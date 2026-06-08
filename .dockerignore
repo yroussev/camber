@@ -1,0 +1,29 @@
+# Keep the build context (and image) small and clean.
+
+# Python / venv / caches
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Version control
+.git/
+.gitignore
+
+# Local reference material that is NOT part of the product -- never bake it into
+# a public image (kept outside the package; listed here as a safety net).
+*.zip
+pdfs/
+
+# Generated / scratch artifacts
+out_*/
+examples/demo/_store/
+*_scan_results.csv
+audit_report.txt
+examples/demo/demo_audit_report.html
+
+# Docs are not needed at runtime (the image runs code, not Markdown).
+*.md
+
+# Real building trend data is mounted at runtime, never baked in.
+data/

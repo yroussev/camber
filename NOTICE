@@ -1,0 +1,7 @@
+CAMBER — Commissioning, Analytics & M&V for Building Energy Re-tuning
+Copyright 2026 The CAMBER authors
+
+This product includes software for analyzing Building Automation System (BAS)
+trend data. Its algorithms are reimplemented from public standards (ASHRAE
+Guideline 36, Guideline 14, Standard 55, Standard 211; IPMVP; PNNL Building
+Re-tuning; NIST APAR). No third-party source code is included.

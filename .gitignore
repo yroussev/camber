@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.venv*/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Generated / scratch
+out_*/
+*_store/
+data/
+examples/_data/
+.DS_Store
+
+# Local-only reference docs (kept on disk, never tracked)
+docs/camber-rcx-visualization-patterns.md
+
+# Do-not-commit session hand-off notes (working context, not for release)
+SESSION-CATCHUP-*.md

@@ -1,0 +1,18 @@
+{
+  "_comment": "LBNL FDD fan-coil unit (FCU) point name -> CAMBER Role mapping. A third BAS naming convention: unlike the cooling-only SDAHU, the FCU has BOTH a cooling and a heating coil plus an OA damper, so the outdoor-air-fraction and simultaneous-heating/cooling detectors both apply. Adding this equipment family is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
+  "aliases": {
+    "FCU_MAT": "mixed_air_temp",
+    "FCU_DAT": "supply_air_temp",
+    "FCU_RAT": "return_air_temp",
+    "FCU_OAT": "oat",
+    "FCU_CVLV": "cool_valve",
+    "FCU_HVLV": "heat_valve",
+    "FCU_DMPR": "oa_damper",
+    "FCU_DA_CFM": "airflow",
+    "FCU_SPD": "supply_fan_speed",
+    "RM_TEMP": "space_temp",
+    "RMCLGSPT": "cool_sp",
+    "RMHTGSPT": "heat_sp"
+  },
+  "patterns": []
+}

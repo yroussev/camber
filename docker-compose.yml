@@ -1,0 +1,27 @@
+# Two ways to run the tool in a container.
+#
+#   docker compose run --rm tests     # run the suite (the default proof)
+#   docker compose run --rm tool ...  # run any command (examples, a shell)
+#
+# The `tool` service mounts ./data read-only at /data so the demo example
+# scripts (or any building's export) can be pointed at real trend files without
+# baking them into the image. Create ./data and drop the per-point CSV folders
+# there, or set CAMBER_DATA to wherever the export lives.
+
+services:
+  tests:
+    build: .
+    image: bas-analysis-tool:latest
+    # inherits the Dockerfile CMD (pytest -q)
+
+  tool:
+    build: .
+    image: bas-analysis-tool:latest
+    environment:
+      CAMBER_DATA: /data
+    volumes:
+      - ./data:/data:ro
+    # override on the command line, e.g.:
+    #   docker compose run --rm tool python examples/demo/run_data_quality.py
+    #   docker compose run --rm tool bash
+    command: ["python", "-c", "import camber, sys; print('tool ready:', sys.version)"]

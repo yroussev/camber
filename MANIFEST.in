@@ -1,0 +1,7 @@
+# Keep the sdist library-only: the package + project metadata (README/LICENSE/
+# NOTICE/pyproject are included automatically). Tests and examples live in the
+# repo, not the published distribution.
+prune tests
+prune examples
+prune docs
+global-exclude __pycache__ *.py[cod]

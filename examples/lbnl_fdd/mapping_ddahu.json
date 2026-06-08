@@ -1,0 +1,13 @@
+{
+  "_comment": "LBNL FDD dual-duct AHU (DDAHU) point name -> CAMBER Role mapping, at the air-handler level. A fourth BAS naming convention: a hot-deck/cold-deck dual-duct AHU with both coils and an OA economizer. The outdoor-air-fraction detector applies at the mixing box (OA/MA/RA temps + OA damper); the cold-deck discharge maps to supply_air_temp. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
+  "aliases": {
+    "OA_TEMP": "oat",
+    "MA_TEMP": "mixed_air_temp",
+    "RA_TEMP": "return_air_temp",
+    "OA_DMPR": "oa_damper",
+    "CHWC_VLV": "cool_valve",
+    "HWC_VLV": "heat_valve",
+    "CSA_TEMP": "supply_air_temp"
+  },
+  "patterns": []
+}
