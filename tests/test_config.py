@@ -152,3 +152,42 @@ def test_unknown_rule_name_raises(tmp_path):
            "rules": ["no_such_rule"]}
     with pytest.raises(KeyError):
         run_config(cfg, base_dir=str(tmp_path))
+
+
+def test_run_config_with_soo_library(tmp_path):
+    folder = str(tmp_path / "trends")
+    _make_site(folder)                       # AHU has midday reheat while cooling
+    cfg = {
+        "site": "SOOHQ",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": [],
+        "soo": [{"class": "AHU", "library": "g36_ahu"}],
+    }
+    res = run_config(cfg, base_dir=str(tmp_path))
+    assert "soo:AHU:g36_ahu" in res.rules_run
+    simul = [f for f in res.findings if f.rule == "soo:no_simultaneous_heat_cool"]
+    assert len(simul) == 1
+    assert simul[0].severity in ("warn", "fault")    # heating open while cooling open
+    assert 0.0 <= simul[0].metrics["conformance_pct"] < 95.0
+
+
+def test_run_config_with_soo_spec_file(tmp_path):
+    folder = str(tmp_path / "trends")
+    _make_site(folder)
+    spec = [{"name": "no_simul",
+             "when": {"subject": "cool_valve", "op": "gt", "value": 5},
+             "expect": {"subject": "heat_valve", "op": "le", "value": 5}}]
+    (tmp_path / "soo_spec.json").write_text(json.dumps(spec))
+    cfg = {
+        "site": "SOOHQ",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": [],
+        "soo": [{"class": "AHU", "spec": "soo_spec.json"}],
+    }
+    res = run_config(cfg, base_dir=str(tmp_path))
+    f = [x for x in res.findings if x.rule == "soo:no_simul"]
+    assert len(f) == 1 and f[0].severity in ("warn", "fault")

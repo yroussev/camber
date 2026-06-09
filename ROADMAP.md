@@ -236,13 +236,13 @@ release; listed so a contributor can claim one.
 
 ### Commissioning workflow (the "C" in CAMBER)
 
-- [~] **Sequence-of-Operations conformance engine** — encode a sequence of operations
+- [x] **Sequence-of-Operations conformance engine** — encode a sequence of operations
       (or ASHRAE G36 itself) as a machine-checkable spec and auto-verify
-      operated-vs-designed behavior from trends. Distinct from the static rule library.
-      *First increment shipped:* a declarative clause engine (`camber.soo`) — gated
-      predicates over roles, JSON-authorable (`examples/soo/`), reporting per-clause
-      conformance % and emitting Findings. Remaining: a packaged G36 clause library,
-      time-based persistence, and config-run integration.
+      operated-vs-designed behavior from trends. Shipped: a declarative clause engine
+      (`camber.soo`) — gated predicates over roles, JSON-authorable (`examples/soo/`),
+      reporting per-clause conformance % with time-based persistence and emitting
+      Findings; a packaged ASHRAE G36 clause library (`camber.soo_library`); and an
+      optional `soo` section in config-driven runs (library or JSON spec per class).
 - [ ] **RCx / MBCx workflow + functional-test automation** — derive functional
       performance tests from trend data, track measures through a fix lifecycle, and
       run before/after M&V on each measure; ongoing monitoring-based commissioning.

@@ -14,8 +14,15 @@ mapping, which equipment to discover, which rules to run, and what report to wri
       "equipment": [{"class": "AHU", "marker": "CHW_Valve"},
                     {"class": "VAV", "marker": "SpaceTemp"}],
       "rules": ["simultaneous_heat_cool", "outdoor_air_fraction", "reheat_penalty"],
+      "soo": [{"class": "AHU", "library": "g36_ahu"},
+              {"class": "AHU", "spec": "ahu_sequence.json"}],
       "report": {"level": 2, "climate_zone": "CA CZ15", "out_text": "audit.txt"}
     }
+
+The optional ``soo`` section evaluates Sequence-of-Operations conformance per
+equipment class -- either a packaged library sequence (``library``: ``g36_ahu`` /
+``g36_plant``) or a JSON clause spec (``spec``) -- merging the per-clause Findings into
+the run.
 
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
@@ -34,8 +41,14 @@ from .model.mapping import MappingProvider
 from .model.roles import Role
 from .realio import load_point
 from .report.audit import AuditReport, Benchmark
-from .resolve import discover, discover_terminals
+from .resolve import discover, discover_terminals, resolve
+from .rules.base import _merge_shared
 from .rules.builtin import builtin_registry, is_fleet
+from .soo import soo_findings, spec_from_dicts
+from .soo_library import g36_ahu_sequence, g36_plant_sequence
+
+# Named built-in SOO sequences referenceable from a config's "soo" section.
+_SOO_LIBRARY = {"g36_ahu": g36_ahu_sequence, "g36_plant": g36_plant_sequence}
 
 
 @dataclass
@@ -104,12 +117,15 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         shared = {Role.OAT: oat}
 
     refs = []
+    refs_by_class: dict = {}          # class -> [EquipRef], for class-targeted SOO specs
     for eq in config.get("equipment", []):
         marker = eq.get("marker", "SpaceTemp")
         if eq["class"] == "TERMINAL":   # union of all terminal-unit types
-            refs += discover_terminals(folders, marker_measure=marker)
+            found = discover_terminals(folders, marker_measure=marker)
         else:
-            refs += discover(folders, eq["class"], marker_measure=marker)
+            found = discover(folders, eq["class"], marker_measure=marker)
+        refs += found
+        refs_by_class.setdefault(eq["class"], []).extend(found)
 
     reg = builtin_registry()
     findings, ran = [], []
@@ -122,6 +138,26 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         else:
             findings += reg.run(name, refs, mapping, resample=resample, shared=shared)
         ran.append(name)
+
+    # Optional SOO conformance: per equipment class, a packaged library sequence or a
+    # JSON clause spec is evaluated over each matched equipment's role-frame, and the
+    # per-clause Findings merge into the run (so they flow through the report/triage).
+    for entry in config.get("soo", []):
+        cls = entry["class"]
+        if entry.get("library"):
+            spec = _SOO_LIBRARY[entry["library"]]()
+        else:
+            with open(_path(base_dir, entry["spec"])) as fh:
+                spec = spec_from_dicts(json.load(fh))
+        if not spec:
+            continue
+        roles = tuple(set().union(*(c.roles() for c in spec)))
+        for ref in refs_by_class.get(cls, []):
+            frame = _merge_shared(resolve(ref, mapping, roles, resample=resample), shared)
+            if frame is None or frame.empty:
+                continue
+            findings += soo_findings(frame, spec, ref.equip)
+        ran.append(f"soo:{cls}:{entry.get('library') or entry.get('spec')}")
 
     report = None
     rep = config.get("report")

@@ -30,7 +30,8 @@ First public pre-release.
   operated-vs-designed behavior per clause as a conformance %, with optional
   time-based persistence (forgive transient excursions), JSON-authorable
   (`examples/soo/`) and emitting Findings into the same prioritization/report/triage;
-  ships a packaged ASHRAE Guideline 36 clause library (`camber.soo_library`).
+  ships a packaged ASHRAE Guideline 36 clause library (`camber.soo_library`); wired
+  into config-driven runs via an optional `soo` section (library or JSON spec per class).
 - **M&V** — change-point inverse models (2P–5P + heating/cooling-zero), the LBNL
   TOWT model, fit statistics with fractional savings uncertainty, CUSUM, weather
   normalization, and rate/energy-aware resampling.
