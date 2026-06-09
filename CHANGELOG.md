@@ -18,7 +18,8 @@ First public pre-release.
   `resolve()` to assemble role-named frames.
 - **FDD** — rule engine with ASHRAE Guideline 36 AFDD and PNNL Building Re-tuning
   diagnostics (simultaneous heat/cool, reheat, SAT/CHW reset, economizer, OA
-  fraction incl. under-ventilation, boiler lockout, overcooling, setback, static
+  fraction incl. under-ventilation, boiler lockout, HW-loop low-ΔT, overcooling,
+  setback, static
   and pump resets, chiller efficiency (kW/ton), chiller staging/cycling,
   cooling-tower approach, leaking valves); impact prioritization and fault
   lifecycle; an
