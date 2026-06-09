@@ -23,7 +23,10 @@ First public pre-release.
   detection vs a reference** (`camber.sensordrift`): bias, drift-per-month, and tracking
   correlation against an independent series — e.g. validating the outdoor-air (OAT/OSA)
   sensor against NASA POWER / a nearby station / a TMY series, which the BAS can't check
-  on its own.
+  on its own. And **point-mapping confidence** (`camber.mapping_confidence`): scores how
+  surely each BAS tag resolved to its role (alias vs pattern match, ambiguity, and
+  physical data-fit), flagging the low-confidence / ambiguous / unmapped tokens so
+  onboarding review goes where it's needed.
 - **Semantic model** — vendor-neutral `Role` vocabulary, `MappingProvider`, an
   entity model with equipment templates and completeness validation, and
   `resolve()` to assemble role-named frames.

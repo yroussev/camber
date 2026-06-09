@@ -50,6 +50,22 @@ class MappingProvider:
                 return role
         return None
 
+    def candidates(self, token: str) -> list:
+        """Every role ``token`` could resolve to: the alias hit (if any) first, then
+        each matching pattern's role -- so callers can detect ambiguity (the same token
+        competing for more than one role) that ``role_of`` hides behind first-match.
+        """
+        out = []
+        if token is None:
+            return out
+        a = self.aliases.get(token.lower())
+        if a is not None:
+            out.append(a)
+        for rx, role in self._compiled:
+            if rx.search(token):
+                out.append(role)
+        return out
+
     def roles_present(self, tokens) -> dict[Role, str]:
         """Given raw tokens, return {Role: token} for those that map (first wins)."""
         out: dict[Role, str] = {}

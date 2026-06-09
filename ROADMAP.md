@@ -249,17 +249,16 @@ release; listed so a contributor can claim one.
 
 ### Foundations & credibility
 
-- [~] **Sensor health & data-trust layer** — sensor faults are not equipment faults;
-      this gates FDD so a rule that cannot trust its inputs declines to fire. *First
-      increment shipped* (`camber.sensorhealth`): role-aware physical bounds,
-      cross-sensor physical-consistency (mixed-air temperature ordering), and a per-role
-      trust roll-up with a `trusted_roles` gate (built on the ingest quality stats),
-      now wired into the rule runner and config (`trust_gate`) so a rule whose required
-      inputs aren't trusted declines to fire. Drift detection shipped too
-      (`camber.sensordrift`): bias / drift-per-month / tracking correlation vs an
-      independent reference — notably validating the OAT/OSA sensor against external
-      weather (NASA POWER, a station, or a TMY series). Remaining: point-mapping
-      confidence.
+- [x] **Sensor health & data-trust layer** — sensor faults are not equipment faults;
+      this gates FDD so a rule that cannot trust its inputs declines to fire. Shipped:
+      `camber.sensorhealth` (role-aware physical bounds, cross-sensor physical-consistency
+      like mixed-air temperature ordering, and a per-role trust roll-up with a
+      `trusted_roles` gate built on the ingest quality stats) wired into the rule runner
+      and config (`trust_gate`); `camber.sensordrift` (bias / drift-per-month / tracking
+      correlation vs an independent reference — validating the OAT/OSA sensor against
+      external weather such as NASA POWER, a station, or a TMY series); and
+      `camber.mapping_confidence` (how surely each BAS tag resolved to its role — alias
+      vs pattern, ambiguity, physical data-fit — to focus onboarding review).
 - [ ] **Methods validation & scientific credibility** — published accuracy on public
       labeled datasets, end-to-end uncertainty quantification, a reproducibility
       harness, and a short methods write-up — the backbone of the defensible/citable
