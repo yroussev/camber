@@ -127,16 +127,22 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 
+    # Optional sensor-health gate: a rule whose required inputs aren't trusted declines
+    # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
+    min_trust = (config.get("trust_gate") or {}).get("min_trust")
+
     reg = builtin_registry()
     findings, ran = [], []
     for name in config.get("rules", []):
         rule = reg.get(name)                 # KeyError on unknown name
         if is_fleet(rule):
-            f = reg.run_fleet(name, refs, mapping, resample=resample, shared=shared)
+            f = reg.run_fleet(name, refs, mapping, resample=resample, shared=shared,
+                              min_trust=min_trust)
             if f is not None:
                 findings.append(f)
         else:
-            findings += reg.run(name, refs, mapping, resample=resample, shared=shared)
+            findings += reg.run(name, refs, mapping, resample=resample, shared=shared,
+                                min_trust=min_trust)
         ran.append(name)
 
     # Optional SOO conformance: per equipment class, a packaged library sequence or a

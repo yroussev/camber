@@ -159,6 +159,23 @@ def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=
     return {role for role, t in health.items() if t.trust >= min_trust}
 
 
+def untrusted_roles(frame: pd.DataFrame, roles, *, min_trust: float = 0.5,
+                    expected_freq=None) -> list:
+    """Which of ``roles`` present in ``frame`` fall below the trust bar.
+
+    Roles absent from the frame are skipped (their absence is handled separately by the
+    rule runner). Returns the offending roles in the order given, for gating a rule's
+    required inputs.
+    """
+    out = []
+    for r in roles:
+        if r not in frame.columns:
+            continue
+        if sensor_trust(frame[r], r, expected_freq=expected_freq).trust < min_trust:
+            out.append(r)
+    return out
+
+
 @dataclass
 class ConsistencyResult:
     """A cross-sensor physical-consistency check over a role-frame."""

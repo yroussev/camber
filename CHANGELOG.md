@@ -17,7 +17,9 @@ First public pre-release.
   physical bounds (catching BAS error sentinels / unit-scaling blunders the robust
   outlier test misses), cross-sensor physical-consistency checks (e.g. mixed-air temp
   must lie between outdoor- and return-air temp), and a per-role trust roll-up with a
-  `trusted_roles` gate so diagnostics can decline to fire on data they cannot trust.
+  `trusted_roles` gate — wired into the rule runner (and config `trust_gate`) so a rule
+  whose required inputs aren't trusted declines to fire (an auditable `info` finding)
+  instead of reporting a sensor problem as an equipment fault.
 - **Semantic model** — vendor-neutral `Role` vocabulary, `MappingProvider`, an
   entity model with equipment templates and completeness validation, and
   `resolve()` to assemble role-named frames.

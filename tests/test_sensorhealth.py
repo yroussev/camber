@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from camber.model.roles import Role  # noqa: E402
 from camber.sensorhealth import (  # noqa: E402
     PHYSICAL_BOUNDS, frame_sensor_health, mixing_consistency,
-    range_violation_frac, sensor_trust, trusted_roles,
+    range_violation_frac, sensor_trust, trusted_roles, untrusted_roles,
 )
 
 
@@ -88,6 +88,11 @@ def test_frame_health_and_trusted_roles():
 
     keep = trusted_roles(frame, min_trust=0.5)
     assert Role.OAT in keep and Role.RETURN_AIR_TEMP not in keep
+
+    # the runner gate's helper: which *required* roles are below the bar
+    bad = untrusted_roles(frame, (Role.OAT, Role.RETURN_AIR_TEMP, Role.SPACE_TEMP),
+                          min_trust=0.5)
+    assert bad == [Role.RETURN_AIR_TEMP]          # OAT trusted; SPACE_TEMP absent -> skipped
 
 
 # --- cross-sensor consistency ------------------------------------------------- #

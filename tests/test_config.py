@@ -191,3 +191,48 @@ def test_run_config_with_soo_spec_file(tmp_path):
     res = run_config(cfg, base_dir=str(tmp_path))
     f = [x for x in res.findings if x.rule == "soo:no_simul"]
     assert len(f) == 1 and f[0].severity in ("warn", "fault")
+
+
+def _make_corrupt_site(folder):
+    """Like _make_site but the cooling-valve sensor is riddled with -999 error codes."""
+    _make_site(folder)
+    idx = pd.date_range("2025-07-07", periods=24 * 14, freq="1h")
+    cool = pd.Series(60.0, index=idx)
+    cool.iloc[::3] = -999.0                       # a third of the readings impossible
+    _write_point(folder, "AHU_1", "CHW_Valve", cool)
+
+
+def test_run_config_trust_gate_declines_on_bad_sensor(tmp_path):
+    folder = str(tmp_path / "trends")
+    _make_corrupt_site(folder)
+    cfg = {
+        "site": "GateHQ",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": ["simultaneous_heat_cool"],
+        "trust_gate": {"min_trust": 0.5},
+    }
+    res = run_config(cfg, base_dir=str(tmp_path))
+    simul = [f for f in res.findings if f.rule == "simultaneous_heat_cool"]
+    assert len(simul) == 1
+    assert simul[0].severity == "info"                         # declined, not a fault
+    assert simul[0].metrics.get("declined") is True
+    assert "cool_valve" in simul[0].metrics["untrusted_roles"]
+
+
+def test_run_config_no_gate_still_fires_on_bad_sensor(tmp_path):
+    # without the gate, the rule runs on the corrupted data (no decline)
+    folder = str(tmp_path / "trends")
+    _make_corrupt_site(folder)
+    cfg = {
+        "site": "NoGateHQ",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": ["simultaneous_heat_cool"],
+    }
+    res = run_config(cfg, base_dir=str(tmp_path))
+    simul = [f for f in res.findings if f.rule == "simultaneous_heat_cool"]
+    assert len(simul) == 1
+    assert not simul[0].metrics.get("declined")               # ran, did not decline

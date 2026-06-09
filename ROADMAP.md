@@ -253,10 +253,10 @@ release; listed so a contributor can claim one.
       this gates FDD so a rule that cannot trust its inputs declines to fire. *First
       increment shipped* (`camber.sensorhealth`): role-aware physical bounds,
       cross-sensor physical-consistency (mixed-air temperature ordering), and a per-role
-      trust roll-up with a `trusted_roles` gate, built on the ingest quality stats
-      (coverage / gaps / flatline / robust outliers). Remaining: drift detection via
-      sensor redundancy, wiring the gate into the rule runner, and point-mapping
-      confidence.
+      trust roll-up with a `trusted_roles` gate (built on the ingest quality stats),
+      now wired into the rule runner and config (`trust_gate`) so a rule whose required
+      inputs aren't trusted declines to fire. Remaining: drift detection via sensor
+      redundancy, and point-mapping confidence.
 - [ ] **Methods validation & scientific credibility** — published accuracy on public
       labeled datasets, end-to-end uncertainty quantification, a reproducibility
       harness, and a short methods write-up — the backbone of the defensible/citable

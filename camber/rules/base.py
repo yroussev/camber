@@ -20,6 +20,7 @@ import pandas as pd
 from ..model.roles import Role
 from ..resolve import EquipRef, resolve, occupied
 from ..model.mapping import MappingProvider
+from ..sensorhealth import untrusted_roles
 
 
 @dataclass
@@ -114,7 +115,7 @@ class Registry:
         return sorted(self._rules)
 
     def run(self, rule_name: str, equip_refs, mapping: MappingProvider, *,
-            resample: str = "1h", shared=None) -> list[Finding]:
+            resample: str = "1h", shared=None, min_trust=None) -> list[Finding]:
         """Run one rule across equipment, resolving each to a role-frame first.
 
         Equipment whose resolved frame lacks any required role is skipped (the
@@ -122,6 +123,11 @@ class Registry:
         of building-level points (e.g. a single OAT sensor) merged into every
         equipment frame -- the role layer's answer to points that aren't carried
         per-equipment.
+
+        ``min_trust`` (0..1) enables the sensor-health gate: if any of the rule's
+        required roles scores below it on the resolved frame, the rule **declines to
+        fire** and instead records an ``info`` finding naming the untrusted input -- so
+        a fault that is really a sensor problem isn't reported as an equipment fault.
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
@@ -131,18 +137,30 @@ class Registry:
             frame = _merge_shared(frame, shared)
             if frame.empty or any(r not in frame.columns for r in rule.roles_required):
                 continue
+            if min_trust is not None:
+                bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
+                if bad:
+                    out.append(Finding(
+                        rule=rule.name, equip=ref.equip, severity="info",
+                        metrics={"declined": True, "min_trust": min_trust,
+                                 "untrusted_roles": [r.value for r in bad]},
+                        summary=(f"{ref.equip}: declined -- untrusted input(s): "
+                                 + ", ".join(r.value for r in bad))))
+                    continue
             f = rule.analyze(ref.equip, frame)
             if f is not None:
                 out.append(f)
         return out
 
     def run_fleet(self, rule_name: str, equip_refs, mapping: MappingProvider, *,
-                  resample: str = "1h", shared=None) -> Finding:
+                  resample: str = "1h", shared=None, min_trust=None) -> Finding:
         """Run a FleetRule: resolve every equipment, pass the set as one batch.
 
         Equipment missing the required roles are skipped; the rule sees only those
         with usable data. ``shared`` (building-level {Role: Series}) is merged into
-        each frame as in :meth:`run`.
+        each frame as in :meth:`run`. ``min_trust`` applies the same sensor-health gate
+        per equipment: a unit whose required inputs aren't trusted is left out of the
+        fleet batch rather than corrupting the aggregate.
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
@@ -150,6 +168,10 @@ class Registry:
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
             frame = _merge_shared(frame, shared)
-            if not frame.empty and all(r in frame.columns for r in rule.roles_required):
-                frames[ref.equip] = frame
+            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+                continue
+            if min_trust is not None and untrusted_roles(frame, rule.roles_required,
+                                                         min_trust=min_trust):
+                continue
+            frames[ref.equip] = frame
         return rule.analyze_fleet(frames)
