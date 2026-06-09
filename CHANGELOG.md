@@ -13,6 +13,11 @@ First public pre-release.
 - **Ingest** — per-point CSV, wide CSV, and a Project-Haystack `hisRead` client;
   per-point data-quality scoring with an auditable cleaning trail; valve/damper
   unit normalization (0–1 vs 0–100).
+- **Sensor health / data-trust** — builds on the ingest quality stats with role-aware
+  physical bounds (catching BAS error sentinels / unit-scaling blunders the robust
+  outlier test misses), cross-sensor physical-consistency checks (e.g. mixed-air temp
+  must lie between outdoor- and return-air temp), and a per-role trust roll-up with a
+  `trusted_roles` gate so diagnostics can decline to fire on data they cannot trust.
 - **Semantic model** — vendor-neutral `Role` vocabulary, `MappingProvider`, an
   entity model with equipment templates and completeness validation, and
   `resolve()` to assemble role-named frames.

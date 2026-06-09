@@ -249,10 +249,14 @@ release; listed so a contributor can claim one.
 
 ### Foundations & credibility
 
-- [ ] **Sensor health & data-trust layer** — drift, flatline/stuck, gap and coverage
-      scoring, unit and timezone validation, and point-mapping confidence. Sensor
-      faults are not equipment faults; this gates FDD so a rule that cannot trust its
-      inputs declines to fire.
+- [~] **Sensor health & data-trust layer** — sensor faults are not equipment faults;
+      this gates FDD so a rule that cannot trust its inputs declines to fire. *First
+      increment shipped* (`camber.sensorhealth`): role-aware physical bounds,
+      cross-sensor physical-consistency (mixed-air temperature ordering), and a per-role
+      trust roll-up with a `trusted_roles` gate, built on the ingest quality stats
+      (coverage / gaps / flatline / robust outliers). Remaining: drift detection via
+      sensor redundancy, wiring the gate into the rule runner, and point-mapping
+      confidence.
 - [ ] **Methods validation & scientific credibility** — published accuracy on public
       labeled datasets, end-to-end uncertainty quantification, a reproducibility
       harness, and a short methods write-up — the backbone of the defensible/citable
