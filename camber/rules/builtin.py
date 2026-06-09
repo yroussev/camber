@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .base import Registry
 from .boiler_rule import BoilerSummerLockout
+from .boilercycle_rule import BoilerShortCycle
 from .chiller_rule import ChillerEfficiency
 from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
@@ -30,8 +31,8 @@ from .zones_rule import ZonesHeatCoolCensus
 # Every shipped rule. Per-equipment rules first, then fleet rules.
 RULE_CLASSES = [
     SimultaneousHeatCool, SupplyAirReset, ReheatPenalty, OvercoolingMinFlow,
-    OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, HWPlantDeltaT,
-    NightWeekendSetback, OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset,
+    OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, BoilerShortCycle,
+    HWPlantDeltaT, NightWeekendSetback, OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, LeakingValve,
     DamperCensus, ZonesHeatCoolCensus,
 ]
