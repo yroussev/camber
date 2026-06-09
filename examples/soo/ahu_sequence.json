@@ -1,0 +1,23 @@
+[
+  {
+    "name": "sat_tracks_setpoint",
+    "when":   {"subject": "supply_fan_status", "op": "on"},
+    "expect": {"subject": "supply_air_temp", "op": "within", "ref": "supply_air_temp_sp", "tol": 2.0}
+  },
+  {
+    "name": "economizer_enabled_in_mild_weather",
+    "when":   {"subject": "oat", "op": "lt", "value": 60},
+    "expect": {"subject": "econ_cmd", "op": "on"},
+    "warn_below": 90.0
+  },
+  {
+    "name": "unoccupied_airflow_setback",
+    "when":   {"subject": "occupancy", "op": "off"},
+    "expect": {"subject": "airflow", "op": "le", "value": 200}
+  },
+  {
+    "name": "boiler_summer_lockout",
+    "when":   {"subject": "oat", "op": "gt", "value": 65},
+    "expect": {"subject": "boiler_status", "op": "off"}
+  }
+]
