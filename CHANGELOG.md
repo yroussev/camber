@@ -19,7 +19,11 @@ First public pre-release.
   must lie between outdoor- and return-air temp), and a per-role trust roll-up with a
   `trusted_roles` gate — wired into the rule runner (and config `trust_gate`) so a rule
   whose required inputs aren't trusted declines to fire (an auditable `info` finding)
-  instead of reporting a sensor problem as an equipment fault.
+  instead of reporting a sensor problem as an equipment fault. Plus **sensor bias/drift
+  detection vs a reference** (`camber.sensordrift`): bias, drift-per-month, and tracking
+  correlation against an independent series — e.g. validating the outdoor-air (OAT/OSA)
+  sensor against NASA POWER / a nearby station / a TMY series, which the BAS can't check
+  on its own.
 - **Semantic model** — vendor-neutral `Role` vocabulary, `MappingProvider`, an
   entity model with equipment templates and completeness validation, and
   `resolve()` to assemble role-named frames.

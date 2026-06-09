@@ -255,8 +255,11 @@ release; listed so a contributor can claim one.
       cross-sensor physical-consistency (mixed-air temperature ordering), and a per-role
       trust roll-up with a `trusted_roles` gate (built on the ingest quality stats),
       now wired into the rule runner and config (`trust_gate`) so a rule whose required
-      inputs aren't trusted declines to fire. Remaining: drift detection via sensor
-      redundancy, and point-mapping confidence.
+      inputs aren't trusted declines to fire. Drift detection shipped too
+      (`camber.sensordrift`): bias / drift-per-month / tracking correlation vs an
+      independent reference — notably validating the OAT/OSA sensor against external
+      weather (NASA POWER, a station, or a TMY series). Remaining: point-mapping
+      confidence.
 - [ ] **Methods validation & scientific credibility** — published accuracy on public
       labeled datasets, end-to-end uncertainty quantification, a reproducibility
       harness, and a short methods write-up — the backbone of the defensible/citable
