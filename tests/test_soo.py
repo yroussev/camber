@@ -103,6 +103,31 @@ def test_too_few_applicable_is_info():
     assert evaluate_clause(f, clause).severity == "info"
 
 
+def test_persistence_forgives_transient_violations():
+    # 100 applicable intervals; violations are 5 isolated single-interval blips
+    # (every 20th row). With persistence=1 -> 95% conformance; persistence=3 forgives
+    # every isolated blip -> 100%.
+    n = 100
+    sat = np.full(n, 55.0)
+    sat[::20] = 70.0                      # 5 isolated out-of-band intervals
+    f = pd.DataFrame({Role.SUPPLY_AIR_TEMP: sat,
+                      Role.SUPPLY_AIR_TEMP_SP: np.full(n, 55.0)}, index=_idx(n))
+    expect = Predicate(Role.SUPPLY_AIR_TEMP, "within", ref=Role.SUPPLY_AIR_TEMP_SP, tol=2.0)
+    assert evaluate_clause(f, Clause("sat", expect=expect)).conformance_pct == 95.0
+    assert evaluate_clause(f, Clause("sat", expect=expect, persistence=3)).conformance_pct == 100.0
+
+
+def test_persistence_still_counts_sustained_violations():
+    # a single sustained 10-interval excursion is NOT forgiven by persistence=3
+    n = 100
+    sat = np.full(n, 55.0)
+    sat[40:50] = 70.0                     # 10 consecutive out-of-band intervals
+    f = pd.DataFrame({Role.SUPPLY_AIR_TEMP: sat,
+                      Role.SUPPLY_AIR_TEMP_SP: np.full(n, 55.0)}, index=_idx(n))
+    expect = Predicate(Role.SUPPLY_AIR_TEMP, "within", ref=Role.SUPPLY_AIR_TEMP_SP, tol=2.0)
+    assert evaluate_clause(f, Clause("sat", expect=expect, persistence=3)).conformance_pct == 90.0
+
+
 def test_missing_role_is_info():
     n = 50
     f = pd.DataFrame({Role.OAT: np.full(n, 70.0)}, index=_idx(n))

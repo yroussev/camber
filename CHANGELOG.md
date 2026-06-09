@@ -27,7 +27,8 @@ First public pre-release.
   FDD-accuracy evaluation harness.
 - **Sequence-of-Operations conformance** — a declarative clause engine (`camber.soo`):
   gated predicates over roles (`when <gate> then expect <predicate>`) that measure
-  operated-vs-designed behavior per clause as a conformance %, JSON-authorable
+  operated-vs-designed behavior per clause as a conformance %, with optional
+  time-based persistence (forgive transient excursions), JSON-authorable
   (`examples/soo/`) and emitting Findings into the same prioritization/report/triage.
 - **M&V** — change-point inverse models (2P–5P + heating/cooling-zero), the LBNL
   TOWT model, fit statistics with fractional savings uncertainty, CUSUM, weather

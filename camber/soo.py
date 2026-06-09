@@ -48,6 +48,27 @@ def _as_role(x) -> Role:
     return x if isinstance(x, Role) else Role(x)
 
 
+def _sustained_mask(viol: np.ndarray, k: int) -> np.ndarray:
+    """Mark elements that sit in a consecutive run of True of length >= k.
+
+    Used to forgive transient violations: only runs of at least ``k`` consecutive
+    (applicable) violating intervals count against conformance.
+    """
+    out = np.zeros(len(viol), dtype=bool)
+    i = 0
+    while i < len(viol):
+        if viol[i]:
+            j = i
+            while j < len(viol) and viol[j]:
+                j += 1
+            if j - i >= k:
+                out[i:j] = True
+            i = j
+        else:
+            i += 1
+    return out
+
+
 @dataclass
 class Predicate:
     """A boolean test over one role: subject OP (value | ref), with a tolerance.
@@ -130,6 +151,7 @@ class Clause:
     fault_below: float = 80.0     # conformance % below this == fault
     warn_below: float = 95.0      # conformance % below this == warn
     min_samples: int = 10         # fewer applicable intervals -> not assessable
+    persistence: int = 1          # a violation counts only if sustained >= N applicable intervals
 
     def roles(self) -> set:
         """All roles this clause reads (gate + expectation)."""
@@ -191,8 +213,12 @@ def evaluate_clause(frame: pd.DataFrame, clause: Clause) -> ClauseResult:
                             f"{clause.name}: only {n_app} applicable intervals "
                             f"(< {clause.min_samples})")
 
-    holds = int((e_holds & applicable).sum())
-    conf = round(100.0 * holds / n_app, 1)
+    # violations among applicable intervals (time-ordered); optionally require the
+    # violation to persist before it counts, forgiving transient excursions.
+    viol_app = (~e_holds[applicable]).to_numpy()
+    if clause.persistence > 1:
+        viol_app = _sustained_mask(viol_app, clause.persistence)
+    conf = round(100.0 * (n_app - int(viol_app.sum())) / n_app, 1)
     if conf < clause.fault_below:
         severity = "fault"
     elif conf < clause.warn_below:
@@ -263,6 +289,7 @@ def clause_from_dict(d: dict) -> Clause:
         fault_below=d.get("fault_below", 80.0),
         warn_below=d.get("warn_below", 95.0),
         min_samples=d.get("min_samples", 10),
+        persistence=d.get("persistence", 1),
     )
 
 
