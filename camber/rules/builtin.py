@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .base import Registry
 from .boiler_rule import BoilerSummerLockout
+from .chiller_rule import ChillerEfficiency
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
 from .leakvalve_rule import LeakingValve
@@ -27,7 +28,7 @@ from .zones_rule import ZonesHeatCoolCensus
 RULE_CLASSES = [
     SimultaneousHeatCool, SupplyAirReset, ReheatPenalty, OvercoolingMinFlow,
     OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, NightWeekendSetback,
-    OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset, LeakingValve,
+    OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset, ChillerEfficiency, LeakingValve,
     DamperCensus, ZonesHeatCoolCensus,
 ]
 

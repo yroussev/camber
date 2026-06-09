@@ -146,6 +146,12 @@ _TEMPLATE_LIST = (
         }),
     ),
     EquipTemplate(
+        "Chiller",
+        required=frozenset({Role.POWER, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP,
+                            Role.CHW_FLOW}),
+        optional=frozenset({Role.CHW_SUPPLY_TEMP_SP, Role.OAT, Role.ENERGY_RATE}),
+    ),
+    EquipTemplate(
         "Meter",
         required=frozenset({Role.POWER}),
         optional=frozenset({Role.ENERGY_RATE}),

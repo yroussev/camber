@@ -66,6 +66,7 @@ class Role(str, Enum):
     CHW_DIFF_PRESS = "chw_diff_press"        # chilled-water loop differential pressure
     CHW_DIFF_PRESS_SP = "chw_diff_press_sp"  # chilled-water loop DP setpoint
     CHW_PUMP_SPEED = "chw_pump_speed"        # chilled-water pump VFD speed (%)
+    CHW_FLOW = "chw_flow"                     # chilled-water volumetric flow (gpm)
 
     # --- energy / power ---
     POWER = "power"                   # electric power (kW)

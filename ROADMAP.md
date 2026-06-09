@@ -212,6 +212,57 @@ That slice already delivers the fuse-graphing-and-diagnostics principle end to e
 the remaining patterns deepen comparison (C, D), turn rules into a chart engine (G,
 J), and extend into M&V and load economics (H, F).
 
+## Additional capability tracks (candidate)
+
+New tracks beyond the phased plan above, each consistent with CAMBER's contract —
+vendor-neutral via the `Role` model, clean-room and citable, dependency-light, and
+every rule shipping a synthetic fixture that proves detection. Not yet slotted into a
+release; listed so a contributor can claim one.
+
+### Diagnostic breadth
+
+- [~] **Central plant & hydronic rule library** — bring FDD to the plant, where the
+      largest kWh/therms usually hide: chillers (kW/ton efficiency, staging,
+      condenser/evaporator approach), boilers, cooling towers (approach, fan staging),
+      and CHW/HW distribution (pumps riding the curve, VFD minimums) — plus
+      **chilled-water low-ΔT syndrome**. Cites ASHRAE/PNNL plant guidance. *First
+      increment (low-ΔT) in progress.*
+- [ ] **IAQ & ventilation analytics** — CO₂-based ventilation adequacy, ASHRAE 62.1
+      checks, and demand-controlled-ventilation verification — the air-quality axis
+      alongside the existing Std-55 thermal comfort.
+- [ ] **Demand & peak analytics** — peak-demand drivers, coincidence and load-shape
+      analysis, demand-charge management, and night/weekend baseload anomaly detection
+      (deeper than today's load profiling).
+
+### Commissioning workflow (the "C" in CAMBER)
+
+- [ ] **Sequence-of-Operations conformance engine** — encode a sequence of operations
+      (or ASHRAE G36 itself) as a machine-checkable spec and auto-verify
+      operated-vs-designed behavior from trends. Distinct from the static rule library.
+- [ ] **RCx / MBCx workflow + functional-test automation** — derive functional
+      performance tests from trend data, track measures through a fix lifecycle, and
+      run before/after M&V on each measure; ongoing monitoring-based commissioning.
+
+### Foundations & credibility
+
+- [ ] **Sensor health & data-trust layer** — drift, flatline/stuck, gap and coverage
+      scoring, unit and timezone validation, and point-mapping confidence. Sensor
+      faults are not equipment faults; this gates FDD so a rule that cannot trust its
+      inputs declines to fire.
+- [ ] **Methods validation & scientific credibility** — published accuracy on public
+      labeled datasets, end-to-end uncertainty quantification, a reproducibility
+      harness, and a short methods write-up — the backbone of the defensible/citable
+      promise.
+
+### Money & compliance
+
+- [ ] **Tariff & financial analytics** — a real utility-rate engine (time-of-use,
+      demand, ratchets, tiered), bill recalculation/validation, and ECM
+      payback/NPV/IRR — broader than the planned fault-economics item.
+- [ ] **Building Performance Standards (BPS) compliance** — EUI/emissions-limit
+      checking against local BPS laws plus ENERGY STAR / ASHRAE bEQ, with
+      penalty-exposure estimates. A regulatory extension of the carbon basics.
+
 ## Horizon (beyond 1.0 — research / exploratory)
 
 Directions worth tracking but not yet committed; each needs validation and likely

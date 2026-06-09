@@ -19,7 +19,8 @@ First public pre-release.
 - **FDD** — rule engine with ASHRAE Guideline 36 AFDD and PNNL Building Re-tuning
   diagnostics (simultaneous heat/cool, reheat, SAT/CHW reset, economizer, OA
   fraction incl. under-ventilation, boiler lockout, overcooling, setback, static
-  and pump resets, leaking valves); impact prioritization and fault lifecycle; an
+  and pump resets, chiller efficiency (kW/ton), leaking valves); impact
+  prioritization and fault lifecycle; an
   FDD-accuracy evaluation harness.
 - **M&V** — change-point inverse models (2P–5P + heating/cooling-zero), the LBNL
   TOWT model, fit statistics with fractional savings uncertainty, CUSUM, weather
