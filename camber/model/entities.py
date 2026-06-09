@@ -134,7 +134,8 @@ _TEMPLATE_LIST = (
         "HotWaterPlant",
         required=frozenset({Role.HW_SUPPLY_TEMP, Role.BOILER_STATUS}),
         optional=frozenset({
-            Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS, Role.OAT, Role.ENERGY_RATE,
+            Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS, Role.HW_PUMP_SPEED, Role.OAT,
+            Role.ENERGY_RATE,
         }),
     ),
     EquipTemplate(

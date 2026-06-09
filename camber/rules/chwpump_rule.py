@@ -38,8 +38,15 @@ class CHWPumpDPReset:
         if res is None:
             return Finding(rule=self.name, equip=equip, severity="info",
                            summary="insufficient data")
-        pf = res.pct_running_near_full
-        severity = "fault" if pf >= 60.0 else ("warn" if pf >= 30.0 else "ok")
+        pf, pm = res.pct_running_near_full, res.pct_running_near_min
+        # riding the curve (near full) is the energy fault; pinned at the VFD minimum
+        # is an oversizing opportunity (warn).
+        if pf >= 60.0:
+            severity = "fault"
+        elif pf >= 30.0 or pm >= 50.0:
+            severity = "warn"
+        else:
+            severity = "ok"
         reset_note = "DP-SP reset present" if res.dp_sp_reset_present else "flat DP setpoint"
         return Finding(
             rule=self.name,
@@ -48,11 +55,12 @@ class CHWPumpDPReset:
             metrics={
                 "median_speed_pct": res.median_speed_pct,
                 "pct_running_near_full": res.pct_running_near_full,
+                "pct_running_near_min": res.pct_running_near_min,
                 "median_dp_sp": res.median_dp_sp,
                 "dp_sp_reset_present": res.dp_sp_reset_present,
                 "n_running": res.n_running,
             },
             summary=(f"{equip}: pump median speed {res.median_speed_pct:.0f}%, "
-                     f"{res.pct_running_near_full:.0f}% of running hours near full "
-                     f"speed; {reset_note}"),
+                     f"{res.pct_running_near_full:.0f}% near full / "
+                     f"{res.pct_running_near_min:.0f}% near min; {reset_note}"),
         )

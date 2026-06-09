@@ -48,6 +48,14 @@ def test_off_hours_excluded():
     assert r.pct_running_near_full > 95
 
 
+def test_pinned_min_speed_oversized():
+    n = 24 * 21
+    df = pd.DataFrame({"PumpSpeed": np.full(n, 18.0)}, index=_idx(n))  # always near min
+    r = analyze_chw_pump(df, "CHWP")
+    assert r.pct_running_near_min > 95
+    assert r.pct_running_near_full < 5
+
+
 def test_rule_protocol_and_severity():
     rule = CHWPumpDPReset()
     assert isinstance(rule, Rule)
@@ -56,3 +64,12 @@ def test_rule_protocol_and_severity():
     f = rule.analyze("CHWP1", frame)
     assert f.severity == "fault"
     assert f.metrics["pct_running_near_full"] > 95
+
+
+def test_rule_oversized_warns():
+    rule = CHWPumpDPReset()
+    n = 24 * 21
+    frame = pd.DataFrame({Role.CHW_PUMP_SPEED: np.full(n, 18.0)}, index=_idx(n))
+    f = rule.analyze("CHWP1", frame)
+    assert f.severity == "warn"                       # pinned at VFD minimum -> oversized
+    assert f.metrics["pct_running_near_min"] > 95

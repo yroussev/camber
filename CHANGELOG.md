@@ -21,8 +21,9 @@ First public pre-release.
   fraction incl. under-ventilation, boiler lockout, boiler short-cycling, HW-loop
   low-ΔT, overcooling, setback, static
   and pump resets, chiller efficiency (kW/ton), chiller staging/cycling, multi-chiller
-  over-staging (fleet), cooling-tower approach, condenser-water reset, leaking
-  valves); impact prioritization and fault lifecycle; an
+  over-staging (fleet), cooling-tower approach, condenser-water reset, CHW/HW pump
+  riding-the-curve + VFD-minimum, leaking valves); impact prioritization and fault
+  lifecycle; an
   FDD-accuracy evaluation harness.
 - **M&V** — change-point inverse models (2P–5P + heating/cooling-zero), the LBNL
   TOWT model, fit statistics with fractional savings uncertainty, CUSUM, weather
