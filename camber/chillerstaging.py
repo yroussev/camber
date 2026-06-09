@@ -90,3 +90,72 @@ def analyze_chiller_staging(
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
     )
+
+
+@dataclass
+class ChillerFleetStagingResult:
+    """Plant-level staging: how often more chillers run than the load requires."""
+
+    n_chillers: int
+    n_running_hours: int          # intervals with >= 1 chiller running
+    n_multi_hours: int            # intervals with >= 2 chillers running
+    pct_overstaged: float         # % of multi-chiller hours that could drop a chiller
+    median_running_count: float   # median number of chillers running (running hours)
+    rep_capacity_kw: float        # representative per-chiller capacity used
+
+    def as_dict(self):
+        """Return the result as a plain dict."""
+        return asdict(self)
+
+
+def analyze_chiller_staging_fleet(
+    frames: dict,
+    *,
+    min_power_kw: float = 2.0,         # power above this == chiller running
+    redundancy_ceiling: float = 0.9,   # a single chiller can carry up to ceiling*capacity
+) -> ChillerFleetStagingResult | None:
+    """Detect over-staging across a set of chillers from their power trends.
+
+    ``frames`` is ``{equip: df}`` with a ``Power`` (kW) column each. Power is the
+    staging load proxy (a chiller's draw scales with its cooling load); per-chiller
+    capacity is its observed peak power. At each interval, the plant is *over-staged*
+    when two or more chillers run but the total draw would fit in one fewer machine
+    (total <= (n_running - 1) * capacity * ceiling) -- a redundant chiller that should
+    be staged off (PNNL Re-tuning Ch.8 / ASHRAE chiller-plant staging).
+    """
+    running_cols, load_cols, caps = {}, {}, []
+    for equip, df in frames.items():
+        if df is None or "Power" not in df.columns:
+            continue
+        p = df["Power"].dropna()
+        if len(p) < 10:
+            continue
+        run = p >= min_power_kw
+        if not bool(run.any()):
+            continue
+        running_cols[equip] = run
+        load_cols[equip] = p.where(run, 0.0)
+        caps.append(float(p[run].quantile(0.95)))   # robust peak (capacity)
+    if len(running_cols) < 2:
+        return None
+
+    running = pd.DataFrame(running_cols).fillna(False)
+    load = pd.DataFrame(load_cols).reindex(running.index).fillna(0.0)
+    n_running = running.sum(axis=1)
+    total_load = load.sum(axis=1)
+    cap_rep = float(pd.Series(caps).median())
+
+    any_run = n_running >= 1
+    multi = n_running >= 2
+    overstaged = multi & (total_load <= (n_running - 1) * cap_rep * redundancy_ceiling)
+    n_multi = int(multi.sum())
+
+    return ChillerFleetStagingResult(
+        n_chillers=len(running_cols),
+        n_running_hours=int(any_run.sum()),
+        n_multi_hours=n_multi,
+        pct_overstaged=round(100.0 * int(overstaged.sum()) / n_multi, 1) if n_multi else 0.0,
+        median_running_count=round(float(n_running[any_run].median()), 1)
+        if bool(any_run.any()) else 0.0,
+        rep_capacity_kw=round(cap_rep, 1),
+    )

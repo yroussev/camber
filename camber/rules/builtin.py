@@ -11,6 +11,7 @@ from .base import Registry
 from .boiler_rule import BoilerSummerLockout
 from .boilercycle_rule import BoilerShortCycle
 from .chiller_rule import ChillerEfficiency
+from .chillerfleet_rule import ChillerStagingFleet
 from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
@@ -34,7 +35,7 @@ RULE_CLASSES = [
     OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, BoilerShortCycle,
     HWPlantDeltaT, NightWeekendSetback, OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, LeakingValve,
-    DamperCensus, ZonesHeatCoolCensus,
+    DamperCensus, ZonesHeatCoolCensus, ChillerStagingFleet,
 ]
 
 
