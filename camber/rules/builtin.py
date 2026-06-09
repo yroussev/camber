@@ -10,6 +10,7 @@ from __future__ import annotations
 from .base import Registry
 from .boiler_rule import BoilerSummerLockout
 from .chiller_rule import ChillerEfficiency
+from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
 from .coolingtower_rule import CoolingTowerApproach
@@ -30,7 +31,7 @@ RULE_CLASSES = [
     SimultaneousHeatCool, SupplyAirReset, ReheatPenalty, OvercoolingMinFlow,
     OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, NightWeekendSetback,
     OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset, ChillerEfficiency,
-    CoolingTowerApproach, LeakingValve,
+    ChillerStaging, CoolingTowerApproach, LeakingValve,
     DamperCensus, ZonesHeatCoolCensus,
 ]
 
