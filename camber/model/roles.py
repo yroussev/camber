@@ -68,6 +68,15 @@ class Role(str, Enum):
     CHW_PUMP_SPEED = "chw_pump_speed"        # chilled-water pump VFD speed (%)
     CHW_FLOW = "chw_flow"                     # chilled-water volumetric flow (gpm)
 
+    # --- condenser water / cooling tower ---
+    CW_SUPPLY_TEMP = "cw_supply_temp"        # condenser water leaving the tower (to condenser)
+    CW_RETURN_TEMP = "cw_return_temp"        # condenser water returning to the tower (from condenser)
+    TOWER_FAN_SPEED = "tower_fan_speed"      # cooling-tower fan speed (%)
+
+    # --- ambient (psychrometric) ---
+    WETBULB_TEMP = "wetbulb_temp"            # outdoor wet-bulb temperature
+    OUTDOOR_RH = "outdoor_rh"                # outdoor relative humidity (%)
+
     # --- energy / power ---
     POWER = "power"                   # electric power (kW)
     ENERGY_RATE = "energy_rate"       # thermal energy rate (BTU meter)
@@ -118,6 +127,12 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.CHW_DIFF_PRESS: "chilled water delta pressure sensor",
     Role.CHW_DIFF_PRESS_SP: "chilled water delta pressure sp",
     Role.CHW_PUMP_SPEED: "chilled water pump speed cmd",
+    Role.CHW_FLOW: "chilled water flow sensor",
+    Role.CW_SUPPLY_TEMP: "condenser water leaving temp sensor",
+    Role.CW_RETURN_TEMP: "condenser water entering temp sensor",
+    Role.TOWER_FAN_SPEED: "cooling tower fan speed cmd",
+    Role.WETBULB_TEMP: "outside air wetBulb temp sensor",
+    Role.OUTDOOR_RH: "outside air humidity sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

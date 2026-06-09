@@ -12,6 +12,7 @@ from .boiler_rule import BoilerSummerLockout
 from .chiller_rule import ChillerEfficiency
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
+from .coolingtower_rule import CoolingTowerApproach
 from .leakvalve_rule import LeakingValve
 from .oafraction_rule import OutdoorAirFraction
 from .overcooling_rule import OvercoolingMinFlow
@@ -28,7 +29,8 @@ from .zones_rule import ZonesHeatCoolCensus
 RULE_CLASSES = [
     SimultaneousHeatCool, SupplyAirReset, ReheatPenalty, OvercoolingMinFlow,
     OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, NightWeekendSetback,
-    OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset, ChillerEfficiency, LeakingValve,
+    OutdoorAirFraction, CHWPlantReset, CHWPumpDPReset, ChillerEfficiency,
+    CoolingTowerApproach, LeakingValve,
     DamperCensus, ZonesHeatCoolCensus,
 ]
 

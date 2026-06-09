@@ -152,6 +152,12 @@ _TEMPLATE_LIST = (
         optional=frozenset({Role.CHW_SUPPLY_TEMP_SP, Role.OAT, Role.ENERGY_RATE}),
     ),
     EquipTemplate(
+        "CoolingTower",
+        required=frozenset({Role.CW_SUPPLY_TEMP}),
+        optional=frozenset({Role.CW_RETURN_TEMP, Role.WETBULB_TEMP, Role.OAT,
+                            Role.OUTDOOR_RH, Role.TOWER_FAN_SPEED, Role.POWER}),
+    ),
+    EquipTemplate(
         "Meter",
         required=frozenset({Role.POWER}),
         optional=frozenset({Role.ENERGY_RATE}),
