@@ -19,6 +19,7 @@ from .condenserwater_rule import CondenserWaterReset
 from .coolingtower_rule import CoolingTowerApproach
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
+from .iaq_rule import CO2Ventilation
 from .leakvalve_rule import LeakingValve
 from .oafraction_rule import OutdoorAirFraction
 from .overcooling_rule import OvercoolingMinFlow
@@ -38,7 +39,7 @@ RULE_CLASSES = [
     HWPlantDeltaT, HWPumpDPReset, NightWeekendSetback, OutdoorAirFraction,
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
-    LeakingValve, DamperCensus, ZonesHeatCoolCensus, ChillerStagingFleet,
+    CO2Ventilation, LeakingValve, DamperCensus, ZonesHeatCoolCensus, ChillerStagingFleet,
 ]
 
 

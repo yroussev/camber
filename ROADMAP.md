@@ -221,15 +221,17 @@ release; listed so a contributor can claim one.
 
 ### Diagnostic breadth
 
-- [~] **Central plant & hydronic rule library** — bring FDD to the plant, where the
-      largest kWh/therms usually hide: chillers (kW/ton efficiency, staging,
-      condenser/evaporator approach), boilers, cooling towers (approach, fan staging),
-      and CHW/HW distribution (pumps riding the curve, VFD minimums) — plus
-      **chilled-water low-ΔT syndrome**. Cites ASHRAE/PNNL plant guidance. *First
-      increment (low-ΔT) in progress.*
-- [ ] **IAQ & ventilation analytics** — CO₂-based ventilation adequacy, ASHRAE 62.1
-      checks, and demand-controlled-ventilation verification — the air-quality axis
-      alongside the existing Std-55 thermal comfort.
+- [x] **Central plant & hydronic rule library** — FDD at the plant, where the largest
+      kWh/therms hide. *Shipped:* chiller efficiency (kW/ton), chiller staging/cycling
+      (single + a multi-chiller fleet over-staging census), cooling-tower approach,
+      condenser-water reset, CHW & HW pump operation (riding-the-curve + VFD-minimum),
+      CHW reset + low-ΔT, boiler summer-lockout, boiler short-cycling, and HW-loop
+      low-ΔT — 11 rules, each citing ASHRAE/PNNL plant guidance with a synthetic fixture.
+- [~] **IAQ & ventilation analytics** — the air-quality axis alongside Std-55 thermal
+      comfort. *Shipped:* CO₂-based ventilation adequacy (`camber.iaq` / `co2_ventilation`
+      rule) — under-ventilation (elevated occupied CO₂) and over-ventilation (CO₂ near
+      outdoor), differential to measured/assumed outdoor CO₂. Remaining: explicit ASHRAE
+      62.1 OA-rate checks and demand-controlled-ventilation (DCV) verification.
 - [ ] **Demand & peak analytics** — peak-demand drivers, coincidence and load-shape
       analysis, demand-charge management, and night/weekend baseload anomaly detection
       (deeper than today's load profiling).

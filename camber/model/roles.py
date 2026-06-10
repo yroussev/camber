@@ -78,6 +78,10 @@ class Role(str, Enum):
     WETBULB_TEMP = "wetbulb_temp"            # outdoor wet-bulb temperature
     OUTDOOR_RH = "outdoor_rh"                # outdoor relative humidity (%)
 
+    # --- air quality ---
+    CO2 = "co2"                              # zone/space CO2 concentration (ppm)
+    OUTDOOR_CO2 = "outdoor_co2"              # outdoor CO2 concentration (ppm)
+
     # --- energy / power ---
     POWER = "power"                   # electric power (kW)
     ENERGY_RATE = "energy_rate"       # thermal energy rate (BTU meter)
@@ -135,6 +139,8 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.TOWER_FAN_SPEED: "cooling tower fan speed cmd",
     Role.WETBULB_TEMP: "outside air wetBulb temp sensor",
     Role.OUTDOOR_RH: "outside air humidity sensor",
+    Role.CO2: "zone air co2 sensor",
+    Role.OUTDOOR_CO2: "outside air co2 sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

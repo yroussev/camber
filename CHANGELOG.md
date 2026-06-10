@@ -49,6 +49,10 @@ First public pre-release.
 - **M&V** — change-point inverse models (2P–5P + heating/cooling-zero), the LBNL
   TOWT model, fit statistics with fractional savings uncertainty, CUSUM, weather
   normalization, and rate/energy-aware resampling.
+- **IAQ / ventilation** — CO₂-based ventilation-adequacy diagnostic (`camber.iaq`):
+  flags under-ventilation (elevated occupied CO₂, ~ASHRAE 62.1 ventilation-rate proxy)
+  and over-ventilation (CO₂ near outdoor — a conditioning-energy penalty), differential
+  to a measured or assumed outdoor CO₂; the air-quality companion to Std-55 comfort.
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with

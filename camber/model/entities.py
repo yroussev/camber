@@ -127,7 +127,7 @@ _TEMPLATE_LIST = (
         required=frozenset({Role.SPACE_TEMP, Role.DAMPER}),
         optional=frozenset({
             Role.HEAT_VALVE, Role.AIRFLOW, Role.AIRFLOW_SP, Role.COOL_SP,
-            Role.HEAT_SP, Role.OCCUPANCY,
+            Role.HEAT_SP, Role.OCCUPANCY, Role.CO2,
         }),
     ),
     EquipTemplate(
