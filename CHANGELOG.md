@@ -53,6 +53,13 @@ First public pre-release.
   flags under-ventilation (elevated occupied CO₂, ~ASHRAE 62.1 ventilation-rate proxy)
   and over-ventilation (CO₂ near outdoor — a conditioning-energy penalty), differential
   to a measured or assumed outdoor CO₂; the air-quality companion to Std-55 comfort.
+- **Tariffs / utility rates** — a native, dependency-free tariff engine (`camber.tariff`):
+  bills an interval load against a URDB-shaped rate (fixed charge, TOU energy with tiered
+  blocks + 12×24 weekday/weekend schedules, TOU and flat monthly demand, ratchet) into a
+  per-month + annual cost breakdown. `camber.interop.openei` fetches and maps an OpenEI
+  Utility Rate Database (URDB) rate (stdlib `urllib`, API key); an optional `[tariff]`
+  extra bridges to NREL PySAM's `UtilityRate5` (`camber.interop.tariff_nrel`) for
+  full-fidelity / cross-checking.
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with

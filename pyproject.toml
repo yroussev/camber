@@ -40,6 +40,10 @@ haystack = [
     "phable>=0.1.0; python_version >= '3.11'",
     "pyhaystack; python_version < '3.11'",
 ]
+# full-fidelity URDB tariff billing via NREL PySAM's UtilityRate5 (BSD-3-Clause; large
+# binary wheel). The native camber.tariff engine needs none of this; the bridge in
+# camber.interop.tariff_nrel uses it for exotic rates / cross-checking.
+tariff = ["nrel-pysam>=4"]
 
 [project.scripts]
 camber = "camber.cli:main"

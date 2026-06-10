@@ -59,6 +59,16 @@ well-trodden wheels.
    differ from strict CalTRACK, and gives an eemeter cross-check recipe (no
    dependency added).
 
+4. **Tariffs / OpenEI URDB — DONE (hybrid).** A native, dependency-free engine
+   (`camber.tariff`) bills an interval load against a URDB-shaped rate (fixed, TOU
+   energy + tiers, TOU/flat demand, ratchet) and covers the common cases; `camber.interop.openei`
+   fetches + maps a URDB rate (stdlib `urllib`, API key). For exotic rates and
+   cross-checking, an optional `[tariff]` extra bridges to **NREL PySAM**'s
+   battle-tested `UtilityRate5` (`camber.interop.tariff_nrel`) — BSD-3-Clause, but a
+   ~47 MB binary, so it stays an opt-in extra, never a core dependency. Same own-it +
+   cross-check-the-heavyweight pattern as M&V/eemeter. (NREL REopt's tariff logic is
+   also BSD-3 but Julia-native — reachable via the REopt API, not embedded.)
+
 ## Cross-validation: G36 fault conditions vs. open-fdd
 
 Our G36 AHU fault engine (`camber.fdd_g36`) is a clean-room implementation of the
