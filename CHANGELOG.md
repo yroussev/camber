@@ -65,6 +65,11 @@ First public pre-release.
 - **ECM financials** — `camber.finance`: simple & discounted payback, NPV, IRR (hand-rolled
   bisection — no `numpy_financial`), and SIR for an energy-conservation measure from its
   cost and dollar savings, with savings escalation, annual O&M, and salvage.
+- **Demand & peak analytics** — `camber.demand`: peak demand + its drivers (hour/day,
+  coincident peak hour, how few intervals set it), load factor, baseload, a
+  night/weekend **baseload-anomaly** check (unoccupied vs occupied load — equipment not
+  setting back), and **peak-shave $ value** (demand charge recoverable by capping the
+  monthly peak at a target).
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with

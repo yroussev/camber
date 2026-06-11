@@ -232,9 +232,10 @@ release; listed so a contributor can claim one.
       rule) — under-ventilation (elevated occupied CO₂) and over-ventilation (CO₂ near
       outdoor), differential to measured/assumed outdoor CO₂. Remaining: explicit ASHRAE
       62.1 OA-rate checks and demand-controlled-ventilation (DCV) verification.
-- [ ] **Demand & peak analytics** — peak-demand drivers, coincidence and load-shape
-      analysis, demand-charge management, and night/weekend baseload anomaly detection
-      (deeper than today's load profiling).
+- [x] **Demand & peak analytics** — `camber.demand`: peak demand + drivers (hour/day,
+      coincident peak hour, peakiness), load factor, baseload, night/weekend
+      baseload-anomaly detection, and peak-shave demand-charge value. Deeper than the
+      load-profiling basics.
 
 ### Commissioning workflow (the "C" in CAMBER)
 
