@@ -15,6 +15,7 @@ can be handed to NREL PySAM via :mod:`camber.interop.tariff_nrel`.
 from __future__ import annotations
 
 import json
+import os
 
 from ..tariff import Tariff
 
@@ -22,13 +23,19 @@ _URDB_URL = ("https://api.openei.org/utility_rates?version=latest&format=json"
              "&detail=full&getpage={label}&api_key={key}")
 
 
-def fetch_urdb_rate(label: str, api_key: str, *, transport=None, timeout: float = 30.0) -> dict:
+def fetch_urdb_rate(label: str, api_key: str | None = None, *, transport=None,
+                    timeout: float = 30.0) -> dict:
     """Fetch one URDB rate page by ``label``; return the rate JSON dict.
 
-    ``transport`` (a ``url -> dict`` callable) overrides the network for tests. The live
-    path uses ``urllib``; an OpenEI/NREL API key is required (get one free at openei.org).
+    ``api_key`` defaults to the ``OPENEI_API_KEY`` environment variable -- get a free key
+    at https://openei.org/services/ and export it (never hard-code or commit the key).
+    ``transport`` (a ``url -> dict`` callable) overrides the network for tests; the live
+    path uses ``urllib``.
     """
-    url = _URDB_URL.format(label=label, key=api_key)
+    api_key = api_key or os.environ.get("OPENEI_API_KEY")
+    if not api_key and transport is None:
+        raise ValueError("OpenEI API key required: pass api_key= or set OPENEI_API_KEY")
+    url = _URDB_URL.format(label=label, key=api_key or "")
     if transport is not None:
         payload = transport(url)
     else:
