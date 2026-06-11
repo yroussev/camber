@@ -59,7 +59,9 @@ First public pre-release.
   per-month + annual cost breakdown. `camber.interop.openei` fetches and maps an OpenEI
   Utility Rate Database (URDB) rate (stdlib `urllib`, API key); an optional `[tariff]`
   extra bridges to NREL PySAM's `UtilityRate5` (`camber.interop.tariff_nrel`) for
-  full-fidelity / cross-checking.
+  full-fidelity / cross-checking. Bill **recalculation/validation** (`validate_bill`)
+  compares the recomputed bill to actual invoices month by month — validating the rate
+  model and flagging over/under-billed months (MAPE + per-month high/low status).
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with

@@ -156,6 +156,91 @@ def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
                       total=round(e_tot + d_tot + f_tot, 2), n_months=len(rows))
 
 
+# --- bill recalculation / validation ----------------------------------------- #
+
+@dataclass
+class MonthBillCheck:
+    """One month's computed-vs-actual bill comparison."""
+
+    period: str
+    computed: float
+    actual: float                 # NaN if no invoice was supplied for the month
+    diff: float                   # actual - computed
+    pct_diff: float               # 100 * diff / actual (signed; + = invoice higher)
+    status: str                   # "ok" | "high" | "low" | "no_actual"
+
+
+@dataclass
+class BillValidation:
+    """Recalculated bill vs actual invoices: per-month checks + a summary verdict."""
+
+    months: list                  # [MonthBillCheck]
+    n_checked: int                # months with an actual invoice
+    n_within: int                 # of those, how many within tolerance
+    mape: float                   # mean abs % difference over checked months
+    max_abs_pct: float
+    tol_pct: float
+    verdict: str                  # "validated" | "minor" | "discrepancy" | "no_actual"
+
+    def as_dict(self) -> dict:
+        """Return the validation (with nested checks) as a plain dict."""
+        return {"months": [vars(m) for m in self.months], "n_checked": self.n_checked,
+                "n_within": self.n_within, "mape": self.mape,
+                "max_abs_pct": self.max_abs_pct, "tol_pct": self.tol_pct,
+                "verdict": self.verdict}
+
+
+def _actual_total(v):
+    """Pull a total from an actual-invoice value (a number, or a dict with 'total')."""
+    if v is None:
+        return float("nan")
+    if isinstance(v, dict):
+        return float(v.get("total", float("nan")))
+    return float(v)
+
+
+def validate_bill(computed: BillResult, actual: dict, *, tol_pct: float = 5.0) -> BillValidation:
+    """Compare a recomputed :class:`BillResult` to actual invoice totals by month.
+
+    ``actual`` maps period ``"YYYY-MM"`` -> the invoiced amount (a number, or a dict with
+    a ``"total"`` key). A close match **validates the rate model**; a month outside
+    ``tol_pct`` is flagged ``high`` (invoice above the recalculation -- a possible
+    overbill, rate change, or under-modeled charge) or ``low``, for review.
+    """
+    comp_by = {m["period"]: float(m["total"]) for m in computed.months}
+    periods = sorted(set(comp_by) | set(actual or {}))
+    checks, pcts = [], []
+    for p in periods:
+        comp = comp_by.get(p, 0.0)
+        act = _actual_total((actual or {}).get(p))
+        if act != act:                                  # NaN -> no invoice this month
+            checks.append(MonthBillCheck(p, round(comp, 2), float("nan"),
+                                         float("nan"), float("nan"), "no_actual"))
+            continue
+        diff = act - comp
+        denom = act if act else (comp if comp else 1.0)
+        pct = 100.0 * diff / denom
+        status = "ok" if abs(pct) <= tol_pct else ("high" if diff > 0 else "low")
+        checks.append(MonthBillCheck(p, round(comp, 2), round(act, 2), round(diff, 2),
+                                     round(pct, 1), status))
+        pcts.append(abs(pct))
+
+    n_checked = len(pcts)
+    n_within = sum(1 for c in checks if c.status == "ok")
+    mape = round(float(np.mean(pcts)), 2) if pcts else float("nan")
+    max_abs = round(float(max(pcts)), 1) if pcts else float("nan")
+    if n_checked == 0:
+        verdict = "no_actual"
+    elif n_within == n_checked:
+        verdict = "validated"
+    elif mape <= tol_pct:
+        verdict = "minor"
+    else:
+        verdict = "discrepancy"
+    return BillValidation(months=checks, n_checked=n_checked, n_within=n_within,
+                          mape=mape, max_abs_pct=max_abs, tol_pct=tol_pct, verdict=verdict)
+
+
 # --- convenience constructors ------------------------------------------------- #
 
 def flat_tariff(energy_rate: float, *, demand_rate: float = 0.0,

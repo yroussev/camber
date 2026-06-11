@@ -9,8 +9,16 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.tariff import (  # noqa: E402
-    Tariff, compute_bill, flat_tariff, hours_schedule, tou_tariff,
+    BillResult, Tariff, compute_bill, flat_tariff, hours_schedule, tou_tariff,
+    validate_bill,
 )
+
+
+def _bill(**totals):
+    """A BillResult with given {period: total} months (other fields unused here)."""
+    months = [{"period": p, "total": float(t)} for p, t in totals.items()]
+    return BillResult(months=months, energy_charge=0.0, demand_charge=0.0,
+                      fixed_charge=0.0, total=sum(totals.values()), n_months=len(months))
 
 
 def _hourly(kw, start="2025-01-01", periods=24 * 31):
@@ -82,3 +90,42 @@ def test_hours_schedule_shape():
 def test_empty_load():
     bill = compute_bill(flat_tariff(0.15), pd.Series([], dtype=float))
     assert bill.n_months == 0 and bill.total == 0.0
+
+
+# --- bill recalculation / validation ------------------------------------------ #
+
+def test_validate_bill_matches_within_tolerance():
+    comp = _bill(**{"2025-01": 1000.0, "2025-02": 1000.0})
+    v = validate_bill(comp, {"2025-01": 1010.0, "2025-02": 990.0}, tol_pct=5.0)
+    assert v.verdict == "validated"
+    assert v.n_checked == 2 and v.n_within == 2
+    assert v.mape < 2.0
+
+
+def test_validate_bill_flags_discrepancy_high():
+    comp = _bill(**{"2025-01": 1000.0, "2025-02": 1000.0})
+    v = validate_bill(comp, {"2025-01": 1300.0, "2025-02": 1000.0}, tol_pct=5.0)
+    assert v.verdict == "discrepancy"
+    jan = [m for m in v.months if m.period == "2025-01"][0]
+    assert jan.status == "high" and jan.pct_diff > 20      # invoice above the recalc
+
+
+def test_validate_bill_minor_when_avg_within_tol():
+    comp = _bill(**{"2025-01": 1000.0, "2025-02": 1000.0})
+    v = validate_bill(comp, {"2025-01": 1080.0, "2025-02": 1000.0}, tol_pct=5.0)
+    assert v.verdict == "minor"                            # one month 8% off, avg <= tol
+    assert v.n_within == 1
+
+
+def test_validate_bill_skips_months_without_invoice():
+    comp = _bill(**{"2025-01": 1000.0, "2025-02": 1000.0})
+    v = validate_bill(comp, {"2025-01": 1000.0}, tol_pct=5.0)
+    assert v.n_checked == 1
+    feb = [m for m in v.months if m.period == "2025-02"][0]
+    assert feb.status == "no_actual"
+
+
+def test_validate_bill_accepts_component_dict():
+    comp = _bill(**{"2025-01": 1000.0})
+    v = validate_bill(comp, {"2025-01": {"total": 1000.0, "energy": 800.0}}, tol_pct=5.0)
+    assert v.verdict == "validated"
