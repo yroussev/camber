@@ -246,9 +246,12 @@ release; listed so a contributor can claim one.
       reporting per-clause conformance % with time-based persistence and emitting
       Findings; a packaged ASHRAE G36 clause library (`camber.soo_library`); and an
       optional `soo` section in config-driven runs (library or JSON spec per class).
-- [ ] **RCx / MBCx workflow + functional-test automation** — derive functional
-      performance tests from trend data, track measures through a fix lifecycle, and
-      run before/after M&V on each measure; ongoing monitoring-based commissioning.
+- [~] **RCx / MBCx workflow + functional-test automation** — *Shipped:* `camber.rcx`
+      with `functional_test` (score a Functional Performance Test from trend data: a
+      pass-rate over the intervals meeting an expected response) and `before_after` (the
+      MBCx persistence check — did a measure's metric move, and significantly, across the
+      intervention date). Cites ASHRAE Guideline 0 / G36. Remaining: a measure-tracking
+      register and report wiring.
 
 ### Foundations & credibility
 
@@ -262,10 +265,11 @@ release; listed so a contributor can claim one.
       external weather such as NASA POWER, a station, or a TMY series); and
       `camber.mapping_confidence` (how surely each BAS tag resolved to its role — alias
       vs pattern, ambiguity, physical data-fit — to focus onboarding review).
-- [ ] **Methods validation & scientific credibility** — published accuracy on public
-      labeled datasets, end-to-end uncertainty quantification, a reproducibility
-      harness, and a short methods write-up — the backbone of the defensible/citable
-      promise.
+- [~] **Methods validation & scientific credibility** — *Shipped:* `camber.validation`
+      adds Wilson score confidence intervals to the FDD-accuracy rates (`metrics_with_ci`
+      over `eval.Confusion`) so TPR/FPR/accuracy ship with uncertainty, plus a
+      `check_determinism` reproducibility harness. Remaining: published accuracy run
+      across the public labeled datasets and a short methods write-up.
 
 ### Money & compliance
 
@@ -275,9 +279,11 @@ release; listed so a contributor can claim one.
       (`[tariff]` extra) for full-fidelity URDB billing; **bill recalculation/validation**
       against actual invoices (`validate_bill`); and **ECM payback / NPV / IRR / SIR**
       (`camber.finance`, dependency-free).
-- [ ] **Building Performance Standards (BPS) compliance** — EUI/emissions-limit
-      checking against local BPS laws plus ENERGY STAR / ASHRAE bEQ, with
-      penalty-exposure estimates. A regulatory extension of the carbon basics.
+- [x] **Building Performance Standards (BPS) compliance** — `camber.bps`: `assess_bps`
+      checks a site EUI or emissions intensity against a supplied BPS limit (compliant?,
+      margin, % of limit, over-amount, and penalty exposure at a $/unit-over rate), and
+      `emissions_intensity` rolls fuel use into kgCO₂e/ft²/yr. Limits are caller-supplied
+      (no hard-coded legal values); motivated by laws like NYC LL97.
 
 ## Horizon (beyond 1.0 — research / exploratory)
 

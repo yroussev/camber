@@ -39,6 +39,17 @@ First public pre-release.
   riding-the-curve + VFD-minimum, leaking valves); impact prioritization and fault
   lifecycle; an
   FDD-accuracy evaluation harness.
+- **RCx / MBCx** — `camber.rcx`: `functional_test` scores a Functional Performance Test
+  from trend data (pass-rate over the intervals meeting an expected response), and
+  `before_after` is the monitoring-based-commissioning persistence check (did a measure's
+  metric move across the intervention date, and significantly). Cites ASHRAE Guideline 0/36.
+- **Methods validation** — `camber.validation`: Wilson score confidence intervals on the
+  FDD-accuracy rates (`metrics_with_ci` over `eval.Confusion`) so TPR/FPR/accuracy carry
+  uncertainty, plus a `check_determinism` reproducibility harness.
+- **BPS compliance** — `camber.bps`: `assess_bps` checks a site EUI or emissions intensity
+  against a supplied Building-Performance-Standard limit (compliant?, margin, % of limit,
+  over-amount, penalty exposure), and `emissions_intensity` rolls fuel use into
+  kgCO₂e/ft²/yr. Caller-supplies limits (no hard-coded legal values).
 - **Sequence-of-Operations conformance** — a declarative clause engine (`camber.soo`):
   gated predicates over roles (`when <gate> then expect <predicate>`) that measure
   operated-vs-designed behavior per clause as a conformance %, with optional
