@@ -268,11 +268,12 @@ release; listed so a contributor can claim one.
 
 ### Money & compliance
 
-- [~] **Tariff & financial analytics** — *Shipped:* a native utility-rate engine
-      (`camber.tariff`: TOU energy + tiers, TOU/flat demand, ratchet, fixed → monthly +
-      annual bill) and OpenEI URDB fetch/map (`camber.interop.openei`), with an optional
-      NREL-PySAM bridge (`[tariff]` extra) for full-fidelity URDB billing. Remaining:
-      bill recalculation/validation against actual invoices, and ECM payback/NPV/IRR.
+- [x] **Tariff & financial analytics** — a native utility-rate engine (`camber.tariff`:
+      TOU energy + tiers, TOU/flat demand, ratchet, fixed → monthly + annual bill) and
+      OpenEI URDB fetch/map (`camber.interop.openei`), with an optional NREL-PySAM bridge
+      (`[tariff]` extra) for full-fidelity URDB billing; **bill recalculation/validation**
+      against actual invoices (`validate_bill`); and **ECM payback / NPV / IRR / SIR**
+      (`camber.finance`, dependency-free).
 - [ ] **Building Performance Standards (BPS) compliance** — EUI/emissions-limit
       checking against local BPS laws plus ENERGY STAR / ASHRAE bEQ, with
       penalty-exposure estimates. A regulatory extension of the carbon basics.

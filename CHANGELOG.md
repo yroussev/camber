@@ -62,6 +62,9 @@ First public pre-release.
   full-fidelity / cross-checking. Bill **recalculation/validation** (`validate_bill`)
   compares the recomputed bill to actual invoices month by month — validating the rate
   model and flagging over/under-billed months (MAPE + per-month high/low status).
+- **ECM financials** — `camber.finance`: simple & discounted payback, NPV, IRR (hand-rolled
+  bisection — no `numpy_financial`), and SIR for an energy-conservation measure from its
+  cost and dollar savings, with savings escalation, annual O&M, and salvage.
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with
