@@ -88,10 +88,14 @@ def serve(store, *, host: str = "127.0.0.1", port: int = 8080):  # pragma: no co
 
 
 if __name__ == "__main__":  # pragma: no cover
+    import os
     import sys
 
     from ..store import ParquetStore
 
-    root = sys.argv[1] if len(sys.argv) > 1 else "tsdb"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8080
-    serve(ParquetStore(root), port=port)
+    # argv wins; otherwise env (CAMBER_STORE / _API_HOST / _API_PORT) — the container
+    # sets HOST=0.0.0.0 to be reachable, while a bare `python -m` stays on localhost.
+    root = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CAMBER_STORE", "tsdb")
+    host = os.environ.get("CAMBER_API_HOST", "127.0.0.1")
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("CAMBER_API_PORT", "8080"))
+    serve(ParquetStore(root), host=host, port=port)
