@@ -121,6 +121,12 @@ First public pre-release.
   night/weekend **baseload-anomaly** check (unoccupied vs occupied load — equipment not
   setting back), and **peak-shave $ value** (demand charge recoverable by capping the
   monthly peak at a target).
+- **Visualization** — three analytics-driven charts (`camber.charts`): a **load carpet**
+  (`carpet`, hour-of-day × date heatmap exposing occupancy bands, weekend setback, and
+  stuck-on days), a **CUSUM** savings/waste trajectory (`cusum_chart`, with optional control
+  limits), and an **energy-signature** plot (`energy_signature`, energy-vs-temperature scatter
+  with the fitted change-point model and balance point(s) overlaid). All draw onto a supplied
+  Axes and lazy-import matplotlib, matching the existing chart convention.
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with

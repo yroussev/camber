@@ -99,8 +99,12 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       carries its `basis` + `assumptions`, and returns *uncosted* (naming the missing input)
       rather than fabricating when sizing is absent. (Audit-grade savings remain the
       M&V/ECM track.)
-- [ ] **Visualization** — richer static charts (load carpets/heatmaps, energy
-      signatures, savings + CUSUM plots) and a portfolio rollup report.
+- [~] **Visualization** — *Shipped:* `camber.charts.carpet` (load carpet — an hour-of-day
+      × date heatmap that exposes occupancy bands, weekend setback, and stuck-on days at a
+      glance), `camber.charts.cusum_chart` (the CUSUM savings/waste trajectory with optional
+      control limits), and `camber.charts.energy_signature` (energy-vs-temperature scatter
+      with the fitted change-point model and balance point(s) overlaid). All follow the
+      draw-on-an-Axes convention. Remaining: a portfolio rollup report.
 - [ ] **Distribution & Docker** — publish a multi-arch image to GHCR on tagged
       releases; a slim runtime image; a `docker compose` bundle for the read-API +
       store; a `.devcontainer` for one-click contributor setup.
