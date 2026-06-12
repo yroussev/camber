@@ -21,7 +21,7 @@ well-trodden wheels.
 | **Haystack client** | [phable](https://github.com/rick-jennings/phable) (modern, zero-dep) / [pyhaystack](https://github.com/ChristianTremblay/pyhaystack) | confirm / Apache-2.0 ✓ | A real `hisRead`/Zinc client | **Optional `[haystack]` extra** wired as the transport our adapter already accepts — no need to hand-roll the HTTP/Zinc layer. |
 | **PV modeling** | [pvlib-python](https://github.com/pvlib/pvlib-python) | BSD-3 ✓ | Rigorous PV performance/irradiance modeling | **Optional `[pv]` extra** for serious PV; keep our performance-ratio basics dep-free. |
 | **Psychrometrics** | [PsychroLib](https://github.com/psychrometrics/psychrolib) | MIT ✓ | ASHRAE psychrometric properties (humidity ratio, enthalpy, wet-bulb) | Optional; back any psychrometric needs (e.g. App-C solar-MRT comfort, latent loads). |
-| **Controls / agents** | [VOLTTRON](https://github.com/VOLTTRON/volttron) | Apache-2.0 (confirm) | BACnet/Modbus drivers, an agent platform, deployment | Reference for ingest drivers and a deployment target; don't vendor. |
+| **Controls / agents** | [Eclipse VOLTTRON](https://github.com/eclipse-volttron) | Apache-2.0 ✓ | BACnet/Modbus drivers, historians, an agent platform | **Interoperate, don't vendor** — read its historian via our SQL adapter / its telemetry via MQTT; study its driver framework. Too heavy (ZMQ/gevent) to import. See note 9 below. |
 
 ## The strategy: optional extras, not forks
 
@@ -96,6 +96,23 @@ well-trodden wheels.
    ASHRAE-formulation properties (`psychrometrics` → wet-bulb, dew point, humidity ratio,
    enthalpy) and `compare_wetbulb` validates the Stull approximation against the exact value
    (~1 °F agreement at hot/dry CZ15 conditions). Lazy import; core dep-free.
+
+8. **Network ingest protocols — DONE (optional extras).** Read-only adapters for Modbus
+   (`[modbus]`/pymodbus, BSD-3), MQTT/Sparkplug (`[mqtt]`/paho-mqtt under EDL-1.0), and BACnet
+   incl. experimental BACnet/SC (`[bacnet]`/bacpypes3, MIT). All lazy-imported, read-only by
+   construction, and steered behind the historian/SQL/Haystack default posture. We deliberately
+   depend on the permissive libraries (bacpypes3/pymodbus/paho-mqtt) and avoid LGPL ones
+   (BAC0, asyncua) as anything but optional dynamic deps. See [SECURITY.md](SECURITY.md) +
+   [INGEST-PROTOCOLS.md](INGEST-PROTOCOLS.md).
+
+9. **VOLTTRON — interoperate, don't vendor.** Eclipse VOLTTRON (Apache-2.0) is a full
+   ZMQ/gevent agent platform, not a light library: its modules assume a live message bus + agent
+   runtime (its BACnet driver even needs a *separate proxy process*), so it can't be imported
+   into a dependency-light tool. CAMBER instead treats a VOLTTRON deployment as a **data source**
+   — point the SQL adapter at its SQLite/PostgreSQL historian, or the MQTT adapter at its
+   forwarded telemetry — and mines its driver framework (registry-CSV point maps, scrape
+   scheduling, COV) as a **design reference**. No `volttron-*` dependency; if any snippet is ever
+   adapted, its Apache-2.0 NOTICE/attribution is retained.
 
 ## Cross-validation: G36 fault conditions vs. open-fdd
 
