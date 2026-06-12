@@ -41,7 +41,7 @@ def fit_changepoint(temps, energy) -> dict:
     ``{"model_type", "r_squared", "baseload", "raw"}``. Requires the ``[better]`` extra.
     """
     fit = _require_better()
-    res = fit(list(map(float, temps)), list(map(float, energy)))
+    res = fit(np.asarray(temps, dtype=float), np.asarray(energy, dtype=float))
     return {"model_type": _attr(res, "model_type"),
             "r_squared": _attr(res, "r_squared"),
             "baseload": _attr(res, "baseload"),
