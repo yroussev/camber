@@ -151,3 +151,72 @@ def before_after(series, change_time, *, min_samples=10) -> MeasureResult | None
         summary=(f"{direction} {abs(pct):.0f}% ({b_mean:.3g} -> {a_mean:.3g}), {sig}"
                  if pct == pct else f"{direction} ({b_mean:.3g} -> {a_mean:.3g}), {sig}"),
     )
+
+
+# --- measure register (MBCx lifecycle) ---------------------------------------- #
+
+@dataclass
+class MeasureRecord:
+    """One tracked measure: its before/after result mapped to a lifecycle status."""
+
+    name: str
+    status: str                   # "verified" | "regressed" | "inconclusive" | "insufficient"
+    result: dict | None           # MeasureResult.as_dict(), or None if not assessable
+
+    def as_dict(self) -> dict:
+        """Return the record as a plain dict."""
+        return {"name": self.name, "status": self.status, "result": self.result}
+
+
+@dataclass
+class RegisterReport:
+    """A portfolio of tracked measures with their persistence verdicts."""
+
+    records: list                 # [MeasureRecord]
+    n: int
+    n_verified: int               # improved and significant
+    n_regressed: int              # got worse and significant
+    n_inconclusive: int           # no significant change
+    n_insufficient: int           # not enough data either side
+    summary: str
+
+    def as_dict(self) -> dict:
+        """Return the report (with nested records) as a plain dict."""
+        return {"records": [r.as_dict() for r in self.records], "n": self.n,
+                "n_verified": self.n_verified, "n_regressed": self.n_regressed,
+                "n_inconclusive": self.n_inconclusive,
+                "n_insufficient": self.n_insufficient, "summary": self.summary}
+
+
+def track_measures(measures) -> RegisterReport:
+    """Run the before/after persistence check across a set of measures (the MBCx register).
+
+    ``measures`` is an iterable of dicts: ``{"name", "series", "change_time"}`` (plus an
+    optional ``"min_samples"``). Each is graded to a commissioning lifecycle status:
+    **verified** (improved and significant), **regressed** (worse and significant),
+    **inconclusive** (no significant change), or **insufficient** (too little data). This
+    is the standing MBCx record -- which fixes stuck, which drifted back.
+    """
+    records = []
+    for m in measures:
+        res = before_after(m["series"], m["change_time"],
+                           min_samples=m.get("min_samples", 10))
+        if res is None:
+            status, payload = "insufficient", None
+        elif not res.significant:
+            status, payload = "inconclusive", res.as_dict()
+        elif res.improved:
+            status, payload = "verified", res.as_dict()
+        else:
+            status, payload = "regressed", res.as_dict()
+        records.append(MeasureRecord(name=m["name"], status=status, result=payload))
+
+    def _count(s):
+        return sum(1 for r in records if r.status == s)
+    nv, nr, ni, nx = _count("verified"), _count("regressed"), _count("inconclusive"), _count("insufficient")
+    return RegisterReport(
+        records=records, n=len(records), n_verified=nv, n_regressed=nr,
+        n_inconclusive=ni, n_insufficient=nx,
+        summary=(f"{len(records)} measures tracked: {nv} verified, {nr} regressed, "
+                 f"{ni} inconclusive, {nx} insufficient data"),
+    )

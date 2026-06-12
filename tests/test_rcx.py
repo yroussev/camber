@@ -9,7 +9,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.rcx import (  # noqa: E402
-    functional_test, before_after,
+    functional_test, before_after, track_measures,
 )
 
 
@@ -102,3 +102,28 @@ def test_before_after_insufficient():
     s = pd.Series(np.arange(12, dtype=float), index=idx)
     # change_time leaves only a few points after it -> below min_samples
     assert before_after(s, idx[10]) is None
+
+
+# --- measure register (MBCx) -------------------------------------------------- #
+
+def test_track_measures_lifecycle_counts():
+    idx = pd.date_range("2025-01-01", periods=200, freq="1h")
+    ct = idx[100]
+    rng = np.random.default_rng(0)
+    verified = pd.Series(np.r_[rng.normal(100, 2, 100), rng.normal(70, 2, 100)], index=idx)
+    regressed = pd.Series(np.r_[rng.normal(70, 2, 100), rng.normal(100, 2, 100)], index=idx)
+    flat = pd.Series(rng.normal(80, 2, 200), index=idx)
+    short = pd.Series(np.arange(12.0), index=pd.date_range("2025-01-01", periods=12, freq="1h"))
+
+    rep = track_measures([
+        {"name": "sat_reset", "series": verified, "change_time": ct},
+        {"name": "econ_fix", "series": regressed, "change_time": ct},
+        {"name": "no_op", "series": flat, "change_time": ct},
+        {"name": "too_short", "series": short, "change_time": short.index[10]},
+    ])
+    assert rep.n == 4
+    assert rep.n_verified == 1 and rep.n_regressed == 1
+    assert rep.n_inconclusive == 1 and rep.n_insufficient == 1
+    statuses = {r.name: r.status for r in rep.records}
+    assert statuses["sat_reset"] == "verified" and statuses["econ_fix"] == "regressed"
+    assert statuses["too_short"] == "insufficient" and rep.records[0].result is not None

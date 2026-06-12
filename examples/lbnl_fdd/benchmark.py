@@ -120,16 +120,23 @@ def score_family(fam):
 
 
 def print_scores(title, records):
-    """Print the benchmark scores for a set of records."""
+    """Print the benchmark scores for a set of records, with Wilson confidence intervals."""
+    from camber.validation import metrics_with_ci   # noqa: E402
+
     rep = benchmark(records, TARGETS)
     o = rep.overall
-    print(f"\n--- {title}: scores (LBNL eval framework) ---")
-    print(f"overall detection: TPR {o.true_positive_rate:.0%}  "
+    print(f"\n--- {title}: scores (LBNL eval framework, 95% Wilson CI) ---")
+    oc = metrics_with_ci(o)
+    print(f"overall detection: TPR {o.true_positive_rate:.0%} "
+          f"[{oc['true_positive_rate'].lo:.0%}-{oc['true_positive_rate'].hi:.0%}]  "
           f"FPR {o.false_positive_rate:.0%}  accuracy {o.accuracy:.0%}")
     print(f"correct diagnosis (right detector for the fault): {rep.correct_diagnosis:.0%}")
     for name, c in rep.per_detector.items():
         if c.total:
-            print(f"  {name:22s} TPR {c.true_positive_rate:.0%}  FPR {c.false_positive_rate:.0%}")
+            ci = metrics_with_ci(c)
+            t, f = ci["true_positive_rate"], ci["false_positive_rate"]
+            print(f"  {name:22s} TPR {t.rate:.0%} [{t.lo:.0%}-{t.hi:.0%}]  "
+                  f"FPR {f.rate:.0%} [{f.lo:.0%}-{f.hi:.0%}]  (n={c.total})")
 
 
 def main() -> int:

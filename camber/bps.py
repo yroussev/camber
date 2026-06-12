@@ -102,6 +102,54 @@ def assess_bps(value: float, standard: BPSStandard) -> BPSResult | None:
     )
 
 
+# Site-energy conversion to kBtu per the fuel's native unit (delivered/site energy).
+# Caller can override or extend per project. (Source EUI would additionally apply
+# site-to-source multipliers -- out of scope here; this is site EUI.)
+EUI_FACTORS_KBTU: dict = {
+    "electricity": 3.412,    # per kWh
+    "natural_gas": 100.0,    # per therm
+    "propane": 91.6,         # per gallon
+    "fuel_oil": 138.7,       # per gallon (No. 2)
+    "district_chw": 12.0,    # per ton-hour of chilled water
+}
+
+
+def site_eui(energy_by_fuel: dict, area_sqft: float, *, factors: dict | None = None) -> float:
+    """Site energy-use intensity (kBtu / sqft / yr) from a per-fuel annual energy breakdown.
+
+    ``energy_by_fuel`` maps a fuel key (``"electricity"`` in kWh, ``"natural_gas"`` in
+    therms, ...) to that fuel's annual use; values are converted to kBtu via ``factors``
+    (defaults :data:`EUI_FACTORS_KBTU`, merged with any caller overrides) and summed over
+    the gross floor area. Fuels missing from ``factors`` contribute zero. Returns ``nan``
+    if ``area_sqft`` is not positive. This is *site* EUI (delivered energy), the metric
+    most BPS laws and ENERGY STAR site-EUI checks use.
+    """
+    if not math.isfinite(area_sqft) or area_sqft <= 0:
+        return float("nan")
+    fac = {**EUI_FACTORS_KBTU, **(factors or {})}
+    total_kbtu = sum(float(energy) * float(fac.get(fuel, 0.0))
+                     for fuel, energy in energy_by_fuel.items())
+    return total_kbtu / float(area_sqft)
+
+
+def assess_eui(energy_by_fuel: dict, area_sqft: float, eui_limit: float, *,
+               name: str = "BPS EUI limit", penalty_per_unit_over: float = 0.0,
+               factors: dict | None = None) -> BPSResult | None:
+    """End-to-end: compute site EUI from energy + area, then assess it against a limit.
+
+    A convenience over :func:`site_eui` + :func:`assess_bps`; ``eui_limit`` is the
+    standard's cap in kBtu/sqft/yr (an ENERGY STAR property-type target or a local BPS
+    limit), with an optional ``$/(kBtu/sqft)``-over penalty. Returns ``None`` if the EUI
+    can't be computed (non-positive area).
+    """
+    eui = site_eui(energy_by_fuel, area_sqft, factors=factors)
+    if not math.isfinite(eui):
+        return None
+    return assess_bps(eui, BPSStandard(name=name, metric="eui", limit=eui_limit,
+                                       unit="kBtu/ft2/yr",
+                                       penalty_per_unit_over=penalty_per_unit_over))
+
+
 def emissions_intensity(energy_by_fuel: dict, factors: dict,
                         area_sqft: float) -> float:
     """Annual emissions intensity (kgCO2e per sqft) from per-fuel energy.

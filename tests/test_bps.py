@@ -6,7 +6,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.bps import (  # noqa: E402
-    BPSStandard, assess_bps, emissions_intensity,
+    BPSStandard, assess_bps, assess_eui, emissions_intensity, site_eui,
 )
 
 
@@ -87,3 +87,30 @@ def test_emissions_intensity_feeds_assess_bps():
     r = assess_bps(ei, std)
     assert r.verdict == "over"
     assert abs(r.over_amount - 1.65) < 1e-6
+
+
+# --- EUI -------------------------------------------------------------------- #
+
+def test_site_eui_from_fuels():
+    # 100,000 kWh -> 341,200 kBtu ; 5,000 therms -> 500,000 kBtu ; / 10,000 sqft
+    eui = site_eui({"electricity": 100_000.0, "natural_gas": 5_000.0}, 10_000.0)
+    assert abs(eui - (341_200 + 500_000) / 10_000) < 0.01     # 84.12 kBtu/ft2/yr
+
+
+def test_site_eui_nonpositive_area_is_nan():
+    import math
+    assert math.isnan(site_eui({"electricity": 1.0}, 0.0))
+
+
+def test_assess_eui_end_to_end():
+    energy = {"electricity": 100_000.0, "natural_gas": 5_000.0}   # -> 84.12 EUI
+    r = assess_eui(energy, 10_000.0, eui_limit=80.0, penalty_per_unit_over=2.0)
+    assert r.metric == "eui" and r.unit == "kBtu/ft2/yr"
+    assert r.verdict == "over"
+    assert abs(r.value - 84.12) < 0.05
+    assert abs(r.over_amount - 4.12) < 0.05 and r.penalty > 0
+
+
+def test_assess_eui_compliant():
+    r = assess_eui({"electricity": 50_000.0}, 10_000.0, eui_limit=80.0)
+    assert r.verdict == "compliant" and r.margin > 0
