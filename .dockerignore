@@ -22,8 +22,11 @@ examples/demo/_store/
 audit_report.txt
 examples/demo/demo_audit_report.html
 
-# Docs are not needed at runtime (the image runs code, not Markdown).
+# Docs are not needed at runtime (the image runs code, not Markdown)...
 *.md
+# ...except README.md, which the package metadata (pyproject `readme`) references at
+# build time — keep it in the context so the wheel build succeeds.
+!README.md
 
 # Real building trend data is mounted at runtime, never baked in.
 data/

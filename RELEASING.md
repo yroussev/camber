@@ -35,7 +35,20 @@ python -m twine upload dist/*
 Prefer **PyPI Trusted Publishing** (GitHub Actions OIDC) over a long-lived token
 once the repo is public — it avoids storing a secret.
 
-## Tag and GitHub release
+## Automated path (recommended) — tag-driven
+
+`.github/workflows/release.yml` runs on any `v*` tag and, **after the test suite passes**:
+publishes to PyPI via **Trusted Publishing** (OIDC — no stored token), pushes a **multi-arch
+image (amd64 + arm64) to GHCR** (`ghcr.io/<owner>/camber:<ver>` + `:latest`), and cuts a GitHub
+Release. One-time setup before the first tag:
+
+- Register CAMBER as a **PyPI trusted publisher** for this repo + workflow, and create a GitHub
+  Actions environment named `pypi`.
+- GHCR push uses the built-in `GITHUB_TOKEN` (no secret needed).
+
+Then a release is just `git tag -a v<ver> -m "…" && git push origin v<ver>`.
+
+## Manual path — tag and GitHub release
 
 ```sh
 git tag -a v<ver> -m "CAMBER v<ver>" && git push origin v<ver>

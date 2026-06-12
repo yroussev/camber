@@ -1,27 +1,47 @@
-# Two ways to run the tool in a container.
+# Ways to run CAMBER in containers.
 #
-#   docker compose run --rm tests     # run the suite (the default proof)
-#   docker compose run --rm tool ...  # run any command (examples, a shell)
+#   docker compose up api                 # serve the read-only HTTP API over ./data/store
+#   docker compose run --rm tests         # run the suite against the built wheel (the proof)
+#   docker compose run --rm tool ...       # run any command (examples, a shell)
 #
-# The `tool` service mounts ./data read-only at /data so the demo example
-# scripts (or any building's export) can be pointed at real trend files without
-# baking them into the image. Create ./data and drop the per-point CSV folders
-# there, or set CAMBER_DATA to wherever the export lives.
+# `api` is the slim runtime image (library + read API only). It mounts ./data/store
+# read-only at /data/store and exposes the read-only GET API on :8080 — point a browser
+# or curl at http://localhost:8080/about , /sites , /points , /history . Populate the
+# store first (see DOCKER.md / the storage docs); the API never writes.
 
 services:
-  tests:
-    build: .
-    image: bas-analysis-tool:latest
-    # inherits the Dockerfile CMD (pytest -q)
+  api:
+    build:
+      context: .
+      target: runtime
+    image: ghcr.io/yroussev/camber:latest
+    ports:
+      - "8080:8080"
+    environment:
+      CAMBER_STORE: /data/store
+      CAMBER_API_HOST: 0.0.0.0
+      CAMBER_API_PORT: 8080
+    volumes:
+      - ./data/store:/data/store:ro
+    restart: unless-stopped
 
   tool:
-    build: .
-    image: bas-analysis-tool:latest
+    build:
+      context: .
+      target: runtime
+    image: ghcr.io/yroussev/camber:latest
     environment:
-      CAMBER_DATA: /data
+      CAMBER_STORE: /data/store
     volumes:
       - ./data:/data:ro
     # override on the command line, e.g.:
-    #   docker compose run --rm tool python examples/demo/run_data_quality.py
-    #   docker compose run --rm tool bash
-    command: ["python", "-c", "import camber, sys; print('tool ready:', sys.version)"]
+    #   docker compose run --rm tool camber --help
+    #   docker compose run --rm tool python -c "import camber, sys; print(sys.version)"
+    command: ["python", "-c", "import camber, sys; print('camber ready:', sys.version)"]
+
+  tests:
+    build:
+      context: .
+      target: test
+    image: camber-test:latest
+    # inherits the test-stage CMD (pytest -q) — a clean-room proof of the built wheel

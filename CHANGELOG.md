@@ -158,6 +158,13 @@ First public pre-release.
   recoverable **dollars** per building (via `fault_economics`) with a fleet-wide total.
 - **Examples** — runnable LBNL FDD and Building Data Genome 2 examples (public
   CC-BY datasets, fetched on demand), plus a data-free synthetic demo.
-- Docker image and GitHub Actions CI (pytest on Python 3.10 / 3.11).
+- **Distribution & Docker** — a multi-stage `Dockerfile` producing a **slim runtime image**
+  (installed package + runtime deps only; non-root; healthcheck) that serves the read-only HTTP
+  API over a mounted store, plus a `test` stage that proves the built wheel; a `docker compose`
+  bundle (`api` / `tool` / `tests`); a release workflow that on a `vX.Y.Z` tag publishes to
+  **PyPI via Trusted Publishing (OIDC, no stored token)** and pushes a **multi-arch image
+  (amd64 + arm64) to GHCR**, then cuts a GitHub Release — all gated on the test suite; a
+  `.devcontainer` for one-click contributor setup; and `DOCKER.md`. CI runs pytest on Python
+  3.10 / 3.11.
 
 [0.1.0]: https://github.com/yroussev/camber/releases

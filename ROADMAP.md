@@ -33,8 +33,10 @@ A working **FDD + M&V + light EIS** toolkit, vendor-neutral via the `Role` model
 Get the project out and installable, with nothing else changing.
 
 - [ ] Make the GitHub repository public.
-- [ ] Cut the **0.1.0** release on PyPI (`RELEASING.md`); adopt **Trusted
-      Publishing** (GitHub Actions OIDC) so no long-lived token is stored.
+- [ ] Cut the **0.1.0** release on PyPI (`RELEASING.md`). Trusted Publishing
+      (GitHub Actions OIDC, no stored token) is **wired** in `.github/workflows/release.yml` —
+      tagging `v0.1.0` triggers it; just configure the PyPI trusted-publisher + `pypi`
+      environment first.
 - [ ] Enable Discussions + the issue/PR templates; add topics/description.
 - [ ] (Optional) Publish the README/ARCHITECTURE as a small docs site (MkDocs).
 
@@ -115,9 +117,11 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       draw-on-an-Axes convention. Portfolio rollup shipped too: `report.fleet` now ranks the
       fleet by estimated recoverable **dollars** (via `fault_economics`) alongside the
       cross-sectional EUI benchmark and fault rollup (text/HTML).
-- [ ] **Distribution & Docker** — publish a multi-arch image to GHCR on tagged
-      releases; a slim runtime image; a `docker compose` bundle for the read-API +
-      store; a `.devcontainer` for one-click contributor setup.
+- [x] **Distribution & Docker** — multi-stage `Dockerfile` (slim, non-root `runtime`
+      image serving the read-only API + a `test` stage proving the wheel); `docker compose`
+      bundle (`api`/`tool`/`tests`); a tag-driven release workflow that publishes to PyPI via
+      **Trusted Publishing (OIDC)** and pushes a **multi-arch image (amd64+arm64) to GHCR**,
+      gated on the suite, then cuts a GitHub Release; a `.devcontainer`; and `DOCKER.md`.
 - [ ] **Scale** — validate and tune the store/readers at portfolio scale (hundreds
       of buildings, years of interval data).
 
