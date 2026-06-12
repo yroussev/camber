@@ -83,8 +83,12 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       complement to the existing avoided-energy use. CalTRACK terminology + eemeter
       cross-check already documented in [docs/MANDV.md](docs/MANDV.md). Remaining:
       retrofit-isolation (sub-meter) Option-B savings.
-- [ ] **Optional analytics backends** — PV via pvlib (`[pv]`), psychrometrics via
-      PsychroLib, for users who need depth beyond the dep-free basics.
+- [x] **Optional analytics backends** — `camber.interop.pvlib_bridge` (`[pv]`,
+      BSD-3): GHI/DNI/DHI→plane-of-array transposition and temperature-aware PVWatts yield
+      beyond `camber.pv`'s flat-PR monitoring, with a `compare_expected` that surfaces the
+      temperature derate. `camber.interop.psychro` (`[psychro]`, MIT): exact ASHRAE
+      psychrometrics (dew point, humidity ratio, enthalpy) plus `compare_wetbulb` validating
+      the dep-free Stull wet-bulb (~±1 °F). Both lazy-imported; core stays dependency-free.
 - [ ] **Fault economics** — per-fault energy/cost impact models feeding the
       prioritizer (rank by dollars, not just severity).
 - [ ] **Visualization** — richer static charts (load carpets/heatmaps, energy

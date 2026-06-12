@@ -48,6 +48,14 @@ tariff = ["nrel-pysam>=4"]
 # BETTER's benchmarking/targeting (modified BSD + U.S. DOE clauses). camber.interop.better
 # imports it lazily; the core needs none of it.
 better = ["better-lbnl-os"]
+# Exact ASHRAE-formulation psychrometrics (dew point, humidity ratio, enthalpy) and a
+# cross-check for CAMBER's dependency-free Stull wet-bulb. MIT. camber.interop.psychro
+# imports it lazily; the core needs none of it.
+psychro = ["psychrolib>=2"]
+# Reference open-source PV modeling: irradiance transposition (GHI/DNI/DHI -> plane-of-array)
+# and temperature-aware PVWatts yield, beyond camber.pv's flat-PR monitoring. BSD-3.
+# camber.interop.pvlib_bridge imports it lazily; the core needs none of it.
+pv = ["pvlib>=0.10"]
 
 [project.scripts]
 camber = "camber.cli:main"
