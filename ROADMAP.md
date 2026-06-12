@@ -89,8 +89,16 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       temperature derate. `camber.interop.psychro` (`[psychro]`, MIT): exact ASHRAE
       psychrometrics (dew point, humidity ratio, enthalpy) plus `compare_wetbulb` validating
       the dep-free Stull wet-bulb (~±1 °F). Both lazy-imported; core stays dependency-free.
-- [ ] **Fault economics** — per-fault energy/cost impact models feeding the
-      prioritizer (rank by dollars, not just severity).
+- [x] **Fault economics** — `camber.fault_economics`: converts a Finding's intensity
+      metric (% of operating hours) plus equipment sizing into an estimated annual energy
+      waste and prices it (`estimate_cost`/`cost_findings`), with per-archetype models
+      (simultaneous-H/C & reheat gas, chiller kW/ton excess, cooling-tower approach, pump
+      riding-the-curve, duct-static fan, boiler short-cycle). `rank_by_cost` orders faults by
+      dollars across severity; `annotate_costs` feeds the existing severity-first prioritizer
+      so it ranks within a tier by money. Triage-grade and fully transparent: every estimate
+      carries its `basis` + `assumptions`, and returns *uncosted* (naming the missing input)
+      rather than fabricating when sizing is absent. (Audit-grade savings remain the
+      M&V/ECM track.)
 - [ ] **Visualization** — richer static charts (load carpets/heatmaps, energy
       signatures, savings + CUSUM plots) and a portfolio rollup report.
 - [ ] **Distribution & Docker** — publish a multi-arch image to GHCR on tagged
