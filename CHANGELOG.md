@@ -18,6 +18,14 @@ First public pre-release.
   (`better-lbnl-os`) on the same monthly energy-vs-temperature series and reports
   model-order / baseload / R² agreement — corroborating a savings baseline with an
   independent engine. PySAM-style lazy import; core stays dependency-free.
+- **SQL/historian ingest** — `camber.ingest.sql`: `SqlSource` (a `SourceAdapter`) and
+  `read_points` read a long/narrow point table (timestamp, point, value, optional unit +
+  `WHERE`) over any PEP-249 DB-API connection into per-point Series — stdlib `sqlite3`,
+  no new dependency.
+- **Full Brick site-model interop** — `camber.interop.site_model`: `site_to_ttl` /
+  `site_from_ttl` round-trip a whole Site→Equip→Point model (with relationships) to and
+  from Brick Turtle, reusing the existing role↔Brick maps; minimal parser by default,
+  rdflib optional — beyond the prior point→role mapping.
 - **Sensor health / data-trust** — builds on the ingest quality stats with role-aware
   physical bounds (catching BAS error sentinels / unit-scaling blunders the robust
   outlier test misses), cross-sensor physical-consistency checks (e.g. mixed-air temp
