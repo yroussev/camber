@@ -67,12 +67,16 @@ Sharpen the "diagnosis, not just detection" edge and scale to many buildings.
 Where sensible, integrate mature OSS as **optional extras** rather than reinventing
 it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysis.
 
-- [ ] **More ingest adapters** — SQL/historian reader; BACnet/Modbus via a gateway;
-      streaming/scheduled intake; a real Haystack client wired into our transport
-      seam (phable / pyhaystack) as a `[haystack]` extra.
-- [ ] **Full ontology interop** — richer Brick coverage and ASHRAE 223P mapping;
-      round-trip an entire site model, not just point→role — via rdflib /
-      py-brickschema as a `[brick]` extra (keep the minimal parser as default).
+- [~] **More ingest adapters** — *Shipped:* a SQL/historian reader (`camber.ingest.sql`:
+      `SqlSource` / `read_points` over any PEP-249 DB-API connection — long/narrow point
+      table → per-point Series, stdlib `sqlite3`, no new dep). Remaining: BACnet/Modbus
+      via a gateway, streaming/scheduled intake, and the Haystack `[haystack]` client
+      wired through the transport seam.
+- [~] **Full ontology interop** — *Shipped:* whole-site Brick round-trip
+      (`camber.interop.site_model`: `site_to_ttl` / `site_from_ttl` over Site→Equip→Point
+      with relationships, reusing the existing role↔Brick maps; minimal parser default,
+      rdflib optional) — beyond the prior point→role mapping. Remaining: richer Brick
+      coverage and ASHRAE 223P mapping.
 - [ ] **M&V Option B + CalTRACK alignment** — retrofit-isolation (sub-meter)
       savings; normalized annual savings with uncertainty bands end-to-end; align
       terminology with CalTRACK and document cross-checking against eemeter.
