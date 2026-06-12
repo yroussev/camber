@@ -148,7 +148,12 @@ First public pre-release.
 - **Domain analytics** — Std-55 comfort (PMV/PPD), utility cost, carbon, water
   (irrigation budget, cooling tower, leak detection), load profiling, PV, lighting.
 - **Storage** — Parquet time-series store (entity-keyed, hive-partitioned) with
-  tag-filtered reads, rollups, and retention pruning.
+  tag-filtered reads, rollups, and retention pruning. **Portfolio-scale tuning:** time-range
+  reads prune `year` partitions (not just the `ts` column), `read_long` takes a `columns=`
+  projection (so `points()` reads only the catalog and `read_role_frame` only ts/role/value),
+  and `read_role_frame` uses a fast plain pivot when observations are unique. A synthetic
+  generator + benchmark (`camber.store.bench`, `python -m camber.store.bench`) and
+  [docs/SCALE.md](docs/SCALE.md) — a single-equipment read stays ~flat as the portfolio grows.
 - **Interop** — Brick model import (derive role mappings) and Haystack/Brick export.
 - **Integration & API** — findings → CMMS tickets with a pluggable notifier; a
   read-only HTTP API over the store.
