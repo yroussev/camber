@@ -93,6 +93,14 @@ First public pre-release.
   (`examples/soo/`) and emitting Findings into the same prioritization/report/triage;
   ships a packaged ASHRAE Guideline 36 clause library (`camber.soo_library`); wired
   into config-driven runs via an optional `soo` section (library or JSON spec per class).
+- **M&V retrofit isolation (IPMVP Option B)** — `camber.mandv.retrofit_isolation`: a generic
+  `fit_driver_model` (affine least-squares `DriverModel` on a sub-metered system's *own*
+  driver — runtime, load, cooling tons, production, or OAT; 1-D, multivariate, or constant)
+  feeds `isolation_savings` (reporting-period avoided energy at the sub-meter boundary, with
+  the ASHRAE G14 Annex-B fractional uncertainty and the baseline model-acceptance verdict) and
+  `isolation_normalized_savings` (savings normalized to a fixed reference driver set). Reuses
+  the existing G14 savings/uncertainty machinery at the narrower Option-B boundary — both are
+  written against any `predict()`-able model.
 - **M&V normalized savings** — `camber.mandv.normalized`: weather-**normalized annual
   savings** (project the baseline and reporting models onto a typical/normal year,
   difference their normalized annual consumption) with an ASHRAE G14 Annex-B uncertainty

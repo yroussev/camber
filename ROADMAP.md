@@ -77,12 +77,15 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       with relationships, reusing the existing role↔Brick maps; minimal parser default,
       rdflib optional) — beyond the prior point→role mapping. Remaining: richer Brick
       coverage and ASHRAE 223P mapping.
-- [~] **M&V Option B + CalTRACK alignment** — *Shipped:* weather-**normalized annual
-      savings** (`camber.mandv.normalized`: project baseline + reporting models onto a
-      typical year, difference the NAC, with a G14 Annex-B uncertainty band) — the
-      complement to the existing avoided-energy use. CalTRACK terminology + eemeter
-      cross-check already documented in [docs/MANDV.md](docs/MANDV.md). Remaining:
-      retrofit-isolation (sub-meter) Option-B savings.
+- [x] **M&V Option B + CalTRACK alignment** — weather-**normalized annual savings**
+      (`camber.mandv.normalized`: project baseline + reporting models onto a typical year,
+      difference the NAC, with a G14 Annex-B uncertainty band), and **retrofit isolation**
+      (`camber.mandv.retrofit_isolation`): a generic `fit_driver_model` (affine OLS on a
+      system's own driver — runtime, load, tons, or OAT — not just weather) feeds
+      `isolation_savings` (sub-meter avoided energy + FSU + model-acceptance gate) and
+      `isolation_normalized_savings` (normalized to a fixed reference driver set), reusing the
+      same G14 machinery at the narrower Option-B boundary. CalTRACK terminology + eemeter
+      cross-check documented in [docs/MANDV.md](docs/MANDV.md).
 - [x] **Optional analytics backends** — `camber.interop.pvlib_bridge` (`[pv]`,
       BSD-3): GHI/DNI/DHI→plane-of-array transposition and temperature-aware PVWatts yield
       beyond `camber.pv`'s flat-PR monitoring, with a `compare_expected` that surfaces the
