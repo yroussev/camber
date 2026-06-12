@@ -81,6 +81,22 @@ well-trodden wheels.
    is a stronger baseline than one. Optional `[better]` extra, imported lazily; the core
    needs none of it. Same own-it-+-cross-check pattern as eemeter.
 
+6. **pvlib (PV modeling) — DONE (extend + cross-check).** `camber.pv` monitors a PV array
+   against a *measured* plane-of-array resource with a flat performance ratio. For users who
+   must *estimate* generation from weather, `camber.interop.pvlib_bridge` (`[pv]` extra,
+   BSD-3) adds what pvlib does well and CAMBER deliberately doesn't: `poa_from_ghi`
+   transposes horizontal irradiance (GHI/DNI/DHI) onto the array plane, and
+   `pvwatts_expected_kwh` applies a temperature-derated PVWatts yield. `compare_expected`
+   puts CAMBER's flat-PR estimate beside pvlib's temperature-corrected one (e.g. a ~0.92
+   ratio at a 55 °C cell — the derate the simple model omits). Lazy import; core dep-free.
+
+7. **PsychroLib (psychrometrics) — DONE (extend + cross-check).** CAMBER computes wet-bulb
+   where it needs it (cooling-tower approach) with Stull's dependency-free closed form.
+   `camber.interop.psychro` (`[psychro]` extra, MIT) bridges to PsychroLib's exact
+   ASHRAE-formulation properties (`psychrometrics` → wet-bulb, dew point, humidity ratio,
+   enthalpy) and `compare_wetbulb` validates the Stull approximation against the exact value
+   (~1 °F agreement at hot/dry CZ15 conditions). Lazy import; core dep-free.
+
 ## Cross-validation: G36 fault conditions vs. open-fdd
 
 Our G36 AHU fault engine (`camber.fdd_g36`) is a clean-room implementation of the

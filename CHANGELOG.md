@@ -18,6 +18,15 @@ First public pre-release.
   (`better-lbnl-os`) on the same monthly energy-vs-temperature series and reports
   model-order / baseload / R² agreement — corroborating a savings baseline with an
   independent engine. PySAM-style lazy import; core stays dependency-free.
+- **pvlib bridge** — optional `[pv]` extra (`camber.interop.pvlib_bridge`, BSD-3):
+  `poa_from_ghi` transposes horizontal irradiance (GHI/DNI/DHI) onto the array plane and
+  `pvwatts_expected_kwh` applies a temperature-derated PVWatts yield — the solar-resource /
+  cell-temperature modeling `camber.pv`'s flat-PR monitoring omits; `compare_expected` shows
+  the temperature derate. Lazy import; core stays dependency-free.
+- **PsychroLib bridge** — optional `[psychro]` extra (`camber.interop.psychro`, MIT): exact
+  ASHRAE-formulation psychrometrics (`psychrometrics`: wet-bulb, dew point, humidity ratio,
+  enthalpy) and `compare_wetbulb`, which validates CAMBER's dependency-free Stull wet-bulb
+  against the exact value (~±1 °F). Lazy import; core stays dependency-free.
 - **SQL/historian ingest** — `camber.ingest.sql`: `SqlSource` (a `SourceAdapter`) and
   `read_points` read a long/narrow point table (timestamp, point, value, optional unit +
   `WHERE`) over any PEP-249 DB-API connection into per-point Series — stdlib `sqlite3`,
