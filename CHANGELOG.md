@@ -74,6 +74,10 @@ First public pre-release.
   (`examples/soo/`) and emitting Findings into the same prioritization/report/triage;
   ships a packaged ASHRAE Guideline 36 clause library (`camber.soo_library`); wired
   into config-driven runs via an optional `soo` section (library or JSON spec per class).
+- **M&V normalized savings** — `camber.mandv.normalized`: weather-**normalized annual
+  savings** (project the baseline and reporting models onto a typical/normal year,
+  difference their normalized annual consumption) with an ASHRAE G14 Annex-B uncertainty
+  band — the IPMVP "normalized savings" complement to the existing avoided-energy use.
 - **M&V** — change-point inverse models (2P–5P + heating/cooling-zero), the LBNL
   TOWT model, fit statistics with fractional savings uncertainty, CUSUM, weather
   normalization, and rate/energy-aware resampling.

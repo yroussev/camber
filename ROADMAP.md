@@ -77,9 +77,12 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       with relationships, reusing the existing role↔Brick maps; minimal parser default,
       rdflib optional) — beyond the prior point→role mapping. Remaining: richer Brick
       coverage and ASHRAE 223P mapping.
-- [ ] **M&V Option B + CalTRACK alignment** — retrofit-isolation (sub-meter)
-      savings; normalized annual savings with uncertainty bands end-to-end; align
-      terminology with CalTRACK and document cross-checking against eemeter.
+- [~] **M&V Option B + CalTRACK alignment** — *Shipped:* weather-**normalized annual
+      savings** (`camber.mandv.normalized`: project baseline + reporting models onto a
+      typical year, difference the NAC, with a G14 Annex-B uncertainty band) — the
+      complement to the existing avoided-energy use. CalTRACK terminology + eemeter
+      cross-check already documented in [docs/MANDV.md](docs/MANDV.md). Remaining:
+      retrofit-isolation (sub-meter) Option-B savings.
 - [ ] **Optional analytics backends** — PV via pvlib (`[pv]`), psychrometrics via
       PsychroLib, for users who need depth beyond the dep-free basics.
 - [ ] **Fault economics** — per-fault energy/cost impact models feeding the
