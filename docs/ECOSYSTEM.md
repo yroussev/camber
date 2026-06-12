@@ -72,6 +72,15 @@ well-trodden wheels.
    cross-check-the-heavyweight pattern as M&V/eemeter. (NREL REopt's tariff logic is
    also BSD-3 but Julia-native — reachable via the REopt API, not embedded.)
 
+5. **LBNL BETTER (change-point M&V + targeting) — DONE (cross-check).** LBNL's BETTER
+   analytical engine (`better-lbnl-os` on PyPI; modified BSD + U.S. DOE clauses) fits
+   change-point models to monthly energy-vs-temperature and benchmarks/targets retrofits.
+   CAMBER already has its own change-point M&V, so the value is **cross-validation**:
+   `camber.interop.better.compare_changepoint` runs CAMBER and BETTER on the same series
+   and reports model-order / baseload / R² agreement — two independent engines agreeing
+   is a stronger baseline than one. Optional `[better]` extra, imported lazily; the core
+   needs none of it. Same own-it-+-cross-check pattern as eemeter.
+
 ## Cross-validation: G36 fault conditions vs. open-fdd
 
 Our G36 AHU fault engine (`camber.fdd_g36`) is a clean-room implementation of the

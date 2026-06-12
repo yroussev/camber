@@ -44,6 +44,10 @@ haystack = [
 # binary wheel). The native camber.tariff engine needs none of this; the bridge in
 # camber.interop.tariff_nrel uses it for exotic rates / cross-checking.
 tariff = ["nrel-pysam>=4"]
+# LBNL BETTER analytical engine, to cross-validate CAMBER's change-point M&V and reach
+# BETTER's benchmarking/targeting (modified BSD + U.S. DOE clauses). camber.interop.better
+# imports it lazily; the core needs none of it.
+better = ["better-lbnl-os"]
 
 [project.scripts]
 camber = "camber.cli:main"

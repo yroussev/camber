@@ -13,6 +13,11 @@ First public pre-release.
 - **Ingest** — per-point CSV, wide CSV, and a Project-Haystack `hisRead` client;
   per-point data-quality scoring with an auditable cleaning trail; valve/damper
   unit normalization (0–1 vs 0–100).
+- **LBNL BETTER cross-check** — optional `[better]` extra (`camber.interop.better`):
+  `compare_changepoint` runs CAMBER's change-point M&V and LBNL BETTER's analytical engine
+  (`better-lbnl-os`) on the same monthly energy-vs-temperature series and reports
+  model-order / baseload / R² agreement — corroborating a savings baseline with an
+  independent engine. PySAM-style lazy import; core stays dependency-free.
 - **Sensor health / data-trust** — builds on the ingest quality stats with role-aware
   physical bounds (catching BAS error sentinels / unit-scaling blunders the robust
   outlier test misses), cross-sensor physical-consistency checks (e.g. mixed-air temp
