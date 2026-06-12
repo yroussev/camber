@@ -56,6 +56,15 @@ psychro = ["psychrolib>=2"]
 # and temperature-aware PVWatts yield, beyond camber.pv's flat-PR monitoring. BSD-3.
 # camber.interop.pvlib_bridge imports it lazily; the core needs none of it.
 pv = ["pvlib>=0.10"]
+# Read-only network ingest adapters (camber.ingest.*). Each imports its protocol library
+# lazily and never issues a write/command service. See docs/INGEST-PROTOCOLS.md + SECURITY.md.
+# Modbus TCP register polling (pymodbus, BSD-3-Clause).
+modbus = ["pymodbus>=3"]
+# MQTT / Sparkplug streaming telemetry (paho-mqtt; depend under its EDL-1.0 / BSD-style option).
+mqtt = ["paho-mqtt>=1.6"]
+# BACnet property / Trend-Log reads incl. experimental BACnet/SC (bacpypes3, MIT). SC needs an
+# operational certificate + hub URI; prefer a historian/gateway for production BACnet.
+bacnet = ["bacpypes3>=0.0.98"]
 
 [project.scripts]
 camber = "camber.cli:main"

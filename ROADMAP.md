@@ -67,11 +67,16 @@ Sharpen the "diagnosis, not just detection" edge and scale to many buildings.
 Where sensible, integrate mature OSS as **optional extras** rather than reinventing
 it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysis.
 
-- [~] **More ingest adapters** — *Shipped:* a SQL/historian reader (`camber.ingest.sql`:
-      `SqlSource` / `read_points` over any PEP-249 DB-API connection — long/narrow point
-      table → per-point Series, stdlib `sqlite3`, no new dep). Remaining: BACnet/Modbus
-      via a gateway, streaming/scheduled intake, and the Haystack `[haystack]` client
-      wired through the transport seam.
+- [~] **More ingest adapters** — *Shipped:* a SQL/historian reader (`camber.ingest.sql`),
+      and **read-only network protocol adapters** — Modbus TCP (`[modbus]`, pymodbus),
+      MQTT/Sparkplug streaming (`[mqtt]`, paho-mqtt), and BACnet incl. **experimental,
+      cert-gated BACnet/SC** (`[bacnet]`, bacpypes3). Each is read-only *by construction*
+      (AST-asserted no write/command service), lazy-imports its library, and uses an
+      injectable client so the data-shaping cores are fully tested without a network. Posture,
+      threat model, and BACnet/SC details in [docs/SECURITY.md](docs/SECURITY.md) +
+      [docs/INGEST-PROTOCOLS.md](docs/INGEST-PROTOCOLS.md); historian/SQL/Haystack remains the
+      recommended path (NIST SP 800-82). Remaining: wiring the `[haystack]` client through the
+      transport seam; an OPC-UA adapter if demanded.
 - [~] **Full ontology interop** — *Shipped:* whole-site Brick round-trip
       (`camber.interop.site_model`: `site_to_ttl` / `site_from_ttl` over Site→Equip→Point
       with relationships, reusing the existing role↔Brick maps; minimal parser default,
