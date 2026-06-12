@@ -129,18 +129,14 @@ class ParquetStore:
     def _dataset(self):
         return ds.dataset(self.root, format="parquet", partitioning="hive")
 
-    def read_long(self, *, site=None, equips=None, roles=None,
-                  start=None, end=None) -> pd.DataFrame:
-        """Tidy read with predicate pushdown. Returns long-form rows.
+    @staticmethod
+    def _build_filter(*, site=None, equips=None, roles=None, start=None, end=None):
+        """Assemble a pyarrow dataset filter, pruning ``year`` partitions from the ts range.
 
-        ``equips`` is an iterable of equip ids; ``roles`` an iterable of
-        :class:`Role` or slugs; ``start``/``end`` any pandas-parseable timestamps
-        (inclusive). Any argument left None is unconstrained.
+        Translating ``start``/``end`` into bounds on the ``year`` *partition* field (not just
+        the ``ts`` data column) lets pyarrow skip whole year directories, so a one-month query
+        across a multi-year store opens only the relevant year(s).
         """
-        if not os.path.isdir(self.root):
-            return pd.DataFrame(columns=[_TS, _EQUIP, _CLASS, _ROLE, _VALUE,
-                                         _SITE, _YEAR])
-        dataset = self._dataset()
         filt = None
 
         def _and(expr):
@@ -154,12 +150,33 @@ class ParquetStore:
         if roles is not None:
             _and(ds.field(_ROLE).isin([_role_slug(r) for r in roles]))
         if start is not None:
-            _and(ds.field(_TS) >= pd.Timestamp(start))
+            ts = pd.Timestamp(start)
+            _and(ds.field(_TS) >= ts)
+            _and(ds.field(_YEAR) >= int(ts.year))      # partition prune
         if end is not None:
-            _and(ds.field(_TS) <= pd.Timestamp(end))
-        table = dataset.to_table(filter=filt)
+            ts = pd.Timestamp(end)
+            _and(ds.field(_TS) <= ts)
+            _and(ds.field(_YEAR) <= int(ts.year))      # partition prune
+        return filt
+
+    def read_long(self, *, site=None, equips=None, roles=None,
+                  start=None, end=None, columns=None) -> pd.DataFrame:
+        """Tidy read with predicate pushdown. Returns long-form rows.
+
+        ``equips`` is an iterable of equip ids; ``roles`` an iterable of
+        :class:`Role` or slugs; ``start``/``end`` any pandas-parseable timestamps
+        (inclusive). Any argument left None is unconstrained. ``columns`` restricts the
+        columns read from Parquet (projection) -- pass only what you need at scale.
+        """
+        if not os.path.isdir(self.root):
+            cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _SITE, _YEAR]
+            return pd.DataFrame(columns=cols)
+        dataset = self._dataset()
+        filt = self._build_filter(site=site, equips=equips, roles=roles,
+                                  start=start, end=end)
+        table = dataset.to_table(filter=filt, columns=columns)
         df = table.to_pandas()
-        if not df.empty:
+        if not df.empty and _TS in df.columns:
             df = df.sort_values(_TS).reset_index(drop=True)
         return df
 
@@ -173,11 +190,15 @@ class ParquetStore:
         (mean-aggregated) or None for the stored grid.
         """
         long = self.read_long(site=site, equips=[equip], roles=roles,
-                              start=start, end=end)
+                              start=start, end=end, columns=[_TS, _ROLE, _VALUE])
         if long.empty:
             return pd.DataFrame()
-        wide = long.pivot_table(index=_TS, columns=_ROLE, values=_VALUE,
-                                aggfunc="mean")
+        # Fast path: a plain pivot when each (ts, role) is unique; only fall back to the
+        # (much slower) mean-aggregating pivot_table when the store holds duplicates.
+        if long.duplicated([_TS, _ROLE]).any():
+            wide = long.pivot_table(index=_TS, columns=_ROLE, values=_VALUE, aggfunc="mean")
+        else:
+            wide = long.pivot(index=_TS, columns=_ROLE, values=_VALUE)
         wide.index = pd.to_datetime(wide.index)
         wide = wide.sort_index()
         if resample:
@@ -190,11 +211,15 @@ class ParquetStore:
 
     # --------------------------------------------------------------- catalog
     def points(self, *, site=None) -> list:
-        """Distinct stored series as :class:`PointKey` (site, equip, role)."""
-        long = self.read_long(site=site)
+        """Distinct stored series as :class:`PointKey` (site, equip, role).
+
+        Projects only the catalog columns (site/equip/role) out of Parquet -- it never reads
+        the ts/value payload, so enumerating a large portfolio's points stays cheap.
+        """
+        long = self.read_long(site=site, columns=[_SITE, _EQUIP, _ROLE])
         if long.empty:
             return []
-        keys = long[[_SITE, _EQUIP, _ROLE]].drop_duplicates()
+        keys = long.drop_duplicates([_SITE, _EQUIP, _ROLE])
         return [PointKey(site=r[_SITE], equip=r[_EQUIP], role=r[_ROLE])
                 for _, r in keys.iterrows()]
 
