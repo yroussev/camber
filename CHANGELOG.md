@@ -61,6 +61,16 @@ First public pre-release.
   riding-the-curve + VFD-minimum, leaking valves); impact prioritization and fault
   lifecycle; an
   FDD-accuracy evaluation harness.
+- **Fault economics** — `camber.fault_economics`: turns a fault into an estimated annual
+  dollar impact so the prioritizer can rank by money, not just severity. Per-archetype models
+  combine the rule's intensity metric (% of operating hours) with equipment sizing and
+  documented, override-able assumptions — simultaneous-H/C & reheat gas (+ paired cooling),
+  chiller kW/ton excess, cooling-tower approach penalty, pump riding-the-curve, duct-static
+  fan waste, boiler short-cycle. `estimate_cost`/`cost_findings`/`total_cost`, `rank_by_cost`
+  (dollar-first across severity) and `annotate_costs` (feeds `triage.rank_findings`). Every
+  estimate carries its `basis` + `assumptions` and returns *uncosted* (naming the missing
+  input) instead of fabricating when sizing is absent; triage-grade, distinct from the
+  audit-grade M&V/ECM track.
 - **RCx / MBCx** — `camber.rcx`: `functional_test` scores a Functional Performance Test
   from trend data (pass-rate over the intervals meeting an expected response),
   `before_after` is the monitoring-based-commissioning persistence check (did a measure's
