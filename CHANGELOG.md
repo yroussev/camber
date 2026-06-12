@@ -134,7 +134,10 @@ First public pre-release.
 - **Interop** — Brick model import (derive role mappings) and Haystack/Brick export.
 - **Integration & API** — findings → CMMS tickets with a pluggable notifier; a
   read-only HTTP API over the store.
-- **Reporting** — ASHRAE/ACCA Standard 211 audit deliverables (text/HTML).
+- **Reporting** — ASHRAE/ACCA Standard 211 audit deliverables (text/HTML), and a
+  **portfolio rollup** (`report.fleet`) that ranks a fleet by cross-sectional EUI
+  benchmark, actionable-fault burden, and — when an `EnergyPrice` is supplied — estimated
+  recoverable **dollars** per building (via `fault_economics`) with a fleet-wide total.
 - **Examples** — runnable LBNL FDD and Building Data Genome 2 examples (public
   CC-BY datasets, fetched on demand), plus a data-free synthetic demo.
 - Docker image and GitHub Actions CI (pytest on Python 3.10 / 3.11).

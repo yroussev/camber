@@ -104,7 +104,9 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       glance), `camber.charts.cusum_chart` (the CUSUM savings/waste trajectory with optional
       control limits), and `camber.charts.energy_signature` (energy-vs-temperature scatter
       with the fitted change-point model and balance point(s) overlaid). All follow the
-      draw-on-an-Axes convention. Remaining: a portfolio rollup report.
+      draw-on-an-Axes convention. Portfolio rollup shipped too: `report.fleet` now ranks the
+      fleet by estimated recoverable **dollars** (via `fault_economics`) alongside the
+      cross-sectional EUI benchmark and fault rollup (text/HTML).
 - [ ] **Distribution & Docker** — publish a multi-arch image to GHCR on tagged
       releases; a slim runtime image; a `docker compose` bundle for the read-API +
       store; a `.devcontainer` for one-click contributor setup.
