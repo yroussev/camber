@@ -1,0 +1,68 @@
+# Architectural constraints for CAMBER (checked by Sentrux).
+#
+# CAMBER is layered: foundational vocabulary/IO at the bottom, analytics in the middle,
+# presentation/serving on top. Dependencies flow strictly downward (no cycles) — the DSM
+# confirms every import edge is below-diagonal. These layers declare that structure so it's
+# enforced in CI and credited as module cohesion.
+#
+# `order` is the tier: lower = more foundational. A layer may depend only on lower-order
+# layers. The flat domain modules under camber/*.py (diagnostics, M&V helpers, the CLI
+# orchestrator) are intentionally not pinned to a single tier — they span the stack — so only
+# the cohesive subpackages are declared here.
+
+[constraints]
+max_cycles = 0          # the import graph is acyclic; keep it that way
+
+# --- foundational -------------------------------------------------------------------------
+[[layers]]
+name = "model"          # vendor-neutral Role vocabulary, mapping, entity model
+paths = ["camber/model/*"]
+order = 0
+
+# --- input / persistence ------------------------------------------------------------------
+[[layers]]
+name = "ingest"         # source adapters (CSV / Haystack / SQL / Modbus / MQTT / BACnet / OPC-UA)
+paths = ["camber/ingest/*"]
+order = 1
+
+[[layers]]
+name = "store"          # Parquet time-series store
+paths = ["camber/store/*"]
+order = 1
+
+# --- analytics engines --------------------------------------------------------------------
+[[layers]]
+name = "mandv"          # measurement & verification (change-point, TOWT, savings)
+paths = ["camber/mandv/*"]
+order = 2
+
+[[layers]]
+name = "integrate"      # findings -> CMMS tickets / notifiers
+paths = ["camber/integrate/*"]
+order = 2
+
+[[layers]]
+name = "interop"        # optional bridges (Brick, eemeter/BETTER, PySAM, pvlib, PsychroLib)
+paths = ["camber/interop/*"]
+order = 3
+
+[[layers]]
+name = "rules"          # FDD rule framework + registry
+paths = ["camber/rules/*"]
+order = 3
+
+# --- presentation / serving ---------------------------------------------------------------
+[[layers]]
+name = "charts"         # diagnostic visuals
+paths = ["camber/charts/*"]
+order = 4
+
+[[layers]]
+name = "report"         # audit + portfolio rollup deliverables
+paths = ["camber/report/*"]
+order = 4
+
+[[layers]]
+name = "api"            # read-only HTTP API over the store
+paths = ["camber/api/*"]
+order = 4

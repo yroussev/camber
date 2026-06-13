@@ -4,9 +4,9 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-06-12
 
-First public pre-release.
+First public release.
 
 ### Added
 
