@@ -10,9 +10,11 @@ First public pre-release.
 
 ### Added
 
-- **Ingest** — per-point CSV, wide CSV, and a Project-Haystack `hisRead` client;
-  per-point data-quality scoring with an auditable cleaning trail; valve/damper
-  unit normalization (0–1 vs 0–100).
+- **Ingest** — per-point CSV, wide CSV, and a Project-Haystack `hisRead` client (wired through
+  an injectable transport seam: `parse_his_grid` consumes a native typed-client Grid — object
+  `.rows`, `datetime`/`Number` values — and `phable_transport` is the one-line hookup for a
+  phable client; pyhaystack/any client via `client_transport`); per-point data-quality scoring
+  with an auditable cleaning trail; valve/damper unit normalization (0–1 vs 0–100).
 - **LBNL BETTER cross-check** — optional `[better]` extra (`camber.interop.better`):
   `compare_changepoint` runs CAMBER's change-point M&V and LBNL BETTER's analytical engine
   (`better-lbnl-os`) on the same monthly energy-vs-temperature series and reports

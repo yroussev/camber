@@ -14,6 +14,7 @@ from .csv_perpoint import PerPointCsvAdapter
 from .csv_wide import WideCsvAdapter
 from .haystack import (
     HaystackAdapter, client_transport, http_json_transport, parse_his_grid,
+    phable_transport,
 )
 from .modbus import ModbusPoint, ModbusSource, decode_registers
 from .mqtt_stream import MqttPoint, MqttStreamSource, parse_payload
@@ -22,6 +23,7 @@ from .sql import SqlSource, read_points
 
 __all__ = ["PerPointCsvAdapter", "WideCsvAdapter", "HaystackAdapter",
            "parse_his_grid", "http_json_transport", "client_transport",
+           "phable_transport",
            "SqlSource", "read_points",
            "ModbusSource", "ModbusPoint", "decode_registers",
            "MqttStreamSource", "MqttPoint", "parse_payload",

@@ -79,7 +79,10 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       [docs/INGEST-PROTOCOLS.md](docs/INGEST-PROTOCOLS.md); historian/SQL/Haystack remains the
       recommended path (NIST SP 800-82). Now also an **OPC-UA** adapter (`[opcua]`, asyncua —
       LGPL kept as a dynamic-only dep): read-only value/history reads with a secure-by-design
-      `OpcUaSecurity` config. Remaining: wiring the `[haystack]` client through the transport seam.
+      `OpcUaSecurity` config. The `[haystack]` client is now wired end-to-end through the
+      transport seam: `parse_his_grid` consumes a native typed-client Grid (object `.rows`,
+      `datetime`/`Number` values), and `phable_transport` is the one-line hookup for phable
+      (pyhaystack via `client_transport`). The ingest layer is complete.
 - [~] **Full ontology interop** — *Shipped:* whole-site Brick round-trip
       (`camber.interop.site_model`: `site_to_ttl` / `site_from_ttl` over Site→Equip→Point
       with relationships, reusing the existing role↔Brick maps; minimal parser default,
