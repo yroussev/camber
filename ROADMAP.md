@@ -77,8 +77,9 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       injectable client so the data-shaping cores are fully tested without a network. Posture,
       threat model, and BACnet/SC details in [docs/SECURITY.md](docs/SECURITY.md) +
       [docs/INGEST-PROTOCOLS.md](docs/INGEST-PROTOCOLS.md); historian/SQL/Haystack remains the
-      recommended path (NIST SP 800-82). Remaining: wiring the `[haystack]` client through the
-      transport seam; an OPC-UA adapter if demanded.
+      recommended path (NIST SP 800-82). Now also an **OPC-UA** adapter (`[opcua]`, asyncua —
+      LGPL kept as a dynamic-only dep): read-only value/history reads with a secure-by-design
+      `OpcUaSecurity` config. Remaining: wiring the `[haystack]` client through the transport seam.
 - [~] **Full ontology interop** — *Shipped:* whole-site Brick round-trip
       (`camber.interop.site_model`: `site_to_ttl` / `site_from_ttl` over Site→Equip→Point
       with relationships, reusing the existing role↔Brick maps; minimal parser default,

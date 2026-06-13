@@ -98,11 +98,12 @@ well-trodden wheels.
    (~1 °F agreement at hot/dry CZ15 conditions). Lazy import; core dep-free.
 
 8. **Network ingest protocols — DONE (optional extras).** Read-only adapters for Modbus
-   (`[modbus]`/pymodbus, BSD-3), MQTT/Sparkplug (`[mqtt]`/paho-mqtt under EDL-1.0), and BACnet
-   incl. experimental BACnet/SC (`[bacnet]`/bacpypes3, MIT). All lazy-imported, read-only by
-   construction, and steered behind the historian/SQL/Haystack default posture. We deliberately
-   depend on the permissive libraries (bacpypes3/pymodbus/paho-mqtt) and avoid LGPL ones
-   (BAC0, asyncua) as anything but optional dynamic deps. See [SECURITY.md](SECURITY.md) +
+   (`[modbus]`/pymodbus, BSD-3), MQTT/Sparkplug (`[mqtt]`/paho-mqtt under EDL-1.0), BACnet
+   incl. experimental BACnet/SC (`[bacnet]`/bacpypes3, MIT), and OPC-UA (`[opcua]`/asyncua).
+   All lazy-imported, read-only by construction, and steered behind the historian/SQL/Haystack
+   default posture. We depend on the permissive libraries directly and keep the **LGPL** ones
+   (asyncua — and BAC0, which we don't use) as optional, dynamically-imported deps only, never
+   vendored/bundled, so CAMBER's own code stays Apache-2.0. See [SECURITY.md](SECURITY.md) +
    [INGEST-PROTOCOLS.md](INGEST-PROTOCOLS.md).
 
 9. **VOLTTRON — interoperate, don't vendor.** Eclipse VOLTTRON (Apache-2.0) is a full

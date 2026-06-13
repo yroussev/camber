@@ -65,6 +65,10 @@ mqtt = ["paho-mqtt>=1.6"]
 # BACnet property / Trend-Log reads incl. experimental BACnet/SC (bacpypes3, MIT). SC needs an
 # operational certificate + hub URI; prefer a historian/gateway for production BACnet.
 bacnet = ["bacpypes3>=0.0.98"]
+# OPC-UA value/history reads (asyncua / opcua-asyncio). NOTE: asyncua is LGPL-3.0 -- kept as an
+# optional, dynamically-imported dependency only (never vendored/bundled). camber.ingest.opcua
+# imports it lazily; the core needs none of it.
+opcua = ["asyncua>=1.0"]
 
 [project.scripts]
 camber = "camber.cli:main"

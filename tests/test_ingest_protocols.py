@@ -165,6 +165,78 @@ def test_bacnet_helpful_error_without_bacpypes():
         src.read_snapshot()
 
 
+# --------------------------------------------------------------------------- OPC-UA
+
+from camber.ingest.opcua import (  # noqa: E402
+    OpcUaPoint, OpcUaSecurity, OpcUaSource, history_to_series,
+)
+
+
+def test_history_to_series_pairs_and_datavalues():
+    s = history_to_series([("2024-01-01 00:00", 1.0), ("2024-01-01 01:00", 2.0),
+                           ("nope", 3.0), ("2024-01-01 01:00", 9.0)])     # dup -> last
+    assert list(s) == [1.0, 9.0] and len(s) == 2
+
+    class _Variant:
+        def __init__(self, v): self.Value = v
+
+    class _DataValue:
+        def __init__(self, ts, v): self.SourceTimestamp, self.Value = ts, _Variant(v)
+    s2 = history_to_series([_DataValue("2024-01-01", 5.0)])
+    assert s2.iloc[0] == 5.0
+
+
+class _FakeOpcUaClient:
+    def read_value(self, node_id):
+        return {"ns=2;s=SAT": 72.5, "ns=2;s=FLOW": 1200}[node_id]
+    def read_history(self, node_id, start, end):
+        return [("2024-01-01 00:00", 70.0), ("2024-01-01 01:00", 71.0)]
+
+
+def test_opcua_snapshot_and_units():
+    pts = [OpcUaPoint("sat", "ns=2;s=SAT", unit="degF"),
+           OpcUaPoint("flow", "ns=2;s=FLOW", unit="cfm")]
+    src = OpcUaSource(pts, client=_FakeOpcUaClient())
+    assert set(src.point_names()) == {"sat", "flow"}
+    assert src.units() == {"sat": "degF", "flow": "cfm"}
+    assert src.read_snapshot() == {"sat": 72.5, "flow": 1200.0}
+
+
+def test_opcua_history_and_load_points_window():
+    src = OpcUaSource([OpcUaPoint("sat", "ns=2;s=SAT")], client=_FakeOpcUaClient())
+    s = src.read_history("sat", start="2024-01-01", end="2024-01-02")
+    assert s.name == "sat" and list(s) == [70.0, 71.0]
+    df = src.load_points(["sat"], start="2024-01-01", end="2024-01-02")
+    assert list(df["sat"]) == [70.0, 71.0]
+
+
+def test_opcua_load_points_snapshot_without_window():
+    src = OpcUaSource([OpcUaPoint("sat", "ns=2;s=SAT")], client=_FakeOpcUaClient())
+    df = src.load_points(["sat"])                       # no window -> one-row snapshot
+    assert len(df) == 1 and df["sat"].iloc[0] == 72.5
+
+
+def test_opcua_requires_url_or_client():
+    src = OpcUaSource([OpcUaPoint("sat", "ns=2;s=SAT")])    # neither client nor url
+    try:
+        import asyncua  # noqa: F401
+        # asyncua present -> the missing-url ValueError is what surfaces
+        import pytest as _pt
+        with _pt.raises(ValueError, match="url"):
+            src.read_snapshot()
+    except ImportError:
+        with pytest.raises(ImportError, match=r"camber\[opcua\]"):
+            src.read_snapshot()
+
+
+def test_opcua_security_dataclass_defaults():
+    sec = OpcUaSecurity()
+    assert sec.security_string is None and sec.username is None
+    sec2 = OpcUaSecurity(security_string="Basic256Sha256,SignAndEncrypt,c.der,k.pem",
+                         username="ro", password="x")
+    assert sec2.username == "ro"
+
+
 # --------------------------------------------------------------------------- read-only contract
 
 def test_adapters_reference_no_write_services():
@@ -178,9 +250,11 @@ def test_adapters_reference_no_write_services():
     import camber.ingest.bacnet as bmod
     import camber.ingest.modbus as mmod
     import camber.ingest.mqtt_stream as qmod
+    import camber.ingest.opcua as omod
     forbidden = {"WriteProperty", "write_register", "write_coil", "write_registers",
-                 "write_coils", "publish", "writeproperty"}
-    for mod in (bmod, mmod, qmod):
+                 "write_coils", "publish", "writeproperty",
+                 "write_value", "write_values", "set_value", "write_attribute"}
+    for mod in (bmod, mmod, qmod, omod):
         tree = ast.parse(open(mod.__file__, encoding="utf-8").read())
         names = set()
         for node in ast.walk(tree):
