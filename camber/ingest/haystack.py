@@ -24,11 +24,14 @@ import pandas as pd
 def _decode_ts(val):
     """Decode a Haystack timestamp scalar to a Timestamp.
 
-    Handles the v3 JSON string form (``t:2024-... Tz``), a plain ISO string, and
-    the Hayson v4 nested form (``{"_kind": "dateTime", "val": "..."}``).
+    Handles the v3 JSON string form (``t:2024-... Tz``), a plain ISO string, a Python
+    ``datetime``, the Hayson v4 nested form (``{"_kind": "dateTime", "val": "..."}``), and a
+    typed client object exposing ``.val`` (e.g. a phable/pyhaystack DateTime kind).
     """
     if isinstance(val, dict):                # Hayson: {"_kind":"dateTime","val":...}
         val = val.get("val", "")
+    elif not isinstance(val, str) and hasattr(val, "val"):   # typed client kind -> unwrap
+        val = val.val
     if isinstance(val, str) and val.startswith("t:"):
         val = val[2:]
     # drop a trailing " Timezone_Name" the JSON encoding appends after the offset
@@ -41,6 +44,8 @@ def _decode_num(val):
     """Decode a Haystack number scalar (v3 ``n:`` string, Hayson dict, or plain)."""
     if isinstance(val, dict):                # Hayson: {"_kind":"number","val":..,"unit":..}
         val = val.get("val")
+    elif not isinstance(val, (str, int, float)) and hasattr(val, "val"):
+        val = val.val                        # typed client kind (e.g. phable Number) -> unwrap
     if isinstance(val, str):
         if val.startswith("n:"):
             val = val[2:]
@@ -57,13 +62,20 @@ def _decode_num(val):
         return float("nan")
 
 
-def parse_his_grid(grid: dict, name: str = "val") -> pd.Series:
-    """Parse a Haystack JSON ``hisRead`` grid into a numeric Series.
+def parse_his_grid(grid, name: str = "val") -> pd.Series:
+    """Parse a Haystack ``hisRead`` grid into a numeric Series.
 
-    Expects ``grid['rows']`` as a list of ``{"ts": <t-scalar>, "val": <n-scalar>}``
-    dicts (the ``hisRead`` response shape). Tolerates a plain ISO/number too.
+    ``grid`` may be a JSON dict with ``grid['rows']``, or a typed client **Grid object**
+    exposing ``.rows`` (e.g. phable / pyhaystack). Each row is ``{"ts": <t>, "val": <n>}`` where
+    the scalars may be v3 strings, Hayson nested dicts, Python ``datetime``/numbers, or typed
+    client kinds — :func:`_decode_ts`/:func:`_decode_num` normalize all of these.
     """
-    rows = (grid or {}).get("rows", [])
+    if grid is None:
+        rows = []
+    elif isinstance(grid, dict):
+        rows = grid.get("rows", [])
+    else:
+        rows = getattr(grid, "rows", [])     # typed client Grid object
     idx, vals = [], []
     for r in rows:
         if "ts" not in r:
@@ -178,6 +190,31 @@ def client_transport(his_read):
                                   transport=client_transport(my_client.his_read))
     """
     def transport(op: str, params: dict) -> dict:
+        return his_read(params["id"], params.get("range"))
+
+    return transport
+
+
+def phable_transport(client, *, his_read_attr: str = "his_read"):
+    """A ready-made transport for a `phable <https://github.com/rick-jennings/phable>`_ client.
+
+    phable is the modern, dependency-light Haystack client (the ``[haystack]`` extra on
+    Python >= 3.11). Its ``Client.his_read(point_ref, range)`` returns a phable ``Grid`` whose
+    rows carry typed values (a ``datetime`` ts, a ``Number`` val); :func:`parse_his_grid` now
+    consumes those natively, so this is just the one-line wiring::
+
+        from phable import Client, Ref
+        client = Client(uri, user, password); client.open()
+        refs = {"AHU1_SAT": Ref("p:demo:r:ahu1.sat")}
+        adapter = HaystackAdapter(uri, point_refs=refs,
+                                  transport=phable_transport(client))
+
+    ``point_refs`` should hold phable ``Ref`` objects (passed through unchanged). For pyhaystack
+    or any other client, use :func:`client_transport` with the client's hisRead callable.
+    """
+    his_read = getattr(client, his_read_attr)
+
+    def transport(op: str, params: dict):
         return his_read(params["id"], params.get("range"))
 
     return transport

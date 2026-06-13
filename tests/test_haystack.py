@@ -135,3 +135,43 @@ def test_hayson_nested_scalars_decode():
                    "val": {"_kind": "number", "val": 21.5, "unit": "degC"}}])
     s = parse_his_grid(grid)
     assert s.iloc[0] == 21.5
+
+
+# --- native typed-client grids (phable / pyhaystack) -------------------------------------
+
+from datetime import datetime, timezone  # noqa: E402
+
+from camber.ingest.haystack import phable_transport  # noqa: E402
+
+
+class _Number:
+    """Stand-in for a phable Number kind (a typed value object with .val/.unit)."""
+    def __init__(self, val, unit=None): self.val, self.unit = val, unit
+
+
+class _Grid:
+    """Stand-in for a phable/pyhaystack Grid object (rows as an attribute, not a dict)."""
+    def __init__(self, rows): self.rows = rows
+
+
+def test_parse_native_grid_object_with_typed_values():
+    # a Grid object (not a dict) whose rows carry a datetime ts and a Number val
+    grid = _Grid([{"ts": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc), "val": _Number(55.0, "degF")},
+                  {"ts": datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc), "val": _Number(56.0, "degF")}])
+    s = parse_his_grid(grid, name="sat")
+    assert list(s) == [55.0, 56.0] and s.name == "sat"
+
+
+def test_phable_transport_end_to_end():
+    calls = []
+
+    class _FakePhableClient:
+        def his_read(self, point_ref, range_str):
+            calls.append((point_ref, range_str))
+            return _Grid([{"ts": datetime(2024, 6, 1, tzinfo=timezone.utc), "val": _Number(72.5)}])
+
+    a = HaystackAdapter("http://x", point_refs={"SAT": "@ahu1.sat"},
+                        transport=phable_transport(_FakePhableClient()), range_str="yesterday")
+    df = a.load_points(["SAT"], resample=None)
+    assert calls == [("@ahu1.sat", "yesterday")]      # ref + range passed through
+    assert df["SAT"].iloc[0] == 72.5
