@@ -17,6 +17,7 @@ from .haystack import (
 )
 from .modbus import ModbusPoint, ModbusSource, decode_registers
 from .mqtt_stream import MqttPoint, MqttStreamSource, parse_payload
+from .opcua import OpcUaPoint, OpcUaSecurity, OpcUaSource, history_to_series
 from .sql import SqlSource, read_points
 
 __all__ = ["PerPointCsvAdapter", "WideCsvAdapter", "HaystackAdapter",
@@ -25,4 +26,5 @@ __all__ = ["PerPointCsvAdapter", "WideCsvAdapter", "HaystackAdapter",
            "ModbusSource", "ModbusPoint", "decode_registers",
            "MqttStreamSource", "MqttPoint", "parse_payload",
            "BacnetSource", "BacnetPoint", "BacnetTarget", "trendlog_to_series",
+           "OpcUaSource", "OpcUaPoint", "OpcUaSecurity", "history_to_series",
            "READ_SERVICES"]

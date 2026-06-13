@@ -29,9 +29,11 @@ First public pre-release.
   against the exact value (~±1 °F). Lazy import; core stays dependency-free.
 - **Network ingest adapters (read-only)** — Modbus TCP (`camber.ingest.modbus`, `[modbus]`/
   pymodbus — register snapshot + poll), MQTT/Sparkplug streaming (`camber.ingest.mqtt_stream`,
-  `[mqtt]`/paho-mqtt — subscribe + buffer + shape), and BACnet (`camber.ingest.bacnet`,
-  `[bacnet]`/bacpypes3 — Trend-Log history + present values), incl. **experimental,
-  certificate-gated BACnet/SC** (`wss://`+TLS, hub URI + operational cert config). Each is
+  `[mqtt]`/paho-mqtt — subscribe + buffer + shape), BACnet (`camber.ingest.bacnet`,
+  `[bacnet]`/bacpypes3 — Trend-Log history + present values) incl. **experimental,
+  certificate-gated BACnet/SC** (`wss://`+TLS, hub URI + operational cert config), and OPC-UA
+  (`camber.ingest.opcua`, `[opcua]`/asyncua — history + current-value reads, secure-by-design
+  `OpcUaSecurity`; asyncua's LGPL kept as a dynamic-only optional dep). Each is
   **read-only by construction** (a test parses the AST and fails on any write/command service),
   lazy-imports its protocol library behind an optional extra, and takes an injectable client so
   the data-shaping cores test without a network. New `docs/SECURITY.md` (NIST SP 800-82 /

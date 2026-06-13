@@ -14,9 +14,13 @@ CAMBER's primary ingest path is the **historian / SQL / Haystack** tier (see
 | Modbus TCP | `camber.ingest.modbus` | `[modbus]` | pymodbus | BSD-3 | snapshot / poll |
 | MQTT (+ Sparkplug) | `camber.ingest.mqtt_stream` | `[mqtt]` | paho-mqtt | EDL-1.0 / EPL-2.0 | streaming buffer |
 | BACnet (+ SC) | `camber.ingest.bacnet` | `[bacnet]` | bacpypes3 | MIT | Trend-Log / present value |
+| OPC-UA | `camber.ingest.opcua` | `[opcua]` | asyncua | **LGPL-3.0** † | history / current value |
+
+† asyncua is LGPL-3.0 — kept as an optional, dynamically-imported dependency only (never
+vendored/bundled), so CAMBER's own code stays Apache-2.0.
 
 ```
-pip install "camber[modbus]"   # or [mqtt], [bacnet]
+pip install "camber[modbus]"   # or [mqtt], [bacnet], [opcua]
 ```
 
 ## Modbus — `camber.ingest.modbus`
@@ -67,10 +71,24 @@ bacpypes3 wrapper configured per deployment), or — recommended for production 
 through a **historian/gateway that already speaks SC** on the OT side and read it via the SQL or
 Haystack adapter.
 
+## OPC-UA — `camber.ingest.opcua`
+
+The analytics-friendly OPC-UA source is a **historizing node**, whose retained timestamped values
+map onto a series; `OpcUaSource.read_history()` / `load_points(start=…, end=…)` shape them, and
+`read_snapshot()` (or `load_points()` with no window) reads current values. The adapter uses only
+the read services (`READ_SERVICES = Read, HistoryRead`).
+
+OPC-UA is secure-by-design: pass an `OpcUaSecurity` with asyncua's security string (policy, mode,
+client cert/key) and/or username/password, and connect to an encrypted, authenticated endpoint —
+not a `None`-security one — on a production network. The client is injectable (any object with
+`read_value(node_id)` and `read_history(node_id, start, end)`); the default wraps asyncua's
+synchronous client and needs a `url`.
+
+**Licensing:** asyncua is **LGPL-3.0**, so it is an optional, dynamically-imported dependency
+only — never vendored or statically bundled — which keeps CAMBER's own code Apache-2.0.
+
 ## Other protocols considered
 
-- **OPC-UA** (`asyncua`, LGPL-3.0) — secure-by-design industrial protocol; viable as an optional
-  dynamic dependency, not vendored, given the license.
 - **VOLTTRON** (Eclipse, Apache-2.0) — a full ZMQ/gevent agent platform, not a light library; its
   BACnet driver even needs a separate proxy process. CAMBER treats VOLTTRON as a **data source**
   (point the SQL adapter at its SQLite/PostgreSQL historian, or the MQTT adapter at forwarded
