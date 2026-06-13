@@ -58,7 +58,14 @@ against those roles. Map a building's tags once and the whole rule set runs on i
 
 ## Install
 
-Python 3.10+.
+Python 3.10+. The PyPI distribution name is **`camber-toolkit`** (it imports as `camber`).
+
+```sh
+pip install camber-toolkit             # from PyPI
+pip install "camber-toolkit[brick]"    # + rdflib, for robust Brick-model parsing (optional)
+```
+
+From source (for development):
 
 ```sh
 pip install -e .            # the package (editable)

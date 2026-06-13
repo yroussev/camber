@@ -30,9 +30,12 @@ jobs:
       - run: pytest -q
 
   # ---- PyPI via Trusted Publishing (OIDC; no API token stored) ----
+  # Non-blocking until the PyPI trusted publisher for `camber-toolkit` is configured; once it
+  # is, this publishes on tag. The GitHub Release does not depend on it.
   pypi:
     needs: test
     runs-on: ubuntu-latest
+    continue-on-error: true
     environment: pypi
     permissions:
       id-token: write          # required for Trusted Publishing
@@ -92,16 +95,18 @@ jobs:
 
   # ---- GitHub Release with changelog notes ----
   release:
-    needs: [pypi, image]
+    needs: [test]              # independent of PyPI/image so the release always lands
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v6
-      - name: Create GitHub Release
+      - name: Create GitHub Release (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 && {
+            echo "release ${GITHUB_REF_NAME} already exists; skipping"; exit 0; }
           gh release create "${GITHUB_REF_NAME}" \
             --title "CAMBER ${GITHUB_REF_NAME}" \
             --notes "See CHANGELOG.md for the ${GITHUB_REF_NAME} changes."

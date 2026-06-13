@@ -9,7 +9,7 @@ and fit -- the same own-it-+-cross-check pattern CAMBER uses with eemeter for Ca
 
 Optional path -- install the extra (keeps the core dependency-free):
 
-    pip install "camber[better]"      # pulls better-lbnl-os (modified BSD + U.S. DOE clauses)
+    pip install "camber-toolkit[better]"      # pulls better-lbnl-os (modified BSD + U.S. DOE clauses)
 
 BETTER is imported lazily. ``fit_changepoint`` wraps its model; ``compare_changepoint``
 runs CAMBER and BETTER side by side and reports agreement.
@@ -25,7 +25,7 @@ def _require_better():
         from better_lbnl_os import fit_changepoint_model  # noqa: F401
     except Exception as e:  # noqa: BLE001
         raise ImportError(
-            'the LBNL BETTER bridge needs the optional extra: pip install "camber[better]"'
+            'the LBNL BETTER bridge needs the optional extra: pip install "camber-toolkit[better]"'
         ) from e
     return fit_changepoint_model
 

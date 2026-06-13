@@ -26,7 +26,7 @@ def _have():
 def test_helpful_error_without_pvlib():
     if _have():
         pytest.skip("pvlib installed; covered by the smoke tests")
-    with pytest.raises(ImportError, match=r"camber\[pv\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[pv\]"):
         pvb.pvwatts_expected_kwh(6.0, 100.0)
 
 

@@ -5,7 +5,7 @@ dependency. For exotic URDB rates -- coincident demand, seasonal ratchets, deepl
 look-back tiers -- this bridges to NREL PySAM's battle-tested ``Utilityrate5`` model,
 which implements the full URDB semantics. It is an **optional** path: install the extra
 
-    pip install "camber[tariff]"      # pulls NREL-PySAM (BSD-3-Clause, ~47 MB binary)
+    pip install "camber-toolkit[tariff]"      # pulls NREL-PySAM (BSD-3-Clause, ~47 MB binary)
 
 PySAM is imported lazily, so the core stays dependency-free. Hand it a URDB rate JSON
 (from :func:`camber.interop.openei.fetch_urdb_rate`) and an 8760-hour load (kW); it
@@ -25,7 +25,7 @@ def _require_pysam():
     except Exception as e:  # noqa: BLE001
         raise ImportError(
             "the NREL PySAM bridge needs the optional extra: "
-            'pip install "camber[tariff]"'
+            'pip install "camber-toolkit[tariff]"'
         ) from e
     return ur5, URDBv8_to_ElectricityRates
 

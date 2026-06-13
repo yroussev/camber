@@ -7,7 +7,7 @@ approximation, this bridges to **PsychroLib** (ASHRAE-formulation psychrometrics
 
 Optional path -- install the extra (the core needs none of it):
 
-    pip install "camber[psychro]"      # PsychroLib (MIT)
+    pip install "camber-toolkit[psychro]"      # PsychroLib (MIT)
 
 PsychroLib is imported lazily and set to IP units (°F, psia, RH as 0-1; this module takes
 RH in %). ``compare_wetbulb`` reports CAMBER's Stull value next to PsychroLib's exact value.
@@ -23,7 +23,7 @@ def _require():
         import psychrolib
     except Exception as e:  # noqa: BLE001
         raise ImportError('the PsychroLib bridge needs the optional extra: '
-                          'pip install "camber[psychro]"') from e
+                          'pip install "camber-toolkit[psychro]"') from e
     psychrolib.SetUnitSystem(psychrolib.IP)
     return psychrolib
 

@@ -71,7 +71,7 @@ class ModbusSource:
                 from pymodbus.client import ModbusTcpClient
             except Exception as e:  # noqa: BLE001
                 raise ImportError('the Modbus adapter needs the optional extra: '
-                                  'pip install "camber[modbus]"') from e
+                                  'pip install "camber-toolkit[modbus]"') from e
             self._client = ModbusTcpClient(self._host, port=self._port)
             self._client.connect()
         return self._client

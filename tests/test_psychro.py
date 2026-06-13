@@ -25,7 +25,7 @@ def _have():
 def test_helpful_error_without_psychrolib():
     if _have():
         pytest.skip("psychrolib installed; covered by the cross-check test")
-    with pytest.raises(ImportError, match=r"camber\[psychro\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[psychro\]"):
         psychro.wet_bulb_f(95.0, 30.0)
 
 

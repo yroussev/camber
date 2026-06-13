@@ -149,7 +149,7 @@ def parse_triples_rdflib(ttl: str):
 
     A full RDF parser, so it handles arbitrary real-world Turtle (blank nodes,
     multiple namespaces, full IRIs, odd formatting) that the minimal reader can't.
-    Requires the ``brick`` extra (``pip install camber[brick]``).
+    Requires the ``brick`` extra (``pip install camber-toolkit[brick]``).
     """
     import rdflib
 
@@ -171,7 +171,7 @@ def _parse(ttl: str, backend: str):
         return parse_triples(ttl)
     if backend == "rdflib":
         if not _have_rdflib():
-            raise ImportError("rdflib not installed; `pip install camber[brick]` "
+            raise ImportError("rdflib not installed; `pip install camber-toolkit[brick]` "
                               "or use backend='minimal'")
         return parse_triples_rdflib(ttl)
     if backend == "auto":

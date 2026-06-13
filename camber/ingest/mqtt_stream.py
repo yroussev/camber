@@ -102,7 +102,7 @@ class MqttStreamSource:
                 import paho.mqtt.client as mqtt
             except Exception as e:  # noqa: BLE001
                 raise ImportError('the MQTT adapter needs the optional extra: '
-                                  'pip install "camber[mqtt]"') from e
+                                  'pip install "camber-toolkit[mqtt]"') from e
             self._client = mqtt.Client()
             if self._tls:
                 self._client.tls_set()           # default secure context; verifies broker cert
