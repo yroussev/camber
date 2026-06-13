@@ -23,6 +23,7 @@ the package.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from dataclasses import dataclass
@@ -41,6 +42,11 @@ _CLASS = "equip_class"
 _ROLE = "role"
 _SITE = "site"
 _YEAR = "year"
+
+# A cached catalog of distinct (site, equip, role) keys, written alongside the dataset so
+# points() needn't rescan every partition. Arrow's dataset discovery ignores leading-"_"
+# paths, so this file is invisible to reads.
+_CATALOG = "_catalog.json"
 
 
 def _role_slug(r) -> str:
@@ -107,6 +113,9 @@ class ParquetStore:
             existing_data_behavior="overwrite_or_ignore",
             basename_template=f"part-{seq}-{{i}}.parquet",
         )
+        # Invalidate the cached catalog (cheap, O(1)); the next points() rebuilds it once.
+        # (Merging keys into the catalog on every write would be O(n^2) over a bulk load.)
+        self._invalidate_catalog()
         return len(df)
 
     def write_role_frame(self, frame: pd.DataFrame, *, site: str, equip: str,
@@ -124,6 +133,57 @@ class ParquetStore:
         for dirpath, _dirs, files in os.walk(sdir):
             n += sum(1 for f in files if f.endswith(".parquet"))
         return n
+
+    # --------------------------------------------------------------- catalog cache
+    def _catalog_path(self) -> str:
+        return os.path.join(self.root, _CATALOG)
+
+    def _read_catalog(self):
+        """Return cached :class:`PointKey` list, or None if there is no (valid) catalog."""
+        p = self._catalog_path()
+        if not os.path.isfile(p):
+            return None
+        try:
+            with open(p, encoding="utf-8") as fh:
+                data = json.load(fh)
+            return [PointKey(site=k["site"], equip=k["equip"], role=k["role"])
+                    for k in data["points"]]
+        except (json.JSONDecodeError, KeyError, TypeError, OSError):
+            return None        # treat a corrupt/old catalog as absent -> fall back to a scan
+
+    def _write_catalog(self, keys) -> None:
+        """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``."""
+        os.makedirs(self.root, exist_ok=True)
+        rows = sorted({(k.site, k.equip, k.role) for k in keys})
+        payload = {"points": [{"site": s, "equip": e, "role": r} for s, e, r in rows]}
+        tmp = self._catalog_path() + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+        os.replace(tmp, self._catalog_path())
+
+    def _invalidate_catalog(self) -> None:
+        """Mark the cached catalog stale (O(1)); the next :meth:`points` rebuilds it."""
+        p = self._catalog_path()
+        if os.path.isfile(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+    def _scan_keys(self) -> list:
+        """Distinct (site, equip, role) keys via a projected scan (no ts/value payload)."""
+        long = self.read_long(columns=[_SITE, _EQUIP, _ROLE])
+        if long.empty:
+            return []
+        return [PointKey(site=r[_SITE], equip=r[_EQUIP], role=r[_ROLE])
+                for _, r in long.drop_duplicates([_SITE, _EQUIP, _ROLE]).iterrows()]
+
+    def rebuild_catalog(self) -> int:
+        """Rebuild the catalog from a projected scan (for stores predating it, or to resync
+        after manual edits). Returns the number of distinct keys."""
+        keys = self._scan_keys()
+        self._write_catalog(keys)
+        return len(keys)
 
     # ------------------------------------------------------------------- read
     def _dataset(self):
@@ -213,15 +273,19 @@ class ParquetStore:
     def points(self, *, site=None) -> list:
         """Distinct stored series as :class:`PointKey` (site, equip, role).
 
-        Projects only the catalog columns (site/equip/role) out of Parquet -- it never reads
-        the ts/value payload, so enumerating a large portfolio's points stays cheap.
+        Reads the cached catalog (``_catalog.json``) so enumerating a portfolio's points needs
+        no partition scan. Writes *invalidate* the catalog (cheap), so the first call after a
+        write burst rebuilds it once with a projected scan (site/equip/role columns only -- no
+        ts/value payload) and caches the result; subsequent calls are instant until the next
+        write.
         """
-        long = self.read_long(site=site, columns=[_SITE, _EQUIP, _ROLE])
-        if long.empty:
-            return []
-        keys = long.drop_duplicates([_SITE, _EQUIP, _ROLE])
-        return [PointKey(site=r[_SITE], equip=r[_EQUIP], role=r[_ROLE])
-                for _, r in keys.iterrows()]
+        cached = self._read_catalog()
+        if cached is None:
+            if not os.path.isdir(self.root):
+                return []
+            cached = self._scan_keys()
+            self._write_catalog(cached)         # memoize until the next write invalidates it
+        return [k for k in cached if site is None or k.site == site]
 
     def sites(self) -> list:
         """Distinct site ids present in the store."""
@@ -286,4 +350,6 @@ class ParquetStore:
                 if yr < before_year:
                     shutil.rmtree(os.path.join(spath, yd))
                     removed += 1
+        if removed:
+            self._invalidate_catalog()      # next points() rebuilds from the remaining data
         return removed
