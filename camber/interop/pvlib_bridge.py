@@ -9,7 +9,7 @@ DNI/DHI) onto the array plane, or apply a temperature-derated PVWatts yield -- t
 
 Optional path -- install the extra (the core needs none of it):
 
-    pip install "camber[pv]"            # pvlib (BSD-3)
+    pip install "camber-toolkit[pv]"            # pvlib (BSD-3)
 
 pvlib is imported lazily. `compare_expected` puts CAMBER's flat-PR estimate next to pvlib's
 temperature-corrected PVWatts yield, so you can see the derate the simple model omits.
@@ -25,7 +25,7 @@ def _require():
         import pvlib
     except Exception as e:  # noqa: BLE001
         raise ImportError('the pvlib bridge needs the optional extra: '
-                          'pip install "camber[pv]"') from e
+                          'pip install "camber-toolkit[pv]"') from e
     return pvlib
 
 

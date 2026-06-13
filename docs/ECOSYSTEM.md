@@ -28,7 +28,7 @@ well-trodden wheels.
 - **Core stays zero-dep.** Today's `camber/` runs on numpy/pandas/pyarrow/
   matplotlib only. None of the above becomes a hard dependency.
 - **Add `pyproject` extras** so capability is opt-in, e.g.:
-  `pip install camber[brick,haystack,pv]`. Each extra wires a mature library behind
+  `pip install camber-toolkit[brick,haystack,pv]`. Each extra wires a mature library behind
   an interface we already have (the Haystack adapter's injectable transport, a PV
   backend, a Brick parser swap).
 - **Why integrate rather than fork:** these projects are maintained, tested, and
@@ -46,7 +46,7 @@ well-trodden wheels.
    backend (`backend="rdflib"`, auto-selected when installed); the zero-dep minimal
    parser remains the default. Verified identical to the minimal parser on the LBNL
    model and able to parse models it can't (`rdf:type`, full IRIs).
-   `pip install camber[brick]`.
+   `pip install camber-toolkit[brick]`.
 2. **Haystack via phable/pyhaystack (`[haystack]`) — DONE.**
    `camber.ingest.haystack` provides `client_transport(his_read)` to wire any
    maintained client into the adapter's transport seam in one line, plus a

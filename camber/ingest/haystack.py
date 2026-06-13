@@ -185,7 +185,7 @@ def client_transport(his_read):
     needs ``parse_his_grid``-compatible rows. This is the one-line seam for plugging
     a third-party client in without CAMBER depending on it directly::
 
-        # pip install camber[haystack]
+        # pip install camber-toolkit[haystack]
         adapter = HaystackAdapter(url, point_refs=refs,
                                   transport=client_transport(my_client.his_read))
     """

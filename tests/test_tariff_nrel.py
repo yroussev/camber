@@ -24,7 +24,7 @@ def test_helpful_error_without_pysam():
         have_pysam = False
     if have_pysam:
         pytest.skip("PySAM installed; covered by the smoke test below")
-    with pytest.raises(ImportError, match=r"camber\[tariff\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[tariff\]"):
         tariff_nrel.bill_with_pysam({"label": "x"}, [1.0] * 8760)
 
 

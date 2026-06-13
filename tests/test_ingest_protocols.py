@@ -68,7 +68,7 @@ def test_modbus_helpful_error_without_pymodbus():
         pytest.skip("pymodbus installed")
     except Exception:  # noqa: BLE001
         pass
-    with pytest.raises(ImportError, match=r"camber\[modbus\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[modbus\]"):
         src.read_snapshot()
 
 
@@ -109,7 +109,7 @@ def test_mqtt_helpful_error_without_paho():
         pytest.skip("paho-mqtt installed")
     except Exception:  # noqa: BLE001
         pass
-    with pytest.raises(ImportError, match=r"camber\[mqtt\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[mqtt\]"):
         src.subscribe()
 
 
@@ -161,7 +161,7 @@ def test_bacnet_helpful_error_without_bacpypes():
         pytest.skip("bacpypes3 installed")
     except Exception:  # noqa: BLE001
         pass
-    with pytest.raises(ImportError, match=r"camber\[bacnet\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[bacnet\]"):
         src.read_snapshot()
 
 
@@ -225,7 +225,7 @@ def test_opcua_requires_url_or_client():
         with _pt.raises(ValueError, match="url"):
             src.read_snapshot()
     except ImportError:
-        with pytest.raises(ImportError, match=r"camber\[opcua\]"):
+        with pytest.raises(ImportError, match=r"camber-toolkit\[opcua\]"):
             src.read_snapshot()
 
 

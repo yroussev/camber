@@ -132,7 +132,7 @@ class OpcUaSource:
                 import asyncua  # noqa: F401
             except Exception as e:  # noqa: BLE001
                 raise ImportError('the OPC-UA adapter needs the optional extra: '
-                                  'pip install "camber[opcua]"') from e
+                                  'pip install "camber-toolkit[opcua]"') from e
             if not self._url:
                 raise ValueError("OpcUaSource needs a url (or an injected client)")
             self._client = _AsyncuaClient(self._url, self._security)

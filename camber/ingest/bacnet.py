@@ -114,7 +114,7 @@ class BacnetSource:
                 import bacpypes3  # noqa: F401
             except Exception as e:  # noqa: BLE001
                 raise ImportError('the BACnet adapter needs the optional extra: '
-                                  'pip install "camber[bacnet]"') from e
+                                  'pip install "camber-toolkit[bacnet]"') from e
             raise NotImplementedError(
                 "no BACnet client injected. The bacpypes3-backed client (incl. experimental "
                 "BACnet/SC) is configured per deployment; inject a client exposing "

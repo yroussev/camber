@@ -31,7 +31,7 @@ def test_helpful_error_without_better():
         have = False
     if have:
         pytest.skip("better-lbnl-os installed; covered by the smoke test")
-    with pytest.raises(ImportError, match=r"camber\[better\]"):
+    with pytest.raises(ImportError, match=r"camber-toolkit\[better\]"):
         better.fit_changepoint(*_heat_cool())
 
 

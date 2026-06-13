@@ -20,7 +20,7 @@ CAMBER's primary ingest path is the **historian / SQL / Haystack** tier (see
 vendored/bundled), so CAMBER's own code stays Apache-2.0.
 
 ```
-pip install "camber[modbus]"   # or [mqtt], [bacnet], [opcua]
+pip install "camber-toolkit[modbus]"   # or [mqtt], [bacnet], [opcua]
 ```
 
 ## Modbus — `camber.ingest.modbus`
