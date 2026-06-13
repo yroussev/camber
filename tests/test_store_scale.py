@@ -87,7 +87,7 @@ def test_benchmark_smoke(tmp_path):
     assert res["rows"] > 0
     assert res["n_points"] == 2 * 2 * 3                    # sites * equips * roles
     assert res["ranged_rows"] > 0
-    for k in ("write_s", "points_s", "read_one_s", "ranged_read_s", "rollup_s"):
+    for k in ("write_s", "points_cold_s", "points_warm_s", "read_one_s", "ranged_read_s", "rollup_s"):
         assert isinstance(res[k], float) and res[k] >= 0.0
 
 
@@ -95,3 +95,79 @@ def test_synth_portfolio_row_count(tmp_path):
     store = ParquetStore(str(tmp_path / "s"))
     rows = synth_portfolio(store, sites=2, equips=2, roles=2, days=1, freq="1h")
     assert rows == 2 * 2 * 2 * 24                          # sites*equips*roles*hours
+
+
+# --------------------------------------------------------------------------- catalog cache
+
+def test_writes_invalidate_then_points_caches(tmp_path):
+    store = _multi_year_store(str(tmp_path / "store"))
+    expect = {("S1", "AHU_00", _ROLE.value), ("S1", "AHU_01", _ROLE.value)}
+    # writes invalidate (keep them cheap): no catalog on disk yet
+    assert not os.path.isfile(os.path.join(store.root, "_catalog.json"))
+
+    # first points() rebuilds once and caches it
+    assert {(p.site, p.equip, p.role) for p in store.points()} == expect
+    assert os.path.isfile(os.path.join(store.root, "_catalog.json"))
+
+    # the cache is now warm: a second call must NOT rescan partitions
+    def _boom(*a, **k):
+        raise AssertionError("points() rescanned partitions instead of using the cached catalog")
+    store.read_long = _boom                                # type: ignore[assignment]
+    assert {(p.site, p.equip, p.role) for p in store.points()} == expect
+    assert {(p.site, p.equip, p.role) for p in store.points(site="S1")} == expect
+    assert store.points(site="absent") == []
+
+
+def test_write_reinvalidates_warm_cache(tmp_path):
+    store = ParquetStore(str(tmp_path / "store"))
+    idx = pd.date_range("2024-01-01", periods=24, freq="1h")
+    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=idx), site="S1", equip="A")
+    assert {p.equip for p in store.points()} == {"A"}                 # builds cache
+    assert os.path.isfile(os.path.join(store.root, "_catalog.json"))
+    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=idx), site="S1", equip="B")
+    assert not os.path.isfile(os.path.join(store.root, "_catalog.json"))  # write invalidated it
+    assert {p.equip for p in store.points()} == {"A", "B"}           # rebuilt with both
+
+
+def test_points_cache_matches_scan(tmp_path):
+    store = _multi_year_store(str(tmp_path / "store"))
+    cached = {(p.site, p.equip, p.role) for p in store.points()}
+    os.remove(os.path.join(store.root, "_catalog.json"))   # force the scan fallback
+    scanned = {(p.site, p.equip, p.role) for p in store.points()}
+    assert cached == scanned
+
+
+def test_rebuild_catalog_for_legacy_store(tmp_path):
+    store = _multi_year_store(str(tmp_path / "store"))      # writes leave no catalog (invalidated)
+    n = store.rebuild_catalog()
+    assert n == 2 and os.path.isfile(os.path.join(store.root, "_catalog.json"))
+    assert {(p.site, p.equip, p.role) for p in store.points()} == \
+        {("S1", "AHU_00", _ROLE.value), ("S1", "AHU_01", _ROLE.value)}
+
+
+def test_corrupt_catalog_falls_back_to_scan(tmp_path):
+    store = _multi_year_store(str(tmp_path / "store"))
+    with open(os.path.join(store.root, "_catalog.json"), "w") as fh:
+        fh.write("{ not valid json")
+    # a corrupt catalog is treated as absent -> scan still returns the right keys
+    assert {(p.site, p.equip, p.role) for p in store.points()} == \
+        {("S1", "AHU_00", _ROLE.value), ("S1", "AHU_01", _ROLE.value)}
+
+
+def test_prune_drops_fully_removed_site_from_catalog(tmp_path):
+    store = ParquetStore(str(tmp_path / "store"))
+    old = pd.date_range("2022-01-01", periods=24, freq="1h")
+    new = pd.date_range("2024-01-01", periods=24, freq="1h")
+    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=old), site="OLD", equip="A")
+    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=new), site="NEW", equip="A")
+    store.prune(before_year=2023)                           # removes all of OLD's partitions
+    assert {p.site for p in store.points()} == {"NEW"}      # OLD dropped from the catalog
+
+
+def test_catalog_file_invisible_to_reads(tmp_path):
+    store = _multi_year_store(str(tmp_path / "store"))
+    store.points()                                         # materialize _catalog.json at the root
+    assert os.path.isfile(os.path.join(store.root, "_catalog.json"))
+    # the _catalog.json at the root must not break dataset discovery or appear as a site
+    assert not store.read_long().empty
+    assert "S1" in store.sites() and "_catalog.json" not in "".join(store.sites())

@@ -55,10 +55,15 @@ def benchmark(root: str, *, sites: int = 10, equips: int = 10, roles: int = 4,
                                   days=days, freq=freq, start=start)
     out["write_s"] = round(time.perf_counter() - t0, 4)
 
+    # cold: writes invalidated the catalog, so this rebuilds it once (a projected scan)...
     t0 = time.perf_counter()
     pts = store.points()
-    out["points_s"] = round(time.perf_counter() - t0, 4)
+    out["points_cold_s"] = round(time.perf_counter() - t0, 4)
     out["n_points"] = len(pts)
+    # ...warm: served straight from the cached catalog, no partition scan.
+    t0 = time.perf_counter()
+    store.points()
+    out["points_warm_s"] = round(time.perf_counter() - t0, 4)
 
     t0 = time.perf_counter()
     store.read_role_frame(site="site_000", equip="AHU_00")

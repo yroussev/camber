@@ -122,14 +122,15 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       bundle (`api`/`tool`/`tests`); a tag-driven release workflow that publishes to PyPI via
       **Trusted Publishing (OIDC)** and pushes a **multi-arch image (amd64+arm64) to GHCR**,
       gated on the suite, then cuts a GitHub Release; a `.devcontainer`; and `DOCKER.md`.
-- [~] **Scale** — tuned the store/readers for portfolio scale: **year-partition pruning**
+- [x] **Scale** — tuned the store/readers for portfolio scale: **year-partition pruning**
       from the ts range (a one-month query across a multi-year store opens only the relevant
       year), **column projection** (`points()` reads only the catalog columns, `read_role_frame`
       only ts/role/value), and a **fast-path pivot** when observations are unique. A synthetic
       generator + benchmark (`python -m camber.store.bench`) and `tests/test_store_scale.py`
       prove pruning/projection mechanically; a single-equipment read stays ~flat as the
-      portfolio grows (see [docs/SCALE.md](docs/SCALE.md)). Remaining: a cached catalog so
-      `points()` over a whole portfolio doesn't rescan partitions.
+      portfolio grows. Plus a **cached catalog** (`_catalog.json`, invalidate-on-write +
+      rebuild-on-read) so `points()` is served from an index instead of a partition scan
+      (~22 ms warm vs a ~3.5 s rebuild), with writes kept cheap. See [docs/SCALE.md](docs/SCALE.md).
 
 ## Phase 3 — Long-term (toward 1.0+)
 
