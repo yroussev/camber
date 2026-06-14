@@ -162,8 +162,9 @@ a runnable script. See the per-example READMEs.
 
 Contributions are welcome — new diagnostics, ingest adapters, M&V models, ontology
 interop, docs, and fixes. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup
-and conventions, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layered
-design, [ROADMAP.md](ROADMAP.md) for what's planned and where to help,
+and conventions, [docs/CAPABILITIES.md](docs/CAPABILITIES.md) for a full capability
+reference (API + option flags per feature), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+for the layered design, [ROADMAP.md](ROADMAP.md) for what's planned and where to help,
 [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the OSS-integration strategy, and the
 [Code of Conduct](CODE_OF_CONDUCT.md). Security reports: see [SECURITY.md](SECURITY.md).
 

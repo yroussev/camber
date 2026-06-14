@@ -4,6 +4,17 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.1.1] — 2026-06-14
+
+Documentation-only patch (no code or dependency changes).
+
+### Added
+
+- **`docs/CAPABILITIES.md`** — a single capability reference for everything in 0.1: what each
+  capability does, its key API, the **option flags** that tune it, the module, and the standard
+  it cites, grouped by layer (ingest · semantic model · FDD · SOO · M&V · RCx · money & compliance ·
+  domain analytics · storage · reporting/integration/API · orchestration). Linked from the README.
+
 ## [0.1.0] — 2026-06-12
 
 First public release.
