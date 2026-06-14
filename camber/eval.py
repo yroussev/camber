@@ -141,3 +141,57 @@ def benchmark(records, detector_targets: dict) -> BenchmarkReport:
         cd = float("nan")
     return BenchmarkReport(n=len(recs), overall=overall, per_detector=per,
                            correct_diagnosis=cd)
+
+
+# Metric-name tokens whose value is better when *lower* (everything else: higher is better).
+_LOWER_IS_BETTER = ("fpr", "false_positive", "false_negative", "fnr", "error")
+
+
+@dataclass(frozen=True)
+class BaselineCheck:
+    """Result of comparing current benchmark metrics to a committed baseline."""
+
+    passed: bool
+    regressions: list      # [(metric, baseline, current, delta)] worse than tol
+    improvements: list     # [(metric, baseline, current, delta)] better than tol
+    unchanged: int
+    missing: list          # metrics present in the baseline but absent now (treated as failing)
+
+    def as_dict(self) -> dict:
+        return {"passed": self.passed, "regressions": self.regressions,
+                "improvements": self.improvements, "unchanged": self.unchanged,
+                "missing": self.missing}
+
+
+def check_against_baseline(current: dict, baseline: dict, *, tol: float = 0.02,
+                           lower_is_better=_LOWER_IS_BETTER, metrics=None) -> BaselineCheck:
+    """Compare flat metric dicts and flag regressions beyond ``tol`` (for CI gating).
+
+    ``current`` / ``baseline`` are ``{metric_name: value}``. A metric whose name contains a
+    ``lower_is_better`` token (FPR, error, …) regresses when it *rises* past ``tol``; every other
+    metric regresses when it *falls* past ``tol``. A baseline metric missing from ``current``
+    counts as a failure (a detector was removed/renamed). ``metrics`` restricts the comparison to
+    a subset. ``passed`` is true when there are no regressions and nothing missing.
+    """
+    keys = list(metrics) if metrics else list(baseline)
+    regressions, improvements, missing, unchanged = [], [], [], 0
+    for k in keys:
+        if k not in baseline:
+            continue
+        if k not in current:
+            missing.append(k)
+            continue
+        b, c = float(baseline[k]), float(current[k])
+        delta = c - b
+        lower = any(tok in k.lower() for tok in lower_is_better)
+        worse = (delta > tol) if lower else (delta < -tol)
+        better = (delta < -tol) if lower else (delta > tol)
+        row = (k, round(b, 4), round(c, 4), round(delta, 4))
+        if worse:
+            regressions.append(row)
+        elif better:
+            improvements.append(row)
+        else:
+            unchanged += 1
+    return BaselineCheck(passed=(not regressions and not missing), regressions=regressions,
+                         improvements=improvements, unchanged=unchanged, missing=missing)

@@ -1,0 +1,56 @@
+name: Benchmark
+
+# Continuous FDD-accuracy benchmarking: run the rule library against LBNL's labeled public
+# datasets and fail on an accuracy regression beyond tolerance. Runs weekly, on demand, and on
+# PRs that touch the rules or the benchmark. Datasets are CC-BY and fetched on demand (cached).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"          # Mondays 06:00 UTC
+  pull_request:
+    paths:
+      - "camber/**"
+      - "examples/lbnl_fdd/**"
+      - ".github/workflows/benchmark.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fdd-accuracy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip && pip install -e .
+
+      - name: Cache LBNL datasets
+        uses: actions/cache@v4
+        with:
+          path: examples/_data
+          key: lbnl-fdd-${{ hashFiles('examples/lbnl_fdd/fetch.py') }}
+
+      - name: Fetch labeled datasets (CC-BY)
+        run: python examples/lbnl_fdd/fetch.py --families
+
+      - name: Run benchmark + gate against baseline
+        run: |
+          BASE=examples/lbnl_fdd/benchmark-baseline.json
+          if [ -f "$BASE" ]; then
+            python examples/lbnl_fdd/benchmark.py --gate "$BASE" --json /tmp/metrics.json --tol 0.05
+          else
+            echo "No committed baseline yet — emitting current metrics to seed one."
+            python examples/lbnl_fdd/benchmark.py --update-baseline /tmp/metrics.json
+          fi
+
+      - name: Upload metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-metrics
+          path: /tmp/metrics.json

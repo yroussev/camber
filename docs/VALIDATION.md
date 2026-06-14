@@ -66,6 +66,26 @@ textbook definitions; IRR is a bisection solver verified against hand-worked cas
 - `metrics_with_ci(confusion)` — TPR/FPR/accuracy each with a Wilson CI.
 - `check_determinism(fn, ...)` — reproducibility guard (identical output across runs).
 
-> Remaining: a packaged "published accuracy" run captured as a versioned artifact, and a
-> continuous-benchmark CI job (Phase-3 roadmap) so accuracy regressions are caught on every
-> change.
+## Continuous benchmarking in CI
+
+Accuracy is gated against a committed baseline so it can't silently drift. The cross-equipment
+runner emits a flat metrics dict and compares it to a baseline:
+
+```sh
+# seed a baseline once (after a known-good run), commit it:
+python examples/lbnl_fdd/benchmark.py --update-baseline examples/lbnl_fdd/benchmark-baseline.json
+# thereafter, gate (CI fails on a regression beyond tolerance):
+python examples/lbnl_fdd/benchmark.py --gate examples/lbnl_fdd/benchmark-baseline.json --tol 0.05
+```
+
+`camber.eval.check_against_baseline(current, baseline, *, tol, metrics)` is the reusable gate:
+a higher-is-better metric (TPR, accuracy, correct-diagnosis) **regresses** when it falls past
+`tol`; a lower-is-better one (FPR, error) regresses when it **rises** past `tol`; a baseline
+metric missing from the current run fails too (a detector was removed/renamed). It returns a
+`BaselineCheck` (`passed`, `regressions`, `improvements`, `unchanged`, `missing`).
+
+`.github/workflows/benchmark.yml` runs this weekly, on demand, and on PRs that touch the rules
+or the benchmark — fetching the CC-BY datasets (cached), gating against the committed baseline
+(or seeding one if absent), and uploading the metrics artifact.
+
+> Remaining: capture a packaged "published accuracy" run as a versioned release artifact.
