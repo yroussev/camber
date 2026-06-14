@@ -139,16 +139,39 @@ def print_scores(title, records):
                   f"FPR {f.rate:.0%} [{f.lo:.0%}-{f.hi:.0%}]  (n={c.total})")
 
 
-def main() -> int:
+def metrics_dict(label, records):
+    """Flatten a family's benchmark to ``{label.tpr, label.fpr, label.accuracy,
+    label.correct_diagnosis}`` for JSON output and baseline gating."""
+    rep = benchmark(records, TARGETS)
+    o = rep.overall
+    return {f"{label}.tpr": round(o.true_positive_rate, 4),
+            f"{label}.fpr": round(o.false_positive_rate, 4),
+            f"{label}.accuracy": round(o.accuracy, 4),
+            f"{label}.correct_diagnosis": round(rep.correct_diagnosis, 4)}
+
+
+def main(argv=None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="LBNL cross-equipment FDD benchmark")
+    ap.add_argument("--json", metavar="PATH", help="write the flat metrics dict as JSON")
+    ap.add_argument("--gate", metavar="PATH",
+                    help="baseline JSON to gate against (exit 2 on regression)")
+    ap.add_argument("--tol", type=float, default=0.02, help="regression tolerance (default 0.02)")
+    ap.add_argument("--update-baseline", metavar="PATH",
+                    help="write current metrics as a new baseline JSON")
+    args = ap.parse_args(argv)
+
     if not os.path.exists(os.path.join(DATA, "sdahu", FAMILIES[0]["scenarios"][0][0])):
         print("Data not found. Run:  python examples/lbnl_fdd/fetch.py")
         return 1
 
-    pooled = []
+    pooled, metrics = [], {}
     for fam in FAMILIES:
         recs = score_family(fam)
         if recs:
             print_scores(fam["label"], recs)
+            metrics.update(metrics_dict(fam["label"], recs))
             pooled.extend(recs)
 
     families_present = sum(1 for fam in FAMILIES
@@ -157,6 +180,7 @@ def main() -> int:
     if families_present > 1:
         print("\n" + "=" * 60)
         print_scores(f"POOLED across {families_present} equipment families", pooled)
+        metrics.update(metrics_dict("pooled", pooled))
         print("\nThe same role-based detectors run unchanged across single-duct AHUs,")
         print("fan-coil units, and dual-duct AHUs -- only the point->role mapping and the")
         print("unit's design-min OA differ. OA-fraction transfers cleanly to single-duct")
@@ -166,6 +190,26 @@ def main() -> int:
     elif families_present == 1:
         print("\n(Only SDAHU present. Run `python examples/lbnl_fdd/fetch.py --families`")
         print(" to download FCU + DDAHU and score the full cross-equipment benchmark.)")
+
+    if args.json:
+        json.dump(metrics, open(args.json, "w"), indent=2, sort_keys=True)
+        print(f"\nwrote metrics -> {args.json}")
+    if args.update_baseline:
+        json.dump(metrics, open(args.update_baseline, "w"), indent=2, sort_keys=True)
+        print(f"wrote baseline -> {args.update_baseline}")
+    if args.gate:
+        from camber.eval import check_against_baseline
+        baseline = json.load(open(args.gate))
+        chk = check_against_baseline(metrics, baseline, tol=args.tol)
+        if not chk.passed:
+            print(f"\n✗ BENCHMARK REGRESSION (tol {args.tol}):")
+            for k, b, c, d in chk.regressions:
+                print(f"    {k}: {b} -> {c}  ({d:+})")
+            for k in chk.missing:
+                print(f"    {k}: missing from current run")
+            return 2
+        print(f"\n✓ benchmark gate OK — {chk.unchanged} stable, "
+              f"{len(chk.improvements)} improved, none regressed")
     return 0
 
 
