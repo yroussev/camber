@@ -22,8 +22,13 @@ ROLE_TO_BRICK_POINT_CLASS = {
     Role.DUCT_STATIC: "Supply_Air_Static_Pressure_Sensor",
     Role.DUCT_STATIC_SP: "Supply_Air_Static_Pressure_Setpoint",
     Role.AIRFLOW: "Supply_Air_Flow_Sensor",
+    Role.AIRFLOW_SP: "Supply_Air_Flow_Setpoint",
+    Role.OA_AIRFLOW: "Outside_Air_Flow_Sensor",
     Role.SPACE_TEMP: "Zone_Air_Temperature_Sensor",
     Role.OCCUPANCY: "Occupancy_Status",
+    Role.CO2: "CO2_Sensor",
+    Role.OUTDOOR_CO2: "Outside_Air_CO2_Sensor",
+    Role.OUTDOOR_RH: "Outside_Air_Humidity_Sensor",
 }
 
 # Context roles -> (part name, part Brick class, point Brick class). The part is
