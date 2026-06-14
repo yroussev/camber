@@ -43,6 +43,7 @@ class Role(str, Enum):
 
     # --- flows / pressures ---
     AIRFLOW = "airflow"
+    OA_AIRFLOW = "oa_airflow"         # outdoor-air volumetric flow (cfm) — 62.1 VRP / DCV
     DUCT_STATIC = "duct_static"
 
     # --- status / mode ---
@@ -115,6 +116,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.OA_DAMPER: "outside air damper cmd",
     Role.DAMPER: "damper cmd",
     Role.AIRFLOW: "discharge air flow sensor",
+    Role.OA_AIRFLOW: "outside air flow sensor",
     Role.DUCT_STATIC: "duct air pressure sensor",
     Role.OCCUPANCY: "occupied",
     Role.WARMUP: "warmup",
