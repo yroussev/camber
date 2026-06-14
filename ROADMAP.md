@@ -7,42 +7,80 @@ exists today versus what is planned; dates are deliberately omitted in favor of
 ordered phases. Contributions toward any item are welcome — see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Where we are — v0.1.0 (built)
+## Released — v0.1.0
 
-A working **FDD + M&V + light EIS** toolkit, vendor-neutral via the `Role` model.
+CAMBER 0.1.0 is **public and installable**: PyPI **`camber-toolkit`** (imports as `camber`),
+a multi-arch container image at **`ghcr.io/yroussev/camber`**, and a GitHub release. **~634
+tests**, CI on Python 3.10/3.11, runnable examples on public CC-BY datasets (LBNL FDD,
+Building Data Genome 2).
 
-- **Ingest** — per-point CSV, wide CSV, a Haystack `hisRead` client; data-quality
-  scoring + auditable cleaning; valve/damper unit normalization.
-- **Semantic model** — roles, mapping provider, entity model with equipment
-  templates and completeness validation; **Brick import/export**.
-- **FDD** — ASHRAE G36 AFDD + PNNL Re-tuning diagnostics; impact prioritization,
-  fault-lifecycle tracking, and an FDD-accuracy evaluation harness.
-- **M&V** — change-point inverse models (2P–5P + zero variants), LBNL TOWT, fit
-  statistics with fractional savings uncertainty, CUSUM, weather normalization,
-  rate/energy-aware resampling.
-- **Domain analytics** — Std-55 comfort, utility cost, carbon, water (irrigation /
-  cooling tower / leaks), load profiling, PV, lighting.
-- **Storage** — Parquet store (entity-keyed, partitioned) with rollups + retention.
-- **Reporting / integration / API** — Std-211 audit (with prioritized findings),
-  findings→CMMS tickets + notifier, read-only HTTP API.
-- **Quality bar** — ~320 tests, CI on Python 3.10/3.11, Docker, runnable examples
-  on public CC-BY datasets (LBNL FDD, Building Data Genome 2).
+0.1.0 shipped well beyond a minimal first cut — **most of the originally-planned Phase-1 and
+Phase-2 work, and several capability tracks, landed in it** (kept below, marked `[x]`, as the
+delivered record). What it includes, by layer:
 
-## Phase 0 — Launch (current focus)
+- **Ingest** — per-point CSV, wide CSV, Project-Haystack `hisRead` (via an injectable
+  transport seam + a phable hookup), SQL/historian (any DB-API), and **read-only network
+  adapters: Modbus, MQTT/Sparkplug, BACnet (incl. experimental BACnet/SC), and OPC-UA** —
+  read-only by construction, lazy-imported, historian-first posture
+  ([SECURITY](docs/SECURITY.md), [INGEST-PROTOCOLS](docs/INGEST-PROTOCOLS.md)). Plus
+  data-quality scoring + auditable cleaning, unit normalization, and a **sensor-health /
+  data-trust gate** (physical bounds, cross-sensor consistency, drift-vs-reference, mapping
+  confidence).
+- **Semantic model** — vendor-neutral `Role` vocabulary, mapping provider, entity model +
+  completeness validation; **Brick import/export and whole-site round-trip**.
+- **FDD** — ASHRAE G36 + PNNL Re-tuning diagnostics; an **11-rule central-plant & hydronic
+  library**; a **SOO conformance engine** + packaged G36 clause library; impact
+  prioritization, **root-cause grouping**, fault-lifecycle tracking, **per-fault dollar
+  economics**, and an accuracy benchmark across three LBNL equipment families with Wilson-CI
+  methods validation.
+- **M&V** — change-point (2P–5P + zero variants), LBNL TOWT, G14 fit stats + fractional
+  savings uncertainty, CUSUM, weather normalization, **normalized annual savings**,
+  **non-routine adjustment**, and **IPMVP Option-B retrofit isolation**; CalTRACK alignment +
+  eemeter / LBNL-BETTER cross-checks.
+- **Commissioning** — RCx / MBCx (`functional_test`, `before_after`, `track_measures`).
+- **Money & compliance** — tariff engine + OpenEI URDB + bill validation + ECM NPV/IRR/SIR;
+  demand & peak analytics; BPS / EUI compliance.
+- **Domain analytics** — Std-55 comfort, IAQ/CO₂ ventilation, cost, carbon, water, load
+  profiling, PV (+ pvlib bridge), psychrometrics (+ PsychroLib bridge), lighting.
+- **Storage** — partitioned Parquet store with rollups/retention, **year-partition pruning,
+  column projection, and a cached catalog**, validated to portfolio scale ([SCALE](docs/SCALE.md)).
+- **Reporting / integration / API** — Std-211 audit with prioritized findings, a **portfolio
+  rollup ranked by recoverable dollars**, findings→CMMS + notifier, a read-only HTTP API, and
+  **viz charts** (load carpet, CUSUM, energy signature).
+- **Config-driven runs** — a declarative JSON config runs a whole analysis without a script.
+- **Distribution** — slim multi-stage Docker image + compose bundle, `.devcontainer`, a
+  tag-driven release workflow (PyPI Trusted Publishing + GHCR), CI.
 
-Get the project out and installable, with nothing else changing.
+## Phase 0 — Launch — DONE ✅
 
-- [ ] Make the GitHub repository public.
-- [ ] Cut the **0.1.0** release on PyPI (`RELEASING.md`). Trusted Publishing
-      (GitHub Actions OIDC, no stored token) is **wired** in `.github/workflows/release.yml` —
-      tagging `v0.1.0` triggers it; just configure the PyPI trusted-publisher + `pypi`
-      environment first.
-- [ ] Enable Discussions + the issue/PR templates; add topics/description.
-- [ ] (Optional) Publish the README/ARCHITECTURE as a small docs site (MkDocs).
+- [x] Public GitHub repository (`yroussev/camber`).
+- [x] **0.1.0 on PyPI** as `camber-toolkit` via Trusted Publishing (OIDC, no stored token),
+      a multi-arch GHCR image, and a GitHub release — all from the tag-driven workflow.
+- [ ] Enable Discussions; confirm issue/PR templates surface; add repo topics/description.
+- [ ] (Optional) Publish README/ARCHITECTURE as a small docs site (MkDocs).
+- [ ] (Tracking) Reclaim the bare `camber` PyPI name (PEP-541 request filed) — optional;
+      `camber-toolkit` is the permanent distribution name regardless.
 
-## Phase 1 — Near-term (0.2): diagnosis depth & portfolio
+## Next — 0.2 (the real near-term)
 
-Sharpen the "diagnosis, not just detection" edge and scale to many buildings.
+The concrete remainders from the tracks 0.1.0 mostly completed, plus the first forward steps.
+
+- [ ] **ASHRAE 223P + richer Brick interop** — beyond the shipped point/site Brick
+      round-trip (the `[~]` item below).
+- [ ] **ASHRAE 62.1 OA-rate + DCV verification** — the explicit ventilation-rate checks on
+      top of the shipped CO₂ adequacy diagnostic (the `[~]` item below).
+- [ ] **Continuous benchmarking in CI** — run the rule library against LBNL's labeled
+      datasets on every change to catch accuracy regressions (pulled forward from Phase 3).
+- [ ] **Outbound integrations** — CMMS/work-order write-back; alerting (email/Slack/Teams/
+      webhook); BI/warehouse export.
+- [ ] **Interactive visualization MVP** — the `A → B → E → I` slice from the Visualizations
+      vision below (readiness ribbon → fault-annotated multi-trend → carpet → data-quality
+      gate); the static chart primitives already shipped.
+
+## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
+
+Sharpen the "diagnosis, not just detection" edge and scale to many buildings — all shipped in
+0.1.0.
 
 - [x] **Root-cause grouping** — cluster co-occurring findings on an equipment into
       one likely root cause (e.g. SAT/overcooling → reheat → simultaneous H/C).
@@ -64,10 +102,11 @@ Sharpen the "diagnosis, not just detection" edge and scale to many buildings.
       equipment → rules → report) runs a whole analysis without a script
       (`camber.config`, `python -m camber.config run.json`).
 
-## Phase 2 — Medium-term (0.3–0.5): breadth, rigor & distribution
+## Delivered in 0.1.0 — breadth, rigor & distribution  *(originally Phase 2)*
 
-Where sensible, integrate mature OSS as **optional extras** rather than reinventing
-it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysis.
+Mature OSS integrated as **optional extras** rather than reinvented — see
+[docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysis. All of the below
+shipped in 0.1.0; the two `[~]` items have remainders tracked under **Next — 0.2**.
 
 - [~] **More ingest adapters** — *Shipped:* a SQL/historian reader (`camber.ingest.sql`),
       and **read-only network protocol adapters** — Modbus TCP (`[modbus]`, pymodbus),
@@ -136,7 +175,9 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       rebuild-on-read) so `points()` is served from an index instead of a partition scan
       (~22 ms warm vs a ~3.5 s rebuild), with writes kept cheap. See [docs/SCALE.md](docs/SCALE.md).
 
-## Phase 3 — Long-term (toward 1.0+)
+## Later — toward 1.0
+
+(Continuous-benchmark CI and outbound integrations are pulled forward to **Next — 0.2**.)
 
 - [ ] **Interactive dashboards / web UI** — fault console with drill-down to the
       supporting trend; portfolio KPIs; energy/savings dashboards.
@@ -144,11 +185,6 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
       history, and plain-language fault explanations — strictly grounded in the
       deterministic layers, citing the rule + data behind every claim (never the
       source of truth, always auditable).
-- [ ] **Outbound integrations** — CMMS/work-order write-back; alerting channels
-      (email/Slack/Teams/webhook); BI/warehouse export.
-- [ ] **Continuous benchmarking in CI** — run the rule library against LBNL's
-      public labeled datasets on every change to catch accuracy regressions; track
-      FP/FN/correct-diagnosis over time.
 - [ ] **Automated system optimization (ASO) hooks** — from diagnosis to suggested
       setpoint/sequence changes (advisory, human-in-the-loop).
 - [ ] **Real-time / streaming** — incremental ingest and online diagnostics on live
@@ -162,8 +198,9 @@ it — see [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysi
 
 ## Visualizations
 
-A capability area that cuts across ingest, FDD, M&V, and reporting. The bullet in
-Phase 2 covers the first static charts; this section is the fuller vision for what
+A capability area that cuts across ingest, FDD, M&V, and reporting. 0.1.0 shipped the first
+**static chart primitives** (load carpet, CUSUM, energy signature); the **interactive MVP
+(`A → B → E → I`) is tracked under Next — 0.2**, and this section is the fuller vision for what
 CAMBER's visual layer should become. It is a **clean-room distillation from public
 building-analytics literature and tools** (e.g. PNNL Re-tuning, LBNL, and
 university energy-dashboard work) — capabilities and ideas in our own
@@ -260,12 +297,12 @@ That slice already delivers the fuse-graphing-and-diagnostics principle end to e
 the remaining patterns deepen comparison (C, D), turn rules into a chart engine (G,
 J), and extend into M&V and load economics (H, F).
 
-## Additional capability tracks (candidate)
+## Capability tracks — delivered in 0.1.0
 
-New tracks beyond the phased plan above, each consistent with CAMBER's contract —
+Tracks beyond the original phased plan, each consistent with CAMBER's contract —
 vendor-neutral via the `Role` model, clean-room and citable, dependency-light, and
-every rule shipping a synthetic fixture that proves detection. Not yet slotted into a
-release; listed so a contributor can claim one.
+every rule shipping a synthetic fixture that proves detection. **All shipped in 0.1.0**
+(the two `[~]` items have remainders tracked under **Next — 0.2**).
 
 ### Diagnostic breadth
 
