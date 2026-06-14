@@ -30,16 +30,20 @@ from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
 from .static_rule import DamperCensus
+from .ventilation_rule import DemandControlledVentilation
 from .zones_rule import ZonesHeatCoolCensus
 
 # Every shipped rule. Per-equipment rules first, then fleet rules.
+# (VentilationRateProcedure needs per-zone design inputs, so it is instantiated explicitly
+# by the caller rather than auto-registered here.)
 RULE_CLASSES = [
     SimultaneousHeatCool, SupplyAirReset, ReheatPenalty, OvercoolingMinFlow,
     OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, BoilerShortCycle,
     HWPlantDeltaT, HWPumpDPReset, NightWeekendSetback, OutdoorAirFraction,
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
-    CO2Ventilation, LeakingValve, DamperCensus, ZonesHeatCoolCensus, ChillerStagingFleet,
+    CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
+    ZonesHeatCoolCensus, ChillerStagingFleet,
 ]
 
 
