@@ -1,0 +1,85 @@
+# Reference Kubernetes manifests for the CAMBER read-only API over a Parquet store.
+#
+# NOT auto-applied or published — a starting point for operators. Apply with:
+#   kubectl apply -f deploy/k8s/camber-api.yaml
+# Assumes the multi-arch image at ghcr.io/yroussev/camber (built by the release workflow) and a
+# store you provide via the PVC below (populate it out-of-band; the API only reads).
+#
+# The API serves GET only (/about /health /sites /points /history) and never writes to the BAS —
+# keep it behind the cluster boundary / an authenticating ingress, not exposed raw (see
+# docs/SECURITY.md).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: camber
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: camber-store
+  namespace: camber
+spec:
+  accessModes: ["ReadOnlyMany"]     # the API only reads; a writer job populates it separately
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: camber-api
+  namespace: camber
+  labels: { app: camber-api }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: camber-api }
+  template:
+    metadata:
+      labels: { app: camber-api }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: camber-api
+          image: ghcr.io/yroussev/camber:latest
+          args: ["python", "-m", "camber.api.server"]
+          ports:
+            - containerPort: 8080
+          env:
+            - { name: CAMBER_STORE, value: /data/store }
+            - { name: CAMBER_API_HOST, value: "0.0.0.0" }
+            - { name: CAMBER_API_PORT, value: "8080" }
+          volumeMounts:
+            - { name: store, mountPath: /data/store, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: store
+          persistentVolumeClaim:
+            claimName: camber-store
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: camber-api
+  namespace: camber
+spec:
+  selector: { app: camber-api }
+  ports:
+    - { port: 80, targetPort: 8080 }
+  type: ClusterIP     # front with an authenticating ingress; do not expose raw
