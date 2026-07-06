@@ -1,6 +1,6 @@
 # CAMBER capabilities reference
 
-A single index of what CAMBER 0.1 does, grouped by the building-analytics layers, with the key
+A single index of what CAMBER 0.2 does, grouped by the building-analytics layers, with the key
 API, the **option flags** that tune each capability, the module, and the standard it cites.
 Deeper write-ups are linked where they exist.
 
@@ -38,6 +38,9 @@ Adapters normalize any source to named point series on a common time grid (`Sour
 - **Brick interop** — `interop.mapping_from_brick` / `roles_from_brick` (import); `interop.to_brick`
   and `interop.site_to_ttl` / `site_from_ttl` (export + whole-site round-trip). Flags: `backend`
   (`auto`/`rdflib`/`minimal`; rdflib via the `[brick]` extra).
+- **ASHRAE 223P** — `interop.semantic223.site_to_223` / `site_from_223` map a site (roles + equipment)
+  to/from a 223P-shaped RDF subset (connections, medium, points; `ROLE_TO_223` quantity-kinds). Flags:
+  `profile` (`minimal`/`full`), `include_relations`. See **[ONTOLOGY.md](ONTOLOGY.md)**.
 
 ## FDD — fault detection & diagnostics
 
@@ -58,11 +61,19 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   inputs aren't trusted.
 - **Prioritization & lifecycle** — `rules.triage`: `rank_findings` (severity, or a magnitude/cost
   key), `group_findings` (root-cause grouping), `FaultRegister` (new/ongoing/resolved across runs).
-  Flags: `magnitude_key`, `actionable_only`.
+  Persistent, cross-process: `faultlifecycle.FaultLifecycle` — a fingerprint-keyed fault store with
+  an assignment/status workflow, SLA/aging tracking, and atomic JSON persistence. Flags:
+  `magnitude_key`, `actionable_only`, `reopen_on_recurrence`, `auto_resolve_absent`.
 - **Fault economics** — `fault_economics`: per-fault annual $ impact → rank by money. Flags:
   `params` (assumptions), `models`, `min_severity` (via `rank_by_cost`).
-- **Accuracy** — `eval.benchmark` + `validation.metrics_with_ci` (Wilson CIs); see
-  **[VALIDATION.md](VALIDATION.md)**.
+- **Ventilation (ASHRAE 62.1)** — `ventilation.assess_62_1` (Ventilation Rate Procedure: required vs
+  delivered OA, deficit) and `assess_dcv` (DCV modulation vs occupancy/CO₂), with the
+  `VentilationRateProcedure` / `DemandControlledVentilation` rules and `Role.OA_AIRFLOW`. Flags:
+  `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `min_corr`, `min_modulation`. See
+  **[VENTILATION.md](VENTILATION.md)**.
+- **Accuracy + CI gating** — `eval.benchmark` + `validation.metrics_with_ci` (Wilson CIs), and
+  `eval.check_against_baseline` to gate accuracy (TPR/FPR/diagnosis) against a committed baseline in
+  CI (`--json` / `--gate` / `--tol` / `--update-baseline`). See **[VALIDATION.md](VALIDATION.md)**.
 
 ## Sequence-of-Operations conformance
 
@@ -79,6 +90,21 @@ TOWT (`mandv.towt`), fit statistics + G14 fractional savings uncertainty (`mandv
 (`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`). Flags: `confidence`,
 `exclude_non_routine`, model `kinds`, `aggregate`.
 
+## Streaming / online
+
+Incremental monitors for a live BAS feed — bounded state, O(1)–O(window) per sample. See
+**[STREAMING.md](STREAMING.md)** and **[FORECAST.md](FORECAST.md)**.
+
+- **Online M&V** — `mandv.online.OnlineCusum` (incremental tabular CUSUM of savings/waste vs a
+  baseline model → savings-erosion alarm) and `RollingAnomaly` (rolling median/MAD residual
+  z-score). Flags: `limit`, `slack`, `window`, `k`, `min_samples`.
+- **Online FDD** — `rules.online.OnlineFDD`: sliding trailing-window rule evaluation emitting a
+  `Transition` only on a verdict change (no per-sample re-alert), per-equipment isolation. Flags:
+  `window`, `eval_every`, `min_samples`, `emit_ok`.
+- **Forecasting + learned-normal anomalies** — `forecast.seasonal_forecast` (time-of-week shape +
+  additive drift, no ML dep), `backtest` (MAE / MAPE / CV(RMSE) honesty check), `forecast_anomalies`
+  (robust residual band → FDD signal). Flags: `drift_window`, `k`, `test_frac`.
+
 ## Commissioning (RCx / MBCx)
 
 `rcx`: `functional_test` (FPT pass-rate), `before_after` (MBCx persistence across an intervention
@@ -94,6 +120,21 @@ date), `track_measures` (measure register → verified/regressed/inconclusive/in
   anomaly, peak-shave $ value. Flags: `near_peak_frac`, `start_hour`/`end_hour`, `target_kw`.
 - **BPS compliance** — `bps`: `site_eui`, `emissions_intensity`, `assess_bps` / `assess_eui`
   (compliant?, margin, penalty exposure). Limits are caller-supplied (no hard-coded legal values).
+
+## Grid-interactive (GEB) & carbon timing
+
+Beyond using *less* energy — quantify *shifting and shedding* load, and the carbon cost of *when*
+power is used. Advisory analytics (read-only toward the BAS). See **[GEB.md](GEB.md)** and
+**[CARBON.md](CARBON.md)**.
+
+- **Demand response & flexibility** — `geb.demand_response` (shed kW/kWh/% + rebound vs a baseline),
+  `geb.flexibility` (sheddable load above baseload, peak-to-average headroom). Flags:
+  `rebound_hours`, `baseload_pct`.
+- **Load timing** — `geb.carbon_aware_shift` (CO₂ saved shifting load dirty→clean hours) and
+  `geb.operation_score` (load timing vs a price/carbon signal, rearrangement-inequality bounds).
+- **Hourly / marginal Scope-2** — `carbon_hourly.hourly_emissions` (time-varying factor → co2e,
+  effective factor, timing premium) and `marginal_vs_average` (load-shift value uses marginal;
+  reporting uses average). Flags: `unit_kg_per_kwh`.
 
 ## Domain analytics
 
@@ -113,10 +154,18 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
 - **Audit** — `report.AuditReport` (ASHRAE/ACCA Standard 211, text/HTML) with prioritized findings.
 - **Portfolio rollup** — `report.build_fleet_report` (cross-sectional EUI benchmark + fault rollup,
   ranked by recoverable $). Flags: `price`, `loads`, `peer_median_eui`, `top_n`.
-- **Outbound** — `integrate`: `finding_to_ticket` / `findings_to_tickets` (neutral CMMS dict),
-  `webhook_transport` / `collect_transport`, `Notifier`. Flags: `actionable_only`, `site`.
-- **Charts** — `charts`: heating-vs-cooling scatter, reheat boxes, zones, load carpet, CUSUM, energy
-  signature. All draw onto a supplied Axes.
+- **Outbound** — `integrate`: CMMS work-orders (`finding_to_ticket` / `findings_to_tickets` → neutral
+  dict), notifiers (`dispatch_findings` over `webhook_transport` / `email_transport`, with
+  `slack_payload` / `teams_payload` formatters; severity filter + fingerprint dedupe), and findings/
+  metrics export (`export_findings`: CSV / Parquet / JSON). All opt-in, from the findings layer —
+  never writing to the BAS. Flags: `channel`, `min_severity`, `dedupe`, `dry_run`, `format`,
+  `flatten_metrics`. See **[INTEGRATIONS.md](INTEGRATIONS.md)**.
+- **Charts + dashboard** — `charts`: heating-vs-cooling scatter, reheat boxes, zones, load carpet,
+  CUSUM, energy signature, plus the visualization MVP — ingest-readiness ribbon (`readiness`),
+  fault-annotated multi-trend (`multitrend`), and data-quality dashboard (`quality_dashboard`).
+  `report.dashboard.build_dashboard` assembles them into one self-contained HTML (matplotlib inlined,
+  no web framework; `findings`/`spans` shade fault violations). Flags: `sections` (A/B/E/I),
+  `rank_by`, `top_n`, `normalize`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
 - **Read-only API** — `api.server` (`python -m camber.api.server <store> [port]`): GET
   `/about` `/health` `/sites` `/points` `/history`. Env: `CAMBER_STORE` / `CAMBER_API_HOST` /
   `CAMBER_API_PORT`.
@@ -125,8 +174,14 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
 
 - **Config-driven runs** — `config`: one JSON config (source → mapping → equipment → rules →
   report) runs a whole analysis: `python -m camber.config run.json`.
-- **Distribution** — slim multi-stage Docker image + compose bundle ([DOCKER.md](../DOCKER.md)),
-  PyPI (`camber-toolkit`) + GHCR via the tag-driven release workflow, CI on 3.10/3.11.
+- **Plugins** — `plugins`: third-party rules / ingest adapters / report formats discovered via
+  Python entry points (`camber.rules` / `camber.adapters` / `camber.reports`) or registered
+  in-process, duck-typed against the existing protocols with per-plugin error isolation. See
+  **[PLUGINS.md](PLUGINS.md)**.
+- **Distribution & deployment** — slim multi-stage Docker image + compose bundle
+  ([DOCKER.md](../DOCKER.md)), PyPI (`camber-toolkit`) + GHCR via the tag-driven release workflow,
+  CI on 3.10/3.11, and reference Kubernetes / conda-recipe manifests (`deploy/`). See
+  **[DEPLOY.md](DEPLOY.md)**.
 
 ---
 
