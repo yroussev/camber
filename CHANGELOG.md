@@ -4,6 +4,68 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.2.0] — 2026-07-06
+
+Second feature release. Extends the 0.1 core along the "Next — 0.2" roadmap and a streaming/
+grid/carbon analytics sprint. Everything stays **read-only toward the BAS/OT** and dependency-light
+(numpy/pandas + stdlib; optional extras stay lazy). Each capability ships with option flags, a
+`docs/` page, and synthetic-fixture tests.
+
+### Added
+
+- **ASHRAE 62.1 ventilation verification** (`camber.ventilation`, `camber.rules.ventilation_rule`)
+  — Ventilation Rate Procedure check of delivered outdoor air (`required_oa_cfm`, `assess_62_1`)
+  and a DCV-modulation check (`assess_dcv`), plus `DemandControlledVentilation` /
+  `VentilationRateProcedure` rules and a new `Role.OA_AIRFLOW`. `docs/VENTILATION.md`.
+- **ASHRAE 223P + richer Brick interop** (`camber.interop.semantic223`) — map `Role`/equipment
+  classes to a 223P-shaped RDF subset (minimal/full profiles, builtin or rdflib backend), and a
+  broadened role↔Brick map with equipment hierarchy + relationships. `docs/ONTOLOGY.md`.
+- **Continuous benchmarking gate** (`camber.eval.check_against_baseline`) — the LBNL benchmark
+  runner gains `--json`/`--gate`/`--tol`/`--update-baseline` so detector accuracy (TPR/FPR/
+  diagnosis) can be gated against a committed baseline in CI. `docs/VALIDATION.md`.
+- **Outbound integrations** (`camber.integrate.notify` / `cmms` / `export`) — webhook, Slack/Teams,
+  and email notifiers (severity filter + fingerprint dedupe), CMMS work-order rendering with a
+  pluggable submit + idempotency, and findings/metrics export (CSV/Parquet/JSON). All opt-in and
+  from the findings layer — never writing to the BAS. `docs/INTEGRATIONS.md`.
+- **Interactive visualization MVP** (`camber.charts.readiness` / `multitrend` /
+  `quality_dashboard`, `camber.report.dashboard`) — ingest-readiness ribbon, fault-annotated
+  synchronized multi-trend, and a data-quality dashboard assembled into one self-contained HTML
+  (matplotlib inlined; no web framework). `docs/VISUALIZATION.md`.
+- **Online / streaming M&V** (`camber.mandv.online`) — `OnlineCusum` (incremental tabular CUSUM of
+  savings/waste against a baseline model) and `RollingAnomaly` (rolling MAD-robust residual
+  z-score); O(1) per sample. `docs/STREAMING.md`.
+- **Online FDD** (`camber.rules.online.OnlineFDD`) — sliding trailing-window rule evaluation that
+  emits a `Transition` only on a verdict change (no per-sample re-alert), with per-equipment
+  isolation and the duck-typed rule protocol. `docs/STREAMING.md`.
+- **Grid-interactive (GEB) analytics** (`camber.geb`) — `demand_response` (shed/rebound vs a
+  baseline), `flexibility` (sheddable headroom), `carbon_aware_shift`, and `operation_score`
+  (load-timing vs a price/carbon signal, rearrangement-inequality best/worst bounds). Advisory
+  analytics; closed-loop DR remains a roadmap item. `docs/GEB.md`.
+- **Hourly / marginal Scope-2 carbon** (`camber.carbon_hourly`) — `hourly_emissions` (time-varying
+  factor → co2e, effective factor, timing premium) and `marginal_vs_average` (load-shift value uses
+  marginal, reporting uses average). `docs/CARBON.md`.
+- **Load forecasting + learned-normal anomalies** (`camber.forecast`) — `seasonal_forecast`
+  (time-of-week shape + additive drift, no ML dependency), `backtest` (MAE/MAPE/CV(RMSE) honesty
+  check), and `forecast_anomalies` (robust residual band → FDD signal). `docs/FORECAST.md`.
+- **Persistent fault lifecycle** (`camber.faultlifecycle`) — a durable fault store keyed by the
+  (site, equip, rule) fingerprint that survives across runs, with an assignment/status workflow,
+  SLA/aging tracking, and atomic JSON persistence.
+- **Plugin API** (`camber.plugins`) — third-party rules / ingest adapters / report formats
+  discovered via Python entry points (`camber.rules` / `camber.adapters` / `camber.reports`) or
+  registered in-process, duck-typed against the existing protocols with per-plugin error
+  isolation. `docs/PLUGINS.md`.
+- **Deployment references** — `deploy/k8s/camber-api.yaml` (namespace + read-only PVC + non-root
+  2-replica Deployment + ClusterIP Service) and a `deploy/conda/meta.yaml` recipe skeleton; nothing
+  is published. `docs/DEPLOY.md`.
+- **Test hardening** — `camber.inventory` and `camber.io` now carry direct tests; a cross-capability
+  `examples/geb_carbon_demo.py` wires GEB → carbon → forecast on synthetic data.
+
+### Fixed
+
+- `carbon_hourly.hourly_emissions` now reports `avg_factor` in the same unit as `effective_factor`
+  on the `unit_kg_per_kwh=False` (g/kWh) path (previously left 1000× off; the timing premium was
+  already correct).
+
 ## [0.1.1] — 2026-06-14
 
 Documentation-only patch (no code or dependency changes).
@@ -190,4 +252,5 @@ First public release.
   `.devcontainer` for one-click contributor setup; and `DOCKER.md`. CI runs pytest on Python
   3.10 / 3.11.
 
+[0.2.0]: https://github.com/yroussev/camber/releases
 [0.1.0]: https://github.com/yroussev/camber/releases
