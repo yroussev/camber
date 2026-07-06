@@ -1,0 +1,50 @@
+# conda-forge recipe SKELETON for camber-toolkit — NOT submitted/published.
+# A starting point if/when a conda-forge feedstock is pursued; version/sha are placeholders to be
+# filled from the PyPI sdist at submission time. See docs/DEPLOY.md.
+{% set name = "camber-toolkit" %}
+{% set version = "0.2.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  # url + sha256 filled from the published PyPI sdist at submission:
+  #   https://pypi.io/packages/source/c/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  url: PLACEHOLDER
+  sha256: PLACEHOLDER
+
+build:
+  noarch: python
+  number: 0
+  script: {{ PYTHON }} -m pip install . -vv
+  entry_points:
+    - camber = camber.cli:main
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=64
+  run:
+    - python >=3.10
+    - numpy >=1.24,<2
+    - pandas >=2.0,<3
+    - matplotlib-base >=3.7
+    - pyarrow >=14
+
+test:
+  imports:
+    - camber
+  commands:
+    - camber --help
+
+about:
+  home: https://github.com/yroussev/camber
+  license: Apache-2.0
+  license_file: LICENSE
+  summary: Vendor-neutral building-automation-system trend analysis (FDD, M&V, RCx)
+
+extra:
+  recipe-maintainers:
+    - yroussev
