@@ -17,7 +17,7 @@ Status legend: ☐ not started · ◐ in progress · ☑ done (on `0.2-dev`).
 
 ---
 
-## 1. ASHRAE 62.1 OA-rate + DCV verification  ◐
+## 1. ASHRAE 62.1 OA-rate + DCV verification  ☑
 
 **Goal.** Verify *delivered* outdoor air against the ASHRAE 62.1 Ventilation Rate Procedure
 (VRP) requirement, and verify that Demand-Controlled Ventilation (DCV) actually modulates OA
@@ -44,7 +44,7 @@ DCV functioning vs static vs uncorrelated, flag effects). **Standards:** ASHRAE 
 
 ---
 
-## 2. ASHRAE 223P + richer Brick interop  ☐
+## 2. ASHRAE 223P + richer Brick interop  ☑
 
 **Goal.** Go beyond the shipped point/site Brick round-trip toward ASHRAE 223P semantic
 modeling and fuller Brick class coverage, so CAMBER consumes/produces models other tools share.
@@ -64,7 +64,7 @@ multi-equip site through 223P + Brick; unmapped-token handling. **Standards:** A
 
 ---
 
-## 3. Continuous benchmarking in CI  ☐
+## 3. Continuous benchmarking in CI  ☑
 
 **Goal.** Run the rule library against LBNL's labeled public datasets on every change and gate
 on accuracy regressions (TPR/FPR/correct-diagnosis), so detector quality can't silently drift.
@@ -86,7 +86,7 @@ the existing LBNL benchmark methodology.
 
 ---
 
-## 4. Outbound integrations  ☐
+## 4. Outbound integrations  ☑
 
 **Goal.** Push findings outward: CMMS/work-order write-back, alerting channels, and BI/warehouse
 export — all opt-in, all from the *findings* layer (never writing to the BAS/OT).
@@ -108,7 +108,7 @@ Slack/Teams payload shape, email via a fake SMTP, severity filter + dedupe, expo
 
 ---
 
-## 5. Interactive visualization MVP (A → B → E → I)  ☐
+## 5. Interactive visualization MVP (A → B → E → I)  ☑
 
 **Goal.** The fuse-graphing-and-diagnostics MVP slice, within the dependency-light constraint
 (no web framework): static-but-rich, self-contained **HTML** built from matplotlib + stdlib, with
