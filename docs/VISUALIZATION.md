@@ -126,6 +126,18 @@ quality (CV(RMSE)) annotates the baseline's credibility. `cumulative_savings(...
 and any `predict()`-able baseline (`mandv.models.best_model`). Flags: `confidence`, `rho`
 (autocorrelation), `ylabel`.
 
+### F — load profiles & load-duration curves
+```python
+from camber.charts.loadprofile_chart import load_profile_chart, load_duration_chart
+load_profile_chart(load_kw, split=True)              # weekday vs weekend hour-of-day shape
+load_duration_chart(load_kw, price=0.15)             # LDC + energy-cost translation
+```
+Two views on load shape. `load_profile_chart` plots the average load by hour-of-day (weekday vs
+weekend when `split`, exposing schedule gaps) with the base load annotated. `load_duration_chart`
+sorts every interval high-to-low against the % of time it's exceeded — the area is energy, the left
+edge the peak, the right shoulder base load — and with a `price` ($/kWh) adds an energy-cost figure.
+Both return `(ax, LoadMetrics)` and reuse `camber.loadprofile`. Flags: `split`, `annotate`, `price`.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
