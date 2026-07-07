@@ -98,6 +98,19 @@ html = build_dashboard(df, findings=findings, rules=registry)   # evidence=True 
 ```
 Each actionable finding whose rule opts in renders its evidence chart under an **Evidence** section.
 
+### C — peer/cohort comparison + cohort-deviation rule
+```python
+from camber.charts.cohort import cohort_small_multiples, cohort_deviation
+fig, res = cohort_small_multiples(frames, Role.AIRFLOW)   # frames: {equip: role-frame}
+res.outliers            # units > k robust-σ from the cohort norm
+```
+Small multiples of a role across a **cohort** of like equipment, ordered by deviation (worst first),
+outliers in red. Deviation is a robust z-score (median/MAD) of a per-unit `summary` (`mean` / `peak`
+/ `load_factor`), so a couple of odd units don't move the reference. The same score powers a FDD
+rule — `camber.rules.cohort.CohortDeviation(role, k=…, summary=…)` is a fleet rule that flags "this
+unit runs unlike its peers", a signal no per-unit absolute-bound rule can see. Flags: `k`, `summary`,
+`min_cohort`, `rank`, `ncols`, `max_units`.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
