@@ -1,27 +1,80 @@
 name: Release
 
-# Fires only on a version tag (e.g. v0.1.0). Publishes three independent artifacts:
-#   1. the PyPI package (Trusted Publishing via OIDC — no stored token),
-#   2. a multi-arch container image to GHCR (linux/amd64 + linux/arm64),
-#   3. a GitHub Release with the changelog notes.
+# Fires only on a semver version tag (e.g. v0.3.0 or a pre-release v0.3.0-rc1). Publishes three
+# independent artifacts, each gated on BOTH a tag<->version consistency check and the test suite:
+#   1. the PyPI package (Trusted Publishing via OIDC — no stored token) with a build-provenance
+#      attestation and a clean-venv install smoke test,
+#   2. a multi-arch container image to GHCR (linux/amd64 + linux/arm64) with SLSA provenance + SBOM,
+#   3. a GitHub Release whose notes are the CHANGELOG section for the tag.
+#
+# Hardening posture:
+#   - deny-by-default GITHUB_TOKEN (permissions: {}); each job elevates only what it needs;
+#   - hardened runners (step-security/harden-runner, egress audited) and no persisted git creds;
+#   - per-job timeouts + single-flight concurrency; the release trigger is restricted to semver tags.
+#   - RECOMMENDED next step: pin every `uses:` to a full commit SHA (currently floating major tags)
+#     and flip harden-runner egress-policy from `audit` to `block` with an allowlist.
 # None of this runs on ordinary pushes, and none of it flips repo visibility.
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
 
-permissions:
-  contents: read
+# Deny by default; jobs opt into the minimum scopes they need.
+permissions: {}
+
+# One release per tag at a time; don't cancel an in-flight publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  # ---- gate: the suite must pass before anything is published ----
-  test:
+  # ---- gate 1: the pushed tag must match the packaged version ----
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Tag matches pyproject + __version__
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#v}"
+          pyproj=$(sed -nE 's/^version = "([^"]+)".*/\1/p' pyproject.toml | head -1)
+          init=$(sed -nE 's/.*__version__ = "([^"]+)".*/\1/p' camber/__init__.py | head -1)
+          echo "tag=$ver  pyproject=$pyproj  __version__=$init"
+          test -n "$ver"
+          test "$ver" = "$pyproj" || { echo "::error::tag ($ver) != pyproject version ($pyproj)"; exit 1; }
+          test "$ver" = "$init"   || { echo "::error::tag ($ver) != camber.__version__ ($init)"; exit 1; }
+
+  # ---- gate 2: the suite must pass on every supported Python ----
+  test:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        python: ["3.10", "3.11"]
+    steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: |
@@ -30,17 +83,22 @@ jobs:
       - run: pytest -q
 
   # ---- PyPI via Trusted Publishing (OIDC; no API token stored) ----
-  # Non-blocking until the PyPI trusted publisher for `camber-toolkit` is configured; once it
-  # is, this publishes on tag. The GitHub Release does not depend on it.
   pypi:
-    needs: test
+    needs: [verify, test]
     runs-on: ubuntu-latest
-    continue-on-error: true
+    timeout-minutes: 15
     environment: pypi
     permissions:
-      id-token: write          # required for Trusted Publishing
+      id-token: write          # Trusted Publishing (OIDC)
+      attestations: write      # build-provenance attestation for the dist files
+      contents: read
     steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -52,18 +110,39 @@ jobs:
         run: |
           python -m pip install --upgrade twine
           python -m twine check dist/*
+      - name: Smoke-test the built wheel in a clean venv
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --upgrade pip
+          /tmp/smoke/bin/pip install dist/*.whl
+          got=$(/tmp/smoke/bin/python -c "import camber; print(camber.__version__)")
+          echo "installed camber $got"
+          test "$got" = "${GITHUB_REF_NAME#v}" || { echo "::error::wheel version ($got) != tag"; exit 1; }
+      - name: Attest build provenance (dist)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true      # a re-run on an already-published version is a no-op, not a failure
 
-  # ---- multi-arch image to GHCR ----
+  # ---- multi-arch image to GHCR, with SLSA provenance + SBOM ----
   image:
-    needs: test
+    needs: [verify, test]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write          # push to ghcr.io
     steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR
@@ -90,23 +169,44 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max      # SLSA build provenance attached to the image
+          sbom: true                # SBOM attestation attached to the image
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ---- GitHub Release with changelog notes ----
+  # ---- GitHub Release with the changelog section as notes ----
   release:
-    needs: [test]              # independent of PyPI/image so the release always lands
+    needs: [verify, test]         # independent of PyPI/image so the release always lands
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
+      - uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Extract changelog notes for this tag
+        run: |
+          set -euo pipefail
+          ver="${GITHUB_REF_NAME#v}"
+          awk -v v="$ver" 'index($0,"## ["v"]")==1{f=1;next} f&&/^## \[/{exit} f{print}' \
+            CHANGELOG.md > RELEASE_NOTES.md || true
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "See CHANGELOG.md for the ${GITHUB_REF_NAME} changes." > RELEASE_NOTES.md
+          fi
+          echo "----- notes -----"; cat RELEASE_NOTES.md
       - name: Create GitHub Release (idempotent)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 && {
-            echo "release ${GITHUB_REF_NAME} already exists; skipping"; exit 0; }
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "release ${GITHUB_REF_NAME} already exists; skipping"; exit 0
+          fi
           gh release create "${GITHUB_REF_NAME}" \
             --title "CAMBER ${GITHUB_REF_NAME}" \
-            --notes "See CHANGELOG.md for the ${GITHUB_REF_NAME} changes."
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag
