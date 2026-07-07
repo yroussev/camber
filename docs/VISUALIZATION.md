@@ -90,13 +90,19 @@ roles / mask / template it needs; `render_evidence(evidence, frame, ax=…)` dis
 pattern primitive. `finding_evidence(rule, equip, frame)` calls the hook safely (returns `None` when
 absent or declined), and `evidence_descriptor(evidence)` is the JSON-friendly payload (renderer +
 roles + violating timestamps) for export/linking. `Finding` carries an optional `evidence` field.
-Backfilled so far: `simultaneous_heat_cool`, `supply_air_reset`, `outdoor_air_fraction`.
+Backfilled rules (each maps to the fitting renderer): `simultaneous_heat_cool` & `outdoor_air_fraction`
+(diagnostic), `supply_air_reset` (diagnostic reset), `reheat_penalty` (OAT scatter — heating in warm
+weather), `night_weekend_setback` (carpet — the fault *is* the schedule), `overcooling_min_flow`
+(multitrend, below-setpoint spans shaded).
 
 The dashboard wires it automatically — pass `rules=`:
 ```python
 html = build_dashboard(df, findings=findings, rules=registry)   # evidence=True by default
 ```
 Each actionable finding whose rule opts in renders its evidence chart under an **Evidence** section.
+The **Std-211 audit report** does the same — `AuditReport.to_html(rules=…, frames={equip: frame})`
+embeds each finding's evidence beneath the findings table (per-equipment frames, so a fleet audit
+renders the right trend for each unit).
 
 ### C — peer/cohort comparison + cohort-deviation rule
 ```python
