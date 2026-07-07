@@ -55,6 +55,12 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
   CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets
   (`design_kw_per_ton`, `max_starts_per_day`, …).
+- **Control stability** — `control_hunting`: flags a modulating output (valve/damper) that reverses
+  direction excessively (unstable loop) by counting reversals/hour beyond a deadband. Flags:
+  `warn_per_hr`, `fault_per_hr`, `deadband`.
+- **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
+  a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
+  `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference), `mapping_confidence`. The runner's `min_trust` flag makes a rule decline when its
