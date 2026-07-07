@@ -8,6 +8,7 @@ one instance of every rule registered under ``rule.name``.
 from __future__ import annotations
 
 from .base import Registry
+from .airflow_rule import AirflowTracking
 from .boiler_rule import BoilerSummerLockout
 from .boilercycle_rule import BoilerShortCycle
 from .chiller_rule import ChillerEfficiency
@@ -47,7 +48,8 @@ RULE_CLASSES = [
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
-    ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, ChillerStagingFleet,
+    ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, AirflowTracking,
+    ChillerStagingFleet,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

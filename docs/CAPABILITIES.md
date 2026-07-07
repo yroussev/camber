@@ -60,7 +60,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   direction excessively (unstable loop) by counting reversals/hour beyond a deadband. Flags:
   `warn_per_hr`, `fault_per_hr`, `deadband`. `supply_air_control`: flags supply-air temperature
   that fails to *track its setpoint* (control/capacity fault; running hours only). Flags: `tol_F`,
-  `warn_pct`, `fault_pct`.
+  `warn_pct`, `fault_pct`. `airflow_tracking`: flags measured VAV airflow that fails to track its
+  setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
+  `tol_frac`, `warn_pct`, `fault_pct`.
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
   a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
   `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.

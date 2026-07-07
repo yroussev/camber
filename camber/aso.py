@@ -197,6 +197,22 @@ def _rec_sat_control(f, frame, P):
                 caveats=["A miscalibrated SAT sensor mimics a control fault — check it first."])
 
 
+def _rec_airflow(f, frame, P):
+    m = getattr(f, "metrics", {}) or {}
+    lean = ("starved (undershooting — check upstream duct static / damper travel)"
+            if m.get("undershoot_pct", 0) >= m.get("overshoot_pct", 0)
+            else "overshooting (check flow-sensor calibration / min-max limits)")
+    return _rec(f, title="Restore VAV airflow control",
+                action=(f"Airflow isn't tracking its setpoint — likely {lean}. Verify the damper "
+                        "actuator strokes fully, the flow sensor (pitot/ring) calibration, and that "
+                        "upstream duct static meets the box's requirement."),
+                parameter="Damper / actuator / flow sensor / duct static",
+                suggested="verify full damper travel + flow-sensor calibration + duct static",
+                expected_effect="Correct delivered airflow → recovers zone comfort and cuts reheat.",
+                confidence="medium", standard="ASHRAE G36 §5.6 (VAV airflow control)",
+                caveats=["A miscalibrated flow sensor mimics a tracking fault — check it first."])
+
+
 def _rec_unmet(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
     lean = ("cooling capacity/airflow" if m.get("too_hot_pct", 0) >= m.get("too_cold_pct", 0)
@@ -234,6 +250,7 @@ RECOMMENDERS = {
     "night_weekend_setback": _rec_setback,
     "unmet_setpoint_hours": _rec_unmet,
     "supply_air_control": _rec_sat_control,
+    "airflow_tracking": _rec_airflow,
     "chiller_efficiency": _rec_chiller_eff,
     "condenser_water_reset": _rec_reset_generic,
     "chw_plant_reset": _rec_reset_generic,
