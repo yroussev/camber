@@ -163,12 +163,22 @@ class AuditReport:
                           f"<figcaption>{cap}</figcaption></figure>")
         return "".join(blocks)
 
-    def to_html(self, *, rules=None, frames=None) -> str:
+    def action_plan(self, *, loads=None, price=None, params=None, aso_params=None,
+                    min_severity: str = "warn"):
+        """Ranked action plan (finding + estimated $/yr + advisory recommendation) for the report's
+        findings, worst-dollars-first. See :func:`camber.actionplan.build_action_plan`."""
+        from ..actionplan import build_action_plan
+        return build_action_plan(self.findings, loads=loads, price=price, params=params,
+                                 aso_params=aso_params, min_severity=min_severity)
+
+    def to_html(self, *, rules=None, frames=None, recommend: bool = False,
+                loads=None, price=None) -> str:
         """Render the audit report as an HTML fragment.
 
         Pattern J — pass ``rules`` (a Registry / {name: rule} / iterable) and ``frames``
         (``{equip: role-frame}``) to embed each actionable finding's evidence chart beneath the
-        findings table.
+        findings table. ``recommend=True`` appends a ranked **action plan** ($/yr + advisory
+        recommendation per finding; ``loads``/``price`` feed the cost estimate).
         """
         e = _html.escape
         parts = [f"<h1>ASHRAE Std-211 Level {self.level} Audit &mdash; {e(self.building)}</h1>"]
@@ -202,6 +212,12 @@ class AuditReport:
                 imgs = self._evidence_html(rf, rules, frames)
                 if imgs:
                     parts.append("<h2>Finding evidence</h2>" + imgs)
+        if recommend and self.findings:
+            from ..actionplan import action_plan_html
+            items = self.action_plan(loads=loads, price=price)
+            if items:
+                parts.append("<h2>Recommended actions (ranked by $/yr)</h2>"
+                             + action_plan_html(items))
         parts.append("<h2>Energy Conservation Measures</h2>")
         parts.append("<table border='1' cellpadding='4'><tr><th>#</th><th>Priority</th>"
                      "<th>Measure</th><th>System</th><th>Finding</th>"
