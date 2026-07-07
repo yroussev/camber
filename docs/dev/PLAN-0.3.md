@@ -170,6 +170,6 @@ synthetic tests, suite green) before the next.
 **Deferred to 0.4** (kept here so they're not lost): **grounded agentic query & explanation** (NL
 over the model + history, plain-language fault explanations strictly grounded/cited from the
 deterministic core — behind an optional, provider-agnostic LLM seam consistent with the existing
-transport/bridge pattern; Claude API the natural first-party default) and **ML-assisted point
-mapping / auto-tagging** (on top of the deterministic mapper + `mapping_confidence`). Both introduce
+transport/bridge pattern, wired to a hosted LLM API of the operator's choice) and **ML-assisted
+point mapping / auto-tagging** (on top of the deterministic mapper + `mapping_confidence`). Both introduce
 heavier dependencies and are held until the viz differentiator lands.
