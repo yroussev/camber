@@ -325,11 +325,12 @@ That slice already delivers the fuse-graphing-and-diagnostics principle end to e
 the remaining patterns deepen comparison (C, D), turn rules into a chart engine (G,
 J), and extend into M&V and load economics (H, F).
 
-**Status:** A/B/E/I shipped in **0.2.0**. **0.3** adds D (OAT cloud-shape scatter),
-G (templated diagnostic scatters), J (rules as a chart engine — every rule renders its
-evidence), C (peer/cohort comparison + a cohort-deviation rule), and interactive linking
-(a brush-able inline-SVG scatter). Remaining: H (M&V baseline/savings viz) and F (load
-profiles / load-duration curves).
+**Status:** A/B/E/I shipped in **0.2.0**. **0.3 completes the catalog** — D (OAT cloud-shape
+scatter), G (templated diagnostic scatters), J (rules as a chart engine — every rule renders its
+evidence, wired into the dashboard and the Std-211 audit), C (peer/cohort comparison + a
+cohort-deviation rule), H (M&V baseline/savings with G14 uncertainty), F (load profiles &
+load-duration curves) — plus interactive linking (a brush-able inline-SVG scatter). All ten
+patterns A–J are now built.
 
 ## Capability tracks — delivered in 0.1.0
 
