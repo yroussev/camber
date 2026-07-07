@@ -81,3 +81,20 @@ Then run the *same* baseline and reporting data through both and compare:
 
 This gives a credible, standards-aligned check without making eemeter a CAMBER
 dependency. See [docs/ECOSYSTEM.md](ECOSYSTEM.md) for the broader leverage strategy.
+
+## Degree-day baseline (`mandv.degreeday`)
+
+The simplest defensible weather model — a variable-base degree-day regression
+`E = base + a·HDD + b·CDD` — for monthly-bill M&V where you have average temperature and energy per
+period (a lighter cousin of the change-point models above).
+
+```python
+from camber.mandv.degreeday import fit_degree_day
+m = fit_degree_day(tavg_per_month, energy_per_month)   # balance point auto-fit by min CV(RMSE)
+m.balance_point, m.cooling_slope, m.heating_slope, m.fit.cv_rmse
+m.predict(normal_year_tavg)                            # normalize / project the baseline
+```
+
+`degree_days(tavg, balance_point)` returns the `(HDD, CDD)` arrays. Flags: `balance_point` (fix it
+or leave None to search), `balance_range`/`step` (search grid), `kind` (`heating`/`cooling`/`both`).
+Fit statistics (R², CV(RMSE), NMBE, G14 acceptance) come from `mandv.stats.fit_stats`.
