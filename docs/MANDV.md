@@ -98,3 +98,19 @@ m.predict(normal_year_tavg)                            # normalize / project the
 `degree_days(tavg, balance_point)` returns the `(HDD, CDD)` arrays. Flags: `balance_point` (fix it
 or leave None to search), `balance_range`/`step` (search grid), `kind` (`heating`/`cooling`/`both`).
 Fit statistics (R², CV(RMSE), NMBE, G14 acceptance) come from `mandv.stats.fit_stats`.
+
+## IPMVP Option A — key-parameter measurement (`mandv.option_a`)
+
+Measure the parameter that drives the savings and **stipulate** the rest (the classic lighting/motor
+retrofit): savings = measured Δparameter × stipulated duty.
+
+```python
+from camber.mandv.option_a import option_a_savings, stipulated_annual_hours
+r = option_a_savings(baseline_kw=100, reporting_kw=60,
+                     stipulated_factor=stipulated_annual_hours(hours_per_day=10))  # 2600 h
+r.savings, r.measured_delta, r.reduction_pct        # 104000 kWh, 40 kW, 0.40
+```
+
+Inputs may be scalars or sampled arrays/Series (the mean is taken). The result's `basis` records the
+measured-vs-stipulated split for audit; the stipulated portion carries uncertainty this method does
+not quantify. Complements Option B (`mandv.retrofit_isolation`) and Option C (`mandv.stats`).
