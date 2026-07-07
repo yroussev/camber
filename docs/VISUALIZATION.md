@@ -137,6 +137,18 @@ open("dashboard.html", "w").write(html)
 | `normalize` | `True` | normalize the multi-trend overlay |
 | `rules` | `None` | Registry / {name: rule} / rules — enables per-finding evidence (pattern J) |
 | `evidence` | `True` | render each actionable finding's evidence chart when `rules` is supplied |
+| `interactive` | `False` | add a brush-able inline-SVG scatter (vanilla JS, no framework) |
+| `link_x` / `link_y` | auto | the scatter's axes (default: an OAT-like x, the first other column) |
+
+### Interactive linking (brush → select)
+```python
+html = build_dashboard(df, interactive=True)          # link_x defaults to an OAT-like column
+```
+With `interactive=True` the dashboard adds one **brush-able** view: an inline-SVG scatter drawn by a
+small **vanilla-JS** module (no framework, no CDN, CSP-safe) from an inline JSON payload. Drag a box
+over the cloud and the selected points highlight while a linked readout lists their **timestamps** —
+the pattern-D brush-back made live. The static PNG panels are unchanged; extending the brush to link
+*them* is future work. `interactive_scatter_html(x, y, timestamps, …)` builds the fragment directly.
 
 ## Scope
 

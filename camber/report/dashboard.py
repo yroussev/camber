@@ -18,6 +18,7 @@ from ..charts.quality_dashboard import quality_dashboard
 from ..charts.readiness import readiness_ribbon
 from ..integrate.tickets import _attr
 from ..rules.triage import rank_findings
+from .linking import LINK_STYLE, interactive_scatter_html
 
 _SECTION_TITLES = {"A": "Ingest readiness", "B": "Fault-annotated trends",
                    "E": "Load carpet", "I": "Data-quality dashboard"}
@@ -116,10 +117,38 @@ _STYLE = ("body{font-family:system-ui,Arial,sans-serif;margin:24px;color:#222}"
           "th{background:#f4f4f4;text-align:left}")
 
 
+def _pick_link_cols(df, link_x, link_y):
+    """Choose the (x, y) columns for the interactive scatter: default x to an OAT-like column,
+    y to the first other column."""
+    cols = list(df.columns)
+    if not cols:
+        return None, None
+    x = link_x
+    if x is None:
+        x = next((c for c in cols if "OAT" in getattr(c, "name", str(c)).upper()), cols[0])
+    y = link_y if link_y is not None else next((c for c in cols if c is not x), None)
+    return x, y
+
+
+def _interactive_section(df, link_x, link_y) -> str:
+    """Build the brush-able interactive-scatter section (empty string if not renderable)."""
+    x, y = _pick_link_cols(df, link_x, link_y)
+    if x is None or y is None or x is y:
+        return ""
+    d = df[[x, y]].dropna()
+    if len(d) < 2:
+        return ""
+    frag = interactive_scatter_html(d[x], d[y], d.index,
+                                    xlabel=str(getattr(x, "name", x)),
+                                    ylabel=str(getattr(y, "name", y)))
+    return "<h2>Interactive — brush to select</h2>" + frag
+
+
 def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "I"),
                     title: str = "CAMBER dashboard", rank_by: str = "severity",
                     top_n: int = 20, carpet_col=None, multitrend_cols=None,
-                    normalize: bool = True, rules=None, evidence: bool = True) -> str:
+                    normalize: bool = True, rules=None, evidence: bool = True,
+                    interactive: bool = False, link_x=None, link_y=None) -> str:
     """Build a self-contained HTML dashboard string.
 
     ``df`` is a wide point/role frame (DatetimeIndex). ``findings`` are listed ranked beneath the
@@ -127,11 +156,16 @@ def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "
 
     Pattern J — when ``rules`` is supplied (a Registry, a {name: rule} map, or an iterable of rules)
     and ``evidence`` is on, each actionable finding whose rule exposes an ``evidence(equip, frame)``
-    hook renders its own evidence chart beneath the table. Option flags: ``sections`` (subset of
-    A/B/E/I), ``rank_by`` ("severity"/"cost"), ``top_n``, ``carpet_col``, ``multitrend_cols``,
-    ``normalize``, ``rules``, ``evidence``.
+    hook renders its own evidence chart beneath the table.
+
+    ``interactive`` adds a brush-able inline-SVG scatter (vanilla JS, no framework) of ``link_y``
+    vs ``link_x`` — box-select a region to list the selected timestamps; defaults pick an OAT-like
+    x and the first other column for y. Option flags: ``sections`` (subset of A/B/E/I), ``rank_by``
+    ("severity"/"cost"), ``top_n``, ``carpet_col``, ``multitrend_cols``, ``normalize``, ``rules``,
+    ``evidence``, ``interactive``, ``link_x``, ``link_y``.
     """
-    parts = [f"<!doctype html><html><head><meta charset='utf-8'><style>{_STYLE}</style>"
+    style = _STYLE + (LINK_STYLE if interactive else "")
+    parts = [f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
              f"<title>{_html.escape(title)}</title></head><body>",
              f"<h1>{_html.escape(title)}</h1>"]
     for letter in sections:
@@ -139,6 +173,8 @@ def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "
                              multitrend_cols=multitrend_cols, normalize=normalize)
         parts.append(f"<h2>{letter}. {_SECTION_TITLES.get(letter, letter)}</h2>"
                      f"<img src='{img}' alt='{_SECTION_TITLES.get(letter, letter)}'>")
+    if interactive:
+        parts.append(_interactive_section(df, link_x, link_y))
     if findings is not None:
         key = "annual_cost_usd" if rank_by == "cost" else None
         ranked = rank_findings(findings, magnitude_key=key, actionable_only=True)[:top_n]
