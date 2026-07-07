@@ -111,6 +111,21 @@ rule — `camber.rules.cohort.CohortDeviation(role, k=…, summary=…)` is a fl
 unit runs unlike its peers", a signal no per-unit absolute-bound rule can see. Flags: `k`, `summary`,
 `min_cohort`, `rank`, `ncols`, `max_units`.
 
+### H — M&V baseline, savings & uncertainty
+```python
+from camber.charts.savings import savings_chart
+ax, res = savings_chart(baseline_model, t_report, y_report,
+                        n_baseline=200, p_baseline=2, cv_rmse=0.08)
+res.avoided_energy, res.abs_uncertainty      # e.g. 2983 ± 1318 at 90%
+```
+The IPMVP Option-C picture: cumulative **baseline-projected vs actual** energy, the avoided energy
+shaded between them (green = saved, red = excess), and the **ASHRAE G14 Annex-B fractional savings
+uncertainty** carried as a ± band on the running total — savings *and* how sure we are of them. Fit
+quality (CV(RMSE)) annotates the baseline's credibility. `cumulative_savings(...)` returns the raw
+`(index, cum_baseline, cum_actual, cum_avoided)` arrays. Reuses `mandv.stats.avoided_energy_savings`
+and any `predict()`-able baseline (`mandv.models.best_model`). Flags: `confidence`, `rho`
+(autocorrelation), `ylabel`.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
