@@ -58,7 +58,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   (`design_kw_per_ton`, `max_starts_per_day`, …).
 - **Control stability** — `control_hunting`: flags a modulating output (valve/damper) that reverses
   direction excessively (unstable loop) by counting reversals/hour beyond a deadband. Flags:
-  `warn_per_hr`, `fault_per_hr`, `deadband`.
+  `warn_per_hr`, `fault_per_hr`, `deadband`. `supply_air_control`: flags supply-air temperature
+  that fails to *track its setpoint* (control/capacity fault; running hours only). Flags: `tol_F`,
+  `warn_pct`, `fault_pct`.
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
   a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
   `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.

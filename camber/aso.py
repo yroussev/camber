@@ -182,6 +182,21 @@ def _rec_leaking_valve(f, frame, P):
                 caveats=["Confirm the leak isn't a stuck command / bad feedback first."])
 
 
+def _rec_sat_control(f, frame, P):
+    m = getattr(f, "metrics", {}) or {}
+    lean = ("under-cooling (coil/valve/airflow can't hit SAT)" if m.get("too_warm_pct", 0)
+            >= m.get("too_cold_pct", 0) else "over-cooling / hunting")
+    return _rec(f, title="Restore supply-air temperature control",
+                action=(f"SAT isn't tracking its setpoint — likely {lean}. Check the coil valve "
+                        "travels fully, the SAT sensor calibration, and the loop tuning (P/I "
+                        "gains); confirm coil capacity and airflow at the operating point."),
+                parameter="SAT loop tuning / coil valve / sensor",
+                suggested="tune the SAT loop; verify full coil travel + sensor calibration",
+                expected_effect="Stable discharge temperature → stable downstream comfort/energy.",
+                confidence="medium", standard="ASHRAE G36 §5.16 (SAT control)",
+                caveats=["A miscalibrated SAT sensor mimics a control fault — check it first."])
+
+
 def _rec_unmet(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
     lean = ("cooling capacity/airflow" if m.get("too_hot_pct", 0) >= m.get("too_cold_pct", 0)
@@ -218,6 +233,7 @@ RECOMMENDERS = {
     "overcooling_severity": _rec_overcooling,
     "night_weekend_setback": _rec_setback,
     "unmet_setpoint_hours": _rec_unmet,
+    "supply_air_control": _rec_sat_control,
     "chiller_efficiency": _rec_chiller_eff,
     "condenser_water_reset": _rec_reset_generic,
     "chw_plant_reset": _rec_reset_generic,
