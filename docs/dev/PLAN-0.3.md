@@ -28,7 +28,7 @@ Status legend: ☐ not started · ◐ in progress · ☑ done.
 
 ---
 
-## 1. Pattern D — OAT cloud-shape scatter + brush-back  ☐
+## 1. Pattern D — OAT cloud-shape scatter + brush-back  ☑
 
 **Goal.** Generalize the shipped energy-signature scatter into a reusable **X-Y-vs-OAT "cloud
 shape"** primitive with automatic shape classification and change-point detection, plus
@@ -52,7 +52,7 @@ time-series buries.
 V-shape vs linear vs scatter; change-point overlay present; brush-back index maps region →
 timestamps. **Standards:** clean-room distillation (ROADMAP Visualizations D).
 
-## 2. Pattern G — templated subsystem diagnostic scatters  ☐
+## 2. Pattern G — templated subsystem diagnostic scatters  ☑
 
 **Goal.** A general framework for **templated diagnostic scatters**: each subsystem has an expected
 signature (economizer, SAT/HW/CHW reset, valve/damper travel, no simultaneous heat-cool); plot the
@@ -72,7 +72,7 @@ doubles as rule evidence and a report figure.
 points on a synthetic frame; a custom template is accepted. **Standards:** ASHRAE G36 / PNNL
 Re-tuning signatures (clean-room).
 
-## 3. Pattern J — rules as a chart engine (keystone)  ☐
+## 3. Pattern J — rules as a chart engine (keystone)  ☑
 
 **Goal.** Turn the rule library into a **chart engine**: every rule that can mark its violating
 timestamps **emits its own evidence chart** (dispatching to the B/D/E/G renderers), so a Finding
@@ -100,7 +100,7 @@ mask → shaded spans), and this formalizes rule → evidence.
 the dashboard embeds one evidence chart per actionable finding; rules without the hook still run.
 **Standards:** clean-room (ROADMAP Visualizations J).
 
-## 4. Pattern C — peer/cohort comparison + cohort-deviation rule  ☐
+## 4. Pattern C — peer/cohort comparison + cohort-deviation rule  ☑
 
 **Goal.** Concurrent **peer comparison** as small multiples with statistical outlier ranking (one
 unit looks fine until you compare it to its siblings), and — enabled by it — a **cohort-deviation
@@ -120,7 +120,7 @@ rule** ("this VAV runs unlike its 40 peers").
 ordered by deviation; the rule flags an injected outlier unit and clears a uniform cohort.
 **Standards:** clean-room (ROADMAP Visualizations C).
 
-## 5. Interactive linking (vanilla JS)  ☐
+## 5. Interactive linking (vanilla JS)  ☑
 
 **Goal.** Make the self-contained dashboard **linked**: brushing a sub-cloud in a scatter filters
 the linked time-series / carpet / calendar to the same points; selection propagates across every
@@ -139,7 +139,7 @@ HTML contains the linking payload + script and the expected element ids; `intera
 reproduces the static dashboard byte-for-byte on the shared parts. **Standards:** clean-room;
 dependency-light contract (no framework / CDN).
 
-## 6. Packaging & community polish  ☐
+## 6. Packaging & community polish  ◐
 
 Independent of the viz track; lands in parallel.
 

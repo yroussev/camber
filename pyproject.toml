@@ -33,6 +33,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+# Docs site only (never a runtime dep): build the MkDocs site with `mkdocs build`.
+docs = ["mkdocs>=1.5", "mkdocs-material>=9.5"]
 brick = ["rdflib>=6"]   # robust Brick/RDF parsing (camber.interop.brick backend="rdflib")
 # a maintained Haystack client to wire via camber.ingest.haystack.client_transport;
 # phable is modern but needs Python >= 3.11, pyhaystack covers older Pythons.
