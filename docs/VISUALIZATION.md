@@ -62,6 +62,19 @@ Flags: `changepoint` (`"auto"`/a kind/`False`), `classify`, `by` (colour by seas
 `min_max_avg` (per-point min–max whiskers — provenance over a bare average), `cmap`. Generalizes the
 `energy_signature` plot to any point (airflow, valve %, ΔT), not just energy.
 
+### G — templated subsystem diagnostic scatters
+```python
+from camber.charts.diagnostic import diagnostic_scatter, TEMPLATES
+ax, violating = diagnostic_scatter(role_frame, TEMPLATES["sat_reset"])   # violating: bool Series
+```
+Each subsystem has an *expected signature*; a `DiagnosticTemplate` names two roles and an
+`expected(x) -> (low, high)` band, and `diagnostic_scatter` overlays that band, shades the points
+outside it, and returns the **violating mask** — so the figure doubles as a rule's evidence (feeds
+pattern J). Packaged `TEMPLATES`: `sat_reset`, `chw_reset` (reset schedules vs OAT — clamped at the
+endpoints), `economizer` (OA damper open for free cooling, minimum when hot), `no_simultaneous_hc`
+(heating valve must be ~0 when cooling is active). Build your own with `band`, `reset_line`,
+`economizer_template`, `no_simultaneous_template`. Flags: `shade`, `tolerance`.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
