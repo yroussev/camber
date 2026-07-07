@@ -40,6 +40,28 @@ quality_dashboard(df, metrics=("coverage", "score", "flatline_frac", "outlier_fr
 A heatmap colored so **green = good** for every metric (higher-is-better and lower-is-better are
 both mapped correctly). Built from `camber.ingest.quality.assess`.
 
+## Deepening the catalog (0.3)
+
+Beyond the MVP slice, 0.3 builds the pattern catalog toward **rules as a chart engine** — every
+rule renders its own evidence. First renderer: pattern **D**.
+
+### D — OAT cloud-shape scatter
+```python
+from camber.charts.oat_scatter import oat_scatter, classify_shape, brush_back
+ax, shape = oat_scatter(load_kw, oat, ylabel="kW")   # overlays the change-point fit + guides
+shape.shape          # "linear" | "hockey-stick" | "v" | "scattered"
+```
+The *shape of the cloud* against outdoor-air temperature reveals control behavior a time-series
+buries. `classify_shape(series, oat)` labels it from the fitted change-point model + goodness of fit
+(a weak fit → `scattered`, i.e. no OAT dependence) with no chart required, returning a
+JSON-friendly `CloudShape`. `brush_back(series, oat, x_range=…, y_range=…)` maps a selected region
+of the cloud back to the **timestamps** that produced it — the primitive the interactive-linking
+layer (below) uses to answer "when did this cluster happen?".
+
+Flags: `changepoint` (`"auto"`/a kind/`False`), `classify`, `by` (colour by season/occupancy),
+`min_max_avg` (per-point min–max whiskers — provenance over a bare average), `cmap`. Generalizes the
+`energy_signature` plot to any point (airflow, valve %, ΔT), not just energy.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
