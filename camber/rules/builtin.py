@@ -15,7 +15,9 @@ from .chillerfleet_rule import ChillerStagingFleet
 from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
+from .cohort import CohortDeviation
 from .condenserwater_rule import CondenserWaterReset
+from .hunting_rule import ControlHunting
 from .coolingtower_rule import CoolingTowerApproach
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
@@ -43,8 +45,19 @@ RULE_CLASSES = [
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
-    ZonesHeatCoolCensus, ChillerStagingFleet,
+    ZonesHeatCoolCensus, ControlHunting, ChillerStagingFleet,
 ]
+
+# Parameterized rules shipped as ready-made instances (they take init args, so they can't be
+# auto-constructed from RULE_CLASSES). Cohort-deviation fleet rules for the common roles.
+from ..model.roles import Role  # noqa: E402
+
+
+def _extra_instances():
+    return [
+        CohortDeviation(Role.AIRFLOW, name="cohort_airflow"),
+        CohortDeviation(Role.SPACE_TEMP, name="cohort_space_temp"),
+    ]
 
 
 def is_fleet(rule) -> bool:
@@ -57,9 +70,11 @@ def builtin_registry() -> Registry:
     reg = Registry()
     for cls in RULE_CLASSES:
         reg.register(cls())
+    for inst in _extra_instances():
+        reg.register(inst)
     return reg
 
 
 def rule_names() -> list:
     """Sorted names of all built-in rules."""
-    return sorted(cls().name for cls in RULE_CLASSES)
+    return sorted([cls().name for cls in RULE_CLASSES] + [r.name for r in _extra_instances()])
