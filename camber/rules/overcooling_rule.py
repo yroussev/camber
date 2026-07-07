@@ -65,3 +65,12 @@ class OvercoolingMinFlow:
                      f"of occupied hours ({res.overcool_with_reheat_pct:.0f}% with "
                      f"reheat); min-flow ~{res.median_minflow_fraction:.0%} of peak"),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: space temp vs cooling setpoint, spans where space runs below setpoint shaded."""
+        from ..charts.evidence import Evidence
+        if Role.SPACE_TEMP in frame.columns and Role.COOL_SP in frame.columns:
+            mask = frame[Role.SPACE_TEMP] < frame[Role.COOL_SP]
+            return Evidence(renderer="multitrend", roles=[Role.SPACE_TEMP, Role.COOL_SP],
+                            mask=mask, label="below cooling SP", title=f"{equip}: overcooling")
+        return None

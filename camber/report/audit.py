@@ -125,8 +125,51 @@ class AuditReport:
             L += [f"  - {c}" for c in self.caveats]
         return "\n".join(L)
 
-    def to_html(self) -> str:
-        """Render the audit report as an HTML fragment."""
+    def _evidence_html(self, ranked, rules, frames) -> str:
+        """Pattern J: render each actionable finding's evidence chart, using per-equipment frames.
+
+        ``frames`` is ``{equip: role-frame}`` and ``rules`` a Registry / {name: rule} / iterable;
+        a finding renders evidence only when its rule exposes an ``evidence()`` hook and its
+        equipment has a frame. Returns an HTML block (empty string if nothing renders).
+        """
+        from ..charts.evidence import finding_evidence, render_evidence
+        from .dashboard import _rules_map, fig_to_base64
+
+        rmap = _rules_map(rules)
+        if not rmap or not frames:
+            return ""
+        import matplotlib.pyplot as plt
+
+        blocks = []
+        for r in ranked:
+            f = r.finding
+            equip = getattr(f, "equip", "")
+            rule = rmap.get(getattr(f, "rule", ""))
+            frame = frames.get(equip)
+            if rule is None or frame is None:
+                continue
+            try:
+                ev = finding_evidence(rule, equip, frame)
+                if ev is None:
+                    continue
+                fig, ax = plt.subplots(figsize=(8, 4))
+                render_evidence(ev, frame, ax=ax)
+                img = fig_to_base64(fig)
+            except Exception:
+                plt.close("all")
+                continue
+            cap = _html.escape(f"{equip} · {getattr(f, 'rule', '')} · {getattr(f, 'summary', '')}")
+            blocks.append(f"<figure><img src='{img}' alt='evidence'>"
+                          f"<figcaption>{cap}</figcaption></figure>")
+        return "".join(blocks)
+
+    def to_html(self, *, rules=None, frames=None) -> str:
+        """Render the audit report as an HTML fragment.
+
+        Pattern J — pass ``rules`` (a Registry / {name: rule} / iterable) and ``frames``
+        (``{equip: role-frame}``) to embed each actionable finding's evidence chart beneath the
+        findings table.
+        """
         e = _html.escape
         parts = [f"<h1>ASHRAE Std-211 Level {self.level} Audit &mdash; {e(self.building)}</h1>"]
         if self.climate_zone:
@@ -155,6 +198,10 @@ class AuditReport:
                 parts.append(f"<tr><td>{r.rank}</td><td>{e(r.severity)}</td>"
                              f"<td>{rule}</td><td>{eq}</td><td>{summ}</td></tr>")
             parts.append("</table>")
+            if rules is not None and frames is not None:
+                imgs = self._evidence_html(rf, rules, frames)
+                if imgs:
+                    parts.append("<h2>Finding evidence</h2>" + imgs)
         parts.append("<h2>Energy Conservation Measures</h2>")
         parts.append("<table border='1' cellpadding='4'><tr><th>#</th><th>Priority</th>"
                      "<th>Measure</th><th>System</th><th>Finding</th>"
