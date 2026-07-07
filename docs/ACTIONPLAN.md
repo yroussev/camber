@@ -28,3 +28,9 @@ JSON/table rows; `action_plan_html(plan)` a self-contained table. Flags: `loads`
 `AuditReport.to_html(recommend=True, loads=…, price=…)` appends a **Recommended actions** section
 (the same ranked plan) beneath the findings; `AuditReport.action_plan(...)` returns the items
 directly. Everything stays advisory and read-only toward the BAS.
+
+## In config-driven runs
+
+A declarative run can emit the action plan too: set `"recommend": true` (and optionally
+`"price": {"electricity_per_kwh": 0.15}`) in the config's `report` block, and the HTML report
+(`out_html`) includes the ranked **Recommended actions** section.

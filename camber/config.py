@@ -178,8 +178,14 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             with open(_path(base_dir, rep["out_text"]), "w") as fh:
                 fh.write(report.to_text())
         if rep.get("out_html"):
+            # optional advisory action plan (findings + $ + recommendation) in the HTML report
+            price = None
+            if rep.get("price"):
+                from .fault_economics import EnergyPrice
+                price = EnergyPrice(**rep["price"])
+            body = report.to_html(recommend=bool(rep.get("recommend")), price=price)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
-                fh.write("<html><body>\n" + report.to_html() + "\n</body></html>\n")
+                fh.write("<html><body>\n" + body + "\n</body></html>\n")
 
     return RunResult(site=site, equipment=len(refs), findings=findings,
                      report=report, rules_run=ran)
