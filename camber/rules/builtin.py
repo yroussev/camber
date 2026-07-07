@@ -28,6 +28,7 @@ from .overcooling_rule import OvercoolingMinFlow
 from .overcooling_severity_rule import OvercoolingSeverity
 from .reheat_min_rule import ReheatMinimization
 from .reheat_rule import ReheatPenalty
+from .satcontrol_rule import SupplyAirControl
 from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
@@ -46,7 +47,7 @@ RULE_CLASSES = [
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
-    ZonesHeatCoolCensus, ControlHunting, UnmetHours, ChillerStagingFleet,
+    ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, ChillerStagingFleet,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be
