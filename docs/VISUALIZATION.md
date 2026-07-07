@@ -75,6 +75,29 @@ endpoints), `economizer` (OA damper open for free cooling, minimum when hot), `n
 (heating valve must be ~0 when cooling is active). Build your own with `band`, `reset_line`,
 `economizer_template`, `no_simultaneous_template`. Flags: `shade`, `tolerance`.
 
+### J — rules as a chart engine (the keystone)
+Every rule that can mark its violating timestamps **renders its own evidence** — the chart *is* the
+audit evidence and the report figure. A rule opts in with an optional, duck-typed hook:
+```python
+class SimultaneousHeatCool:
+    def evidence(self, equip, frame):        # optional; rules without it are unaffected
+        from camber.charts.diagnostic import TEMPLATES
+        from camber.charts.evidence import Evidence
+        return Evidence(renderer="diagnostic", template=TEMPLATES["no_simultaneous_hc"])
+```
+An `Evidence` names a **renderer** (`diagnostic` / `multitrend` / `oat_scatter` / `carpet`) and the
+roles / mask / template it needs; `render_evidence(evidence, frame, ax=…)` dispatches to that
+pattern primitive. `finding_evidence(rule, equip, frame)` calls the hook safely (returns `None` when
+absent or declined), and `evidence_descriptor(evidence)` is the JSON-friendly payload (renderer +
+roles + violating timestamps) for export/linking. `Finding` carries an optional `evidence` field.
+Backfilled so far: `simultaneous_heat_cool`, `supply_air_reset`, `outdoor_air_fraction`.
+
+The dashboard wires it automatically — pass `rules=`:
+```python
+html = build_dashboard(df, findings=findings, rules=registry)   # evidence=True by default
+```
+Each actionable finding whose rule opts in renders its evidence chart under an **Evidence** section.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
@@ -99,6 +122,8 @@ open("dashboard.html", "w").write(html)
 | `carpet_col` | first column | which point the carpet (E) draws |
 | `multitrend_cols` | all | which points section B overlays |
 | `normalize` | `True` | normalize the multi-trend overlay |
+| `rules` | `None` | Registry / {name: rule} / rules — enables per-finding evidence (pattern J) |
+| `evidence` | `True` | render each actionable finding's evidence chart when `rules` is supplied |
 
 ## Scope
 

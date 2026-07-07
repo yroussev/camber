@@ -51,9 +51,49 @@ def _section_image(letter, df, *, spans, carpet_col, multitrend_cols, normalize)
     return fig_to_base64(fig)
 
 
-def _findings_table(findings, *, rank_by: str, top_n: int) -> str:
-    key = "annual_cost_usd" if rank_by == "cost" else None
-    ranked = rank_findings(findings, magnitude_key=key, actionable_only=True)[:top_n]
+def _rules_map(rules) -> dict:
+    """Normalize ``rules`` (a Registry, a {name: rule} dict, or an iterable of rules) to a map."""
+    if rules is None:
+        return {}
+    if hasattr(rules, "names") and hasattr(rules, "get"):        # a Registry
+        return {n: rules.get(n) for n in rules.names()}
+    if isinstance(rules, dict):
+        return dict(rules)
+    return {getattr(r, "name", str(i)): r for i, r in enumerate(rules)}
+
+
+def _evidence_images(ranked, df, rules_map) -> str:
+    """Render each ranked finding's evidence chart (pattern J) whose rule opts in, over ``df``."""
+    from ..charts.evidence import finding_evidence, render_evidence
+
+    if not rules_map:
+        return ""
+    import matplotlib.pyplot as plt
+
+    blocks = []
+    for r in ranked:
+        f = r.finding
+        rule = rules_map.get(_attr(f, "rule", ""))
+        if rule is None:
+            continue
+        try:
+            ev = finding_evidence(rule, _attr(f, "equip", ""), df)
+            if ev is None:
+                continue
+            fig, ax = plt.subplots(figsize=(8, 4))
+            render_evidence(ev, df, ax=ax)
+            img = fig_to_base64(fig)
+        except Exception:
+            plt.close("all")
+            continue
+        cap = _html.escape(f"{_attr(f, 'equip', '')} · {_attr(f, 'rule', '')} · "
+                           f"{_attr(f, 'summary', '')}")
+        blocks.append(f"<figure><img src='{img}' alt='evidence'>"
+                      f"<figcaption>{cap}</figcaption></figure>")
+    return "".join(blocks)
+
+
+def _findings_table(ranked) -> str:
     if not ranked:
         return "<p>No actionable findings.</p>"
     rows = ["<tr><th>#</th><th>Severity</th><th>Equip</th><th>Rule</th>"
@@ -79,13 +119,17 @@ _STYLE = ("body{font-family:system-ui,Arial,sans-serif;margin:24px;color:#222}"
 def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "I"),
                     title: str = "CAMBER dashboard", rank_by: str = "severity",
                     top_n: int = 20, carpet_col=None, multitrend_cols=None,
-                    normalize: bool = True) -> str:
+                    normalize: bool = True, rules=None, evidence: bool = True) -> str:
     """Build a self-contained HTML dashboard string.
 
     ``df`` is a wide point/role frame (DatetimeIndex). ``findings`` are listed ranked beneath the
-    charts. ``spans`` (``{label: boolean Series}``) shade fault evidence in section B. Option
-    flags: ``sections`` (subset of A/B/E/I, in order), ``rank_by`` ("severity"/"cost"),
-    ``top_n``, ``carpet_col``, ``multitrend_cols``, ``normalize``.
+    charts. ``spans`` (``{label: boolean Series}``) shade fault evidence in section B.
+
+    Pattern J — when ``rules`` is supplied (a Registry, a {name: rule} map, or an iterable of rules)
+    and ``evidence`` is on, each actionable finding whose rule exposes an ``evidence(equip, frame)``
+    hook renders its own evidence chart beneath the table. Option flags: ``sections`` (subset of
+    A/B/E/I), ``rank_by`` ("severity"/"cost"), ``top_n``, ``carpet_col``, ``multitrend_cols``,
+    ``normalize``, ``rules``, ``evidence``.
     """
     parts = [f"<!doctype html><html><head><meta charset='utf-8'><style>{_STYLE}</style>"
              f"<title>{_html.escape(title)}</title></head><body>",
@@ -96,7 +140,13 @@ def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "
         parts.append(f"<h2>{letter}. {_SECTION_TITLES.get(letter, letter)}</h2>"
                      f"<img src='{img}' alt='{_SECTION_TITLES.get(letter, letter)}'>")
     if findings is not None:
+        key = "annual_cost_usd" if rank_by == "cost" else None
+        ranked = rank_findings(findings, magnitude_key=key, actionable_only=True)[:top_n]
         parts.append(f"<h2>Findings (ranked by {_html.escape(rank_by)})</h2>")
-        parts.append(_findings_table(findings, rank_by=rank_by, top_n=top_n))
+        parts.append(_findings_table(ranked))
+        if evidence and rules is not None:
+            imgs = _evidence_images(ranked, df, _rules_map(rules))
+            if imgs:
+                parts.append("<h2>Evidence</h2>" + imgs)
     parts.append("</body></html>")
     return "\n".join(parts)
