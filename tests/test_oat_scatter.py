@@ -7,14 +7,22 @@ import sys
 import matplotlib
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
+import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.charts.oat_scatter import (  # noqa: E402
     CloudShape, brush_back, classify_shape, oat_scatter,
 )
+
+
+@pytest.fixture(autouse=True)
+def _close_figs():
+    yield
+    plt.close("all")
 
 
 def _oat(n=400, seed=0):
