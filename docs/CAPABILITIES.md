@@ -49,8 +49,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
 
 - **Air-side (G36 + PNNL Re-tuning)** — simultaneous heat/cool, reheat (penalty + G36 minimization),
   SAT reset, overcooling (min-flow + severity), economizer / OA-fraction (incl. under-ventilation),
-  night/weekend setback, duct-static, zone census. Per-rule flags (e.g. `threshold`, `min_oa_pct`,
-  `occupied_only`).
+  night/weekend setback, duct-static, zone census, and **unmet-setpoint hours** (`unmet_setpoint_hours`
+  — occupied space temp outside the heating/cooling band, the operator-facing comfort/capacity
+  metric). Per-rule flags (e.g. `threshold`, `min_oa_pct`, `occupied_only`, `tol_F`).
 - **Central plant & hydronic** — chiller kW/ton efficiency, chiller staging + multi-chiller fleet
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
   CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets

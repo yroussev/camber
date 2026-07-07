@@ -32,6 +32,7 @@ from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
 from .static_rule import DamperCensus
+from .unmet_rule import UnmetHours
 from .ventilation_rule import DemandControlledVentilation
 from .zones_rule import ZonesHeatCoolCensus
 
@@ -45,7 +46,7 @@ RULE_CLASSES = [
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
-    ZonesHeatCoolCensus, ControlHunting, ChillerStagingFleet,
+    ZonesHeatCoolCensus, ControlHunting, UnmetHours, ChillerStagingFleet,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

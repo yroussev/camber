@@ -182,6 +182,21 @@ def _rec_leaking_valve(f, frame, P):
                 caveats=["Confirm the leak isn't a stuck command / bad feedback first."])
 
 
+def _rec_unmet(f, frame, P):
+    m = getattr(f, "metrics", {}) or {}
+    lean = ("cooling capacity/airflow" if m.get("too_hot_pct", 0) >= m.get("too_cold_pct", 0)
+            else "heating capacity/airflow")
+    return _rec(f, title="Investigate unmet-setpoint zones (capacity / airflow / control)",
+                action=(f"Check {lean}: verify the coil valve reaches full travel, airflow meets the "
+                        "request, the setpoint schedule is correct, and the terminal isn't starved by "
+                        "low duct static or a stuck damper."),
+                parameter="Terminal capacity / airflow / control",
+                suggested="restore full coil travel + design airflow",
+                expected_effect="Restores comfort (unmet hours) without over-driving neighbors.",
+                confidence="medium", standard="ASHRAE G36 / Std-55 (comfort)",
+                caveats=["Rule out a space-temp sensor error before a capacity fix."])
+
+
 def _rec_dcv(f, frame, P):
     return _rec(f, title="Enable / repair demand-controlled ventilation",
                 action=("Enable DCV so outdoor air modulates with CO₂ / occupancy, and verify the CO₂ "
@@ -202,6 +217,7 @@ RECOMMENDERS = {
     "overcooling_min_flow": _rec_overcooling,
     "overcooling_severity": _rec_overcooling,
     "night_weekend_setback": _rec_setback,
+    "unmet_setpoint_hours": _rec_unmet,
     "chiller_efficiency": _rec_chiller_eff,
     "condenser_water_reset": _rec_reset_generic,
     "chw_plant_reset": _rec_reset_generic,
