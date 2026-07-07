@@ -64,3 +64,18 @@ with the largest. `score` places the actual load-weighted average between them. 
 These are *analytics* — they quantify shed, flexibility, and timing from measured load and a
 supplied grid signal. They are advisory, not control: CAMBER stays read-only toward the BAS
 (closed-loop DR dispatch is a roadmap Horizon item).
+
+## OpenADR report export (`interop.openadr`)
+
+Hand a measured DR event to a demand-response program in a shape it recognizes:
+
+```python
+from camber.interop.openadr import to_openadr_report
+r = demand_response(load_kw, baseline_kw, event_start=..., event_end=...)
+report = to_openadr_report(r, program_id="PROG-1", event_id="EV-42", client_name="HQ")
+```
+
+Maps a `DemandResponseResult` to an **OpenADR-3.0-shaped report** — baseline / actual / shed energy
+as interval payloads (KWH) plus a performance summary (avg/peak reduction kW, %, rebound). It's a
+**schema-level mapping for interop**, not a VTN/VEN transport; `openadr_report_json(...)` gives the
+JSON. Timestamps are caller-supplied (`created=`) — nothing is fabricated.
