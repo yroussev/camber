@@ -75,12 +75,13 @@ def _mad_z(values: np.ndarray) -> np.ndarray:
 def outlier_mask(series: pd.Series, cutoff: float = _MAD_Z_CUTOFF) -> pd.Series:
     """Boolean mask of robust (MAD-based) outliers among the non-null values."""
     s = series.dropna()
-    mask = pd.Series(False, index=series.index)
+    notna = series.notna().to_numpy()
+    vals = np.zeros(len(series), dtype=bool)
     if len(s) < 3:
-        return mask
+        return pd.Series(vals, index=series.index)
     z = np.abs(_mad_z(s.to_numpy(dtype="float64")))
-    mask.loc[s.index] = z > cutoff
-    return mask
+    vals[notna] = z > cutoff            # positional -> robust to a non-unique (duplicate-ts) index
+    return pd.Series(vals, index=series.index)
 
 
 def longest_flatline(series: pd.Series) -> int:
@@ -115,6 +116,7 @@ class QualityReport:
     outlier_frac: float         # n_outliers / n, 0..1
     expected_freq: object       # inferred/declared interval (Timedelta or None)
     score: float                # composite quality 0..1 (1 = clean)
+    n_duplicate_ts: int = 0     # duplicate timestamps (DST fall-back / concatenated exports)
 
     def as_dict(self):
         """Return as a plain dict (expected_freq stringified)."""
@@ -140,6 +142,7 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
     flat_frac = (flat / n) if n else 0.0
     n_out = int(outlier_mask(series).sum())
     out_frac = (n_out / n) if n else 0.0
+    n_dup = int(pd.DatetimeIndex(series.index).duplicated().sum())
 
     # Composite: coverage dominates; outliers penalize moderately; an extreme
     # flatline (whole series stuck) contributes lightly since some points are
@@ -150,7 +153,7 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
         n=n, n_missing=n_missing, coverage=round(coverage, 4),
         n_gaps=n_gaps, longest_flatline=flat, flatline_frac=round(flat_frac, 4),
         n_outliers=n_out, outlier_frac=round(out_frac, 4),
-        expected_freq=exp, score=round(score, 4),
+        expected_freq=exp, score=round(score, 4), n_duplicate_ts=n_dup,
     )
 
 
