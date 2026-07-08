@@ -22,11 +22,11 @@ option flags, a `docs/` page, and synthetic-fixture tests.
 - **Pattern G** — `charts.diagnostic`: templated subsystem diagnostic scatters (expected band
   overlaid, violations shaded) with a packaged `TEMPLATES` set (SAT/CHW reset, economizer,
   no-simultaneous-heat-cool) and constructors.
-- **Pattern J (keystone)** — `charts.evidence`: **rules render their own evidence**. A duck-typed
+- **Pattern J (keystone)** — `charts.evidence`: **every rule renders its own evidence**. A duck-typed
   `evidence(equip, frame)` hook returns an `Evidence` that `render_evidence` dispatches to a
-  B/D/E/G renderer; wired into the HTML dashboard and the Std-211 audit report. Backfilled on nine
-  rules (simultaneous H/C, SAT reset, economizer, reheat, setback, overcooling, hunting, unmet,
-  SAT/airflow control).
+  B/D/E/G renderer; wired into the HTML dashboard and the Std-211 audit report. Rules without a
+  tailored hook fall back to a default multi-trend of the roles they examined, so the whole 33-rule
+  library (and future rules) carries evidence with no per-rule map.
 - **Pattern C** — `charts.cohort` + `rules.cohort.CohortDeviation`: peer/cohort small-multiples
   ordered by deviation, and a fleet rule flagging a unit that runs unlike its peers.
 - **Pattern H** — `charts.savings`: cumulative M&V baseline-vs-actual with the avoided energy shaded
@@ -42,6 +42,9 @@ option flags, a `docs/` page, and synthetic-fixture tests.
 - `supply_air_control` — supply-air temperature not tracking its setpoint.
 - `airflow_tracking` — VAV airflow not tracking its setpoint.
 - `cohort_airflow` / `cohort_space_temp` — shipped cohort-deviation fleet-rule instances.
+- `economizer_high_limit` (OA damper not locked out above the high limit), `free_cooling_missed`
+  (mechanical cooling while free cooling was available), `static_pressure_reset` (duct-static
+  setpoint that doesn't trim with demand).
 
 **Advisory decision layer** (read-only, human-in-the-loop)
 - `camber.aso` — maps an actionable finding to a suggested setpoint/sequence change, grounded (cites
@@ -65,6 +68,12 @@ option flags, a `docs/` page, and synthetic-fixture tests.
   `docs/FREECOOLING.md`.
 - `camber.disaggregate` — split an interval load into baseload / weather / other.
   `docs/DISAGGREGATE.md`.
+- `camber.anomaly` — anomaly ensemble: fuse point (MAD), change-point, and data-quality signals
+  into one severity verdict. `docs/ANOMALY.md`.
+
+**Reporting**
+- `report.build_site_report` — a one-shot self-contained HTML deliverable: health scorecard +
+  chart sections + ranked action plan + per-finding evidence. `docs/SITE-REPORT.md`.
 
 **Time handling & DST** — `camber.timegrid` (`docs/TIME-HANDLING.md`)
 - `interval_hours` (shared, robust to duplicate/zero gaps), `regularize` (sort + de-duplicate
