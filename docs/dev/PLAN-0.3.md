@@ -173,3 +173,27 @@ deterministic core — behind an optional, provider-agnostic LLM seam consistent
 transport/bridge pattern, wired to a hosted LLM API of the operator's choice) and **ML-assisted
 point mapping / auto-tagging** (on top of the deterministic mapper + `mapping_confidence`). Both introduce
 heavier dependencies and are held until the viz differentiator lands.
+
+## Delivered beyond the plan (0.3.0)
+
+0.3 grew well past the 6 planned items. Also shipped:
+
+- **Visualization** — patterns **H** (M&V savings + G14 uncertainty) and **F** (load profiles /
+  load-duration curves), completing the catalog A–J; pattern **J** broadened (more evidence hooks +
+  Std-211 audit wiring).
+- **Advisory layer** — `aso` (recommendations), `actionplan` (findings + $ + recommendation, wired
+  into the audit report and config runs), `scorecard` (category scores + A–F grade).
+- **FDD rules** — `control_hunting`, `unmet_setpoint_hours`, `supply_air_control`,
+  `airflow_tracking`, and shipped cohort-deviation instances.
+- **M&V** — `mandv.degreeday` (variable-base degree-day baseline) and `mandv.option_a` (IPMVP
+  Option A).
+- **Analytics** — `schedule` (schedule inference), `changedetect` (level shifts in time),
+  `freecooling` (economizer opportunity $), `disaggregate` (baseload/weather/other).
+- **Standards** — `interop.openadr` (DR → OpenADR report schema).
+- **Time / DST** — `timegrid` (interval width, de-duplication, tz-localize, DST anomalies), wired
+  into `io.load_csv` and `ingest.quality`.
+- **Infra** — hardened `release.yml`; a multi-agent code-review pass fixed a batch of correctness
+  bugs (`tests/test_review_fixes.py`).
+
+Remaining packaging/community items (item 6) that need the repo owner: conda-forge feedstock
+submission, GitHub Discussions, the PEP-541 `camber` name, and enabling Pages for the MkDocs site.
