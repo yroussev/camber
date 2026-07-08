@@ -280,6 +280,8 @@ RECOMMENDERS = {
     "airflow_tracking": _rec_airflow,
     "control_hunting": _rec_hunting,
     "cohort_airflow": _rec_cohort, "cohort_space_temp": _rec_cohort,
+    "economizer_high_limit": _rec_economizer, "free_cooling_missed": _rec_economizer,
+    "static_pressure_reset": _rec_reset_generic,
     "chiller_efficiency": _rec_chiller_eff,
     "condenser_water_reset": _rec_reset_generic,
     "chw_plant_reset": _rec_reset_generic,

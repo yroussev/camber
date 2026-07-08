@@ -69,6 +69,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
   a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
   `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.
+- **Economizer / free cooling** — `economizer_high_limit` (OA damper open above the high limit — not
+  locked out), `free_cooling_missed` (mechanical cooling ran while OAT was cool enough for free),
+  `static_pressure_reset` (duct-static setpoint that doesn't trim with demand). Flags: `high_limit_f`,
+  `min_damper`, `min_range_inwc`.
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference), `mapping_confidence`. The runner's `min_trust` flag makes a rule decline when its

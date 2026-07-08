@@ -18,7 +18,10 @@ from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
 from .cohort import CohortDeviation
 from .condenserwater_rule import CondenserWaterReset
+from .economizer_lockout_rule import EconomizerHighLimit
+from .freecoolingmissed_rule import FreeCoolingMissed
 from .hunting_rule import ControlHunting
+from .staticreset_rule import StaticPressureReset
 from .coolingtower_rule import CoolingTowerApproach
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
@@ -49,7 +52,7 @@ RULE_CLASSES = [
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
     ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, AirflowTracking,
-    ChillerStagingFleet,
+    EconomizerHighLimit, StaticPressureReset, FreeCoolingMissed, ChillerStagingFleet,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be
