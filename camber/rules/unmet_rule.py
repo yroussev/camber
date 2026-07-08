@@ -76,5 +76,8 @@ class UnmetHours:
         if len(roles) < 2:
             return None
         too_hot, too_cold = self._unmet_masks(frame)
-        return Evidence(renderer="multitrend", roles=roles, mask=(too_hot | too_cold),
-                        label="unmet", title=f"{equip}: unmet setpoint")
+        # restrict to occupied hours -- the same gate the finding's count uses, so the shaded
+        # evidence matches the reported unmet %
+        mask = (too_hot | too_cold) & self._occupied_mask(frame)
+        return Evidence(renderer="multitrend", roles=roles, mask=mask,
+                        label="unmet (occupied)", title=f"{equip}: unmet setpoint")

@@ -70,7 +70,10 @@ class OvercoolingMinFlow:
         """Pattern J: space temp vs cooling setpoint, spans where space runs below setpoint shaded."""
         from ..charts.evidence import Evidence
         if Role.SPACE_TEMP in frame.columns and Role.COOL_SP in frame.columns:
-            mask = frame[Role.SPACE_TEMP] < frame[Role.COOL_SP]
+            # a comfortable space normally sits below the cooling setpoint; only shade where it
+            # runs well below it (overcooled past the deadband), not routine operation
+            margin = 3.0
+            mask = ((frame[Role.COOL_SP] - frame[Role.SPACE_TEMP]) > margin).fillna(False)
             return Evidence(renderer="multitrend", roles=[Role.SPACE_TEMP, Role.COOL_SP],
-                            mask=mask, label="below cooling SP", title=f"{equip}: overcooling")
+                            mask=mask, label="overcooled (>3F below SP)", title=f"{equip}: overcooling")
         return None

@@ -19,13 +19,8 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import pandas as pd
 
-
-def _interval_hours(index) -> float:
-    idx = pd.DatetimeIndex(index)
-    if len(idx) < 2:
-        return 1.0
-    deltas = np.diff(idx.view("int64")) / 3.6e12
-    return float(np.median(deltas)) if len(deltas) else 1.0
+from .mandv.degreeday import degree_days
+from .timegrid import interval_hours
 
 
 @dataclass
@@ -60,15 +55,14 @@ def disaggregate_load(load: pd.Series, oat: pd.Series, *, baseload_pct: float = 
     if df.empty:
         return LoadComponents(0, 0, 0, 0, float("nan"), float("nan"), float("nan"),
                               float("nan"), 0.0)
-    dt = _interval_hours(df.index)
+    dt = interval_hours(df.index)
     ld = df["load"].to_numpy(float)
     t = df["oat"].to_numpy(float)
     base_kw = float(np.percentile(ld, baseload_pct))
     excess = np.clip(ld - base_kw, 0.0, None)
 
     def fit_at(bp):
-        cdd = np.clip(t - bp, 0.0, None)
-        hdd = np.clip(bp - t, 0.0, None)
+        hdd, cdd = degree_days(t, bp)               # shared M&V degree-day convention
         X = np.column_stack([cdd, hdd])
         coef, *_ = np.linalg.lstsq(X, excess, rcond=None)
         pred = np.clip(X @ coef, 0.0, excess)          # non-negative, can't exceed the excess

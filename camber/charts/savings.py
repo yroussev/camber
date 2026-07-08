@@ -63,7 +63,7 @@ def savings_chart(baseline_model, t_report, y_report, *, n_baseline: int, p_base
     ax.fill_between(x, cum_act, cum_base, where=(cum_base < cum_act), interpolate=True,
                     color="#f2a6a6", alpha=0.5, label="excess")
     # G14 uncertainty as a ± band on the running total (scaled to the cumulative avoided fraction)
-    if np.isfinite(res.abs_uncertainty) and cum_avoided[-1] != 0:
+    if len(cum_avoided) and np.isfinite(res.abs_uncertainty) and cum_avoided[-1] != 0:
         frac = cum_avoided / cum_avoided[-1]
         band = np.abs(frac) * res.abs_uncertainty
         ax.fill_between(x, cum_avoided - band + cum_act, cum_avoided + band + cum_act,

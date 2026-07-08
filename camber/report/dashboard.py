@@ -63,8 +63,14 @@ def _rules_map(rules) -> dict:
     return {getattr(r, "name", str(i)): r for i, r in enumerate(rules)}
 
 
-def _evidence_images(ranked, df, rules_map) -> str:
-    """Render each ranked finding's evidence chart (pattern J) whose rule opts in, over ``df``."""
+def render_evidence_blocks(ranked, rules_map, frame_for) -> str:
+    """Shared pattern-J evidence rendering used by the dashboard and the audit report.
+
+    ``frame_for(equip)`` resolves the role-frame for a finding's equipment (the dashboard passes a
+    single ``df`` for all; the audit passes a per-equipment map). A finding renders only when its
+    rule exposes an ``evidence()`` hook and a frame exists. A failed render closes only its own
+    figure (never the whole pyplot registry) and is skipped.
+    """
     from ..charts.evidence import finding_evidence, render_evidence
 
     if not rules_map:
@@ -74,24 +80,32 @@ def _evidence_images(ranked, df, rules_map) -> str:
     blocks = []
     for r in ranked:
         f = r.finding
+        equip = _attr(f, "equip", "")
         rule = rules_map.get(_attr(f, "rule", ""))
-        if rule is None:
+        frame = frame_for(equip)
+        if rule is None or frame is None:
             continue
+        fig = None
         try:
-            ev = finding_evidence(rule, _attr(f, "equip", ""), df)
+            ev = finding_evidence(rule, equip, frame)
             if ev is None:
                 continue
             fig, ax = plt.subplots(figsize=(8, 4))
-            render_evidence(ev, df, ax=ax)
-            img = fig_to_base64(fig)
+            render_evidence(ev, frame, ax=ax)
+            img = fig_to_base64(fig)                    # closes fig on success
         except Exception:
-            plt.close("all")
+            if fig is not None:
+                plt.close(fig)                          # close only this figure, not plt.close("all")
             continue
-        cap = _html.escape(f"{_attr(f, 'equip', '')} · {_attr(f, 'rule', '')} · "
-                           f"{_attr(f, 'summary', '')}")
+        cap = _html.escape(f"{equip} · {_attr(f, 'rule', '')} · {_attr(f, 'summary', '')}")
         blocks.append(f"<figure><img src='{img}' alt='evidence'>"
                       f"<figcaption>{cap}</figcaption></figure>")
     return "".join(blocks)
+
+
+def _evidence_images(ranked, df, rules_map) -> str:
+    """Dashboard evidence: one shared ``df`` resolves every finding's frame (single-frame view)."""
+    return render_evidence_blocks(ranked, rules_map, lambda _equip: df)
 
 
 def _findings_table(ranked) -> str:

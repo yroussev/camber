@@ -182,7 +182,8 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             price = None
             if rep.get("price"):
                 from .fault_economics import EnergyPrice
-                price = EnergyPrice(**rep["price"])
+                known = {"electricity_per_kwh", "gas_per_therm"}
+                price = EnergyPrice(**{k: v for k, v in rep["price"].items() if k in known})
             body = report.to_html(recommend=bool(rep.get("recommend")), price=price)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
                 fh.write("<html><body>\n" + body + "\n</body></html>\n")

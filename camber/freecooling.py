@@ -16,13 +16,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import pandas as pd
 
-
-def _interval_hours(index) -> float:
-    idx = pd.DatetimeIndex(index)
-    if len(idx) < 2:
-        return 1.0
-    deltas = np.diff(idx.view("int64")) / 3.6e12
-    return float(np.median(deltas)) if len(deltas) else 1.0
+from .timegrid import interval_hours
 
 
 @dataclass
@@ -59,7 +53,7 @@ def free_cooling_opportunity(oat, cooling_signal, *, cooling_kw=None, high_limit
     df = pd.DataFrame(cols).dropna(subset=["oat", "cool"])
     if df.empty:
         return FreeCoolingOpportunity(0.0, 0.0, float("nan"), 0.0, 0.0, float("nan"), high_limit_f)
-    dt = _interval_hours(df.index)
+    dt = interval_hours(df.index)
     available = df["oat"] < high_limit_f
     active = df["cool"] > active_thresh
     missed = available & active

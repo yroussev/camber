@@ -76,8 +76,14 @@ def fit_degree_day(tavg, energy, *, balance_point: float | None = None,
         raise ValueError("kind must be 'heating', 'cooling', or 'both'")
     tavg = np.asarray(tavg, dtype=float)
     energy = np.asarray(energy, dtype=float)
-    if len(tavg) != len(energy) or len(tavg) < 3:
-        raise ValueError("need >= 3 aligned (tavg, energy) points")
+    if len(tavg) != len(energy):
+        raise ValueError("tavg and energy must be the same length")
+    finite = np.isfinite(tavg) & np.isfinite(energy)      # drop NaN/inf pairs (a missing bill month)
+    tavg, energy = tavg[finite], energy[finite]
+    p = 3 if kind == "both" else 2                        # intercept + one or two slopes
+    if len(tavg) <= p:                                    # need > p points, else the fit is degenerate
+        raise ValueError(f"need more than {p} finite (tavg, energy) points for kind={kind!r}, "
+                         f"have {len(tavg)}")
 
     candidates = ([float(balance_point)] if balance_point is not None
                   else list(np.arange(balance_range[0], balance_range[1] + 1e-9, step)))
