@@ -68,12 +68,18 @@ def test_finding_evidence_hook_present_absent_and_declined():
     ev = finding_evidence(rule, "AHU-1", frame)
     assert ev is not None and ev.renderer == "diagnostic"
 
-    class _NoHook:
+    class _NoHook:                                                   # no hook, no required roles
         name = "x"
-    assert finding_evidence(_NoHook(), "AHU-1", frame) is None      # no hook -> None
+        roles_required = ()
+    assert finding_evidence(_NoHook(), "AHU-1", frame) is None      # nothing to plot -> None
 
-    bare = frame[[Role.HEAT_VALVE]]                                  # cooling role missing
-    assert finding_evidence(rule, "AHU-1", bare) is None            # rule declines -> None
+    # tailored hook declines (cooling role missing) -> default evidence of the present required role
+    bare = frame[[Role.HEAT_VALVE]]
+    ev_bare = finding_evidence(rule, "AHU-1", bare)
+    assert ev_bare is not None and ev_bare.renderer == "multitrend"
+
+    # no required role present at all -> None
+    assert finding_evidence(rule, "AHU-1", frame[[Role.OAT]]) is None
 
 
 def test_evidence_descriptor_is_jsonable():
@@ -111,3 +117,28 @@ def test_dashboard_skips_evidence_for_rule_without_hook():
     fault = Finding(rule="plain_rule", equip="AHU-1", severity="fault", summary="x")
     html = build_dashboard(frame, findings=[fault], rules=[_Plain()], carpet_col=Role.COOL_VALVE)
     assert "<h2>Evidence</h2>" not in html          # no hook -> no evidence, no error
+
+
+def test_default_evidence_covers_rules_without_a_hook():
+    # a rule with no tailored evidence() hook still renders a multitrend of its required roles
+    from camber.rules.chiller_rule import ChillerEfficiency
+    idx = pd.date_range("2024-07-01", periods=48, freq="1h")
+    frame = pd.DataFrame({Role.POWER: pd.Series(100.0, index=idx),
+                          Role.CHW_SUPPLY_TEMP: pd.Series(44.0, index=idx),
+                          Role.CHW_RETURN_TEMP: pd.Series(54.0, index=idx),
+                          Role.CHW_FLOW: pd.Series(500.0, index=idx)})
+    ev = finding_evidence(ChillerEfficiency(), "CH-1", frame)
+    assert ev is not None and ev.renderer == "multitrend" and len(ev.roles) == 4
+
+
+def test_default_evidence_none_when_no_required_role_present():
+    from camber.rules.chiller_rule import ChillerEfficiency
+    idx = pd.date_range("2024-07-01", periods=48, freq="1h")
+    assert finding_evidence(ChillerEfficiency(), "CH-1",
+                            pd.DataFrame({Role.OAT: pd.Series(70.0, index=idx)})) is None
+
+
+def test_tailored_hook_still_wins_over_default():
+    frame = _hc_frame()
+    ev = finding_evidence(SimultaneousHeatCool(), "AHU-1", frame)
+    assert ev.renderer == "diagnostic"        # the tailored hook, not the default multitrend

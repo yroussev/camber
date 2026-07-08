@@ -58,11 +58,15 @@ def test_reheat_setback_overcooling_hooks_render():
         assert ax is not None and (ax.collections or ax.get_lines() or ax.images)
 
 
-def test_hook_declines_when_required_roles_absent():
+def test_declined_hook_falls_back_to_default_or_none():
     frame = _frame()
-    assert finding_evidence(ReheatPenalty(), "AHU-1", frame[[Role.HEAT_VALVE]]) is None  # no OAT
-    assert finding_evidence(NightWeekendSetback(), "AHU-1", frame[[Role.OAT]]) is None    # no fan
-    assert finding_evidence(OvercoolingMinFlow(), "AHU-1", frame[[Role.SPACE_TEMP]]) is None  # no SP
+    # tailored reheat hook declines (no OAT) but its required HEAT_VALVE is present -> default trend
+    assert finding_evidence(ReheatPenalty(), "AHU-1", frame[[Role.HEAT_VALVE]]).renderer == "multitrend"
+    # no required role present at all -> None (nothing to plot)
+    assert finding_evidence(ReheatPenalty(), "AHU-1", frame[[Role.OAT]]) is None
+    assert finding_evidence(OvercoolingMinFlow(), "AHU-1", frame[[Role.OAT]]) is None
+    # setback has no required roles, so with only its optional fan absent it renders nothing
+    assert finding_evidence(NightWeekendSetback(), "AHU-1", frame[[Role.OAT]]) is None
 
 
 def test_audit_embeds_evidence_with_rules_and_frames():

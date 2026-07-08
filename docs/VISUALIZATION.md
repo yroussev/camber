@@ -90,10 +90,14 @@ roles / mask / template it needs; `render_evidence(evidence, frame, ax=…)` dis
 pattern primitive. `finding_evidence(rule, equip, frame)` calls the hook safely (returns `None` when
 absent or declined), and `evidence_descriptor(evidence)` is the JSON-friendly payload (renderer +
 roles + violating timestamps) for export/linking. `Finding` carries an optional `evidence` field.
-Backfilled rules (each maps to the fitting renderer): `simultaneous_heat_cool` & `outdoor_air_fraction`
-(diagnostic), `supply_air_reset` (diagnostic reset), `reheat_penalty` (OAT scatter — heating in warm
-weather), `night_weekend_setback` (carpet — the fault *is* the schedule), `overcooling_min_flow`
-(multitrend, below-setpoint spans shaded).
+**Every rule renders evidence.** Rules with a *tailored* hook map to the fitting renderer and shade
+the specific violation: `simultaneous_heat_cool` & `outdoor_air_fraction` (diagnostic),
+`supply_air_reset` (diagnostic reset), `reheat_penalty` (OAT scatter — heating in warm weather),
+`night_weekend_setback` (carpet — the fault *is* the schedule), `overcooling_min_flow` /
+`unmet_setpoint_hours` / `supply_air_control` / `airflow_tracking` (multitrend, violating spans
+shaded). Every *other* rule falls back to a **default** multitrend of the roles it examined — so the
+whole library (present and future rules) carries evidence, no per-rule map required. Fleet findings
+(no single equipment frame) render none.
 
 The dashboard wires it automatically — pass `rules=`:
 ```python
