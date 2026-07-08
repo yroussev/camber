@@ -67,15 +67,24 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
 
 
 def finding_evidence(rule, equip: str, frame: pd.DataFrame):
-    """Call a rule's optional ``evidence(equip, frame)`` hook; return an :class:`Evidence` or None.
+    """Return an :class:`Evidence` for a rule's finding, or None.
 
-    Rules without the hook (or that decline for this frame) return None — the caller renders no
-    evidence chart, never an error.
+    A rule may implement a tailored ``evidence(equip, frame)`` hook (which can shade the specific
+    violating spans). When it doesn't — or the hook declines — every rule still gets **default**
+    evidence: a multi-trend of the ``roles_required`` present in the frame, i.e. the data the rule
+    examined. So pattern J covers the whole rule library, present and future, without a per-rule map.
+    Returns None only when no required role is plottable (e.g. a fleet finding with no single frame).
     """
     hook = getattr(rule, "evidence", None)
-    if not callable(hook):
+    if callable(hook):
+        ev = hook(equip, frame)
+        if ev is not None:
+            return ev
+    roles = [r for r in getattr(rule, "roles_required", ()) if r in getattr(frame, "columns", ())]
+    if not roles:
         return None
-    return hook(equip, frame)
+    return Evidence(renderer="multitrend", roles=roles,
+                    title=f"{equip}: {getattr(rule, 'name', 'finding')}")
 
 
 def evidence_descriptor(evidence: Evidence) -> dict:
