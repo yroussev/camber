@@ -25,14 +25,9 @@ import numpy as np
 import pandas as pd
 
 from ..mandv.models import best_model
+from .energy_signature import _r2
 
 _KINDS = ("2P", "3PC", "3PH", "4P", "5P")
-
-
-def _r2(model, T, y) -> float:
-    y = np.asarray(y, dtype=float)
-    sst = float(np.sum((y - y.mean()) ** 2))
-    return 1.0 - model.sse / sst if sst > 0 else float("nan")
 
 
 @dataclass

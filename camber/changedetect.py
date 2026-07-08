@@ -35,14 +35,17 @@ class LevelShift:
         return d
 
 
-def _best_split(x):
+def _best_split(x, min_segment: int = 1):
     """Index k (split after position k) maximizing the CUSUM of the mean-centered signal, and the
-    standardized two-sample statistic there."""
+    standardized two-sample statistic there. The split is constrained so both sides have at least
+    ``min_segment`` points — otherwise a lone boundary outlier makes a 1-point segment with a huge
+    (near-zero-variance) statistic and fakes a regime change."""
     n = len(x)
-    if n < 4:
+    lo, hi = min_segment - 1, n - min_segment      # valid CUSUM positions -> k in [min_segment, n-min_segment]
+    if hi <= lo:
         return None, 0.0
     cs = np.cumsum(x - x.mean())
-    k = int(np.argmax(np.abs(cs[:-1]))) + 1        # split into x[:k], x[k:], both non-empty
+    k = int(np.argmax(np.abs(cs[lo:hi]))) + lo + 1
     a, b = x[:k], x[k:]
     va, vb = a.var(ddof=1) if len(a) > 1 else 0.0, b.var(ddof=1) if len(b) > 1 else 0.0
     se = np.sqrt(va / len(a) + vb / len(b))
@@ -73,7 +76,7 @@ def detect_level_shifts(series: pd.Series, *, min_segment: int = 24, max_shifts:
         lo, hi = stack.pop()
         if hi - lo < 2 * min_segment:
             continue
-        k, score = _best_split(vals[lo:hi])
+        k, score = _best_split(vals[lo:hi], min_segment)
         if k is None or score < z:
             continue
         pos = lo + k

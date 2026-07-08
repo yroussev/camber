@@ -182,6 +182,33 @@ def _rec_leaking_valve(f, frame, P):
                 caveats=["Confirm the leak isn't a stuck command / bad feedback first."])
 
 
+def _rec_hunting(f, frame, P):
+    sig = (getattr(f, "metrics", {}) or {}).get("worst_signal", "the modulating output")
+    return _rec(f, title="Retune the hunting control loop",
+                action=(f"{sig} reverses direction excessively (unstable loop). Slow the loop "
+                        "(lower proportional/integral gain) or widen the deadband so the actuator "
+                        "settles; check for a sticking valve/damper and a noisy sensor."),
+                parameter="Loop tuning (P/I gains) / deadband",
+                suggested="lower loop gain / widen deadband until it settles",
+                expected_effect="Stops actuator hunting — less wear and stable control downstream.",
+                confidence="medium", standard="ASHRAE G36 (loop tuning) / PNNL Re-tuning",
+                caveats=["Rule out mechanical binding or a noisy sensor before retuning."])
+
+
+def _rec_cohort(f, frame, P):
+    outliers = (getattr(f, "metrics", {}) or {}).get("outliers", [])
+    who = ", ".join(outliers[:5]) if outliers else "the deviating unit(s)"
+    return _rec(f, title="Investigate the unit(s) deviating from the cohort",
+                action=(f"{who} run unlike their peers on this role. Compare setpoints, schedule, "
+                        "valve/damper travel, and sensor calibration against a typical sibling to "
+                        "find why this unit differs."),
+                parameter="Per-unit setpoints / schedule / calibration vs peers",
+                suggested="align the outlier to its cohort's operating pattern",
+                expected_effect="Brings a straggler back in line with a proven-good peer group.",
+                confidence="low", standard="peer/cohort comparison (statistical)",
+                caveats=["A whole cohort can share a systematic issue — confirm the peers are right."])
+
+
 def _rec_sat_control(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
     lean = ("under-cooling (coil/valve/airflow can't hit SAT)" if m.get("too_warm_pct", 0)
@@ -251,6 +278,8 @@ RECOMMENDERS = {
     "unmet_setpoint_hours": _rec_unmet,
     "supply_air_control": _rec_sat_control,
     "airflow_tracking": _rec_airflow,
+    "control_hunting": _rec_hunting,
+    "cohort_airflow": _rec_cohort, "cohort_space_temp": _rec_cohort,
     "chiller_efficiency": _rec_chiller_eff,
     "condenser_water_reset": _rec_reset_generic,
     "chw_plant_reset": _rec_reset_generic,

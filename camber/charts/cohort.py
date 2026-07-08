@@ -72,7 +72,9 @@ def cohort_deviation(frames: dict, role, *, k: float = 3.5, summary: str = "mean
     arr = vals.to_numpy(float)
     med = float(np.median(arr))
     mad = float(np.median(np.abs(arr - med)))
-    scale = 1.4826 * mad
+    # MAD collapses to 0 when >half the cohort shares a value; fall back to mean abs deviation so a
+    # lone outlier isn't masked (z=0 for everyone). Standard MAD-blind-spot guard.
+    scale = 1.4826 * mad if mad > 0 else 1.2533 * float(np.mean(np.abs(arr - med)))
     z = {e: ((v - med) / scale if scale > 0 else 0.0) for e, v in vals.items()}
     outliers = [e for e, zz in z.items() if abs(zz) >= k]
     return CohortResult(rname, summary, {e: float(v) for e, v in vals.items()},

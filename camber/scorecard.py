@@ -28,6 +28,7 @@ RULE_CATEGORY = {
     "unmet_setpoint_hours": "comfort", "overcooling_min_flow": "comfort",
     "overcooling_severity": "comfort", "supply_air_control": "comfort",
     "airflow_tracking": "comfort", "zones_heat_cool_census": "comfort",
+    "cohort_airflow": "comfort", "cohort_space_temp": "comfort",
     # ventilation
     "co2_ventilation": "ventilation", "dcv_verification": "ventilation",
     # maintenance / controls
@@ -86,8 +87,11 @@ def build_scorecard(findings, *, fault_penalty: float = 15.0, warn_penalty: floa
         by_cat[category_for(getattr(f, "rule", ""))].append(f)
 
     weights = category_weights or {c: 1.0 for c in CATEGORIES}
+    # score the fixed categories AND any extra category present in the findings (e.g. "other" for
+    # unmapped/plugin rules) -- so an unmapped fault can never be silently dropped from the grade.
+    scored = list(CATEGORIES) + sorted(c for c in by_cat if c not in CATEGORIES)
     cats, n_actionable = [], 0
-    for cat in CATEGORIES:
+    for cat in scored:
         fs = by_cat.get(cat, [])
         nf = sum(1 for f in fs if _SEV.get(getattr(f, "severity", ""), 0) == 2)
         nw = sum(1 for f in fs if _SEV.get(getattr(f, "severity", ""), 0) == 1)

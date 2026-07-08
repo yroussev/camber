@@ -130,38 +130,14 @@ class AuditReport:
 
         ``frames`` is ``{equip: role-frame}`` and ``rules`` a Registry / {name: rule} / iterable;
         a finding renders evidence only when its rule exposes an ``evidence()`` hook and its
-        equipment has a frame. Returns an HTML block (empty string if nothing renders).
+        equipment has a frame. Shares the render loop with the dashboard.
         """
-        from ..charts.evidence import finding_evidence, render_evidence
-        from .dashboard import _rules_map, fig_to_base64
+        from .dashboard import _rules_map, render_evidence_blocks
 
         rmap = _rules_map(rules)
         if not rmap or not frames:
             return ""
-        import matplotlib.pyplot as plt
-
-        blocks = []
-        for r in ranked:
-            f = r.finding
-            equip = getattr(f, "equip", "")
-            rule = rmap.get(getattr(f, "rule", ""))
-            frame = frames.get(equip)
-            if rule is None or frame is None:
-                continue
-            try:
-                ev = finding_evidence(rule, equip, frame)
-                if ev is None:
-                    continue
-                fig, ax = plt.subplots(figsize=(8, 4))
-                render_evidence(ev, frame, ax=ax)
-                img = fig_to_base64(fig)
-            except Exception:
-                plt.close("all")
-                continue
-            cap = _html.escape(f"{equip} · {getattr(f, 'rule', '')} · {getattr(f, 'summary', '')}")
-            blocks.append(f"<figure><img src='{img}' alt='evidence'>"
-                          f"<figcaption>{cap}</figcaption></figure>")
-        return "".join(blocks)
+        return render_evidence_blocks(ranked, rmap, frames.get)
 
     def action_plan(self, *, loads=None, price=None, params=None, aso_params=None,
                     min_severity: str = "warn"):
@@ -216,7 +192,9 @@ class AuditReport:
             from ..actionplan import action_plan_html
             items = self.action_plan(loads=loads, price=price)
             if items:
-                parts.append("<h2>Recommended actions (ranked by $/yr)</h2>"
+                # only claim dollar-ranking when at least one item is actually costed
+                ranked_by = "$/yr" if any(getattr(i, "costed", False) for i in items) else "severity"
+                parts.append(f"<h2>Recommended actions (ranked by {ranked_by})</h2>"
                              + action_plan_html(items))
         parts.append("<h2>Energy Conservation Measures</h2>")
         parts.append("<table border='1' cellpadding='4'><tr><th>#</th><th>Priority</th>"

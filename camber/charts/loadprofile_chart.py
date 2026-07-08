@@ -21,12 +21,7 @@ from ..loadprofile import (
 )
 
 
-def _interval_hours(index) -> float:
-    idx = pd.DatetimeIndex(index)
-    if len(idx) < 2:
-        return 1.0
-    deltas = np.diff(idx.view("int64")) / 3.6e12
-    return float(np.median(deltas)) if len(deltas) else 1.0
+from ..timegrid import interval_hours
 
 
 def load_profile_chart(series: pd.Series, *, ax=None, split: bool = True, annotate: bool = True,
@@ -79,7 +74,7 @@ def load_duration_chart(series: pd.Series, *, ax=None, price: float | None = Non
         ax.axhline(m.near_base, color="#2ca02c", ls="--", lw=0.9, label=f"baseload ≈ {m.near_base:g}")
     cost_note = ""
     if price is not None:
-        energy = float(np.nansum(series.dropna().to_numpy()) * _interval_hours(series.index))
+        energy = float(np.nansum(series.dropna().to_numpy()) * interval_hours(series.index))
         cost_note = f" · {energy:,.0f} kWh ≈ ${energy * price:,.0f}"
     ax.set_xlabel("% of time at or above")
     ax.set_ylabel(ylabel)

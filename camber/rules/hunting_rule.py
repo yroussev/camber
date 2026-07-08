@@ -34,7 +34,8 @@ def reversals_per_hour(signal, deadband: float):
     signs = np.sign(sig.to_numpy())
     reversals = int(np.sum(signs[1:] != signs[:-1]))
     idx = pd.DatetimeIndex(s.index)
-    hours = (idx[-1] - idx[0]).total_seconds() / 3600.0
+    # span from min/max, not endpoints -> robust to unsorted or duplicate (DST fall-back) timestamps
+    hours = (idx.max() - idx.min()).total_seconds() / 3600.0
     return (reversals / hours if hours > 0 else 0.0), reversals
 
 

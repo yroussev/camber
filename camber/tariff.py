@@ -83,12 +83,7 @@ def _tiered(qty: float, tiers: list) -> float:
     return cost
 
 
-def _interval_hours(index: pd.DatetimeIndex) -> float:
-    """Hours per interval, from the median timestamp spacing (default 1.0)."""
-    if len(index) < 2:
-        return 1.0
-    secs = float(pd.Series(index).diff().dt.total_seconds().median())
-    return secs / 3600.0 if secs and secs == secs else 1.0
+from .timegrid import interval_hours as _interval_hours
 
 
 def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
