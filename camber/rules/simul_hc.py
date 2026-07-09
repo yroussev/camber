@@ -60,3 +60,12 @@ class SimultaneousHeatCool:
             summary=(f"{equip}: both coils open {pct:.1f}% of occupied hours "
                      f"(CHW {res.chw_open_pct:.0f}%, HHW {res.hhw_open_pct:.0f}%)"),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: render the heat-vs-cool valve diagnostic (both-open points shaded)."""
+        from ..charts.diagnostic import TEMPLATES
+        from ..charts.evidence import Evidence
+        if Role.HEAT_VALVE in frame.columns and Role.COOL_VALVE in frame.columns:
+            return Evidence(renderer="diagnostic", template=TEMPLATES["no_simultaneous_hc"],
+                            title=f"{equip}: simultaneous heat/cool")
+        return None

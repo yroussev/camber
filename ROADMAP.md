@@ -61,21 +61,51 @@ delivered record). What it includes, by layer:
 - [ ] (Tracking) Reclaim the bare `camber` PyPI name (PEP-541 request filed) — optional;
       `camber-toolkit` is the permanent distribution name regardless.
 
-## Next — 0.2 (the real near-term)
+## Delivered — v0.2.0
 
-The concrete remainders from the tracks 0.1.0 mostly completed, plus the first forward steps.
+All five near-term 0.2 items shipped, plus a streaming/grid/carbon analytics tranche and several
+platform items pulled forward from *Later — toward 1.0* / *Horizon*.
 
-- [ ] **ASHRAE 223P + richer Brick interop** — beyond the shipped point/site Brick
-      round-trip (the `[~]` item below).
-- [ ] **ASHRAE 62.1 OA-rate + DCV verification** — the explicit ventilation-rate checks on
-      top of the shipped CO₂ adequacy diagnostic (the `[~]` item below).
-- [ ] **Continuous benchmarking in CI** — run the rule library against LBNL's labeled
-      datasets on every change to catch accuracy regressions (pulled forward from Phase 3).
-- [ ] **Outbound integrations** — CMMS/work-order write-back; alerting (email/Slack/Teams/
-      webhook); BI/warehouse export.
-- [ ] **Interactive visualization MVP** — the `A → B → E → I` slice from the Visualizations
-      vision below (readiness ribbon → fault-annotated multi-trend → carpet → data-quality
-      gate); the static chart primitives already shipped.
+- [x] **ASHRAE 223P + richer Brick interop** — `interop.semantic223` (site↔223P RDF subset,
+      minimal/full profiles) + a broadened role↔Brick map.
+- [x] **ASHRAE 62.1 OA-rate + DCV verification** — `camber.ventilation` (VRP `assess_62_1`,
+      `assess_dcv`) + rules and `Role.OA_AIRFLOW`.
+- [x] **Continuous benchmarking in CI** — `eval.check_against_baseline` gates detector accuracy
+      against a committed baseline (`--json`/`--gate`/`--tol`).
+- [x] **Outbound integrations** — CMMS work-orders, notifiers (webhook/Slack/Teams/email), and
+      findings/metrics export (`camber.integrate`).
+- [x] **Interactive visualization MVP** — the `A → B → E → I` slice + a self-contained HTML
+      assembler (`report.build_dashboard`).
+- [x] **Real-time / streaming** — online M&V (`mandv.online`) + online FDD (`rules.online`).
+- [x] **Predictive layer (forecasting)** — `camber.forecast` (seasonal-naïve + drift, backtest,
+      learned-normal anomalies); no ML dependency. *(ML-assisted point mapping → 0.4.)*
+- [x] **Grid-interactive (GEB)** — `camber.geb` (demand response, flexibility, carbon shift,
+      operation-timing score) + **hourly/marginal Scope-2** (`camber.carbon_hourly`).
+- [x] **Fault lifecycle at scale** — `camber.faultlifecycle` (persistent store, assignment/status
+      workflow, SLA/aging).
+- [x] **Plugin API** — `camber.plugins` (entry-point + in-process rules/adapters/reports).
+- [~] **Packaged deployments** — reference Kubernetes manifests + a conda recipe *skeleton*
+      (`deploy/`). Remaining: a conda-forge feedstock submission and a hosted demo → 0.3.
+
+## Next — 0.3 (visualization depth)
+
+Deepen the differentiator — *charts and faults are the same artifact* — into a full
+**rules-as-a-chart-engine**, dependency-light (matplotlib + stdlib; interactivity is inlined
+vanilla JS, no web framework). Continues the Visualizations build order past the MVP (A/B/E/I).
+
+- [x] **Pattern D** — OAT cloud-shape scatter with classification + brush-back (`charts.oat_scatter`).
+- [x] **Pattern G** — templated subsystem diagnostic scatters (`charts.diagnostic`).
+- [x] **Pattern J** — rules as a chart engine: every rule renders its own evidence
+      (`charts.evidence`; the `evidence()` hook), wired into the dashboard.
+- [x] **Pattern C** — peer/cohort comparison + a cohort-deviation rule (`charts.cohort`,
+      `rules.cohort`).
+- [x] **Interactive linking** — a brush-able inline-SVG scatter (`report.linking`); box-select →
+      linked timestamp readout.
+- [ ] **Packaging & community** — conda-forge feedstock, a MkDocs docs site, GitHub Discussions,
+      and the PEP-541 `camber` name request.
+
+Deferred to **0.4**: grounded agentic query & explanation (NL over the deterministic core, cited),
+and ML-assisted point mapping — both behind an optional, provider-agnostic seam.
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
 
@@ -177,24 +207,22 @@ shipped in 0.1.0; the two `[~]` items have remainders tracked under **Next — 0
 
 ## Later — toward 1.0
 
-(Continuous-benchmark CI and outbound integrations are pulled forward to **Next — 0.2**.)
+(Continuous-benchmark CI and outbound integrations shipped in **0.2.0**. Real-time/streaming,
+fault-lifecycle-at-scale, and the plugin API also landed in 0.2.0.)
 
-- [ ] **Interactive dashboards / web UI** — fault console with drill-down to the
-      supporting trend; portfolio KPIs; energy/savings dashboards.
+- [~] **Interactive dashboards / web UI** — the self-contained HTML dashboard (A/B/E/I + evidence
+      + a brush-able scatter) shipped in 0.2/0.3; a live web UI with cross-panel linking remains.
 - [ ] **Agentic query & triage** — natural-language questions over the model and
       history, and plain-language fault explanations — strictly grounded in the
       deterministic layers, citing the rule + data behind every claim (never the
-      source of truth, always auditable).
+      source of truth, always auditable). *(Targeted for 0.4.)*
 - [ ] **Automated system optimization (ASO) hooks** — from diagnosis to suggested
       setpoint/sequence changes (advisory, human-in-the-loop).
-- [ ] **Real-time / streaming** — incremental ingest and online diagnostics on live
-      BAS feeds, not just batch trend exports.
-- [ ] **Fault lifecycle at scale** — persistent fault store, assignment/resolution
-      workflow, and SLA/aging tracking across a portfolio.
-- [ ] **Plugin API** — a documented extension point so third parties can ship rules,
-      adapters, and report formats as separate packages.
-- [ ] **Packaged deployments** — conda-forge, a hosted demo, and reference
-      Kubernetes/Compose stacks for the API + store.
+- [x] **Real-time / streaming** — online M&V + online FDD on live feeds (0.2.0).
+- [x] **Fault lifecycle at scale** — persistent store + assignment/SLA/aging (0.2.0).
+- [x] **Plugin API** — entry-point + in-process extension points (0.2.0).
+- [~] **Packaged deployments** — reference Kubernetes manifests + a conda recipe skeleton (0.2.0);
+      conda-forge feedstock + a hosted demo tracked under **Next — 0.3**.
 
 ## Visualizations
 
@@ -297,6 +325,13 @@ That slice already delivers the fuse-graphing-and-diagnostics principle end to e
 the remaining patterns deepen comparison (C, D), turn rules into a chart engine (G,
 J), and extend into M&V and load economics (H, F).
 
+**Status:** A/B/E/I shipped in **0.2.0**. **0.3 completes the catalog** — D (OAT cloud-shape
+scatter), G (templated diagnostic scatters), J (rules as a chart engine — every rule renders its
+evidence, wired into the dashboard and the Std-211 audit), C (peer/cohort comparison + a
+cohort-deviation rule), H (M&V baseline/savings with G14 uncertainty), F (load profiles &
+load-duration curves) — plus interactive linking (a brush-able inline-SVG scatter). All ten
+patterns A–J are now built.
+
 ## Capability tracks — delivered in 0.1.0
 
 Tracks beyond the original phased plan, each consistent with CAMBER's contract —
@@ -379,13 +414,12 @@ every rule shipping a synthetic fixture that proves detection. **All shipped in 
 Directions worth tracking but not yet committed; each needs validation and likely
 collaboration.
 
-- [ ] **Predictive / ML layer** — load forecasting, anomaly detection that learns
-      normal behavior, and ML-assisted point mapping (auto-tagging) on top of — not
-      replacing — the deterministic core.
-- [ ] **Grid-interactive (GEB)** — demand-response readiness, load-shed/flex
-      quantification, and time-of-use / carbon-aware operation analytics.
-- [ ] **Measured carbon & Scope-2 hourly** — marginal/hourly emissions accounting
-      with locational grid signals.
+- [~] **Predictive / ML layer** — load forecasting + learned-normal anomaly detection shipped in
+      0.2.0 (`camber.forecast`, no ML dep); ML-assisted point mapping (auto-tagging) → **0.4**.
+- [x] **Grid-interactive (GEB)** — demand-response, load-shed/flex quantification, and TOU /
+      carbon-aware operation analytics (0.2.0, `camber.geb`).
+- [x] **Measured carbon & Scope-2 hourly** — marginal/hourly emissions accounting against a
+      supplied grid signal (0.2.0, `camber.carbon_hourly`).
 - [ ] **Closed-loop control** — beyond advisory ASO, supervised write-back of
       optimized sequences (with strong guardrails and audit).
 - [ ] **Multi-tenant / SaaS** — auth, tenancy, and an authenticated API if the

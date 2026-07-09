@@ -70,3 +70,12 @@ class SupplyAirReset:
                      f"{res.slope_per_F:+.2f} F/F, <58F {res.pct_sat_below_58:.0f}% "
                      f"of cooling hours -- {res.verdict}"),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: SAT-vs-OAT against the reset schedule (off-schedule points shaded)."""
+        from ..charts.diagnostic import TEMPLATES
+        from ..charts.evidence import Evidence
+        if Role.SUPPLY_AIR_TEMP in frame.columns and Role.OAT in frame.columns:
+            return Evidence(renderer="diagnostic", template=TEMPLATES["sat_reset"],
+                            title=f"{equip}: SAT reset")
+        return None

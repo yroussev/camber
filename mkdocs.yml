@@ -1,0 +1,45 @@
+# MkDocs site config (docs-only; not a runtime dependency).
+# Build:   pip install -e .[docs] && mkdocs build
+# Serve:   mkdocs serve
+# Publish: enable GitHub Pages for the repo, then `mkdocs gh-deploy` (or a Pages workflow).
+site_name: CAMBER
+site_description: Vendor-neutral building-automation-system trend analysis — FDD, M&V, RCx.
+repo_url: https://github.com/yroussev/camber
+docs_dir: docs
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      toggle: { icon: material/weather-night, name: Dark }
+    - scheme: slate
+      primary: teal
+      toggle: { icon: material/weather-sunny, name: Light }
+  features: [navigation.sections, navigation.top, content.code.copy]
+nav:
+  - Home: index.md
+  - Capabilities: CAPABILITIES.md
+  - Architecture: ARCHITECTURE.md
+  - Ecosystem: ECOSYSTEM.md
+  - Analytics:
+      - M&V: MANDV.md
+      - Streaming / online: STREAMING.md
+      - Forecasting: FORECAST.md
+      - Grid-interactive (GEB): GEB.md
+      - Carbon: CARBON.md
+      - Ventilation: VENTILATION.md
+      - Visualization: VISUALIZATION.md
+  - Platform:
+      - Ingest protocols: INGEST-PROTOCOLS.md
+      - Ontology / interop: ONTOLOGY.md
+      - Integrations: INTEGRATIONS.md
+      - Plugins: PLUGINS.md
+      - Fault lifecycle: FAULT-LIFECYCLE.md
+      - Scale: SCALE.md
+      - Deployment: DEPLOY.md
+      - Security: SECURITY.md
+      - Validation: VALIDATION.md
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.superfences

@@ -32,6 +32,7 @@ class Finding:
     severity: str                 # "ok" | "info" | "warn" | "fault"
     metrics: dict = field(default_factory=dict)
     summary: str = ""
+    evidence: dict | None = None  # optional JSON-friendly evidence descriptor (pattern J)
 
     def as_dict(self):
         """Return the finding as a plain dict (JSON/report friendly)."""

@@ -8,6 +8,7 @@ one instance of every rule registered under ``rule.name``.
 from __future__ import annotations
 
 from .base import Registry
+from .airflow_rule import AirflowTracking
 from .boiler_rule import BoilerSummerLockout
 from .boilercycle_rule import BoilerShortCycle
 from .chiller_rule import ChillerEfficiency
@@ -15,7 +16,12 @@ from .chillerfleet_rule import ChillerStagingFleet
 from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
+from .cohort import CohortDeviation
 from .condenserwater_rule import CondenserWaterReset
+from .economizer_lockout_rule import EconomizerHighLimit
+from .freecoolingmissed_rule import FreeCoolingMissed
+from .hunting_rule import ControlHunting
+from .staticreset_rule import StaticPressureReset
 from .coolingtower_rule import CoolingTowerApproach
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
@@ -26,10 +32,12 @@ from .overcooling_rule import OvercoolingMinFlow
 from .overcooling_severity_rule import OvercoolingSeverity
 from .reheat_min_rule import ReheatMinimization
 from .reheat_rule import ReheatPenalty
+from .satcontrol_rule import SupplyAirControl
 from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
 from .static_rule import DamperCensus
+from .unmet_rule import UnmetHours
 from .ventilation_rule import DemandControlledVentilation
 from .zones_rule import ZonesHeatCoolCensus
 
@@ -43,8 +51,20 @@ RULE_CLASSES = [
     CHWPlantReset, CHWPumpDPReset,
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
-    ZonesHeatCoolCensus, ChillerStagingFleet,
+    ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, AirflowTracking,
+    EconomizerHighLimit, StaticPressureReset, FreeCoolingMissed, ChillerStagingFleet,
 ]
+
+# Parameterized rules shipped as ready-made instances (they take init args, so they can't be
+# auto-constructed from RULE_CLASSES). Cohort-deviation fleet rules for the common roles.
+from ..model.roles import Role  # noqa: E402
+
+
+def _extra_instances():
+    return [
+        CohortDeviation(Role.AIRFLOW, name="cohort_airflow"),
+        CohortDeviation(Role.SPACE_TEMP, name="cohort_space_temp"),
+    ]
 
 
 def is_fleet(rule) -> bool:
@@ -57,9 +77,11 @@ def builtin_registry() -> Registry:
     reg = Registry()
     for cls in RULE_CLASSES:
         reg.register(cls())
+    for inst in _extra_instances():
+        reg.register(inst)
     return reg
 
 
 def rule_names() -> list:
     """Sorted names of all built-in rules."""
-    return sorted(cls().name for cls in RULE_CLASSES)
+    return sorted([cls().name for cls in RULE_CLASSES] + [r.name for r in _extra_instances()])
