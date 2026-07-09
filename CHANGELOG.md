@@ -4,6 +4,115 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.3.0] — 2026-07-07
+
+Third feature release. Completes the **visualization pattern catalog** (the "charts and faults are
+the same artifact" differentiator), adds an **advisory decision layer** (recommendations, a
+prioritized action plan, a health scorecard), deepens **FDD / M&V / analytics**, and hardens
+**time/DST handling** and the **release pipeline**. Everything stays **read-only toward the BAS/OT**
+and dependency-light (numpy/pandas + stdlib; optional extras stay lazy); each capability ships with
+option flags, a `docs/` page, and synthetic-fixture tests.
+
+### Added
+
+**Visualization — the full pattern catalog A–J** (`docs/VISUALIZATION.md`)
+- **Pattern D** — `charts.oat_scatter`: X-vs-OAT "cloud-shape" scatter with change-point overlay,
+  shape classification (linear / hockey-stick / V / scattered), and **brush-back** (region →
+  timestamps).
+- **Pattern G** — `charts.diagnostic`: templated subsystem diagnostic scatters (expected band
+  overlaid, violations shaded) with a packaged `TEMPLATES` set (SAT/CHW reset, economizer,
+  no-simultaneous-heat-cool) and constructors.
+- **Pattern J (keystone)** — `charts.evidence`: **every rule renders its own evidence**. A duck-typed
+  `evidence(equip, frame)` hook returns an `Evidence` that `render_evidence` dispatches to a
+  B/D/E/G renderer; wired into the HTML dashboard and the Std-211 audit report. Rules without a
+  tailored hook fall back to a default multi-trend of the roles they examined, so the whole 33-rule
+  library (and future rules) carries evidence with no per-rule map.
+- **Pattern C** — `charts.cohort` + `rules.cohort.CohortDeviation`: peer/cohort small-multiples
+  ordered by deviation, and a fleet rule flagging a unit that runs unlike its peers.
+- **Pattern H** — `charts.savings`: cumulative M&V baseline-vs-actual with the avoided energy shaded
+  and an ASHRAE G14 fractional-savings uncertainty band.
+- **Pattern F** — `charts.loadprofile_chart`: load profiles (weekday/weekend) and load-duration
+  curves with baseload/peak annotation and cost translation.
+- **Interactive linking** — `report.linking`: a brush-able inline-SVG scatter (vanilla JS, no
+  framework, CSP-safe) with a linked timestamp readout; `build_dashboard(interactive=True)`.
+
+**FDD rules** (all with evidence hooks + ASO recommenders + `docs/CAPABILITIES.md`)
+- `control_hunting` — a modulating output that reverses direction excessively (unstable loop).
+- `unmet_setpoint_hours` — occupied space temp outside the heating/cooling band (comfort/capacity).
+- `supply_air_control` — supply-air temperature not tracking its setpoint.
+- `airflow_tracking` — VAV airflow not tracking its setpoint.
+- `cohort_airflow` / `cohort_space_temp` — shipped cohort-deviation fleet-rule instances.
+- `economizer_high_limit` (OA damper not locked out above the high limit), `free_cooling_missed`
+  (mechanical cooling while free cooling was available), `static_pressure_reset` (duct-static
+  setpoint that doesn't trim with demand).
+
+**Advisory decision layer** (read-only, human-in-the-loop)
+- `camber.aso` — maps an actionable finding to a suggested setpoint/sequence change, grounded (cites
+  the rule + G36/PNNL) with documented override-able targets; never a BAS command. `docs/ASO.md`.
+- `camber.actionplan` — fuses findings + `fault_economics` ($/yr) + `aso` into a ranked action plan;
+  wired into the audit report and config-driven runs. `docs/ACTIONPLAN.md`.
+- `camber.scorecard` — rolls findings into per-category scores + an overall A–F grade.
+  `docs/SCORECARD.md`.
+
+**M&V**
+- `mandv.degreeday` — variable-base HDD/CDD regression baseline (balance point auto-fit by CV(RMSE)).
+- `mandv.option_a` — IPMVP Option A (measured Δparameter × stipulated duty), completing Option
+  A/B/C coverage.
+
+**Analytics**
+- `camber.schedule` — infer the actual weekly operating schedule from interval load; compare to a
+  stated schedule (setback opportunity). `docs/SCHEDULE.md`.
+- `camber.changedetect` — operational change-point (level-shift) detection in time, for MBCx
+  persistence/regression. `docs/CHANGEDETECT.md`.
+- `camber.freecooling` — economizer free-cooling opportunity in hours and dollars.
+  `docs/FREECOOLING.md`.
+- `camber.disaggregate` — split an interval load into baseload / weather / other.
+  `docs/DISAGGREGATE.md`.
+- `camber.anomaly` — anomaly ensemble: fuse point (MAD), change-point, and data-quality signals
+  into one severity verdict. `docs/ANOMALY.md`.
+
+**Reporting**
+- `report.build_site_report` — a one-shot self-contained HTML deliverable: health scorecard +
+  chart sections + ranked action plan + per-finding evidence. `docs/SITE-REPORT.md`.
+
+**Time handling & DST** — `camber.timegrid` (`docs/TIME-HANDLING.md`)
+- `interval_hours` (shared, robust to duplicate/zero gaps), `regularize` (sort + de-duplicate
+  timestamps), `localize` (tz-localize resolving DST ambiguous/nonexistent times), and
+  `dst_anomalies` (count duplicates + fall-back/spring-forward transitions).
+
+**Standards** — `interop.openadr`: map a `geb.DemandResponseResult` to an OpenADR-3.0-shaped report
+payload (`docs/GEB.md`).
+
+### Changed
+
+- **Release pipeline hardened** (`.github/workflows/release.yml`): semver-only trigger, deny-by-
+  default token with per-job least privilege, hardened runners (egress audit), no persisted git
+  creds, per-job timeouts + single-flight concurrency, a **tag↔version consistency gate**, a
+  3.10/3.11 test matrix, a built-wheel install smoke test, PyPI `skip-existing`, SLSA provenance +
+  SBOM on the image, and changelog-extracted release notes.
+- `io.load_csv(dedupe="first")` collapses duplicate timestamps on load; `ingest.quality` reports
+  `n_duplicate_ts`.
+- `report.build_dashboard` gains `rules`/`evidence`/`interactive` flags; `AuditReport.to_html`
+  gains `rules`/`frames`/`recommend`; config-driven runs support a `recommend` report option.
+- `Finding` gains an optional `evidence` field (additive; back-compatible).
+- `ROADMAP.md` re-baselined and `docs/CAPABILITIES.md` extended for the 0.3 surface.
+
+### Fixed
+
+Correctness issues surfaced by a multi-agent code review of the 0.3 diff (regression-tested in
+`tests/test_review_fixes.py`):
+- cohort robust-z no longer masks a real outlier when >half the cohort share a value (MAD=0
+  mean-absolute-deviation fallback);
+- `scorecard` no longer silently drops unmapped/plugin-rule findings (they'd hide behind an "A");
+- `degreeday` drops NaN periods before the fit and rejects degenerate n≤p fits;
+- `changedetect` constrains splits by `min_segment` (no spurious shift from a single edge outlier);
+- `savings_chart` guards an empty cumulative array; `interval_hours`/`hunting` are robust to
+  duplicate (DST fall-back) timestamps;
+- evidence rendering closes only its own figure (was `plt.close("all")`) and unifies the dashboard/
+  audit loop; `outlier_mask` no longer crashes on a non-unique index;
+- config `EnergyPrice` ignores unknown keys instead of crashing late; unmet/overcooling evidence
+  masks now match their finding's metric.
+
 ## [0.2.0] — 2026-07-06
 
 Second feature release. Extends the 0.1 core along the "Next — 0.2" roadmap and a streaming/
@@ -252,5 +361,6 @@ First public release.
   `.devcontainer` for one-click contributor setup; and `DOCKER.md`. CI runs pytest on Python
   3.10 / 3.11.
 
+[0.3.0]: https://github.com/yroussev/camber/releases
 [0.2.0]: https://github.com/yroussev/camber/releases
 [0.1.0]: https://github.com/yroussev/camber/releases

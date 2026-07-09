@@ -80,13 +80,7 @@ def demand_response(load_kw: pd.Series, baseline_kw, *, event_start, event_end,
         rebound_kwh=round(rebound, 2))
 
 
-def _interval_hours(index: pd.DatetimeIndex):
-    """Per-sample interval in hours (modal spacing), as an array aligned to the index."""
-    if len(index) < 2:
-        return np.ones(len(index))
-    deltas = np.diff(index.view("int64")) / 3.6e12       # ns → hours
-    step = float(np.median(deltas)) if len(deltas) else 1.0
-    return np.full(len(index), step)
+from .timegrid import interval_hours as _interval_hours   # noqa: E402
 
 
 @dataclass

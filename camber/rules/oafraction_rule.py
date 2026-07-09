@@ -78,3 +78,13 @@ class OutdoorAirFraction:
             summary=(f"{equip}: OAF median {res.oaf_median_pct:.0f}% "
                      f"({res.median_oaf_cooling:.0f}% in cooling weather); {tail}"),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: OA damper vs OAT against the economizer expectation (missed free
+        cooling / no lockout shaded)."""
+        from ..charts.diagnostic import TEMPLATES
+        from ..charts.evidence import Evidence
+        if Role.OAT in frame.columns and Role.OA_DAMPER in frame.columns:
+            return Evidence(renderer="diagnostic", template=TEMPLATES["economizer"],
+                            title=f"{equip}: economizer")
+        return None

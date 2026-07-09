@@ -70,3 +70,11 @@ class ReheatPenalty:
             summary=(f"{equip}: reheat valve open {res.valve_open_pct:.0f}% of occupied "
                      f"hours; {res.reheat_at_high_oat_pct:.0f}% at OAT>65F"),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: reheat-valve position vs OAT — heating in warm weather stands out."""
+        from ..charts.evidence import Evidence
+        if Role.HEAT_VALVE in frame.columns and Role.OAT in frame.columns:
+            return Evidence(renderer="oat_scatter", roles=[Role.HEAT_VALVE],
+                            title=f"{equip}: reheat valve vs OAT")
+        return None

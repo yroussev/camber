@@ -62,3 +62,12 @@ class NightWeekendSetback:
                      f"unoccupied hours (vs {res.fan_run_occupied_pct:.0f}% occupied); "
                      f"setback {'effective' if res.setback_effective else 'MISSING/weak'}"),
         )
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: a carpet of fan runtime — the fault *is* the schedule (night/weekend run)."""
+        from ..charts.evidence import Evidence
+        col = (Role.SUPPLY_FAN_SPEED if Role.SUPPLY_FAN_SPEED in frame.columns else
+               Role.SUPPLY_FAN_STATUS if Role.SUPPLY_FAN_STATUS in frame.columns else None)
+        if col is not None:
+            return Evidence(renderer="carpet", roles=[col], title=f"{equip}: fan schedule")
+        return None

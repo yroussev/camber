@@ -1,6 +1,6 @@
 # CAMBER capabilities reference
 
-A single index of what CAMBER 0.2 does, grouped by the building-analytics layers, with the key
+A single index of what CAMBER 0.3 does, grouped by the building-analytics layers, with the key
 API, the **option flags** that tune each capability, the module, and the standard it cites.
 Deeper write-ups are linked where they exist.
 
@@ -26,8 +26,11 @@ Adapters normalize any source to named point series on a common time grid (`Sour
 - **Network protocols (read-only)** — Modbus (`[modbus]`), MQTT/Sparkplug (`[mqtt]`), BACnet incl.
   experimental BACnet/SC (`[bacnet]`), OPC-UA (`[opcua]`). Read-only by construction; historian-first
   posture. Per-adapter flags documented in INGEST-PROTOCOLS.md.
-- **Data quality** — `ingest.quality.assess` (coverage, gaps, flatline, outliers, composite score)
-  and `clean`. Flags: `expected_freq`, `drop_outliers`.
+- **Data quality** — `ingest.quality.assess` (coverage, gaps, flatline, outliers, duplicate
+  timestamps, composite score) and `clean`. Flags: `expected_freq`, `drop_outliers`.
+- **Time / DST** — `timegrid`: `interval_hours`, `regularize` (sort + de-duplicate the DST fall-back
+  hour), `localize` (tz-localize resolving DST ambiguous/nonexistent), `dst_anomalies`. `load_csv`
+  de-duplicates timestamps by default. See **[TIME-HANDLING.md](TIME-HANDLING.md)**.
 
 ## Semantic model
 
@@ -49,12 +52,27 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
 
 - **Air-side (G36 + PNNL Re-tuning)** — simultaneous heat/cool, reheat (penalty + G36 minimization),
   SAT reset, overcooling (min-flow + severity), economizer / OA-fraction (incl. under-ventilation),
-  night/weekend setback, duct-static, zone census. Per-rule flags (e.g. `threshold`, `min_oa_pct`,
-  `occupied_only`).
+  night/weekend setback, duct-static, zone census, and **unmet-setpoint hours** (`unmet_setpoint_hours`
+  — occupied space temp outside the heating/cooling band, the operator-facing comfort/capacity
+  metric). Per-rule flags (e.g. `threshold`, `min_oa_pct`, `occupied_only`, `tol_F`).
 - **Central plant & hydronic** — chiller kW/ton efficiency, chiller staging + multi-chiller fleet
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
   CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets
   (`design_kw_per_ton`, `max_starts_per_day`, …).
+- **Control stability** — `control_hunting`: flags a modulating output (valve/damper) that reverses
+  direction excessively (unstable loop) by counting reversals/hour beyond a deadband. Flags:
+  `warn_per_hr`, `fault_per_hr`, `deadband`. `supply_air_control`: flags supply-air temperature
+  that fails to *track its setpoint* (control/capacity fault; running hours only). Flags: `tol_F`,
+  `warn_pct`, `fault_pct`. `airflow_tracking`: flags measured VAV airflow that fails to track its
+  setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
+  `tol_frac`, `warn_pct`, `fault_pct`.
+- **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
+  a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
+  `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.
+- **Economizer / free cooling** — `economizer_high_limit` (OA damper open above the high limit — not
+  locked out), `free_cooling_missed` (mechanical cooling ran while OAT was cool enough for free),
+  `static_pressure_reset` (duct-static setpoint that doesn't trim with demand). Flags: `high_limit_f`,
+  `min_damper`, `min_range_inwc`.
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference), `mapping_confidence`. The runner's `min_trust` flag makes a rule decline when its
@@ -87,8 +105,10 @@ See **[MANDV.md](MANDV.md)**. Change-point models (`mandv.models`, 2P–5P + zer
 TOWT (`mandv.towt`), fit statistics + G14 fractional savings uncertainty (`mandv.stats`), CUSUM
 (`mandv.cusum`), weather normalization (`mandv.weather`), normalized annual savings
 (`mandv.normalized`), non-routine adjustment (`mandv.nonroutine`), Option-B retrofit isolation
-(`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`). Flags: `confidence`,
-`exclude_non_routine`, model `kinds`, `aggregate`.
+(`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`), a **variable-base degree-day**
+baseline (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance point), and **IPMVP Option
+A** (`mandv.option_a`, measured Δparameter × stipulated duty — completing Option A/B/C). Flags:
+`confidence`, `exclude_non_routine`, model `kinds`, `aggregate`, `balance_point`.
 
 ## Streaming / online
 
@@ -135,12 +155,32 @@ power is used. Advisory analytics (read-only toward the BAS). See **[GEB.md](GEB
 - **Hourly / marginal Scope-2** — `carbon_hourly.hourly_emissions` (time-varying factor → co2e,
   effective factor, timing premium) and `marginal_vs_average` (load-shift value uses marginal;
   reporting uses average). Flags: `unit_kg_per_kwh`.
+- **OpenADR export** — `interop.openadr.to_openadr_report`: map a `demand_response` result to an
+  OpenADR-3.0-shaped report payload for a DR program.
 
 ## Domain analytics
 
 `comfort` (Std-55 PMV/PPD), `iaq` (CO₂ ventilation adequacy), `cost`, `carbon`, `water` (irrigation
 / cooling-tower / leak), `loadprofile`, `pv` (+ `interop.pvlib_bridge`, `[pv]`),
-`interop.psychro` (PsychroLib, `[psychro]`), `lighting`.
+`interop.psychro` (PsychroLib, `[psychro]`), `lighting`. Plus:
+- **Schedule inference** — `schedule.detect_schedule` / `compare_schedule`: the actual weekly
+  operating schedule from interval load vs a stated one (setback opportunity). [SCHEDULE.md](SCHEDULE.md).
+- **Change-point detection** — `changedetect.detect_level_shifts`: *when* a signal's mean shifts
+  (MBCx persistence/regression). [CHANGEDETECT.md](CHANGEDETECT.md).
+- **Free-cooling opportunity** — `freecooling.free_cooling_opportunity`: missed economizer hours →
+  recoverable kWh/$. [FREECOOLING.md](FREECOOLING.md).
+- **Load disaggregation** — `disaggregate.disaggregate_load`: baseload / weather / other split.
+  [DISAGGREGATE.md](DISAGGREGATE.md).
+
+## Advisory & synthesis
+
+Read-only, human-in-the-loop layers on top of the findings:
+- **ASO** — `aso.recommend` / `recommend_findings`: an actionable finding → a suggested setpoint/
+  sequence change, grounded (cites the rule + G36/PNNL), never a BAS command. [ASO.md](ASO.md).
+- **Action plan** — `actionplan.build_action_plan`: findings + `fault_economics` ($/yr) + `aso`,
+  ranked worst-dollars-first; embeds in the audit report + config runs. [ACTIONPLAN.md](ACTIONPLAN.md).
+- **Health scorecard** — `scorecard.build_scorecard`: per-category scores + an overall A–F grade.
+  [SCORECARD.md](SCORECARD.md).
 
 ## Storage
 
@@ -160,12 +200,16 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
   metrics export (`export_findings`: CSV / Parquet / JSON). All opt-in, from the findings layer —
   never writing to the BAS. Flags: `channel`, `min_severity`, `dedupe`, `dry_run`, `format`,
   `flatten_metrics`. See **[INTEGRATIONS.md](INTEGRATIONS.md)**.
-- **Charts + dashboard** — `charts`: heating-vs-cooling scatter, reheat boxes, zones, load carpet,
-  CUSUM, energy signature, plus the visualization MVP — ingest-readiness ribbon (`readiness`),
-  fault-annotated multi-trend (`multitrend`), and data-quality dashboard (`quality_dashboard`).
-  `report.dashboard.build_dashboard` assembles them into one self-contained HTML (matplotlib inlined,
-  no web framework; `findings`/`spans` shade fault violations). Flags: `sections` (A/B/E/I),
-  `rank_by`, `top_n`, `normalize`. See **[VISUALIZATION.md](VISUALIZATION.md)**.
+- **Charts + dashboard** — the full **visualization pattern catalog A–J**: readiness ribbon (A),
+  fault-annotated multi-trend (B), load carpet (E), data-quality dashboard (I), OAT cloud-shape
+  scatter (D, `oat_scatter`), templated diagnostic scatters (G, `diagnostic`), **rules as a chart
+  engine** (J, `evidence` — every rule renders its own proof), cohort small-multiples (C, `cohort`),
+  M&V savings with uncertainty (H, `savings`), load profiles / load-duration curves (F,
+  `loadprofile_chart`), plus the legacy scatters/CUSUM/energy-signature. `report.build_dashboard`
+  assembles them into one self-contained HTML (matplotlib inlined, no web framework), embeds each
+  finding's evidence (`rules=`), and offers a brush-able inline-SVG scatter (`interactive=True`).
+  Flags: `sections`, `rank_by`, `top_n`, `normalize`, `rules`, `evidence`, `interactive`. See
+  **[VISUALIZATION.md](VISUALIZATION.md)**.
 - **Read-only API** — `api.server` (`python -m camber.api.server <store> [port]`): GET
   `/about` `/health` `/sites` `/points` `/history`. Env: `CAMBER_STORE` / `CAMBER_API_HOST` /
   `CAMBER_API_PORT`.

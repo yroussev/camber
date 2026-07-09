@@ -236,3 +236,24 @@ def test_run_config_no_gate_still_fires_on_bad_sensor(tmp_path):
     simul = [f for f in res.findings if f.rule == "simultaneous_heat_cool"]
     assert len(simul) == 1
     assert not simul[0].metrics.get("declined")               # ran, did not decline
+
+
+def test_run_config_html_action_plan_toggle(tmp_path):
+    folder = str(tmp_path / "trends")
+    _make_site(folder)
+    base = {
+        "site": "TestHQ",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": ["simultaneous_heat_cool"],
+    }
+    # recommend=True -> the HTML carries the advisory action plan
+    cfg = {**base, "report": {"level": 2, "out_html": str(tmp_path / "rich.html"),
+                              "recommend": True, "price": {"electricity_per_kwh": 0.15}}}
+    run_config(cfg, base_dir=str(tmp_path))
+    assert "Recommended actions" in open(tmp_path / "rich.html").read()
+    # default -> no action plan section
+    cfg2 = {**base, "report": {"level": 2, "out_html": str(tmp_path / "plain.html")}}
+    run_config(cfg2, base_dir=str(tmp_path))
+    assert "Recommended actions" not in open(tmp_path / "plain.html").read()

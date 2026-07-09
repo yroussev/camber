@@ -125,8 +125,37 @@ class AuditReport:
             L += [f"  - {c}" for c in self.caveats]
         return "\n".join(L)
 
-    def to_html(self) -> str:
-        """Render the audit report as an HTML fragment."""
+    def _evidence_html(self, ranked, rules, frames) -> str:
+        """Pattern J: render each actionable finding's evidence chart, using per-equipment frames.
+
+        ``frames`` is ``{equip: role-frame}`` and ``rules`` a Registry / {name: rule} / iterable;
+        a finding renders evidence only when its rule exposes an ``evidence()`` hook and its
+        equipment has a frame. Shares the render loop with the dashboard.
+        """
+        from .dashboard import _rules_map, render_evidence_blocks
+
+        rmap = _rules_map(rules)
+        if not rmap or not frames:
+            return ""
+        return render_evidence_blocks(ranked, rmap, frames.get)
+
+    def action_plan(self, *, loads=None, price=None, params=None, aso_params=None,
+                    min_severity: str = "warn"):
+        """Ranked action plan (finding + estimated $/yr + advisory recommendation) for the report's
+        findings, worst-dollars-first. See :func:`camber.actionplan.build_action_plan`."""
+        from ..actionplan import build_action_plan
+        return build_action_plan(self.findings, loads=loads, price=price, params=params,
+                                 aso_params=aso_params, min_severity=min_severity)
+
+    def to_html(self, *, rules=None, frames=None, recommend: bool = False,
+                loads=None, price=None) -> str:
+        """Render the audit report as an HTML fragment.
+
+        Pattern J — pass ``rules`` (a Registry / {name: rule} / iterable) and ``frames``
+        (``{equip: role-frame}``) to embed each actionable finding's evidence chart beneath the
+        findings table. ``recommend=True`` appends a ranked **action plan** ($/yr + advisory
+        recommendation per finding; ``loads``/``price`` feed the cost estimate).
+        """
         e = _html.escape
         parts = [f"<h1>ASHRAE Std-211 Level {self.level} Audit &mdash; {e(self.building)}</h1>"]
         if self.climate_zone:
@@ -155,6 +184,18 @@ class AuditReport:
                 parts.append(f"<tr><td>{r.rank}</td><td>{e(r.severity)}</td>"
                              f"<td>{rule}</td><td>{eq}</td><td>{summ}</td></tr>")
             parts.append("</table>")
+            if rules is not None and frames is not None:
+                imgs = self._evidence_html(rf, rules, frames)
+                if imgs:
+                    parts.append("<h2>Finding evidence</h2>" + imgs)
+        if recommend and self.findings:
+            from ..actionplan import action_plan_html
+            items = self.action_plan(loads=loads, price=price)
+            if items:
+                # only claim dollar-ranking when at least one item is actually costed
+                ranked_by = "$/yr" if any(getattr(i, "costed", False) for i in items) else "severity"
+                parts.append(f"<h2>Recommended actions (ranked by {ranked_by})</h2>"
+                             + action_plan_html(items))
         parts.append("<h2>Energy Conservation Measures</h2>")
         parts.append("<table border='1' cellpadding='4'><tr><th>#</th><th>Priority</th>"
                      "<th>Measure</th><th>System</th><th>Finding</th>"

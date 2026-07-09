@@ -28,11 +28,7 @@ def _align(load_kw: pd.Series, factor):
     return df
 
 
-def _interval_hours(index: pd.DatetimeIndex) -> float:
-    if len(index) < 2:
-        return 1.0
-    deltas = np.diff(pd.DatetimeIndex(index).view("int64")) / 3.6e12
-    return float(np.median(deltas)) if len(deltas) else 1.0
+from .timegrid import interval_hours as _interval_hours
 
 
 @dataclass
