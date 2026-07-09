@@ -49,7 +49,11 @@ def regularize(obj, *, dedupe: str = "first", sort: bool = True):
         return out
     if dedupe in ("first", "last"):
         return out[~idx.duplicated(keep=dedupe)]
-    return out.groupby(level=0).mean()
+    # "mean": average numeric duplicates, keep the first value of any non-numeric column
+    g = out.groupby(level=0)
+    if isinstance(out, pd.Series):
+        return g.mean() if pd.api.types.is_numeric_dtype(out) else g.first()
+    return g.agg(lambda s: s.mean() if pd.api.types.is_numeric_dtype(s) else s.iloc[0])
 
 
 def localize(index, tz, *, ambiguous="infer", nonexistent="shift_forward") -> pd.DatetimeIndex:
@@ -61,7 +65,12 @@ def localize(index, tz, *, ambiguous="infer", nonexistent="shift_forward") -> pd
     idx = pd.DatetimeIndex(index)
     if idx.tz is not None:
         return idx.tz_convert(tz)
-    return idx.tz_localize(tz, ambiguous=ambiguous, nonexistent=nonexistent)
+    try:
+        return idx.tz_localize(tz, ambiguous=ambiguous, nonexistent=nonexistent)
+    except Exception:
+        # ambiguous="infer" needs a clean monotonic repeated pair; real fall-back data (a single
+        # or unsorted reading in the repeated hour) can't be inferred -> mark those NaT, don't crash
+        return idx.tz_localize(tz, ambiguous="NaT", nonexistent=nonexistent)
 
 
 def dst_anomalies(index, tz=None) -> dict:
@@ -70,7 +79,7 @@ def dst_anomalies(index, tz=None) -> dict:
     hours) for that timezone."""
     idx = pd.DatetimeIndex(index)
     out = {"duplicate_timestamps": int(idx.duplicated().sum())}
-    if tz is not None:
+    if tz is not None and idx.tz is None:      # DST ambiguity only applies to naive local data
         u = pd.DatetimeIndex(idx.unique())
         amb = u.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
         ne = u.tz_localize(tz, ambiguous=True, nonexistent="NaT")

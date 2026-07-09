@@ -59,17 +59,19 @@ def detect_anomalies(series: pd.Series, *, forecast: pd.Series | None = None, k:
         from .forecast import forecast_anomalies
         rep = forecast_anomalies(series, forecast, k=k)
         point_ts, n_point = list(rep.timestamps), rep.n_anomalies
+        denom = rep.n                       # the series∩forecast overlap the anomalies are counted over
     elif n >= 3:
         z = np.abs(_mad_z(s.to_numpy(dtype="float64")))
         mask = z > k
         point_ts = [str(t) for t, m in zip(s.index, mask) if m]
         n_point = int(mask.sum())
+        denom = n
     else:
-        point_ts, n_point = [], 0
+        point_ts, n_point, denom = [], 0, n
 
     shifts = detect_level_shifts(series, z=change_z, min_segment=min_segment)
     q = assess(series)
-    frac = n_point / n if n else 0.0
+    frac = n_point / denom if denom else 0.0
 
     if frac >= fault_frac or len(shifts) >= 2 or q.score < fault_quality:
         severity = "fault"

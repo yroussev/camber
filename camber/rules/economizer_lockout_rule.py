@@ -2,8 +2,7 @@
 
 Above the outdoor-air high limit, bringing in more outdoor air only adds cooling load. The
 economizer should hold minimum OA; a damper still modulated open in hot weather is a stuck/mis-tuned
-economizer wasting cooling energy. Counts occupied hours where OAT exceeds the high limit yet the OA
-damper is above minimum. numpy/pandas.
+economizer wasting cooling energy. Counts hours where OAT exceeds the high limit yet the OA damper is above minimum. numpy/pandas.
 """
 
 from __future__ import annotations

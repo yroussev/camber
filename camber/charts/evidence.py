@@ -80,6 +80,10 @@ def finding_evidence(rule, equip: str, frame: pd.DataFrame):
         ev = hook(equip, frame)
         if ev is not None:
             return ev
+    # fleet/aggregate rules have no single-equipment frame -> no default evidence (a shared df is
+    # not "this finding's" data); only per-equipment rules fall back to a default trend.
+    if hasattr(rule, "analyze_fleet"):
+        return None
     roles = [r for r in getattr(rule, "roles_required", ()) if r in getattr(frame, "columns", ())]
     if not roles:
         return None
