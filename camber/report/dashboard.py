@@ -43,8 +43,13 @@ def _section_image(letter, df, *, spans, carpet_col, multitrend_cols, normalize)
     elif letter == "B":
         fault_multitrend(df, multitrend_cols, spans=spans, ax=ax, normalize=normalize)
     elif letter == "E":
-        col = carpet_col or next((c for c in df.columns), None)
-        load_carpet(df[col], ax=ax, title=f"Load carpet — {col}")
+        num = df.select_dtypes(include="number")
+        col = carpet_col if carpet_col is not None else (num.columns[0] if len(num.columns) else None)
+        if col is None:
+            ax.text(0.5, 0.5, "no numeric column for a load carpet", ha="center", va="center")
+            ax.axis("off")
+        else:
+            load_carpet(df[col], ax=ax, title=f"Load carpet — {col}")
     elif letter == "I":
         quality_dashboard(df, ax=ax)
     else:

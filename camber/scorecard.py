@@ -23,7 +23,8 @@ RULE_CATEGORY = {
     "condenser_water_reset": "energy", "chw_plant_reset": "energy", "cooling_tower_approach": "energy",
     "hw_plant_deltat": "energy", "boiler_short_cycle": "energy", "boiler_summer_lockout": "energy",
     "chw_pump_dp_reset": "energy", "hw_pump_dp_reset": "energy", "night_weekend_setback": "energy",
-    "outdoor_air_fraction": "energy",
+    "outdoor_air_fraction": "energy", "economizer_high_limit": "energy",
+    "free_cooling_missed": "energy", "static_pressure_reset": "energy",
     # comfort
     "unmet_setpoint_hours": "comfort", "overcooling_min_flow": "comfort",
     "overcooling_severity": "comfort", "supply_air_control": "comfort",
