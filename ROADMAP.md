@@ -107,6 +107,25 @@ vanilla JS, no web framework). Continues the Visualizations build order past the
 Deferred to **0.4**: grounded agentic query & explanation (NL over the deterministic core, cited),
 and ML-assisted point mapping — both behind an optional, provider-agnostic seam.
 
+## Next — 0.4 (AI-assist: point mapping + grounded agent)
+
+The two deferred AI-assist tracks, built dependency-light and provider-agnostic. Both are
+**advisory-only** (never the source of truth, always auditable) and read-only toward the BAS.
+
+- [x] **ML-assisted point mapping** — `camber.mapping_assist`: suggest roles for *unmapped* tags,
+      advisory-only (a human-confirmed review list; never mutates a `MappingProvider`). A numpy/stdlib
+      `FeatureSuggester` baseline (string + unit + physical-range fit), an optional scikit-learn
+      `MLSuggester` behind the `[ml]` extra (no pretrained weights; trains on caller/synthetic labels),
+      and an `LLMSuggester` over the agent seam whose proposals are validated + re-scored
+      deterministically. See **[MAPPING-ASSIST.md](docs/MAPPING-ASSIST.md)**.
+- [x] **Grounded agentic query & explanation** — `camber.agent`: cited explanations of findings and
+      NL Q&A over the deterministic layers. A `Context` of citable `Fact`s (order-stable ids),
+      number-traceability verification, a deterministic template fallback (fully useful with **no LLM
+      wired**), and a fully **provider-agnostic** seam — no vendor named, no SDK, no network; an
+      AST guard proves it. See **[AGENT.md](docs/AGENT.md)**.
+- [ ] **Packaging & community** — conda-forge feedstock submission, MkDocs site on GitHub Pages,
+      Discussions, and the PEP-541 `camber` name request (carried from 0.3).
+
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
 
 Sharpen the "diagnosis, not just detection" edge and scale to many buildings — all shipped in

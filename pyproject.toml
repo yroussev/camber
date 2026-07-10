@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.3.0"
+version = "0.4.0"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -71,6 +71,10 @@ bacnet = ["bacpypes3>=0.0.98"]
 # optional, dynamically-imported dependency only (never vendored/bundled). camber.ingest.opcua
 # imports it lazily; the core needs none of it.
 opcua = ["asyncua>=1.0"]
+# Optional learned point-mapping backend (camber.mapping_assist.MLSuggester). scikit-learn (BSD-3).
+# Trains on the caller's / synthetic labels; ships NO pretrained weights. camber.mapping_assist
+# imports it lazily behind _require(); the numpy FeatureSuggester baseline needs none of it.
+ml = ["scikit-learn>=1.3"]
 
 [project.scripts]
 camber = "camber.cli:main"

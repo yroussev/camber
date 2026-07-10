@@ -4,6 +4,63 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.4.0] — 2026-07-10
+
+Fourth feature release. Adds the two deferred **AI-assist** tracks — **assisted point mapping** and
+a **grounded explanation & Q&A agent** — built dependency-light, **advisory-only** (never the source
+of truth, always auditable), and **read-only toward the BAS**. The LLM path is fully
+**provider-agnostic**: no vendor is named, no SDK or network client is imported, and an AST guard
+proves it; everything works with **no LLM wired** via deterministic fallbacks. Each capability ships
+option flags, a `docs/` page, and synthetic-fixture tests.
+
+### Added
+
+**Assisted point mapping** (`camber.mapping_assist`, `docs/MAPPING-ASSIST.md`)
+- `suggest_roles(token, …)` / `review_unmapped(tokens, mapping, …)` — suggest roles for **unmapped**
+  BAS tags as a human-confirmed review list; **never mutates a `MappingProvider`** (advisory boundary).
+- `FeatureSuggester` — dependency-light baseline (numpy/stdlib): tag initials + edit distance vs the
+  `Role` vocabulary, a unit-compatibility table, and physical-range fit (reusing
+  `sensorhealth.range_violation_frac`) so a role the data physically contradicts is demoted.
+- `MLSuggester` — optional learned backend behind the new **`[ml]` extra** (scikit-learn, lazy
+  `_require()`); a char-n-gram classifier trained on the caller's / synthetic labels (`fit`,
+  `from_mapping`) — **no pretrained weights** (clean-room). Predictions pass the same range gate.
+- `LLMSuggester` — reuses the agent seam (no new dependency); the model proposes roles, each is
+  validated `Role(value)` and **re-scored** via `mapping_confidence.score_token` so a
+  physically-inconsistent suggestion can't outrank a good one.
+
+**Grounded explanation & Q&A** (`camber.agent`, `docs/AGENT.md`)
+- `agent.explain(findings, …)` and `agent.ask(question, …)` — cited, plain-language explanations and
+  NL Q&A over the deterministic layers; return a `Grounded(text, cited, facts, grounded, flagged,
+  source)`.
+- `agent.context` — a **grounding whitelist**: `Fact(id, kind, equip, text, data)` + `Context` with
+  order-stable, deterministic ids (`F1`/`C1`/`R1`/…). Builders `facts_from_findings`, `facts_from_run`,
+  `facts_from_scorecard`, `facts_from_completeness` (why a rule couldn't run), `facts_from_history`
+  (**bounded stats only**, never raw series), and `facts_from_mapping`. Cost facts never fabricate a
+  dollar figure when uncosted — they state the basis.
+- `agent.verify` — grounding by **number-traceability**: an answer is grounded iff every `[id]`
+  resolves and every number it states appears in a cited fact; `strict` mode repairs (drops
+  untraceable sentences, strips unknown cites), non-strict marks only.
+- `agent.templates` — deterministic (no-LLM) `explain_from_facts` / `answer_from_facts`; trivially
+  100% grounded and the oracle the LLM path is verified against.
+- `agent.client` — the **provider-agnostic seam**: `AgentClient` wraps an injected
+  `complete(prompt, **opts) -> str` callable (`client_from_callable`, network-free `stub_client`).
+  Unwired is a valid state (falls back to templates); `generate()` raises a helpful error only when
+  actually called.
+
+**Packaging**
+- `[ml]` optional extra (`scikit-learn>=1.3`); conda recipe filled to 0.4.0 with a `run_constrained`
+  for it; a hardened MkDocs → GitHub Pages workflow (`.github/workflows/pages.yml`) + an **AI-assist**
+  docs nav group. `docs/DEPLOY.md` documents the conda-forge / Pages / community owner-actions.
+
+### Guarantees
+- `tests/test_agent_readonly_guard.py` — an AST guard over `camber/agent/*.py` + `camber/mapping_assist.py`
+  fails on any write/command/actuation symbol **and** on any LLM-provider or network import, mechanically
+  enforcing the read-only and no-vendor/no-network contracts.
+
+### Tests
+- +77 tests (913 → 990): `test_mapping_assist`, `test_agent_context`, `test_agent_verify`,
+  `test_agent_client_seam`, `test_agent_explain_ask`, `test_agent_readonly_guard`.
+
 ## [0.3.0] — 2026-07-07
 
 Third feature release. Completes the **visualization pattern catalog** (the "charts and faults are

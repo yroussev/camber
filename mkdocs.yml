@@ -29,6 +29,9 @@ nav:
       - Carbon: CARBON.md
       - Ventilation: VENTILATION.md
       - Visualization: VISUALIZATION.md
+  - AI-assist:
+      - Assisted point mapping: MAPPING-ASSIST.md
+      - Grounded explanation & Q&A: AGENT.md
   - Platform:
       - Ingest protocols: INGEST-PROTOCOLS.md
       - Ontology / interop: ONTOLOGY.md

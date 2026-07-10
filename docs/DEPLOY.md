@@ -26,14 +26,38 @@ kubectl apply -f deploy/k8s/camber-api.yaml
 The store is a `ReadOnlyMany` PVC: a separate writer (a batch job running the analysis + `ParquetStore`)
 populates it; the API pods mount it read-only.
 
-## conda-forge (skeleton)
+## conda-forge
 
-[`deploy/conda/meta.yaml`](../deploy/conda/meta.yaml) is a **recipe skeleton**, not a submission —
-`noarch: python`, the runtime deps, the `camber` entry point. If a conda-forge feedstock is pursued,
-fill `url`/`sha256` from the published PyPI sdist and submit via `staged-recipes`. Until then, install
-from PyPI: `pip install camber-toolkit`.
+[`deploy/conda/meta.yaml`](../deploy/conda/meta.yaml) is a submission-ready recipe (`noarch: python`,
+the runtime deps, the `camber` entry point, and a `run_constrained` for the optional `[ml]` extra).
+Pinned to the current version; the only field to fill is `sha256`, from the published sdist:
+
+```bash
+curl -sL https://pypi.org/pypi/camber-toolkit/0.4.0/json \
+  | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
+```
+
+Then submit via [`conda-forge/staged-recipes`](https://github.com/conda-forge/staged-recipes) (a PR
+that creates the feedstock — a **repo-owner action**). Once the feedstock exists, its bot opens
+version-bump PRs automatically on each PyPI release. Until then, install from PyPI:
+`pip install camber-toolkit`.
+
+## Docs site (GitHub Pages)
+
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) builds the MkDocs site
+(`mkdocs build --strict`) and deploys it to GitHub Pages on every push to `main` that touches `docs/`
+or `mkdocs.yml`. Enabling it is a **one-time repo-owner action**: *Settings → Pages → Source: GitHub
+Actions*. Build locally with `pip install -e .[docs] && mkdocs serve`.
 
 ## Hosted demo
 
-Not included (would need infra + a public dataset). The runnable examples on public CC-BY datasets
-(`examples/lbnl_fdd`, `examples/bdg2`) are the reproducible stand-in.
+The site can carry a self-contained demo — the runnable examples on public CC-BY datasets
+(`examples/lbnl_fdd`, `examples/bdg2`) plus a rendered site report — as static Pages content, needing
+no infrastructure beyond the Pages deploy above.
+
+## Community (repo-owner actions)
+
+- Enable **GitHub Discussions** (*Settings → Features → Discussions*).
+- Confirm the issue/PR templates surface; set repo topics/description.
+- Track the **PEP-541** request to reclaim the bare `camber` PyPI name (`camber-toolkit` remains the
+  permanent distribution name regardless).

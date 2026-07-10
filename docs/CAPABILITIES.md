@@ -1,6 +1,6 @@
 # CAMBER capabilities reference
 
-A single index of what CAMBER 0.3 does, grouped by the building-analytics layers, with the key
+A single index of what CAMBER 0.4 does, grouped by the building-analytics layers, with the key
 API, the **option flags** that tune each capability, the module, and the standard it cites.
 Deeper write-ups are linked where they exist.
 
@@ -181,6 +181,23 @@ Read-only, human-in-the-loop layers on top of the findings:
   ranked worst-dollars-first; embeds in the audit report + config runs. [ACTIONPLAN.md](ACTIONPLAN.md).
 - **Health scorecard** — `scorecard.build_scorecard`: per-category scores + an overall A–F grade.
   [SCORECARD.md](SCORECARD.md).
+
+## AI-assist (advisory, provider-agnostic)
+
+Dependency-light, advisory-only, read-only toward the BAS. The LLM path is fully **provider-agnostic**
+— no vendor named, no SDK, no network (an AST guard enforces it) — and everything works with **no LLM
+wired** via deterministic fallbacks.
+
+- **Assisted point mapping** — `mapping_assist.suggest_roles` / `review_unmapped`: suggest roles for
+  *unmapped* tags (a human-confirmed review list; never mutates a `MappingProvider`). `FeatureSuggester`
+  (numpy baseline: string + unit + physical-range fit), optional `MLSuggester` (`[ml]` extra,
+  scikit-learn, no pretrained weights), and `LLMSuggester` (agent seam; proposals validated + re-scored
+  deterministically). See **[MAPPING-ASSIST.md](MAPPING-ASSIST.md)**.
+- **Grounded explanation & Q&A** — `agent.explain` / `agent.ask`: cited, plain-language explanations
+  and NL Q&A over the findings/costs/recommendations/scorecard/completeness/history/mapping. A `Context`
+  of citable `Fact`s (order-stable ids), number-traceability verification (`agent.check`), a
+  deterministic template fallback, and an injected `complete(prompt, **opts)` seam
+  (`client_from_callable`). See **[AGENT.md](AGENT.md)**.
 
 ## Storage
 
