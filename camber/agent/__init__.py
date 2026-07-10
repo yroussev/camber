@@ -11,14 +11,18 @@ caller owns all I/O by wrapping any vendor SDK in the injected callable — mirr
 ``ingest.haystack`` transport seam. Advisory only, always auditable.
 """
 
-from .context import Fact, Context, build_context, facts_from_findings
+from .context import (
+    Fact, Context, build_context, facts_from_findings, facts_from_run, facts_from_scorecard,
+    facts_from_completeness, facts_from_history, facts_from_mapping,
+)
 from .verify import Grounded, check
 from .client import AgentClient, client_from_callable, stub_client
 from .explain import explain
 from .ask import ask
 
 __all__ = [
-    "Fact", "Context", "build_context", "facts_from_findings",
+    "Fact", "Context", "build_context", "facts_from_findings", "facts_from_run",
+    "facts_from_scorecard", "facts_from_completeness", "facts_from_history", "facts_from_mapping",
     "Grounded", "check",
     "AgentClient", "client_from_callable", "stub_client",
     "explain", "ask",

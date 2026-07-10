@@ -141,12 +141,116 @@ def facts_from_findings(findings, *, loads=None, price=None, ids: _IdGen | None 
     return out
 
 
-def build_context(findings=None, *, loads=None, price=None, site: str | None = None) -> Context:
-    """The single front door. Assemble a :class:`Context` with deterministic, order-stable ids."""
+def facts_from_run(run, *, loads=None, price=None, ids: _IdGen | None = None) -> list:
+    """Facts for a whole :class:`config.RunResult`: a run-summary fact, then all finding facts."""
+    gen = ids or _IdGen()
+    site = getattr(run, "site", "") or ""
+    n_equip = getattr(run, "equipment", 0)
+    rules_run = getattr(run, "rules_run", []) or []
+    findings = getattr(run, "findings", []) or []
+    text = (f"Run over {n_equip} equipment at '{site}': {len(rules_run)} rules executed, "
+            f"{len(findings)} findings.")
+    out = [Fact(gen.next("run"), "run", "", text,
+                {"site": site, "equipment": n_equip, "n_rules": len(rules_run),
+                 "n_findings": len(findings)})]
+    out.extend(facts_from_findings(findings, loads=loads, price=price, ids=gen))
+    return out
+
+
+def facts_from_scorecard(scorecard, *, ids: _IdGen | None = None) -> list:
+    """One overall health fact plus a fact for each category carrying a fault or warning."""
+    gen = ids or _IdGen()
+    text = (f"Overall building health: grade {scorecard.overall_grade} "
+            f"({scorecard.overall_score:.0f}/100), {scorecard.n_actionable} actionable findings.")
+    out = [Fact(gen.next("scorecard"), "scorecard", "", text, scorecard.as_dict())]
+    for cat in getattr(scorecard, "categories", []):
+        if getattr(cat, "n_faults", 0) or getattr(cat, "n_warnings", 0):
+            ctext = (f"{cat.category}: grade {cat.grade} ({cat.score:.0f}/100) — "
+                     f"{cat.n_faults} faults, {cat.n_warnings} warnings.")
+            out.append(Fact(gen.next("scorecard"), "scorecard", "", ctext, cat.as_dict()))
+    return out
+
+
+def facts_from_completeness(items, *, ids: _IdGen | None = None) -> list:
+    """A fact per equipment that is missing template-required roles — i.e. *why* a rule couldn't run."""
+    gen = ids or _IdGen()
+    out: list = []
+    for c in items:
+        missing = sorted(_role_str(r) for r in getattr(c, "missing_required", ()) or ())
+        if not missing:
+            continue
+        equip = getattr(c, "equip", "") or ""
+        text = (f"{equip or c.equip_class}: some rules cannot run — missing required "
+                f"role(s) {', '.join(missing)} for class '{c.equip_class}'.")
+        out.append(Fact(gen.next("completeness"), "completeness", equip, text, _completeness_dict(c)))
+    return out
+
+
+def facts_from_history(read_api, *, site=None, equip=None, role=None, limit=None,
+                       ids: _IdGen | None = None) -> list:
+    """Bounded per-point stats (count/min/max/mean/span) from a :class:`api.read.ReadAPI`.
+
+    Never emits raw series — only summary statistics — so the context stays small and no unbounded
+    data leaks into a prompt.
+    """
+    gen = ids or _IdGen()
+    hist = read_api.history(site=site, equip=equip, role=role, limit=limit)
+    buckets: dict = {}
+    for row in hist.get("history", []):
+        v = row.get("value")
+        if v is None:
+            continue
+        buckets.setdefault((row["equip"], row["role"]), []).append((row["ts"], v))
+    out: list = []
+    for (eq, rl), pts in buckets.items():
+        vals = [v for _, v in pts]
+        ts = [t for t, _ in pts]
+        lo, hi, mean = min(vals), max(vals), sum(vals) / len(vals)
+        text = (f"{eq}/{rl}: {len(vals)} samples, min {lo:.2f}, max {hi:.2f}, mean {mean:.2f} "
+                f"({min(ts)} to {max(ts)}).")
+        out.append(Fact(gen.next("history"), "history", eq, text,
+                        {"equip": eq, "role": rl, "count": len(vals), "min": lo, "max": hi,
+                         "mean": mean, "start": min(ts), "end": max(ts)}))
+    return out
+
+
+def facts_from_mapping(review_result, *, ids: _IdGen | None = None) -> list:
+    """Facts from a :func:`mapping_confidence.review` result: unmapped and low-confidence tokens."""
+    gen = ids or _IdGen()
+    out: list = []
+    for s in review_result.get("unmapped", []):
+        out.append(Fact(gen.next("mapping"), "mapping", "",
+                        f"Point '{s.token}' is unmapped — no role resolved.", _as_dict(s)))
+    for s in review_result.get("needs_review", []):
+        out.append(Fact(gen.next("mapping"), "mapping", "",
+                        f"Point '{s.token}' maps to {getattr(s, 'role', '?')} but needs review "
+                        f"(confidence {getattr(s, 'confidence', 0.0):.2f}).", _as_dict(s)))
+    return out
+
+
+def build_context(findings=None, *, loads=None, price=None, site: str | None = None,
+                  run=None, scorecard=None, completeness=None, read_api=None,
+                  mapping_review=None, history_query: dict | None = None) -> Context:
+    """The single front door. Assemble a :class:`Context` with deterministic, order-stable ids.
+
+    Any subset of sources may be supplied; a shared id generator keeps ids unique and stable across
+    them. When ``run`` is given, ``site`` defaults to the run's site.
+    """
     gen = _IdGen()
     facts: list = []
+    if run is not None:
+        facts.extend(facts_from_run(run, loads=loads, price=price, ids=gen))
+        site = site or getattr(run, "site", None)
     if findings:
         facts.extend(facts_from_findings(findings, loads=loads, price=price, ids=gen))
+    if scorecard is not None:
+        facts.extend(facts_from_scorecard(scorecard, ids=gen))
+    if completeness:
+        facts.extend(facts_from_completeness(completeness, ids=gen))
+    if read_api is not None:
+        facts.extend(facts_from_history(read_api, ids=gen, **(history_query or {})))
+    if mapping_review is not None:
+        facts.extend(facts_from_mapping(mapping_review, ids=gen))
     return Context(facts=facts, site=site)
 
 
@@ -173,3 +277,18 @@ def _load_for(loads, equip):
     if isinstance(loads, dict):
         return loads.get(equip)
     return loads
+
+
+def _role_str(role) -> str:
+    return getattr(role, "value", str(role))
+
+
+def _completeness_dict(c) -> dict:
+    fn = getattr(c, "as_dict", None)
+    if callable(fn):
+        return fn()
+    return {"equip": getattr(c, "equip", ""), "equip_class": getattr(c, "equip_class", ""),
+            "present": sorted(_role_str(r) for r in getattr(c, "present", ()) or ()),
+            "missing_required": sorted(_role_str(r) for r in getattr(c, "missing_required", ()) or ()),
+            "missing_optional": sorted(_role_str(r) for r in getattr(c, "missing_optional", ()) or ()),
+            "has_template": getattr(c, "has_template", False)}

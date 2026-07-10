@@ -13,8 +13,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.rules.base import Finding  # noqa: E402
 from camber.fault_economics import EquipmentLoad, EnergyPrice  # noqa: E402
-from camber.agent import build_context, Fact, Context  # noqa: E402
+from camber.scorecard import build_scorecard  # noqa: E402
+from camber.model.entities import completeness, TEMPLATES  # noqa: E402
+from camber.model.mapping import MappingProvider  # noqa: E402
+from camber.mapping_confidence import review  # noqa: E402
+from camber.agent import (  # noqa: E402
+    build_context, Fact, Context, facts_from_scorecard, facts_from_completeness,
+    facts_from_history, facts_from_mapping,
+)
 from camber.agent.context import facts_from_findings  # noqa: E402
+from camber.agent.verify import check  # noqa: E402
 
 
 def _findings():
@@ -124,3 +132,72 @@ def test_fact_is_frozen_and_serializable():
     f = Fact("F1", "finding", "AHU-1", "text", {"a": 1})
     assert f.as_dict() == {"id": "F1", "kind": "finding", "equip": "AHU-1",
                            "text": "text", "data": {"a": 1}}
+
+
+# --------------------------------------------------------------------------- other builders (step 5)
+
+class _FakeReadAPI:
+    """Duck-typed ReadAPI for facts_from_history — returns long-form rows."""
+
+    def history(self, **kw):
+        return {"history": [
+            {"ts": "2024-07-01T00:00:00", "equip": "AHU-1", "role": "oat", "value": 60.0},
+            {"ts": "2024-07-01T01:00:00", "equip": "AHU-1", "role": "oat", "value": 90.0},
+            {"ts": "2024-07-01T02:00:00", "equip": "AHU-1", "role": "oat", "value": None}],
+            "count": 3}
+
+
+def test_scorecard_facts_overall_plus_weak_categories():
+    sc = build_scorecard(_findings())
+    facts = facts_from_scorecard(sc)
+    assert facts[0].kind == "scorecard" and "grade" in facts[0].text.lower()
+    assert facts[0].data["overall_grade"] == sc.overall_grade
+
+
+def test_completeness_fact_only_when_required_role_missing():
+    tmpl = TEMPLATES["AHU"]
+    ready = completeness("AHU", list(tmpl.required))          # fully instrumented -> no fact
+    missing = completeness("AHU", list(tmpl.required)[:1])    # missing required -> a fact
+    assert facts_from_completeness([ready]) == []
+    facts = facts_from_completeness([missing])
+    assert len(facts) == 1 and facts[0].kind == "completeness"
+    assert "missing required" in facts[0].text
+
+
+def test_history_facts_are_bounded_stats_not_raw():
+    facts = facts_from_history(_FakeReadAPI())
+    assert len(facts) == 1
+    f = facts[0]
+    assert f.kind == "history" and f.data["count"] == 2       # the None sample is dropped
+    assert f.data["min"] == 60.0 and f.data["max"] == 90.0 and f.data["mean"] == 75.0
+    assert "history" not in f.data and "values" not in f.data  # never the raw series
+
+
+def test_mapping_facts_from_review():
+    mp = MappingProvider.from_dict({"aliases": {"OAT": "oat"}, "patterns": []})
+    facts = facts_from_mapping(review(["OAT", "Mystery"], mp))
+    assert any("Mystery" in f.text and "unmapped" in f.text for f in facts)
+    assert all(f.kind == "mapping" for f in facts)
+
+
+def test_unified_context_has_unique_ids_and_self_grounds():
+    sc = build_scorecard(_findings())
+    comp = completeness("AHU", list(TEMPLATES["AHU"].required)[:1])
+    mp = MappingProvider.from_dict({"aliases": {}, "patterns": []})
+    ctx = build_context(_findings(), scorecard=sc, completeness=[comp],
+                        read_api=_FakeReadAPI(), mapping_review=review(["Mystery"], mp))
+    assert len(set(ctx.ids())) == len(ctx.ids())             # ids unique across all builders
+    # every fact, cited on its own, verifies grounded (numbers traceable to itself)
+    assert all(check(f"[{f.id}] {f.text}", ctx).grounded for f in ctx.facts)
+
+
+def test_run_context_summary_and_findings():
+    class _Run:
+        site = "Demo"
+        equipment = 3
+        rules_run = ["a", "b"]
+        findings = _findings()
+    ctx = build_context(run=_Run(), price=EnergyPrice())
+    run_facts = ctx.by_kind("run")
+    assert len(run_facts) == 1 and "3 equipment" in run_facts[0].text
+    assert ctx.site == "Demo" and len(ctx.by_kind("finding")) == len(_findings())

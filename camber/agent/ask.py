@@ -14,11 +14,14 @@ from . import templates
 from .explain import _answer
 
 
-def ask(question, context=None, *, findings=None, client=None, loads=None, price=None,
+def ask(question, context=None, *, findings=None, run=None, read_api=None, scorecard=None,
+        completeness=None, mapping_review=None, client=None, loads=None, price=None,
         strict: bool = True):
-    """Answer ``question`` from ``context`` (or one built from ``findings``). Returns a grounded answer."""
+    """Answer ``question`` from ``context`` (or one built from the given sources). Grounded answer."""
     if context is None:
-        context = build_context(list(findings) if findings else None, loads=loads, price=price)
+        context = build_context(list(findings) if findings else None, run=run, read_api=read_api,
+                                scorecard=scorecard, completeness=completeness,
+                                mapping_review=mapping_review, loads=loads, price=price)
     task = ("Answer the question using only the facts above. Cite every claim with its [id]; if no "
             "fact answers it, say you don't know.")
     fallback = templates.answer_from_facts(question, context)
