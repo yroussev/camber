@@ -140,6 +140,160 @@ class FeatureSuggester:
         return "; ".join(bits) or f"weak match to {role.value}"
 
 
+def _range_fit(role: Role, series) -> tuple:
+    """Physical-range consistency of ``series`` with ``role``: ``(multiplier, fit)``.
+
+    ``fit`` is ``True`` (data inside bounds), ``False`` (data violates bounds -> ``multiplier`` < 1),
+    or ``None`` (role has no bounds or no data -> ``multiplier`` == 1). Reused by the ML/LLM tiers so a
+    physically-impossible role can't win regardless of how it was proposed.
+    """
+    if series is None or role not in PHYSICAL_BOUNDS:
+        return 1.0, None
+    rv = range_violation_frac(series, role)
+    if rv != rv:                               # NaN -> no bounds / no data
+        return 1.0, None
+    if rv > 0.1:
+        return 1.0 - min(rv, 1.0), False
+    return 1.0, True
+
+
+def _unpack_label(entry) -> tuple:
+    """Normalize a training label to ``(token, role_value, unit, series)`` (unit/series optional)."""
+    token, role = entry[0], entry[1]
+    unit = entry[2] if len(entry) > 2 else None
+    series = entry[3] if len(entry) > 3 else None
+    return token, Role(role).value, unit, series
+
+
+class MLSuggester:
+    """Optional learned suggester (scikit-learn, behind the ``[ml]`` extra; imported lazily).
+
+    A character-n-gram classifier over tag strings, trained on the caller's / synthetic labels — it
+    ships **no pretrained weights** (clean-room). Predictions are gated by the same physical-range
+    check as the baseline, so a learned guess that the data contradicts is demoted. Call :meth:`fit`
+    (or :meth:`from_mapping`) before :meth:`suggest`.
+    """
+
+    def __init__(self):
+        self._vec = None
+        self._clf = None
+        self._classes = None
+
+    @staticmethod
+    def _require():
+        try:
+            import sklearn  # noqa: F401
+        except ImportError as e:                # pragma: no cover - exercised only without the extra
+            raise ImportError(
+                "MLSuggester needs scikit-learn. Install the optional extra: "
+                "`pip install camber-toolkit[ml]`. The numpy FeatureSuggester baseline needs none "
+                "of it.") from e
+
+    def fit(self, labeled) -> "MLSuggester":
+        """Train on ``labeled = [(token, role[, unit[, series]]), ...]``. Roles validated via ``Role``."""
+        self._require()
+        from sklearn.feature_extraction.text import CountVectorizer
+        from sklearn.linear_model import LogisticRegression
+
+        rows = [_unpack_label(e) for e in labeled]
+        tokens = [" ".join(_norm(t)) or t.lower() for t, _, _, _ in rows]
+        roles = [r for _, r, _, _ in rows]
+        self._vec = CountVectorizer(analyzer="char_wb", ngram_range=(2, 4))
+        X = self._vec.fit_transform(tokens)
+        self._clf = LogisticRegression(max_iter=1000)
+        self._clf.fit(X, roles)
+        self._classes = list(self._clf.classes_)
+        return self
+
+    @classmethod
+    def from_mapping(cls, mapping: MappingProvider, *, extra=None) -> "MLSuggester":
+        """Bootstrap labels from a mapping's aliases (token->role) plus optional ``extra`` labels."""
+        labeled = [(tok, role.value) for tok, role in getattr(mapping, "aliases", {}).items()]
+        labeled += list(extra or [])
+        return cls().fit(labeled)
+
+    def suggest(self, token: str, *, series=None, unit=None, k: int = 3) -> list:
+        if self._clf is None:
+            raise RuntimeError("MLSuggester.suggest called before fit(); train it first.")
+        X = self._vec.transform([" ".join(_norm(token)) or token.lower()])
+        proba = self._clf.predict_proba(X)[0]
+        out = []
+        for role_val, p in zip(self._classes, proba):
+            role = Role(role_val)
+            mult, fit = _range_fit(role, series)
+            s = min(1.0, float(p) * mult + (0.02 if fit else 0.0))
+            if s <= 0.0:
+                continue
+            note = f"learned model (p={p:.2f})" + ("; data fits bounds" if fit else
+                                                    "; data violates bounds" if fit is False else "")
+            out.append(RoleSuggestion(token, role_val, round(s, 4), "ml", note))
+        out.sort(key=lambda x: -x.confidence)
+        return out[:k]
+
+
+class LLMSuggester:
+    """Optional suggester over the provider-agnostic agent seam — the LLM proposes, the deterministic
+    layer disposes.
+
+    Reuses a :class:`camber.agent.client.AgentClient` (no new dependency, no vendor). The model is
+    shown the tag, its unit + bounded sample stats, and the whole :class:`Role` vocabulary, and asked
+    to propose roles. Every proposal is validated ``Role(value)`` (out-of-vocab dropped) **and**
+    re-scored through :func:`mapping_confidence.score_token`, so a physically-inconsistent suggestion
+    cannot outrank a good one.
+    """
+
+    def __init__(self, client, mapping: MappingProvider | None = None):
+        self.client = client
+        self.mapping = mapping
+
+    def suggest(self, token: str, *, series=None, unit=None, k: int = 3) -> list:
+        raw = self.client.generate(_llm_prompt(token, series, unit))
+        proposed = _parse_roles(raw)
+        out, seen = [], set()
+        for role in proposed:
+            if role.value in seen:
+                continue
+            seen.add(role.value)
+            conf = _rescore(token, role, series)
+            out.append(RoleSuggestion(token, role.value, round(conf, 4), "llm",
+                                      f"LLM proposed; re-scored to {conf:.2f} for physical consistency"))
+        out.sort(key=lambda x: -x.confidence)
+        return out[:k]
+
+
+def _llm_prompt(token, series, unit) -> str:
+    vocab = ", ".join(r.value for r in Role)
+    stats = ""
+    if series is not None and len(series):
+        try:
+            import numpy as _np
+            arr = _np.asarray(series, dtype=float)
+            arr = arr[~_np.isnan(arr)]
+            if arr.size:
+                stats = f" Sample stats: min={arr.min():.2f}, max={arr.max():.2f}, mean={arr.mean():.2f}."
+        except Exception:                       # pragma: no cover - stats are best-effort
+            stats = ""
+    u = f" unit='{unit}'" if unit else ""
+    return (f"A building-automation point is tagged '{token}'.{u}{stats}\n"
+            f"Choose the most likely role(s) ONLY from this list: {vocab}.\n"
+            f"Reply with role slugs, most likely first.")
+
+
+def _parse_roles(raw: str) -> list:
+    """Roles whose slug appears in the model's reply, in order of first appearance (out-of-vocab ignored)."""
+    low = (raw or "").lower()
+    hits = [(low.index(r.value), r) for r in Role if r.value in low]
+    return [r for _, r in sorted(hits)]
+
+
+def _rescore(token, role: Role, series) -> float:
+    """Physical-consistency confidence for proposing ``role`` for ``token`` (via score_token)."""
+    from .mapping_confidence import score_token
+
+    mp = MappingProvider.from_dict({"aliases": {token: role.value}, "patterns": []})
+    return float(score_token(token, mp, series).confidence)
+
+
 def suggest_roles(token: str, mapping: MappingProvider | None = None, *, series=None, unit=None,
                   suggester=None, k: int = 3) -> list:
     """Ranked role suggestions for one ``token`` (default :class:`FeatureSuggester`)."""
