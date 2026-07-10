@@ -1,3 +1,3 @@
 """CAMBER — Commissioning, Analytics & M&V for Building Energy Re-tuning."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
