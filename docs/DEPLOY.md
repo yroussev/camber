@@ -45,7 +45,7 @@ version-bump PRs automatically on each PyPI release. Until then, install from Py
 ## Docs site (GitHub Pages)
 
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml) builds the MkDocs site
-(`mkdocs build --strict`) and deploys it to GitHub Pages on every push to `main` that touches `docs/`
+(`mkdocs build`) and deploys it to GitHub Pages on every push to `main` that touches `docs/`
 or `mkdocs.yml`. Enabling it is a **one-time repo-owner action**: *Settings → Pages → Source: GitHub
 Actions*. Build locally with `pip install -e .[docs] && mkdocs serve`.
 
