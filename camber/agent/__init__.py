@@ -12,5 +12,14 @@ caller owns all I/O by wrapping any vendor SDK in the injected callable — mirr
 """
 
 from .context import Fact, Context, build_context, facts_from_findings
+from .verify import Grounded, check
+from .client import AgentClient, client_from_callable, stub_client
+from .explain import explain
+from .ask import ask
 
-__all__ = ["Fact", "Context", "build_context", "facts_from_findings"]
+__all__ = [
+    "Fact", "Context", "build_context", "facts_from_findings",
+    "Grounded", "check",
+    "AgentClient", "client_from_callable", "stub_client",
+    "explain", "ask",
+]
