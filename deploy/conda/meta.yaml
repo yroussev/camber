@@ -1,18 +1,17 @@
-# conda-forge recipe SKELETON for camber-toolkit — NOT submitted/published.
-# A starting point if/when a conda-forge feedstock is pursued; version/sha are placeholders to be
-# filled from the PyPI sdist at submission time. See docs/DEPLOY.md.
+# conda-forge recipe for camber-toolkit. Ready to submit via staged-recipes once the {{ version }}
+# sdist is on PyPI: the only field to fill is `sha256` (from the published sdist). See docs/DEPLOY.md.
 {% set name = "camber-toolkit" %}
-{% set version = "0.2.0" %}
+{% set version = "0.4.0" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  # url + sha256 filled from the published PyPI sdist at submission:
-  #   https://pypi.io/packages/source/c/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  url: PLACEHOLDER
-  sha256: PLACEHOLDER
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  # sha256 of the published sdist; get it with:
+  #   curl -sL https://pypi.org/pypi/{{ name }}/{{ version }}/json | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
+  sha256: PLACEHOLDER  # fill from the published 0.4.0 sdist at submission time
 
 build:
   noarch: python
@@ -32,6 +31,9 @@ requirements:
     - pandas >=2.0,<3
     - matplotlib-base >=3.7
     - pyarrow >=14
+  run_constrained:
+    # optional [ml] extra — the learned point-mapping backend (camber.mapping_assist.MLSuggester)
+    - scikit-learn >=1.3
 
 test:
   imports:
