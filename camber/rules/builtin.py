@@ -16,7 +16,12 @@ from .chillerfleet_rule import ChillerStagingFleet
 from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
+from .chiller_approach_rule import ChillerApproachFouling
 from .cohort import CohortDeviation
+from .compressor_cycle_rule import CompressorShortCycle
+from .compressor_stage_rule import CompressorStaging
+from .filter_rule import FilterFouling
+from .heatpump_rule import HeatPumpDefrost
 from .condenserwater_rule import CondenserWaterReset
 from .economizer_lockout_rule import EconomizerHighLimit
 from .freecoolingmissed_rule import FreeCoolingMissed
@@ -52,7 +57,9 @@ RULE_CLASSES = [
     ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
     CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
     ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, AirflowTracking,
-    EconomizerHighLimit, StaticPressureReset, FreeCoolingMissed, ChillerStagingFleet,
+    EconomizerHighLimit, StaticPressureReset, FreeCoolingMissed,
+    CompressorShortCycle, CompressorStaging, HeatPumpDefrost, FilterFouling,
+    ChillerApproachFouling, ChillerStagingFleet,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

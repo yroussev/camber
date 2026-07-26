@@ -189,6 +189,47 @@ def _chw_reset(idx, *, faulty):
                          Role.OAT: pd.Series(oat, index=idx)}, index=idx)
 
 
+def _fine_idx(days=3):
+    return pd.date_range("2025-07-07", periods=days * 24 * 12, freq="5min")   # 5-min sampling
+
+
+def _compressor_cycle(idx, *, faulty):
+    fine = _fine_idx()
+    n = len(fine)
+    status = np.tile([1.0, 0.0], n // 2 + 1)[:n] if faulty else np.ones(n)  # 5-min on/off = many starts
+    return pd.DataFrame({Role.COMPRESSOR_STATUS: pd.Series(status, index=fine)}, index=fine)
+
+
+def _compressor_stage(idx, *, faulty):
+    fine = _fine_idx()
+    n = len(fine)
+    stage = np.tile([1.0, 2.0], n // 2 + 1)[:n] if faulty else np.full(n, 1.0)
+    return pd.DataFrame({Role.COMPRESSOR_STAGE: pd.Series(stage, index=fine)}, index=fine)
+
+
+def _heatpump(idx, *, faulty):
+    fine = _fine_idx()
+    n = len(fine)
+    if faulty:
+        rv = np.tile([1.0, 0.0], n // 2 + 1)[:n]                # reversing every 5 min = excess defrost
+    else:
+        rv = np.concatenate([np.ones(n // 2), np.zeros(n - n // 2)])   # one mode change
+    return pd.DataFrame({Role.REVERSING_VALVE_CMD: pd.Series(rv, index=fine)}, index=fine)
+
+
+def _filter(idx, *, faulty):
+    n = len(idx)
+    dp = 1.8 if faulty else 0.4                                 # above / below the 1.0 change-out
+    return pd.DataFrame({Role.FILTER_DIFF_PRESS: np.full(n, dp)}, index=idx)
+
+
+def _chiller_approach(idx, *, faulty):
+    n = len(idx)
+    cond, evap = (12.0, 9.0) if faulty else (4.0, 3.0)          # 2.4x / 2.25x design when fouled
+    return pd.DataFrame({Role.COND_APPROACH_TEMP: np.full(n, cond),
+                         Role.EVAP_APPROACH_TEMP: np.full(n, evap)}, index=idx)
+
+
 #: rule name -> its scenario builder (called with ``faulty=True/False``)
 SCENARIOS: dict = {
     "simultaneous_heat_cool": _simul,
@@ -210,6 +251,11 @@ SCENARIOS: dict = {
     "co2_ventilation": _co2,
     "dcv_verification": _dcv,
     "chw_plant_reset": _chw_reset,
+    "compressor_short_cycle": _compressor_cycle,
+    "compressor_staging": _compressor_stage,
+    "heatpump_defrost": _heatpump,
+    "filter_fouling": _filter,
+    "chiller_approach_fouling": _chiller_approach,
 }
 
 
