@@ -26,7 +26,7 @@ from camber.charts.zones_chart import (  # noqa: E402
 
 def test_cli_demo_writes_outputs(tmp_path):
     out = str(tmp_path / "out")
-    rc = cli.main(["--demo", "reheat", "--ahu", "1", "--out", out])
+    rc = cli.main(["charts", "--demo", "reheat", "--ahu", "1", "--out", out])   # 0.5: subcommand CLI
     assert rc == 0
     assert os.path.exists(os.path.join(out, "hec_summary.json"))
     pngs = [f for f in os.listdir(out) if f.endswith(".png")]

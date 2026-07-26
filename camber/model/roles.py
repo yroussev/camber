@@ -83,6 +83,22 @@ class Role(str, Enum):
     CO2 = "co2"                              # zone/space CO2 concentration (ppm)
     OUTDOOR_CO2 = "outdoor_co2"              # outdoor CO2 concentration (ppm)
 
+    # --- packaged / DX equipment (RTU, heat pump) ---
+    COMPRESSOR_STATUS = "compressor_status"      # DX compressor running (1) / off (0)
+    COMPRESSOR_STAGE = "compressor_stage"        # active DX cooling stage (0,1,2,...)
+    CONDENSER_FAN_STATUS = "condenser_fan_status"  # condenser/outdoor fan running (1) / off (0)
+    HEAT_STAGE = "heat_stage"                    # active (gas/electric) heating stage (0,1,2,...)
+    REVERSING_VALVE_CMD = "reversing_valve_cmd"  # heat-pump mode: heating (1) / cooling (0)
+
+    # --- air-side humidity / filtration ---
+    FILTER_DIFF_PRESS = "filter_diff_press"      # differential pressure across the air filter (inH2O)
+    SUPPLY_AIR_HUMIDITY = "supply_air_humidity"  # supply/discharge air relative humidity (%)
+    RETURN_AIR_HUMIDITY = "return_air_humidity"  # return air relative humidity (%)
+
+    # --- refrigerant-side chiller (fouling / charge proxies) ---
+    COND_APPROACH_TEMP = "cond_approach_temp"    # condenser approach (refrigerant - CW leaving), degF
+    EVAP_APPROACH_TEMP = "evap_approach_temp"    # evaporator approach (CHW leaving - refrigerant), degF
+
     # --- energy / power ---
     POWER = "power"                   # electric power (kW)
     ENERGY_RATE = "energy_rate"       # thermal energy rate (BTU meter)
@@ -94,7 +110,8 @@ class Role(str, Enum):
 # loader which would NaN them.
 STATUS_ROLES: frozenset = frozenset({
     Role.BOILER_STATUS, Role.OCCUPANCY, Role.WARMUP, Role.COOLDOWN, Role.ECON_CMD,
-    Role.SUPPLY_FAN_STATUS,
+    Role.SUPPLY_FAN_STATUS, Role.COMPRESSOR_STATUS, Role.CONDENSER_FAN_STATUS,
+    Role.REVERSING_VALVE_CMD,
 })
 
 
@@ -143,6 +160,16 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.OUTDOOR_RH: "outside air humidity sensor",
     Role.CO2: "zone air co2 sensor",
     Role.OUTDOOR_CO2: "outside air co2 sensor",
+    Role.COMPRESSOR_STATUS: "compressor run sensor",
+    Role.COMPRESSOR_STAGE: "compressor stage sensor",
+    Role.CONDENSER_FAN_STATUS: "condenser fan run sensor",
+    Role.HEAT_STAGE: "heating stage sensor",
+    Role.REVERSING_VALVE_CMD: "heatPump reversing valve cmd",
+    Role.FILTER_DIFF_PRESS: "filter air delta pressure sensor",
+    Role.SUPPLY_AIR_HUMIDITY: "discharge air humidity sensor",
+    Role.RETURN_AIR_HUMIDITY: "return air humidity sensor",
+    Role.COND_APPROACH_TEMP: "condenser refrig temp approach sensor",
+    Role.EVAP_APPROACH_TEMP: "evaporator refrig temp approach sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

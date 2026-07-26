@@ -64,6 +64,19 @@ PHYSICAL_BOUNDS: dict = {
     Role.CHW_FLOW: (-1.0, 1e6),
     Role.POWER: (-1.0, 1e7),
     Role.DUCT_STATIC: (-1.0, 20.0),
+    # packaged / DX status + stages (binary or small integer)
+    Role.COMPRESSOR_STATUS: (-0.1, 1.1),
+    Role.COMPRESSOR_STAGE: (-0.1, 6.1),
+    Role.CONDENSER_FAN_STATUS: (-0.1, 1.1),
+    Role.HEAT_STAGE: (-0.1, 6.1),
+    Role.REVERSING_VALVE_CMD: (-0.1, 1.1),
+    # air-side humidity / filtration
+    Role.FILTER_DIFF_PRESS: (-0.1, 10.0),
+    Role.SUPPLY_AIR_HUMIDITY: (-2.0, 102.0),
+    Role.RETURN_AIR_HUMIDITY: (-2.0, 102.0),
+    # refrigerant-side approach temperatures
+    Role.COND_APPROACH_TEMP: (-5.0, 60.0),
+    Role.EVAP_APPROACH_TEMP: (-5.0, 60.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"

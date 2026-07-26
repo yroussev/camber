@@ -201,3 +201,39 @@ def test_run_context_summary_and_findings():
     run_facts = ctx.by_kind("run")
     assert len(run_facts) == 1 and "3 equipment" in run_facts[0].text
     assert ctx.site == "Demo" and len(ctx.by_kind("finding")) == len(_findings())
+
+
+# --- portfolio / fleet facts (0.5) ------------------------------------------ #
+
+def _fleet():
+    from camber.report.fleet import build_fleet_report
+    b1 = {"site": "Building A", "eui": 120.0, "findings": _findings()}
+    b2 = {"site": "Building B", "eui": 65.0,
+          "findings": [Finding(rule="economizer_high_limit", equip="AHU-2", severity="warn",
+                               summary="econ")]}
+    return build_fleet_report([b1, b2], peer_median_eui=90.0)
+
+
+def test_facts_from_fleet_summary_and_per_building():
+    from camber.agent import facts_from_fleet
+    facts = facts_from_fleet(_fleet())
+    assert facts[0].kind == "fleet" and facts[0].equip == ""       # summary fact
+    per = [f for f in facts if f.equip]
+    assert {f.equip for f in per} == {"Building A", "Building B"}
+    assert all(f.kind == "fleet" for f in facts)
+
+
+def test_build_context_fleet_sets_multisite_and_grounds():
+    ctx = build_context(fleet=_fleet())
+    assert ctx.site == ["Building A", "Building B"]                # multi-site
+    for f in ctx.by_kind("fleet"):
+        assert check(f"[{f.id}] {f.text}", ctx).grounded          # every figure traceable
+    assert len(set(ctx.ids())) == len(ctx.ids())
+
+
+def test_build_context_runs_list_multisite():
+    class _Run:
+        def __init__(self, site): self.site = site; self.equipment = 1; self.rules_run = ["r"]; \
+            self.findings = _findings()
+    ctx = build_context(runs=[_Run("S1"), _Run("S2")], price=EnergyPrice())
+    assert ctx.site == ["S1", "S2"] and len(ctx.by_kind("run")) == 2
