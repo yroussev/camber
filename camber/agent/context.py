@@ -24,6 +24,7 @@ from ..rules.triage import group_findings
 _KIND_PREFIX = {
     "finding": "F", "cost": "C", "recommendation": "R", "rootcause": "G",
     "run": "N", "scorecard": "S", "completeness": "M", "history": "H", "mapping": "P",
+    "fleet": "L",
 }
 
 
@@ -228,9 +229,41 @@ def facts_from_mapping(review_result, *, ids: _IdGen | None = None) -> list:
     return out
 
 
-def build_context(findings=None, *, loads=None, price=None, site: str | None = None,
-                  run=None, scorecard=None, completeness=None, read_api=None,
-                  mapping_review=None, history_query: dict | None = None) -> Context:
+def facts_from_fleet(fleet_report, *, ids: _IdGen | None = None) -> list:
+    """Portfolio facts from a :class:`report.FleetReport`: a fleet-summary fact + one per building.
+
+    Enables grounded portfolio-wide triage ("which building is worst / wastes the most?"). Every figure
+    (EUI, fault counts, $/yr) is in the fact text so :func:`verify.check` keeps portfolio answers
+    grounded. Per-building facts carry the site name in ``equip`` so equipment/site routing resolves.
+    """
+    gen = ids or _IdGen()
+    fr = fleet_report
+    buildings = getattr(fr, "buildings", []) or []
+    parts = [f"Fleet of {len(buildings)} buildings"]
+    if getattr(fr, "peer_median_eui", None):
+        parts.append(f"peer-median EUI {fr.peer_median_eui:g} kBtu/ft2/yr")
+    if getattr(fr, "total_annual_cost_usd", None) is not None:
+        parts.append(f"estimated recoverable waste ${fr.total_annual_cost_usd:,.0f}/yr fleet-wide")
+    out = [Fact(gen.next("fleet"), "fleet", "", "; ".join(parts) + ".",
+                {"n_buildings": len(buildings),
+                 "peer_median_eui": getattr(fr, "peer_median_eui", None),
+                 "total_annual_cost_usd": getattr(fr, "total_annual_cost_usd", None)})]
+    for b in buildings:
+        bits = [f"{b.site}:"]
+        if b.eui is not None:
+            bits.append(f"EUI {b.eui:g} kBtu/ft2/yr")
+        if b.pct_vs_median is not None:
+            bits.append(f"{b.pct_vs_median:+.0f}% vs peer median")
+        bits.append(f"{b.n_fault} faults, {b.n_warn} warnings")
+        if b.annual_cost_usd is not None:
+            bits.append(f"${b.annual_cost_usd:,.0f}/yr recoverable")
+        out.append(Fact(gen.next("fleet"), "fleet", b.site, " ".join(bits) + ".", _as_dict(b)))
+    return out
+
+
+def build_context(findings=None, *, loads=None, price=None, site=None,
+                  run=None, runs=None, fleet=None, scorecard=None, completeness=None,
+                  read_api=None, mapping_review=None, history_query: dict | None = None) -> Context:
     """The single front door. Assemble a :class:`Context` with deterministic, order-stable ids.
 
     Any subset of sources may be supplied; a shared id generator keeps ids unique and stable across
@@ -238,9 +271,16 @@ def build_context(findings=None, *, loads=None, price=None, site: str | None = N
     """
     gen = _IdGen()
     facts: list = []
+    if fleet is not None:
+        facts.extend(facts_from_fleet(fleet, ids=gen))
+        site = site or [b.site for b in getattr(fleet, "buildings", []) or []]
     if run is not None:
         facts.extend(facts_from_run(run, loads=loads, price=price, ids=gen))
         site = site or getattr(run, "site", None)
+    for r in (runs or []):
+        facts.extend(facts_from_run(r, loads=loads, price=price, ids=gen))
+    if runs and site is None:
+        site = [getattr(r, "site", None) for r in runs]
     if findings:
         facts.extend(facts_from_findings(findings, loads=loads, price=price, ids=gen))
     if scorecard is not None:
