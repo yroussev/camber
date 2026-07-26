@@ -73,6 +73,14 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   locked out), `free_cooling_missed` (mechanical cooling ran while OAT was cool enough for free),
   `static_pressure_reset` (duct-static setpoint that doesn't trim with demand). Flags: `high_limit_f`,
   `min_damper`, `min_range_inwc`.
+- **Packaged / DX & refrigerant-side** (`docs/FDD-DX.md`) — `compressor_short_cycle` and
+  `compressor_staging` (RTU/DX cycling + staging), `heatpump_defrost` (excess reversing-valve
+  cycling), `filter_fouling` (filter ΔP at/above change-out), and `chiller_approach_fouling`
+  (condenser/evaporator approach-temperature degradation — refrigerant-side fouling without
+  refrigerant-pressure sensors). New equipment templates: **RTU, HeatPump/VRF, DOAS, FCU**.
+- **G36 §5.16.14 engine** — `fdd_g36.run_g36_afdd` scores AHU fault conditions **FC1–FC15** with
+  operating-state gating; cross-validated vs open-fdd and accuracy-scored in the synthetic harness
+  ([VALIDATION.md](VALIDATION.md)).
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference), `mapping_confidence`. The runner's `min_trust` flag makes a rule decline when its
@@ -198,6 +206,9 @@ wired** via deterministic fallbacks.
   of citable `Fact`s (order-stable ids), number-traceability verification (`agent.check`), a
   deterministic template fallback, and an injected `complete(prompt, **opts)` seam
   (`client_from_callable`). See **[AGENT.md](AGENT.md)**.
+- **Portfolio triage** — `agent.facts_from_fleet` builds grounded facts from a `report.FleetReport`
+  (per-building EUI / faults / recoverable $), and `build_context(fleet=…)` makes a multi-site
+  context, so `ask`/`explain` answer portfolio-wide ("which building is worst?").
 
 ## Storage
 
@@ -235,6 +246,8 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
 
 - **Config-driven runs** — `config`: one JSON config (source → mapping → equipment → rules →
   report) runs a whole analysis: `python -m camber.config run.json`.
+- **CLI** — the `camber` console script: `run` / `report` / `explain` / `ask` / `fleet` / `charts`
+  subcommands, with a vendor-neutral `--llm-cmd` seam for the agent. See **[CLI.md](CLI.md)**.
 - **Plugins** — `plugins`: third-party rules / ingest adapters / report formats discovered via
   Python entry points (`camber.rules` / `camber.adapters` / `camber.reports`) or registered
   in-process, duck-typed against the existing protocols with per-plugin error isolation. See
