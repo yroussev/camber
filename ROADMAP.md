@@ -107,7 +107,7 @@ vanilla JS, no web framework). Continues the Visualizations build order past the
 Deferred to **0.4**: grounded agentic query & explanation (NL over the deterministic core, cited),
 and ML-assisted point mapping — both behind an optional, provider-agnostic seam.
 
-## Next — 0.4 (AI-assist: point mapping + grounded agent)
+## Delivered — v0.4.0 (AI-assist: point mapping + grounded agent)
 
 The two deferred AI-assist tracks, built dependency-light and provider-agnostic. Both are
 **advisory-only** (never the source of truth, always auditable) and read-only toward the BAS.
@@ -125,6 +125,34 @@ The two deferred AI-assist tracks, built dependency-light and provider-agnostic.
       AST guard proves it. See **[AGENT.md](docs/AGENT.md)**.
 - [ ] **Packaging & community** — conda-forge feedstock submission, MkDocs site on GitHub Pages,
       Discussions, and the PEP-541 `camber` name request (carried from 0.3).
+
+## Delivered — v0.5.0 (deepen FDD + validation; agent CLI + portfolio)
+
+Validation-led: prove the existing suite, then broaden equipment coverage and make the agent
+reachable from the terminal.
+
+- [x] **FDD accuracy — prove the whole suite** — `camber.faultlab` + `examples/synthetic_fdd`: a
+      deterministic synthetic fault-injection harness scores **24 of 33 single-equipment rules** at
+      100% TPR / 0% FPR (up from 2 in the LBNL benchmark), plus a **G36 FC1–FC15** engine harness;
+      CI-gated against a committed baseline with an honest scored-vs-fixture coverage table. The
+      real-data LBNL benchmark stays for external validity. See **[VALIDATION.md](docs/VALIDATION.md)**.
+- [x] **Packaged / DX & refrigerant-side FDD** — new roles (compressor/DX/humidity/heat-pump/approach)
+      + templates (**RTU, HeatPump/VRF, DOAS, FCU**) + rules (`compressor_short_cycle`,
+      `compressor_staging`, `heatpump_defrost`, `filter_fouling`, `chiller_approach_fouling`). See
+      **[FDD-DX.md](docs/FDD-DX.md)**.
+- [x] **Agent CLI** — the `camber` console script gains `run` / `report` / `explain` / `ask` / `fleet`
+      subcommands (legacy AHU charts under `charts`), with a vendor-neutral `--llm-cmd` seam. See
+      **[CLI.md](docs/CLI.md)**.
+- [x] **Portfolio triage** — `agent.facts_from_fleet` + multi-site context: grounded portfolio-wide
+      Q&A ("which building is worst?").
+
+## Next — 0.6
+
+- [ ] **IPMVP Option D — calibrated simulation** M&V (the one remaining IPMVP boundary; A/B/C ship).
+- [ ] **Broaden the labeled FDD benchmark** — a second public labeled dataset to accuracy-score more
+      of the rules currently fixture-only.
+- [ ] **Packaging & community** (carried) — conda-forge feedstock, Pages enablement, Discussions,
+      PEP-541 `camber` name.
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
 
@@ -231,12 +259,14 @@ fault-lifecycle-at-scale, and the plugin API also landed in 0.2.0.)
 
 - [~] **Interactive dashboards / web UI** — the self-contained HTML dashboard (A/B/E/I + evidence
       + a brush-able scatter) shipped in 0.2/0.3; a live web UI with cross-panel linking remains.
-- [ ] **Agentic query & triage** — natural-language questions over the model and
+- [x] **Agentic query & triage** — natural-language questions over the model and
       history, and plain-language fault explanations — strictly grounded in the
       deterministic layers, citing the rule + data behind every claim (never the
-      source of truth, always auditable). *(Targeted for 0.4.)*
-- [ ] **Automated system optimization (ASO) hooks** — from diagnosis to suggested
-      setpoint/sequence changes (advisory, human-in-the-loop).
+      source of truth, always auditable). Shipped in **0.4.0** (`camber.agent`), with a
+      CLI + portfolio triage in **0.5.0**.
+- [x] **Automated system optimization (ASO) hooks** — from diagnosis to suggested
+      setpoint/sequence changes (advisory, human-in-the-loop). Shipped in **0.3.0**
+      (`camber.aso` + `camber.actionplan`).
 - [x] **Real-time / streaming** — online M&V + online FDD on live feeds (0.2.0).
 - [x] **Fault lifecycle at scale** — persistent store + assignment/SLA/aging (0.2.0).
 - [x] **Plugin API** — entry-point + in-process extension points (0.2.0).

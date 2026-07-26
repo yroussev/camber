@@ -22,6 +22,7 @@ nav:
   - Architecture: ARCHITECTURE.md
   - Ecosystem: ECOSYSTEM.md
   - Analytics:
+      - Packaged / DX FDD: FDD-DX.md
       - M&V: MANDV.md
       - Streaming / online: STREAMING.md
       - Forecasting: FORECAST.md
@@ -33,6 +34,7 @@ nav:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md
   - Platform:
+      - CLI: CLI.md
       - Ingest protocols: INGEST-PROTOCOLS.md
       - Ontology / interop: ONTOLOGY.md
       - Integrations: INTEGRATIONS.md
