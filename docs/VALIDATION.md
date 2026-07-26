@@ -39,6 +39,22 @@ modulating-valve **leak detector under-fires** — gaps the benchmark *measures*
 than hides. The pooled interval is the defensible headline; the small-n per-family
 numbers are reported with their uncertainty.
 
+## FDD accuracy — synthetic whole-suite harness
+
+LBNL's public data labels only a handful of AHU fault modes, so it can accuracy-score only a few
+detectors. To measure the **rest** of the suite, `camber.faultlab` injects each rule's target fault
+into a role-frame (a labeled positive) and a matching fault-free frame (a negative), and
+`examples/synthetic_fdd/benchmark.py` scores the whole registry with the same `camber.eval` framework —
+deterministically, with no download, gated in CI against a committed baseline
+(`tests/test_faultlab.py`).
+
+Current coverage: **24 of the 33 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+their injected faults); the remaining 9 are honestly reported as *fixture-only* (unit-tested but no
+labeled scenario yet), and the 5 fleet rules are scored separately. A companion harness scores the
+**G36 FC1–FC15 engine** over 6 representative fault conditions. The runner prints a scored-vs-fixture
+coverage table so the credibility story is explicit rather than implied. This complements — does not
+replace — the real-data LBNL benchmark above (external validity on real equipment).
+
 ## Cross-validation vs an independent implementation
 
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the

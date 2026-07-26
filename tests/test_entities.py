@@ -119,3 +119,41 @@ def test_runnable_handles_rule_without_optional_attr():
     res = runnable_rules({Role.POWER}, [Bare()])
     assert res[0].can_run
     assert res[0].missing_optional == frozenset()
+
+
+# --- 0.5 packaged / DX / DOAS / FCU templates -------------------------------- #
+
+def test_new_equipment_templates_registered():
+    for cls in ("RTU", "HeatPump", "DOAS", "FCU"):
+        assert template_for(cls) is not None, f"{cls} template missing"
+
+
+def test_rtu_completeness_gates_on_dx():
+    c = completeness("RTU", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS})
+    assert c.ready and c.missing_required == frozenset()
+    c2 = completeness("RTU", {Role.SUPPLY_AIR_TEMP})           # no compressor signal
+    assert not c2.ready and Role.COMPRESSOR_STATUS in c2.missing_required
+
+
+def test_heatpump_requires_reversing_valve():
+    ready = completeness("HeatPump", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS,
+                                      Role.REVERSING_VALVE_CMD})
+    assert ready.ready
+    miss = completeness("HeatPump", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS})
+    assert not miss.ready and Role.REVERSING_VALVE_CMD in miss.missing_required
+
+
+def test_doas_requires_oa_airflow():
+    assert completeness("DOAS", {Role.SUPPLY_AIR_TEMP, Role.OA_AIRFLOW}).ready
+    assert not completeness("DOAS", {Role.SUPPLY_AIR_TEMP}).ready
+
+
+def test_fcu_is_distinct_from_vav_template():
+    # FCU is now its own template, not the VAV alias
+    assert template_for("FCU").required == frozenset({Role.SPACE_TEMP})
+    assert template_for("FCU").required != template_for("VAV").required
+
+
+def test_chiller_template_carries_approach_temps():
+    exp = template_for("Chiller").expected()
+    assert Role.COND_APPROACH_TEMP in exp and Role.EVAP_APPROACH_TEMP in exp

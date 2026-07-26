@@ -150,7 +150,8 @@ _TEMPLATE_LIST = (
         "Chiller",
         required=frozenset({Role.POWER, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP,
                             Role.CHW_FLOW}),
-        optional=frozenset({Role.CHW_SUPPLY_TEMP_SP, Role.OAT, Role.ENERGY_RATE}),
+        optional=frozenset({Role.CHW_SUPPLY_TEMP_SP, Role.OAT, Role.ENERGY_RATE,
+                            Role.COND_APPROACH_TEMP, Role.EVAP_APPROACH_TEMP}),
     ),
     EquipTemplate(
         "CoolingTower",
@@ -162,6 +163,42 @@ _TEMPLATE_LIST = (
         "Meter",
         required=frozenset({Role.POWER}),
         optional=frozenset({Role.ENERGY_RATE}),
+    ),
+    EquipTemplate(
+        "RTU",   # packaged rooftop unit: DX cooling + optional gas/electric heat + economizer
+        required=frozenset({Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS}),
+        optional=frozenset({
+            Role.COMPRESSOR_STAGE, Role.CONDENSER_FAN_STATUS, Role.HEAT_STAGE,
+            Role.OA_DAMPER, Role.ECON_CMD, Role.OAT, Role.RETURN_AIR_TEMP,
+            Role.MIXED_AIR_TEMP, Role.SUPPLY_FAN_STATUS, Role.SUPPLY_AIR_TEMP_SP,
+            Role.FILTER_DIFF_PRESS,
+        }),
+    ),
+    EquipTemplate(
+        "HeatPump",   # air-source heat pump / VRF: reversible DX
+        required=frozenset({Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS,
+                            Role.REVERSING_VALVE_CMD}),
+        optional=frozenset({
+            Role.COMPRESSOR_STAGE, Role.CONDENSER_FAN_STATUS, Role.OAT, Role.SPACE_TEMP,
+            Role.SUPPLY_FAN_STATUS, Role.FILTER_DIFF_PRESS,
+        }),
+    ),
+    EquipTemplate(
+        "DOAS",   # dedicated outdoor-air system (ERV/energy recovery via optional roles)
+        required=frozenset({Role.SUPPLY_AIR_TEMP, Role.OA_AIRFLOW}),
+        optional=frozenset({
+            Role.SUPPLY_AIR_HUMIDITY, Role.RETURN_AIR_HUMIDITY, Role.HEAT_VALVE,
+            Role.COOL_VALVE, Role.ECON_CMD, Role.OAT, Role.SUPPLY_FAN_STATUS,
+            Role.FILTER_DIFF_PRESS,
+        }),
+    ),
+    EquipTemplate(
+        "FCU",   # fan-coil unit (distinct template; previously only aliased VAV)
+        required=frozenset({Role.SPACE_TEMP}),
+        optional=frozenset({
+            Role.HEAT_VALVE, Role.COOL_VALVE, Role.SUPPLY_FAN_STATUS, Role.AIRFLOW,
+            Role.OCCUPANCY, Role.FILTER_DIFF_PRESS,
+        }),
     ),
 )
 

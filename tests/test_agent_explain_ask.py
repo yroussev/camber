@@ -104,3 +104,25 @@ def test_ask_unknown_topic_is_honest_and_grounded():
     ctx = build_context(None)
     g = ask("what is the airspeed of a swallow?", ctx)
     assert g.grounded and "don't know" in g.text.lower()
+
+
+# --- portfolio triage (0.5) -------------------------------------------------- #
+
+def _fleet_ctx():
+    from camber.report.fleet import build_fleet_report
+    from camber.agent import build_context
+    fr = build_fleet_report(
+        [{"site": "Building A", "eui": 120.0, "findings": _findings()},
+         {"site": "Building B", "eui": 65.0, "findings": []}],
+        peer_median_eui=90.0)
+    return build_context(fleet=fr)
+
+
+def test_ask_portfolio_worst_building_is_grounded():
+    g = ask("which building is worst?", _fleet_ctx())
+    assert g.grounded and g.source == "template" and "[L" in g.text
+
+
+def test_ask_scopes_to_named_building():
+    g = ask("tell me about Building A", _fleet_ctx())
+    assert g.grounded and "Building A" in g.text and "Building B" not in g.text

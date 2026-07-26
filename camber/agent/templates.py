@@ -42,6 +42,8 @@ def explain_from_facts(context) -> str:
 _COST_WORDS = ("cost", "$", "dollar", "save", "saving", "waste", "energy", "kwh", "expensive")
 _FIX_WORDS = ("recommend", "fix", "do", "action", "repair", "correct", "resolve", "should")
 _CAUSE_WORDS = ("cause", "root", "why", "reason", "because", "driver")
+_FLEET_WORDS = ("fleet", "portfolio", "building", "buildings", "worst", "best", "eui",
+                "efficient", "efficiency", "rank", "across")
 
 
 def _mentioned_equips(question, context) -> list:
@@ -74,8 +76,12 @@ def answer_from_facts(question: str, context) -> str:
     def _kind(kind):
         return [f for f in scope if f.kind == kind]
 
-    if any(w in q for w in _COST_WORDS):
-        facts = _kind("cost")
+    fleet_facts = _kind("fleet")
+    if fleet_facts and (any(w in q for w in _FLEET_WORDS) or not equips):
+        # a portfolio question (or any question when the context is fleet-level) -> fleet facts
+        facts = fleet_facts
+    elif any(w in q for w in _COST_WORDS):
+        facts = _kind("cost") or fleet_facts
     elif any(w in q for w in _FIX_WORDS):
         facts = _kind("recommendation")
     elif any(w in q for w in _CAUSE_WORDS):
