@@ -4,6 +4,53 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.5.0] — 2026-07-26
+
+Fifth feature release. **Validation-led**: prove the existing FDD suite, then broaden equipment
+coverage, and make the 0.4 grounded agent reachable from the terminal. Everything stays read-only
+toward the BAS, dependency-light, clean-room/citable, with synthetic-fixture tests + a `docs/` page per
+capability. IPMVP Option D (calibrated simulation) is deferred to 0.6.
+
+### Added
+
+**FDD accuracy — prove the whole suite** (`camber.faultlab`, `examples/synthetic_fdd`, `docs/VALIDATION.md`)
+- A deterministic synthetic fault-injection harness that scores the registry: each rule's target fault
+  is injected (a labeled positive) alongside a fault-free frame (a negative), scored with the existing
+  `camber.eval` LBNL framework. **24 of 33 single-equipment rules** are now accuracy-scored at 100% TPR
+  / 0% FPR (up from 2 in the LBNL benchmark); the remaining 9 are honestly reported as fixture-only.
+- A **G36 §5.16.14 FC1–FC15** engine harness (6 representative fault conditions, all detected, clean
+  quiet). Runner (`--json/--gate/--update-baseline`) + committed baseline, gated in normal CI
+  (`tests/test_faultlab.py`) and the benchmark workflow (no download). Honest scored-vs-fixture
+  coverage table.
+
+**Packaged / DX & refrigerant-side FDD** (`docs/FDD-DX.md`)
+- 10 new roles: `compressor_status`/`compressor_stage`, `condenser_fan_status`, `heat_stage`,
+  `reversing_valve_cmd`, `filter_diff_press`, `supply/return_air_humidity`,
+  `cond/evap_approach_temp` — each with `PHYSICAL_BOUNDS` + a Haystack hint.
+- 4 equipment templates: **RTU**, **HeatPump** (VRF), **DOAS** (ERV via optional roles), and **FCU**
+  (now distinct from the VAV alias).
+- 5 rules: `compressor_short_cycle`, `compressor_staging`, `heatpump_defrost`, `filter_fouling`, and
+  `chiller_approach_fouling` (condenser/evaporator approach-temperature degradation — the
+  refrigerant-side indicator that needs no refrigerant-pressure instrumentation).
+
+**Agent CLI** (`camber.cli`, `docs/CLI.md`)
+- The `camber` console script becomes a subcommand CLI: `run`, `report`, `explain`, `ask`, `fleet`,
+  and `charts`. `explain`/`ask` are grounded and useful with no LLM; `--llm-cmd` wires any model via a
+  **vendor-neutral** shell seam (prompt on stdin → completion on stdout) whose subprocess wrapper lives
+  in the CLI so `camber.agent` stays pure.
+
+**Portfolio triage** (`camber.agent`)
+- `facts_from_fleet(FleetReport)` (a `fleet` fact kind) and multi-site `Context`
+  (`build_context(fleet=…, runs=…)`) enable grounded portfolio-wide Q&A ("which building is worst?").
+
+### Changed
+- **BREAKING (CLI):** the legacy top-level `--csv`/`--demo` AHU heating-vs-cooling charts now live under
+  `camber charts` (e.g. `python -m camber.cli charts --demo reheat`).
+
+### Tests
+- +41 tests (990 → 1031): `test_faultlab`, `test_new_roles`, `test_dx_rules`, `test_cli`, plus template
+  completeness and portfolio-context additions.
+
 ## [0.4.0] — 2026-07-10
 
 Fourth feature release. Adds the two deferred **AI-assist** tracks — **assisted point mapping** and
