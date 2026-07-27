@@ -4,6 +4,38 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.7.0] — 2026-07-27
+
+Seventh release — **IPMVP Option D (calibrated simulation)**, the last remaining IPMVP boundary.
+Dependency-light (numpy only), read-only toward the BAS, clean-room (ISO 13790 simple-hourly / ASHRAE
+inverse-modeling lineage), synthetic-fixture tested. **CAMBER now covers IPMVP Options A/B/C/D.**
+
+### Added
+- **`camber.mandv.rc_model`** — a forward, schedule-driven **1R1C grey-box** building model.
+  `RCModel(ua_eff, gain_eff, tau).predict(oat, schedule)` returns hourly HVAC energy and can be run under
+  a counterfactual (as-corrected) control — the capability the inverse models (A/B/C) lack.
+  `daily_schedule(...)` builds an occupied/setback control schedule.
+- **`calibrate(oat, schedule, metered_energy)`** — mirrors the change-point fitter: grid the one
+  nonlinear parameter `tau` (coarse→fine), OLS the linear conductance/gain, keep the best CV(RMSE);
+  gated by the existing ASHRAE G14 acceptance (`stats.fit_stats` + `cv_rmse_max_for("hourly")`).
+  Deterministic (`validation.check_determinism`). Returns a `Calibration` (model + fit + accept).
+- **`option_d_savings(calibration, oat, as_found, as_corrected)`** — differences the calibrated model's
+  as-found vs as-corrected annual profiles into modeled avoided energy with a **G14 Annex-B fractional
+  savings uncertainty** band. **Refuses to claim a saving when the calibration fails the G14 gate**
+  (`valid=False`, `avoided_energy=None`) — the same refuse-to-fabricate posture as `fault_economics`
+  (`costed`) and `ecm_savings` (upper bound).
+- **`mandv.ecm_savings.modeled_savings(...)`** — bridges the metered-waste **upper bound** to the
+  pre-implementation **modeled** Option-D saving, closing the caveat that module's docstring flagged.
+
+### Docs
+- `docs/OPTION-D.md`; IPMVP A/B/C/D noted complete in `MANDV.md` + `CAPABILITIES.md`; ROADMAP marks
+  Option D delivered and reshapes Next-0.8 (the deferred chiller dataset, Option-D depth, packaging).
+
+### Tests
+- +11 (1044 → 1055): `test_rc_model` — recovers a known model within tolerance, calibration is
+  deterministic, unstructured noise fails the G14 gate, savings match the direct profile difference, and
+  a failed calibration claims no saving.
+
 ## [0.6.0] — 2026-07-27
 
 Sixth release — **validation & interop completeness**: finish the stories 0.5 opened rather than open a

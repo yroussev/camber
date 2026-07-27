@@ -163,13 +163,19 @@ A consolidation release — finish the validation and interop stories 0.5 opened
       validation of the refrigerant-side rules; **deferred pending an owner license-clearance** for
       clean-room use.
 
-## Next — 0.7
+## Delivered — v0.7.0 (IPMVP Option D — calibrated simulation)
 
-- [ ] **IPMVP Option D — calibrated simulation** M&V (the one remaining IPMVP boundary; A/B/C ship).
-      Feasible dependency-light: a numpy grey-box RC model + calibration loop reusing the existing G14
-      `fit_stats` / hourly-CV(RMSE) acceptance and `predict()`-based savings machinery (EnergyPlus only
-      an optional cross-validator). The standing 0.7 headline.
+- [x] **IPMVP Option D — calibrated simulation** M&V — the last IPMVP boundary. A dependency-light numpy
+      1R1C grey-box model (`mandv.rc_model`) calibrated to metered energy (grid-τ + OLS, gated by the
+      existing G14 `fit_stats` / hourly-CV(RMSE) acceptance), run as-found vs as-corrected for a modeled
+      pre-implementation saving with a G14 uncertainty band — refusing to claim a number when calibration
+      fails the gate. **CAMBER now covers IPMVP Options A/B/C/D.** See **[OPTION-D.md](docs/OPTION-D.md)**.
+
+## Next — 0.8
+
 - [ ] **Labeled chiller benchmark** — if/when the license clears (carried from 0.6 Tier 2).
+- [ ] **Option D depth** — 2R2C / multi-zone, and an optional EnergyPlus `[energyplus]` cross-validator
+      (mirroring the pvlib/BETTER own-it-then-cross-check pattern).
 - [ ] **Packaging & community** (carried) — conda-forge feedstock, Pages enablement, Discussions,
       PEP-541 `camber` name.
 
