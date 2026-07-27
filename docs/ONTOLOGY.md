@@ -14,6 +14,16 @@ model can be exported for downstream use.
 - **Whole-site round-trip** — `site_to_ttl` / `site_from_ttl` round-trip a Site→Equip→Point model
   (with relationships); minimal parser by default, rdflib used when the `[brick]` extra is present.
 
+## Project Haystack
+
+- **Export** — `haystack_tags(role)` / `equip_haystack_tags(roles)` emit a role's marker-tag set (from
+  `HAYSTACK_HINT`). `camber/interop/export.py`.
+- **Import (0.6)** — `role_from_tags(tags)` / `roles_from_haystack(points)` / `mapping_from_haystack`
+  recover roles from a point's marker tags, closing the round-trip to Brick-level parity. A role matches
+  when its hint tag-set is a subset of the point's tags; the **most specific** hint wins ties (so
+  `…temp sp` beats `…temp sensor`). Accepts `(name, tags)` pairs or Haystack tag dicts. All 54 roles
+  round-trip export→import. `camber/interop/haystack_semantic.py`.
+
 ## ASHRAE 223P (minimal profile)
 
 ASHRAE Standard 223P is an RDF/SHACL semantic model for building systems — equipment, connections,
@@ -27,6 +37,14 @@ from camber.interop import site_to_223, site_from_223
 ttl = site_to_223(site, profile="minimal", include_relations=True)
 site2 = site_from_223(ttl)        # round-trips equip_class + the points' roles
 ```
+
+Mapping coverage was broadened in **0.6** from 21 to **44 of 54 roles** — the full plant/hydronic side
+(CHW/HW/CW temps, loop pressures, pump/tower speeds), power/thermal energy, ambient/humidity, and the
+refrigerant-side approach temps. The remaining 10 roles are binary/enumerated **status & command**
+signals (`*_status`, `*_stage`, `reversing_valve_cmd`, `econ_cmd`, warm-up/cool-down) that carry no QUDT
+quantity-kind; they are listed in `_NO_223_QUANTITY` and intentionally omitted from the quantity map
+(223P models them as enumerated states). A test asserts the mapped + unmapped sets partition every role,
+so a newly-added role can't be silently forgotten.
 
 Mapping (`ROLE_TO_223`, `role_223_quantity`): e.g. `SUPPLY_AIR_TEMP → (Temperature, Air)`,
 `OA_AIRFLOW → (VolumeFlowRate, Air)`, `CHW_FLOW → (VolumeFlowRate, Water)`, valves/dampers →
