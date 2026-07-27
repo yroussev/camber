@@ -114,3 +114,12 @@ r.savings, r.measured_delta, r.reduction_pct        # 104000 kWh, 40 kW, 0.40
 Inputs may be scalars or sampled arrays/Series (the mean is taken). The result's `basis` records the
 measured-vs-stipulated split for audit; the stipulated portion carries uncertainty this method does
 not quantify. Complements Option B (`mandv.retrofit_isolation`) and Option C (`mandv.stats`).
+
+## IPMVP Option D — calibrated simulation (`mandv.rc_model`)
+
+The one remaining IPMVP boundary, now shipped: a dependency-light 1R1C grey-box building model
+(`RCModel.predict(oat, schedule)`) calibrated to metered energy (grid `tau` + OLS, gated by the same
+ASHRAE G14 acceptance test), then run under an as-corrected control to give a **pre-implementation
+modeled saving** with a G14 uncertainty band — the counterfactual the `ecm_savings` upper bound stands
+in for. Refuses to claim a saving when the calibration fails the gate. So CAMBER now covers **IPMVP
+Options A, B, C, and D**. See **[OPTION-D.md](OPTION-D.md)**.
