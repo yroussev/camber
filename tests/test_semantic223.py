@@ -54,16 +54,17 @@ def test_223_roundtrip_preserves_equip_class_and_roles():
 
 
 def test_223_minimal_profile_drops_unmapped_roles():
-    # WETBULB_TEMP isn't in the 223P map; minimal profile omits it, full keeps it
+    # BOILER_STATUS is a status signal with no QUDT quantity-kind (in _NO_223_QUANTITY);
+    # the minimal profile omits it, the full profile keeps it (dimensionless)
     eq = Equip(id="E1", equip_class="AHU",
-               points=(Point("E1.wb", role=Role.WETBULB_TEMP),
+               points=(Point("E1.bs", role=Role.BOILER_STATUS),
                        Point("E1.sat", role=Role.SUPPLY_AIR_TEMP)))
     site = Site(id="S", equips=(eq,))
     minimal = site_to_223(site, profile="minimal")
-    assert "wetbulb_temp a s223:Property" not in minimal
+    assert "boiler_status a s223:Property" not in minimal
     assert "supply_air_temp a s223:Property" in minimal
     full = site_to_223(site, profile="full")
-    assert "wetbulb_temp a s223:Property" in full           # full keeps it (dimensionless)
+    assert "boiler_status a s223:Property" in full          # full keeps it (dimensionless)
 
 
 def test_223_no_relations_omits_hasproperty():
@@ -79,3 +80,38 @@ def test_brick_map_broadened():
         assert role in ROLE_TO_BRICK_POINT_CLASS
     ttl = to_brick("AHU_1", "AHU", [Role.CO2, Role.OA_AIRFLOW, Role.SUPPLY_AIR_TEMP])
     assert "CO2_Sensor" in ttl and "Outside_Air_Flow_Sensor" in ttl
+
+
+# --- 0.6: broadened 223P coverage (plant / DX / humidity) -------------------- #
+
+def _plant_site():
+    chiller = Equip(id="CH_1", equip_class="Chiller", points=(
+        Point(name="CH_1.power", role=Role.POWER),
+        Point(name="CH_1.chw_supply_temp", role=Role.CHW_SUPPLY_TEMP),
+        Point(name="CH_1.cond_approach_temp", role=Role.COND_APPROACH_TEMP),
+    ))
+    return Site(id="Plant", equips=(chiller,))
+
+
+def test_223_covers_plant_and_refrigerant_roles():
+    from camber.interop.semantic223 import ROLE_TO_223, _NO_223_QUANTITY
+    # every role is either mapped to a quantity or explicitly documented as unmapped (no silent gaps)
+    assert set(ROLE_TO_223) | set(_NO_223_QUANTITY) == set(Role)
+    assert not (set(ROLE_TO_223) & set(_NO_223_QUANTITY))
+    for r in (Role.CHW_SUPPLY_TEMP, Role.HW_PUMP_SPEED, Role.CW_RETURN_TEMP, Role.POWER,
+              Role.COND_APPROACH_TEMP, Role.SUPPLY_AIR_HUMIDITY):
+        assert role_223_quantity(r) is not None
+
+
+def test_223_status_roles_intentionally_unmapped():
+    for r in (Role.COMPRESSOR_STATUS, Role.BOILER_STATUS, Role.REVERSING_VALVE_CMD):
+        assert role_223_quantity(r) is None
+
+
+def test_223_plant_roles_emit_proper_quantity_and_round_trip():
+    ttl = site_to_223(_plant_site())
+    # the plant temp emits qk:Temperature + s223:Water, not the Dimensionless/Air default
+    assert "qk:Temperature" in ttl and "s223:Water" in ttl and "qk:Power" in ttl
+    back = site_from_223(ttl, site_id="Plant")
+    roles = {p.role for e in back.equips for p in e.points}
+    assert {Role.POWER, Role.CHW_SUPPLY_TEMP, Role.COND_APPROACH_TEMP} <= roles

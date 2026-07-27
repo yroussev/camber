@@ -42,7 +42,42 @@ ROLE_TO_223 = {
     Role.DAMPER: ("PositionRatio", "Air"),
     Role.SUPPLY_FAN_SPEED: ("DimensionlessRatio", "Air"),
     Role.OCCUPANCY: ("Dimensionless", "Air"),
+    # --- 0.6: plant / hydronic ---
+    Role.CHW_SUPPLY_TEMP: ("Temperature", "Water"),
+    Role.CHW_RETURN_TEMP: ("Temperature", "Water"),
+    Role.CHW_SUPPLY_TEMP_SP: ("Temperature", "Water"),
+    Role.CHW_DIFF_PRESS: ("Pressure", "Water"),
+    Role.CHW_DIFF_PRESS_SP: ("Pressure", "Water"),
+    Role.CHW_PUMP_SPEED: ("DimensionlessRatio", "Water"),
+    Role.HW_SUPPLY_TEMP: ("Temperature", "Water"),
+    Role.HW_RETURN_TEMP: ("Temperature", "Water"),
+    Role.HW_DIFF_PRESS: ("Pressure", "Water"),
+    Role.HW_PUMP_SPEED: ("DimensionlessRatio", "Water"),
+    Role.CW_SUPPLY_TEMP: ("Temperature", "Water"),
+    Role.CW_RETURN_TEMP: ("Temperature", "Water"),
+    Role.TOWER_FAN_SPEED: ("DimensionlessRatio", "Air"),
+    # --- 0.6: ambient / setpoints / humidity / filtration ---
+    Role.WETBULB_TEMP: ("Temperature", "Air"),
+    Role.COOL_SP: ("Temperature", "Air"),
+    Role.HEAT_SP: ("Temperature", "Air"),
+    Role.SUPPLY_AIR_HUMIDITY: ("RelativeHumidity", "Air"),
+    Role.RETURN_AIR_HUMIDITY: ("RelativeHumidity", "Air"),
+    Role.FILTER_DIFF_PRESS: ("Pressure", "Air"),
+    # --- 0.6: energy / refrigerant-side ---
+    Role.POWER: ("Power", "Electricity"),
+    Role.ENERGY_RATE: ("Power", "Water"),
+    Role.COND_APPROACH_TEMP: ("Temperature", "Refrigerant"),
+    Role.EVAP_APPROACH_TEMP: ("Temperature", "Refrigerant"),
 }
+
+# Roles intentionally NOT in ROLE_TO_223: binary/enumerated status & command signals carry no QUDT
+# quantity-kind — 223P models them as enumerated states, out of scope for this quantity/medium profile.
+# (Kept explicit so the coverage is honest and a newly-added role can't be silently forgotten.)
+_NO_223_QUANTITY = frozenset({
+    Role.BOILER_STATUS, Role.SUPPLY_FAN_STATUS, Role.WARMUP, Role.COOLDOWN, Role.ECON_CMD,
+    Role.COMPRESSOR_STATUS, Role.COMPRESSOR_STAGE, Role.CONDENSER_FAN_STATUS, Role.HEAT_STAGE,
+    Role.REVERSING_VALVE_CMD,
+})
 
 S223_PREFIX = ('@prefix s223: <http://data.ashrae.org/standard223#> .\n'
                '@prefix qk: <http://qudt.org/vocab/quantitykind/> .\n'
