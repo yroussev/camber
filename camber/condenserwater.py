@@ -65,6 +65,7 @@ def analyze_cw_reset(
     if "CWS_Temp" not in df.columns:
         return None
     work = df.copy()
+    work = work[~work.index.duplicated(keep="first")]   # defensive: reindex needs a unique index
     if "WetBulb" in work.columns:
         wb = work["WetBulb"]
         wb_source = "measured"
