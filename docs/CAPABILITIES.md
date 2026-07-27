@@ -119,9 +119,12 @@ TOWT (`mandv.towt`), fit statistics + G14 fractional savings uncertainty (`mandv
 (`mandv.cusum`), weather normalization (`mandv.weather`), normalized annual savings
 (`mandv.normalized`), non-routine adjustment (`mandv.nonroutine`), Option-B retrofit isolation
 (`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`), a **variable-base degree-day**
-baseline (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance point), and **IPMVP Option
-A** (`mandv.option_a`, measured Δparameter × stipulated duty — completing Option A/B/C). Flags:
-`confidence`, `exclude_non_routine`, model `kinds`, `aggregate`, `balance_point`.
+baseline (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance point), **IPMVP Option A**
+(`mandv.option_a`, measured Δparameter × stipulated duty), and **IPMVP Option D** (`mandv.rc_model`, a
+1R1C grey-box model calibrated to metered energy — grid-τ + OLS, G14-gated — run as-found vs
+as-corrected for a modeled pre-implementation saving; see **[OPTION-D.md](OPTION-D.md)**). **CAMBER now
+covers IPMVP Options A/B/C/D.** Flags: `confidence`, `exclude_non_routine`, model `kinds`, `aggregate`,
+`balance_point`, `interval`.
 
 ## Streaming / online
 

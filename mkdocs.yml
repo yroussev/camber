@@ -24,6 +24,7 @@ nav:
   - Analytics:
       - Packaged / DX FDD: FDD-DX.md
       - M&V: MANDV.md
+      - "M&V: Option D (calibrated sim)": OPTION-D.md
       - Streaming / online: STREAMING.md
       - Forecasting: FORECAST.md
       - Grid-interactive (GEB): GEB.md
