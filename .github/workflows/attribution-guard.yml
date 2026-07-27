@@ -1,0 +1,85 @@
+name: attribution-guard
+
+# Enforced backstop for the no-AI-attribution rule. Local git hooks
+# (.githooks/) are opt-in; this CI job is the net that always runs.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  attribution-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan tracked files and commit range for AI attribution
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Case-insensitive patterns. Keep in sync with .githooks/*.
+          patterns=(
+            'co-authored-by:.*(claude|anthropic)'
+            'generated with .*claude'
+            'claude code'
+            '🤖'
+          )
+
+          # Exclude the guard's own files, which contain the patterns as data.
+          exclude=(
+            ':(exclude).githooks/commit-msg'
+            ':(exclude).githooks/pre-commit'
+            ':(exclude).github/workflows/attribution-guard.yml'
+          )
+
+          fail=0
+
+          echo "== Scanning tracked files =="
+          for pat in "${patterns[@]}"; do
+            if git grep -iInE "$pat" -- . "${exclude[@]}"; then
+              echo "::error::Tracked content matches attribution pattern: /$pat/i"
+              fail=1
+            fi
+          done
+
+          # A CLAUDE.md must never be tracked.
+          if git ls-files | grep -iqE '(^|/)CLAUDE\.md$'; then
+            echo "::error::A CLAUDE.md file is tracked in the repository."
+            fail=1
+          fi
+
+          echo "== Scanning commit messages in range =="
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            range="${base}..${head}"
+          else
+            # push: before..after; on first push 'before' is all-zeros.
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              range="${{ github.sha }} -1"
+            else
+              range="${before}..${{ github.sha }}"
+            fi
+          fi
+
+          msgs="$(git log --format='%H %s%n%b' $range || true)"
+          for pat in "${patterns[@]}"; do
+            if printf '%s\n' "$msgs" | grep -inE "$pat"; then
+              echo "::error::A commit message in the range matches: /$pat/i"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -ne 0 ]; then
+            echo "attribution-guard failed: remove AI-assistant attribution."
+            exit 1
+          fi
+          echo "attribution-guard passed: no AI attribution found."

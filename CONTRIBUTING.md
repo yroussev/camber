@@ -70,3 +70,29 @@ No code needed — add a tag→role mapping (a JSON file like the ones under
 - Small, focused commits with descriptive messages.
 - Open a PR against `main`; CI (pytest on Python 3.10 and 3.11) must pass.
 - Fill in the PR template and link any related issue.
+
+## No AI-assistant attribution
+
+CAMBER is a human-authored, vendor-neutral project. Do **not** add
+AI-assistant attribution anywhere — not in commit messages, PR bodies, or
+tracked files. That means no `Co-Authored-By` trailers crediting an AI
+assistant, no auto-generated "assistant" credit lines, no AI coding-tool
+name-drops, no robot emoji, and no committed `CLAUDE.md` instructions file.
+
+This is enforced two ways:
+
+- **Local git hooks** (opt-in, but please enable them). They reject a commit
+  whose message or staged content adds those patterns. Git does not share
+  `.git/hooks` across clones, so the hooks are versioned under `.githooks/`.
+  Enable them once per clone:
+
+  ```sh
+  bash scripts/install-hooks.sh
+  ```
+
+  This sets `git config core.hooksPath .githooks`.
+
+- **CI backstop.** The `attribution-guard` workflow
+  (`.github/workflows/attribution-guard.yml`) scans tracked files and the PR's
+  commit range on every pull request and fails if attribution is found. This
+  runs regardless of whether contributors installed the local hooks.
