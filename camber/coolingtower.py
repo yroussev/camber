@@ -79,6 +79,7 @@ def analyze_cooling_tower_approach(
     if "CWS_Temp" not in df.columns:
         return None
     work = df.copy()
+    work = work[~work.index.duplicated(keep="first")]   # defensive: reindex needs a unique index
     # wet-bulb: prefer a measured point, else derive from dry-bulb + RH
     if "WetBulb" in work.columns:
         wb = work["WetBulb"]
