@@ -171,13 +171,27 @@ A consolidation release — finish the validation and interop stories 0.5 opened
       pre-implementation saving with a G14 uncertainty band — refusing to claim a number when calibration
       fails the gate. **CAMBER now covers IPMVP Options A/B/C/D.** See **[OPTION-D.md](docs/OPTION-D.md)**.
 
-## Next — 0.8
+## Delivered — v0.8.0 (cross-panel viz linking + pre-1.0 hardening)
 
-- [ ] **Labeled chiller benchmark** — if/when the license clears (carried from 0.6 Tier 2).
-- [ ] **Option D depth** — 2R2C / multi-zone, and an optional EnergyPlus `[energyplus]` cross-validator
-      (mirroring the pvlib/BETTER own-it-then-cross-check pattern).
-- [ ] **Packaging & community** (carried) — conda-forge feedstock, Pages enablement, Discussions,
-      PEP-541 `camber` name.
+- [x] **Cross-panel interactive linking** — a shared `window.CAMBER` selection bus lets a brush in the
+      dashboard scatter propagate to every view: panels B (multitrend) and E (carpet) are inline SVG that
+      shade the brushed time ranges / highlight the matching hour×date cells. Vanilla JS, single
+      self-contained CSP-safe file. See **[VISUALIZATION.md](docs/VISUALIZATION.md)**.
+- [x] **Pre-1.0 stress-test / hardening pass** — dependency-light adversarial generators found and fixed
+      real robustness bugs (`load_csv` malformed input, every rule on degenerate frames, M&V degrade-not-
+      raise, fleet O(N²)→O(N log N), mapping ReDoS) + a broad determinism sweep. See
+      **[VALIDATION.md](docs/VALIDATION.md)**.
+
+## Road to 1.0
+
+The capability surface is broad and now hardened; 1.0 is a consolidation, not new features.
+
+- [ ] **API stability + deprecation policy** — review/settle the public API; commit to SemVer from 1.0.
+- [ ] **Docs completeness** pass; enable the MkDocs **Pages** site (owner action — the workflow is built).
+- [ ] **Packaging & community** (carried) — conda-forge feedstock, Discussions, PEP-541 `camber` name.
+- [ ] **Labeled chiller benchmark** — if/when the license clears (carried from 0.6).
+- [ ] **Option D depth** (post-1.0) — 2R2C / multi-zone + an optional EnergyPlus `[energyplus]`
+      cross-validator (mirroring the pvlib/BETTER own-it-then-cross-check pattern).
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
 

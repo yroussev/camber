@@ -28,12 +28,32 @@ def load_csv(path, timestamp_col: str | None = None, resample: str | None = None
     """
     from .timegrid import regularize
 
-    df = pd.read_csv(path)
+    try:
+        df = pd.read_csv(path)
+    except pd.errors.EmptyDataError as e:
+        raise ValueError(f"empty CSV (no header/columns): {path}") from e
+    if df.shape[1] == 0:
+        raise ValueError(f"CSV has no columns: {path}")
     if timestamp_col is None:
         timestamp_col = df.columns[0]
-    df[timestamp_col] = pd.to_datetime(df[timestamp_col])
-    df = regularize(df.set_index(timestamp_col), dedupe=dedupe)   # sort + collapse duplicate ts
-    if resample:
+    if timestamp_col not in df.columns:
+        raise ValueError(f"timestamp column {timestamp_col!r} not found in {list(df.columns)}")
+
+    # Parse timestamps leniently: unparseable rows become NaT and are dropped (one bad row must not
+    # sink the whole load). If the file had rows but NONE parsed, that's a real error, not empty data.
+    ts = pd.to_datetime(df[timestamp_col], errors="coerce")
+    n_rows = len(ts)
+    values = df.drop(columns=[timestamp_col])
+    # Value columns are numeric by contract; coerce so a stray text cell becomes NaN instead of
+    # silently poisoning the whole column to object dtype (which breaks resample/analysis downstream).
+    values = values.apply(pd.to_numeric, errors="coerce")
+    values.index = ts
+    values = values[values.index.notna()]
+    if n_rows > 0 and len(values) == 0:
+        raise ValueError(f"no parseable timestamps in column {timestamp_col!r}")
+
+    df = regularize(values, dedupe=dedupe)   # sort + collapse duplicate ts (handles empty)
+    if resample and len(df):
         df = df.resample(resample).mean(numeric_only=True)
     return df
 
