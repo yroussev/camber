@@ -39,7 +39,8 @@ def test_coverage_partitions_the_registry():
     assert len(cov["scored"]) + len(cov["fixture_only"]) == cov["n_single"]
     # scored + fixture-only + fleet accounts for every registered rule
     assert len(cov["scored"]) + len(cov["fixture_only"]) + len(cov["fleet"]) == len(reg.names())
-    assert len(cov["scored"]) >= 15          # a strong majority of the single-equip suite
+    # 0.6: the whole single-equipment suite is accuracy-scored — no fixture-only rules remain
+    assert cov["fixture_only"] == [] and len(cov["scored"]) == cov["n_single"]
 
 
 def test_records_are_deterministic():
