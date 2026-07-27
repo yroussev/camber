@@ -29,7 +29,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 import pandas as pd
 
-from .stats import fit_stats, cv_rmse_max_for
+from .stats import fit_stats, cv_rmse_max_for, FitStats
 from .normalized import _rel_unc
 
 
@@ -139,6 +139,15 @@ def calibrate(oat, schedule, metered_energy, *, interval: str = "hourly",
     oat = np.asarray(oat, dtype=float)
     y = np.asarray(metered_energy, dtype=float)
 
+    # Degrade, don't raise, on data too thin/degenerate to calibrate: return a non-accepted
+    # Calibration so the savings layer refuses to claim a number (rather than a ValueError).
+    n_finite = int(np.isfinite(y).sum())
+    if len(y) < 4 or n_finite < 4:
+        nan = float("nan")
+        fit = FitStats(n=len(y), p=3, r2=nan, rmse=nan, cv_rmse=nan, nmbe=nan, f_stat=nan,
+                       accept=False, notes="insufficient data to calibrate (need >= 4 finite points)")
+        return Calibration(model=RCModel(ua_eff=nan, gain_eff=nan, tau=nan), fit=fit, tau_grid_n=0)
+
     def _fit_at(tau):
         ddh, cond = _design(oat, schedule, float(tau))
         # energy = ua_eff*ddh - gain_eff*cond  ->  OLS on columns [ddh, -cond]
@@ -161,7 +170,15 @@ def calibrate(oat, schedule, metered_energy, *, interval: str = "hourly",
             if sse < best_sse:
                 best_sse, model = sse, cand
     yhat = model.predict(oat, schedule)
-    fit = fit_stats(y, yhat, p=3, cv_rmse_max=cv_rmse_max_for(interval))
+    try:
+        fit = fit_stats(y, yhat, p=3, cv_rmse_max=cv_rmse_max_for(interval))
+    except ValueError:
+        fit = None
+    # NaN-gapped energy yields non-finite coefficients / stats -> degrade to a non-accepted fit
+    if fit is None or not np.isfinite(model.ua_eff) or fit.cv_rmse != fit.cv_rmse:
+        nan = float("nan")
+        fit = FitStats(n=len(y), p=3, r2=nan, rmse=nan, cv_rmse=nan, nmbe=nan, f_stat=nan,
+                       accept=False, notes="calibration produced a non-finite fit (gapped/degenerate energy)")
     return Calibration(model=model, fit=fit, tau_grid_n=n_evals)
 
 
