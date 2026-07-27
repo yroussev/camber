@@ -10,9 +10,12 @@ corresponding ECM: fixing the condition cannot save more than the energy current
 spent on it, and realistically saves a fraction of it.
 
 Each result reports the metered waste energy AND states its method/assumption so it
-is never mistaken for a measured post-retrofit saving. Once a measure is
-implemented, the change-point M&V engine (models.py + stats.py) gives the true
-avoided-energy-with-uncertainty figure.
+is never mistaken for a measured post-retrofit saving. For a *pre-implementation*
+modeled saving (the counterfactual this upper bound stands in for), calibrate an
+:class:`camber.mandv.rc_model.RCModel` to the metered energy and call
+:func:`modeled_savings` here (IPMVP Option D). Once a measure is actually implemented,
+the change-point M&V engine (models.py + stats.py) gives the measured
+avoided-energy-with-uncertainty figure (Option C).
 
 Energy units: BTU meters report a rate (BTU/hr); we integrate to energy with the
 rate-aware resampler. Helpers convert to therms (heating) and ton-hours (cooling).
@@ -118,3 +121,17 @@ def unoccupied_cooling_energy(chw_rate, index_for_occ=None, *,
         total_btu=total,
         waste_fraction_pct=round(100.0 * waste / total, 1) if total else 0.0,
     )
+
+
+def modeled_savings(calibration, oat, as_found_schedule, as_corrected_schedule):
+    """Pre-implementation **modeled** ECM saving via a calibrated RC model (IPMVP Option D).
+
+    The counterfactual the :class:`WasteEstimate` upper bound stands in for: run the calibrated
+    :class:`camber.mandv.rc_model.RCModel` under the as-found vs the as-corrected control and difference
+    the annual profiles. Returns an :class:`camber.mandv.rc_model.OptionDSavings` — with a real
+    ``basis="IPMVP Option D (calibrated simulation)"`` when the calibration met the G14 acceptance gate,
+    and ``valid=False`` / no claimed saving when it did not. Delegates to
+    :func:`camber.mandv.rc_model.option_d_savings`.
+    """
+    from .rc_model import option_d_savings
+    return option_d_savings(calibration, oat, as_found_schedule, as_corrected_schedule)
