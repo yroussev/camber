@@ -4,6 +4,39 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.8.0] — 2026-07-27
+
+Eighth release — one **feature** plus a **pre-1.0 stress-test / hardening pass**. Dependency-light
+throughout (no new deps; the hardening uses seeded generators, not `hypothesis`).
+
+### Added
+- **Cross-panel interactive linking** (`camber.report`) — a brush in the dashboard scatter now
+  propagates to every view. A shared `window.CAMBER` selection bus (a Set of selected timestamp
+  strings) drives two panels promoted from static PNG to **inline SVG**: **B (fault multitrend)** shades
+  the brushed time ranges and **E (load carpet)** highlights the matching hour×date cells. Panels A + I
+  stay PNG; every panel keys off the same `str(timestamp)`, so they interoperate without a shared
+  coordinate system. Single self-contained CSP-safe file, vanilla JS, no framework. New helpers
+  `selection_bus_html`, `carpet_svg_html`, `multitrend_svg_html`.
+
+### Hardened (bugs found + fixed by the stress pass)
+- **`io.load_csv`** — empty / header-only / unparseable-timestamp CSVs now raise a clear `ValueError`;
+  a single bad timestamp row is dropped instead of crashing the load; value columns are coerced to
+  numeric so a stray text cell no longer silently poisons a column to `object` dtype.
+- **FDD rules** — a 191-case sweep asserts every registered rule returns a `Finding` (never raises) on
+  empty / 1-row / all-NaN / all-equal / duplicate-index frames; two plant rules (`condenser_water_reset`,
+  `cooling_tower_approach`) hardened against a duplicate-index reindex crash.
+- **M&V calibration** — `rc_model.calibrate` degrades to `accept=False` (not `ValueError`) on <4-point /
+  all-NaN / gapped / constant energy, so the savings layer refuses to claim a number.
+- **Fleet rollup** — the EUI-percentile loop is O(N log N) via `bisect` (was O(N²)); scale-tested to N=500.
+- **Mapping** — `MappingProvider` rejects catastrophic-backtracking (ReDoS) regex patterns at config
+  load (a `(a+)+`-style pattern could hang the mapper); legitimate patterns unaffected.
+- **Determinism** — `validation.check_determinism` now nets `calibrate` / `best_model` /
+  `detect_level_shifts` / cohort / `faultlab` (was 2 spots).
+
+### Tests
+- +230 (1055 → 1285): `test_hardening_*` (io, rules sweep, mandv, scale+determinism, timegrid+mapping),
+  cross-panel linking additions, and a shared `tests/conftest.py` of degenerate-frame factories.
+
 ## [0.7.0] — 2026-07-27
 
 Seventh release — **IPMVP Option D (calibrated simulation)**, the last remaining IPMVP boundary.
