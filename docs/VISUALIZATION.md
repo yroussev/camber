@@ -181,11 +181,20 @@ open("dashboard.html", "w").write(html)
 ```python
 html = build_dashboard(df, interactive=True)          # link_x defaults to an OAT-like column
 ```
-With `interactive=True` the dashboard adds one **brush-able** view: an inline-SVG scatter drawn by a
-small **vanilla-JS** module (no framework, no CDN, CSP-safe) from an inline JSON payload. Drag a box
-over the cloud and the selected points highlight while a linked readout lists their **timestamps** —
-the pattern-D brush-back made live. The static PNG panels are unchanged; extending the brush to link
-*them* is future work. `interactive_scatter_html(x, y, timestamps, …)` builds the fragment directly.
+With `interactive=True` the dashboard adds a **brush-able** scatter drawn by a small **vanilla-JS**
+module (no framework, no CDN, CSP-safe) from an inline JSON payload. Drag a box over the cloud and the
+selected points highlight while a linked readout lists their **timestamps** — the pattern-D brush-back
+made live.
+
+**Cross-panel linking (0.8).** The brush no longer stops at the scatter: a shared `window.CAMBER`
+selection bus (a Set of selected timestamp strings) lets the selection **propagate across every view**.
+Panels **B (fault multitrend)** and **E (load carpet)** are promoted from static PNG to **inline SVG**
+that subscribe to the bus — brushing a cluster in the scatter shades the corresponding **time ranges**
+in the multitrend and highlights the matching **hour × date cells** in the carpet. Every panel keys off
+the same `str(timestamp)` from the frame index, so they interoperate without sharing a coordinate
+system; panels A and I stay PNG (aggregate matrices, not timestamp-indexed). Still a single
+self-contained CSP-safe file. `selection_bus_html()`, `carpet_svg_html(series, …)`, and
+`multitrend_svg_html(df, cols, spans=…)` build the pieces; `interactive_scatter_html(...)` the scatter.
 
 ## Scope
 
