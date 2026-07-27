@@ -83,6 +83,21 @@ textbook definitions; IRR is a bisection solver verified against hand-worked cas
 - `metrics_with_ci(confusion)` — TPR/FPR/accuracy each with a Wilson CI.
 - `check_determinism(fn, ...)` — reproducibility guard (identical output across runs).
 
+## Robustness / adversarial hardening (pre-1.0)
+
+A dependency-light stress pass (seeded generators + parametrize, no `hypothesis`) exercises the core
+entry points on degenerate/adversarial input, and each real bug it found is fixed and regression-locked:
+
+- **`io.load_csv`** — empty / header-only / unparseable-timestamp / text-in-numeric CSVs now raise a
+  clear error or coerce cleanly (a stray text cell no longer silently poisons a column to `object`).
+- **Every registered rule** on empty / 1-row / all-NaN / all-equal / duplicate-index frames returns a
+  `Finding` and never raises (a 191-case parametrized sweep) — two plant rules were hardened.
+- **M&V calibration** degrades to `accept=False` (never a `ValueError`) on thin/degenerate energy.
+- **Fleet rollup** percentile is O(N log N) (was O(N²)); scale-tested to N=500.
+- **Mapping** rejects catastrophic-backtracking (ReDoS) regex patterns at config load.
+- **Determinism sweep** — `check_determinism` now nets `calibrate` / `best_model` / `detect_level_shifts`
+  / cohort / `faultlab`, not just two spots.
+
 ## Continuous benchmarking in CI
 
 Accuracy is gated against a committed baseline so it can't silently drift. The cross-equipment
