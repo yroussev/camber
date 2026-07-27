@@ -90,3 +90,60 @@ def test_interactive_section_empty_when_not_renderable():
     one = pd.DataFrame({Role.OAT: pd.Series(range(20), index=idx)})
     html = build_dashboard(one, sections=("A",), interactive=True, carpet_col=Role.OAT)
     assert "camber-link-data" not in html
+
+
+# --- cross-panel linking (0.8) ---------------------------------------------- #
+
+def _wide_df():
+    idx = pd.date_range("2024-07-01", periods=24 * 7, freq="1h")
+    rng = np.random.default_rng(0)
+    return pd.DataFrame({"OAT": 60 + 20 * np.sin(idx.hour / 24 * 6.28),
+                         "load": 50 + 30 * rng.random(len(idx))}, index=idx)
+
+
+def test_selection_bus_and_svg_panels_present_when_interactive():
+    from camber.report.dashboard import build_dashboard
+    html = build_dashboard(_wide_df(), interactive=True)
+    # bus + subscribers
+    assert "window.CAMBER" in html and "onChange" in html
+    assert "camber-cell" in html and "data-ts=" in html          # carpet cells (E)
+    assert "camber-band" in html                                 # multitrend highlight band (B)
+    assert "camber-link-data" in html                            # scatter still present
+    assert "window.CAMBER.set" in html                           # brush publishes
+
+
+def test_interactive_promotes_B_and_E_to_svg_two_pngs_remain():
+    from camber.report.dashboard import build_dashboard
+    html = build_dashboard(_wide_df(), interactive=True)
+    # B (multitrend) and E (carpet) are now inline SVG; only A (readiness) + I (quality) stay PNG
+    assert html.count("data:image/png;base64,") == 2
+
+
+def test_static_dashboard_unchanged_four_pngs_no_bus():
+    from camber.report.dashboard import build_dashboard
+    html = build_dashboard(_wide_df())
+    assert html.count("data:image/png;base64,") == 4 and "window.CAMBER" not in html
+
+
+def test_cross_panel_timestamps_are_consistent():
+    # a timestamp in the scatter payload must match the carpet cell + trend meta keys (same str())
+    from camber.report.dashboard import build_dashboard
+    df = _wide_df()
+    html = build_dashboard(df, interactive=True)
+    ts = str(pd.Timestamp(df.index[24]))
+    assert html.count(ts) >= 3        # appears in scatter payload, carpet data-ts, and trend meta
+
+
+def test_interactive_dashboard_is_csp_safe():
+    from camber.report.dashboard import build_dashboard
+    html = build_dashboard(_wide_df(), interactive=True).replace("http://www.w3.org", "")
+    assert "http://" not in html and "https://" not in html
+
+
+def test_svg_panels_empty_on_degenerate_frame_fall_back():
+    # a frame with no numeric columns -> SVG panels return "" -> PNG fallback, no crash
+    from camber.report.linking import carpet_svg_html, multitrend_svg_html
+    import pandas as pd
+    empty = pd.Series(dtype=float)
+    assert carpet_svg_html(empty) == ""
+    assert multitrend_svg_html(pd.DataFrame(), []) == ""

@@ -13,12 +13,13 @@ import html as _html
 import io
 
 from ..charts.carpet import load_carpet
-from ..charts.multitrend import fault_multitrend
+from ..charts.multitrend import fault_multitrend, mask_to_spans
 from ..charts.quality_dashboard import quality_dashboard
 from ..charts.readiness import readiness_ribbon
 from ..integrate.tickets import _attr
 from ..rules.triage import rank_findings
-from .linking import LINK_STYLE, interactive_scatter_html
+from .linking import (LINK_STYLE, interactive_scatter_html, selection_bus_html,
+                      carpet_svg_html, multitrend_svg_html)
 
 _SECTION_TITLES = {"A": "Ingest readiness", "B": "Fault-annotated trends",
                    "E": "Load carpet", "I": "Data-quality dashboard"}
@@ -149,6 +150,27 @@ def _pick_link_cols(df, link_x, link_y):
     return x, y
 
 
+def _numeric_cols(df):
+    return list(df.select_dtypes(include="number").columns)
+
+
+def _linked_panel(letter, df, spans, carpet_col, multitrend_cols) -> str:
+    """Inline-SVG version of panel B (multitrend) or E (carpet) for cross-panel linking; else ""."""
+    if letter == "E":
+        num = _numeric_cols(df)
+        col = carpet_col if carpet_col is not None else (num[0] if num else None)
+        return carpet_svg_html(df[col]) if col is not None else ""
+    if letter == "B":
+        cols = list(multitrend_cols) if multitrend_cols else _numeric_cols(df)[:4]
+        if not cols:
+            return ""
+        span_list = []
+        for series in (spans or {}).values():        # spans = {label: boolean Series}
+            span_list.extend(mask_to_spans(series))
+        return multitrend_svg_html(df, cols, spans=span_list)
+    return ""
+
+
 def _interactive_section(df, link_x, link_y) -> str:
     """Build the brush-able interactive-scatter section (empty string if not renderable)."""
     x, y = _pick_link_cols(df, link_x, link_y)
@@ -187,11 +209,19 @@ def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "
     parts = [f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
              f"<title>{_html.escape(title)}</title></head><body>",
              f"<h1>{_html.escape(title)}</h1>"]
+    if interactive:
+        parts.append(selection_bus_html())     # cross-panel selection bus (once, before the panels)
     for letter in sections:
-        img = _section_image(letter, df, spans=spans, carpet_col=carpet_col,
-                             multitrend_cols=multitrend_cols, normalize=normalize)
-        parts.append(f"<h2>{letter}. {_SECTION_TITLES.get(letter, letter)}</h2>"
-                     f"<img src='{img}' alt='{_SECTION_TITLES.get(letter, letter)}'>")
+        # when interactive, B (multitrend) and E (carpet) render as inline SVG that highlights on the
+        # brushed selection; A and I stay static PNG. Empty/degenerate SVG falls back to the PNG.
+        svg = _linked_panel(letter, df, spans, carpet_col, multitrend_cols) if interactive else ""
+        title = _SECTION_TITLES.get(letter, letter)
+        if svg:
+            parts.append(f"<h2>{letter}. {title}</h2>{svg}")
+        else:
+            img = _section_image(letter, df, spans=spans, carpet_col=carpet_col,
+                                 multitrend_cols=multitrend_cols, normalize=normalize)
+            parts.append(f"<h2>{letter}. {title}</h2><img src='{img}' alt='{title}'>")
     if interactive:
         parts.append(_interactive_section(df, link_x, link_y))
     if findings is not None:
