@@ -125,3 +125,13 @@ def test_savings_as_dict_json_friendly():
     found, corrected = _found_corrected()
     cal = calibrate(oat, found, RCModel(0.8, 3.0, 24.0).predict(oat, found))
     json.dumps(option_d_savings(cal, oat, found, corrected).as_dict())   # must not raise
+
+
+def test_ecm_modeled_savings_bridges_to_option_d():
+    from camber.mandv.ecm_savings import modeled_savings
+    oat = _oat()
+    found, corrected = _found_corrected()
+    cal = calibrate(oat, found, RCModel(0.8, 3.0, 24.0).predict(oat, found))
+    sv = modeled_savings(cal, oat, found, corrected)
+    assert isinstance(sv, OptionDSavings) and sv.valid
+    assert sv.basis == "IPMVP Option D (calibrated simulation)" and sv.avoided_energy > 0
