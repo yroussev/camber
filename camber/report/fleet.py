@@ -21,6 +21,7 @@ finding-like objects.
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -187,7 +188,10 @@ def build_fleet_report(buildings, *, peer_median_eui=None, top_n=5,
                 rule_buildings[r] += 1
         pctile = None
         if eui is not None and euis:
-            pctile = round(100.0 * sum(1 for e in euis if e >= eui) / len(euis), 0)
+            # count of peers with EUI >= this one, over the pre-sorted list: O(log N) via bisect
+            # (was O(N) per building -> O(N^2) over the fleet)
+            n_ge = len(euis) - bisect_left(euis, eui)
+            pctile = round(100.0 * n_ge / len(euis), 0)
         pct_vs_median = None
         if eui is not None and median:
             pct_vs_median = round(100.0 * (eui - median) / median, 0)

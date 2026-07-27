@@ -20,6 +20,20 @@ from dataclasses import dataclass, field
 
 from .roles import Role
 
+# A quantifier applied to a group that itself contains a quantifier — e.g. ``(a+)+``, ``(x*)+``,
+# ``(ab+)*`` — is the classic catastrophic-backtracking (ReDoS) shape that can hang on a long
+# non-matching token. Mapping patterns come from operator config, so we reject the obvious cases at
+# load time rather than risk a match-time hang. (Realistic role patterns never nest quantifiers.)
+_NESTED_QUANTIFIER = re.compile(r"\([^)]*[+*][^)]*\)\s*[+*]")
+
+
+def _reject_catastrophic(pattern: str) -> None:
+    if _NESTED_QUANTIFIER.search(pattern):
+        raise ValueError(
+            f"mapping pattern {pattern!r} nests quantifiers (e.g. '(a+)+'), a catastrophic-"
+            "backtracking shape that can hang the mapper; rewrite it without a quantifier on a "
+            "quantified group.")
+
 
 @dataclass
 class MappingProvider:
@@ -36,6 +50,8 @@ class MappingProvider:
     def __post_init__(self):
         # normalize alias keys to lowercase for case-insensitive lookup
         self.aliases = {k.lower(): v for k, v in self.aliases.items()}
+        for p, _ in self.patterns:
+            _reject_catastrophic(p)     # fail fast on ReDoS-prone patterns (config-time, not match-time)
         self._compiled = [(re.compile(p, re.IGNORECASE), r) for p, r in self.patterns]
 
     def role_of(self, token: str) -> Role | None:
