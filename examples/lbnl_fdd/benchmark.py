@@ -55,7 +55,12 @@ FAMILIES = [
             ("damper_stuck_025_annual.csv", "damper"),
             ("damper_stuck_075_annual.csv", "damper"),
             ("damper_stuck_100_annual_short.csv", "damper"),
+            # cooling-coil-valve leakage severity sweep (characterizes the leak detector, which
+            # under-fires at low severity — each missing CSV is skipped via the os.path.exists guard)
+            ("coi_leakage_010_annual.csv", "valve_leak"),
+            ("coi_leakage_025_annual.csv", "valve_leak"),
             ("coi_leakage_050_annual.csv", "valve_leak"),
+            ("coi_leakage_100_annual.csv", "valve_leak"),
         ],
     },
     {
