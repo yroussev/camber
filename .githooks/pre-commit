@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# CAMBER attribution guard — pre-commit hook.
+#
+# Rejects a commit when the STAGED content adds AI-assistant attribution, or
+# when a file named CLAUDE.md is being added. CAMBER carries no AI attribution
+# in tracked files.
+#
+# Enable locally with:  bash scripts/install-hooks.sh
+set -euo pipefail
+
+fail=0
+
+# 1) Block adding a project-instructions file named CLAUDE.md anywhere.
+if git diff --cached --name-only --diff-filter=A | grep -iqE '(^|/)CLAUDE\.md$'; then
+  echo "------------------------------------------------------------------" >&2
+  echo "COMMIT REJECTED: attempt to add a CLAUDE.md file." >&2
+  echo "CAMBER does not ship an AI-assistant instructions file. Remove it" >&2
+  echo "from the staging area (git rm --cached CLAUDE.md) and commit again." >&2
+  echo "------------------------------------------------------------------" >&2
+  fail=1
+fi
+
+# 2) Block added lines that credit an AI assistant. Only inspect ADDED lines
+#    (leading '+') in the staged diff so pre-existing content and this guard's
+#    own pattern list do not trip it.
+patterns=(
+  'co-authored-by:.*(claude|anthropic)'
+  'generated with .*claude'
+  'claude code'
+  '🤖'
+)
+
+# Exclude the guard's own files from the content scan (they legitimately
+# contain the patterns as data).
+added="$(git diff --cached --no-color -- . \
+  ':(exclude).githooks/commit-msg' \
+  ':(exclude).githooks/pre-commit' \
+  ':(exclude).github/workflows/attribution-guard.yml' \
+  | grep '^+' | grep -v '^+++' || true)"
+
+if [ -n "$added" ]; then
+  for pat in "${patterns[@]}"; do
+    if printf '%s\n' "$added" | grep -iqE "$pat"; then
+      echo "------------------------------------------------------------------" >&2
+      echo "COMMIT REJECTED: AI-assistant attribution found in staged changes." >&2
+      echo "Matched pattern: /$pat/i" >&2
+      echo "Remove the attribution from the staged content and commit again." >&2
+      echo "------------------------------------------------------------------" >&2
+      fail=1
+    fi
+  done
+fi
+
+exit "$fail"

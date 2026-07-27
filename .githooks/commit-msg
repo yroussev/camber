@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# CAMBER attribution guard — commit-msg hook.
+#
+# Rejects any commit whose message credits an AI assistant. CAMBER is a
+# vendor-neutral, human-authored project: no attribution to Claude / Anthropic
+# / any AI assistant belongs in the git history.
+#
+# Enable locally with:  bash scripts/install-hooks.sh
+set -euo pipefail
+
+msg_file="$1"
+
+# Case-insensitive patterns. Keep in sync with .githooks/pre-commit and
+# .github/workflows/attribution-guard.yml.
+patterns=(
+  'co-authored-by:.*(claude|anthropic)'
+  'generated with .*claude'
+  'claude code'
+  '🤖'
+)
+
+for pat in "${patterns[@]}"; do
+  if grep -iqE "$pat" "$msg_file"; then
+    echo "------------------------------------------------------------------" >&2
+    echo "COMMIT REJECTED: AI-assistant attribution found in commit message." >&2
+    echo "" >&2
+    echo "Matched pattern: /$pat/i" >&2
+    echo "" >&2
+    echo "CAMBER is a human-authored, vendor-neutral project. Do not add" >&2
+    echo "Co-Authored-By: Claude/Anthropic trailers, 'Generated with ...'," >&2
+    echo "'Claude Code', or the robot emoji to commit messages." >&2
+    echo "Remove the attribution line and commit again." >&2
+    echo "------------------------------------------------------------------" >&2
+    exit 1
+  fi
+done
+
+exit 0
