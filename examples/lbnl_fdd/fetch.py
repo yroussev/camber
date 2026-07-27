@@ -29,13 +29,21 @@ TTL_ZIP_URL = ("https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/
                "LBNL_FDD_Data_Sets_SDAHU_ttl.zip")
 MEMBERS = [
     "LBNL_FDD_Dataset_SDAHU/AHU_annual.csv",
+    # cooling-coil-valve leakage severity sweep (benchmark.py scores leaking_valve across severities)
+    "LBNL_FDD_Dataset_SDAHU/coi_leakage_010_annual.csv",
+    "LBNL_FDD_Dataset_SDAHU/coi_leakage_025_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
+    "LBNL_FDD_Dataset_SDAHU/coi_leakage_100_annual.csv",
     # stuck-damper severities for the FDD-accuracy benchmark (benchmark.py)
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_010_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_025_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_075_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_100_annual_short.csv",
 ]
+# The proven-present core (baseline + one leak + the four dampers); the extra leak severities above
+# are optional (may be absent in some zip releases) and don't gate the "already fetched" no-op.
+REQUIRED = [m for m in MEMBERS if "coi_leakage_010" not in m
+            and "coi_leakage_025" not in m and "coi_leakage_100" not in m]
 
 # Extra equipment families for the cross-equipment benchmark (opt-in via --families).
 # (subdir, zip url, ~size note, [zip members to extract])
@@ -73,11 +81,16 @@ def _fetch_ttl():
                     f.write(src.read())
 
 
-def _fetch_set(subdir, url, size, members, zip_name):
-    """Download ``url`` (if absent) and extract ``members`` into DATA/subdir."""
+def _fetch_set(subdir, url, size, members, zip_name, required=None):
+    """Download ``url`` (if absent) and extract ``members`` into DATA/subdir.
+
+    ``required`` (default = all members) is the subset whose local presence means "already fetched".
+    Optional members (severity variants that may not exist in every zip release) extract when present
+    but never gate the no-op, so a broadened catalog can't cause an endless re-download.
+    """
     out = os.path.join(DATA, subdir)
     os.makedirs(out, exist_ok=True)
-    needed = [os.path.basename(m) for m in members]
+    needed = [os.path.basename(m) for m in (required if required is not None else members)]
     if all(os.path.exists(os.path.join(out, n)) for n in needed):
         print(f"LBNL {subdir.upper()} CSVs already present; nothing to do.")
         return
@@ -87,7 +100,14 @@ def _fetch_set(subdir, url, size, members, zip_name):
         urllib.request.urlretrieve(url, zpath)
     print(f"Extracting the {subdir.upper()} CSVs ...")
     with zipfile.ZipFile(zpath) as z:
+        available = set(z.namelist())
         for m in members:
+            if m not in available:
+                # a labeled fault CSV not present in this release of the zip — skip, don't crash.
+                # benchmark.py already guards each scenario with os.path.exists, so a missing member
+                # simply isn't scored. Keeps the fetch robust as the fault catalog is broadened.
+                print(f"  (skipped, not in zip: {os.path.basename(m)})")
+                continue
             dest = os.path.join(out, os.path.basename(m))
             with z.open(m) as src, open(dest, "wb") as f:
                 f.write(src.read())
@@ -98,7 +118,7 @@ def _fetch_set(subdir, url, size, members, zip_name):
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     _fetch_ttl()
-    _fetch_set("sdahu", ZIP_URL, "~580 MB", MEMBERS, "LBNL_SDAHU.zip")
+    _fetch_set("sdahu", ZIP_URL, "~580 MB", MEMBERS, "LBNL_SDAHU.zip", required=REQUIRED)
     if "--families" in argv:
         for subdir, url, size, members in FAMILY_SETS:
             _fetch_set(subdir, url, size, members, f"LBNL_{subdir.upper()}.zip")

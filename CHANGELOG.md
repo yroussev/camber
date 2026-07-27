@@ -4,6 +4,39 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.6.0] — 2026-07-27
+
+Sixth release — **validation & interop completeness**: finish the stories 0.5 opened rather than open a
+new headline (IPMVP Option D / calibrated simulation is deferred to 0.7). Read-only toward the BAS,
+dependency-light, clean-room/citable; synthetic-fixture tests + docs per capability.
+
+### Added
+- **FDD hardening → 33/33.** The synthetic fault-injection harness (`camber.faultlab`) now scores
+  **every single-equipment rule** at 100% TPR / 0% FPR — scenarios added for the last 9 fixture-only
+  rules (boiler summer-lockout, HW-plant ΔT, condenser-water reset, CHW/HW pump DP reset, leaking valve,
+  night/weekend setback, OA-fraction, G36 reheat minimization). The fixture-only list is now empty; the
+  committed baseline is regenerated and CI-gated.
+- **Haystack tag→role import** (`camber.interop.haystack_semantic`): `role_from_tags`,
+  `roles_from_haystack`, `mapping_from_haystack` — inverting `HAYSTACK_HINT` (subset match, most-specific
+  tie-break) to close the export→import round-trip to Brick parity. All 54 roles round-trip.
+- **ASHRAE 223P coverage 21 → 44 roles** (`interop.semantic223.ROLE_TO_223`): the full plant/hydronic
+  side (CHW/HW/CW temps, loop pressures, pump/tower speeds), power + thermal energy, ambient/humidity,
+  and the refrigerant-side approach temps. The 10 remaining binary status/command roles carry no QUDT
+  quantity-kind and are listed in `_NO_223_QUANTITY` (intentionally unmapped); a test asserts the mapped
+  and unmapped sets partition every role.
+- **Broadened real-data LBNL benchmark (Tier 1):** a cooling-coil-valve leakage **severity sweep**
+  (010–100%) characterizes the leak detector that the pooled result showed under-firing; the fetcher is
+  hardened to skip zip members absent from a given release and to gate its no-op on a proven-present core.
+
+### Deferred
+- **IPMVP Option D — calibrated simulation** → 0.7 (feasible as a dependency-light grey-box RC model).
+- **ASHRAE RP-1043 chiller dataset (Tier 2)** — real-data validation of the refrigerant-side rules,
+  pending an owner license-clearance for clean-room use.
+
+### Tests
+- +13 net (1031 → 1044): `test_faultlab` (33/33, empty fixture-only), `test_haystack_semantic`,
+  `test_semantic223` (plant/DX round-trip + partition), `test_lbnl_fetch` (robust fetch, synthetic zip).
+
 ## [0.5.0] — 2026-07-26
 
 Fifth feature release. **Validation-led**: prove the existing FDD suite, then broaden equipment

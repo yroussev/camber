@@ -230,6 +230,73 @@ def _chiller_approach(idx, *, faulty):
                          Role.EVAP_APPROACH_TEMP: np.full(n, evap)}, index=idx)
 
 
+def _boiler_summer(idx, *, faulty):
+    oat = _oat_wave(idx, center=72.0, amp=15.0)                 # swings above/below the 65F lockout
+    # fault: boiler runs through hot weather; clean: boiler off when it's warm out
+    status = np.ones(len(idx)) if faulty else (oat < 65).astype(float)
+    return pd.DataFrame({Role.BOILER_STATUS: pd.Series(status, index=idx),
+                         Role.OAT: pd.Series(oat, index=idx)}, index=idx)
+
+
+def _hw_deltat(idx, *, faulty):
+    n = len(idx)
+    supply = np.full(n, 140.0)
+    ret = np.full(n, 130.0 if faulty else 115.0)               # 10F (low) vs 25F (healthy) loop dT
+    return pd.DataFrame({Role.BOILER_STATUS: np.ones(n), Role.HW_SUPPLY_TEMP: supply,
+                         Role.HW_RETURN_TEMP: ret}, index=idx)
+
+
+def _cond_water_reset(idx, *, faulty):
+    wb = _oat_wave(idx, center=60.0, amp=12.0)                  # wet-bulb regressor
+    cws = np.full(len(idx), 80.0) if faulty else np.clip(62 + 0.9 * (wb - 55), 60, 85)
+    return pd.DataFrame({Role.CW_SUPPLY_TEMP: pd.Series(cws, index=idx),
+                         Role.WETBULB_TEMP: pd.Series(wb, index=idx)}, index=idx)
+
+
+def _chw_pump(idx, *, faulty):
+    n = len(idx)
+    speed = np.full(n, 95.0) if faulty else np.full(n, 55.0)   # riding the curve vs modulating
+    return pd.DataFrame({Role.CHW_PUMP_SPEED: speed}, index=idx)
+
+
+def _hw_pump(idx, *, faulty):
+    n = len(idx)
+    speed = np.full(n, 95.0) if faulty else np.full(n, 55.0)
+    return pd.DataFrame({Role.HW_PUMP_SPEED: speed}, index=idx)
+
+
+def _leaking_valve(idx, *, faulty):
+    n = len(idx)
+    mat = np.full(n, 72.0)
+    # valve commanded shut, but SAT still drops across the coil (passing/leaking) when faulty
+    sat = np.full(n, 62.0 if faulty else 72.0)
+    return pd.DataFrame({Role.COOL_VALVE: np.zeros(n), Role.MIXED_AIR_TEMP: mat,
+                         Role.SUPPLY_AIR_TEMP: sat}, index=idx)
+
+
+def _setback(idx, *, faulty):
+    occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    fan = np.ones(len(idx)) if faulty else occ.astype(float)   # 24/7 vs occupied-only runtime
+    return pd.DataFrame({Role.SUPPLY_FAN_STATUS: pd.Series(fan, index=idx)}, index=idx)
+
+
+def _oa_fraction(idx, *, faulty):
+    n = len(idx)
+    oat = np.full(n, 85.0)                                      # cooling weather (> 70F cutoff)
+    rat = np.full(n, 75.0)
+    # OAF = (MAT-RAT)/(OAT-RAT): MAT near OAT = ~80% OA (over-ventilating) vs ~20% at the minimum
+    mat = np.full(n, 83.0 if faulty else 77.0)
+    return pd.DataFrame({Role.OAT: oat, Role.RETURN_AIR_TEMP: rat, Role.MIXED_AIR_TEMP: mat}, index=idx)
+
+
+def _reheat_min(idx, *, faulty):
+    n = len(idx)
+    hv = np.full(n, 40.0 if faulty else 0.0)                   # reheating...
+    flow = np.full(n, 1000.0)
+    sp = np.full(n, 500.0)                                     # ...while airflow is well above min
+    return pd.DataFrame({Role.HEAT_VALVE: hv, Role.AIRFLOW: flow, Role.AIRFLOW_SP: sp}, index=idx)
+
+
 #: rule name -> its scenario builder (called with ``faulty=True/False``)
 SCENARIOS: dict = {
     "simultaneous_heat_cool": _simul,
@@ -256,6 +323,15 @@ SCENARIOS: dict = {
     "heatpump_defrost": _heatpump,
     "filter_fouling": _filter,
     "chiller_approach_fouling": _chiller_approach,
+    "boiler_summer_lockout": _boiler_summer,
+    "hw_plant_deltat": _hw_deltat,
+    "condenser_water_reset": _cond_water_reset,
+    "chw_pump_dp_reset": _chw_pump,
+    "hw_pump_dp_reset": _hw_pump,
+    "leaking_valve": _leaking_valve,
+    "night_weekend_setback": _setback,
+    "outdoor_air_fraction": _oa_fraction,
+    "reheat_minimization_g36": _reheat_min,
 }
 
 
