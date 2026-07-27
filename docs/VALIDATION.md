@@ -48,12 +48,13 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage: **24 of the 33 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
-their injected faults); the remaining 9 are honestly reported as *fixture-only* (unit-tested but no
-labeled scenario yet), and the 5 fleet rules are scored separately. A companion harness scores the
-**G36 FC1–FC15 engine** over 6 representative fault conditions. The runner prints a scored-vs-fixture
-coverage table so the credibility story is explicit rather than implied. This complements — does not
-replace — the real-data LBNL benchmark above (external validity on real equipment).
+Current coverage (0.6): **all 33 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+their injected faults) — the fixture-only list is now empty; the 5 fleet rules are scored separately. A
+companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
+prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This
+complements — does not replace — the real-data LBNL benchmark above (external validity on real equipment),
+which 0.6 broadened with a **cooling-coil-valve leakage severity sweep** (010–100%) to characterize the
+leak detector that the pooled result showed under-firing.
 
 ## Cross-validation vs an independent implementation
 

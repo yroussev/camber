@@ -146,11 +146,30 @@ reachable from the terminal.
 - [x] **Portfolio triage** — `agent.facts_from_fleet` + multi-site context: grounded portfolio-wide
       Q&A ("which building is worst?").
 
-## Next — 0.6
+## Delivered — v0.6.0 (validation & interop completeness)
+
+A consolidation release — finish the validation and interop stories 0.5 opened.
+
+- [x] **FDD hardening → 33/33** — the synthetic accuracy harness (`camber.faultlab`) now scores **every**
+      single-equipment rule (fixture-only list empty), 100% TPR / 0% FPR, CI-gated.
+      See **[VALIDATION.md](docs/VALIDATION.md)**.
+- [x] **Interop round-trips** — Haystack tag→role **import** (`interop.roles_from_haystack` /
+      `mapping_from_haystack`, closing the round-trip to Brick parity) + ASHRAE **223P** broadened from
+      21 to **44 of 54 roles** (full plant/DX/refrigerant; status/command roles documented as unmapped).
+      See **[ONTOLOGY.md](docs/ONTOLOGY.md)**.
+- [x] **Broaden the real-data FDD benchmark (Tier 1)** — a cooling-coil-valve leakage **severity sweep**
+      in the already-wired LBNL data (characterizes the under-firing leak detector) + a hardened fetcher.
+- [~] **Second labeled dataset (Tier 2)** — a second labeled chiller dataset would give the first real-data
+      validation of the refrigerant-side rules; **deferred pending an owner license-clearance** for
+      clean-room use.
+
+## Next — 0.7
 
 - [ ] **IPMVP Option D — calibrated simulation** M&V (the one remaining IPMVP boundary; A/B/C ship).
-- [ ] **Broaden the labeled FDD benchmark** — a second public labeled dataset to accuracy-score more
-      of the rules currently fixture-only.
+      Feasible dependency-light: a numpy grey-box RC model + calibration loop reusing the existing G14
+      `fit_stats` / hourly-CV(RMSE) acceptance and `predict()`-based savings machinery (EnergyPlus only
+      an optional cross-validator). The standing 0.7 headline.
+- [ ] **Labeled chiller benchmark** — if/when the license clears (carried from 0.6 Tier 2).
 - [ ] **Packaging & community** (carried) — conda-forge feedstock, Pages enablement, Discussions,
       PEP-541 `camber` name.
 

@@ -41,9 +41,14 @@ Adapters normalize any source to named point series on a common time grid (`Sour
 - **Brick interop** — `interop.mapping_from_brick` / `roles_from_brick` (import); `interop.to_brick`
   and `interop.site_to_ttl` / `site_from_ttl` (export + whole-site round-trip). Flags: `backend`
   (`auto`/`rdflib`/`minimal`; rdflib via the `[brick]` extra).
+- **Project-Haystack semantics** — `interop.haystack_tags` / `equip_haystack_tags` (role→tags export)
+  and, **new in 0.6**, `interop.role_from_tags` / `roles_from_haystack` / `mapping_from_haystack`
+  (tag→role import) — closing the round-trip to Brick-level parity (all 54 roles recover).
 - **ASHRAE 223P** — `interop.semantic223.site_to_223` / `site_from_223` map a site (roles + equipment)
-  to/from a 223P-shaped RDF subset (connections, medium, points; `ROLE_TO_223` quantity-kinds). Flags:
-  `profile` (`minimal`/`full`), `include_relations`. See **[ONTOLOGY.md](ONTOLOGY.md)**.
+  to/from a 223P-shaped RDF subset (connections, medium, points; `ROLE_TO_223` quantity-kinds, broadened
+  in 0.6 to **44 of 54 roles** — the full plant/DX/refrigerant side; status/command roles are documented
+  as intentionally unmapped). Flags: `profile` (`minimal`/`full`), `include_relations`. See
+  **[ONTOLOGY.md](ONTOLOGY.md)**.
 
 ## FDD — fault detection & diagnostics
 
