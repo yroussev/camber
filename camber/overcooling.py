@@ -19,15 +19,23 @@ re-tuning target (lower the min flow / fix the flow station).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
 from .schedules import occupied_mask
 
 # Box measures this diagnostic uses (legacy token names).
-OVERCOOL_MEASURES = ["SpaceTemp", "ActCoolSP", "ActFlow", "ActFlowSP", "Damper",
-                     "HWValve", "WarmUp", "CoolDown"]
+OVERCOOL_MEASURES = [
+    "SpaceTemp",
+    "ActCoolSP",
+    "ActFlow",
+    "ActFlowSP",
+    "Damper",
+    "HWValve",
+    "WarmUp",
+    "CoolDown",
+]
 
 
 @dataclass
@@ -36,11 +44,11 @@ class OvercoolResult:
 
     equip: str
     n_considered: int
-    satisfied_pct: float            # % occupied hrs zone at/below cooling setpoint
+    satisfied_pct: float  # % occupied hrs zone at/below cooling setpoint
     overcool_at_minflow_pct: float  # satisfied AND airflow near min
-    overcool_with_reheat_pct: float # the above AND reheat valve open
+    overcool_with_reheat_pct: float  # the above AND reheat valve open
     median_minflow_fraction: float  # median ActFlowSP / max ActFlow (how high is "min"?)
-    has_heat_valve: bool            # whether a HEAT_VALVE (HWValve) column was present
+    has_heat_valve: bool  # whether a HEAT_VALVE (HWValve) column was present
     coverage_start: str
     coverage_end: str
 
@@ -57,9 +65,9 @@ def analyze_overcooling(
     df: pd.DataFrame,
     equip: str,
     *,
-    flow_tol: float = 0.15,        # airflow within +15% of its setpoint == "at min"
+    flow_tol: float = 0.15,  # airflow within +15% of its setpoint == "at min"
     valve_thr: float = 5.0,
-    damper_low: float = 30.0,      # damper at/below this can't reduce flow further
+    damper_low: float = 30.0,  # damper at/below this can't reduce flow further
     satisfied_deadband_f: float = 0.0,  # require SpaceTemp <= ActCoolSP - deadband
     occupied_only: bool = True,
 ) -> OvercoolResult | None:
@@ -87,11 +95,13 @@ def analyze_overcooling(
         return None
     work = df.copy()
     if occupied_only:
-        work = work[occupied_mask(
-            work.index,
-            warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-            cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-        )]
+        work = work[
+            occupied_mask(
+                work.index,
+                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
+                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+            )
+        ]
     work = work.dropna(subset=["SpaceTemp", "ActCoolSP"])
     n = len(work)
     if n == 0:
@@ -129,7 +139,9 @@ def analyze_overcooling(
         satisfied_pct=_pct(satisfied, n),
         overcool_at_minflow_pct=_pct(overcool, n),
         overcool_with_reheat_pct=_pct(with_reheat, n),
-        median_minflow_fraction=round(minflow_frac, 3) if minflow_frac == minflow_frac else float("nan"),
+        median_minflow_fraction=round(minflow_frac, 3)
+        if minflow_frac == minflow_frac
+        else float("nan"),
         has_heat_valve=has_heat_valve,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),

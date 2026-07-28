@@ -9,7 +9,9 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.forecast import (  # noqa: E402
-    backtest, forecast_anomalies, seasonal_forecast,
+    backtest,
+    forecast_anomalies,
+    seasonal_forecast,
 )
 
 
@@ -33,25 +35,26 @@ def test_seasonal_forecast_recovers_occupancy_shape():
 
 
 def test_seasonal_forecast_empty_history():
-    fc = seasonal_forecast(pd.Series(dtype=float),
-                           pd.date_range("2026-06-01", periods=5, freq="1h"))
-    assert fc.empty or fc.isna().all()               # no history -> no usable forecast
+    fc = seasonal_forecast(
+        pd.Series(dtype=float), pd.date_range("2026-06-01", periods=5, freq="1h")
+    )
+    assert fc.empty or fc.isna().all()  # no history -> no usable forecast
 
 
 def test_backtest_reports_reasonable_accuracy():
     h = _weekly_load(weeks=4)
     r = backtest(h, test_frac=0.25)
     assert "cv_rmse" in r and r["n_test"] > 0
-    assert r["cv_rmse"] < 0.5                        # a clean seasonal signal fits well
+    assert r["cv_rmse"] < 0.5  # a clean seasonal signal fits well
 
 
 def test_forecast_anomalies_flags_injected_spikes():
     h = _weekly_load(weeks=4, seed=1)
     # forecast the last week from the first three, then inject spikes into the actual
-    horizon = h.index[-7 * 24:]
-    fc = seasonal_forecast(h.iloc[:-7 * 24], horizon)
+    horizon = h.index[-7 * 24 :]
+    fc = seasonal_forecast(h.iloc[: -7 * 24], horizon)
     actual = h.loc[horizon].copy()
-    actual.iloc[20] += 200.0                          # two clear anomalies
+    actual.iloc[20] += 200.0  # two clear anomalies
     actual.iloc[100] -= 200.0
     rep = forecast_anomalies(actual, fc, k=4.0)
     assert rep.n_anomalies >= 2 and rep.anomaly_frac > 0
@@ -60,8 +63,8 @@ def test_forecast_anomalies_flags_injected_spikes():
 
 def test_forecast_anomalies_clean_series_few_flags():
     h = _weekly_load(weeks=4, seed=2)
-    horizon = h.index[-7 * 24:]
-    fc = seasonal_forecast(h.iloc[:-7 * 24], horizon)
+    horizon = h.index[-7 * 24 :]
+    fc = seasonal_forecast(h.iloc[: -7 * 24], horizon)
     rep = forecast_anomalies(h.loc[horizon], fc, k=4.0)
-    assert rep.anomaly_frac < 0.05                    # a matching forecast -> few anomalies
+    assert rep.anomaly_frac < 0.05  # a matching forecast -> few anomalies
     assert rep.mae >= 0

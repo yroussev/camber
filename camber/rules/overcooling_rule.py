@@ -27,12 +27,19 @@ _ROLE_TO_COL = {
 
 
 class OvercoolingMinFlow:
-    """Detects overcooling driven by too-high minimum airflow at terminal boxes (PNNL Re-tuning Ch.7)."""
+    """Detects overcooling driven by too-high minimum airflow at terminal boxes
+    (PNNL Re-tuning Ch.7)."""
 
     name = "overcooling_min_flow"
     roles_required = (Role.SPACE_TEMP, Role.COOL_SP)
-    roles_optional = (Role.AIRFLOW, Role.AIRFLOW_SP, Role.DAMPER, Role.HEAT_VALVE,
-                      Role.WARMUP, Role.COOLDOWN)
+    roles_optional = (
+        Role.AIRFLOW,
+        Role.AIRFLOW_SP,
+        Role.DAMPER,
+        Role.HEAT_VALVE,
+        Role.WARMUP,
+        Role.COOLDOWN,
+    )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -40,8 +47,9 @@ class OvercoolingMinFlow:
         legacy = frame.rename(columns=cols)
         res = analyze_overcooling(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         # Severity from overcooling-at-min-flow that co-occurs with reheat (the
         # actionable, wasteful case). Fall back to overcool-at-min-flow ONLY when
         # there is genuinely no heat-valve data -- not when reheat merely never
@@ -61,19 +69,28 @@ class OvercoolingMinFlow:
                 "median_minflow_fraction": res.median_minflow_fraction,
                 "n_considered": res.n_considered,
             },
-            summary=(f"{equip}: overcools at min flow {res.overcool_at_minflow_pct:.0f}% "
-                     f"of occupied hours ({res.overcool_with_reheat_pct:.0f}% with "
-                     f"reheat); min-flow ~{res.median_minflow_fraction:.0%} of peak"),
+            summary=(
+                f"{equip}: overcools at min flow {res.overcool_at_minflow_pct:.0f}% "
+                f"of occupied hours ({res.overcool_with_reheat_pct:.0f}% with "
+                f"reheat); min-flow ~{res.median_minflow_fraction:.0%} of peak"
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: space temp vs cooling setpoint, spans where space runs below setpoint shaded."""
+        """Pattern J: space temp vs cooling setpoint, spans where space runs below setpoint
+        shaded."""
         from ..charts.evidence import Evidence
+
         if Role.SPACE_TEMP in frame.columns and Role.COOL_SP in frame.columns:
             # a comfortable space normally sits below the cooling setpoint; only shade where it
             # runs well below it (overcooled past the deadband), not routine operation
             margin = 3.0
             mask = ((frame[Role.COOL_SP] - frame[Role.SPACE_TEMP]) > margin).fillna(False)
-            return Evidence(renderer="multitrend", roles=[Role.SPACE_TEMP, Role.COOL_SP],
-                            mask=mask, label="overcooled (>3F below SP)", title=f"{equip}: overcooling")
+            return Evidence(
+                renderer="multitrend",
+                roles=[Role.SPACE_TEMP, Role.COOL_SP],
+                mask=mask,
+                label="overcooled (>3F below SP)",
+                title=f"{equip}: overcooling",
+            )
         return None

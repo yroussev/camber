@@ -46,8 +46,9 @@ class ControlHunting:
     roles_required = ()
     roles_optional = _MODULATING
 
-    def __init__(self, *, warn_per_hr: float = 6.0, fault_per_hr: float = 12.0,
-                 deadband: float = 0.05):
+    def __init__(
+        self, *, warn_per_hr: float = 6.0, fault_per_hr: float = 12.0, deadband: float = 0.05
+    ):
         self.warn_per_hr = warn_per_hr
         self.fault_per_hr = fault_per_hr
         self.deadband = deadband
@@ -67,24 +68,42 @@ class ControlHunting:
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run over an equipment role-frame; return a Finding on the worst-hunting output."""
         if not self._signals(frame):
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary=f"{equip}: no modulating output present")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary=f"{equip}: no modulating output present",
+            )
         role, rate, rev, rates = self._worst(frame)
-        sev = ("fault" if rate >= self.fault_per_hr else
-               "warn" if rate >= self.warn_per_hr else "ok")
+        sev = "fault" if rate >= self.fault_per_hr else "warn" if rate >= self.warn_per_hr else "ok"
         rn = getattr(role, "value", str(role)) if role is not None else ""
         return Finding(
-            rule=self.name, equip=equip, severity=sev,
-            metrics={"worst_signal": rn, "reversals_per_hr": round(rate, 2), "reversals": rev,
-                     "per_signal_rate": rates, "deadband": self.deadband},
-            summary=(f"{equip}: {rn} reverses {rate:.1f}x/hr (hunting)" if sev != "ok"
-                     else f"{equip}: modulating outputs stable ({rate:.1f}x/hr)"))
+            rule=self.name,
+            equip=equip,
+            severity=sev,
+            metrics={
+                "worst_signal": rn,
+                "reversals_per_hr": round(rate, 2),
+                "reversals": rev,
+                "per_signal_rate": rates,
+                "deadband": self.deadband,
+            },
+            summary=(
+                f"{equip}: {rn} reverses {rate:.1f}x/hr (hunting)"
+                if sev != "ok"
+                else f"{equip}: modulating outputs stable ({rate:.1f}x/hr)"
+            ),
+        )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: the worst-hunting signal's trend (the oscillation is the evidence)."""
         from ..charts.evidence import Evidence
+
         role = self._worst(frame)[0]
         if role is None:
             return None
-        return Evidence(renderer="multitrend", roles=[role],
-                        title=f"{equip}: {getattr(role, 'value', role)} hunting")
+        return Evidence(
+            renderer="multitrend",
+            roles=[role],
+            title=f"{equip}: {getattr(role, 'value', role)} hunting",
+        )

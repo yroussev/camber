@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from camber.interop.openei import fetch_urdb_rate, tariff_from_urdb  # noqa: E402
 from camber.tariff import compute_bill  # noqa: E402
 
-
 # A minimal URDB-shaped rate: $10/mo fixed, two-tier energy, flat $/kW demand, schedules.
 _URDB = {
     "label": "abc123",
@@ -20,8 +19,8 @@ _URDB = {
     "fixedchargefirstmeter": 10.0,
     "fixedchargeunits": "$/month",
     "energyratestructure": [
-        [{"max": 5000, "rate": 0.10}, {"rate": 0.20}],   # period 0: tiered
-        [{"rate": 0.40}],                                 # period 1: peak
+        [{"max": 5000, "rate": 0.10}, {"rate": 0.20}],  # period 0: tiered
+        [{"rate": 0.40}],  # period 1: peak
     ],
     "energyweekdayschedule": [[0] * 16 + [1] * 5 + [0] * 3 for _ in range(12)],
     "energyweekendschedule": [[0] * 24 for _ in range(12)],
@@ -38,13 +37,13 @@ def test_tariff_from_urdb_maps_fields():
     assert t.energy_rates[1] == [(None, 0.40)]
     assert t.flat_demand_rates == [[(None, 12.0)]]
     assert t.flat_demand_months == [0] * 12
-    assert t.ratchet_pct == 80.0           # 0.8 fraction normalized to percent
+    assert t.ratchet_pct == 80.0  # 0.8 fraction normalized to percent
 
 
 def test_mapped_tariff_bills():
     t = tariff_from_urdb(_URDB)
     idx = pd.date_range("2025-06-01", periods=24 * 30, freq="1h")
-    load = pd.Series(np.full(len(idx), 2.0), index=idx)   # 2 kW constant
+    load = pd.Series(np.full(len(idx), 2.0), index=idx)  # 2 kW constant
     bill = compute_bill(t, load)
     assert bill.n_months == 1
     assert bill.fixed_charge == 10.0

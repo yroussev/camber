@@ -25,7 +25,7 @@ stdlib only -- no numpy/pandas needed for these scalar computations.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 
 @dataclass
@@ -40,7 +40,7 @@ class BPSStandard:
     """
 
     name: str
-    metric: str                          # "eui" | "emissions"
+    metric: str  # "eui" | "emissions"
     limit: float
     unit: str = ""
     penalty_per_unit_over: float = 0.0
@@ -60,11 +60,11 @@ class BPSResult:
     limit: float
     unit: str
     compliant: bool
-    margin: float            # limit - value (positive = headroom)
-    pct_of_limit: float      # 100 * value / limit
-    over_amount: float       # max(0, value - limit)
-    penalty: float           # over_amount * penalty_per_unit_over
-    verdict: str             # "compliant" | "over"
+    margin: float  # limit - value (positive = headroom)
+    pct_of_limit: float  # 100 * value / limit
+    over_amount: float  # max(0, value - limit)
+    penalty: float  # over_amount * penalty_per_unit_over
+    verdict: str  # "compliant" | "over"
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
@@ -106,11 +106,11 @@ def assess_bps(value: float, standard: BPSStandard) -> BPSResult | None:
 # Caller can override or extend per project. (Source EUI would additionally apply
 # site-to-source multipliers -- out of scope here; this is site EUI.)
 EUI_FACTORS_KBTU: dict = {
-    "electricity": 3.412,    # per kWh
-    "natural_gas": 100.0,    # per therm
-    "propane": 91.6,         # per gallon
-    "fuel_oil": 138.7,       # per gallon (No. 2)
-    "district_chw": 12.0,    # per ton-hour of chilled water
+    "electricity": 3.412,  # per kWh
+    "natural_gas": 100.0,  # per therm
+    "propane": 91.6,  # per gallon
+    "fuel_oil": 138.7,  # per gallon (No. 2)
+    "district_chw": 12.0,  # per ton-hour of chilled water
 }
 
 
@@ -127,14 +127,21 @@ def site_eui(energy_by_fuel: dict, area_sqft: float, *, factors: dict | None = N
     if not math.isfinite(area_sqft) or area_sqft <= 0:
         return float("nan")
     fac = {**EUI_FACTORS_KBTU, **(factors or {})}
-    total_kbtu = sum(float(energy) * float(fac.get(fuel, 0.0))
-                     for fuel, energy in energy_by_fuel.items())
+    total_kbtu = sum(
+        float(energy) * float(fac.get(fuel, 0.0)) for fuel, energy in energy_by_fuel.items()
+    )
     return total_kbtu / float(area_sqft)
 
 
-def assess_eui(energy_by_fuel: dict, area_sqft: float, eui_limit: float, *,
-               name: str = "BPS EUI limit", penalty_per_unit_over: float = 0.0,
-               factors: dict | None = None) -> BPSResult | None:
+def assess_eui(
+    energy_by_fuel: dict,
+    area_sqft: float,
+    eui_limit: float,
+    *,
+    name: str = "BPS EUI limit",
+    penalty_per_unit_over: float = 0.0,
+    factors: dict | None = None,
+) -> BPSResult | None:
     """End-to-end: compute site EUI from energy + area, then assess it against a limit.
 
     A convenience over :func:`site_eui` + :func:`assess_bps`; ``eui_limit`` is the
@@ -145,13 +152,19 @@ def assess_eui(energy_by_fuel: dict, area_sqft: float, eui_limit: float, *,
     eui = site_eui(energy_by_fuel, area_sqft, factors=factors)
     if not math.isfinite(eui):
         return None
-    return assess_bps(eui, BPSStandard(name=name, metric="eui", limit=eui_limit,
-                                       unit="kBtu/ft2/yr",
-                                       penalty_per_unit_over=penalty_per_unit_over))
+    return assess_bps(
+        eui,
+        BPSStandard(
+            name=name,
+            metric="eui",
+            limit=eui_limit,
+            unit="kBtu/ft2/yr",
+            penalty_per_unit_over=penalty_per_unit_over,
+        ),
+    )
 
 
-def emissions_intensity(energy_by_fuel: dict, factors: dict,
-                        area_sqft: float) -> float:
+def emissions_intensity(energy_by_fuel: dict, factors: dict, area_sqft: float) -> float:
     """Annual emissions intensity (kgCO2e per sqft) from per-fuel energy.
 
     ``energy_by_fuel`` maps a fuel key (e.g. ``"electricity"``, ``"natural_gas"``)

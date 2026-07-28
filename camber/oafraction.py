@@ -20,9 +20,8 @@ RAT ~= OAT (denominator near zero), so those intervals are excluded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
-import numpy as np
 import pandas as pd
 
 from .schedules import occupied_mask
@@ -33,13 +32,13 @@ class OAFractionResult:
     """Outside-air-fraction diagnostics: excess-OA in cooling and under-ventilation rates."""
 
     equip: str
-    n_valid: int                  # intervals with a stable OAF
+    n_valid: int  # intervals with a stable OAF
     oaf_median_pct: float
-    n_cooling: int                # valid intervals in cooling weather (OAT > cutoff)
-    excess_oa_pct: float          # % of cooling intervals with OAF above min + margin
-    median_oaf_cooling: float     # median OAF during cooling weather
-    under_vent_pct: float         # % of occupied intervals with OAF below min - margin
-    min_oa_pct: float             # the design-minimum assumption used
+    n_cooling: int  # valid intervals in cooling weather (OAT > cutoff)
+    excess_oa_pct: float  # % of cooling intervals with OAF above min + margin
+    median_oaf_cooling: float  # median OAF during cooling weather
+    under_vent_pct: float  # % of occupied intervals with OAF below min - margin
+    min_oa_pct: float  # the design-minimum assumption used
     coverage_start: str
     coverage_end: str
 
@@ -52,11 +51,11 @@ def analyze_oa_fraction(
     df: pd.DataFrame,
     equip: str,
     *,
-    min_oa_pct: float = 20.0,        # assumed design minimum OA fraction
+    min_oa_pct: float = 20.0,  # assumed design minimum OA fraction
     excess_margin_pct: float = 5.0,  # OAF above min+margin == excess
-    under_margin_pct: float = 5.0,   # OAF below min-margin == under-ventilation
+    under_margin_pct: float = 5.0,  # OAF below min-margin == under-ventilation
     cooling_cutoff_f: float = 70.0,  # OAT above this == cooling weather (not economizing)
-    denom_min_f: float = 5.0,        # require |RAT-OAT| >= this for a stable OAF
+    denom_min_f: float = 5.0,  # require |RAT-OAT| >= this for a stable OAF
     occupied_only: bool = True,
 ) -> OAFractionResult | None:
     """Compute OAF and flag excess outdoor air in cooling weather.
@@ -79,7 +78,7 @@ def analyze_oa_fraction(
     if len(w) < 10:
         return None
     oaf = 100.0 * (w.ReturnAir - w.MixedAir) / (w.ReturnAir - w.OAT)
-    oaf = oaf[(oaf > -20) & (oaf < 120)]   # physical-ish range
+    oaf = oaf[(oaf > -20) & (oaf < 120)]  # physical-ish range
     if len(oaf) < 10:
         return None
 

@@ -7,13 +7,17 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.integrate import (  # noqa: E402
-    Notifier, collect_transport, finding_to_ticket, findings_to_tickets,
+    Notifier,
+    collect_transport,
+    finding_to_ticket,
+    findings_to_tickets,
 )
 from camber.integrate.tickets import fingerprint  # noqa: E402
 
 
 class _F:
     """A minimal finding-like object (duck-typed)."""
+
     def __init__(self, rule, equip, severity, summary="", metrics=None):
         self.rule = rule
         self.equip = equip
@@ -23,10 +27,9 @@ class _F:
 
 
 def test_finding_to_ticket_fields_and_priority():
-    f = _F("simul_hc", "AHU_2", "fault", "heating fighting cooling",
-           {"simultaneous_hc_pct": 1.2})
+    f = _F("simul_hc", "AHU_2", "fault", "heating fighting cooling", {"simultaneous_hc_pct": 1.2})
     t = finding_to_ticket(f, site="DemoSite")
-    assert t["priority"] == "high"          # fault -> high
+    assert t["priority"] == "high"  # fault -> high
     assert t["equip"] == "AHU_2"
     assert t["rule"] == "simul_hc"
     assert t["status"] == "open"
@@ -47,9 +50,9 @@ def test_ticket_is_json_serializable():
 
 def test_fingerprint_stable_and_specific():
     a = fingerprint("S", "AHU_1", "simul_hc")
-    assert a == fingerprint("S", "AHU_1", "simul_hc")     # stable across calls
-    assert a != fingerprint("S", "AHU_2", "simul_hc")     # equip-specific
-    assert a != fingerprint("S", "AHU_1", "sat_reset")    # rule-specific
+    assert a == fingerprint("S", "AHU_1", "simul_hc")  # stable across calls
+    assert a != fingerprint("S", "AHU_2", "simul_hc")  # equip-specific
+    assert a != fingerprint("S", "AHU_1", "sat_reset")  # rule-specific
 
 
 def test_finding_from_dict_also_works():
@@ -58,10 +61,14 @@ def test_finding_from_dict_also_works():
 
 
 def test_findings_to_tickets_filters_non_actionable():
-    findings = [_F("a", "e1", "fault"), _F("b", "e2", "ok"),
-                _F("c", "e3", "warn"), _F("d", "e4", "info")]
+    findings = [
+        _F("a", "e1", "fault"),
+        _F("b", "e2", "ok"),
+        _F("c", "e3", "warn"),
+        _F("d", "e4", "info"),
+    ]
     actionable = findings_to_tickets(findings, site="S")
-    assert {t["rule"] for t in actionable} == {"a", "c"}    # fault + warn only
+    assert {t["rule"] for t in actionable} == {"a", "c"}  # fault + warn only
     everything = findings_to_tickets(findings, site="S", actionable_only=False)
     assert len(everything) == 4
 
@@ -72,7 +79,7 @@ def test_notifier_default_collects():
     sent = n.emit_findings(findings, site="S")
     assert n.sent == 2
     assert len(sent) == 2
-    assert len(n.collected) == 2                # captured by the collector
+    assert len(n.collected) == 2  # captured by the collector
     assert n.collected[0]["rule"] == "a"
 
 
@@ -81,5 +88,5 @@ def test_notifier_with_injected_transport():
     n = Notifier(transport=transport)
     n.emit_findings([_F("a", "e1", "fault")], site="S")
     assert len(sink) == 1
-    assert n.collected is None                  # no default sink when injected
+    assert n.collected is None  # no default sink when injected
     assert sink[0]["priority"] == "high"

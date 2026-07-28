@@ -7,10 +7,11 @@ measure persist or silently regress? did equipment degrade?
 
 ```python
 from camber.changedetect import detect_level_shifts, largest_shift
+
 shifts = detect_level_shifts(series, z=4.0, min_delta=5.0)
 for s in shifts:
     print(s.at, s.before_mean, "->", s.after_mean, f"(Δ{s.delta:+.1f}, score {s.score})")
-big = largest_shift(series)          # the single most significant shift, or None
+big = largest_shift(series)  # the single most significant shift, or None
 ```
 
 Transparent binary segmentation: the most likely single change point maximizes the CUSUM of the

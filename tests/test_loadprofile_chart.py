@@ -5,6 +5,7 @@ import os
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -21,8 +22,8 @@ def _close_figs():
     plt.close("all")
 
 
-from camber.loadprofile import LoadMetrics  # noqa: E402
 from camber.charts.loadprofile_chart import load_duration_chart, load_profile_chart  # noqa: E402
+from camber.loadprofile import LoadMetrics  # noqa: E402
 
 
 def _load(days=21, seed=0):
@@ -36,20 +37,20 @@ def test_load_profile_split_weekday_vs_weekend():
     ax, m = load_profile_chart(_load(), split=True)
     assert isinstance(m, LoadMetrics)
     lines = ax.get_lines()
-    assert len(lines) == 3                               # weekday, weekend, baseload ref
+    assert len(lines) == 3  # weekday, weekend, baseload ref
     wk, we = lines[0].get_ydata(), lines[1].get_ydata()
-    assert wk[12] > we[12] + 30                          # occupied weekday midday >> weekend
+    assert wk[12] > we[12] + 30  # occupied weekday midday >> weekend
 
 
 def test_load_profile_single_daily_avg():
     ax, m = load_profile_chart(_load(), split=False, annotate=False)
-    assert len([ln for ln in ax.get_lines()]) == 1       # one daily-average line, no baseload ref
+    assert len([ln for ln in ax.get_lines()]) == 1  # one daily-average line, no baseload ref
 
 
 def test_load_duration_curve_monotone_and_annotated():
     ax, m = load_duration_chart(_load())
     ydata = ax.get_lines()[0].get_ydata()
-    assert np.all(np.diff(ydata) <= 1e-9)                # sorted high-to-low
+    assert np.all(np.diff(ydata) <= 1e-9)  # sorted high-to-low
     assert 0.0 < m.load_factor < 1.0
     labels = " ".join(ln.get_label() for ln in ax.get_lines())
     assert "peak" in labels and "baseload" in labels
@@ -58,7 +59,7 @@ def test_load_duration_curve_monotone_and_annotated():
 def test_load_duration_cost_translation():
     ax, _ = load_duration_chart(_load(), price=0.15)
     title = ax.get_title()
-    assert "kWh" in title and "$" in title               # energy × price surfaced
+    assert "kWh" in title and "$" in title  # energy × price surfaced
 
 
 def test_load_duration_no_price_no_cost_note():

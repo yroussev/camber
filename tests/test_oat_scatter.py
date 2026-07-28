@@ -5,6 +5,7 @@ import os
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -15,7 +16,10 @@ import pytest  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.charts.oat_scatter import (  # noqa: E402
-    CloudShape, brush_back, classify_shape, oat_scatter,
+    CloudShape,
+    brush_back,
+    classify_shape,
+    oat_scatter,
 )
 
 
@@ -36,7 +40,7 @@ def test_classify_linear_vs_v_vs_hockey_vs_scattered():
     lin = pd.Series(2.0 * T + rng.normal(0, 3, len(T)), index=T.index)
     v = pd.Series(40 + 2.0 * np.abs(T - 60) + rng.normal(0, 3, len(T)), index=T.index)
     hs = pd.Series(30 + np.clip(T - 65, 0, None) * 3 + rng.normal(0, 3, len(T)), index=T.index)
-    sc = pd.Series(50 + rng.normal(0, 15, len(T)), index=T.index)   # no OAT dependence
+    sc = pd.Series(50 + rng.normal(0, 15, len(T)), index=T.index)  # no OAT dependence
 
     assert classify_shape(lin, T).shape == "linear"
     assert classify_shape(v, T).shape == "v"
@@ -74,7 +78,7 @@ def test_oat_scatter_returns_axes_fit_and_shape():
     T, rng = _oat()
     v = pd.Series(40 + 2.0 * np.abs(T - 60) + rng.normal(0, 3, len(T)), index=T.index)
     ax, shape = oat_scatter(v, T, ylabel="kW")
-    assert ax.collections and ax.get_lines()          # scatter + fit/guide lines drawn
+    assert ax.collections and ax.get_lines()  # scatter + fit/guide lines drawn
     assert shape.shape == "v" and shape.change_points  # balance point(s) fit
 
 
@@ -91,4 +95,4 @@ def test_oat_scatter_color_by_category():
     y = pd.Series(2.0 * T + rng.normal(0, 3, len(T)), index=T.index)
     season = pd.Series(np.where(T < 55, "cold", "warm"), index=T.index, name="season")
     ax, _ = oat_scatter(y, T, by=season)
-    assert ax.collections                              # colored scatter drawn
+    assert ax.collections  # colored scatter drawn

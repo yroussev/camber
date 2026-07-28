@@ -41,8 +41,7 @@ ROLE_TO_BRICK_PART = {
     Role.SUPPLY_FAN_STATUS: ("Supply_Air_Fan", "Fan", "Fan_On_Off_Status"),
 }
 
-_PREFIX = ('@prefix bldg: <bldg#> .\n'
-           '@prefix brick: <https://brickschema.org/schema/Brick#> .\n\n')
+_PREFIX = "@prefix bldg: <bldg#> .\n@prefix brick: <https://brickschema.org/schema/Brick#> .\n\n"
 
 
 def haystack_tags(role: Role) -> frozenset:
@@ -59,8 +58,7 @@ def equip_haystack_tags(roles) -> dict:
     return {r: haystack_tags(r) for r in roles}
 
 
-def to_brick(equip_id: str, equip_class: str, roles, *,
-             point_names: dict | None = None) -> str:
+def to_brick(equip_id: str, equip_class: str, roles, *, point_names: dict | None = None) -> str:
     """Emit a Brick (Turtle) model for one equipment and its roles.
 
     ``point_names`` optionally maps a role to the point's local name (default is
@@ -68,8 +66,8 @@ def to_brick(equip_id: str, equip_class: str, roles, *,
     same set of roles.
     """
     point_names = point_names or {}
-    direct_pts = []          # (point_name, point_class) attached straight to equip
-    parts = {}               # part_name -> (part_class, [(point_name, point_class)])
+    direct_pts = []  # (point_name, point_class) attached straight to equip
+    parts = {}  # part_name -> (part_class, [(point_name, point_class)])
     for r in roles:
         pname = point_names.get(r, r.value)
         if r in ROLE_TO_BRICK_POINT_CLASS:
@@ -82,11 +80,9 @@ def to_brick(equip_id: str, equip_class: str, roles, *,
     # equipment node with its parts and directly-attached points
     eq = [f"bldg:{equip_id} a brick:{equip_class}"]
     if parts:
-        eq.append("    brick:hasPart " + ",\n        ".join(
-            f"bldg:{p}" for p in sorted(parts)))
+        eq.append("    brick:hasPart " + ",\n        ".join(f"bldg:{p}" for p in sorted(parts)))
     if direct_pts:
-        eq.append("    brick:hasPoint " + ",\n        ".join(
-            f"bldg:{n}" for n, _ in direct_pts))
+        eq.append("    brick:hasPoint " + ",\n        ".join(f"bldg:{n}" for n, _ in direct_pts))
     lines.append(" ;\n".join(eq) + " .\n\n")
     # direct point typings
     for n, cls in direct_pts:
@@ -94,9 +90,10 @@ def to_brick(equip_id: str, equip_class: str, roles, *,
     # parts and their points
     for part_name in sorted(parts):
         part_cls, pts = parts[part_name]
-        lines.append(f"\nbldg:{part_name} a brick:{part_cls} ;\n"
-                     "    brick:hasPoint " + ",\n        ".join(
-                         f"bldg:{n}" for n, _ in pts) + " .\n")
+        lines.append(
+            f"\nbldg:{part_name} a brick:{part_cls} ;\n"
+            "    brick:hasPoint " + ",\n        ".join(f"bldg:{n}" for n, _ in pts) + " .\n"
+        )
         for n, cls in pts:
             lines.append(f"bldg:{n} a brick:{cls} .\n")
     return "".join(lines)

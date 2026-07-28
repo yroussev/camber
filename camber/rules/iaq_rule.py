@@ -31,8 +31,12 @@ class CO2Ventilation:
         legacy = frame.rename(columns=cols)
         res = analyze_co2_ventilation(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need zone CO2 over occupied hours)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need zone CO2 over occupied hours)",
+            )
         # Under-ventilation (high CO2) is the IAQ fault and drives severity; persistent
         # over-ventilation is an energy opportunity surfaced as a warn at most.
         if res.under_vent_pct >= 20.0:
@@ -44,11 +48,15 @@ class CO2Ventilation:
         else:
             severity = "ok"
         if res.under_vent_pct >= 5.0:
-            tail = (f"under-ventilated {res.under_vent_pct:.0f}% of occupied hours "
-                    f"(CO2 p95 {res.co2_p95_ppm:.0f} ppm, > {res.high_ppm:.0f} threshold)")
+            tail = (
+                f"under-ventilated {res.under_vent_pct:.0f}% of occupied hours "
+                f"(CO2 p95 {res.co2_p95_ppm:.0f} ppm, > {res.high_ppm:.0f} threshold)"
+            )
         elif res.over_vent_pct >= 60.0:
-            tail = (f"over-ventilated: CO2 near outdoor {res.over_vent_pct:.0f}% of "
-                    f"occupied hours (energy opportunity)")
+            tail = (
+                f"over-ventilated: CO2 near outdoor {res.over_vent_pct:.0f}% of "
+                f"occupied hours (energy opportunity)"
+            )
         else:
             tail = f"CO2 median {res.co2_median_ppm:.0f} ppm; ventilation adequate"
         return Finding(

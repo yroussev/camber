@@ -42,8 +42,13 @@ DIRECT_CLASS_TO_ROLE = {
 }
 
 # Point classes whose role depends on the owning equipment part.
-_CONTEXT_CLASSES = {"Valve_Position_Sensor", "Damper_Position_Sensor",
-                    "Speed_status", "Speed_Status", "Fan_On_Off_Status"}
+_CONTEXT_CLASSES = {
+    "Valve_Position_Sensor",
+    "Damper_Position_Sensor",
+    "Speed_status",
+    "Speed_Status",
+    "Fan_On_Off_Status",
+}
 
 
 def _local(token: str) -> str:
@@ -54,8 +59,7 @@ def _local(token: str) -> str:
     ``#`` / ``/`` / ``:``), so it works for both the minimal parser's prefixed
     tokens and rdflib's expanded URIs.
     """
-    return (token.strip().lstrip("<").rstrip(">")
-            .split("#")[-1].split("/")[-1].split(":")[-1])
+    return token.strip().lstrip("<").rstrip(">").split("#")[-1].split("/")[-1].split(":")[-1]
 
 
 def parse_triples(ttl: str):
@@ -65,8 +69,11 @@ def parse_triples(ttl: str):
     {part_local -> [point_local, ...]}. Handles ``a``/``;``/``,`` lists; ignores
     ``@prefix`` and comments. Not a general RDF parser.
     """
-    lines = [ln.strip() for ln in ttl.splitlines()
-             if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))]
+    lines = [
+        ln.strip()
+        for ln in ttl.splitlines()
+        if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))
+    ]
     text = " ".join(lines)
     types, has_point = {}, {}
     for stmt in re.split(r"\s\.\s", text + " "):
@@ -138,6 +145,7 @@ def roles_from_triples(types: dict, has_point: dict) -> dict:
 def _have_rdflib() -> bool:
     try:
         import rdflib  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -158,9 +166,9 @@ def parse_triples_rdflib(ttl: str):
     types, has_point = {}, {}
     for s, p, o in g:
         pl = _local(str(p))
-        if pl == "type":                       # rdf:type
+        if pl == "type":  # rdf:type
             types[_local(str(s))] = _local(str(o))
-        elif pl == "hasPoint":                 # brick:hasPoint (any Brick version)
+        elif pl == "hasPoint":  # brick:hasPoint (any Brick version)
             has_point.setdefault(_local(str(s)), []).append(_local(str(o)))
     return types, has_point
 
@@ -171,8 +179,9 @@ def _parse(ttl: str, backend: str):
         return parse_triples(ttl)
     if backend == "rdflib":
         if not _have_rdflib():
-            raise ImportError("rdflib not installed; `pip install camber-toolkit[brick]` "
-                              "or use backend='minimal'")
+            raise ImportError(
+                "rdflib not installed; `pip install camber-toolkit[brick]` or use backend='minimal'"
+            )
         return parse_triples_rdflib(ttl)
     if backend == "auto":
         return parse_triples_rdflib(ttl) if _have_rdflib() else parse_triples(ttl)
@@ -195,4 +204,5 @@ def mapping_from_brick(ttl: str, *, backend: str = "auto") -> MappingProvider:
     """Build a :class:`MappingProvider` directly from a Brick Turtle model."""
     roles = roles_from_brick(ttl, backend=backend)
     return MappingProvider.from_dict(
-        {"aliases": {name: role.value for name, role in roles.items()}})
+        {"aliases": {name: role.value for name, role in roles.items()}}
+    )

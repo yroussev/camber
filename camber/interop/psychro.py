@@ -22,8 +22,9 @@ def _require():
     try:
         import psychrolib
     except Exception as e:  # noqa: BLE001
-        raise ImportError('the PsychroLib bridge needs the optional extra: '
-                          'pip install "camber-toolkit[psychro]"') from e
+        raise ImportError(
+            'the PsychroLib bridge needs the optional extra: pip install "camber-toolkit[psychro]"'
+        ) from e
     psychrolib.SetUnitSystem(psychrolib.IP)
     return psychrolib
 
@@ -31,8 +32,7 @@ def _require():
 def wet_bulb_f(tdb_f, rh_pct, *, pressure_psia: float = 14.696) -> float:
     """Exact wet-bulb temperature (°F) from dry-bulb (°F) and RH (%) via PsychroLib."""
     p = _require()
-    return float(p.GetTWetBulbFromRelHum(float(tdb_f), float(rh_pct) / 100.0,
-                                         float(pressure_psia)))
+    return float(p.GetTWetBulbFromRelHum(float(tdb_f), float(rh_pct) / 100.0, float(pressure_psia)))
 
 
 def psychrometrics(tdb_f, rh_pct, *, pressure_psia: float = 14.696) -> dict:
@@ -40,15 +40,20 @@ def psychrometrics(tdb_f, rh_pct, *, pressure_psia: float = 14.696) -> dict:
     p = _require()
     tdb, rh, press = float(tdb_f), float(rh_pct) / 100.0, float(pressure_psia)
     w = p.GetHumRatioFromRelHum(tdb, rh, press)
-    return {"wet_bulb_f": round(float(p.GetTWetBulbFromRelHum(tdb, rh, press)), 2),
-            "dew_point_f": round(float(p.GetTDewPointFromRelHum(tdb, rh)), 2),
-            "humidity_ratio": round(float(w), 5),
-            "enthalpy_btu_per_lb": round(float(p.GetMoistAirEnthalpy(tdb, w)), 2)}
+    return {
+        "wet_bulb_f": round(float(p.GetTWetBulbFromRelHum(tdb, rh, press)), 2),
+        "dew_point_f": round(float(p.GetTDewPointFromRelHum(tdb, rh)), 2),
+        "humidity_ratio": round(float(w), 5),
+        "enthalpy_btu_per_lb": round(float(p.GetMoistAirEnthalpy(tdb, w)), 2),
+    }
 
 
 def compare_wetbulb(tdb_f, rh_pct, *, pressure_psia: float = 14.696) -> dict:
     """CAMBER's Stull wet-bulb vs PsychroLib's exact value (validate the approximation)."""
     exact = wet_bulb_f(tdb_f, rh_pct, pressure_psia=pressure_psia)
     approx = float(stull_wetbulb_f(tdb_f, rh_pct))
-    return {"stull_f": round(approx, 2), "psychrolib_f": round(exact, 2),
-            "abs_diff_f": round(abs(approx - exact), 2)}
+    return {
+        "stull_f": round(approx, 2),
+        "psychrolib_f": round(exact, 2),
+        "abs_diff_f": round(abs(approx - exact), 2),
+    }

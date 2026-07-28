@@ -15,7 +15,7 @@ def test_online_cusum_accumulates_savings():
     m = OnlineCusum(lambda d: 100.0)
     states = [m.update(d, 90.0) for d in range(5)]
     assert states[-1].n == 5
-    assert abs(states[-1].cusum - 50.0) < 1e-9            # 5 × 10
+    assert abs(states[-1].cusum - 50.0) < 1e-9  # 5 × 10
     assert states[-1].last_residual == 10.0
 
 
@@ -35,7 +35,7 @@ def test_online_cusum_tabular_alarm_savings_and_waste():
 
 
 def test_online_cusum_accepts_array_predict_and_reset():
-    m = OnlineCusum(lambda d: np.array([100.0]))          # model.predict-style length-1 array
+    m = OnlineCusum(lambda d: np.array([100.0]))  # model.predict-style length-1 array
     s = m.update(1, 95.0)
     assert s.last_residual == 5.0
     m.reset()
@@ -46,13 +46,13 @@ def test_rolling_anomaly_flags_spike_when_warm():
     rng = np.random.default_rng(0)
     m = RollingAnomaly(window=48, k=3.5, min_samples=10)
     states = [m.update(float(x)) for x in rng.normal(0, 1, 60)]
-    assert states[0].warm is False and not states[0].is_anomaly   # cold start never flags
+    assert states[0].warm is False and not states[0].is_anomaly  # cold start never flags
     assert states[-1].warm is True
-    spike = m.update(50.0)                                # a clear outlier vs ~N(0,1)
+    spike = m.update(50.0)  # a clear outlier vs ~N(0,1)
     assert spike.is_anomaly and abs(spike.z) >= 3.5
 
 
 def test_rolling_anomaly_quiet_stream_no_false_positive():
     m = RollingAnomaly(window=24, k=3.5, min_samples=8)
     flags = [m.update(5.0 + (i % 2) * 0.1).is_anomaly for i in range(40)]  # tiny variation
-    assert not any(flags)                                 # near-constant -> no anomalies
+    assert not any(flags)  # near-constant -> no anomalies

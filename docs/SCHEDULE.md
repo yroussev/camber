@@ -7,11 +7,12 @@ occupancy model).
 
 ```python
 from camber.schedule import detect_schedule, compare_schedule
-sch = detect_schedule(load_kw)          # threshold defaults to midway between base and peak
-sch.days[0].start_hour, sch.days[0].end_hour     # Monday on-period
-sch.occupied_fraction                             # share of the 168 hour-of-week slots that are on
 
-stated = [(d, h) for d in range(5) for h in range(9, 17)]   # weekday 9–5
+sch = detect_schedule(load_kw)  # threshold defaults to midway between base and peak
+sch.days[0].start_hour, sch.days[0].end_hour  # Monday on-period
+sch.occupied_fraction  # share of the 168 hour-of-week slots that are on
+
+stated = [(d, h) for d in range(5) for h in range(9, 17)]  # weekday 9–5
 cmp = compare_schedule(sch, stated)
 cmp["extra_runtime_slots"], cmp["n_missing"], cmp["agreement"]
 ```

@@ -95,15 +95,19 @@ from camber.model.roles import Role
 from camber.rules.simul_hc import SimultaneousHeatCool
 
 idx = pd.date_range("2025-07-07", periods=24 * 7, freq="1h")
-frame = pd.DataFrame({
-    Role.OAT:        90 + 10 * np.sin((idx.hour - 9) / 24 * 2 * np.pi),
-    Role.COOL_VALVE: 70.0,                                  # cooling all day
-    Role.HEAT_VALVE: np.where((idx.dayofweek < 5) & idx.hour.isin([11, 12, 13, 14]),
-                              40.0, 0.0),                    # midday reheat — a fault
-}, index=idx)
+frame = pd.DataFrame(
+    {
+        Role.OAT: 90 + 10 * np.sin((idx.hour - 9) / 24 * 2 * np.pi),
+        Role.COOL_VALVE: 70.0,  # cooling all day
+        Role.HEAT_VALVE: np.where(
+            (idx.dayofweek < 5) & idx.hour.isin([11, 12, 13, 14]), 40.0, 0.0
+        ),  # midday reheat — a fault
+    },
+    index=idx,
+)
 
 f = SimultaneousHeatCool().analyze("AHU_1", frame)
-print(f.severity, f.metrics["simultaneous_hc_pct"])         # -> fault 36.36
+print(f.severity, f.metrics["simultaneous_hc_pct"])  # -> fault 36.36
 ```
 
 **Measurement & verification** — fit a change-point baseline and score it:
@@ -115,9 +119,9 @@ from camber.mandv.stats import fit_stats
 
 oat = np.linspace(35, 100, 120)
 energy = 50 + np.clip(oat - 65, 0, None) * 3 + np.random.default_rng(0).normal(0, 2, 120)
-m = best_model(oat, energy)                                 # picks the inverse model
+m = best_model(oat, energy)  # picks the inverse model
 st = fit_stats(energy, m.predict(oat), N_PARAMS[m.kind])
-print(m.kind, round(st.r2, 2), f"{st.cv_rmse:.0%}")         # -> 3PC 1.0 2%
+print(m.kind, round(st.r2, 2), f"{st.cv_rmse:.0%}")  # -> 3PC 1.0 2%
 ```
 
 **Your own building** — map point names → roles in a small JSON config (or derive

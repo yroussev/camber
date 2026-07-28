@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from ..model.roles import Role
 from ..schedules import occupied_mask
-from ..zones import zone_states, time_of_week_profile
+from ..zones import time_of_week_profile, zone_states
 from .base import Finding
 
 _ROLE_TO_ZONE_COL = {
@@ -29,27 +29,38 @@ class ZonesHeatCoolCensus:
 
     name = "zones_heat_cool_census"
     roles_required = (Role.HEAT_VALVE,)
-    roles_optional = (Role.AIRFLOW, Role.AIRFLOW_SP, Role.SPACE_TEMP, Role.COOL_SP,
-                      Role.WARMUP, Role.COOLDOWN)
+    roles_optional = (
+        Role.AIRFLOW,
+        Role.AIRFLOW_SP,
+        Role.SPACE_TEMP,
+        Role.COOL_SP,
+        Role.WARMUP,
+        Role.COOLDOWN,
+    )
 
     def analyze_fleet(self, frames: dict) -> Finding:
         """Run the diagnostic across the fleet's role-frames; return one aggregate Finding."""
         if not frames:
-            return Finding(rule=self.name, equip="<fleet>", severity="info",
-                           summary="no zones with reheat valves")
+            return Finding(
+                rule=self.name,
+                equip="<fleet>",
+                severity="info",
+                summary="no zones with reheat valves",
+            )
         legacy = {
-            equip: f.rename(columns={r: c for r, c in _ROLE_TO_ZONE_COL.items()
-                                     if r in f.columns})
+            equip: f.rename(columns={r: c for r, c in _ROLE_TO_ZONE_COL.items() if r in f.columns})
             for equip, f in frames.items()
         }
         states = zone_states(legacy)
         if states.empty:
-            return Finding(rule=self.name, equip="<fleet>", severity="info",
-                           summary="no zone states computed")
+            return Finding(
+                rule=self.name, equip="<fleet>", severity="info", summary="no zone states computed"
+            )
         occ = states[occupied_mask(states.index)]
         if occ.empty:
-            return Finding(rule=self.name, equip="<fleet>", severity="info",
-                           summary="no occupied intervals")
+            return Finding(
+                rule=self.name, equip="<fleet>", severity="info", summary="no occupied intervals"
+            )
         avg_both = float(occ["n_both"].mean())
         pct_any_both = 100.0 * float((occ["n_both"] > 0).mean())
         avg_heating = float(occ["n_heating"].mean())
@@ -72,6 +83,8 @@ class ZonesHeatCoolCensus:
                 "max_zones_both": int(occ["n_both"].max()),
                 "timeofweek_profile": profile,  # DataFrame, for charts
             },
-            summary=(f"fleet: avg {avg_both:.1f} zones simultaneously heating+cooling; "
-                     f"{pct_any_both:.0f}% of occupied hours have >=1 such zone"),
+            summary=(
+                f"fleet: avg {avg_both:.1f} zones simultaneously heating+cooling; "
+                f"{pct_any_both:.0f}% of occupied hours have >=1 such zone"
+            ),
         )

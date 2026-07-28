@@ -36,8 +36,9 @@ class CHWPumpDPReset:
         legacy = frame.rename(columns=cols)
         res = analyze_chw_pump(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         pf, pm = res.pct_running_near_full, res.pct_running_near_min
         # riding the curve (near full) is the energy fault; pinned at the VFD minimum
         # is an oversizing opportunity (warn).
@@ -60,7 +61,9 @@ class CHWPumpDPReset:
                 "dp_sp_reset_present": res.dp_sp_reset_present,
                 "n_running": res.n_running,
             },
-            summary=(f"{equip}: pump median speed {res.median_speed_pct:.0f}%, "
-                     f"{res.pct_running_near_full:.0f}% near full / "
-                     f"{res.pct_running_near_min:.0f}% near min; {reset_note}"),
+            summary=(
+                f"{equip}: pump median speed {res.median_speed_pct:.0f}%, "
+                f"{res.pct_running_near_full:.0f}% near full / "
+                f"{res.pct_running_near_min:.0f}% near min; {reset_note}"
+            ),
         )

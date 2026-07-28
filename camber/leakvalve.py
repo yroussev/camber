@@ -18,7 +18,7 @@ mistaken for a heating leak.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -30,10 +30,10 @@ class LeakValveResult:
     """Coil-valve leak diagnostics: SAT-vs-MAT drift when both valves are closed."""
 
     equip: str
-    n_both_closed: int            # hours both coil valves commanded closed
-    hw_leak_pct: float            # % of those hours SAT > MAT + thr (heating leak)
-    chw_leak_pct: float           # % of those hours SAT < MAT - thr (cooling leak)
-    median_delta_f: float         # median (SAT-MAT) when both closed
+    n_both_closed: int  # hours both coil valves commanded closed
+    hw_leak_pct: float  # % of those hours SAT > MAT + thr (heating leak)
+    chw_leak_pct: float  # % of those hours SAT < MAT - thr (cooling leak)
+    median_delta_f: float  # median (SAT-MAT) when both closed
     coverage_start: str
     coverage_end: str
 
@@ -46,10 +46,10 @@ def analyze_leak_valves(
     df: pd.DataFrame,
     equip: str,
     *,
-    valve_closed_thr: float = 5.0,   # valve at/below this == commanded closed
-    delta_thr_f: float = 3.0,        # |SAT-MAT| beyond fan heat to call a leak
-    fan_heat_f: float = 1.0,         # expected SAT rise from fan work (subtracted)
-    occupied_only: bool = False,     # leaks show whenever the AHU runs
+    valve_closed_thr: float = 5.0,  # valve at/below this == commanded closed
+    delta_thr_f: float = 3.0,  # |SAT-MAT| beyond fan heat to call a leak
+    fan_heat_f: float = 1.0,  # expected SAT rise from fan work (subtracted)
+    occupied_only: bool = False,  # leaks show whenever the AHU runs
 ) -> LeakValveResult | None:
     """Detect leaking coil valves at an AHU. ``df`` has CHW_Valve, HHW_Valve,
     MixedAir, SupplyAir (measure-named).

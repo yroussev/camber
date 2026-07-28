@@ -22,10 +22,9 @@ cooling-mode hours (CHW valve open). |b| small AND sat_std small => no reset.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
-import pandas as pd
 
 from .schedules import occupied_mask
 
@@ -49,9 +48,9 @@ class SATResetResult:
     sat_p05: float
     sat_p95: float
     sat_std: float
-    slope_per_F: float        # d(SAT)/d(OAT); ~0 means no reset
+    slope_per_F: float  # d(SAT)/d(OAT); ~0 means no reset
     r2: float
-    pct_sat_below_58: float   # % of cooling hours SAT pinned low (<58 F)
+    pct_sat_below_58: float  # % of cooling hours SAT pinned low (<58 F)
     verdict: str
     coverage_start: str
     coverage_end: str
@@ -73,8 +72,17 @@ def _ols(x: np.ndarray, y: np.ndarray):
     return float(b), float(a), float(r2)
 
 
-def analyze_satreset(df, equip, *, oat=None, valve_thr=5.0, occupied_only=True,
-                     low_sat_f=58.0, slope_flat=0.10, spread_tight=3.0):
+def analyze_satreset(
+    df,
+    equip,
+    *,
+    oat=None,
+    valve_thr=5.0,
+    occupied_only=True,
+    low_sat_f=58.0,
+    slope_flat=0.10,
+    spread_tight=3.0,
+):
     """Diagnose SAT reset behavior for one AHU. ``df`` columns are measure names.
 
     Verdict cutoffs are OUR diagnostic thresholds (judgment, not a standard); the
@@ -90,12 +98,14 @@ def analyze_satreset(df, equip, *, oat=None, valve_thr=5.0, occupied_only=True,
         return None
     work = df.copy()
     if occupied_only:
-        work = work[occupied_mask(
-            work.index,
-            occ=_populated(work, "Occupancy"),
-            warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-            cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-        )]
+        work = work[
+            occupied_mask(
+                work.index,
+                occ=_populated(work, "Occupancy"),
+                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
+                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+            )
+        ]
 
     # cooling-mode hours only: SAT reset is about cooling supply temp
     if "CHW_Valve" in work.columns:

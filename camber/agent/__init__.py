@@ -11,20 +11,39 @@ caller owns all I/O by wrapping any vendor SDK in the injected callable — mirr
 ``ingest.haystack`` transport seam. Advisory only, always auditable.
 """
 
-from .context import (
-    Fact, Context, build_context, facts_from_findings, facts_from_run, facts_from_scorecard,
-    facts_from_completeness, facts_from_history, facts_from_mapping, facts_from_fleet,
-)
-from .verify import Grounded, check
-from .client import AgentClient, client_from_callable, stub_client
-from .explain import explain
 from .ask import ask
+from .client import AgentClient, client_from_callable, stub_client
+from .context import (
+    Context,
+    Fact,
+    build_context,
+    facts_from_completeness,
+    facts_from_findings,
+    facts_from_fleet,
+    facts_from_history,
+    facts_from_mapping,
+    facts_from_run,
+    facts_from_scorecard,
+)
+from .explain import explain
+from .verify import Grounded, check
 
 __all__ = [
-    "Fact", "Context", "build_context", "facts_from_findings", "facts_from_run",
-    "facts_from_scorecard", "facts_from_completeness", "facts_from_history", "facts_from_mapping",
+    "Fact",
+    "Context",
+    "build_context",
+    "facts_from_findings",
+    "facts_from_run",
+    "facts_from_scorecard",
+    "facts_from_completeness",
+    "facts_from_history",
+    "facts_from_mapping",
     "facts_from_fleet",
-    "Grounded", "check",
-    "AgentClient", "client_from_callable", "stub_client",
-    "explain", "ask",
+    "Grounded",
+    "check",
+    "AgentClient",
+    "client_from_callable",
+    "stub_client",
+    "explain",
+    "ask",
 ]

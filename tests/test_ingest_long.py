@@ -50,4 +50,4 @@ def test_custom_column_names_and_resample(tmp_path):
     p.write_text("t,name,reading\n2024-01-01 00:00,P1,10\n2024-01-01 00:30,P1,20\n")
     src = LongCsvAdapter(str(p), ts_col="t", point_col="name", value_col="reading", unit_col=None)
     df = src.load_points(["P1"], resample="1h")
-    assert df["P1"].iloc[0] == 15.0            # hourly mean of 10,20
+    assert df["P1"].iloc[0] == 15.0  # hourly mean of 10,20

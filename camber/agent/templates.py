@@ -42,8 +42,19 @@ def explain_from_facts(context) -> str:
 _COST_WORDS = ("cost", "$", "dollar", "save", "saving", "waste", "energy", "kwh", "expensive")
 _FIX_WORDS = ("recommend", "fix", "do", "action", "repair", "correct", "resolve", "should")
 _CAUSE_WORDS = ("cause", "root", "why", "reason", "because", "driver")
-_FLEET_WORDS = ("fleet", "portfolio", "building", "buildings", "worst", "best", "eui",
-                "efficient", "efficiency", "rank", "across")
+_FLEET_WORDS = (
+    "fleet",
+    "portfolio",
+    "building",
+    "buildings",
+    "worst",
+    "best",
+    "eui",
+    "efficient",
+    "efficiency",
+    "rank",
+    "across",
+)
 
 
 def _mentioned_equips(question, context) -> list:
@@ -87,7 +98,7 @@ def answer_from_facts(question: str, context) -> str:
     elif any(w in q for w in _CAUSE_WORDS):
         facts = _kind("rootcause") or _kind("finding")
     elif equips:
-        facts = scope                       # "tell me about AHU-1" -> everything on it
+        facts = scope  # "tell me about AHU-1" -> everything on it
     else:
         facts = _kind("finding")
 

@@ -25,7 +25,7 @@ engineering judgment, not from the standards. pandas + numpy only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -38,9 +38,9 @@ class FunctionalTestResult:
     """Outcome of one automated functional performance test (FPT) over trend data."""
 
     name: str
-    n: int                        # valid (non-null) intervals scored
-    pass_rate_pct: float          # % of valid intervals meeting the expected response
-    severity: str                 # "pass" | "marginal" | "fail"
+    n: int  # valid (non-null) intervals scored
+    pass_rate_pct: float  # % of valid intervals meeting the expected response
+    severity: str  # "pass" | "marginal" | "fail"
     summary: str
 
     def as_dict(self) -> dict:
@@ -48,8 +48,9 @@ class FunctionalTestResult:
         return asdict(self)
 
 
-def functional_test(frame, name, condition_fn, *, occupied_only=False,
-                    min_samples=10) -> FunctionalTestResult | None:
+def functional_test(
+    frame, name, condition_fn, *, occupied_only=False, min_samples=10
+) -> FunctionalTestResult | None:
     """Score a Functional Performance Test from trend data.
 
     ``frame`` is a role-frame (DataFrame, or any object ``condition_fn`` understands).
@@ -64,7 +65,7 @@ def functional_test(frame, name, condition_fn, *, occupied_only=False,
     practice. Returns None if fewer than ``min_samples`` valid intervals remain.
     """
     result = condition_fn(frame)
-    cond = pd.Series(result).astype("float")    # True->1.0, False->0.0, null stays NaN
+    cond = pd.Series(result).astype("float")  # True->1.0, False->0.0, null stays NaN
     if occupied_only and isinstance(cond.index, pd.DatetimeIndex):
         occ = occupied_mask(cond.index)
         cond = cond[occ.reindex(cond.index, fill_value=False)]
@@ -84,8 +85,10 @@ def functional_test(frame, name, condition_fn, *, occupied_only=False,
         n=n,
         pass_rate_pct=round(pass_rate, 2),
         severity=severity,
-        summary=(f"{name}: {severity} -- met expected response in "
-                 f"{pass_rate:.0f}% of {n} valid intervals"),
+        summary=(
+            f"{name}: {severity} -- met expected response in "
+            f"{pass_rate:.0f}% of {n} valid intervals"
+        ),
     )
 
 
@@ -95,10 +98,10 @@ class MeasureResult:
 
     metric_before: float
     metric_after: float
-    delta: float                  # after - before (negative = improvement, lower-is-better)
-    pct_change: float             # % change relative to before
-    improved: bool                # after mean < before mean
-    significant: bool             # |delta| > 0.5 * pooled std
+    delta: float  # after - before (negative = improvement, lower-is-better)
+    pct_change: float  # % change relative to before
+    improved: bool  # after mean < before mean
+    significant: bool  # |delta| > 0.5 * pooled std
     n_before: int
     n_after: int
     summary: str
@@ -148,20 +151,24 @@ def before_after(series, change_time, *, min_samples=10) -> MeasureResult | None
         significant=bool(significant),
         n_before=nb,
         n_after=na,
-        summary=(f"{direction} {abs(pct):.0f}% ({b_mean:.3g} -> {a_mean:.3g}), {sig}"
-                 if pct == pct else f"{direction} ({b_mean:.3g} -> {a_mean:.3g}), {sig}"),
+        summary=(
+            f"{direction} {abs(pct):.0f}% ({b_mean:.3g} -> {a_mean:.3g}), {sig}"
+            if pct == pct
+            else f"{direction} ({b_mean:.3g} -> {a_mean:.3g}), {sig}"
+        ),
     )
 
 
 # --- measure register (MBCx lifecycle) ---------------------------------------- #
+
 
 @dataclass
 class MeasureRecord:
     """One tracked measure: its before/after result mapped to a lifecycle status."""
 
     name: str
-    status: str                   # "verified" | "regressed" | "inconclusive" | "insufficient"
-    result: dict | None           # MeasureResult.as_dict(), or None if not assessable
+    status: str  # "verified" | "regressed" | "inconclusive" | "insufficient"
+    result: dict | None  # MeasureResult.as_dict(), or None if not assessable
 
     def as_dict(self) -> dict:
         """Return the record as a plain dict."""
@@ -172,20 +179,25 @@ class MeasureRecord:
 class RegisterReport:
     """A portfolio of tracked measures with their persistence verdicts."""
 
-    records: list                 # [MeasureRecord]
+    records: list  # [MeasureRecord]
     n: int
-    n_verified: int               # improved and significant
-    n_regressed: int              # got worse and significant
-    n_inconclusive: int           # no significant change
-    n_insufficient: int           # not enough data either side
+    n_verified: int  # improved and significant
+    n_regressed: int  # got worse and significant
+    n_inconclusive: int  # no significant change
+    n_insufficient: int  # not enough data either side
     summary: str
 
     def as_dict(self) -> dict:
         """Return the report (with nested records) as a plain dict."""
-        return {"records": [r.as_dict() for r in self.records], "n": self.n,
-                "n_verified": self.n_verified, "n_regressed": self.n_regressed,
-                "n_inconclusive": self.n_inconclusive,
-                "n_insufficient": self.n_insufficient, "summary": self.summary}
+        return {
+            "records": [r.as_dict() for r in self.records],
+            "n": self.n,
+            "n_verified": self.n_verified,
+            "n_regressed": self.n_regressed,
+            "n_inconclusive": self.n_inconclusive,
+            "n_insufficient": self.n_insufficient,
+            "summary": self.summary,
+        }
 
 
 def track_measures(measures) -> RegisterReport:
@@ -199,8 +211,7 @@ def track_measures(measures) -> RegisterReport:
     """
     records = []
     for m in measures:
-        res = before_after(m["series"], m["change_time"],
-                           min_samples=m.get("min_samples", 10))
+        res = before_after(m["series"], m["change_time"], min_samples=m.get("min_samples", 10))
         if res is None:
             status, payload = "insufficient", None
         elif not res.significant:
@@ -213,10 +224,22 @@ def track_measures(measures) -> RegisterReport:
 
     def _count(s):
         return sum(1 for r in records if r.status == s)
-    nv, nr, ni, nx = _count("verified"), _count("regressed"), _count("inconclusive"), _count("insufficient")
+
+    nv, nr, ni, nx = (
+        _count("verified"),
+        _count("regressed"),
+        _count("inconclusive"),
+        _count("insufficient"),
+    )
     return RegisterReport(
-        records=records, n=len(records), n_verified=nv, n_regressed=nr,
-        n_inconclusive=ni, n_insufficient=nx,
-        summary=(f"{len(records)} measures tracked: {nv} verified, {nr} regressed, "
-                 f"{ni} inconclusive, {nx} insufficient data"),
+        records=records,
+        n=len(records),
+        n_verified=nv,
+        n_regressed=nr,
+        n_inconclusive=ni,
+        n_insufficient=nx,
+        summary=(
+            f"{len(records)} measures tracked: {nv} verified, {nr} regressed, "
+            f"{ni} inconclusive, {nx} insufficient data"
+        ),
     )

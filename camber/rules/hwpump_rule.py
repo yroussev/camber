@@ -31,8 +31,9 @@ class HWPumpDPReset:
         legacy = frame.rename(columns=cols)
         res = analyze_pump(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         pf, pm = res.pct_running_near_full, res.pct_running_near_min
         if pf >= 60.0:
             severity = "fault"
@@ -50,7 +51,9 @@ class HWPumpDPReset:
                 "pct_running_near_min": res.pct_running_near_min,
                 "n_running": res.n_running,
             },
-            summary=(f"{equip}: HW pump median speed {res.median_speed_pct:.0f}%, "
-                     f"{res.pct_running_near_full:.0f}% near full / "
-                     f"{res.pct_running_near_min:.0f}% near min"),
+            summary=(
+                f"{equip}: HW pump median speed {res.median_speed_pct:.0f}%, "
+                f"{res.pct_running_near_full:.0f}% near full / "
+                f"{res.pct_running_near_min:.0f}% near min"
+            ),
         )

@@ -18,12 +18,12 @@ class LoadMetrics:
     """Shape metrics for an interval load series."""
 
     peak: float
-    near_peak: float          # 3rd-highest (robust to single spikes)
+    near_peak: float  # 3rd-highest (robust to single spikes)
     base: float
-    near_base: float          # 3rd-lowest (robust to single dropouts)
+    near_base: float  # 3rd-lowest (robust to single dropouts)
     mean: float
-    base_to_peak: float       # near_base / near_peak (->1 is flat)
-    load_factor: float        # mean / peak (->1 is flat, efficient use of capacity)
+    base_to_peak: float  # near_base / near_peak (->1 is flat)
+    load_factor: float  # mean / peak (->1 is flat, efficient use of capacity)
     n: int
 
 
@@ -44,10 +44,16 @@ def load_metrics(series: pd.Series) -> LoadMetrics:
     near_base = float(ordered[2])
     b2p = near_base / near_peak if near_peak else float("nan")
     lf = mean / peak if peak else float("nan")
-    return LoadMetrics(peak=round(peak, 4), near_peak=round(near_peak, 4),
-                       base=round(base, 4), near_base=round(near_base, 4),
-                       mean=round(mean, 4), base_to_peak=round(b2p, 4),
-                       load_factor=round(lf, 4), n=int(len(s)))
+    return LoadMetrics(
+        peak=round(peak, 4),
+        near_peak=round(near_peak, 4),
+        base=round(base, 4),
+        near_base=round(near_base, 4),
+        mean=round(mean, 4),
+        base_to_peak=round(b2p, 4),
+        load_factor=round(lf, 4),
+        n=int(len(s)),
+    )
 
 
 def load_duration(series: pd.Series) -> np.ndarray:

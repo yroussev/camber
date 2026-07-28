@@ -37,11 +37,13 @@ def test_fits_per_category():
 def test_pooled_fit_beats_single_model():
     from camber.mandv.models import best_model
     from camber.mandv.stats import fit_stats
+
     T, y, cat = _two_regime()
     cm = fit_categorical(T, y, cat)
     # single pooled model ignoring category
     single = best_model(T, y)
     from camber.mandv.models import N_PARAMS
+
     s_single = fit_stats(y, single.predict(T), p=N_PARAMS[single.kind])
     # the categorical model explains more variance than one lumped model
     assert cm.pooled_stats.r2 > s_single.r2
@@ -59,7 +61,7 @@ def test_predict_routes_by_category():
 def test_skips_sparse_category():
     T, y, cat = _two_regime()
     cat = cat.copy()
-    cat[:3] = "holiday"            # only 3 holiday points -> below min_per_cat
+    cat[:3] = "holiday"  # only 3 holiday points -> below min_per_cat
     m = fit_categorical(T, y, cat, min_per_cat=6)
     assert "holiday" not in m.categories
 

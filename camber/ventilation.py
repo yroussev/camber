@@ -20,7 +20,7 @@ for a stamped 62.1 calculation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -50,13 +50,16 @@ def oa_rates_for(space_type: str) -> tuple[float, float]:
     """``(Rp, Ra)`` for a 62.1 space type (case-insensitive). Raises if unknown."""
     key = str(space_type).strip().lower().replace(" ", "_")
     if key not in OA_RATES_62_1:
-        raise KeyError(f"unknown space type {space_type!r}; pass rp/ra explicitly or use one "
-                       f"of: {', '.join(sorted(OA_RATES_62_1))}")
+        raise KeyError(
+            f"unknown space type {space_type!r}; pass rp/ra explicitly or use one "
+            f"of: {', '.join(sorted(OA_RATES_62_1))}"
+        )
     return OA_RATES_62_1[key]
 
 
-def required_oa_cfm(area_sqft: float, population: float, *, rp: float, ra: float,
-                    ez: float = DEFAULT_EZ) -> float:
+def required_oa_cfm(
+    area_sqft: float, population: float, *, rp: float, ra: float, ez: float = DEFAULT_EZ
+) -> float:
     """ASHRAE 62.1 zone outdoor air ``Voz = (Rp·Pz + Ra·Az) / Ez`` (cfm)."""
     if ez <= 0:
         raise ValueError("ez (zone air-distribution effectiveness) must be > 0")
@@ -64,9 +67,13 @@ def required_oa_cfm(area_sqft: float, population: float, *, rp: float, ra: float
     return vbz / ez
 
 
-_AGG = {"median": np.nanmedian, "mean": np.nanmean,
-        "min": np.nanmin, "p05": lambda a: np.nanpercentile(a, 5),
-        "p95": lambda a: np.nanpercentile(a, 95)}
+_AGG = {
+    "median": np.nanmedian,
+    "mean": np.nanmean,
+    "min": np.nanmin,
+    "p05": lambda a: np.nanpercentile(a, 5),
+    "p95": lambda a: np.nanpercentile(a, 95),
+}
 
 
 @dataclass
@@ -75,23 +82,34 @@ class VrpResult:
 
     equip: str
     required_cfm: float
-    measured_cfm: float          # aggregated delivered OA
-    ratio: float                 # measured / required
-    status: str                  # "under" | "adequate" | "over"
-    deficit_cfm: float           # max(0, required - measured)
+    measured_cfm: float  # aggregated delivered OA
+    ratio: float  # measured / required
+    status: str  # "under" | "adequate" | "over"
+    deficit_cfm: float  # max(0, required - measured)
     rp: float
     ra: float
     ez: float
-    n: int                       # samples behind the aggregate (1 if scalar)
+    n: int  # samples behind the aggregate (1 if scalar)
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def assess_62_1(measured_oa_cfm, *, area_sqft: float, population: float,
-                space_type: str | None = None, rp: float | None = None, ra: float | None = None,
-                ez: float = DEFAULT_EZ, occupied_mask=None, aggregate: str = "median",
-                under_tol: float = 0.9, over_factor: float = 1.5, equip: str = "") -> VrpResult:
+def assess_62_1(
+    measured_oa_cfm,
+    *,
+    area_sqft: float,
+    population: float,
+    space_type: str | None = None,
+    rp: float | None = None,
+    ra: float | None = None,
+    ez: float = DEFAULT_EZ,
+    occupied_mask=None,
+    aggregate: str = "median",
+    under_tol: float = 0.9,
+    over_factor: float = 1.5,
+    equip: str = "",
+) -> VrpResult:
     """Compare measured delivered OA to the 62.1 VRP requirement.
 
     ``measured_oa_cfm`` is a scalar or a time series; a Series is filtered by ``occupied_mask``
@@ -132,12 +150,20 @@ def assess_62_1(measured_oa_cfm, *, area_sqft: float, population: float,
         status = "over"
     else:
         status = "adequate"
-    return VrpResult(equip=equip, required_cfm=round(required, 1),
-                     measured_cfm=round(measured, 1) if np.isfinite(measured) else float("nan"),
-                     ratio=round(ratio, 3) if np.isfinite(ratio) else float("nan"),
-                     status=status, deficit_cfm=round(max(0.0, required - measured), 1)
-                     if np.isfinite(measured) else float("nan"),
-                     rp=rp, ra=ra, ez=ez, n=n)
+    return VrpResult(
+        equip=equip,
+        required_cfm=round(required, 1),
+        measured_cfm=round(measured, 1) if np.isfinite(measured) else float("nan"),
+        ratio=round(ratio, 3) if np.isfinite(ratio) else float("nan"),
+        status=status,
+        deficit_cfm=round(max(0.0, required - measured), 1)
+        if np.isfinite(measured)
+        else float("nan"),
+        rp=rp,
+        ra=ra,
+        ez=ez,
+        n=n,
+    )
 
 
 @dataclass
@@ -146,18 +172,25 @@ class DcvResult:
 
     equip: str
     n: int
-    correlation: float           # OA vs demand (CO₂/occupancy); DCV -> positive
-    modulation: float            # (max-min)/max of the OA signal, 0..1
-    status: str                  # "functioning" | "static" | "uncorrelated" | "insufficient"
+    correlation: float  # OA vs demand (CO₂/occupancy); DCV -> positive
+    modulation: float  # (max-min)/max of the OA signal, 0..1
+    status: str  # "functioning" | "static" | "uncorrelated" | "insufficient"
     co2_breach_at_min_pct: float | None  # % samples CO₂>setpoint while OA at its min (if given)
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def assess_dcv(oa_signal: pd.Series, demand_signal: pd.Series, *, occupied_mask=None,
-               min_corr: float = 0.3, min_modulation: float = 0.1,
-               co2_setpoint: float | None = None, equip: str = "") -> DcvResult:
+def assess_dcv(
+    oa_signal: pd.Series,
+    demand_signal: pd.Series,
+    *,
+    occupied_mask=None,
+    min_corr: float = 0.3,
+    min_modulation: float = 0.1,
+    co2_setpoint: float | None = None,
+    equip: str = "",
+) -> DcvResult:
     """Verify DCV: does the OA signal track ventilation demand?
 
     ``oa_signal`` is OA flow / OA fraction / OA-damper position; ``demand_signal`` is CO₂ or an
@@ -171,8 +204,14 @@ def assess_dcv(oa_signal: pd.Series, demand_signal: pd.Series, *, occupied_mask=
         df = df[occupied_mask.reindex(df.index, fill_value=False)]
     n = int(len(df))
     if n < 10:
-        return DcvResult(equip=equip, n=n, correlation=float("nan"), modulation=float("nan"),
-                         status="insufficient", co2_breach_at_min_pct=None)
+        return DcvResult(
+            equip=equip,
+            n=n,
+            correlation=float("nan"),
+            modulation=float("nan"),
+            status="insufficient",
+            co2_breach_at_min_pct=None,
+        )
     oa = df["oa"].to_numpy(dtype=float)
     d = df["d"].to_numpy(dtype=float)
     oa_max = float(np.max(oa))
@@ -192,5 +231,11 @@ def assess_dcv(oa_signal: pd.Series, demand_signal: pd.Series, *, occupied_mask=
         at_min = oa <= oa_min_level
         breach = round(100.0 * float(np.mean((d > co2_setpoint) & at_min)), 1) if n else 0.0
 
-    return DcvResult(equip=equip, n=n, correlation=round(corr, 3) if np.isfinite(corr) else float("nan"),
-                     modulation=round(modulation, 3), status=status, co2_breach_at_min_pct=breach)
+    return DcvResult(
+        equip=equip,
+        n=n,
+        correlation=round(corr, 3) if np.isfinite(corr) else float("nan"),
+        modulation=round(modulation, 3),
+        status=status,
+        co2_breach_at_min_pct=breach,
+    )

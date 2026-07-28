@@ -21,7 +21,7 @@ mind*, not a toxicity threshold; this measures the rate, it doesn't diagnose the
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -33,13 +33,13 @@ class CO2VentilationResult:
     """CO2-based ventilation adequacy over occupied hours for one zone."""
 
     equip: str
-    n_occupied: int               # occupied intervals with valid CO2
+    n_occupied: int  # occupied intervals with valid CO2
     co2_median_ppm: float
-    co2_p95_ppm: float            # 95th-percentile occupied CO2 (the bad-hour level)
-    under_vent_pct: float         # % occupied hrs CO2 above the elevated threshold
-    over_vent_pct: float          # % occupied hrs CO2 near outdoor (possible over-ventilation)
-    outdoor_co2_ppm: float        # outdoor reference used (measured or assumed)
-    high_ppm: float               # elevated-CO2 threshold used
+    co2_p95_ppm: float  # 95th-percentile occupied CO2 (the bad-hour level)
+    under_vent_pct: float  # % occupied hrs CO2 above the elevated threshold
+    over_vent_pct: float  # % occupied hrs CO2 near outdoor (possible over-ventilation)
+    outdoor_co2_ppm: float  # outdoor reference used (measured or assumed)
+    high_ppm: float  # elevated-CO2 threshold used
     coverage_start: str
     coverage_end: str
 
@@ -52,8 +52,8 @@ def analyze_co2_ventilation(
     df: pd.DataFrame,
     equip: str,
     *,
-    delta_high_ppm: float = 700.0,    # CO2 this far above outdoor == under-ventilated
-    delta_low_ppm: float = 150.0,     # CO2 only this far above outdoor == over-ventilated
+    delta_high_ppm: float = 700.0,  # CO2 this far above outdoor == under-ventilated
+    delta_low_ppm: float = 150.0,  # CO2 only this far above outdoor == over-ventilated
     assumed_outdoor_ppm: float = 420.0,  # used when no outdoor-CO2 column is present
     occupied_only: bool = True,
 ) -> CO2VentilationResult | None:
@@ -71,7 +71,7 @@ def analyze_co2_ventilation(
     if occupied_only:
         work = work[occupied_mask(work.index)]
     co2 = work["CO2"].dropna()
-    co2 = co2[(co2 >= 250) & (co2 <= 5000)]   # plausibility guard (drop sensor dropouts)
+    co2 = co2[(co2 >= 250) & (co2 <= 5000)]  # plausibility guard (drop sensor dropouts)
     if len(co2) < 10:
         return None
 

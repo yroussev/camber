@@ -23,7 +23,8 @@ _ROLE_TO_COL = {
 
 
 class CHWPlantReset:
-    """Detects no CHWST reset and/or low loop delta-T at the chilled-water plant (PNNL Re-tuning Ch.8)."""
+    """Detects no CHWST reset and/or low loop delta-T at the chilled-water plant
+    (PNNL Re-tuning Ch.8)."""
 
     name = "chw_plant_reset"
     roles_required = (Role.CHW_SUPPLY_TEMP,)
@@ -35,8 +36,9 @@ class CHWPlantReset:
         legacy = frame.rename(columns=cols)
         res = analyze_chw_plant(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         # Low-deltaT is the clearest part-load fault; no-reset compounds it.
         low_dt = res.low_deltaT_pct if res.low_deltaT_pct == res.low_deltaT_pct else 0.0
         if low_dt >= 50.0:
@@ -59,8 +61,10 @@ class CHWPlantReset:
                 "low_deltaT_pct": res.low_deltaT_pct,
                 "n_running": res.n_running,
             },
-            summary=(f"{equip}: CHWST median {res.chwst_median_f:.1f}F, "
-                     f"loop deltaT median {res.deltaT_median_f:.1f}F "
-                     f"({res.low_deltaT_pct:.0f}% of running hours < "
-                     f"{res.design_deltaT_min_f:.0f}F); {reset_note}"),
+            summary=(
+                f"{equip}: CHWST median {res.chwst_median_f:.1f}F, "
+                f"loop deltaT median {res.deltaT_median_f:.1f}F "
+                f"({res.low_deltaT_pct:.0f}% of running hours < "
+                f"{res.design_deltaT_min_f:.0f}F); {reset_note}"
+            ),
         )

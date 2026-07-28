@@ -8,14 +8,15 @@ A forecaster on top of — not replacing — the deterministic core. Two pieces,
   drift *without* distorting that shape. Good enough for next-day/next-week load and as an anomaly
   baseline; honest about being a transparent baseline, not a black-box model.
 - **`forecast_anomalies`** — flags intervals whose actual deviates from the forecast beyond a
-  robust band (the residual's median/MAD), turning "unlike its own recent normal" into an FDD signal.
+  robust band (the residual's median/MAD), turning "unlike its own recent normal" into an FDD
+  signal.
 
 numpy/pandas only.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -28,8 +29,9 @@ def _time_of_week(index: pd.DatetimeIndex, freq_hours: float) -> np.ndarray:
     return np.floor(hours / freq_hours).astype(int)
 
 
-def seasonal_forecast(history: pd.Series, horizon_index: pd.DatetimeIndex, *,
-                      drift_window: int = 168) -> pd.Series:
+def seasonal_forecast(
+    history: pd.Series, horizon_index: pd.DatetimeIndex, *, drift_window: int = 168
+) -> pd.Series:
     """Forecast ``horizon_index`` from ``history``: seasonal-naïve shape + additive drift.
 
     The **seasonal** term is the mean of history at each target's time-of-week slot (the daily/
@@ -72,9 +74,9 @@ class AnomalyReport:
     n: int
     n_anomalies: int
     anomaly_frac: float
-    band: float                  # ±threshold on the residual (k·robust-σ)
-    mae: float                   # mean absolute forecast error
-    timestamps: list             # anomalous timestamps (ISO strings)
+    band: float  # ±threshold on the residual (k·robust-σ)
+    mae: float  # mean absolute forecast error
+    timestamps: list  # anomalous timestamps (ISO strings)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -99,9 +101,14 @@ def forecast_anomalies(actual: pd.Series, forecast: pd.Series, *, k: float = 3.5
     else:
         mask = np.zeros(len(resid), dtype=bool)
     ts = [str(t) for t, m in zip(df.index, mask) if m]
-    return AnomalyReport(n=int(len(df)), n_anomalies=int(mask.sum()),
-                         anomaly_frac=round(float(mask.mean()), 4), band=round(band, 4),
-                         mae=round(float(np.mean(np.abs(resid))), 4), timestamps=ts)
+    return AnomalyReport(
+        n=int(len(df)),
+        n_anomalies=int(mask.sum()),
+        anomaly_frac=round(float(mask.mean()), 4),
+        band=round(band, 4),
+        mae=round(float(np.mean(np.abs(resid))), 4),
+        timestamps=ts,
+    )
 
 
 def backtest(history: pd.Series, *, test_frac: float = 0.25, **fc_kw) -> dict:
@@ -119,8 +126,11 @@ def backtest(history: pd.Series, *, test_frac: float = 0.25, **fc_kw) -> dict:
         return {"error": "no overlapping forecast"}
     mae = float(err.abs().mean())
     denom = float(test.reindex(err.index).abs().mean())
-    rmse = float(np.sqrt((err ** 2).mean()))
+    rmse = float(np.sqrt((err**2).mean()))
     ybar = float(test.reindex(err.index).mean())
-    return {"n_test": int(len(err)), "mae": round(mae, 3),
-            "mape": round(mae / denom, 4) if denom else float("nan"),
-            "cv_rmse": round(rmse / ybar, 4) if ybar else float("nan")}
+    return {
+        "n_test": int(len(err)),
+        "mae": round(mae, 3),
+        "mape": round(mae / denom, 4) if denom else float("nan"),
+        "cv_rmse": round(rmse / ybar, 4) if ybar else float("nan"),
+    }

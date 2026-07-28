@@ -4,7 +4,8 @@ Subcommands:
 
     camber run     <config.json> [--out DIR]        # run a config, print/write findings
     camber report  <config.json> --out site.html    # run + write an HTML audit report
-    camber explain <config.json> [--no-strict]      # grounded plain-language explanation of findings
+    camber explain <config.json> [--no-strict]      # grounded plain-language explanation of
+                                                     # findings
     camber ask "<question>" --config <config.json> [--llm-cmd CMD]   # grounded Q&A over the run
     camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] # portfolio rollup + triage
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
@@ -25,11 +26,13 @@ import json
 import os
 import sys
 
+# --------------------------------------------------------------------------- LLM seam
+# (vendor-neutral)
 
-# --------------------------------------------------------------------------- LLM seam (vendor-neutral)
 
 def _subprocess_client(cmd: str):
-    """Wrap a shell command as an agent ``complete`` callable: prompt on stdin, completion on stdout.
+    """Wrap a shell command as an agent ``complete`` callable: prompt on stdin, completion on
+    stdout.
 
     Kept in the CLI (not camber.agent) so the agent package imports no subprocess / does no I/O.
     """
@@ -42,6 +45,7 @@ def _subprocess_client(cmd: str):
         if proc.returncode != 0:
             raise RuntimeError(f"--llm-cmd failed ({proc.returncode}): {proc.stderr.strip()}")
         return proc.stdout
+
     return client_from_callable(_complete)
 
 
@@ -52,17 +56,21 @@ def _client_from_args(args):
 
 # --------------------------------------------------------------------------- findings helpers
 
+
 def _print_findings(findings) -> None:
     order = {"fault": 0, "warn": 1, "info": 2, "ok": 3}
     for f in sorted(findings, key=lambda x: order.get(x.severity, 9)):
         if f.severity in ("fault", "warn"):
             print(f"  [{f.severity:5s}] {f.equip:12s} {f.rule:26s} {f.summary}")
     n = {s: sum(1 for f in findings if f.severity == s) for s in ("fault", "warn", "info", "ok")}
-    print(f"\n{len(findings)} findings — {n['fault']} fault, {n['warn']} warn, "
-          f"{n['info']} info, {n['ok']} ok")
+    print(
+        f"\n{len(findings)} findings — {n['fault']} fault, {n['warn']} warn, "
+        f"{n['info']} info, {n['ok']} ok"
+    )
 
 
 # --------------------------------------------------------------------------- subcommands
+
 
 def _cmd_run(args) -> int:
     from .config import run_config_file
@@ -94,8 +102,8 @@ def _cmd_report(args) -> int:
 
 
 def _cmd_explain(args) -> int:
-    from .config import run_config_file
     from .agent import explain
+    from .config import run_config_file
 
     res = run_config_file(args.config)
     g = explain(res.findings, client=_client_from_args(args), strict=not args.no_strict)
@@ -105,8 +113,8 @@ def _cmd_explain(args) -> int:
 
 
 def _cmd_ask(args) -> int:
-    from .config import run_config_file
     from .agent import ask, build_context
+    from .config import run_config_file
 
     res = run_config_file(args.config)
     ctx = build_context(run=res)
@@ -129,8 +137,9 @@ def _cmd_fleet(args) -> int:
     buildings = []
     for p in paths:
         res = run_config_file(p)
-        buildings.append({"site": res.site or os.path.basename(p), "eui": None,
-                          "findings": res.findings})
+        buildings.append(
+            {"site": res.site or os.path.basename(p), "eui": None, "findings": res.findings}
+        )
     fr = build_fleet_report(buildings)
     print(fr.to_text())
     if args.out:
@@ -138,8 +147,13 @@ def _cmd_fleet(args) -> int:
         print(f"\nwrote {args.out}")
     if args.ask:
         from .agent import ask, build_context
-        g = ask(args.ask, build_context(fleet=fr), client=_client_from_args(args),
-                strict=not args.no_strict)
+
+        g = ask(
+            args.ask,
+            build_context(fleet=fr),
+            client=_client_from_args(args),
+            strict=not args.no_strict,
+        )
         print(f"\nQ: {args.ask}\n{g.text}\n[{g.source}; grounded={g.grounded}]")
     return 0
 
@@ -147,6 +161,7 @@ def _cmd_fleet(args) -> int:
 def _cmd_charts(args) -> int:
     """The legacy AHU heating-vs-cooling scatter/timeseries charts."""
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -155,15 +170,18 @@ def _cmd_charts(args) -> int:
 
     if args.demo:
         from .synth import make_ahu_trends
+
         df = make_ahu_trends(fault=args.demo, ahu_id=args.ahu or 1)
     else:
         from .io import load_csv
+
         df = load_csv(args.csv, timestamp_col=args.timestamp_col, resample=args.resample)
 
     if args.ahu:
         ids = [args.ahu]
     else:
         from .points import count_equipment
+
         ids = list(range(1, count_equipment(df.columns, "AHU") + 1))
     if not ids:
         print("No AHU equipment found (need columns like AHU1_HeC, AHU1_CC).", file=sys.stderr)
@@ -181,8 +199,10 @@ def _cmd_charts(args) -> int:
         ax2.figure.savefig(os.path.join(args.out, f"AHU{i}_HeC_timeseries.png"), dpi=120)
         plt.close(ax2.figure)
         summary.append(m.as_dict())
-        print(f"AHU{i}: simultaneous H/C = {m.simultaneous_pct:.1f}% "
-              f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F), n={m.n_considered}")
+        print(
+            f"AHU{i}: simultaneous H/C = {m.simultaneous_pct:.1f}% "
+            f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F), n={m.n_considered}"
+        )
 
     with open(os.path.join(args.out, "hec_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
@@ -191,7 +211,9 @@ def _cmd_charts(args) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)")
+    ap = argparse.ArgumentParser(
+        prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("run", help="run a config and print/write findings")
@@ -206,14 +228,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
     pe = sub.add_parser("explain", help="grounded plain-language explanation of the findings")
     pe.add_argument("config")
-    pe.add_argument("--llm-cmd", dest="llm_cmd", help="shell command: prompt on stdin -> completion on stdout")
+    pe.add_argument(
+        "--llm-cmd", dest="llm_cmd", help="shell command: prompt on stdin -> completion on stdout"
+    )
     pe.add_argument("--no-strict", action="store_true", help="do not repair ungrounded LLM text")
     pe.set_defaults(func=_cmd_explain)
 
     pa = sub.add_parser("ask", help="grounded natural-language Q&A over the run")
     pa.add_argument("question")
     pa.add_argument("--config", required=True)
-    pa.add_argument("--llm-cmd", dest="llm_cmd", help="shell command: prompt on stdin -> completion on stdout")
+    pa.add_argument(
+        "--llm-cmd", dest="llm_cmd", help="shell command: prompt on stdin -> completion on stdout"
+    )
     pa.add_argument("--no-strict", action="store_true")
     pa.set_defaults(func=_cmd_ask)
 
@@ -233,8 +259,12 @@ def _build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--timestamp-col", dest="timestamp_col", default=None)
     pc.add_argument("--resample", default=None, help='e.g. "15min", "1h"')
     pc.add_argument("--occupied-only", dest="occupied_only", action="store_true")
-    pc.add_argument("--threshold", type=float, default=5.0,
-                    help="deadband %% above which a valve counts as open")
+    pc.add_argument(
+        "--threshold",
+        type=float,
+        default=5.0,
+        help="deadband %% above which a valve counts as open",
+    )
     pc.add_argument("--out", default="out", help="output directory for PNGs/JSON")
     pc.set_defaults(func=_cmd_charts)
     return ap

@@ -24,17 +24,17 @@ def test_operational_efficiency_requires_positive_installed():
 
 def test_flags_failed_unoccupied_setback():
     idx = pd.date_range("2024-01-01", periods=4, freq="h")
-    metered = pd.Series([80.0, 80.0, 90.0, 90.0], index=idx)   # eff 0.8/0.8/0.9/0.9
+    metered = pd.Series([80.0, 80.0, 90.0, 90.0], index=idx)  # eff 0.8/0.8/0.9/0.9
     occupied = [True, True, False, False]
     s = lighting_summary(metered, 100.0, occupied=occupied)
     assert s.occupied_mean == 0.8
     assert s.unoccupied_mean == 0.9
-    assert "failed_unoccupied_setback" in s.flags        # 0.9 > 0.30 unoccupied
-    assert "no_turndown" not in s.flags                  # min 0.8 < 0.90
+    assert "failed_unoccupied_setback" in s.flags  # 0.9 > 0.30 unoccupied
+    assert "no_turndown" not in s.flags  # min 0.8 < 0.90
 
 
 def test_flags_no_turndown():
     idx = pd.date_range("2024-01-01", periods=2, freq="h")
     metered = pd.Series([95.0, 95.0], index=idx)
     s = lighting_summary(metered, 100.0, occupied=[True, False])
-    assert "no_turndown" in s.flags                      # never drops below 0.90
+    assert "no_turndown" in s.flags  # never drops below 0.90

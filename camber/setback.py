@@ -15,7 +15,7 @@ unoccupied run ratio so a partial/ineffective setback is visible.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -31,9 +31,9 @@ class SetbackResult:
     equip: str
     n_occupied: int
     n_unoccupied: int
-    fan_run_occupied_pct: float       # % occupied hrs fan running (sanity: should be high)
-    fan_run_unoccupied_pct: float     # % unoccupied hrs fan running (the fault metric)
-    setback_effective: bool           # unoccupied run materially below occupied run
+    fan_run_occupied_pct: float  # % occupied hrs fan running (sanity: should be high)
+    fan_run_unoccupied_pct: float  # % unoccupied hrs fan running (the fault metric)
+    setback_effective: bool  # unoccupied run materially below occupied run
     coverage_start: str
     coverage_end: str
 
@@ -55,8 +55,8 @@ def analyze_setback(
     df: pd.DataFrame,
     equip: str,
     *,
-    speed_thr: float = 5.0,           # fan speed above this counts as running
-    setback_ratio: float = 0.5,       # unoccupied run < this * occupied run == effective
+    speed_thr: float = 5.0,  # fan speed above this counts as running
+    setback_ratio: float = 0.5,  # unoccupied run < this * occupied run == effective
     start_hour: int = 7,
     end_hour: int = 18,
 ) -> SetbackResult | None:

@@ -31,7 +31,7 @@ def test_mean_loses_energy_on_upsample():
     # the cautionary case: averaging energy understates the hourly total
     s = pd.Series([1.0, 1.0, 1.0, 1.0], index=_idx(4, "15min"))
     out = resample(s, "1h", method="mean")
-    assert out.iloc[0] == 1.0          # mean = 1, NOT the 4 kWh total
+    assert out.iloc[0] == 1.0  # mean = 1, NOT the 4 kWh total
 
 
 def test_mean_correct_for_rate():
@@ -44,7 +44,7 @@ def test_mean_correct_for_rate():
 def test_nearest_prior_step():
     s = pd.Series([1.0, np.nan, np.nan, 0.0], index=_idx(4, "15min"))
     out = resample(s, "15min", method="nearest_prior")
-    assert out.iloc[1] == 1.0          # carried forward
+    assert out.iloc[1] == 1.0  # carried forward
     assert out.iloc[3] == 0.0
 
 
@@ -63,9 +63,9 @@ def test_cumulative_to_interval():
 
 
 def test_cumulative_rollover_to_nan():
-    cum = pd.Series([100.0, 102, 5, 8], index=_idx(4, "1h"))   # reset at idx 2
+    cum = pd.Series([100.0, 102, 5, 8], index=_idx(4, "1h"))  # reset at idx 2
     d = cumulative_to_interval(cum)
-    assert np.isnan(d.iloc[2])         # negative diff -> NaN, not a huge negative
+    assert np.isnan(d.iloc[2])  # negative diff -> NaN, not a huge negative
 
 
 def test_resample_energy_end_to_end():

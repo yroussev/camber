@@ -1,0 +1,11 @@
+# Optional developer convenience: run the same ruff gate CI enforces, before each commit.
+# Install once:  pip install pre-commit && pre-commit install
+# This complements the attribution guards in .githooks/ (installed via
+# scripts/install-hooks.sh); the two mechanisms are independent and both can be active.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.0
+    hooks:
+      - id: ruff          # lint (autofix the mechanical set)
+        args: [--fix]
+      - id: ruff-format   # format

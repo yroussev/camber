@@ -43,7 +43,7 @@ def _temp_breakpoints(temp: np.ndarray, n_segments: int) -> np.ndarray:
     t = temp[np.isfinite(temp)]
     qs = np.linspace(0.0, 1.0, n_segments + 1)
     bps = np.unique(np.quantile(t, qs))
-    if len(bps) < 2:                       # degenerate (constant temp)
+    if len(bps) < 2:  # degenerate (constant temp)
         bps = np.array([t.min(), t.min() + 1.0])
     return bps
 
@@ -63,8 +63,13 @@ def _temp_components(temp: np.ndarray, breakpoints: np.ndarray) -> np.ndarray:
     return np.nan_to_num(out)
 
 
-def _build_design(tow: np.ndarray, temp: np.ndarray, bins: np.ndarray,
-                  breakpoints: np.ndarray, occ_bins: frozenset | None) -> np.ndarray:
+def _build_design(
+    tow: np.ndarray,
+    temp: np.ndarray,
+    bins: np.ndarray,
+    breakpoints: np.ndarray,
+    occ_bins: frozenset | None,
+) -> np.ndarray:
     """Assemble [TOW one-hot | temperature components] for the given layout."""
     # time-of-week one-hot, columns in `bins` order
     onehot = (tow[:, None] == bins[None, :]).astype("float64")
@@ -82,23 +87,25 @@ def _build_design(tow: np.ndarray, temp: np.ndarray, bins: np.ndarray,
 class TOWTModel:
     """A fitted Time-of-Week & Temperature model."""
 
-    bins: np.ndarray            # TOW bin ids present at fit (one-hot column order)
-    breakpoints: np.ndarray     # temperature segment breakpoints
+    bins: np.ndarray  # TOW bin ids present at fit (one-hot column order)
+    breakpoints: np.ndarray  # temperature segment breakpoints
     occ_bins: frozenset | None  # occupied TOW bins (None if no occ/unocc split)
-    beta: np.ndarray            # OLS coefficients
-    n_params: int               # effective parameters (design rank), for stats dof
+    beta: np.ndarray  # OLS coefficients
+    n_params: int  # effective parameters (design rank), for stats dof
     split: bool
 
     def predict(self, index, temp) -> np.ndarray:
         """Predict energy for the given timestamps and temperatures."""
         tow = hour_of_week(pd.DatetimeIndex(index))
-        X = _build_design(tow, np.asarray(temp, dtype="float64"),
-                          self.bins, self.breakpoints, self.occ_bins)
+        X = _build_design(
+            tow, np.asarray(temp, dtype="float64"), self.bins, self.breakpoints, self.occ_bins
+        )
         return X @ self.beta
 
 
-def fit_towt(energy: pd.Series, temp: pd.Series, *, n_temp_segments: int = 6,
-             occ_split: bool = True) -> TOWTModel:
+def fit_towt(
+    energy: pd.Series, temp: pd.Series, *, n_temp_segments: int = 6, occ_split: bool = True
+) -> TOWTModel:
     """Fit a TOWT model to an hourly ``energy`` series against ``temp``.
 
     Both series are aligned on their shared timestamps. ``n_temp_segments`` sets
@@ -127,5 +134,11 @@ def fit_towt(energy: pd.Series, temp: pd.Series, *, n_temp_segments: int = 6,
 
     X = _build_design(tow, t, bins, breakpoints, occ_bins)
     beta, _res, rank, _sv = np.linalg.lstsq(X, y, rcond=None)
-    return TOWTModel(bins=bins, breakpoints=breakpoints, occ_bins=occ_bins,
-                     beta=beta, n_params=int(rank), split=occ_split)
+    return TOWTModel(
+        bins=bins,
+        breakpoints=breakpoints,
+        occ_bins=occ_bins,
+        beta=beta,
+        n_params=int(rank),
+        split=occ_split,
+    )

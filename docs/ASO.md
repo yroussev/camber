@@ -14,7 +14,7 @@ targets come from documented, override-able defaults (no fabricated site-specifi
 ```python
 from camber.aso import recommend, recommend_findings
 
-recs = recommend_findings(findings, min_severity="warn")   # worst-first, skips ok/info + unmapped
+recs = recommend_findings(findings, min_severity="warn")  # worst-first, skips ok/info + unmapped
 for r in recs:
     print(r.severity, r.equip, r.rule, "→", r.title)
     print("   ", r.action, "| target:", r.suggested, "| cite:", r.standard)

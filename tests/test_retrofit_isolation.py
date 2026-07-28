@@ -8,7 +8,9 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv.retrofit_isolation import (  # noqa: E402
-    DriverModel, IsolationSavings, fit_driver_model, isolation_normalized_savings,
+    IsolationSavings,
+    fit_driver_model,
+    isolation_normalized_savings,
     isolation_savings,
 )
 
@@ -28,7 +30,7 @@ def test_fit_driver_model_constant():
     m = fit_driver_model(None, y)
     assert m.coef == () and m.p == 1
     assert abs(m.intercept - y.mean()) < 1e-9
-    assert np.allclose(m.predict(len(y)), y.mean())          # predict by length
+    assert np.allclose(m.predict(len(y)), y.mean())  # predict by length
 
 
 def test_fit_driver_model_multivariate():
@@ -46,15 +48,16 @@ def test_isolation_savings_load_driven():
     tons_b = np.linspace(50, 400, 50)
     tons_r = np.linspace(60, 380, 50)
     yb = 10 + 0.8 * tons_b
-    yr = 10 + 0.6 * tons_r                                    # ~25% less per ton
-    r = isolation_savings(yb, yr, baseline_driver=tons_b, reporting_driver=tons_r,
-                          boundary="CH-1 sub-meter")
+    yr = 10 + 0.6 * tons_r  # ~25% less per ton
+    r = isolation_savings(
+        yb, yr, baseline_driver=tons_b, reporting_driver=tons_r, boundary="CH-1 sub-meter"
+    )
     assert isinstance(r, IsolationSavings) and r.option == "B"
     assert r.boundary == "CH-1 sub-meter"
-    assert r.savings > 0 and r.savings_pct > 0.1             # real savings, adjusted for load
+    assert r.savings > 0 and r.savings_pct > 0.1  # real savings, adjusted for load
     # adjusted baseline = baseline model applied to REPORTING tons (load-corrected)
     assert abs(r.adjusted_baseline - float((10 + 0.8 * tons_r).sum())) < 1.0
-    assert r.accept                                          # clean synthetic -> model accepted
+    assert r.accept  # clean synthetic -> model accepted
 
 
 def test_isolation_savings_constant_load():
@@ -72,12 +75,12 @@ def test_load_adjustment_beats_naive_difference():
     # reporting period ran at HIGHER load; a naive sub-meter difference would understate
     # savings, but the load-adjusted Option-B baseline corrects for it.
     tons_b = np.linspace(50, 300, 40)
-    tons_r = np.linspace(150, 400, 40)                       # heavier reporting load
+    tons_r = np.linspace(150, 400, 40)  # heavier reporting load
     yb = 0.8 * tons_b
-    yr = 0.6 * tons_r                                        # more efficient, but more load
+    yr = 0.6 * tons_r  # more efficient, but more load
     r = isolation_savings(yb, yr, baseline_driver=tons_b, reporting_driver=tons_r)
     naive = float(yb.sum() - yr.sum())
-    assert r.savings > naive                                 # adjustment credits the extra load
+    assert r.savings > naive  # adjustment credits the extra load
     assert r.savings > 0
 
 
@@ -85,12 +88,13 @@ def test_isolation_normalized_savings_removes_driver_shift():
     # same efficiency both periods but reporting ran at lower load -> normalized savings ~0
     normal = np.linspace(50, 400, 12)
     tons_b = np.linspace(50, 400, 40)
-    tons_r = np.linspace(40, 300, 40)                        # lighter reporting load
+    tons_r = np.linspace(40, 300, 40)  # lighter reporting load
     yb = 5 + 0.7 * tons_b
-    yr = 5 + 0.7 * tons_r                                    # identical model
-    ns = isolation_normalized_savings(yb, yr, normal, baseline_driver=tons_b,
-                                      reporting_driver=tons_r)
-    assert abs(ns.savings_pct) < 0.02                        # no real change once normalized
+    yr = 5 + 0.7 * tons_r  # identical model
+    ns = isolation_normalized_savings(
+        yb, yr, normal, baseline_driver=tons_b, reporting_driver=tons_r
+    )
+    assert abs(ns.savings_pct) < 0.02  # no real change once normalized
 
 
 def test_as_dict_includes_model():

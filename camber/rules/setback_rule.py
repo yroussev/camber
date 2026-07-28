@@ -20,7 +20,8 @@ _ROLE_TO_COL = {
 
 
 class NightWeekendSetback:
-    """Detects an AHU fan running unoccupied / missing night-weekend setback (PNNL Re-tuning Ch.5)."""
+    """Detects an AHU fan running unoccupied / missing night-weekend setback
+    (PNNL Re-tuning Ch.5)."""
 
     name = "night_weekend_setback"
     # status preferred; speed is an acceptable substitute, so require neither
@@ -30,16 +31,20 @@ class NightWeekendSetback:
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
-        if (Role.SUPPLY_FAN_STATUS not in frame.columns
-                and Role.SUPPLY_FAN_SPEED not in frame.columns):
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="no fan status or speed")
+        if (
+            Role.SUPPLY_FAN_STATUS not in frame.columns
+            and Role.SUPPLY_FAN_SPEED not in frame.columns
+        ):
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="no fan status or speed"
+            )
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         res = analyze_setback(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         un = res.fan_run_unoccupied_pct
         # High unoccupied run = no setback. ok only if setback is effective.
         if res.setback_effective:
@@ -58,16 +63,24 @@ class NightWeekendSetback:
                 "setback_effective": res.setback_effective,
                 "n_unoccupied": res.n_unoccupied,
             },
-            summary=(f"{equip}: supply fan runs {res.fan_run_unoccupied_pct:.0f}% of "
-                     f"unoccupied hours (vs {res.fan_run_occupied_pct:.0f}% occupied); "
-                     f"setback {'effective' if res.setback_effective else 'MISSING/weak'}"),
+            summary=(
+                f"{equip}: supply fan runs {res.fan_run_unoccupied_pct:.0f}% of "
+                f"unoccupied hours (vs {res.fan_run_occupied_pct:.0f}% occupied); "
+                f"setback {'effective' if res.setback_effective else 'MISSING/weak'}"
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: a carpet of fan runtime — the fault *is* the schedule (night/weekend run)."""
         from ..charts.evidence import Evidence
-        col = (Role.SUPPLY_FAN_SPEED if Role.SUPPLY_FAN_SPEED in frame.columns else
-               Role.SUPPLY_FAN_STATUS if Role.SUPPLY_FAN_STATUS in frame.columns else None)
+
+        col = (
+            Role.SUPPLY_FAN_SPEED
+            if Role.SUPPLY_FAN_SPEED in frame.columns
+            else Role.SUPPLY_FAN_STATUS
+            if Role.SUPPLY_FAN_STATUS in frame.columns
+            else None
+        )
         if col is not None:
             return Evidence(renderer="carpet", roles=[col], title=f"{equip}: fan schedule")
         return None

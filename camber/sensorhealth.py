@@ -82,12 +82,27 @@ PHYSICAL_BOUNDS: dict = {
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
 # signal. For setpoints, status/commands, and valve/damper positions a constant value
 # is normal, so flatline is NOT penalized there.
-_SENSOR_ROLES: frozenset = frozenset({
-    Role.OAT, Role.WETBULB_TEMP, Role.SUPPLY_AIR_TEMP, Role.MIXED_AIR_TEMP,
-    Role.RETURN_AIR_TEMP, Role.SPACE_TEMP, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP,
-    Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP, Role.CW_SUPPLY_TEMP, Role.CW_RETURN_TEMP,
-    Role.OUTDOOR_RH, Role.AIRFLOW, Role.CHW_FLOW, Role.POWER, Role.DUCT_STATIC,
-})
+_SENSOR_ROLES: frozenset = frozenset(
+    {
+        Role.OAT,
+        Role.WETBULB_TEMP,
+        Role.SUPPLY_AIR_TEMP,
+        Role.MIXED_AIR_TEMP,
+        Role.RETURN_AIR_TEMP,
+        Role.SPACE_TEMP,
+        Role.CHW_SUPPLY_TEMP,
+        Role.CHW_RETURN_TEMP,
+        Role.HW_SUPPLY_TEMP,
+        Role.HW_RETURN_TEMP,
+        Role.CW_SUPPLY_TEMP,
+        Role.CW_RETURN_TEMP,
+        Role.OUTDOOR_RH,
+        Role.AIRFLOW,
+        Role.CHW_FLOW,
+        Role.POWER,
+        Role.DUCT_STATIC,
+    }
+)
 
 
 def range_violation_frac(series: pd.Series, role) -> float:
@@ -113,9 +128,9 @@ class SensorTrust:
     coverage: float
     flatline_frac: float
     outlier_frac: float
-    range_violation_frac: float   # NaN if the role has no bounds
-    trust: float                  # 0..1 (1 = fully trustworthy)
-    verdict: str                  # "trusted" | "suspect" | "untrusted"
+    range_violation_frac: float  # NaN if the role has no bounds
+    trust: float  # 0..1 (1 = fully trustworthy)
+    verdict: str  # "trusted" | "suspect" | "untrusted"
     flags: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -129,7 +144,7 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
     """Score one point's trustworthiness from quality stats + physical-range checks."""
     q = assess(series, expected_freq)
     rng = range_violation_frac(series, role)
-    rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)   # out-of-range is serious
+    rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)  # out-of-range is serious
     trust = q.score * (1.0 - rng_pen)
 
     flags = []
@@ -143,22 +158,28 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
         flags.append("out_of_range")
     if role in _SENSOR_ROLES and q.flatline_frac > 0.5:
         flags.append("stuck")
-        trust *= 0.5                                       # a stuck analog sensor is bad
+        trust *= 0.5  # a stuck analog sensor is bad
 
     trust = round(float(max(0.0, min(1.0, trust))), 4)
     verdict = "trusted" if trust >= 0.8 else ("suspect" if trust >= 0.5 else "untrusted")
     return SensorTrust(
         role=role.value if isinstance(role, Role) else str(role),
-        n=q.n, coverage=q.coverage, flatline_frac=q.flatline_frac,
+        n=q.n,
+        coverage=q.coverage,
+        flatline_frac=q.flatline_frac,
         outlier_frac=q.outlier_frac,
-        range_violation_frac=rng, trust=trust, verdict=verdict, flags=flags,
+        range_violation_frac=rng,
+        trust=trust,
+        verdict=verdict,
+        flags=flags,
     )
 
 
 def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None) -> dict:
     """Trust score every role-column of a role-frame -> ``{Role: SensorTrust}``."""
-    return {role: sensor_trust(frame[role], role, expected_freq=expected_freq)
-            for role in frame.columns}
+    return {
+        role: sensor_trust(frame[role], role, expected_freq=expected_freq) for role in frame.columns
+    }
 
 
 def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=None) -> set:
@@ -172,8 +193,9 @@ def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=
     return {role for role, t in health.items() if t.trust >= min_trust}
 
 
-def untrusted_roles(frame: pd.DataFrame, roles, *, min_trust: float = 0.5,
-                    expected_freq=None) -> list:
+def untrusted_roles(
+    frame: pd.DataFrame, roles, *, min_trust: float = 0.5, expected_freq=None
+) -> list:
     """Which of ``roles`` present in ``frame`` fall below the trust bar.
 
     Roles absent from the frame are skipped (their absence is handled separately by the
@@ -196,7 +218,7 @@ class ConsistencyResult:
     check: str
     n_checked: int
     violation_frac: float
-    severity: str                 # "ok" | "warn" | "fault" | "info"
+    severity: str  # "ok" | "warn" | "fault" | "info"
     summary: str
 
     def as_dict(self) -> dict:
@@ -204,8 +226,9 @@ class ConsistencyResult:
         return self.__dict__.copy()
 
 
-def mixing_consistency(frame: pd.DataFrame, *, tol_f: float = 5.0,
-                       warn_frac: float = 0.05, fault_frac: float = 0.20) -> ConsistencyResult:
+def mixing_consistency(
+    frame: pd.DataFrame, *, tol_f: float = 5.0, warn_frac: float = 0.05, fault_frac: float = 0.20
+) -> ConsistencyResult:
     """Mixed-air temp must lie between outdoor- and return-air temp (it is their blend).
 
     A persistent violation (MAT outside [min(OAT,RAT) - tol, max(OAT,RAT) + tol]) means
@@ -214,12 +237,22 @@ def mixing_consistency(frame: pd.DataFrame, *, tol_f: float = 5.0,
     """
     need = (Role.MIXED_AIR_TEMP, Role.OAT, Role.RETURN_AIR_TEMP)
     if any(r not in frame.columns for r in need):
-        return ConsistencyResult("mixing_temperature_order", 0, float("nan"), "info",
-                                 "need mixed-air, outdoor-air, and return-air temps")
+        return ConsistencyResult(
+            "mixing_temperature_order",
+            0,
+            float("nan"),
+            "info",
+            "need mixed-air, outdoor-air, and return-air temps",
+        )
     w = frame[list(need)].dropna()
     if len(w) < 10:
-        return ConsistencyResult("mixing_temperature_order", len(w), float("nan"), "info",
-                                 "insufficient overlapping samples")
+        return ConsistencyResult(
+            "mixing_temperature_order",
+            len(w),
+            float("nan"),
+            "info",
+            "insufficient overlapping samples",
+        )
     lo = np.minimum(w[Role.OAT], w[Role.RETURN_AIR_TEMP]) - tol_f
     hi = np.maximum(w[Role.OAT], w[Role.RETURN_AIR_TEMP]) + tol_f
     viol = float(((w[Role.MIXED_AIR_TEMP] < lo) | (w[Role.MIXED_AIR_TEMP] > hi)).mean())
@@ -234,6 +267,8 @@ def mixing_consistency(frame: pd.DataFrame, *, tol_f: float = 5.0,
         n_checked=int(len(w)),
         violation_frac=round(viol, 4),
         severity=severity,
-        summary=(f"mixed-air temp outside [OAT,RAT]±{tol_f:.0f}F for "
-                 f"{100 * viol:.0f}% of {len(w)} samples"),
+        summary=(
+            f"mixed-air temp outside [OAT,RAT]±{tol_f:.0f}F for "
+            f"{100 * viol:.0f}% of {len(w)} samples"
+        ),
     )

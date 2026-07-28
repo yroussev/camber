@@ -14,7 +14,7 @@ manufacturer-dependent and injected by the rule.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -24,9 +24,9 @@ class BoilerCyclingResult:
     """Boiler firing rate over the trend window."""
 
     equip: str
-    n_days: float                 # observed span in days
-    starts_per_day: float         # off->on transitions per day (a floor; see module doc)
-    runtime_pct: float            # % of intervals the boiler is firing
+    n_days: float  # observed span in days
+    starts_per_day: float  # off->on transitions per day (a floor; see module doc)
+    runtime_pct: float  # % of intervals the boiler is firing
     n_starts: int
     coverage_start: str
     coverage_end: str

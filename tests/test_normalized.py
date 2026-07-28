@@ -9,7 +9,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv.models import best_model  # noqa: E402
 from camber.mandv.normalized import (  # noqa: E402
-    NormalizedSavings, normalized_annual_consumption, normalized_savings,
+    NormalizedSavings,
+    normalized_annual_consumption,
+    normalized_savings,
 )
 
 
@@ -25,7 +27,7 @@ def test_nac_sums_predictions():
     y = _cooling(_TEMPS)
     m = best_model(_TEMPS, y)
     nac = normalized_annual_consumption(m, _TEMPS)
-    assert abs(nac - float(y.sum())) < 5.0          # model reproduces the clean signal
+    assert abs(nac - float(y.sum())) < 5.0  # model reproduces the clean signal
 
 
 def test_normalized_savings_positive():
@@ -36,7 +38,7 @@ def test_normalized_savings_positive():
     r = normalized_savings(mb, mr, _TEMPS, baseline_cv_rmse=0.03, n_baseline=12)
     assert isinstance(r, NormalizedSavings)
     assert r.normalized_savings > 0
-    assert abs(r.savings_pct - 0.15) < 0.02         # ~15% normalized saving
+    assert abs(r.savings_pct - 0.15) < 0.02  # ~15% normalized saving
     assert r.abs_uncertainty > 0 and 0 < r.fractional_uncertainty < 1.0
     assert r.n_normal_periods == 12
 
@@ -65,4 +67,4 @@ def test_normalizes_out_weather():
     mb = best_model(hot, _cooling(hot))
     mr = best_model(mild, _cooling(mild))
     r = normalized_savings(mb, mr, _TEMPS, baseline_cv_rmse=0.03, n_baseline=12)
-    assert abs(r.savings_pct) < 0.05                # no real change once weather-normalized
+    assert abs(r.savings_pct) < 0.05  # no real change once weather-normalized

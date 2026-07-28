@@ -21,8 +21,10 @@ def _idx(n):
 def _boxes(medians):
     n = 24 * 14
     idx = _idx(n)
-    return {f"VAV_{i}": pd.DataFrame({"Damper": np.full(n, m)}, index=idx)
-            for i, m in enumerate(medians)}
+    return {
+        f"VAV_{i}": pd.DataFrame({"Damper": np.full(n, m)}, index=idx)
+        for i, m in enumerate(medians)
+    }
 
 
 def test_census_static_too_high():
@@ -70,8 +72,10 @@ def test_fleet_rule_protocol_and_severity():
     assert isinstance(rule, FleetRule)
     n = 24 * 14
     idx = _idx(n)
-    frames = {f"VAV_{i}": pd.DataFrame({Role.DAMPER: np.full(n, m)}, index=idx)
-              for i, m in enumerate([10, 12, 15, 8, 20, 18])}
+    frames = {
+        f"VAV_{i}": pd.DataFrame({Role.DAMPER: np.full(n, m)}, index=idx)
+        for i, m in enumerate([10, 12, 15, 8, 20, 18])
+    }
     f = rule.analyze_fleet(frames)
     assert f.severity == "fault"
     assert f.metrics["pct_boxes_low"] >= 60

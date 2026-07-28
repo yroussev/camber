@@ -25,11 +25,11 @@ from .diagnostic import _col
 class Evidence:
     """How to render one finding's evidence — a renderer + what it needs from the frame."""
 
-    renderer: str                # "diagnostic" | "multitrend" | "oat_scatter" | "carpet"
-    roles: list = field(default_factory=list)   # columns to plot (multitrend/carpet; [y] for oat)
-    mask: object = None          # bool Series of violating timestamps (multitrend spans)
-    template: object = None      # a DiagnosticTemplate for the "diagnostic" renderer
-    label: str = "violation"     # span label
+    renderer: str  # "diagnostic" | "multitrend" | "oat_scatter" | "carpet"
+    roles: list = field(default_factory=list)  # columns to plot (multitrend/carpet; [y] for oat)
+    mask: object = None  # bool Series of violating timestamps (multitrend spans)
+    template: object = None  # a DiagnosticTemplate for the "diagnostic" renderer
+    label: str = "violation"  # span label
     title: str = ""
 
 
@@ -44,26 +44,36 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
     r = evidence.renderer
     if r == "diagnostic":
         from .diagnostic import diagnostic_scatter
+
         return diagnostic_scatter(frame, evidence.template, ax=ax)
     if r == "multitrend":
         from .multitrend import fault_multitrend
+
         spans = {evidence.label: evidence.mask} if evidence.mask is not None else None
-        ax = fault_multitrend(frame, list(evidence.roles) or None, spans=spans, ax=ax,
-                              title=evidence.title or None)
+        ax = fault_multitrend(
+            frame, list(evidence.roles) or None, spans=spans, ax=ax, title=evidence.title or None
+        )
         return ax, evidence.mask
     if r == "oat_scatter":
         from .oat_scatter import oat_scatter
+
         y = _col(frame, evidence.roles[0])
-        ax, _ = oat_scatter(y, _col(frame, Role.OAT), ax=ax,
-                            ylabel=getattr(evidence.roles[0], "name", str(evidence.roles[0])),
-                            title=evidence.title or None)
+        ax, _ = oat_scatter(
+            y,
+            _col(frame, Role.OAT),
+            ax=ax,
+            ylabel=getattr(evidence.roles[0], "name", str(evidence.roles[0])),
+            title=evidence.title or None,
+        )
         return ax, evidence.mask
     if r == "carpet":
         from .carpet import load_carpet
+
         ax = load_carpet(_col(frame, evidence.roles[0]), ax=ax, title=evidence.title or None)
         return ax, None
-    raise ValueError(f"unknown evidence renderer {r!r}; "
-                     "use diagnostic/multitrend/oat_scatter/carpet")
+    raise ValueError(
+        f"unknown evidence renderer {r!r}; use diagnostic/multitrend/oat_scatter/carpet"
+    )
 
 
 def finding_evidence(rule, equip: str, frame: pd.DataFrame):
@@ -72,8 +82,10 @@ def finding_evidence(rule, equip: str, frame: pd.DataFrame):
     A rule may implement a tailored ``evidence(equip, frame)`` hook (which can shade the specific
     violating spans). When it doesn't — or the hook declines — every rule still gets **default**
     evidence: a multi-trend of the ``roles_required`` present in the frame, i.e. the data the rule
-    examined. So pattern J covers the whole rule library, present and future, without a per-rule map.
-    Returns None only when no required role is plottable (e.g. a fleet finding with no single frame).
+    examined. So pattern J covers the whole rule library, present and future, without a per-rule
+    map.
+    Returns None only when no required role is plottable (e.g. a fleet finding with no single
+    frame).
     """
     hook = getattr(rule, "evidence", None)
     if callable(hook):
@@ -87,16 +99,19 @@ def finding_evidence(rule, equip: str, frame: pd.DataFrame):
     roles = [r for r in getattr(rule, "roles_required", ()) if r in getattr(frame, "columns", ())]
     if not roles:
         return None
-    return Evidence(renderer="multitrend", roles=roles,
-                    title=f"{equip}: {getattr(rule, 'name', 'finding')}")
+    return Evidence(
+        renderer="multitrend", roles=roles, title=f"{equip}: {getattr(rule, 'name', 'finding')}"
+    )
 
 
 def evidence_descriptor(evidence: Evidence) -> dict:
     """A JSON-friendly descriptor of an Evidence (renderer + roles + violating timestamps) — the
     payload a Finding can carry and the interactive-linking layer consumes; never the figure."""
-    d = {"renderer": evidence.renderer,
-         "roles": [getattr(r, "name", str(r)) for r in evidence.roles],
-         "label": evidence.label}
+    d = {
+        "renderer": evidence.renderer,
+        "roles": [getattr(r, "name", str(r)) for r in evidence.roles],
+        "label": evidence.label,
+    }
     if evidence.template is not None:
         d["template"] = getattr(evidence.template, "name", str(evidence.template))
     if evidence.mask is not None:

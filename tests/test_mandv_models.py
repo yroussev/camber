@@ -12,7 +12,7 @@ from camber.mandv.models import best_model, fit_model  # noqa: E402
 
 def test_2p_recovers_line():
     T = np.linspace(40, 100, 200)
-    y = 10 + 0.5 * T                      # exact line
+    y = 10 + 0.5 * T  # exact line
     m = fit_model(T, y, "2P")
     assert abs(m.coeffs["base"] - 10) < 1e-6
     assert abs(m.coeffs["slope"] - 0.5) < 1e-6
@@ -25,7 +25,7 @@ def test_3pc_recovers_change_point():
     T = np.linspace(45, 105, 400)
     y = 20 + 0.8 * np.maximum(0.0, T - 65) + rng.normal(0, 0.3, len(T))
     m = fit_model(T, y, "3PC")
-    assert abs(m.change_points[0] - 65) < 3        # recovers Tc ~ 65F
+    assert abs(m.change_points[0] - 65) < 3  # recovers Tc ~ 65F
     assert abs(m.coeffs["cool_slope"] - 0.8) < 0.1
     assert abs(m.coeffs["base"] - 20) < 1.0
 
@@ -44,8 +44,12 @@ def test_5p_recovers_both_change_points():
     # heat below 55, deadband, cool above 70
     rng = np.random.default_rng(2)
     T = np.linspace(20, 110, 600)
-    y = (12 + 1.0 * np.maximum(0.0, 55 - T) + 0.7 * np.maximum(0.0, T - 70)
-         + rng.normal(0, 0.3, len(T)))
+    y = (
+        12
+        + 1.0 * np.maximum(0.0, 55 - T)
+        + 0.7 * np.maximum(0.0, T - 70)
+        + rng.normal(0, 0.3, len(T))
+    )
     m = fit_model(T, y, "5P")
     tlo, thi = m.change_points
     assert abs(tlo - 55) < 5 and abs(thi - 70) < 5
@@ -63,7 +67,7 @@ def test_best_model_recovers_cooling_shape():
     assert abs(m.change_points[0] - 65) < 3
     cool = m.coeffs.get("cool_slope", m.coeffs.get("right_slope"))
     assert abs(cool - 0.8) < 0.1
-    if "left_slope" in m.coeffs:        # if 4P, the left arm should be ~flat
+    if "left_slope" in m.coeffs:  # if 4P, the left arm should be ~flat
         assert abs(m.coeffs["left_slope"]) < 0.15
 
 
@@ -86,9 +90,9 @@ def test_3ph_zero_no_base_load():
     # heating that truly goes to zero above the change point (gas-only-heating)
     rng = np.random.default_rng(10)
     T = np.linspace(35, 90, 300)
-    y = np.maximum(0.0, 60 - T) * 2.0 + rng.normal(0, 0.3, len(T))   # zero above 60F
+    y = np.maximum(0.0, 60 - T) * 2.0 + rng.normal(0, 0.3, len(T))  # zero above 60F
     m = fit_model(T, y, "3PHZ")
-    assert m.coeffs["base"] == 0.0                 # forced zero base
+    assert m.coeffs["base"] == 0.0  # forced zero base
     assert abs(m.change_points[0] - 60) < 4
     assert abs(m.coeffs["heat_slope"] - 2.0) < 0.2
     # predicts ~0 well above the change point
@@ -102,8 +106,8 @@ def test_3ph_zero_vs_3ph_on_base_load_data():
     y = 50 + np.maximum(0.0, 60 - T) * 2.0 + rng.normal(0, 0.3, len(T))  # base 50
     mh = fit_model(T, y, "3PH")
     mz = fit_model(T, y, "3PHZ")
-    assert mh.sse < mz.sse                          # base-load data favors 3PH
-    assert mh.coeffs["base"] > 30                   # recovers the ~50 base
+    assert mh.sse < mz.sse  # base-load data favors 3PH
+    assert mh.coeffs["base"] > 30  # recovers the ~50 base
 
 
 def test_best_model_can_select_htg_zero():
@@ -116,7 +120,7 @@ def test_best_model_can_select_htg_zero():
     T = np.linspace(35, 90, 300)
     y = np.maximum(0.0, 60 - T) * 2.0 + rng.normal(0, 0.3, len(T))
     m = best_model(T, y, kinds=("2P", "3PH", "3PHZ"))
-    assert m.kind in ("3PH", "3PHZ")               # a heating change-point model
+    assert m.kind in ("3PH", "3PHZ")  # a heating change-point model
     # and the explicit Htg-zero fit recovers the structure with a forced-zero base
     mz = fit_model(T, y, "3PHZ")
     assert mz.coeffs["base"] == 0.0
@@ -127,8 +131,7 @@ def test_5p_zero_no_base_both_arms():
     # heat below 50, zero between, cool above 80, NO base load
     rng = np.random.default_rng(20)
     T = np.linspace(20, 110, 600)
-    y = (1.0 * np.maximum(0.0, 50 - T) + 0.6 * np.maximum(0.0, T - 80)
-         + rng.normal(0, 0.3, len(T)))
+    y = 1.0 * np.maximum(0.0, 50 - T) + 0.6 * np.maximum(0.0, T - 80) + rng.normal(0, 0.3, len(T))
     m = fit_model(T, y, "5PZ")
     assert m.coeffs["base"] == 0.0
     tlo, thi = m.change_points
@@ -147,7 +150,7 @@ def test_bias_mode_reduces_net_determination_bias():
     m_bias = fit_model(T, y, "3PC", objective="bias")
     bias_sse = abs((y - m_sse.predict(T)).sum() / y.sum())
     bias_b = abs((y - m_bias.predict(T)).sum() / y.sum())
-    assert bias_b <= bias_sse + 1e-9            # bias mode is at least as unbiased
+    assert bias_b <= bias_sse + 1e-9  # bias mode is at least as unbiased
 
 
 def test_bias_mode_default_is_sse():

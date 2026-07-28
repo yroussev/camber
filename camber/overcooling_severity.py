@@ -48,7 +48,7 @@ Reference setpoint (configurable via ``relative_to_deadband``):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -67,15 +67,15 @@ class OvercoolSeverityResult:
 
     equip: str
     n_considered: int
-    mode: str                  # "relative_deadband" | "absolute"
-    interval_min: float        # inferred/declared sampling interval (minutes)
-    window_min: float          # persistence window (minutes)
-    median_depth_f: float      # median depth below the reference among overcooled samples
-    max_depth_f: float         # deepest excursion below the reference (degF)
-    tier_pct: dict             # tier -> % of considered samples in a SUSTAINED run
-    tier_minutes: dict         # tier -> total sustained minutes at that tier
-    tier_sustained: dict       # tier -> bool (any sustained run at all)
-    severity: str              # worst SUSTAINED tier: "ok" | "info" | "warn" | "fault"
+    mode: str  # "relative_deadband" | "absolute"
+    interval_min: float  # inferred/declared sampling interval (minutes)
+    window_min: float  # persistence window (minutes)
+    median_depth_f: float  # median depth below the reference among overcooled samples
+    max_depth_f: float  # deepest excursion below the reference (degF)
+    tier_pct: dict  # tier -> % of considered samples in a SUSTAINED run
+    tier_minutes: dict  # tier -> total sustained minutes at that tier
+    tier_sustained: dict  # tier -> bool (any sustained run at all)
+    severity: str  # worst SUSTAINED tier: "ok" | "info" | "warn" | "fault"
     coverage_start: str
     coverage_end: str
 
@@ -96,9 +96,13 @@ def infer_interval(index: pd.DatetimeIndex) -> pd.Timedelta | None:
     return med if med > pd.Timedelta(0) else None
 
 
-def _sustained_mask(qualifies: np.ndarray, times: np.ndarray,
-                    window: pd.Timedelta, interval: pd.Timedelta,
-                    gap_factor: float = 1.5) -> np.ndarray:
+def _sustained_mask(
+    qualifies: np.ndarray,
+    times: np.ndarray,
+    window: pd.Timedelta,
+    interval: pd.Timedelta,
+    gap_factor: float = 1.5,
+) -> np.ndarray:
     """Mark samples that belong to a qualifying run sustained for >= ``window``.
 
     ``qualifies`` is a boolean array; ``times`` the matching datetime64 values.
@@ -124,12 +128,11 @@ def _sustained_mask(qualifies: np.ndarray, times: np.ndarray,
             i += 1
             continue
         j = i
-        while (j + 1 < n and qualifies[j + 1]
-               and (times[j + 1] - times[j]) <= gap_limit):
+        while j + 1 < n and qualifies[j + 1] and (times[j + 1] - times[j]) <= gap_limit:
             j += 1
         # run is samples [i .. j]; contiguous coverage = span + one interval
         if (times[j] - times[i]) + iv >= w:
-            out[i:j + 1] = True
+            out[i : j + 1] = True
         i = j + 1
     return out
 
@@ -159,11 +162,13 @@ def analyze_overcooling_severity(
 
     work = df.copy()
     if occupied_only:
-        work = work[occupied_mask(
-            work.index,
-            warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-            cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-        )]
+        work = work[
+            occupied_mask(
+                work.index,
+                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
+                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+            )
+        ]
 
     have_heat = "ActHeatSP" in work.columns
     use_relative = relative_to_deadband and have_heat
@@ -205,7 +210,7 @@ def analyze_overcooling_severity(
         tier_pct[tier] = round(100.0 * cnt / n, 2) if n else 0.0
         tier_minutes[tier] = round(cnt * iv_min, 1)
         if cnt:
-            severity = tier        # tiers iterate mild -> worst; worst sustained wins
+            severity = tier  # tiers iterate mild -> worst; worst sustained wins
 
     return OvercoolSeverityResult(
         equip=equip,

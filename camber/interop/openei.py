@@ -19,12 +19,15 @@ import os
 
 from ..tariff import Tariff
 
-_URDB_URL = ("https://api.openei.org/utility_rates?version=latest&format=json"
-             "&detail=full&getpage={label}&api_key={key}")
+_URDB_URL = (
+    "https://api.openei.org/utility_rates?version=latest&format=json"
+    "&detail=full&getpage={label}&api_key={key}"
+)
 
 
-def fetch_urdb_rate(label: str, api_key: str | None = None, *, transport=None,
-                    timeout: float = 30.0) -> dict:
+def fetch_urdb_rate(
+    label: str, api_key: str | None = None, *, transport=None, timeout: float = 30.0
+) -> dict:
     """Fetch one URDB rate page by ``label``; return the rate JSON dict.
 
     ``api_key`` defaults to the ``OPENEI_API_KEY`` environment variable -- get a free key
@@ -39,8 +42,9 @@ def fetch_urdb_rate(label: str, api_key: str | None = None, *, transport=None,
     if transport is not None:
         payload = transport(url)
     else:
-        from urllib.request import urlopen        # stdlib; no dependency
-        with urlopen(url, timeout=timeout) as resp:   # noqa: S310 -- fixed OpenEI host
+        from urllib.request import urlopen  # stdlib; no dependency
+
+        with urlopen(url, timeout=timeout) as resp:  # noqa: S310 -- fixed OpenEI host
             payload = json.loads(resp.read().decode("utf-8"))
     items = payload.get("items") or []
     if not items:
@@ -65,7 +69,7 @@ def tariff_from_urdb(urdb: dict) -> Tariff:
     """Map a URDB rate JSON dict onto a native :class:`~camber.tariff.Tariff`."""
     fixed = float(urdb.get("fixedchargefirstmeter", 0.0) or 0.0)
     if "month" not in str(urdb.get("fixedchargeunits", "$/month")).lower():
-        fixed = 0.0   # only monthly fixed charges map cleanly to the monthly engine
+        fixed = 0.0  # only monthly fixed charges map cleanly to the monthly engine
 
     energy = _rate_structure(urdb.get("energyratestructure")) or [[(None, 0.0)]]
     demand = _rate_structure(urdb.get("demandratestructure"))

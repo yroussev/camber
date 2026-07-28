@@ -43,8 +43,12 @@ class ChillerStaging:
         legacy = frame.rename(columns=cols)
         res = analyze_chiller_staging(legacy, equip, min_load_pct=self.low_load_pct)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need chiller power)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need chiller power)",
+            )
         cyc = res.starts_per_day
         low = res.low_load_pct if res.low_load_pct == res.low_load_pct else 0.0  # NaN-safe
         if cyc >= 2 * self.max_starts_per_day or low >= 50.0:
@@ -53,9 +57,12 @@ class ChillerStaging:
             severity = "warn"
         else:
             severity = "ok"
-        load_note = (f", load-factor median {res.load_factor_median_pct:.0f}% "
-                     f"({res.low_load_pct:.0f}% of run hrs below {self.low_load_pct:.0f}%)"
-                     if res.low_load_pct == res.low_load_pct else "")
+        load_note = (
+            f", load-factor median {res.load_factor_median_pct:.0f}% "
+            f"({res.low_load_pct:.0f}% of run hrs below {self.low_load_pct:.0f}%)"
+            if res.low_load_pct == res.low_load_pct
+            else ""
+        )
         return Finding(
             rule=self.name,
             equip=equip,
@@ -68,7 +75,9 @@ class ChillerStaging:
                 "low_load_pct": res.low_load_pct,
                 "n_days": res.n_days,
             },
-            summary=(f"{equip}: {res.starts_per_day:.1f} starts/day "
-                     f"(threshold {self.max_starts_per_day:.0f}), running "
-                     f"{res.runtime_pct:.0f}% of the time{load_note}"),
+            summary=(
+                f"{equip}: {res.starts_per_day:.1f} starts/day "
+                f"(threshold {self.max_starts_per_day:.0f}), running "
+                f"{res.runtime_pct:.0f}% of the time{load_note}"
+            ),
         )

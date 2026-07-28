@@ -20,17 +20,24 @@ plus magnitude stats, so findings are quantitative and rankable across boxes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
-import numpy as np
 import pandas as pd
 
 from .schedules import occupied_mask
 
 # Measures we try to load for each terminal box.
 BOX_MEASURES = [
-    "HWValve", "SpaceTemp", "SupplyAir", "ActHeatSP", "ActCoolSP",
-    "ActFlow", "ActFlowSP", "Damper", "WarmUp", "CoolDown",
+    "HWValve",
+    "SpaceTemp",
+    "SupplyAir",
+    "ActHeatSP",
+    "ActCoolSP",
+    "ActFlow",
+    "ActFlowSP",
+    "Damper",
+    "WarmUp",
+    "CoolDown",
 ]
 
 
@@ -41,7 +48,7 @@ class ReheatResult:
     equip: str
     n_intervals: int
     n_considered: int
-    valve_open_pct: float                 # % intervals reheat valve > thr
+    valve_open_pct: float  # % intervals reheat valve > thr
     reheat_and_coldsupply_pct: float
     reheat_at_high_oat_pct: float
     reheat_above_min_flow_pct: float
@@ -93,11 +100,13 @@ def analyze_box(
     # Occupied = weekday daytime window minus WarmUp/CoolDown prep modes, via the
     # single shared occupancy filter (schedules.occupied_mask).
     if occupied_only:
-        work = work[occupied_mask(
-            work.index,
-            warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-            cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-        )]
+        work = work[
+            occupied_mask(
+                work.index,
+                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
+                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+            )
+        ]
     n = len(work)
     if n == 0:
         return None

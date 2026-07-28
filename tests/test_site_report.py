@@ -4,6 +4,7 @@ import os
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -20,32 +21,53 @@ def _close_figs():
     plt.close("all")
 
 
+from camber.fault_economics import EnergyPrice, EquipmentLoad  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
+from camber.report import build_site_report  # noqa: E402
 from camber.rules.base import Finding  # noqa: E402
 from camber.rules.simul_hc import SimultaneousHeatCool  # noqa: E402
-from camber.report import build_site_report  # noqa: E402
-from camber.fault_economics import EnergyPrice, EquipmentLoad  # noqa: E402
 
 
 def _df():
     idx = pd.date_range("2024-07-01", periods=240, freq="1h")
     rng = np.random.default_rng(0)
-    return pd.DataFrame({Role.HEAT_VALVE: pd.Series(np.where(idx.hour > 12, 0.5, 0.0), index=idx),
-                         Role.COOL_VALVE: pd.Series(np.where(idx.hour > 12, 0.6, 0.0), index=idx),
-                         Role.OAT: pd.Series(rng.uniform(60, 90, 240), index=idx)})
+    return pd.DataFrame(
+        {
+            Role.HEAT_VALVE: pd.Series(np.where(idx.hour > 12, 0.5, 0.0), index=idx),
+            Role.COOL_VALVE: pd.Series(np.where(idx.hour > 12, 0.6, 0.0), index=idx),
+            Role.OAT: pd.Series(rng.uniform(60, 90, 240), index=idx),
+        }
+    )
 
 
 def _findings():
-    return [Finding(rule="simultaneous_heat_cool", equip="AHU-1", severity="fault",
-                    metrics={"simultaneous_hc_pct": 20.0}, summary="both coils 20%"),
-            Finding(rule="unmet_setpoint_hours", equip="Z-1", severity="warn", summary="unmet 12%")]
+    return [
+        Finding(
+            rule="simultaneous_heat_cool",
+            equip="AHU-1",
+            severity="fault",
+            metrics={"simultaneous_hc_pct": 20.0},
+            summary="both coils 20%",
+        ),
+        Finding(rule="unmet_setpoint_hours", equip="Z-1", severity="warn", summary="unmet 12%"),
+    ]
 
 
 def test_full_report_has_all_sections():
-    html = build_site_report(_df(), findings=_findings(), rules=[SimultaneousHeatCool()],
-                             loads={"AHU-1": EquipmentLoad(heating_capacity_kbtuh=200)},
-                             price=EnergyPrice())
-    for token in ("Health scorecard", "Findings", "Recommended actions", "<h2>Evidence</h2>", "<img"):
+    html = build_site_report(
+        _df(),
+        findings=_findings(),
+        rules=[SimultaneousHeatCool()],
+        loads={"AHU-1": EquipmentLoad(heating_capacity_kbtuh=200)},
+        price=EnergyPrice(),
+    )
+    for token in (
+        "Health scorecard",
+        "Findings",
+        "Recommended actions",
+        "<h2>Evidence</h2>",
+        "<img",
+    ):
         assert token in html
     assert html.startswith("<!doctype html>") and html.rstrip().endswith("</html>")
 
@@ -53,7 +75,7 @@ def test_full_report_has_all_sections():
 def test_charts_only_without_findings():
     html = build_site_report(_df())
     assert "Health scorecard" not in html and "Recommended actions" not in html
-    assert "<img" in html                                   # charts still render
+    assert "<img" in html  # charts still render
 
 
 def test_sections_subset_honored():

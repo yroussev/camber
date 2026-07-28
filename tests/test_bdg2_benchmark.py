@@ -24,13 +24,23 @@ def _bench():
 
 def test_acceptance_metrics_shape_and_values():
     B = _bench()
-    recs = [{"cv_rmse": 0.12, "accept": True}, {"cv_rmse": 0.28, "accept": True},
-            {"cv_rmse": 0.55, "accept": False}, {"cv_rmse": 0.40, "accept": False}]
+    recs = [
+        {"cv_rmse": 0.12, "accept": True},
+        {"cv_rmse": 0.28, "accept": True},
+        {"cv_rmse": 0.55, "accept": False},
+        {"cv_rmse": 0.40, "accept": False},
+    ]
     m = B.acceptance_metrics(recs, "chilledwater")
     assert m["chilledwater.acceptance_rate"] == 0.5
     assert m["chilledwater.n_buildings"] == 4
     assert m["chilledwater.median_cv_rmse"] == 0.34
-    assert 0.0 <= m["chilledwater.acceptance_ci_lo"] <= 0.5 <= m["chilledwater.acceptance_ci_hi"] <= 1.0
+    assert (
+        0.0
+        <= m["chilledwater.acceptance_ci_lo"]
+        <= 0.5
+        <= m["chilledwater.acceptance_ci_hi"]
+        <= 1.0
+    )
 
 
 def test_acceptance_metrics_empty():

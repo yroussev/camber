@@ -25,10 +25,10 @@ class Transition:
 
     equip: str
     rule: str
-    from_severity: str | None    # None = first verdict for this (equip, rule)
+    from_severity: str | None  # None = first verdict for this (equip, rule)
     to_severity: str
-    finding: object              # the Finding at the new state
-    at: object                   # the window's last timestamp
+    finding: object  # the Finding at the new state
+    at: object  # the window's last timestamp
 
 
 @dataclass
@@ -42,12 +42,12 @@ class OnlineFDD:
     """
 
     rules: list
-    window: int = 240                       # trailing samples retained per equipment
-    eval_every: int = 1                     # evaluate after this many pushes
-    min_samples: int = 12                   # don't evaluate a window smaller than this
-    emit_ok: bool = False                   # also emit transitions back to "ok"/"info"
-    _buffers: dict = field(default_factory=dict)   # equip -> deque[(ts, {role: value})]
-    _last: dict = field(default_factory=dict)      # (equip, rule) -> last emitted severity
+    window: int = 240  # trailing samples retained per equipment
+    eval_every: int = 1  # evaluate after this many pushes
+    min_samples: int = 12  # don't evaluate a window smaller than this
+    emit_ok: bool = False  # also emit transitions back to "ok"/"info"
+    _buffers: dict = field(default_factory=dict)  # equip -> deque[(ts, {role: value})]
+    _last: dict = field(default_factory=dict)  # (equip, rule) -> last emitted severity
     _since_eval: dict = field(default_factory=dict)
 
     def _buf(self, equip: str) -> deque:
@@ -99,12 +99,20 @@ class OnlineFDD:
             key = (equip, getattr(rule, "name", repr(rule)))
             prev = self._last.get(key)
             if sev == prev:
-                continue                                  # no change -> no re-alert
+                continue  # no change -> no re-alert
             worsened = sev in _ACTIONABLE
             recovered = prev in _ACTIONABLE and sev not in _ACTIONABLE
             if worsened or (recovered and self.emit_ok) or (prev is None and self.emit_ok):
-                out.append(Transition(equip=equip, rule=key[1], from_severity=prev,
-                                      to_severity=sev, finding=finding, at=frame.index[-1]))
+                out.append(
+                    Transition(
+                        equip=equip,
+                        rule=key[1],
+                        from_severity=prev,
+                        to_severity=sev,
+                        finding=finding,
+                        at=frame.index[-1],
+                    )
+                )
             self._last[key] = sev
         return out
 

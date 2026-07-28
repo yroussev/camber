@@ -27,16 +27,16 @@ def main() -> int:
 
     # Hot-desert summer: OAT swings, cooling valve modulates open most of the day.
     oat = 92 + 14 * np.sin((hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 1.0, len(idx))
-    cool = np.clip(55 + 25 * np.sin((hour - 9) / 24 * 2 * np.pi)
-                   + rng.normal(0, 4, len(idx)), 0, 100)
+    cool = np.clip(
+        55 + 25 * np.sin((hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 4, len(idx)), 0, 100
+    )
     # Controls fault: a leaking reheat valve sits open through the occupied
     # afternoon (weekdays) while the cooling valve is also driving -- classic
     # simultaneous heating/cooling.
     weekday = idx.dayofweek < 5
     heat = np.where(weekday & (idx.hour >= 11) & (idx.hour < 16), 35.0, 0.0)
 
-    frame = pd.DataFrame(
-        {Role.OAT: oat, Role.COOL_VALVE: cool, Role.HEAT_VALVE: heat}, index=idx)
+    frame = pd.DataFrame({Role.OAT: oat, Role.COOL_VALVE: cool, Role.HEAT_VALVE: heat}, index=idx)
 
     finding = SimultaneousHeatCool().analyze("AHU_DEMO", frame)
     print("CAMBER synthetic demo -- simultaneous heating/cooling diagnostic")

@@ -19,7 +19,7 @@ def test_unwired_client_is_valid_but_generate_raises():
     assert c.wired is False
     with pytest.raises(NotImplementedError) as ei:
         c.generate("hello")
-    assert "complete" in str(ei.value)          # the error tells you how to wire one
+    assert "complete" in str(ei.value)  # the error tells you how to wire one
 
 
 def test_non_callable_complete_rejected():

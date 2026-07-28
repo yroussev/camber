@@ -36,8 +36,12 @@ class BoilerShortCycle:
         legacy = frame.rename(columns=cols)
         res = analyze_boiler_cycling(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need boiler status)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need boiler status)",
+            )
         cyc = res.starts_per_day
         if cyc >= 2 * self.max_starts_per_day:
             severity = "fault"
@@ -56,7 +60,9 @@ class BoilerShortCycle:
                 "n_starts": res.n_starts,
                 "n_days": res.n_days,
             },
-            summary=(f"{equip}: {res.starts_per_day:.1f} boiler starts/day "
-                     f"(threshold {self.max_starts_per_day:.0f}), firing "
-                     f"{res.runtime_pct:.0f}% of the time"),
+            summary=(
+                f"{equip}: {res.starts_per_day:.1f} boiler starts/day "
+                f"(threshold {self.max_starts_per_day:.0f}), firing "
+                f"{res.runtime_pct:.0f}% of the time"
+            ),
         )

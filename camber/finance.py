@@ -17,7 +17,7 @@ O&M and end-of-life salvage. Currency-agnostic; rates are real unless you feed n
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 
 def npv(rate: float, cashflows) -> float:
@@ -51,16 +51,16 @@ class ECMResult:
     """Financial metrics for one energy-conservation measure."""
 
     cost: float
-    annual_savings: float         # year-one net saving (before escalation / O&M nuance)
+    annual_savings: float  # year-one net saving (before escalation / O&M nuance)
     life_years: int
     discount_rate: float
-    simple_payback_years: float   # inf if the net annual saving is <= 0
+    simple_payback_years: float  # inf if the net annual saving is <= 0
     discounted_payback_years: float  # NaN if never recovered within the measure life
     npv: float
-    irr: float                    # NaN if undefined
-    sir: float                    # PV(savings) / cost
-    total_savings: float          # nominal sum of yearly net savings
-    cashflows: list               # [-cost, net_1, ..., net_life]
+    irr: float  # NaN if undefined
+    sir: float  # PV(savings) / cost
+    total_savings: float  # nominal sum of yearly net savings
+    cashflows: list  # [-cost, net_1, ..., net_life]
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
@@ -73,9 +73,9 @@ def ecm_financials(
     *,
     life_years: int,
     discount_rate: float = 0.0,
-    escalation: float = 0.0,      # annual growth of the savings (energy-price escalation)
-    annual_om: float = 0.0,       # recurring O&M cost of the measure ($/yr)
-    salvage: float = 0.0,         # one-time value at end of life
+    escalation: float = 0.0,  # annual growth of the savings (energy-price escalation)
+    annual_om: float = 0.0,  # recurring O&M cost of the measure ($/yr)
+    salvage: float = 0.0,  # one-time value at end of life
 ) -> ECMResult:
     """Compute payback / NPV / IRR / SIR for a measure costing ``cost`` up front.
 
@@ -102,8 +102,7 @@ def ecm_financials(
             disc_pb = float(t)
             break
 
-    pv_savings = sum(cashflows[t] / (1.0 + discount_rate) ** t
-                     for t in range(1, len(cashflows)))
+    pv_savings = sum(cashflows[t] / (1.0 + discount_rate) ** t for t in range(1, len(cashflows)))
     sir = (pv_savings / cost) if cost else float("inf")
 
     return ECMResult(

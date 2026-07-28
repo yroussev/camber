@@ -26,6 +26,7 @@ def _heat_cool(n=24):
 def test_helpful_error_without_better():
     try:
         import better_lbnl_os  # noqa: F401
+
         have = True
     except Exception:  # noqa: BLE001
         have = False
@@ -40,5 +41,5 @@ def test_cross_check_if_installed():
     T, y = _heat_cool()
     out = better.compare_changepoint(T, y)
     assert "camber" in out and "better" in out and "agreement" in out
-    assert out["camber"]["kind"]                      # CAMBER always fits
+    assert out["camber"]["kind"]  # CAMBER always fits
     assert "order_match" in out["agreement"]

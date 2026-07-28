@@ -31,11 +31,11 @@ Once the package is installed alongside CAMBER, it's discovered:
 from camber.plugins import PluginRegistry, apply_rules
 from camber.rules.builtin import builtin_registry
 
-plugins = PluginRegistry().load_entrypoints()      # finds installed camber.* entry points
-rules = apply_rules(plugins, builtin_registry())    # built-ins + plugin rules in one registry
-plugins.adapters()   # {name: adapter class/factory}
-plugins.reports()    # {name: report callable/renderer}
-plugins.errors       # any plugin that failed to import/validate (isolated, not fatal)
+plugins = PluginRegistry().load_entrypoints()  # finds installed camber.* entry points
+rules = apply_rules(plugins, builtin_registry())  # built-ins + plugin rules in one registry
+plugins.adapters()  # {name: adapter class/factory}
+plugins.reports()  # {name: report callable/renderer}
+plugins.errors  # any plugin that failed to import/validate (isolated, not fatal)
 ```
 
 Discovery is **isolated**: a plugin that fails to import or doesn't satisfy its protocol is
@@ -50,9 +50,9 @@ from camber.plugins import PluginRegistry, apply_rules
 from camber.rules.base import Registry
 
 reg = PluginRegistry()
-reg.register("rules", MyRule)                 # name taken from MyRule.name
+reg.register("rules", MyRule)  # name taken from MyRule.name
 reg.register("adapters", MySource, name="my_source")
-rules = apply_rules(reg, Registry())          # MyRule is instantiated and registered
+rules = apply_rules(reg, Registry())  # MyRule is instantiated and registered
 ```
 
 `apply_rules` accepts rule **classes** (instantiated zero-arg) or **instances**.

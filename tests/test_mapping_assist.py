@@ -14,12 +14,16 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from camber.agent import stub_client  # noqa: E402
+from camber.mapping_assist import (  # noqa: E402
+    LLMSuggester,
+    MLSuggester,
+    RoleSuggestion,
+    review_unmapped,
+    suggest_roles,
+)
 from camber.model.mapping import MappingProvider  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
-from camber.mapping_assist import (  # noqa: E402
-    FeatureSuggester, MLSuggester, LLMSuggester, RoleSuggestion, suggest_roles, review_unmapped,
-)
-from camber.agent import stub_client  # noqa: E402
 
 _IDX = pd.date_range("2024-07-01", periods=120, freq="1h")
 
@@ -42,7 +46,7 @@ def test_initials_match_ranks_role_top():
 def test_every_suggestion_is_a_valid_role():
     for s in suggest_roles("VAV12_DmprPos", unit="%", k=5):
         assert isinstance(s, RoleSuggestion)
-        Role(s.role)                       # raises if out of vocab
+        Role(s.role)  # raises if out of vocab
         assert 0.0 < s.confidence <= 1.0
 
 
@@ -71,7 +75,7 @@ def test_range_fit_demotes_physically_impossible_role():
 
 def test_range_fit_bonus_promotes_fitting_data():
     plain = suggest_roles("OAT")
-    fit = suggest_roles("OAT", series=_series(30, 95))   # squarely inside OAT bounds
+    fit = suggest_roles("OAT", series=_series(30, 95))  # squarely inside OAT bounds
     oat_plain = next(s.confidence for s in plain if s.role == Role.OAT.value)
     oat_fit = next(s.confidence for s in fit if s.role == Role.OAT.value)
     assert oat_fit >= oat_plain
@@ -90,10 +94,12 @@ def test_rationale_is_deterministic_and_nonempty():
 
 
 def _mapping():
-    return MappingProvider.from_dict({
-        "aliases": {"OAT": "oat"},
-        "patterns": [[r".*_sat$", "supply_air_temp"]],
-    })
+    return MappingProvider.from_dict(
+        {
+            "aliases": {"OAT": "oat"},
+            "patterns": [[r".*_sat$", "supply_air_temp"]],
+        }
+    )
 
 
 def test_review_unmapped_returns_only_unmapped():
@@ -111,7 +117,7 @@ def test_review_unmapped_never_mutates_mapping():
     before_aliases = dict(mp.aliases)
     review_unmapped(["Foo_Damper", "Bar_Qux"], mp, units={"Foo_Damper": "%"})
     assert mp.aliases == before_aliases
-    assert mp.role_of("Foo_Damper") is None       # still unmapped afterward
+    assert mp.role_of("Foo_Damper") is None  # still unmapped afterward
 
 
 def test_review_unmapped_attaches_serializable_suggestions():
@@ -132,22 +138,27 @@ def test_custom_suggester_is_honored():
     assert out[0].role == Role.CO2.value and out[0].basis == "ml"
 
 
-# --------------------------------------------------------------------------- LLMSuggester (agent seam)
+# --------------------------------------------------------------------- LLMSuggester (agent seam)
+
 
 def test_llm_suggester_drops_out_of_vocab_and_labels_basis():
-    stub = stub_client("supply_air_temp, oat, flux_capacitor")   # last is not a Role
+    stub = stub_client("supply_air_temp, oat, flux_capacitor")  # last is not a Role
     out = suggest_roles("AH1_SAT", suggester=LLMSuggester(stub))
     assert [s.role for s in out][:2] == [Role.SUPPLY_AIR_TEMP.value, Role.OAT.value]
-    assert all(s.role in {r.value for r in Role} for s in out)   # no out-of-vocab leaked
+    assert all(s.role in {r.value for r in Role} for s in out)  # no out-of-vocab leaked
     assert out[0].basis == "llm"
 
 
 def test_llm_suggestion_rescored_against_physical_range():
     # the SAME proposed role scores lower when the data contradicts it
-    bad = suggest_roles("AH1_SAT", suggester=LLMSuggester(stub_client("supply_air_temp")),
-                        series=pd.Series(500.0, index=_IDX))
-    good = suggest_roles("AH1_SAT", suggester=LLMSuggester(stub_client("supply_air_temp")),
-                         series=_series(52, 58))
+    bad = suggest_roles(
+        "AH1_SAT",
+        suggester=LLMSuggester(stub_client("supply_air_temp")),
+        series=pd.Series(500.0, index=_IDX),
+    )
+    good = suggest_roles(
+        "AH1_SAT", suggester=LLMSuggester(stub_client("supply_air_temp")), series=_series(52, 58)
+    )
     assert bad[0].confidence < good[0].confidence
 
 
@@ -156,14 +167,20 @@ def test_llm_suggester_empty_when_no_valid_role_proposed():
     assert out == []
 
 
-# --------------------------------------------------------------------------- MLSuggester ([ml] extra)
+# ---------------------------------------------------------------------- MLSuggester ([ml] extra)
+
 
 def _ml_labels():
     labels = []
     for prefix in ("AH1", "AH2", "RTU3", "AHU7", "MAU4"):
-        labels += [(f"{prefix}_SAT", "supply_air_temp"), (f"{prefix}_OAT", "oat"),
-                   (f"{prefix}_MAT", "mixed_air_temp"), (f"{prefix}_DmprPos", "oa_damper"),
-                   (f"{prefix}_HtgVlv", "heat_valve"), (f"{prefix}_ClgVlv", "cool_valve")]
+        labels += [
+            (f"{prefix}_SAT", "supply_air_temp"),
+            (f"{prefix}_OAT", "oat"),
+            (f"{prefix}_MAT", "mixed_air_temp"),
+            (f"{prefix}_DmprPos", "oa_damper"),
+            (f"{prefix}_HtgVlv", "heat_valve"),
+            (f"{prefix}_ClgVlv", "cool_valve"),
+        ]
     return labels
 
 

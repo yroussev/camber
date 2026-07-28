@@ -10,8 +10,7 @@ from __future__ import annotations
 from .scatter import _resolve
 
 
-def ahu_hec_timeseries(df, ahu_id, *, threshold=5.0, oat_col=None,
-                       cooling_cutoff_f=65.0, ax=None):
+def ahu_hec_timeseries(df, ahu_id, *, threshold=5.0, oat_col=None, cooling_cutoff_f=65.0, ax=None):
     """Draw the heating/cooling/OAT time-series. Returns the primary Axes."""
     import matplotlib.pyplot as plt
 
@@ -31,11 +30,11 @@ def ahu_hec_timeseries(df, ahu_id, *, threshold=5.0, oat_col=None,
         ax2.plot(df.index, df[oat_col], color="#999999", lw=0.7, label="OAT (°F)")
         ax2.set_ylabel("OAT (°F)")
         hot = overlap & (df[oat_col] > cooling_cutoff_f)
-        ax.scatter(df.index[hot], df[hec][hot], color="red", s=10, zorder=5,
-                   label="Simul. H/C @ OAT>65°F")
+        ax.scatter(
+            df.index[hot], df[hec][hot], color="red", s=10, zorder=5, label="Simul. H/C @ OAT>65°F"
+        )
 
     pct = 100.0 * overlap.mean() if len(df) else 0.0
-    ax.set_title(f"AHU{ahu_id} heating / cooling / OAT — "
-                 f"{pct:.1f}% of intervals simultaneous H/C")
+    ax.set_title(f"AHU{ahu_id} heating / cooling / OAT — {pct:.1f}% of intervals simultaneous H/C")
     ax.legend(loc="upper left", fontsize=8)
     return ax
