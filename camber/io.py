@@ -46,9 +46,10 @@ def load_csv(path, timestamp_col: str | None = None, resample: str | None = None
     ts = pd.Series(parse_timestamps(df[timestamp_col]), index=df.index)
     n_rows = len(ts)
     values = df.drop(columns=[timestamp_col])
-    # Value columns are numeric by contract; coerce so a stray text cell becomes NaN instead of
-    # silently poisoning the whole column to object dtype (which breaks resample/analysis downstream).
-    values = values.apply(pd.to_numeric, errors="coerce")
+    # Value columns are numeric by contract; coerce (thousands/null-token aware) so a stray text cell
+    # becomes NaN instead of silently poisoning the whole column to object dtype.
+    from .coerce import coerce_numeric
+    values = values.apply(coerce_numeric)
     values.index = ts
     values = values[values.index.notna()]
     if n_rows > 0 and len(values) == 0:
