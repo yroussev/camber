@@ -13,15 +13,16 @@ from glob import glob
 
 import pandas as pd
 
-# Strip the trailing timezone abbreviation (PDT/PST) -- pandas can't parse %Z
-# reliably for these, and all data is one local clock anyway.
+from .tsparse import parse_timestamps
+
+# Strip the trailing timezone abbreviation (PDT/PST) -- kept for callers that import it.
 _TZ_RE = re.compile(r"\s+[A-Z]{2,4}$")
 
 
-def _parse_ts(series: pd.Series) -> pd.Series:
-    cleaned = series.astype(str).str.replace(_TZ_RE, "", regex=True).str.strip()
-    # format: 21-Apr-23 8:30:03 AM
-    return pd.to_datetime(cleaned, format="%d-%b-%y %I:%M:%S %p", errors="coerce")
+def _parse_ts(series: pd.Series) -> pd.DatetimeIndex:
+    # Delegate to the shared multi-format parser (BAS 12-h format leads its try-list, so existing
+    # exports parse identically; ISO / US / epoch / Excel-serial now also work).
+    return parse_timestamps(series)
 
 
 def load_point(path: str, name: str | None = None) -> pd.Series:
