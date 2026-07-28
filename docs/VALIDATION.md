@@ -56,6 +56,29 @@ complements — does not replace — the real-data LBNL benchmark above (externa
 which 0.6 broadened with a **cooling-coil-valve leakage severity sweep** (010–100%) to characterize the
 leak detector that the pooled result showed under-firing.
 
+## M&V accuracy — real-data acceptance on BDG2
+
+The M&V analogue of the LBNL FDD accuracy benchmark: `examples/bdg2/benchmark.py` scores the **ASHRAE
+Guideline 14 baseline-model acceptance rate** on **real** whole-building meters (Building Data Genome 2,
+CC-BY, ~2,000 meters). For each building it fits the daily change-point inverse model of energy vs
+outdoor temperature and asks whether the fit meets the G14 gate (CV(RMSE) ≤ 30% daily); the headline is
+the fraction that pass, with a Wilson CI. Committed baseline, gated in the benchmark CI job.
+
+Representative result (2016, ~2,044 buildings):
+
+| Meter | Acceptance (95% CI) | Median CV(RMSE) | n |
+|---|---|---:|---:|
+| Chilled water (cooling) | 36% [32–40%] | 32% | 518 |
+| Electricity | 8% [7–10%] | 21% | 1,526 |
+| **Pooled** | **15% [14–17%]** | 24% | 2,044 |
+
+The honest read: weather-driven **chilled-water** energy is baseline-able at a **meaningfully higher**
+rate than schedule/plug-driven **electricity** (~4.5×) — CAMBER reproduces the expected physics — but
+real whole-building energy is messy, and half the chilled-water buildings sit near the 30% daily
+CV(RMSE) line. Reporting *both* meter types (not just the flattering one) with confidence intervals is
+the point. The runner also rolls the portfolio up by EUI at real scale (validating the fleet percentile
+path on a real distribution).
+
 ## Cross-validation vs an independent implementation
 
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the
