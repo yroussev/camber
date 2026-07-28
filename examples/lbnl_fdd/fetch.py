@@ -23,13 +23,17 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "lbnl")
-ZIP_URL = ("https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/"
-           "LBNL_FDD_Data_Sets_SDAHU.zip")
-TTL_ZIP_URL = ("https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/"
-               "LBNL_FDD_Data_Sets_SDAHU_ttl.zip")
+ZIP_URL = (
+    "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/LBNL_FDD_Data_Sets_SDAHU.zip"
+)
+TTL_ZIP_URL = (
+    "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/"
+    "LBNL_FDD_Data_Sets_SDAHU_ttl.zip"
+)
 MEMBERS = [
     "LBNL_FDD_Dataset_SDAHU/AHU_annual.csv",
-    # cooling-coil-valve leakage severity sweep (benchmark.py scores leaking_valve across severities)
+    # cooling-coil-valve leakage severity sweep (benchmark.py scores leaking_valve across
+    # severities)
     "LBNL_FDD_Dataset_SDAHU/coi_leakage_010_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/coi_leakage_025_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
@@ -42,25 +46,37 @@ MEMBERS = [
 ]
 # The proven-present core (baseline + one leak + the four dampers); the extra leak severities above
 # are optional (may be absent in some zip releases) and don't gate the "already fetched" no-op.
-REQUIRED = [m for m in MEMBERS if "coi_leakage_010" not in m
-            and "coi_leakage_025" not in m and "coi_leakage_100" not in m]
+REQUIRED = [
+    m
+    for m in MEMBERS
+    if "coi_leakage_010" not in m and "coi_leakage_025" not in m and "coi_leakage_100" not in m
+]
 
 # Extra equipment families for the cross-equipment benchmark (opt-in via --families).
 # (subdir, zip url, ~size note, [zip members to extract])
 FAMILY_SETS = [
-    ("fcu",
-     "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FCU/"
-     "LBNL_FDD_Data_Sets_FCU.zip", "~0.5 GB",
-     ["LBNL_FDD_Dataset_FCU/FCU_FaultFree.csv",
-      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_0.csv",
-      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_100.csv",
-      "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_50.csv"]),
-    ("ddahu",
-     "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_DDAHU/"
-     "LBNL_FDD_Data_Sets_DDAHU.zip", "~1.7 GB",
-     ["LBNL_FDD_Dataset_DDAHU/DualDuct_FaultFree.csv",
-      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_0.csv",
-      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_100.csv"]),
+    (
+        "fcu",
+        "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FCU/LBNL_FDD_Data_Sets_FCU.zip",
+        "~0.5 GB",
+        [
+            "LBNL_FDD_Dataset_FCU/FCU_FaultFree.csv",
+            "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_0.csv",
+            "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_100.csv",
+            "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_50.csv",
+        ],
+    ),
+    (
+        "ddahu",
+        "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_DDAHU/"
+        "LBNL_FDD_Data_Sets_DDAHU.zip",
+        "~1.7 GB",
+        [
+            "LBNL_FDD_Dataset_DDAHU/DualDuct_FaultFree.csv",
+            "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_0.csv",
+            "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_100.csv",
+        ],
+    ),
 ]
 
 
@@ -76,8 +92,7 @@ def _fetch_ttl():
     with zipfile.ZipFile(tz) as z:
         for m in z.namelist():
             if m.endswith(".ttl"):
-                with z.open(m) as src, open(os.path.join(ttl_dir,
-                                                         os.path.basename(m)), "wb") as f:
+                with z.open(m) as src, open(os.path.join(ttl_dir, os.path.basename(m)), "wb") as f:
                     f.write(src.read())
 
 
@@ -85,8 +100,8 @@ def _fetch_set(subdir, url, size, members, zip_name, required=None):
     """Download ``url`` (if absent) and extract ``members`` into DATA/subdir.
 
     ``required`` (default = all members) is the subset whose local presence means "already fetched".
-    Optional members (severity variants that may not exist in every zip release) extract when present
-    but never gate the no-op, so a broadened catalog can't cause an endless re-download.
+    Optional members (severity variants that may not exist in every zip release) extract when
+    present but never gate the no-op, so a broadened catalog can't cause an endless re-download.
     """
     out = os.path.join(DATA, subdir)
     os.makedirs(out, exist_ok=True)
@@ -123,8 +138,9 @@ def main(argv=None) -> int:
         for subdir, url, size, members in FAMILY_SETS:
             _fetch_set(subdir, url, size, members, f"LBNL_{subdir.upper()}.zip")
     else:
-        print("\n(Add --families to also fetch FCU + DDAHU for the full"
-              " cross-equipment benchmark.)")
+        print(
+            "\n(Add --families to also fetch FCU + DDAHU for the full cross-equipment benchmark.)"
+        )
     return 0
 
 

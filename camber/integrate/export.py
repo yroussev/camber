@@ -15,8 +15,9 @@ from .tickets import _attr, fingerprint
 _BASE_COLS = ["fingerprint", "site", "equip", "rule", "severity", "summary"]
 
 
-def findings_to_frame(findings, *, site: str = "", flatten_metrics: bool = True,
-                      columns=None) -> pd.DataFrame:
+def findings_to_frame(
+    findings, *, site: str = "", flatten_metrics: bool = True, columns=None
+) -> pd.DataFrame:
     """Flatten findings into a DataFrame (one row per finding).
 
     Base columns: fingerprint, site, equip, rule, severity, summary. When ``flatten_metrics``,
@@ -27,9 +28,14 @@ def findings_to_frame(findings, *, site: str = "", flatten_metrics: bool = True,
     for f in findings:
         equip = _attr(f, "equip", "")
         rule = _attr(f, "rule", "")
-        row = {"fingerprint": fingerprint(site, equip, rule), "site": site, "equip": equip,
-               "rule": rule, "severity": _attr(f, "severity", "info"),
-               "summary": _attr(f, "summary", "")}
+        row = {
+            "fingerprint": fingerprint(site, equip, rule),
+            "site": site,
+            "equip": equip,
+            "rule": rule,
+            "severity": _attr(f, "severity", "info"),
+            "summary": _attr(f, "summary", ""),
+        }
         if flatten_metrics:
             for k, v in (_attr(f, "metrics", {}) or {}).items():
                 if isinstance(v, (int, float, str, bool)) or v is None:
@@ -44,8 +50,15 @@ def findings_to_frame(findings, *, site: str = "", flatten_metrics: bool = True,
     return df
 
 
-def export_findings(findings, path: str, *, format: str | None = None, site: str = "",
-                    flatten_metrics: bool = True, columns=None) -> int:
+def export_findings(
+    findings,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    flatten_metrics: bool = True,
+    columns=None,
+) -> int:
     """Write findings to ``path`` as CSV / JSON / Parquet. Returns the row count.
 
     ``format`` is inferred from the file extension when None (``.csv`` / ``.json`` /

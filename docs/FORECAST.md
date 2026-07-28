@@ -8,7 +8,8 @@ honest about being a transparent baseline, not a black-box model.
 
 ```python
 from camber.forecast import seasonal_forecast
-fc = seasonal_forecast(history, horizon_index)        # both DatetimeIndexed
+
+fc = seasonal_forecast(history, horizon_index)  # both DatetimeIndexed
 ```
 
 **Seasonal-naïve shape + additive drift.** Each target interval is predicted from the mean of
@@ -23,7 +24,8 @@ Flags: `drift_window` (samples used for the drift term; default 168 = a week of 
 
 ```python
 from camber.forecast import backtest
-backtest(history, test_frac=0.25)     # {n_test, mae, mape, cv_rmse}
+
+backtest(history, test_frac=0.25)  # {n_test, mae, mape, cv_rmse}
 ```
 
 Holds out the last `test_frac`, forecasts it, and reports MAE / MAPE / CV(RMSE) — a quick honesty
@@ -33,6 +35,7 @@ check on the forecaster for a given series before you rely on it.
 
 ```python
 from camber.forecast import forecast_anomalies
+
 rep = forecast_anomalies(actual, forecast, k=3.5)
 rep.n_anomalies, rep.anomaly_frac, rep.band, rep.timestamps
 ```

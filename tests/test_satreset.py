@@ -23,11 +23,14 @@ def _frame(n=24 * 30, reset=False, seed=0):
     else:
         # no reset: SAT pinned ~55 regardless of OAT
         sat = 55 + rng.normal(0, 0.4, n)
-    return pd.DataFrame({
-        "SupplyAir": sat,
-        "CHW_Valve": np.full(n, 60.0),
-        "OSA": oat,
-    }, index=idx)
+    return pd.DataFrame(
+        {
+            "SupplyAir": sat,
+            "CHW_Valve": np.full(n, 60.0),
+            "OSA": oat,
+        },
+        index=idx,
+    )
 
 
 def test_no_reset_detected():
@@ -51,8 +54,7 @@ def _frame_inverse(n=24 * 30, seed=3):
     hour = idx.hour + idx.minute / 60.0
     oat = 90 + 12 * np.sin((hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 1, n)
     sat = 56 - 0.15 * (oat - 90) + rng.normal(0, 1.0, n)
-    return pd.DataFrame({"SupplyAir": sat, "CHW_Valve": np.full(n, 60.0),
-                         "OSA": oat}, index=idx)
+    return pd.DataFrame({"SupplyAir": sat, "CHW_Valve": np.full(n, 60.0), "OSA": oat}, index=idx)
 
 
 def test_inverse_load_tracking_detected():
@@ -62,6 +64,7 @@ def test_inverse_load_tracking_detected():
 
 
 def test_returns_none_without_sat():
-    df = pd.DataFrame({"CHW_Valve": [50, 60]},
-                      index=pd.date_range("2025-07-01", periods=2, freq="1h"))
+    df = pd.DataFrame(
+        {"CHW_Valve": [50, 60]}, index=pd.date_range("2025-07-01", periods=2, freq="1h")
+    )
     assert analyze_satreset(df, "AHU_T", occupied_only=False) is None

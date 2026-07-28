@@ -16,11 +16,11 @@ from dataclasses import dataclass
 
 # kg CO2e per unit. Electricity is grid- and year-specific -- override it.
 DEFAULT_FACTORS: dict = {
-    "electricity_kwh": 0.40,     # placeholder; supply your eGRID subregion value (~0.4-0.9)
-    "natural_gas_therm": 5.30,   # EIA combustion factor, kg CO2e/therm
-    "natural_gas_kwh": 0.181,    # if gas is metered in kWh
-    "fuel_oil_gal": 10.21,       # kg CO2e/gal (No. 2)
-    "propane_gal": 5.72,         # kg CO2e/gal
+    "electricity_kwh": 0.40,  # placeholder; supply your eGRID subregion value (~0.4-0.9)
+    "natural_gas_therm": 5.30,  # EIA combustion factor, kg CO2e/therm
+    "natural_gas_kwh": 0.181,  # if gas is metered in kWh
+    "fuel_oil_gal": 10.21,  # kg CO2e/gal (No. 2)
+    "propane_gal": 5.72,  # kg CO2e/gal
     "district_steam_kbtu": 0.066,
 }
 
@@ -29,8 +29,8 @@ DEFAULT_FACTORS: dict = {
 class Emissions:
     """Emissions result: per-fuel and total CO2e."""
 
-    by_fuel: dict           # fuel -> kg CO2e
-    total_kg: float         # total kg CO2e
+    by_fuel: dict  # fuel -> kg CO2e
+    total_kg: float  # total kg CO2e
     intensity_kg_sf: float  # kg CO2e / ft2 (NaN if area not given)
 
     @property
@@ -39,8 +39,9 @@ class Emissions:
         return round(self.total_kg / 1000.0, 4)
 
 
-def emissions(consumption_by_fuel: dict, *, factors: dict | None = None,
-              gross_sf: float | None = None) -> Emissions:
+def emissions(
+    consumption_by_fuel: dict, *, factors: dict | None = None, gross_sf: float | None = None
+) -> Emissions:
     """Compute CO2e from ``{fuel_key: amount}`` using ``factors`` (kg CO2e/unit).
 
     Fuel keys must match the factor keys (see :data:`DEFAULT_FACTORS`). Unknown

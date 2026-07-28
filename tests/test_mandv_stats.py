@@ -23,7 +23,7 @@ def test_perfect_fit_stats():
 def test_poor_fit_rejected():
     rng = np.random.default_rng(0)
     y = rng.normal(100, 30, 200)
-    yhat = np.full(200, 100.0)        # predicts the mean: R2 ~ 0
+    yhat = np.full(200, 100.0)  # predicts the mean: R2 ~ 0
     s = fit_stats(y, yhat, p=2)
     assert s.r2 < 0.1
     assert not s.accept
@@ -58,12 +58,13 @@ def test_savings_positive_when_post_below_baseline():
     y_base = 30 + 1.0 * np.maximum(0.0, T - 65) + rng.normal(0, 0.3, len(T))
     base = fit_model(T, y_base, "3PC")
     T_rep = np.linspace(50, 100, 300)
-    y_rep = 0.8 * (30 + 1.0 * np.maximum(0.0, T_rep - 65))   # 20% savings
-    s = avoided_energy_savings(base, T_rep, y_rep, cv_rmse=0.05,
-                               n_baseline=300, p_baseline=3, confidence=0.90)
+    y_rep = 0.8 * (30 + 1.0 * np.maximum(0.0, T_rep - 65))  # 20% savings
+    s = avoided_energy_savings(
+        base, T_rep, y_rep, cv_rmse=0.05, n_baseline=300, p_baseline=3, confidence=0.90
+    )
     assert s.avoided_energy > 0
     assert 0.15 < s.savings_pct < 0.25
-    assert s.fractional_uncertainty > 0       # uncertainty is quantified
+    assert s.fractional_uncertainty > 0  # uncertainty is quantified
     assert s.abs_uncertainty > 0
 
 
@@ -73,29 +74,34 @@ def test_uncertainty_grows_as_savings_shrink():
     T = np.linspace(50, 100, 300)
     y_base = 30 + 1.0 * np.maximum(0.0, T - 65) + rng.normal(0, 0.3, len(T))
     base = fit_model(T, y_base, "3PC")
-    big = avoided_energy_savings(base, T, 0.7 * base.predict(T), cv_rmse=0.1,
-                                 n_baseline=300, p_baseline=3)
-    small = avoided_energy_savings(base, T, 0.97 * base.predict(T), cv_rmse=0.1,
-                                   n_baseline=300, p_baseline=3)
+    big = avoided_energy_savings(
+        base, T, 0.7 * base.predict(T), cv_rmse=0.1, n_baseline=300, p_baseline=3
+    )
+    small = avoided_energy_savings(
+        base, T, 0.97 * base.predict(T), cv_rmse=0.1, n_baseline=300, p_baseline=3
+    )
     assert small.fractional_uncertainty > big.fractional_uncertainty
 
 
 def test_cv_rmse_threshold_by_interval():
     from camber.mandv.stats import cv_rmse_max_for
+
     # G14: finer resolution -> looser CV(RMSE) gate
     assert cv_rmse_max_for("monthly") < cv_rmse_max_for("daily")
     assert cv_rmse_max_for("hourly") >= 0.30
-    assert cv_rmse_max_for("unknown") == 0.20   # safe middle default
+    assert cv_rmse_max_for("unknown") == 0.20  # safe middle default
 
 
 def test_fit_stats_respects_custom_cv_gate():
     import numpy as np
+
     from camber.mandv.stats import fit_stats
+
     rng = np.random.default_rng(7)
-    y = 100 + rng.normal(0, 18, 300)        # ~18% scatter about the mean
+    y = 100 + rng.normal(0, 18, 300)  # ~18% scatter about the mean
     yhat = np.full(300, 100.0)
     strict = fit_stats(y, yhat, p=2, cv_rmse_max=0.15)
     loose = fit_stats(y, yhat, p=2, cv_rmse_max=0.30)
     # same data, looser gate is at least as permissive on the CV(RMSE) criterion
     assert (loose.cv_rmse <= 0.30) or (not loose.accept)
-    assert strict.cv_rmse == loose.cv_rmse   # the metric itself is unchanged
+    assert strict.cv_rmse == loose.cv_rmse  # the metric itself is unchanged

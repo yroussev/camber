@@ -8,25 +8,32 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from camber.model.mapping import MappingProvider  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.resolve import (  # noqa: E402
-    discover, discover_terminals, resolve, occupied, TERMINAL_CLASSES)
-
+    TERMINAL_CLASSES,
+    discover,
+    discover_terminals,
+    occupied,
+    resolve,
+)
 
 # ---- mapping ----
 
+
 def _mapping():
-    return MappingProvider.from_dict({
-        "aliases": {
-            "HWValve": "heat_valve",
-            "HHW_Valve": "heat_valve",
-            "CHW_Valve": "cool_valve",
-            "SupplyAir": "supply_air_temp",
-            "SpaceTemp": "space_temp",
-            "ActCoolSP": "cool_sp",
-            "WarmUp": "warmup",
-            "CoolDown": "cooldown",
-        },
-        "patterns": [[r"OSA$", "oat"]],
-    })
+    return MappingProvider.from_dict(
+        {
+            "aliases": {
+                "HWValve": "heat_valve",
+                "HHW_Valve": "heat_valve",
+                "CHW_Valve": "cool_valve",
+                "SupplyAir": "supply_air_temp",
+                "SpaceTemp": "space_temp",
+                "ActCoolSP": "cool_sp",
+                "WarmUp": "warmup",
+                "CoolDown": "cooldown",
+            },
+            "patterns": [[r"OSA$", "oat"]],
+        }
+    )
 
 
 def test_alias_case_insensitive():
@@ -63,8 +70,9 @@ def test_roles_present_first_wins():
 # ---- discover + resolve against a tiny fixture folder ----
 
 _HDR = "Timestamp,Value (%)\n"
-_ROWS = "".join(f"07-Jul-25 {h:02d}:00:00 AM PDT,{v}\n"
-                for h, v in [(8, 40.0), (9, 45.0), (10, 50.0)])
+_ROWS = "".join(
+    f"07-Jul-25 {h:02d}:00:00 AM PDT,{v}\n" for h, v in [(8, 40.0), (9, 45.0), (10, 50.0)]
+)
 
 
 def _write_point(folder, equip, measure, header=_HDR, rows=_ROWS):
@@ -81,9 +89,12 @@ def test_discover_and_resolve(tmp_path):
     refs = discover(folder, "VAV")
     assert [r.equip for r in refs] == ["VAV_101", "VAV_102"]
 
-    frame = resolve(refs[0], _mapping(),
-                    [Role.HEAT_VALVE, Role.COOL_VALVE, Role.SPACE_TEMP, Role.OAT],
-                    resample="1h")
+    frame = resolve(
+        refs[0],
+        _mapping(),
+        [Role.HEAT_VALVE, Role.COOL_VALVE, Role.SPACE_TEMP, Role.OAT],
+        resample="1h",
+    )
     # mapped roles present become columns; unmapped (FilterDPT) and absent (OAT) omitted
     assert Role.HEAT_VALVE in frame.columns
     assert Role.COOL_VALVE in frame.columns
@@ -97,15 +108,14 @@ def test_discover_terminals_unions_vav_cav_fcav(tmp_path):
     # a mixed building: VAV + CAV + FCAV terminals (plus a non-terminal AHU)
     for eq in ("VAV_101", "VAV_102", "CAV_201", "FCAV_301", "FCAV_302"):
         _write_point(folder, eq, "SpaceTemp")
-    _write_point(folder, "AHU_1", "SpaceTemp")   # not a terminal class
+    _write_point(folder, "AHU_1", "SpaceTemp")  # not a terminal class
 
     # VAV-only discovery misses CAV/FCAV (the 67-of-73 bug)
     vav_only = [r.equip for r in discover(folder, "VAV")]
     assert vav_only == ["VAV_101", "VAV_102"]
 
     terms = discover_terminals(folder)
-    assert [r.equip for r in terms] == [
-        "CAV_201", "FCAV_301", "FCAV_302", "VAV_101", "VAV_102"]
+    assert [r.equip for r in terms] == ["CAV_201", "FCAV_301", "FCAV_302", "VAV_101", "VAV_102"]
     # AHU is not swept in as a terminal
     assert all(not r.equip.startswith("AHU") for r in terms)
     # each ref keeps its own class
@@ -115,7 +125,7 @@ def test_discover_terminals_unions_vav_cav_fcav(tmp_path):
 
 def test_discover_terminals_no_double_count(tmp_path):
     folder = str(tmp_path)
-    _write_point(folder, "FCAV_301", "SpaceTemp")   # must not also match CAV/VAV
+    _write_point(folder, "FCAV_301", "SpaceTemp")  # must not also match CAV/VAV
     terms = discover_terminals(folder)
     assert [r.equip for r in terms] == ["FCAV_301"]
     assert "FCAV" in TERMINAL_CLASSES
@@ -146,8 +156,8 @@ def test_resolve_finds_points_split_across_folders(tmp_path):
     _write_point(str(fb), "VAV_101", "HWValve")
     ref = discover([str(fa), str(fb)], "VAV")[0]
     frame = resolve(ref, _mapping(), [Role.SPACE_TEMP, Role.HEAT_VALVE], resample="1h")
-    assert Role.SPACE_TEMP in frame.columns      # from folder a
-    assert Role.HEAT_VALVE in frame.columns      # from folder b
+    assert Role.SPACE_TEMP in frame.columns  # from folder a
+    assert Role.HEAT_VALVE in frame.columns  # from folder b
 
 
 def test_resolve_empty_when_no_roles(tmp_path):
@@ -160,6 +170,7 @@ def test_resolve_empty_when_no_roles(tmp_path):
 
 def test_occupied_weekday_window(tmp_path):
     import pandas as pd
+
     # build a role-named frame spanning a weekday across the occupied boundary
     idx = pd.date_range("2025-07-07 05:00", periods=8, freq="1h")  # Monday
     frame = pd.DataFrame({Role.HEAT_VALVE: range(8)}, index=idx)

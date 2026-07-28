@@ -21,11 +21,14 @@ def _mapping():
 
 
 def _series(vals, n=200):
-    return pd.Series(np.resize(np.asarray(vals, dtype=float), n),
-                     index=pd.date_range("2025-07-07", periods=n, freq="1h"))
+    return pd.Series(
+        np.resize(np.asarray(vals, dtype=float), n),
+        index=pd.date_range("2025-07-07", periods=n, freq="1h"),
+    )
 
 
 # --- match basis -------------------------------------------------------------- #
+
 
 def test_alias_is_high_confidence():
     c = score_token("HHW_Valve", _mapping())
@@ -34,7 +37,7 @@ def test_alias_is_high_confidence():
 
 
 def test_pattern_is_medium_confidence():
-    c = score_token("ZoneTemp", _mapping())          # matches .*Temp$ -> space_temp
+    c = score_token("ZoneTemp", _mapping())  # matches .*Temp$ -> space_temp
     assert c.basis == "pattern" and c.role == "space_temp"
     assert c.verdict == "medium" and not c.ambiguous
 
@@ -47,6 +50,7 @@ def test_unmapped_token():
 
 # --- ambiguity ---------------------------------------------------------------- #
 
+
 def test_ambiguous_pattern_lowers_confidence():
     # "SAT_Temp" matches BOTH .*Temp$ (space_temp) and .*SAT.* (supply_air_temp)
     c = score_token("SAT_Temp", _mapping())
@@ -55,13 +59,16 @@ def test_ambiguous_pattern_lowers_confidence():
 
 
 def test_alias_overrides_ambiguity():
-    m = MappingProvider(aliases={"SAT_Temp": Role.SUPPLY_AIR_TEMP},
-                        patterns=[(r".*Temp$", Role.SPACE_TEMP), (r".*SAT.*", Role.SUPPLY_AIR_TEMP)])
+    m = MappingProvider(
+        aliases={"SAT_Temp": Role.SUPPLY_AIR_TEMP},
+        patterns=[(r".*Temp$", Role.SPACE_TEMP), (r".*SAT.*", Role.SUPPLY_AIR_TEMP)],
+    )
     c = score_token("SAT_Temp", m)
     assert c.basis == "alias" and not c.ambiguous and c.verdict == "high"
 
 
 # --- data fit ----------------------------------------------------------------- #
+
 
 def test_data_fit_confirms_good_mapping():
     # OSA->oat, data is plausible outdoor temps -> high confidence, data_fit ~1
@@ -78,14 +85,15 @@ def test_data_mismatch_drops_confidence():
 
 # --- review roll-up ----------------------------------------------------------- #
 
+
 def test_review_partitions_tokens():
     tokens = ["HHW_Valve", "ZoneTemp", "SAT_Temp", "MysteryPoint", "OSA"]
-    sbt = {"OSA": _series([250.0])}                  # OSA data is impossible -> flagged
+    sbt = {"OSA": _series([250.0])}  # OSA data is impossible -> flagged
     rep = review(tokens, _mapping(), sbt, min_confidence=0.5)
     assert rep["n"] == 5
     unmapped = {s.token for s in rep["unmapped"]}
     needs = {s.token for s in rep["needs_review"]}
     assert unmapped == {"MysteryPoint"}
-    assert "SAT_Temp" in needs        # ambiguous
-    assert "OSA" in needs             # data mismatch
-    assert "HHW_Valve" not in needs   # solid alias
+    assert "SAT_Temp" in needs  # ambiguous
+    assert "OSA" in needs  # data mismatch
+    assert "HHW_Valve" not in needs  # solid alias

@@ -30,8 +30,13 @@ class CondenserWaterReset:
 
     name = "condenser_water_reset"
     roles_required = (Role.CW_SUPPLY_TEMP,)
-    roles_optional = (Role.WETBULB_TEMP, Role.OAT, Role.OUTDOOR_RH,
-                      Role.CW_RETURN_TEMP, Role.TOWER_FAN_SPEED)
+    roles_optional = (
+        Role.WETBULB_TEMP,
+        Role.OAT,
+        Role.OUTDOOR_RH,
+        Role.CW_RETURN_TEMP,
+        Role.TOWER_FAN_SPEED,
+    )
 
     def __init__(self, reset_slope_flat: float = 0.3):
         # An ideal reset tracks wet-bulb ~1:1; below this slope it is effectively flat.
@@ -43,12 +48,15 @@ class CondenserWaterReset:
         legacy = frame.rename(columns=cols)
         res = analyze_cw_reset(legacy, equip, reset_slope_flat=self.reset_slope_flat)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need CW supply temp + wet-bulb or OAT+RH)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need CW supply temp + wet-bulb or OAT+RH)",
+            )
         # No reset is an efficiency opportunity, not a hard fault -> warn.
         severity = "ok" if res.reset_present else "warn"
-        note = ("resets with wet-bulb" if res.reset_present
-                else "flat setpoint (no wet-bulb reset)")
+        note = "resets with wet-bulb" if res.reset_present else "flat setpoint (no wet-bulb reset)"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -60,6 +68,8 @@ class CondenserWaterReset:
                 "wetbulb_source": res.wetbulb_source,
                 "n_operating": res.n_operating,
             },
-            summary=(f"{equip}: CW supply median {res.cws_median_f:.1f}F, "
-                     f"slope {res.cws_slope_per_wetbulb:.2f} F/F vs wet-bulb; {note}"),
+            summary=(
+                f"{equip}: CW supply median {res.cws_median_f:.1f}F, "
+                f"slope {res.cws_slope_per_wetbulb:.2f} F/F vs wet-bulb; {note}"
+            ),
         )

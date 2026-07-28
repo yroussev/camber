@@ -8,12 +8,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.eval import Confusion  # noqa: E402
 from camber.validation import (  # noqa: E402
-    wilson_interval, rate_ci, RateCI, metrics_with_ci,
-    check_determinism, DeterminismResult,
+    DeterminismResult,
+    RateCI,
+    check_determinism,
+    metrics_with_ci,
+    rate_ci,
+    wilson_interval,
 )
 
-
 # --- wilson_interval ---------------------------------------------------------- #
+
 
 def test_wilson_typical():
     lo, hi = wilson_interval(8, 10)
@@ -46,6 +50,7 @@ def test_wilson_contains_point_estimate():
 
 # --- rate_ci ------------------------------------------------------------------ #
 
+
 def test_rate_ci_basic():
     r = rate_ci(8, 10)
     assert isinstance(r, RateCI)
@@ -64,8 +69,9 @@ def test_rate_ci_zero_n():
 
 # --- metrics_with_ci ---------------------------------------------------------- #
 
+
 def test_metrics_with_ci_denominators():
-    c = Confusion(tp=8, fp=2, fn=2, tn=18)   # P=10, N=20, total=30
+    c = Confusion(tp=8, fp=2, fn=2, tn=18)  # P=10, N=20, total=30
     m = metrics_with_ci(c)
     assert set(m) == {"true_positive_rate", "false_positive_rate", "accuracy"}
     tpr = m["true_positive_rate"]
@@ -80,6 +86,7 @@ def test_metrics_with_ci_denominators():
 
 
 # --- check_determinism -------------------------------------------------------- #
+
 
 def _pure(x):
     return x * 2 + 1

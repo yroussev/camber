@@ -38,12 +38,20 @@ class CompressorStaging:
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         if Role.COMPRESSOR_STAGE not in frame.columns:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need compressor stage)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need compressor stage)",
+            )
         n_changes, per_day, span = _changes_per_day(frame[Role.COMPRESSOR_STAGE])
         if span <= 0:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need compressor stage)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need compressor stage)",
+            )
         max_stage = float(np.nanmax(frame[Role.COMPRESSOR_STAGE].to_numpy(dtype=float)))
         if per_day >= 2 * self.max_changes_per_day:
             severity = "fault"
@@ -52,10 +60,18 @@ class CompressorStaging:
         else:
             severity = "ok"
         return Finding(
-            rule=self.name, equip=equip, severity=severity,
-            metrics={"stage_changes_per_day": round(per_day, 2),
-                     "max_changes_per_day": self.max_changes_per_day,
-                     "n_changes": n_changes, "max_stage": max_stage, "n_days": round(span, 2)},
-            summary=(f"{equip}: {per_day:.1f} compressor-stage changes/day "
-                     f"(threshold {self.max_changes_per_day:.0f}), top stage {max_stage:.0f}"),
+            rule=self.name,
+            equip=equip,
+            severity=severity,
+            metrics={
+                "stage_changes_per_day": round(per_day, 2),
+                "max_changes_per_day": self.max_changes_per_day,
+                "n_changes": n_changes,
+                "max_stage": max_stage,
+                "n_days": round(span, 2),
+            },
+            summary=(
+                f"{equip}: {per_day:.1f} compressor-stage changes/day "
+                f"(threshold {self.max_changes_per_day:.0f}), top stage {max_stage:.0f}"
+            ),
         )

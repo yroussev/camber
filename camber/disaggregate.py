@@ -14,7 +14,7 @@ is only what OAT explains, and the rest is labeled *other*, not over-attributed.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -41,9 +41,14 @@ class LoadComponents:
         return asdict(self)
 
 
-def disaggregate_load(load: pd.Series, oat: pd.Series, *, baseload_pct: float = 5.0,
-                      balance_point: float | None = None,
-                      balance_range=(50.0, 70.0)) -> LoadComponents:
+def disaggregate_load(
+    load: pd.Series,
+    oat: pd.Series,
+    *,
+    baseload_pct: float = 5.0,
+    balance_point: float | None = None,
+    balance_range=(50.0, 70.0),
+) -> LoadComponents:
     """Decompose ``load`` into baseload / weather / other using ``oat``.
 
     ``baseload_pct`` sets the always-on floor (percentile of load). Above that floor, load is
@@ -53,8 +58,9 @@ def disaggregate_load(load: pd.Series, oat: pd.Series, *, baseload_pct: float = 
     """
     df = pd.DataFrame({"load": load, "oat": oat}).dropna()
     if df.empty:
-        return LoadComponents(0, 0, 0, 0, float("nan"), float("nan"), float("nan"),
-                              float("nan"), 0.0)
+        return LoadComponents(
+            0, 0, 0, 0, float("nan"), float("nan"), float("nan"), float("nan"), 0.0
+        )
     dt = interval_hours(df.index)
     ld = df["load"].to_numpy(float)
     t = df["oat"].to_numpy(float)
@@ -62,10 +68,10 @@ def disaggregate_load(load: pd.Series, oat: pd.Series, *, baseload_pct: float = 
     excess = np.clip(ld - base_kw, 0.0, None)
 
     def fit_at(bp):
-        hdd, cdd = degree_days(t, bp)               # shared M&V degree-day convention
+        hdd, cdd = degree_days(t, bp)  # shared M&V degree-day convention
         X = np.column_stack([cdd, hdd])
         coef, *_ = np.linalg.lstsq(X, excess, rcond=None)
-        pred = np.clip(X @ coef, 0.0, excess)          # non-negative, can't exceed the excess
+        pred = np.clip(X @ coef, 0.0, excess)  # non-negative, can't exceed the excess
         sse = float(np.sum((excess - (X @ coef)) ** 2))
         return pred, sse
 
@@ -88,9 +94,13 @@ def disaggregate_load(load: pd.Series, oat: pd.Series, *, baseload_pct: float = 
     other_kwh = float(np.sum(other_kw) * dt)
     tot = total_kwh if total_kwh > 0 else float("nan")
     return LoadComponents(
-        total_kwh=round(total_kwh, 2), baseload_kwh=round(base_kwh, 2),
-        weather_kwh=round(weather_kwh, 2), other_kwh=round(other_kwh, 2),
+        total_kwh=round(total_kwh, 2),
+        baseload_kwh=round(base_kwh, 2),
+        weather_kwh=round(weather_kwh, 2),
+        other_kwh=round(other_kwh, 2),
         baseload_frac=round(base_kwh / tot, 4) if tot == tot else float("nan"),
         weather_frac=round(weather_kwh / tot, 4) if tot == tot else float("nan"),
         other_frac=round(other_kwh / tot, 4) if tot == tot else float("nan"),
-        balance_point_f=round(bp, 2), baseload_kw=round(base_kw, 3))
+        balance_point_f=round(bp, 2),
+        baseload_kw=round(base_kw, 3),
+    )

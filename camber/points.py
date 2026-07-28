@@ -35,10 +35,10 @@ _TRAILING_ID = re.compile(r"(\d{1,2})$")
 class Point:
     """A parsed data-column name ``<prefix><id>_<measure>``."""
 
-    column: str          # original column name, e.g. "AHU1_HeC"
-    prefix: str          # equipment prefix, e.g. "AHU"
-    equip_id: int | None # integer id, e.g. 1  (None if no trailing digit)
-    measure: str         # measure suffix WITHOUT the underscore, e.g. "HeC"
+    column: str  # original column name, e.g. "AHU1_HeC"
+    prefix: str  # equipment prefix, e.g. "AHU"
+    equip_id: int | None  # integer id, e.g. 1  (None if no trailing digit)
+    measure: str  # measure suffix WITHOUT the underscore, e.g. "HeC"
 
     @property
     def equip(self) -> str:
@@ -90,7 +90,7 @@ def matches(header: str, generic_name: str, equip_id: int) -> bool:
     True when ``header`` is a building-level point sharing the measure suffix
     (``Bldg*<suffix>``) or an exact ``<prefix><id><suffix>`` match.
     """
-    suffix = measure_suffix(generic_name)              # "_HeC"
+    suffix = measure_suffix(generic_name)  # "_HeC"
     last_us = generic_name.rfind("_")
     prefix = generic_name[:last_us] if last_us != -1 else generic_name  # "AHU"
     if header.startswith("Bldg") and header.endswith(suffix):

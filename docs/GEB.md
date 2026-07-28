@@ -10,8 +10,14 @@ Quantify a DR event against an expected baseline:
 
 ```python
 from camber.geb import demand_response
-r = demand_response(load_kw, baseline_kw, event_start="2026-07-15 16:00",
-                    event_end="2026-07-15 19:00", rebound_hours=2)
+
+r = demand_response(
+    load_kw,
+    baseline_kw,
+    event_start="2026-07-15 16:00",
+    event_end="2026-07-15 19:00",
+    rebound_hours=2,
+)
 r.energy_shed_kwh, r.avg_shed_kw, r.peak_shed_kw, r.pct_shed, r.rebound_kwh
 ```
 
@@ -23,6 +29,7 @@ baseline in the `rebound_hours` after (the snap-back that erodes net benefit).
 
 ```python
 from camber.geb import flexibility
+
 f = flexibility(load_kw, baseload_pct=10)
 f.baseload_kw, f.sheddable_kw, f.sheddable_frac, f.peak_to_average
 ```
@@ -34,6 +41,7 @@ sheddable fraction and peak-to-average ratio mean more DR/shift potential.
 
 ```python
 from camber.geb import carbon_aware_shift
+
 out = carbon_aware_shift(load_kw, hourly_emissions_factor, shift_kwh=500)
 out["co2_saved_kg"], out["ef_high"], out["ef_low"], out["spread_kg_per_kwh"]
 ```
@@ -48,10 +56,11 @@ How well is load *timed* against a cost or carbon signal?
 
 ```python
 from camber.geb import operation_score
+
 s = operation_score(load_kw, hourly_price, label="price")
-s.load_weighted_avg    # $/kWh the building actually incurred
-s.score                # 1 = every kWh in the cheapest hours, 0 = the worst, ~0.5 = flat
-s.vs_flat_pct          # % better(-)/worse(+) than indifferent (flat) operation
+s.load_weighted_avg  # $/kWh the building actually incurred
+s.score  # 1 = every kWh in the cheapest hours, 0 = the worst, ~0.5 = flat
+s.vs_flat_pct  # % better(-)/worse(+) than indifferent (flat) operation
 ```
 
 The best/worst bounds keep the **same load magnitudes and the same signal values** and pair them
@@ -71,6 +80,7 @@ Hand a measured DR event to a demand-response program in a shape it recognizes:
 
 ```python
 from camber.interop.openadr import to_openadr_report
+
 r = demand_response(load_kw, baseline_kw, event_start=..., event_end=...)
 report = to_openadr_report(r, program_id="PROG-1", event_id="EV-42", client_name="HQ")
 ```

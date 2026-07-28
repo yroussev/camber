@@ -20,7 +20,7 @@ tower/climate-specific, so ``design_approach_f`` is an injected parameter.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -32,13 +32,16 @@ def stull_wetbulb_f(oat_f, rh_pct):
     Valid for roughly 5-99% RH at sea level; accurate to ~±1 °F across typical HVAC
     conditions. Vectorized over pandas Series / numpy arrays.
     """
-    t = (np.asarray(oat_f, dtype=float) - 32.0) / 1.8   # -> °C
+    t = (np.asarray(oat_f, dtype=float) - 32.0) / 1.8  # -> °C
     rh = np.asarray(rh_pct, dtype=float)
-    tw_c = (t * np.arctan(0.151977 * np.sqrt(rh + 8.313659))
-            + np.arctan(t + rh) - np.arctan(rh - 1.676331)
-            + 0.00391838 * rh ** 1.5 * np.arctan(0.023101 * rh)
-            - 4.686035)
-    return tw_c * 1.8 + 32.0                              # -> °F
+    tw_c = (
+        t * np.arctan(0.151977 * np.sqrt(rh + 8.313659))
+        + np.arctan(t + rh)
+        - np.arctan(rh - 1.676331)
+        + 0.00391838 * rh**1.5 * np.arctan(0.023101 * rh)
+        - 4.686035
+    )
+    return tw_c * 1.8 + 32.0  # -> °F
 
 
 @dataclass
@@ -46,10 +49,10 @@ class CoolingTowerResult:
     """Cooling-tower approach over operating hours vs the design approach."""
 
     equip: str
-    n_operating: int              # intervals the tower is rejecting heat
-    approach_median_f: float      # median (CW supply - wet-bulb) over operating hours
-    range_median_f: float         # median (CW return - CW supply), NaN if no return temp
-    wetbulb_source: str           # "measured" | "derived" (from OAT + RH)
+    n_operating: int  # intervals the tower is rejecting heat
+    approach_median_f: float  # median (CW supply - wet-bulb) over operating hours
+    range_median_f: float  # median (CW return - CW supply), NaN if no return temp
+    wetbulb_source: str  # "measured" | "derived" (from OAT + RH)
     pct_hours_high_approach: float  # % operating hrs above design + margin
     design_approach_f: float
     coverage_start: str
@@ -64,10 +67,10 @@ def analyze_cooling_tower_approach(
     df: pd.DataFrame,
     equip: str,
     *,
-    design_approach_f: float = 7.0,    # tower/climate-specific -- SET to the schedule
-    high_margin_f: float = 3.0,        # approach above design+margin == high
-    min_range_f: float = 2.0,          # CW range below this == not really rejecting heat
-    min_fan_pct: float = 5.0,          # tower fan above this == operating (if available)
+    design_approach_f: float = 7.0,  # tower/climate-specific -- SET to the schedule
+    high_margin_f: float = 3.0,  # approach above design+margin == high
+    min_range_f: float = 2.0,  # CW range below this == not really rejecting heat
+    min_fan_pct: float = 5.0,  # tower fan above this == operating (if available)
 ) -> CoolingTowerResult | None:
     """Compute tower approach from CW supply temp and wet-bulb (measured or derived).
 
@@ -79,7 +82,7 @@ def analyze_cooling_tower_approach(
     if "CWS_Temp" not in df.columns:
         return None
     work = df.copy()
-    work = work[~work.index.duplicated(keep="first")]   # defensive: reindex needs a unique index
+    work = work[~work.index.duplicated(keep="first")]  # defensive: reindex needs a unique index
     # wet-bulb: prefer a measured point, else derive from dry-bulb + RH
     if "WetBulb" in work.columns:
         wb = work["WetBulb"]
@@ -107,7 +110,7 @@ def analyze_cooling_tower_approach(
     if len(w) < 10:
         return None
 
-    approach = (w.CWS_Temp - w._wb).clip(lower=-2)   # can't beat wet-bulb (allow noise)
+    approach = (w.CWS_Temp - w._wb).clip(lower=-2)  # can't beat wet-bulb (allow noise)
     rng = (w.CWR_Temp - w.CWS_Temp) if "CWR_Temp" in w.columns else None
     high = float((approach > design_approach_f + high_margin_f).mean())
 

@@ -16,23 +16,22 @@ dataset (so a single CV(RMSE)/R2 describes the combined model).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 
-from .models import ChangePointModel, best_model, fit_model
+from .models import N_PARAMS, best_model, fit_model
 from .stats import FitStats, fit_stats
-from .models import N_PARAMS
 
 
 @dataclass
 class CategoricalModel:
     """A set of per-category change-point models with combined prediction."""
 
-    models: dict                    # category value -> ChangePointModel
-    categories: tuple               # ordered category values
-    total_params: int               # sum of params across sub-models
+    models: dict  # category value -> ChangePointModel
+    categories: tuple  # ordered category values
+    total_params: int  # sum of params across sub-models
     pooled_stats: FitStats | None = None
 
     def predict(self, T, cat) -> np.ndarray:
@@ -47,9 +46,16 @@ class CategoricalModel:
         return out
 
 
-def fit_categorical(T, y, cat, *, kind: str | None = None,
-                    kinds=("2P", "3PC", "3PH", "4P", "5P"),
-                    objective: str = "sse", min_per_cat: int = 6) -> CategoricalModel:
+def fit_categorical(
+    T,
+    y,
+    cat,
+    *,
+    kind: str | None = None,
+    kinds=("2P", "3PC", "3PH", "4P", "5P"),
+    objective: str = "sse",
+    min_per_cat: int = 6,
+) -> CategoricalModel:
     """Fit one change-point model per category value.
 
     ``T``, ``y``, ``cat`` are equal-length arrays/Series. For each category with at
@@ -68,8 +74,11 @@ def fit_categorical(T, y, cat, *, kind: str | None = None,
             continue
         Tc, yc = T[sel], y[sel]
         if kind is not None:
-            m = fit_model(Tc, yc, kind, objective=objective) \
-                if kind in ("3PC", "3PH", "4P") else fit_model(Tc, yc, kind)
+            m = (
+                fit_model(Tc, yc, kind, objective=objective)
+                if kind in ("3PC", "3PH", "4P")
+                else fit_model(Tc, yc, kind)
+            )
         else:
             m = best_model(Tc, yc, kinds=kinds)
         models[c] = m
@@ -79,8 +88,8 @@ def fit_categorical(T, y, cat, *, kind: str | None = None,
 
     # pooled stats over all modeled points
     modeled = np.isin(cat, list(models.keys()))
-    yhat = CategoricalModel(models, tuple(models.keys()), total_p).predict(
-        T[modeled], cat[modeled])
+    yhat = CategoricalModel(models, tuple(models.keys()), total_p).predict(T[modeled], cat[modeled])
     pooled = fit_stats(y[modeled], yhat, p=total_p)
-    return CategoricalModel(models=models, categories=tuple(models.keys()),
-                            total_params=total_p, pooled_stats=pooled)
+    return CategoricalModel(
+        models=models, categories=tuple(models.keys()), total_params=total_p, pooled_stats=pooled
+    )

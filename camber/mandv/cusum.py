@@ -29,9 +29,9 @@ def cusum(baseline_projected: pd.Series, actual: pd.Series) -> pd.Series:
 class CusumResult:
     """Summary of a CUSUM trajectory."""
 
-    series: pd.Series          # the cumulative curve
-    total: float               # final cumulative savings (projected - actual)
-    mean_rate: float           # average per-interval savings (the overall slope)
+    series: pd.Series  # the cumulative curve
+    total: float  # final cumulative savings (projected - actual)
+    mean_rate: float  # average per-interval savings (the overall slope)
     n: int
 
     @property
@@ -45,14 +45,15 @@ def cusum_savings(baseline_projected: pd.Series, actual: pd.Series) -> CusumResu
     s = cusum(baseline_projected, actual)
     n = int(len(s))
     total = float(s.iloc[-1]) if n else 0.0
-    mean_rate = float((baseline_projected.reindex(s.index)
-                       - actual.reindex(s.index)).mean()) if n else 0.0
-    return CusumResult(series=s, total=round(total, 4),
-                       mean_rate=round(mean_rate, 6), n=n)
+    mean_rate = (
+        float((baseline_projected.reindex(s.index) - actual.reindex(s.index)).mean()) if n else 0.0
+    )
+    return CusumResult(series=s, total=round(total, 4), mean_rate=round(mean_rate, 6), n=n)
 
 
-def control_exceedances(baseline_projected: pd.Series, actual: pd.Series, *,
-                        limit: float) -> pd.Series:
+def control_exceedances(
+    baseline_projected: pd.Series, actual: pd.Series, *, limit: float
+) -> pd.Series:
     """Timestamps where |CUSUM| crosses +/-``limit`` (a performance alert).
 
     A symmetric control band: the first crossing of the upper limit flags

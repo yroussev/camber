@@ -21,12 +21,18 @@ import pandas as pd
 from .model.roles import Role
 
 # Roles whose magnitude is a position/percent (0-100) that rules threshold on.
-PERCENT_ROLES = frozenset({
-    Role.HEAT_VALVE, Role.COOL_VALVE, Role.OA_DAMPER, Role.DAMPER,
-    Role.SUPPLY_FAN_SPEED, Role.CHW_PUMP_SPEED,
-})
+PERCENT_ROLES = frozenset(
+    {
+        Role.HEAT_VALVE,
+        Role.COOL_VALVE,
+        Role.OA_DAMPER,
+        Role.DAMPER,
+        Role.SUPPLY_FAN_SPEED,
+        Role.CHW_PUMP_SPEED,
+    }
+)
 
-FRACTION_MAX = 1.5   # finite max at/below this (and non-negative) => 0-1 fraction
+FRACTION_MAX = 1.5  # finite max at/below this (and non-negative) => 0-1 fraction
 
 
 def looks_like_fraction(s: pd.Series, fraction_max: float = FRACTION_MAX) -> bool:
@@ -42,8 +48,9 @@ def normalize_percent(s: pd.Series, fraction_max: float = FRACTION_MAX) -> pd.Se
     return s * 100.0 if looks_like_fraction(s, fraction_max) else s
 
 
-def normalize_percent_frame(frame: pd.DataFrame, *, roles=PERCENT_ROLES,
-                            fraction_max: float = FRACTION_MAX) -> pd.DataFrame:
+def normalize_percent_frame(
+    frame: pd.DataFrame, *, roles=PERCENT_ROLES, fraction_max: float = FRACTION_MAX
+) -> pd.DataFrame:
     """Normalize the percent/position-role columns of a role-named frame to percent.
 
     Only columns whose label is in ``roles`` are touched; everything else

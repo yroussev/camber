@@ -12,7 +12,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.integrate.export import export_findings, findings_to_frame  # noqa: E402
 from camber.integrate.notify import (  # noqa: E402
-    dispatch_findings, email_transport, format_for, slack_payload, teams_payload,
+    dispatch_findings,
+    email_transport,
+    format_for,
+    slack_payload,
+    teams_payload,
 )
 from camber.integrate.tickets import finding_to_ticket  # noqa: E402
 from camber.rules.base import Finding  # noqa: E402
@@ -31,6 +35,7 @@ _FINDINGS = [
 
 # --------------------------------------------------------------------------- channels
 
+
 def test_slack_and_teams_payload_shape():
     t = finding_to_ticket(_FINDINGS[0], site="S1")
     slack = slack_payload(t)
@@ -41,16 +46,17 @@ def test_slack_and_teams_payload_shape():
 
 def test_format_for_dispatch_and_unknown_channel():
     t = finding_to_ticket(_FINDINGS[1], site="S1")
-    assert format_for("webhook", t) is t            # raw passthrough
+    assert format_for("webhook", t) is t  # raw passthrough
     assert "text" in format_for("slack", t)
     try:
         format_for("carrier-pigeon", t)
-        assert False
+        raise AssertionError("expected ValueError")
     except ValueError:
         pass
 
 
 # --------------------------------------------------------------------------- dispatch
+
 
 def test_dispatch_severity_filter():
     sent = []
@@ -73,32 +79,45 @@ def test_dispatch_dedupe_across_runs():
 def test_dispatch_dry_run_does_not_call_transport():
     calls = []
     out = dispatch_findings(_FINDINGS, calls.append, dry_run=True, dedupe=False)
-    assert len(out) == 2 and calls == []            # formatted but not sent
+    assert len(out) == 2 and calls == []  # formatted but not sent
 
 
 def test_dispatch_slack_channel_formats_payloads():
     sent = []
     dispatch_findings(_FINDINGS, sent.append, channel="slack", min_severity="fault", dedupe=False)
-    assert len(sent) == 1 and "text" in sent[0]     # only the fault, slack-shaped
+    assert len(sent) == 1 and "text" in sent[0]  # only the fault, slack-shaped
 
 
 # --------------------------------------------------------------------------- email
 
+
 class _FakeSMTP:
     log = []
 
-    def starttls(self): self.log.append("starttls")
-    def login(self, u, p): self.log.append(("login", u))
-    def send_message(self, msg): self.log.append(("send", msg["Subject"], msg["To"]))
-    def quit(self): self.log.append("quit")
+    def starttls(self):
+        self.log.append("starttls")
+
+    def login(self, u, p):
+        self.log.append(("login", u))
+
+    def send_message(self, msg):
+        self.log.append(("send", msg["Subject"], msg["To"]))
+
+    def quit(self):
+        self.log.append("quit")
 
 
 def test_email_transport_sends_via_fake_smtp():
     _FakeSMTP.log = []
     fake = _FakeSMTP()
-    transport = email_transport("smtp.example.com", sender="camber@x.com",
-                                recipients=["ops@x.com", "fm@x.com"],
-                                username="u", password="p", _smtp_factory=lambda: fake)
+    transport = email_transport(
+        "smtp.example.com",
+        sender="camber@x.com",
+        recipients=["ops@x.com", "fm@x.com"],
+        username="u",
+        password="p",
+        _smtp_factory=lambda: fake,
+    )
     ticket = finding_to_ticket(_FINDINGS[0], site="S1")
     res = transport(ticket)
     assert res["ok"] and res["recipients"] == ["ops@x.com", "fm@x.com"]
@@ -108,12 +127,13 @@ def test_email_transport_sends_via_fake_smtp():
 
 # --------------------------------------------------------------------------- export
 
+
 def test_findings_to_frame_flattens_metrics():
     df = findings_to_frame(_FINDINGS, site="S1")
     assert list(df["rule"]) == ["simultaneous_heat_cool", "chiller_efficiency", "co2_ventilation"]
     assert "metric_simultaneous_hc_pct" in df.columns
     assert df.loc[0, "metric_simultaneous_hc_pct"] == 22.0
-    assert df.loc[0, "fingerprint"]                       # stable id present
+    assert df.loc[0, "fingerprint"]  # stable id present
 
 
 def test_export_csv_json_parquet(tmp_path):
@@ -131,6 +151,6 @@ def test_export_columns_subset_and_bad_format(tmp_path):
     assert list(df.columns) == ["rule", "severity"]
     try:
         export_findings(_FINDINGS, str(tmp_path / "x.xml"))
-        assert False
+        raise AssertionError("expected ValueError")
     except ValueError:
         pass

@@ -21,9 +21,17 @@ from ..model.roles import Role
 from .parquet_store import ParquetStore
 
 
-def synth_portfolio(store: ParquetStore, *, sites: int = 10, equips: int = 10, roles: int = 4,
-                    days: int = 30, freq: str = "1h", start: str = "2024-01-01",
-                    seed: int = 0) -> int:
+def synth_portfolio(
+    store: ParquetStore,
+    *,
+    sites: int = 10,
+    equips: int = 10,
+    roles: int = 4,
+    days: int = 30,
+    freq: str = "1h",
+    start: str = "2024-01-01",
+    seed: int = 0,
+) -> int:
     """Write a synthetic portfolio (sites × equips, each with ``roles`` role-series). Returns
     total rows written. ``days`` may span years to exercise year partitioning."""
     rng = np.random.default_rng(seed)
@@ -35,14 +43,24 @@ def synth_portfolio(store: ParquetStore, *, sites: int = 10, equips: int = 10, r
         site = f"site_{s:03d}"
         for e in range(equips):
             frame = pd.DataFrame(
-                {r: 50.0 + rng.normal(0, 5, len(idx)) for r in role_list}, index=idx)
-            rows += store.write_role_frame(frame, site=site, equip=f"AHU_{e:02d}",
-                                           equip_class="ahu")
+                {r: 50.0 + rng.normal(0, 5, len(idx)) for r in role_list}, index=idx
+            )
+            rows += store.write_role_frame(
+                frame, site=site, equip=f"AHU_{e:02d}", equip_class="ahu"
+            )
     return rows
 
 
-def benchmark(root: str, *, sites: int = 10, equips: int = 10, roles: int = 4,
-              days: int = 30, freq: str = "1h", start: str = "2024-01-01") -> dict:
+def benchmark(
+    root: str,
+    *,
+    sites: int = 10,
+    equips: int = 10,
+    roles: int = 4,
+    days: int = 30,
+    freq: str = "1h",
+    start: str = "2024-01-01",
+) -> dict:
     """Build a synthetic portfolio under ``root`` and time the store's hot paths.
 
     Returns a dict of row/point counts and per-operation wall-clock seconds.
@@ -51,8 +69,9 @@ def benchmark(root: str, *, sites: int = 10, equips: int = 10, roles: int = 4,
     out: dict = {"sites": sites, "equips": equips, "roles": roles, "days": days, "freq": freq}
 
     t0 = time.perf_counter()
-    out["rows"] = synth_portfolio(store, sites=sites, equips=equips, roles=roles,
-                                  days=days, freq=freq, start=start)
+    out["rows"] = synth_portfolio(
+        store, sites=sites, equips=equips, roles=roles, days=days, freq=freq, start=start
+    )
     out["write_s"] = round(time.perf_counter() - t0, 4)
 
     # cold: writes invalidated the catalog, so this rebuilds it once (a projected scan)...
@@ -96,8 +115,15 @@ def _main(argv=None):  # pragma: no cover
     args = ap.parse_args(argv)
 
     root = args.root or tempfile.mkdtemp(prefix="camber-bench-")
-    res = benchmark(root, sites=args.sites, equips=args.equips, roles=args.roles,
-                    days=args.days, freq=args.freq, start=args.start)
+    res = benchmark(
+        root,
+        sites=args.sites,
+        equips=args.equips,
+        roles=args.roles,
+        days=args.days,
+        freq=args.freq,
+        start=args.start,
+    )
     width = max(len(k) for k in res)
     for k, v in res.items():
         print(f"  {k:<{width}} : {v}")

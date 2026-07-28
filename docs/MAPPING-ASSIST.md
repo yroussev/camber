@@ -50,11 +50,11 @@ The front door for a whole tag set. It reuses `mapping_confidence.review()` to f
 ```python
 from camber.mapping_assist import review_unmapped
 
-rev = review_unmapped(tokens, mapping,
-                      series_by_token={"VAV12_DmprPos": damper_series},
-                      units={"VAV12_DmprPos": "%"})
-rev["n_unmapped"]        # how many didn't resolve
-rev["review_list"]       # [{"token", "suggestions": [RoleSuggestion.as_dict(), ...]}, ...]
+rev = review_unmapped(
+    tokens, mapping, series_by_token={"VAV12_DmprPos": damper_series}, units={"VAV12_DmprPos": "%"}
+)
+rev["n_unmapped"]  # how many didn't resolve
+rev["review_list"]  # [{"token", "suggestions": [RoleSuggestion.as_dict(), ...]}, ...]
 ```
 
 The mapping is **never modified** — you review `rev["review_list"]`, then apply the confirmed roles by
@@ -69,7 +69,7 @@ it on your own labels or bootstrap from an existing mapping:
 ```python
 from camber.mapping_assist import MLSuggester
 
-ml = MLSuggester.from_mapping(mapping)                    # labels from mapping.aliases
+ml = MLSuggester.from_mapping(mapping)  # labels from mapping.aliases
 # or: MLSuggester().fit([("AH1_SAT", "supply_air_temp"), ("RTU3_OAT", "oat"), ...])
 suggest_roles("AH9_SAT", suggester=ml)
 ```
@@ -92,7 +92,7 @@ roles. Then the deterministic layer disposes:
 from camber.mapping_assist import LLMSuggester
 from camber.agent import client_from_callable
 
-client = client_from_callable(lambda p, **o: my_llm.complete(p))   # you own the SDK
+client = client_from_callable(lambda p, **o: my_llm.complete(p))  # you own the SDK
 suggest_roles("AH1_SAT", suggester=LLMSuggester(client), series=sat_series)
 ```
 

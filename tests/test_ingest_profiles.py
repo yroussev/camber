@@ -7,8 +7,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from camber.ingest.profiles import PROFILES, IngestProfile, get_profile  # noqa: E402
 from camber.io import load_csv  # noqa: E402
-from camber.ingest.profiles import get_profile, IngestProfile, PROFILES  # noqa: E402
 
 
 def _csv(tmp_path, text, name="t.csv", encoding="utf-8"):
@@ -28,19 +28,22 @@ def test_get_profile_resolves_name_object_none():
 def test_desigo_semicolon_decimal_comma_dayfirst(tmp_path):
     text = "ts;power\n07.01.2024 00:00:00;1.234,5\n07.01.2024 01:00:00;2.000,0\n"
     df = load_csv(_csv(tmp_path, text), profile="desigo")
-    assert df.index[0].month == 1 and df.index[0].day == 7      # DD.MM day-first
-    assert df["power"].tolist() == [1234.5, 2000.0]             # decimal comma + thousands "."
+    assert df.index[0].month == 1 and df.index[0].day == 7  # DD.MM day-first
+    assert df["power"].tolist() == [1234.5, 2000.0]  # decimal comma + thousands "."
 
 
 def test_metasys_us_format_with_preamble_rows(tmp_path):
-    text = "Export report\nSite XYZ\nTimestamp,Value\n07/07/2025 11:00:00 AM,42\n07/07/2025 12:00:00 PM,43\n"
+    text = (
+        "Export report\nSite XYZ\nTimestamp,Value\n"
+        "07/07/2025 11:00:00 AM,42\n07/07/2025 12:00:00 PM,43\n"
+    )
     df = load_csv(_csv(tmp_path, text), profile="metasys", skiprows=2)
     assert df.index[0].hour == 11 and df["Value"].tolist() == [42, 43]
 
 
 def test_explicit_kwargs_override_profile(tmp_path):
     text = "ts|v\n2024-01-01 00:00|5\n"
-    df = load_csv(_csv(tmp_path, text), delimiter="|")           # override generic comma
+    df = load_csv(_csv(tmp_path, text), delimiter="|")  # override generic comma
     assert df["v"].tolist() == [5]
 
 

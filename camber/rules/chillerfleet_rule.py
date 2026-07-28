@@ -29,13 +29,21 @@ class ChillerStagingFleet:
     def analyze_fleet(self, frames: dict) -> Finding:
         """Run across the chillers' role-frames; return one aggregate Finding."""
         if not frames:
-            return Finding(rule=self.name, equip="<fleet>", severity="info",
-                           summary="no chillers with power points")
+            return Finding(
+                rule=self.name,
+                equip="<fleet>",
+                severity="info",
+                summary="no chillers with power points",
+            )
         legacy = {e: f.rename(columns={Role.POWER: "Power"}) for e, f in frames.items()}
         res = analyze_chiller_staging_fleet(legacy, redundancy_ceiling=self.redundancy_ceiling)
         if res is None:
-            return Finding(rule=self.name, equip="<fleet>", severity="info",
-                           summary="need >= 2 chillers with power data to assess staging")
+            return Finding(
+                rule=self.name,
+                equip="<fleet>",
+                severity="info",
+                summary="need >= 2 chillers with power data to assess staging",
+            )
         pct = res.pct_overstaged
         if pct >= 50.0:
             severity = "fault"
@@ -55,8 +63,10 @@ class ChillerStagingFleet:
                 "median_running_count": res.median_running_count,
                 "rep_capacity_kw": res.rep_capacity_kw,
             },
-            summary=(f"fleet: {res.n_chillers} chillers, "
-                     f"{res.pct_overstaged:.0f}% of multi-chiller hours over-staged "
-                     f"(median {res.median_running_count:.0f} running); a redundant "
-                     f"chiller could stage off"),
+            summary=(
+                f"fleet: {res.n_chillers} chillers, "
+                f"{res.pct_overstaged:.0f}% of multi-chiller hours over-staged "
+                f"(median {res.median_running_count:.0f} running); a redundant "
+                f"chiller could stage off"
+            ),
         )

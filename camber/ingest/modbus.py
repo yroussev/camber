@@ -27,16 +27,17 @@ class ModbusPoint:
 
     name: str
     address: int
-    kind: str = "holding"        # "holding" (read_holding_registers) | "input" (read_input_registers)
-    slave: int = 1               # unit/slave id
-    count: int = 1               # registers to read (1 = 16-bit, 2 = 32-bit)
+    kind: str = "holding"  # "holding" (read_holding_registers) | "input" (read_input_registers)
+    slave: int = 1  # unit/slave id
+    count: int = 1  # registers to read (1 = 16-bit, 2 = 32-bit)
     scale: float = 1.0
     offset: float = 0.0
-    unit: str = ""               # engineering unit string
+    unit: str = ""  # engineering unit string
 
 
-def decode_registers(registers, *, count: int = 1, scale: float = 1.0,
-                     offset: float = 0.0) -> float:
+def decode_registers(
+    registers, *, count: int = 1, scale: float = 1.0, offset: float = 0.0
+) -> float:
     """Decode raw 16-bit register words to an engineering value (scale·raw + offset).
 
     ``count == 1`` reads a single 16-bit word; ``count == 2`` combines two words as a 32-bit
@@ -70,8 +71,10 @@ class ModbusSource:
             try:
                 from pymodbus.client import ModbusTcpClient
             except Exception as e:  # noqa: BLE001
-                raise ImportError('the Modbus adapter needs the optional extra: '
-                                  'pip install "camber-toolkit[modbus]"') from e
+                raise ImportError(
+                    "the Modbus adapter needs the optional extra: "
+                    'pip install "camber-toolkit[modbus]"'
+                ) from e
             self._client = ModbusTcpClient(self._host, port=self._port)
             self._client.connect()
         return self._client
@@ -83,8 +86,7 @@ class ModbusSource:
         return {n: p.unit for n, p in self._points.items() if p.unit}
 
     def _read_one(self, client, p: ModbusPoint) -> float:
-        reader = (client.read_input_registers if p.kind == "input"
-                  else client.read_holding_registers)
+        reader = client.read_input_registers if p.kind == "input" else client.read_holding_registers
         rr = reader(p.address, count=p.count, slave=p.slave)
         if rr is None or (hasattr(rr, "isError") and rr.isError()):
             return float("nan")
@@ -96,8 +98,15 @@ class ModbusSource:
         sel = list(self._points) if names is None else [n for n in names if n in self._points]
         return {n: self._read_one(client, self._points[n]) for n in sel}
 
-    def poll(self, names=None, *, samples: int = 1, interval_s: float = 60.0,
-             _sleep=time.sleep, _clock=None) -> pd.DataFrame:
+    def poll(
+        self,
+        names=None,
+        *,
+        samples: int = 1,
+        interval_s: float = 60.0,
+        _sleep=time.sleep,
+        _clock=None,
+    ) -> pd.DataFrame:
         """Repeatedly snapshot to build a short time series (``samples`` rows, ``interval_s``
         apart). ``_clock``/``_sleep`` are injectable for testing."""
         clock = _clock or (lambda: pd.Timestamp.now())

@@ -24,8 +24,7 @@ class PerPointCsvAdapter:
 
     def point_names(self):
         """Sorted point names (one per ``<name>.csv`` file in the folder)."""
-        return sorted(os.path.basename(p)[:-4]
-                      for p in glob(os.path.join(self.folder, "*.csv")))
+        return sorted(os.path.basename(p)[:-4] for p in glob(os.path.join(self.folder, "*.csv")))
 
     def load_points(self, names, resample: str | None = "1h") -> pd.DataFrame:
         """Load the named points into a wide, optionally resampled frame."""

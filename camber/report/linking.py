@@ -18,16 +18,18 @@ import json
 import pandas as pd
 
 # CSS for the interactive scatter (merged into the dashboard <style>).
-LINK_STYLE = (".camber-pt{fill:#3366cc;opacity:.55}"
-              ".camber-pt.sel{fill:#d62728;opacity:.95}"
-              ".camber-brush{fill:#3366cc;opacity:.12;stroke:#3366cc;stroke-dasharray:4 2}"
-              "svg.camber-svg{border:1px solid #ddd;touch-action:none;cursor:crosshair}"
-              ".camber-out{font-size:13px;margin-top:6px;color:#333}"
-              # cross-panel linking: highlight for selected carpet cells + multitrend time bands
-              ".camber-cell{stroke:#fff;stroke-width:.5}"
-              ".camber-cell.sel{stroke:#d62728;stroke-width:1.5}"
-              ".camber-band{fill:#d62728;opacity:.18}"
-              "svg.camber-static{border:1px solid #ddd}")
+LINK_STYLE = (
+    ".camber-pt{fill:#3366cc;opacity:.55}"
+    ".camber-pt.sel{fill:#d62728;opacity:.95}"
+    ".camber-brush{fill:#3366cc;opacity:.12;stroke:#3366cc;stroke-dasharray:4 2}"
+    "svg.camber-svg{border:1px solid #ddd;touch-action:none;cursor:crosshair}"
+    ".camber-out{font-size:13px;margin-top:6px;color:#333}"
+    # cross-panel linking: highlight for selected carpet cells + multitrend time bands
+    ".camber-cell{stroke:#fff;stroke-width:.5}"
+    ".camber-cell.sel{stroke:#d62728;stroke-width:1.5}"
+    ".camber-band{fill:#d62728;opacity:.18}"
+    "svg.camber-static{border:1px solid #ddd}"
+)
 
 # Vanilla-JS brush module; "__ID__" is replaced with the element id. No external dependencies.
 _BRUSH_JS = """
@@ -71,16 +73,27 @@ _BRUSH_JS = """
     start = null; rect.style.display = "none";
   });
 })();
-"""
+"""  # noqa: E501
 
 
-def interactive_scatter_html(x, y, timestamps, *, xlabel: str = "x", ylabel: str = "y",
-                             elem_id: str = "camber-link", width: int = 680,
-                             height: int = 380) -> str:
+def interactive_scatter_html(
+    x,
+    y,
+    timestamps,
+    *,
+    xlabel: str = "x",
+    ylabel: str = "y",
+    elem_id: str = "camber-link",
+    width: int = 680,
+    height: int = 380,
+) -> str:
     """Return a self-contained HTML fragment: an inline JSON payload, a brush-able SVG scatter, a
     linked readout, and the vanilla-JS module — no external dependencies."""
-    pts = [[str(t), float(xi), float(yi)]
-           for t, xi, yi in zip(timestamps, x, y) if pd.notna(xi) and pd.notna(yi)]
+    pts = [
+        [str(t), float(xi), float(yi)]
+        for t, xi, yi in zip(timestamps, x, y)
+        if pd.notna(xi) and pd.notna(yi)
+    ]
     payload = json.dumps(pts, separators=(",", ":"))
     js = _BRUSH_JS.replace("__ID__", elem_id)
     return (
@@ -89,13 +102,15 @@ def interactive_scatter_html(x, y, timestamps, *, xlabel: str = "x", ylabel: str
         f"<script type='application/json' id='{elem_id}-data'>{payload}</script>"
         f"<svg class='camber-svg' id='{elem_id}' width='{width}' height='{height}'></svg>"
         f"<div class='camber-out' id='{elem_id}-out'>drag a box over the cloud to select</div>"
-        f"<script>{js}</script>")
+        f"<script>{js}</script>"
+    )
 
 
-# --------------------------------------------------------------------------- cross-panel bus + SVG panels
+# --------------------------------------------------------------------------- cross-panel bus + SVG
+# panels
 
-# The shared selection bus (injected once when interactive). Holds a Set of selected timestamp strings;
-# the scatter brush publishes to it, the SVG panels below subscribe. Idempotent.
+# The shared selection bus (injected once when interactive). Holds a Set of selected timestamp
+# strings; the scatter brush publishes to it, the SVG panels below subscribe. Idempotent.
 _BUS_JS = """
 (function(){
   if(window.CAMBER) return;
@@ -103,7 +118,7 @@ _BUS_JS = """
     set:function(ids){this.sel=new Set(ids); for(var i=0;i<this.subs.length;i++) this.subs[i](this.sel);},
     onChange:function(f){this.subs.push(f); f(this.sel);}};
 })();
-"""
+"""  # noqa: E501
 
 
 def selection_bus_html() -> str:
@@ -130,12 +145,19 @@ _CARPET_JS = """
 """
 
 
-def carpet_svg_html(series, *, title: str = "Load carpet", elem_id: str = "camber-carpet",
-                    width: int = 680, height: int = 300) -> str:
+def carpet_svg_html(
+    series,
+    *,
+    title: str = "Load carpet",
+    elem_id: str = "camber-carpet",
+    width: int = 680,
+    height: int = 300,
+) -> str:
     """An inline-SVG hour×date load carpet whose cells highlight on the shared selection.
 
-    Each cell carries its ``data-ts`` (the sample's timestamp string, matching the scatter payload), so
-    a brush selection in the scatter highlights the corresponding cells. Self-contained, CSP-safe.
+    Each cell carries its ``data-ts`` (the sample's timestamp string, matching the scatter
+    payload), so a brush selection in the scatter highlights the corresponding cells.
+    Self-contained, CSP-safe.
     """
     import numpy as np
 
@@ -154,14 +176,18 @@ def carpet_svg_html(series, *, title: str = "Load carpet", elem_id: str = "cambe
     for t, v in zip(idx, s.values):
         x = pad_l + di[t.date()] * cw
         y = pad_t + t.hour * ch
-        rects.append(f"<rect class='camber-cell' data-ts='{str(pd.Timestamp(t))}' "
-                     f"x='{x:.1f}' y='{y:.1f}' width='{cw:.1f}' height='{ch:.1f}' "
-                     f"fill='{_blue((v - vmin) / rng)}'></rect>")
+        rects.append(
+            f"<rect class='camber-cell' data-ts='{str(pd.Timestamp(t))}' "
+            f"x='{x:.1f}' y='{y:.1f}' width='{cw:.1f}' height='{ch:.1f}' "
+            f"fill='{_blue((v - vmin) / rng)}'></rect>"
+        )
     js = _CARPET_JS.replace("__ID__", elem_id)
-    return (f"<p style='font-size:13px;color:#555'>{title} — cells highlight for the brushed selection "
-            f"(hour of day × date).</p>"
-            f"<svg class='camber-static' id='{elem_id}' width='{width}' height='{height}'>"
-            f"{''.join(rects)}</svg><script>{js}</script>")
+    return (
+        f"<p style='font-size:13px;color:#555'>{title} — cells highlight for the brushed selection "
+        f"(hour of day × date).</p>"
+        f"<svg class='camber-static' id='{elem_id}' width='{width}' height='{height}'>"
+        f"{''.join(rects)}</svg><script>{js}</script>"
+    )
 
 
 _TREND_JS = """
@@ -183,13 +209,14 @@ _TREND_JS = """
     }
   });
 })();
-"""
+"""  # noqa: E501
 
 
-def multitrend_svg_html(df, cols, *, spans=None, elem_id: str = "camber-trend",
-                        width: int = 680, height: int = 300) -> str:
-    """An inline-SVG multitrend (a normalized polyline per column + fault-span shading) that shades the
-    brushed time ranges on the shared selection. Self-contained, CSP-safe."""
+def multitrend_svg_html(
+    df, cols, *, spans=None, elem_id: str = "camber-trend", width: int = 680, height: int = 300
+) -> str:
+    """An inline-SVG multitrend (a normalized polyline per column + fault-span shading) that shades
+    the brushed time ranges on the shared selection. Self-contained, CSP-safe."""
     import json as _json
 
     import numpy as np
@@ -211,20 +238,34 @@ def multitrend_svg_html(df, cols, *, spans=None, elem_id: str = "camber-trend",
         v = frame[c].to_numpy(dtype=float)
         lo, hi = np.nanmin(v), np.nanmax(v)
         rng = (hi - lo) or 1.0
-        pts = " ".join(f"{px(i):.1f},{(height - pad - (0 if vi != vi else (vi - lo) / rng) * (height - 2 * pad)):.1f}"
-                       for i, vi in enumerate(v))
-        lines.append(f"<polyline fill='none' stroke='{palette[k % len(palette)]}' "
-                     f"stroke-width='1' points='{pts}'></polyline>")
+        pts = " ".join(
+            f"{px(i):.1f},"
+            f"{(height - pad - (0 if vi != vi else (vi - lo) / rng) * (height - 2 * pad)):.1f}"
+            for i, vi in enumerate(v)
+        )
+        lines.append(
+            f"<polyline fill='none' stroke='{palette[k % len(palette)]}' "
+            f"stroke-width='1' points='{pts}'></polyline>"
+        )
     span_rects = []
-    for start, end in (spans or []):
+    for start, end in spans or []:
         i0 = int(idx.searchsorted(pd.Timestamp(start)))
         i1 = int(idx.searchsorted(pd.Timestamp(end)))
-        span_rects.append(f"<rect class='camber-band' x='{px(i0):.1f}' y='{pad}' "
-                          f"width='{max(px(i1) - px(i0), 1.5):.1f}' height='{height - 2 * pad}'></rect>")
-    meta = {"H": height, "pad": pad, "xs": [[str(pd.Timestamp(t)), round(px(i), 1)]
-                                            for i, t in enumerate(idx)]}
+        span_rects.append(
+            f"<rect class='camber-band' x='{px(i0):.1f}' y='{pad}' "
+            f"width='{max(px(i1) - px(i0), 1.5):.1f}' height='{height - 2 * pad}'></rect>"
+        )
+    meta = {
+        "H": height,
+        "pad": pad,
+        "xs": [[str(pd.Timestamp(t)), round(px(i), 1)] for i, t in enumerate(idx)],
+    }
     js = _TREND_JS.replace("__ID__", elem_id)
-    return (f"<p style='font-size:13px;color:#555'>Fault multitrend — brushed time ranges are shaded.</p>"
-            f"<script type='application/json' id='{elem_id}-meta'>{_json.dumps(meta, separators=(',', ':'))}</script>"
-            f"<svg class='camber-static' id='{elem_id}' width='{width}' height='{height}'>"
-            f"<g id='{elem_id}-hl'></g>{''.join(span_rects)}{''.join(lines)}</svg><script>{js}</script>")
+    return (
+        f"<p style='font-size:13px;color:#555'>Fault multitrend — brushed time ranges are "
+        f"shaded.</p>"
+        f"<script type='application/json' id='{elem_id}-meta'>"
+        f"{_json.dumps(meta, separators=(',', ':'))}</script>"
+        f"<svg class='camber-static' id='{elem_id}' width='{width}' height='{height}'>"
+        f"<g id='{elem_id}-hl'></g>{''.join(span_rects)}{''.join(lines)}</svg><script>{js}</script>"
+    )

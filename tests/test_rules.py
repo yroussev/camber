@@ -75,9 +75,11 @@ def test_runner_over_fixture_folder(tmp_path):
     _write(folder, "AHU_1", "CHW_Valve", 60)
     _write(folder, "AHU_1", "HHW_Valve", 30)
 
-    mapping = MappingProvider.from_dict({
-        "aliases": {"CHW_Valve": "cool_valve", "HHW_Valve": "heat_valve"},
-    })
+    mapping = MappingProvider.from_dict(
+        {
+            "aliases": {"CHW_Valve": "cool_valve", "HHW_Valve": "heat_valve"},
+        }
+    )
     reg = Registry()
     reg.register(SimultaneousHeatCool())
     refs = discover(folder, "AHU", marker_measure="CHW_Valve")

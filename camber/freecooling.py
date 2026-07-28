@@ -6,12 +6,13 @@ given a cooling-power series and a price — how much energy and money that repr
 business case that turns an economizer finding into a funded fix, in the spirit of
 :mod:`camber.fault_economics`.
 
-numpy/pandas; matplotlib not needed. A supplied electricity price is caller-set (no hard-coded rate).
+numpy/pandas; matplotlib not needed. A supplied electricity price is caller-set (no hard-coded
+rate).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -23,27 +24,36 @@ from .timegrid import interval_hours
 class FreeCoolingOpportunity:
     """Missed free-cooling hours and (if power is known) the recoverable energy/cost."""
 
-    hours_available: float           # OAT below the economizer high limit
-    hours_missed: float              # available AND mechanical cooling running
-    missed_fraction: float           # missed / available
-    addressable_kwh: float           # mechanical cooling energy during missed hours
-    recoverable_kwh: float           # addressable × recover_frac
-    savings_usd: float               # recoverable × price (NaN if no price given)
+    hours_available: float  # OAT below the economizer high limit
+    hours_missed: float  # available AND mechanical cooling running
+    missed_fraction: float  # missed / available
+    addressable_kwh: float  # mechanical cooling energy during missed hours
+    recoverable_kwh: float  # addressable × recover_frac
+    savings_usd: float  # recoverable × price (NaN if no price given)
     high_limit_f: float
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def free_cooling_opportunity(oat, cooling_signal, *, cooling_kw=None, high_limit_f: float = 65.0,
-                             active_thresh: float = 0.05, recover_frac: float = 0.7,
-                             price_per_kwh: float | None = None) -> FreeCoolingOpportunity:
+def free_cooling_opportunity(
+    oat,
+    cooling_signal,
+    *,
+    cooling_kw=None,
+    high_limit_f: float = 65.0,
+    active_thresh: float = 0.05,
+    recover_frac: float = 0.7,
+    price_per_kwh: float | None = None,
+) -> FreeCoolingOpportunity:
     """Quantify the missed economizer free-cooling opportunity.
 
     ``oat`` is outdoor-air temperature (°F); ``cooling_signal`` indicates mechanical cooling running
-    (a cooling-valve fraction or chiller power — ``> active_thresh`` counts as on), aligned to ``oat``.
+    (a cooling-valve fraction or chiller power — ``> active_thresh`` counts as on), aligned to
+    ``oat``.
     Free cooling is *available* when OAT is below ``high_limit_f`` and *missed* when it's available
-    yet mechanical cooling runs. With ``cooling_kw`` (the mechanical cooling power aligned to ``oat``)
+    yet mechanical cooling runs. With ``cooling_kw`` (the mechanical cooling power aligned to
+    ``oat``)
     the missed-hours energy is summed; ``recover_frac`` is the fraction an economizer could offset,
     and ``price_per_kwh`` values it.
     """
@@ -71,8 +81,11 @@ def free_cooling_opportunity(oat, cooling_signal, *, cooling_kw=None, high_limit
         savings = float("nan")
 
     return FreeCoolingOpportunity(
-        hours_available=round(hours_available, 2), hours_missed=round(hours_missed, 2),
+        hours_available=round(hours_available, 2),
+        hours_missed=round(hours_missed, 2),
         missed_fraction=round(missed_frac, 4) if np.isfinite(missed_frac) else float("nan"),
-        addressable_kwh=round(addressable, 2), recoverable_kwh=round(recoverable, 2),
+        addressable_kwh=round(addressable, 2),
+        recoverable_kwh=round(recoverable, 2),
         savings_usd=round(savings, 2) if np.isfinite(savings) else float("nan"),
-        high_limit_f=high_limit_f)
+        high_limit_f=high_limit_f,
+    )

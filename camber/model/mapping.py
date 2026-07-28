@@ -32,7 +32,8 @@ def _reject_catastrophic(pattern: str) -> None:
         raise ValueError(
             f"mapping pattern {pattern!r} nests quantifiers (e.g. '(a+)+'), a catastrophic-"
             "backtracking shape that can hang the mapper; rewrite it without a quantifier on a "
-            "quantified group.")
+            "quantified group."
+        )
 
 
 @dataclass
@@ -51,7 +52,9 @@ class MappingProvider:
         # normalize alias keys to lowercase for case-insensitive lookup
         self.aliases = {k.lower(): v for k, v in self.aliases.items()}
         for p, _ in self.patterns:
-            _reject_catastrophic(p)     # fail fast on ReDoS-prone patterns (config-time, not match-time)
+            _reject_catastrophic(
+                p
+            )  # fail fast on ReDoS-prone patterns (config-time, not match-time)
         self._compiled = [(re.compile(p, re.IGNORECASE), r) for p, r in self.patterns]
 
     def role_of(self, token: str) -> Role | None:
@@ -92,7 +95,7 @@ class MappingProvider:
         return out
 
     @classmethod
-    def from_dict(cls, spec: dict) -> "MappingProvider":
+    def from_dict(cls, spec: dict) -> MappingProvider:
         """Build from a plain dict: {'aliases': {token: role_slug},
         'patterns': [[regex, role_slug], ...]}. Role slugs are Role values."""
         aliases = {k: Role(v) for k, v in spec.get("aliases", {}).items()}

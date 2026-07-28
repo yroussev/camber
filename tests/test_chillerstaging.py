@@ -20,11 +20,12 @@ def _idx(n):
 
 # --- diagnostic --------------------------------------------------------------- #
 
+
 def test_steady_run_low_cycling():
     n = 24 * 14
     df = pd.DataFrame({"Power": np.full(n, 120.0)}, index=_idx(n))  # never stops
     r = analyze_chiller_staging(df, "CH-1")
-    assert r.starts_per_day < 0.2          # one start across two weeks
+    assert r.starts_per_day < 0.2  # one start across two weeks
     assert r.runtime_pct > 99
 
 
@@ -39,24 +40,29 @@ def test_short_cycling_flagged():
 def test_low_part_load_detected():
     n = 24 * 14
     # always running; 10% of hours at peak (~200 tons), rest at ~50 tons (25% LF)
-    flow = np.where(np.arange(n) % 10 == 0, 400.0, 100.0)   # gpm
-    df = pd.DataFrame({
-        "Power": np.full(n, 120.0),
-        "CHWS_Temp": np.full(n, 44.0),
-        "CHWR_Temp": np.full(n, 56.0),       # 12F dT -> tons = gpm/2
-        "CHW_Flow": flow,
-    }, index=_idx(n))
+    flow = np.where(np.arange(n) % 10 == 0, 400.0, 100.0)  # gpm
+    df = pd.DataFrame(
+        {
+            "Power": np.full(n, 120.0),
+            "CHWS_Temp": np.full(n, 44.0),
+            "CHWR_Temp": np.full(n, 56.0),  # 12F dT -> tons = gpm/2
+            "CHW_Flow": flow,
+        },
+        index=_idx(n),
+    )
     r = analyze_chiller_staging(df, "CH-1", min_load_pct=40.0)
-    assert r.low_load_pct > 80              # most running hours are lightly loaded
+    assert r.low_load_pct > 80  # most running hours are lightly loaded
     assert r.load_factor_median_pct < 40
 
 
 def test_insufficient_data_returns_none():
-    assert analyze_chiller_staging(pd.DataFrame({"Power": [100.0] * 4}, index=_idx(4)),
-                                   "CH-1") is None
+    assert (
+        analyze_chiller_staging(pd.DataFrame({"Power": [100.0] * 4}, index=_idx(4)), "CH-1") is None
+    )
 
 
 # --- rule wrapper ------------------------------------------------------------- #
+
 
 def test_rule_is_a_rule_and_severity():
     assert isinstance(ChillerStaging(), Rule)

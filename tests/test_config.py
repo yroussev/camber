@@ -25,10 +25,10 @@ def _write_point(folder, equip, measure, series):
 def _make_site(folder):
     """One AHU with a simultaneous-heat/cool fault during occupied hours."""
     os.makedirs(folder, exist_ok=True)
-    idx = pd.date_range("2025-07-07", periods=24 * 14, freq="1h")   # 2 weeks
+    idx = pd.date_range("2025-07-07", periods=24 * 14, freq="1h")  # 2 weeks
     weekday = idx.dayofweek < 5
     midday = (idx.hour >= 11) & (idx.hour < 15)
-    cool = pd.Series(60.0, index=idx)                              # cooling all day
+    cool = pd.Series(60.0, index=idx)  # cooling all day
     heat = pd.Series(np.where(weekday & midday, 40.0, 0.0), index=idx)  # midday reheat
     _write_point(folder, "AHU_1", "CHW_Valve", cool)
     _write_point(folder, "AHU_1", "HHW_Valve", heat)
@@ -37,16 +37,22 @@ def _make_site(folder):
     _write_point(folder, "AHU_1", "OSA", pd.Series(88.0, index=idx))
 
 
-_MAPPING = {"aliases": {"CHW_Valve": "cool_valve", "HHW_Valve": "heat_valve",
-                        "MixedAir": "mixed_air_temp", "SupplyAir": "supply_air_temp",
-                        "OSA": "oat"}}
+_MAPPING = {
+    "aliases": {
+        "CHW_Valve": "cool_valve",
+        "HHW_Valve": "heat_valve",
+        "MixedAir": "mixed_air_temp",
+        "SupplyAir": "supply_air_temp",
+        "OSA": "oat",
+    }
+}
 
 
 def test_builtin_registry_has_all_rules():
     reg = builtin_registry()
     names = rule_names()
     assert "simultaneous_heat_cool" in names and "outdoor_air_fraction" in names
-    assert all(reg.get(n).name == n for n in names)     # every name resolves
+    assert all(reg.get(n).name == n for n in names)  # every name resolves
 
 
 def test_run_config_discovers_and_flags(tmp_path):
@@ -82,7 +88,7 @@ def test_run_config_file_with_mapping_path(tmp_path):
         "rules": ["simultaneous_heat_cool"],
     }
     (tmp_path / "run.json").write_text(json.dumps(cfg))
-    res = run_config_file(str(tmp_path / "run.json"))   # paths relative to file dir
+    res = run_config_file(str(tmp_path / "run.json"))  # paths relative to file dir
     assert res.equipment == 1
     assert any(f.severity == "fault" for f in res.findings)
 
@@ -138,8 +144,13 @@ def test_run_config_multi_folder_globs(tmp_path):
 
 
 def test_source_requires_a_folder_spec(tmp_path):
-    cfg = {"site": "X", "source": {"kind": "perpoint_csv"},
-           "mapping": _MAPPING, "equipment": [], "rules": []}
+    cfg = {
+        "site": "X",
+        "source": {"kind": "perpoint_csv"},
+        "mapping": _MAPPING,
+        "equipment": [],
+        "rules": [],
+    }
     with pytest.raises(ValueError):
         run_config(cfg, base_dir=str(tmp_path))
 
@@ -147,16 +158,20 @@ def test_source_requires_a_folder_spec(tmp_path):
 def test_unknown_rule_name_raises(tmp_path):
     folder = str(tmp_path / "trends")
     _make_site(folder)
-    cfg = {"site": "X", "source": {"kind": "perpoint_csv", "folder": folder},
-           "mapping": _MAPPING, "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
-           "rules": ["no_such_rule"]}
+    cfg = {
+        "site": "X",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": ["no_such_rule"],
+    }
     with pytest.raises(KeyError):
         run_config(cfg, base_dir=str(tmp_path))
 
 
 def test_run_config_with_soo_library(tmp_path):
     folder = str(tmp_path / "trends")
-    _make_site(folder)                       # AHU has midday reheat while cooling
+    _make_site(folder)  # AHU has midday reheat while cooling
     cfg = {
         "site": "SOOHQ",
         "source": {"kind": "perpoint_csv", "folder": folder},
@@ -169,16 +184,20 @@ def test_run_config_with_soo_library(tmp_path):
     assert "soo:AHU:g36_ahu" in res.rules_run
     simul = [f for f in res.findings if f.rule == "soo:no_simultaneous_heat_cool"]
     assert len(simul) == 1
-    assert simul[0].severity in ("warn", "fault")    # heating open while cooling open
+    assert simul[0].severity in ("warn", "fault")  # heating open while cooling open
     assert 0.0 <= simul[0].metrics["conformance_pct"] < 95.0
 
 
 def test_run_config_with_soo_spec_file(tmp_path):
     folder = str(tmp_path / "trends")
     _make_site(folder)
-    spec = [{"name": "no_simul",
-             "when": {"subject": "cool_valve", "op": "gt", "value": 5},
-             "expect": {"subject": "heat_valve", "op": "le", "value": 5}}]
+    spec = [
+        {
+            "name": "no_simul",
+            "when": {"subject": "cool_valve", "op": "gt", "value": 5},
+            "expect": {"subject": "heat_valve", "op": "le", "value": 5},
+        }
+    ]
     (tmp_path / "soo_spec.json").write_text(json.dumps(spec))
     cfg = {
         "site": "SOOHQ",
@@ -198,7 +217,7 @@ def _make_corrupt_site(folder):
     _make_site(folder)
     idx = pd.date_range("2025-07-07", periods=24 * 14, freq="1h")
     cool = pd.Series(60.0, index=idx)
-    cool.iloc[::3] = -999.0                       # a third of the readings impossible
+    cool.iloc[::3] = -999.0  # a third of the readings impossible
     _write_point(folder, "AHU_1", "CHW_Valve", cool)
 
 
@@ -216,7 +235,7 @@ def test_run_config_trust_gate_declines_on_bad_sensor(tmp_path):
     res = run_config(cfg, base_dir=str(tmp_path))
     simul = [f for f in res.findings if f.rule == "simultaneous_heat_cool"]
     assert len(simul) == 1
-    assert simul[0].severity == "info"                         # declined, not a fault
+    assert simul[0].severity == "info"  # declined, not a fault
     assert simul[0].metrics.get("declined") is True
     assert "cool_valve" in simul[0].metrics["untrusted_roles"]
 
@@ -235,7 +254,7 @@ def test_run_config_no_gate_still_fires_on_bad_sensor(tmp_path):
     res = run_config(cfg, base_dir=str(tmp_path))
     simul = [f for f in res.findings if f.rule == "simultaneous_heat_cool"]
     assert len(simul) == 1
-    assert not simul[0].metrics.get("declined")               # ran, did not decline
+    assert not simul[0].metrics.get("declined")  # ran, did not decline
 
 
 def test_run_config_html_action_plan_toggle(tmp_path):
@@ -249,8 +268,15 @@ def test_run_config_html_action_plan_toggle(tmp_path):
         "rules": ["simultaneous_heat_cool"],
     }
     # recommend=True -> the HTML carries the advisory action plan
-    cfg = {**base, "report": {"level": 2, "out_html": str(tmp_path / "rich.html"),
-                              "recommend": True, "price": {"electricity_per_kwh": 0.15}}}
+    cfg = {
+        **base,
+        "report": {
+            "level": 2,
+            "out_html": str(tmp_path / "rich.html"),
+            "recommend": True,
+            "price": {"electricity_per_kwh": 0.15},
+        },
+    }
     run_config(cfg, base_dir=str(tmp_path))
     assert "Recommended actions" in open(tmp_path / "rich.html").read()
     # default -> no action plan section

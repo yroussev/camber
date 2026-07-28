@@ -17,7 +17,7 @@ import csv
 import numpy as np
 import pandas as pd
 
-EPW_DRYBULB_COL = 6   # 0-based field index of dry-bulb temp (deg C) in an EPW row
+EPW_DRYBULB_COL = 6  # 0-based field index of dry-bulb temp (deg C) in an EPW row
 _EPW_HEADER_LINES = 8
 
 
@@ -49,8 +49,9 @@ def load_epw(path: str, *, year: int = 2001) -> pd.Series:
         raise ValueError(f"no EPW data rows parsed from {path}")
     df = pd.DataFrame(rows, columns=["mo", "da", "hr", "tc"])
     # EPW hour is 1..24; shift to 0..23 with day rollover for hour 24
-    base = pd.to_datetime(dict(year=year, month=df.mo, day=df.da)) \
-        + pd.to_timedelta(df.hr - 1, unit="h")
+    base = pd.to_datetime(dict(year=year, month=df.mo, day=df.da)) + pd.to_timedelta(
+        df.hr - 1, unit="h"
+    )
     s = pd.Series(c_to_f(df.tc.values), index=base, name="oat_f").sort_index()
     return s[~s.index.duplicated(keep="first")]
 

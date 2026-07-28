@@ -14,8 +14,10 @@ from camber.disaggregate import LoadComponents, disaggregate_load  # noqa: E402
 def _weather_load(days=30, base=40.0, seed=0):
     idx = pd.date_range("2025-06-01", periods=days * 24, freq="1h")
     rng = np.random.default_rng(seed)
-    oat = pd.Series(70 + 15 * np.sin(np.arange(len(idx)) * 2 * np.pi / 24) + rng.normal(0, 2, len(idx)),
-                    index=idx)
+    oat = pd.Series(
+        70 + 15 * np.sin(np.arange(len(idx)) * 2 * np.pi / 24) + rng.normal(0, 2, len(idx)),
+        index=idx,
+    )
     cooling = 1.5 * np.clip(oat.to_numpy() - 65, 0, None)
     occ = np.where((idx.hour >= 8) & (idx.hour <= 18), 30.0, 0.0)
     load = pd.Series(base + cooling + occ + rng.normal(0, 1, len(idx)), index=idx)
@@ -33,7 +35,7 @@ def test_components_sum_to_total():
 def test_baseload_detected_near_floor():
     load, oat = _weather_load(base=40.0)
     c = disaggregate_load(load, oat)
-    assert 36 < c.baseload_kw < 44 and c.baseload_frac > 0.4       # ~40 kW always-on floor
+    assert 36 < c.baseload_kw < 44 and c.baseload_frac > 0.4  # ~40 kW always-on floor
 
 
 def test_weather_component_present_when_weather_driven():
@@ -58,4 +60,4 @@ def test_fixed_balance_point_used():
 
 def test_empty_input():
     c = disaggregate_load(pd.Series(dtype=float), pd.Series(dtype=float))
-    assert c.total_kwh == 0 and c.baseload_frac != c.baseload_frac    # NaN
+    assert c.total_kwh == 0 and c.baseload_frac != c.baseload_frac  # NaN

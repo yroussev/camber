@@ -52,11 +52,16 @@ class Confusion:
 
     def as_dict(self) -> dict:
         """Return counts plus derived rates as a plain dict."""
-        return {"tp": self.tp, "fp": self.fp, "fn": self.fn, "tn": self.tn,
-                "true_positive_rate": self.true_positive_rate,
-                "false_negative_rate": self.false_negative_rate,
-                "false_positive_rate": self.false_positive_rate,
-                "accuracy": self.accuracy}
+        return {
+            "tp": self.tp,
+            "fp": self.fp,
+            "fn": self.fn,
+            "tn": self.tn,
+            "true_positive_rate": self.true_positive_rate,
+            "false_negative_rate": self.false_negative_rate,
+            "false_positive_rate": self.false_positive_rate,
+            "accuracy": self.accuracy,
+        }
 
 
 def confusion(labels, predictions) -> Confusion:
@@ -101,15 +106,18 @@ class BenchmarkReport:
     """Multi-detector benchmark over labeled scenarios."""
 
     n: int
-    overall: Confusion            # any-detector detection vs faulty/not-faulty
-    per_detector: dict            # detector name -> Confusion (vs its target fault)
-    correct_diagnosis: float      # of faulty scenarios, a detector for the right fault fired
+    overall: Confusion  # any-detector detection vs faulty/not-faulty
+    per_detector: dict  # detector name -> Confusion (vs its target fault)
+    correct_diagnosis: float  # of faulty scenarios, a detector for the right fault fired
 
     def as_dict(self) -> dict:
         """Return the report (with nested confusions) as a plain dict."""
-        return {"n": self.n, "overall": self.overall.as_dict(),
-                "per_detector": {k: v.as_dict() for k, v in self.per_detector.items()},
-                "correct_diagnosis": self.correct_diagnosis}
+        return {
+            "n": self.n,
+            "overall": self.overall.as_dict(),
+            "per_detector": {k: v.as_dict() for k, v in self.per_detector.items()},
+            "correct_diagnosis": self.correct_diagnosis,
+        }
 
 
 def benchmark(records, detector_targets: dict) -> BenchmarkReport:
@@ -125,22 +133,21 @@ def benchmark(records, detector_targets: dict) -> BenchmarkReport:
     detector whose target equals the true fault fired) -- the LBNL FDD evaluation
     framework, generalized across rules.
     """
-    recs = [{"truth": (r.get("truth") or ""), "fired": set(r.get("fired") or ())}
-            for r in records]
-    overall = confusion([bool(r["truth"]) for r in recs],
-                        [bool(r["fired"]) for r in recs])
-    per = {d: confusion([r["truth"] == target for r in recs],
-                        [d in r["fired"] for r in recs])
-           for d, target in detector_targets.items()}
+    recs = [{"truth": (r.get("truth") or ""), "fired": set(r.get("fired") or ())} for r in records]
+    overall = confusion([bool(r["truth"]) for r in recs], [bool(r["fired"]) for r in recs])
+    per = {
+        d: confusion([r["truth"] == target for r in recs], [d in r["fired"] for r in recs])
+        for d, target in detector_targets.items()
+    }
     faulty = [r for r in recs if r["truth"]]
     if faulty:
-        correct = sum(1 for r in faulty
-                      if any(detector_targets.get(d) == r["truth"] for d in r["fired"]))
+        correct = sum(
+            1 for r in faulty if any(detector_targets.get(d) == r["truth"] for d in r["fired"])
+        )
         cd = round(correct / len(faulty), 4)
     else:
         cd = float("nan")
-    return BenchmarkReport(n=len(recs), overall=overall, per_detector=per,
-                           correct_diagnosis=cd)
+    return BenchmarkReport(n=len(recs), overall=overall, per_detector=per, correct_diagnosis=cd)
 
 
 # Metric-name tokens whose value is better when *lower* (everything else: higher is better).
@@ -152,19 +159,29 @@ class BaselineCheck:
     """Result of comparing current benchmark metrics to a committed baseline."""
 
     passed: bool
-    regressions: list      # [(metric, baseline, current, delta)] worse than tol
-    improvements: list     # [(metric, baseline, current, delta)] better than tol
+    regressions: list  # [(metric, baseline, current, delta)] worse than tol
+    improvements: list  # [(metric, baseline, current, delta)] better than tol
     unchanged: int
-    missing: list          # metrics present in the baseline but absent now (treated as failing)
+    missing: list  # metrics present in the baseline but absent now (treated as failing)
 
     def as_dict(self) -> dict:
-        return {"passed": self.passed, "regressions": self.regressions,
-                "improvements": self.improvements, "unchanged": self.unchanged,
-                "missing": self.missing}
+        return {
+            "passed": self.passed,
+            "regressions": self.regressions,
+            "improvements": self.improvements,
+            "unchanged": self.unchanged,
+            "missing": self.missing,
+        }
 
 
-def check_against_baseline(current: dict, baseline: dict, *, tol: float = 0.02,
-                           lower_is_better=_LOWER_IS_BETTER, metrics=None) -> BaselineCheck:
+def check_against_baseline(
+    current: dict,
+    baseline: dict,
+    *,
+    tol: float = 0.02,
+    lower_is_better=_LOWER_IS_BETTER,
+    metrics=None,
+) -> BaselineCheck:
     """Compare flat metric dicts and flag regressions beyond ``tol`` (for CI gating).
 
     ``current`` / ``baseline`` are ``{metric_name: value}``. A metric whose name contains a
@@ -193,5 +210,10 @@ def check_against_baseline(current: dict, baseline: dict, *, tol: float = 0.02,
             improvements.append(row)
         else:
             unchanged += 1
-    return BaselineCheck(passed=(not regressions and not missing), regressions=regressions,
-                         improvements=improvements, unchanged=unchanged, missing=missing)
+    return BaselineCheck(
+        passed=(not regressions and not missing),
+        regressions=regressions,
+        improvements=improvements,
+        unchanged=unchanged,
+        missing=missing,
+    )

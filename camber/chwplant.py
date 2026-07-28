@@ -20,7 +20,7 @@ dead/untrended, so this diagnostic relies on temperatures, not flow.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -35,13 +35,13 @@ class CHWPlantResult:
     """Chilled-water plant CHWST reset and delta-T diagnostics for one plant."""
 
     equip: str
-    n_running: int                # hours plant judged running
+    n_running: int  # hours plant judged running
     chwst_median_f: float
-    chwst_slope_per_F: float      # d(CHWST)/d(OAT); ~0 = no reset
+    chwst_slope_per_F: float  # d(CHWST)/d(OAT); ~0 = no reset
     chwst_reset_present: bool
-    pct_chwst_low: float          # % running hrs CHWST below low threshold
+    pct_chwst_low: float  # % running hrs CHWST below low threshold
     deltaT_median_f: float
-    low_deltaT_pct: float         # % running hrs deltaT < design_min
+    low_deltaT_pct: float  # % running hrs deltaT < design_min
     design_deltaT_min_f: float
     coverage_start: str
     coverage_end: str
@@ -62,11 +62,11 @@ def analyze_chw_plant(
     df: pd.DataFrame,
     equip: str,
     *,
-    chwst_running_lo_f: float = 38.0,   # plausible chilled-water supply range...
-    chwst_running_hi_f: float = 58.0,   # ...used to gate "plant running" (flow is dead)
-    chwst_low_f: float = 46.0,          # CHWST at/below this = held low
+    chwst_running_lo_f: float = 38.0,  # plausible chilled-water supply range...
+    chwst_running_hi_f: float = 58.0,  # ...used to gate "plant running" (flow is dead)
+    chwst_low_f: float = 46.0,  # CHWST at/below this = held low
     chwst_reset_slope_flat: float = 0.05,
-    design_deltaT_min_f: float = 8.0,   # PNNL low-deltaT threshold
+    design_deltaT_min_f: float = 8.0,  # PNNL low-deltaT threshold
     occupied_only: bool = True,
 ) -> CHWPlantResult | None:
     """Diagnose a chilled-water plant. ``df`` columns are measure names.
@@ -106,7 +106,9 @@ def analyze_chw_plant(
         dt = (work["CHWR_Temp"] - work["CHWS_Temp"]).dropna()
         dt = dt[dt.between(-2, 40)]  # drop nonsense from sensor dropouts
         dt_median = round(float(dt.median()), 1) if len(dt) else float("nan")
-        low_dt_pct = round(100.0 * float((dt < design_deltaT_min_f).mean()), 1) if len(dt) else float("nan")
+        low_dt_pct = (
+            round(100.0 * float((dt < design_deltaT_min_f).mean()), 1) if len(dt) else float("nan")
+        )
     else:
         dt_median = low_dt_pct = float("nan")
 

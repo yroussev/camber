@@ -32,9 +32,10 @@ schedule.
 
 ```python
 from camber.mandv.rc_model import calibrate
-cal = calibrate(oat, schedule, metered_energy)      # -> Calibration(model, fit, accept)
-cal.accept          # met the ASHRAE Guideline 14 acceptance gate?
-cal.fit.cv_rmse     # hourly CV(RMSE)
+
+cal = calibrate(oat, schedule, metered_energy)  # -> Calibration(model, fit, accept)
+cal.accept  # met the ASHRAE Guideline 14 acceptance gate?
+cal.fit.cv_rmse  # hourly CV(RMSE)
 ```
 
 Calibration mirrors the change-point fitter (`camber.mandv.models`): the single nonlinear parameter
@@ -47,12 +48,13 @@ solved by **OLS** — no scipy. Acceptance is the existing G14 gate (`stats.fit_
 
 ```python
 from camber.mandv.rc_model import option_d_savings
+
 sv = option_d_savings(cal, oat, as_found_schedule, as_corrected_schedule)
-sv.avoided_energy            # modeled avoided energy (None if the calibration failed the gate)
-sv.fractional_savings        # avoided / as-found
+sv.avoided_energy  # modeled avoided energy (None if the calibration failed the gate)
+sv.fractional_savings  # avoided / as-found
 sv.frac_savings_uncertainty  # ASHRAE G14 Annex-B fractional savings uncertainty
-sv.basis                     # "IPMVP Option D (calibrated simulation)"  |  a not-claimed note
-sv.valid                     # calibration met the G14 gate
+sv.basis  # "IPMVP Option D (calibrated simulation)"  |  a not-claimed note
+sv.valid  # calibration met the G14 gate
 ```
 
 The savings are the difference of the calibrated model's annual profiles under the two schedules, with a

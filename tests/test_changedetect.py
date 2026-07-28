@@ -23,7 +23,7 @@ def test_single_step_detected_with_correct_levels():
     assert isinstance(ls, LevelShift)
     assert abs(ls.before_mean - 50) < 2 and abs(ls.after_mean - 70) < 2
     assert abs(ls.delta - 20) < 3
-    assert abs((ls.at - s.index[150]).total_seconds()) / 3600 < 24    # near the true break
+    assert abs((ls.at - s.index[150]).total_seconds()) / 3600 < 24  # near the true break
 
 
 def test_flat_series_has_no_shift():
@@ -34,20 +34,23 @@ def test_flat_series_has_no_shift():
 
 def test_two_steps_detected():
     rng = np.random.default_rng(2)
-    x = np.concatenate([50 + rng.normal(0, 1.5, 100), 70 + rng.normal(0, 1.5, 100),
-                        55 + rng.normal(0, 1.5, 100)])
+    x = np.concatenate(
+        [50 + rng.normal(0, 1.5, 100), 70 + rng.normal(0, 1.5, 100), 55 + rng.normal(0, 1.5, 100)]
+    )
     shifts = detect_level_shifts(pd.Series(x, index=_idx(300)), max_shifts=5)
     assert len(shifts) == 2
     deltas = sorted(round(s.delta) for s in shifts)
-    assert deltas == [-15, 20]                                        # 70->55 and 50->70
+    assert deltas == [-15, 20]  # 70->55 and 50->70
 
 
 def test_min_delta_filters_small_steps():
     rng = np.random.default_rng(3)
-    x = np.concatenate([50 + rng.normal(0, 0.5, 150), 51 + rng.normal(0, 0.5, 150)])  # tiny 1-unit step
+    x = np.concatenate(
+        [50 + rng.normal(0, 0.5, 150), 51 + rng.normal(0, 0.5, 150)]
+    )  # tiny 1-unit step
     s = pd.Series(x, index=_idx(300))
-    assert len(detect_level_shifts(s, min_delta=5.0)) == 0            # below min_delta
-    assert len(detect_level_shifts(s, min_delta=0.2)) >= 1            # detected when allowed
+    assert len(detect_level_shifts(s, min_delta=5.0)) == 0  # below min_delta
+    assert len(detect_level_shifts(s, min_delta=0.2)) >= 1  # detected when allowed
 
 
 def test_min_segment_prevents_tiny_segments():

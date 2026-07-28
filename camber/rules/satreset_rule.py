@@ -27,12 +27,12 @@ _ROLE_TO_SAT_COL = {
 
 
 class SupplyAirReset:
-    """Detects missing/weak supply-air-temperature reset that sustains reheat (PNNL Re-tuning / G36)."""
+    """Detects missing/weak supply-air-temperature reset that sustains reheat
+    (PNNL Re-tuning / G36)."""
 
     name = "supply_air_reset"
     roles_required = (Role.SUPPLY_AIR_TEMP,)
-    roles_optional = (Role.COOL_VALVE, Role.OAT, Role.OCCUPANCY,
-                      Role.WARMUP, Role.COOLDOWN)
+    roles_optional = (Role.COOL_VALVE, Role.OAT, Role.OCCUPANCY, Role.WARMUP, Role.COOLDOWN)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -41,12 +41,13 @@ class SupplyAirReset:
         oat = frame[Role.OAT] if Role.OAT in frame.columns else None
         res = analyze_satreset(legacy, equip, oat=oat)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         # Flag when SAT sits cold most of the time and isn't reset upward at low
         # load (flat/near-zero or load-tracking slope). A clear upward reset is ok.
         slope = res.slope_per_F
-        resetting_up = (slope is not None and not math.isnan(slope) and slope > 0.10)
+        resetting_up = slope is not None and not math.isnan(slope) and slope > 0.10
         cold_dominant = res.pct_sat_below_58 >= 50.0
         if resetting_up:
             severity = "ok"
@@ -66,16 +67,20 @@ class SupplyAirReset:
                 "pct_sat_below_58": res.pct_sat_below_58,
                 "n_considered": res.n_considered,
             },
-            summary=(f"{equip}: SAT median {res.sat_median:.1f}F, slope "
-                     f"{res.slope_per_F:+.2f} F/F, <58F {res.pct_sat_below_58:.0f}% "
-                     f"of cooling hours -- {res.verdict}"),
+            summary=(
+                f"{equip}: SAT median {res.sat_median:.1f}F, slope "
+                f"{res.slope_per_F:+.2f} F/F, <58F {res.pct_sat_below_58:.0f}% "
+                f"of cooling hours -- {res.verdict}"
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: SAT-vs-OAT against the reset schedule (off-schedule points shaded)."""
         from ..charts.diagnostic import TEMPLATES
         from ..charts.evidence import Evidence
+
         if Role.SUPPLY_AIR_TEMP in frame.columns and Role.OAT in frame.columns:
-            return Evidence(renderer="diagnostic", template=TEMPLATES["sat_reset"],
-                            title=f"{equip}: SAT reset")
+            return Evidence(
+                renderer="diagnostic", template=TEMPLATES["sat_reset"], title=f"{equip}: SAT reset"
+            )
         return None

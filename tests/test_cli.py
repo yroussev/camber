@@ -12,15 +12,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.cli import main  # noqa: E402
 
-_MAPPING = {"aliases": {"CHW_Valve": "cool_valve", "HHW_Valve": "heat_valve",
-                        "MixedAir": "mixed_air_temp", "SupplyAir": "supply_air_temp",
-                        "OSA": "oat"}}
+_MAPPING = {
+    "aliases": {
+        "CHW_Valve": "cool_valve",
+        "HHW_Valve": "heat_valve",
+        "MixedAir": "mixed_air_temp",
+        "SupplyAir": "supply_air_temp",
+        "OSA": "oat",
+    }
+}
 
 
 def _write_point(folder, equip, measure, series):
     ts = series.index.strftime("%d-%b-%y %I:%M:%S %p") + " PDT"
     pd.DataFrame({"Timestamp": ts, "Value": series.values}).to_csv(
-        os.path.join(folder, f"{equip}_{measure}.csv"), index=False)
+        os.path.join(folder, f"{equip}_{measure}.csv"), index=False
+    )
 
 
 def _make_config(root, site="Demo"):
@@ -34,9 +41,13 @@ def _make_config(root, site="Demo"):
     _write_point(trends, "AHU_1", "MixedAir", pd.Series(72.0, index=idx))
     _write_point(trends, "AHU_1", "SupplyAir", pd.Series(55.0, index=idx))
     _write_point(trends, "AHU_1", "OSA", pd.Series(88.0, index=idx))
-    cfg = {"site": site, "source": {"kind": "perpoint_csv", "folder": "trends"},
-           "mapping": _MAPPING, "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
-           "rules": ["simultaneous_heat_cool", "reheat_penalty"]}
+    cfg = {
+        "site": site,
+        "source": {"kind": "perpoint_csv", "folder": "trends"},
+        "mapping": _MAPPING,
+        "equipment": [{"class": "AHU", "marker": "CHW_Valve"}],
+        "rules": ["simultaneous_heat_cool", "reheat_penalty"],
+    }
     path = os.path.join(root, "config.json")
     open(path, "w").write(json.dumps(cfg))
     return path
@@ -57,7 +68,7 @@ def test_report_writes_html(tmp_path):
     dest = str(tmp_path / "site.html")
     assert main(["report", cfg, "--out", dest]) == 0
     html = open(dest).read()
-    assert "<h" in html.lower() and "findings" in html.lower()   # an HTML audit report body
+    assert "<h" in html.lower() and "findings" in html.lower()  # an HTML audit report body
 
 
 def test_explain_is_grounded_template(tmp_path, capsys):
@@ -71,7 +82,7 @@ def test_ask_is_grounded_and_cites(tmp_path, capsys):
     cfg = _make_config(str(tmp_path))
     assert main(["ask", "what should I do?", "--config", cfg]) == 0
     out = capsys.readouterr().out
-    assert "grounded=True" in out and "[" in out          # a citation token present
+    assert "grounded=True" in out and "[" in out  # a citation token present
 
 
 def test_ask_with_llm_cmd_runs(tmp_path, capsys):
@@ -79,7 +90,7 @@ def test_ask_with_llm_cmd_runs(tmp_path, capsys):
     # a vendor-neutral shell "model": echo the prompt back (cat). Must run and stay grounded.
     rc = main(["ask", "summarize", "--config", cfg, "--llm-cmd", "cat"])
     assert rc == 0
-    assert capsys.readouterr().out.strip()                # produced an answer
+    assert capsys.readouterr().out.strip()  # produced an answer
 
 
 def test_ask_llm_cmd_failure_surfaces(tmp_path):
@@ -89,10 +100,12 @@ def test_ask_llm_cmd_failure_surfaces(tmp_path):
 
 
 def test_fleet_rollup_and_triage(tmp_path, capsys):
-    a = _make_config(str(tmp_path / "a"), site="Building A")
-    b = _make_config(str(tmp_path / "b"), site="Building B")
+    _make_config(str(tmp_path / "a"), site="Building A")
+    _make_config(str(tmp_path / "b"), site="Building B")
     glob = str(tmp_path / "*" / "config.json")
-    rc = main(["fleet", glob, "--ask", "which building is worst?", "--out", str(tmp_path / "f.html")])
+    rc = main(
+        ["fleet", glob, "--ask", "which building is worst?", "--out", str(tmp_path / "f.html")]
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "Building A" in out and "Building B" in out and "grounded=True" in out

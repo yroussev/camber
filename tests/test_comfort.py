@@ -12,7 +12,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.comfort import comfort_series, pmv, ppd, pmv_f  # noqa: E402
+from camber.comfort import comfort_series, pmv, pmv_f, ppd  # noqa: E402
 
 
 # ISO 7730 Annex D worked examples (ta=tr, vel, rh, met, clo -> PMV, PPD)
@@ -30,8 +30,8 @@ def test_pmv_iso_case2_warm():
 
 
 def test_ppd_from_pmv():
-    assert abs(ppd(0.0) - 5.0) < 0.1          # neutral -> 5% minimum dissatisfied
-    assert abs(ppd(-0.75) - 17.0) < 1.5       # ISO case 1
+    assert abs(ppd(0.0) - 5.0) < 0.1  # neutral -> 5% minimum dissatisfied
+    assert abs(ppd(-0.75) - 17.0) < 1.5  # ISO case 1
     assert abs(ppd(0.77) - 17.0) < 1.5
 
 
@@ -50,7 +50,7 @@ def test_pmv_f_degF_wrapper():
 def test_colder_air_drives_pmv_down():
     warm = pmv_f(74, met=1.1, clo=0.6)
     cold = pmv_f(68, met=1.1, clo=0.6)
-    assert cold < warm                         # colder -> lower (more dissatisfied-cold)
+    assert cold < warm  # colder -> lower (more dissatisfied-cold)
 
 
 def test_comfort_series_flags_overcooling():
@@ -58,7 +58,7 @@ def test_comfort_series_flags_overcooling():
     idx = pd.date_range("2025-07-07", periods=200, freq="1h")
     s = pd.Series(np.full(200, 68.0), index=idx)
     r = comfort_series(s, met=1.1, clo=0.6, equip="VAV_1")
-    assert r.pct_cold > 50                      # mostly cold-uncomfortable
+    assert r.pct_cold > 50  # mostly cold-uncomfortable
     assert r.pmv_median < -0.5
 
 

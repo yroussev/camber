@@ -25,6 +25,7 @@ def test_every_scored_rule_detects_its_own_fault_and_is_clean():
 
 def test_scenarios_key_on_real_single_equipment_rules():
     from camber.rules.builtin import builtin_registry, is_fleet
+
     reg = builtin_registry()
     for name in faultlab.SCENARIOS:
         r = reg.get(name)
@@ -33,6 +34,7 @@ def test_scenarios_key_on_real_single_equipment_rules():
 
 def test_coverage_partitions_the_registry():
     from camber.rules.builtin import builtin_registry
+
     reg = builtin_registry()
     cov = faultlab.coverage()
     assert len(cov["scored"]) == len(faultlab.SCENARIOS)
@@ -46,7 +48,7 @@ def test_coverage_partitions_the_registry():
 def test_records_are_deterministic():
     a = faultlab.labeled_records()
     b = faultlab.labeled_records()
-    assert a == b                            # same frames + rules -> identical records (stable baseline)
+    assert a == b  # same frames + rules -> identical records (stable baseline)
 
 
 def test_g36_engine_detects_every_covered_fault_and_stays_quiet():
@@ -61,17 +63,21 @@ def test_g36_engine_detects_every_covered_fault_and_stays_quiet():
 def test_cross_fire_reports_only_co_detections_not_self():
     xf = faultlab.cross_fire()
     for name, others in xf.items():
-        assert name not in others            # a rule never lists itself as cross-firing
+        assert name not in others  # a rule never lists itself as cross-firing
 
 
 def test_benchmark_gate_passes_against_committed_baseline():
-    # load the example runner under a unique module name (the LBNL example is also named `benchmark`)
+    # load the example runner under a unique module name (the LBNL example is also named
+    # `benchmark`)
     import importlib.util
+
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     path = os.path.join(root, "examples", "synthetic_fdd", "benchmark.py")
     spec = importlib.util.spec_from_file_location("synthetic_fdd_benchmark", path)
     bench = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bench)
-    baseline = json.load(open(os.path.join(root, "examples", "synthetic_fdd", "benchmark-baseline.json")))
+    baseline = json.load(
+        open(os.path.join(root, "examples", "synthetic_fdd", "benchmark-baseline.json"))
+    )
     chk = check_against_baseline(bench.metrics_dict(), baseline, tol=0.0)
     assert chk.passed, f"synthetic benchmark regressed vs committed baseline: {chk.regressions}"

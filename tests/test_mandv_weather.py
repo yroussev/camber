@@ -14,9 +14,12 @@ from camber.mandv.weather import (  # noqa: E402
     normalized_annual_from_monthly,
 )
 
-EPW = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   "weather", "tmy",
-                   "example_tmyx_cz15.epw")
+EPW = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "weather",
+    "tmy",
+    "example_tmyx_cz15.epw",
+)
 
 HAVE_EPW = os.path.exists(EPW)
 skip = __import__("pytest").mark.skipif(not HAVE_EPW, reason="example EPW not present")
@@ -30,12 +33,12 @@ def test_c_to_f():
 @skip
 def test_load_epw_shape():
     s = load_epw(EPW)
-    assert len(s) == 8760                 # one typical year, hourly
+    assert len(s) == 8760  # one typical year, hourly
     assert s.index.is_monotonic_increasing
     # CZ15 hot desert: annual mean comfortably warm, summer hot
     assert 65 < s.mean() < 80
-    assert s.max() > 105                  # summer peak
-    assert s.min() < 45                   # winter night
+    assert s.max() > 105  # summer peak
+    assert s.min() < 45  # winter night
 
 
 @skip
@@ -52,6 +55,7 @@ def test_normalized_annual_from_monthly():
     class _M:
         def predict(self, T):
             return 1000.0 + 50.0 * np.asarray(T, dtype=float)
+
     annual = normalized_annual_from_monthly(_M(), load_epw(EPW))
     mm = monthly_normals(load_epw(EPW))
     expected = float(np.sum(1000.0 + 50.0 * mm.values))

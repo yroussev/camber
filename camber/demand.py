@@ -17,9 +17,8 @@ Operates on an interval kW series (a meter or a piece of equipment). pandas + nu
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
-import numpy as np
 import pandas as pd
 
 from .schedules import occupied_mask
@@ -31,24 +30,25 @@ class DemandResult:
 
     n: int
     peak_kw: float
-    peak_time: str                # when the overall peak occurred
-    peak_hour: int                # hour-of-day of the overall peak
-    peak_dayofweek: int           # 0=Mon .. 6=Sun
+    peak_time: str  # when the overall peak occurred
+    peak_hour: int  # hour-of-day of the overall peak
+    peak_dayofweek: int  # 0=Mon .. 6=Sun
     avg_kw: float
-    load_factor: float            # avg / peak (0..1; low = spiky)
-    baseload_kw: float            # 5th-percentile load
-    baseload_frac: float          # baseload / peak
+    load_factor: float  # avg / peak (0..1; low = spiky)
+    baseload_kw: float  # 5th-percentile load
+    baseload_frac: float  # baseload / peak
     pct_intervals_near_peak: float  # % of intervals within near_peak_frac of the peak
-    coincident_peak_hour: int     # modal hour-of-day across the monthly peaks
-    monthly_peak_kw: dict         # {"YYYY-MM": peak kW}
+    coincident_peak_hour: int  # modal hour-of-day across the monthly peaks
+    monthly_peak_kw: dict  # {"YYYY-MM": peak kW}
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
         return asdict(self)
 
 
-def analyze_demand(load_kw: pd.Series, *, near_peak_frac: float = 0.9,
-                   baseload_q: float = 0.05) -> DemandResult | None:
+def analyze_demand(
+    load_kw: pd.Series, *, near_peak_frac: float = 0.9, baseload_q: float = 0.05
+) -> DemandResult | None:
     """Characterize an interval kW load's peak and shape."""
     s = load_kw.dropna()
     if len(s) < 10:
@@ -56,10 +56,12 @@ def analyze_demand(load_kw: pd.Series, *, near_peak_frac: float = 0.9,
     peak = float(s.max())
     peak_t = s.idxmax()
     monthly = s.resample("MS").max()
-    monthly_peaks = {d.strftime("%Y-%m"): round(float(v), 2)
-                     for d, v in monthly.items() if v == v}
-    peak_hours = [s.loc[mstart:mstart + pd.offsets.MonthEnd(0)].idxmax().hour
-                  for mstart in monthly.index if monthly.loc[mstart] == monthly.loc[mstart]]
+    monthly_peaks = {d.strftime("%Y-%m"): round(float(v), 2) for d, v in monthly.items() if v == v}
+    peak_hours = [
+        s.loc[mstart : mstart + pd.offsets.MonthEnd(0)].idxmax().hour
+        for mstart in monthly.index
+        if monthly.loc[mstart] == monthly.loc[mstart]
+    ]
     coincident = int(pd.Series(peak_hours).mode().iloc[0]) if peak_hours else int(peak_t.hour)
     avg = float(s.mean())
     base = float(s.quantile(baseload_q))
@@ -87,9 +89,9 @@ class BaseloadResult:
 
     occupied_avg_kw: float
     unoccupied_avg_kw: float
-    baseload_ratio: float         # unoccupied avg / occupied avg
-    baseload_kw: float            # 5th-percentile load
-    severity: str                 # "ok" | "warn" | "fault"
+    baseload_ratio: float  # unoccupied avg / occupied avg
+    baseload_kw: float  # 5th-percentile load
+    severity: str  # "ok" | "warn" | "fault"
     summary: str
 
     def as_dict(self) -> dict:
@@ -97,8 +99,14 @@ class BaseloadResult:
         return asdict(self)
 
 
-def baseload_anomaly(load_kw: pd.Series, *, start_hour: int = 7, end_hour: int = 18,
-                     warn_ratio: float = 0.6, fault_ratio: float = 0.8) -> BaseloadResult | None:
+def baseload_anomaly(
+    load_kw: pd.Series,
+    *,
+    start_hour: int = 7,
+    end_hour: int = 18,
+    warn_ratio: float = 0.6,
+    fault_ratio: float = 0.8,
+) -> BaseloadResult | None:
     """Flag a high unoccupied/occupied load ratio (equipment not setting back).
 
     Occupied = weekday ``start_hour``..``end_hour``; everything else is unoccupied. A
@@ -124,8 +132,10 @@ def baseload_anomaly(load_kw: pd.Series, *, start_hour: int = 7, end_hour: int =
         baseload_ratio=round(ratio, 3) if ratio == ratio else float("nan"),
         baseload_kw=round(float(s.quantile(0.05)), 2),
         severity=severity,
-        summary=(f"unoccupied load is {100 * ratio:.0f}% of occupied "
-                 f"({unocc_avg:.0f} vs {occ_avg:.0f} kW avg)"),
+        summary=(
+            f"unoccupied load is {100 * ratio:.0f}% of occupied "
+            f"({unocc_avg:.0f} vs {occ_avg:.0f} kW avg)"
+        ),
     )
 
 
@@ -137,15 +147,16 @@ class PeakShaveResult:
     demand_rate: float
     annual_savings: float
     n_months: int
-    monthly: dict                 # {"YYYY-MM": {"peak_kw", "shaved_kw", "savings"}}
+    monthly: dict  # {"YYYY-MM": {"peak_kw", "shaved_kw", "savings"}}
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
         return asdict(self)
 
 
-def peak_shave_savings(load_kw: pd.Series, target_kw: float, *,
-                       demand_rate: float) -> PeakShaveResult | None:
+def peak_shave_savings(
+    load_kw: pd.Series, target_kw: float, *, demand_rate: float
+) -> PeakShaveResult | None:
     """Demand savings from capping each month's peak at ``target_kw`` (at ``demand_rate``).
 
     A first-order business case for peak shaving: it assumes the peak can be held at the
@@ -162,9 +173,15 @@ def peak_shave_savings(load_kw: pd.Series, target_kw: float, *,
         shaved = max(0.0, float(peak) - target_kw)
         save = shaved * demand_rate
         total += save
-        monthly[d.strftime("%Y-%m")] = {"peak_kw": round(float(peak), 2),
-                                        "shaved_kw": round(shaved, 2),
-                                        "savings": round(save, 2)}
-    return PeakShaveResult(target_kw=float(target_kw), demand_rate=float(demand_rate),
-                           annual_savings=round(total, 2), n_months=len(monthly),
-                           monthly=monthly)
+        monthly[d.strftime("%Y-%m")] = {
+            "peak_kw": round(float(peak), 2),
+            "shaved_kw": round(shaved, 2),
+            "savings": round(save, 2),
+        }
+    return PeakShaveResult(
+        target_kw=float(target_kw),
+        demand_rate=float(demand_rate),
+        annual_savings=round(total, 2),
+        n_months=len(monthly),
+        monthly=monthly,
+    )

@@ -31,13 +31,23 @@ _ROLE_TO_BOX_COL = {
 
 
 class ReheatPenalty:
-    """Detects terminal-box reheat that coincides with cooling (reheat penalty) (PNNL Re-tuning Ch.7)."""
+    """Detects terminal-box reheat that coincides with cooling (reheat penalty)
+    (PNNL Re-tuning Ch.7)."""
 
     name = "reheat_penalty"
     roles_required = (Role.HEAT_VALVE,)
-    roles_optional = (Role.OAT, Role.SPACE_TEMP, Role.SUPPLY_AIR_TEMP, Role.HEAT_SP,
-                      Role.COOL_SP, Role.AIRFLOW, Role.AIRFLOW_SP, Role.DAMPER,
-                      Role.WARMUP, Role.COOLDOWN)
+    roles_optional = (
+        Role.OAT,
+        Role.SPACE_TEMP,
+        Role.SUPPLY_AIR_TEMP,
+        Role.HEAT_SP,
+        Role.COOL_SP,
+        Role.AIRFLOW,
+        Role.AIRFLOW_SP,
+        Role.DAMPER,
+        Role.WARMUP,
+        Role.COOLDOWN,
+    )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -47,8 +57,9 @@ class ReheatPenalty:
         oat = frame[Role.OAT] if Role.OAT in frame.columns else None
         res = analyze_box(legacy, equip, oat=oat)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         # Headline = reheat at high OAT (heating in cooling weather). Falls back to
         # the cold-supply indicator if no OAT was available.
         hi = res.reheat_at_high_oat_pct
@@ -67,14 +78,20 @@ class ReheatPenalty:
                 "mean_valve_when_open": res.mean_valve_when_open,
                 "n_considered": res.n_considered,
             },
-            summary=(f"{equip}: reheat valve open {res.valve_open_pct:.0f}% of occupied "
-                     f"hours; {res.reheat_at_high_oat_pct:.0f}% at OAT>65F"),
+            summary=(
+                f"{equip}: reheat valve open {res.valve_open_pct:.0f}% of occupied "
+                f"hours; {res.reheat_at_high_oat_pct:.0f}% at OAT>65F"
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: reheat-valve position vs OAT — heating in warm weather stands out."""
         from ..charts.evidence import Evidence
+
         if Role.HEAT_VALVE in frame.columns and Role.OAT in frame.columns:
-            return Evidence(renderer="oat_scatter", roles=[Role.HEAT_VALVE],
-                            title=f"{equip}: reheat valve vs OAT")
+            return Evidence(
+                renderer="oat_scatter",
+                roles=[Role.HEAT_VALVE],
+                title=f"{equip}: reheat valve vs OAT",
+            )
         return None

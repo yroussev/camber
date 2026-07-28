@@ -13,7 +13,7 @@ lazy-imported.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -29,9 +29,9 @@ class CohortResult:
 
     role: str
     summary: str
-    values: dict                 # {equip: summary scalar}
-    z: dict                      # {equip: robust z-score vs the cohort}
-    outliers: list               # equip with |z| >= k
+    values: dict  # {equip: summary scalar}
+    z: dict  # {equip: robust z-score vs the cohort}
+    outliers: list  # equip with |z| >= k
     median: float
     mad: float
 
@@ -56,14 +56,15 @@ def cohort_summary(frames: dict, role, *, summary: str = "mean") -> pd.Series:
             out[equip] = float(s.mean())
         elif summary == "peak":
             out[equip] = float(s.max())
-        else:                                        # load_factor
+        else:  # load_factor
             peak = float(s.max())
             out[equip] = float(s.mean()) / peak if peak else float("nan")
     return pd.Series(out, dtype=float)
 
 
-def cohort_deviation(frames: dict, role, *, k: float = 3.5, summary: str = "mean",
-                     min_cohort: int = 3) -> CohortResult:
+def cohort_deviation(
+    frames: dict, role, *, k: float = 3.5, summary: str = "mean", min_cohort: int = 3
+) -> CohortResult:
     """Robust z-score of each unit's role summary vs the cohort; flag ``|z| >= k`` as outliers."""
     rname = getattr(role, "name", str(role))
     vals = cohort_summary(frames, role, summary=summary).dropna()
@@ -77,14 +78,28 @@ def cohort_deviation(frames: dict, role, *, k: float = 3.5, summary: str = "mean
     scale = 1.4826 * mad if mad > 0 else 1.2533 * float(np.mean(np.abs(arr - med)))
     z = {e: ((v - med) / scale if scale > 0 else 0.0) for e, v in vals.items()}
     outliers = [e for e, zz in z.items() if abs(zz) >= k]
-    return CohortResult(rname, summary, {e: float(v) for e, v in vals.items()},
-                        {e: round(zz, 3) for e, zz in z.items()}, outliers, round(med, 4),
-                        round(mad, 4))
+    return CohortResult(
+        rname,
+        summary,
+        {e: float(v) for e, v in vals.items()},
+        {e: round(zz, 3) for e, zz in z.items()},
+        outliers,
+        round(med, 4),
+        round(mad, 4),
+    )
 
 
-def cohort_small_multiples(frames: dict, role, *, ncols: int = 4, rank: str = "deviation",
-                           k: float = 3.5, summary: str = "mean", max_units: int = 16,
-                           figsize=None):
+def cohort_small_multiples(
+    frames: dict,
+    role,
+    *,
+    ncols: int = 4,
+    rank: str = "deviation",
+    k: float = 3.5,
+    summary: str = "mean",
+    max_units: int = 16,
+    figsize=None,
+):
     """Small-multiples grid of ``role`` across the cohort, ordered by deviation; outliers in red.
 
     Returns ``(fig, CohortResult)``. ``rank="deviation"`` orders units by ``|z|`` descending (worst
@@ -100,8 +115,9 @@ def cohort_small_multiples(frames: dict, role, *, ncols: int = 4, rank: str = "d
 
     n = len(order)
     nrows = max(1, math.ceil(n / ncols))
-    fig, axes = plt.subplots(nrows, ncols, figsize=figsize or (3.2 * ncols, 2.2 * nrows),
-                             squeeze=False)
+    fig, axes = plt.subplots(
+        nrows, ncols, figsize=figsize or (3.2 * ncols, 2.2 * nrows), squeeze=False
+    )
     for i, equip in enumerate(order):
         ax = axes[i // ncols][i % ncols]
         try:
@@ -113,9 +129,10 @@ def cohort_small_multiples(frames: dict, role, *, ncols: int = 4, rank: str = "d
         zlbl = f"  z={res.z[equip]:+.1f}" if equip in res.z else ""
         ax.set_title(f"{equip}{zlbl}", fontsize=8, color="#d62728" if is_out else "#222")
         ax.tick_params(labelsize=6)
-    for j in range(n, nrows * ncols):               # hide unused panels
+    for j in range(n, nrows * ncols):  # hide unused panels
         axes[j // ncols][j % ncols].axis("off")
-    fig.suptitle(f"Cohort — {res.role} ({summary}): {len(res.outliers)} outlier(s) of {n}",
-                 fontsize=11)
+    fig.suptitle(
+        f"Cohort — {res.role} ({summary}): {len(res.outliers)} outlier(s) of {n}", fontsize=11
+    )
     fig.tight_layout()
     return fig, res

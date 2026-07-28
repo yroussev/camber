@@ -9,7 +9,11 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.pv import (  # noqa: E402
-    expected_generation, net_energy, performance_ratio, pv_summary, specific_yield,
+    expected_generation,
+    net_energy,
+    performance_ratio,
+    pv_summary,
+    specific_yield,
 )
 
 
@@ -37,7 +41,7 @@ def test_net_energy_import_and_export():
 
 def test_pv_summary_with_self_consumption():
     idx = pd.date_range("2024-06-01", periods=4, freq="h")
-    ac = pd.Series([2.0, 2.0, 2.0, 2.0], index=idx)          # 8 kWh total
+    ac = pd.Series([2.0, 2.0, 2.0, 2.0], index=idx)  # 8 kWh total
     load = pd.Series([5.0, 5.0, 1.0, 1.0], index=idx)
     r = pv_summary(ac, poa_irradiation_kwh_m2=10.0, rated_kw=1.0, load=load)
     assert r.generation_kwh == 8.0

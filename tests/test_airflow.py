@@ -4,6 +4,7 @@ import os
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -20,11 +21,11 @@ def _close_figs():
     plt.close("all")
 
 
+from camber.aso import recommend  # noqa: E402
+from camber.charts.evidence import finding_evidence  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.rules.airflow_rule import AirflowTracking  # noqa: E402
 from camber.rules.builtin import rule_names  # noqa: E402
-from camber.charts.evidence import finding_evidence  # noqa: E402
-from camber.aso import recommend  # noqa: E402
 
 
 def _frame(flow, sp=1000.0, n=240):
@@ -41,13 +42,13 @@ def test_tracking_setpoint_is_ok():
 
 
 def test_starved_box_faults_as_undershoot():
-    f = AirflowTracking().analyze("VAV-2", _frame(600.0))       # 40% below the 1000 setpoint
+    f = AirflowTracking().analyze("VAV-2", _frame(600.0))  # 40% below the 1000 setpoint
     assert f.severity == "fault" and f.metrics["undershoot_pct"] > 90
     assert f.metrics["mean_abs_rel_error"] > 0.2
 
 
 def test_overshoot_faults():
-    f = AirflowTracking().analyze("VAV-3", _frame(1400.0))      # 40% above setpoint
+    f = AirflowTracking().analyze("VAV-3", _frame(1400.0))  # 40% above setpoint
     assert f.severity == "fault" and f.metrics["overshoot_pct"] > 90
 
 
@@ -66,5 +67,5 @@ def test_evidence_recommendation_and_registration():
     ev = finding_evidence(AirflowTracking(), "VAV-2", frame)
     assert ev is not None and ev.renderer == "multitrend"
     rec = recommend(f)
-    assert rec is not None and "starved" in rec.action        # undershoot -> starved lean
+    assert rec is not None and "starved" in rec.action  # undershoot -> starved lean
     assert "airflow_tracking" in rule_names()

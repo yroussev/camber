@@ -18,7 +18,8 @@ self-contained HTML assembler; the primitives (load carpet, CUSUM, energy signat
 ### A — readiness ribbon
 ```python
 from camber.charts.readiness import readiness_ribbon
-readiness_ribbon(df, max_bins=240)        # df: wide point/role frame
+
+readiness_ribbon(df, max_bins=240)  # df: wide point/role frame
 ```
 Flags = `max_bins` (time resolution), `title`, `max_xticks`. `presence_matrix(df)` returns the
 raw `(matrix, bin_starts, coverage)` if you want the numbers.
@@ -26,6 +27,7 @@ raw `(matrix, bin_starts, coverage)` if you want the numbers.
 ### B — fault-annotated multi-trend
 ```python
 from camber.charts.multitrend import fault_multitrend
+
 fault_multitrend(df, ["load_kw", "sat"], spans={"high_load": df["load_kw"] > 95}, normalize=True)
 ```
 `spans` is `{label: boolean Series}` — each rule supplies the timestamps where it tripped, and
@@ -35,6 +37,7 @@ each True run is shaded once. Flags: `normalize` (overlay disparate units 0–1)
 ### I — data-quality dashboard
 ```python
 from camber.charts.quality_dashboard import quality_dashboard
+
 quality_dashboard(df, metrics=("coverage", "score", "flatline_frac", "outlier_frac"))
 ```
 A heatmap colored so **green = good** for every metric (higher-is-better and lower-is-better are
@@ -48,8 +51,9 @@ rule renders its own evidence. First renderer: pattern **D**.
 ### D — OAT cloud-shape scatter
 ```python
 from camber.charts.oat_scatter import oat_scatter, classify_shape, brush_back
-ax, shape = oat_scatter(load_kw, oat, ylabel="kW")   # overlays the change-point fit + guides
-shape.shape          # "linear" | "hockey-stick" | "v" | "scattered"
+
+ax, shape = oat_scatter(load_kw, oat, ylabel="kW")  # overlays the change-point fit + guides
+shape.shape  # "linear" | "hockey-stick" | "v" | "scattered"
 ```
 The *shape of the cloud* against outdoor-air temperature reveals control behavior a time-series
 buries. `classify_shape(series, oat)` labels it from the fitted change-point model + goodness of fit
@@ -65,7 +69,8 @@ Flags: `changepoint` (`"auto"`/a kind/`False`), `classify`, `by` (colour by seas
 ### G — templated subsystem diagnostic scatters
 ```python
 from camber.charts.diagnostic import diagnostic_scatter, TEMPLATES
-ax, violating = diagnostic_scatter(role_frame, TEMPLATES["sat_reset"])   # violating: bool Series
+
+ax, violating = diagnostic_scatter(role_frame, TEMPLATES["sat_reset"])  # violating: bool Series
 ```
 Each subsystem has an *expected signature*; a `DiagnosticTemplate` names two roles and an
 `expected(x) -> (low, high)` band, and `diagnostic_scatter` overlays that band, shades the points
@@ -80,9 +85,10 @@ Every rule that can mark its violating timestamps **renders its own evidence** �
 audit evidence and the report figure. A rule opts in with an optional, duck-typed hook:
 ```python
 class SimultaneousHeatCool:
-    def evidence(self, equip, frame):        # optional; rules without it are unaffected
+    def evidence(self, equip, frame):  # optional; rules without it are unaffected
         from camber.charts.diagnostic import TEMPLATES
         from camber.charts.evidence import Evidence
+
         return Evidence(renderer="diagnostic", template=TEMPLATES["no_simultaneous_hc"])
 ```
 An `Evidence` names a **renderer** (`diagnostic` / `multitrend` / `oat_scatter` / `carpet`) and the
@@ -101,7 +107,7 @@ whole library (present and future rules) carries evidence, no per-rule map requi
 
 The dashboard wires it automatically — pass `rules=`:
 ```python
-html = build_dashboard(df, findings=findings, rules=registry)   # evidence=True by default
+html = build_dashboard(df, findings=findings, rules=registry)  # evidence=True by default
 ```
 Each actionable finding whose rule opts in renders its evidence chart under an **Evidence** section.
 The **Std-211 audit report** does the same — `AuditReport.to_html(rules=…, frames={equip: frame})`
@@ -111,8 +117,9 @@ renders the right trend for each unit).
 ### C — peer/cohort comparison + cohort-deviation rule
 ```python
 from camber.charts.cohort import cohort_small_multiples, cohort_deviation
-fig, res = cohort_small_multiples(frames, Role.AIRFLOW)   # frames: {equip: role-frame}
-res.outliers            # units > k robust-σ from the cohort norm
+
+fig, res = cohort_small_multiples(frames, Role.AIRFLOW)  # frames: {equip: role-frame}
+res.outliers  # units > k robust-σ from the cohort norm
 ```
 Small multiples of a role across a **cohort** of like equipment, ordered by deviation (worst first),
 outliers in red. Deviation is a robust z-score (median/MAD) of a per-unit `summary` (`mean` / `peak`
@@ -124,9 +131,11 @@ unit runs unlike its peers", a signal no per-unit absolute-bound rule can see. F
 ### H — M&V baseline, savings & uncertainty
 ```python
 from camber.charts.savings import savings_chart
-ax, res = savings_chart(baseline_model, t_report, y_report,
-                        n_baseline=200, p_baseline=2, cv_rmse=0.08)
-res.avoided_energy, res.abs_uncertainty      # e.g. 2983 ± 1318 at 90%
+
+ax, res = savings_chart(
+    baseline_model, t_report, y_report, n_baseline=200, p_baseline=2, cv_rmse=0.08
+)
+res.avoided_energy, res.abs_uncertainty  # e.g. 2983 ± 1318 at 90%
 ```
 The IPMVP Option-C picture: cumulative **baseline-projected vs actual** energy, the avoided energy
 shaded between them (green = saved, red = excess), and the **ASHRAE G14 Annex-B fractional savings
@@ -139,8 +148,9 @@ and any `predict()`-able baseline (`mandv.models.best_model`). Flags: `confidenc
 ### F — load profiles & load-duration curves
 ```python
 from camber.charts.loadprofile_chart import load_profile_chart, load_duration_chart
-load_profile_chart(load_kw, split=True)              # weekday vs weekend hour-of-day shape
-load_duration_chart(load_kw, price=0.15)             # LDC + energy-cost translation
+
+load_profile_chart(load_kw, split=True)  # weekday vs weekend hour-of-day shape
+load_duration_chart(load_kw, price=0.15)  # LDC + energy-cost translation
 ```
 Two views on load shape. `load_profile_chart` plots the average load by hour-of-day (weekday vs
 weekend when `split`, exposing schedule gaps) with the base load annotated. `load_duration_chart`
@@ -156,8 +166,15 @@ external assets.
 
 ```python
 from camber.report import build_dashboard
-html = build_dashboard(df, findings=findings, spans={"high_load": df["load_kw"] > 95},
-                       carpet_col="load_kw", rank_by="cost", title="Site dashboard")
+
+html = build_dashboard(
+    df,
+    findings=findings,
+    spans={"high_load": df["load_kw"] > 95},
+    carpet_col="load_kw",
+    rank_by="cost",
+    title="Site dashboard",
+)
 open("dashboard.html", "w").write(html)
 ```
 
@@ -179,7 +196,7 @@ open("dashboard.html", "w").write(html)
 
 ### Interactive linking (brush → select)
 ```python
-html = build_dashboard(df, interactive=True)          # link_x defaults to an OAT-like column
+html = build_dashboard(df, interactive=True)  # link_x defaults to an OAT-like column
 ```
 With `interactive=True` the dashboard adds a **brush-able** scatter drawn by a small **vanilla-JS**
 module (no framework, no CDN, CSP-safe) from an inline JSON payload. Drag a box over the cloud and the

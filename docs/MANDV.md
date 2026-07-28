@@ -34,8 +34,9 @@ open-source CalTRACK implementation.
 ```python
 from camber.mandv.caltrack import caltrack_savings
 
-res = caltrack_savings(baseline_energy, baseline_temp,
-                       reporting_energy, reporting_temp)   # hourly Series in
+res = caltrack_savings(
+    baseline_energy, baseline_temp, reporting_energy, reporting_temp
+)  # hourly Series in
 print(res.model_kind, round(res.baseline_r2, 3))
 print(res.savings.savings_pct, "±", res.savings.fractional_uncertainty)  # fractions
 ```
@@ -90,9 +91,10 @@ period (a lighter cousin of the change-point models above).
 
 ```python
 from camber.mandv.degreeday import fit_degree_day
-m = fit_degree_day(tavg_per_month, energy_per_month)   # balance point auto-fit by min CV(RMSE)
+
+m = fit_degree_day(tavg_per_month, energy_per_month)  # balance point auto-fit by min CV(RMSE)
 m.balance_point, m.cooling_slope, m.heating_slope, m.fit.cv_rmse
-m.predict(normal_year_tavg)                            # normalize / project the baseline
+m.predict(normal_year_tavg)  # normalize / project the baseline
 ```
 
 `degree_days(tavg, balance_point)` returns the `(HDD, CDD)` arrays. Flags: `balance_point` (fix it
@@ -106,9 +108,11 @@ retrofit): savings = measured Δparameter × stipulated duty.
 
 ```python
 from camber.mandv.option_a import option_a_savings, stipulated_annual_hours
-r = option_a_savings(baseline_kw=100, reporting_kw=60,
-                     stipulated_factor=stipulated_annual_hours(hours_per_day=10))  # 2600 h
-r.savings, r.measured_delta, r.reduction_pct        # 104000 kWh, 40 kW, 0.40
+
+r = option_a_savings(
+    baseline_kw=100, reporting_kw=60, stipulated_factor=stipulated_annual_hours(hours_per_day=10)
+)  # 2600 h
+r.savings, r.measured_delta, r.reduction_pct  # 104000 kWh, 40 kW, 0.40
 ```
 
 Inputs may be scalars or sampled arrays/Series (the mean is taken). The result's `basis` records the

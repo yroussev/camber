@@ -25,7 +25,7 @@ dependency-light (you bring the external series from whatever provider you use).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -38,13 +38,13 @@ class DriftResult:
     """Bias/drift of a sensor relative to a reference it should track."""
 
     name: str
-    n: int                        # overlapping samples compared
-    bias: float                   # median(sensor - reference); + = sensor reads high
-    drift_per_month: float        # slope of (sensor - reference) over time
-    rmse: float                   # root-mean-square difference
-    correlation: float            # Pearson r between sensor and reference
-    severity: str                 # "ok" | "warn" | "fault" | "info"
-    verdict: str                  # short human label of the dominant issue
+    n: int  # overlapping samples compared
+    bias: float  # median(sensor - reference); + = sensor reads high
+    drift_per_month: float  # slope of (sensor - reference) over time
+    rmse: float  # root-mean-square difference
+    correlation: float  # Pearson r between sensor and reference
+    severity: str  # "ok" | "warn" | "fault" | "info"
+    verdict: str  # short human label of the dominant issue
     summary: str
 
     def as_dict(self) -> dict:
@@ -57,9 +57,9 @@ def compare_to_reference(
     reference: pd.Series,
     *,
     name: str = "sensor",
-    bias_warn: float = 2.0,       # |bias| at/above this == warn (degF defaults)
+    bias_warn: float = 2.0,  # |bias| at/above this == warn (degF defaults)
     bias_fault: float = 5.0,
-    drift_warn: float = 1.0,      # |drift|/month at/above this == warn
+    drift_warn: float = 1.0,  # |drift|/month at/above this == warn
     drift_fault: float = 3.0,
     min_correlation: float = 0.7,  # below this the sensor isn't tracking the reference
     min_samples: int = 100,
@@ -76,11 +76,19 @@ def compare_to_reference(
     a, b = a.align(b, join="inner")
     n = len(a)
     if n < min_samples:
-        return DriftResult(name, n, float("nan"), float("nan"), float("nan"),
-                           float("nan"), "info", "insufficient overlap",
-                           f"{name}: only {n} overlapping samples (< {min_samples})")
+        return DriftResult(
+            name,
+            n,
+            float("nan"),
+            float("nan"),
+            float("nan"),
+            float("nan"),
+            "info",
+            "insufficient overlap",
+            f"{name}: only {n} overlapping samples (< {min_samples})",
+        )
 
-    diff = (a - b)
+    diff = a - b
     bias = float(diff.median())
     months = (a.index - a.index[0]).total_seconds().to_numpy() / (86400.0 * 30.44)
     if np.std(months) > 0:
@@ -88,8 +96,11 @@ def compare_to_reference(
     else:
         slope = float("nan")
     rmse = float(np.sqrt(np.mean(diff.to_numpy() ** 2)))
-    corr = (float(np.corrcoef(a.to_numpy(), b.to_numpy())[0, 1])
-            if a.std() > 0 and b.std() > 0 else float("nan"))
+    corr = (
+        float(np.corrcoef(a.to_numpy(), b.to_numpy())[0, 1])
+        if a.std() > 0 and b.std() > 0
+        else float("nan")
+    )
 
     untracking = corr == corr and corr < min_correlation
     drift_mag = abs(slope) if slope == slope else 0.0
@@ -110,17 +121,22 @@ def compare_to_reference(
         verdict = "tracks reference"
 
     return DriftResult(
-        name=name, n=n,
-        bias=round(bias, 2), drift_per_month=round(slope, 3) if slope == slope else slope,
-        rmse=round(rmse, 2), correlation=round(corr, 3) if corr == corr else corr,
-        severity=severity, verdict=verdict,
-        summary=(f"{name}: bias {bias:+.1f}, drift {slope:+.2f}/month, "
-                 f"RMSE {rmse:.1f}, r={corr:.2f} over {n} samples -- {verdict}"),
+        name=name,
+        n=n,
+        bias=round(bias, 2),
+        drift_per_month=round(slope, 3) if slope == slope else slope,
+        rmse=round(rmse, 2),
+        correlation=round(corr, 3) if corr == corr else corr,
+        severity=severity,
+        verdict=verdict,
+        summary=(
+            f"{name}: bias {bias:+.1f}, drift {slope:+.2f}/month, "
+            f"RMSE {rmse:.1f}, r={corr:.2f} over {n} samples -- {verdict}"
+        ),
     )
 
 
-def drift_finding(series: pd.Series, reference: pd.Series, equip: str, role,
-                  **kwargs) -> Finding:
+def drift_finding(series: pd.Series, reference: pd.Series, equip: str, role, **kwargs) -> Finding:
     """Compare a sensor to a reference and return a :class:`Finding` (role in the name).
 
     So sensor-drift results flow through the same prioritization / report / triage as
@@ -132,7 +148,12 @@ def drift_finding(series: pd.Series, reference: pd.Series, equip: str, role,
         rule=f"sensor_drift:{role_slug}",
         equip=equip,
         severity=res.severity,
-        metrics={"bias": res.bias, "drift_per_month": res.drift_per_month,
-                 "rmse": res.rmse, "correlation": res.correlation, "n": res.n},
+        metrics={
+            "bias": res.bias,
+            "drift_per_month": res.drift_per_month,
+            "rmse": res.rmse,
+            "correlation": res.correlation,
+            "n": res.n,
+        },
         summary=f"{equip} {res.summary}",
     )

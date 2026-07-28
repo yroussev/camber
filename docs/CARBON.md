@@ -17,7 +17,8 @@ Scope-2 footprint. Factors are user-supplied (from a grid-signal provider); no h
 
 ```python
 from camber.carbon_hourly import hourly_emissions
-e = hourly_emissions(load_kw, hourly_factor)          # factor: kgCO2/kWh, aligned to load
+
+e = hourly_emissions(load_kw, hourly_factor)  # factor: kgCO2/kWh, aligned to load
 e.co2e_kg, e.effective_factor, e.timing_premium_pct
 ```
 
@@ -30,6 +31,7 @@ accepts a g/kWh factor.
 
 ```python
 from camber.carbon_hourly import marginal_vs_average
+
 c = marginal_vs_average(load_kw, average_factor, marginal_factor)
 c.co2e_avg_kg, c.co2e_marginal_kg, c.marginal_over_avg
 ```

@@ -9,11 +9,20 @@ from __future__ import annotations
 import pandas as pd
 
 
-def load_csv(path, timestamp_col: str | None = None, resample: str | None = None,
-             dedupe: str = "first", *, profile=None, encoding: str | None = None,
-             delimiter: str | None = None, skiprows: int | None = None,
-             decimal: str | None = None, thousands: str | None = None,
-             dayfirst: bool | None = None):
+def load_csv(
+    path,
+    timestamp_col: str | None = None,
+    resample: str | None = None,
+    dedupe: str = "first",
+    *,
+    profile=None,
+    encoding: str | None = None,
+    delimiter: str | None = None,
+    skiprows: int | None = None,
+    decimal: str | None = None,
+    thousands: str | None = None,
+    dayfirst: bool | None = None,
+):
     """Load a trend CSV into a DataFrame indexed by a parsed DatetimeIndex.
 
     Parameters
@@ -23,18 +32,20 @@ def load_csv(path, timestamp_col: str | None = None, resample: str | None = None
     timestamp_col : str, optional
         Name of the timestamp column. If None, the profile's ``ts_col`` or the first column is used.
     resample : str, optional
-        Pandas offset alias (e.g. "15min", "1h") to resample numeric columns to (mean). None = native.
+        Pandas offset alias (e.g. "15min", "1h") to resample numeric columns to (mean).
+        None = native.
     dedupe : str, optional
         Collapse duplicate timestamps: ``"first"`` (default) / ``"last"`` / ``"mean"`` / ``None``.
     profile : str | IngestProfile, optional
         A vendor ingest profile (name or object) supplying the delimiter/encoding/skiprows/timestamp
-        format/decimal conventions — see :mod:`camber.ingest.profiles`. Individual keyword args below
-        override the profile. Defaults resolve to the ``generic`` profile (fully backward compatible).
+        format/decimal conventions — see :mod:`camber.ingest.profiles`. Individual keyword args
+        below override the profile. Defaults resolve to the ``generic`` profile (fully backward
+        compatible).
     """
-    from .timegrid import regularize
-    from .tsparse import parse_timestamps
     from .coerce import coerce_numeric
     from .ingest.profiles import get_profile
+    from .timegrid import regularize
+    from .tsparse import parse_timestamps
 
     p = get_profile(profile)
     enc = encoding or p.encoding
@@ -70,7 +81,7 @@ def load_csv(path, timestamp_col: str | None = None, resample: str | None = None
     if n_rows > 0 and len(values) == 0:
         raise ValueError(f"no parseable timestamps in column {timestamp_col!r}")
 
-    df = regularize(values, dedupe=dedupe)   # sort + collapse duplicate ts (handles empty)
+    df = regularize(values, dedupe=dedupe)  # sort + collapse duplicate ts (handles empty)
     if resample and len(df):
         df = df.resample(resample).mean(numeric_only=True)
     return df

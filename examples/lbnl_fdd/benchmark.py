@@ -56,7 +56,8 @@ FAMILIES = [
             ("damper_stuck_075_annual.csv", "damper"),
             ("damper_stuck_100_annual_short.csv", "damper"),
             # cooling-coil-valve leakage severity sweep (characterizes the leak detector, which
-            # under-fires at low severity — each missing CSV is skipped via the os.path.exists guard)
+            # under-fires at low severity — each missing CSV is skipped via the
+            # os.path.exists guard)
             ("coi_leakage_010_annual.csv", "valve_leak"),
             ("coi_leakage_025_annual.csv", "valve_leak"),
             ("coi_leakage_050_annual.csv", "valve_leak"),
@@ -93,18 +94,21 @@ FAMILIES = [
 
 def load_role_frame(csv, mapping):
     """Read one LBNL CSV into an hourly role-named frame via the family's mapping."""
-    df = (pd.read_csv(csv, usecols=lambda c: c == "Datetime" or mapping.role_of(c),
-                      parse_dates=["Datetime"])
-          .set_index("Datetime").resample("1h").mean())
-    frame = pd.DataFrame({mapping.role_of(c): df[c] for c in df.columns
-                          if mapping.role_of(c)})
+    df = (
+        pd.read_csv(
+            csv, usecols=lambda c: c == "Datetime" or mapping.role_of(c), parse_dates=["Datetime"]
+        )
+        .set_index("Datetime")
+        .resample("1h")
+        .mean()
+    )
+    frame = pd.DataFrame({mapping.role_of(c): df[c] for c in df.columns if mapping.role_of(c)})
     return normalize_percent_frame(frame)
 
 
 def score_family(fam):
     """Run the family's detectors over its scenarios; return the records list."""
-    mapping = MappingProvider.from_dict(
-        json.load(open(os.path.join(HERE, fam["mapping"]))))
+    mapping = MappingProvider.from_dict(json.load(open(os.path.join(HERE, fam["mapping"]))))
     detectors = [OutdoorAirFraction(min_oa_pct=fam["min_oa_pct"])]
     if fam["use_leak"]:
         detectors.append(LeakingValve())
@@ -117,8 +121,11 @@ def score_family(fam):
         if not os.path.exists(path):
             continue
         frame = load_role_frame(path, mapping)
-        fired = {rule.name for rule in detectors
-                 if rule.analyze("EQUIP", frame).severity in ("warn", "fault")}
+        fired = {
+            rule.name
+            for rule in detectors
+            if rule.analyze("EQUIP", frame).severity in ("warn", "fault")
+        }
         records.append({"truth": truth, "fired": fired})
         print(f"{fname:32s} {truth or 'fault-free':11s} {sorted(fired)}")
     return records
@@ -126,22 +133,26 @@ def score_family(fam):
 
 def print_scores(title, records):
     """Print the benchmark scores for a set of records, with Wilson confidence intervals."""
-    from camber.validation import metrics_with_ci   # noqa: E402
+    from camber.validation import metrics_with_ci  # noqa: E402
 
     rep = benchmark(records, TARGETS)
     o = rep.overall
     print(f"\n--- {title}: scores (LBNL eval framework, 95% Wilson CI) ---")
     oc = metrics_with_ci(o)
-    print(f"overall detection: TPR {o.true_positive_rate:.0%} "
-          f"[{oc['true_positive_rate'].lo:.0%}-{oc['true_positive_rate'].hi:.0%}]  "
-          f"FPR {o.false_positive_rate:.0%}  accuracy {o.accuracy:.0%}")
+    print(
+        f"overall detection: TPR {o.true_positive_rate:.0%} "
+        f"[{oc['true_positive_rate'].lo:.0%}-{oc['true_positive_rate'].hi:.0%}]  "
+        f"FPR {o.false_positive_rate:.0%}  accuracy {o.accuracy:.0%}"
+    )
     print(f"correct diagnosis (right detector for the fault): {rep.correct_diagnosis:.0%}")
     for name, c in rep.per_detector.items():
         if c.total:
             ci = metrics_with_ci(c)
             t, f = ci["true_positive_rate"], ci["false_positive_rate"]
-            print(f"  {name:22s} TPR {t.rate:.0%} [{t.lo:.0%}-{t.hi:.0%}]  "
-                  f"FPR {f.rate:.0%} [{f.lo:.0%}-{f.hi:.0%}]  (n={c.total})")
+            print(
+                f"  {name:22s} TPR {t.rate:.0%} [{t.lo:.0%}-{t.hi:.0%}]  "
+                f"FPR {f.rate:.0%} [{f.lo:.0%}-{f.hi:.0%}]  (n={c.total})"
+            )
 
 
 def metrics_dict(label, records):
@@ -149,10 +160,12 @@ def metrics_dict(label, records):
     label.correct_diagnosis}`` for JSON output and baseline gating."""
     rep = benchmark(records, TARGETS)
     o = rep.overall
-    return {f"{label}.tpr": round(o.true_positive_rate, 4),
-            f"{label}.fpr": round(o.false_positive_rate, 4),
-            f"{label}.accuracy": round(o.accuracy, 4),
-            f"{label}.correct_diagnosis": round(rep.correct_diagnosis, 4)}
+    return {
+        f"{label}.tpr": round(o.true_positive_rate, 4),
+        f"{label}.fpr": round(o.false_positive_rate, 4),
+        f"{label}.accuracy": round(o.accuracy, 4),
+        f"{label}.correct_diagnosis": round(rep.correct_diagnosis, 4),
+    }
 
 
 def main(argv=None) -> int:
@@ -160,11 +173,13 @@ def main(argv=None) -> int:
 
     ap = argparse.ArgumentParser(description="LBNL cross-equipment FDD benchmark")
     ap.add_argument("--json", metavar="PATH", help="write the flat metrics dict as JSON")
-    ap.add_argument("--gate", metavar="PATH",
-                    help="baseline JSON to gate against (exit 2 on regression)")
+    ap.add_argument(
+        "--gate", metavar="PATH", help="baseline JSON to gate against (exit 2 on regression)"
+    )
     ap.add_argument("--tol", type=float, default=0.02, help="regression tolerance (default 0.02)")
-    ap.add_argument("--update-baseline", metavar="PATH",
-                    help="write current metrics as a new baseline JSON")
+    ap.add_argument(
+        "--update-baseline", metavar="PATH", help="write current metrics as a new baseline JSON"
+    )
     args = ap.parse_args(argv)
 
     if not os.path.exists(os.path.join(DATA, "sdahu", FAMILIES[0]["scenarios"][0][0])):
@@ -179,9 +194,11 @@ def main(argv=None) -> int:
             metrics.update(metrics_dict(fam["label"], recs))
             pooled.extend(recs)
 
-    families_present = sum(1 for fam in FAMILIES
-                           if os.path.exists(os.path.join(DATA, fam["dir"],
-                                                          fam["scenarios"][0][0])))
+    families_present = sum(
+        1
+        for fam in FAMILIES
+        if os.path.exists(os.path.join(DATA, fam["dir"], fam["scenarios"][0][0]))
+    )
     if families_present > 1:
         print("\n" + "=" * 60)
         print_scores(f"POOLED across {families_present} equipment families", pooled)
@@ -204,6 +221,7 @@ def main(argv=None) -> int:
         print(f"wrote baseline -> {args.update_baseline}")
     if args.gate:
         from camber.eval import check_against_baseline
+
         baseline = json.load(open(args.gate))
         chk = check_against_baseline(metrics, baseline, tol=args.tol)
         if not chk.passed:
@@ -213,8 +231,10 @@ def main(argv=None) -> int:
             for k in chk.missing:
                 print(f"    {k}: missing from current run")
             return 2
-        print(f"\n✓ benchmark gate OK — {chk.unchanged} stable, "
-              f"{len(chk.improvements)} improved, none regressed")
+        print(
+            f"\n✓ benchmark gate OK — {chk.unchanged} stable, "
+            f"{len(chk.improvements)} improved, none regressed"
+        )
     return 0
 
 

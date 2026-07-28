@@ -25,10 +25,16 @@ or you pass them explicitly.
 from camber.ventilation import assess_62_1
 
 # a 2,000 ft² office for 10 people, metering ~120 cfm OA over occupied hours
-r = assess_62_1(oa_cfm_series, area_sqft=2000, population=10, space_type="office",
-                occupied_mask=occ, aggregate="median")
-r.required_cfm   # 170.0   (5·10 + 0.06·2000)
-r.status         # "under" -> deficit 50 cfm
+r = assess_62_1(
+    oa_cfm_series,
+    area_sqft=2000,
+    population=10,
+    space_type="office",
+    occupied_mask=occ,
+    aggregate="median",
+)
+r.required_cfm  # 170.0   (5·10 + 0.06·2000)
+r.status  # "under" -> deficit 50 cfm
 ```
 
 `measured_oa_cfm` may be a scalar or a time series; a series is filtered by `occupied_mask` and
@@ -53,9 +59,9 @@ an energy penalty), or **adequate**.
 from camber.ventilation import assess_dcv
 
 res = assess_dcv(oa_signal, co2_series, occupied_mask=occ, co2_setpoint=1000)
-res.status        # "functioning" | "static" | "uncorrelated" | "insufficient"
-res.modulation    # (max-min)/max of the OA signal
-res.correlation   # OA vs demand (DCV -> positive)
+res.status  # "functioning" | "static" | "uncorrelated" | "insufficient"
+res.modulation  # (max-min)/max of the OA signal
+res.correlation  # OA vs demand (DCV -> positive)
 ```
 
 `oa_signal` can be OA flow, OA fraction, or OA-damper position; `demand_signal` is CO₂ or
@@ -83,8 +89,9 @@ persists while OA is pinned at its minimum.
 
   ```python
   from camber.rules.ventilation_rule import VentilationRateProcedure
+
   rule = VentilationRateProcedure(area_sqft=2000, population=10, space_type="office")
-  finding = rule.analyze("AHU-1", role_frame)   # fault on under-ventilation
+  finding = rule.analyze("AHU-1", role_frame)  # fault on under-ventilation
   ```
 
 ## Scope

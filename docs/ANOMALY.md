@@ -6,7 +6,8 @@ change-point test misses isolated spikes; both miss a series that's simply full 
 
 ```python
 from camber.anomaly import detect_anomalies
-r = detect_anomalies(series, forecast=forecast)      # forecast optional
+
+r = detect_anomalies(series, forecast=forecast)  # forecast optional
 r.severity, r.n_point_anomalies, r.n_change_points, r.quality_score
 ```
 

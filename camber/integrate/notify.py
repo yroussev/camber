@@ -32,8 +32,10 @@ def slack_payload(ticket: dict) -> dict:
     """Shape a ticket into a Slack incoming-webhook payload (`{"text": ...}`)."""
     emoji = _PRIORITY_EMOJI.get(ticket.get("priority", "low"), "•")
     where = ticket.get("location") or ticket.get("equip") or "building"
-    return {"text": f"{emoji} *{ticket.get('title', 'finding')}*\n{ticket.get('body', '')}\n"
-                    f"_location:_ {where}"}
+    return {
+        "text": f"{emoji} *{ticket.get('title', 'finding')}*\n{ticket.get('body', '')}\n"
+        f"_location:_ {where}"
+    }
 
 
 def teams_payload(ticket: dict) -> dict:
@@ -44,13 +46,17 @@ def teams_payload(ticket: dict) -> dict:
         "@context": "https://schema.org/extensions",
         "themeColor": colors.get(ticket.get("priority", "low"), "888888"),
         "summary": ticket.get("title", "CAMBER finding"),
-        "sections": [{
-            "activityTitle": ticket.get("title", "CAMBER finding"),
-            "text": ticket.get("body", ""),
-            "facts": [{"name": "location", "value": ticket.get("location", "")},
-                      {"name": "priority", "value": ticket.get("priority", "")},
-                      {"name": "rule", "value": ticket.get("rule", "")}],
-        }],
+        "sections": [
+            {
+                "activityTitle": ticket.get("title", "CAMBER finding"),
+                "text": ticket.get("body", ""),
+                "facts": [
+                    {"name": "location", "value": ticket.get("location", "")},
+                    {"name": "priority", "value": ticket.get("priority", "")},
+                    {"name": "rule", "value": ticket.get("rule", "")},
+                ],
+            }
+        ],
     }
 
 
@@ -64,9 +70,18 @@ def format_for(channel: str, ticket: dict) -> dict:
     return _CHANNELS[channel](ticket)
 
 
-def email_transport(host: str, *, port: int = 587, sender: str, recipients,
-                    use_tls: bool = True, username: str | None = None,
-                    password: str | None = None, timeout: float = 30.0, _smtp_factory=None):
+def email_transport(
+    host: str,
+    *,
+    port: int = 587,
+    sender: str,
+    recipients,
+    use_tls: bool = True,
+    username: str | None = None,
+    password: str | None = None,
+    timeout: float = 30.0,
+    _smtp_factory=None,
+):
     """A transport that emails each ticket (subject = title, body = body).
 
     Pass it as the ``transport`` to :func:`dispatch_findings` with ``channel="webhook"`` (the raw
@@ -96,9 +111,18 @@ def email_transport(host: str, *, port: int = 587, sender: str, recipients,
     return transport
 
 
-def dispatch_findings(findings, transport, *, channel: str = "webhook",
-                      min_severity: str = "warn", site: str = "", seen: set | None = None,
-                      dedupe: bool = True, dry_run: bool = False, source: str = "camber") -> list:
+def dispatch_findings(
+    findings,
+    transport,
+    *,
+    channel: str = "webhook",
+    min_severity: str = "warn",
+    site: str = "",
+    seen: set | None = None,
+    dedupe: bool = True,
+    dry_run: bool = False,
+    source: str = "camber",
+) -> list:
     """Render findings to tickets, filter by severity, dedupe, format, and send.
 
     ``transport`` is a callable taking the formatted payload (e.g. ``webhook_transport(url)``,

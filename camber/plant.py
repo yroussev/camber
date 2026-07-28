@@ -22,7 +22,7 @@ OAT is typically a building-level point, so callers pass it via the rule layer's
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -39,17 +39,17 @@ class HWPlantResult:
     """Hot-water plant runtime, summer-lockout, and HWS reset diagnostics."""
 
     equip: str
-    n_considered: int             # occupied hours with boiler data
-    boiler_running_pct: float     # % of occupied hours boiler is running
+    n_considered: int  # occupied hours with boiler data
+    boiler_running_pct: float  # % of occupied hours boiler is running
     n_running: int
-    summer_run_pct: float         # % of running hours at OAT > lockout threshold
-    lockout_oat_f: float          # the (climate-dependent) threshold used
+    summer_run_pct: float  # % of running hours at OAT > lockout threshold
+    lockout_oat_f: float  # the (climate-dependent) threshold used
     hws_median_f: float
-    hws_slope_per_F: float        # d(HWS)/d(OAT); <0 = reset present
+    hws_slope_per_F: float  # d(HWS)/d(OAT); <0 = reset present
     hws_reset_present: bool
-    deltaT_median_f: float        # median loop dT (HWS - HWR) over running hours
-    low_deltaT_pct: float         # % running hrs with loop dT < design_deltaT_min_f
-    design_deltaT_min_f: float    # the design-minimum loop dT used
+    deltaT_median_f: float  # median loop dT (HWS - HWR) over running hours
+    low_deltaT_pct: float  # % running hrs with loop dT < design_deltaT_min_f
+    design_deltaT_min_f: float  # the design-minimum loop dT used
     dp_median: float
     coverage_start: str
     coverage_end: str
@@ -70,9 +70,9 @@ def analyze_hw_plant(
     df: pd.DataFrame,
     equip: str,
     *,
-    summer_lockout_oat_f: float = 65.0,   # climate-dependent; inject per climate zone
-    hws_reset_slope_flat: float = 0.05,    # |slope| below this = effectively no reset
-    design_deltaT_min_f: float = 20.0,     # HW loop dT below this = low-deltaT (overpumping)
+    summer_lockout_oat_f: float = 65.0,  # climate-dependent; inject per climate zone
+    hws_reset_slope_flat: float = 0.05,  # |slope| below this = effectively no reset
+    design_deltaT_min_f: float = 20.0,  # HW loop dT below this = low-deltaT (overpumping)
     occupied_only: bool = True,
 ) -> HWPlantResult | None:
     """Diagnose a hot-water plant. ``df`` columns are measure names (see
@@ -99,8 +99,11 @@ def analyze_hw_plant(
     # summer-lockout violation (needs OAT)
     if "OAT" in work.columns and n_run:
         oat_run = work.loc[running, "OAT"].dropna()
-        summer_run_pct = round(100.0 * float((oat_run > summer_lockout_oat_f).mean()), 2) \
-            if len(oat_run) else 0.0
+        summer_run_pct = (
+            round(100.0 * float((oat_run > summer_lockout_oat_f).mean()), 2)
+            if len(oat_run)
+            else 0.0
+        )
     else:
         summer_run_pct = 0.0
 
@@ -110,7 +113,9 @@ def analyze_hw_plant(
         hws_median = round(float(hws.median()), 1) if len(hws) else float("nan")
         if "OAT" in work.columns and n_run:
             r = work.loc[running, ["HWS_Temp", "OAT"]].dropna()
-            slope = _ols_slope(r["OAT"].values, r["HWS_Temp"].values) if len(r) >= 10 else float("nan")
+            slope = (
+                _ols_slope(r["OAT"].values, r["HWS_Temp"].values) if len(r) >= 10 else float("nan")
+            )
         else:
             slope = float("nan")
     else:
@@ -124,14 +129,17 @@ def analyze_hw_plant(
     low_dt_pct = float("nan")
     if {"HWS_Temp", "HWR_Temp"} <= set(work.columns) and n_run:
         d = work.loc[running, ["HWS_Temp", "HWR_Temp"]].dropna()
-        dt = (d["HWS_Temp"] - d["HWR_Temp"])
-        dt = dt[(dt > -2) & (dt < 120)]   # physical-ish guard
+        dt = d["HWS_Temp"] - d["HWR_Temp"]
+        dt = dt[(dt > -2) & (dt < 120)]  # physical-ish guard
         if len(dt) >= 10:
             deltaT_median = round(float(dt.median()), 1)
             low_dt_pct = round(100.0 * float((dt < design_deltaT_min_f).mean()), 1)
 
-    dp_median = round(float(work["HW_DiffPress"].median()), 2) \
-        if "HW_DiffPress" in work.columns and work["HW_DiffPress"].notna().any() else float("nan")
+    dp_median = (
+        round(float(work["HW_DiffPress"].median()), 2)
+        if "HW_DiffPress" in work.columns and work["HW_DiffPress"].notna().any()
+        else float("nan")
+    )
 
     return HWPlantResult(
         equip=equip,

@@ -18,8 +18,7 @@ from __future__ import annotations
 import pandas as pd
 
 
-def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None,
-                  warmup=None, cooldown=None):
+def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None, warmup=None, cooldown=None):
     """Boolean Series: is each interval occupied?
 
     Weekday (Mon-Fri) within [start_hour, end_hour). If ``occ`` (a BAS occupancy
@@ -32,8 +31,7 @@ def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None,
     tool generalizes beyond one building.
     """
     hour = index.hour + index.minute / 60.0
-    m = pd.Series((index.dayofweek < 5) & (hour >= start_hour) & (hour < end_hour),
-                  index=index)
+    m = pd.Series((index.dayofweek < 5) & (hour >= start_hour) & (hour < end_hour), index=index)
     if occ is not None:
         m = m & (occ.reindex(index).fillna(0) > 0.5)
     for flag in (warmup, cooldown):
@@ -44,8 +42,7 @@ def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None,
 
 def day_type(index):
     """Series of 'weekday' / 'weekend' per interval."""
-    return pd.Series(["weekend" if d >= 5 else "weekday" for d in index.dayofweek],
-                     index=index)
+    return pd.Series(["weekend" if d >= 5 else "weekday" for d in index.dayofweek], index=index)
 
 
 def time_of_week_bin(index):

@@ -15,20 +15,22 @@ Factors are user-supplied (from a grid-signal provider); no hard-coded grid data
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
 
+from .timegrid import interval_hours as _interval_hours
+
 
 def _align(load_kw: pd.Series, factor):
-    f = (factor.reindex(load_kw.index) if isinstance(factor, pd.Series)
-         else pd.Series(np.asarray(factor, dtype=float), index=load_kw.index))
+    f = (
+        factor.reindex(load_kw.index)
+        if isinstance(factor, pd.Series)
+        else pd.Series(np.asarray(factor, dtype=float), index=load_kw.index)
+    )
     df = pd.DataFrame({"l": load_kw, "f": f}).dropna()
     return df
-
-
-from .timegrid import interval_hours as _interval_hours
 
 
 @dataclass
@@ -36,16 +38,18 @@ class HourlyEmissions:
     """Emissions of an interval-load profile against a time-varying grid factor."""
 
     kwh: float
-    co2e_kg: float               # Σ load·factor·Δt
-    avg_factor: float            # time-average of the supplied factor
-    effective_factor: float      # co2e / kwh — the load-weighted factor actually incurred
-    timing_premium_pct: float    # effective vs a flat-operation baseline (+ = worse timing)
+    co2e_kg: float  # Σ load·factor·Δt
+    avg_factor: float  # time-average of the supplied factor
+    effective_factor: float  # co2e / kwh — the load-weighted factor actually incurred
+    timing_premium_pct: float  # effective vs a flat-operation baseline (+ = worse timing)
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def hourly_emissions(load_kw: pd.Series, factor, *, unit_kg_per_kwh: bool = True) -> HourlyEmissions:
+def hourly_emissions(
+    load_kw: pd.Series, factor, *, unit_kg_per_kwh: bool = True
+) -> HourlyEmissions:
     """Scope-2 emissions of ``load_kw`` (kW) against a time-varying ``factor`` (kgCO₂/kWh).
 
     The **effective factor** (co2e/kWh) is what the building actually incurred given its timing;
@@ -61,22 +65,26 @@ def hourly_emissions(load_kw: pd.Series, factor, *, unit_kg_per_kwh: bool = True
     avg_f = float(df["f"].mean())
     eff = co2e / kwh if kwh else float("nan")
     premium = 100.0 * (eff - avg_f) / avg_f if avg_f else float("nan")
-    if not unit_kg_per_kwh:                       # factor given in g/kWh -> report kg throughout
+    if not unit_kg_per_kwh:  # factor given in g/kWh -> report kg throughout
         co2e /= 1000.0
-        avg_f /= 1000.0                           # keep avg_factor comparable to effective_factor
+        avg_f /= 1000.0  # keep avg_factor comparable to effective_factor
         eff = co2e / kwh if kwh else float("nan")
-    return HourlyEmissions(kwh=round(kwh, 2), co2e_kg=round(co2e, 3),
-                           avg_factor=round(avg_f, 5), effective_factor=round(eff, 5),
-                           timing_premium_pct=round(premium, 2) if premium == premium else float("nan"))
+    return HourlyEmissions(
+        kwh=round(kwh, 2),
+        co2e_kg=round(co2e, 3),
+        avg_factor=round(avg_f, 5),
+        effective_factor=round(eff, 5),
+        timing_premium_pct=round(premium, 2) if premium == premium else float("nan"),
+    )
 
 
 @dataclass
 class MarginalComparison:
     """Average- vs marginal-emissions accounting for the same load."""
 
-    co2e_avg_kg: float           # against the average (location-based) factor
-    co2e_marginal_kg: float      # against the marginal factor
-    marginal_over_avg: float     # ratio (a marginal signal usually differs from average)
+    co2e_avg_kg: float  # against the average (location-based) factor
+    co2e_marginal_kg: float  # against the marginal factor
+    marginal_over_avg: float  # ratio (a marginal signal usually differs from average)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -86,11 +94,14 @@ def marginal_vs_average(load_kw: pd.Series, avg_factor, marginal_factor) -> Marg
     """Compare emissions under average vs marginal grid factors.
 
     Load-shift *value* should use the **marginal** factor (what changes when you move a kWh), while
-    compliance/reporting typically uses the **average** (location-based) factor. Reporting both makes
-    the gap explicit.
+    compliance/reporting typically uses the **average** (location-based) factor. Reporting both
+    makes the gap explicit.
     """
     a = hourly_emissions(load_kw, avg_factor)
     m = hourly_emissions(load_kw, marginal_factor)
     ratio = m.co2e_kg / a.co2e_kg if a.co2e_kg else float("nan")
-    return MarginalComparison(co2e_avg_kg=a.co2e_kg, co2e_marginal_kg=m.co2e_kg,
-                              marginal_over_avg=round(ratio, 3) if ratio == ratio else float("nan"))
+    return MarginalComparison(
+        co2e_avg_kg=a.co2e_kg,
+        co2e_marginal_kg=m.co2e_kg,
+        marginal_over_avg=round(ratio, 3) if ratio == ratio else float("nan"),
+    )

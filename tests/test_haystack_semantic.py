@@ -5,11 +5,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.model.roles import Role, HAYSTACK_HINT  # noqa: E402
 from camber.interop.export import haystack_tags  # noqa: E402
 from camber.interop.haystack_semantic import (  # noqa: E402
-    role_from_tags, roles_from_haystack, mapping_from_haystack,
+    mapping_from_haystack,
+    role_from_tags,
+    roles_from_haystack,
 )
+from camber.model.roles import Role  # noqa: E402
 
 
 def test_every_role_round_trips_through_haystack_tags():
@@ -43,23 +45,42 @@ def test_roles_from_haystack_pairs_and_dicts():
     points = [
         ("AHU1.SAT", "discharge air temp sensor"),
         ("AHU1.OAT", {"outside", "air", "temp", "sensor"}),
-        {"id": "AHU1.SATSP", "discharge": True, "air": True, "temp": True, "sp": True, "point": True},
-        ("AHU1.mystery", "foo bar baz"),                      # unresolved -> dropped
+        {
+            "id": "AHU1.SATSP",
+            "discharge": True,
+            "air": True,
+            "temp": True,
+            "sp": True,
+            "point": True,
+        },
+        ("AHU1.mystery", "foo bar baz"),  # unresolved -> dropped
     ]
     roles = roles_from_haystack(points)
-    assert roles == {"AHU1.SAT": Role.SUPPLY_AIR_TEMP, "AHU1.OAT": Role.OAT,
-                     "AHU1.SATSP": Role.SUPPLY_AIR_TEMP_SP}
+    assert roles == {
+        "AHU1.SAT": Role.SUPPLY_AIR_TEMP,
+        "AHU1.OAT": Role.OAT,
+        "AHU1.SATSP": Role.SUPPLY_AIR_TEMP_SP,
+    }
 
 
 def test_mapping_from_haystack_builds_provider():
-    mp = mapping_from_haystack([("CHW_ret", "chilled water entering temp sensor"),
-                                ("kW", "elec power sensor")])
+    mp = mapping_from_haystack(
+        [("CHW_ret", "chilled water entering temp sensor"), ("kW", "elec power sensor")]
+    )
     assert mp.role_of("CHW_ret") is Role.CHW_RETURN_TEMP
     assert mp.role_of("kW") is Role.POWER
 
 
 def test_dict_marker_detection_ignores_structural_tags():
     # id/dis/point/his are structural, not semantic -> only the marker tags drive the match
-    p = {"id": "p1", "dis": "OA Temp", "point": True, "his": True,
-         "outside": True, "air": True, "temp": True, "sensor": True}
+    p = {
+        "id": "p1",
+        "dis": "OA Temp",
+        "point": True,
+        "his": True,
+        "outside": True,
+        "air": True,
+        "temp": True,
+        "sensor": True,
+    }
     assert roles_from_haystack([p]) == {"p1": Role.OAT}

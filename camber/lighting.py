@@ -27,15 +27,20 @@ def operational_efficiency(metered_kw: pd.Series, installed_kw: float) -> pd.Ser
 class LightingSummary:
     """Lighting controls assessment from metered vs installed power."""
 
-    occupied_mean: float        # mean efficiency during occupied hours
-    unoccupied_mean: float      # mean efficiency during unoccupied hours
-    min_efficiency: float       # lowest interval efficiency (does it ever turn down?)
-    flags: tuple                # detected controls faults
+    occupied_mean: float  # mean efficiency during occupied hours
+    unoccupied_mean: float  # mean efficiency during unoccupied hours
+    min_efficiency: float  # lowest interval efficiency (does it ever turn down?)
+    flags: tuple  # detected controls faults
 
 
-def lighting_summary(metered_kw: pd.Series, installed_kw: float, *,
-                     occupied=None, unoccupied_max: float = 0.30,
-                     always_on_min: float = 0.90) -> LightingSummary:
+def lighting_summary(
+    metered_kw: pd.Series,
+    installed_kw: float,
+    *,
+    occupied=None,
+    unoccupied_max: float = 0.30,
+    always_on_min: float = 0.90,
+) -> LightingSummary:
     """Assess lighting controls.
 
     ``occupied`` is a boolean mask aligned to the series; if omitted, a weekday
@@ -58,6 +63,9 @@ def lighting_summary(metered_kw: pd.Series, installed_kw: float, *,
         flags.append("failed_unoccupied_setback")
     if min_eff > always_on_min:
         flags.append("no_turndown")
-    return LightingSummary(occupied_mean=round(occ_mean, 4),
-                           unoccupied_mean=round(unocc_mean, 4),
-                           min_efficiency=round(min_eff, 4), flags=tuple(flags))
+    return LightingSummary(
+        occupied_mean=round(occ_mean, 4),
+        unoccupied_mean=round(unocc_mean, 4),
+        min_efficiency=round(min_eff, 4),
+        flags=tuple(flags),
+    )

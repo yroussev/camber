@@ -1,4 +1,5 @@
-"""Tests for the IPMVP Option-D grey-box RC model + calibration + savings (camber.mandv.rc_model)."""
+"""Tests for the IPMVP Option-D grey-box RC model + calibration + savings
+(camber.mandv.rc_model)."""
 
 import os
 import sys
@@ -9,11 +10,16 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.mandv.rc_model import (  # noqa: E402
-    RCModel, Calibration, daily_schedule, calibrate, option_d_savings, OptionDSavings,
+    Calibration,
+    OptionDSavings,
+    RCModel,
+    calibrate,
+    daily_schedule,
+    option_d_savings,
 )
 from camber.validation import check_determinism  # noqa: E402
 
-_IDX = pd.date_range("2024-01-01", periods=24 * 28, freq="1h")   # 4 winter weeks, hourly
+_IDX = pd.date_range("2024-01-01", periods=24 * 28, freq="1h")  # 4 winter weeks, hourly
 
 
 def _oat(seed=0):
@@ -26,6 +32,7 @@ def _sched(**kw):
 
 
 # --- forward model ----------------------------------------------------------
+
 
 def test_predict_is_nonnegative_and_zero_off_load():
     m = RCModel(ua_eff=0.8, gain_eff=3.0, tau=24.0)
@@ -52,6 +59,7 @@ def test_more_conductance_more_energy():
 
 # --- calibration ------------------------------------------------------------
 
+
 def test_calibrate_recovers_known_parameters():
     oat = _oat()
     s = _sched(occ_setpoint=70, setback_setpoint=60)
@@ -76,15 +84,18 @@ def test_noise_fails_g14_acceptance():
     oat = _oat()
     s = _sched()
     rng = np.random.default_rng(7)
-    cal = calibrate(oat, s, rng.normal(50, 50, len(_IDX)))   # unstructured noise
+    cal = calibrate(oat, s, rng.normal(50, 50, len(_IDX)))  # unstructured noise
     assert not cal.accept
 
 
 # --- Option-D savings -------------------------------------------------------
 
+
 def _found_corrected():
     # as-found: 24/7 hold at 72; as-corrected: add a weekday night/weekend setback to 60
-    found = _sched(occ_setpoint=72, setback_setpoint=72, occ_start=0, occ_end=24, weekdays_only=False)
+    found = _sched(
+        occ_setpoint=72, setback_setpoint=72, occ_start=0, occ_end=24, weekdays_only=False
+    )
     corrected = _sched(occ_setpoint=72, setback_setpoint=60, occ_start=7, occ_end=18)
     return found, corrected
 
@@ -96,7 +107,7 @@ def test_option_d_savings_from_setback():
     sv = option_d_savings(cal, oat, found, corrected)
     assert isinstance(sv, OptionDSavings) and sv.valid
     assert sv.avoided_energy > 0 and 0 < sv.fractional_savings < 1
-    assert sv.frac_savings_uncertainty == sv.frac_savings_uncertainty   # not NaN
+    assert sv.frac_savings_uncertainty == sv.frac_savings_uncertainty  # not NaN
     assert sv.basis == "IPMVP Option D (calibrated simulation)"
 
 
@@ -121,14 +132,16 @@ def test_failed_calibration_claims_no_saving():
 
 def test_savings_as_dict_json_friendly():
     import json
+
     oat = _oat()
     found, corrected = _found_corrected()
     cal = calibrate(oat, found, RCModel(0.8, 3.0, 24.0).predict(oat, found))
-    json.dumps(option_d_savings(cal, oat, found, corrected).as_dict())   # must not raise
+    json.dumps(option_d_savings(cal, oat, found, corrected).as_dict())  # must not raise
 
 
 def test_ecm_modeled_savings_bridges_to_option_d():
     from camber.mandv.ecm_savings import modeled_savings
+
     oat = _oat()
     found, corrected = _found_corrected()
     cal = calibrate(oat, found, RCModel(0.8, 3.0, 24.0).predict(oat, found))
