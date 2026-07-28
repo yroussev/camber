@@ -4,6 +4,40 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.9.0] — 2026-07-27
+
+Ninth release — **ingest robustness across vendor formats** + a **real-data M&V validation** on Building
+Data Genome 2. Dependency-light throughout; the ingest refactor is fully backward compatible (existing
+BAS/ISO exports parse identically — full suite green).
+
+### Added — ingest robustness (`docs/INGEST-FORMATS.md`)
+- **`camber.tsparse`** — one shared multi-format timestamp parser behind every adapter: an ordered
+  format try-list (ISO 8601, US, European `dayfirst`, the BAS 12-hour format, LBNL `yyyymmdd`), epoch
+  seconds/millis + Excel-serial detection, tz-abbrev strip, auto-detect by parse rate, naive-local by
+  default. Replaces 5 scattered inline `pd.to_datetime` sites. **Fixes silent traps:** European
+  `03/04/2025` read as US, a non-BAS per-point format yielding an empty series, and a trailing `AM`/`PM`
+  meridiem being stripped as a timezone.
+- **`camber.coerce`** — shared value coercion: a null/quality-token vocabulary (`N/A`, `---`, `Bad`,
+  `Comm Fail`, …) + thousands-separator / European-decimal-comma handling, and an extended, overridable
+  status vocabulary (On/Off, Open/Closed, Fault/Alarm/Normal, Override/Hand/Manual, Auto).
+- **Vendor profiles** (`camber.ingest.profiles`) — an `IngestProfile` + presets
+  (`niagara_n4`/`metasys`/`webctrl`/`tracer`/`desigo`) capturing each export tool's delimiter/encoding/
+  skiprows/timestamp/decimal conventions; `load_csv(..., profile=…)` (and explicit `encoding`/`delimiter`/
+  `skiprows`/`decimal`/`dayfirst` overrides).
+- **`camber.ingest.csv_long.LongCsvAdapter`** — the `timestamp,point,value[,unit]` historian shape.
+- A synthetic **per-vendor equivalence corpus** asserting every vendor format normalizes to the same frame.
+
+### Added — BDG2 M&V validation (`docs/VALIDATION.md`)
+- **`examples/bdg2/benchmark.py`** — the M&V analogue of the LBNL FDD benchmark: the ASHRAE G14
+  baseline-model **acceptance rate** across ~2,044 real BDG2 whole-building meters, with Wilson CIs.
+  Verified on real data: chilled water **36%** [32–40%] vs electricity **8%** [7–10%], pooled 15% — the
+  engine reproduces the expected physics (weather-driven energy is ~4.5× more baseline-able) and reports
+  both honestly. Committed a real (not CI-seeded) baseline; deterministic; new `mv-accuracy` CI job.
+
+### Tests
+- +43 (1285 → 1328): `test_tsparse`, `test_coerce`, `test_ingest_profiles`, `test_ingest_long`,
+  `test_ingest_formats` (per-vendor equivalence), `test_bdg2_benchmark` (pure metrics, no download).
+
 ## [0.8.0] — 2026-07-27
 
 Eighth release — one **feature** plus a **pre-1.0 stress-test / hardening pass**. Dependency-light
