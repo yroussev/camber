@@ -12,6 +12,7 @@ on:
     paths:
       - "camber/**"
       - "examples/lbnl_fdd/**"
+      - "examples/bdg2/**"
       - ".github/workflows/benchmark.yml"
 
 permissions:
@@ -59,3 +60,37 @@ jobs:
         with:
           name: benchmark-metrics
           path: /tmp/metrics.json
+
+  mv-accuracy:
+    # BDG2 real-data M&V validation: the ASHRAE G14 baseline-model acceptance rate across ~2,000 real
+    # whole-building meters. Large CC-BY download (~250 MB), cached.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip && pip install -e .
+
+      - name: Cache BDG2 dataset
+        uses: actions/cache@v4
+        with:
+          path: examples/_data/bdg2
+          key: bdg2-${{ hashFiles('examples/bdg2/fetch.py') }}
+
+      - name: Fetch BDG2 (CC-BY)
+        run: python examples/bdg2/fetch.py
+
+      - name: Run M&V benchmark + gate against baseline
+        run: |
+          python examples/bdg2/benchmark.py \
+            --gate examples/bdg2/benchmark-baseline.json --json /tmp/bdg2-metrics.json --tol 0.05
+
+      - name: Upload M&V metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdg2-metrics
+          path: /tmp/bdg2-metrics.json
