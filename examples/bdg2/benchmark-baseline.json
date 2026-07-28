@@ -1,0 +1,20 @@
+{
+  "chilledwater.acceptance_ci_hi": 0.3974,
+  "chilledwater.acceptance_ci_lo": 0.3152,
+  "chilledwater.acceptance_rate": 0.3552,
+  "chilledwater.median_cv_rmse": 0.3184,
+  "chilledwater.n_buildings": 518,
+  "electricity.acceptance_ci_hi": 0.0989,
+  "electricity.acceptance_ci_lo": 0.071,
+  "electricity.acceptance_rate": 0.0839,
+  "electricity.median_cv_rmse": 0.2099,
+  "electricity.n_buildings": 1526,
+  "eui.median": 12.23,
+  "eui.n_buildings": 2044,
+  "eui.percentile_monotonic": true,
+  "pooled.acceptance_ci_hi": 0.1689,
+  "pooled.acceptance_ci_lo": 0.1377,
+  "pooled.acceptance_rate": 0.1526,
+  "pooled.median_cv_rmse": 0.2357,
+  "pooled.n_buildings": 2044
+}
