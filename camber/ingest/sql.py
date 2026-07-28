@@ -62,8 +62,10 @@ def read_points(connection, table, *, ts_col, point_col, value_col,
     if not rows:
         return {}
 
+    from ..tsparse import parse_timestamps
+
     df = pd.DataFrame(rows, columns=["ts", "point", "value"])
-    idx = pd.DatetimeIndex(pd.to_datetime(df["ts"], errors="coerce").values)
+    idx = parse_timestamps(df["ts"])
     vals = pd.to_numeric(df["value"], errors="coerce")
     df = pd.DataFrame({"point": df["point"].values, "value": vals.values},
                       index=idx)

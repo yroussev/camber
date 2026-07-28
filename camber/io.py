@@ -39,9 +39,11 @@ def load_csv(path, timestamp_col: str | None = None, resample: str | None = None
     if timestamp_col not in df.columns:
         raise ValueError(f"timestamp column {timestamp_col!r} not found in {list(df.columns)}")
 
-    # Parse timestamps leniently: unparseable rows become NaT and are dropped (one bad row must not
-    # sink the whole load). If the file had rows but NONE parsed, that's a real error, not empty data.
-    ts = pd.to_datetime(df[timestamp_col], errors="coerce")
+    # Parse timestamps leniently via the shared multi-format parser: unparseable rows become NaT and
+    # are dropped (one bad row must not sink the whole load). If the file had rows but NONE parsed,
+    # that's a real error, not empty data.
+    from .tsparse import parse_timestamps
+    ts = pd.Series(parse_timestamps(df[timestamp_col]), index=df.index)
     n_rows = len(ts)
     values = df.drop(columns=[timestamp_col])
     # Value columns are numeric by contract; coerce so a stray text cell becomes NaN instead of
