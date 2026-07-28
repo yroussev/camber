@@ -78,16 +78,17 @@ def trendlog_to_series(records) -> pd.Series:
     ``.value``. Unparseable timestamps and non-numeric values are dropped; duplicate timestamps
     keep the last, matching :func:`camber.realio.load_point`.
     """
-    pairs = []
+    from ..tsparse import parse_timestamps
+
+    raw_ts, raw_val = [], []
     for r in records:
         if isinstance(r, (tuple, list)) and len(r) >= 2:
-            ts, val = r[0], r[1]
+            raw_ts.append(r[0]); raw_val.append(r[1])
         else:
-            ts, val = getattr(r, "timestamp", None), getattr(r, "value", None)
-        ts = pd.to_datetime(ts, errors="coerce")
-        val = pd.to_numeric(val, errors="coerce")
-        if pd.notna(ts) and pd.notna(val):
-            pairs.append((ts, float(val)))
+            raw_ts.append(getattr(r, "timestamp", None)); raw_val.append(getattr(r, "value", None))
+    idx = parse_timestamps(raw_ts)                        # batch, multi-format
+    vals = pd.to_numeric(pd.Series(raw_val), errors="coerce")
+    pairs = [(t, float(v)) for t, v in zip(idx, vals) if pd.notna(t) and pd.notna(v)]
     if not pairs:
         return pd.Series(dtype=float)
     s = pd.Series({ts: v for ts, v in pairs}).sort_index()

@@ -37,6 +37,7 @@ nav:
   - Platform:
       - CLI: CLI.md
       - Ingest protocols: INGEST-PROTOCOLS.md
+      - Ingest formats: INGEST-FORMATS.md
       - Ontology / interop: ONTOLOGY.md
       - Integrations: INTEGRATIONS.md
       - Plugins: PLUGINS.md

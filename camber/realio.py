@@ -13,15 +13,17 @@ from glob import glob
 
 import pandas as pd
 
-# Strip the trailing timezone abbreviation (PDT/PST) -- pandas can't parse %Z
-# reliably for these, and all data is one local clock anyway.
+from .tsparse import parse_timestamps
+from .coerce import coerce_numeric, coerce_status, STATUS_ON as _STATUS_ON, STATUS_OFF as _STATUS_OFF
+
+# Strip the trailing timezone abbreviation (PDT/PST) -- kept for callers that import it.
 _TZ_RE = re.compile(r"\s+[A-Z]{2,4}$")
 
 
-def _parse_ts(series: pd.Series) -> pd.Series:
-    cleaned = series.astype(str).str.replace(_TZ_RE, "", regex=True).str.strip()
-    # format: 21-Apr-23 8:30:03 AM
-    return pd.to_datetime(cleaned, format="%d-%b-%y %I:%M:%S %p", errors="coerce")
+def _parse_ts(series: pd.Series) -> pd.DatetimeIndex:
+    # Delegate to the shared multi-format parser (BAS 12-h format leads its try-list, so existing
+    # exports parse identically; ISO / US / epoch / Excel-serial now also work).
+    return parse_timestamps(series)
 
 
 def load_point(path: str, name: str | None = None) -> pd.Series:
@@ -29,17 +31,10 @@ def load_point(path: str, name: str | None = None) -> pd.Series:
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
     idx = _parse_ts(df[ts_col])
-    s = pd.Series(pd.to_numeric(df[val_col], errors="coerce").values, index=idx)
+    s = pd.Series(coerce_numeric(df[val_col]).values, index=idx)   # thousands/null-token aware
     s = s[~s.index.isna()]
     s.name = name or os.path.basename(path)[:-4]
     return s[~s.index.duplicated(keep="first")].sort_index()
-
-
-# On/off text vocab seen in BAS status & command points, mapped to 1.0 / 0.0.
-_STATUS_ON = {"running", "on", "start", "started", "enabled", "active", "occupied",
-              "true", "yes", "1"}
-_STATUS_OFF = {"off", "stop", "stopped", "disabled", "inactive", "unoccupied",
-               "false", "no", "0", "standby", "idle"}
 
 
 def load_status(path: str, name: str | None = None,
@@ -56,21 +51,7 @@ def load_status(path: str, name: str | None = None,
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
     idx = _parse_ts(df[ts_col])
-    vals = df[val_col].astype(str).str.strip().str.lower()
-
-    def _to01(v):
-        if v in _STATUS_ON:
-            return 1.0
-        if v in _STATUS_OFF:
-            return 0.0
-        # numerically-logged status (e.g. "1.0", "0", "85.0"): nonzero -> on
-        try:
-            return 1.0 if float(v) != 0.0 else 0.0
-        except ValueError:
-            return float("nan")
-
-    num = vals.map(_to01)
-    s = pd.Series(num.values, index=idx)
+    s = pd.Series(coerce_status(df[val_col]).values, index=idx)   # On/Off/Open/Closed/Fault/… -> 0/1
     s = s[~s.index.isna()]
     s = s[~s.index.duplicated(keep="last")].sort_index().ffill()
     s.name = name or os.path.basename(path)[:-4]

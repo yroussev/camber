@@ -182,6 +182,19 @@ A consolidation release — finish the validation and interop stories 0.5 opened
       raise, fleet O(N²)→O(N log N), mapping ReDoS) + a broad determinism sweep. See
       **[VALIDATION.md](docs/VALIDATION.md)**.
 
+## Delivered — v0.9.0 (ingest robustness + BDG2 M&V validation)
+
+- [x] **Ingest robustness across vendor formats** — one shared multi-format timestamp parser
+      (`tsparse`: ISO / US / EU-dayfirst / BAS / epoch / Excel-serial) + value/status coercion
+      (`coerce`: thousands, null tokens, extended On/Off/Open/Closed/Fault vocab) + named vendor
+      **profiles** (`ingest.profiles`) + a **long/tall** CSV adapter + a synthetic per-vendor
+      equivalence corpus. Fixes silent misparse traps (EU dates, meridiem-stripping). See
+      **[INGEST-FORMATS.md](docs/INGEST-FORMATS.md)**.
+- [x] **BDG2 real-data M&V validation** — the M&V analogue of the LBNL FDD benchmark: the ASHRAE G14
+      baseline-model acceptance rate across ~2,044 real BDG2 meters (chilled water 36% vs electricity 8%,
+      with Wilson CIs), gated in CI against a real committed baseline. See
+      **[VALIDATION.md](docs/VALIDATION.md)**.
+
 ## Road to 1.0
 
 The capability surface is broad and now hardened; 1.0 is a consolidation, not new features.

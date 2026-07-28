@@ -14,14 +14,15 @@ from .. import io as _io
 class WideCsvAdapter:
     """SourceAdapter over a single wide CSV (timestamp + many point columns)."""
 
-    def __init__(self, path: str, timestamp_col: str | None = None):
+    def __init__(self, path: str, timestamp_col: str | None = None, *, profile=None):
         self.path = path
         self.timestamp_col = timestamp_col
+        self.profile = profile              # vendor ingest profile (see camber.ingest.profiles)
         self._frame: pd.DataFrame | None = None
 
     def _load_all(self, resample: str | None) -> pd.DataFrame:
         return _io.load_csv(self.path, timestamp_col=self.timestamp_col,
-                            resample=resample)
+                            resample=resample, profile=self.profile)
 
     def point_names(self):
         """Column names of the wide CSV (one per point)."""
