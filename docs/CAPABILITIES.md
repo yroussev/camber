@@ -16,8 +16,13 @@ Adapters normalize any source to named point series on a common time grid (`Sour
 `point_names` / `load_points` / `units`). See **[INGEST-PROTOCOLS.md](INGEST-PROTOCOLS.md)** and
 **[SECURITY.md](SECURITY.md)**.
 
-- **CSV** — `ingest.csv_perpoint.PerPointCsvAdapter` (a folder of per-point files) and
-  `ingest.csv_wide.WideCsvAdapter` (one wide table). Flags: `resample`.
+- **CSV** — `ingest.csv_perpoint.PerPointCsvAdapter` (a folder of per-point files),
+  `ingest.csv_wide.WideCsvAdapter` (one wide table), and `ingest.csv_long.LongCsvAdapter`
+  (`timestamp,point,value` historian shape). Flags: `resample`, `profile`.
+- **Vendor formats** — one shared multi-format timestamp parser (`tsparse`: ISO / US / EU-dayfirst /
+  BAS / epoch / Excel-serial) + value/status coercion (`coerce`: thousands, null tokens, On/Off/Open/
+  Closed/Fault status) + named vendor **profiles** (`ingest.profiles`: niagara_n4/metasys/webctrl/tracer/
+  desigo). `load_csv(..., profile=…)`. See **[INGEST-FORMATS.md](INGEST-FORMATS.md)**.
 - **Project-Haystack** — `ingest.haystack.HaystackAdapter` over an injectable transport
   (`http_json_transport`, or `client_transport` to wrap a maintained client). Flags: `range_str`,
   `resample`.
