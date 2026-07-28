@@ -22,8 +22,9 @@ import numpy as np
 import pandas as pd
 
 # Trailing timezone abbreviation (PDT/PST/GMT/…) — pandas can't parse %Z reliably and CAMBER treats a
-# trend as one local clock (DST is re-attached deliberately in timegrid.localize).
-_TZ_ABBREV = re.compile(r"\s+[A-Za-z]{2,4}$")
+# trend as one local clock (DST is re-attached deliberately in timegrid.localize). The negative
+# lookahead protects a trailing AM/PM meridiem (also 2 letters) from being stripped as a tz.
+_TZ_ABBREV = re.compile(r"\s+(?![AaPp][Mm]$)[A-Za-z]{2,4}$")
 
 # Ordered explicit formats. BAS + ISO lead so already-working data parses identically; European
 # day-first formats are only tried when dayfirst is requested (they're ambiguous with US otherwise).
