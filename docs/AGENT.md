@@ -23,6 +23,7 @@ reproducible.
 
 ```python
 from camber.agent import build_context
+
 ctx = build_context(findings, loads=loads, price=price)
 print(ctx.to_prompt_block())
 # [F1] (finding, AHU-1) Both coils open 20% of hours.
@@ -43,9 +44,10 @@ missing input ("No dollar figure — no cost model for rule 'unmet_setpoint_hour
 
 ```python
 from camber.agent import explain
-g = explain(findings, loads=loads, price=price)     # no client -> deterministic template
-print(g.text)      # grouped by equipment, every claim cited [F1]/[C1]/[R1]
-print(g.source)    # "template"
+
+g = explain(findings, loads=loads, price=price)  # no client -> deterministic template
+print(g.text)  # grouped by equipment, every claim cited [F1]/[C1]/[R1]
+print(g.source)  # "template"
 print(g.grounded)  # True
 ```
 
@@ -56,8 +58,9 @@ grounded, no LLM. This is also the regression oracle the LLM path is verified ag
 
 ```python
 from camber.agent import ask
-ask("what should I do about AHU-1?", ctx).text     # -> [R1] Lock out simultaneous heating ...
-ask("what will this cost?", ctx).text              # -> [C1] Estimated annual cost ≈ $2,897 ...
+
+ask("what should I do about AHU-1?", ctx).text  # -> [R1] Lock out simultaneous heating ...
+ask("what will this cost?", ctx).text  # -> [C1] Estimated annual cost ≈ $2,897 ...
 ```
 
 Without an LLM, `ask` routes the question over the fact set by keyword / equipment / kind and answers
@@ -76,10 +79,10 @@ from camber.agent import client_from_callable, explain
 client = client_from_callable(lambda prompt, **opts: my_provider.complete(prompt))
 
 g = explain(findings, client=client, loads=loads, price=price)
-g.source     # "llm"
-g.cited      # ["F1", "R1"] — ids that resolve to real facts
-g.grounded   # True only if every cite resolves AND every number is traceable
-g.flagged    # problems found (unknown-citation / uncited-number)
+g.source  # "llm"
+g.cited  # ["F1", "R1"] — ids that resolve to real facts
+g.grounded  # True only if every cite resolves AND every number is traceable
+g.flagged  # problems found (unknown-citation / uncited-number)
 ```
 
 The model is prompted with the fact block and instructed to cite every claim with its `[id]` and to

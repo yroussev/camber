@@ -13,15 +13,20 @@ from camber.ahu import analyze_ahu  # noqa: E402
 
 def _frame(n=24 * 14, simul=False):
     idx = pd.date_range("2025-07-01", periods=n, freq="1h")
-    chw = np.full(n, 60.0)              # cooling always on
+    chw = np.full(n, 60.0)  # cooling always on
     hhw = np.zeros(n)
     if simul:
-        hhw[:] = 30.0                   # heating coil also open -> simultaneous
-    return pd.DataFrame({
-        "CHW_Valve": chw, "HHW_Valve": hhw,
-        "ReturnAir": np.full(n, 74.0), "OSA": np.full(n, 95.0),
-        "OA_Damper": np.full(n, 10.0),
-    }, index=idx)
+        hhw[:] = 30.0  # heating coil also open -> simultaneous
+    return pd.DataFrame(
+        {
+            "CHW_Valve": chw,
+            "HHW_Valve": hhw,
+            "ReturnAir": np.full(n, 74.0),
+            "OSA": np.full(n, 95.0),
+            "OA_Damper": np.full(n, 10.0),
+        },
+        index=idx,
+    )
 
 
 def test_no_simultaneous():

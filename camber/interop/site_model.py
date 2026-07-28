@@ -38,8 +38,9 @@ _PART_CLASSES = frozenset(pc for _, pc, _ in ROLE_TO_BRICK_PART.values())
 # standard Brick inverse of the site's ``hasPart``; we read it back during import.
 _IS_PART_OF = "brick:isPartOf"
 
-_SITE_PREFIX = ('@prefix bldg: <bldg#> .\n'
-                '@prefix brick: <https://brickschema.org/schema/Brick#> .\n\n')
+_SITE_PREFIX = (
+    "@prefix bldg: <bldg#> .\n@prefix brick: <https://brickschema.org/schema/Brick#> .\n\n"
+)
 
 
 def _equip_fragment(equip: Site) -> str:  # equip: Equip
@@ -52,8 +53,7 @@ def _equip_fragment(equip: Site) -> str:  # equip: Equip
     and splice in the ``isPartOf`` link on the equipment node.
     """
     point_names = {p.role: p.name for p in equip.points}
-    frag = to_brick(equip.id, equip.equip_class, equip.roles(),
-                    point_names=point_names)
+    frag = to_brick(equip.id, equip.equip_class, equip.roles(), point_names=point_names)
     # strip the fragment's own prefix lines; the site document declares them once.
     body = frag.split("\n\n", 1)[1] if "\n\n" in frag else frag
     body = body.lstrip("\n")
@@ -78,9 +78,17 @@ def site_to_ttl(site: Site) -> str:
     lines = [_SITE_PREFIX, f"bldg:{site.id} a brick:Site .\n\n"]
     for equip in site.equips:
         # ensure each equipment knows its site even if the field was left blank.
-        eq = equip if equip.site == site.id else Equip(
-            id=equip.id, equip_class=equip.equip_class, points=equip.points,
-            site=site.id, space=equip.space)
+        eq = (
+            equip
+            if equip.site == site.id
+            else Equip(
+                id=equip.id,
+                equip_class=equip.equip_class,
+                points=equip.points,
+                site=site.id,
+                space=equip.space,
+            )
+        )
         lines.append(_equip_fragment(eq))
         if not lines[-1].endswith("\n"):
             lines.append("\n")
@@ -96,8 +104,7 @@ def _is_part_of(ttl: str, backend: str) -> dict:
     the minimal reader accepts. ``brick.parse_triples`` only tracks ``a`` and
     ``hasPoint``, so the site link is recovered here.
     """
-    use_rdflib = (backend == "rdflib"
-                  or (backend == "auto" and _brick._have_rdflib()))
+    use_rdflib = backend == "rdflib" or (backend == "auto" and _brick._have_rdflib())
     if use_rdflib:
         import rdflib
 
@@ -118,8 +125,11 @@ def _minimal_links(ttl: str, predicate: str) -> dict:
     statements that reader does (``brick.parse_triples`` only tracks ``a`` and
     ``hasPoint``, so site/part links are recovered here).
     """
-    lines = [ln.strip() for ln in ttl.splitlines()
-             if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))]
+    lines = [
+        ln.strip()
+        for ln in ttl.splitlines()
+        if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))
+    ]
     text = " ".join(lines)
     out = {}
     for stmt in re.split(r"\s\.\s", text + " "):
@@ -179,10 +189,10 @@ def site_from_ttl(ttl: str, *, backend: str = "auto") -> Site:
         pt_names = list(has_point.get(subj, []))
         for part in has_part.get(subj, []):
             pt_names.extend(has_point.get(part, []))
-        points = tuple(
-            Point(name=pn, role=roles[pn]) for pn in pt_names if pn in roles)
-        equips.append(Equip(id=subj, equip_class=cls, points=points,
-                            site=part_of.get(subj, site_id)))
+        points = tuple(Point(name=pn, role=roles[pn]) for pn in pt_names if pn in roles)
+        equips.append(
+            Equip(id=subj, equip_class=cls, points=points, site=part_of.get(subj, site_id))
+        )
 
     equips.sort(key=lambda e: e.id)
     return Site(id=site_id, equips=tuple(equips))
@@ -194,8 +204,7 @@ def _has_part(ttl: str, backend: str) -> dict:
     Same two-backend strategy as :func:`_is_part_of`; lets the importer fold a
     part's points back onto the owning equipment.
     """
-    use_rdflib = (backend == "rdflib"
-                  or (backend == "auto" and _brick._have_rdflib()))
+    use_rdflib = backend == "rdflib" or (backend == "auto" and _brick._have_rdflib())
     if use_rdflib:
         import rdflib
 
@@ -204,7 +213,6 @@ def _has_part(ttl: str, backend: str) -> dict:
         out = {}
         for s, p, o in g:
             if _brick._local(str(p)) == "hasPart":
-                out.setdefault(_brick._local(str(s)), []).append(
-                    _brick._local(str(o)))
+                out.setdefault(_brick._local(str(s)), []).append(_brick._local(str(o)))
         return out
     return _minimal_links(ttl, "hasPart")

@@ -10,16 +10,23 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from camber.agent import ask, build_context, explain, stub_client  # noqa: E402
+from camber.fault_economics import EnergyPrice, EquipmentLoad  # noqa: E402
 from camber.rules.base import Finding  # noqa: E402
-from camber.fault_economics import EquipmentLoad, EnergyPrice  # noqa: E402
-from camber.agent import explain, ask, stub_client, build_context  # noqa: E402
 
 _LOADS = {"AHU-1": EquipmentLoad(heating_capacity_kbtuh=200, cooling_tons=50)}
 
 
 def _findings():
-    return [Finding(rule="simultaneous_heat_cool", equip="AHU-1", severity="fault",
-                    metrics={"simultaneous_hc_pct": 20.0}, summary="Both coils open 20% of hours.")]
+    return [
+        Finding(
+            rule="simultaneous_heat_cool",
+            equip="AHU-1",
+            severity="fault",
+            metrics={"simultaneous_hc_pct": 20.0},
+            summary="Both coils open 20% of hours.",
+        )
+    ]
 
 
 def _explain(**kw):
@@ -28,10 +35,12 @@ def _explain(**kw):
 
 # --------------------------------------------------------------------------- explain
 
+
 def test_explain_without_llm_is_grounded_template():
     g = _explain()
     assert g.source == "template" and g.grounded
     assert "[F1]" in g.text and "[C1]" in g.text
+
 
 def test_explain_accepts_single_finding():
     g = explain(_findings()[0], loads=_LOADS, price=EnergyPrice())
@@ -51,21 +60,21 @@ def test_explain_with_misbehaving_stub_flags_and_repairs():
     assert g.source == "llm" and not g.grounded
     reasons = {f["reason"] for f in g.flagged}
     assert "unknown-citation" in reasons and "uncited-number" in reasons
-    assert "88,888" not in g.text and "[Z9]" not in g.text     # repaired
-    assert "[F1]" in g.text                                     # good part kept
+    assert "88,888" not in g.text and "[Z9]" not in g.text  # repaired
+    assert "[F1]" in g.text  # good part kept
 
 
 def test_explain_with_fully_hallucinated_stub_falls_back_to_template():
     stub = stub_client("[Z9] Everything costs $99,999 and nothing here is real.")
     g = _explain(client=stub, strict=True)
-    assert g.source == "template" and g.grounded           # gutted -> deterministic answer
+    assert g.source == "template" and g.grounded  # gutted -> deterministic answer
 
 
 def test_explain_nonstrict_keeps_llm_text_but_marks_ungrounded():
     stub = stub_client("[Z9] AHU-1 wastes $88,888.")
     g = _explain(client=stub, strict=False)
     assert g.source == "llm" and not g.grounded
-    assert "88,888" in g.text                               # non-strict does not repair
+    assert "88,888" in g.text  # non-strict does not repair
 
 
 def test_explain_empty_findings():
@@ -75,8 +84,11 @@ def test_explain_empty_findings():
 
 # --------------------------------------------------------------------------- ask
 
+
 def test_ask_without_llm_routes_and_grounds():
-    g = ask("what should I do about AHU-1?", findings=_findings(), loads=_LOADS, price=EnergyPrice())
+    g = ask(
+        "what should I do about AHU-1?", findings=_findings(), loads=_LOADS, price=EnergyPrice()
+    )
     assert g.source == "template" and g.grounded and "[R1]" in g.text
 
 
@@ -108,13 +120,18 @@ def test_ask_unknown_topic_is_honest_and_grounded():
 
 # --- portfolio triage (0.5) -------------------------------------------------- #
 
+
 def _fleet_ctx():
-    from camber.report.fleet import build_fleet_report
     from camber.agent import build_context
+    from camber.report.fleet import build_fleet_report
+
     fr = build_fleet_report(
-        [{"site": "Building A", "eui": 120.0, "findings": _findings()},
-         {"site": "Building B", "eui": 65.0, "findings": []}],
-        peer_median_eui=90.0)
+        [
+            {"site": "Building A", "eui": 120.0, "findings": _findings()},
+            {"site": "Building B", "eui": 65.0, "findings": []},
+        ],
+        peer_median_eui=90.0,
+    )
     return build_context(fleet=fr)
 
 

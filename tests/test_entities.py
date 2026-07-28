@@ -6,19 +6,30 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.model.entities import (  # noqa: E402
-    Completeness, Equip, Point, Runnable, Site, TEMPLATES,
-    completeness, runnable_rules, template_for,
+    TEMPLATES,
+    Completeness,
+    Equip,
+    Point,
+    Runnable,
+    Site,
+    completeness,
+    runnable_rules,
+    template_for,
 )
 from camber.model.roles import Role  # noqa: E402
 
-
 # --- entities -------------------------------------------------------------- #
 
+
 def test_equip_roles_from_points():
-    e = Equip("AHU_1", "AHU", points=(
-        Point("AHU_1_HHW_Valve", Role.HEAT_VALVE),
-        Point("AHU_1_CHW_Valve", Role.COOL_VALVE),
-    ))
+    e = Equip(
+        "AHU_1",
+        "AHU",
+        points=(
+            Point("AHU_1_HHW_Valve", Role.HEAT_VALVE),
+            Point("AHU_1_CHW_Valve", Role.COOL_VALVE),
+        ),
+    )
     assert e.roles() == frozenset({Role.HEAT_VALVE, Role.COOL_VALVE})
 
 
@@ -40,6 +51,7 @@ def test_site_lookup_and_class_filter():
 
 # --- templates ------------------------------------------------------------- #
 
+
 def test_terminal_box_classes_share_vav_template():
     assert template_for("CAV").required == template_for("VAV").required
     assert template_for("FCAV").optional == template_for("VAV").optional
@@ -51,6 +63,7 @@ def test_unknown_class_has_no_template():
 
 # --- completeness ---------------------------------------------------------- #
 
+
 def test_completeness_ready_when_required_present():
     c = completeness("AHU", {Role.SUPPLY_AIR_TEMP, Role.HEAT_VALVE, Role.COOL_VALVE})
     assert isinstance(c, Completeness)
@@ -60,7 +73,7 @@ def test_completeness_ready_when_required_present():
 
 
 def test_completeness_not_ready_flags_missing_required():
-    c = completeness("AHU", {Role.SUPPLY_AIR_TEMP})   # missing both valves
+    c = completeness("AHU", {Role.SUPPLY_AIR_TEMP})  # missing both valves
     assert not c.ready
     assert c.missing_required == frozenset({Role.HEAT_VALVE, Role.COOL_VALVE})
 
@@ -76,7 +89,7 @@ def test_completeness_score_full_is_one():
 def test_completeness_unexpected_roles_reported():
     c = completeness("Meter", {Role.POWER, Role.SPACE_TEMP})
     assert Role.SPACE_TEMP in c.unexpected
-    assert c.ready          # POWER (the only required role) is present
+    assert c.ready  # POWER (the only required role) is present
 
 
 def test_completeness_unknown_class_not_ready():
@@ -88,6 +101,7 @@ def test_completeness_unknown_class_not_ready():
 
 
 # --- runnable rules (duck-typed) ------------------------------------------- #
+
 
 class _FakeRule:
     def __init__(self, name, required, optional=()):
@@ -107,7 +121,7 @@ def test_runnable_splits_on_required_roles():
     simul, sat = res
     assert isinstance(simul, Runnable)
     assert simul.can_run
-    assert simul.missing_optional == frozenset({Role.OAT})   # degrades, not blocks
+    assert simul.missing_optional == frozenset({Role.OAT})  # degrades, not blocks
     assert not sat.can_run
     assert sat.missing_required == frozenset({Role.SUPPLY_AIR_TEMP})
 
@@ -116,12 +130,14 @@ def test_runnable_handles_rule_without_optional_attr():
     class Bare:
         name = "bare"
         roles_required = (Role.POWER,)
+
     res = runnable_rules({Role.POWER}, [Bare()])
     assert res[0].can_run
     assert res[0].missing_optional == frozenset()
 
 
 # --- 0.5 packaged / DX / DOAS / FCU templates -------------------------------- #
+
 
 def test_new_equipment_templates_registered():
     for cls in ("RTU", "HeatPump", "DOAS", "FCU"):
@@ -131,13 +147,14 @@ def test_new_equipment_templates_registered():
 def test_rtu_completeness_gates_on_dx():
     c = completeness("RTU", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS})
     assert c.ready and c.missing_required == frozenset()
-    c2 = completeness("RTU", {Role.SUPPLY_AIR_TEMP})           # no compressor signal
+    c2 = completeness("RTU", {Role.SUPPLY_AIR_TEMP})  # no compressor signal
     assert not c2.ready and Role.COMPRESSOR_STATUS in c2.missing_required
 
 
 def test_heatpump_requires_reversing_valve():
-    ready = completeness("HeatPump", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS,
-                                      Role.REVERSING_VALVE_CMD})
+    ready = completeness(
+        "HeatPump", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS, Role.REVERSING_VALVE_CMD}
+    )
     assert ready.ready
     miss = completeness("HeatPump", {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS})
     assert not miss.ready and Role.REVERSING_VALVE_CMD in miss.missing_required

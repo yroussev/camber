@@ -45,8 +45,10 @@ def main() -> int:
     hand = json.load(open(os.path.join(HERE, "mapping.json")))["aliases"]
     hand_pts = {k.upper() for k in hand}
     auto_pts = {k.upper() for k in derived}
-    print(f"\nhand-written mapping.json covers {len(hand_pts)} points; the Brick model "
-          f"auto-derives {len(auto_pts)} (no hand mapping needed).")
+    print(
+        f"\nhand-written mapping.json covers {len(hand_pts)} points; the Brick model "
+        f"auto-derives {len(auto_pts)} (no hand mapping needed)."
+    )
     extra = sorted(auto_pts - hand_pts)
     if extra:
         print(f"  additionally derived from Brick: {', '.join(extra)}")
@@ -57,21 +59,32 @@ def main() -> int:
 
     # drive the pipeline straight from the Brick-derived mapping
     mp = mapping_from_brick(ttl)
-    df = (pd.read_csv(BASELINE,
-                      usecols=lambda c: c == "Datetime" or mp.role_of(c) is not None,
-                      parse_dates=["Datetime"]).set_index("Datetime").resample("1h").mean())
+    df = (
+        pd.read_csv(
+            BASELINE,
+            usecols=lambda c: c == "Datetime" or mp.role_of(c) is not None,
+            parse_dates=["Datetime"],
+        )
+        .set_index("Datetime")
+        .resample("1h")
+        .mean()
+    )
     frame = normalize_percent_frame(
-        pd.DataFrame({mp.role_of(c): df[c] for c in df.columns if mp.role_of(c)}))
+        pd.DataFrame({mp.role_of(c): df[c] for c in df.columns if mp.role_of(c)})
+    )
     roles = set(frame.columns)
     c = completeness("AHU", roles)
-    print(f"\n=== Pipeline on the Brick-derived role-frame ===")
-    print(f"AHU completeness {c.score:.0%} (ready={c.ready}); "
-          f"{len(roles)} roles resolved with zero hand mapping.")
+    print("\n=== Pipeline on the Brick-derived role-frame ===")
+    print(
+        f"AHU completeness {c.score:.0%} (ready={c.ready}); "
+        f"{len(roles)} roles resolved with zero hand mapping."
+    )
     f = OutdoorAirFraction().analyze("AHU", frame)
-    print(f"OA-fraction diagnostic: {f.severity} "
-          f"(median OAF {f.metrics.get('oaf_median_pct')}%)")
-    print("\nA Brick-tagged building is analyzed with no hand-written mapping --"
-          "\nthe ontology supplies the roles.")
+    print(f"OA-fraction diagnostic: {f.severity} (median OAF {f.metrics.get('oaf_median_pct')}%)")
+    print(
+        "\nA Brick-tagged building is analyzed with no hand-written mapping --"
+        "\nthe ontology supplies the roles."
+    )
     return 0
 
 

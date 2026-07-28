@@ -35,9 +35,20 @@ def cumulative_savings(baseline_model, t_report, y_report):
     return idx, cum_base, cum_act, cum_base - cum_act
 
 
-def savings_chart(baseline_model, t_report, y_report, *, n_baseline: int, p_baseline: int,
-                  cv_rmse: float, confidence: float = 0.90, rho: float = 0.0, ax=None,
-                  title: str | None = None, ylabel: str = "Energy"):
+def savings_chart(
+    baseline_model,
+    t_report,
+    y_report,
+    *,
+    n_baseline: int,
+    p_baseline: int,
+    cv_rmse: float,
+    confidence: float = 0.90,
+    rho: float = 0.0,
+    ax=None,
+    title: str | None = None,
+    ylabel: str = "Energy",
+):
     """Plot cumulative M&V savings with a G14 uncertainty band. Returns ``(ax, SavingsResult)``.
 
     ``baseline_model`` is any ``predict(T)``-able baseline (e.g. `mandv.models.best_model`);
@@ -48,9 +59,16 @@ def savings_chart(baseline_model, t_report, y_report, *, n_baseline: int, p_base
     import matplotlib.pyplot as plt
 
     idx, cum_base, cum_act, cum_avoided = cumulative_savings(baseline_model, t_report, y_report)
-    res = avoided_energy_savings(baseline_model, t_report, y_report, cv_rmse=cv_rmse,
-                                 n_baseline=n_baseline, p_baseline=p_baseline,
-                                 confidence=confidence, rho=rho)
+    res = avoided_energy_savings(
+        baseline_model,
+        t_report,
+        y_report,
+        cv_rmse=cv_rmse,
+        n_baseline=n_baseline,
+        p_baseline=p_baseline,
+        confidence=confidence,
+        rho=rho,
+    )
     if ax is None:
         _, ax = plt.subplots(figsize=(9, 5))
 
@@ -58,16 +76,38 @@ def savings_chart(baseline_model, t_report, y_report, *, n_baseline: int, p_base
     ax.plot(x, cum_base, color="#3366cc", lw=1.8, ls="--", label="baseline (projected)")
     ax.plot(x, cum_act, color="#111111", lw=1.8, label="actual")
     # avoided energy = area between baseline and actual (green = saved, red = excess)
-    ax.fill_between(x, cum_act, cum_base, where=(cum_base >= cum_act), interpolate=True,
-                    color="#8fd19e", alpha=0.5, label="avoided")
-    ax.fill_between(x, cum_act, cum_base, where=(cum_base < cum_act), interpolate=True,
-                    color="#f2a6a6", alpha=0.5, label="excess")
+    ax.fill_between(
+        x,
+        cum_act,
+        cum_base,
+        where=(cum_base >= cum_act),
+        interpolate=True,
+        color="#8fd19e",
+        alpha=0.5,
+        label="avoided",
+    )
+    ax.fill_between(
+        x,
+        cum_act,
+        cum_base,
+        where=(cum_base < cum_act),
+        interpolate=True,
+        color="#f2a6a6",
+        alpha=0.5,
+        label="excess",
+    )
     # G14 uncertainty as a ± band on the running total (scaled to the cumulative avoided fraction)
     if len(cum_avoided) and np.isfinite(res.abs_uncertainty) and cum_avoided[-1] != 0:
         frac = cum_avoided / cum_avoided[-1]
         band = np.abs(frac) * res.abs_uncertainty
-        ax.fill_between(x, cum_avoided - band + cum_act, cum_avoided + band + cum_act,
-                        color="#cccccc", alpha=0.35, label=f"±{int(confidence * 100)}% band")
+        ax.fill_between(
+            x,
+            cum_avoided - band + cum_act,
+            cum_avoided + band + cum_act,
+            color="#cccccc",
+            alpha=0.35,
+            label=f"±{int(confidence * 100)}% band",
+        )
 
     tot = f"{res.avoided_energy:,.0f}"
     unc = f" ± {res.abs_uncertainty:,.0f}" if np.isfinite(res.abs_uncertainty) else ""

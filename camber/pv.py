@@ -21,8 +21,13 @@ def daily_generation(ac_energy: pd.Series) -> pd.Series:
     return ac_energy.dropna().resample("D").sum()
 
 
-def performance_ratio(ac_energy_kwh: float, poa_irradiation_kwh_m2: float,
-                      rated_kw: float, *, g_ref_kw_m2: float = G_REF_KW_M2) -> float:
+def performance_ratio(
+    ac_energy_kwh: float,
+    poa_irradiation_kwh_m2: float,
+    rated_kw: float,
+    *,
+    g_ref_kw_m2: float = G_REF_KW_M2,
+) -> float:
     """Performance ratio = (E_ac / P_rated) / (H_POA / G_ref), a unitless fraction.
 
     ``ac_energy_kwh`` is generation over a period; ``poa_irradiation_kwh_m2`` is the
@@ -42,12 +47,15 @@ def specific_yield(ac_energy_kwh: float, rated_kw: float) -> float:
     return round(ac_energy_kwh / rated_kw, 2) if rated_kw else float("nan")
 
 
-def expected_generation(poa_irradiation_kwh_m2: float, rated_kw: float, *,
-                        performance_ratio: float = 0.80,
-                        g_ref_kw_m2: float = G_REF_KW_M2) -> float:
+def expected_generation(
+    poa_irradiation_kwh_m2: float,
+    rated_kw: float,
+    *,
+    performance_ratio: float = 0.80,
+    g_ref_kw_m2: float = G_REF_KW_M2,
+) -> float:
     """Expected AC energy for a given insolation, capacity and assumed PR."""
-    return round(rated_kw * (poa_irradiation_kwh_m2 / g_ref_kw_m2)
-                 * performance_ratio, 2)
+    return round(rated_kw * (poa_irradiation_kwh_m2 / g_ref_kw_m2) * performance_ratio, 2)
 
 
 def net_energy(load: pd.Series, generation: pd.Series) -> pd.Series:
@@ -64,11 +72,16 @@ class PvSummary:
     expected_kwh: float
     performance_ratio: float
     specific_yield: float
-    self_consumption_pct: float    # share of generation used on-site (vs exported)
+    self_consumption_pct: float  # share of generation used on-site (vs exported)
 
 
-def pv_summary(ac_energy: pd.Series, poa_irradiation_kwh_m2: float,
-               rated_kw: float, *, load: pd.Series | None = None) -> PvSummary:
+def pv_summary(
+    ac_energy: pd.Series,
+    poa_irradiation_kwh_m2: float,
+    rated_kw: float,
+    *,
+    load: pd.Series | None = None,
+) -> PvSummary:
     """Summarize PV performance over the series' period.
 
     If ``load`` is given, also reports self-consumption (the fraction of generation
@@ -82,7 +95,10 @@ def pv_summary(ac_energy: pd.Series, poa_irradiation_kwh_m2: float,
         df = pd.DataFrame({"l": load, "g": ac_energy}).fillna(0.0)
         on_site = (df[["l", "g"]].min(axis=1)).clip(lower=0).sum()
         sc = round(100.0 * on_site / gen, 1) if gen else float("nan")
-    return PvSummary(generation_kwh=round(gen, 2), expected_kwh=exp,
-                     performance_ratio=pr,
-                     specific_yield=specific_yield(gen, rated_kw),
-                     self_consumption_pct=sc)
+    return PvSummary(
+        generation_kwh=round(gen, 2),
+        expected_kwh=exp,
+        performance_ratio=pr,
+        specific_yield=specific_yield(gen, rated_kw),
+        self_consumption_pct=sc,
+    )

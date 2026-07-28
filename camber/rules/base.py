@@ -12,14 +12,13 @@ discovered equipment, skipping any equipment missing a rule's required roles.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
-from ..model.roles import Role
-from ..resolve import EquipRef, resolve, occupied
 from ..model.mapping import MappingProvider
+from ..resolve import resolve
 from ..sensorhealth import untrusted_roles
 
 
@@ -29,7 +28,7 @@ class Finding:
 
     rule: str
     equip: str
-    severity: str                 # "ok" | "info" | "warn" | "fault"
+    severity: str  # "ok" | "info" | "warn" | "fault"
     metrics: dict = field(default_factory=dict)
     summary: str = ""
     evidence: dict | None = None  # optional JSON-friendly evidence descriptor (pattern J)
@@ -115,8 +114,16 @@ class Registry:
         """Sorted list of registered rule names."""
         return sorted(self._rules)
 
-    def run(self, rule_name: str, equip_refs, mapping: MappingProvider, *,
-            resample: str = "1h", shared=None, min_trust=None) -> list[Finding]:
+    def run(
+        self,
+        rule_name: str,
+        equip_refs,
+        mapping: MappingProvider,
+        *,
+        resample: str = "1h",
+        shared=None,
+        min_trust=None,
+    ) -> list[Finding]:
         """Run one rule across equipment, resolving each to a role-frame first.
 
         Equipment whose resolved frame lacks any required role is skipped (the
@@ -141,20 +148,38 @@ class Registry:
             if min_trust is not None:
                 bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
                 if bad:
-                    out.append(Finding(
-                        rule=rule.name, equip=ref.equip, severity="info",
-                        metrics={"declined": True, "min_trust": min_trust,
-                                 "untrusted_roles": [r.value for r in bad]},
-                        summary=(f"{ref.equip}: declined -- untrusted input(s): "
-                                 + ", ".join(r.value for r in bad))))
+                    out.append(
+                        Finding(
+                            rule=rule.name,
+                            equip=ref.equip,
+                            severity="info",
+                            metrics={
+                                "declined": True,
+                                "min_trust": min_trust,
+                                "untrusted_roles": [r.value for r in bad],
+                            },
+                            summary=(
+                                f"{ref.equip}: declined -- untrusted input(s): "
+                                + ", ".join(r.value for r in bad)
+                            ),
+                        )
+                    )
                     continue
             f = rule.analyze(ref.equip, frame)
             if f is not None:
                 out.append(f)
         return out
 
-    def run_fleet(self, rule_name: str, equip_refs, mapping: MappingProvider, *,
-                  resample: str = "1h", shared=None, min_trust=None) -> Finding:
+    def run_fleet(
+        self,
+        rule_name: str,
+        equip_refs,
+        mapping: MappingProvider,
+        *,
+        resample: str = "1h",
+        shared=None,
+        min_trust=None,
+    ) -> Finding:
         """Run a FleetRule: resolve every equipment, pass the set as one batch.
 
         Equipment missing the required roles are skipped; the rule sees only those
@@ -171,8 +196,9 @@ class Registry:
             frame = _merge_shared(frame, shared)
             if frame.empty or any(r not in frame.columns for r in rule.roles_required):
                 continue
-            if min_trust is not None and untrusted_roles(frame, rule.roles_required,
-                                                         min_trust=min_trust):
+            if min_trust is not None and untrusted_roles(
+                frame, rule.roles_required, min_trust=min_trust
+            ):
                 continue
             frames[ref.equip] = frame
         return rule.analyze_fleet(frames)

@@ -5,8 +5,8 @@ Two AST checks, enforced on real code rather than docstring prose:
 1. **Read-only:** these modules must never *reference* a write/command/actuation service — the agent
    explains and the mapping-assist advises; neither ever writes back to a BAS.
 2. **No vendor / no network:** no LLM provider SDK and no network client may be imported anywhere in
-   the pure layer. All model I/O is owned by the caller's injected ``complete`` callable, so a vendor
-   import here would break the provider-agnostic guarantee.
+   the pure layer. All model I/O is owned by the caller's injected ``complete`` callable, so a
+   vendor import here would break the provider-agnostic guarantee.
 """
 
 import ast
@@ -27,17 +27,47 @@ def _guarded_files():
 
 # write/command/actuation vocabulary — the read-only contract
 _FORBIDDEN_SYMBOLS = {
-    "write_back", "writeback", "write_property", "writeproperty", "WriteProperty",
-    "write_register", "write_registers", "write_coil", "write_coils", "write_value",
-    "write_values", "set_value", "write_attribute", "command", "actuate", "override",
-    "publish", "send_command", "set_point", "setpoint_write",
+    "write_back",
+    "writeback",
+    "write_property",
+    "writeproperty",
+    "WriteProperty",
+    "write_register",
+    "write_registers",
+    "write_coil",
+    "write_coils",
+    "write_value",
+    "write_values",
+    "set_value",
+    "write_attribute",
+    "command",
+    "actuate",
+    "override",
+    "publish",
+    "send_command",
+    "set_point",
+    "setpoint_write",
 }
 
 # LLM providers + network clients — the no-vendor / no-network contract
 _FORBIDDEN_IMPORT_ROOTS = {
-    "anthropic", "openai", "cohere", "google", "mistralai", "ollama", "langchain",
-    "llama_cpp", "transformers", "httpx", "requests", "urllib", "socket", "aiohttp",
-    "http", "websocket", "websockets",
+    "anthropic",
+    "openai",
+    "cohere",
+    "google",
+    "mistralai",
+    "ollama",
+    "langchain",
+    "llama_cpp",
+    "transformers",
+    "httpx",
+    "requests",
+    "urllib",
+    "socket",
+    "aiohttp",
+    "http",
+    "websocket",
+    "websockets",
 }
 
 
@@ -72,5 +102,12 @@ def test_agent_layer_imports_no_vendor_or_network():
 def test_guard_covers_expected_modules():
     # the guard must actually be looking at the agent package + mapping_assist (not silently empty)
     basenames = {os.path.basename(p) for p in _guarded_files()}
-    assert {"context.py", "verify.py", "templates.py", "client.py", "explain.py", "ask.py",
-            "mapping_assist.py"} <= basenames
+    assert {
+        "context.py",
+        "verify.py",
+        "templates.py",
+        "client.py",
+        "explain.py",
+        "ask.py",
+        "mapping_assist.py",
+    } <= basenames

@@ -33,8 +33,9 @@ def _quote_ident(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def read_points(connection, table, *, ts_col, point_col, value_col,
-                unit_col=None, where=None) -> dict[str, pd.Series]:
+def read_points(
+    connection, table, *, ts_col, point_col, value_col, unit_col=None, where=None
+) -> dict[str, pd.Series]:
     """Read a long/narrow point table into ``{point name -> Series}``.
 
     ``connection`` is any DB-API 2.0 connection (e.g. ``sqlite3.connect(...)``).
@@ -48,8 +49,7 @@ def read_points(connection, table, *, ts_col, point_col, value_col,
     duplicate timestamps (first kept) are dropped, matching
     :func:`camber.realio.load_point`.
     """
-    cols = [_quote_ident(ts_col), _quote_ident(point_col),
-            _quote_ident(value_col)]
+    cols = [_quote_ident(ts_col), _quote_ident(point_col), _quote_ident(value_col)]
     sql = f"SELECT {', '.join(cols)} FROM {_quote_ident(table)}"
     if where:
         sql += f" WHERE {where}"
@@ -67,8 +67,7 @@ def read_points(connection, table, *, ts_col, point_col, value_col,
     df = pd.DataFrame(rows, columns=["ts", "point", "value"])
     idx = parse_timestamps(df["ts"])
     vals = pd.to_numeric(df["value"], errors="coerce")
-    df = pd.DataFrame({"point": df["point"].values, "value": vals.values},
-                      index=idx)
+    df = pd.DataFrame({"point": df["point"].values, "value": vals.values}, index=idx)
     df = df[~df.index.isna()]
 
     out: dict[str, pd.Series] = {}
@@ -87,8 +86,9 @@ class SqlSource:
     its lifecycle). Point series are read lazily and cached on first use.
     """
 
-    def __init__(self, connection, table, *, ts_col, point_col, value_col,
-                 unit_col=None, where=None):
+    def __init__(
+        self, connection, table, *, ts_col, point_col, value_col, unit_col=None, where=None
+    ):
         self.connection = connection
         self.table = table
         self.ts_col = ts_col
@@ -102,9 +102,13 @@ class SqlSource:
     def _load(self) -> dict[str, pd.Series]:
         if self._points is None:
             self._points = read_points(
-                self.connection, self.table, ts_col=self.ts_col,
-                point_col=self.point_col, value_col=self.value_col,
-                where=self.where)
+                self.connection,
+                self.table,
+                ts_col=self.ts_col,
+                point_col=self.point_col,
+                value_col=self.value_col,
+                where=self.where,
+            )
         return self._points
 
     def point_names(self):

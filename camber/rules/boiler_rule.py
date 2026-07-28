@@ -12,8 +12,6 @@ runner's ``shared`` channel since it is a building-level point.
 
 from __future__ import annotations
 
-import math
-
 import pandas as pd
 
 from ..model.roles import Role
@@ -34,8 +32,7 @@ class BoilerSummerLockout:
 
     name = "boiler_summer_lockout"
     roles_required = (Role.BOILER_STATUS,)
-    roles_optional = (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS,
-                      Role.OAT)
+    roles_optional = (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS, Role.OAT)
 
     def __init__(self, summer_lockout_oat_f: float = 65.0):
         # climate-dependent knob; default generic, override per climate zone
@@ -45,16 +42,15 @@ class BoilerSummerLockout:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_HW_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
-        res = analyze_hw_plant(legacy, equip,
-                               summer_lockout_oat_f=self.summer_lockout_oat_f)
+        res = analyze_hw_plant(legacy, equip, summer_lockout_oat_f=self.summer_lockout_oat_f)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         # Severity from summer-running: a comfort boiler should rarely run hot-weather.
         sp = res.summer_run_pct
         severity = "fault" if sp >= 20.0 else ("warn" if sp >= 5.0 else "ok")
-        reset_note = ("HWS reset present" if res.hws_reset_present
-                      else "no/weak HWS reset")
+        reset_note = "HWS reset present" if res.hws_reset_present else "no/weak HWS reset"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -69,8 +65,10 @@ class BoilerSummerLockout:
                 "n_running": res.n_running,
                 "n_considered": res.n_considered,
             },
-            summary=(f"{equip}: boiler runs {res.boiler_running_pct:.0f}% of occupied "
-                     f"hours; {res.summer_run_pct:.0f}% of running hours at "
-                     f"OAT>{res.lockout_oat_f:.0f}F; {reset_note} "
-                     f"(HWS~OAT slope {res.hws_slope_per_F:+.2f})"),
+            summary=(
+                f"{equip}: boiler runs {res.boiler_running_pct:.0f}% of occupied "
+                f"hours; {res.summer_run_pct:.0f}% of running hours at "
+                f"OAT>{res.lockout_oat_f:.0f}F; {reset_note} "
+                f"(HWS~OAT slope {res.hws_slope_per_F:+.2f})"
+            ),
         )

@@ -17,8 +17,7 @@ def _dr():
     vals = [100.0] * 12
     for h in (4, 5, 6, 7):
         vals[h] = 60.0
-    return demand_response(pd.Series(vals, index=idx), 100.0,
-                           event_start=idx[4], event_end=idx[7])
+    return demand_response(pd.Series(vals, index=idx), 100.0, event_start=idx[4], event_end=idx[7])
 
 
 def _payloads(rep):
@@ -30,7 +29,7 @@ def test_maps_dr_result_to_report_structure():
     assert rep["objectType"] == "REPORT" and rep["reportName"] == "DR_EVENT_PERFORMANCE"
     assert rep["programID"] == "PROG-1" and rep["eventID"] == "EV-42" and rep["clientName"] == "HQ"
     pl = _payloads(rep)
-    assert pl == {"BASELINE": 400.0, "USAGE": 240.0, "REDUCTION": 160.0}   # 4h × (100 / 60 / 40)
+    assert pl == {"BASELINE": 400.0, "USAGE": 240.0, "REDUCTION": 160.0}  # 4h × (100 / 60 / 40)
     assert all(p["unit"] == "KWH" for p in rep["resources"][0]["intervals"][0]["payloads"])
 
 
@@ -43,13 +42,13 @@ def test_performance_summary_carries_kw_metrics():
 
 def test_accepts_plain_dict_and_is_json_serializable():
     d = _dr().as_dict()
-    rep = to_openadr_report(d, event_id="EV-9")            # a plain dict, not the dataclass
+    rep = to_openadr_report(d, event_id="EV-9")  # a plain dict, not the dataclass
     assert _payloads(rep)["REDUCTION"] == 160.0
     assert isinstance(json.loads(openadr_report_json(d)), dict)
 
 
 def test_created_timestamp_not_fabricated():
-    rep = to_openadr_report(_dr())                         # no created= supplied
-    assert rep["createdDateTime"] == ""                    # empty, never invented
+    rep = to_openadr_report(_dr())  # no created= supplied
+    assert rep["createdDateTime"] == ""  # empty, never invented
     rep2 = to_openadr_report(_dr(), created="2026-07-15T20:00:00Z")
     assert rep2["createdDateTime"] == "2026-07-15T20:00:00Z"

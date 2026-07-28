@@ -19,7 +19,7 @@ Reuses :func:`camber.mandv.models.best_model`; matplotlib is lazy-imported. nump
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -34,18 +34,19 @@ _KINDS = ("2P", "3PC", "3PH", "4P", "5P")
 class CloudShape:
     """Classification of an X-vs-OAT cloud."""
 
-    shape: str                   # "linear" | "hockey-stick" | "v" | "scattered" | "insufficient"
-    model_kind: str              # the fitted change-point kind ("" if not fit)
-    r2: float                    # goodness of fit of that model
-    change_points: tuple         # the fitted balance point(s)
-    n: int                       # points classified
+    shape: str  # "linear" | "hockey-stick" | "v" | "scattered" | "insufficient"
+    model_kind: str  # the fitted change-point kind ("" if not fit)
+    r2: float  # goodness of fit of that model
+    change_points: tuple  # the fitted balance point(s)
+    n: int  # points classified
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def classify_shape(series, oat, *, r2_floor: float = 0.3, min_points: int = 5,
-                   kinds=_KINDS, _model=None) -> CloudShape:
+def classify_shape(
+    series, oat, *, r2_floor: float = 0.3, min_points: int = 5, kinds=_KINDS, _model=None
+) -> CloudShape:
     """Label an X-vs-OAT cloud from its change-point fit. No chart required.
 
     A weak fit (``r2 < r2_floor``) means no clear OAT dependence → ``scattered``. Otherwise the
@@ -64,17 +65,24 @@ def classify_shape(series, oat, *, r2_floor: float = 0.3, min_points: int = 5,
         shape = "linear"
     elif model.kind in ("3PC", "3PH"):
         shape = "hockey-stick"
-    else:                                       # 4P / 5P — heating and cooling legs
+    else:  # 4P / 5P — heating and cooling legs
         shape = "v"
-    return CloudShape(shape, model.kind, round(r2, 3) if r2 == r2 else float("nan"),
-                      tuple(float(c) for c in model.change_points), len(df))
+    return CloudShape(
+        shape,
+        model.kind,
+        round(r2, 3) if r2 == r2 else float("nan"),
+        tuple(float(c) for c in model.change_points),
+        len(df),
+    )
 
 
 def brush_back(series, oat, *, x_range=None, y_range=None) -> pd.DatetimeIndex:
     """Timestamps whose (OAT, value) point falls in the given box — the brush-back primitive.
 
-    ``x_range`` / ``y_range`` are ``(lo, hi)`` bounds (inclusive); either may be omitted. Returns the
-    index of the selected points, so a region brushed in the scatter maps back to *when* it happened.
+    ``x_range`` / ``y_range`` are ``(lo, hi)`` bounds (inclusive); either may be omitted. Returns
+    the
+    index of the selected points, so a region brushed in the scatter maps back to *when* it
+    happened.
     """
     df = pd.DataFrame({"y": series, "T": oat}).dropna()
     sel = pd.Series(True, index=df.index)
@@ -87,10 +95,21 @@ def brush_back(series, oat, *, x_range=None, y_range=None) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(df.index[sel.to_numpy()])
 
 
-def oat_scatter(series, oat, *, ax=None, classify: bool = True, changepoint="auto",
-                by=None, cmap: str = "viridis", min_max_avg=None, title: str | None = None,
-                xlabel: str = "Outdoor air temperature (°F)", ylabel: str = "Value",
-                kinds=_KINDS):
+def oat_scatter(
+    series,
+    oat,
+    *,
+    ax=None,
+    classify: bool = True,
+    changepoint="auto",
+    by=None,
+    cmap: str = "viridis",
+    min_max_avg=None,
+    title: str | None = None,
+    xlabel: str = "Outdoor air temperature (°F)",
+    ylabel: str = "Value",
+    kinds=_KINDS,
+):
     """Scatter any ``series`` against ``oat``; overlay a change-point fit and classify the cloud.
 
     Returns ``(ax, CloudShape | None)``. Options:
@@ -120,8 +139,10 @@ def oat_scatter(series, oat, *, ax=None, classify: bool = True, changepoint="aut
         cats = pd.Series(by).reindex(df.index).astype("category")
         codes = cats.cat.codes.to_numpy()
         sc = ax.scatter(T, y, c=codes, cmap=cmap, s=18, alpha=0.7, zorder=2)
-        handles = [plt.Line2D([], [], marker="o", ls="", color=sc.cmap(sc.norm(c)),
-                              label=str(lbl)) for c, lbl in enumerate(cats.cat.categories)]
+        handles = [
+            plt.Line2D([], [], marker="o", ls="", color=sc.cmap(sc.norm(c)), label=str(lbl))
+            for c, lbl in enumerate(cats.cat.categories)
+        ]
         if handles:
             ax.legend(handles=handles, loc="best", fontsize=8, title=getattr(by, "name", None))
     else:
@@ -129,11 +150,15 @@ def oat_scatter(series, oat, *, ax=None, classify: bool = True, changepoint="aut
 
     model = None
     if changepoint and len(df) >= 5:
-        model = best_model(T, y, kinds=kinds) if changepoint in ("auto", True) else \
-            best_model(T, y, kinds=(changepoint,))
+        model = (
+            best_model(T, y, kinds=kinds)
+            if changepoint in ("auto", True)
+            else best_model(T, y, kinds=(changepoint,))
+        )
         grid = np.linspace(T.min(), T.max(), 200)
-        ax.plot(grid, model.predict(grid), color="#cc3333", lw=2.0, zorder=3,
-                label=f"{model.kind} fit")
+        ax.plot(
+            grid, model.predict(grid), color="#cc3333", lw=2.0, zorder=3, label=f"{model.kind} fit"
+        )
         for cp in model.change_points:
             ax.axvline(float(cp), color="grey", lw=0.8, ls="--", zorder=1)
 
@@ -142,8 +167,9 @@ def oat_scatter(series, oat, *, ax=None, classify: bool = True, changepoint="aut
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     if title is None and shape is not None:
-        title = f"OAT cloud — {shape.shape}" + (f" ({shape.model_kind}, R² {shape.r2:.2f})"
-                                                if shape.model_kind else "")
+        title = f"OAT cloud — {shape.shape}" + (
+            f" ({shape.model_kind}, R² {shape.r2:.2f})" if shape.model_kind else ""
+        )
     ax.set_title(title or "OAT scatter")
     if by is None or model is not None:
         ax.legend(loc="best", fontsize=8)

@@ -22,8 +22,9 @@ def degenerate_frames():
         "one_row": pd.DataFrame({"v": [1.0]}, index=_idx(1)),
         "all_nan": pd.DataFrame({"v": np.full(48, np.nan)}, index=_idx(48)),
         "all_equal": pd.DataFrame({"v": np.full(48, 5.0)}, index=_idx(48)),
-        "dup_index": pd.DataFrame({"v": np.arange(4.0)},
-                                  index=pd.DatetimeIndex(["2024-01-01"] * 4)),
+        "dup_index": pd.DataFrame(
+            {"v": np.arange(4.0)}, index=pd.DatetimeIndex(["2024-01-01"] * 4)
+        ),
         "huge": pd.DataFrame({"v": np.full(48, 1e18)}, index=_idx(48)),
         "tiny": pd.DataFrame({"v": np.full(48, 1e-18)}, index=_idx(48)),
     }
@@ -32,6 +33,7 @@ def degenerate_frames():
 @pytest.fixture
 def make_frame():
     """Factory: make_frame(kind, cols) -> a multi-column frame of a degenerate kind."""
+
     def _make(kind="all_equal", cols=("a", "b"), n=48):
         idx = _idx(n)
         if kind == "empty":
@@ -43,9 +45,11 @@ def make_frame():
         if kind == "all_equal":
             return pd.DataFrame({c: np.full(n, 3.0) for c in cols}, index=idx)
         if kind == "dup_index":
-            return pd.DataFrame({c: np.arange(float(n)) for c in cols},
-                                index=pd.DatetimeIndex([idx[0]] * n))
+            return pd.DataFrame(
+                {c: np.arange(float(n)) for c in cols}, index=pd.DatetimeIndex([idx[0]] * n)
+            )
         raise ValueError(kind)
+
     return _make
 
 

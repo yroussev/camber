@@ -32,8 +32,14 @@ class SimultaneousHeatCool:
 
     name = "simultaneous_heat_cool"
     roles_required = (Role.HEAT_VALVE, Role.COOL_VALVE)
-    roles_optional = (Role.OAT, Role.RETURN_AIR_TEMP, Role.OA_DAMPER,
-                      Role.OCCUPANCY, Role.WARMUP, Role.COOLDOWN)
+    roles_optional = (
+        Role.OAT,
+        Role.RETURN_AIR_TEMP,
+        Role.OA_DAMPER,
+        Role.OCCUPANCY,
+        Role.WARMUP,
+        Role.COOLDOWN,
+    )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -42,8 +48,9 @@ class SimultaneousHeatCool:
         legacy = frame.rename(columns=cols)
         res = analyze_ahu(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         pct = res.simultaneous_hc_pct
         severity = "fault" if pct >= 5.0 else ("warn" if pct >= 1.0 else "ok")
         return Finding(
@@ -57,15 +64,21 @@ class SimultaneousHeatCool:
                 "mean_overlap_when_simul": res.mean_overlap_when_simul,
                 "n_considered": res.n_considered,
             },
-            summary=(f"{equip}: both coils open {pct:.1f}% of occupied hours "
-                     f"(CHW {res.chw_open_pct:.0f}%, HHW {res.hhw_open_pct:.0f}%)"),
+            summary=(
+                f"{equip}: both coils open {pct:.1f}% of occupied hours "
+                f"(CHW {res.chw_open_pct:.0f}%, HHW {res.hhw_open_pct:.0f}%)"
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: render the heat-vs-cool valve diagnostic (both-open points shaded)."""
         from ..charts.diagnostic import TEMPLATES
         from ..charts.evidence import Evidence
+
         if Role.HEAT_VALVE in frame.columns and Role.COOL_VALVE in frame.columns:
-            return Evidence(renderer="diagnostic", template=TEMPLATES["no_simultaneous_hc"],
-                            title=f"{equip}: simultaneous heat/cool")
+            return Evidence(
+                renderer="diagnostic",
+                template=TEMPLATES["no_simultaneous_hc"],
+                title=f"{equip}: simultaneous heat/cool",
+            )
         return None

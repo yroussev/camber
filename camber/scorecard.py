@@ -10,30 +10,49 @@ synthesis layer on top of the rules — pairs with `camber.actionplan` (what to 
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass, field
 
 _SEV = {"ok": 0, "info": 0, "warn": 1, "fault": 2}
 
 #: rule name -> category. Rules not listed fall in "other".
 RULE_CATEGORY = {
     # energy
-    "simultaneous_heat_cool": "energy", "reheat_penalty": "energy",
-    "reheat_minimization_g36": "energy", "supply_air_reset": "energy",
-    "chiller_efficiency": "energy", "chiller_staging": "energy", "chiller_staging_fleet": "energy",
-    "condenser_water_reset": "energy", "chw_plant_reset": "energy", "cooling_tower_approach": "energy",
-    "hw_plant_deltat": "energy", "boiler_short_cycle": "energy", "boiler_summer_lockout": "energy",
-    "chw_pump_dp_reset": "energy", "hw_pump_dp_reset": "energy", "night_weekend_setback": "energy",
-    "outdoor_air_fraction": "energy", "economizer_high_limit": "energy",
-    "free_cooling_missed": "energy", "static_pressure_reset": "energy",
+    "simultaneous_heat_cool": "energy",
+    "reheat_penalty": "energy",
+    "reheat_minimization_g36": "energy",
+    "supply_air_reset": "energy",
+    "chiller_efficiency": "energy",
+    "chiller_staging": "energy",
+    "chiller_staging_fleet": "energy",
+    "condenser_water_reset": "energy",
+    "chw_plant_reset": "energy",
+    "cooling_tower_approach": "energy",
+    "hw_plant_deltat": "energy",
+    "boiler_short_cycle": "energy",
+    "boiler_summer_lockout": "energy",
+    "chw_pump_dp_reset": "energy",
+    "hw_pump_dp_reset": "energy",
+    "night_weekend_setback": "energy",
+    "outdoor_air_fraction": "energy",
+    "economizer_high_limit": "energy",
+    "free_cooling_missed": "energy",
+    "static_pressure_reset": "energy",
     # comfort
-    "unmet_setpoint_hours": "comfort", "overcooling_min_flow": "comfort",
-    "overcooling_severity": "comfort", "supply_air_control": "comfort",
-    "airflow_tracking": "comfort", "zones_heat_cool_census": "comfort",
-    "cohort_airflow": "comfort", "cohort_space_temp": "comfort",
+    "unmet_setpoint_hours": "comfort",
+    "overcooling_min_flow": "comfort",
+    "overcooling_severity": "comfort",
+    "supply_air_control": "comfort",
+    "airflow_tracking": "comfort",
+    "zones_heat_cool_census": "comfort",
+    "cohort_airflow": "comfort",
+    "cohort_space_temp": "comfort",
     # ventilation
-    "co2_ventilation": "ventilation", "dcv_verification": "ventilation",
+    "co2_ventilation": "ventilation",
+    "dcv_verification": "ventilation",
     # maintenance / controls
-    "leaking_valve": "maintenance", "control_hunting": "maintenance", "damper_census": "maintenance",
+    "leaking_valve": "maintenance",
+    "control_hunting": "maintenance",
+    "damper_census": "maintenance",
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")
@@ -44,8 +63,17 @@ def category_for(rule: str) -> str:
 
 
 def grade_for(score: float) -> str:
-    return ("A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70
-            else "D" if score >= 60 else "F")
+    return (
+        "A"
+        if score >= 90
+        else "B"
+        if score >= 80
+        else "C"
+        if score >= 70
+        else "D"
+        if score >= 60
+        else "F"
+    )
 
 
 @dataclass
@@ -75,8 +103,13 @@ class Scorecard:
         return d
 
 
-def build_scorecard(findings, *, fault_penalty: float = 15.0, warn_penalty: float = 5.0,
-                    category_weights: dict | None = None) -> Scorecard:
+def build_scorecard(
+    findings,
+    *,
+    fault_penalty: float = 15.0,
+    warn_penalty: float = 5.0,
+    category_weights: dict | None = None,
+) -> Scorecard:
     """Roll findings up into per-category scores (100 minus severity penalties, clamped to 0..100)
     and a weighted overall score/grade.
 
@@ -98,10 +131,22 @@ def build_scorecard(findings, *, fault_penalty: float = 15.0, warn_penalty: floa
         nw = sum(1 for f in fs if _SEV.get(getattr(f, "severity", ""), 0) == 1)
         n_actionable += nf + nw
         score = max(0.0, min(100.0, 100.0 - nf * fault_penalty - nw * warn_penalty))
-        cats.append(CategoryScore(category=cat, score=round(score, 1), grade=grade_for(score),
-                                  n_faults=nf, n_warnings=nw))
+        cats.append(
+            CategoryScore(
+                category=cat,
+                score=round(score, 1),
+                grade=grade_for(score),
+                n_faults=nf,
+                n_warnings=nw,
+            )
+        )
 
     wsum = sum(weights.get(c.category, 1.0) for c in cats)
     overall = (sum(c.score * weights.get(c.category, 1.0) for c in cats) / wsum) if wsum else 100.0
-    return Scorecard(overall_score=round(overall, 1), overall_grade=grade_for(overall),
-                     n_findings=len(findings), n_actionable=n_actionable, categories=cats)
+    return Scorecard(
+        overall_score=round(overall, 1),
+        overall_grade=grade_for(overall),
+        n_findings=len(findings),
+        n_actionable=n_actionable,
+        categories=cats,
+    )

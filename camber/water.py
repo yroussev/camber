@@ -32,8 +32,9 @@ def effective_precip(rain_in: float, eto_in: float, fraction: float = 0.75) -> f
     return min(rain_in * fraction, eto_in)
 
 
-def irrigation_budget_inches(eto_in: float, landscape_coeff: float,
-                             efficiency: float, eff_precip_in: float = 0.0) -> float:
+def irrigation_budget_inches(
+    eto_in: float, landscape_coeff: float, efficiency: float, eff_precip_in: float = 0.0
+) -> float:
     """Required application depth (inches) = (ETo*KL - effective precip) / efficiency."""
     need = eto_in * landscape_coeff - eff_precip_in
     return max(0.0, need) / efficiency
@@ -51,12 +52,18 @@ class IrrigationBudget:
     required_inches: float
     required_gallons: float
     actual_gallons: float
-    overage_pct: float       # (actual - budget) / budget * 100
+    overage_pct: float  # (actual - budget) / budget * 100
 
 
-def irrigation_budget(*, eto_in: float, area_sf: float, actual_gallons: float,
-                      landscape_coeff: float = 0.7, efficiency: float = 0.70,
-                      rain_in: float = 0.0) -> IrrigationBudget:
+def irrigation_budget(
+    *,
+    eto_in: float,
+    area_sf: float,
+    actual_gallons: float,
+    landscape_coeff: float = 0.7,
+    efficiency: float = 0.70,
+    rain_in: float = 0.0,
+) -> IrrigationBudget:
     """Monthly irrigation water budget vs metered use.
 
     Defaults: KL=0.7 (mixed landscape), efficiency=0.70 (spray). Overage beyond
@@ -66,10 +73,12 @@ def irrigation_budget(*, eto_in: float, area_sf: float, actual_gallons: float,
     inches = irrigation_budget_inches(eto_in, landscape_coeff, efficiency, ep)
     budget_gal = inches_to_gallons(inches, area_sf)
     over = ((actual_gallons - budget_gal) / budget_gal * 100.0) if budget_gal else float("nan")
-    return IrrigationBudget(required_inches=round(inches, 3),
-                            required_gallons=round(budget_gal, 1),
-                            actual_gallons=round(actual_gallons, 1),
-                            overage_pct=round(over, 1))
+    return IrrigationBudget(
+        required_inches=round(inches, 3),
+        required_gallons=round(budget_gal, 1),
+        actual_gallons=round(actual_gallons, 1),
+        overage_pct=round(over, 1),
+    )
 
 
 # ------------------------------------------------------------------ cooling tower
@@ -127,7 +136,10 @@ def leak_impact(gpm: float, *, rate_per_ccf: float = 12.0) -> LeakImpact:
     gpd = gpm * MIN_PER_DAY
     gpmonth = gpd * 30.0
     cost_month = gpmonth / GAL_PER_CCF * rate_per_ccf
-    return LeakImpact(gpm=gpm, gallons_per_day=round(gpd, 1),
-                      gallons_per_month=round(gpmonth, 1),
-                      cost_per_month=round(cost_month, 2),
-                      cost_per_year=round(cost_month * 12.0, 2))
+    return LeakImpact(
+        gpm=gpm,
+        gallons_per_day=round(gpd, 1),
+        gallons_per_month=round(gpmonth, 1),
+        cost_per_month=round(cost_month, 2),
+        cost_per_year=round(cost_month * 12.0, 2),
+    )

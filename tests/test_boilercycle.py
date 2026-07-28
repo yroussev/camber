@@ -20,6 +20,7 @@ def _idx(n):
 
 # --- diagnostic --------------------------------------------------------------- #
 
+
 def test_steady_firing_low_cycling():
     n = 24 * 14
     df = pd.DataFrame({"BoilerStatus": np.ones(n)}, index=_idx(n))  # fires continuously
@@ -30,18 +31,21 @@ def test_steady_firing_low_cycling():
 
 def test_short_cycling_flagged():
     n = 24 * 14
-    status = np.tile([1.0, 0.0], n // 2)   # on/off every hour -> 12 starts/day
+    status = np.tile([1.0, 0.0], n // 2)  # on/off every hour -> 12 starts/day
     r = analyze_boiler_cycling(pd.DataFrame({"BoilerStatus": status}, index=_idx(n)), "BLR-1")
     assert r.starts_per_day >= 11.5
     assert abs(r.runtime_pct - 50.0) < 1.0
 
 
 def test_insufficient_data_returns_none():
-    assert analyze_boiler_cycling(
-        pd.DataFrame({"BoilerStatus": [1.0] * 4}, index=_idx(4)), "BLR-1") is None
+    assert (
+        analyze_boiler_cycling(pd.DataFrame({"BoilerStatus": [1.0] * 4}, index=_idx(4)), "BLR-1")
+        is None
+    )
 
 
 # --- rule wrapper ------------------------------------------------------------- #
+
 
 def test_rule_is_a_rule_and_severity():
     assert isinstance(BoilerShortCycle(), Rule)

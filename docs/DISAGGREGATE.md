@@ -5,8 +5,9 @@ baseload reduction, envelope/HVAC targeting, and setback opportunity:
 
 ```python
 from camber.disaggregate import disaggregate_load
+
 c = disaggregate_load(load_kw, oat)
-c.baseload_frac, c.weather_frac, c.other_frac      # e.g. 0.61, 0.26, 0.13 (sum to 1)
+c.baseload_frac, c.weather_frac, c.other_frac  # e.g. 0.61, 0.26, 0.13 (sum to 1)
 c.baseload_kw, c.balance_point_f
 ```
 

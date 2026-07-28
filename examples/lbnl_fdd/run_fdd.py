@@ -44,12 +44,17 @@ def load_role_frame(csv: str) -> pd.DataFrame:
     Column selection goes through ``role_of`` (case-insensitive), so it works
     regardless of the source's capitalization.
     """
-    df = (pd.read_csv(csv,
-                      usecols=lambda c: c == "Datetime" or MAPPING.role_of(c) is not None,
-                      parse_dates=["Datetime"])
-          .set_index("Datetime").resample("1h").mean())
-    frame = pd.DataFrame({MAPPING.role_of(c): df[c] for c in df.columns
-                          if MAPPING.role_of(c)})
+    df = (
+        pd.read_csv(
+            csv,
+            usecols=lambda c: c == "Datetime" or MAPPING.role_of(c) is not None,
+            parse_dates=["Datetime"],
+        )
+        .set_index("Datetime")
+        .resample("1h")
+        .mean()
+    )
+    frame = pd.DataFrame({MAPPING.role_of(c): df[c] for c in df.columns if MAPPING.role_of(c)})
     # LBNL valve/damper signals are 0-1; normalize to percent for the rules
     return normalize_percent_frame(frame)
 
@@ -64,15 +69,18 @@ def main() -> int:
     base = load_role_frame(base_csv)
     roles = set(base.columns)
     print("=== 1. Mapping ===")
-    print(f"LBNL point names -> {len(roles)} CAMBER roles: "
-          f"{', '.join(sorted(r.value for r in roles))}")
+    print(
+        f"LBNL point names -> {len(roles)} CAMBER roles: "
+        f"{', '.join(sorted(r.value for r in roles))}"
+    )
 
     print("\n=== 2. Completeness (entity model) ===")
     c = completeness("AHU", roles)
-    print(f"AHU ready={c.ready}  completeness={c.score:.0%}  "
-          f"missing required={[r.value for r in c.missing_required]}")
-    for rr in runnable_rules(roles, [SupplyAirReset(), OutdoorAirFraction(),
-                                     LeakingValve()]):
+    print(
+        f"AHU ready={c.ready}  completeness={c.score:.0%}  "
+        f"missing required={[r.value for r in c.missing_required]}"
+    )
+    for rr in runnable_rules(roles, [SupplyAirReset(), OutdoorAirFraction(), LeakingValve()]):
         why = "" if rr.can_run else f" (needs {[x.value for x in rr.missing_required]})"
         print(f"  {rr.rule}: {'runs' if rr.can_run else 'gated'}{why}")
 
@@ -80,17 +88,20 @@ def main() -> int:
     st = ParquetStore(tempfile.mkdtemp())
     n = st.write_role_frame(base, site="LBNL_SDAHU", equip="AHU", equip_class="AHU")
     back = st.read_role_frame(site="LBNL_SDAHU", equip="AHU")
-    print(f"wrote {n:,} observations; read back {back.shape[0]:,} hourly rows x "
-          f"{back.shape[1]} roles; round-trip ok={len(base) == len(back)}")
+    print(
+        f"wrote {n:,} observations; read back {back.shape[0]:,} hourly rows x "
+        f"{back.shape[1]} roles; round-trip ok={len(base) == len(back)}"
+    )
 
     print("\n=== 4. Fault detection: baseline vs labeled stuck-damper ===")
     rule = OutdoorAirFraction()
-    for label, csv in [("fault-free baseline", base_csv),
-                       ("damper_stuck_100", fault_csv)]:
+    for label, csv in [("fault-free baseline", base_csv), ("damper_stuck_100", fault_csv)]:
         f = rule.analyze("AHU", load_role_frame(csv))
-        print(f"  {label:22s}: {f.severity:5s}  "
-              f"OAF median {f.metrics.get('oaf_median_pct')}%  "
-              f"excess-OA {f.metrics.get('excess_oa_pct')}%")
+        print(
+            f"  {label:22s}: {f.severity:5s}  "
+            f"OAF median {f.metrics.get('oaf_median_pct')}%  "
+            f"excess-OA {f.metrics.get('excess_oa_pct')}%"
+        )
     print("\nThe stuck-open damper drives outdoor-air fraction to ~100% and trips the")
     print("diagnostic, while the baseline economizes correctly (~20%) and stays OK --")
     print("detection validated against the dataset's ground-truth fault label.")

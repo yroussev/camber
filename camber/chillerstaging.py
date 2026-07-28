@@ -20,7 +20,7 @@ are invisible -- so starts-per-day is a floor, reported as such.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -30,11 +30,11 @@ class ChillerStagingResult:
     """Chiller cycling rate and part-load distribution over the trend window."""
 
     equip: str
-    n_days: float                  # observed span in days
-    starts_per_day: float          # off->on transitions per day (a floor; see module doc)
-    runtime_pct: float             # % of intervals the chiller is running
+    n_days: float  # observed span in days
+    starts_per_day: float  # off->on transitions per day (a floor; see module doc)
+    runtime_pct: float  # % of intervals the chiller is running
     load_factor_median_pct: float  # median load as % of observed peak (NaN if no load data)
-    low_load_pct: float            # % of running hrs below min_load_pct (NaN if no load data)
+    low_load_pct: float  # % of running hrs below min_load_pct (NaN if no load data)
     coverage_start: str
     coverage_end: str
 
@@ -47,8 +47,8 @@ def analyze_chiller_staging(
     df: pd.DataFrame,
     equip: str,
     *,
-    min_power_kw: float = 2.0,      # power above this == running
-    min_load_pct: float = 40.0,     # load factor below this == "low part-load"
+    min_power_kw: float = 2.0,  # power above this == running
+    min_load_pct: float = 40.0,  # load factor below this == "low part-load"
 ) -> ChillerStagingResult | None:
     """Compute cycling rate and part-load distribution from metered power (+ optional load).
 
@@ -58,8 +58,9 @@ def analyze_chiller_staging(
     """
     if "Power" not in df.columns:
         return None
-    w = df[[c for c in ("Power", "CHWS_Temp", "CHWR_Temp", "CHW_Flow")
-            if c in df.columns]].dropna(subset=["Power"])
+    w = df[[c for c in ("Power", "CHWS_Temp", "CHWR_Temp", "CHW_Flow") if c in df.columns]].dropna(
+        subset=["Power"]
+    )
     if len(w) < 10:
         return None
     span_days = (w.index.max() - w.index.min()).total_seconds() / 86400.0
@@ -72,7 +73,7 @@ def analyze_chiller_staging(
     low_load = float("nan")
     if {"CHWS_Temp", "CHWR_Temp", "CHW_Flow"} <= set(w.columns):
         run = w[running]
-        tons = (run.CHW_Flow * (run.CHWR_Temp - run.CHWS_Temp) / 24.0)
+        tons = run.CHW_Flow * (run.CHWR_Temp - run.CHWS_Temp) / 24.0
         tons = tons[tons > 0]
         if len(tons) >= 10:
             peak = float(tons.max())
@@ -97,11 +98,11 @@ class ChillerFleetStagingResult:
     """Plant-level staging: how often more chillers run than the load requires."""
 
     n_chillers: int
-    n_running_hours: int          # intervals with >= 1 chiller running
-    n_multi_hours: int            # intervals with >= 2 chillers running
-    pct_overstaged: float         # % of multi-chiller hours that could drop a chiller
-    median_running_count: float   # median number of chillers running (running hours)
-    rep_capacity_kw: float        # representative per-chiller capacity used
+    n_running_hours: int  # intervals with >= 1 chiller running
+    n_multi_hours: int  # intervals with >= 2 chillers running
+    pct_overstaged: float  # % of multi-chiller hours that could drop a chiller
+    median_running_count: float  # median number of chillers running (running hours)
+    rep_capacity_kw: float  # representative per-chiller capacity used
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -111,8 +112,8 @@ class ChillerFleetStagingResult:
 def analyze_chiller_staging_fleet(
     frames: dict,
     *,
-    min_power_kw: float = 2.0,         # power above this == chiller running
-    redundancy_ceiling: float = 0.9,   # a single chiller can carry up to ceiling*capacity
+    min_power_kw: float = 2.0,  # power above this == chiller running
+    redundancy_ceiling: float = 0.9,  # a single chiller can carry up to ceiling*capacity
 ) -> ChillerFleetStagingResult | None:
     """Detect over-staging across a set of chillers from their power trends.
 
@@ -135,7 +136,7 @@ def analyze_chiller_staging_fleet(
             continue
         running_cols[equip] = run
         load_cols[equip] = p.where(run, 0.0)
-        caps.append(float(p[run].quantile(0.95)))   # robust peak (capacity)
+        caps.append(float(p[run].quantile(0.95)))  # robust peak (capacity)
     if len(running_cols) < 2:
         return None
 
@@ -156,6 +157,7 @@ def analyze_chiller_staging_fleet(
         n_multi_hours=n_multi,
         pct_overstaged=round(100.0 * int(overstaged.sum()) / n_multi, 1) if n_multi else 0.0,
         median_running_count=round(float(n_running[any_run].median()), 1)
-        if bool(any_run.any()) else 0.0,
+        if bool(any_run.any())
+        else 0.0,
         rep_capacity_kw=round(cap_rep, 1),
     )

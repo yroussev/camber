@@ -15,11 +15,14 @@ from camber.rules.reheat_min_rule import ReheatMinimization  # noqa: E402
 
 def _frame(n=24 * 21, hw=0.0, flow=600.0, flow_sp=600.0):
     idx = pd.date_range("2025-07-07", periods=n, freq="1h")  # Monday
-    return pd.DataFrame({
-        Role.HEAT_VALVE: np.full(n, hw),
-        Role.AIRFLOW: np.full(n, flow),
-        Role.AIRFLOW_SP: np.full(n, flow_sp),
-    }, index=idx)
+    return pd.DataFrame(
+        {
+            Role.HEAT_VALVE: np.full(n, hw),
+            Role.AIRFLOW: np.full(n, flow),
+            Role.AIRFLOW_SP: np.full(n, flow_sp),
+        },
+        index=idx,
+    )
 
 
 def test_rule_protocol():
@@ -36,14 +39,14 @@ def test_violation_reheat_at_high_flow():
 
 def test_compliant_reheat_at_min_flow():
     # reheating but holding minimum airflow -> compliant
-    f = _frame(hw=40, flow=620, flow_sp=600)   # within 20% margin of min
+    f = _frame(hw=40, flow=620, flow_sp=600)  # within 20% margin of min
     r = ReheatMinimization().analyze("VAV_2", f)
     assert r.metrics["reheat_above_min_pct"] < 5
     assert r.severity == "ok"
 
 
 def test_no_reheat_is_ok():
-    f = _frame(hw=0, flow=1200, flow_sp=600)   # high flow but no reheat -> not a reheat fault
+    f = _frame(hw=0, flow=1200, flow_sp=600)  # high flow but no reheat -> not a reheat fault
     r = ReheatMinimization().analyze("VAV_3", f)
     assert r.severity == "ok"
     assert r.metrics["reheat_hours_pct"] == 0.0

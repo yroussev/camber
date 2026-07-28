@@ -13,7 +13,7 @@ numpy/pandas only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 import pandas as pd
@@ -23,11 +23,11 @@ import pandas as pd
 class LevelShift:
     """A detected step change in a series' mean."""
 
-    at: object                       # timestamp (or index position) of the shift
+    at: object  # timestamp (or index position) of the shift
     before_mean: float
     after_mean: float
-    delta: float                     # after − before
-    score: float                     # standardized two-sample statistic at the split
+    delta: float  # after − before
+    score: float  # standardized two-sample statistic at the split
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -41,7 +41,10 @@ def _best_split(x, min_segment: int = 1):
     ``min_segment`` points — otherwise a lone boundary outlier makes a 1-point segment with a huge
     (near-zero-variance) statistic and fakes a regime change."""
     n = len(x)
-    lo, hi = min_segment - 1, n - min_segment      # valid CUSUM positions -> k in [min_segment, n-min_segment]
+    lo, hi = (
+        min_segment - 1,
+        n - min_segment,
+    )  # valid CUSUM positions -> k in [min_segment, n-min_segment]
     if hi <= lo:
         return None, 0.0
     cs = np.cumsum(x - x.mean())
@@ -53,16 +56,22 @@ def _best_split(x, min_segment: int = 1):
     return k, float(score)
 
 
-def detect_level_shifts(series: pd.Series, *, min_segment: int = 24, max_shifts: int = 8,
-                        z: float = 4.0, min_delta: float | None = None) -> list:
+def detect_level_shifts(
+    series: pd.Series,
+    *,
+    min_segment: int = 24,
+    max_shifts: int = 8,
+    z: float = 4.0,
+    min_delta: float | None = None,
+) -> list:
     """Detect step changes in ``series``' mean (binary segmentation). Returns worst-first
     :class:`LevelShift` list.
 
     A candidate split is accepted when its standardized two-sample statistic exceeds ``z``; segments
     below ``min_segment`` points are not split further. Once all breakpoints are found, each shift's
-    ``before``/``after`` means are computed from the **adjacent** segments (so an early shift's level
-    isn't blurred by a later regime), and ``min_delta`` filters small clean level changes. At most
-    ``max_shifts`` are returned.
+    ``before``/``after`` means are computed from the **adjacent** segments (so an early shift's
+    level isn't blurred by a later regime), and ``min_delta`` filters small clean level changes. At
+    most ``max_shifts`` are returned.
     """
     s = series.dropna()
     vals = s.to_numpy(dtype=float)
@@ -92,14 +101,20 @@ def detect_level_shifts(series: pd.Series, *, min_segment: int = 24, max_shifts:
     bounds = [0] + positions + [n]
     shifts = []
     for i, p in enumerate(positions):
-        before = vals[bounds[i]:p]
-        after = vals[p:bounds[i + 2]]
+        before = vals[bounds[i] : p]
+        after = vals[p : bounds[i + 2]]
         delta = float(after.mean() - before.mean())
         if min_delta is not None and abs(delta) < min_delta:
             continue
-        shifts.append(LevelShift(at=idx[p], before_mean=round(float(before.mean()), 4),
-                                  after_mean=round(float(after.mean()), 4),
-                                  delta=round(delta, 4), score=round(score_at[p], 3)))
+        shifts.append(
+            LevelShift(
+                at=idx[p],
+                before_mean=round(float(before.mean()), 4),
+                after_mean=round(float(after.mean()), 4),
+                delta=round(delta, 4),
+                score=round(score_at[p], 3),
+            )
+        )
     shifts.sort(key=lambda ls: -ls.score)
     return shifts[:max_shifts]
 

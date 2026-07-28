@@ -13,8 +13,11 @@ from glob import glob
 
 import pandas as pd
 
+from .coerce import (
+    coerce_numeric,
+    coerce_status,
+)
 from .tsparse import parse_timestamps
-from .coerce import coerce_numeric, coerce_status, STATUS_ON as _STATUS_ON, STATUS_OFF as _STATUS_OFF
 
 # Strip the trailing timezone abbreviation (PDT/PST) -- kept for callers that import it.
 _TZ_RE = re.compile(r"\s+[A-Z]{2,4}$")
@@ -31,14 +34,13 @@ def load_point(path: str, name: str | None = None) -> pd.Series:
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
     idx = _parse_ts(df[ts_col])
-    s = pd.Series(coerce_numeric(df[val_col]).values, index=idx)   # thousands/null-token aware
+    s = pd.Series(coerce_numeric(df[val_col]).values, index=idx)  # thousands/null-token aware
     s = s[~s.index.isna()]
     s.name = name or os.path.basename(path)[:-4]
     return s[~s.index.duplicated(keep="first")].sort_index()
 
 
-def load_status(path: str, name: str | None = None,
-                resample: str | None = None) -> pd.Series:
+def load_status(path: str, name: str | None = None, resample: str | None = None) -> pd.Series:
     """Load a text/event-based status or command point as a 0/1 step series.
 
     BAS status (``Off``/``Running``) and command (``STOP``/``START``) points are
@@ -51,7 +53,7 @@ def load_status(path: str, name: str | None = None,
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
     idx = _parse_ts(df[ts_col])
-    s = pd.Series(coerce_status(df[val_col]).values, index=idx)   # On/Off/Open/Closed/Fault/… -> 0/1
+    s = pd.Series(coerce_status(df[val_col]).values, index=idx)  # On/Off/Open/Closed/Fault/… -> 0/1
     s = s[~s.index.isna()]
     s = s[~s.index.duplicated(keep="last")].sort_index().ffill()
     s.name = name or os.path.basename(path)[:-4]

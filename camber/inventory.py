@@ -9,18 +9,38 @@ possible before running any.
 
 from __future__ import annotations
 
-import csv
 import os
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from glob import glob
 
 # Equipment-type prefixes seen in the export. Order matters: longer/multiword
 # prefixes (CHW_SYS, HW_SYS) must be tried before bare CHW/HW.
 EQUIP_PREFIXES = [
-    "CHW_SYS", "HHW_SYS", "HW_SYS", "CW_SYS", "CHW_BTU_METER", "HHW_BTU_METER",
-    "AHU", "RTU", "VAV", "CAV", "FCAV", "FCU", "EF", "SF", "RF",
-    "CHWP", "CHWP_", "CHW", "HHW", "HW", "CW", "Chiller", "Boiler", "CT",
+    "CHW_SYS",
+    "HHW_SYS",
+    "HW_SYS",
+    "CW_SYS",
+    "CHW_BTU_METER",
+    "HHW_BTU_METER",
+    "AHU",
+    "RTU",
+    "VAV",
+    "CAV",
+    "FCAV",
+    "FCU",
+    "EF",
+    "SF",
+    "RF",
+    "CHWP",
+    "CHWP_",
+    "CHW",
+    "HHW",
+    "HW",
+    "CW",
+    "Chiller",
+    "Boiler",
+    "CT",
 ]
 
 
@@ -100,7 +120,6 @@ def to_rows(points):
 
 
 if __name__ == "__main__":
-    import json
     import sys
 
     folders = sys.argv[1:] or ["."]

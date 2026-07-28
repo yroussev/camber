@@ -7,27 +7,26 @@ one instance of every rule registered under ``rule.name``.
 
 from __future__ import annotations
 
-from .base import Registry
 from .airflow_rule import AirflowTracking
+from .base import Registry
 from .boiler_rule import BoilerSummerLockout
 from .boilercycle_rule import BoilerShortCycle
+from .chiller_approach_rule import ChillerApproachFouling
 from .chiller_rule import ChillerEfficiency
 from .chillerfleet_rule import ChillerStagingFleet
 from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
-from .chiller_approach_rule import ChillerApproachFouling
 from .cohort import CohortDeviation
 from .compressor_cycle_rule import CompressorShortCycle
 from .compressor_stage_rule import CompressorStaging
-from .filter_rule import FilterFouling
-from .heatpump_rule import HeatPumpDefrost
 from .condenserwater_rule import CondenserWaterReset
-from .economizer_lockout_rule import EconomizerHighLimit
-from .freecoolingmissed_rule import FreeCoolingMissed
-from .hunting_rule import ControlHunting
-from .staticreset_rule import StaticPressureReset
 from .coolingtower_rule import CoolingTowerApproach
+from .economizer_lockout_rule import EconomizerHighLimit
+from .filter_rule import FilterFouling
+from .freecoolingmissed_rule import FreeCoolingMissed
+from .heatpump_rule import HeatPumpDefrost
+from .hunting_rule import ControlHunting
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
 from .iaq_rule import CO2Ventilation
@@ -42,6 +41,7 @@ from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
 from .static_rule import DamperCensus
+from .staticreset_rule import StaticPressureReset
 from .unmet_rule import UnmetHours
 from .ventilation_rule import DemandControlledVentilation
 from .zones_rule import ZonesHeatCoolCensus
@@ -50,16 +50,42 @@ from .zones_rule import ZonesHeatCoolCensus
 # (VentilationRateProcedure needs per-zone design inputs, so it is instantiated explicitly
 # by the caller rather than auto-registered here.)
 RULE_CLASSES = [
-    SimultaneousHeatCool, SupplyAirReset, ReheatPenalty, OvercoolingMinFlow,
-    OvercoolingSeverity, ReheatMinimization, BoilerSummerLockout, BoilerShortCycle,
-    HWPlantDeltaT, HWPumpDPReset, NightWeekendSetback, OutdoorAirFraction,
-    CHWPlantReset, CHWPumpDPReset,
-    ChillerEfficiency, ChillerStaging, CoolingTowerApproach, CondenserWaterReset,
-    CO2Ventilation, DemandControlledVentilation, LeakingValve, DamperCensus,
-    ZonesHeatCoolCensus, ControlHunting, UnmetHours, SupplyAirControl, AirflowTracking,
-    EconomizerHighLimit, StaticPressureReset, FreeCoolingMissed,
-    CompressorShortCycle, CompressorStaging, HeatPumpDefrost, FilterFouling,
-    ChillerApproachFouling, ChillerStagingFleet,
+    SimultaneousHeatCool,
+    SupplyAirReset,
+    ReheatPenalty,
+    OvercoolingMinFlow,
+    OvercoolingSeverity,
+    ReheatMinimization,
+    BoilerSummerLockout,
+    BoilerShortCycle,
+    HWPlantDeltaT,
+    HWPumpDPReset,
+    NightWeekendSetback,
+    OutdoorAirFraction,
+    CHWPlantReset,
+    CHWPumpDPReset,
+    ChillerEfficiency,
+    ChillerStaging,
+    CoolingTowerApproach,
+    CondenserWaterReset,
+    CO2Ventilation,
+    DemandControlledVentilation,
+    LeakingValve,
+    DamperCensus,
+    ZonesHeatCoolCensus,
+    ControlHunting,
+    UnmetHours,
+    SupplyAirControl,
+    AirflowTracking,
+    EconomizerHighLimit,
+    StaticPressureReset,
+    FreeCoolingMissed,
+    CompressorShortCycle,
+    CompressorStaging,
+    HeatPumpDefrost,
+    FilterFouling,
+    ChillerApproachFouling,
+    ChillerStagingFleet,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

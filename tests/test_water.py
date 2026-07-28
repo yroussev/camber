@@ -3,39 +3,51 @@
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.water import (  # noqa: E402
-    effective_precip, evaporation_gpm, flow_duration, gallons_per_ton_hour,
-    irrigation_budget, leak_impact, makeup_gpm, min_night_flow,
+    effective_precip,
+    evaporation_gpm,
+    flow_duration,
+    gallons_per_ton_hour,
+    irrigation_budget,
+    leak_impact,
+    makeup_gpm,
+    min_night_flow,
 )
-
 
 # --- irrigation -------------------------------------------------------------- #
 
+
 def test_effective_precip_capped_by_eto():
-    assert abs(effective_precip(0.2, 8.0) - 0.15) < 1e-9   # min(0.2*0.75, 8)
-    assert effective_precip(20.0, 8.0) == 8.0              # capped at ETo
+    assert abs(effective_precip(0.2, 8.0) - 0.15) < 1e-9  # min(0.2*0.75, 8)
+    assert effective_precip(20.0, 8.0) == 8.0  # capped at ETo
 
 
 def test_irrigation_budget_worked_example():
     # 50,000 sf, KL 0.7, eff 0.70, ETo 8 in, rain 0.2 in
-    b = irrigation_budget(eto_in=8.0, area_sf=50000, actual_gallons=280000,
-                          landscape_coeff=0.7, efficiency=0.70, rain_in=0.2)
+    b = irrigation_budget(
+        eto_in=8.0,
+        area_sf=50000,
+        actual_gallons=280000,
+        landscape_coeff=0.7,
+        efficiency=0.70,
+        rain_in=0.2,
+    )
     assert abs(b.required_inches - 7.79) < 0.01
-    assert abs(b.required_gallons - 242575) < 100      # ~242.6k gal
-    assert abs(b.overage_pct - 15.4) < 0.3             # ~15% over budget
+    assert abs(b.required_gallons - 242575) < 100  # ~242.6k gal
+    assert abs(b.overage_pct - 15.4) < 0.3  # ~15% over budget
 
 
 # --- cooling tower ----------------------------------------------------------- #
 
+
 def test_cooling_tower_makeup_and_cycles():
-    assert abs(evaporation_gpm(500) - 1.5) < 1e-9      # 500*3/1000
-    assert abs(makeup_gpm(500, 4) - 2.0) < 1e-6        # 1.5 / (1 - 1/4)
-    assert abs(makeup_gpm(500, 6) - 1.8) < 0.01        # raising cycles cuts makeup
+    assert abs(evaporation_gpm(500) - 1.5) < 1e-9  # 500*3/1000
+    assert abs(makeup_gpm(500, 4) - 2.0) < 1e-6  # 1.5 / (1 - 1/4)
+    assert abs(makeup_gpm(500, 6) - 1.8) < 0.01  # raising cycles cuts makeup
 
 
 def test_gallons_per_ton_hour():
@@ -43,6 +55,7 @@ def test_gallons_per_ton_hour():
 
 
 # --- leak detection ---------------------------------------------------------- #
+
 
 def test_leak_impact_one_gpm():
     li = leak_impact(1.0, rate_per_ccf=12.0)

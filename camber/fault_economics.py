@@ -19,7 +19,7 @@ re-run with better inputs. When the required sizing is missing, the estimator re
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 
 from .integrate.tickets import _attr
 
@@ -29,15 +29,17 @@ _KBTU_PER_THERM = 100.0
 
 # Documented default assumptions. Override per call via ``params=`` (shallow-merged).
 DEFAULTS = {
-    "reheat_diversity": 0.30,        # mean reheat-coil output as a fraction of capacity when faulted
-    "cool_cop": 3.5,                 # chiller COP for the cooling that fights the reheat
-    "boiler_efficiency": 0.80,       # combustion/output efficiency (gas input = output / eff)
-    "chiller_target_kw_per_ton": 0.65,   # fallback efficiency target if the finding lacks a design value
-    "chiller_load_factor": 0.60,     # mean chiller load as a fraction of full when running
-    "ct_kw_per_approach_f": 0.015,   # chiller power penalty per °F of cooling-tower approach above design
-    "fan_excess_frac": 0.15,         # supply-fan power wasted when duct static rides high
-    "pump_excess_frac": 0.15,        # loop-pump power wasted when it rides the curve (no DP reset)
-    "per_start_loss": 0.005,         # boiler standby/purge loss per excess start/day (capped at 10%)
+    "reheat_diversity": 0.30,  # mean reheat-coil output as a fraction of capacity when faulted
+    "cool_cop": 3.5,  # chiller COP for the cooling that fights the reheat
+    "boiler_efficiency": 0.80,  # combustion/output efficiency (gas input = output / eff)
+    "chiller_target_kw_per_ton": 0.65,  # fallback efficiency target if the finding lacks a
+    # design value
+    "chiller_load_factor": 0.60,  # mean chiller load as a fraction of full when running
+    "ct_kw_per_approach_f": 0.015,  # chiller power penalty per °F of cooling-tower approach
+    # above design
+    "fan_excess_frac": 0.15,  # supply-fan power wasted when duct static rides high
+    "pump_excess_frac": 0.15,  # loop-pump power wasted when it rides the curve (no DP reset)
+    "per_start_loss": 0.005,  # boiler standby/purge loss per excess start/day (capped at 10%)
 }
 
 
@@ -55,12 +57,12 @@ class EquipmentLoad:
     needs and reports what is missing. Capacities prefer values the rule already measured (e.g.
     chiller tons), falling back to these."""
 
-    heating_capacity_kbtuh: float | None = None   # reheat coil / burner output capacity
-    cooling_tons: float | None = None             # chiller / cooling-coil capacity
-    chiller_kw_per_ton: float | None = None       # full-load electrical input
-    fan_kw: float | None = None                   # supply-fan motor power
-    pump_kw: float | None = None                  # loop-pump motor power
-    annual_hours: float = 8760.0                  # operating hours per year for this equipment
+    heating_capacity_kbtuh: float | None = None  # reheat coil / burner output capacity
+    cooling_tons: float | None = None  # chiller / cooling-coil capacity
+    chiller_kw_per_ton: float | None = None  # full-load electrical input
+    fan_kw: float | None = None  # supply-fan motor power
+    pump_kw: float | None = None  # loop-pump motor power
+    annual_hours: float = 8760.0  # operating hours per year for this equipment
 
 
 @dataclass(frozen=True)
@@ -73,8 +75,8 @@ class FaultCost:
     electricity_kwh: float
     gas_therms: float
     annual_cost_usd: float
-    basis: str                       # which model ran, or why it couldn't
-    costed: bool                     # False = uncosted (missing inputs / no model)
+    basis: str  # which model ran, or why it couldn't
+    costed: bool  # False = uncosted (missing inputs / no model)
     assumptions: dict = field(default_factory=dict)
 
     def as_dict(self):
@@ -106,6 +108,7 @@ def _price(elec_kwh, gas_therms, price):
 # Return elec_kwh=gas_therms=0 with a basis string when a required input is missing.
 # --------------------------------------------------------------------------- #
 
+
 def _reheat_gas(metrics, load, price, P, *, pct_keys, with_cooling):
     """Reheat / simultaneous-H/C gas (and, if paired, the cooling it fights)."""
     cap = load.heating_capacity_kbtuh
@@ -119,7 +122,7 @@ def _reheat_gas(metrics, load, price, P, *, pct_keys, with_cooling):
     used = {"faulted_frac": round(frac, 3), "reheat_diversity": div, "boiler_efficiency": eff}
     if with_cooling:
         cop = P["cool_cop"]
-        elec_kwh = (gas_kbtu_out / _KBTU_PER_KWH) / cop      # cooling to remove the reheat heat
+        elec_kwh = (gas_kbtu_out / _KBTU_PER_KWH) / cop  # cooling to remove the reheat heat
         used["cool_cop"] = cop
     return elec_kwh, gas_therms, "reheat-gas" + ("+paired-cooling" if with_cooling else ""), used
 
@@ -129,14 +132,18 @@ def _est_simultaneous(m, load, price, P):
 
 
 def _est_reheat_penalty(m, load, price, P):
-    return _reheat_gas(m, load, price, P,
-                       pct_keys=("reheat_above_min_flow_pct", "reheat_and_coldsupply_pct",
-                                 "valve_open_pct"), with_cooling=False)
+    return _reheat_gas(
+        m,
+        load,
+        price,
+        P,
+        pct_keys=("reheat_above_min_flow_pct", "reheat_and_coldsupply_pct", "valve_open_pct"),
+        with_cooling=False,
+    )
 
 
 def _est_reheat_min(m, load, price, P):
-    return _reheat_gas(m, load, price, P,
-                       pct_keys=("reheat_hours_pct",), with_cooling=False)
+    return _reheat_gas(m, load, price, P, pct_keys=("reheat_hours_pct",), with_cooling=False)
 
 
 def _est_chiller(m, load, price, P):
@@ -149,9 +156,17 @@ def _est_chiller(m, load, price, P):
     excess = max(0.0, kwpt - target)
     hours = _frac(_num(m, "pct_hours_inefficient")) * load.annual_hours
     elec = excess * tons * hours
-    return elec, 0.0, "chiller-excess-kw/ton", {
-        "excess_kw_per_ton": round(excess, 3), "target_kw_per_ton": round(target, 3),
-        "tons": round(tons, 1), "inefficient_hours": round(hours)}
+    return (
+        elec,
+        0.0,
+        "chiller-excess-kw/ton",
+        {
+            "excess_kw_per_ton": round(excess, 3),
+            "target_kw_per_ton": round(target, 3),
+            "tons": round(tons, 1),
+            "inefficient_hours": round(hours),
+        },
+    )
 
 
 def _est_cooling_tower(m, load, price, P):
@@ -169,9 +184,17 @@ def _est_cooling_tower(m, load, price, P):
     hours = _frac(_num(m, "pct_hours_high_approach")) * load.annual_hours
     chiller_kw = tons * kwpt * P["chiller_load_factor"]
     elec = penalty * chiller_kw * hours
-    return elec, 0.0, "cooling-tower-approach->chiller", {
-        "excess_approach_f": round(excess_f, 1), "penalty_frac": round(penalty, 4),
-        "chiller_kw": round(chiller_kw, 1), "high_approach_hours": round(hours)}
+    return (
+        elec,
+        0.0,
+        "cooling-tower-approach->chiller",
+        {
+            "excess_approach_f": round(excess_f, 1),
+            "penalty_frac": round(penalty, 4),
+            "chiller_kw": round(chiller_kw, 1),
+            "high_approach_hours": round(hours),
+        },
+    )
 
 
 def _est_pump(m, load, price, P):
@@ -181,19 +204,27 @@ def _est_pump(m, load, price, P):
     frac = _frac(_num(m, "pct_running_near_full", "median_speed_pct"))
     excess = P["pump_excess_frac"]
     elec = load.pump_kw * load.annual_hours * frac * excess
-    return elec, 0.0, "pump-riding-curve", {
-        "near_full_frac": round(frac, 3), "pump_excess_frac": excess}
+    return (
+        elec,
+        0.0,
+        "pump-riding-curve",
+        {"near_full_frac": round(frac, 3), "pump_excess_frac": excess},
+    )
 
 
 def _est_static(m, load, price, P):
     """Supply-fan energy wasted when duct static rides high (boxes throttling)."""
     if not load.fan_kw:
         return 0.0, 0.0, "needs EquipmentLoad.fan_kw", {}
-    frac = _frac(_num(m, "pct_boxes_low"))           # boxes choked down -> static too high
+    frac = _frac(_num(m, "pct_boxes_low"))  # boxes choked down -> static too high
     excess = P["fan_excess_frac"]
     elec = load.fan_kw * load.annual_hours * frac * excess
-    return elec, 0.0, "duct-static-high->fan", {
-        "throttled_box_frac": round(frac, 3), "fan_excess_frac": excess}
+    return (
+        elec,
+        0.0,
+        "duct-static-high->fan",
+        {"throttled_box_frac": round(frac, 3), "fan_excess_frac": excess},
+    )
 
 
 def _est_boiler_cycle(m, load, price, P):
@@ -210,9 +241,16 @@ def _est_boiler_cycle(m, load, price, P):
     eff = P["boiler_efficiency"]
     runtime = _frac(_num(m, "runtime_pct"))
     gas_input = cap * load.annual_hours * runtime / _KBTU_PER_THERM / eff
-    return 0.0, gas_input * loss, "boiler-short-cycle", {
-        "extra_starts_per_day": round(extra, 1), "loss_frac": round(loss, 3),
-        "runtime_frac": round(runtime, 3)}
+    return (
+        0.0,
+        gas_input * loss,
+        "boiler-short-cycle",
+        {
+            "extra_starts_per_day": round(extra, 1),
+            "loss_frac": round(loss, 3),
+            "runtime_frac": round(runtime, 3),
+        },
+    )
 
 
 # rule name -> estimator
@@ -224,14 +262,20 @@ DEFAULT_MODELS = {
     "cooling_tower_approach": _est_cooling_tower,
     "hw_pump_dp_reset": _est_pump,
     "chw_pump_dp_reset": _est_pump,
-    "duct_static_high": _est_static,     # alias if a static rule emits this name
+    "duct_static_high": _est_static,  # alias if a static rule emits this name
     "damper_census": _est_static,
     "boiler_short_cycle": _est_boiler_cycle,
 }
 
 
-def estimate_cost(finding, load: EquipmentLoad | None = None, price: EnergyPrice | None = None,
-                  *, params: dict | None = None, models: dict | None = None) -> FaultCost:
+def estimate_cost(
+    finding,
+    load: EquipmentLoad | None = None,
+    price: EnergyPrice | None = None,
+    *,
+    params: dict | None = None,
+    models: dict | None = None,
+) -> FaultCost:
     """Estimate one finding's annual cost. Falls back to explicit ``waste_*`` metrics, then
     to an uncosted result when no model applies or required sizing is absent."""
     price = price or EnergyPrice()
@@ -246,19 +290,26 @@ def estimate_cost(finding, load: EquipmentLoad | None = None, price: EnergyPrice
     est = models.get(rule)
     if est is not None:
         elec, gas, basis, used = est(metrics, load, price, P)
-        costed = (elec > 0 or gas > 0)
+        costed = elec > 0 or gas > 0
     else:
         # generic fallback: price an explicit energy estimate the rule may have attached
         elec = _num(metrics, "waste_kwh") or 0.0
         gas = _num(metrics, "waste_therms") or 0.0
-        costed = (elec > 0 or gas > 0)
+        costed = elec > 0 or gas > 0
         basis = "explicit-waste-metric" if costed else f"no cost model for rule '{rule}'"
         used = {}
     cost = _price(elec, gas, price)
-    return FaultCost(rule=rule, equip=equip, severity=sev,
-                     electricity_kwh=round(elec, 1), gas_therms=round(gas, 1),
-                     annual_cost_usd=round(cost, 2), basis=basis, costed=costed,
-                     assumptions=used)
+    return FaultCost(
+        rule=rule,
+        equip=equip,
+        severity=sev,
+        electricity_kwh=round(elec, 1),
+        gas_therms=round(gas, 1),
+        annual_cost_usd=round(cost, 2),
+        basis=basis,
+        costed=costed,
+        assumptions=used,
+    )
 
 
 def _load_for(loads, equip):
@@ -269,23 +320,40 @@ def _load_for(loads, equip):
     return loads.get(equip, EquipmentLoad())
 
 
-def cost_findings(findings, loads=None, price: EnergyPrice | None = None,
-                  *, params: dict | None = None, models: dict | None = None) -> list:
+def cost_findings(
+    findings,
+    loads=None,
+    price: EnergyPrice | None = None,
+    *,
+    params: dict | None = None,
+    models: dict | None = None,
+) -> list:
     """Estimate cost for many findings. ``loads`` is one :class:`EquipmentLoad` for all, or a
     ``{equip: EquipmentLoad}`` map (missing equipment get defaults)."""
-    return [estimate_cost(f, _load_for(loads, _attr(f, "equip", "")), price,
-                          params=params, models=models) for f in findings]
+    return [
+        estimate_cost(
+            f, _load_for(loads, _attr(f, "equip", "")), price, params=params, models=models
+        )
+        for f in findings
+    ]
 
 
-def annotate_costs(findings, loads=None, price: EnergyPrice | None = None,
-                   *, params: dict | None = None, models: dict | None = None) -> list:
+def annotate_costs(
+    findings,
+    loads=None,
+    price: EnergyPrice | None = None,
+    *,
+    params: dict | None = None,
+    models: dict | None = None,
+) -> list:
     """Write ``annual_cost_usd`` / ``waste_kwh`` / ``waste_therms`` into each finding's metrics
     (in place) so the severity-first prioritizer can rank within a tier by dollars via
     ``rank_findings(..., magnitude_key="annual_cost_usd")``. Returns the findings."""
     out = list(findings)
     for f in out:
-        fc = estimate_cost(f, _load_for(loads, _attr(f, "equip", "")), price,
-                           params=params, models=models)
+        fc = estimate_cost(
+            f, _load_for(loads, _attr(f, "equip", "")), price, params=params, models=models
+        )
         m = _attr(f, "metrics", None)
         if isinstance(m, dict):
             m["annual_cost_usd"] = fc.annual_cost_usd
@@ -294,9 +362,15 @@ def annotate_costs(findings, loads=None, price: EnergyPrice | None = None,
     return out
 
 
-def rank_by_cost(findings, loads=None, price: EnergyPrice | None = None,
-                 *, params: dict | None = None, models: dict | None = None,
-                 costed_only: bool = False) -> list:
+def rank_by_cost(
+    findings,
+    loads=None,
+    price: EnergyPrice | None = None,
+    *,
+    params: dict | None = None,
+    models: dict | None = None,
+    costed_only: bool = False,
+) -> list:
     """Rank findings purely by estimated annual dollars (worst first). Returns the
     :class:`FaultCost` items in order; ``costed_only`` drops faults with no usable estimate."""
     costs = cost_findings(findings, loads, price, params=params, models=models)
@@ -311,6 +385,10 @@ def total_cost(fault_costs) -> dict:
     gas = sum(c.gas_therms for c in fault_costs)
     usd = sum(c.annual_cost_usd for c in fault_costs)
     n_costed = sum(1 for c in fault_costs if c.costed)
-    return {"electricity_kwh": round(elec, 1), "gas_therms": round(gas, 1),
-            "annual_cost_usd": round(usd, 2), "n_costed": n_costed,
-            "n_uncosted": len(fault_costs) - n_costed}
+    return {
+        "electricity_kwh": round(elec, 1),
+        "gas_therms": round(gas, 1),
+        "annual_cost_usd": round(usd, 2),
+        "n_costed": n_costed,
+        "n_uncosted": len(fault_costs) - n_costed,
+    }

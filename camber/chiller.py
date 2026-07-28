@@ -22,7 +22,7 @@ intervals below a minimum load and with the chiller off are excluded.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -32,12 +32,12 @@ class ChillerEfficiencyResult:
     """Measured chiller kW/ton over loaded, running hours vs the design ceiling."""
 
     equip: str
-    n_running: int                # intervals chiller on and above min load
-    kw_per_ton_median: float      # median kW/ton over running hours
-    tons_median: float            # median cooling output (tons) over running hours
+    n_running: int  # intervals chiller on and above min load
+    kw_per_ton_median: float  # median kW/ton over running hours
+    tons_median: float  # median cooling output (tons) over running hours
     load_factor_median_pct: float  # median load as % of observed peak tons
     pct_hours_inefficient: float  # % running hrs above design * (1 + margin)
-    design_kw_per_ton: float      # the expected ceiling used (equipment-specific)
+    design_kw_per_ton: float  # the expected ceiling used (equipment-specific)
     coverage_start: str
     coverage_end: str
 
@@ -50,11 +50,11 @@ def analyze_chiller_efficiency(
     df: pd.DataFrame,
     equip: str,
     *,
-    design_kw_per_ton: float = 0.85,   # expected ceiling -- SET to the chiller type/design
+    design_kw_per_ton: float = 0.85,  # expected ceiling -- SET to the chiller type/design
     inefficient_margin: float = 0.15,  # kW/ton above design*(1+margin) == inefficient
-    min_load_tons: float = 5.0,        # below this, kW/ton is too noisy to trust
-    min_power_kw: float = 2.0,         # below this the chiller is effectively off
-    min_dt_f: float = 0.5,             # need a real loop dT to be making cooling
+    min_load_tons: float = 5.0,  # below this, kW/ton is too noisy to trust
+    min_power_kw: float = 2.0,  # below this the chiller is effectively off
+    min_dt_f: float = 0.5,  # need a real loop dT to be making cooling
 ) -> ChillerEfficiencyResult | None:
     """Compute chiller kW/ton from metered power, CHW flow, and loop dT.
 
@@ -68,8 +68,12 @@ def analyze_chiller_efficiency(
         return None
     w = df[list(need)].dropna()
     # plausibility guards (drop sensor dropouts / impossible values)
-    w = w[(w.Power >= 0) & (w.CHWS_Temp.between(35, 60)) &
-          (w.CHWR_Temp.between(38, 80)) & (w.CHW_Flow >= 0)]
+    w = w[
+        (w.Power >= 0)
+        & (w.CHWS_Temp.between(35, 60))
+        & (w.CHWR_Temp.between(38, 80))
+        & (w.CHW_Flow >= 0)
+    ]
     dt = w.CHWR_Temp - w.CHWS_Temp
     tons = w.CHW_Flow * dt / 24.0
     # "running and loaded": chiller drawing power and producing real cooling
@@ -78,7 +82,7 @@ def analyze_chiller_efficiency(
     if len(w) < 10:
         return None
 
-    kw_per_ton = (w.Power / tons)
+    kw_per_ton = w.Power / tons
     kw_per_ton = kw_per_ton[(kw_per_ton > 0) & (kw_per_ton < 5)]  # physical-ish range
     if len(kw_per_ton) < 10:
         return None
@@ -93,7 +97,8 @@ def analyze_chiller_efficiency(
         kw_per_ton_median=round(float(kw_per_ton.median()), 3),
         tons_median=round(float(tons.median()), 1),
         load_factor_median_pct=round(100.0 * float(tons.median()) / peak_tons, 1)
-        if peak_tons > 0 else float("nan"),
+        if peak_tons > 0
+        else float("nan"),
         pct_hours_inefficient=round(100.0 * inefficient, 1),
         design_kw_per_ton=float(design_kw_per_ton),
         coverage_start=str(df.index.min()),

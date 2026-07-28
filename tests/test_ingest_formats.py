@@ -50,7 +50,13 @@ _VENDORS = {
     "niagara_n4": ("niagara_n4", "utf-8", _rows_niagara, ",", lambda v: f"{v}"),
     "metasys": ("metasys", "utf-8", _rows_metasys, ",", lambda v: f"{v}"),
     "webctrl": ("webctrl", "utf-8", _rows_webctrl, ",", lambda v: f"{v}"),
-    "desigo": ("desigo", "utf-8", _rows_desigo, ";", lambda v: f"{v}".replace(".", ",")),  # decimal comma
+    "desigo": (
+        "desigo",
+        "utf-8",
+        _rows_desigo,
+        ";",
+        lambda v: f"{v}".replace(".", ","),
+    ),  # decimal comma
 }
 
 
@@ -69,8 +75,9 @@ def _write(tmp_path, vendor):
 def test_each_vendor_format_normalizes_to_reference(tmp_path, vendor):
     path, profile = _write(tmp_path, vendor)
     df = load_csv(path, profile=profile)
-    pd.testing.assert_frame_equal(df[["power", "temp"]], _reference(),
-                                  check_freq=False, check_names=False)
+    pd.testing.assert_frame_equal(
+        df[["power", "temp"]], _reference(), check_freq=False, check_names=False
+    )
 
 
 def test_all_vendor_variants_agree(tmp_path):
@@ -89,12 +96,14 @@ def test_epoch_timestamp_file_normalizes(tmp_path):
     path = tmp_path / "epoch.csv"
     path.write_text("\n".join(lines) + "\n")
     df = load_csv(str(path))
-    pd.testing.assert_frame_equal(df[["power", "temp"]], _reference(), check_freq=False, check_names=False)
+    pd.testing.assert_frame_equal(
+        df[["power", "temp"]], _reference(), check_freq=False, check_names=False
+    )
 
 
 def test_bom_and_thousands_and_null_tokens(tmp_path):
     # UTF-8 BOM header + thousands-grouped value + a null token, generic profile
-    text = "﻿timestamp,power\n2024-07-01 00:00:00,\"1,234.5\"\n2024-07-01 01:00:00,N/A\n"
+    text = '﻿timestamp,power\n2024-07-01 00:00:00,"1,234.5"\n2024-07-01 01:00:00,N/A\n'
     path = tmp_path / "bom.csv"
     path.write_text(text, encoding="utf-8")
     df = load_csv(str(path))

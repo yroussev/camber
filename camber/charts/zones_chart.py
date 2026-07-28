@@ -6,8 +6,6 @@ while others cool, across the week and against outdoor temperature.
 
 from __future__ import annotations
 
-import pandas as pd
-
 
 def zones_timeofweek_figure(profile, *, title="Zones heating vs cooling (time-of-week)"):
     """profile: DataFrame indexed by time-of-week hour (0..167) with n_heating/
@@ -16,9 +14,21 @@ def zones_timeofweek_figure(profile, *, title="Zones heating vs cooling (time-of
 
     fig, ax = plt.subplots(figsize=(13, 4))
     ax.plot(profile.index, profile["n_cooling"], color="#3366cc", lw=1.0, label="# zones cooling")
-    ax.plot(profile.index, profile["n_heating"], color="#cc3333", lw=1.0, label="# zones heating (reheat)")
-    ax.fill_between(profile.index, 0, profile["n_both"], color="purple", alpha=0.25,
-                    label="# zones BOTH (reheat penalty)")
+    ax.plot(
+        profile.index,
+        profile["n_heating"],
+        color="#cc3333",
+        lw=1.0,
+        label="# zones heating (reheat)",
+    )
+    ax.fill_between(
+        profile.index,
+        0,
+        profile["n_both"],
+        color="purple",
+        alpha=0.25,
+        label="# zones BOTH (reheat penalty)",
+    )
     for d in range(1, 7):
         ax.axvline(d * 24, color="#dddddd", lw=0.5)
     ax.set_xlim(0, 168)

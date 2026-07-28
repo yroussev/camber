@@ -20,7 +20,7 @@ numpy only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class RateCI:
     rate: float
     lo: float
     hi: float
-    n: int                        # denominator (sample size) behind the rate
+    n: int  # denominator (sample size) behind the rate
 
     def as_dict(self) -> dict:
         """Return the rate and its interval as a plain dict."""
@@ -69,8 +69,7 @@ def rate_ci(k, n, *, z: float = 1.96) -> RateCI:
     k = int(k)
     rate = round(k / n, 4) if n else float("nan")
     lo, hi = wilson_interval(k, n, z=z)
-    return RateCI(rate=rate, lo=round(lo, 4) if n else lo,
-                  hi=round(hi, 4) if n else hi, n=n)
+    return RateCI(rate=rate, lo=round(lo, 4) if n else lo, hi=round(hi, 4) if n else hi, n=n)
 
 
 def metrics_with_ci(c: Confusion) -> dict:
@@ -110,23 +109,25 @@ def check_determinism(fn, *args, runs: int = 3, **kwargs) -> DeterminismResult:
     """
     runs = int(runs)
     if runs < 2:
-        return DeterminismResult(deterministic=True, n_runs=runs,
-                                 note="fewer than 2 runs; trivially reproducible")
+        return DeterminismResult(
+            deterministic=True, n_runs=runs, note="fewer than 2 runs; trivially reproducible"
+        )
     first = fn(*args, **kwargs)
     for i in range(1, runs):
         cur = fn(*args, **kwargs)
         if not _same(first, cur):
             return DeterminismResult(
-                deterministic=False, n_runs=runs,
-                note=f"output diverged on run {i + 1} of {runs}")
-    return DeterminismResult(deterministic=True, n_runs=runs,
-                             note=f"identical output across {runs} runs")
+                deterministic=False, n_runs=runs, note=f"output diverged on run {i + 1} of {runs}"
+            )
+    return DeterminismResult(
+        deterministic=True, n_runs=runs, note=f"identical output across {runs} runs"
+    )
 
 
 def _same(a, b) -> bool:
     """Best-effort equality, falling back to repr for non-boolean comparisons."""
     try:
-        result = (a == b)
+        result = a == b
         if isinstance(result, bool):
             return result
         # array-like / ambiguous truth value -> require all-equal

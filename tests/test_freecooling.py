@@ -14,8 +14,10 @@ from camber.freecooling import FreeCoolingOpportunity, free_cooling_opportunity 
 def _data(days=30, seed=0):
     idx = pd.date_range("2025-04-01", periods=days * 24, freq="1h")
     rng = np.random.default_rng(seed)
-    oat = pd.Series(55 + 15 * np.sin(np.arange(len(idx)) * 2 * np.pi / 24) + rng.normal(0, 3, len(idx)),
-                    index=idx)
+    oat = pd.Series(
+        55 + 15 * np.sin(np.arange(len(idx)) * 2 * np.pi / 24) + rng.normal(0, 3, len(idx)),
+        index=idx,
+    )
     cool = pd.Series(np.where((idx.hour >= 8) & (idx.hour <= 18), 0.6, 0.0), index=idx)
     kw = pd.Series(np.where(cool > 0, 50.0, 0.0), index=idx)
     return oat, cool, kw
@@ -40,12 +42,12 @@ def test_no_mechanical_cooling_no_opportunity():
 def test_no_price_returns_energy_but_nan_savings():
     oat, cool, kw = _data()
     r = free_cooling_opportunity(oat, cool, cooling_kw=kw)
-    assert r.recoverable_kwh > 0 and r.savings_usd != r.savings_usd     # NaN savings, energy known
+    assert r.recoverable_kwh > 0 and r.savings_usd != r.savings_usd  # NaN savings, energy known
 
 
 def test_no_power_series_gives_hours_only():
     oat, cool, _ = _data()
-    r = free_cooling_opportunity(oat, cool)                              # no cooling_kw
+    r = free_cooling_opportunity(oat, cool)  # no cooling_kw
     assert r.hours_missed > 0 and r.addressable_kwh == 0.0
 
 
@@ -53,7 +55,7 @@ def test_high_limit_widens_available_hours():
     oat, cool, kw = _data()
     low = free_cooling_opportunity(oat, cool, cooling_kw=kw, high_limit_f=55.0)
     high = free_cooling_opportunity(oat, cool, cooling_kw=kw, high_limit_f=70.0)
-    assert high.hours_available > low.hours_available                    # a higher limit = more free-cooling weather
+    assert high.hours_available > low.hours_available  # a higher limit = more free-cooling weather
 
 
 def test_empty_input():

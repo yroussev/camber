@@ -17,10 +17,8 @@ from camber.ingest.csv_perpoint import PerPointCsvAdapter  # noqa: E402
 from camber.ingest.csv_wide import WideCsvAdapter  # noqa: E402
 from camber.ingest.haystack import HaystackAdapter  # noqa: E402
 
-
 # three hourly readings on a Monday; perpoint timestamps in the BAS export format
-_TS = ["07-Jul-25 08:00:00 AM PDT", "07-Jul-25 09:00:00 AM PDT",
-       "07-Jul-25 10:00:00 AM PDT"]
+_TS = ["07-Jul-25 08:00:00 AM PDT", "07-Jul-25 09:00:00 AM PDT", "07-Jul-25 10:00:00 AM PDT"]
 _TS_PLAIN = ["2025-07-07 08:00", "2025-07-07 09:00", "2025-07-07 10:00"]
 _HW = [40.0, 45.0, 50.0]
 _CC = [60.0, 55.0, 50.0]

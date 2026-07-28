@@ -11,7 +11,7 @@ numpy only; fit statistics reuse :func:`camber.mandv.stats.fit_stats`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -28,12 +28,12 @@ def degree_days(tavg, balance_point: float):
 class DegreeDayModel:
     """A fitted variable-base degree-day baseline: ``E = base + a·HDD + b·CDD``."""
 
-    kind: str                        # "heating" | "cooling" | "both"
+    kind: str  # "heating" | "cooling" | "both"
     balance_point: float
-    base: float                      # weather-independent energy per period
-    heating_slope: float             # energy per HDD (0 if kind excludes heating)
-    cooling_slope: float             # energy per CDD (0 if kind excludes cooling)
-    fit: object                      # camber.mandv.stats.FitStats
+    base: float  # weather-independent energy per period
+    heating_slope: float  # energy per HDD (0 if kind excludes heating)
+    cooling_slope: float  # energy per CDD (0 if kind excludes cooling)
+    fit: object  # camber.mandv.stats.FitStats
 
     def predict(self, tavg):
         """Predicted energy for period average temperature(s) ``tavg``."""
@@ -51,9 +51,11 @@ def _fit_at(tavg, energy, bp: float, kind: str):
     cols = [np.ones(len(tavg))]
     idx = {}
     if kind in ("heating", "both"):
-        idx["h"] = len(cols); cols.append(hdd)
+        idx["h"] = len(cols)
+        cols.append(hdd)
     if kind in ("cooling", "both"):
-        idx["c"] = len(cols); cols.append(cdd)
+        idx["c"] = len(cols)
+        cols.append(cdd)
     X = np.column_stack(cols)
     coef, *_ = np.linalg.lstsq(X, energy, rcond=None)
     fs = fit_stats(energy, X @ coef, p=X.shape[1])
@@ -63,9 +65,15 @@ def _fit_at(tavg, energy, bp: float, kind: str):
     return base, hs, cs, fs
 
 
-def fit_degree_day(tavg, energy, *, balance_point: float | None = None,
-                   balance_range=(50.0, 70.0), step: float = 1.0,
-                   kind: str = "both") -> DegreeDayModel:
+def fit_degree_day(
+    tavg,
+    energy,
+    *,
+    balance_point: float | None = None,
+    balance_range=(50.0, 70.0),
+    step: float = 1.0,
+    kind: str = "both",
+) -> DegreeDayModel:
     """Fit ``E = base + a·HDD + b·CDD``. Returns a :class:`DegreeDayModel`.
 
     ``tavg``/``energy`` are per-period average temperature and energy (e.g. monthly). If
@@ -78,15 +86,19 @@ def fit_degree_day(tavg, energy, *, balance_point: float | None = None,
     energy = np.asarray(energy, dtype=float)
     if len(tavg) != len(energy):
         raise ValueError("tavg and energy must be the same length")
-    finite = np.isfinite(tavg) & np.isfinite(energy)      # drop NaN/inf pairs (a missing bill month)
+    finite = np.isfinite(tavg) & np.isfinite(energy)  # drop NaN/inf pairs (a missing bill month)
     tavg, energy = tavg[finite], energy[finite]
-    p = 3 if kind == "both" else 2                        # intercept + one or two slopes
-    if len(tavg) <= p:                                    # need > p points, else the fit is degenerate
-        raise ValueError(f"need more than {p} finite (tavg, energy) points for kind={kind!r}, "
-                         f"have {len(tavg)}")
+    p = 3 if kind == "both" else 2  # intercept + one or two slopes
+    if len(tavg) <= p:  # need > p points, else the fit is degenerate
+        raise ValueError(
+            f"need more than {p} finite (tavg, energy) points for kind={kind!r}, have {len(tavg)}"
+        )
 
-    candidates = ([float(balance_point)] if balance_point is not None
-                  else list(np.arange(balance_range[0], balance_range[1] + 1e-9, step)))
+    candidates = (
+        [float(balance_point)]
+        if balance_point is not None
+        else list(np.arange(balance_range[0], balance_range[1] + 1e-9, step))
+    )
     best = None
     for bp in candidates:
         base, hs, cs, fs = _fit_at(tavg, energy, bp, kind)
@@ -94,5 +106,11 @@ def fit_degree_day(tavg, energy, *, balance_point: float | None = None,
         if best is None or key < best[0]:
             best = (key, bp, base, hs, cs, fs)
     _, bp, base, hs, cs, fs = best
-    return DegreeDayModel(kind=kind, balance_point=round(float(bp), 2), base=round(base, 3),
-                          heating_slope=round(hs, 4), cooling_slope=round(cs, 4), fit=fs)
+    return DegreeDayModel(
+        kind=kind,
+        balance_point=round(float(bp), 2),
+        base=round(base, 3),
+        heating_slope=round(hs, 4),
+        cooling_slope=round(cs, 4),
+        fit=fs,
+    )

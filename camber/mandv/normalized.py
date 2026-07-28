@@ -18,7 +18,7 @@ operates on any model with a ``predict(temps)`` method (e.g. a change-point or T
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -41,10 +41,10 @@ class NormalizedSavings:
 
     nac_baseline: float
     nac_reporting: float
-    normalized_savings: float       # nac_baseline - nac_reporting
-    savings_pct: float              # of normalized baseline
-    fractional_uncertainty: float   # of the savings, at ``confidence``
-    abs_uncertainty: float          # +/- energy at ``confidence``
+    normalized_savings: float  # nac_baseline - nac_reporting
+    savings_pct: float  # of normalized baseline
+    fractional_uncertainty: float  # of the savings, at ``confidence``
+    abs_uncertainty: float  # +/- energy at ``confidence``
     confidence: float
     n_normal_periods: int
 
@@ -60,11 +60,17 @@ def _rel_unc(cv_rmse: float, n: int, m: int) -> float:
     return 1.26 * cv_rmse * np.sqrt((n / m) * (1.0 + 2.0 / n))
 
 
-def normalized_savings(baseline_model, reporting_model, normal_temps, *,
-                       baseline_cv_rmse: float, n_baseline: int,
-                       reporting_cv_rmse: float | None = None,
-                       n_reporting: int | None = None,
-                       confidence: float = 0.90) -> NormalizedSavings:
+def normalized_savings(
+    baseline_model,
+    reporting_model,
+    normal_temps,
+    *,
+    baseline_cv_rmse: float,
+    n_baseline: int,
+    reporting_cv_rmse: float | None = None,
+    n_reporting: int | None = None,
+    confidence: float = 0.90,
+) -> NormalizedSavings:
     """Weather-normalized annual savings between two fitted models over a normal year.
 
     Projects ``baseline_model`` and ``reporting_model`` onto ``normal_temps`` (the typical
@@ -90,10 +96,12 @@ def normalized_savings(baseline_model, reporting_model, normal_temps, *,
     frac = abs_unc / abs(savings) if (savings and abs_unc == abs_unc) else float("nan")
 
     return NormalizedSavings(
-        nac_baseline=round(nac_b, 2), nac_reporting=round(nac_r, 2),
+        nac_baseline=round(nac_b, 2),
+        nac_reporting=round(nac_r, 2),
         normalized_savings=round(savings, 2),
         savings_pct=round(pct, 4) if pct == pct else float("nan"),
         fractional_uncertainty=round(frac, 4) if frac == frac else float("nan"),
         abs_uncertainty=round(abs_unc, 2) if abs_unc == abs_unc else float("nan"),
-        confidence=confidence, n_normal_periods=m,
+        confidence=confidence,
+        n_normal_periods=m,
     )

@@ -28,9 +28,9 @@ def _decode_ts(val):
     ``datetime``, the Hayson v4 nested form (``{"_kind": "dateTime", "val": "..."}``), and a
     typed client object exposing ``.val`` (e.g. a phable/pyhaystack DateTime kind).
     """
-    if isinstance(val, dict):                # Hayson: {"_kind":"dateTime","val":...}
+    if isinstance(val, dict):  # Hayson: {"_kind":"dateTime","val":...}
         val = val.get("val", "")
-    elif not isinstance(val, str) and hasattr(val, "val"):   # typed client kind -> unwrap
+    elif not isinstance(val, str) and hasattr(val, "val"):  # typed client kind -> unwrap
         val = val.val
     if isinstance(val, str) and val.startswith("t:"):
         val = val[2:]
@@ -42,14 +42,14 @@ def _decode_ts(val):
 
 def _decode_num(val):
     """Decode a Haystack number scalar (v3 ``n:`` string, Hayson dict, or plain)."""
-    if isinstance(val, dict):                # Hayson: {"_kind":"number","val":..,"unit":..}
+    if isinstance(val, dict):  # Hayson: {"_kind":"number","val":..,"unit":..}
         val = val.get("val")
     elif not isinstance(val, (str, int, float)) and hasattr(val, "val"):
-        val = val.val                        # typed client kind (e.g. phable Number) -> unwrap
+        val = val.val  # typed client kind (e.g. phable Number) -> unwrap
     if isinstance(val, str):
         if val.startswith("n:"):
             val = val[2:]
-        val = val.strip().split(" ", 1)[0]   # strip a trailing unit token
+        val = val.strip().split(" ", 1)[0]  # strip a trailing unit token
         if val in ("INF", "+INF"):
             return float("inf")
         if val == "-INF":
@@ -75,7 +75,7 @@ def parse_his_grid(grid, name: str = "val") -> pd.Series:
     elif isinstance(grid, dict):
         rows = grid.get("rows", [])
     else:
-        rows = getattr(grid, "rows", [])     # typed client Grid object
+        rows = getattr(grid, "rows", [])  # typed client Grid object
     idx, vals = [], []
     for r in rows:
         if "ts" not in r:
@@ -89,9 +89,15 @@ def parse_his_grid(grid, name: str = "val") -> pd.Series:
 class HaystackAdapter:
     """SourceAdapter over a Project Haystack server (hisRead)."""
 
-    def __init__(self, base_url: str, *, auth_token: str | None = None,
-                 point_refs: dict | None = None, transport=None,
-                 range_str: str = "today"):
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        auth_token: str | None = None,
+        point_refs: dict | None = None,
+        transport=None,
+        range_str: str = "today",
+    ):
         self.base_url = base_url
         self.auth_token = auth_token
         # point_refs: {point_name -> Haystack Ref id}; supplied by a site config
@@ -145,8 +151,8 @@ class HaystackAdapter:
 # pyhaystack, ...) by its hisRead function. Pick whichever fits your server.
 # --------------------------------------------------------------------------- #
 
-def http_json_transport(base_url: str, *, token: str | None = None,
-                        timeout: float = 30.0):
+
+def http_json_transport(base_url: str, *, token: str | None = None, timeout: float = 30.0):
     """A stdlib (urllib) transport for a Haystack server's HTTP JSON API.
 
     Issues ``GET <base_url>/<op>?id=<id>&range=<range>`` with
@@ -189,6 +195,7 @@ def client_transport(his_read):
         adapter = HaystackAdapter(url, point_refs=refs,
                                   transport=client_transport(my_client.his_read))
     """
+
     def transport(op: str, params: dict) -> dict:
         return his_read(params["id"], params.get("range"))
 

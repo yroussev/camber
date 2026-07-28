@@ -59,12 +59,13 @@ def _interval_hours(index: pd.DatetimeIndex) -> np.ndarray:
         return np.array([1.0] * len(index))
     secs = np.diff(index.view("int64")) / 1e9
     hours = secs / 3600.0
-    hours = np.append(hours, hours[-1])   # last sample: assume prior interval
+    hours = np.append(hours, hours[-1])  # last sample: assume prior interval
     return hours
 
 
-def resample(s: pd.Series, freq: str, method: str = "mean", *,
-             gap_limit: int | None = None) -> pd.Series:
+def resample(
+    s: pd.Series, freq: str, method: str = "mean", *, gap_limit: int | None = None
+) -> pd.Series:
     """Resample series ``s`` to ``freq`` using ``method``.
 
     ``gap_limit``: max number of consecutive missing target bins to forward-fill

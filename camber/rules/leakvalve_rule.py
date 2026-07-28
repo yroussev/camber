@@ -36,12 +36,12 @@ class LeakingValve:
         legacy = frame.rename(columns=cols)
         res = analyze_leak_valves(legacy, equip)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
         worst = max(res.hw_leak_pct, res.chw_leak_pct)
         severity = "fault" if worst >= 30.0 else ("warn" if worst >= 10.0 else "ok")
-        which = ("HW (heating) coil" if res.hw_leak_pct >= res.chw_leak_pct
-                 else "CHW (cooling) coil")
+        which = "HW (heating) coil" if res.hw_leak_pct >= res.chw_leak_pct else "CHW (cooling) coil"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -52,8 +52,10 @@ class LeakingValve:
                 "median_delta_f": res.median_delta_f,
                 "n_both_closed": res.n_both_closed,
             },
-            summary=(f"{equip}: with both valves shut, air shifts (median "
-                     f"{res.median_delta_f:+.1f}F); HW-leak {res.hw_leak_pct:.0f}% / "
-                     f"CHW-leak {res.chw_leak_pct:.0f}% of closed hours "
-                     f"(worst: {which})"),
+            summary=(
+                f"{equip}: with both valves shut, air shifts (median "
+                f"{res.median_delta_f:+.1f}F); HW-leak {res.hw_leak_pct:.0f}% / "
+                f"CHW-leak {res.chw_leak_pct:.0f}% of closed hours "
+                f"(worst: {which})"
+            ),
         )

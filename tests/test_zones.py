@@ -3,13 +3,12 @@
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.schedules import occupied_mask, day_type, time_of_week_bin  # noqa: E402
-from camber.zones import zone_states, time_of_week_profile  # noqa: E402
+from camber.schedules import day_type, occupied_mask, time_of_week_bin  # noqa: E402
+from camber.zones import time_of_week_profile, zone_states  # noqa: E402
 
 
 def _idx(n=48):
@@ -28,8 +27,8 @@ def test_occupied_mask_weekday_window():
 def test_day_type():
     idx = pd.date_range("2025-07-07", periods=24 * 7, freq="1h")
     dt = day_type(idx)
-    assert dt.loc[pd.Timestamp("2025-07-07 12:00")] == "weekday"   # Monday
-    assert dt.loc[pd.Timestamp("2025-07-12 12:00")] == "weekend"   # Saturday
+    assert dt.loc[pd.Timestamp("2025-07-07 12:00")] == "weekday"  # Monday
+    assert dt.loc[pd.Timestamp("2025-07-12 12:00")] == "weekend"  # Saturday
 
 
 def test_time_of_week_bin_range():
@@ -49,9 +48,9 @@ def test_zone_states_counts():
     c = pd.DataFrame({"HWValve": 40.0, "ActFlow": 400.0, "ActFlowSP": 200.0}, index=idx)
     st = zone_states({"A": a, "B": b, "C": c})
     assert (st["n_zones"] == 3).all()
-    assert (st["n_heating"] == 2).all()   # A and C
-    assert (st["n_cooling"] == 2).all()   # B and C
-    assert (st["n_both"] == 1).all()      # C only
+    assert (st["n_heating"] == 2).all()  # A and C
+    assert (st["n_cooling"] == 2).all()  # B and C
+    assert (st["n_both"] == 1).all()  # C only
 
 
 def test_time_of_week_profile_shape():

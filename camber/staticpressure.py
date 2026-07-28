@@ -18,7 +18,7 @@ per-AHU.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -31,10 +31,10 @@ class DamperCensusResult:
 
     n_boxes: int
     n_intervals: int
-    median_damper_pct: float       # fleet median damper position (occupied)
-    pct_boxes_low: float           # share of boxes whose median is below low band
-    pct_boxes_high: float          # share whose median is at/above high band
-    pct_boxes_in_band: float       # share in the healthy mid band
+    median_damper_pct: float  # fleet median damper position (occupied)
+    pct_boxes_low: float  # share of boxes whose median is below low band
+    pct_boxes_high: float  # share whose median is at/above high band
+    pct_boxes_in_band: float  # share in the healthy mid band
     verdict: str
     coverage_start: str
     coverage_end: str
@@ -61,7 +61,7 @@ def damper_census(
     box_medians = []
     n_int = 0
     start = end = None
-    for equip, df in box_frames.items():
+    for _equip, df in box_frames.items():
         if "Damper" not in df.columns:
             continue
         s = df["Damper"]
@@ -112,7 +112,7 @@ class StaticResetResult:
     n_considered: int
     sp_median: float
     sp_std: float
-    sp_reset_present: bool         # setpoint varies materially => some reset
+    sp_reset_present: bool  # setpoint varies materially => some reset
     coverage_start: str
     coverage_end: str
 
@@ -125,7 +125,7 @@ def analyze_static_reset(
     df: pd.DataFrame,
     equip: str,
     *,
-    sp_flat_std: float = 0.05,     # SP std (in. w.c.) below this == flat (no reset)
+    sp_flat_std: float = 0.05,  # SP std (in. w.c.) below this == flat (no reset)
     occupied_only: bool = True,
 ) -> StaticResetResult | None:
     """Is the duct-static setpoint reset, or held flat? ``df`` has 'DuctStaticSP'."""

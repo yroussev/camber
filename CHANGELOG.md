@@ -4,7 +4,26 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## [0.9.0] — 2026-07-27
+## [0.9.1] — 2026-07-28
+
+First of the pre-1.0 hardening series. **A lint + format gate** — no behavior change, no
+API change; the whole codebase is now machine-formatted and lint-clean, and CI enforces it.
+
+### Added
+- **`ruff` gate** (`[tool.ruff]` in `pyproject.toml`): line length 100, targeting Python
+  3.10, rule set `E`/`F`/`I`/`W`/`UP`/`B` (pycodestyle, pyflakes, import sorting, pyupgrade,
+  flake8-bugbear). A `lint` job in CI runs `ruff check .` and `ruff format --check .`.
+- **`.pre-commit-config.yaml`** wiring the `ruff` + `ruff-format` hooks for local use,
+  alongside the existing attribution guards in `.githooks/`.
+
+### Changed
+- Whole codebase auto-formatted with `ruff format` and lint-cleaned: removed unused imports,
+  sorted imports, applied `pyupgrade` modernizations, and fixed a handful of bugbear findings
+  (`assert False` → `raise AssertionError` in tests, unused loop/local variables). Two
+  deferred `from .timegrid import interval_hours` imports moved to module top (no cycle).
+  `zip(strict=...)` auditing (`B905`) is intentionally deferred to a later release.
+
+
 
 Ninth release — **ingest robustness across vendor formats** + a **real-data M&V validation** on Building
 Data Genome 2. Dependency-light throughout; the ingest refactor is fully backward compatible (existing

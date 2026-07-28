@@ -32,9 +32,17 @@ def mask_to_spans(mask: pd.Series):
     return spans
 
 
-def fault_multitrend(df: pd.DataFrame, columns=None, *, spans=None, ax=None, normalize=False,
-                     title: str | None = None, shade_color: str = "#d62728",
-                     shade_alpha: float = 0.15):
+def fault_multitrend(
+    df: pd.DataFrame,
+    columns=None,
+    *,
+    spans=None,
+    ax=None,
+    normalize=False,
+    title: str | None = None,
+    shade_color: str = "#d62728",
+    shade_alpha: float = 0.15,
+):
     """Plot ``columns`` on one time axis and shade violation ``spans``. Returns the Axes.
 
     ``spans`` is ``{label: boolean Series}`` — each True run is shaded once and labeled.
@@ -55,14 +63,23 @@ def fault_multitrend(df: pd.DataFrame, columns=None, *, spans=None, ax=None, nor
     shaded_labels = set()
     for label, mask in (spans or {}).items():
         for start, end in mask_to_spans(mask):
-            ax.axvspan(start, end, color=shade_color, alpha=shade_alpha,
-                       label=label if label not in shaded_labels else None)
+            ax.axvspan(
+                start,
+                end,
+                color=shade_color,
+                alpha=shade_alpha,
+                label=label if label not in shaded_labels else None,
+            )
             shaded_labels.add(label)
 
     ax.set_xlabel("Time")
     ax.set_ylabel("normalized (0–1)" if normalize else "value")
     n_viol = len(shaded_labels)
-    ax.set_title(title or (f"Multi-trend — {len(cols)} points"
-                           + (f", {n_viol} fault overlay(s)" if n_viol else "")))
+    ax.set_title(
+        title
+        or (
+            f"Multi-trend — {len(cols)} points" + (f", {n_viol} fault overlay(s)" if n_viol else "")
+        )
+    )
     ax.legend(loc="upper left", fontsize=8, ncol=2)
     return ax

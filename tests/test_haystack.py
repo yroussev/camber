@@ -13,15 +13,16 @@ from camber.ingest.haystack import HaystackAdapter, parse_his_grid  # noqa: E402
 
 
 def _grid(rows):
-    return {"meta": {"ver": "3.0"}, "cols": [{"name": "ts"}, {"name": "val"}],
-            "rows": rows}
+    return {"meta": {"ver": "3.0"}, "cols": [{"name": "ts"}, {"name": "val"}], "rows": rows}
 
 
 def test_parse_his_grid_decodes_t_and_n_prefixes():
-    grid = _grid([
-        {"ts": "t:2024-01-01T00:00:00-08:00 Los_Angeles", "val": "n:23.5 °C"},
-        {"ts": "t:2024-01-01T01:00:00-08:00 Los_Angeles", "val": "n:24.0 °C"},
-    ])
+    grid = _grid(
+        [
+            {"ts": "t:2024-01-01T00:00:00-08:00 Los_Angeles", "val": "n:23.5 °C"},
+            {"ts": "t:2024-01-01T01:00:00-08:00 Los_Angeles", "val": "n:24.0 °C"},
+        ]
+    )
     s = parse_his_grid(grid, name="sat")
     assert list(s) == [23.5, 24.0]
     assert s.name == "sat"
@@ -35,32 +36,44 @@ def test_parse_handles_plain_iso_and_bare_number():
 
 
 def test_parse_inf_and_nan_tokens():
-    grid = _grid([
-        {"ts": "t:2024-01-01T00:00:00Z", "val": "n:INF"},
-        {"ts": "t:2024-01-01T01:00:00Z", "val": "NaN"},
-    ])
+    grid = _grid(
+        [
+            {"ts": "t:2024-01-01T00:00:00Z", "val": "n:INF"},
+            {"ts": "t:2024-01-01T01:00:00Z", "val": "NaN"},
+        ]
+    )
     s = parse_his_grid(grid)
     assert s.iloc[0] == float("inf")
     assert pd.isna(s.iloc[1])
 
 
 def test_parse_sorts_and_skips_rowless():
-    grid = _grid([
-        {"ts": "t:2024-01-01T02:00:00Z", "val": "n:2"},
-        {"val": "n:99"},                                   # no ts -> skipped
-        {"ts": "t:2024-01-01T00:00:00Z", "val": "n:0"},
-    ])
+    grid = _grid(
+        [
+            {"ts": "t:2024-01-01T02:00:00Z", "val": "n:2"},
+            {"val": "n:99"},  # no ts -> skipped
+            {"ts": "t:2024-01-01T00:00:00Z", "val": "n:0"},
+        ]
+    )
     s = parse_his_grid(grid)
-    assert list(s) == [0.0, 2.0]                            # sorted by ts
+    assert list(s) == [0.0, 2.0]  # sorted by ts
 
 
 def test_adapter_assembles_frame_with_canned_transport():
     refs = {"AHU_1_SAT": "@p1", "AHU_1_OAT": "@p2"}
     grids = {
-        "@p1": _grid([{"ts": "t:2024-01-01T00:00:00Z", "val": "n:55"},
-                      {"ts": "t:2024-01-01T01:00:00Z", "val": "n:56"}]),
-        "@p2": _grid([{"ts": "t:2024-01-01T00:00:00Z", "val": "n:70"},
-                      {"ts": "t:2024-01-01T01:00:00Z", "val": "n:72"}]),
+        "@p1": _grid(
+            [
+                {"ts": "t:2024-01-01T00:00:00Z", "val": "n:55"},
+                {"ts": "t:2024-01-01T01:00:00Z", "val": "n:56"},
+            ]
+        ),
+        "@p2": _grid(
+            [
+                {"ts": "t:2024-01-01T00:00:00Z", "val": "n:70"},
+                {"ts": "t:2024-01-01T01:00:00Z", "val": "n:72"},
+            ]
+        ),
     }
 
     def transport(op, params):
@@ -68,7 +81,7 @@ def test_adapter_assembles_frame_with_canned_transport():
         return grids[params["id"]]
 
     a = HaystackAdapter("http://x", point_refs=refs, transport=transport)
-    assert isinstance(a, SourceAdapter)         # satisfies the adapter protocol
+    assert isinstance(a, SourceAdapter)  # satisfies the adapter protocol
     df = a.load_points(["AHU_1_SAT", "AHU_1_OAT"], resample=None)
     assert list(df.columns) == ["AHU_1_SAT", "AHU_1_OAT"]
     assert df["AHU_1_OAT"].tolist() == [70.0, 72.0]
@@ -99,10 +112,14 @@ def test_client_transport_wires_any_hisread():
         calls.append((point_id, range_str))
         return _grid([{"ts": "t:2024-01-01T00:00:00Z", "val": "n:55"}])
 
-    a = HaystackAdapter("http://x", point_refs={"SAT": "@p1"},
-                        transport=client_transport(fake_his_read), range_str="today")
+    a = HaystackAdapter(
+        "http://x",
+        point_refs={"SAT": "@p1"},
+        transport=client_transport(fake_his_read),
+        range_str="today",
+    )
     df = a.load_points(["SAT"], resample=None)
-    assert calls == [("@p1", "today")]        # id + range passed through
+    assert calls == [("@p1", "today")]  # id + range passed through
     assert df["SAT"].iloc[0] == 55.0
 
 
@@ -111,16 +128,23 @@ def test_http_json_transport_builds_request_and_parses(monkeypatch):
 
     class _Resp:
         status = 200
-        def __init__(self, body): self._b = body
-        def read(self): return self._b
-        def __enter__(self): return self
-        def __exit__(self, *a): return False
+
+        def __init__(self, body):
+            self._b = body
+
+        def read(self):
+            return self._b
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
 
     def fake_urlopen(req, timeout=None):
         captured["url"] = req.full_url
         captured["headers"] = {k.lower(): v for k, v in req.header_items()}
-        return _Resp(_json.dumps(_grid([{"ts": "t:2024-01-01T00:00:00Z",
-                                         "val": "n:70"}])).encode())
+        return _Resp(_json.dumps(_grid([{"ts": "t:2024-01-01T00:00:00Z", "val": "n:70"}])).encode())
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     t = http_json_transport("http://server/api/", token="secret")
@@ -131,8 +155,14 @@ def test_http_json_transport_builds_request_and_parses(monkeypatch):
 
 
 def test_hayson_nested_scalars_decode():
-    grid = _grid([{"ts": {"_kind": "dateTime", "val": "2024-01-01T00:00:00Z"},
-                   "val": {"_kind": "number", "val": 21.5, "unit": "degC"}}])
+    grid = _grid(
+        [
+            {
+                "ts": {"_kind": "dateTime", "val": "2024-01-01T00:00:00Z"},
+                "val": {"_kind": "number", "val": 21.5, "unit": "degC"},
+            }
+        ]
+    )
     s = parse_his_grid(grid)
     assert s.iloc[0] == 21.5
 
@@ -146,18 +176,26 @@ from camber.ingest.haystack import phable_transport  # noqa: E402
 
 class _Number:
     """Stand-in for a phable Number kind (a typed value object with .val/.unit)."""
-    def __init__(self, val, unit=None): self.val, self.unit = val, unit
+
+    def __init__(self, val, unit=None):
+        self.val, self.unit = val, unit
 
 
 class _Grid:
     """Stand-in for a phable/pyhaystack Grid object (rows as an attribute, not a dict)."""
-    def __init__(self, rows): self.rows = rows
+
+    def __init__(self, rows):
+        self.rows = rows
 
 
 def test_parse_native_grid_object_with_typed_values():
     # a Grid object (not a dict) whose rows carry a datetime ts and a Number val
-    grid = _Grid([{"ts": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc), "val": _Number(55.0, "degF")},
-                  {"ts": datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc), "val": _Number(56.0, "degF")}])
+    grid = _Grid(
+        [
+            {"ts": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc), "val": _Number(55.0, "degF")},
+            {"ts": datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc), "val": _Number(56.0, "degF")},
+        ]
+    )
     s = parse_his_grid(grid, name="sat")
     assert list(s) == [55.0, 56.0] and s.name == "sat"
 
@@ -170,8 +208,12 @@ def test_phable_transport_end_to_end():
             calls.append((point_ref, range_str))
             return _Grid([{"ts": datetime(2024, 6, 1, tzinfo=timezone.utc), "val": _Number(72.5)}])
 
-    a = HaystackAdapter("http://x", point_refs={"SAT": "@ahu1.sat"},
-                        transport=phable_transport(_FakePhableClient()), range_str="yesterday")
+    a = HaystackAdapter(
+        "http://x",
+        point_refs={"SAT": "@ahu1.sat"},
+        transport=phable_transport(_FakePhableClient()),
+        range_str="yesterday",
+    )
     df = a.load_points(["SAT"], resample=None)
-    assert calls == [("@ahu1.sat", "yesterday")]      # ref + range passed through
+    assert calls == [("@ahu1.sat", "yesterday")]  # ref + range passed through
     assert df["SAT"].iloc[0] == 72.5

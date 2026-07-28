@@ -17,16 +17,19 @@ def _weather(n=24 * 60):
     rng = np.random.default_rng(0)
     idx = pd.date_range("2025-06-01", periods=n, freq="1h")
     h = np.arange(n)
-    oat = (80 + 18 * np.sin((h % 24 - 9) / 24 * 2 * np.pi)     # daily
-           + 8 * np.sin(h / (24 * 60) * 2 * np.pi)             # seasonal-ish
-           + rng.normal(0, 1.5, n))
+    oat = (
+        80
+        + 18 * np.sin((h % 24 - 9) / 24 * 2 * np.pi)  # daily
+        + 8 * np.sin(h / (24 * 60) * 2 * np.pi)  # seasonal-ish
+        + rng.normal(0, 1.5, n)
+    )
     return pd.Series(oat, index=idx)
 
 
 def test_healthy_sensor_tracks_reference():
     ref = _weather()
     rng = np.random.default_rng(1)
-    bas = ref + rng.normal(0, 0.5, len(ref))      # same signal, small noise
+    bas = ref + rng.normal(0, 0.5, len(ref))  # same signal, small noise
     r = compare_to_reference(bas, ref, name="oat")
     assert r.severity == "ok"
     assert abs(r.bias) < 2.0 and r.correlation > 0.95
@@ -34,7 +37,7 @@ def test_healthy_sensor_tracks_reference():
 
 def test_constant_bias_flagged():
     ref = _weather()
-    bas = ref + 6.0                               # BAS OAT reads 6F high everywhere
+    bas = ref + 6.0  # BAS OAT reads 6F high everywhere
     r = compare_to_reference(bas, ref, name="oat")
     assert r.severity == "fault"
     assert 5.5 < r.bias < 6.5
@@ -44,7 +47,7 @@ def test_constant_bias_flagged():
 def test_drift_over_time_flagged():
     ref = _weather()
     months = (ref.index - ref.index[0]).total_seconds().to_numpy() / (86400.0 * 30.44)
-    bas = ref + 4.0 * months                      # grows 4F per month -> drift
+    bas = ref + 4.0 * months  # grows 4F per month -> drift
     r = compare_to_reference(bas, ref, name="oat")
     assert r.severity == "fault"
     assert r.drift_per_month > 3.0
@@ -63,15 +66,15 @@ def test_not_tracking_flagged():
 
 def test_insufficient_overlap_is_info():
     ref = _weather()
-    bas = ref.iloc[:50]                           # only 50 overlapping samples
+    bas = ref.iloc[:50]  # only 50 overlapping samples
     assert compare_to_reference(bas, ref, name="oat").severity == "info"
 
 
 def test_alignment_on_shared_timestamps():
     ref = _weather()
-    bas = (ref + 6.0).iloc[100:]                  # offset in time and value
+    bas = (ref + 6.0).iloc[100:]  # offset in time and value
     r = compare_to_reference(bas, ref, name="oat")
-    assert r.n == len(ref) - 100                  # compared only the overlap
+    assert r.n == len(ref) - 100  # compared only the overlap
     assert r.bias > 5.0
 
 

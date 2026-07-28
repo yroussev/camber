@@ -21,15 +21,30 @@ renders, **filters by severity**, **dedupes**, formats per channel, and sends.
 from camber.integrate import dispatch_findings, webhook_transport, email_transport
 
 # Slack incoming webhook, only warn+ , deduped across runs
-seen = load_seen()                       # a set of fingerprints you persist
-dispatch_findings(findings, webhook_transport(SLACK_URL), channel="slack",
-                  min_severity="warn", site="HQ", seen=seen)
+seen = load_seen()  # a set of fingerprints you persist
+dispatch_findings(
+    findings,
+    webhook_transport(SLACK_URL),
+    channel="slack",
+    min_severity="warn",
+    site="HQ",
+    seen=seen,
+)
 save_seen(seen)
 
 # Email via SMTP (raw ticket -> subject/body)
-dispatch_findings(findings, email_transport("smtp.example.com", sender="camber@x.com",
-                                            recipients=["ops@x.com"], username="u", password="p"),
-                  channel="webhook", min_severity="fault")
+dispatch_findings(
+    findings,
+    email_transport(
+        "smtp.example.com",
+        sender="camber@x.com",
+        recipients=["ops@x.com"],
+        username="u",
+        password="p",
+    ),
+    channel="webhook",
+    min_severity="fault",
+)
 
 # CMMS / generic webhook: channel="webhook" posts the raw ticket dict
 dispatch_findings(findings, webhook_transport(CMMS_URL), channel="webhook")
@@ -59,8 +74,8 @@ tests.
 ```python
 from camber.integrate import export_findings, findings_to_frame
 
-df = findings_to_frame(findings, site="HQ")          # one row per finding, metrics flattened
-export_findings(findings, "findings.parquet", site="HQ")   # csv / json / parquet by extension
+df = findings_to_frame(findings, site="HQ")  # one row per finding, metrics flattened
+export_findings(findings, "findings.parquet", site="HQ")  # csv / json / parquet by extension
 ```
 
 ### Option flags — `export_findings` / `findings_to_frame`

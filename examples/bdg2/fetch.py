@@ -15,8 +15,9 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "bdg2")
-BASE = ("https://media.githubusercontent.com/media/buds-lab/"
-        "building-data-genome-project-2/master/data/")
+BASE = (
+    "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/"
+)
 FILES = {
     "metadata.csv": "metadata/metadata.csv",
     "weather.csv": "weather/weather.csv",

@@ -10,8 +10,10 @@ self-contained HTML page that answers, top to bottom:
 
 ```python
 from camber.report import build_site_report
-html = build_site_report(df, findings=findings, rules=registry,
-                         loads=loads, price=price)          # loads/price cost the action plan
+
+html = build_site_report(
+    df, findings=findings, rules=registry, loads=loads, price=price
+)  # loads/price cost the action plan
 open("site.html", "w").write(html)
 ```
 

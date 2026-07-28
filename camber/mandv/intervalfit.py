@@ -27,8 +27,9 @@ import pandas as pd
 from .resample import resample
 
 
-def degree_days(oat_hourly: pd.Series, freq: str, base_f: float = 65.0,
-                kind: str = "heating") -> pd.Series:
+def degree_days(
+    oat_hourly: pd.Series, freq: str, base_f: float = 65.0, kind: str = "heating"
+) -> pd.Series:
     """Heating or cooling degree-days per ``freq`` bin from HOURLY temperatures.
 
     Computed from the hourly series (not a daily mean) so a cold morning under a
@@ -63,8 +64,9 @@ def rate_to_energy(rate: pd.Series, freq: str) -> pd.Series:
     return energy_per_sample.resample(freq).sum(min_count=1)
 
 
-def daily_energy_vs_temp(rate: pd.Series, oat: pd.Series, *,
-                         rate_is_energy_rate: bool = True) -> pd.DataFrame:
+def daily_energy_vs_temp(
+    rate: pd.Series, oat: pd.Series, *, rate_is_energy_rate: bool = True
+) -> pd.DataFrame:
     """Daily energy vs daily-mean OAT, ready for change-point fitting.
 
     ``rate``: interval meter series. If ``rate_is_energy_rate`` it is a rate
@@ -80,9 +82,15 @@ def daily_energy_vs_temp(rate: pd.Series, oat: pd.Series, *,
     return df[df["energy"] >= 0]
 
 
-def energy_vs_degree_days(rate: pd.Series, oat_hourly: pd.Series, *, freq: str = "D",
-                          base_f: float = 65.0, kind: str = "heating",
-                          rate_is_energy_rate: bool = True) -> pd.DataFrame:
+def energy_vs_degree_days(
+    rate: pd.Series,
+    oat_hourly: pd.Series,
+    *,
+    freq: str = "D",
+    base_f: float = 65.0,
+    kind: str = "heating",
+    rate_is_energy_rate: bool = True,
+) -> pd.DataFrame:
     """Energy per ``freq`` bin vs degree-days, for daily or monthly heating/cooling.
 
     Degree-days are computed from the hourly OAT (so cold hours under a mild daily
@@ -98,8 +106,9 @@ def energy_vs_degree_days(rate: pd.Series, oat_hourly: pd.Series, *, freq: str =
     return df[df["energy"] >= 0]
 
 
-def hourly_energy_vs_temp(rate: pd.Series, oat: pd.Series, *,
-                          rate_is_energy_rate: bool = True) -> pd.DataFrame:
+def hourly_energy_vs_temp(
+    rate: pd.Series, oat: pd.Series, *, rate_is_energy_rate: bool = True
+) -> pd.DataFrame:
     """Hourly energy vs hourly-mean OAT, with an hour-of-day column.
 
     The ``hour`` column (0-23) lets a caller fit an hour-of-day basis (one model

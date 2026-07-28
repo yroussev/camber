@@ -3,7 +3,6 @@
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -12,13 +11,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from camber.tsparse import parse_timestamps  # noqa: E402
 
 
-@pytest.mark.parametrize("values,expected", [
-    (["2024-01-01 00:00:00", "2024-01-01 01:00:00"], "2024-01-01 00:00:00"),   # ISO
-    (["2024-01-01T00:00:00", "2024-01-01T01:00:00"], "2024-01-01 00:00:00"),   # ISO-T
-    (["07/07/2025 11:00:00 AM", "07/07/2025 12:00:00 PM"], "2025-07-07 11:00:00"),  # US 12h
-    (["21-Apr-23 8:30:03 AM PDT", "21-Apr-23 9:30:03 AM PDT"], "2023-04-21 08:30:03"),  # BAS
-    (["20240101 00:00", "20240101 01:00"], "2024-01-01 00:00:00"),             # LBNL yyyymmdd
-])
+@pytest.mark.parametrize(
+    "values,expected",
+    [
+        (["2024-01-01 00:00:00", "2024-01-01 01:00:00"], "2024-01-01 00:00:00"),  # ISO
+        (["2024-01-01T00:00:00", "2024-01-01T01:00:00"], "2024-01-01 00:00:00"),  # ISO-T
+        (["07/07/2025 11:00:00 AM", "07/07/2025 12:00:00 PM"], "2025-07-07 11:00:00"),  # US 12h
+        (["21-Apr-23 8:30:03 AM PDT", "21-Apr-23 9:30:03 AM PDT"], "2023-04-21 08:30:03"),  # BAS
+        (["20240101 00:00", "20240101 01:00"], "2024-01-01 00:00:00"),  # LBNL yyyymmdd
+    ],
+)
 def test_string_formats_parse(values, expected):
     idx = parse_timestamps(values)
     assert idx.isna().sum() == 0
@@ -27,7 +29,9 @@ def test_string_formats_parse(values, expected):
 
 def test_epoch_seconds_and_millis():
     assert parse_timestamps([1700000000, 1700003600])[0] == pd.Timestamp("2023-11-14 22:13:20")
-    assert parse_timestamps([1700000000000, 1700003600000])[0] == pd.Timestamp("2023-11-14 22:13:20")
+    assert parse_timestamps([1700000000000, 1700003600000])[0] == pd.Timestamp(
+        "2023-11-14 22:13:20"
+    )
 
 
 def test_epoch_unit_override():
@@ -40,7 +44,7 @@ def test_excel_serial():
 
 
 def test_dayfirst_disambiguates_european_dates():
-    us = parse_timestamps(["03/04/2025 00:00"])                 # default US -> March 4
+    us = parse_timestamps(["03/04/2025 00:00"])  # default US -> March 4
     eu = parse_timestamps(["03/04/2025 00:00"], dayfirst=True)  # European -> April 3
     assert us[0] == pd.Timestamp("2025-03-04") and eu[0] == pd.Timestamp("2025-04-03")
 
@@ -69,4 +73,4 @@ def test_explicit_format_override():
 
 def test_index_has_no_column_name():
     idx = parse_timestamps(pd.Series(["2024-01-01"], name="ts"))
-    assert idx.name is None            # never carries the source column name
+    assert idx.name is None  # never carries the source column name

@@ -8,8 +8,8 @@ overlapping exports duplicate timestamps too. This module centralizes robust han
 - :func:`interval_hours` — modal interval width, immune to duplicate/zero gaps;
 - :func:`regularize` — sort and collapse duplicate timestamps on a Series/DataFrame;
 - :func:`localize` — tz-localize a naive local index, resolving DST ambiguous/nonexistent times;
-- :func:`dst_anomalies` — count duplicate timestamps and (given a tz) the DST fall-back/spring-forward
-  transitions in the index.
+- :func:`dst_anomalies` — count duplicate timestamps and (given a tz) the DST
+  fall-back/spring-forward transitions in the index.
 
 numpy/pandas only.
 """
@@ -29,7 +29,7 @@ def interval_hours(index) -> float:
     idx = pd.DatetimeIndex(index)
     if len(idx) < 2:
         return 1.0
-    deltas = np.diff(idx.asi8) / 3.6e12          # ns -> hours; asi8 avoids the deprecated .view
+    deltas = np.diff(idx.asi8) / 3.6e12  # ns -> hours; asi8 avoids the deprecated .view
     deltas = deltas[deltas > 0]
     return float(np.median(deltas)) if len(deltas) else 1.0
 
@@ -60,7 +60,8 @@ def localize(index, tz, *, ambiguous="infer", nonexistent="shift_forward") -> pd
     """Attach a timezone to a naive local ``index`` (or convert a tz-aware one), resolving DST.
 
     ``ambiguous`` handles the fall-back repeated hour (default ``"infer"`` — order-based), and
-    ``nonexistent`` handles the spring-forward missing hour (default shift the skipped time forward).
+    ``nonexistent`` handles the spring-forward missing hour (default shift the skipped time
+    forward).
     """
     idx = pd.DatetimeIndex(index)
     if idx.tz is not None:
@@ -79,7 +80,7 @@ def dst_anomalies(index, tz=None) -> dict:
     hours) for that timezone."""
     idx = pd.DatetimeIndex(index)
     out = {"duplicate_timestamps": int(idx.duplicated().sum())}
-    if tz is not None and idx.tz is None:      # DST ambiguity only applies to naive local data
+    if tz is not None and idx.tz is None:  # DST ambiguity only applies to naive local data
         u = pd.DatetimeIndex(idx.unique())
         amb = u.tz_localize(tz, ambiguous="NaT", nonexistent="shift_forward")
         ne = u.tz_localize(tz, ambiguous=True, nonexistent="NaT")

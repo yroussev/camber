@@ -6,7 +6,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.interop.brick import (  # noqa: E402
-    mapping_from_brick, parse_triples, roles_from_brick,
+    mapping_from_brick,
+    parse_triples,
+    roles_from_brick,
 )
 from camber.model.roles import Role  # noqa: E402
 
@@ -60,25 +62,25 @@ def test_direct_class_roles():
 
 def test_valve_role_from_coil_context():
     roles = roles_from_brick(TTL)
-    assert roles["CHWC_VLV"] == Role.COOL_VALVE     # owned by a chilled-water coil
-    assert roles["HC_VLV"] == Role.HEAT_VALVE       # owned by a hot-water coil
+    assert roles["CHWC_VLV"] == Role.COOL_VALVE  # owned by a chilled-water coil
+    assert roles["HC_VLV"] == Role.HEAT_VALVE  # owned by a hot-water coil
 
 
 def test_damper_and_fan_context():
     roles = roles_from_brick(TTL)
-    assert roles["OA_DMPR"] == Role.OA_DAMPER       # owned by the outside damper
+    assert roles["OA_DMPR"] == Role.OA_DAMPER  # owned by the outside damper
     assert roles["SF_SPD"] == Role.SUPPLY_FAN_SPEED  # owned by the supply fan
 
 
 def test_command_points_skipped():
     roles = roles_from_brick(TTL)
-    assert "CHWC_VLV_DM" not in roles               # a command, not a measured point
+    assert "CHWC_VLV_DM" not in roles  # a command, not a measured point
 
 
 def test_mapping_from_brick_is_usable():
     mp = mapping_from_brick(TTL)
     assert mp.role_of("CHWC_VLV") == Role.COOL_VALVE
-    assert mp.role_of("ma_temp") == Role.MIXED_AIR_TEMP   # case-insensitive lookup
+    assert mp.role_of("ma_temp") == Role.MIXED_AIR_TEMP  # case-insensitive lookup
 
 
 # --- rdflib backend (optional [brick] extra) -------------------------------- #
@@ -108,13 +110,14 @@ bldg:CHWC_VLV rdf:type brick:Valve_Position_Sensor .
 """
     r = roles_from_brick(ttl, backend="rdflib")
     assert r["OA_TEMP"] == Role.OAT
-    assert r["CHWC_VLV"] == Role.COOL_VALVE          # resolved via the coil context
+    assert r["CHWC_VLV"] == Role.COOL_VALVE  # resolved via the coil context
     # the minimal parser only understands `a`, not `rdf:type`, so it sees no types
     assert roles_from_brick(ttl, backend="minimal") != r
 
 
 def test_rdflib_backend_required_when_forced(monkeypatch):
     import camber.interop.brick as b
+
     monkeypatch.setattr(b, "_have_rdflib", lambda: False)
     with pytest.raises(ImportError):
         b.roles_from_brick("x", backend="rdflib")

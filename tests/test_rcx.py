@@ -9,7 +9,9 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.rcx import (  # noqa: E402
-    functional_test, before_after, track_measures,
+    before_after,
+    functional_test,
+    track_measures,
 )
 
 
@@ -21,11 +23,11 @@ def _frame(n=200, start="2025-06-01"):
 
 # --- functional_test ---------------------------------------------------------- #
 
+
 def test_functional_test_pass():
     # SAT tracks setpoint within 2 degF on every interval -> 100% pass
     f = _frame()
-    r = functional_test(f, "SAT tracks SP",
-                        lambda fr: (fr["sat"] - fr["sat_sp"]).abs() <= 2.0)
+    r = functional_test(f, "SAT tracks SP", lambda fr: (fr["sat"] - fr["sat_sp"]).abs() <= 2.0)
     assert r.severity == "pass"
     assert abs(r.pass_rate_pct - 100.0) < 1e-6
     assert r.n == len(f)
@@ -35,8 +37,7 @@ def test_functional_test_fail():
     # Drive SAT 6 degF off setpoint for 60% of intervals -> well below 80% pass
     f = _frame()
     f.loc[f.index[:120], "sat"] = 61.0
-    r = functional_test(f, "SAT tracks SP",
-                        lambda fr: (fr["sat"] - fr["sat_sp"]).abs() <= 2.0)
+    r = functional_test(f, "SAT tracks SP", lambda fr: (fr["sat"] - fr["sat_sp"]).abs() <= 2.0)
     assert r.severity == "fail"
     assert r.pass_rate_pct < 80.0
     assert abs(r.pass_rate_pct - 40.0) < 1.0
@@ -54,12 +55,12 @@ def test_functional_test_nulls_are_excluded():
 
 def test_functional_test_insufficient():
     f = _frame(n=5)
-    r = functional_test(f, "tiny",
-                        lambda fr: (fr["sat"] - fr["sat_sp"]).abs() <= 2.0)
+    r = functional_test(f, "tiny", lambda fr: (fr["sat"] - fr["sat_sp"]).abs() <= 2.0)
     assert r is None
 
 
 # --- before_after ------------------------------------------------------------- #
+
 
 def _step_series(before_level, after_level, noise=0.0, n=100, seed=0):
     """Metric series: constant level before/after a midpoint change, optional noise."""
@@ -77,7 +78,7 @@ def test_before_after_significant_improvement():
     r = before_after(s, ct)
     assert r.improved is True
     assert r.significant is True
-    assert r.delta < 0                          # lower-is-better: a drop
+    assert r.delta < 0  # lower-is-better: a drop
     assert r.metric_after < r.metric_before
 
 
@@ -86,7 +87,7 @@ def test_before_after_regression():
     r = before_after(s, ct)
     assert r.improved is False
     assert r.significant is True
-    assert r.delta > 0                          # metric went up = worse
+    assert r.delta > 0  # metric went up = worse
 
 
 def test_before_after_no_change_insignificant():
@@ -106,6 +107,7 @@ def test_before_after_insufficient():
 
 # --- measure register (MBCx) -------------------------------------------------- #
 
+
 def test_track_measures_lifecycle_counts():
     idx = pd.date_range("2025-01-01", periods=200, freq="1h")
     ct = idx[100]
@@ -115,12 +117,14 @@ def test_track_measures_lifecycle_counts():
     flat = pd.Series(rng.normal(80, 2, 200), index=idx)
     short = pd.Series(np.arange(12.0), index=pd.date_range("2025-01-01", periods=12, freq="1h"))
 
-    rep = track_measures([
-        {"name": "sat_reset", "series": verified, "change_time": ct},
-        {"name": "econ_fix", "series": regressed, "change_time": ct},
-        {"name": "no_op", "series": flat, "change_time": ct},
-        {"name": "too_short", "series": short, "change_time": short.index[10]},
-    ])
+    rep = track_measures(
+        [
+            {"name": "sat_reset", "series": verified, "change_time": ct},
+            {"name": "econ_fix", "series": regressed, "change_time": ct},
+            {"name": "no_op", "series": flat, "change_time": ct},
+            {"name": "too_short", "series": short, "change_time": short.index[10]},
+        ]
+    )
     assert rep.n == 4
     assert rep.n_verified == 1 and rep.n_regressed == 1
     assert rep.n_inconclusive == 1 and rep.n_insufficient == 1

@@ -27,7 +27,7 @@ class MqttPoint:
 
     topic: str
     name: str
-    value_key: str | None = None   # JSON key to read; None = parse the whole payload as a float
+    value_key: str | None = None  # JSON key to read; None = parse the whole payload as a float
     unit: str = ""
 
 
@@ -48,13 +48,14 @@ class MqttStreamSource:
     pure message handler used by both the live callback and tests.
     """
 
-    def __init__(self, points, *, host: str = "127.0.0.1", port: int = 1883,
-                 tls: bool = False, client=None):
+    def __init__(
+        self, points, *, host: str = "127.0.0.1", port: int = 1883, tls: bool = False, client=None
+    ):
         self._by_topic = {p.topic: p for p in points}
         self._points = {p.name: p for p in points}
         self._host, self._port, self._tls = host, port, tls
         self._client = client
-        self._buffer: dict = {p.name: [] for p in points}   # name -> [(ts, value)]
+        self._buffer: dict = {p.name: [] for p in points}  # name -> [(ts, value)]
 
     def ingest(self, topic: str, payload, *, ts=None) -> bool:
         """Handle one message: buffer ``(ts, value)`` for the topic's point. Returns whether
@@ -101,11 +102,12 @@ class MqttStreamSource:
             try:
                 import paho.mqtt.client as mqtt
             except Exception as e:  # noqa: BLE001
-                raise ImportError('the MQTT adapter needs the optional extra: '
-                                  'pip install "camber-toolkit[mqtt]"') from e
+                raise ImportError(
+                    'the MQTT adapter needs the optional extra: pip install "camber-toolkit[mqtt]"'
+                ) from e
             self._client = mqtt.Client()
             if self._tls:
-                self._client.tls_set()           # default secure context; verifies broker cert
+                self._client.tls_set()  # default secure context; verifies broker cert
         return self._client
 
     def subscribe(self, *, qos: int = 0, timeout: float | None = None):

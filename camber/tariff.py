@@ -15,10 +15,12 @@ dependency; the bridge handles full fidelity. Currency-agnostic ($/unit as bille
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
+
+from .timegrid import interval_hours as _interval_hours
 
 # A "tier" is (upper_bound, rate): covers consumption from the previous tier's bound up
 # to this one at ``rate``; an upper_bound of None means "no limit" (the top tier).
@@ -33,7 +35,7 @@ class Tariff:
     fixed_monthly: float = 0.0
     # energy: one tier-list per period; schedules index periods by [month0-11][hour0-23]
     energy_rates: list = field(default_factory=lambda: [[(None, 0.0)]])
-    energy_weekday: list | None = None   # 12x24 period indices; None -> all period 0
+    energy_weekday: list | None = None  # 12x24 period indices; None -> all period 0
     energy_weekend: list | None = None
     # TOU demand (optional): one tier-list per period + its own schedules
     demand_rates: list = field(default_factory=list)
@@ -41,8 +43,8 @@ class Tariff:
     demand_weekend: list | None = None
     # flat (non-TOU) monthly demand (optional): tier-lists per period + month->period map
     flat_demand_rates: list = field(default_factory=list)
-    flat_demand_months: list | None = None   # 12 period indices; None -> no flat demand
-    ratchet_pct: float = 0.0             # billed demand >= pct% of the trailing peak
+    flat_demand_months: list | None = None  # 12 period indices; None -> no flat demand
+    ratchet_pct: float = 0.0  # billed demand >= pct% of the trailing peak
 
     def as_dict(self) -> dict:
         """Return the tariff as a plain dict (JSON friendly)."""
@@ -53,7 +55,7 @@ class Tariff:
 class BillResult:
     """A computed utility bill: per-month rows plus annual component totals."""
 
-    months: list                  # [{period, kwh, peak_kw, energy, demand, fixed, total}]
+    months: list  # [{period, kwh, peak_kw, energy, demand, fixed, total}]
     energy_charge: float
     demand_charge: float
     fixed_charge: float
@@ -81,9 +83,6 @@ def _tiered(qty: float, tiers: list) -> float:
         if upper is not None and qty <= upper:
             break
     return cost
-
-
-from .timegrid import interval_hours as _interval_hours
 
 
 def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
@@ -138,20 +137,33 @@ def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
             d += _tiered(billed, tariff.flat_demand_rates[fp])
         peaks.append(peak)
         f = tariff.fixed_monthly
-        rows.append({"period": f"{key // 100:04d}-{mon:02d}",
-                     "kwh": round(float(kwh[m].sum()), 2), "peak_kw": round(peak, 2),
-                     "energy": round(e, 2), "demand": round(d, 2), "fixed": round(f, 2),
-                     "total": round(e + d + f, 2)})
+        rows.append(
+            {
+                "period": f"{key // 100:04d}-{mon:02d}",
+                "kwh": round(float(kwh[m].sum()), 2),
+                "peak_kw": round(peak, 2),
+                "energy": round(e, 2),
+                "demand": round(d, 2),
+                "fixed": round(f, 2),
+                "total": round(e + d + f, 2),
+            }
+        )
         e_tot += e
         d_tot += d
         f_tot += f
 
-    return BillResult(months=rows, energy_charge=round(e_tot, 2),
-                      demand_charge=round(d_tot, 2), fixed_charge=round(f_tot, 2),
-                      total=round(e_tot + d_tot + f_tot, 2), n_months=len(rows))
+    return BillResult(
+        months=rows,
+        energy_charge=round(e_tot, 2),
+        demand_charge=round(d_tot, 2),
+        fixed_charge=round(f_tot, 2),
+        total=round(e_tot + d_tot + f_tot, 2),
+        n_months=len(rows),
+    )
 
 
 # --- bill recalculation / validation ----------------------------------------- #
+
 
 @dataclass
 class MonthBillCheck:
@@ -159,30 +171,35 @@ class MonthBillCheck:
 
     period: str
     computed: float
-    actual: float                 # NaN if no invoice was supplied for the month
-    diff: float                   # actual - computed
-    pct_diff: float               # 100 * diff / actual (signed; + = invoice higher)
-    status: str                   # "ok" | "high" | "low" | "no_actual"
+    actual: float  # NaN if no invoice was supplied for the month
+    diff: float  # actual - computed
+    pct_diff: float  # 100 * diff / actual (signed; + = invoice higher)
+    status: str  # "ok" | "high" | "low" | "no_actual"
 
 
 @dataclass
 class BillValidation:
     """Recalculated bill vs actual invoices: per-month checks + a summary verdict."""
 
-    months: list                  # [MonthBillCheck]
-    n_checked: int                # months with an actual invoice
-    n_within: int                 # of those, how many within tolerance
-    mape: float                   # mean abs % difference over checked months
+    months: list  # [MonthBillCheck]
+    n_checked: int  # months with an actual invoice
+    n_within: int  # of those, how many within tolerance
+    mape: float  # mean abs % difference over checked months
     max_abs_pct: float
     tol_pct: float
-    verdict: str                  # "validated" | "minor" | "discrepancy" | "no_actual"
+    verdict: str  # "validated" | "minor" | "discrepancy" | "no_actual"
 
     def as_dict(self) -> dict:
         """Return the validation (with nested checks) as a plain dict."""
-        return {"months": [vars(m) for m in self.months], "n_checked": self.n_checked,
-                "n_within": self.n_within, "mape": self.mape,
-                "max_abs_pct": self.max_abs_pct, "tol_pct": self.tol_pct,
-                "verdict": self.verdict}
+        return {
+            "months": [vars(m) for m in self.months],
+            "n_checked": self.n_checked,
+            "n_within": self.n_within,
+            "mape": self.mape,
+            "max_abs_pct": self.max_abs_pct,
+            "tol_pct": self.tol_pct,
+            "verdict": self.verdict,
+        }
 
 
 def _actual_total(v):
@@ -208,16 +225,20 @@ def validate_bill(computed: BillResult, actual: dict, *, tol_pct: float = 5.0) -
     for p in periods:
         comp = comp_by.get(p, 0.0)
         act = _actual_total((actual or {}).get(p))
-        if act != act:                                  # NaN -> no invoice this month
-            checks.append(MonthBillCheck(p, round(comp, 2), float("nan"),
-                                         float("nan"), float("nan"), "no_actual"))
+        if act != act:  # NaN -> no invoice this month
+            checks.append(
+                MonthBillCheck(
+                    p, round(comp, 2), float("nan"), float("nan"), float("nan"), "no_actual"
+                )
+            )
             continue
         diff = act - comp
         denom = act if act else (comp if comp else 1.0)
         pct = 100.0 * diff / denom
         status = "ok" if abs(pct) <= tol_pct else ("high" if diff > 0 else "low")
-        checks.append(MonthBillCheck(p, round(comp, 2), round(act, 2), round(diff, 2),
-                                     round(pct, 1), status))
+        checks.append(
+            MonthBillCheck(p, round(comp, 2), round(act, 2), round(diff, 2), round(pct, 1), status)
+        )
         pcts.append(abs(pct))
 
     n_checked = len(pcts)
@@ -232,14 +253,23 @@ def validate_bill(computed: BillResult, actual: dict, *, tol_pct: float = 5.0) -
         verdict = "minor"
     else:
         verdict = "discrepancy"
-    return BillValidation(months=checks, n_checked=n_checked, n_within=n_within,
-                          mape=mape, max_abs_pct=max_abs, tol_pct=tol_pct, verdict=verdict)
+    return BillValidation(
+        months=checks,
+        n_checked=n_checked,
+        n_within=n_within,
+        mape=mape,
+        max_abs_pct=max_abs,
+        tol_pct=tol_pct,
+        verdict=verdict,
+    )
 
 
 # --- convenience constructors ------------------------------------------------- #
 
-def flat_tariff(energy_rate: float, *, demand_rate: float = 0.0,
-                fixed_monthly: float = 0.0) -> Tariff:
+
+def flat_tariff(
+    energy_rate: float, *, demand_rate: float = 0.0, fixed_monthly: float = 0.0
+) -> Tariff:
     """A flat tariff: one energy rate, optional flat monthly demand, fixed charge."""
     return Tariff(
         name="flat",
@@ -256,15 +286,22 @@ def hours_schedule(peak_hours, *, peak_period: int = 1) -> list:
     return [[peak_period if h in pk else 0 for h in range(24)] for _ in range(12)]
 
 
-def tou_tariff(off_peak_rate: float, peak_rate: float, peak_hours, *,
-               demand_rate: float = 0.0, fixed_monthly: float = 0.0) -> Tariff:
+def tou_tariff(
+    off_peak_rate: float,
+    peak_rate: float,
+    peak_hours,
+    *,
+    demand_rate: float = 0.0,
+    fixed_monthly: float = 0.0,
+) -> Tariff:
     """A two-period TOU energy tariff (period 0 off-peak, period 1 peak) over ``peak_hours``."""
     sched = hours_schedule(peak_hours)
     return Tariff(
         name="tou",
         fixed_monthly=fixed_monthly,
         energy_rates=[[(None, off_peak_rate)], [(None, peak_rate)]],
-        energy_weekday=sched, energy_weekend=sched,
+        energy_weekday=sched,
+        energy_weekend=sched,
         flat_demand_rates=[[(None, demand_rate)]] if demand_rate else [],
         flat_demand_months=[0] * 12 if demand_rate else None,
     )

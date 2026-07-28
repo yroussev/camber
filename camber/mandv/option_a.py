@@ -12,7 +12,7 @@ uncertainty this method does not quantify. numpy only.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -27,22 +27,28 @@ def _mean(x) -> float:
 class OptionAResult:
     """Measured-parameter savings with a stipulated duty (IPMVP Option A)."""
 
-    baseline_measured: float         # measured parameter, baseline (e.g. kW)
-    reporting_measured: float        # measured parameter, reporting
-    measured_delta: float            # baseline − reporting (positive = reduction)
-    stipulated_factor: float         # the stipulated duty (e.g. annual operating hours)
-    savings: float                   # measured_delta × stipulated_factor
-    unit: str                        # unit of savings (e.g. "kWh")
-    basis: str                       # what was measured vs stipulated
-    reduction_pct: float             # measured_delta / baseline_measured
+    baseline_measured: float  # measured parameter, baseline (e.g. kW)
+    reporting_measured: float  # measured parameter, reporting
+    measured_delta: float  # baseline − reporting (positive = reduction)
+    stipulated_factor: float  # the stipulated duty (e.g. annual operating hours)
+    savings: float  # measured_delta × stipulated_factor
+    unit: str  # unit of savings (e.g. "kWh")
+    basis: str  # what was measured vs stipulated
+    reduction_pct: float  # measured_delta / baseline_measured
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
-def option_a_savings(baseline_measured, reporting_measured, *, stipulated_factor: float,
-                     unit: str = "kWh", measured_name: str = "power (kW)",
-                     stipulated_name: str = "annual operating hours") -> OptionAResult:
+def option_a_savings(
+    baseline_measured,
+    reporting_measured,
+    *,
+    stipulated_factor: float,
+    unit: str = "kWh",
+    measured_name: str = "power (kW)",
+    stipulated_name: str = "annual operating hours",
+) -> OptionAResult:
     """IPMVP Option A savings: measured Δparameter × a stipulated duty.
 
     ``baseline_measured`` / ``reporting_measured`` are the measured parameter (scalar, or an array/
@@ -56,15 +62,20 @@ def option_a_savings(baseline_measured, reporting_measured, *, stipulated_factor
     savings = delta * stipulated_factor
     pct = delta / b if b not in (0.0, float("nan")) and np.isfinite(b) and b != 0 else float("nan")
     return OptionAResult(
-        baseline_measured=round(b, 4), reporting_measured=round(r, 4),
-        measured_delta=round(delta, 4), stipulated_factor=float(stipulated_factor),
-        savings=round(savings, 2), unit=unit,
+        baseline_measured=round(b, 4),
+        reporting_measured=round(r, 4),
+        measured_delta=round(delta, 4),
+        stipulated_factor=float(stipulated_factor),
+        savings=round(savings, 2),
+        unit=unit,
         basis=f"measured {measured_name} (Δ={delta:.4g}); stipulated {stipulated_name}"
-              f"={stipulated_factor:g}",
-        reduction_pct=round(pct, 4) if np.isfinite(pct) else float("nan"))
+        f"={stipulated_factor:g}",
+        reduction_pct=round(pct, 4) if np.isfinite(pct) else float("nan"),
+    )
 
 
-def stipulated_annual_hours(hours_per_day: float, days_per_week: float = 5.0,
-                            weeks_per_year: float = 52.0) -> float:
+def stipulated_annual_hours(
+    hours_per_day: float, days_per_week: float = 5.0, weeks_per_year: float = 52.0
+) -> float:
     """A stipulated annual-hours factor from a simple schedule (a common Option-A stipulation)."""
     return float(hours_per_day * days_per_week * weeks_per_year)

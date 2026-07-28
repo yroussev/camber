@@ -36,7 +36,7 @@ Variable conventions (all temperatures degF here):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -46,21 +46,22 @@ import pandas as pd
 class G36Thresholds:
     """Tunable tolerances; defaults are the G36 Table 5.16.14.7 initial values
     (converted to degF where the standard gives degC), derived from NISTIR 7365."""
-    dT_sf: float = 2.0        # fan-heat temperature rise (degF)
-    dT_min: float = 10.0      # min |OAT-RAT| to evaluate economizer faults (degF)
-    e_sat: float = 2.0        # SAT sensor tolerance
-    e_rat: float = 2.0        # RAT sensor tolerance
-    e_mat: float = 5.0        # MAT sensor tolerance
-    e_oat: float = 5.0        # OAT sensor tolerance (5 global / 2 if local)
-    e_flow: float = 0.30      # airflow / OA-fraction tolerance (fraction)
-    e_vfdspd: float = 0.05    # fan-speed tolerance (fraction)
-    e_dsp: float = 0.1        # duct-static tolerance (in. w.c.)
+
+    dT_sf: float = 2.0  # fan-heat temperature rise (degF)
+    dT_min: float = 10.0  # min |OAT-RAT| to evaluate economizer faults (degF)
+    e_sat: float = 2.0  # SAT sensor tolerance
+    e_rat: float = 2.0  # RAT sensor tolerance
+    e_mat: float = 5.0  # MAT sensor tolerance
+    e_oat: float = 5.0  # OAT sensor tolerance (5 global / 2 if local)
+    e_flow: float = 0.30  # airflow / OA-fraction tolerance (fraction)
+    e_vfdspd: float = 0.05  # fan-speed tolerance (fraction)
+    e_dsp: float = 0.1  # duct-static tolerance (in. w.c.)
     e_ccet: float = 5.0
     e_cclt: float = 2.0
     e_hcet: float = 5.0
     e_hclt: float = 2.0
-    valve_on: float = 99.0    # valve commanded "fully open" threshold (%)
-    fan_full: float = 99.0    # fan "full speed" threshold (%)
+    valve_on: float = 99.0  # valve commanded "fully open" threshold (%)
+    fan_full: float = 99.0  # fan "full speed" threshold (%)
 
 
 # Operating states. Classification keys off the heating- and cooling-valve
@@ -68,10 +69,10 @@ class G36Thresholds:
 # OS#4. HC>0 AND CC>0 simultaneously is OS#5 (no normal OS applies) -- the
 # simultaneous-heating/cooling signature.
 OS_HEATING = 1
-OS_FREECOOL = 2          # modulating economizer, no mechanical cooling
-OS_MECH_ECON = 3         # mechanical + 100% economizer
-OS_MECH_MINOA = 4        # mechanical cooling, minimum OA
-OS_UNKNOWN = 5           # simultaneous heat/cool, dehumidification, or fault
+OS_FREECOOL = 2  # modulating economizer, no mechanical cooling
+OS_MECH_ECON = 3  # mechanical + 100% economizer
+OS_MECH_MINOA = 4  # mechanical cooling, minimum OA
+OS_UNKNOWN = 5  # simultaneous heat/cool, dehumidification, or fault
 
 
 def classify_os(hc, cc, oa_damper=None, valve_thr=5.0, econ_damper_open=80.0):
@@ -95,65 +96,70 @@ def classify_os(hc, cc, oa_damper=None, valve_thr=5.0, econ_damper_open=80.0):
 
 # Which fault conditions are evaluated in each operating state (G36 §5.16.14.9).
 OS_FAULTS = {
-    OS_HEATING:    [1, 2, 3, 4, 5, 6, 7, 14],
-    OS_FREECOOL:   [1, 2, 3, 4, 8, 9, 12, 14, 15],
-    OS_MECH_ECON:  [1, 2, 3, 4, 10, 11, 12, 13, 15],
+    OS_HEATING: [1, 2, 3, 4, 5, 6, 7, 14],
+    OS_FREECOOL: [1, 2, 3, 4, 8, 9, 12, 14, 15],
+    OS_MECH_ECON: [1, 2, 3, 4, 10, 11, 12, 13, 15],
     OS_MECH_MINOA: [1, 2, 3, 4, 6, 12, 13, 15],
-    OS_UNKNOWN:    [1, 2, 3, 4],
+    OS_UNKNOWN: [1, 2, 3, 4],
 }
 
 
 # Each FC is a predicate on a row dict of averaged values. Returns True if the
 # fault equation is satisfied (fault present). Equations per G36 Table 5.16.14.8.
-def _fc1(r, k):   # DSP too low with fan at full speed
-    return (r.get("DSP") is not None and r.get("DSPSP") is not None
-            and r.get("FS") is not None
-            and r["DSP"] < r["DSPSP"] - k.e_dsp
-            and r["FS"] >= k.fan_full * (1 - k.e_vfdspd))
+def _fc1(r, k):  # DSP too low with fan at full speed
+    return (
+        r.get("DSP") is not None
+        and r.get("DSPSP") is not None
+        and r.get("FS") is not None
+        and r["DSP"] < r["DSPSP"] - k.e_dsp
+        and r["FS"] >= k.fan_full * (1 - k.e_vfdspd)
+    )
 
 
-def _fc2(r, k):   # MAT too low; should be between OAT and RAT
+def _fc2(r, k):  # MAT too low; should be between OAT and RAT
     if any(r.get(x) is None for x in ("MAT", "RAT", "OAT")):
         return False
     return r["MAT"] + k.e_mat < min(r["RAT"] - k.e_rat, r["OAT"] - k.e_oat)
 
 
-def _fc3(r, k):   # MAT too high
+def _fc3(r, k):  # MAT too high
     if any(r.get(x) is None for x in ("MAT", "RAT", "OAT")):
         return False
     return r["MAT"] - k.e_mat > max(r["RAT"] + k.e_rat, r["OAT"] + k.e_oat)
 
 
-def _fc4(r, k):   # too many operating-state changes (instability)
+def _fc4(r, k):  # too many operating-state changes (instability)
     return r.get("dOS") is not None and r["dOS"] > k.os_max
 
 
-def _fc5(r, k):   # SAT too low; should be higher than MAT (in heating)
+def _fc5(r, k):  # SAT too low; should be higher than MAT (in heating)
     if any(r.get(x) is None for x in ("SAT", "MAT")):
         return False
     return r["SAT"] + k.e_sat <= r["MAT"] - k.e_mat + k.dT_sf
 
 
-def _fc6(r, k):   # OA fraction off (too low/high vs minimum)
+def _fc6(r, k):  # OA fraction off (too low/high vs minimum)
     if any(r.get(x) is None for x in ("RAT", "OAT", "pct_oa", "pct_oa_min")):
         return False
-    return (abs(r["RAT"] - r["OAT"]) >= k.dT_min
-            and abs(r["pct_oa"] - r["pct_oa_min"]) > k.e_flow * 100.0)
+    return (
+        abs(r["RAT"] - r["OAT"]) >= k.dT_min
+        and abs(r["pct_oa"] - r["pct_oa_min"]) > k.e_flow * 100.0
+    )
 
 
-def _fc7(r, k):   # SAT too low in full heating
+def _fc7(r, k):  # SAT too low in full heating
     if any(r.get(x) is None for x in ("SAT", "SATSP", "HC")):
         return False
     return r["SAT"] < r["SATSP"] - k.e_sat and r["HC"] >= k.valve_on
 
 
-def _fc8(r, k):   # SAT and MAT should be ~equal (free cooling)
+def _fc8(r, k):  # SAT and MAT should be ~equal (free cooling)
     if any(r.get(x) is None for x in ("SAT", "MAT")):
         return False
     return abs(r["SAT"] - k.dT_sf - r["MAT"]) > np.hypot(k.e_sat, k.e_mat)
 
 
-def _fc9(r, k):   # OAT too high for free cooling
+def _fc9(r, k):  # OAT too high for free cooling
     if any(r.get(x) is None for x in ("OAT", "SATSP")):
         return False
     return r["OAT"] - k.e_oat > r["SATSP"] - k.dT_sf + k.e_sat
@@ -197,8 +203,23 @@ def _fc15(r, k):  # temperature rise across an inactive heating coil (leak/stuck
     return hlt - het >= np.hypot(k.e_hcet, k.e_hclt) + k.dT_sf
 
 
-_FCS = {1: _fc1, 2: _fc2, 3: _fc3, 4: _fc4, 5: _fc5, 6: _fc6, 7: _fc7, 8: _fc8,
-        9: _fc9, 10: _fc10, 11: _fc11, 12: _fc12, 13: _fc13, 14: _fc14, 15: _fc15}
+_FCS = {
+    1: _fc1,
+    2: _fc2,
+    3: _fc3,
+    4: _fc4,
+    5: _fc5,
+    6: _fc6,
+    7: _fc7,
+    8: _fc8,
+    9: _fc9,
+    10: _fc10,
+    11: _fc11,
+    12: _fc12,
+    13: _fc13,
+    14: _fc14,
+    15: _fc15,
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -243,7 +264,7 @@ def _vfc3(c, dos, k, n):
 
 
 def _vfc4(c, dos, k, n):
-    return dos > k.os_max          # NaN > thr -> False
+    return dos > k.os_max  # NaN > thr -> False
 
 
 def _vfc5(c, dos, k, n):
@@ -255,8 +276,9 @@ def _vfc5(c, dos, k, n):
 def _vfc6(c, dos, k, n):
     if any(c[x] is None for x in ("RAT", "OAT", "pct_oa", "pct_oa_min")):
         return _false(n)
-    return ((np.abs(c["RAT"] - c["OAT"]) >= k.dT_min)
-            & (np.abs(c["pct_oa"] - c["pct_oa_min"]) > k.e_flow * 100.0))
+    return (np.abs(c["RAT"] - c["OAT"]) >= k.dT_min) & (
+        np.abs(c["pct_oa"] - c["pct_oa_min"]) > k.e_flow * 100.0
+    )
 
 
 def _vfc7(c, dos, k, n):
@@ -313,9 +335,23 @@ def _vfc15(c, dos, k, n):
     return c["HCLT"] - c["HCET"] >= np.hypot(k.e_hcet, k.e_hclt) + k.dT_sf
 
 
-_VFCS = {1: _vfc1, 2: _vfc2, 3: _vfc3, 4: _vfc4, 5: _vfc5, 6: _vfc6, 7: _vfc7,
-         8: _vfc8, 9: _vfc9, 10: _vfc10, 11: _vfc11, 12: _vfc12, 13: _vfc13,
-         14: _vfc14, 15: _vfc15}
+_VFCS = {
+    1: _vfc1,
+    2: _vfc2,
+    3: _vfc3,
+    4: _vfc4,
+    5: _vfc5,
+    6: _vfc6,
+    7: _vfc7,
+    8: _vfc8,
+    9: _vfc9,
+    10: _vfc10,
+    11: _vfc11,
+    12: _vfc12,
+    13: _vfc13,
+    14: _vfc14,
+    15: _vfc15,
+}
 
 # OS codes in which each FC is evaluated (inverse of OS_FAULTS).
 _FC_STATES = {fc: [os for os, fcs in OS_FAULTS.items() if fc in fcs] for fc in _FCS}
@@ -325,11 +361,21 @@ _FC_STATES = {fc: [os for os, fcs in OS_FAULTS.items() if fc in fcs] for fc in _
 # which the fault *could* be computed at all, regardless of operating state. FC4
 # keys off dOS, which is always derivable, so it has no column requirement.
 _FC_INPUTS = {
-    1: ("DSP", "DSPSP", "FS"), 2: ("MAT", "RAT", "OAT"), 3: ("MAT", "RAT", "OAT"),
-    4: (), 5: ("SAT", "MAT"), 6: ("RAT", "OAT", "pct_oa", "pct_oa_min"),
-    7: ("SAT", "SATSP", "HC"), 8: ("SAT", "MAT"), 9: ("OAT", "SATSP"),
-    10: ("MAT", "OAT"), 11: ("OAT", "SATSP"), 12: ("SAT", "MAT"),
-    13: ("SAT", "SATSP", "CC"), 14: ("CCET", "CCLT"), 15: ("HCET", "HCLT"),
+    1: ("DSP", "DSPSP", "FS"),
+    2: ("MAT", "RAT", "OAT"),
+    3: ("MAT", "RAT", "OAT"),
+    4: (),
+    5: ("SAT", "MAT"),
+    6: ("RAT", "OAT", "pct_oa", "pct_oa_min"),
+    7: ("SAT", "SATSP", "HC"),
+    8: ("SAT", "MAT"),
+    9: ("OAT", "SATSP"),
+    10: ("MAT", "OAT"),
+    11: ("OAT", "SATSP"),
+    12: ("SAT", "MAT"),
+    13: ("SAT", "SATSP", "CC"),
+    14: ("CCET", "CCLT"),
+    15: ("HCET", "HCLT"),
 }
 
 
@@ -352,13 +398,20 @@ def _input_valid_mask(cols, fc, n):
         mask &= ~np.isnan(arr)
     return mask
 
+
 FC_DESC = {
-    1: "duct static too low at full fan", 2: "mixed-air temp too low",
-    3: "mixed-air temp too high", 4: "unstable control (too many OS changes)",
-    5: "supply-air too low in heating", 6: "outdoor-air fraction off",
-    7: "supply-air too low in full heating", 8: "SAT/MAT mismatch (free cooling)",
-    9: "OAT too high for free cooling", 10: "OAT/MAT mismatch (economizer)",
-    11: "OAT too low for mechanical cooling", 12: "supply-air too high (cooling)",
+    1: "duct static too low at full fan",
+    2: "mixed-air temp too low",
+    3: "mixed-air temp too high",
+    4: "unstable control (too many OS changes)",
+    5: "supply-air too low in heating",
+    6: "outdoor-air fraction off",
+    7: "supply-air too low in full heating",
+    8: "SAT/MAT mismatch (free cooling)",
+    9: "OAT too high for free cooling",
+    10: "OAT/MAT mismatch (economizer)",
+    11: "OAT too low for mechanical cooling",
+    12: "supply-air too high (cooling)",
     13: "supply-air too high in full cooling",
     14: "temp drop across inactive cooling coil (leak/stuck)",
     15: "temp rise across inactive heating coil (leak/stuck)",
@@ -375,9 +428,9 @@ class G36Result:
 
     equip: str
     n_intervals: int
-    os_distribution: dict          # OS code -> count
-    fault_pct: dict                # FC number -> % of *applicable* intervals tripped
-    fault_n_applicable: dict       # FC number -> intervals where its OS applied
+    os_distribution: dict  # OS code -> count
+    fault_pct: dict  # FC number -> % of *applicable* intervals tripped
+    fault_n_applicable: dict  # FC number -> intervals where its OS applied
     coverage_start: str
     coverage_end: str
     # Opt-in comparability output (None unless run_g36_afdd(comparability=True)):
@@ -392,19 +445,28 @@ class G36Result:
         When the comparability output is present, also emits FC<n>_pct_singlesignal
         keys; otherwise the dict is identical to the default-mode output.
         """
-        d = {"equip": self.equip, "n_intervals": self.n_intervals,
-             "os_distribution": self.os_distribution,
-             "coverage_start": self.coverage_start, "coverage_end": self.coverage_end}
+        d = {
+            "equip": self.equip,
+            "n_intervals": self.n_intervals,
+            "os_distribution": self.os_distribution,
+            "coverage_start": self.coverage_start,
+            "coverage_end": self.coverage_end,
+        }
         d.update({f"FC{n}_pct": self.fault_pct.get(n) for n in _FCS})
         if self.fault_pct_singlesignal is not None:
-            d.update({f"FC{n}_pct_singlesignal": self.fault_pct_singlesignal.get(n)
-                      for n in _FCS})
+            d.update({f"FC{n}_pct_singlesignal": self.fault_pct_singlesignal.get(n) for n in _FCS})
         return d
 
 
-def run_g36_afdd(df: pd.DataFrame, equip: str, *, thr: G36Thresholds | None = None,
-                 econ_damper_open: float = 80.0, valve_thr: float = 5.0,
-                 comparability: bool = False) -> G36Result | None:
+def run_g36_afdd(
+    df: pd.DataFrame,
+    equip: str,
+    *,
+    thr: G36Thresholds | None = None,
+    econ_damper_open: float = 80.0,
+    valve_thr: float = 5.0,
+    comparability: bool = False,
+) -> G36Result | None:
     """Run the G36 AFDD fault set over an AHU frame.
 
     ``df`` columns (any subset; faults needing missing inputs are skipped):
@@ -427,8 +489,7 @@ def run_g36_afdd(df: pd.DataFrame, equip: str, *, thr: G36Thresholds | None = No
     # operating state per interval (vectorized over the whole frame)
     hc = df["HC"].to_numpy(dtype=float)
     cc = df["CC"].to_numpy(dtype=float)
-    oa = (df["OA_Damper"].to_numpy(dtype=float) if "OA_Damper" in df.columns
-          else np.full(n, np.nan))
+    oa = df["OA_Damper"].to_numpy(dtype=float) if "OA_Damper" in df.columns else np.full(n, np.nan)
     os_codes = _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open)
     # dOS: operating-state changes in the trailing 60 min (time-based 1h window)
     os_ser = pd.Series(os_codes, index=df.index)
@@ -437,30 +498,55 @@ def run_g36_afdd(df: pd.DataFrame, equip: str, *, thr: G36Thresholds | None = No
 
     # Pull every measure column once (None when absent) and evaluate each FC over
     # the whole column; a missing column / NaN value yields False for that interval.
-    cols = {col: (df[col].to_numpy(dtype=float) if col in df.columns else None)
-            for col in ("HC", "CC", "SAT", "MAT", "RAT", "OAT", "SATSP", "FS",
-                        "DSP", "DSPSP", "pct_oa", "pct_oa_min",
-                        "CCET", "CCLT", "HCET", "HCLT")}
+    cols = {
+        col: (df[col].to_numpy(dtype=float) if col in df.columns else None)
+        for col in (
+            "HC",
+            "CC",
+            "SAT",
+            "MAT",
+            "RAT",
+            "OAT",
+            "SATSP",
+            "FS",
+            "DSP",
+            "DSPSP",
+            "pct_oa",
+            "pct_oa_min",
+            "CCET",
+            "CCLT",
+            "HCET",
+            "HCLT",
+        )
+    }
 
     fault_pct, fault_n = {}, {}
     fault_pct_ss = {} if comparability else None
     for fc in _FCS:
-        fired = _VFCS[fc](cols, dos, k, n)          # the fault equation, once
+        fired = _VFCS[fc](cols, dos, k, n)  # the fault equation, once
         # default: operating-state-gated denominator (the G36-faithful convention)
         applicable = np.isin(os_codes, _FC_STATES[fc])
         n_app = int(applicable.sum())
         fault_n[fc] = n_app
-        fault_pct[fc] = (None if n_app == 0
-                         else round(100.0 * int((fired & applicable).sum()) / n_app, 2))
+        fault_pct[fc] = (
+            None if n_app == 0 else round(100.0 * int((fired & applicable).sum()) / n_app, 2)
+        )
         # opt-in: single-signal (input-validity) denominator, same fires
         if comparability:
             valid = _input_valid_mask(cols, fc, n)
             n_valid = int(valid.sum())
-            fault_pct_ss[fc] = (None if n_valid == 0
-                                else round(100.0 * int((fired & valid).sum()) / n_valid, 2))
+            fault_pct_ss[fc] = (
+                None if n_valid == 0 else round(100.0 * int((fired & valid).sum()) / n_valid, 2)
+            )
 
     os_dist = {int(o): int((os_codes == o).sum()) for o in range(1, 6)}
-    return G36Result(equip=equip, n_intervals=n, os_distribution=os_dist,
-                     fault_pct=fault_pct, fault_n_applicable=fault_n,
-                     coverage_start=str(df.index.min()), coverage_end=str(df.index.max()),
-                     fault_pct_singlesignal=fault_pct_ss)
+    return G36Result(
+        equip=equip,
+        n_intervals=n,
+        os_distribution=os_dist,
+        fault_pct=fault_pct,
+        fault_n_applicable=fault_n,
+        coverage_start=str(df.index.min()),
+        coverage_end=str(df.index.max()),
+        fault_pct_singlesignal=fault_pct_ss,
+    )

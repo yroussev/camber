@@ -5,6 +5,7 @@ import os
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -21,10 +22,13 @@ def _close_figs():
     plt.close("all")
 
 
-from camber.model.roles import Role  # noqa: E402
 from camber.charts.cohort import (  # noqa: E402
-    CohortResult, cohort_deviation, cohort_small_multiples, cohort_summary,
+    CohortResult,
+    cohort_deviation,
+    cohort_small_multiples,
+    cohort_summary,
 )
+from camber.model.roles import Role  # noqa: E402
 from camber.rules.cohort import CohortDeviation  # noqa: E402
 
 
@@ -34,7 +38,7 @@ def _cohort(n_units=8, outlier=True, seed=0):
     idx = pd.date_range("2024-06-01", periods=120, freq="1h")
     frames = {}
     for i in range(n_units):
-        level = 1000.0 + rng.normal(0, 20, len(idx))          # peers cluster near 1000
+        level = 1000.0 + rng.normal(0, 20, len(idx))  # peers cluster near 1000
         frames[f"VAV-{i}"] = pd.DataFrame({Role.AIRFLOW: pd.Series(level, index=idx)})
     if outlier:
         idx0 = frames["VAV-0"].index
@@ -54,7 +58,7 @@ def test_cohort_summary_reductions():
 def test_cohort_deviation_flags_the_outlier():
     res = cohort_deviation(_cohort(outlier=True), Role.AIRFLOW, k=3.5)
     assert isinstance(res, CohortResult)
-    assert res.outliers == ["VAV-0"]                          # the 2x-flow unit
+    assert res.outliers == ["VAV-0"]  # the 2x-flow unit
     assert abs(res.z["VAV-0"]) >= 3.5
 
 
@@ -66,13 +70,13 @@ def test_cohort_deviation_uniform_has_no_outliers():
 def test_cohort_deviation_below_min_cohort():
     frames = _cohort(n_units=2, outlier=False)
     res = cohort_deviation(frames, Role.AIRFLOW, min_cohort=3)
-    assert res.outliers == [] and res.z == {}                 # not enough peers to judge
+    assert res.outliers == [] and res.z == {}  # not enough peers to judge
 
 
 def test_cohort_small_multiples_orders_by_deviation():
     fig, res = cohort_small_multiples(_cohort(outlier=True), Role.AIRFLOW)
     axes = fig.get_axes()
-    assert len(axes) >= len(res.values)                       # a panel per unit (+ hidden fillers)
+    assert len(axes) >= len(res.values)  # a panel per unit (+ hidden fillers)
     # worst deviation first: the top-left panel is the outlier
     assert "VAV-0" in axes[0].get_title()
 

@@ -17,7 +17,9 @@ from camber.model.roles import Role  # noqa: E402
 
 def _sample_site() -> Site:
     ahu = Equip(
-        id="AHU_1", equip_class="AHU", site="SITE1",
+        id="AHU_1",
+        equip_class="AHU",
+        site="SITE1",
         points=(
             Point("AHU_1_SAT", Role.SUPPLY_AIR_TEMP),
             Point("AHU_1_OAT", Role.OAT),
@@ -27,7 +29,9 @@ def _sample_site() -> Site:
         ),
     )
     vav = Equip(
-        id="VAV_117", equip_class="VAV", site="SITE1",
+        id="VAV_117",
+        equip_class="VAV",
+        site="SITE1",
         points=(
             Point("VAV_117_ZNT", Role.SPACE_TEMP),
             Point("VAV_117_OCC", Role.OCCUPANCY),
@@ -60,7 +64,10 @@ def test_round_trip_preserves_equipment_and_roles():
 
     # the role set on each equipment is recovered exactly
     assert by_id["AHU_1"].roles() == {
-        Role.SUPPLY_AIR_TEMP, Role.OAT, Role.COOL_VALVE, Role.HEAT_VALVE,
+        Role.SUPPLY_AIR_TEMP,
+        Role.OAT,
+        Role.COOL_VALVE,
+        Role.HEAT_VALVE,
         Role.SUPPLY_FAN_SPEED,
     }
     assert by_id["VAV_117"].roles() == {Role.SPACE_TEMP, Role.OCCUPANCY}
@@ -69,8 +76,7 @@ def test_round_trip_preserves_equipment_and_roles():
 def test_round_trip_preserves_point_to_role_assignment():
     site = _sample_site()
     back = site_from_ttl(site_to_ttl(site), backend="minimal")
-    pairs = {p.name: p.role
-             for e in back.equips for p in e.points}
+    pairs = {p.name: p.role for e in back.equips for p in e.points}
     # original point names map to their original roles after the round-trip
     assert pairs["AHU_1_SAT"] == Role.SUPPLY_AIR_TEMP
     assert pairs["AHU_1_CCV"] == Role.COOL_VALVE

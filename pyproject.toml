@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.9.0"
+version = "0.9.1"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "ruff>=0.6"]
 # Docs site only (never a runtime dep): build the MkDocs site with `mkdocs build`.
 docs = ["mkdocs>=1.5", "mkdocs-material>=9.5"]
 brick = ["rdflib>=6"]   # robust Brick/RDF parsing (camber.interop.brick backend="rdflib")
@@ -81,3 +81,23 @@ camber = "camber.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["camber*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Moderate, high-value rule set: pyflakes (F), import sorting (I), pycodestyle
+# errors/warnings (E/W), pyupgrade (UP), and flake8-bugbear (B). Ratchet upward in
+# later hardening releases.
+select = ["E", "F", "I", "W", "UP", "B"]
+# B905 (zip-without-explicit-strict) intentionally deferred: mechanically adding
+# strict=False would just opt out of the safety, and a correct strict=True audit is a
+# focused per-call-site task for a later release.
+ignore = ["B905"]
+
+[tool.ruff.lint.per-file-ignores]
+# Every test/example module runs a `sys.path.insert(...)` prelude before importing
+# `camber`, so imports legitimately follow executable code.
+"tests/*" = ["E402"]
+"examples/*" = ["E402"]

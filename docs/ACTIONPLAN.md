@@ -9,12 +9,20 @@ recommendation, ranked **worst-dollars-first** (severity breaks ties).
 from camber.actionplan import build_action_plan, action_plan_html
 from camber.fault_economics import EnergyPrice, EquipmentLoad
 
-plan = build_action_plan(findings,
-                         loads={"AHU-1": EquipmentLoad(heating_capacity_kbtuh=200)},
-                         price=EnergyPrice(electricity_per_kwh=0.15))
+plan = build_action_plan(
+    findings,
+    loads={"AHU-1": EquipmentLoad(heating_capacity_kbtuh=200)},
+    price=EnergyPrice(electricity_per_kwh=0.15),
+)
 for a in plan:
-    print(a.severity, a.equip, a.rule, f"${a.annual_cost_usd:,.0f}", "→",
-          a.recommendation.title if a.recommendation else "")
+    print(
+        a.severity,
+        a.equip,
+        a.rule,
+        f"${a.annual_cost_usd:,.0f}",
+        "→",
+        a.recommendation.title if a.recommendation else "",
+    )
 ```
 
 Each `ActionItem`: `equip`, `rule`, `severity`, `annual_cost_usd`, `costed` (False when sizing is

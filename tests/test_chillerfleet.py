@@ -24,11 +24,11 @@ def _pair_solo_then_shared(n, solo=60, peak=480.0, shared=150.0):
     rest = n - 2 * solo
     p1 = np.concatenate([np.full(solo, peak), np.full(solo, 0.0), np.full(rest, shared)])
     p2 = np.concatenate([np.full(solo, 0.0), np.full(solo, peak), np.full(rest, shared)])
-    return (pd.DataFrame({"Power": p1}, index=_idx(n)),
-            pd.DataFrame({"Power": p2}, index=_idx(n)))
+    return (pd.DataFrame({"Power": p1}, index=_idx(n)), pd.DataFrame({"Power": p2}, index=_idx(n)))
 
 
 # --- diagnostic --------------------------------------------------------------- #
+
 
 def test_overstaged_when_both_run_at_low_load():
     n = 24 * 14
@@ -56,6 +56,7 @@ def test_single_chiller_returns_none():
 
 # --- fleet rule wrapper ------------------------------------------------------- #
 
+
 def test_rule_is_a_fleet_rule_and_severity():
     assert isinstance(ChillerStagingFleet(), FleetRule)
     n = 24 * 14
@@ -67,8 +68,12 @@ def test_rule_is_a_fleet_rule_and_severity():
 
     rule = ChillerStagingFleet()
     a, b = _pair_solo_then_shared(n)
-    overstaged = rule.analyze_fleet({"CH-1": a.rename(columns={"Power": Role.POWER}),
-                                     "CH-2": b.rename(columns={"Power": Role.POWER})})
+    overstaged = rule.analyze_fleet(
+        {
+            "CH-1": a.rename(columns={"Power": Role.POWER}),
+            "CH-2": b.rename(columns={"Power": Role.POWER}),
+        }
+    )
     assert overstaged.severity == "fault"
     assert overstaged.equip == "<fleet>"
 

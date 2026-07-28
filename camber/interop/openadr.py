@@ -21,20 +21,30 @@ def _payload(ptype: str, value, unit: str) -> dict:
     return {"type": ptype, "unit": unit, "values": [round(float(value), 3)]}
 
 
-def to_openadr_report(dr, *, program_id: str = "", event_id: str = "", client_name: str = "",
-                      resource_name: str = "aggregate", created: str = "",
-                      report_name: str = "DR_EVENT_PERFORMANCE") -> dict:
+def to_openadr_report(
+    dr,
+    *,
+    program_id: str = "",
+    event_id: str = "",
+    client_name: str = "",
+    resource_name: str = "aggregate",
+    created: str = "",
+    report_name: str = "DR_EVENT_PERFORMANCE",
+) -> dict:
     """Map a ``DemandResponseResult`` (or its ``as_dict()``) to an OpenADR-3.0-shaped report dict.
 
     The event's baseline / actual / shed energies become interval report payloads (KWH); the average
     and peak reduction, percent, rebound, and event hours become a performance summary.
     """
     d = dr.as_dict() if hasattr(dr, "as_dict") else dict(dr)
-    interval = {"id": 0, "payloads": [
-        _payload("BASELINE", d["baseline_kwh"], _KWH),
-        _payload("USAGE", d["actual_kwh"], _KWH),
-        _payload("REDUCTION", d["energy_shed_kwh"], _KWH),
-    ]}
+    interval = {
+        "id": 0,
+        "payloads": [
+            _payload("BASELINE", d["baseline_kwh"], _KWH),
+            _payload("USAGE", d["actual_kwh"], _KWH),
+            _payload("REDUCTION", d["energy_shed_kwh"], _KWH),
+        ],
+    }
     return {
         "objectType": "REPORT",
         "reportName": report_name,

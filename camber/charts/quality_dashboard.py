@@ -22,8 +22,12 @@ _METRICS = {
 }
 
 
-def quality_matrix(df: pd.DataFrame, *, metrics=("coverage", "score", "flatline_frac",
-                                                 "outlier_frac"), expected_freq=None):
+def quality_matrix(
+    df: pd.DataFrame,
+    *,
+    metrics=("coverage", "score", "flatline_frac", "outlier_frac"),
+    expected_freq=None,
+):
     """Return ``(values, goodness, points, metric_labels)`` from per-column quality reports.
 
     ``values`` is points×metrics raw; ``goodness`` is the same mapped to 0–1 where 1 is good
@@ -43,9 +47,14 @@ def quality_matrix(df: pd.DataFrame, *, metrics=("coverage", "score", "flatline_
     return raw, good, points, labels
 
 
-def quality_dashboard(df: pd.DataFrame, *, ax=None, metrics=("coverage", "score",
-                      "flatline_frac", "outlier_frac"), expected_freq=None,
-                      title: str | None = None):
+def quality_dashboard(
+    df: pd.DataFrame,
+    *,
+    ax=None,
+    metrics=("coverage", "score", "flatline_frac", "outlier_frac"),
+    expected_freq=None,
+    title: str | None = None,
+):
     """Heatmap of data-quality metrics (rows=points, cols=metrics). Returns the Axes."""
     import matplotlib.pyplot as plt
 
@@ -61,9 +70,8 @@ def quality_dashboard(df: pd.DataFrame, *, ax=None, metrics=("coverage", "score"
     ax.set_xticklabels(labels, fontsize=9)
     ax.set_yticks(range(len(points)))
     ax.set_yticklabels([str(p) for p in points], fontsize=8)
-    for i in range(len(points)):                       # annotate the raw value in each cell
+    for i in range(len(points)):  # annotate the raw value in each cell
         for j in range(len(labels)):
-            ax.text(j, i, f"{raw[i, j]:.2f}", ha="center", va="center", fontsize=7,
-                    color="black")
+            ax.text(j, i, f"{raw[i, j]:.2f}", ha="center", va="center", fontsize=7, color="black")
     ax.set_title(title or "Data-quality dashboard (green = good)")
     return ax

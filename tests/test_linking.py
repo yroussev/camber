@@ -7,6 +7,7 @@ import re
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -31,8 +32,12 @@ from camber.report.linking import interactive_scatter_html  # noqa: E402
 def _df(n=200, seed=0):
     idx = pd.date_range("2024-07-01", periods=n, freq="1h")
     rng = np.random.default_rng(seed)
-    return pd.DataFrame({Role.OAT: pd.Series(rng.uniform(30, 95, n), index=idx),
-                         Role.SUPPLY_AIR_TEMP: pd.Series(55 + rng.normal(0, 1, n), index=idx)})
+    return pd.DataFrame(
+        {
+            Role.OAT: pd.Series(rng.uniform(30, 95, n), index=idx),
+            Role.SUPPLY_AIR_TEMP: pd.Series(55 + rng.normal(0, 1, n), index=idx),
+        }
+    )
 
 
 def _payload(fragment, elem_id="camber-link"):
@@ -43,19 +48,25 @@ def _payload(fragment, elem_id="camber-link"):
 def test_fragment_has_svg_json_readout_and_brush_script():
     df = _df()
     frag = interactive_scatter_html(df[Role.OAT], df[Role.SUPPLY_AIR_TEMP], df.index)
-    for token in ("<svg", "camber-link-data", "camber-link-out", "mousedown", "mouseup",
-                  "application/json"):
+    for token in (
+        "<svg",
+        "camber-link-data",
+        "camber-link-out",
+        "mousedown",
+        "mouseup",
+        "application/json",
+    ):
         assert token in frag
-    assert "http" not in frag.replace("http://www.w3.org", "")   # no external URLs (CSP-safe)
+    assert "http" not in frag.replace("http://www.w3.org", "")  # no external URLs (CSP-safe)
 
 
 def test_payload_is_timestamp_and_floats_and_skips_nan():
     df = _df(n=10)
     y = df[Role.SUPPLY_AIR_TEMP].copy()
-    y.iloc[3] = np.nan                                   # a gap
+    y.iloc[3] = np.nan  # a gap
     frag = interactive_scatter_html(df[Role.OAT], y, df.index)
     pts = _payload(frag)
-    assert len(pts) == 9                                 # the NaN point dropped
+    assert len(pts) == 9  # the NaN point dropped
     t, x, yy = pts[0]
     assert isinstance(t, str) and isinstance(x, float) and isinstance(yy, float)
 
@@ -63,7 +74,7 @@ def test_payload_is_timestamp_and_floats_and_skips_nan():
 def test_pick_link_cols_defaults_to_oat_then_other():
     df = _df()
     x, y = _pick_link_cols(df, None, None)
-    assert x == Role.OAT and y == Role.SUPPLY_AIR_TEMP   # OAT-like x, first other y
+    assert x == Role.OAT and y == Role.SUPPLY_AIR_TEMP  # OAT-like x, first other y
     # explicit override honored
     x2, y2 = _pick_link_cols(df, Role.SUPPLY_AIR_TEMP, Role.OAT)
     assert x2 == Role.SUPPLY_AIR_TEMP and y2 == Role.OAT
@@ -73,7 +84,7 @@ def test_dashboard_interactive_adds_section_style_and_script():
     df = _df()
     html = build_dashboard(df, sections=("A",), interactive=True, carpet_col=Role.OAT)
     assert "Interactive — brush to select" in html
-    assert "camber-pt" in html                           # LINK_STYLE injected
+    assert "camber-pt" in html  # LINK_STYLE injected
     assert "camber-link-data" in html and "<script>" in html
 
 
@@ -81,7 +92,7 @@ def test_dashboard_static_by_default_has_no_interactivity():
     df = _df()
     html = build_dashboard(df, sections=("A",), carpet_col=Role.OAT)
     assert "camber-link-data" not in html and "Interactive — brush" not in html
-    assert "camber-pt" not in html                       # LINK_STYLE not injected
+    assert "camber-pt" not in html  # LINK_STYLE not injected
 
 
 def test_interactive_section_empty_when_not_renderable():
@@ -94,26 +105,31 @@ def test_interactive_section_empty_when_not_renderable():
 
 # --- cross-panel linking (0.8) ---------------------------------------------- #
 
+
 def _wide_df():
     idx = pd.date_range("2024-07-01", periods=24 * 7, freq="1h")
     rng = np.random.default_rng(0)
-    return pd.DataFrame({"OAT": 60 + 20 * np.sin(idx.hour / 24 * 6.28),
-                         "load": 50 + 30 * rng.random(len(idx))}, index=idx)
+    return pd.DataFrame(
+        {"OAT": 60 + 20 * np.sin(idx.hour / 24 * 6.28), "load": 50 + 30 * rng.random(len(idx))},
+        index=idx,
+    )
 
 
 def test_selection_bus_and_svg_panels_present_when_interactive():
     from camber.report.dashboard import build_dashboard
+
     html = build_dashboard(_wide_df(), interactive=True)
     # bus + subscribers
     assert "window.CAMBER" in html and "onChange" in html
-    assert "camber-cell" in html and "data-ts=" in html          # carpet cells (E)
-    assert "camber-band" in html                                 # multitrend highlight band (B)
-    assert "camber-link-data" in html                            # scatter still present
-    assert "window.CAMBER.set" in html                           # brush publishes
+    assert "camber-cell" in html and "data-ts=" in html  # carpet cells (E)
+    assert "camber-band" in html  # multitrend highlight band (B)
+    assert "camber-link-data" in html  # scatter still present
+    assert "window.CAMBER.set" in html  # brush publishes
 
 
 def test_interactive_promotes_B_and_E_to_svg_two_pngs_remain():
     from camber.report.dashboard import build_dashboard
+
     html = build_dashboard(_wide_df(), interactive=True)
     # B (multitrend) and E (carpet) are now inline SVG; only A (readiness) + I (quality) stay PNG
     assert html.count("data:image/png;base64,") == 2
@@ -121,6 +137,7 @@ def test_interactive_promotes_B_and_E_to_svg_two_pngs_remain():
 
 def test_static_dashboard_unchanged_four_pngs_no_bus():
     from camber.report.dashboard import build_dashboard
+
     html = build_dashboard(_wide_df())
     assert html.count("data:image/png;base64,") == 4 and "window.CAMBER" not in html
 
@@ -128,22 +145,26 @@ def test_static_dashboard_unchanged_four_pngs_no_bus():
 def test_cross_panel_timestamps_are_consistent():
     # a timestamp in the scatter payload must match the carpet cell + trend meta keys (same str())
     from camber.report.dashboard import build_dashboard
+
     df = _wide_df()
     html = build_dashboard(df, interactive=True)
     ts = str(pd.Timestamp(df.index[24]))
-    assert html.count(ts) >= 3        # appears in scatter payload, carpet data-ts, and trend meta
+    assert html.count(ts) >= 3  # appears in scatter payload, carpet data-ts, and trend meta
 
 
 def test_interactive_dashboard_is_csp_safe():
     from camber.report.dashboard import build_dashboard
+
     html = build_dashboard(_wide_df(), interactive=True).replace("http://www.w3.org", "")
     assert "http://" not in html and "https://" not in html
 
 
 def test_svg_panels_empty_on_degenerate_frame_fall_back():
     # a frame with no numeric columns -> SVG panels return "" -> PNG fallback, no crash
-    from camber.report.linking import carpet_svg_html, multitrend_svg_html
     import pandas as pd
+
+    from camber.report.linking import carpet_svg_html, multitrend_svg_html
+
     empty = pd.Series(dtype=float)
     assert carpet_svg_html(empty) == ""
     assert multitrend_svg_html(pd.DataFrame(), []) == ""

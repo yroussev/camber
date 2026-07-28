@@ -7,9 +7,11 @@ cooling-power series and a price) the recoverable energy and dollars.
 
 ```python
 from camber.freecooling import free_cooling_opportunity
-opp = free_cooling_opportunity(oat, cool_valve, cooling_kw=chiller_kw,
-                               high_limit_f=65, recover_frac=0.7, price_per_kwh=0.15)
-opp.hours_missed, opp.recoverable_kwh, opp.savings_usd     # e.g. 286 h, 10010 kWh, $1502
+
+opp = free_cooling_opportunity(
+    oat, cool_valve, cooling_kw=chiller_kw, high_limit_f=65, recover_frac=0.7, price_per_kwh=0.15
+)
+opp.hours_missed, opp.recoverable_kwh, opp.savings_usd  # e.g. 286 h, 10010 kWh, $1502
 ```
 
 Free cooling is *available* when OAT is below `high_limit_f` and *missed* when it's available yet

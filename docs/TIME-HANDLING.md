@@ -8,10 +8,16 @@ exports duplicate timestamps too. `camber.timegrid` centralizes robust handling.
 ```python
 from camber.timegrid import interval_hours, regularize, localize, dst_anomalies
 
-interval_hours(series.index)                 # modal width, ignores 0/duplicate gaps
-clean = regularize(df, dedupe="first")       # sort + collapse duplicate timestamps ("first"/"last"/"mean")
-aware = localize(idx, "America/Los_Angeles") # tz-localize, resolving DST ambiguous/nonexistent times
-dst_anomalies(idx, "America/Los_Angeles")    # {"duplicate_timestamps", "fallback_ambiguous", "springforward_nonexistent"}
+interval_hours(series.index)  # modal width, ignores 0/duplicate gaps
+clean = regularize(
+    df, dedupe="first"
+)  # sort + collapse duplicate timestamps ("first"/"last"/"mean")
+aware = localize(
+    idx, "America/Los_Angeles"
+)  # tz-localize, resolving DST ambiguous/nonexistent times
+dst_anomalies(
+    idx, "America/Los_Angeles"
+)  # {"duplicate_timestamps", "fallback_ambiguous", "springforward_nonexistent"}
 ```
 
 - **`interval_hours`** uses the median of strictly-positive gaps, so a duplicate (0-gap) timestamp

@@ -18,15 +18,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from camber import cli, inventory  # noqa: E402
 from camber.charts.box_reheat import box_reheat_figure  # noqa: E402
 from camber.charts.zones_chart import (  # noqa: E402
-    zones_timeofweek_figure, zones_vs_oat_figure,
+    zones_timeofweek_figure,
+    zones_vs_oat_figure,
 )
-
 
 # --- cli (covers cli + charts/scatter + charts/timeseries + synth) ---------- #
 
+
 def test_cli_demo_writes_outputs(tmp_path):
     out = str(tmp_path / "out")
-    rc = cli.main(["charts", "--demo", "reheat", "--ahu", "1", "--out", out])   # 0.5: subcommand CLI
+    rc = cli.main(["charts", "--demo", "reheat", "--ahu", "1", "--out", out])  # 0.5: subcommand CLI
     assert rc == 0
     assert os.path.exists(os.path.join(out, "hec_summary.json"))
     pngs = [f for f in os.listdir(out) if f.endswith(".png")]
@@ -34,6 +35,7 @@ def test_cli_demo_writes_outputs(tmp_path):
 
 
 # --- inventory -------------------------------------------------------------- #
+
 
 def test_parse_name_generic():
     et, eid, meas = inventory.parse_name("AHU_1_CHW_Valve.csv")
@@ -46,7 +48,8 @@ def test_inventory_and_to_rows(tmp_path):
     idx = pd.date_range("2025-01-01", periods=3, freq="1h").strftime("%d-%b-%y %I:%M:%S %p")
     for meas in ("CHW_Valve", "HHW_Valve"):
         pd.DataFrame({"Timestamp": idx + " PST", "Value (%)": [10, 20, 30]}).to_csv(
-            folder / f"AHU_1_{meas}.csv", index=False)
+            folder / f"AHU_1_{meas}.csv", index=False
+        )
     points = inventory.inventory([str(folder)], count_rows=True)
     assert len(points) == 2
     rows = inventory.to_rows(points)
@@ -56,6 +59,7 @@ def test_inventory_and_to_rows(tmp_path):
 
 # --- charts: box_reheat + zones --------------------------------------------- #
 
+
 def test_box_reheat_figure():
     idx = pd.date_range("2025-07-07", periods=24 * 5, freq="1h")  # a weekday span
     df = pd.DataFrame({"HWValve": 30.0, "ActFlow": 800.0, "ActFlowSP": 700.0}, index=idx)
@@ -64,8 +68,9 @@ def test_box_reheat_figure():
 
 
 def test_zones_figures():
-    profile = pd.DataFrame({"n_heating": range(168), "n_cooling": range(168),
-                            "n_both": [1] * 168}, index=range(168))
+    profile = pd.DataFrame(
+        {"n_heating": range(168), "n_cooling": range(168), "n_both": [1] * 168}, index=range(168)
+    )
     assert isinstance(zones_timeofweek_figure(profile), Figure)
 
     idx = pd.date_range("2025-07-01", periods=48, freq="1h")

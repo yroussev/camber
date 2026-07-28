@@ -54,8 +54,9 @@ def _role_slug(r) -> str:
     return r.value if isinstance(r, Role) else str(r)
 
 
-def role_frame_to_long(frame: pd.DataFrame, *, site: str, equip: str,
-                       equip_class: str = "") -> pd.DataFrame:
+def role_frame_to_long(
+    frame: pd.DataFrame, *, site: str, equip: str, equip_class: str = ""
+) -> pd.DataFrame:
     """Melt a wide role-named frame (``resolve`` output) to the store's long form.
 
     ``frame`` has a DatetimeIndex and columns that are :class:`Role` members (or
@@ -108,8 +109,11 @@ class ParquetStore:
         table = pa.Table.from_pandas(df, preserve_index=False)
         seq = self._next_seq(site)
         ds.write_dataset(
-            table, self.root, format="parquet",
-            partitioning=[_SITE, _YEAR], partitioning_flavor="hive",
+            table,
+            self.root,
+            format="parquet",
+            partitioning=[_SITE, _YEAR],
+            partitioning_flavor="hive",
             existing_data_behavior="overwrite_or_ignore",
             basename_template=f"part-{seq}-{{i}}.parquet",
         )
@@ -118,19 +122,19 @@ class ParquetStore:
         self._invalidate_catalog()
         return len(df)
 
-    def write_role_frame(self, frame: pd.DataFrame, *, site: str, equip: str,
-                         equip_class: str = "") -> int:
+    def write_role_frame(
+        self, frame: pd.DataFrame, *, site: str, equip: str, equip_class: str = ""
+    ) -> int:
         """Convenience: melt a wide role-frame and append it. Returns rows written."""
         return self.write_long(
-            role_frame_to_long(frame, site=site, equip=equip,
-                               equip_class=equip_class),
-            site=site)
+            role_frame_to_long(frame, site=site, equip=equip, equip_class=equip_class), site=site
+        )
 
     def _next_seq(self, site: str) -> int:
         """Monotonic per-site write counter, derived from existing part files."""
         sdir = os.path.join(self.root, f"{_SITE}={site}")
         n = 0
-        for dirpath, _dirs, files in os.walk(sdir):
+        for _dirpath, _dirs, files in os.walk(sdir):
             n += sum(1 for f in files if f.endswith(".parquet"))
         return n
 
@@ -146,10 +150,11 @@ class ParquetStore:
         try:
             with open(p, encoding="utf-8") as fh:
                 data = json.load(fh)
-            return [PointKey(site=k["site"], equip=k["equip"], role=k["role"])
-                    for k in data["points"]]
+            return [
+                PointKey(site=k["site"], equip=k["equip"], role=k["role"]) for k in data["points"]
+            ]
         except (json.JSONDecodeError, KeyError, TypeError, OSError):
-            return None        # treat a corrupt/old catalog as absent -> fall back to a scan
+            return None  # treat a corrupt/old catalog as absent -> fall back to a scan
 
     def _write_catalog(self, keys) -> None:
         """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``."""
@@ -175,8 +180,10 @@ class ParquetStore:
         long = self.read_long(columns=[_SITE, _EQUIP, _ROLE])
         if long.empty:
             return []
-        return [PointKey(site=r[_SITE], equip=r[_EQUIP], role=r[_ROLE])
-                for _, r in long.drop_duplicates([_SITE, _EQUIP, _ROLE]).iterrows()]
+        return [
+            PointKey(site=r[_SITE], equip=r[_EQUIP], role=r[_ROLE])
+            for _, r in long.drop_duplicates([_SITE, _EQUIP, _ROLE]).iterrows()
+        ]
 
     def rebuild_catalog(self) -> int:
         """Rebuild the catalog from a projected scan (for stores predating it, or to resync
@@ -212,15 +219,16 @@ class ParquetStore:
         if start is not None:
             ts = pd.Timestamp(start)
             _and(ds.field(_TS) >= ts)
-            _and(ds.field(_YEAR) >= int(ts.year))      # partition prune
+            _and(ds.field(_YEAR) >= int(ts.year))  # partition prune
         if end is not None:
             ts = pd.Timestamp(end)
             _and(ds.field(_TS) <= ts)
-            _and(ds.field(_YEAR) <= int(ts.year))      # partition prune
+            _and(ds.field(_YEAR) <= int(ts.year))  # partition prune
         return filt
 
-    def read_long(self, *, site=None, equips=None, roles=None,
-                  start=None, end=None, columns=None) -> pd.DataFrame:
+    def read_long(
+        self, *, site=None, equips=None, roles=None, start=None, end=None, columns=None
+    ) -> pd.DataFrame:
         """Tidy read with predicate pushdown. Returns long-form rows.
 
         ``equips`` is an iterable of equip ids; ``roles`` an iterable of
@@ -232,25 +240,37 @@ class ParquetStore:
             cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _SITE, _YEAR]
             return pd.DataFrame(columns=cols)
         dataset = self._dataset()
-        filt = self._build_filter(site=site, equips=equips, roles=roles,
-                                  start=start, end=end)
+        filt = self._build_filter(site=site, equips=equips, roles=roles, start=start, end=end)
         table = dataset.to_table(filter=filt, columns=columns)
         df = table.to_pandas()
         if not df.empty and _TS in df.columns:
             df = df.sort_values(_TS).reset_index(drop=True)
         return df
 
-    def read_role_frame(self, *, site: str, equip: str, roles=None,
-                        start=None, end=None, resample: str | None = None
-                        ) -> pd.DataFrame:
+    def read_role_frame(
+        self,
+        *,
+        site: str,
+        equip: str,
+        roles=None,
+        start=None,
+        end=None,
+        resample: str | None = None,
+    ) -> pd.DataFrame:
         """Read one equipment back as a wide, role-named frame (rule-ready).
 
         Columns are :class:`Role` members (mirroring ``resolve``); index is a
         sorted DatetimeIndex. ``resample`` is a pandas offset alias
         (mean-aggregated) or None for the stored grid.
         """
-        long = self.read_long(site=site, equips=[equip], roles=roles,
-                              start=start, end=end, columns=[_TS, _ROLE, _VALUE])
+        long = self.read_long(
+            site=site,
+            equips=[equip],
+            roles=roles,
+            start=start,
+            end=end,
+            columns=[_TS, _ROLE, _VALUE],
+        )
         if long.empty:
             return pd.DataFrame()
         # Fast path: a plain pivot when each (ts, role) is unique; only fall back to the
@@ -284,19 +304,21 @@ class ParquetStore:
             if not os.path.isdir(self.root):
                 return []
             cached = self._scan_keys()
-            self._write_catalog(cached)         # memoize until the next write invalidates it
+            self._write_catalog(cached)  # memoize until the next write invalidates it
         return [k for k in cached if site is None or k.site == site]
 
     def sites(self) -> list:
         """Distinct site ids present in the store."""
         if not os.path.isdir(self.root):
             return []
-        return sorted(d.split("=", 1)[1] for d in os.listdir(self.root)
-                      if d.startswith(f"{_SITE}="))
+        return sorted(
+            d.split("=", 1)[1] for d in os.listdir(self.root) if d.startswith(f"{_SITE}=")
+        )
 
     # ------------------------------------------------------- rollup / retention
-    def rollup(self, freq: str, *, site=None, equips=None, roles=None,
-               agg: str = "mean") -> pd.DataFrame:
+    def rollup(
+        self, freq: str, *, site=None, equips=None, roles=None, agg: str = "mean"
+    ) -> pd.DataFrame:
         """Downsample stored history to ``freq`` per (site, equip, role).
 
         Returns a long-form frame with ``ts`` bucketed to the period and ``value``
@@ -307,14 +329,15 @@ class ParquetStore:
         if long.empty:
             return long
         long = long.copy()
-        long[_TS] = pd.to_datetime(long[_TS]).dt.floor("D") if freq == "D" \
+        long[_TS] = (
+            pd.to_datetime(long[_TS]).dt.floor("D")
+            if freq == "D"
             else pd.to_datetime(long[_TS]).dt.to_period(freq).dt.start_time
-        grouped = (long.groupby([_SITE, _EQUIP, _CLASS, _ROLE, _TS])[_VALUE]
-                   .agg(agg).reset_index())
+        )
+        grouped = long.groupby([_SITE, _EQUIP, _CLASS, _ROLE, _TS])[_VALUE].agg(agg).reset_index()
         return grouped.sort_values(_TS).reset_index(drop=True)
 
-    def write_rollup(self, freq: str, dest: "ParquetStore", *, agg: str = "mean",
-                     site=None) -> int:
+    def write_rollup(self, freq: str, dest: ParquetStore, *, agg: str = "mean", site=None) -> int:
         """Compute a rollup and write it to another store; returns rows written."""
         rolled = self.rollup(freq, site=site, agg=agg)
         if rolled.empty:
@@ -333,9 +356,11 @@ class ParquetStore:
         if not os.path.isdir(self.root):
             return 0
         removed = 0
-        site_dirs = ([f"{_SITE}={site}"] if site is not None
-                     else [d for d in os.listdir(self.root)
-                           if d.startswith(f"{_SITE}=")])
+        site_dirs = (
+            [f"{_SITE}={site}"]
+            if site is not None
+            else [d for d in os.listdir(self.root) if d.startswith(f"{_SITE}=")]
+        )
         for sd in site_dirs:
             spath = os.path.join(self.root, sd)
             if not os.path.isdir(spath):
@@ -351,5 +376,5 @@ class ParquetStore:
                     shutil.rmtree(os.path.join(spath, yd))
                     removed += 1
         if removed:
-            self._invalidate_catalog()      # next points() rebuilds from the remaining data
+            self._invalidate_catalog()  # next points() rebuilds from the remaining data
         return removed

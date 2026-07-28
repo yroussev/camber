@@ -10,7 +10,7 @@ net determination bias, F-stat, and fractional savings uncertainty (FSU).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -20,13 +20,13 @@ class FitStats:
     """Goodness-of-fit metrics plus the G14 model-acceptance verdict."""
 
     n: int
-    p: int                  # number of model parameters
+    p: int  # number of model parameters
     r2: float
     rmse: float
-    cv_rmse: float          # CV(RMSE) as a fraction (0.20 = 20%)
-    nmbe: float             # normalized mean bias error (net determination bias), fraction
+    cv_rmse: float  # CV(RMSE) as a fraction (0.20 = 20%)
+    nmbe: float  # normalized mean bias error (net determination bias), fraction
     f_stat: float
-    accept: bool            # meets G14 thresholds
+    accept: bool  # meets G14 thresholds
     notes: str
 
     def as_dict(self):
@@ -49,9 +49,9 @@ def cv_rmse_max_for(interval: str) -> float:
     return _CV_RMSE_MAX.get(interval, 0.20)
 
 
-def fit_stats(y, yhat, p: int,
-              cv_rmse_max: float = 0.20, r2_min: float = 0.75,
-              nmbe_max: float = 0.005) -> FitStats:
+def fit_stats(
+    y, yhat, p: int, cv_rmse_max: float = 0.20, r2_min: float = 0.75, nmbe_max: float = 0.005
+) -> FitStats:
     """Goodness-of-fit + G14 acceptance for observed ``y`` vs predicted ``yhat``.
 
     Default thresholds are the common ASHRAE G14 / IPMVP guidance for monthly/
@@ -78,9 +78,14 @@ def fit_stats(y, yhat, p: int,
     ssr = sst - sse
     f_stat = (ssr / (p - 1)) / (sse / (n - p)) if (p > 1 and sse > 0) else float("nan")
 
-    ok = (np.isfinite(cv_rmse) and cv_rmse <= cv_rmse_max
-          and np.isfinite(r2) and r2 >= r2_min
-          and np.isfinite(nmbe) and abs(nmbe) <= nmbe_max)
+    ok = (
+        np.isfinite(cv_rmse)
+        and cv_rmse <= cv_rmse_max
+        and np.isfinite(r2)
+        and r2 >= r2_min
+        and np.isfinite(nmbe)
+        and abs(nmbe) <= nmbe_max
+    )
     notes = []
     if not (np.isfinite(cv_rmse) and cv_rmse <= cv_rmse_max):
         notes.append(f"CV(RMSE) {cv_rmse:.1%} > {cv_rmse_max:.0%}")
@@ -88,23 +93,31 @@ def fit_stats(y, yhat, p: int,
         notes.append(f"R2 {r2:.2f} < {r2_min}")
     if not (np.isfinite(nmbe) and abs(nmbe) <= nmbe_max):
         notes.append(f"|NMBE| {abs(nmbe):.2%} > {nmbe_max:.1%}")
-    return FitStats(n=n, p=p, r2=round(r2, 4), rmse=round(rmse, 4),
-                    cv_rmse=round(cv_rmse, 4), nmbe=round(nmbe, 5),
-                    f_stat=round(f_stat, 2) if np.isfinite(f_stat) else float("nan"),
-                    accept=bool(ok), notes="; ".join(notes) or "meets G14 thresholds")
+    return FitStats(
+        n=n,
+        p=p,
+        r2=round(r2, 4),
+        rmse=round(rmse, 4),
+        cv_rmse=round(cv_rmse, 4),
+        nmbe=round(nmbe, 5),
+        f_stat=round(f_stat, 2) if np.isfinite(f_stat) else float("nan"),
+        accept=bool(ok),
+        notes="; ".join(notes) or "meets G14 thresholds",
+    )
 
 
 @dataclass
 class SavingsResult:
     """Avoided energy with G14 Annex-B fractional savings uncertainty."""
 
-    avoided_energy: float           # baseline-projected minus actual, summed
+    avoided_energy: float  # baseline-projected minus actual, summed
     baseline_projected: float
     reporting_actual: float
-    savings_pct: float              # of projected baseline
-    fractional_uncertainty: float   # ASHRAE G14 Annex-B, fraction of savings (at conf)
+    savings_pct: float  # of projected baseline
+    fractional_uncertainty: float  # ASHRAE G14 Annex-B, fraction of savings (at conf)
     confidence: float
-    abs_uncertainty: float          # +/- energy at the confidence level
+    abs_uncertainty: float  # +/- energy at the confidence level
+
     def as_dict(self):
         """Return as a plain dict."""
         return asdict(self)
@@ -114,10 +127,17 @@ class SavingsResult:
 _T = {0.80: 1.282, 0.90: 1.645, 0.95: 1.960}
 
 
-def avoided_energy_savings(baseline_model, T_report, y_report, *,
-                           cv_rmse: float, n_baseline: int, p_baseline: int,
-                           confidence: float = 0.90,
-                           rho: float = 0.0) -> SavingsResult:
+def avoided_energy_savings(
+    baseline_model,
+    T_report,
+    y_report,
+    *,
+    cv_rmse: float,
+    n_baseline: int,
+    p_baseline: int,
+    confidence: float = 0.90,
+    rho: float = 0.0,
+) -> SavingsResult:
     """IPMVP Option-C avoided energy use with G14 Annex-B fractional uncertainty.
 
     Projects the baseline model onto the reporting-period temperatures, subtracts
