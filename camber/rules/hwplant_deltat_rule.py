@@ -41,8 +41,12 @@ class HWPlantDeltaT:
         legacy = frame.rename(columns=cols)
         res = analyze_hw_plant(legacy, equip, design_deltaT_min_f=self.design_deltaT_min_f)
         if res is None or res.deltaT_median_f != res.deltaT_median_f:  # None / NaN dT
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient running data for loop delta-T")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient running data for loop delta-T",
+            )
         low = res.low_deltaT_pct
         if low >= 50.0:
             severity = "fault"
@@ -60,7 +64,9 @@ class HWPlantDeltaT:
                 "low_deltaT_pct": res.low_deltaT_pct,
                 "n_running": res.n_running,
             },
-            summary=(f"{equip}: HW loop deltaT median {res.deltaT_median_f:.1f}F "
-                     f"({res.low_deltaT_pct:.0f}% of running hours < "
-                     f"{res.design_deltaT_min_f:.0f}F design)"),
+            summary=(
+                f"{equip}: HW loop deltaT median {res.deltaT_median_f:.1f}F "
+                f"({res.low_deltaT_pct:.0f}% of running hours < "
+                f"{res.design_deltaT_min_f:.0f}F design)"
+            ),
         )

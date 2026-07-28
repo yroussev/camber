@@ -39,8 +39,9 @@ def presence_matrix(data, *, max_bins: int = 240):
     return grid.to_numpy().T, pd.DatetimeIndex(grid.index), coverage
 
 
-def readiness_ribbon(data, *, ax=None, max_bins: int = 240, title: str | None = None,
-                     max_xticks: int = 10):
+def readiness_ribbon(
+    data, *, ax=None, max_bins: int = 240, title: str | None = None, max_xticks: int = 10
+):
     """Draw the per-point presence ribbon (points on y, time on x). Returns the Axes."""
     import matplotlib.pyplot as plt
 
@@ -59,8 +60,12 @@ def readiness_ribbon(data, *, ax=None, max_bins: int = 240, title: str | None = 
     step = max(1, n // max_xticks)
     pos = list(range(0, n, step))
     ax.set_xticks(pos)
-    ax.set_xticklabels([pd.Timestamp(bins[p]).strftime("%Y-%m-%d") for p in pos],
-                       rotation=45, ha="right", fontsize=8)
+    ax.set_xticklabels(
+        [pd.Timestamp(bins[p]).strftime("%Y-%m-%d") for p in pos],
+        rotation=45,
+        ha="right",
+        fontsize=8,
+    )
     ax.set_xlabel("Time")
     ax.set_title(title or f"Ingest readiness — {len(cols)} points, green = data present")
     return ax

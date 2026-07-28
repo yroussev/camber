@@ -36,17 +36,22 @@ def test_spikes_flag_point_anomalies():
 
 def test_level_shift_flags_change_point():
     rng = np.random.default_rng(1)
-    s = pd.Series(np.concatenate([50 + rng.normal(0, 1, 150), 70 + rng.normal(0, 1, 150)]),
-                 index=_idx())
+    s = pd.Series(
+        np.concatenate([50 + rng.normal(0, 1, 150), 70 + rng.normal(0, 1, 150)]), index=_idx()
+    )
     r = detect_anomalies(s)
     assert r.n_change_points >= 1 and r.change_points
 
 
 def test_two_change_points_are_a_fault():
     rng = np.random.default_rng(2)
-    s = pd.Series(np.concatenate([50 + rng.normal(0, 1, 100), 70 + rng.normal(0, 1, 100),
-                                  55 + rng.normal(0, 1, 100)]), index=_idx())
-    assert detect_anomalies(s).severity == "fault"     # >=2 change points
+    s = pd.Series(
+        np.concatenate(
+            [50 + rng.normal(0, 1, 100), 70 + rng.normal(0, 1, 100), 55 + rng.normal(0, 1, 100)]
+        ),
+        index=_idx(),
+    )
+    assert detect_anomalies(s).severity == "fault"  # >=2 change points
 
 
 def test_forecast_residual_path():

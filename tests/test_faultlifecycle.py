@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.faultlifecycle import FaultLifecycle, FaultRecord, OPEN_STATUSES  # noqa: E402
+from camber.faultlifecycle import FaultLifecycle, FaultRecord  # noqa: E402
 from camber.rules.base import Finding  # noqa: E402
 
 
@@ -13,15 +13,17 @@ def _f(rule, equip, sev):
     return Finding(rule=rule, equip=equip, severity=sev, metrics={}, summary="")
 
 
-_RUN1 = [_f("simultaneous_heat_cool", "AHU-1", "fault"),
-         _f("chiller_efficiency", "CH-1", "warn"),
-         _f("co2_ventilation", "VAV-3", "info")]      # info is non-actionable
+_RUN1 = [
+    _f("simultaneous_heat_cool", "AHU-1", "fault"),
+    _f("chiller_efficiency", "CH-1", "warn"),
+    _f("co2_ventilation", "VAV-3", "info"),
+]  # info is non-actionable
 
 
 def test_update_creates_open_records_for_actionable():
     lc = FaultLifecycle()
     res = lc.update(_RUN1, run_id="2026-01-01T00:00", site="S1")
-    assert len(res["new"]) == 2 and not res["ongoing"]    # info dropped
+    assert len(res["new"]) == 2 and not res["ongoing"]  # info dropped
     assert {r.status for r in lc.open_faults()} == {"open"}
     assert all(r.occurrences == 1 for r in lc.records())
 
@@ -30,8 +32,9 @@ def test_ongoing_bumps_occurrences_and_absent_listed():
     lc = FaultLifecycle()
     lc.update(_RUN1, run_id="2026-01-01T00:00", site="S1")
     # next run: chiller persists, simultaneous gone
-    res = lc.update([_f("chiller_efficiency", "CH-1", "warn")],
-                    run_id="2026-01-02T00:00", site="S1")
+    res = lc.update(
+        [_f("chiller_efficiency", "CH-1", "warn")], run_id="2026-01-02T00:00", site="S1"
+    )
     assert len(res["ongoing"]) == 1 and len(res["absent"]) == 1
     ch = [r for r in lc.records() if r.rule == "chiller_efficiency"][0]
     assert ch.occurrences == 2 and ch.last_seen == "2026-01-02T00:00"
@@ -71,21 +74,22 @@ def test_reopen_on_recurrence():
 def test_aging_and_overdue_by_sla():
     lc = FaultLifecycle()
     lc.update(_RUN1, run_id="2026-01-01T00:00", site="S1")
-    now = "2026-01-02T00:00"                                # 24h later
+    now = "2026-01-02T00:00"  # 24h later
     ages = lc.aging(now)
     assert all(abs(h - 24.0) < 0.01 for h in ages.values())
     # fault must be acked within 4h, resolved within 48h; warn resolved within 168h
-    overdue = lc.overdue(now, ack_sla_hours={"fault": 4, "warn": 12},
-                         resolve_sla_hours={"fault": 48, "warn": 168})
+    overdue = lc.overdue(
+        now, ack_sla_hours={"fault": 4, "warn": 12}, resolve_sla_hours={"fault": 48, "warn": 168}
+    )
     kinds = {(r.rule, kind) for r, kind, _age, _sla in overdue}
-    assert ("simultaneous_heat_cool", "ack") in kinds      # fault unacked > 4h
-    assert ("chiller_efficiency", "ack") in kinds          # warn unacked > 12h
-    assert all(k[1] != "resolve" for k in kinds)           # nothing past the resolve SLA yet
+    assert ("simultaneous_heat_cool", "ack") in kinds  # fault unacked > 4h
+    assert ("chiller_efficiency", "ack") in kinds  # warn unacked > 12h
+    assert all(k[1] != "resolve" for k in kinds)  # nothing past the resolve SLA yet
 
 
 def test_persistence_round_trip(tmp_path):
     path = str(tmp_path / "faults.json")
-    lc = FaultLifecycle.load(path)                          # empty (file absent)
+    lc = FaultLifecycle.load(path)  # empty (file absent)
     lc.update(_RUN1, run_id="r1", site="S1")
     fp = lc.records()[0].fingerprint
     lc.assign(fp, "bob")
@@ -111,6 +115,6 @@ def test_unknown_fingerprint_raises():
     lc = FaultLifecycle()
     try:
         lc.resolve("deadbeef", "r1")
-        assert False
+        raise AssertionError("expected KeyError")
     except KeyError:
         pass

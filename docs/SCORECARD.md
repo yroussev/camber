@@ -5,8 +5,9 @@ manager reads: per-category scores (energy, comfort, ventilation, maintenance) a
 
 ```python
 from camber.scorecard import build_scorecard
+
 sc = build_scorecard(findings)
-sc.overall_score, sc.overall_grade                 # e.g. 90.0, "A"
+sc.overall_score, sc.overall_grade  # e.g. 90.0, "A"
 for c in sc.categories:
     print(c.category, c.score, c.grade, c.n_faults, c.n_warnings)
 ```

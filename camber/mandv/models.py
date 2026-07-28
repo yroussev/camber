@@ -32,11 +32,11 @@ import numpy as np
 class ChangePointModel:
     """A fitted change-point model and its prediction function."""
 
-    kind: str                       # "2P" | "3PC" | "3PH" | "4P" | "5P"
-    coeffs: dict                    # named parameters (base, slopes, change points)
-    change_points: tuple            # () | (Tc,) | (Tc_lo, Tc_hi)
-    sse: float                      # sum of squared residuals at the fit
-    n: int                          # number of observations
+    kind: str  # "2P" | "3PC" | "3PH" | "4P" | "5P"
+    coeffs: dict  # named parameters (base, slopes, change points)
+    change_points: tuple  # () | (Tc,) | (Tc_lo, Tc_hi)
+    sse: float  # sum of squared residuals at the fit
+    n: int  # number of observations
     _predict: object = field(default=None, repr=False)
 
     def predict(self, T):
@@ -46,28 +46,37 @@ class ChangePointModel:
 
 # --- design matrices for each model kind, given change point(s) ---
 
+
 def _design_2p(T):
     return np.column_stack([np.ones_like(T), T])
 
 
-def _design_3pc(T, tc):           # cooling: flat then up
+def _design_3pc(T, tc):  # cooling: flat then up
     return np.column_stack([np.ones_like(T), np.maximum(0.0, T - tc)])
 
 
-def _design_3ph(T, tc):           # heating: down then flat
+def _design_3ph(T, tc):  # heating: down then flat
     return np.column_stack([np.ones_like(T), np.maximum(0.0, tc - T)])
 
 
-def _design_4p(T, tc):            # two slopes meeting at tc
-    return np.column_stack([np.ones_like(T),
-                            np.minimum(0.0, T - tc),    # left slope (T<tc)
-                            np.maximum(0.0, T - tc)])    # right slope (T>tc)
+def _design_4p(T, tc):  # two slopes meeting at tc
+    return np.column_stack(
+        [
+            np.ones_like(T),
+            np.minimum(0.0, T - tc),  # left slope (T<tc)
+            np.maximum(0.0, T - tc),
+        ]
+    )  # right slope (T>tc)
 
 
-def _design_5p(T, tlo, thi):      # heating below tlo, deadband, cooling above thi
-    return np.column_stack([np.ones_like(T),
-                            np.maximum(0.0, tlo - T),    # heating arm
-                            np.maximum(0.0, T - thi)])    # cooling arm
+def _design_5p(T, tlo, thi):  # heating below tlo, deadband, cooling above thi
+    return np.column_stack(
+        [
+            np.ones_like(T),
+            np.maximum(0.0, tlo - T),  # heating arm
+            np.maximum(0.0, T - thi),
+        ]
+    )  # cooling arm
 
 
 def _lstsq_sse(X, y):
@@ -102,7 +111,7 @@ def _cp_score(beta, X, y, objective):
     if objective == "bias":
         denom = y.sum()
         return abs(resid.sum() / denom) if denom != 0 else abs(resid.sum())
-    return float(resid @ resid)            # sse
+    return float(resid @ resid)  # sse
 
 
 def _fit_one_cp(T, y, design, name_slopes, objective=None):
@@ -120,14 +129,22 @@ def _fit_one_cp(T, y, design, name_slopes, objective=None):
 
 def _fit_3pc(T, y, objective=None):
     beta, sse, tc = _fit_one_cp(T, y, _design_3pc, None, objective)
-    return ({"base": beta[0], "cool_slope": beta[1], "Tc": tc}, sse, (tc,),
-            lambda t: beta[0] + beta[1] * np.maximum(0.0, t - tc))
+    return (
+        {"base": beta[0], "cool_slope": beta[1], "Tc": tc},
+        sse,
+        (tc,),
+        lambda t: beta[0] + beta[1] * np.maximum(0.0, t - tc),
+    )
 
 
 def _fit_3ph(T, y, objective=None):
     beta, sse, tc = _fit_one_cp(T, y, _design_3ph, None, objective)
-    return ({"base": beta[0], "heat_slope": beta[1], "Tc": tc}, sse, (tc,),
-            lambda t: beta[0] + beta[1] * np.maximum(0.0, tc - t))
+    return (
+        {"base": beta[0], "heat_slope": beta[1], "Tc": tc},
+        sse,
+        (tc,),
+        lambda t: beta[0] + beta[1] * np.maximum(0.0, tc - t),
+    )
 
 
 def _fit_3ph_zero(T, y):
@@ -141,8 +158,12 @@ def _fit_3ph_zero(T, y):
             best = (beta, sse, tc)
     beta, sse, tc = best
     slope = float(beta[0])
-    return ({"base": 0.0, "heat_slope": slope, "Tc": tc}, sse, (tc,),
-            lambda t: slope * np.maximum(0.0, tc - t))
+    return (
+        {"base": 0.0, "heat_slope": slope, "Tc": tc},
+        sse,
+        (tc,),
+        lambda t: slope * np.maximum(0.0, tc - t),
+    )
 
 
 def _fit_3pc_zero(T, y):
@@ -155,16 +176,22 @@ def _fit_3pc_zero(T, y):
             best = (beta, sse, tc)
     beta, sse, tc = best
     slope = float(beta[0])
-    return ({"base": 0.0, "cool_slope": slope, "Tc": tc}, sse, (tc,),
-            lambda t: slope * np.maximum(0.0, t - tc))
+    return (
+        {"base": 0.0, "cool_slope": slope, "Tc": tc},
+        sse,
+        (tc,),
+        lambda t: slope * np.maximum(0.0, t - tc),
+    )
 
 
 def _fit_4p(T, y, objective=None):
     beta, sse, tc = _fit_one_cp(T, y, _design_4p, None, objective)
-    return ({"base": beta[0], "left_slope": beta[1], "right_slope": beta[2], "Tc": tc},
-            sse, (tc,),
-            lambda t: beta[0] + beta[1] * np.minimum(0.0, t - tc)
-            + beta[2] * np.maximum(0.0, t - tc))
+    return (
+        {"base": beta[0], "left_slope": beta[1], "right_slope": beta[2], "Tc": tc},
+        sse,
+        (tc,),
+        lambda t: beta[0] + beta[1] * np.minimum(0.0, t - tc) + beta[2] * np.maximum(0.0, t - tc),
+    )
 
 
 def _fit_5p(T, y):
@@ -172,7 +199,7 @@ def _fit_5p(T, y):
     best = None
     for i, tlo in enumerate(grid):
         for thi in grid[i:]:
-            if thi - tlo < (grid[1] - grid[0]):   # keep a real dead-band
+            if thi - tlo < (grid[1] - grid[0]):  # keep a real dead-band
                 continue
             beta, sse = _lstsq_sse(_design_5p(T, tlo, thi), y)
             if best is None or sse < best[1]:
@@ -180,10 +207,12 @@ def _fit_5p(T, y):
     if best is None:
         return _fit_2p(T, y)
     beta, sse, tlo, thi = best
-    return ({"base": beta[0], "heat_slope": beta[1], "cool_slope": beta[2],
-             "Tc_lo": tlo, "Tc_hi": thi}, sse, (tlo, thi),
-            lambda t: beta[0] + beta[1] * np.maximum(0.0, tlo - t)
-            + beta[2] * np.maximum(0.0, t - thi))
+    return (
+        {"base": beta[0], "heat_slope": beta[1], "cool_slope": beta[2], "Tc_lo": tlo, "Tc_hi": thi},
+        sse,
+        (tlo, thi),
+        lambda t: beta[0] + beta[1] * np.maximum(0.0, tlo - t) + beta[2] * np.maximum(0.0, t - thi),
+    )
 
 
 def _fit_5p_zero(T, y):
@@ -206,19 +235,28 @@ def _fit_5p_zero(T, y):
         return _fit_2p(T, y)
     beta, sse, tlo, thi = best
     bh, bc = float(beta[0]), float(beta[1])
-    return ({"base": 0.0, "heat_slope": bh, "cool_slope": bc,
-             "Tc_lo": tlo, "Tc_hi": thi}, sse, (tlo, thi),
-            lambda t: bh * np.maximum(0.0, tlo - t) + bc * np.maximum(0.0, t - thi))
+    return (
+        {"base": 0.0, "heat_slope": bh, "cool_slope": bc, "Tc_lo": tlo, "Tc_hi": thi},
+        sse,
+        (tlo, thi),
+        lambda t: bh * np.maximum(0.0, tlo - t) + bc * np.maximum(0.0, t - thi),
+    )
 
 
-_FITTERS = {"2P": _fit_2p, "3PC": _fit_3pc, "3PH": _fit_3ph,
-            "3PHZ": _fit_3ph_zero, "3PCZ": _fit_3pc_zero,
-            "4P": _fit_4p, "5P": _fit_5p, "5PZ": _fit_5p_zero}
+_FITTERS = {
+    "2P": _fit_2p,
+    "3PC": _fit_3pc,
+    "3PH": _fit_3ph,
+    "3PHZ": _fit_3ph_zero,
+    "3PCZ": _fit_3pc_zero,
+    "4P": _fit_4p,
+    "5P": _fit_5p,
+    "5PZ": _fit_5p_zero,
+}
 
 # parameter counts (for fit stats / BIC). Htg-zero / Clg-zero have 2 (slope + Tc);
 # 5PZ has 4 (two slopes + two change points, no intercept).
-N_PARAMS = {"2P": 2, "3PC": 3, "3PH": 3, "3PHZ": 2, "3PCZ": 2,
-            "4P": 4, "5P": 5, "5PZ": 4}
+N_PARAMS = {"2P": 2, "3PC": 3, "3PH": 3, "3PHZ": 2, "3PCZ": 2, "4P": 4, "5P": 5, "5PZ": 4}
 
 
 # change-point fitters that accept an `objective` (single-change-point models)
@@ -243,8 +281,9 @@ def fit_model(T, y, kind: str, *, objective: str = "sse") -> ChangePointModel:
         coeffs, sse, cps, pred = _FITTERS[kind](T, y, objective=objective)
     else:
         coeffs, sse, cps, pred = _FITTERS[kind](T, y)
-    return ChangePointModel(kind=kind, coeffs=coeffs, change_points=cps,
-                            sse=sse, n=len(T), _predict=pred)
+    return ChangePointModel(
+        kind=kind, coeffs=coeffs, change_points=cps, sse=sse, n=len(T), _predict=pred
+    )
 
 
 def best_model(T, y, kinds=("2P", "3PC", "3PH", "4P", "5P")) -> ChangePointModel:

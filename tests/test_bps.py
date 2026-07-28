@@ -6,19 +6,24 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.bps import (  # noqa: E402
-    BPSStandard, assess_bps, assess_eui, emissions_intensity, site_eui,
+    BPSStandard,
+    assess_bps,
+    assess_eui,
+    emissions_intensity,
+    site_eui,
 )
-
 
 # --- assess_bps: compliant ---------------------------------------------------- #
 
+
 def test_compliant_building_has_margin_and_no_penalty():
-    std = BPSStandard(name="EUI cap", metric="eui", limit=100.0,
-                      unit="kBtu/ft2-yr", penalty_per_unit_over=5.0)
+    std = BPSStandard(
+        name="EUI cap", metric="eui", limit=100.0, unit="kBtu/ft2-yr", penalty_per_unit_over=5.0
+    )
     r = assess_bps(80.0, std)
     assert r.compliant is True
     assert r.verdict == "compliant"
-    assert abs(r.margin - 20.0) < 1e-6        # 100 - 80
+    assert abs(r.margin - 20.0) < 1e-6  # 100 - 80
     assert r.over_amount == 0.0
     assert r.penalty == 0.0
     assert abs(r.pct_of_limit - 80.0) < 1e-6
@@ -26,13 +31,19 @@ def test_compliant_building_has_margin_and_no_penalty():
 
 # --- assess_bps: over --------------------------------------------------------- #
 
+
 def test_over_building_computes_over_amount_and_penalty():
-    std = BPSStandard(name="Emissions cap", metric="emissions", limit=10.0,
-                      unit="kgCO2e/ft2-yr", penalty_per_unit_over=268.0)
+    std = BPSStandard(
+        name="Emissions cap",
+        metric="emissions",
+        limit=10.0,
+        unit="kgCO2e/ft2-yr",
+        penalty_per_unit_over=268.0,
+    )
     r = assess_bps(13.0, std)
     assert r.compliant is False
     assert r.verdict == "over"
-    assert abs(r.over_amount - 3.0) < 1e-6        # 13 - 10
+    assert abs(r.over_amount - 3.0) < 1e-6  # 13 - 10
     assert abs(r.margin - (-3.0)) < 1e-6
     # penalty = 3 units over * $268/unit = $804
     assert abs(r.penalty - 804.0) < 1e-6
@@ -40,12 +51,12 @@ def test_over_building_computes_over_amount_and_penalty():
 
 def test_pct_of_limit_at_and_over_limit():
     std = BPSStandard(name="cap", metric="eui", limit=50.0)
-    at = assess_bps(50.0, std)                     # exactly at the limit -> compliant
+    at = assess_bps(50.0, std)  # exactly at the limit -> compliant
     assert at.compliant is True
     assert abs(at.pct_of_limit - 100.0) < 1e-6
     assert at.over_amount == 0.0
     over = assess_bps(75.0, std)
-    assert abs(over.pct_of_limit - 150.0) < 1e-6   # 75 / 50
+    assert abs(over.pct_of_limit - 150.0) < 1e-6  # 75 / 50
 
 
 def test_bad_limit_returns_none():
@@ -54,6 +65,7 @@ def test_bad_limit_returns_none():
 
 
 # --- emissions_intensity ------------------------------------------------------ #
+
 
 def test_emissions_intensity_two_fuel():
     # 100,000 kWh electricity @ 0.4 kgCO2e/kWh = 40,000 kgCO2e
@@ -66,14 +78,15 @@ def test_emissions_intensity_two_fuel():
 
 
 def test_emissions_intensity_missing_factor_contributes_zero():
-    energy = {"electricity": 1_000.0, "steam": 500.0}   # no steam factor supplied
+    energy = {"electricity": 1_000.0, "steam": 500.0}  # no steam factor supplied
     factors = {"electricity": 0.4}
     ei = emissions_intensity(energy, factors, area_sqft=1_000.0)
-    assert abs(ei - 0.4) < 1e-6                          # only electricity counts
+    assert abs(ei - 0.4) < 1e-6  # only electricity counts
 
 
 def test_emissions_intensity_nonpositive_area_is_nan():
     import math
+
     ei = emissions_intensity({"electricity": 1.0}, {"electricity": 0.4}, area_sqft=0.0)
     assert math.isnan(ei)
 
@@ -81,9 +94,10 @@ def test_emissions_intensity_nonpositive_area_is_nan():
 def test_emissions_intensity_feeds_assess_bps():
     energy = {"electricity": 100_000.0, "natural_gas": 5_000.0}
     factors = {"electricity": 0.4, "natural_gas": 5.3}
-    ei = emissions_intensity(energy, factors, area_sqft=10_000.0)   # 6.65
-    std = BPSStandard(name="cap", metric="emissions", limit=5.0,
-                      unit="kgCO2e/ft2-yr", penalty_per_unit_over=268.0)
+    ei = emissions_intensity(energy, factors, area_sqft=10_000.0)  # 6.65
+    std = BPSStandard(
+        name="cap", metric="emissions", limit=5.0, unit="kgCO2e/ft2-yr", penalty_per_unit_over=268.0
+    )
     r = assess_bps(ei, std)
     assert r.verdict == "over"
     assert abs(r.over_amount - 1.65) < 1e-6
@@ -91,19 +105,21 @@ def test_emissions_intensity_feeds_assess_bps():
 
 # --- EUI -------------------------------------------------------------------- #
 
+
 def test_site_eui_from_fuels():
     # 100,000 kWh -> 341,200 kBtu ; 5,000 therms -> 500,000 kBtu ; / 10,000 sqft
     eui = site_eui({"electricity": 100_000.0, "natural_gas": 5_000.0}, 10_000.0)
-    assert abs(eui - (341_200 + 500_000) / 10_000) < 0.01     # 84.12 kBtu/ft2/yr
+    assert abs(eui - (341_200 + 500_000) / 10_000) < 0.01  # 84.12 kBtu/ft2/yr
 
 
 def test_site_eui_nonpositive_area_is_nan():
     import math
+
     assert math.isnan(site_eui({"electricity": 1.0}, 0.0))
 
 
 def test_assess_eui_end_to_end():
-    energy = {"electricity": 100_000.0, "natural_gas": 5_000.0}   # -> 84.12 EUI
+    energy = {"electricity": 100_000.0, "natural_gas": 5_000.0}  # -> 84.12 EUI
     r = assess_eui(energy, 10_000.0, eui_limit=80.0, penalty_per_unit_over=2.0)
     assert r.metric == "eui" and r.unit == "kBtu/ft2/yr"
     assert r.verdict == "over"

@@ -27,7 +27,7 @@ the diagnosis to the analyst (and to the rule library).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -39,8 +39,17 @@ from .rules.base import Finding
 # constant) or ``ref`` (another role's series); eq/ne/within use ``tol``; off/on
 # treat the subject as a 0/1 binary (status/command) point.
 _OPS = ("lt", "le", "gt", "ge", "eq", "ne", "within", "off", "on")
-_OP_SYMBOL = {"lt": "<", "le": "<=", "gt": ">", "ge": ">=", "eq": "==", "ne": "!=",
-              "within": "within", "off": "is off", "on": "is on"}
+_OP_SYMBOL = {
+    "lt": "<",
+    "le": "<=",
+    "gt": ">",
+    "ge": ">=",
+    "eq": "==",
+    "ne": "!=",
+    "within": "within",
+    "off": "is off",
+    "on": "is on",
+}
 
 
 def _as_role(x) -> Role:
@@ -148,10 +157,10 @@ class Clause:
     name: str
     expect: Predicate
     when: Predicate | None = None
-    fault_below: float = 80.0     # conformance % below this == fault
-    warn_below: float = 95.0      # conformance % below this == warn
-    min_samples: int = 10         # fewer applicable intervals -> not assessable
-    persistence: int = 1          # a violation counts only if sustained >= N applicable intervals
+    fault_below: float = 80.0  # conformance % below this == fault
+    warn_below: float = 95.0  # conformance % below this == warn
+    min_samples: int = 10  # fewer applicable intervals -> not assessable
+    persistence: int = 1  # a violation counts only if sustained >= N applicable intervals
 
     def roles(self) -> set:
         """All roles this clause reads (gate + expectation)."""
@@ -163,9 +172,9 @@ class ClauseResult:
     """Conformance of one clause over a role-frame."""
 
     name: str
-    severity: str                 # "ok" | "warn" | "fault" | "info"
-    conformance_pct: float        # % of applicable intervals that conformed (NaN if n/a)
-    n_applicable: int             # intervals where the gate held and inputs were present
+    severity: str  # "ok" | "warn" | "fault" | "info"
+    conformance_pct: float  # % of applicable intervals that conformed (NaN if n/a)
+    n_applicable: int  # intervals where the gate held and inputs were present
     summary: str
 
     def as_dict(self) -> dict:
@@ -178,40 +187,48 @@ class SOOReport:
     """Conformance across a whole sequence for one equipment."""
 
     equip: str
-    clauses: list = field(default_factory=list)   # list[ClauseResult]
-    overall_conformance: float = float("nan")     # mean over assessable clauses
-    severity: str = "info"                        # worst clause severity
+    clauses: list = field(default_factory=list)  # list[ClauseResult]
+    overall_conformance: float = float("nan")  # mean over assessable clauses
+    severity: str = "info"  # worst clause severity
 
     def as_dict(self) -> dict:
         """Return the report (with nested clause results) as a plain dict."""
-        return {"equip": self.equip,
-                "clauses": [c.as_dict() for c in self.clauses],
-                "overall_conformance": self.overall_conformance,
-                "severity": self.severity}
+        return {
+            "equip": self.equip,
+            "clauses": [c.as_dict() for c in self.clauses],
+            "overall_conformance": self.overall_conformance,
+            "severity": self.severity,
+        }
 
 
 def evaluate_clause(frame: pd.DataFrame, clause: Clause) -> ClauseResult:
     """Measure one clause's conformance over a role-frame."""
     e_valid, e_holds = clause.expect.evaluate(frame)
     if e_valid is None:
-        return ClauseResult(clause.name, "info", float("nan"), 0,
-                            f"{clause.name}: expectation role(s) not present")
+        return ClauseResult(
+            clause.name, "info", float("nan"), 0, f"{clause.name}: expectation role(s) not present"
+        )
 
     if clause.when is None:
         gate_true = pd.Series(True, index=frame.index)
     else:
         w_valid, w_holds = clause.when.evaluate(frame)
         if w_valid is None:
-            return ClauseResult(clause.name, "info", float("nan"), 0,
-                                f"{clause.name}: gate role(s) not present")
-        gate_true = w_holds   # already bool: True only where the gate is valid and met
+            return ClauseResult(
+                clause.name, "info", float("nan"), 0, f"{clause.name}: gate role(s) not present"
+            )
+        gate_true = w_holds  # already bool: True only where the gate is valid and met
 
     applicable = gate_true & e_valid
     n_app = int(applicable.sum())
     if n_app < clause.min_samples:
-        return ClauseResult(clause.name, "info", float("nan"), n_app,
-                            f"{clause.name}: only {n_app} applicable intervals "
-                            f"(< {clause.min_samples})")
+        return ClauseResult(
+            clause.name,
+            "info",
+            float("nan"),
+            n_app,
+            f"{clause.name}: only {n_app} applicable intervals (< {clause.min_samples})",
+        )
 
     # violations among applicable intervals (time-ordered); optionally require the
     # violation to persist before it counts, forgiving transient excursions.
@@ -232,21 +249,23 @@ def evaluate_clause(frame: pd.DataFrame, clause: Clause) -> ClauseResult:
         severity=severity,
         conformance_pct=conf,
         n_applicable=n_app,
-        summary=(f"{clause.name}: {conf:.0f}% conformance over {n_app} intervals "
-                 f"[{gate_txt}expect {clause.expect.describe()}]"),
+        summary=(
+            f"{clause.name}: {conf:.0f}% conformance over {n_app} intervals "
+            f"[{gate_txt}expect {clause.expect.describe()}]"
+        ),
     )
 
 
 def evaluate_soo(frame: pd.DataFrame, spec, equip: str = "") -> SOOReport:
     """Evaluate a sequence (list of clauses) over one equipment's role-frame."""
     results = [evaluate_clause(frame, c) for c in spec]
-    assessable = [r.conformance_pct for r in results
-                  if r.conformance_pct == r.conformance_pct]   # drop NaN (info)
+    assessable = [
+        r.conformance_pct for r in results if r.conformance_pct == r.conformance_pct
+    ]  # drop NaN (info)
     overall = round(float(np.mean(assessable)), 1) if assessable else float("nan")
     order = {"ok": 0, "info": 0, "warn": 1, "fault": 2}
     severity = max((r.severity for r in results), key=lambda s: order[s], default="info")
-    return SOOReport(equip=equip, clauses=results, overall_conformance=overall,
-                     severity=severity)
+    return SOOReport(equip=equip, clauses=results, overall_conformance=overall, severity=severity)
 
 
 def soo_findings(frame: pd.DataFrame, spec, equip: str) -> list:
@@ -258,22 +277,30 @@ def soo_findings(frame: pd.DataFrame, spec, equip: str) -> list:
     """
     out = []
     for r in evaluate_soo(frame, spec, equip).clauses:
-        out.append(Finding(
-            rule=f"soo:{r.name}",
-            equip=equip,
-            severity=r.severity,
-            metrics={"conformance_pct": r.conformance_pct, "n_applicable": r.n_applicable},
-            summary=r.summary,
-        ))
+        out.append(
+            Finding(
+                rule=f"soo:{r.name}",
+                equip=equip,
+                severity=r.severity,
+                metrics={"conformance_pct": r.conformance_pct, "n_applicable": r.n_applicable},
+                summary=r.summary,
+            )
+        )
     return out
 
 
 # --- JSON / config authoring -------------------------------------------------- #
 
+
 def predicate_from_dict(d: dict) -> Predicate:
     """Build a :class:`Predicate` from a plain dict (JSON config)."""
-    return Predicate(subject=d["subject"], op=d["op"], value=d.get("value"),
-                     ref=d.get("ref"), tol=d.get("tol", 0.5))
+    return Predicate(
+        subject=d["subject"],
+        op=d["op"],
+        value=d.get("value"),
+        ref=d.get("ref"),
+        tol=d.get("tol", 0.5),
+    )
 
 
 def clause_from_dict(d: dict) -> Clause:

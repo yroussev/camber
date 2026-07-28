@@ -3,11 +3,12 @@
 The deterministic mapper (`camber.model.mapping.MappingProvider`) resolves a tag to a role by alias
 or regex, and `camber.mapping_confidence` scores how sure that resolution is. This adds the missing
 piece: when a tag **doesn't** resolve, propose the most likely roles from the vendor-neutral `Role`
-vocabulary — from the tag string, its unit, and (if given) whether the data physically fits the role.
+vocabulary — from the tag string, its unit, and (if given) whether the data physically fits the
+role.
 
-Advisory only, by construction: it returns a ranked, human-confirmed **review list** and never mutates
-a `MappingProvider` — a confirmed suggestion is applied by the operator editing the mapping JSON (the
-same boundary `camber.aso` keeps toward the BAS). Three suggesters share one interface —
+Advisory only, by construction: it returns a ranked, human-confirmed **review list** and never
+mutates a `MappingProvider` — a confirmed suggestion is applied by the operator editing the mapping
+JSON (the same boundary `camber.aso` keeps toward the BAS). Three suggesters share one interface —
 `suggest(token, *, series=None, unit=None, k=3) -> list[RoleSuggestion]`:
 
 - :class:`FeatureSuggester` — dependency-light (numpy/stdlib), always available (this module);
@@ -21,7 +22,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 from .model.mapping import MappingProvider
 from .model.roles import Role
@@ -30,17 +31,35 @@ from .sensorhealth import PHYSICAL_BOUNDS, range_violation_frac
 # --------------------------------------------------------------------------- unit → candidate roles
 
 _TEMP_ROLES = frozenset(r for r in Role if r.value.endswith("_temp") or r in (Role.OAT,))
-_PERCENT_ROLES = frozenset({Role.HEAT_VALVE, Role.COOL_VALVE, Role.OA_DAMPER, Role.DAMPER,
-                            Role.SUPPLY_FAN_SPEED, Role.CHW_PUMP_SPEED, Role.HW_PUMP_SPEED,
-                            Role.TOWER_FAN_SPEED})
+_PERCENT_ROLES = frozenset(
+    {
+        Role.HEAT_VALVE,
+        Role.COOL_VALVE,
+        Role.OA_DAMPER,
+        Role.DAMPER,
+        Role.SUPPLY_FAN_SPEED,
+        Role.CHW_PUMP_SPEED,
+        Role.HW_PUMP_SPEED,
+        Role.TOWER_FAN_SPEED,
+    }
+)
 #: normalized unit token -> the roles that unit is physically compatible with
 ROLE_UNIT: dict[str, frozenset] = {
-    "degf": _TEMP_ROLES, "degc": _TEMP_ROLES, "f": _TEMP_ROLES, "c": _TEMP_ROLES,
-    "percent": _PERCENT_ROLES, "pct": _PERCENT_ROLES, "%": _PERCENT_ROLES,
-    "cfm": frozenset({Role.AIRFLOW, Role.OA_AIRFLOW}), "gpm": frozenset({Role.CHW_FLOW}),
-    "kw": frozenset({Role.POWER}), "kwh": frozenset({Role.POWER}),
-    "inwc": frozenset({Role.DUCT_STATIC}), "inh2o": frozenset({Role.DUCT_STATIC}),
-    "ppm": frozenset({Role.CO2}), "rh": frozenset({Role.OUTDOOR_RH}),
+    "degf": _TEMP_ROLES,
+    "degc": _TEMP_ROLES,
+    "f": _TEMP_ROLES,
+    "c": _TEMP_ROLES,
+    "percent": _PERCENT_ROLES,
+    "pct": _PERCENT_ROLES,
+    "%": _PERCENT_ROLES,
+    "cfm": frozenset({Role.AIRFLOW, Role.OA_AIRFLOW}),
+    "gpm": frozenset({Role.CHW_FLOW}),
+    "kw": frozenset({Role.POWER}),
+    "kwh": frozenset({Role.POWER}),
+    "inwc": frozenset({Role.DUCT_STATIC}),
+    "inh2o": frozenset({Role.DUCT_STATIC}),
+    "ppm": frozenset({Role.CO2}),
+    "rh": frozenset({Role.OUTDOOR_RH}),
 }
 
 
@@ -49,10 +68,10 @@ class RoleSuggestion:
     """One advisory role suggestion for a token."""
 
     token: str
-    role: str                 # a Role enum value (always validated via Role(value))
-    confidence: float         # 0..1
-    basis: str                # ngram | edit_distance | initials | unit | range_fit | ml | llm | combined
-    rationale: str            # deterministic, human-readable why
+    role: str  # a Role enum value (always validated via Role(value))
+    confidence: float  # 0..1
+    basis: str  # ngram | edit_distance | initials | unit | range_fit | ml | llm | combined
+    rationale: str  # deterministic, human-readable why
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -72,7 +91,8 @@ def _norm_unit(unit) -> str:
 
 
 def _string_score(words: list[str], role: Role) -> tuple[float, str]:
-    """Best string-similarity of a tag's words to a role's slug: initials or per-word edit distance."""
+    """Best string-similarity of a tag's words to a role's slug: initials or per-word edit
+    distance."""
     slug = role.value
     joined = "".join(words)
     initials = _initials(role)
@@ -101,28 +121,36 @@ class FeatureSuggester:
         unit_roles = ROLE_UNIT.get(u, frozenset())
         scored = []
         for role in self.vocab:
-            s, basis = _string_score(words, role)   # the dominant lexical signal (0..0.85)
+            s, basis = _string_score(words, role)  # the dominant lexical signal (0..0.85)
             bases = [basis]
             # unit + range are GATES + small tie-breakers -- they must not erase the lexical order
             if unit_roles:
                 if role in unit_roles:
-                    s += 0.05; bases.append("unit")
+                    s += 0.05
+                    bases.append("unit")
                 else:
-                    s *= 0.4                        # a known-incompatible unit strongly demotes
+                    s *= 0.4  # a known-incompatible unit strongly demotes
             if series is not None and role in PHYSICAL_BOUNDS:
                 rv = range_violation_frac(series, role)
-                if rv == rv:                        # role has bounds AND data present
+                if rv == rv:  # role has bounds AND data present
                     if rv > 0.1:
-                        s *= (1.0 - min(rv, 1.0))    # data doesn't fit -> demote
+                        s *= 1.0 - min(rv, 1.0)  # data doesn't fit -> demote
                     else:
-                        s += 0.03; bases.append("range_fit")
+                        s += 0.03
+                        bases.append("range_fit")
             s = min(1.0, s)
             if s <= 0.0:
                 continue
             rationale = self._rationale(token, role, u, bases)
-            scored.append(RoleSuggestion(token=token, role=role.value, confidence=round(s, 4),
-                                         basis="combined" if len(bases) > 1 else bases[0],
-                                         rationale=rationale))
+            scored.append(
+                RoleSuggestion(
+                    token=token,
+                    role=role.value,
+                    confidence=round(s, 4),
+                    basis="combined" if len(bases) > 1 else bases[0],
+                    rationale=rationale,
+                )
+            )
         scored.sort(key=lambda x: -x.confidence)
         return scored[:k]
 
@@ -143,14 +171,14 @@ class FeatureSuggester:
 def _range_fit(role: Role, series) -> tuple:
     """Physical-range consistency of ``series`` with ``role``: ``(multiplier, fit)``.
 
-    ``fit`` is ``True`` (data inside bounds), ``False`` (data violates bounds -> ``multiplier`` < 1),
-    or ``None`` (role has no bounds or no data -> ``multiplier`` == 1). Reused by the ML/LLM tiers so a
-    physically-impossible role can't win regardless of how it was proposed.
+    ``fit`` is ``True`` (data inside bounds), ``False`` (data violates bounds ->
+    ``multiplier`` < 1), or ``None`` (role has no bounds or no data -> ``multiplier`` == 1). Reused
+    by the ML/LLM tiers so a physically-impossible role can't win regardless of how it was proposed.
     """
     if series is None or role not in PHYSICAL_BOUNDS:
         return 1.0, None
     rv = range_violation_frac(series, role)
-    if rv != rv:                               # NaN -> no bounds / no data
+    if rv != rv:  # NaN -> no bounds / no data
         return 1.0, None
     if rv > 0.1:
         return 1.0 - min(rv, 1.0), False
@@ -158,7 +186,8 @@ def _range_fit(role: Role, series) -> tuple:
 
 
 def _unpack_label(entry) -> tuple:
-    """Normalize a training label to ``(token, role_value, unit, series)`` (unit/series optional)."""
+    """Normalize a training label to ``(token, role_value, unit, series)`` (unit/series
+    optional)."""
     token, role = entry[0], entry[1]
     unit = entry[2] if len(entry) > 2 else None
     series = entry[3] if len(entry) > 3 else None
@@ -183,14 +212,16 @@ class MLSuggester:
     def _require():
         try:
             import sklearn  # noqa: F401
-        except ImportError as e:                # pragma: no cover - exercised only without the extra
+        except ImportError as e:  # pragma: no cover - exercised only without the extra
             raise ImportError(
                 "MLSuggester needs scikit-learn. Install the optional extra: "
                 "`pip install camber-toolkit[ml]`. The numpy FeatureSuggester baseline needs none "
-                "of it.") from e
+                "of it."
+            ) from e
 
-    def fit(self, labeled) -> "MLSuggester":
-        """Train on ``labeled = [(token, role[, unit[, series]]), ...]``. Roles validated via ``Role``."""
+    def fit(self, labeled) -> MLSuggester:
+        """Train on ``labeled = [(token, role[, unit[, series]]), ...]``. Roles validated via
+        ``Role``."""
         self._require()
         from sklearn.feature_extraction.text import CountVectorizer
         from sklearn.linear_model import LogisticRegression
@@ -206,8 +237,9 @@ class MLSuggester:
         return self
 
     @classmethod
-    def from_mapping(cls, mapping: MappingProvider, *, extra=None) -> "MLSuggester":
-        """Bootstrap labels from a mapping's aliases (token->role) plus optional ``extra`` labels."""
+    def from_mapping(cls, mapping: MappingProvider, *, extra=None) -> MLSuggester:
+        """Bootstrap labels from a mapping's aliases (token->role) plus optional ``extra``
+        labels."""
         labeled = [(tok, role.value) for tok, role in getattr(mapping, "aliases", {}).items()]
         labeled += list(extra or [])
         return cls().fit(labeled)
@@ -224,22 +256,23 @@ class MLSuggester:
             s = min(1.0, float(p) * mult + (0.02 if fit else 0.0))
             if s <= 0.0:
                 continue
-            note = f"learned model (p={p:.2f})" + ("; data fits bounds" if fit else
-                                                    "; data violates bounds" if fit is False else "")
+            note = f"learned model (p={p:.2f})" + (
+                "; data fits bounds" if fit else "; data violates bounds" if fit is False else ""
+            )
             out.append(RoleSuggestion(token, role_val, round(s, 4), "ml", note))
         out.sort(key=lambda x: -x.confidence)
         return out[:k]
 
 
 class LLMSuggester:
-    """Optional suggester over the provider-agnostic agent seam — the LLM proposes, the deterministic
-    layer disposes.
+    """Optional suggester over the provider-agnostic agent seam — the LLM proposes, the
+    deterministic layer disposes.
 
     Reuses a :class:`camber.agent.client.AgentClient` (no new dependency, no vendor). The model is
-    shown the tag, its unit + bounded sample stats, and the whole :class:`Role` vocabulary, and asked
-    to propose roles. Every proposal is validated ``Role(value)`` (out-of-vocab dropped) **and**
-    re-scored through :func:`mapping_confidence.score_token`, so a physically-inconsistent suggestion
-    cannot outrank a good one.
+    shown the tag, its unit + bounded sample stats, and the whole :class:`Role` vocabulary, and
+    asked to propose roles. Every proposal is validated ``Role(value)`` (out-of-vocab dropped)
+    **and** re-scored through :func:`mapping_confidence.score_token`, so a physically-inconsistent
+    suggestion cannot outrank a good one.
     """
 
     def __init__(self, client, mapping: MappingProvider | None = None):
@@ -255,8 +288,15 @@ class LLMSuggester:
                 continue
             seen.add(role.value)
             conf = _rescore(token, role, series)
-            out.append(RoleSuggestion(token, role.value, round(conf, 4), "llm",
-                                      f"LLM proposed; re-scored to {conf:.2f} for physical consistency"))
+            out.append(
+                RoleSuggestion(
+                    token,
+                    role.value,
+                    round(conf, 4),
+                    "llm",
+                    f"LLM proposed; re-scored to {conf:.2f} for physical consistency",
+                )
+            )
         out.sort(key=lambda x: -x.confidence)
         return out[:k]
 
@@ -267,20 +307,27 @@ def _llm_prompt(token, series, unit) -> str:
     if series is not None and len(series):
         try:
             import numpy as _np
+
             arr = _np.asarray(series, dtype=float)
             arr = arr[~_np.isnan(arr)]
             if arr.size:
-                stats = f" Sample stats: min={arr.min():.2f}, max={arr.max():.2f}, mean={arr.mean():.2f}."
-        except Exception:                       # pragma: no cover - stats are best-effort
+                stats = (
+                    f" Sample stats: min={arr.min():.2f}, max={arr.max():.2f}, "
+                    f"mean={arr.mean():.2f}."
+                )
+        except Exception:  # pragma: no cover - stats are best-effort
             stats = ""
     u = f" unit='{unit}'" if unit else ""
-    return (f"A building-automation point is tagged '{token}'.{u}{stats}\n"
-            f"Choose the most likely role(s) ONLY from this list: {vocab}.\n"
-            f"Reply with role slugs, most likely first.")
+    return (
+        f"A building-automation point is tagged '{token}'.{u}{stats}\n"
+        f"Choose the most likely role(s) ONLY from this list: {vocab}.\n"
+        f"Reply with role slugs, most likely first."
+    )
 
 
 def _parse_roles(raw: str) -> list:
-    """Roles whose slug appears in the model's reply, in order of first appearance (out-of-vocab ignored)."""
+    """Roles whose slug appears in the model's reply, in order of first appearance (out-of-vocab
+    ignored)."""
     low = (raw or "").lower()
     hits = [(low.index(r.value), r) for r in Role if r.value in low]
     return [r for _, r in sorted(hits)]
@@ -294,16 +341,30 @@ def _rescore(token, role: Role, series) -> float:
     return float(score_token(token, mp, series).confidence)
 
 
-def suggest_roles(token: str, mapping: MappingProvider | None = None, *, series=None, unit=None,
-                  suggester=None, k: int = 3) -> list:
+def suggest_roles(
+    token: str,
+    mapping: MappingProvider | None = None,
+    *,
+    series=None,
+    unit=None,
+    suggester=None,
+    k: int = 3,
+) -> list:
     """Ranked role suggestions for one ``token`` (default :class:`FeatureSuggester`)."""
     s = suggester if suggester is not None else FeatureSuggester(mapping)
     return s.suggest(token, series=series, unit=unit, k=k)
 
 
-def review_unmapped(tokens, mapping: MappingProvider, *, series_by_token: dict | None = None,
-                    units: dict | None = None, suggester=None, k: int = 3,
-                    min_confidence: float = 0.5) -> dict:
+def review_unmapped(
+    tokens,
+    mapping: MappingProvider,
+    *,
+    series_by_token: dict | None = None,
+    units: dict | None = None,
+    suggester=None,
+    k: int = 3,
+    min_confidence: float = 0.5,
+) -> dict:
     """Find the tokens that don't map and attach ranked role suggestions to each.
 
     Reuses `mapping_confidence.review` to identify the unmapped tokens, then runs ``suggester`` on
@@ -315,10 +376,17 @@ def review_unmapped(tokens, mapping: MappingProvider, *, series_by_token: dict |
 
     sbt = series_by_token or {}
     un = units or {}
-    unmapped = [s.token for s in _review(tokens, mapping, series_by_token,
-                                         min_confidence=min_confidence)["unmapped"]]
-    suggestions = {t: suggest_roles(t, mapping, series=sbt.get(t), unit=un.get(t),
-                                    suggester=suggester, k=k) for t in unmapped}
-    review_list = [{"token": t, "suggestions": [s.as_dict() for s in suggestions[t]]}
-                   for t in unmapped]
+    unmapped = [
+        s.token
+        for s in _review(tokens, mapping, series_by_token, min_confidence=min_confidence)[
+            "unmapped"
+        ]
+    ]
+    suggestions = {
+        t: suggest_roles(t, mapping, series=sbt.get(t), unit=un.get(t), suggester=suggester, k=k)
+        for t in unmapped
+    }
+    review_list = [
+        {"token": t, "suggestions": [s.as_dict() for s in suggestions[t]]} for t in unmapped
+    ]
     return {"suggestions": suggestions, "review_list": review_list, "n_unmapped": len(unmapped)}

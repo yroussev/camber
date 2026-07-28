@@ -35,7 +35,7 @@ class SupplyAirControl:
         return pd.Series(True, index=frame.index)
 
     def _deviation(self, frame):
-        return (frame[Role.SUPPLY_AIR_TEMP] - frame[Role.SUPPLY_AIR_TEMP_SP])
+        return frame[Role.SUPPLY_AIR_TEMP] - frame[Role.SUPPLY_AIR_TEMP_SP]
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run over an equipment role-frame; return a Finding on SAT-vs-setpoint tracking."""
@@ -43,29 +43,46 @@ class SupplyAirControl:
         run = self._running_mask(frame) & dev.notna()
         n = int(run.sum())
         if n == 0:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary=f"{equip}: no running supply-air data")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary=f"{equip}: no running supply-air data",
+            )
         off = (dev.abs() > self.tol_F) & run
         off_pct = 100.0 * float(off.sum()) / n
-        above = 100.0 * float(((dev > self.tol_F) & run).sum()) / n     # SAT too warm
-        below = 100.0 * float(((dev < -self.tol_F) & run).sum()) / n    # SAT too cold
+        above = 100.0 * float(((dev > self.tol_F) & run).sum()) / n  # SAT too warm
+        below = 100.0 * float(((dev < -self.tol_F) & run).sum()) / n  # SAT too cold
         mean_abs = float(dev[run].abs().mean())
-        sev = ("fault" if off_pct >= self.fault_pct else
-               "warn" if off_pct >= self.warn_pct else "ok")
+        sev = "fault" if off_pct >= self.fault_pct else "warn" if off_pct >= self.warn_pct else "ok"
         return Finding(
-            rule=self.name, equip=equip, severity=sev,
-            metrics={"off_setpoint_pct": round(off_pct, 2), "too_warm_pct": round(above, 2),
-                     "too_cold_pct": round(below, 2), "mean_abs_dev_F": round(mean_abs, 2),
-                     "n_running": n, "tol_F": self.tol_F},
-            summary=(f"{equip}: SAT off setpoint {off_pct:.0f}% of running hours "
-                     f"(mean |Δ| {mean_abs:.1f}°F; warm {above:.0f}%, cold {below:.0f}%)"))
+            rule=self.name,
+            equip=equip,
+            severity=sev,
+            metrics={
+                "off_setpoint_pct": round(off_pct, 2),
+                "too_warm_pct": round(above, 2),
+                "too_cold_pct": round(below, 2),
+                "mean_abs_dev_F": round(mean_abs, 2),
+                "n_running": n,
+                "tol_F": self.tol_F,
+            },
+            summary=(
+                f"{equip}: SAT off setpoint {off_pct:.0f}% of running hours "
+                f"(mean |Δ| {mean_abs:.1f}°F; warm {above:.0f}%, cold {below:.0f}%)"
+            ),
+        )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: SAT vs its setpoint, off-setpoint spans shaded."""
         from ..charts.evidence import Evidence
+
         run = self._running_mask(frame)
         off = (self._deviation(frame).abs() > self.tol_F) & run
-        return Evidence(renderer="multitrend",
-                        roles=[Role.SUPPLY_AIR_TEMP, Role.SUPPLY_AIR_TEMP_SP],
-                        mask=off.fillna(False), label="off setpoint",
-                        title=f"{equip}: SAT vs setpoint")
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.SUPPLY_AIR_TEMP, Role.SUPPLY_AIR_TEMP_SP],
+            mask=off.fillna(False),
+            label="off setpoint",
+            title=f"{equip}: SAT vs setpoint",
+        )

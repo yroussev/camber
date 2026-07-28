@@ -20,7 +20,7 @@ completeness/runnable helpers duck-type on rule objects (``.name`` /
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .roles import Role
 
@@ -29,7 +29,7 @@ from .roles import Role
 class Point:
     """One measured/commanded stream, tagged with its vendor-neutral role."""
 
-    name: str            # raw source token, e.g. "AHU_1_HHW_Valve"
+    name: str  # raw source token, e.g. "AHU_1_HHW_Valve"
     role: Role
     unit: str = ""
 
@@ -38,9 +38,9 @@ class Point:
 class Equip:
     """A piece of equipment and the points resolved onto it."""
 
-    id: str              # equip token incl. id, e.g. "AHU_1" / "VAV_117"
-    equip_class: str     # "AHU", "VAV", "HotWaterPlant", ...
-    points: tuple = ()   # tuple[Point]
+    id: str  # equip token incl. id, e.g. "AHU_1" / "VAV_117"
+    equip_class: str  # "AHU", "VAV", "HotWaterPlant", ...
+    points: tuple = ()  # tuple[Point]
     site: str = ""
     space: str = ""
 
@@ -49,7 +49,7 @@ class Equip:
         return frozenset(p.role for p in self.points)
 
     @classmethod
-    def from_roles(cls, id: str, equip_class: str, roles, **kw) -> "Equip":
+    def from_roles(cls, id: str, equip_class: str, roles, **kw) -> Equip:
         """Build an Equip when only the present roles are known (no point names).
 
         Convenience for the common case where ``resolve`` has produced a
@@ -73,9 +73,9 @@ class Site:
     """A building: its equipment and a bit of context."""
 
     id: str
-    climate_zone: str = ""           # e.g. "CA CZ15"
-    equips: tuple = ()               # tuple[Equip]
-    spaces: tuple = ()               # tuple[Space]
+    climate_zone: str = ""  # e.g. "CA CZ15"
+    equips: tuple = ()  # tuple[Equip]
+    spaces: tuple = ()  # tuple[Space]
 
     def of_class(self, equip_class: str) -> tuple:
         """All equipment of a given class."""
@@ -98,12 +98,13 @@ class Site:
 # require a subset, and a building may exceed a template.
 # --------------------------------------------------------------------------- #
 
+
 @dataclass(frozen=True)
 class EquipTemplate:
     """The expected role inventory for an equipment class."""
 
     equip_class: str
-    required: frozenset       # frozenset[Role]
+    required: frozenset  # frozenset[Role]
     optional: frozenset = frozenset()
 
     def expected(self) -> frozenset:
@@ -115,49 +116,91 @@ _TEMPLATE_LIST = (
     EquipTemplate(
         "AHU",
         required=frozenset({Role.SUPPLY_AIR_TEMP, Role.HEAT_VALVE, Role.COOL_VALVE}),
-        optional=frozenset({
-            Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP, Role.OA_DAMPER,
-            Role.SUPPLY_AIR_TEMP_SP, Role.DUCT_STATIC, Role.DUCT_STATIC_SP,
-            Role.SUPPLY_FAN_STATUS, Role.SUPPLY_FAN_SPEED, Role.OAT, Role.OCCUPANCY,
-            Role.ECON_CMD,
-        }),
+        optional=frozenset(
+            {
+                Role.MIXED_AIR_TEMP,
+                Role.RETURN_AIR_TEMP,
+                Role.OA_DAMPER,
+                Role.SUPPLY_AIR_TEMP_SP,
+                Role.DUCT_STATIC,
+                Role.DUCT_STATIC_SP,
+                Role.SUPPLY_FAN_STATUS,
+                Role.SUPPLY_FAN_SPEED,
+                Role.OAT,
+                Role.OCCUPANCY,
+                Role.ECON_CMD,
+            }
+        ),
     ),
     EquipTemplate(
         "VAV",
         required=frozenset({Role.SPACE_TEMP, Role.DAMPER}),
-        optional=frozenset({
-            Role.HEAT_VALVE, Role.AIRFLOW, Role.AIRFLOW_SP, Role.COOL_SP,
-            Role.HEAT_SP, Role.OCCUPANCY, Role.CO2,
-        }),
+        optional=frozenset(
+            {
+                Role.HEAT_VALVE,
+                Role.AIRFLOW,
+                Role.AIRFLOW_SP,
+                Role.COOL_SP,
+                Role.HEAT_SP,
+                Role.OCCUPANCY,
+                Role.CO2,
+            }
+        ),
     ),
     EquipTemplate(
         "HotWaterPlant",
         required=frozenset({Role.HW_SUPPLY_TEMP, Role.BOILER_STATUS}),
-        optional=frozenset({
-            Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS, Role.HW_PUMP_SPEED, Role.OAT,
-            Role.ENERGY_RATE,
-        }),
+        optional=frozenset(
+            {
+                Role.HW_RETURN_TEMP,
+                Role.HW_DIFF_PRESS,
+                Role.HW_PUMP_SPEED,
+                Role.OAT,
+                Role.ENERGY_RATE,
+            }
+        ),
     ),
     EquipTemplate(
         "ChilledWaterPlant",
         required=frozenset({Role.CHW_SUPPLY_TEMP}),
-        optional=frozenset({
-            Role.CHW_RETURN_TEMP, Role.CHW_SUPPLY_TEMP_SP, Role.CHW_DIFF_PRESS,
-            Role.CHW_DIFF_PRESS_SP, Role.CHW_PUMP_SPEED, Role.OAT, Role.ENERGY_RATE,
-        }),
+        optional=frozenset(
+            {
+                Role.CHW_RETURN_TEMP,
+                Role.CHW_SUPPLY_TEMP_SP,
+                Role.CHW_DIFF_PRESS,
+                Role.CHW_DIFF_PRESS_SP,
+                Role.CHW_PUMP_SPEED,
+                Role.OAT,
+                Role.ENERGY_RATE,
+            }
+        ),
     ),
     EquipTemplate(
         "Chiller",
-        required=frozenset({Role.POWER, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP,
-                            Role.CHW_FLOW}),
-        optional=frozenset({Role.CHW_SUPPLY_TEMP_SP, Role.OAT, Role.ENERGY_RATE,
-                            Role.COND_APPROACH_TEMP, Role.EVAP_APPROACH_TEMP}),
+        required=frozenset({Role.POWER, Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP, Role.CHW_FLOW}),
+        optional=frozenset(
+            {
+                Role.CHW_SUPPLY_TEMP_SP,
+                Role.OAT,
+                Role.ENERGY_RATE,
+                Role.COND_APPROACH_TEMP,
+                Role.EVAP_APPROACH_TEMP,
+            }
+        ),
     ),
     EquipTemplate(
         "CoolingTower",
         required=frozenset({Role.CW_SUPPLY_TEMP}),
-        optional=frozenset({Role.CW_RETURN_TEMP, Role.WETBULB_TEMP, Role.OAT,
-                            Role.OUTDOOR_RH, Role.TOWER_FAN_SPEED, Role.POWER}),
+        optional=frozenset(
+            {
+                Role.CW_RETURN_TEMP,
+                Role.WETBULB_TEMP,
+                Role.OAT,
+                Role.OUTDOOR_RH,
+                Role.TOWER_FAN_SPEED,
+                Role.POWER,
+            }
+        ),
     ),
     EquipTemplate(
         "Meter",
@@ -165,49 +208,76 @@ _TEMPLATE_LIST = (
         optional=frozenset({Role.ENERGY_RATE}),
     ),
     EquipTemplate(
-        "RTU",   # packaged rooftop unit: DX cooling + optional gas/electric heat + economizer
+        "RTU",  # packaged rooftop unit: DX cooling + optional gas/electric heat + economizer
         required=frozenset({Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS}),
-        optional=frozenset({
-            Role.COMPRESSOR_STAGE, Role.CONDENSER_FAN_STATUS, Role.HEAT_STAGE,
-            Role.OA_DAMPER, Role.ECON_CMD, Role.OAT, Role.RETURN_AIR_TEMP,
-            Role.MIXED_AIR_TEMP, Role.SUPPLY_FAN_STATUS, Role.SUPPLY_AIR_TEMP_SP,
-            Role.FILTER_DIFF_PRESS,
-        }),
+        optional=frozenset(
+            {
+                Role.COMPRESSOR_STAGE,
+                Role.CONDENSER_FAN_STATUS,
+                Role.HEAT_STAGE,
+                Role.OA_DAMPER,
+                Role.ECON_CMD,
+                Role.OAT,
+                Role.RETURN_AIR_TEMP,
+                Role.MIXED_AIR_TEMP,
+                Role.SUPPLY_FAN_STATUS,
+                Role.SUPPLY_AIR_TEMP_SP,
+                Role.FILTER_DIFF_PRESS,
+            }
+        ),
     ),
     EquipTemplate(
-        "HeatPump",   # air-source heat pump / VRF: reversible DX
-        required=frozenset({Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS,
-                            Role.REVERSING_VALVE_CMD}),
-        optional=frozenset({
-            Role.COMPRESSOR_STAGE, Role.CONDENSER_FAN_STATUS, Role.OAT, Role.SPACE_TEMP,
-            Role.SUPPLY_FAN_STATUS, Role.FILTER_DIFF_PRESS,
-        }),
+        "HeatPump",  # air-source heat pump / VRF: reversible DX
+        required=frozenset(
+            {Role.SUPPLY_AIR_TEMP, Role.COMPRESSOR_STATUS, Role.REVERSING_VALVE_CMD}
+        ),
+        optional=frozenset(
+            {
+                Role.COMPRESSOR_STAGE,
+                Role.CONDENSER_FAN_STATUS,
+                Role.OAT,
+                Role.SPACE_TEMP,
+                Role.SUPPLY_FAN_STATUS,
+                Role.FILTER_DIFF_PRESS,
+            }
+        ),
     ),
     EquipTemplate(
-        "DOAS",   # dedicated outdoor-air system (ERV/energy recovery via optional roles)
+        "DOAS",  # dedicated outdoor-air system (ERV/energy recovery via optional roles)
         required=frozenset({Role.SUPPLY_AIR_TEMP, Role.OA_AIRFLOW}),
-        optional=frozenset({
-            Role.SUPPLY_AIR_HUMIDITY, Role.RETURN_AIR_HUMIDITY, Role.HEAT_VALVE,
-            Role.COOL_VALVE, Role.ECON_CMD, Role.OAT, Role.SUPPLY_FAN_STATUS,
-            Role.FILTER_DIFF_PRESS,
-        }),
+        optional=frozenset(
+            {
+                Role.SUPPLY_AIR_HUMIDITY,
+                Role.RETURN_AIR_HUMIDITY,
+                Role.HEAT_VALVE,
+                Role.COOL_VALVE,
+                Role.ECON_CMD,
+                Role.OAT,
+                Role.SUPPLY_FAN_STATUS,
+                Role.FILTER_DIFF_PRESS,
+            }
+        ),
     ),
     EquipTemplate(
-        "FCU",   # fan-coil unit (distinct template; previously only aliased VAV)
+        "FCU",  # fan-coil unit (distinct template; previously only aliased VAV)
         required=frozenset({Role.SPACE_TEMP}),
-        optional=frozenset({
-            Role.HEAT_VALVE, Role.COOL_VALVE, Role.SUPPLY_FAN_STATUS, Role.AIRFLOW,
-            Role.OCCUPANCY, Role.FILTER_DIFF_PRESS,
-        }),
+        optional=frozenset(
+            {
+                Role.HEAT_VALVE,
+                Role.COOL_VALVE,
+                Role.SUPPLY_FAN_STATUS,
+                Role.AIRFLOW,
+                Role.OCCUPANCY,
+                Role.FILTER_DIFF_PRESS,
+            }
+        ),
     ),
 )
 
 # CAV / FCAV are terminal boxes that share the VAV template (same role shape).
 TEMPLATES: dict = {t.equip_class: t for t in _TEMPLATE_LIST}
-TEMPLATES["CAV"] = EquipTemplate("CAV", TEMPLATES["VAV"].required,
-                                 TEMPLATES["VAV"].optional)
-TEMPLATES["FCAV"] = EquipTemplate("FCAV", TEMPLATES["VAV"].required,
-                                  TEMPLATES["VAV"].optional)
+TEMPLATES["CAV"] = EquipTemplate("CAV", TEMPLATES["VAV"].required, TEMPLATES["VAV"].optional)
+TEMPLATES["FCAV"] = EquipTemplate("FCAV", TEMPLATES["VAV"].required, TEMPLATES["VAV"].optional)
 
 
 def template_for(equip_class: str):
@@ -219,16 +289,17 @@ def template_for(equip_class: str):
 # Model-completeness validation
 # --------------------------------------------------------------------------- #
 
+
 @dataclass(frozen=True)
 class Completeness:
     """How well a piece of equipment matches its template."""
 
     equip: str
     equip_class: str
-    present: frozenset                 # roles resolvable on the equip
-    missing_required: frozenset        # template-required roles not present
-    missing_optional: frozenset        # template-optional roles not present
-    unexpected: frozenset              # present roles the template didn't list
+    present: frozenset  # roles resolvable on the equip
+    missing_required: frozenset  # template-required roles not present
+    missing_optional: frozenset  # template-optional roles not present
+    unexpected: frozenset  # present roles the template didn't list
     has_template: bool
 
     @property
@@ -260,11 +331,19 @@ def completeness(equip_class: str, present_roles) -> Completeness:
     present = frozenset(present_roles)
     tmpl = TEMPLATES.get(equip_class)
     if tmpl is None:
-        return Completeness(equip="", equip_class=equip_class, present=present,
-                            missing_required=frozenset(), missing_optional=frozenset(),
-                            unexpected=present, has_template=False)
+        return Completeness(
+            equip="",
+            equip_class=equip_class,
+            present=present,
+            missing_required=frozenset(),
+            missing_optional=frozenset(),
+            unexpected=present,
+            has_template=False,
+        )
     return Completeness(
-        equip="", equip_class=equip_class, present=present,
+        equip="",
+        equip_class=equip_class,
+        present=present,
         missing_required=tmpl.required - present,
         missing_optional=tmpl.optional - present,
         unexpected=present - tmpl.expected(),
@@ -278,8 +357,8 @@ class Runnable:
 
     rule: str
     can_run: bool
-    missing_required: frozenset        # required roles not present (blocks the run)
-    missing_optional: frozenset        # optional roles not present (degrades only)
+    missing_required: frozenset  # required roles not present (blocks the run)
+    missing_optional: frozenset  # optional roles not present (degrades only)
 
 
 def runnable_rules(present_roles, rules) -> list:
@@ -297,10 +376,12 @@ def runnable_rules(present_roles, rules) -> list:
         required = frozenset(getattr(r, "roles_required", ()))
         optional = frozenset(getattr(r, "roles_optional", ()))
         miss_req = required - present
-        out.append(Runnable(
-            rule=getattr(r, "name", r.__class__.__name__),
-            can_run=not miss_req,
-            missing_required=miss_req,
-            missing_optional=optional - present,
-        ))
+        out.append(
+            Runnable(
+                rule=getattr(r, "name", r.__class__.__name__),
+                can_run=not miss_req,
+                missing_required=miss_req,
+                missing_optional=optional - present,
+            )
+        )
     return out

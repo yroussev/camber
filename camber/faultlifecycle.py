@@ -36,8 +36,8 @@ class FaultRecord:
     rule: str
     severity: str
     status: str = "open"
-    first_seen: str = ""          # run_id stamped when first observed (ISO timestamp recommended)
-    last_seen: str = ""           # run_id of the most recent observation
+    first_seen: str = ""  # run_id stamped when first observed (ISO timestamp recommended)
+    last_seen: str = ""  # run_id of the most recent observation
     occurrences: int = 0
     assignee: str = ""
     acknowledged_at: str | None = None
@@ -48,7 +48,7 @@ class FaultRecord:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "FaultRecord":
+    def from_dict(cls, d: dict) -> FaultRecord:
         return cls(**d)
 
 
@@ -61,7 +61,7 @@ class FaultLifecycle:
 
     # ----------------------------------------------------------------- persistence
     @classmethod
-    def load(cls, path: str) -> "FaultLifecycle":
+    def load(cls, path: str) -> FaultLifecycle:
         """Load a fault store from JSON (empty if the file doesn't exist yet)."""
         lc = cls(path)
         if path and os.path.isfile(path):
@@ -82,8 +82,16 @@ class FaultLifecycle:
         return len(self._recs)
 
     # ----------------------------------------------------------------- folding a run
-    def update(self, findings, *, run_id, site: str = "", actionable=ACTIONABLE,
-               reopen_on_recurrence: bool = True, auto_resolve_absent: bool = False) -> dict:
+    def update(
+        self,
+        findings,
+        *,
+        run_id,
+        site: str = "",
+        actionable=ACTIONABLE,
+        reopen_on_recurrence: bool = True,
+        auto_resolve_absent: bool = False,
+    ) -> dict:
         """Fold one analysis run's findings into the store. Returns fingerprint lists
         ``{new, ongoing, reopened, absent, resolved}``.
 
@@ -103,9 +111,16 @@ class FaultLifecycle:
             r = self._recs.get(fp)
             if r is None:
                 self._recs[fp] = FaultRecord(
-                    fingerprint=fp, site=site, equip=equip, rule=rule,
-                    severity=_attr(f, "severity", "info"), status="open",
-                    first_seen=rid, last_seen=rid, occurrences=1)
+                    fingerprint=fp,
+                    site=site,
+                    equip=equip,
+                    rule=rule,
+                    severity=_attr(f, "severity", "info"),
+                    status="open",
+                    first_seen=rid,
+                    last_seen=rid,
+                    occurrences=1,
+                )
                 new.append(fp)
             else:
                 r.last_seen = rid
@@ -117,8 +132,9 @@ class FaultLifecycle:
                     reopened.append(fp)
                 else:
                     ongoing.append(fp)
-        absent = [fp for fp, r in self._recs.items()
-                  if fp not in seen and r.status in OPEN_STATUSES]
+        absent = [
+            fp for fp, r in self._recs.items() if fp not in seen and r.status in OPEN_STATUSES
+        ]
         resolved = []
         if auto_resolve_absent:
             for fp in absent:
@@ -127,8 +143,13 @@ class FaultLifecycle:
                 self._recs[fp].notes.append(f"{rid}: auto-resolved (absent)")
                 resolved.append(fp)
             absent = []
-        return {"new": sorted(new), "ongoing": sorted(ongoing), "reopened": sorted(reopened),
-                "absent": sorted(absent), "resolved": sorted(resolved)}
+        return {
+            "new": sorted(new),
+            "ongoing": sorted(ongoing),
+            "reopened": sorted(reopened),
+            "absent": sorted(absent),
+            "resolved": sorted(resolved),
+        }
 
     # ----------------------------------------------------------------- workflow ops
     def _get(self, fp: str) -> FaultRecord:
@@ -209,8 +230,9 @@ class FaultLifecycle:
                 out[fp] = round((t - pd.Timestamp(r.first_seen)) / pd.Timedelta(hours=1), 2)
         return out
 
-    def overdue(self, now, *, ack_sla_hours: dict | None = None,
-                resolve_sla_hours: dict | None = None) -> list:
+    def overdue(
+        self, now, *, ack_sla_hours: dict | None = None, resolve_sla_hours: dict | None = None
+    ) -> list:
         """Open faults past an SLA. Returns ``[(record, kind, age_hours, sla_hours)]``.
 
         ``ack_sla_hours``/``resolve_sla_hours`` map severity → hours. A still-unacknowledged
@@ -238,5 +260,9 @@ class FaultLifecycle:
             by_status[r.status] = by_status.get(r.status, 0) + 1
             if r.status in OPEN_STATUSES:
                 by_sev[r.severity] = by_sev.get(r.severity, 0) + 1
-        return {"total": len(self._recs), "open": len(self.open_faults()),
-                "by_status": by_status, "open_by_severity": by_sev}
+        return {
+            "total": len(self._recs),
+            "open": len(self.open_faults()),
+            "by_status": by_status,
+            "open_by_severity": by_sev,
+        }

@@ -16,16 +16,26 @@ economizer command, supports these checks:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
 from .schedules import occupied_mask
 
 AHU_MEASURES = [
-    "CHW_Valve", "HHW_Valve", "SupplyAir", "MixedAir", "ReturnAir",
-    "OSA", "OA_Damper", "EconoCmd", "DuctStatic", "DuctStaticSP",
-    "Occupancy", "WarmUp", "CoolDown",
+    "CHW_Valve",
+    "HHW_Valve",
+    "SupplyAir",
+    "MixedAir",
+    "ReturnAir",
+    "OSA",
+    "OA_Damper",
+    "EconoCmd",
+    "DuctStatic",
+    "DuctStaticSP",
+    "Occupancy",
+    "WarmUp",
+    "CoolDown",
 ]
 
 
@@ -38,10 +48,10 @@ class AHUResult:
     n_considered: int
     chw_open_pct: float
     hhw_open_pct: float
-    simultaneous_hc_pct: float          # both valves open
-    mean_overlap_when_simul: float      # mean min(CHW,HHW) during overlap
-    econ_opportunity_pct: float         # intervals economizer SHOULD help
-    econ_missed_pct: float              # of opportunity, damper stayed shut while cooling
+    simultaneous_hc_pct: float  # both valves open
+    mean_overlap_when_simul: float  # mean min(CHW,HHW) during overlap
+    econ_opportunity_pct: float  # intervals economizer SHOULD help
+    econ_missed_pct: float  # of opportunity, damper stayed shut while cooling
     coverage_start: str
     coverage_end: str
 
@@ -65,8 +75,9 @@ def _populated(df, col):
     return None
 
 
-def analyze_ahu(df, equip, *, valve_thr=5.0, econ_high_limit_f=70.0,
-                damper_min_open=20.0, occupied_only=True):
+def analyze_ahu(
+    df, equip, *, valve_thr=5.0, econ_high_limit_f=70.0, damper_min_open=20.0, occupied_only=True
+):
     """Compute AHU H/C + economizer metrics. ``df`` columns are measure names.
 
     Threshold basis (economizer logic, PNNL Re-tuning Ch.6):
@@ -90,12 +101,14 @@ def analyze_ahu(df, equip, *, valve_thr=5.0, econ_high_limit_f=70.0,
         return None
 
     if occupied_only:
-        work = work[occupied_mask(
-            work.index,
-            occ=_populated(work, "Occupancy"),
-            warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-            cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-        )]
+        work = work[
+            occupied_mask(
+                work.index,
+                occ=_populated(work, "Occupancy"),
+                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
+                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+            )
+        ]
     n = len(work)
     if n == 0:
         return None

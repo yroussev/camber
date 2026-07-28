@@ -29,7 +29,7 @@ import json
 from camber.soo import spec_from_dicts, evaluate_soo, soo_findings
 
 spec = spec_from_dicts(json.load(open("examples/soo/ahu_sequence.json")))
-report = evaluate_soo(role_frame, spec, equip="AHU-1")   # role_frame from resolve()
+report = evaluate_soo(role_frame, spec, equip="AHU-1")  # role_frame from resolve()
 print(report.overall_conformance, report.severity)
 for c in report.clauses:
     print(c.summary)

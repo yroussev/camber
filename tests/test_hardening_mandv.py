@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.mandv.rc_model import daily_schedule, calibrate, option_d_savings  # noqa: E402
+from camber.mandv.rc_model import calibrate, daily_schedule, option_d_savings  # noqa: E402
 
 
 def _inputs(n):
@@ -17,17 +17,20 @@ def _inputs(n):
     return np.linspace(30, 50, n), daily_schedule(idx)
 
 
-@pytest.mark.parametrize("energy", [
-    np.array([1.0, 2.0, 3.0]),                 # < 4 points
-    np.full(48, np.nan),                       # all NaN
-    np.full(48, 5.0),                          # constant (rank-deficient)
-    np.concatenate([np.abs(np.linspace(1, 5, 30)), np.full(18, np.nan)]),  # gapped
-])
+@pytest.mark.parametrize(
+    "energy",
+    [
+        np.array([1.0, 2.0, 3.0]),  # < 4 points
+        np.full(48, np.nan),  # all NaN
+        np.full(48, 5.0),  # constant (rank-deficient)
+        np.concatenate([np.abs(np.linspace(1, 5, 30)), np.full(18, np.nan)]),  # gapped
+    ],
+)
 def test_calibrate_degrades_not_raises(energy):
     oat, sched = _inputs(len(energy))
-    cal = calibrate(oat, sched, energy)         # must not raise
+    cal = calibrate(oat, sched, energy)  # must not raise
     if len(energy) < 4 or not np.isfinite(energy).all() or np.ptp(energy[np.isfinite(energy)]) == 0:
-        assert not cal.accept                   # thin/degenerate -> not accepted
+        assert not cal.accept  # thin/degenerate -> not accepted
 
 
 def test_degraded_calibration_claims_no_saving():
@@ -40,4 +43,4 @@ def test_degraded_calibration_claims_no_saving():
 def test_length_mismatch_raises_clear_error():
     oat, sched = _inputs(48)
     with pytest.raises(ValueError):
-        calibrate(oat[:10], sched, np.arange(48.0))   # oat/schedule/energy length mismatch
+        calibrate(oat[:10], sched, np.arange(48.0))  # oat/schedule/energy length mismatch

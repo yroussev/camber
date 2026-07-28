@@ -37,7 +37,7 @@ def fingerprint(site: str, equip: str, rule: str) -> str:
     Deliberately excludes metrics/severity so a recurring issue updates one
     ticket rather than spawning a new one each run.
     """
-    raw = f"{site}\x1f{equip}\x1f{rule}".encode("utf-8")
+    raw = f"{site}\x1f{equip}\x1f{rule}".encode()
     return hashlib.sha1(raw).hexdigest()[:12]
 
 
@@ -68,8 +68,9 @@ def finding_to_ticket(finding, *, site: str = "", source: str = "camber") -> dic
     }
 
 
-def findings_to_tickets(findings, *, site: str = "", actionable_only: bool = True,
-                        source: str = "camber") -> list:
+def findings_to_tickets(
+    findings, *, site: str = "", actionable_only: bool = True, source: str = "camber"
+) -> list:
     """Map many findings to tickets, by default dropping non-actionable ones.
 
     ``actionable_only`` keeps just ``fault``/``warn`` severities (the ones an
@@ -106,13 +107,14 @@ def webhook_transport(url: str, *, timeout: float = 10.0):
     Returns a callable suitable for :class:`Notifier`. Network errors propagate to
     the caller; swap in :func:`collect_transport` to exercise the path offline.
     """
+
     def transport(payload: dict) -> dict:
         """POST the payload as JSON to the configured URL."""
         data = json.dumps(payload).encode("utf-8")
-        req = _request.Request(url, data=data,
-                               headers={"Content-Type": "application/json"})
+        req = _request.Request(url, data=data, headers={"Content-Type": "application/json"})
         with _request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return {"status": resp.status}
+
     return transport
 
 
@@ -133,11 +135,9 @@ class Notifier:
         self.sent += 1
         return result
 
-    def emit_findings(self, findings, *, site: str = "",
-                      actionable_only: bool = True) -> list:
+    def emit_findings(self, findings, *, site: str = "", actionable_only: bool = True) -> list:
         """Convert findings to tickets and send each; returns the tickets sent."""
-        tickets = findings_to_tickets(findings, site=site,
-                                      actionable_only=actionable_only)
+        tickets = findings_to_tickets(findings, site=site, actionable_only=actionable_only)
         for t in tickets:
             self.send(t)
         return tickets

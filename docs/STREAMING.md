@@ -14,10 +14,12 @@ the read-only streaming ingest (`camber.ingest.mqtt_stream`).
 
   ```python
   from camber.mandv.online import OnlineCusum
+
   mon = OnlineCusum(baseline_model.predict, limit=200, slack=2)
   for driver, actual in feed:
       st = mon.update(driver, actual)
-      if st.alarm: alert(st)
+      if st.alarm:
+          alert(st)
   ```
 
 - **`RollingAnomaly(window, k, min_samples)`** — robust (median/MAD) z-score over a trailing
@@ -36,7 +38,7 @@ from camber.rules.builtin import builtin_registry
 
 reg = builtin_registry()
 fdd = OnlineFDD([reg.get(n) for n in reg.names()], window=240, eval_every=4)
-for equip, row, ts in stream:                     # row: {Role|str: value}
+for equip, row, ts in stream:  # row: {Role|str: value}
     for tr in fdd.push(equip, row, ts=ts):
         notify(tr.rule, tr.from_severity, "->", tr.to_severity, tr.finding)
 ```

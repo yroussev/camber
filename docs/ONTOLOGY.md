@@ -34,8 +34,9 @@ profile**: equipment, their observable properties, and each property's QUDT **qu
 
 ```python
 from camber.interop import site_to_223, site_from_223
+
 ttl = site_to_223(site, profile="minimal", include_relations=True)
-site2 = site_from_223(ttl)        # round-trips equip_class + the points' roles
+site2 = site_from_223(ttl)  # round-trips equip_class + the points' roles
 ```
 
 Mapping coverage was broadened in **0.6** from 21 to **44 of 54 roles** — the full plant/hydronic side

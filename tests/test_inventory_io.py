@@ -11,8 +11,8 @@ from camber import inventory as inv  # noqa: E402
 from camber import io as cio  # noqa: E402
 from camber.inventory import PointFile, parse_name, to_rows  # noqa: E402
 
-
 # --------------------------------------------------------------------------- parse_name
+
 
 def test_parse_name_known_prefix_id_measure():
     assert parse_name("AHU_1_SupplyAirTemp.csv") == ("AHU", "1", "SupplyAirTemp")
@@ -28,7 +28,7 @@ def test_parse_name_longest_prefix_wins():
 
 def test_parse_name_prefix_only_and_no_measure():
     assert parse_name("AHU.csv") == ("AHU", "", "")
-    assert parse_name("AHU_Status.csv") == ("AHU", "", "Status")   # single token after prefix
+    assert parse_name("AHU_Status.csv") == ("AHU", "", "Status")  # single token after prefix
 
 
 def test_parse_name_generic_fallback():
@@ -43,8 +43,17 @@ def test_parse_name_handles_missing_extension():
 
 
 def test_to_rows_serializes_pointfiles():
-    pts = [PointFile(path="p1.csv", fname="AHU_1_SAT.csv", equip_type="AHU", equip_id="1",
-                     measure="SAT", unit="degF", n_rows=10)]
+    pts = [
+        PointFile(
+            path="p1.csv",
+            fname="AHU_1_SAT.csv",
+            equip_type="AHU",
+            equip_id="1",
+            measure="SAT",
+            unit="degF",
+            n_rows=10,
+        )
+    ]
     rows = to_rows(pts)
     assert rows[0]["equip_type"] == "AHU" and rows[0]["measure"] == "SAT"
 
@@ -61,6 +70,7 @@ def test_inventory_over_a_folder(tmp_path):
 
 # --------------------------------------------------------------------------- io
 
+
 def test_load_csv_default_and_named_timestamp(tmp_path):
     p = tmp_path / "trend.csv"
     p.write_text("Datetime,SAT\n2024-06-01 00:00,55\n2024-06-01 01:00,57\n")
@@ -74,10 +84,10 @@ def test_load_csv_resample_mean(tmp_path):
     p = tmp_path / "t.csv"
     p.write_text("ts,v\n2024-06-01 00:00,10\n2024-06-01 00:30,20\n2024-06-01 01:00,30\n")
     df = cio.load_csv(str(p), resample="1h")
-    assert df["v"].iloc[0] == 15.0                     # mean of 10,20 in the first hour
+    assert df["v"].iloc[0] == 15.0  # mean of 10,20 in the first hour
 
 
 def test_add_oat_band_cooling_season():
     df = pd.DataFrame({"oat": [50.0, 65.0, 70.0, 80.0]})
     band = cio.add_oat_band(df, "oat", cooling_cutoff_f=65.0)
-    assert list(band) == [False, False, True, True]    # strictly above the cutoff
+    assert list(band) == [False, False, True, True]  # strictly above the cutoff

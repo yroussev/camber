@@ -62,13 +62,17 @@ No code needed — add a tag→role mapping (a JSON file like the ones under
 
 ## Style
 
-- PEP 8. Clear module and function docstrings that explain the *why*, not just the
-  *what*. Match the idioms of the surrounding code.
+- Style is enforced by **ruff** (lint + format, line length 100), configured in
+  `pyproject.toml` and gated in CI. Run `ruff check .` and `ruff format .` before pushing,
+  or install the hook once with `pip install pre-commit && pre-commit install`.
+- Clear module and function docstrings that explain the *why*, not just the *what*. Match
+  the idioms of the surrounding code.
 
 ## Commits and pull requests
 
 - Small, focused commits with descriptive messages.
-- Open a PR against `main`; CI (pytest on Python 3.10 and 3.11) must pass.
+- Open a PR against `main`; CI (ruff lint + format check, and pytest on Python 3.10 and
+  3.11) must pass.
 - Fill in the PR template and link any related issue.
 
 ## No AI-assistant attribution

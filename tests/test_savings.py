@@ -5,6 +5,7 @@ import os
 import sys
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless, before pyplot is imported anywhere
 
 import matplotlib.pyplot as plt  # noqa: E402
@@ -21,9 +22,9 @@ def _close_figs():
     plt.close("all")
 
 
+from camber.charts.savings import cumulative_savings, savings_chart  # noqa: E402
 from camber.mandv.models import best_model  # noqa: E402
 from camber.mandv.stats import SavingsResult, fit_stats  # noqa: E402
-from camber.charts.savings import cumulative_savings, savings_chart  # noqa: E402
 
 
 def _baseline(seed=0):
@@ -47,40 +48,41 @@ def test_cumulative_savings_shapes_and_monotone_baseline():
     Tr, yr = _report(model, rng, 0.85)
     idx, cum_base, cum_act, cum_avoided = cumulative_savings(model, Tr, yr)
     assert len(idx) == len(cum_base) == len(cum_act) == len(cum_avoided) == len(yr)
-    assert np.all(np.diff(cum_base) >= 0)                 # positive baseline energy accumulates
-    assert cum_avoided[-1] > 0                            # actual ran below baseline -> saved
+    assert np.all(np.diff(cum_base) >= 0)  # positive baseline energy accumulates
+    assert cum_avoided[-1] > 0  # actual ran below baseline -> saved
 
 
 def test_savings_chart_positive_savings():
     model, cv, rng = _baseline()
-    Tr, yr = _report(model, rng, 0.85)                    # ~15% savings
+    Tr, yr = _report(model, rng, 0.85)  # ~15% savings
     ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
     assert isinstance(res, SavingsResult)
     assert res.avoided_energy > 0 and 0.12 < res.savings_pct < 0.18
-    assert ax.get_lines() and ax.collections               # cumulative curves + shaded areas
+    assert ax.get_lines() and ax.collections  # cumulative curves + shaded areas
     assert "M&V savings" in ax.get_title()
 
 
 def test_savings_chart_excess_when_actual_above_baseline():
     model, cv, rng = _baseline()
-    Tr, yr = _report(model, rng, 1.12)                    # used MORE than baseline
+    Tr, yr = _report(model, rng, 1.12)  # used MORE than baseline
     _, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
-    assert res.avoided_energy < 0                          # excess, not savings
+    assert res.avoided_energy < 0  # excess, not savings
 
 
 def test_savings_chart_reports_uncertainty_band():
     model, cv, rng = _baseline()
     Tr, yr = _report(model, rng, 0.85)
-    ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv,
-                            confidence=0.90)
+    ax, res = savings_chart(
+        model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv, confidence=0.90
+    )
     assert np.isfinite(res.abs_uncertainty) and res.abs_uncertainty > 0
     labels = [c.get_label() for c in ax.collections]
-    assert any("band" in str(lbl) for lbl in labels)      # the ± band was drawn
+    assert any("band" in str(lbl) for lbl in labels)  # the ± band was drawn
 
 
 def test_savings_chart_accepts_plain_array_report():
     model, cv, rng = _baseline()
     Tr = rng.uniform(20, 90, 60)
-    yr = model.predict(Tr) * 0.9                           # a numpy array, no index
+    yr = model.predict(Tr) * 0.9  # a numpy array, no index
     ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
     assert res.avoided_energy > 0 and ax.get_lines()

@@ -28,12 +28,20 @@ class FilterFouling:
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         if Role.FILTER_DIFF_PRESS not in frame.columns:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need filter differential pressure)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need filter differential pressure)",
+            )
         dp = frame[Role.FILTER_DIFF_PRESS].dropna()
         if dp.empty:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need filter differential pressure)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need filter differential pressure)",
+            )
         median = float(dp.median())
         thr = self.change_dp_inwc
         over_pct = float((dp > thr).mean() * 100.0)
@@ -44,10 +52,17 @@ class FilterFouling:
         else:
             severity = "ok"
         return Finding(
-            rule=self.name, equip=equip, severity=severity,
-            metrics={"filter_dp_median_inwc": round(median, 3),
-                     "change_dp_inwc": thr, "pct_over_threshold": round(over_pct, 1),
-                     "filter_dp_p95_inwc": round(float(np.nanpercentile(dp, 95)), 3)},
-            summary=(f"{equip}: filter ΔP median {median:.2f} inH2O "
-                     f"(change-out {thr:.2f}); {over_pct:.0f}% of hours above threshold"),
+            rule=self.name,
+            equip=equip,
+            severity=severity,
+            metrics={
+                "filter_dp_median_inwc": round(median, 3),
+                "change_dp_inwc": thr,
+                "pct_over_threshold": round(over_pct, 1),
+                "filter_dp_p95_inwc": round(float(np.nanpercentile(dp, 95)), 3),
+            },
+            summary=(
+                f"{equip}: filter ΔP median {median:.2f} inH2O "
+                f"(change-out {thr:.2f}); {over_pct:.0f}% of hours above threshold"
+            ),
         )

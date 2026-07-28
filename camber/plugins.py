@@ -29,8 +29,11 @@ GROUPS = {"rules": "camber.rules", "adapters": "camber.adapters", "reports": "ca
 
 
 def _is_rule(o) -> bool:
-    return (hasattr(o, "name") and hasattr(o, "roles_required")
-            and (callable(getattr(o, "analyze", None)) or callable(getattr(o, "analyze_fleet", None))))
+    return (
+        hasattr(o, "name")
+        and hasattr(o, "roles_required")
+        and (callable(getattr(o, "analyze", None)) or callable(getattr(o, "analyze_fleet", None)))
+    )
 
 
 def _is_adapter(o) -> bool:
@@ -38,7 +41,9 @@ def _is_adapter(o) -> bool:
 
 
 def _is_report(o) -> bool:
-    return callable(o) or any(callable(getattr(o, m, None)) for m in ("to_text", "to_html", "render"))
+    return callable(o) or any(
+        callable(getattr(o, m, None)) for m in ("to_text", "to_html", "render")
+    )
 
 
 _VALIDATORS = {"rules": _is_rule, "adapters": _is_adapter, "reports": _is_report}
@@ -57,10 +62,11 @@ class LoadedPlugin:
 
 def _group_entry_points(group: str):
     from importlib.metadata import entry_points
+
     try:
-        return list(entry_points(group=group))          # Python 3.10+ selection API
-    except TypeError:                                    # very old importlib.metadata
-        return list(entry_points().get(group, []))      # pragma: no cover
+        return list(entry_points(group=group))  # Python 3.10+ selection API
+    except TypeError:  # very old importlib.metadata
+        return list(entry_points().get(group, []))  # pragma: no cover
 
 
 def discover(kind: str, *, source=None) -> list:
@@ -106,10 +112,10 @@ class PluginRegistry:
         self._by_kind[kind][nm] = obj
         return obj
 
-    def load_entrypoints(self, *, kinds=None, source_for=None) -> "PluginRegistry":
+    def load_entrypoints(self, *, kinds=None, source_for=None) -> PluginRegistry:
         """Discover + register plugins from entry points. ``source_for(kind)`` (optional) injects
         the entry-point iterable per kind for testing. Failed loads land in ``self.errors``."""
-        for kind in (kinds or GROUPS):
+        for kind in kinds or GROUPS:
             src = source_for(kind) if source_for else None
             for lp in discover(kind, source=src):
                 if lp.obj is not None:

@@ -35,8 +35,13 @@ class OvercoolingSeverity:
     roles_required = (Role.SPACE_TEMP, Role.COOL_SP)
     roles_optional = (Role.HEAT_SP, Role.WARMUP, Role.COOLDOWN)
 
-    def __init__(self, *, tiers: dict | None = None, window_min: float = 60.0,
-                 relative_to_deadband: bool = True):
+    def __init__(
+        self,
+        *,
+        tiers: dict | None = None,
+        window_min: float = 60.0,
+        relative_to_deadband: bool = True,
+    ):
         self.tiers = tiers
         self.window_min = window_min
         self.relative_to_deadband = relative_to_deadband
@@ -46,17 +51,21 @@ class OvercoolingSeverity:
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         res = analyze_overcooling_severity(
-            legacy, equip, tiers=self.tiers, window_min=self.window_min,
-            relative_to_deadband=self.relative_to_deadband)
+            legacy,
+            equip,
+            tiers=self.tiers,
+            window_min=self.window_min,
+            relative_to_deadband=self.relative_to_deadband,
+        )
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data")
-        ref = ("heating setpoint" if res.mode == "relative_deadband"
-               else "cooling setpoint")
+            return Finding(
+                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
+        ref = "heating setpoint" if res.mode == "relative_deadband" else "cooling setpoint"
         return Finding(
             rule=self.name,
             equip=equip,
-            severity=res.severity,           # ok | info | warn | fault (info non-actionable)
+            severity=res.severity,  # ok | info | warn | fault (info non-actionable)
             metrics={
                 "mode": res.mode,
                 "interval_min": res.interval_min,
@@ -69,9 +78,11 @@ class OvercoolingSeverity:
                 "fault_minutes": res.tier_minutes.get("fault"),
                 "n_considered": res.n_considered,
             },
-            summary=(f"{equip}: overcooled below {ref} -- max {res.max_depth_f:.1f} degF, "
-                     f"sustained tiers info/warn/fault = "
-                     f"{res.tier_pct.get('info'):.0f}/{res.tier_pct.get('warn'):.0f}/"
-                     f"{res.tier_pct.get('fault'):.0f}% of occupied samples "
-                     f"({res.window_min:.0f}-min persistence @ {res.interval_min:.0f}-min data)"),
+            summary=(
+                f"{equip}: overcooled below {ref} -- max {res.max_depth_f:.1f} degF, "
+                f"sustained tiers info/warn/fault = "
+                f"{res.tier_pct.get('info'):.0f}/{res.tier_pct.get('warn'):.0f}/"
+                f"{res.tier_pct.get('fault'):.0f}% of occupied samples "
+                f"({res.window_min:.0f}-min persistence @ {res.interval_min:.0f}-min data)"
+            ),
         )

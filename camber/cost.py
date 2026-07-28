@@ -18,16 +18,15 @@ from dataclasses import dataclass, field
 class EnergyRate:
     """An electricity/gas tariff."""
 
-    energy_rate: float            # $ per unit (kWh, therm)
-    demand_rate: float = 0.0      # $ per peak kW
-    fixed: float = 0.0            # $ per period
+    energy_rate: float  # $ per unit (kWh, therm)
+    demand_rate: float = 0.0  # $ per peak kW
+    fixed: float = 0.0  # $ per period
     tou: dict = field(default_factory=dict)  # {hour: rate} overrides energy_rate
 
 
 def energy_cost(energy: float, *, rate: EnergyRate, peak_demand: float = 0.0) -> float:
     """Total energy bill = consumption + demand + fixed."""
-    return round(energy * rate.energy_rate
-                 + peak_demand * rate.demand_rate + rate.fixed, 4)
+    return round(energy * rate.energy_rate + peak_demand * rate.demand_rate + rate.fixed, 4)
 
 
 def tou_energy_cost(hourly_energy, hourly_hour, rate: EnergyRate) -> float:
@@ -55,12 +54,10 @@ def tiered_cost(volume: float, tiers) -> float:
 
 def marginal_rate(volume: float, tiers) -> float:
     """The block rate the next unit at ``volume`` would be billed at."""
-    lower = 0.0
     for limit, rate in tiers:
         cap = float("inf") if limit is None else limit
         if volume < cap:
             return rate
-        lower = cap
     return tiers[-1][1]
 
 
@@ -76,8 +73,14 @@ class WaterBill:
     marginal_cost_per_unit: float
 
 
-def water_cost(volume: float, *, supply_tiers, sewer_tiers=None,
-               indoor_fraction: float = 1.0, fixed: float = 0.0) -> WaterBill:
+def water_cost(
+    volume: float,
+    *,
+    supply_tiers,
+    sewer_tiers=None,
+    indoor_fraction: float = 1.0,
+    fixed: float = 0.0,
+) -> WaterBill:
     """Water + wastewater bill.
 
     Supply charges apply to all metered ``volume``; wastewater charges apply only
@@ -94,6 +97,11 @@ def water_cost(volume: float, *, supply_tiers, sewer_tiers=None,
     marg = marginal_rate(volume, supply_tiers)
     if sewer_tiers and indoor_fraction > 0:
         marg += marginal_rate(volume * indoor_fraction, sewer_tiers) * indoor_fraction
-    return WaterBill(supply=supply, wastewater=round(sewer, 4), fixed=fixed,
-                     total=total, avg_cost_per_unit=avg,
-                     marginal_cost_per_unit=round(marg, 6))
+    return WaterBill(
+        supply=supply,
+        wastewater=round(sewer, 4),
+        fixed=fixed,
+        total=total,
+        avg_cost_per_unit=avg,
+        marginal_cost_per_unit=round(marg, 6),
+    )

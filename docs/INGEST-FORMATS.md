@@ -46,9 +46,10 @@ docs; every field overridable):
 
 ```python
 from camber.io import load_csv
-load_csv("export.csv", profile="desigo")                    # semicolon + decimal comma + DD.MM.YYYY
-load_csv("export.csv", profile="metasys", skiprows=2)       # skip a 2-row export preamble
-load_csv("export.csv", delimiter="|", dayfirst=True)        # or override fields directly
+
+load_csv("export.csv", profile="desigo")  # semicolon + decimal comma + DD.MM.YYYY
+load_csv("export.csv", profile="metasys", skiprows=2)  # skip a 2-row export preamble
+load_csv("export.csv", delimiter="|", dayfirst=True)  # or override fields directly
 ```
 
 Profiles thread through `io.load_csv` and `WideCsvAdapter`; defaults resolve to `generic` (fully

@@ -19,7 +19,7 @@ def test_numeric_strips_thousands_separators():
 def test_numeric_normalizes_null_and_quality_tokens():
     out = coerce_numeric(pd.Series(["1.0", "N/A", "---", "Bad", "Comm Fail", "", "2.0"]))
     assert out[0] == 1.0 and out.iloc[-1] == 2.0
-    assert out.iloc[1:6].isna().all()          # every null/quality token -> NaN
+    assert out.iloc[1:6].isna().all()  # every null/quality token -> NaN
 
 
 def test_numeric_european_decimal_comma():
@@ -33,8 +33,9 @@ def test_numeric_leaves_clean_numbers_unchanged():
 
 
 def test_status_classic_and_extended_vocab():
-    out = coerce_status(pd.Series(["Running", "Off", "Open", "Closed", "Fault", "Normal",
-                                   "Override", "Auto"]))
+    out = coerce_status(
+        pd.Series(["Running", "Off", "Open", "Closed", "Fault", "Normal", "Override", "Auto"])
+    )
     assert out.tolist() == [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]
 
 

@@ -20,8 +20,7 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
-ZONE_MEASURES = ["HWValve", "ActFlow", "ActFlowSP", "SpaceTemp", "ActCoolSP",
-                 "WarmUp", "CoolDown"]
+ZONE_MEASURES = ["HWValve", "ActFlow", "ActFlowSP", "SpaceTemp", "ActCoolSP", "WarmUp", "CoolDown"]
 
 
 def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
@@ -56,8 +55,9 @@ def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
 
     H = pd.DataFrame(heating_cols).fillna(False)
     C = pd.DataFrame(cooling_cols).fillna(False)
-    present = (pd.DataFrame({e: f.notna().any(axis=1) for e, f in box_frames.items()
-                            if "HWValve" in f.columns}).fillna(False))
+    present = pd.DataFrame(
+        {e: f.notna().any(axis=1) for e, f in box_frames.items() if "HWValve" in f.columns}
+    ).fillna(False)
 
     out = pd.DataFrame(index=H.index)
     out["n_zones"] = present.sum(axis=1)

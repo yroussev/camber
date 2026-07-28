@@ -12,17 +12,17 @@ live here, so they are defined once rather than re-globbed and re-coded per rule
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from glob import glob
-import os
 
 import pandas as pd
 
 from . import realio
 from .model.mapping import MappingProvider
-from .model.roles import Role, STATUS_ROLES
-from .units import normalize_percent_frame
+from .model.roles import STATUS_ROLES, Role
 from .schedules import occupied_mask
+from .units import normalize_percent_frame
 
 
 @dataclass(frozen=True)
@@ -36,10 +36,10 @@ class EquipRef:
     span them. The primary token wins if a role is found in more than one.
     """
 
-    equip: str        # primary equipment token incl. id, e.g. "VAV_117" / "AHU_1"
+    equip: str  # primary equipment token incl. id, e.g. "VAV_117" / "AHU_1"
     equip_class: str  # e.g. "VAV", "AHU"
-    folder: str       # primary source folder holding its per-point CSVs
-    extra_equips: tuple = ()   # sibling tokens holding related points
+    folder: str  # primary source folder holding its per-point CSVs
+    extra_equips: tuple = ()  # sibling tokens holding related points
     extra_folders: tuple = ()  # additional folders to search (multi-folder sources)
 
     def all_equips(self) -> tuple:
@@ -81,7 +81,7 @@ def discover(folder, equip_class: str, marker_measure: str = "SpaceTemp"):
     """
     folders = _as_folders(folder)
     suffix = f"_{marker_measure}.csv"
-    primary: dict = {}     # equip -> folder where its marker was first found
+    primary: dict = {}  # equip -> folder where its marker was first found
     for fd in folders:
         for p in sorted(glob(os.path.join(fd, f"{equip_class}_*{suffix}"))):
             equip = os.path.basename(p)[: -len(suffix)]
@@ -90,13 +90,15 @@ def discover(folder, equip_class: str, marker_measure: str = "SpaceTemp"):
     for equip in sorted(primary):
         marker_fd = primary[equip]
         extras = tuple(f for f in folders if f != marker_fd)
-        out.append(EquipRef(equip=equip, equip_class=equip_class,
-                            folder=marker_fd, extra_folders=extras))
+        out.append(
+            EquipRef(equip=equip, equip_class=equip_class, folder=marker_fd, extra_folders=extras)
+        )
     return out
 
 
-def discover_terminals(folder: str, marker_measure: str = "SpaceTemp",
-                       classes: tuple = TERMINAL_CLASSES):
+def discover_terminals(
+    folder: str, marker_measure: str = "SpaceTemp", classes: tuple = TERMINAL_CLASSES
+):
     """Discover ALL terminal-unit zones (VAV + CAV + FCAV) in ``folder``.
 
     The union helper for zone-level analyses: ``discover("VAV", ...)`` alone misses
@@ -120,12 +122,13 @@ def _candidate_tokens(folder: str, equip: str):
     toks = []
     prefix = f"{equip}_"
     for p in glob(os.path.join(folder, f"{prefix}*.csv")):
-        toks.append(os.path.basename(p)[len(prefix):-4])
+        toks.append(os.path.basename(p)[len(prefix) : -4])
     return toks
 
 
-def resolve(equip_ref: EquipRef, mapping: MappingProvider, roles, *,
-            resample: str = "1h") -> pd.DataFrame:
+def resolve(
+    equip_ref: EquipRef, mapping: MappingProvider, roles, *, resample: str = "1h"
+) -> pd.DataFrame:
     """Load the requested ``roles`` for one equipment into a role-named frame.
 
     Only roles whose tokens exist for this equipment appear as columns (callers
@@ -169,5 +172,11 @@ def occupied(frame: pd.DataFrame, *, start_hour: int = 7, end_hour: int = 18):
     occ_series = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
     warm = frame[Role.WARMUP] if Role.WARMUP in frame.columns else None
     cool = frame[Role.COOLDOWN] if Role.COOLDOWN in frame.columns else None
-    return occupied_mask(frame.index, start_hour=start_hour, end_hour=end_hour,
-                         occ=occ_series, warmup=warm, cooldown=cool)
+    return occupied_mask(
+        frame.index,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        occ=occ_series,
+        warmup=warm,
+        cooldown=cool,
+    )

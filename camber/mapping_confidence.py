@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from .model.mapping import MappingProvider
-from .model.roles import Role
 from .sensorhealth import range_violation_frac
 
 
@@ -33,12 +32,12 @@ class MappingConfidence:
     """Confidence that one raw token resolved to the right role."""
 
     token: str
-    role: str | None              # role slug, or None if unmapped
-    basis: str                    # "alias" | "pattern" | "unmapped"
-    ambiguous: bool               # token also matches other patterns for other roles
-    data_fit: float               # 1 - range-violation frac (NaN if no data / no bounds)
-    confidence: float             # 0..1
-    verdict: str                  # "high" | "medium" | "low" | "unmapped"
+    role: str | None  # role slug, or None if unmapped
+    basis: str  # "alias" | "pattern" | "unmapped"
+    ambiguous: bool  # token also matches other patterns for other roles
+    data_fit: float  # 1 - range-violation frac (NaN if no data / no bounds)
+    confidence: float  # 0..1
+    verdict: str  # "high" | "medium" | "low" | "unmapped"
     flags: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
@@ -48,13 +47,15 @@ class MappingConfidence:
         return d
 
 
-def score_token(token: str, mapping: MappingProvider,
-                series: pd.Series | None = None) -> MappingConfidence:
+def score_token(
+    token: str, mapping: MappingProvider, series: pd.Series | None = None
+) -> MappingConfidence:
     """Score the confidence of one token's mapping, optionally cross-checked vs data."""
     role = mapping.role_of(token)
     if role is None:
-        return MappingConfidence(token, None, "unmapped", False, float("nan"), 0.0,
-                                 "unmapped", ["unmapped"])
+        return MappingConfidence(
+            token, None, "unmapped", False, float("nan"), 0.0, "unmapped", ["unmapped"]
+        )
 
     alias_hit = mapping.aliases.get(token.lower()) is not None
     basis = "alias" if alias_hit else "pattern"
@@ -70,16 +71,15 @@ def score_token(token: str, mapping: MappingProvider,
     data_fit = float("nan")
     if series is not None:
         rv = range_violation_frac(series, role)
-        if rv == rv:                       # role has bounds and data present
+        if rv == rv:  # role has bounds and data present
             data_fit = round(1.0 - rv, 4)
-            if rv > 0.1:                   # data doesn't physically fit the role
+            if rv > 0.1:  # data doesn't physically fit the role
                 flags.append("data_mismatch")
-                conf *= (1.0 - min(rv * 2.0, 1.0))
+                conf *= 1.0 - min(rv * 2.0, 1.0)
 
     conf = round(max(0.0, min(1.0, conf)), 4)
     verdict = "high" if conf >= 0.8 else ("medium" if conf >= 0.5 else "low")
-    return MappingConfidence(token, role.value, basis, ambiguous, data_fit, conf,
-                             verdict, flags)
+    return MappingConfidence(token, role.value, basis, ambiguous, data_fit, conf, verdict, flags)
 
 
 def score_mapping(tokens, mapping: MappingProvider, series_by_token: dict | None = None) -> list:
@@ -92,8 +92,13 @@ def score_mapping(tokens, mapping: MappingProvider, series_by_token: dict | None
     return [score_token(t, mapping, sbt.get(t)) for t in tokens]
 
 
-def review(tokens, mapping: MappingProvider, series_by_token: dict | None = None,
-           *, min_confidence: float = 0.5) -> dict:
+def review(
+    tokens,
+    mapping: MappingProvider,
+    series_by_token: dict | None = None,
+    *,
+    min_confidence: float = 0.5,
+) -> dict:
     """Summarize a mapping review: what's solid, what needs a human look.
 
     Returns ``{"scored", "needs_review", "unmapped", "n"}`` where ``needs_review`` is the
@@ -102,6 +107,10 @@ def review(tokens, mapping: MappingProvider, series_by_token: dict | None = None
     """
     scored = score_mapping(tokens, mapping, series_by_token)
     unmapped = [s for s in scored if s.basis == "unmapped"]
-    needs = [s for s in scored if s.basis != "unmapped"
-             and (s.confidence < min_confidence or s.ambiguous or "data_mismatch" in s.flags)]
+    needs = [
+        s
+        for s in scored
+        if s.basis != "unmapped"
+        and (s.confidence < min_confidence or s.ambiguous or "data_mismatch" in s.flags)
+    ]
     return {"scored": scored, "needs_review": needs, "unmapped": unmapped, "n": len(scored)}

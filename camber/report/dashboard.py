@@ -18,11 +18,20 @@ from ..charts.quality_dashboard import quality_dashboard
 from ..charts.readiness import readiness_ribbon
 from ..integrate.tickets import _attr
 from ..rules.triage import rank_findings
-from .linking import (LINK_STYLE, interactive_scatter_html, selection_bus_html,
-                      carpet_svg_html, multitrend_svg_html)
+from .linking import (
+    LINK_STYLE,
+    carpet_svg_html,
+    interactive_scatter_html,
+    multitrend_svg_html,
+    selection_bus_html,
+)
 
-_SECTION_TITLES = {"A": "Ingest readiness", "B": "Fault-annotated trends",
-                   "E": "Load carpet", "I": "Data-quality dashboard"}
+_SECTION_TITLES = {
+    "A": "Ingest readiness",
+    "B": "Fault-annotated trends",
+    "E": "Load carpet",
+    "I": "Data-quality dashboard",
+}
 
 
 def fig_to_base64(fig, *, dpi: int = 90) -> str:
@@ -45,7 +54,9 @@ def _section_image(letter, df, *, spans, carpet_col, multitrend_cols, normalize)
         fault_multitrend(df, multitrend_cols, spans=spans, ax=ax, normalize=normalize)
     elif letter == "E":
         num = df.select_dtypes(include="number")
-        col = carpet_col if carpet_col is not None else (num.columns[0] if len(num.columns) else None)
+        col = (
+            carpet_col if carpet_col is not None else (num.columns[0] if len(num.columns) else None)
+        )
         if col is None:
             ax.text(0.5, 0.5, "no numeric column for a load carpet", ha="center", va="center")
             ax.axis("off")
@@ -62,7 +73,7 @@ def _rules_map(rules) -> dict:
     """Normalize ``rules`` (a Registry, a {name: rule} dict, or an iterable of rules) to a map."""
     if rules is None:
         return {}
-    if hasattr(rules, "names") and hasattr(rules, "get"):        # a Registry
+    if hasattr(rules, "names") and hasattr(rules, "get"):  # a Registry
         return {n: rules.get(n) for n in rules.names()}
     if isinstance(rules, dict):
         return dict(rules)
@@ -98,14 +109,15 @@ def render_evidence_blocks(ranked, rules_map, frame_for) -> str:
                 continue
             fig, ax = plt.subplots(figsize=(8, 4))
             render_evidence(ev, frame, ax=ax)
-            img = fig_to_base64(fig)                    # closes fig on success
+            img = fig_to_base64(fig)  # closes fig on success
         except Exception:
             if fig is not None:
-                plt.close(fig)                          # close only this figure, not plt.close("all")
+                plt.close(fig)  # close only this figure, not plt.close("all")
             continue
         cap = _html.escape(f"{equip} · {_attr(f, 'rule', '')} · {_attr(f, 'summary', '')}")
-        blocks.append(f"<figure><img src='{img}' alt='evidence'>"
-                      f"<figcaption>{cap}</figcaption></figure>")
+        blocks.append(
+            f"<figure><img src='{img}' alt='evidence'><figcaption>{cap}</figcaption></figure>"
+        )
     return "".join(blocks)
 
 
@@ -117,8 +129,10 @@ def _evidence_images(ranked, df, rules_map) -> str:
 def _findings_table(ranked) -> str:
     if not ranked:
         return "<p>No actionable findings.</p>"
-    rows = ["<tr><th>#</th><th>Severity</th><th>Equip</th><th>Rule</th>"
-            "<th>Summary</th><th>$/yr</th></tr>"]
+    rows = [
+        "<tr><th>#</th><th>Severity</th><th>Equip</th><th>Rule</th>"
+        "<th>Summary</th><th>$/yr</th></tr>"
+    ]
     for r in ranked:
         f = r.finding
         cost = (_attr(f, "metrics", {}) or {}).get("annual_cost_usd", "")
@@ -127,14 +141,17 @@ def _findings_table(ranked) -> str:
             f"<tr><td>{r.rank}</td><td>{_html.escape(r.severity)}</td>"
             f"<td>{_html.escape(str(_attr(f, 'equip', '')))}</td>"
             f"<td>{_html.escape(str(_attr(f, 'rule', '')))}</td>"
-            f"<td>{_html.escape(str(_attr(f, 'summary', '')))}</td><td>{cost}</td></tr>")
+            f"<td>{_html.escape(str(_attr(f, 'summary', '')))}</td><td>{cost}</td></tr>"
+        )
     return "<table border='1' cellpadding='5' cellspacing='0'>" + "".join(rows) + "</table>"
 
 
-_STYLE = ("body{font-family:system-ui,Arial,sans-serif;margin:24px;color:#222}"
-          "h1{margin-bottom:4px}h2{margin-top:28px;border-bottom:1px solid #ddd}"
-          "img{max-width:100%;height:auto}table{border-collapse:collapse;font-size:13px}"
-          "th{background:#f4f4f4;text-align:left}")
+_STYLE = (
+    "body{font-family:system-ui,Arial,sans-serif;margin:24px;color:#222}"
+    "h1{margin-bottom:4px}h2{margin-top:28px;border-bottom:1px solid #ddd}"
+    "img{max-width:100%;height:auto}table{border-collapse:collapse;font-size:13px}"
+    "th{background:#f4f4f4;text-align:left}"
+)
 
 
 def _pick_link_cols(df, link_x, link_y):
@@ -165,7 +182,7 @@ def _linked_panel(letter, df, spans, carpet_col, multitrend_cols) -> str:
         if not cols:
             return ""
         span_list = []
-        for series in (spans or {}).values():        # spans = {label: boolean Series}
+        for series in (spans or {}).values():  # spans = {label: boolean Series}
             span_list.extend(mask_to_spans(series))
         return multitrend_svg_html(df, cols, spans=span_list)
     return ""
@@ -179,17 +196,30 @@ def _interactive_section(df, link_x, link_y) -> str:
     d = df[[x, y]].dropna()
     if len(d) < 2:
         return ""
-    frag = interactive_scatter_html(d[x], d[y], d.index,
-                                    xlabel=str(getattr(x, "name", x)),
-                                    ylabel=str(getattr(y, "name", y)))
+    frag = interactive_scatter_html(
+        d[x], d[y], d.index, xlabel=str(getattr(x, "name", x)), ylabel=str(getattr(y, "name", y))
+    )
     return "<h2>Interactive — brush to select</h2>" + frag
 
 
-def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "I"),
-                    title: str = "CAMBER dashboard", rank_by: str = "severity",
-                    top_n: int = 20, carpet_col=None, multitrend_cols=None,
-                    normalize: bool = True, rules=None, evidence: bool = True,
-                    interactive: bool = False, link_x=None, link_y=None) -> str:
+def build_dashboard(
+    df,
+    *,
+    findings=None,
+    spans=None,
+    sections=("A", "B", "E", "I"),
+    title: str = "CAMBER dashboard",
+    rank_by: str = "severity",
+    top_n: int = 20,
+    carpet_col=None,
+    multitrend_cols=None,
+    normalize: bool = True,
+    rules=None,
+    evidence: bool = True,
+    interactive: bool = False,
+    link_x=None,
+    link_y=None,
+) -> str:
     """Build a self-contained HTML dashboard string.
 
     ``df`` is a wide point/role frame (DatetimeIndex). ``findings`` are listed ranked beneath the
@@ -206,21 +236,30 @@ def build_dashboard(df, *, findings=None, spans=None, sections=("A", "B", "E", "
     ``evidence``, ``interactive``, ``link_x``, ``link_y``.
     """
     style = _STYLE + (LINK_STYLE if interactive else "")
-    parts = [f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
-             f"<title>{_html.escape(title)}</title></head><body>",
-             f"<h1>{_html.escape(title)}</h1>"]
+    parts = [
+        f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
+        f"<title>{_html.escape(title)}</title></head><body>",
+        f"<h1>{_html.escape(title)}</h1>",
+    ]
     if interactive:
-        parts.append(selection_bus_html())     # cross-panel selection bus (once, before the panels)
+        parts.append(selection_bus_html())  # cross-panel selection bus (once, before the panels)
     for letter in sections:
-        # when interactive, B (multitrend) and E (carpet) render as inline SVG that highlights on the
-        # brushed selection; A and I stay static PNG. Empty/degenerate SVG falls back to the PNG.
+        # when interactive, B (multitrend) and E (carpet) render as inline SVG that highlights on
+        # the brushed selection; A and I stay static PNG. Empty/degenerate SVG falls back to the
+        # PNG.
         svg = _linked_panel(letter, df, spans, carpet_col, multitrend_cols) if interactive else ""
         title = _SECTION_TITLES.get(letter, letter)
         if svg:
             parts.append(f"<h2>{letter}. {title}</h2>{svg}")
         else:
-            img = _section_image(letter, df, spans=spans, carpet_col=carpet_col,
-                                 multitrend_cols=multitrend_cols, normalize=normalize)
+            img = _section_image(
+                letter,
+                df,
+                spans=spans,
+                carpet_col=carpet_col,
+                multitrend_cols=multitrend_cols,
+                normalize=normalize,
+            )
             parts.append(f"<h2>{letter}. {title}</h2><img src='{img}' alt='{title}'>")
     if interactive:
         parts.append(_interactive_section(df, link_x, link_y))

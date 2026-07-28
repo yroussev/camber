@@ -50,8 +50,9 @@ def impact_score(finding, *, magnitude_key: str | None = None) -> float:
     return sev * 1e9 + mag
 
 
-def rank_findings(findings, *, magnitude_key: str | None = None,
-                  actionable_only: bool = False) -> list:
+def rank_findings(
+    findings, *, magnitude_key: str | None = None, actionable_only: bool = False
+) -> list:
     """Rank findings worst-first. Returns :class:`Ranked` items with 1-based rank."""
     items = list(findings)
     if actionable_only:
@@ -66,9 +67,10 @@ def rank_findings(findings, *, magnitude_key: str | None = None,
                 mag = float(m)
         scored.append((impact_score(f, magnitude_key=magnitude_key), sev, mag, f))
     scored.sort(key=lambda t: -t[0])
-    return [Ranked(finding=f, severity=sev, magnitude=mag, score=round(s, 4),
-                   rank=i + 1)
-            for i, (s, sev, mag, f) in enumerate(scored)]
+    return [
+        Ranked(finding=f, severity=sev, magnitude=mag, score=round(s, 4), rank=i + 1)
+        for i, (s, sev, mag, f) in enumerate(scored)
+    ]
 
 
 @dataclass
@@ -80,22 +82,26 @@ class FaultRegister:
     (timestamp, integer, date string) stamped as first/last seen.
     """
 
-    _open: dict = field(default_factory=dict)   # fingerprint -> {site,equip,rule,first_seen,last_seen}
+    _open: dict = field(
+        default_factory=dict
+    )  # fingerprint -> {site,equip,rule,first_seen,last_seen}
 
     def open_faults(self) -> dict:
         """Snapshot of currently open faults keyed by fingerprint."""
         return dict(self._open)
 
-    def update(self, findings, *, site: str = "", run_id=None,
-               actionable=_ACTIONABLE) -> dict:
+    def update(self, findings, *, site: str = "", run_id=None, actionable=_ACTIONABLE) -> dict:
         """Fold in one run; return ``{"new":[...], "ongoing":[...], "resolved":[...]}``
         as lists of fingerprints."""
         now = {}
         for f in findings:
             if _attr(f, "severity", "info") in actionable:
                 fp = fingerprint(site, _attr(f, "equip", ""), _attr(f, "rule", ""))
-                now[fp] = {"site": site, "equip": _attr(f, "equip", ""),
-                           "rule": _attr(f, "rule", "")}
+                now[fp] = {
+                    "site": site,
+                    "equip": _attr(f, "equip", ""),
+                    "rule": _attr(f, "rule", ""),
+                }
         prev = set(self._open)
         cur = set(now)
         new, ongoing, resolved = cur - prev, cur & prev, prev - cur
@@ -105,8 +111,7 @@ class FaultRegister:
             self._open[fp]["last_seen"] = run_id
         for fp in resolved:
             del self._open[fp]
-        return {"new": sorted(new), "ongoing": sorted(ongoing),
-                "resolved": sorted(resolved)}
+        return {"new": sorted(new), "ongoing": sorted(ongoing), "resolved": sorted(resolved)}
 
 
 # --------------------------------------------------------------------------- #
@@ -122,13 +127,19 @@ class FaultRegister:
 # --------------------------------------------------------------------------- #
 
 CAUSE_CHAINS = [
-    ("overcool_reheat", ["supply_air_reset", "overcooling_min_flow",
-                         "reheat_minimization", "reheat_penalty",
-                         "simultaneous_heat_cool"]),
+    (
+        "overcool_reheat",
+        [
+            "supply_air_reset",
+            "overcooling_min_flow",
+            "reheat_minimization",
+            "reheat_penalty",
+            "simultaneous_heat_cool",
+        ],
+    ),
 ]
 # rule name -> (chain_id, position) where position 0 is the most upstream
-_CHAIN_POS = {rule: (cid, i)
-              for cid, rules in CAUSE_CHAINS for i, rule in enumerate(rules)}
+_CHAIN_POS = {rule: (cid, i) for cid, rules in CAUSE_CHAINS for i, rule in enumerate(rules)}
 
 
 @dataclass(frozen=True)
@@ -136,9 +147,9 @@ class RootCauseGroup:
     """A cluster of related findings on one equipment with a presumed root cause."""
 
     equip: str
-    primary_rule: str        # the most-upstream rule present (presumed root cause)
-    severity: str            # worst severity among the grouped findings
-    members: list            # findings, ordered root-cause first
+    primary_rule: str  # the most-upstream rule present (presumed root cause)
+    severity: str  # worst severity among the grouped findings
+    members: list  # findings, ordered root-cause first
     summary: str
 
 
@@ -150,9 +161,9 @@ def group_findings(findings, *, actionable_only: bool = True) -> list:
     cause. Unrelated findings each form their own single-member group. Groups are
     returned worst-severity first.
     """
-    items = [f for f in findings
-             if (not actionable_only)
-             or _attr(f, "severity", "info") in _ACTIONABLE]
+    items = [
+        f for f in findings if (not actionable_only) or _attr(f, "severity", "info") in _ACTIONABLE
+    ]
     buckets = {}
     for f in items:
         equip = _attr(f, "equip", "")
@@ -168,16 +179,25 @@ def group_findings(findings, *, actionable_only: bool = True) -> list:
     for (equip, _key), fs in buckets.items():
         fs_sorted = sorted(fs, key=_pos)
         primary = fs_sorted[0]
-        sev = max((_attr(f, "severity", "info") for f in fs),
-                  key=lambda s: SEVERITY_ORDER.get(s, 1))
+        sev = max(
+            (_attr(f, "severity", "info") for f in fs), key=lambda s: SEVERITY_ORDER.get(s, 1)
+        )
         others = [_attr(f, "rule", "") for f in fs_sorted[1:]]
         if others:
-            summary = (f"{equip}: likely root cause '{_attr(primary, 'rule', '')}' "
-                       f"with {len(others)} related symptom(s): {', '.join(others)}")
+            summary = (
+                f"{equip}: likely root cause '{_attr(primary, 'rule', '')}' "
+                f"with {len(others)} related symptom(s): {', '.join(others)}"
+            )
         else:
             summary = f"{equip}: {_attr(primary, 'rule', '')}"
-        groups.append(RootCauseGroup(
-            equip=equip, primary_rule=_attr(primary, "rule", ""), severity=sev,
-            members=fs_sorted, summary=summary))
+        groups.append(
+            RootCauseGroup(
+                equip=equip,
+                primary_rule=_attr(primary, "rule", ""),
+                severity=sev,
+                members=fs_sorted,
+                summary=summary,
+            )
+        )
     groups.sort(key=lambda g: (-SEVERITY_ORDER.get(g.severity, 1), -len(g.members)))
     return groups

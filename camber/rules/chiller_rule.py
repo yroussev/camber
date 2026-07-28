@@ -39,11 +39,14 @@ class ChillerEfficiency:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
-        res = analyze_chiller_efficiency(legacy, equip,
-                                         design_kw_per_ton=self.design_kw_per_ton)
+        res = analyze_chiller_efficiency(legacy, equip, design_kw_per_ton=self.design_kw_per_ton)
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need power, CHW flow, supply/return temp)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need power, CHW flow, supply/return temp)",
+            )
         ratio = res.kw_per_ton_median / res.design_kw_per_ton
         if ratio >= 1.5:
             severity = "fault"
@@ -63,8 +66,10 @@ class ChillerEfficiency:
                 "pct_hours_inefficient": res.pct_hours_inefficient,
                 "n_running": res.n_running,
             },
-            summary=(f"{equip}: chiller kW/ton median {res.kw_per_ton_median:.2f} "
-                     f"vs design {res.design_kw_per_ton:.2f} "
-                     f"({res.pct_hours_inefficient:.0f}% of loaded hours inefficient; "
-                     f"median load {res.tons_median:.0f} tons)"),
+            summary=(
+                f"{equip}: chiller kW/ton median {res.kw_per_ton_median:.2f} "
+                f"vs design {res.design_kw_per_ton:.2f} "
+                f"({res.pct_hours_inefficient:.0f}% of loaded hours inefficient; "
+                f"median load {res.tons_median:.0f} tons)"
+            ),
         )

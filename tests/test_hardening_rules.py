@@ -13,8 +13,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.rules.builtin import builtin_registry, is_fleet  # noqa: E402
 from camber.rules.base import Finding  # noqa: E402
+from camber.rules.builtin import builtin_registry, is_fleet  # noqa: E402
 
 _REG = builtin_registry()
 _NAMES = _REG.names()
@@ -32,11 +32,11 @@ def _frame(roles, kind):
     }[kind]
     n = len(idx)
     if kind == "all_nan":
-        vals = lambda: np.full(n, np.nan)          # noqa: E731
+        vals = lambda: np.full(n, np.nan)  # noqa: E731
     elif kind == "all_equal":
-        vals = lambda: np.full(n, 1.0)             # noqa: E731
+        vals = lambda: np.full(n, 1.0)  # noqa: E731
     else:
-        vals = lambda: np.arange(float(n))         # noqa: E731
+        vals = lambda: np.arange(float(n))  # noqa: E731
     return pd.DataFrame({r: vals() for r in roles}, index=idx)
 
 

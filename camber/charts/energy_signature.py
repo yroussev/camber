@@ -19,9 +19,17 @@ def _r2(model, T, y):
     return 1.0 - model.sse / sst if sst > 0 else float("nan")
 
 
-def energy_signature(T, y, model=None, *, ax=None, title: str | None = None,
-                     xlabel: str = "Outdoor air temperature (°F)", ylabel: str = "Energy",
-                     kinds=("2P", "3PC", "3PH", "4P", "5P")):
+def energy_signature(
+    T,
+    y,
+    model=None,
+    *,
+    ax=None,
+    title: str | None = None,
+    xlabel: str = "Outdoor air temperature (°F)",
+    ylabel: str = "Energy",
+    kinds=("2P", "3PC", "3PH", "4P", "5P"),
+):
     """Scatter energy vs temperature and overlay the change-point fit. Returns ``(ax, model)``.
 
     If ``model`` is None, the best model (by :func:`best_model`) is fit and overlaid. Change
@@ -38,8 +46,7 @@ def energy_signature(T, y, model=None, *, ax=None, title: str | None = None,
 
     ax.scatter(T, y, s=18, alpha=0.6, color="#3366cc", label="measured")
     grid = np.linspace(T.min(), T.max(), 200)
-    ax.plot(grid, model.predict(grid), color="#cc3333", lw=2.0,
-            label=f"{model.kind} fit")
+    ax.plot(grid, model.predict(grid), color="#cc3333", lw=2.0, label=f"{model.kind} fit")
     for cp in model.change_points:
         ax.axvline(float(cp), color="grey", lw=0.8, ls="--")
 

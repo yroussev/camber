@@ -19,10 +19,10 @@ class HeCMetrics:
 
     ahu_id: int
     n_intervals: int
-    n_considered: int          # after occupied_only filter
-    simultaneous_pct: float    # % with HeC>thr AND CC>thr
+    n_considered: int  # after occupied_only filter
+    simultaneous_pct: float  # % with HeC>thr AND CC>thr
     simultaneous_pct_oat_gt_65: float
-    median_overlap: float      # median min(HeC,CC) during overlap intervals
+    median_overlap: float  # median min(HeC,CC) during overlap intervals
     mean_overlap: float
 
     def as_dict(self):
@@ -54,8 +54,9 @@ def _occ_mask(df, ahu_id):
     return df[occ].astype(float) > 0.5
 
 
-def hec_metrics(df, ahu_id, *, threshold=5.0, occupied_only=False, oat_col=None,
-                cooling_cutoff_f=65.0) -> HeCMetrics:
+def hec_metrics(
+    df, ahu_id, *, threshold=5.0, occupied_only=False, oat_col=None, cooling_cutoff_f=65.0
+) -> HeCMetrics:
     """Compute the simultaneous-heating/cooling metrics for one AHU."""
     hec, cc, oat_col = _resolve(df, ahu_id, oat_col)
     sub = df[[hec, cc] + ([oat_col] if oat_col else [])].dropna()
@@ -94,8 +95,9 @@ def hec_metrics(df, ahu_id, *, threshold=5.0, occupied_only=False, oat_col=None,
     )
 
 
-def ahu_hec_scatter(df, ahu_id, *, threshold=5.0, occupied_only=False,
-                    color_by="oat", oat_col=None, ax=None):
+def ahu_hec_scatter(
+    df, ahu_id, *, threshold=5.0, occupied_only=False, color_by="oat", oat_col=None, ax=None
+):
     """Draw the heating-vs-cooling scatter. Returns (ax, HeCMetrics)."""
     import matplotlib.pyplot as plt
 
@@ -111,8 +113,7 @@ def ahu_hec_scatter(df, ahu_id, *, threshold=5.0, occupied_only=False,
         _, ax = plt.subplots(figsize=(6, 6))
 
     if color_by == "oat" and oat_col:
-        sc = ax.scatter(sub[hec], sub[cc], c=sub[oat_col], cmap="coolwarm",
-                        s=12, alpha=0.7)
+        sc = ax.scatter(sub[hec], sub[cc], c=sub[oat_col], cmap="coolwarm", s=12, alpha=0.7)
         ax.figure.colorbar(sc, ax=ax, label="OAT (°F)")
     else:
         ax.scatter(sub[hec], sub[cc], s=12, alpha=0.6, color="#3366cc")
@@ -120,19 +121,28 @@ def ahu_hec_scatter(df, ahu_id, *, threshold=5.0, occupied_only=False,
     # quadrant deadband lines + simultaneous-H/C region shading
     ax.axvline(threshold, color="grey", lw=0.7, ls="--")
     ax.axhline(threshold, color="grey", lw=0.7, ls="--")
-    ax.axhspan(threshold, 100, xmin=threshold / 100, xmax=1.0,
-               color="red", alpha=0.06)
+    ax.axhspan(threshold, 100, xmin=threshold / 100, xmax=1.0, color="red", alpha=0.06)
 
-    m = hec_metrics(df, ahu_id, threshold=threshold, occupied_only=occupied_only,
-                    oat_col=oat_col)
+    m = hec_metrics(df, ahu_id, threshold=threshold, occupied_only=occupied_only, oat_col=oat_col)
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
     ax.set_aspect("equal")
     ax.set_xlabel("Heating-coil valve (% open)")
     ax.set_ylabel("Cooling-coil valve (% open)")
-    ax.set_title(f"AHU{ahu_id} simultaneous heating/cooling\n"
-                 f"{m.simultaneous_pct:.1f}% of intervals in fault region "
-                 f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F)")
-    ax.text(0.97, 0.97, "simultaneous\nH + C", transform=ax.transAxes,
-            ha="right", va="top", color="red", fontsize=9, alpha=0.8)
+    ax.set_title(
+        f"AHU{ahu_id} simultaneous heating/cooling\n"
+        f"{m.simultaneous_pct:.1f}% of intervals in fault region "
+        f"({m.simultaneous_pct_oat_gt_65:.1f}% at OAT>65°F)"
+    )
+    ax.text(
+        0.97,
+        0.97,
+        "simultaneous\nH + C",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        color="red",
+        fontsize=9,
+        alpha=0.8,
+    )
     return ax, m

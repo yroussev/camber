@@ -63,11 +63,12 @@ def history_to_series(records) -> pd.Series:
     raw_ts, raw_val = [], []
     for r in records:
         if isinstance(r, (tuple, list)) and len(r) >= 2:
-            raw_ts.append(r[0]); raw_val.append(r[1])
+            raw_ts.append(r[0])
+            raw_val.append(r[1])
         else:
             raw_ts.append(getattr(r, "SourceTimestamp", None))
             raw_val.append(getattr(getattr(r, "Value", None), "Value", None))
-    idx = parse_timestamps(raw_ts)                        # batch, multi-format
+    idx = parse_timestamps(raw_ts)  # batch, multi-format
     vals = pd.to_numeric(pd.Series(raw_val), errors="coerce")
     pairs = [(t, float(v)) for t, v in zip(idx, vals) if pd.notna(t) and pd.notna(v)]
     if not pairs:
@@ -82,6 +83,7 @@ class _AsyncuaClient:  # pragma: no cover - exercised only against a live server
 
     def __init__(self, url: str, security: OpcUaSecurity | None = None):
         from asyncua.sync import Client
+
         self._c = Client(url)
         if security:
             if security.security_string:
@@ -120,8 +122,9 @@ class OpcUaSource:
     (+ optional :class:`OpcUaSecurity`).
     """
 
-    def __init__(self, points, *, url: str | None = None,
-                 security: OpcUaSecurity | None = None, client=None):
+    def __init__(
+        self, points, *, url: str | None = None, security: OpcUaSecurity | None = None, client=None
+    ):
         self._points = {p.name: p for p in points}
         self._url = url
         self._security = security
@@ -132,8 +135,10 @@ class OpcUaSource:
             try:
                 import asyncua  # noqa: F401
             except Exception as e:  # noqa: BLE001
-                raise ImportError('the OPC-UA adapter needs the optional extra: '
-                                  'pip install "camber-toolkit[opcua]"') from e
+                raise ImportError(
+                    "the OPC-UA adapter needs the optional extra: "
+                    'pip install "camber-toolkit[opcua]"'
+                ) from e
             if not self._url:
                 raise ValueError("OpcUaSource needs a url (or an injected client)")
             self._client = _AsyncuaClient(self._url, self._security)
@@ -158,8 +163,9 @@ class OpcUaSource:
     def read_history(self, name: str, *, start, end) -> pd.Series:
         """Read a node's historized values over [start, end] into a Series (read-only)."""
         client = self._require_client()
-        recs = client.read_history(self._points[name].node_id,
-                                   pd.Timestamp(start), pd.Timestamp(end))
+        recs = client.read_history(
+            self._points[name].node_id, pd.Timestamp(start), pd.Timestamp(end)
+        )
         s = history_to_series(recs)
         s.name = name
         return s
@@ -171,7 +177,7 @@ class OpcUaSource:
             snap = self.read_snapshot(names)
             return pd.DataFrame([snap], index=pd.DatetimeIndex([pd.Timestamp.now()]))
         cols = {}
-        for n in (names or self._points):
+        for n in names or self._points:
             if n not in self._points:
                 continue
             s = self.read_history(n, start=start, end=end)

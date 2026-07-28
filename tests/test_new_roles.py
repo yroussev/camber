@@ -1,5 +1,6 @@
 """Role-table consistency: every role has a Haystack hint, and the 0.5 packaged/DX/refrigerant
-roles are fully wired (bounds + hint + status classification) so no interop surface silently regresses.
+roles are fully wired (bounds + hint + status classification) so no interop surface silently
+regresses.
 """
 
 import os
@@ -7,13 +8,20 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.model.roles import Role, HAYSTACK_HINT, STATUS_ROLES  # noqa: E402
+from camber.model.roles import HAYSTACK_HINT, STATUS_ROLES, Role  # noqa: E402
 from camber.sensorhealth import PHYSICAL_BOUNDS  # noqa: E402
 
 _NEW_ROLES = [
-    Role.COMPRESSOR_STATUS, Role.COMPRESSOR_STAGE, Role.CONDENSER_FAN_STATUS, Role.HEAT_STAGE,
-    Role.REVERSING_VALVE_CMD, Role.FILTER_DIFF_PRESS, Role.SUPPLY_AIR_HUMIDITY,
-    Role.RETURN_AIR_HUMIDITY, Role.COND_APPROACH_TEMP, Role.EVAP_APPROACH_TEMP,
+    Role.COMPRESSOR_STATUS,
+    Role.COMPRESSOR_STAGE,
+    Role.CONDENSER_FAN_STATUS,
+    Role.HEAT_STAGE,
+    Role.REVERSING_VALVE_CMD,
+    Role.FILTER_DIFF_PRESS,
+    Role.SUPPLY_AIR_HUMIDITY,
+    Role.RETURN_AIR_HUMIDITY,
+    Role.COND_APPROACH_TEMP,
+    Role.EVAP_APPROACH_TEMP,
 ]
 
 

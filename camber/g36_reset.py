@@ -23,27 +23,29 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
 
 
 @dataclass
 class TRParams:
     """Trim-&-Respond parameters (G36 §5.1.14). Signs encode direction:
     SP_trim and SP_res are opposite-signed; SP_res_max bounds one response step."""
-    sp0: float          # initial setpoint
+
+    sp0: float  # initial setpoint
     sp_min: float
     sp_max: float
-    ignored: int        # I: requests ignored before responding
-    sp_trim: float      # trim per cycle (toward the energy-saving direction)
-    sp_res: float       # response per request (toward meeting demand)
-    sp_res_max: float   # max response magnitude per cycle (same sign as sp_res)
+    ignored: int  # I: requests ignored before responding
+    sp_trim: float  # trim per cycle (toward the energy-saving direction)
+    sp_res: float  # response per request (toward meeting demand)
+    sp_res_max: float  # max response magnitude per cycle (same sign as sp_res)
 
 
 # Default parameter sets from G36 tables (converted to degF / in. w.c.).
-SAT_TR = TRParams(sp0=65.0, sp_min=55.0, sp_max=65.0, ignored=2,
-                  sp_trim=+0.2, sp_res=-0.3, sp_res_max=-1.0)        # Table 5.16.2.2
-STATIC_TR = TRParams(sp0=0.5, sp_min=0.1, sp_max=1.5, ignored=2,
-                     sp_trim=-0.05, sp_res=+0.06, sp_res_max=+0.13)  # Table 5.16.1.2
+SAT_TR = TRParams(
+    sp0=65.0, sp_min=55.0, sp_max=65.0, ignored=2, sp_trim=+0.2, sp_res=-0.3, sp_res_max=-1.0
+)  # Table 5.16.2.2
+STATIC_TR = TRParams(
+    sp0=0.5, sp_min=0.1, sp_max=1.5, ignored=2, sp_trim=-0.05, sp_res=+0.06, sp_res_max=+0.13
+)  # Table 5.16.1.2
 
 
 def tr_step(sp: float, requests: int, p: TRParams) -> float:
@@ -76,8 +78,7 @@ def tr_simulate(requests, p: TRParams) -> np.ndarray:
     return out
 
 
-def oat_sat_setpoint(oat, *, min_clg_sat=55.0, t_max=65.0,
-                     oat_min=60.0, oat_max=70.0):
+def oat_sat_setpoint(oat, *, min_clg_sat=55.0, t_max=65.0, oat_min=60.0, oat_max=70.0):
     """OAT-based SAT setpoint map (G36 §5.16.2.2.b).
 
     SAT setpoint = min_clg_sat at OAT >= oat_max, rising linearly to ``t_max`` at
@@ -92,8 +93,8 @@ def oat_sat_setpoint(oat, *, min_clg_sat=55.0, t_max=65.0,
 
 # ---- zone reset-request generation (G36 §5.14.8) ----
 
-def cooling_sat_requests(zone_temp, cool_sp, cooling_loop=None, *,
-                         hi_f=5.0, mid_f=3.0):
+
+def cooling_sat_requests(zone_temp, cool_sp, cooling_loop=None, *, hi_f=5.0, mid_f=3.0):
     """SAT reset requests from one zone (§5.14.8.1).
 
     3 requests if zone temp exceeds cooling setpoint by >= hi_f (5F);
@@ -133,8 +134,8 @@ class SATResetComplianceResult:
 
     equip: str
     n: int
-    pct_below_g36_target: float    # % hours actual SAT below the G36 OAT-reset target
-    mean_gap_f: float              # mean (G36 target - actual SAT), degF (positive = too cold)
+    pct_below_g36_target: float  # % hours actual SAT below the G36 OAT-reset target
+    mean_gap_f: float  # mean (G36 target - actual SAT), degF (positive = too cold)
     actual_sat_median: float
     g36_target_median: float
     coverage_start: str
@@ -143,11 +144,13 @@ class SATResetComplianceResult:
     def as_dict(self):
         """Return the result as a plain dict."""
         from dataclasses import asdict
+
         return asdict(self)
 
 
-def sat_reset_compliance(df, equip, *, sat_col="SAT", oat_col="OAT",
-                         tol_f=1.0, **reset_kwargs) -> SATResetComplianceResult | None:
+def sat_reset_compliance(
+    df, equip, *, sat_col="SAT", oat_col="OAT", tol_f=1.0, **reset_kwargs
+) -> SATResetComplianceResult | None:
     """Compare actual SAT to the G36 OAT-based reset target.
 
     Flags how often the plant holds SAT colder than G36 would (a reheat/energy
@@ -162,13 +165,15 @@ def sat_reset_compliance(df, equip, *, sat_col="SAT", oat_col="OAT",
         return None
     target = oat_sat_setpoint(w[oat_col].values, **reset_kwargs)
     actual = w[sat_col].values
-    gap = target - actual                       # positive => actual colder than target
+    gap = target - actual  # positive => actual colder than target
     below = gap > tol_f
     return SATResetComplianceResult(
-        equip=equip, n=int(len(w)),
+        equip=equip,
+        n=int(len(w)),
         pct_below_g36_target=round(100.0 * float(below.mean()), 1),
         mean_gap_f=round(float(gap.mean()), 2),
         actual_sat_median=round(float(np.median(actual)), 1),
         g36_target_median=round(float(np.median(target)), 1),
-        coverage_start=str(df.index.min()), coverage_end=str(df.index.max()),
+        coverage_start=str(df.index.min()),
+        coverage_end=str(df.index.max()),
     )

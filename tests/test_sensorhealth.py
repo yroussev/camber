@@ -10,8 +10,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.model.roles import Role  # noqa: E402
 from camber.sensorhealth import (  # noqa: E402
-    PHYSICAL_BOUNDS, frame_sensor_health, mixing_consistency,
-    range_violation_frac, sensor_trust, trusted_roles, untrusted_roles,
+    PHYSICAL_BOUNDS,
+    frame_sensor_health,
+    mixing_consistency,
+    range_violation_frac,
+    sensor_trust,
+    trusted_roles,
+    untrusted_roles,
 )
 
 
@@ -23,15 +28,15 @@ def _clean_temp(n=24 * 14, base=75.0, amp=15.0):
     """A smooth, healthy temperature sensor (diurnal swing + tiny noise)."""
     rng = np.random.default_rng(0)
     h = np.arange(n)
-    return pd.Series(base + amp * np.sin(h / 24 * 2 * np.pi) + rng.normal(0, 0.4, n),
-                     index=_idx(n))
+    return pd.Series(base + amp * np.sin(h / 24 * 2 * np.pi) + rng.normal(0, 0.4, n), index=_idx(n))
 
 
 # --- physical range ----------------------------------------------------------- #
 
+
 def test_range_violation_catches_error_sentinels():
     s = _clean_temp().copy()
-    s.iloc[::10] = -999.0                         # 10% BAS error sentinels
+    s.iloc[::10] = -999.0  # 10% BAS error sentinels
     frac = range_violation_frac(s, Role.OAT)
     assert 0.08 < frac < 0.12
 
@@ -45,6 +50,7 @@ def test_range_violation_clean_and_unbounded():
 
 # --- per-sensor trust --------------------------------------------------------- #
 
+
 def test_clean_sensor_is_trusted():
     t = sensor_trust(_clean_temp(), Role.OAT)
     assert t.verdict == "trusted"
@@ -53,7 +59,7 @@ def test_clean_sensor_is_trusted():
 
 def test_out_of_range_sensor_untrusted():
     s = _clean_temp().copy()
-    s.iloc[::5] = -999.0                          # 20% impossible readings
+    s.iloc[::5] = -999.0  # 20% impossible readings
     t = sensor_trust(s, Role.OAT)
     assert "out_of_range" in t.flags
     assert t.verdict in ("suspect", "untrusted")
@@ -77,10 +83,11 @@ def test_constant_setpoint_not_flagged_stuck():
 
 # --- frame roll-up + gate ----------------------------------------------------- #
 
+
 def test_frame_health_and_trusted_roles():
     good = _clean_temp()
     bad = _clean_temp().copy()
-    bad.iloc[::3] = -999.0                        # heavily corrupted
+    bad.iloc[::3] = -999.0  # heavily corrupted
     frame = pd.DataFrame({Role.OAT: good, Role.RETURN_AIR_TEMP: bad})
     health = frame_sensor_health(frame)
     assert health[Role.OAT].verdict == "trusted"
@@ -90,31 +97,37 @@ def test_frame_health_and_trusted_roles():
     assert Role.OAT in keep and Role.RETURN_AIR_TEMP not in keep
 
     # the runner gate's helper: which *required* roles are below the bar
-    bad = untrusted_roles(frame, (Role.OAT, Role.RETURN_AIR_TEMP, Role.SPACE_TEMP),
-                          min_trust=0.5)
-    assert bad == [Role.RETURN_AIR_TEMP]          # OAT trusted; SPACE_TEMP absent -> skipped
+    bad = untrusted_roles(frame, (Role.OAT, Role.RETURN_AIR_TEMP, Role.SPACE_TEMP), min_trust=0.5)
+    assert bad == [Role.RETURN_AIR_TEMP]  # OAT trusted; SPACE_TEMP absent -> skipped
 
 
 # --- cross-sensor consistency ------------------------------------------------- #
 
+
 def test_mixing_consistency_ok():
     n = 24 * 14
-    f = pd.DataFrame({
-        Role.OAT: np.full(n, 90.0),
-        Role.RETURN_AIR_TEMP: np.full(n, 74.0),
-        Role.MIXED_AIR_TEMP: np.full(n, 80.0),   # between OAT and RAT
-    }, index=_idx(n))
+    f = pd.DataFrame(
+        {
+            Role.OAT: np.full(n, 90.0),
+            Role.RETURN_AIR_TEMP: np.full(n, 74.0),
+            Role.MIXED_AIR_TEMP: np.full(n, 80.0),  # between OAT and RAT
+        },
+        index=_idx(n),
+    )
     r = mixing_consistency(f)
     assert r.severity == "ok" and r.violation_frac == 0.0
 
 
 def test_mixing_consistency_fault_on_swapped_sensor():
     n = 24 * 14
-    f = pd.DataFrame({
-        Role.OAT: np.full(n, 90.0),
-        Role.RETURN_AIR_TEMP: np.full(n, 74.0),
-        Role.MIXED_AIR_TEMP: np.full(n, 110.0),  # impossibly hotter than both
-    }, index=_idx(n))
+    f = pd.DataFrame(
+        {
+            Role.OAT: np.full(n, 90.0),
+            Role.RETURN_AIR_TEMP: np.full(n, 74.0),
+            Role.MIXED_AIR_TEMP: np.full(n, 110.0),  # impossibly hotter than both
+        },
+        index=_idx(n),
+    )
     r = mixing_consistency(f)
     assert r.severity == "fault" and r.violation_frac > 0.95
 

@@ -22,11 +22,11 @@ class CusumState:
     """Snapshot of the online savings CUSUM after an update."""
 
     n: int
-    last_residual: float        # predicted − actual (positive = savings)
-    cusum: float                # running Σ residual (net savings to date)
-    high: float                 # one-sided tabular accumulator (sustained savings)
-    low: float                  # one-sided tabular accumulator (sustained waste)
-    alarm: str | None           # "savings" | "waste" | None, when a tabular limit is crossed
+    last_residual: float  # predicted − actual (positive = savings)
+    cusum: float  # running Σ residual (net savings to date)
+    high: float  # one-sided tabular accumulator (sustained savings)
+    low: float  # one-sided tabular accumulator (sustained waste)
+    alarm: str | None  # "savings" | "waste" | None, when a tabular limit is crossed
 
 
 class OnlineCusum:
@@ -54,7 +54,7 @@ class OnlineCusum:
 
     def update(self, driver, actual) -> CusumState:
         raw = self._predict(driver)
-        pred = float(np.asarray(raw).reshape(-1)[0])    # accept scalar or length-1 array
+        pred = float(np.asarray(raw).reshape(-1)[0])  # accept scalar or length-1 array
         resid = pred - float(actual)
         self.n += 1
         self.cusum += resid
@@ -67,8 +67,14 @@ class OnlineCusum:
                 alarm = "savings"
             elif self.low >= self.limit:
                 alarm = "waste"
-        return CusumState(n=self.n, last_residual=round(resid, 4), cusum=round(self.cusum, 4),
-                          high=round(self.high, 4), low=round(self.low, 4), alarm=alarm)
+        return CusumState(
+            n=self.n,
+            last_residual=round(resid, 4),
+            cusum=round(self.cusum, 4),
+            high=round(self.high, 4),
+            low=round(self.low, 4),
+            alarm=alarm,
+        )
 
 
 @dataclass
@@ -77,9 +83,9 @@ class AnomalyState:
 
     n: int
     value: float
-    z: float                    # robust z-score of the latest value vs the window (NaN until warm)
+    z: float  # robust z-score of the latest value vs the window (NaN until warm)
     is_anomaly: bool
-    warm: bool                  # whether the window has enough history to judge
+    warm: bool  # whether the window has enough history to judge
 
 
 class RollingAnomaly:
@@ -105,10 +111,15 @@ class RollingAnomaly:
             arr = np.asarray(self._buf, dtype=float)
             med = float(np.median(arr))
             mad = float(np.median(np.abs(arr - med)))
-            scale = 1.4826 * mad                     # MAD → σ for a normal distribution
+            scale = 1.4826 * mad  # MAD → σ for a normal distribution
             if scale > 0:
                 z = (v - med) / scale
                 is_anom = abs(z) >= self.k
-        self._buf.append(v)                          # the latest joins the window after judging
-        return AnomalyState(n=len(self._buf), value=v, z=round(z, 3) if z == z else float("nan"),
-                            is_anomaly=is_anom, warm=warm)
+        self._buf.append(v)  # the latest joins the window after judging
+        return AnomalyState(
+            n=len(self._buf),
+            value=v,
+            z=round(z, 3) if z == z else float("nan"),
+            is_anomaly=is_anom,
+            warm=warm,
+        )

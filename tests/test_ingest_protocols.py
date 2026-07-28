@@ -14,36 +14,47 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.ingest.bacnet import (  # noqa: E402
-    BacnetPoint, BacnetSource, BacnetTarget, trendlog_to_series,
+    BacnetPoint,
+    BacnetSource,
+    BacnetTarget,
+    trendlog_to_series,
 )
 from camber.ingest.modbus import ModbusPoint, ModbusSource, decode_registers  # noqa: E402
 from camber.ingest.mqtt_stream import MqttPoint, MqttStreamSource, parse_payload  # noqa: E402
 
-
 # --------------------------------------------------------------------------- Modbus
 
+
 class _FakeRR:
-    def __init__(self, registers): self.registers = registers
-    def isError(self): return False
+    def __init__(self, registers):
+        self.registers = registers
+
+    def isError(self):
+        return False
 
 
 class _FakeModbusClient:
-    def __init__(self, table): self.table = table   # (kind, address) -> [registers]
+    def __init__(self, table):
+        self.table = table  # (kind, address) -> [registers]
+
     def read_holding_registers(self, address, count=1, slave=1):
         return _FakeRR(self.table[("holding", address)])
+
     def read_input_registers(self, address, count=1, slave=1):
         return _FakeRR(self.table[("input", address)])
 
 
 def test_decode_registers_16_and_32_bit():
     assert decode_registers([250], count=1, scale=0.1) == 25.0
-    assert decode_registers([1, 0], count=2) == 65536          # high word first
+    assert decode_registers([1, 0], count=2) == 65536  # high word first
     assert decode_registers([], count=1) != decode_registers([], count=1) or True  # NaN safe
 
 
 def test_modbus_snapshot_and_units():
-    pts = [ModbusPoint("ahu_sat", address=10, scale=0.1, unit="degF"),
-           ModbusPoint("ahu_flow", address=5, kind="input", count=2, unit="cfm")]
+    pts = [
+        ModbusPoint("ahu_sat", address=10, scale=0.1, unit="degF"),
+        ModbusPoint("ahu_flow", address=5, kind="input", count=2, unit="cfm"),
+    ]
     client = _FakeModbusClient({("holding", 10): [725], ("input", 5): [0, 1200]})
     src = ModbusSource(pts, client=client)
     assert set(src.point_names()) == {"ahu_sat", "ahu_flow"}
@@ -62,9 +73,10 @@ def test_modbus_poll_builds_series():
 
 
 def test_modbus_helpful_error_without_pymodbus():
-    src = ModbusSource([ModbusPoint("p", address=1)])   # no client injected
+    src = ModbusSource([ModbusPoint("p", address=1)])  # no client injected
     try:
         import pymodbus  # noqa: F401
+
         pytest.skip("pymodbus installed")
     except Exception:  # noqa: BLE001
         pass
@@ -74,19 +86,22 @@ def test_modbus_helpful_error_without_pymodbus():
 
 # --------------------------------------------------------------------------- MQTT
 
+
 def test_parse_payload_plain_and_json():
     assert parse_payload(b"21.5") == 21.5
     assert parse_payload('{"v": 3, "u": "kW"}', value_key="v") == 3.0
 
 
 def test_mqtt_ingest_buffers_and_shapes():
-    pts = [MqttPoint("bldg/ahu1/sat", "ahu1_sat", unit="degF"),
-           MqttPoint("bldg/ahu1/flow", "ahu1_flow", value_key="value")]
+    pts = [
+        MqttPoint("bldg/ahu1/sat", "ahu1_sat", unit="degF"),
+        MqttPoint("bldg/ahu1/flow", "ahu1_flow", value_key="value"),
+    ]
     src = MqttStreamSource(pts)
     assert src.ingest("bldg/ahu1/sat", b"55.0", ts="2024-01-01 00:00")
     assert src.ingest("bldg/ahu1/sat", b"56.0", ts="2024-01-01 00:01")
     assert src.ingest("bldg/ahu1/flow", '{"value": 900}', ts="2024-01-01 00:00")
-    assert not src.ingest("unmapped/topic", b"1.0")          # unknown topic ignored
+    assert not src.ingest("unmapped/topic", b"1.0")  # unknown topic ignored
     assert not src.ingest("bldg/ahu1/sat", b"not-a-number")  # bad payload ignored
     df = src.to_frame()
     assert list(df["ahu1_sat"].dropna()) == [55.0, 56.0]
@@ -99,13 +114,14 @@ def test_mqtt_resample():
     src.ingest("t", b"10", ts="2024-01-01 00:00")
     src.ingest("t", b"20", ts="2024-01-01 00:30")
     df = src.load_points(["p"], resample="1h")
-    assert df["p"].iloc[0] == 15.0                            # hourly mean of 10,20
+    assert df["p"].iloc[0] == 15.0  # hourly mean of 10,20
 
 
 def test_mqtt_helpful_error_without_paho():
     src = MqttStreamSource([MqttPoint("t", "p")])
     try:
         import paho.mqtt.client  # noqa: F401
+
         pytest.skip("paho-mqtt installed")
     except Exception:  # noqa: BLE001
         pass
@@ -115,13 +131,22 @@ def test_mqtt_helpful_error_without_paho():
 
 # --------------------------------------------------------------------------- BACnet
 
+
 def test_trendlog_to_series_pairs_and_objects():
-    s = trendlog_to_series([("2024-01-01 00:00", 1.0), ("2024-01-01 01:00", 2.0),
-                            ("bad-ts", 3.0), ("2024-01-01 01:00", 9.0)])  # dup -> last
+    s = trendlog_to_series(
+        [
+            ("2024-01-01 00:00", 1.0),
+            ("2024-01-01 01:00", 2.0),
+            ("bad-ts", 3.0),
+            ("2024-01-01 01:00", 9.0),
+        ]
+    )  # dup -> last
     assert list(s) == [1.0, 9.0] and len(s) == 2
 
     class _Rec:
-        def __init__(self, t, v): self.timestamp, self.value = t, v
+        def __init__(self, t, v):
+            self.timestamp, self.value = t, v
+
     s2 = trendlog_to_series([_Rec("2024-01-01", 5.0)])
     assert s2.iloc[0] == 5.0
 
@@ -129,6 +154,7 @@ def test_trendlog_to_series_pairs_and_objects():
 class _FakeBacnetClient:
     def read_trend_log(self, object_id):
         return [("2024-01-01 00:00", 70.0), ("2024-01-01 01:00", 71.0)]
+
     def read_present_value(self, object_id):
         return 72.0
 
@@ -144,20 +170,22 @@ def test_bacnet_source_reads_trendlog_and_snapshot():
 
 
 def test_bacnet_sc_target_validation():
-    BacnetTarget(address="10.0.0.5").validate()               # legacy ok
+    BacnetTarget(address="10.0.0.5").validate()  # legacy ok
     with pytest.raises(ValueError, match="address"):
-        BacnetTarget().validate()                             # nothing set
+        BacnetTarget().validate()  # nothing set
     with pytest.raises(ValueError, match="hub_uri, cert, key, ca"):
-        BacnetTarget(secure=True).validate()                  # SC needs certs + hub
+        BacnetTarget(secure=True).validate()  # SC needs certs + hub
     # full SC config validates
-    BacnetTarget(secure=True, hub_uri="wss://hub:443/", cert="c.pem", key="k.pem",
-                 ca="ca.pem").validate()
+    BacnetTarget(
+        secure=True, hub_uri="wss://hub:443/", cert="c.pem", key="k.pem", ca="ca.pem"
+    ).validate()
 
 
 def test_bacnet_helpful_error_without_bacpypes():
     src = BacnetSource([BacnetPoint("p", ("trendLog", 1))], BacnetTarget(address="1.2.3.4"))
     try:
         import bacpypes3  # noqa: F401
+
         pytest.skip("bacpypes3 installed")
     except Exception:  # noqa: BLE001
         pass
@@ -168,20 +196,32 @@ def test_bacnet_helpful_error_without_bacpypes():
 # --------------------------------------------------------------------------- OPC-UA
 
 from camber.ingest.opcua import (  # noqa: E402
-    OpcUaPoint, OpcUaSecurity, OpcUaSource, history_to_series,
+    OpcUaPoint,
+    OpcUaSecurity,
+    OpcUaSource,
+    history_to_series,
 )
 
 
 def test_history_to_series_pairs_and_datavalues():
-    s = history_to_series([("2024-01-01 00:00", 1.0), ("2024-01-01 01:00", 2.0),
-                           ("nope", 3.0), ("2024-01-01 01:00", 9.0)])     # dup -> last
+    s = history_to_series(
+        [
+            ("2024-01-01 00:00", 1.0),
+            ("2024-01-01 01:00", 2.0),
+            ("nope", 3.0),
+            ("2024-01-01 01:00", 9.0),
+        ]
+    )  # dup -> last
     assert list(s) == [1.0, 9.0] and len(s) == 2
 
     class _Variant:
-        def __init__(self, v): self.Value = v
+        def __init__(self, v):
+            self.Value = v
 
     class _DataValue:
-        def __init__(self, ts, v): self.SourceTimestamp, self.Value = ts, _Variant(v)
+        def __init__(self, ts, v):
+            self.SourceTimestamp, self.Value = ts, _Variant(v)
+
     s2 = history_to_series([_DataValue("2024-01-01", 5.0)])
     assert s2.iloc[0] == 5.0
 
@@ -189,13 +229,16 @@ def test_history_to_series_pairs_and_datavalues():
 class _FakeOpcUaClient:
     def read_value(self, node_id):
         return {"ns=2;s=SAT": 72.5, "ns=2;s=FLOW": 1200}[node_id]
+
     def read_history(self, node_id, start, end):
         return [("2024-01-01 00:00", 70.0), ("2024-01-01 01:00", 71.0)]
 
 
 def test_opcua_snapshot_and_units():
-    pts = [OpcUaPoint("sat", "ns=2;s=SAT", unit="degF"),
-           OpcUaPoint("flow", "ns=2;s=FLOW", unit="cfm")]
+    pts = [
+        OpcUaPoint("sat", "ns=2;s=SAT", unit="degF"),
+        OpcUaPoint("flow", "ns=2;s=FLOW", unit="cfm"),
+    ]
     src = OpcUaSource(pts, client=_FakeOpcUaClient())
     assert set(src.point_names()) == {"sat", "flow"}
     assert src.units() == {"sat": "degF", "flow": "cfm"}
@@ -212,16 +255,18 @@ def test_opcua_history_and_load_points_window():
 
 def test_opcua_load_points_snapshot_without_window():
     src = OpcUaSource([OpcUaPoint("sat", "ns=2;s=SAT")], client=_FakeOpcUaClient())
-    df = src.load_points(["sat"])                       # no window -> one-row snapshot
+    df = src.load_points(["sat"])  # no window -> one-row snapshot
     assert len(df) == 1 and df["sat"].iloc[0] == 72.5
 
 
 def test_opcua_requires_url_or_client():
-    src = OpcUaSource([OpcUaPoint("sat", "ns=2;s=SAT")])    # neither client nor url
+    src = OpcUaSource([OpcUaPoint("sat", "ns=2;s=SAT")])  # neither client nor url
     try:
         import asyncua  # noqa: F401
+
         # asyncua present -> the missing-url ValueError is what surfaces
         import pytest as _pt
+
         with _pt.raises(ValueError, match="url"):
             src.read_snapshot()
     except ImportError:
@@ -232,12 +277,14 @@ def test_opcua_requires_url_or_client():
 def test_opcua_security_dataclass_defaults():
     sec = OpcUaSecurity()
     assert sec.security_string is None and sec.username is None
-    sec2 = OpcUaSecurity(security_string="Basic256Sha256,SignAndEncrypt,c.der,k.pem",
-                         username="ro", password="x")
+    sec2 = OpcUaSecurity(
+        security_string="Basic256Sha256,SignAndEncrypt,c.der,k.pem", username="ro", password="x"
+    )
     assert sec2.username == "ro"
 
 
 # --------------------------------------------------------------------------- read-only contract
+
 
 def test_adapters_reference_no_write_services():
     """Structural guard: the network adapters must not *reference* any write/command service.
@@ -251,9 +298,20 @@ def test_adapters_reference_no_write_services():
     import camber.ingest.modbus as mmod
     import camber.ingest.mqtt_stream as qmod
     import camber.ingest.opcua as omod
-    forbidden = {"WriteProperty", "write_register", "write_coil", "write_registers",
-                 "write_coils", "publish", "writeproperty",
-                 "write_value", "write_values", "set_value", "write_attribute"}
+
+    forbidden = {
+        "WriteProperty",
+        "write_register",
+        "write_coil",
+        "write_registers",
+        "write_coils",
+        "publish",
+        "writeproperty",
+        "write_value",
+        "write_values",
+        "set_value",
+        "write_attribute",
+    }
     for mod in (bmod, mmod, qmod, omod):
         tree = ast.parse(open(mod.__file__, encoding="utf-8").read())
         names = set()

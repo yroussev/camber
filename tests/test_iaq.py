@@ -28,20 +28,21 @@ def _co2(ppm, outdoor=None):
 
 # --- diagnostic --------------------------------------------------------------- #
 
+
 def test_under_ventilated_flagged():
-    r = analyze_co2_ventilation(_co2(1400), "VAV-1")     # rise ~980 ppm > 700
+    r = analyze_co2_ventilation(_co2(1400), "VAV-1")  # rise ~980 ppm > 700
     assert r is not None
     assert r.under_vent_pct > 95 and r.over_vent_pct == 0.0
     assert r.co2_p95_ppm == 1400
 
 
 def test_adequate_ventilation():
-    r = analyze_co2_ventilation(_co2(900), "VAV-1")      # rise ~480: neither high nor low
+    r = analyze_co2_ventilation(_co2(900), "VAV-1")  # rise ~480: neither high nor low
     assert r.under_vent_pct == 0.0 and r.over_vent_pct == 0.0
 
 
 def test_over_ventilated_flagged():
-    r = analyze_co2_ventilation(_co2(500), "VAV-1")      # rise ~80 < 150 -> over-ventilated
+    r = analyze_co2_ventilation(_co2(500), "VAV-1")  # rise ~80 < 150 -> over-ventilated
     assert r.over_vent_pct > 95 and r.under_vent_pct == 0.0
 
 
@@ -56,17 +57,17 @@ def test_only_occupied_hours_counted():
     co2 = np.full(n, 500.0)
     idx = _idx(n)
     night = (idx.hour < 7) | (idx.hour >= 18)
-    co2[night] = 1800.0                                  # high CO2 only at night
+    co2[night] = 1800.0  # high CO2 only at night
     r = analyze_co2_ventilation(pd.DataFrame({"CO2": co2}, index=idx), "VAV-1")
-    assert r.under_vent_pct == 0.0                       # night excluded -> not flagged
+    assert r.under_vent_pct == 0.0  # night excluded -> not flagged
 
 
 def test_insufficient_data_returns_none():
-    assert analyze_co2_ventilation(pd.DataFrame({"X": [1, 2, 3]}, index=_idx(3)),
-                                   "VAV-1") is None
+    assert analyze_co2_ventilation(pd.DataFrame({"X": [1, 2, 3]}, index=_idx(3)), "VAV-1") is None
 
 
 # --- rule wrapper ------------------------------------------------------------- #
+
 
 def test_rule_severity():
     assert isinstance(CO2Ventilation(), Rule)
@@ -74,9 +75,9 @@ def test_rule_severity():
     def frame(ppm):
         return pd.DataFrame({Role.CO2: np.full(24 * 14, float(ppm))}, index=_idx())
 
-    assert CO2Ventilation().analyze("VAV-1", frame(1400)).severity == "fault"   # under-vent
+    assert CO2Ventilation().analyze("VAV-1", frame(1400)).severity == "fault"  # under-vent
     assert CO2Ventilation().analyze("VAV-1", frame(900)).severity == "ok"
-    assert CO2Ventilation().analyze("VAV-1", frame(480)).severity == "warn"     # over-vent
+    assert CO2Ventilation().analyze("VAV-1", frame(480)).severity == "warn"  # over-vent
 
 
 def test_rule_missing_role_info():

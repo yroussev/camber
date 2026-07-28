@@ -26,7 +26,8 @@ from .base import Finding
 
 
 class ReheatMinimization:
-    """Detects high-flow reheat that violates G36 dual-max reheat minimization (ASHRAE Guideline 36 §5.6.5)."""
+    """Detects high-flow reheat that violates G36 dual-max reheat minimization
+    (ASHRAE Guideline 36 §5.6.5)."""
 
     name = "reheat_minimization_g36"
     roles_required = (Role.HEAT_VALVE, Role.AIRFLOW, Role.AIRFLOW_SP)
@@ -41,8 +42,12 @@ class ReheatMinimization:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         need = (Role.HEAT_VALVE, Role.AIRFLOW, Role.AIRFLOW_SP)
         if any(r not in frame.columns for r in need):
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="needs reheat valve + airflow + airflow setpoint")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="needs reheat valve + airflow + airflow setpoint",
+            )
         w = frame.copy()
         warm = w[Role.WARMUP] if Role.WARMUP in w.columns else None
         cool = w[Role.COOLDOWN] if Role.COOLDOWN in w.columns else None
@@ -50,14 +55,17 @@ class ReheatMinimization:
         w = w.dropna(subset=[Role.HEAT_VALVE, Role.AIRFLOW, Role.AIRFLOW_SP])
         n = len(w)
         if n == 0:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="no occupied data")
+            return Finding(rule=self.name, equip=equip, severity="info", summary="no occupied data")
         reheating = w[Role.HEAT_VALVE] > self.valve_thr
         n_reheat = int(reheating.sum())
         if n_reheat == 0:
-            return Finding(rule=self.name, equip=equip, severity="ok",
-                           metrics={"reheat_hours_pct": 0.0, "n_considered": n},
-                           summary=f"{equip}: no reheating in occupied hours")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="ok",
+                metrics={"reheat_hours_pct": 0.0, "n_considered": n},
+                summary=f"{equip}: no reheating in occupied hours",
+            )
         above_min = w[Role.AIRFLOW] > w[Role.AIRFLOW_SP] * self.flow_margin
         # G36 violation: reheating AND airflow above minimum (should be at min until
         # deep heating demand)
@@ -65,14 +73,18 @@ class ReheatMinimization:
         viol_pct = round(100.0 * int(violation.sum()) / n_reheat, 1)  # of reheat hours
         severity = "fault" if viol_pct >= 40.0 else ("warn" if viol_pct >= 15.0 else "ok")
         return Finding(
-            rule=self.name, equip=equip, severity=severity,
+            rule=self.name,
+            equip=equip,
+            severity=severity,
             metrics={
                 "reheat_hours_pct": round(100.0 * n_reheat / n, 1),
-                "reheat_above_min_pct": viol_pct,   # of reheating hours
+                "reheat_above_min_pct": viol_pct,  # of reheating hours
                 "n_reheat_hours": n_reheat,
                 "n_considered": n,
             },
-            summary=(f"{equip}: reheating {100.0*n_reheat/n:.0f}% of occupied hours; "
-                     f"of those, {viol_pct:.0f}% with airflow above minimum "
-                     f"(G36 §5.6.5 would hold min flow until deep heating demand)"),
+            summary=(
+                f"{equip}: reheating {100.0 * n_reheat / n:.0f}% of occupied hours; "
+                f"of those, {viol_pct:.0f}% with airflow above minimum "
+                f"(G36 §5.6.5 would hold min flow until deep heating demand)"
+            ),
         )

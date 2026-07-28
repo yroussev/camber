@@ -24,14 +24,21 @@ def test_to_brick_emits_prefixes_and_typing():
 
 def test_round_trip_direct_and_context_roles():
     roles_in = {
-        Role.OAT, Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP, Role.SUPPLY_AIR_TEMP,
-        Role.SPACE_TEMP, Role.OCCUPANCY,
-        Role.COOL_VALVE, Role.HEAT_VALVE, Role.OA_DAMPER,
-        Role.SUPPLY_FAN_SPEED, Role.SUPPLY_FAN_STATUS,
+        Role.OAT,
+        Role.MIXED_AIR_TEMP,
+        Role.RETURN_AIR_TEMP,
+        Role.SUPPLY_AIR_TEMP,
+        Role.SPACE_TEMP,
+        Role.OCCUPANCY,
+        Role.COOL_VALVE,
+        Role.HEAT_VALVE,
+        Role.OA_DAMPER,
+        Role.SUPPLY_FAN_SPEED,
+        Role.SUPPLY_FAN_STATUS,
     }
     ttl = to_brick("AHU_2", "AHU", roles_in)
     roles_out = set(roles_from_brick(ttl).values())
-    assert roles_out == roles_in       # export -> import recovers every role
+    assert roles_out == roles_in  # export -> import recovers every role
 
 
 def test_shared_supply_fan_part_groups_points():

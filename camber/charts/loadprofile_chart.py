@@ -17,15 +17,23 @@ import numpy as np
 import pandas as pd
 
 from ..loadprofile import (
-    daily_profile, load_duration, load_metrics, weekday_weekend_profiles,
+    daily_profile,
+    load_duration,
+    load_metrics,
+    weekday_weekend_profiles,
 )
-
-
 from ..timegrid import interval_hours
 
 
-def load_profile_chart(series: pd.Series, *, ax=None, split: bool = True, annotate: bool = True,
-                       title: str | None = None, ylabel: str = "kW"):
+def load_profile_chart(
+    series: pd.Series,
+    *,
+    ax=None,
+    split: bool = True,
+    annotate: bool = True,
+    title: str | None = None,
+    ylabel: str = "kW",
+):
     """Average load by hour-of-day. Returns ``(ax, LoadMetrics)``.
 
     ``split`` draws weekday vs weekend profiles (exposes schedule gaps); otherwise a single daily
@@ -39,13 +47,25 @@ def load_profile_chart(series: pd.Series, *, ax=None, split: bool = True, annota
     if split:
         wk, we = weekday_weekend_profiles(series)
         ax.plot(wk.index, wk.to_numpy(), color="#3366cc", lw=1.8, marker="o", ms=3, label="weekday")
-        ax.plot(we.index, we.to_numpy(), color="#ff7f0e", lw=1.6, ls="--", marker="s", ms=3,
-                label="weekend")
+        ax.plot(
+            we.index,
+            we.to_numpy(),
+            color="#ff7f0e",
+            lw=1.6,
+            ls="--",
+            marker="s",
+            ms=3,
+            label="weekend",
+        )
     else:
         dp = daily_profile(series)
-        ax.plot(dp.index, dp.to_numpy(), color="#3366cc", lw=1.8, marker="o", ms=3, label="daily avg")
+        ax.plot(
+            dp.index, dp.to_numpy(), color="#3366cc", lw=1.8, marker="o", ms=3, label="daily avg"
+        )
     if annotate:
-        ax.axhline(m.near_base, color="#2ca02c", ls=":", lw=1.0, label=f"baseload ≈ {m.near_base:g}")
+        ax.axhline(
+            m.near_base, color="#2ca02c", ls=":", lw=1.0, label=f"baseload ≈ {m.near_base:g}"
+        )
     ax.set_xlabel("hour of day")
     ax.set_ylabel(ylabel)
     ax.set_xticks(range(0, 24, 3))
@@ -54,8 +74,15 @@ def load_profile_chart(series: pd.Series, *, ax=None, split: bool = True, annota
     return ax, m
 
 
-def load_duration_chart(series: pd.Series, *, ax=None, price: float | None = None,
-                        annotate: bool = True, title: str | None = None, ylabel: str = "kW"):
+def load_duration_chart(
+    series: pd.Series,
+    *,
+    ax=None,
+    price: float | None = None,
+    annotate: bool = True,
+    title: str | None = None,
+    ylabel: str = "kW",
+):
     """Load-duration curve (values sorted high-to-low vs % of time). Returns ``(ax, LoadMetrics)``.
 
     ``price`` ($/kWh) adds an energy-cost figure (LDC area × price) to the title.
@@ -71,7 +98,9 @@ def load_duration_chart(series: pd.Series, *, ax=None, price: float | None = Non
     ax.plot(x, ldc, color="#3366cc", lw=1.8, label="load-duration")
     if annotate:
         ax.axhline(m.near_peak, color="#d62728", ls="--", lw=0.9, label=f"peak ≈ {m.near_peak:g}")
-        ax.axhline(m.near_base, color="#2ca02c", ls="--", lw=0.9, label=f"baseload ≈ {m.near_base:g}")
+        ax.axhline(
+            m.near_base, color="#2ca02c", ls="--", lw=0.9, label=f"baseload ≈ {m.near_base:g}"
+        )
     cost_note = ""
     if price is not None:
         energy = float(np.nansum(series.dropna().to_numpy()) * interval_hours(series.index))

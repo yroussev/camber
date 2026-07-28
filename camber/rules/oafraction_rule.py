@@ -38,11 +38,16 @@ class OutdoorAirFraction:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
-        res = analyze_oa_fraction(legacy, equip, min_oa_pct=self.min_oa_pct,
-                                  cooling_cutoff_f=self.cooling_cutoff_f)
+        res = analyze_oa_fraction(
+            legacy, equip, min_oa_pct=self.min_oa_pct, cooling_cutoff_f=self.cooling_cutoff_f
+        )
         if res is None:
-            return Finding(rule=self.name, equip=equip, severity="info",
-                           summary="insufficient data (need OAT/MAT/RAT)")
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary="insufficient data (need OAT/MAT/RAT)",
+            )
         ex, mn = res.excess_oa_pct, res.min_oa_pct
         order = {"ok": 0, "warn": 1, "fault": 2}
         # excess-OA severity (energy penalty): share of cooling hours above the min
@@ -58,10 +63,12 @@ class OutdoorAirFraction:
             sev_under = "ok"
         severity = max(sev_excess, sev_under, key=lambda s: order[s])
         if order[sev_under] > order[sev_excess]:
-            tail = (f"under-ventilation: median OAF {m:.0f}% below the "
-                    f"{mn:.0f}% min ({res.under_vent_pct:.0f}% of occupied hours low)")
+            tail = (
+                f"under-ventilation: median OAF {m:.0f}% below the "
+                f"{mn:.0f}% min ({res.under_vent_pct:.0f}% of occupied hours low)"
+            )
         else:
-            tail = (f"excess OA {ex:.0f}% of cooling hours above {mn:.0f}% min")
+            tail = f"excess OA {ex:.0f}% of cooling hours above {mn:.0f}% min"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -75,8 +82,10 @@ class OutdoorAirFraction:
                 "n_cooling": res.n_cooling,
                 "n_valid": res.n_valid,
             },
-            summary=(f"{equip}: OAF median {res.oaf_median_pct:.0f}% "
-                     f"({res.median_oaf_cooling:.0f}% in cooling weather); {tail}"),
+            summary=(
+                f"{equip}: OAF median {res.oaf_median_pct:.0f}% "
+                f"({res.median_oaf_cooling:.0f}% in cooling weather); {tail}"
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
@@ -84,7 +93,11 @@ class OutdoorAirFraction:
         cooling / no lockout shaded)."""
         from ..charts.diagnostic import TEMPLATES
         from ..charts.evidence import Evidence
+
         if Role.OAT in frame.columns and Role.OA_DAMPER in frame.columns:
-            return Evidence(renderer="diagnostic", template=TEMPLATES["economizer"],
-                            title=f"{equip}: economizer")
+            return Evidence(
+                renderer="diagnostic",
+                template=TEMPLATES["economizer"],
+                title=f"{equip}: economizer",
+            )
         return None

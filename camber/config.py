@@ -34,7 +34,6 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-
 from glob import glob
 
 from .model.mapping import MappingProvider
@@ -56,8 +55,8 @@ class RunResult:
     """Outcome of a config-driven run."""
 
     site: str
-    equipment: int               # number of equipment discovered
-    findings: list               # all Findings produced
+    equipment: int  # number of equipment discovered
+    findings: list  # all Findings produced
     report: AuditReport | None = None
     rules_run: list = field(default_factory=list)
 
@@ -117,10 +116,10 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         shared = {Role.OAT: oat}
 
     refs = []
-    refs_by_class: dict = {}          # class -> [EquipRef], for class-targeted SOO specs
+    refs_by_class: dict = {}  # class -> [EquipRef], for class-targeted SOO specs
     for eq in config.get("equipment", []):
         marker = eq.get("marker", "SpaceTemp")
-        if eq["class"] == "TERMINAL":   # union of all terminal-unit types
+        if eq["class"] == "TERMINAL":  # union of all terminal-unit types
             found = discover_terminals(folders, marker_measure=marker)
         else:
             found = discover(folders, eq["class"], marker_measure=marker)
@@ -134,15 +133,17 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     reg = builtin_registry()
     findings, ran = [], []
     for name in config.get("rules", []):
-        rule = reg.get(name)                 # KeyError on unknown name
+        rule = reg.get(name)  # KeyError on unknown name
         if is_fleet(rule):
-            f = reg.run_fleet(name, refs, mapping, resample=resample, shared=shared,
-                              min_trust=min_trust)
+            f = reg.run_fleet(
+                name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
+            )
             if f is not None:
                 findings.append(f)
         else:
-            findings += reg.run(name, refs, mapping, resample=resample, shared=shared,
-                                min_trust=min_trust)
+            findings += reg.run(
+                name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
+            )
         ran.append(name)
 
     # Optional SOO conformance: per equipment class, a packaged library sequence or a
@@ -168,8 +169,9 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     report = None
     rep = config.get("report")
     if rep is not None:
-        report = AuditReport(building=site, level=rep.get("level", 2),
-                             climate_zone=rep.get("climate_zone", ""))
+        report = AuditReport(
+            building=site, level=rep.get("level", 2), climate_zone=rep.get("climate_zone", "")
+        )
         if "benchmark" in rep:
             b = rep["benchmark"]
             report.benchmark = Benchmark(b["site_eui"], b["peer_median_eui"])
@@ -182,14 +184,16 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             price = None
             if rep.get("price"):
                 from .fault_economics import EnergyPrice
+
                 known = {"electricity_per_kwh", "gas_per_therm"}
                 price = EnergyPrice(**{k: v for k, v in rep["price"].items() if k in known})
             body = report.to_html(recommend=bool(rep.get("recommend")), price=price)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
                 fh.write("<html><body>\n" + body + "\n</body></html>\n")
 
-    return RunResult(site=site, equipment=len(refs), findings=findings,
-                     report=report, rules_run=ran)
+    return RunResult(
+        site=site, equipment=len(refs), findings=findings, report=report, rules_run=ran
+    )
 
 
 def load_config(path: str) -> dict:
@@ -200,8 +204,7 @@ def load_config(path: str) -> dict:
 
 def run_config_file(path: str) -> RunResult:
     """Load and run a config file; paths resolve relative to the file's directory."""
-    return run_config(load_config(path),
-                      base_dir=os.path.dirname(os.path.abspath(path)))
+    return run_config(load_config(path), base_dir=os.path.dirname(os.path.abspath(path)))
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -210,7 +213,9 @@ if __name__ == "__main__":  # pragma: no cover
     if len(sys.argv) < 2:
         raise SystemExit("usage: python -m camber.config <config.json>")
     res = run_config_file(sys.argv[1])
-    print(f"{res.site}: {res.equipment} equipment, {len(res.findings)} findings "
-          f"from {len(res.rules_run)} rules")
+    print(
+        f"{res.site}: {res.equipment} equipment, {len(res.findings)} findings "
+        f"from {len(res.rules_run)} rules"
+    )
     if res.report is not None:
         print("\n" + res.report.to_text())

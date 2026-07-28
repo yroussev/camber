@@ -3,7 +3,6 @@
 import os
 import sys
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,12 +15,12 @@ def _s(vals, start="2026-07-01"):
 
 
 def test_hourly_emissions_basic():
-    load = _s([10.0] * 24)                       # 10 kW every hour -> 240 kWh
-    ef = _s([0.5] * 24)                          # 0.5 kg/kWh flat
+    load = _s([10.0] * 24)  # 10 kW every hour -> 240 kWh
+    ef = _s([0.5] * 24)  # 0.5 kg/kWh flat
     e = hourly_emissions(load, ef)
     assert e.kwh == 240.0 and abs(e.co2e_kg - 120.0) < 1e-6
     assert abs(e.effective_factor - 0.5) < 1e-9
-    assert abs(e.timing_premium_pct) < 1e-6      # flat factor -> no timing premium
+    assert abs(e.timing_premium_pct) < 1e-6  # flat factor -> no timing premium
 
 
 def test_timing_premium_positive_when_running_dirty_hours():
@@ -34,25 +33,25 @@ def test_timing_premium_positive_when_running_dirty_hours():
 
 def test_timing_premium_negative_when_running_clean_hours():
     ef = _s([0.2] * 8 + [0.8] * 8 + [0.2] * 8)
-    load = _s([90.0] * 8 + [10.0] * 8 + [90.0] * 8)   # avoids the dirty block
+    load = _s([90.0] * 8 + [10.0] * 8 + [90.0] * 8)  # avoids the dirty block
     e = hourly_emissions(load, ef)
     assert e.timing_premium_pct < 0
 
 
 def test_grams_per_kwh_unit():
     load = _s([10.0] * 4)
-    ef_g = _s([500.0] * 4)                        # g/kWh
+    ef_g = _s([500.0] * 4)  # g/kWh
     e = hourly_emissions(load, ef_g, unit_kg_per_kwh=False)
-    assert abs(e.co2e_kg - 20.0) < 1e-6          # 40 kWh × 0.5 kg/kWh
+    assert abs(e.co2e_kg - 20.0) < 1e-6  # 40 kWh × 0.5 kg/kWh
     # avg_factor and effective_factor must be reported in the same (kg/kWh) unit
-    assert abs(e.avg_factor - 0.5) < 1e-9        # 500 g/kWh -> 0.5 kg/kWh, not left at 500
-    assert abs(e.effective_factor - e.avg_factor) < 1e-9   # flat factor -> equal, comparable
+    assert abs(e.avg_factor - 0.5) < 1e-9  # 500 g/kWh -> 0.5 kg/kWh, not left at 500
+    assert abs(e.effective_factor - e.avg_factor) < 1e-9  # flat factor -> equal, comparable
 
 
 def test_marginal_vs_average():
     load = _s([20.0] * 12)
     avg = _s([0.35] * 12)
-    marg = _s([0.6] * 12)                         # marginal dirtier than average
+    marg = _s([0.6] * 12)  # marginal dirtier than average
     c = marginal_vs_average(load, avg, marg)
     assert c.co2e_marginal_kg > c.co2e_avg_kg
     assert abs(c.marginal_over_avg - (0.6 / 0.35)) < 0.01

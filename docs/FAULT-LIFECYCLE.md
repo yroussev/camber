@@ -14,7 +14,7 @@ record across runs rather than a new alert each time.
 ```python
 from camber.faultlifecycle import FaultLifecycle
 
-lc = FaultLifecycle.load("faults.json")            # empty if the file doesn't exist yet
+lc = FaultLifecycle.load("faults.json")  # empty if the file doesn't exist yet
 res = lc.update(findings, run_id="2026-06-14T06:00", site="HQ")
 # res -> {"new": [...], "ongoing": [...], "reopened": [...], "absent": [...], "resolved": [...]}
 lc.save()
@@ -44,12 +44,14 @@ excluded from open work).
 ## SLA & aging
 
 ```python
-lc.aging("2026-06-14T12:00")          # {fingerprint: hours_open} for open faults
-lc.overdue("2026-06-14T12:00",
-           ack_sla_hours={"fault": 4, "warn": 24},
-           resolve_sla_hours={"fault": 48, "warn": 168})
+lc.aging("2026-06-14T12:00")  # {fingerprint: hours_open} for open faults
+lc.overdue(
+    "2026-06-14T12:00",
+    ack_sla_hours={"fault": 4, "warn": 24},
+    resolve_sla_hours={"fault": 48, "warn": 168},
+)
 # -> [(record, "ack"|"resolve", age_hours, sla_hours), ...]
-lc.summary()   # {total, open, by_status, open_by_severity}
+lc.summary()  # {total, open, by_status, open_by_severity}
 ```
 
 A still-unacknowledged `open` fault older than its **ack** SLA is `"ack"`-overdue; any open fault

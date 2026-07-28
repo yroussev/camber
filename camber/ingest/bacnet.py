@@ -44,20 +44,25 @@ class BacnetTarget:
     address: str | None = None
     secure: bool = False
     hub_uri: str | None = None
-    cert: str | None = None        # operational certificate (PEM) path
-    key: str | None = None         # operational private key (PEM) path
-    ca: str | None = None          # issuer / CA certificate (PEM) path
+    cert: str | None = None  # operational certificate (PEM) path
+    key: str | None = None  # operational private key (PEM) path
+    ca: str | None = None  # issuer / CA certificate (PEM) path
 
-    def validate(self) -> "BacnetTarget":
+    def validate(self) -> BacnetTarget:
         """Check the target is internally consistent; raise ValueError otherwise."""
         if self.secure:
             missing = [n for n in ("hub_uri", "cert", "key", "ca") if not getattr(self, n)]
             if missing:
-                raise ValueError("BACnet/SC requires " + ", ".join(missing)
-                                 + " (operational certificate + hub URI)")
+                raise ValueError(
+                    "BACnet/SC requires "
+                    + ", ".join(missing)
+                    + " (operational certificate + hub URI)"
+                )
         elif not self.address:
-            raise ValueError("a legacy BACnet target needs an address (or set secure=True "
-                             "with SC hub/cert config)")
+            raise ValueError(
+                "a legacy BACnet target needs an address (or set secure=True "
+                "with SC hub/cert config)"
+            )
         return self
 
 
@@ -83,10 +88,12 @@ def trendlog_to_series(records) -> pd.Series:
     raw_ts, raw_val = [], []
     for r in records:
         if isinstance(r, (tuple, list)) and len(r) >= 2:
-            raw_ts.append(r[0]); raw_val.append(r[1])
+            raw_ts.append(r[0])
+            raw_val.append(r[1])
         else:
-            raw_ts.append(getattr(r, "timestamp", None)); raw_val.append(getattr(r, "value", None))
-    idx = parse_timestamps(raw_ts)                        # batch, multi-format
+            raw_ts.append(getattr(r, "timestamp", None))
+            raw_val.append(getattr(r, "value", None))
+    idx = parse_timestamps(raw_ts)  # batch, multi-format
     vals = pd.to_numeric(pd.Series(raw_val), errors="coerce")
     pairs = [(t, float(v)) for t, v in zip(idx, vals) if pd.notna(t) and pd.notna(v)]
     if not pairs:
@@ -114,13 +121,16 @@ class BacnetSource:
             try:
                 import bacpypes3  # noqa: F401
             except Exception as e:  # noqa: BLE001
-                raise ImportError('the BACnet adapter needs the optional extra: '
-                                  'pip install "camber-toolkit[bacnet]"') from e
+                raise ImportError(
+                    "the BACnet adapter needs the optional extra: "
+                    'pip install "camber-toolkit[bacnet]"'
+                ) from e
             raise NotImplementedError(
                 "no BACnet client injected. The bacpypes3-backed client (incl. experimental "
                 "BACnet/SC) is configured per deployment; inject a client exposing "
                 "read_trend_log(object_id) and read_present_value(object_id). See docs/"
-                "INGEST-PROTOCOLS.md.")
+                "INGEST-PROTOCOLS.md."
+            )
         return self._client
 
     def point_names(self) -> list[str]:
@@ -145,7 +155,7 @@ class BacnetSource:
     def load_points(self, names, resample=None) -> pd.DataFrame:
         """Load points by reading each one's Trend Log into a DataFrame (one column each)."""
         cols = {}
-        for n in (names or self._points):
+        for n in names or self._points:
             if n not in self._points:
                 continue
             s = self.read_trend_log(n)

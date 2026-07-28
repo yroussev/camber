@@ -17,9 +17,8 @@ HW pumps (see the ``analyze_pump`` alias).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 
-import numpy as np
 import pandas as pd
 
 from .schedules import occupied_mask
@@ -32,10 +31,10 @@ class CHWPumpResult:
     equip: str
     n_running: int
     median_speed_pct: float
-    pct_running_near_full: float   # % running hrs speed >= near_full_pct (riding the curve)
-    pct_running_near_min: float    # % running hrs speed <= near_min_pct (oversized / VFD min)
-    median_dp_sp: float            # median DP setpoint (if available)
-    dp_sp_reset_present: bool      # DP setpoint varies materially
+    pct_running_near_full: float  # % running hrs speed >= near_full_pct (riding the curve)
+    pct_running_near_min: float  # % running hrs speed <= near_min_pct (oversized / VFD min)
+    median_dp_sp: float  # median DP setpoint (if available)
+    dp_sp_reset_present: bool  # DP setpoint varies materially
     coverage_start: str
     coverage_end: str
 
@@ -48,11 +47,11 @@ def analyze_chw_pump(
     df: pd.DataFrame,
     equip: str,
     *,
-    run_thr: float = 5.0,          # speed above this == pump running
-    near_full_pct: float = 90.0,   # speed at/above this == effectively full speed
-    near_min_pct: float = 25.0,    # speed at/below this == effectively at the VFD minimum
-    dp_sp_flat_std: float = 0.5,   # DP-SP std below this == flat (no reset)
-    occupied_only: bool = False,   # pumps run on load, not occupancy; default all hrs
+    run_thr: float = 5.0,  # speed above this == pump running
+    near_full_pct: float = 90.0,  # speed at/above this == effectively full speed
+    near_min_pct: float = 25.0,  # speed at/below this == effectively at the VFD minimum
+    dp_sp_flat_std: float = 0.5,  # DP-SP std below this == flat (no reset)
+    occupied_only: bool = False,  # pumps run on load, not occupancy; default all hrs
 ) -> CHWPumpResult | None:
     """Diagnose pump speed distribution / DP reset. ``df`` has 'PumpSpeed' (and optional
     'DiffPressSP'). Speeds are %; running = speed > run_thr.

@@ -80,7 +80,7 @@ def outlier_mask(series: pd.Series, cutoff: float = _MAD_Z_CUTOFF) -> pd.Series:
     if len(s) < 3:
         return pd.Series(vals, index=series.index)
     z = np.abs(_mad_z(s.to_numpy(dtype="float64")))
-    vals[notna] = z > cutoff            # positional -> robust to a non-unique (duplicate-ts) index
+    vals[notna] = z > cutoff  # positional -> robust to a non-unique (duplicate-ts) index
     return pd.Series(vals, index=series.index)
 
 
@@ -106,17 +106,17 @@ def gap_count(index: pd.DatetimeIndex, expected) -> int:
 class QualityReport:
     """Read-only quality summary for one point series."""
 
-    n: int                      # samples present (non-null)
-    n_missing: int              # NaN samples in the series
-    coverage: float             # non-null fraction, 0..1
-    n_gaps: int                 # time-grid gaps > 1.5x expected interval
-    longest_flatline: int       # longest stuck run (identical consecutive values)
-    flatline_frac: float        # longest_flatline / n, 0..1
-    n_outliers: int             # robust (MAD) outliers
-    outlier_frac: float         # n_outliers / n, 0..1
-    expected_freq: object       # inferred/declared interval (Timedelta or None)
-    score: float                # composite quality 0..1 (1 = clean)
-    n_duplicate_ts: int = 0     # duplicate timestamps (DST fall-back / concatenated exports)
+    n: int  # samples present (non-null)
+    n_missing: int  # NaN samples in the series
+    coverage: float  # non-null fraction, 0..1
+    n_gaps: int  # time-grid gaps > 1.5x expected interval
+    longest_flatline: int  # longest stuck run (identical consecutive values)
+    flatline_frac: float  # longest_flatline / n, 0..1
+    n_outliers: int  # robust (MAD) outliers
+    outlier_frac: float  # n_outliers / n, 0..1
+    expected_freq: object  # inferred/declared interval (Timedelta or None)
+    score: float  # composite quality 0..1 (1 = clean)
+    n_duplicate_ts: int = 0  # duplicate timestamps (DST fall-back / concatenated exports)
 
     def as_dict(self):
         """Return as a plain dict (expected_freq stringified)."""
@@ -135,8 +135,7 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
     n_missing = int(series.isna().sum())
     n = total - n_missing
     coverage = (n / total) if total else 0.0
-    exp = pd.Timedelta(expected_freq) if expected_freq is not None \
-        else infer_freq(series.index)
+    exp = pd.Timedelta(expected_freq) if expected_freq is not None else infer_freq(series.index)
     n_gaps = gap_count(series.index, exp)
     flat = longest_flatline(series)
     flat_frac = (flat / n) if n else 0.0
@@ -150,10 +149,17 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
     score = coverage * (1.0 - min(out_frac * 2.0, 1.0)) * (1.0 - 0.2 * flat_frac)
     score = float(max(0.0, min(1.0, score)))
     return QualityReport(
-        n=n, n_missing=n_missing, coverage=round(coverage, 4),
-        n_gaps=n_gaps, longest_flatline=flat, flatline_frac=round(flat_frac, 4),
-        n_outliers=n_out, outlier_frac=round(out_frac, 4),
-        expected_freq=exp, score=round(score, 4), n_duplicate_ts=n_dup,
+        n=n,
+        n_missing=n_missing,
+        coverage=round(coverage, 4),
+        n_gaps=n_gaps,
+        longest_flatline=flat,
+        flatline_frac=round(flat_frac, 4),
+        n_outliers=n_out,
+        outlier_frac=round(out_frac, 4),
+        expected_freq=exp,
+        score=round(score, 4),
+        n_duplicate_ts=n_dup,
     )
 
 
@@ -161,7 +167,7 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
 class CleaningLog:
     """An auditable record of what :func:`clean` changed."""
 
-    steps: list = field(default_factory=list)   # list[dict]: op, n_affected, detail
+    steps: list = field(default_factory=list)  # list[dict]: op, n_affected, detail
 
     def add(self, op: str, n_affected: int, detail: str = ""):
         """Record one cleaning step (operation, count affected, detail)."""
@@ -173,8 +179,13 @@ class CleaningLog:
         return sum(s["n_affected"] for s in self.steps)
 
 
-def clean(series: pd.Series, *, drop_outliers: bool = False,
-          fill_limit: int = 0, outlier_cutoff: float = _MAD_Z_CUTOFF):
+def clean(
+    series: pd.Series,
+    *,
+    drop_outliers: bool = False,
+    fill_limit: int = 0,
+    outlier_cutoff: float = _MAD_Z_CUTOFF,
+):
     """Return ``(cleaned_series, CleaningLog)`` applying opt-in repairs.
 
     - ``drop_outliers``: replace robust outliers with NaN (so they don't bias a
@@ -192,8 +203,7 @@ def clean(series: pd.Series, *, drop_outliers: bool = False,
         mask = outlier_mask(out, cutoff=outlier_cutoff)
         if mask.any():
             out[mask] = np.nan
-            log.add("drop_outliers", mask.sum(),
-                    f"MAD z>{outlier_cutoff} set to NaN")
+            log.add("drop_outliers", mask.sum(), f"MAD z>{outlier_cutoff} set to NaN")
     if fill_limit and fill_limit > 0:
         before = int(out.isna().sum())
         out = out.ffill(limit=fill_limit)
