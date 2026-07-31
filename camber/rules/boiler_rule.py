@@ -48,9 +48,36 @@ class BoilerSummerLockout:
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
         # Severity from summer-running: a comfort boiler should rarely run hot-weather.
-        sp = res.summer_run_pct
-        severity = "fault" if sp >= 20.0 else ("warn" if sp >= 5.0 else "ok")
-        reset_note = "HWS reset present" if res.hws_reset_present else "no/weak HWS reset"
+        # The headline summer-lockout check needs OAT; without it summer_run_pct is None
+        # (not evaluated) and we must NOT read that as a confident 0% ("clean") -> decline
+        # to judge (info) rather than assert ok. Reset (None) is likewise not asserted.
+        caveats = []
+        sp = res.summer_run_pct  # float or None (None = no OAT, not evaluated)
+        if sp is None:
+            caveats.append("summer lockout not evaluated: no OAT")
+            severity = "info"
+        else:
+            severity = "fault" if sp >= 20.0 else ("warn" if sp >= 5.0 else "ok")
+        reset = res.hws_reset_present  # True / False / None
+        if reset is None:
+            caveats.append("HWS reset not evaluated: no/insufficient OAT")
+        reset_note = (
+            "HWS reset present"
+            if reset is True
+            else "no/weak HWS reset"
+            if reset is False
+            else "HWS reset not evaluated (no OAT)"
+        )
+        summer_note = (
+            f"{sp:.0f}% of running hours at OAT>{res.lockout_oat_f:.0f}F"
+            if sp is not None
+            else "summer lockout not evaluated (no OAT)"
+        )
+        slope_note = (
+            f" (HWS~OAT slope {res.hws_slope_per_F:+.2f})"
+            if res.hws_slope_per_F is not None
+            else ""
+        )
         return Finding(
             rule=self.name,
             equip=equip,
@@ -67,8 +94,7 @@ class BoilerSummerLockout:
             },
             summary=(
                 f"{equip}: boiler runs {res.boiler_running_pct:.0f}% of occupied "
-                f"hours; {res.summer_run_pct:.0f}% of running hours at "
-                f"OAT>{res.lockout_oat_f:.0f}F; {reset_note} "
-                f"(HWS~OAT slope {res.hws_slope_per_F:+.2f})"
+                f"hours; {summer_note}; {reset_note}{slope_note}"
             ),
+            caveats=caveats,
         )

@@ -48,7 +48,20 @@ class CHWPumpDPReset:
             severity = "warn"
         else:
             severity = "ok"
-        reset_note = "DP-SP reset present" if res.dp_sp_reset_present else "flat DP setpoint"
+        # DP-setpoint reset is a separate sub-check; None means no DP setpoint was
+        # available to evaluate it -> caveat + honest note, never a confident "flat DP
+        # setpoint". (Severity here rides on speed distribution, not on reset.)
+        caveats = []
+        reset = res.dp_sp_reset_present  # True / False / None
+        if reset is None:
+            caveats.append("DP-setpoint reset not evaluated: no DP setpoint")
+        reset_note = (
+            "DP-SP reset present"
+            if reset is True
+            else "flat DP setpoint"
+            if reset is False
+            else "DP-SP reset not evaluated (no DP setpoint)"
+        )
         return Finding(
             rule=self.name,
             equip=equip,
@@ -66,4 +79,5 @@ class CHWPumpDPReset:
                 f"{res.pct_running_near_full:.0f}% near full / "
                 f"{res.pct_running_near_min:.0f}% near min; {reset_note}"
             ),
+            caveats=caveats,
         )

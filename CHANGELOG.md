@@ -4,6 +4,34 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.9.3] — 2026-07-31
+
+Correctness release (field-found on a real 50%-outside-air building): a rule must never
+assert a negative it did not test. When an absent **optional** input made a sub-check
+impossible, several rules silently collapsed the missing input into a confident wrong
+verdict — a `False` metric, a raised severity, or a summary asserting something untested.
+
+### Fixed — the "could not evaluate" honesty convention
+- **`Finding.caveats: list[str]`** (new field) + a documented convention in
+  `camber.rules.base`: an unevaluated sub-check is represented as `None` (tri-state), never a
+  `nan`/`False`/`0` sentinel; it is excluded from severity, written as a null metric, kept out
+  of the summary, and recorded as a caveat. The audit report surfaces finding caveats.
+- **`Registry.run`/`run_fleet`** now record any absent optional roles on each finding
+  (`metrics["_missing_optional"]`) so the whole class is visible without reading each rule.
+- **Rules corrected** (absent optional role no longer flips the verdict): `chw_plant_reset`
+  (OAT → false "no reset"/warn — the exemplar), `boiler_summer_lockout` (OAT → false clean),
+  `supply_air_control` (no fan signal → false off-setpoint fault), `overcooling_min_flow`
+  (no damper → over-count), `overcooling_severity` (no heating SP → over-flag),
+  `zones_heat_cool_census` (missing flow/SP → under-count), `chw_pump_dp_reset` (false "flat
+  DP setpoint"), `supply_air_reset` (false "load-tracking" verdict), `unmet_setpoint_hours`
+  (one-sided setpoint → false "0%"). Each now declines the sub-check with a caveat instead.
+- Hardened three `camber.aso` recommender comparisons against `None`-valued metrics.
+
+**Behavior change (non-breaking, pre-1.0):** affected metrics may now be `null` instead of a
+(wrong) `False`, and some findings that previously read `warn`/`ok` now read `ok`/`info` with a
+caveat. These are corrected results; per `docs/API-STABILITY.md`, bug fixes that change a
+genuinely wrong result are allowed. `Finding.caveats` and `_missing_optional` are additive.
+
 ## [0.9.2] — 2026-07-28
 
 Second pre-1.0 hardening release: **the public API contract** — the biggest 1.0 prerequisite.

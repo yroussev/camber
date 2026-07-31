@@ -74,9 +74,15 @@ class UnmetHours:
                 severity="info",
                 summary=f"{equip}: no occupied space-temp data",
             )
+        # Each direction needs its own setpoint. A missing side is NOT evaluated -- its
+        # metric is None (never a confident "0%"), and a clean one-sided result is not a
+        # confident "met": decline ok -> info and caveat the untested direction. The
+        # union (unmet_pct) still stands on whatever side(s) we could evaluate.
+        have_cool = Role.COOL_SP in frame.columns
+        have_heat = Role.HEAT_SP in frame.columns
         too_hot, too_cold = self._unmet_masks(frame)
-        hot_pct = 100.0 * float((too_hot & occ).sum()) / n
-        cold_pct = 100.0 * float((too_cold & occ).sum()) / n
+        hot_pct = 100.0 * float((too_hot & occ).sum()) / n if have_cool else None
+        cold_pct = 100.0 * float((too_cold & occ).sum()) / n if have_heat else None
         unmet_pct = 100.0 * float(((too_hot | too_cold) & occ).sum()) / n
         sev = (
             "fault"
@@ -85,21 +91,28 @@ class UnmetHours:
             if unmet_pct >= self.warn_pct
             else "ok"
         )
+        caveats = []
+        if not have_heat:
+            caveats.append("no heating setpoint: too-cold not evaluated")
+        if not have_cool:
+            caveats.append("no cooling setpoint: too-hot not evaluated")
+        if sev == "ok" and not (have_heat and have_cool):
+            sev = "info"  # one-sided clean result is not a confident "met"
+        hot_txt = f"too hot {hot_pct:.0f}%" if hot_pct is not None else "too hot n/a"
+        cold_txt = f"too cold {cold_pct:.0f}%" if cold_pct is not None else "too cold n/a"
         return Finding(
             rule=self.name,
             equip=equip,
             severity=sev,
             metrics={
                 "unmet_pct": round(unmet_pct, 2),
-                "too_hot_pct": round(hot_pct, 2),
-                "too_cold_pct": round(cold_pct, 2),
+                "too_hot_pct": round(hot_pct, 2) if hot_pct is not None else None,
+                "too_cold_pct": round(cold_pct, 2) if cold_pct is not None else None,
                 "n_occupied": n,
                 "tol_F": self.tol_F,
             },
-            summary=(
-                f"{equip}: unmet {unmet_pct:.0f}% of occupied hours "
-                f"(too hot {hot_pct:.0f}%, too cold {cold_pct:.0f}%)"
-            ),
+            summary=(f"{equip}: unmet {unmet_pct:.0f}% of occupied hours ({hot_txt}, {cold_txt})"),
+            caveats=caveats,
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):

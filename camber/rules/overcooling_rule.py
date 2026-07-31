@@ -58,6 +58,15 @@ class OvercoolingMinFlow:
         # whenever the valve existed but never co-occurred.
         oc = res.overcool_with_reheat_pct if res.has_heat_valve else res.overcool_at_minflow_pct
         severity = "fault" if oc >= 15.0 else ("warn" if oc >= 5.0 else "ok")
+        # Without a damper column the "at minimum flow" condition can't be CONFIRMED --
+        # at_min rests on flow alone, which over-counts. Don't let that broadened,
+        # unconfirmed count drive the top tier: cap at warn and caveat. The damper-present
+        # path (a genuine, confirmed overcooling-at-min fault) is untouched and still fires.
+        caveats = []
+        if not res.damper_present:
+            caveats.append("damper unavailable: at-min inferred from flow only (unconfirmed)")
+            if severity == "fault":
+                severity = "warn"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -74,6 +83,7 @@ class OvercoolingMinFlow:
                 f"of occupied hours ({res.overcool_with_reheat_pct:.0f}% with "
                 f"reheat); min-flow ~{res.median_minflow_fraction:.0%} of peak"
             ),
+            caveats=caveats,
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):

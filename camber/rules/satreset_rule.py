@@ -46,8 +46,15 @@ class SupplyAirReset:
             )
         # Flag when SAT sits cold most of the time and isn't reset upward at low
         # load (flat/near-zero or load-tracking slope). A clear upward reset is ok.
+        # The reset SLOPE needs OAT; without it slope is None (not evaluated) -- the
+        # cold-dominant check still stands (it needs no OAT), but we caveat the missing
+        # reset judgement and never format a confident slope.
         slope = res.slope_per_F
-        resetting_up = slope is not None and not math.isnan(slope) and slope > 0.10
+        caveats = []
+        reset_evaluated = slope is not None and not math.isnan(slope)
+        if not reset_evaluated:
+            caveats.append("SAT reset not evaluated: no OAT")
+        resetting_up = reset_evaluated and slope > 0.10
         cold_dominant = res.pct_sat_below_58 >= 50.0
         if resetting_up:
             severity = "ok"
@@ -55,6 +62,7 @@ class SupplyAirReset:
             severity = "warn"
         else:
             severity = "info"
+        slope_note = f"slope {slope:+.2f} F/F" if reset_evaluated else "slope n/a (no OAT)"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -68,10 +76,10 @@ class SupplyAirReset:
                 "n_considered": res.n_considered,
             },
             summary=(
-                f"{equip}: SAT median {res.sat_median:.1f}F, slope "
-                f"{res.slope_per_F:+.2f} F/F, <58F {res.pct_sat_below_58:.0f}% "
-                f"of cooling hours -- {res.verdict}"
+                f"{equip}: SAT median {res.sat_median:.1f}F, {slope_note}, "
+                f"<58F {res.pct_sat_below_58:.0f}% of cooling hours -- {res.verdict}"
             ),
+            caveats=caveats,
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
