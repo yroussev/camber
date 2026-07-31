@@ -169,6 +169,48 @@ def test_unknown_rule_name_raises(tmp_path):
         run_config(cfg, base_dir=str(tmp_path))
 
 
+def _make_econ_site(folder):
+    """One AHU whose OA damper rides open (0.7) in hot weather -> economizer-lockout fault."""
+    os.makedirs(folder, exist_ok=True)
+    idx = pd.date_range("2025-07-07", periods=24 * 14, freq="1h")
+    oat = pd.Series(np.where(idx.hour.isin(range(11, 17)), 90.0, 55.0), index=idx)
+    damper = pd.Series(np.where(oat > 65, 0.7, 0.2), index=idx)
+    _write_point(folder, "AHU_1", "OA_Damper", damper)
+    _write_point(folder, "AHU_1", "OSA", oat)
+
+
+_ECON_MAPPING = {"aliases": {"OA_Damper": "oa_damper", "OSA": "oat"}}
+
+
+def test_run_config_per_rule_params_override_reaches_the_rule(tmp_path):
+    """A {name, params} rule entry constructs a params-overridden rule for the run."""
+    folder = str(tmp_path / "trends")
+    _make_econ_site(folder)
+    base = {
+        "site": "EconHQ",
+        "source": {"kind": "perpoint_csv", "folder": folder},
+        "mapping": _ECON_MAPPING,
+        "equipment": [{"class": "AHU", "marker": "OA_Damper"}],
+    }
+
+    # bare-string form: defaults -> the 0.7 open damper faults
+    default = run_config({**base, "rules": ["economizer_high_limit"]}, base_dir=str(tmp_path))
+    assert default.rules_run == ["economizer_high_limit"]
+    econ = [f for f in default.findings if f.rule == "economizer_high_limit"]
+    assert econ and econ[0].severity == "fault"
+
+    # {name, params}: raising the design-minimum damper clears the false fault
+    tuned = run_config(
+        {
+            **base,
+            "rules": [{"name": "economizer_high_limit", "params": {"min_damper": 0.9}}],
+        },
+        base_dir=str(tmp_path),
+    )
+    econ_t = [f for f in tuned.findings if f.rule == "economizer_high_limit"]
+    assert econ_t and econ_t[0].severity == "ok"  # param reached the rule
+
+
 def test_run_config_with_soo_library(tmp_path):
     folder = str(tmp_path / "trends")
     _make_site(folder)  # AHU has midday reheat while cooling
