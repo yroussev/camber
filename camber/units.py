@@ -20,6 +20,14 @@ import pandas as pd
 
 from .model.roles import Role
 
+__all__ = [
+    "PERCENT_ROLES",
+    "FRACTION_MAX",
+    "looks_like_fraction",
+    "normalize_percent",
+    "normalize_percent_frame",
+]
+
 # Roles whose magnitude is a position/percent (0-100) that rules threshold on.
 PERCENT_ROLES = frozenset(
     {

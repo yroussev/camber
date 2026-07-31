@@ -23,6 +23,15 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "DemandResult",
+    "analyze_demand",
+    "BaseloadResult",
+    "baseload_anomaly",
+    "PeakShaveResult",
+    "peak_shave_savings",
+]
+
 
 @dataclass
 class DemandResult:

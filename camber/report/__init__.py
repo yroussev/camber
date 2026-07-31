@@ -3,6 +3,12 @@
 from .audit import ECM, AuditReport, Benchmark
 from .dashboard import build_dashboard, fig_to_base64
 from .fleet import BuildingSummary, FleetReport, build_fleet_report
+from .linking import (
+    carpet_svg_html,
+    interactive_scatter_html,
+    multitrend_svg_html,
+    selection_bus_html,
+)
 from .site import build_site_report
 
 __all__ = [
@@ -15,4 +21,8 @@ __all__ = [
     "build_dashboard",
     "build_site_report",
     "fig_to_base64",
+    "carpet_svg_html",
+    "multitrend_svg_html",
+    "interactive_scatter_html",
+    "selection_bus_html",
 ]

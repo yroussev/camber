@@ -26,6 +26,15 @@ import numpy as np
 
 from .eval import Confusion
 
+__all__ = [
+    "wilson_interval",
+    "RateCI",
+    "rate_ci",
+    "metrics_with_ci",
+    "DeterminismResult",
+    "check_determinism",
+]
+
 
 def wilson_interval(k, n, *, z: float = 1.96):
     """Wilson score confidence interval for a binomial proportion (``k`` of ``n``).

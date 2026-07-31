@@ -25,6 +25,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "OVERCOOL_MEASURES",
+    "OvercoolResult",
+    "analyze_overcooling",
+]
+
 # Box measures this diagnostic uses (legacy token names).
 OVERCOOL_MEASURES = [
     "SpaceTemp",

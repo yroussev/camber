@@ -26,6 +26,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "BOX_MEASURES",
+    "ReheatResult",
+    "analyze_box",
+]
+
 # Measures we try to load for each terminal box.
 BOX_MEASURES = [
     "HWValve",

@@ -24,6 +24,15 @@ from .model.roles import STATUS_ROLES, Role
 from .schedules import occupied_mask
 from .units import normalize_percent_frame
 
+__all__ = [
+    "EquipRef",
+    "TERMINAL_CLASSES",
+    "discover",
+    "discover_terminals",
+    "resolve",
+    "occupied",
+]
+
 
 @dataclass(frozen=True)
 class EquipRef:

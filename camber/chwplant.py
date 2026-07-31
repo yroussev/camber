@@ -27,6 +27,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "CHWPLANT_MEASURES",
+    "CHWPlantResult",
+    "analyze_chw_plant",
+]
+
 CHWPLANT_MEASURES = ["CHWS_Temp", "CHWR_Temp", "CHWS_SP", "OAT", "PumpSpeed"]
 
 

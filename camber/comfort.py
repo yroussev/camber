@@ -21,6 +21,15 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
+__all__ = [
+    "f_to_c",
+    "pmv",
+    "ppd",
+    "pmv_f",
+    "ComfortResult",
+    "comfort_series",
+]
+
 
 def f_to_c(f):
     """Convert degF to degC (array-friendly)."""

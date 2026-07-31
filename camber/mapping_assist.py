@@ -28,6 +28,16 @@ from .model.mapping import MappingProvider
 from .model.roles import Role
 from .sensorhealth import PHYSICAL_BOUNDS, range_violation_frac
 
+__all__ = [
+    "ROLE_UNIT",
+    "RoleSuggestion",
+    "FeatureSuggester",
+    "MLSuggester",
+    "LLMSuggester",
+    "suggest_roles",
+    "review_unmapped",
+]
+
 # --------------------------------------------------------------------------- unit → candidate roles
 
 _TEMP_ROLES = frozenset(r for r in Role if r.value.endswith("_temp") or r in (Role.OAT,))

@@ -16,6 +16,13 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "DaySchedule",
+    "WeeklySchedule",
+    "detect_schedule",
+    "compare_schedule",
+]
+
 
 @dataclass
 class DaySchedule:

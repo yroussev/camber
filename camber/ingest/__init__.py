@@ -28,9 +28,27 @@ from .modbus import ModbusPoint, ModbusSource, decode_registers
 from .mqtt_stream import MqttPoint, MqttStreamSource, parse_payload
 from .opcua import OpcUaPoint, OpcUaSecurity, OpcUaSource, history_to_series
 from .profiles import PROFILES, IngestProfile, get_profile
+from .quality import (
+    CleaningLog,
+    QualityReport,
+    assess,
+    clean,
+    gap_count,
+    infer_freq,
+    longest_flatline,
+    outlier_mask,
+)
 from .sql import SqlSource, read_points
 
 __all__ = [
+    "QualityReport",
+    "assess",
+    "CleaningLog",
+    "clean",
+    "infer_freq",
+    "gap_count",
+    "longest_flatline",
+    "outlier_mask",
     "PerPointCsvAdapter",
     "WideCsvAdapter",
     "LongCsvAdapter",

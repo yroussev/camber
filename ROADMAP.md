@@ -199,7 +199,10 @@ A consolidation release — finish the validation and interop stories 0.5 opened
 
 The capability surface is broad and now hardened; 1.0 is a consolidation, not new features.
 
-- [ ] **API stability + deprecation policy** — review/settle the public API; commit to SemVer from 1.0.
+- [x] **API stability + deprecation policy** (0.9.2) — public API surface settled: `__all__`
+      across every subpackage + all 70 flat modules, a written contract + deprecation policy in
+      **[API-STABILITY.md](docs/API-STABILITY.md)**, `camber._deprecation` machinery, and a
+      snapshot test (`tests/test_public_api.py`) that fails on any unreviewed surface change.
 - [ ] **Docs completeness** pass; enable the MkDocs **Pages** site (owner action — the workflow is built).
 - [ ] **Packaging & community** (carried) — conda-forge feedstock, Discussions, PEP-541 `camber` name.
 - [ ] **Labeled chiller benchmark** — if/when the license clears (carried from 0.6).

@@ -21,6 +21,13 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "seasonal_forecast",
+    "AnomalyReport",
+    "forecast_anomalies",
+    "backtest",
+]
+
 
 def _time_of_week(index: pd.DatetimeIndex, freq_hours: float) -> np.ndarray:
     """Bucket each timestamp into a slot within the week (0 .. slots_per_week-1)."""

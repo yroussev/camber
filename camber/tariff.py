@@ -22,6 +22,19 @@ import pandas as pd
 
 from .timegrid import interval_hours as _interval_hours
 
+__all__ = [
+    "Tier",
+    "Tariff",
+    "BillResult",
+    "compute_bill",
+    "MonthBillCheck",
+    "BillValidation",
+    "validate_bill",
+    "flat_tariff",
+    "hours_schedule",
+    "tou_tariff",
+]
+
 # A "tier" is (upper_bound, rate): covers consumption from the previous tier's bound up
 # to this one at ``rate``; an upper_bound of None means "no limit" (the top tier).
 Tier = tuple

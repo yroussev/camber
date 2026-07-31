@@ -19,6 +19,16 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "DemandResponseResult",
+    "demand_response",
+    "FlexibilityResult",
+    "flexibility",
+    "carbon_aware_shift",
+    "OperationScore",
+    "operation_score",
+]
+
 
 @dataclass
 class DemandResponseResult:

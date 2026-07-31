@@ -25,6 +25,17 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "OA_RATES_62_1",
+    "DEFAULT_EZ",
+    "oa_rates_for",
+    "required_oa_cfm",
+    "VrpResult",
+    "assess_62_1",
+    "DcvResult",
+    "assess_dcv",
+]
+
 # ASHRAE 62.1 Table 6.1 minimum rates: space type -> (Rp cfm/person, Ra cfm/ft²).
 # A practical subset of common space types (public standard values).
 OA_RATES_62_1 = {

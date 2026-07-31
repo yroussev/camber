@@ -18,6 +18,12 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "LevelShift",
+    "detect_level_shifts",
+    "largest_shift",
+]
+
 
 @dataclass
 class LevelShift:
