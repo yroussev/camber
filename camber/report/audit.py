@@ -85,6 +85,21 @@ class AuditReport:
             self.findings, magnitude_key=self.finding_magnitude_key, actionable_only=True
         )
 
+    def all_caveats(self) -> list:
+        """Report-level caveats plus distinct finding-level "could not evaluate" notes.
+
+        Surfaces the honesty convention (see ``camber.rules.base``): where a rule declined
+        a sub-check for want of an input, that reaches the reader instead of hiding.
+        """
+        out = list(self.caveats)
+        seen = set(out)
+        for f in self.findings:
+            for c in getattr(f, "caveats", None) or []:
+                if c not in seen:
+                    seen.add(c)
+                    out.append(c)
+        return out
+
     # ECMs sorted high->medium->low for presentation
     def ranked_ecms(self):
         """ECMs sorted high -> medium -> low priority for presentation."""
@@ -126,9 +141,10 @@ class AuditReport:
                 L.append(f"     comfort/IAQ: {e.comfort_iaq_impact}")
             if e.est_savings or e.est_cost:
                 L.append(f"     savings: {e.est_savings or 'TBD'}   cost: {e.est_cost or 'TBD'}")
-        if self.caveats:
+        cav = self.all_caveats()
+        if cav:
             L.append("\nCaveats:")
-            L += [f"  - {c}" for c in self.caveats]
+            L += [f"  - {c}" for c in cav]
         return "\n".join(L)
 
     def _evidence_html(self, ranked, rules, frames) -> str:
@@ -242,8 +258,9 @@ class AuditReport:
                 f"<td>{e(m.est_cost)}</td></tr>"
             )
         parts.append("</table>")
-        if self.caveats:
+        cav = self.all_caveats()
+        if cav:
             parts.append(
-                "<h2>Caveats</h2><ul>" + "".join(f"<li>{e(c)}</li>" for c in self.caveats) + "</ul>"
+                "<h2>Caveats</h2><ul>" + "".join(f"<li>{e(c)}</li>" for c in cav) + "</ul>"
             )
         return "\n".join(parts)

@@ -48,6 +48,13 @@ and `api/` (read API) around the edges.
    so detection is proven deterministically.
 4. Cite the standard/method in the module docstring.
 
+**Declare what you couldn't evaluate.** A rule must never assert a negative it did not
+test. When an absent optional input makes a sub-check impossible, represent it as `None`
+(tri-state), not a `nan`/`False`/`0` sentinel: exclude the `None` sub-check from severity
+(test `is False`/`is None`, never `not x`), write the metric as `None`, keep the untested
+claim out of the summary, and append a note to `Finding.caveats`. See the convention in
+`camber/rules/base.py` and the `chw_plant_reset` reference implementation.
+
 ## Adding a building or BAS
 
 No code needed — add a tag→role mapping (a JSON file like the ones under

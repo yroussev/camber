@@ -54,8 +54,8 @@ class SATResetResult:
     sat_p05: float
     sat_p95: float
     sat_std: float
-    slope_per_F: float  # d(SAT)/d(OAT); ~0 means no reset
-    r2: float
+    slope_per_F: float | None  # d(SAT)/d(OAT); None = not evaluated (no OAT)
+    r2: float | None
     pct_sat_below_58: float  # % of cooling hours SAT pinned low (<58 F)
     verdict: str
     coverage_start: str
@@ -136,7 +136,11 @@ def analyze_satreset(
 
     flat = (not np.isnan(slope)) and abs(slope) < slope_flat
     tight = sat_std < spread_tight
-    if flat and tight:
+    # Reset is SAT-vs-OAT modulation. Without OAT the slope is NaN and we CANNOT judge
+    # reset direction -- say so, never assert a confident "INVERSE / load tracking".
+    if np.isnan(slope):
+        verdict = "RESET NOT EVALUATED (no OAT)"
+    elif flat and tight:
         verdict = "NO RESET (SAT pinned low regardless of OAT)"
     elif flat:
         verdict = "WEAK/NO RESET (flat SAT vs OAT)"
@@ -152,8 +156,8 @@ def analyze_satreset(
         sat_p05=round(float(sat.quantile(0.05)), 1),
         sat_p95=round(float(sat.quantile(0.95)), 1),
         sat_std=round(sat_std, 2),
-        slope_per_F=round(slope, 3) if not np.isnan(slope) else float("nan"),
-        r2=round(r2, 3) if not np.isnan(r2) else float("nan"),
+        slope_per_F=round(slope, 3) if not np.isnan(slope) else None,
+        r2=round(r2, 3) if not np.isnan(r2) else None,
         pct_sat_below_58=pct_low,
         verdict=verdict,
         coverage_start=str(df.index.min()),

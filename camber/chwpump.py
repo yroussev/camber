@@ -40,7 +40,7 @@ class CHWPumpResult:
     pct_running_near_full: float  # % running hrs speed >= near_full_pct (riding the curve)
     pct_running_near_min: float  # % running hrs speed <= near_min_pct (oversized / VFD min)
     median_dp_sp: float  # median DP setpoint (if available)
-    dp_sp_reset_present: bool  # DP setpoint varies materially
+    dp_sp_reset_present: bool | None  # None = not evaluated (no/insufficient DP setpoint)
     coverage_start: str
     coverage_end: str
 
@@ -81,17 +81,19 @@ def analyze_chw_pump(
     pct_full = round(100.0 * float((running >= near_full_pct).mean()), 1)
     pct_min = round(100.0 * float((running <= near_min_pct).mean()), 1)
 
+    # DP-setpoint reset needs a usable DP setpoint. Without it (or too few samples) we
+    # CANNOT evaluate reset -- report None, never a confident "flat / no reset" (False).
     if "DiffPressSP" in work.columns:
         sp = work["DiffPressSP"].dropna()
         sp = sp[sp > 0]
         if len(sp) >= 10:
             dp_std = float(sp.std())
             dp_med = round(float(sp.median()), 2)
-            dp_reset = dp_std >= dp_sp_flat_std
+            dp_reset = bool(dp_std >= dp_sp_flat_std)
         else:
-            dp_med, dp_reset = float("nan"), False
+            dp_med, dp_reset = float("nan"), None  # DP setpoint too thin -> not evaluated
     else:
-        dp_med, dp_reset = float("nan"), False
+        dp_med, dp_reset = float("nan"), None  # no DP setpoint -> not evaluated
 
     return CHWPumpResult(
         equip=equip,
@@ -100,7 +102,7 @@ def analyze_chw_pump(
         pct_running_near_full=pct_full,
         pct_running_near_min=pct_min,
         median_dp_sp=dp_med,
-        dp_sp_reset_present=bool(dp_reset),
+        dp_sp_reset_present=dp_reset,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
     )

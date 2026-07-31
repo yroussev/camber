@@ -55,6 +55,7 @@ class OvercoolResult:
     overcool_with_reheat_pct: float  # the above AND reheat valve open
     median_minflow_fraction: float  # median ActFlowSP / max ActFlow (how high is "min"?)
     has_heat_valve: bool  # whether a HEAT_VALVE (HWValve) column was present
+    damper_present: bool  # whether a DAMPER column confirmed the at-min test (else flow-only)
     coverage_start: str
     coverage_end: str
 
@@ -121,8 +122,12 @@ def analyze_overcooling(
     else:
         at_min = pd.Series(False, index=work.index)
 
-    # damper not open beyond a low position (can't reduce flow further)
-    if "Damper" in work.columns:
+    # damper not open beyond a low position (can't reduce flow further). Without a
+    # damper column we CANNOT confirm the box is truly pinned at minimum -- at_min then
+    # rests on flow alone (a broader, unconfirmed signal that over-counts). Track that so
+    # the rule can caveat it and avoid escalating on the unconfirmed count.
+    damper_present = "Damper" in work.columns
+    if damper_present:
         damper_pinned = work["Damper"].fillna(0) <= damper_low
         at_min = at_min & damper_pinned
 
@@ -149,6 +154,7 @@ def analyze_overcooling(
         if minflow_frac == minflow_frac
         else float("nan"),
         has_heat_valve=has_heat_valve,
+        damper_present=damper_present,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
     )

@@ -62,10 +62,23 @@ class OvercoolingSeverity:
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
         ref = "heating setpoint" if res.mode == "relative_deadband" else "cooling setpoint"
+        # Without a heating setpoint the deadband-relative severity can't be computed;
+        # analysis falls back to absolute (depth below the COOLING setpoint), which
+        # over-flags a healthy space sitting a few degF below its cooling SP. Be
+        # conservative: don't emit the top fault tier on the absolute fallback alone,
+        # and caveat it. When a heating setpoint IS present, keep the computed severity.
+        severity = res.severity  # ok | info | warn | fault (info non-actionable)
+        caveats = []
+        if Role.HEAT_SP not in frame.columns and res.mode == "absolute":
+            caveats.append(
+                "no heating setpoint: severity judged on cooling-SP depth only (may over-flag)"
+            )
+            if severity == "fault":
+                severity = "warn"
         return Finding(
             rule=self.name,
             equip=equip,
-            severity=res.severity,  # ok | info | warn | fault (info non-actionable)
+            severity=severity,
             metrics={
                 "mode": res.mode,
                 "interval_min": res.interval_min,
@@ -85,4 +98,5 @@ class OvercoolingSeverity:
                 f"{res.tier_pct.get('fault'):.0f}% of occupied samples "
                 f"({res.window_min:.0f}-min persistence @ {res.interval_min:.0f}-min data)"
             ),
+            caveats=caveats,
         )

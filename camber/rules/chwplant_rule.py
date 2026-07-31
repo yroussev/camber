@@ -39,15 +39,37 @@ class CHWPlantReset:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
-        # Low-deltaT is the clearest part-load fault; no-reset compounds it.
-        low_dt = res.low_deltaT_pct if res.low_deltaT_pct == res.low_deltaT_pct else 0.0
+        caveats = []
+        # Low-deltaT sub-check: a NaN pct means no usable CHW return temp -> not evaluated
+        # (must not count toward the fault). Reset sub-check: None means OAT was absent/thin
+        # -> not evaluated (must not read as a confident "no reset").
+        dt_evaluated = res.low_deltaT_pct == res.low_deltaT_pct  # False when NaN
+        low_dt = res.low_deltaT_pct if dt_evaluated else 0.0
+        if not dt_evaluated:
+            caveats.append("loop deltaT not evaluated: no CHW return temp")
+        reset = res.chwst_reset_present  # True / False / None
+        if reset is None:
+            caveats.append("CHWST reset not evaluated: no/insufficient OAT")
+        # Severity: only a genuinely-evaluated flat reset (is False) downgrades; None does not.
         if low_dt >= 50.0:
             severity = "fault"
-        elif low_dt >= 20.0 or not res.chwst_reset_present:
+        elif low_dt >= 20.0 or reset is False:
             severity = "warn"
         else:
             severity = "ok"
-        reset_note = "CHWST reset present" if res.chwst_reset_present else "flat CHWST (no reset)"
+        reset_note = (
+            "CHWST reset present"
+            if reset is True
+            else "flat CHWST (no reset)"
+            if reset is False
+            else "CHWST reset not evaluated (no OAT)"
+        )
+        dt_note = (
+            f"loop deltaT median {res.deltaT_median_f:.1f}F "
+            f"({res.low_deltaT_pct:.0f}% of running hours < {res.design_deltaT_min_f:.0f}F)"
+            if dt_evaluated
+            else "loop deltaT not evaluated (no return temp)"
+        )
         return Finding(
             rule=self.name,
             equip=equip,
@@ -61,10 +83,6 @@ class CHWPlantReset:
                 "low_deltaT_pct": res.low_deltaT_pct,
                 "n_running": res.n_running,
             },
-            summary=(
-                f"{equip}: CHWST median {res.chwst_median_f:.1f}F, "
-                f"loop deltaT median {res.deltaT_median_f:.1f}F "
-                f"({res.low_deltaT_pct:.0f}% of running hours < "
-                f"{res.design_deltaT_min_f:.0f}F); {reset_note}"
-            ),
+            summary=f"{equip}: CHWST median {res.chwst_median_f:.1f}F, {dt_note}; {reset_note}",
+            caveats=caveats,
         )
