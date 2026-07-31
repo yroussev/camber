@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.9.4] — 2026-07-31
+
+Correctness release (same El Centro building): the `economizer_high_limit` rule false-faulted a
+high-outside-air design, and there was no way to tell it the building's design minimum.
+
+### Fixed
+- **`economizer_high_limit` OA-damper unit bug.** `OA_DAMPER` is a percent role (the pipeline
+  scales it to 0–100), but the rule compared it against a `0.25` *fraction* — so every open damper
+  read "not locked out" (≈99.99% at El Centro). The damper is now canonicalized to a fraction
+  regardless of source scale (0–1 or 0–100).
+- **Judge on outside-air fraction when available.** When mixed- and return-air temperatures are
+  present, the rule now judges on temperature-balance OA-fraction (the `camber.oafraction` method)
+  instead of damper position — damper % isn't linear in OA flow. It falls back to a damper threshold
+  otherwise, recording a caveat that names the basis. Distinct from `outdoor_air_fraction` (excess OA
+  in cooling generally) vs this rule's lockout-above-the-high-limit.
+- Both the high limit and the minimum (`high_limit_f`, `min_damper`/`min_oa_pct`) are documented as
+  tunable; the defaults encode a typical, not universal, building (CA Title 24 sets the changeover by
+  climate zone).
+
+### Added
+- **Per-rule config parameters.** A `rules` entry in a config may now be `{"name", "params"}` to
+  override a rule's constructor for the run, alongside the existing bare-string form (backward
+  compatible). Benefits ~24 tunable rules. New `camber.rules.builtin.make_rule(name, **params)`
+  constructs a built-in rule by name with clear errors on an unknown name or invalid parameter.
+
 ## [0.9.3] — 2026-07-31
 
 Correctness release (field-found on a real 50%-outside-air building): a rule must never

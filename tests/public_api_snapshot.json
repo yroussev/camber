@@ -961,6 +961,7 @@
     "RULE_CLASSES",
     "builtin_registry",
     "is_fleet",
+    "make_rule",
     "rule_names"
   ],
   "camber.rules.chiller_approach_rule": [
