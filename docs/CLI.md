@@ -16,6 +16,14 @@ A **config** is the same declarative JSON that drives `camber.config.run_config`
 equipment, rules — see the config examples). `run`/`report` execute it; `explain`/`ask` build the
 grounded [agent](AGENT.md) context from the run and answer over it.
 
+A `rules` entry is either a bare name or a `{"name", "params"}` object that overrides that rule's
+constructor for the run — e.g. a high-outside-air building setting its design minimum:
+
+```json
+"rules": ["simultaneous_heat_cool",
+          {"name": "economizer_high_limit", "params": {"high_limit_f": 75, "min_damper": 0.45}}]
+```
+
 ## Grounded agent from the shell
 
 `explain` and `ask` are useful with **no LLM** — they fall back to the deterministic template answer,

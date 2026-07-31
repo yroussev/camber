@@ -13,7 +13,11 @@ mapping, which equipment to discover, which rules to run, and what report to wri
       "shared_oat": {"file": "trends/OAT.csv"},
       "equipment": [{"class": "AHU", "marker": "CHW_Valve"},
                     {"class": "VAV", "marker": "SpaceTemp"}],
-      "rules": ["simultaneous_heat_cool", "outdoor_air_fraction", "reheat_penalty"],
+      "rules": ["simultaneous_heat_cool", "reheat_penalty",
+                {"name": "economizer_high_limit",     # per-rule tuning: a dict entry
+                 "params": {"high_limit_f": 75, "min_damper": 0.45}}],
+        # a rule is a bare name (constructor defaults) OR {"name","params"} to override its
+        # kwargs for this run (e.g. a high-outside-air building's design minimum damper).
       "soo": [{"class": "AHU", "library": "g36_ahu"},
               {"class": "AHU", "spec": "ahu_sequence.json"}],
       "report": {"level": 2, "climate_zone": "CA CZ15", "out_text": "audit.txt"}
@@ -42,7 +46,7 @@ from .realio import load_point
 from .report.audit import AuditReport, Benchmark
 from .resolve import discover, discover_terminals, resolve
 from .rules.base import _merge_shared
-from .rules.builtin import builtin_registry, is_fleet
+from .rules.builtin import builtin_registry, is_fleet, make_rule
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
 
@@ -139,7 +143,16 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     reg = builtin_registry()
     findings, ran = [], []
-    for name in config.get("rules", []):
+    for entry in config.get("rules", []):
+        # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
+        # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
+        if isinstance(entry, dict):
+            name = entry["name"]
+            params = entry.get("params") or {}
+            if params:
+                reg.register(make_rule(name, **params))  # override the default instance
+        else:
+            name = entry
         rule = reg.get(name)  # KeyError on unknown name
         if is_fleet(rule):
             f = reg.run_fleet(
