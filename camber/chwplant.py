@@ -43,8 +43,8 @@ class CHWPlantResult:
     equip: str
     n_running: int  # hours plant judged running
     chwst_median_f: float
-    chwst_slope_per_F: float  # d(CHWST)/d(OAT); ~0 = no reset
-    chwst_reset_present: bool
+    chwst_slope_per_F: float | None  # d(CHWST)/d(OAT); None = not evaluated (no OAT)
+    chwst_reset_present: bool | None  # None = could not evaluate (no/insufficient OAT)
     pct_chwst_low: float  # % running hrs CHWST below low threshold
     deltaT_median_f: float
     low_deltaT_pct: float  # % running hrs deltaT < design_min
@@ -100,13 +100,19 @@ def analyze_chw_plant(
     chwst_median = round(float(sup.median()), 1)
     pct_low = round(100.0 * float((sup <= chwst_low_f).mean()), 1)
 
+    # Reset is CHWST-vs-OAT modulation. Without OAT (or without enough overlapping data)
+    # we CANNOT evaluate it -- report None, never a confident "no reset" (False).
     if "OAT" in work.columns:
         r = work[["CHWS_Temp", "OAT"]].dropna()
         slope = _ols_slope(r["OAT"].values, r["CHWS_Temp"].values) if len(r) >= 10 else float("nan")
     else:
         slope = float("nan")
-    # reset present if CHWST varies materially with OAT (either sign of modulation)
-    reset_present = (not np.isnan(slope)) and abs(slope) >= chwst_reset_slope_flat
+    if np.isnan(slope):
+        slope_out = None
+        reset_present = None  # not evaluated (no/insufficient OAT) -- NOT "no reset"
+    else:
+        slope_out = round(slope, 3)
+        reset_present = bool(abs(slope) >= chwst_reset_slope_flat)
 
     if "CHWR_Temp" in work.columns:
         dt = (work["CHWR_Temp"] - work["CHWS_Temp"]).dropna()
@@ -122,8 +128,8 @@ def analyze_chw_plant(
         equip=equip,
         n_running=n,
         chwst_median_f=chwst_median,
-        chwst_slope_per_F=round(slope, 3) if not np.isnan(slope) else float("nan"),
-        chwst_reset_present=bool(reset_present),
+        chwst_slope_per_F=slope_out,
+        chwst_reset_present=reset_present,
         pct_chwst_low=pct_low,
         deltaT_median_f=dt_median,
         low_deltaT_pct=low_dt_pct,

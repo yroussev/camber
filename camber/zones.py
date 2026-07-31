@@ -43,6 +43,7 @@ def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
     """
     heating_cols = {}
     cooling_cols = {}
+    cooling_unevaluable = []  # boxes with no flow/space-temp signal to judge "cooling"
     for equip, df in box_frames.items():
         if "HWValve" not in df.columns:
             continue
@@ -52,7 +53,11 @@ def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
         elif "SpaceTemp" in df.columns and "ActCoolSP" in df.columns:
             cooling = df["SpaceTemp"] >= df["ActCoolSP"]
         else:
+            # No cooling criterion available: this box's "cooling" is NOT evaluated. Fill
+            # False so the columns align, but record it so a consumer can caveat that the
+            # census may under-count cooling/simultaneous rather than read a confident 0.
             cooling = pd.Series(False, index=df.index)
+            cooling_unevaluable.append(equip)
         heating_cols[equip] = heating
         cooling_cols[equip] = cooling
 
@@ -70,6 +75,7 @@ def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
     out["n_heating"] = H.sum(axis=1)
     out["n_cooling"] = C.sum(axis=1)
     out["n_both"] = (H & C).sum(axis=1)
+    out.attrs["cooling_unevaluable"] = cooling_unevaluable
     return out
 
 

@@ -8,6 +8,22 @@ its tags are mapped.
 
 The registry maps rule name -> Rule and the runner applies rules across all
 discovered equipment, skipping any equipment missing a rule's required roles.
+
+Declaring what you couldn't evaluate (honesty convention)
+---------------------------------------------------------
+A rule must **never assert a negative it did not test.** When an absent optional input
+makes a sub-check impossible, the analysis layer represents that sub-check as ``None``
+(tri-state ``bool | None`` / ``float | None``), never a sentinel (``nan``/``False``/``0``)
+that silently collapses into an asserted negative. The rule then:
+
+1. **excludes** a ``None`` sub-check from the severity decision (test ``is False`` / ``is
+   None`` -- never ``not x``, which reads ``True`` for ``None``);
+2. writes the metric as ``None`` (an honest JSON ``null``), not ``False``;
+3. phrases the summary without the untested clause; and
+4. appends a **caveat** to :attr:`Finding.caveats` naming what wasn't evaluated and why.
+
+As a backstop, :meth:`Registry.run` records any missing optional roles on every Finding
+(``metrics["_missing_optional"]``) so the whole class is visible without reading each rule.
 """
 
 from __future__ import annotations
@@ -24,7 +40,13 @@ from ..sensorhealth import untrusted_roles
 
 @dataclass
 class Finding:
-    """The structured result of running one rule on one equipment."""
+    """The structured result of running one rule on one equipment.
+
+    ``caveats`` carries human-readable "could not evaluate X" notes. A rule appends one
+    whenever a missing optional input made a sub-check impossible, so the rule can *decline*
+    that sub-check (an honest ``None`` metric + a caveat) rather than assert a false negative.
+    See the "declaring what you couldn't evaluate" convention below.
+    """
 
     rule: str
     equip: str
@@ -32,6 +54,7 @@ class Finding:
     metrics: dict = field(default_factory=dict)
     summary: str = ""
     evidence: dict | None = None  # optional JSON-friendly evidence descriptor (pattern J)
+    caveats: list = field(default_factory=list)  # "could not evaluate X" notes (see convention)
 
     def as_dict(self):
         """Return the finding as a plain dict (JSON/report friendly)."""
@@ -77,6 +100,17 @@ class FleetRule(Protocol):
 def _roles_to_load(rule) -> tuple:
     """Required + optional roles a rule wants resolved (optional may be absent)."""
     return tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
+
+
+def _missing_optional(rule, frame: pd.DataFrame) -> list:
+    """Optional roles the rule declared but that aren't present on the resolved frame."""
+    return [r for r in getattr(rule, "roles_optional", ()) if r not in frame.columns]
+
+
+def _note_missing_optional(finding, missing) -> None:
+    """Record absent optional roles on a Finding (backstop for the honesty convention)."""
+    if finding is not None and missing:
+        finding.metrics.setdefault("_missing_optional", [getattr(r, "value", r) for r in missing])
 
 
 def _merge_shared(frame: pd.DataFrame, shared) -> pd.DataFrame:
@@ -166,6 +200,7 @@ class Registry:
                     )
                     continue
             f = rule.analyze(ref.equip, frame)
+            _note_missing_optional(f, _missing_optional(rule, frame))
             if f is not None:
                 out.append(f)
         return out
@@ -201,4 +236,13 @@ class Registry:
             ):
                 continue
             frames[ref.equip] = frame
-        return rule.analyze_fleet(frames)
+        f = rule.analyze_fleet(frames)
+        # backstop: optional roles that were present on no equipment at all
+        if frames:
+            never = [
+                r
+                for r in getattr(rule, "roles_optional", ())
+                if all(r not in fr.columns for fr in frames.values())
+            ]
+            _note_missing_optional(f, never)
+        return f

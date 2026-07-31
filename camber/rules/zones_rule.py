@@ -68,12 +68,26 @@ class ZonesHeatCoolCensus:
         # Fleet is "in fault" when it is essentially never free of simultaneous
         # heat/cool during occupancy.
         severity = "fault" if pct_any_both >= 75.0 else ("warn" if pct_any_both >= 25.0 else "ok")
+        # Boxes lacking any flow/space-temp signal could not be judged for "cooling":
+        # they contribute 0 to n_cooling/n_both, so the census UNDER-counts. Don't let
+        # that read as a confident "ok" -- decline to info and caveat which zones were
+        # unevaluable (a real warn/fault already found the problem, so it stands).
+        caveats = []
+        unevaluable = states.attrs.get("cooling_unevaluable", [])
+        if unevaluable:
+            caveats.append(
+                f"cooling not evaluated for {len(unevaluable)} zone(s) lacking flow/space-temp "
+                f"setpoints: census may under-count cooling/simultaneous"
+            )
+            if severity == "ok":
+                severity = "info"
         # keep the time-of-week profile available for charting downstream
         profile = time_of_week_profile(states, occupied_only=True)
         return Finding(
             rule=self.name,
             equip="<fleet>",
             severity=severity,
+            caveats=caveats,
             metrics={
                 "n_zones": int(occ["n_zones"].max()),
                 "avg_zones_heating": round(avg_heating, 2),

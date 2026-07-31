@@ -37,9 +37,36 @@ class SupplyAirControl:
     def _deviation(self, frame):
         return frame[Role.SUPPLY_AIR_TEMP] - frame[Role.SUPPLY_AIR_TEMP_SP]
 
+    def _has_running_signal(self, frame):
+        return Role.SUPPLY_FAN_STATUS in frame.columns or Role.SUPPLY_FAN_SPEED in frame.columns
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run over an equipment role-frame; return a Finding on SAT-vs-setpoint tracking."""
         dev = self._deviation(frame)
+        if not self._has_running_signal(frame):
+            # No fan status/speed: which hours the unit is actually running is UNKNOWN.
+            # Counting every hour would fold in fan-OFF hours where SAT naturally drifts
+            # from setpoint, inflating off-setpoint into a false warn/fault. Decline the
+            # metric (None) rather than assert an untested negative, and do not raise
+            # severity on an unconfirmed all-running assumption.
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={
+                    "off_setpoint_pct": None,
+                    "too_warm_pct": None,
+                    "too_cold_pct": None,
+                    "mean_abs_dev_F": None,
+                    "n_running": None,
+                    "tol_F": self.tol_F,
+                },
+                summary=(
+                    f"{equip}: SAT-vs-setpoint not evaluated "
+                    "(no fan status/speed: running hours unknown)"
+                ),
+                caveats=["no fan status/speed: running hours unknown, SAT-vs-SP not evaluated"],
+            )
         run = self._running_mask(frame) & dev.notna()
         n = int(run.sum())
         if n == 0:
