@@ -48,11 +48,11 @@ class HWPlantResult:
     n_considered: int  # occupied hours with boiler data
     boiler_running_pct: float  # % of occupied hours boiler is running
     n_running: int
-    summer_run_pct: float  # % of running hours at OAT > lockout threshold
+    summer_run_pct: float | None  # % running hrs at OAT>lockout; None = no OAT (not evaluated)
     lockout_oat_f: float  # the (climate-dependent) threshold used
     hws_median_f: float
-    hws_slope_per_F: float  # d(HWS)/d(OAT); <0 = reset present
-    hws_reset_present: bool
+    hws_slope_per_F: float | None  # d(HWS)/d(OAT); None = not evaluated (no/insufficient OAT)
+    hws_reset_present: bool | None  # None = could not evaluate (no/insufficient OAT or no HWS)
     deltaT_median_f: float  # median loop dT (HWS - HWR) over running hours
     low_deltaT_pct: float  # % running hrs with loop dT < design_deltaT_min_f
     design_deltaT_min_f: float  # the design-minimum loop dT used
@@ -102,13 +102,18 @@ def analyze_hw_plant(
     n_run = int(running.sum())
     boiler_running_pct = round(100.0 * n_run / n, 2)
 
-    # summer-lockout violation (needs OAT)
-    if "OAT" in work.columns and n_run:
+    # summer-lockout violation (needs OAT). Without OAT we CANNOT evaluate it --
+    # report None, never a confident 0% ("clean, locked out in summer"). When the
+    # boiler never runs (n_run == 0) there are trivially no hot-weather running hours,
+    # so 0% is an honest evaluated answer.
+    if "OAT" not in work.columns:
+        summer_run_pct = None
+    elif n_run:
         oat_run = work.loc[running, "OAT"].dropna()
         summer_run_pct = (
             round(100.0 * float((oat_run > summer_lockout_oat_f).mean()), 2)
             if len(oat_run)
-            else 0.0
+            else None  # OAT present but all-NaN over running hours -> not evaluated
         )
     else:
         summer_run_pct = 0.0
@@ -126,7 +131,14 @@ def analyze_hw_plant(
             slope = float("nan")
     else:
         hws_median = slope = float("nan")
-    reset_present = (not np.isnan(slope)) and slope < -hws_reset_slope_flat
+    # Reset is HWS-vs-OAT modulation. Without OAT/HWS (or enough overlap) we CANNOT
+    # evaluate it -- report None, never a confident "no reset" (False).
+    if np.isnan(slope):
+        slope_out = None
+        reset_present = None  # not evaluated (no/insufficient OAT or no HWS)
+    else:
+        slope_out = round(slope, 3)
+        reset_present = bool(slope < -hws_reset_slope_flat)
 
     # HW loop delta-T (HWS - HWR) over running hours. Low delta-T = overpumping:
     # the loop circulates a lot of water for little heat transfer (PNNL Ch.8, the
@@ -155,8 +167,8 @@ def analyze_hw_plant(
         summer_run_pct=summer_run_pct,
         lockout_oat_f=float(summer_lockout_oat_f),
         hws_median_f=hws_median,
-        hws_slope_per_F=round(slope, 3) if not np.isnan(slope) else float("nan"),
-        hws_reset_present=bool(reset_present),
+        hws_slope_per_F=slope_out,
+        hws_reset_present=reset_present,
         deltaT_median_f=deltaT_median,
         low_deltaT_pct=low_dt_pct,
         design_deltaT_min_f=float(design_deltaT_min_f),

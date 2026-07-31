@@ -311,7 +311,7 @@ def _rec_sat_control(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
     lean = (
         "under-cooling (coil/valve/airflow can't hit SAT)"
-        if m.get("too_warm_pct", 0) >= m.get("too_cold_pct", 0)
+        if (m.get("too_warm_pct") or 0) >= (m.get("too_cold_pct") or 0)
         else "over-cooling / hunting"
     )
     return _rec(
@@ -335,7 +335,7 @@ def _rec_airflow(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
     lean = (
         "starved (undershooting — check upstream duct static / damper travel)"
-        if m.get("undershoot_pct", 0) >= m.get("overshoot_pct", 0)
+        if (m.get("undershoot_pct") or 0) >= (m.get("overshoot_pct") or 0)
         else "overshooting (check flow-sensor calibration / min-max limits)"
     )
     return _rec(
@@ -359,7 +359,7 @@ def _rec_unmet(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
     lean = (
         "cooling capacity/airflow"
-        if m.get("too_hot_pct", 0) >= m.get("too_cold_pct", 0)
+        if (m.get("too_hot_pct") or 0) >= (m.get("too_cold_pct") or 0)
         else "heating capacity/airflow"
     )
     return _rec(
