@@ -41,6 +41,20 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "G36Thresholds",
+    "OS_HEATING",
+    "OS_FREECOOL",
+    "OS_MECH_ECON",
+    "OS_MECH_MINOA",
+    "OS_UNKNOWN",
+    "classify_os",
+    "OS_FAULTS",
+    "FC_DESC",
+    "G36Result",
+    "run_g36_afdd",
+]
+
 
 @dataclass
 class G36Thresholds:

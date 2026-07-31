@@ -14,6 +14,13 @@ from dataclasses import dataclass
 from .aso import _SEV_ORDER, recommend
 from .fault_economics import cost_findings
 
+__all__ = [
+    "ActionItem",
+    "build_action_plan",
+    "action_plan_rows",
+    "action_plan_html",
+]
+
 
 @dataclass
 class ActionItem:

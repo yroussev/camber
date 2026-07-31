@@ -16,6 +16,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "make_ahu_trends",
+]
+
 
 def make_ahu_trends(
     days: int = 14,

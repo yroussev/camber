@@ -17,6 +17,12 @@ from __future__ import annotations
 
 import pandas as pd
 
+__all__ = [
+    "occupied_mask",
+    "day_type",
+    "time_of_week_bin",
+]
+
 
 def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None, warmup=None, cooldown=None):
     """Boolean Series: is each interval occupied?

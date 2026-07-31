@@ -19,6 +19,11 @@ import pandas as pd
 
 from .timegrid import interval_hours
 
+__all__ = [
+    "FreeCoolingOpportunity",
+    "free_cooling_opportunity",
+]
+
 
 @dataclass
 class FreeCoolingOpportunity:

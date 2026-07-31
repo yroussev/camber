@@ -46,6 +46,13 @@ from .rules.builtin import builtin_registry, is_fleet
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
 
+__all__ = [
+    "RunResult",
+    "run_config",
+    "load_config",
+    "run_config_file",
+]
+
 # Named built-in SOO sequences referenceable from a config's "soo" section.
 _SOO_LIBRARY = {"g36_ahu": g36_ahu_sequence, "g36_plant": g36_plant_sequence}
 

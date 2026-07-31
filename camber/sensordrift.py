@@ -32,6 +32,12 @@ import pandas as pd
 
 from .rules.base import Finding
 
+__all__ = [
+    "DriftResult",
+    "compare_to_reference",
+    "drift_finding",
+]
+
 
 @dataclass
 class DriftResult:

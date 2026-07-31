@@ -30,6 +30,15 @@ import pandas as pd
 
 from .model.roles import Role
 
+__all__ = [
+    "SCENARIOS",
+    "labeled_records",
+    "g36_accuracy",
+    "cross_fire",
+    "targets",
+    "coverage",
+]
+
 
 def _idx(days: int = 21, freq: str = "1h") -> pd.DatetimeIndex:
     return pd.date_range("2025-07-07", periods=days * 24, freq=freq)  # Monday start

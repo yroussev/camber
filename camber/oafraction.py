@@ -26,6 +26,11 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "OAFractionResult",
+    "analyze_oa_fraction",
+]
+
 
 @dataclass
 class OAFractionResult:

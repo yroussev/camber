@@ -23,6 +23,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "CHWPumpResult",
+    "analyze_chw_pump",
+    "analyze_pump",
+]
+
 
 @dataclass
 class CHWPumpResult:

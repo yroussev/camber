@@ -19,6 +19,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+__all__ = [
+    "npv",
+    "irr",
+    "ECMResult",
+    "ecm_financials",
+]
+
 
 def npv(rate: float, cashflows) -> float:
     """Net present value of ``cashflows`` (index 0 = today) discounted at ``rate``."""

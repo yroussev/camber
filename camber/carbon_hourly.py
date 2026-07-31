@@ -22,6 +22,13 @@ import pandas as pd
 
 from .timegrid import interval_hours as _interval_hours
 
+__all__ = [
+    "HourlyEmissions",
+    "hourly_emissions",
+    "MarginalComparison",
+    "marginal_vs_average",
+]
+
 
 def _align(load_kw: pd.Series, factor):
     f = (

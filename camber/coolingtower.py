@@ -25,6 +25,12 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+__all__ = [
+    "stull_wetbulb_f",
+    "CoolingTowerResult",
+    "analyze_cooling_tower_approach",
+]
+
 
 def stull_wetbulb_f(oat_f, rh_pct):
     """Wet-bulb (°F) from dry-bulb (°F) and RH (%) via Stull's 2011 approximation.

@@ -21,6 +21,14 @@ import pandas as pd
 
 from .integrate.tickets import _attr, fingerprint
 
+__all__ = [
+    "ACTIONABLE",
+    "OPEN_STATUSES",
+    "STATUSES",
+    "FaultRecord",
+    "FaultLifecycle",
+]
+
 ACTIONABLE = frozenset({"fault", "warn"})
 OPEN_STATUSES = frozenset({"open", "acknowledged", "in_progress"})
 STATUSES = ("open", "acknowledged", "in_progress", "resolved", "suppressed")

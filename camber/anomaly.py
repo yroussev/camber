@@ -23,6 +23,11 @@ import pandas as pd
 from .changedetect import detect_level_shifts
 from .ingest.quality import _mad_z, assess
 
+__all__ = [
+    "AnomalyResult",
+    "detect_anomalies",
+]
+
 
 @dataclass
 class AnomalyResult:

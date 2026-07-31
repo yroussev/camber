@@ -12,6 +12,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = [
+    "Confusion",
+    "confusion",
+    "correct_diagnosis_rate",
+    "BenchmarkReport",
+    "benchmark",
+    "BaselineCheck",
+    "check_against_baseline",
+]
+
 
 @dataclass(frozen=True)
 class Confusion:

@@ -12,6 +12,14 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 
+__all__ = [
+    "RULE_CATEGORY",
+    "CATEGORIES",
+    "CategoryScore",
+    "Scorecard",
+    "build_scorecard",
+]
+
 _SEV = {"ok": 0, "info": 0, "warn": 1, "fault": 2}
 
 #: rule name -> category. Rules not listed fall in "other".
@@ -58,11 +66,13 @@ RULE_CATEGORY = {
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")
 
 
-def category_for(rule: str) -> str:
+def _category_for(rule: str) -> str:
+    """Map a rule name to its scorecard category, or ``"other"`` if unmapped."""
     return RULE_CATEGORY.get(rule, "other")
 
 
-def grade_for(score: float) -> str:
+def _grade_for(score: float) -> str:
+    """Letter grade (A–F) for a 0–100 score on the usual 90/80/70/60 thresholds."""
     return (
         "A"
         if score >= 90
@@ -78,6 +88,8 @@ def grade_for(score: float) -> str:
 
 @dataclass
 class CategoryScore:
+    """A single category's rolled-up health: score, letter grade, and finding counts."""
+
     category: str
     score: float
     grade: str
@@ -118,7 +130,7 @@ def build_scorecard(
     """
     by_cat = defaultdict(list)
     for f in findings:
-        by_cat[category_for(getattr(f, "rule", ""))].append(f)
+        by_cat[_category_for(getattr(f, "rule", ""))].append(f)
 
     weights = category_weights or {c: 1.0 for c in CATEGORIES}
     # score the fixed categories AND any extra category present in the findings (e.g. "other" for
@@ -135,7 +147,7 @@ def build_scorecard(
             CategoryScore(
                 category=cat,
                 score=round(score, 1),
-                grade=grade_for(score),
+                grade=_grade_for(score),
                 n_faults=nf,
                 n_warnings=nw,
             )
@@ -145,7 +157,7 @@ def build_scorecard(
     overall = (sum(c.score * weights.get(c.category, 1.0) for c in cats) / wsum) if wsum else 100.0
     return Scorecard(
         overall_score=round(overall, 1),
-        overall_grade=grade_for(overall),
+        overall_grade=_grade_for(overall),
         n_findings=len(findings),
         n_actionable=n_actionable,
         categories=cats,

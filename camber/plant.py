@@ -29,6 +29,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "HWPLANT_MEASURES",
+    "HWPlantResult",
+    "analyze_hw_plant",
+]
+
 # Roles consumed (kept as strings here to avoid a hard import cycle with model;
 # the rule wrapper maps Role -> these legacy column names).
 HWPLANT_MEASURES = ["BoilerStatus", "HWS_Temp", "HWR_Temp", "HW_DiffPress", "OAT"]

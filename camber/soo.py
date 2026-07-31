@@ -35,6 +35,19 @@ import pandas as pd
 from .model.roles import Role
 from .rules.base import Finding
 
+__all__ = [
+    "Predicate",
+    "Clause",
+    "ClauseResult",
+    "SOOReport",
+    "evaluate_clause",
+    "evaluate_soo",
+    "soo_findings",
+    "predicate_from_dict",
+    "clause_from_dict",
+    "spec_from_dicts",
+]
+
 # Comparison operators a predicate may use. Numeric compares take ``value`` (a
 # constant) or ``ref`` (another role's series); eq/ne/within use ``tol``; off/on
 # treat the subject as a 0/1 binary (status/command) point.

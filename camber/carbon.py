@@ -14,6 +14,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = [
+    "DEFAULT_FACTORS",
+    "Emissions",
+    "emissions",
+]
+
 # kg CO2e per unit. Electricity is grid- and year-specific -- override it.
 DEFAULT_FACTORS: dict = {
     "electricity_kwh": 0.40,  # placeholder; supply your eGRID subregion value (~0.4-0.9)
