@@ -21,3 +21,6 @@ docs/camber-rcx-visualization-patterns.md
 
 # Do-not-commit session hand-off notes (working context, not for release)
 SESSION-CATCHUP-*.md
+
+# scratch plan-prompt files (not project docs)
+PLAN-PROMPT-*.md
