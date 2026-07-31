@@ -14,6 +14,14 @@ import re
 from dataclasses import asdict, dataclass
 from glob import glob
 
+__all__ = [
+    "EQUIP_PREFIXES",
+    "PointFile",
+    "parse_name",
+    "inventory",
+    "to_rows",
+]
+
 # Equipment-type prefixes seen in the export. Order matters: longer/multiword
 # prefixes (CHW_SYS, HW_SYS) must be tried before bare CHW/HW.
 EQUIP_PREFIXES = [

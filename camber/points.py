@@ -26,6 +26,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+__all__ = [
+    "Point",
+    "equip_id_len",
+    "parse_point",
+    "measure_suffix",
+    "matches",
+    "find_column",
+    "count_equipment",
+]
+
 # Trailing 1-2 digit equipment id at the end of the pre-measure segment. Greedy
 # so a two-digit id wins over one; capped at two digits by the quantifier.
 _TRAILING_ID = re.compile(r"(\d{1,2})$")

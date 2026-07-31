@@ -4,7 +4,37 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## [0.9.1] — 2026-07-28
+## [0.9.2] — 2026-07-28
+
+Second pre-1.0 hardening release: **the public API contract** — the biggest 1.0 prerequisite.
+Settles what is public, writes down the SemVer + deprecation promise, and locks it in CI. No
+behavior change to existing analytics (full suite green).
+
+### Added
+- **`docs/API-STABILITY.md`** — the public-API + deprecation policy: a name is public iff it
+  (and its module) has no leading underscore; `__all__` is each module's curated surface;
+  SemVer from 1.0; a deprecation window of at least one minor release and never removed before
+  the next major. Wired into the docs nav.
+- **`camber._deprecation`** (private) — `@deprecated(since=, remove_in=, use=)` decorator and
+  `warn_deprecated()` helper emitting a consistent `DeprecationWarning`, attaching a
+  machine-readable `__deprecated__` marker and a docstring note. Works on functions and classes.
+- **`__all__` everywhere** — declared on the three previously-bare subpackages (`rules`,
+  `model`, `charts`, with curated re-exports) and on all 70 flat top-level modules (each
+  module's non-underscore surface). `camber.ingest` now surfaces its data-quality API
+  (`assess`/`clean`/…) and `camber.report` its interactive-viz helpers, closing docstring-vs-
+  export gaps.
+- **`tests/test_public_api.py` + `tests/public_api_snapshot.json`** — a committed snapshot of
+  the entire public surface (200 modules, 832 names); adding/removing any public name fails CI
+  until the snapshot is regenerated. Also asserts every `__all__` name resolves, no private
+  name leaks into an `__all__`, and every public function/class is documented (575, all pass).
+
+### Changed
+- Top-level `camber` is now an explicit namespace: it exposes only `__version__` (documented),
+  not a re-export surface — import from subpackages/modules per the policy.
+- `camber.scorecard.category_for` / `grade_for` reclassified as private (`_category_for` /
+  `_grade_for`) — they were trivial internal lookups; users get their results via `Scorecard`.
+
+
 
 First of the pre-1.0 hardening series. **A lint + format gate** — no behavior change, no
 API change; the whole codebase is now machine-formatted and lint-clean, and CI enforces it.

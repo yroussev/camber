@@ -1,0 +1,1234 @@
+{
+  "camber": [
+    "__version__"
+  ],
+  "camber.actionplan": [
+    "ActionItem",
+    "action_plan_html",
+    "action_plan_rows",
+    "build_action_plan"
+  ],
+  "camber.agent": [
+    "AgentClient",
+    "Context",
+    "Fact",
+    "Grounded",
+    "ask",
+    "build_context",
+    "check",
+    "client_from_callable",
+    "explain",
+    "facts_from_completeness",
+    "facts_from_findings",
+    "facts_from_fleet",
+    "facts_from_history",
+    "facts_from_mapping",
+    "facts_from_run",
+    "facts_from_scorecard",
+    "stub_client"
+  ],
+  "camber.agent.ask": [
+    "ask"
+  ],
+  "camber.agent.client": [
+    "AgentClient",
+    "client_from_callable",
+    "stub_client"
+  ],
+  "camber.agent.context": [
+    "Context",
+    "Fact",
+    "build_context",
+    "facts_from_completeness",
+    "facts_from_findings",
+    "facts_from_fleet",
+    "facts_from_history",
+    "facts_from_mapping",
+    "facts_from_run",
+    "facts_from_scorecard"
+  ],
+  "camber.agent.explain": [
+    "explain"
+  ],
+  "camber.agent.templates": [
+    "answer_from_facts",
+    "explain_from_facts"
+  ],
+  "camber.agent.verify": [
+    "Grounded",
+    "check",
+    "extract_cites"
+  ],
+  "camber.ahu": [
+    "AHUResult",
+    "AHU_MEASURES",
+    "analyze_ahu"
+  ],
+  "camber.anomaly": [
+    "AnomalyResult",
+    "detect_anomalies"
+  ],
+  "camber.api": [
+    "ReadAPI",
+    "dispatch",
+    "make_server",
+    "serve"
+  ],
+  "camber.api.read": [
+    "ReadAPI"
+  ],
+  "camber.api.server": [
+    "ReadAPIHandler",
+    "dispatch",
+    "make_server",
+    "serve"
+  ],
+  "camber.aso": [
+    "DEFAULT_PARAMS",
+    "RECOMMENDERS",
+    "Recommendation",
+    "recommend",
+    "recommend_findings"
+  ],
+  "camber.boilercycle": [
+    "BoilerCyclingResult",
+    "analyze_boiler_cycling"
+  ],
+  "camber.bps": [
+    "BPSResult",
+    "BPSStandard",
+    "EUI_FACTORS_KBTU",
+    "assess_bps",
+    "assess_eui",
+    "emissions_intensity",
+    "site_eui"
+  ],
+  "camber.carbon": [
+    "DEFAULT_FACTORS",
+    "Emissions",
+    "emissions"
+  ],
+  "camber.carbon_hourly": [
+    "HourlyEmissions",
+    "MarginalComparison",
+    "hourly_emissions",
+    "marginal_vs_average"
+  ],
+  "camber.changedetect": [
+    "LevelShift",
+    "detect_level_shifts",
+    "largest_shift"
+  ],
+  "camber.charts": [
+    "CloudShape",
+    "CohortResult",
+    "DiagnosticTemplate",
+    "Evidence",
+    "HeCMetrics",
+    "ahu_hec_scatter",
+    "ahu_hec_timeseries",
+    "band",
+    "box_reheat_figure",
+    "brush_back",
+    "carpet_matrix",
+    "classify_shape",
+    "cohort_deviation",
+    "cohort_small_multiples",
+    "cohort_summary",
+    "cumulative_savings",
+    "cusum_plot",
+    "diagnostic_scatter",
+    "economizer_template",
+    "energy_signature",
+    "evidence_descriptor",
+    "fault_multitrend",
+    "finding_evidence",
+    "hec_metrics",
+    "load_carpet",
+    "load_duration_chart",
+    "load_profile_chart",
+    "mask_to_spans",
+    "no_simultaneous_template",
+    "oat_scatter",
+    "presence_matrix",
+    "quality_dashboard",
+    "quality_matrix",
+    "readiness_ribbon",
+    "render_evidence",
+    "reset_line",
+    "savings_chart",
+    "zones_timeofweek_figure",
+    "zones_vs_oat_figure"
+  ],
+  "camber.charts.box_reheat": [
+    "box_reheat_figure"
+  ],
+  "camber.charts.carpet": [
+    "carpet_matrix",
+    "load_carpet"
+  ],
+  "camber.charts.cohort": [
+    "CohortResult",
+    "cohort_deviation",
+    "cohort_small_multiples",
+    "cohort_summary"
+  ],
+  "camber.charts.cusum_chart": [
+    "cusum_plot"
+  ],
+  "camber.charts.diagnostic": [
+    "DiagnosticTemplate",
+    "TEMPLATES",
+    "band",
+    "diagnostic_scatter",
+    "economizer_template",
+    "no_simultaneous_template",
+    "reset_line"
+  ],
+  "camber.charts.energy_signature": [
+    "energy_signature"
+  ],
+  "camber.charts.evidence": [
+    "Evidence",
+    "evidence_descriptor",
+    "finding_evidence",
+    "render_evidence"
+  ],
+  "camber.charts.loadprofile_chart": [
+    "load_duration_chart",
+    "load_profile_chart"
+  ],
+  "camber.charts.multitrend": [
+    "fault_multitrend",
+    "mask_to_spans"
+  ],
+  "camber.charts.oat_scatter": [
+    "CloudShape",
+    "brush_back",
+    "classify_shape",
+    "oat_scatter"
+  ],
+  "camber.charts.quality_dashboard": [
+    "quality_dashboard",
+    "quality_matrix"
+  ],
+  "camber.charts.readiness": [
+    "presence_matrix",
+    "readiness_ribbon"
+  ],
+  "camber.charts.savings": [
+    "cumulative_savings",
+    "savings_chart"
+  ],
+  "camber.charts.scatter": [
+    "HeCMetrics",
+    "ahu_hec_scatter",
+    "hec_metrics"
+  ],
+  "camber.charts.timeseries": [
+    "ahu_hec_timeseries"
+  ],
+  "camber.charts.zones_chart": [
+    "zones_timeofweek_figure",
+    "zones_vs_oat_figure"
+  ],
+  "camber.chiller": [
+    "ChillerEfficiencyResult",
+    "analyze_chiller_efficiency"
+  ],
+  "camber.chillerstaging": [
+    "ChillerFleetStagingResult",
+    "ChillerStagingResult",
+    "analyze_chiller_staging",
+    "analyze_chiller_staging_fleet"
+  ],
+  "camber.chwplant": [
+    "CHWPLANT_MEASURES",
+    "CHWPlantResult",
+    "analyze_chw_plant"
+  ],
+  "camber.chwpump": [
+    "CHWPumpResult",
+    "analyze_chw_pump",
+    "analyze_pump"
+  ],
+  "camber.cli": [
+    "main"
+  ],
+  "camber.coerce": [
+    "NULL_TOKENS",
+    "STATUS_OFF",
+    "STATUS_ON",
+    "coerce_numeric",
+    "coerce_status"
+  ],
+  "camber.comfort": [
+    "ComfortResult",
+    "comfort_series",
+    "f_to_c",
+    "pmv",
+    "pmv_f",
+    "ppd"
+  ],
+  "camber.condenserwater": [
+    "CondenserWaterResetResult",
+    "analyze_cw_reset"
+  ],
+  "camber.config": [
+    "RunResult",
+    "load_config",
+    "run_config",
+    "run_config_file"
+  ],
+  "camber.coolingtower": [
+    "CoolingTowerResult",
+    "analyze_cooling_tower_approach",
+    "stull_wetbulb_f"
+  ],
+  "camber.cost": [
+    "EnergyRate",
+    "WaterBill",
+    "energy_cost",
+    "marginal_rate",
+    "tiered_cost",
+    "tou_energy_cost",
+    "water_cost"
+  ],
+  "camber.demand": [
+    "BaseloadResult",
+    "DemandResult",
+    "PeakShaveResult",
+    "analyze_demand",
+    "baseload_anomaly",
+    "peak_shave_savings"
+  ],
+  "camber.disaggregate": [
+    "LoadComponents",
+    "disaggregate_load"
+  ],
+  "camber.eval": [
+    "BaselineCheck",
+    "BenchmarkReport",
+    "Confusion",
+    "benchmark",
+    "check_against_baseline",
+    "confusion",
+    "correct_diagnosis_rate"
+  ],
+  "camber.fault_economics": [
+    "DEFAULTS",
+    "DEFAULT_MODELS",
+    "EnergyPrice",
+    "EquipmentLoad",
+    "FaultCost",
+    "annotate_costs",
+    "cost_findings",
+    "estimate_cost",
+    "rank_by_cost",
+    "total_cost"
+  ],
+  "camber.faultlab": [
+    "SCENARIOS",
+    "coverage",
+    "cross_fire",
+    "g36_accuracy",
+    "labeled_records",
+    "targets"
+  ],
+  "camber.faultlifecycle": [
+    "ACTIONABLE",
+    "FaultLifecycle",
+    "FaultRecord",
+    "OPEN_STATUSES",
+    "STATUSES"
+  ],
+  "camber.fdd_g36": [
+    "FC_DESC",
+    "G36Result",
+    "G36Thresholds",
+    "OS_FAULTS",
+    "OS_FREECOOL",
+    "OS_HEATING",
+    "OS_MECH_ECON",
+    "OS_MECH_MINOA",
+    "OS_UNKNOWN",
+    "classify_os",
+    "run_g36_afdd"
+  ],
+  "camber.finance": [
+    "ECMResult",
+    "ecm_financials",
+    "irr",
+    "npv"
+  ],
+  "camber.forecast": [
+    "AnomalyReport",
+    "backtest",
+    "forecast_anomalies",
+    "seasonal_forecast"
+  ],
+  "camber.freecooling": [
+    "FreeCoolingOpportunity",
+    "free_cooling_opportunity"
+  ],
+  "camber.g36_reset": [
+    "SATResetComplianceResult",
+    "SAT_TR",
+    "STATIC_TR",
+    "TRParams",
+    "cooling_sat_requests",
+    "oat_sat_setpoint",
+    "sat_reset_compliance",
+    "static_pressure_requests",
+    "tr_simulate",
+    "tr_step"
+  ],
+  "camber.geb": [
+    "DemandResponseResult",
+    "FlexibilityResult",
+    "OperationScore",
+    "carbon_aware_shift",
+    "demand_response",
+    "flexibility",
+    "operation_score"
+  ],
+  "camber.iaq": [
+    "CO2VentilationResult",
+    "analyze_co2_ventilation"
+  ],
+  "camber.ingest": [
+    "BacnetPoint",
+    "BacnetSource",
+    "BacnetTarget",
+    "CleaningLog",
+    "HaystackAdapter",
+    "IngestProfile",
+    "LongCsvAdapter",
+    "ModbusPoint",
+    "ModbusSource",
+    "MqttPoint",
+    "MqttStreamSource",
+    "OpcUaPoint",
+    "OpcUaSecurity",
+    "OpcUaSource",
+    "PROFILES",
+    "PerPointCsvAdapter",
+    "QualityReport",
+    "READ_SERVICES",
+    "SqlSource",
+    "WideCsvAdapter",
+    "assess",
+    "clean",
+    "client_transport",
+    "decode_registers",
+    "gap_count",
+    "get_profile",
+    "history_to_series",
+    "http_json_transport",
+    "infer_freq",
+    "longest_flatline",
+    "outlier_mask",
+    "parse_his_grid",
+    "parse_payload",
+    "phable_transport",
+    "read_points",
+    "trendlog_to_series"
+  ],
+  "camber.ingest.bacnet": [
+    "BacnetPoint",
+    "BacnetSource",
+    "BacnetTarget",
+    "READ_SERVICES",
+    "trendlog_to_series"
+  ],
+  "camber.ingest.base": [
+    "SourceAdapter"
+  ],
+  "camber.ingest.csv_long": [
+    "LongCsvAdapter"
+  ],
+  "camber.ingest.csv_perpoint": [
+    "PerPointCsvAdapter"
+  ],
+  "camber.ingest.csv_wide": [
+    "WideCsvAdapter"
+  ],
+  "camber.ingest.haystack": [
+    "HaystackAdapter",
+    "client_transport",
+    "http_json_transport",
+    "parse_his_grid",
+    "phable_transport"
+  ],
+  "camber.ingest.modbus": [
+    "ModbusPoint",
+    "ModbusSource",
+    "decode_registers"
+  ],
+  "camber.ingest.mqtt_stream": [
+    "MqttPoint",
+    "MqttStreamSource",
+    "parse_payload"
+  ],
+  "camber.ingest.opcua": [
+    "OpcUaPoint",
+    "OpcUaSecurity",
+    "OpcUaSource",
+    "READ_SERVICES",
+    "history_to_series"
+  ],
+  "camber.ingest.profiles": [
+    "IngestProfile",
+    "PROFILES",
+    "get_profile"
+  ],
+  "camber.ingest.quality": [
+    "CleaningLog",
+    "QualityReport",
+    "assess",
+    "clean",
+    "gap_count",
+    "infer_freq",
+    "longest_flatline",
+    "outlier_mask"
+  ],
+  "camber.ingest.sql": [
+    "SqlSource",
+    "read_points"
+  ],
+  "camber.integrate": [
+    "Notifier",
+    "collect_transport",
+    "dispatch_findings",
+    "email_transport",
+    "export_findings",
+    "finding_to_ticket",
+    "findings_to_frame",
+    "findings_to_tickets",
+    "format_for",
+    "slack_payload",
+    "teams_payload",
+    "webhook_transport"
+  ],
+  "camber.integrate.export": [
+    "export_findings",
+    "findings_to_frame"
+  ],
+  "camber.integrate.notify": [
+    "dispatch_findings",
+    "email_transport",
+    "format_for",
+    "slack_payload",
+    "teams_payload"
+  ],
+  "camber.integrate.tickets": [
+    "Notifier",
+    "SEVERITY_TO_PRIORITY",
+    "collect_transport",
+    "finding_to_ticket",
+    "findings_to_tickets",
+    "fingerprint",
+    "webhook_transport"
+  ],
+  "camber.interop": [
+    "ROLE_TO_223",
+    "equip_haystack_tags",
+    "equip_to_223",
+    "haystack_tags",
+    "mapping_from_brick",
+    "mapping_from_haystack",
+    "role_223_quantity",
+    "role_from_tags",
+    "roles_from_brick",
+    "roles_from_haystack",
+    "site_from_223",
+    "site_from_ttl",
+    "site_to_223",
+    "site_to_ttl",
+    "to_brick"
+  ],
+  "camber.interop.better": [
+    "compare_changepoint",
+    "fit_changepoint"
+  ],
+  "camber.interop.brick": [
+    "DIRECT_CLASS_TO_ROLE",
+    "mapping_from_brick",
+    "parse_triples",
+    "parse_triples_rdflib",
+    "roles_from_brick",
+    "roles_from_triples"
+  ],
+  "camber.interop.export": [
+    "ROLE_TO_BRICK_PART",
+    "ROLE_TO_BRICK_POINT_CLASS",
+    "equip_haystack_tags",
+    "haystack_tags",
+    "to_brick"
+  ],
+  "camber.interop.haystack_semantic": [
+    "mapping_from_haystack",
+    "role_from_tags",
+    "roles_from_haystack"
+  ],
+  "camber.interop.openadr": [
+    "openadr_report_json",
+    "to_openadr_report"
+  ],
+  "camber.interop.openei": [
+    "fetch_urdb_rate",
+    "tariff_from_urdb"
+  ],
+  "camber.interop.psychro": [
+    "compare_wetbulb",
+    "psychrometrics",
+    "wet_bulb_f"
+  ],
+  "camber.interop.pvlib_bridge": [
+    "compare_expected",
+    "poa_from_ghi",
+    "pvwatts_expected_kwh"
+  ],
+  "camber.interop.semantic223": [
+    "ROLE_TO_223",
+    "S223_PREFIX",
+    "equip_to_223",
+    "role_223_quantity",
+    "site_from_223",
+    "site_to_223"
+  ],
+  "camber.interop.site_model": [
+    "site_from_ttl",
+    "site_to_ttl"
+  ],
+  "camber.interop.tariff_nrel": [
+    "bill_with_pysam"
+  ],
+  "camber.inventory": [
+    "EQUIP_PREFIXES",
+    "PointFile",
+    "inventory",
+    "parse_name",
+    "to_rows"
+  ],
+  "camber.io": [
+    "add_oat_band",
+    "load_csv"
+  ],
+  "camber.leakvalve": [
+    "LeakValveResult",
+    "analyze_leak_valves"
+  ],
+  "camber.lighting": [
+    "LightingSummary",
+    "lighting_summary",
+    "operational_efficiency"
+  ],
+  "camber.loadprofile": [
+    "LoadMetrics",
+    "daily_profile",
+    "load_duration",
+    "load_metrics",
+    "weekday_weekend_profiles"
+  ],
+  "camber.mandv": [
+    "Calibration",
+    "DriverModel",
+    "IsolationSavings",
+    "NMECResult",
+    "NonRoutineResult",
+    "NormalizedSavings",
+    "OptionDSavings",
+    "RCModel",
+    "StepChangeResult",
+    "calibrate",
+    "caltrack_savings",
+    "daily_schedule",
+    "detect_non_routine",
+    "detect_step_change",
+    "fit_driver_model",
+    "isolation_normalized_savings",
+    "isolation_savings",
+    "normalized_annual_consumption",
+    "normalized_savings",
+    "option_d_savings"
+  ],
+  "camber.mandv.caltrack": [
+    "NMECResult",
+    "caltrack_savings"
+  ],
+  "camber.mandv.categorical": [
+    "CategoricalModel",
+    "fit_categorical"
+  ],
+  "camber.mandv.cusum": [
+    "CusumResult",
+    "control_exceedances",
+    "cusum",
+    "cusum_savings"
+  ],
+  "camber.mandv.degreeday": [
+    "DegreeDayModel",
+    "degree_days",
+    "fit_degree_day"
+  ],
+  "camber.mandv.ecm_savings": [
+    "BTU_PER_THERM",
+    "BTU_PER_TON_HOUR",
+    "WasteEstimate",
+    "heating_in_cooling_weather",
+    "modeled_savings",
+    "simultaneous_heat_cool_energy",
+    "unoccupied_cooling_energy"
+  ],
+  "camber.mandv.intervalfit": [
+    "daily_energy_vs_temp",
+    "degree_days",
+    "energy_vs_degree_days",
+    "hourly_energy_vs_temp",
+    "rate_to_energy"
+  ],
+  "camber.mandv.models": [
+    "ChangePointModel",
+    "N_PARAMS",
+    "best_model",
+    "fit_model"
+  ],
+  "camber.mandv.nonroutine": [
+    "NonRoutineResult",
+    "StepChangeResult",
+    "detect_non_routine",
+    "detect_step_change",
+    "residual_outliers"
+  ],
+  "camber.mandv.normalized": [
+    "NormalizedSavings",
+    "normalized_annual_consumption",
+    "normalized_savings"
+  ],
+  "camber.mandv.online": [
+    "AnomalyState",
+    "CusumState",
+    "OnlineCusum",
+    "RollingAnomaly"
+  ],
+  "camber.mandv.option_a": [
+    "OptionAResult",
+    "option_a_savings",
+    "stipulated_annual_hours"
+  ],
+  "camber.mandv.rc_model": [
+    "Calibration",
+    "OptionDSavings",
+    "RCModel",
+    "calibrate",
+    "daily_schedule",
+    "option_d_savings"
+  ],
+  "camber.mandv.resample": [
+    "cumulative_to_interval",
+    "is_cumulative",
+    "resample",
+    "resample_energy"
+  ],
+  "camber.mandv.retrofit_isolation": [
+    "DriverModel",
+    "IsolationSavings",
+    "fit_driver_model",
+    "isolation_normalized_savings",
+    "isolation_savings"
+  ],
+  "camber.mandv.stats": [
+    "FitStats",
+    "SavingsResult",
+    "avoided_energy_savings",
+    "cv_rmse_max_for",
+    "fit_stats"
+  ],
+  "camber.mandv.towt": [
+    "TOWTModel",
+    "fit_towt",
+    "hour_of_week"
+  ],
+  "camber.mandv.weather": [
+    "EPW_DRYBULB_COL",
+    "c_to_f",
+    "load_epw",
+    "monthly_normals",
+    "normalized_annual_energy",
+    "normalized_annual_from_monthly"
+  ],
+  "camber.mapping_assist": [
+    "FeatureSuggester",
+    "LLMSuggester",
+    "MLSuggester",
+    "ROLE_UNIT",
+    "RoleSuggestion",
+    "review_unmapped",
+    "suggest_roles"
+  ],
+  "camber.mapping_confidence": [
+    "MappingConfidence",
+    "review",
+    "score_mapping",
+    "score_token"
+  ],
+  "camber.model": [
+    "Completeness",
+    "Equip",
+    "EquipTemplate",
+    "HAYSTACK_HINT",
+    "MappingProvider",
+    "Point",
+    "Role",
+    "Runnable",
+    "STATUS_ROLES",
+    "Site",
+    "Space",
+    "TEMPLATES",
+    "completeness",
+    "runnable_rules",
+    "template_for"
+  ],
+  "camber.model.entities": [
+    "Completeness",
+    "Equip",
+    "EquipTemplate",
+    "Point",
+    "Runnable",
+    "Site",
+    "Space",
+    "TEMPLATES",
+    "completeness",
+    "runnable_rules",
+    "template_for"
+  ],
+  "camber.model.mapping": [
+    "MappingProvider"
+  ],
+  "camber.model.roles": [
+    "HAYSTACK_HINT",
+    "Role",
+    "STATUS_ROLES"
+  ],
+  "camber.oafraction": [
+    "OAFractionResult",
+    "analyze_oa_fraction"
+  ],
+  "camber.overcooling": [
+    "OVERCOOL_MEASURES",
+    "OvercoolResult",
+    "analyze_overcooling"
+  ],
+  "camber.overcooling_severity": [
+    "DEFAULT_TIERS",
+    "OvercoolSeverityResult",
+    "analyze_overcooling_severity",
+    "infer_interval"
+  ],
+  "camber.plant": [
+    "HWPLANT_MEASURES",
+    "HWPlantResult",
+    "analyze_hw_plant"
+  ],
+  "camber.plugins": [
+    "GROUPS",
+    "LoadedPlugin",
+    "PluginRegistry",
+    "apply_rules",
+    "discover"
+  ],
+  "camber.points": [
+    "Point",
+    "count_equipment",
+    "equip_id_len",
+    "find_column",
+    "matches",
+    "measure_suffix",
+    "parse_point"
+  ],
+  "camber.pv": [
+    "G_REF_KW_M2",
+    "PvSummary",
+    "daily_generation",
+    "expected_generation",
+    "net_energy",
+    "performance_ratio",
+    "pv_summary",
+    "specific_yield"
+  ],
+  "camber.rcx": [
+    "FunctionalTestResult",
+    "MeasureRecord",
+    "MeasureResult",
+    "RegisterReport",
+    "before_after",
+    "functional_test",
+    "track_measures"
+  ],
+  "camber.realio": [
+    "find_point",
+    "list_equipment",
+    "load_equipment",
+    "load_point",
+    "load_status"
+  ],
+  "camber.reheat": [
+    "BOX_MEASURES",
+    "ReheatResult",
+    "analyze_box"
+  ],
+  "camber.report": [
+    "AuditReport",
+    "Benchmark",
+    "BuildingSummary",
+    "ECM",
+    "FleetReport",
+    "build_dashboard",
+    "build_fleet_report",
+    "build_site_report",
+    "carpet_svg_html",
+    "fig_to_base64",
+    "interactive_scatter_html",
+    "multitrend_svg_html",
+    "selection_bus_html"
+  ],
+  "camber.report.audit": [
+    "AuditReport",
+    "Benchmark",
+    "ECM"
+  ],
+  "camber.report.dashboard": [
+    "build_dashboard",
+    "fig_to_base64",
+    "render_evidence_blocks"
+  ],
+  "camber.report.fleet": [
+    "BuildingSummary",
+    "FleetReport",
+    "build_fleet_report"
+  ],
+  "camber.report.linking": [
+    "LINK_STYLE",
+    "carpet_svg_html",
+    "interactive_scatter_html",
+    "multitrend_svg_html",
+    "selection_bus_html"
+  ],
+  "camber.report.site": [
+    "build_site_report"
+  ],
+  "camber.resolve": [
+    "EquipRef",
+    "TERMINAL_CLASSES",
+    "discover",
+    "discover_terminals",
+    "occupied",
+    "resolve"
+  ],
+  "camber.rules": [
+    "FaultRegister",
+    "Finding",
+    "FleetRule",
+    "Ranked",
+    "Registry",
+    "RootCauseGroup",
+    "Rule",
+    "SEVERITY_ORDER",
+    "builtin_registry",
+    "group_findings",
+    "impact_score",
+    "is_fleet",
+    "rank_findings",
+    "rule_names"
+  ],
+  "camber.rules.airflow_rule": [
+    "AirflowTracking"
+  ],
+  "camber.rules.base": [
+    "Finding",
+    "FleetRule",
+    "Registry",
+    "Rule"
+  ],
+  "camber.rules.boiler_rule": [
+    "BoilerSummerLockout"
+  ],
+  "camber.rules.boilercycle_rule": [
+    "BoilerShortCycle"
+  ],
+  "camber.rules.builtin": [
+    "RULE_CLASSES",
+    "builtin_registry",
+    "is_fleet",
+    "rule_names"
+  ],
+  "camber.rules.chiller_approach_rule": [
+    "ChillerApproachFouling"
+  ],
+  "camber.rules.chiller_rule": [
+    "ChillerEfficiency"
+  ],
+  "camber.rules.chillerfleet_rule": [
+    "ChillerStagingFleet"
+  ],
+  "camber.rules.chillerstaging_rule": [
+    "ChillerStaging"
+  ],
+  "camber.rules.chwplant_rule": [
+    "CHWPlantReset"
+  ],
+  "camber.rules.chwpump_rule": [
+    "CHWPumpDPReset"
+  ],
+  "camber.rules.cohort": [
+    "CohortDeviation"
+  ],
+  "camber.rules.compressor_cycle_rule": [
+    "CompressorShortCycle"
+  ],
+  "camber.rules.compressor_stage_rule": [
+    "CompressorStaging"
+  ],
+  "camber.rules.condenserwater_rule": [
+    "CondenserWaterReset"
+  ],
+  "camber.rules.coolingtower_rule": [
+    "CoolingTowerApproach"
+  ],
+  "camber.rules.economizer_lockout_rule": [
+    "EconomizerHighLimit"
+  ],
+  "camber.rules.filter_rule": [
+    "FilterFouling"
+  ],
+  "camber.rules.freecoolingmissed_rule": [
+    "FreeCoolingMissed"
+  ],
+  "camber.rules.heatpump_rule": [
+    "HeatPumpDefrost"
+  ],
+  "camber.rules.hunting_rule": [
+    "ControlHunting",
+    "reversals_per_hour"
+  ],
+  "camber.rules.hwplant_deltat_rule": [
+    "HWPlantDeltaT"
+  ],
+  "camber.rules.hwpump_rule": [
+    "HWPumpDPReset"
+  ],
+  "camber.rules.iaq_rule": [
+    "CO2Ventilation"
+  ],
+  "camber.rules.leakvalve_rule": [
+    "LeakingValve"
+  ],
+  "camber.rules.oafraction_rule": [
+    "OutdoorAirFraction"
+  ],
+  "camber.rules.online": [
+    "OnlineFDD",
+    "Transition"
+  ],
+  "camber.rules.overcooling_rule": [
+    "OvercoolingMinFlow"
+  ],
+  "camber.rules.overcooling_severity_rule": [
+    "OvercoolingSeverity"
+  ],
+  "camber.rules.reheat_min_rule": [
+    "ReheatMinimization"
+  ],
+  "camber.rules.reheat_rule": [
+    "ReheatPenalty"
+  ],
+  "camber.rules.satcontrol_rule": [
+    "SupplyAirControl"
+  ],
+  "camber.rules.satreset_rule": [
+    "SupplyAirReset"
+  ],
+  "camber.rules.setback_rule": [
+    "NightWeekendSetback"
+  ],
+  "camber.rules.simul_hc": [
+    "SimultaneousHeatCool"
+  ],
+  "camber.rules.static_rule": [
+    "DamperCensus"
+  ],
+  "camber.rules.staticreset_rule": [
+    "StaticPressureReset"
+  ],
+  "camber.rules.triage": [
+    "CAUSE_CHAINS",
+    "FaultRegister",
+    "Ranked",
+    "RootCauseGroup",
+    "SEVERITY_ORDER",
+    "group_findings",
+    "impact_score",
+    "rank_findings"
+  ],
+  "camber.rules.unmet_rule": [
+    "UnmetHours"
+  ],
+  "camber.rules.ventilation_rule": [
+    "DemandControlledVentilation",
+    "VentilationRateProcedure"
+  ],
+  "camber.rules.zones_rule": [
+    "ZonesHeatCoolCensus"
+  ],
+  "camber.satreset": [
+    "SATRESET_MEASURES",
+    "SATResetResult",
+    "analyze_satreset"
+  ],
+  "camber.schedule": [
+    "DaySchedule",
+    "WeeklySchedule",
+    "compare_schedule",
+    "detect_schedule"
+  ],
+  "camber.schedules": [
+    "day_type",
+    "occupied_mask",
+    "time_of_week_bin"
+  ],
+  "camber.scorecard": [
+    "CATEGORIES",
+    "CategoryScore",
+    "RULE_CATEGORY",
+    "Scorecard",
+    "build_scorecard"
+  ],
+  "camber.sensordrift": [
+    "DriftResult",
+    "compare_to_reference",
+    "drift_finding"
+  ],
+  "camber.sensorhealth": [
+    "ConsistencyResult",
+    "PHYSICAL_BOUNDS",
+    "SensorTrust",
+    "frame_sensor_health",
+    "mixing_consistency",
+    "range_violation_frac",
+    "sensor_trust",
+    "trusted_roles",
+    "untrusted_roles"
+  ],
+  "camber.setback": [
+    "SETBACK_MEASURES",
+    "SetbackResult",
+    "analyze_setback"
+  ],
+  "camber.soo": [
+    "Clause",
+    "ClauseResult",
+    "Predicate",
+    "SOOReport",
+    "clause_from_dict",
+    "evaluate_clause",
+    "evaluate_soo",
+    "predicate_from_dict",
+    "soo_findings",
+    "spec_from_dicts"
+  ],
+  "camber.soo_library": [
+    "g36_ahu_sequence",
+    "g36_plant_sequence"
+  ],
+  "camber.staticpressure": [
+    "DamperCensusResult",
+    "StaticResetResult",
+    "analyze_static_reset",
+    "damper_census"
+  ],
+  "camber.store": [
+    "ParquetStore",
+    "role_frame_to_long"
+  ],
+  "camber.store.bench": [
+    "benchmark",
+    "synth_portfolio"
+  ],
+  "camber.store.parquet_store": [
+    "ParquetStore",
+    "PointKey",
+    "role_frame_to_long"
+  ],
+  "camber.synth": [
+    "make_ahu_trends"
+  ],
+  "camber.tariff": [
+    "BillResult",
+    "BillValidation",
+    "MonthBillCheck",
+    "Tariff",
+    "Tier",
+    "compute_bill",
+    "flat_tariff",
+    "hours_schedule",
+    "tou_tariff",
+    "validate_bill"
+  ],
+  "camber.timegrid": [
+    "dst_anomalies",
+    "interval_hours",
+    "localize",
+    "regularize"
+  ],
+  "camber.tsparse": [
+    "parse_timestamps"
+  ],
+  "camber.units": [
+    "FRACTION_MAX",
+    "PERCENT_ROLES",
+    "looks_like_fraction",
+    "normalize_percent",
+    "normalize_percent_frame"
+  ],
+  "camber.validation": [
+    "DeterminismResult",
+    "RateCI",
+    "check_determinism",
+    "metrics_with_ci",
+    "rate_ci",
+    "wilson_interval"
+  ],
+  "camber.ventilation": [
+    "DEFAULT_EZ",
+    "DcvResult",
+    "OA_RATES_62_1",
+    "VrpResult",
+    "assess_62_1",
+    "assess_dcv",
+    "oa_rates_for",
+    "required_oa_cfm"
+  ],
+  "camber.water": [
+    "GAL_PER_CCF",
+    "GAL_PER_INCH_SF",
+    "IrrigationBudget",
+    "LeakImpact",
+    "MIN_PER_DAY",
+    "effective_precip",
+    "evaporation_gpm",
+    "flow_duration",
+    "gallons_per_ton_hour",
+    "inches_to_gallons",
+    "irrigation_budget",
+    "irrigation_budget_inches",
+    "leak_impact",
+    "makeup_gpm",
+    "min_night_flow"
+  ],
+  "camber.zones": [
+    "ZONE_MEASURES",
+    "time_of_week_profile",
+    "zone_states"
+  ]
+}

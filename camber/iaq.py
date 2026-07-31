@@ -27,6 +27,11 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "CO2VentilationResult",
+    "analyze_co2_ventilation",
+]
+
 
 @dataclass
 class CO2VentilationResult:

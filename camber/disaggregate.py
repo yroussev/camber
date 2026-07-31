@@ -22,6 +22,11 @@ import pandas as pd
 from .mandv.degreeday import degree_days
 from .timegrid import interval_hours
 
+__all__ = [
+    "LoadComponents",
+    "disaggregate_load",
+]
+
 
 @dataclass
 class LoadComponents:

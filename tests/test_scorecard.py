@@ -9,9 +9,9 @@ from camber.rules.base import Finding  # noqa: E402
 from camber.scorecard import (  # noqa: E402
     CATEGORIES,
     Scorecard,
+    _category_for,  # internal helpers, exercised directly
+    _grade_for,
     build_scorecard,
-    category_for,
-    grade_for,
 )
 
 
@@ -40,7 +40,7 @@ def test_penalties_by_category_and_severity():
 
 
 def test_grade_thresholds():
-    assert (grade_for(95), grade_for(85), grade_for(72), grade_for(61), grade_for(40)) == (
+    assert (_grade_for(95), _grade_for(85), _grade_for(72), _grade_for(61), _grade_for(40)) == (
         "A",
         "B",
         "C",
@@ -57,9 +57,9 @@ def test_score_clamped_to_zero():
 
 
 def test_category_mapping_and_unknown_is_other():
-    assert category_for("co2_ventilation") == "ventilation"
-    assert category_for("leaking_valve") == "maintenance"
-    assert category_for("totally_unknown_rule") == "other"  # unmapped -> other, not an error
+    assert _category_for("co2_ventilation") == "ventilation"
+    assert _category_for("leaking_valve") == "maintenance"
+    assert _category_for("totally_unknown_rule") == "other"  # unmapped -> other, not an error
 
 
 def test_weights_and_jsonable():

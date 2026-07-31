@@ -26,6 +26,11 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
+__all__ = [
+    "ChillerEfficiencyResult",
+    "analyze_chiller_efficiency",
+]
+
 
 @dataclass
 class ChillerEfficiencyResult:

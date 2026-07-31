@@ -31,6 +31,18 @@ import pandas as pd
 from .ingest.quality import assess
 from .model.roles import Role
 
+__all__ = [
+    "PHYSICAL_BOUNDS",
+    "range_violation_frac",
+    "SensorTrust",
+    "sensor_trust",
+    "frame_sensor_health",
+    "trusted_roles",
+    "untrusted_roles",
+    "ConsistencyResult",
+    "mixing_consistency",
+]
+
 # Plausible physical bounds per role (degF for temps, % for valves/dampers/speeds/RH,
 # native units otherwise). Generous on purpose: the goal is to catch impossible values
 # (BAS error sentinels like -999/32767, unit-scaling blunders), not to second-guess

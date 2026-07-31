@@ -19,6 +19,11 @@ from __future__ import annotations
 from .model.roles import Role
 from .soo import Clause, Predicate
 
+__all__ = [
+    "g36_ahu_sequence",
+    "g36_plant_sequence",
+]
+
 
 def g36_ahu_sequence(
     *,
