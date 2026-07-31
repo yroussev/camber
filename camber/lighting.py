@@ -15,6 +15,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "operational_efficiency",
+    "LightingSummary",
+    "lighting_summary",
+]
+
 
 def operational_efficiency(metered_kw: pd.Series, installed_kw: float) -> pd.Series:
     """Fraction of installed lighting power drawn at each interval (0..~1)."""

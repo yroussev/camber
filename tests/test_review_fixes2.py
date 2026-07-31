@@ -97,7 +97,7 @@ def test_carpet_section_survives_non_numeric_first_column():
 
 
 def test_new_energy_rules_categorized():
-    from camber.scorecard import category_for
+    from camber.scorecard import _category_for
 
     for r in ("economizer_high_limit", "static_pressure_reset", "free_cooling_missed"):
-        assert category_for(r) == "energy"  # not silently "other"
+        assert _category_for(r) == "energy"  # not silently "other"

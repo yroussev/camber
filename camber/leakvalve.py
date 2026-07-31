@@ -24,6 +24,11 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "LeakValveResult",
+    "analyze_leak_valves",
+]
+
 
 @dataclass
 class LeakValveResult:

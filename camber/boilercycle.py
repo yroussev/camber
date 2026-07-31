@@ -18,6 +18,11 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
+__all__ = [
+    "BoilerCyclingResult",
+    "analyze_boiler_cycling",
+]
+
 
 @dataclass
 class BoilerCyclingResult:

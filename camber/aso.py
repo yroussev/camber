@@ -18,6 +18,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
+__all__ = [
+    "DEFAULT_PARAMS",
+    "Recommendation",
+    "RECOMMENDERS",
+    "recommend",
+    "recommend_findings",
+]
+
 _SEV_ORDER = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
 
 #: Documented default targets; override per call via ``params=`` (shallow-merged, top level).

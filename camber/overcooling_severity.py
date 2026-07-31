@@ -55,6 +55,13 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "DEFAULT_TIERS",
+    "OvercoolSeverityResult",
+    "infer_interval",
+    "analyze_overcooling_severity",
+]
+
 # Default severity tiers: degF below the reference setpoint.
 DEFAULT_TIERS: dict = {"info": 1.0, "warn": 2.0, "fault": 3.0}
 # Tier ordering, mildest -> worst (info is informational only).

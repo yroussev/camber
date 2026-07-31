@@ -24,6 +24,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+__all__ = [
+    "GROUPS",
+    "LoadedPlugin",
+    "discover",
+    "PluginRegistry",
+    "apply_rules",
+]
+
 # Plugin kind -> entry-point group name.
 GROUPS = {"rules": "camber.rules", "adapters": "camber.adapters", "reports": "camber.reports"}
 

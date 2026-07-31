@@ -26,6 +26,10 @@ import json
 import os
 import sys
 
+__all__ = [
+    "main",
+]
+
 # --------------------------------------------------------------------------- LLM seam
 # (vendor-neutral)
 

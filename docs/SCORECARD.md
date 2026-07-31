@@ -14,6 +14,6 @@ for c in sc.categories:
 
 Each category starts at 100; every actionable finding deducts by severity (`fault_penalty` /
 `warn_penalty`), clamped to 0–100, graded A–F. The overall is a weighted mean across categories
-(`category_weights`, equal by default). Rules map to categories via `RULE_CATEGORY`
-(`category_for(rule)`), with unmapped rules in `other`. Pairs with `camber.actionplan` (what to do)
+(`category_weights`, equal by default). Rules map to categories via `RULE_CATEGORY`,
+with unmapped rules in `other`. Pairs with `camber.actionplan` (what to do)
 and `camber.fault_economics` (what it's worth). stdlib only.

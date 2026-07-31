@@ -21,6 +21,12 @@ import pandas as pd
 
 from .schedules import occupied_mask
 
+__all__ = [
+    "SETBACK_MEASURES",
+    "SetbackResult",
+    "analyze_setback",
+]
+
 SETBACK_MEASURES = ["SupplyFanStatus", "SupplyFanSpeed"]
 
 

@@ -46,6 +46,7 @@ nav:
       - Deployment: DEPLOY.md
       - Security: SECURITY.md
       - Validation: VALIDATION.md
+      - API stability & deprecation: API-STABILITY.md
 markdown_extensions:
   - admonition
   - tables
