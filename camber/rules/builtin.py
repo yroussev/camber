@@ -118,3 +118,25 @@ def builtin_registry() -> Registry:
 def rule_names() -> list:
     """Sorted names of all built-in rules."""
     return sorted([cls().name for cls in RULE_CLASSES] + [r.name for r in _extra_instances()])
+
+
+def _class_by_name() -> dict:
+    """Map each auto-registered rule's name -> its class (for params-overridden builds)."""
+    return {cls().name: cls for cls in RULE_CLASSES}
+
+
+def make_rule(name: str, **params):
+    """Construct a built-in rule by ``name``, overriding its constructor defaults with ``params``.
+
+    Enables per-rule tuning from a config (e.g. a building whose design minimum outside air
+    isn't the rule's default). Only the auto-registered :data:`RULE_CLASSES` are constructible
+    this way. Raises ``KeyError`` for an unknown name and ``TypeError`` (naming the rule) for an
+    invalid parameter.
+    """
+    classes = _class_by_name()
+    if name not in classes:
+        raise KeyError(name)
+    try:
+        return classes[name](**params)
+    except TypeError as e:
+        raise TypeError(f"invalid params for rule {name!r}: {e}") from e
