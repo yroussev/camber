@@ -24,3 +24,6 @@ SESSION-CATCHUP-*.md
 
 # scratch plan-prompt files (not project docs)
 PLAN-PROMPT-*.md
+
+# Local content denylist for the pre-commit guard (holds sensitive terms; never committed)
+.githooks/denylist.local

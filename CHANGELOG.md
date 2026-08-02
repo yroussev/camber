@@ -4,6 +4,29 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.9.5] — 2026-08-02
+
+Pre-1.0 hardening: **CAMBER is now a typed library.** No API or behavior change (full suite
+unchanged).
+
+### Added
+- **`py.typed` marker** (PEP 561), shipped in the wheel — downstream mypy/pyright now trust
+  CAMBER's inline type hints.
+- **`mypy` gate.** A pragmatic `[tool.mypy]` config (optional-extra libs import-ignored,
+  untyped function bodies not deep-checked yet — a floor that ratchets in later releases) and
+  a `types` CI job running `mypy` on every push/PR. `mypy` added to the `dev` extra.
+- **Local, gitignored content denylist** for the pre-commit guard (`.githooks/denylist.local`,
+  templated by `.githooks/denylist.local.example`): a per-clone file that can hold sensitive
+  terms — e.g. a real client site name — to block them at commit time *without* committing the
+  term itself. Reinforces the vendor-/site-neutral contribution rule.
+
+### Changed
+- Backfilled type annotations across ~25 modules to reach a clean `mypy` run — missing variable
+  annotations, `None`-narrowing asserts that restate invariants the code already enforced, a
+  `Site`→`Equip` parameter-annotation fix in `interop/site_model`, and targeted
+  `# type: ignore[code]` (with reasons) only where mypy can't see a dynamic/dataclass/numpy
+  type. No runtime behavior change.
+
 ## [0.9.4] — 2026-07-31
 
 Correctness release (same high-outside-air design as 0.9.3): the `economizer_high_limit` rule

@@ -43,7 +43,7 @@ _SITE_PREFIX = (
 )
 
 
-def _equip_fragment(equip: Site) -> str:  # equip: Equip
+def _equip_fragment(equip: Equip) -> str:
     """Brick Turtle for one equipment, reusing :func:`to_brick`, with the
     equipment additionally declared ``brick:isPartOf`` its site.
 
@@ -110,7 +110,7 @@ def _is_part_of(ttl: str, backend: str) -> dict:
 
         g = rdflib.Graph()
         g.parse(data=ttl, format="turtle")
-        out = {}
+        out: dict = {}
         for s, p, o in g:
             if _brick._local(str(p)) == "isPartOf":
                 out[_brick._local(str(s))] = _brick._local(str(o))
@@ -131,7 +131,7 @@ def _minimal_links(ttl: str, predicate: str) -> dict:
         if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))
     ]
     text = " ".join(lines)
-    out = {}
+    out: dict = {}
     for stmt in re.split(r"\s\.\s", text + " "):
         stmt = stmt.strip().rstrip(".").strip()
         if not stmt:
@@ -210,7 +210,7 @@ def _has_part(ttl: str, backend: str) -> dict:
 
         g = rdflib.Graph()
         g.parse(data=ttl, format="turtle")
-        out = {}
+        out: dict = {}
         for s, p, o in g:
             if _brick._local(str(p)) == "hasPart":
                 out.setdefault(_brick._local(str(s)), []).append(_brick._local(str(o)))

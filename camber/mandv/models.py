@@ -278,9 +278,11 @@ def fit_model(T, y, kind: str, *, objective: str = "sse") -> ChangePointModel:
     if len(T) < 3:
         raise ValueError("need >=3 finite points to fit")
     if kind in _OBJECTIVE_AWARE:
-        coeffs, sse, cps, pred = _FITTERS[kind](T, y, objective=objective)
+        # _OBJECTIVE_AWARE fitters accept objective=; the union type hides that from mypy.
+        res = _FITTERS[kind](T, y, objective=objective)  # type: ignore[call-arg]
     else:
-        coeffs, sse, cps, pred = _FITTERS[kind](T, y)
+        res = _FITTERS[kind](T, y)
+    coeffs, sse, cps, pred = res
     return ChangePointModel(
         kind=kind, coeffs=coeffs, change_points=cps, sse=sse, n=len(T), _predict=pred
     )

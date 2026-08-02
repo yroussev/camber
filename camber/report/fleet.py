@@ -190,7 +190,7 @@ def build_fleet_report(
     fleet_median = euis[len(euis) // 2] if euis else None
     median = peer_median_eui if peer_median_eui is not None else fleet_median
 
-    rule_buildings = Counter()  # rule -> number of buildings it appears in
+    rule_buildings: Counter = Counter()  # rule -> number of buildings it appears in
     summaries = []
     any_cost = False
     for b in buildings:

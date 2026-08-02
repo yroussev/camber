@@ -89,6 +89,7 @@ def disaggregate_load(
             pred, sse = fit_at(cand)
             if best is None or sse < best[0]:
                 best = (sse, cand, pred)
+        assert best is not None  # the arange is non-empty, so the loop always sets best
         _, bp, weather_kw = best
 
     other_kw = np.clip(excess - weather_kw, 0.0, None)

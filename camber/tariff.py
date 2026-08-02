@@ -126,7 +126,8 @@ def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
         d_period = np.where(wknd, dwe[month - 1, hour], dwd[month - 1, hour])
     use_flat_demand = bool(tariff.flat_demand_rates) and tariff.flat_demand_months is not None
 
-    rows, peaks = [], []
+    rows = []
+    peaks: list[float] = []
     e_tot = d_tot = f_tot = 0.0
     for key in sorted(set(ym.tolist())):
         m = ym == key
@@ -146,6 +147,7 @@ def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
             billed = peak
             if tariff.ratchet_pct > 0 and peaks:
                 billed = max(peak, tariff.ratchet_pct / 100.0 * max(peaks))
+            assert tariff.flat_demand_months is not None  # use_flat_demand guards this
             fp = tariff.flat_demand_months[mon - 1]
             d += _tiered(billed, tariff.flat_demand_rates[fp])
         peaks.append(peak)
