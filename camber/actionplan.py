@@ -41,7 +41,11 @@ class ActionItem:
             "severity": self.severity,
             "annual_cost_usd": self.annual_cost_usd,
             "costed": self.costed,
-            "recommendation": self.recommendation.as_dict() if self.recommendation else None,
+            "recommendation": (
+                self.recommendation.as_dict()  # type: ignore[attr-defined]  # Recommendation when set
+                if self.recommendation
+                else None
+            ),
         }
         return d
 

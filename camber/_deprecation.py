@@ -97,7 +97,7 @@ def deprecated(
         if isinstance(obj, type):
             # Deprecate a class by warning on construction; leave the type otherwise intact
             # so isinstance()/subclassing still work during the deprecation window.
-            orig_init = obj.__init__
+            orig_init = obj.__init__  # type: ignore[misc]  # wrapping the class __init__ to warn
 
             @functools.wraps(orig_init)
             def __init__(self, *args, **kwargs):  # noqa: N807 (dunder wrapper)
@@ -106,8 +106,8 @@ def deprecated(
                 )
                 orig_init(self, *args, **kwargs)
 
-            obj.__init__ = __init__
-            obj.__deprecated__ = meta
+            obj.__init__ = __init__  # type: ignore[misc]  # install warn-on-construct wrapper
+            obj.__deprecated__ = meta  # type: ignore[attr-defined]  # machine-readable marker
             obj.__doc__ = (obj.__doc__ or "") + note
             return obj
 
@@ -120,7 +120,7 @@ def deprecated(
                 use=use,
                 stacklevel=2,
             )
-            return obj(*args, **kwargs)  # type: ignore[operator]
+            return obj(*args, **kwargs)
 
         wrapper.__deprecated__ = meta  # type: ignore[attr-defined]
         wrapper.__doc__ = (obj.__doc__ or "") + note

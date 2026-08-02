@@ -113,7 +113,7 @@ class Calibration:
     """A calibrated :class:`RCModel` with its ASHRAE G14 fit statistics."""
 
     model: RCModel
-    fit: object  # FitStats
+    fit: FitStats
     tau_grid_n: int = 0
 
     @property
@@ -151,7 +151,7 @@ def calibrate(
     n_finite = int(np.isfinite(y).sum())
     if len(y) < 4 or n_finite < 4:
         nan = float("nan")
-        fit = FitStats(
+        deg_fit = FitStats(
             n=len(y),
             p=3,
             r2=nan,
@@ -162,7 +162,9 @@ def calibrate(
             accept=False,
             notes="insufficient data to calibrate (need >= 4 finite points)",
         )
-        return Calibration(model=RCModel(ua_eff=nan, gain_eff=nan, tau=nan), fit=fit, tau_grid_n=0)
+        return Calibration(
+            model=RCModel(ua_eff=nan, gain_eff=nan, tau=nan), fit=deg_fit, tau_grid_n=0
+        )
 
     def _fit_at(tau):
         ddh, cond = _design(oat, schedule, float(tau))
@@ -187,7 +189,7 @@ def calibrate(
                 best_sse, model = sse, cand
     yhat = model.predict(oat, schedule)
     try:
-        fit = fit_stats(y, yhat, p=3, cv_rmse_max=cv_rmse_max_for(interval))
+        fit: FitStats | None = fit_stats(y, yhat, p=3, cv_rmse_max=cv_rmse_max_for(interval))
     except ValueError:
         fit = None
     # NaN-gapped energy yields non-finite coefficients / stats -> degrade to a non-accepted fit

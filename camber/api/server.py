@@ -72,7 +72,7 @@ def make_server(store, *, host: str = "127.0.0.1", port: int = 8080):
     ``serve_forever()`` to run, or use this in a thread for tests.
     """
     httpd = ThreadingHTTPServer((host, port), ReadAPIHandler)
-    httpd.api = ReadAPI(store)
+    httpd.api = ReadAPI(store)  # type: ignore[attr-defined]  # stash API on server for the handler
     return httpd
 
 

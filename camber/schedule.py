@@ -74,7 +74,8 @@ def detect_schedule(
     on = (s > threshold).to_numpy()
     frac = pd.Series(on, index=[idx.dayofweek, idx.hour]).groupby(level=[0, 1]).mean()
 
-    on_slots, days = [], []
+    on_slots: list = []
+    days = []
     for dow in range(7):
         hours_on = [h for h in range(24) if float(frac.get((dow, h), 0.0)) >= min_fraction]
         on_slots.extend((dow, h) for h in hours_on)

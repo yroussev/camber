@@ -172,7 +172,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     for entry in config.get("soo", []):
         cls = entry["class"]
         if entry.get("library"):
-            spec = _SOO_LIBRARY[entry["library"]]()
+            spec = _SOO_LIBRARY[entry["library"]]()  # type: ignore[operator]  # library builder
         else:
             with open(_path(base_dir, entry["spec"])) as fh:
                 spec = spec_from_dicts(json.load(fh))

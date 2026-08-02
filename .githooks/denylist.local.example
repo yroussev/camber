@@ -1,0 +1,18 @@
+# Local content denylist for the CAMBER pre-commit guard (.githooks/pre-commit).
+#
+# Copy this file to `.githooks/denylist.local` (which is .gitignored and therefore NEVER
+# committed) and add your patterns. Because it is never committed, it can safely hold
+# sensitive terms -- e.g. a real client site name -- without embedding them in the repo,
+# which a tracked denylist would defeat the purpose of.
+#
+# Format: one case-insensitive extended-regex (grep -E) per line. Blank lines and lines
+# starting with '#' are ignored. Any staged ADDED line matching a pattern blocks the commit.
+#
+# Enable the hooks once per clone:  bash scripts/install-hooks.sh
+#
+# --- Example: keep the project vendor-/site-neutral (no real client site names) ---
+# my[ -]?client[ -]?site
+# some-building-name
+#
+# --- Example: extra AI-attribution catches (belt-and-suspenders with the built-in guard) ---
+# co-authored-by:.*(gpt|copilot|gemini)

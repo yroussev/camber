@@ -433,7 +433,7 @@ FC_DESC = {
 
 
 # add os_max to thresholds (kept here so the dataclass stays focused on tolerances)
-G36Thresholds.os_max = 7
+G36Thresholds.os_max = 7  # type: ignore[attr-defined]  # attached outside the dataclass body
 
 
 @dataclass
@@ -535,7 +535,7 @@ def run_g36_afdd(
     }
 
     fault_pct, fault_n = {}, {}
-    fault_pct_ss = {} if comparability else None
+    fault_pct_ss: dict | None = {} if comparability else None
     for fc in _FCS:
         fired = _VFCS[fc](cols, dos, k, n)  # the fault equation, once
         # default: operating-state-gated denominator (the G36-faithful convention)
@@ -547,6 +547,7 @@ def run_g36_afdd(
         )
         # opt-in: single-signal (input-validity) denominator, same fires
         if comparability:
+            assert fault_pct_ss is not None  # non-None exactly when comparability
             valid = _input_valid_mask(cols, fc, n)
             n_valid = int(valid.sum())
             fault_pct_ss[fc] = (

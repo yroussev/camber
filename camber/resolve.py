@@ -106,7 +106,7 @@ def discover(folder, equip_class: str, marker_measure: str = "SpaceTemp"):
 
 
 def discover_terminals(
-    folder: str, marker_measure: str = "SpaceTemp", classes: tuple = TERMINAL_CLASSES
+    folder, marker_measure: str = "SpaceTemp", classes: tuple = TERMINAL_CLASSES
 ):
     """Discover ALL terminal-unit zones (VAV + CAV + FCAV) in ``folder``.
 
