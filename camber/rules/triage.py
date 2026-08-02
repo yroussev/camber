@@ -164,7 +164,7 @@ def group_findings(findings, *, actionable_only: bool = True) -> list:
     items = [
         f for f in findings if (not actionable_only) or _attr(f, "severity", "info") in _ACTIONABLE
     ]
-    buckets = {}
+    buckets: dict = {}
     for f in items:
         equip = _attr(f, "equip", "")
         rule = _attr(f, "rule", "")

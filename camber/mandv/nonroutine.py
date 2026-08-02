@@ -177,6 +177,9 @@ def detect_step_change(
         if stat > best_stat:
             best_i, best_stat, best_delta = i, stat, delta
 
+    # the loop always runs (range is non-empty given n >= 2*min_segment_days) and the first
+    # iteration sets best_i, since any stat > the -1.0 seed; so best_i is never None here.
+    assert best_i is not None
     date = df.index[best_i]
     detected = bool(best_stat >= z)
     mask = pd.Series((df.index >= date) if detected else False, index=df.index)

@@ -132,8 +132,8 @@ if __name__ == "__main__":
 
     folders = sys.argv[1:] or ["."]
     pts = inventory(folders, count_rows=False)
-    by_type = {}
-    by_meas = {}
+    by_type: dict[str, int] = {}
+    by_meas: dict[str, int] = {}
     for p in pts:
         by_type[p.equip_type] = by_type.get(p.equip_type, 0) + 1
         by_meas[p.measure] = by_meas.get(p.measure, 0) + 1

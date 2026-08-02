@@ -105,6 +105,7 @@ def fit_degree_day(
         key = fs.cv_rmse if fs.cv_rmse == fs.cv_rmse else float("inf")
         if best is None or key < best[0]:
             best = (key, bp, base, hs, cs, fs)
+    assert best is not None  # candidates is non-empty, so the loop always sets best
     _, bp, base, hs, cs, fs = best
     return DegreeDayModel(
         kind=kind,

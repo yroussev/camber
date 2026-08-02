@@ -75,7 +75,8 @@ def parse_triples(ttl: str):
         if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))
     ]
     text = " ".join(lines)
-    types, has_point = {}, {}
+    types: dict = {}
+    has_point: dict = {}
     for stmt in re.split(r"\s\.\s", text + " "):
         stmt = stmt.strip().rstrip(".").strip()
         if not stmt:
@@ -126,7 +127,7 @@ def roles_from_triples(types: dict, has_point: dict) -> dict:
     classes with no CAMBER role are skipped. Returns {point_name -> Role}.
     """
     # invert hasPoint: point -> owning part
-    owner = {}
+    owner: dict = {}
     for part, pts in has_point.items():
         for p in pts:
             owner.setdefault(p, part)
@@ -163,7 +164,8 @@ def parse_triples_rdflib(ttl: str):
 
     g = rdflib.Graph()
     g.parse(data=ttl, format="turtle")
-    types, has_point = {}, {}
+    types: dict = {}
+    has_point: dict = {}
     for s, p, o in g:
         pl = _local(str(p))
         if pl == "type":  # rdf:type

@@ -35,6 +35,8 @@ patterns=(
 added="$(git diff --cached --no-color -- . \
   ':(exclude).githooks/commit-msg' \
   ':(exclude).githooks/pre-commit' \
+  ':(exclude).githooks/denylist.local' \
+  ':(exclude).githooks/denylist.local.example' \
   ':(exclude).github/workflows/attribution-guard.yml' \
   | grep '^+' | grep -v '^+++' || true)"
 
@@ -49,6 +51,26 @@ if [ -n "$added" ]; then
       fail=1
     fi
   done
+fi
+
+# 3) Block added lines matching a LOCAL, gitignored denylist. Because the file is never
+#    committed (.gitignore), it can safely hold sensitive terms -- e.g. a real client site
+#    name -- without embedding them in the repo, which a tracked denylist would. One
+#    case-insensitive extended-regex per line; blank lines and '#' comments are ignored.
+#    Create/edit .githooks/denylist.local to use it (see .githooks/denylist.local.example).
+denylist="$(git rev-parse --show-toplevel)/.githooks/denylist.local"
+if [ -f "$denylist" ] && [ -n "$added" ]; then
+  while IFS= read -r pat || [ -n "$pat" ]; do
+    case "$pat" in '' | \#*) continue ;; esac
+    if printf '%s\n' "$added" | grep -iqE "$pat"; then
+      echo "------------------------------------------------------------------" >&2
+      echo "COMMIT REJECTED: staged content matches a local denylist rule." >&2
+      echo "Matched pattern: /$pat/i  (from .githooks/denylist.local)" >&2
+      echo "Keep the project vendor-/site-neutral and attribution-free." >&2
+      echo "------------------------------------------------------------------" >&2
+      fail=1
+    fi
+  done <"$denylist"
 fi
 
 exit "$fail"

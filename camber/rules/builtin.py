@@ -49,7 +49,7 @@ from .zones_rule import ZonesHeatCoolCensus
 # Every shipped rule. Per-equipment rules first, then fleet rules.
 # (VentilationRateProcedure needs per-zone design inputs, so it is instantiated explicitly
 # by the caller rather than auto-registered here.)
-RULE_CLASSES = [
+RULE_CLASSES: list[type] = [
     SimultaneousHeatCool,
     SupplyAirReset,
     ReheatPenalty,

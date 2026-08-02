@@ -74,8 +74,10 @@ def compare_changepoint(temps, energy, *, baseload_tol_pct: float = 15.0) -> dic
     cam_order = "".join(ch for ch in str(cam["kind"]) if ch.isdigit())
     bet_order = "".join(ch for ch in str(bet["model_type"]) if ch.isdigit())
     cb, bb = cam["baseload"], bet["baseload"]
-    if cb == cb and bb not in (None,) and bb == bb and max(abs(cb), abs(bb)) > 0:
-        base_pct = 100.0 * abs(cb - bb) / max(abs(cb), abs(bb))
+    ok = cb == cb and bb not in (None,) and bb == bb
+    mx = max(abs(cb), abs(bb)) if ok else 0.0  # type: ignore[arg-type]  # floats
+    if ok and mx > 0:
+        base_pct = 100.0 * abs(cb - bb) / mx
     else:
         base_pct = float("nan")
     agreement = {

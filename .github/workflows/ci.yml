@@ -25,6 +25,26 @@ jobs:
       - name: Format check (ruff format)
         run: ruff format --check .
 
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev,brick]
+
+      - name: Type check (mypy)
+        run: mypy
+
   test:
     runs-on: ubuntu-latest
     strategy:

@@ -60,7 +60,7 @@ def demand_response(
     s = load_kw.dropna()
     idx = pd.DatetimeIndex(s.index)
     if np.isscalar(baseline_kw):
-        base = pd.Series(float(baseline_kw), index=s.index)
+        base = pd.Series(float(baseline_kw), index=s.index)  # type: ignore[arg-type]  # scalar
     elif isinstance(baseline_kw, pd.Series):
         base = baseline_kw.reindex(s.index).ffill()
     else:  # array/list: must be one value per load sample

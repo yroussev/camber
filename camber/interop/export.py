@@ -67,7 +67,7 @@ def to_brick(equip_id: str, equip_class: str, roles, *, point_names: dict | None
     """
     point_names = point_names or {}
     direct_pts = []  # (point_name, point_class) attached straight to equip
-    parts = {}  # part_name -> (part_class, [(point_name, point_class)])
+    parts: dict = {}  # part_name -> (part_class, [(point_name, point_class)])
     for r in roles:
         pname = point_names.get(r, r.value)
         if r in ROLE_TO_BRICK_POINT_CLASS:

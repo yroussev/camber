@@ -45,7 +45,8 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
     if r == "diagnostic":
         from .diagnostic import diagnostic_scatter
 
-        return diagnostic_scatter(frame, evidence.template, ax=ax)
+        tmpl = evidence.template
+        return diagnostic_scatter(frame, tmpl, ax=ax)  # type: ignore[arg-type]  # template
     if r == "multitrend":
         from .multitrend import fault_multitrend
 
