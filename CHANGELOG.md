@@ -6,14 +6,14 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.9.4] — 2026-07-31
 
-Correctness release (same El Centro building): the `economizer_high_limit` rule false-faulted a
+Correctness release (same reference building as 0.9.3): the `economizer_high_limit` rule false-faulted a
 high-outside-air design, and there was no way to tell it the building's design minimum.
 
 ### Fixed
 - **`economizer_high_limit` OA-damper unit bug.** `OA_DAMPER` is a percent role (the pipeline
   scales it to 0–100), but the rule compared it against a `0.25` *fraction* — so every open damper
-  read "not locked out" (≈99.99% at El Centro). The damper is now canonicalized to a fraction
-  regardless of source scale (0–1 or 0–100).
+  read "not locked out" (≈99.99% of samples on the reference building). The damper is now
+  canonicalized to a fraction regardless of source scale (0–1 or 0–100).
 - **Judge on outside-air fraction when available.** When mixed- and return-air temperatures are
   present, the rule now judges on temperature-balance OA-fraction (the `camber.oafraction` method)
   instead of damper position — damper % isn't linear in OA flow. It falls back to a damper threshold
@@ -31,7 +31,7 @@ high-outside-air design, and there was no way to tell it the building's design m
 
 ## [0.9.3] — 2026-07-31
 
-Correctness release (field-found on a real 50%-outside-air building): a rule must never
+Correctness release (found on an example 50%-outside-air site): a rule must never
 assert a negative it did not test. When an absent **optional** input made a sub-check
 impossible, several rules silently collapsed the missing input into a confident wrong
 verdict — a `False` metric, a raised severity, or a summary asserting something untested.

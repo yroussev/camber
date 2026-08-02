@@ -63,7 +63,7 @@ def test_damper_scale_agnostic_percent_or_fraction():
     """The pipeline delivers OA_DAMPER in percent (0-100); a stray source may give 0-1.
 
     Both must be judged identically against the fraction threshold -- the mis-scaling that
-    made every open damper read 'not locked out' (99.99% at El Centro) must not recur.
+    made every open damper read 'not locked out' (99.99% of field samples) must not recur.
     """
     idx = pd.date_range("2024-07-01", periods=200, freq="1h")
     oat = pd.Series(np.where(np.arange(200) % 2 == 0, 90.0, 55.0), index=idx)
