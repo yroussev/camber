@@ -6,8 +6,8 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.9.4] — 2026-07-31
 
-Correctness release (same reference building): the `economizer_high_limit` rule false-faulted a
-high-outside-air design, and there was no way to tell it the building's design minimum.
+Correctness release (same high-outside-air design as 0.9.3): the `economizer_high_limit` rule
+false-faulted a high-outside-air building, and there was no way to tell it the design minimum.
 
 ### Fixed
 - **`economizer_high_limit` OA-damper unit bug.** `OA_DAMPER` is a percent role (the pipeline
@@ -31,7 +31,7 @@ high-outside-air design, and there was no way to tell it the building's design m
 
 ## [0.9.3] — 2026-07-31
 
-Correctness release (field-found on a real 50%-outside-air building): a rule must never
+Correctness release (field-found on a high-outside-air, 50%-OA VAV design): a rule must never
 assert a negative it did not test. When an absent **optional** input made a sub-check
 impossible, several rules silently collapsed the missing input into a confident wrong
 verdict — a `False` metric, a raised severity, or a summary asserting something untested.

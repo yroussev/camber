@@ -49,7 +49,7 @@ def _chwplant_frame(with_oat=True):
 
 
 def test_chwplant_reset_without_oat_does_not_flip_to_false_no_reset():
-    """The field repro: the reset works, but dropping OAT must not report 'no reset'/warn."""
+    """Reproduces the field case: the reset works, but dropping OAT must not report 'no reset'."""
     with_oat = CHWPlantReset().analyze("CHW", _chwplant_frame(with_oat=True))
     no_oat = CHWPlantReset().analyze("CHW", _chwplant_frame(with_oat=False))
 
