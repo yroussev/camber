@@ -10,9 +10,11 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ground rules
 
-- **Vendor-neutral.** Diagnostics are written against the `Role` vocabulary
-  (`camber/model/roles.py`), never a specific BAS's tag names. Building-specific
-  material (tag maps, scan scripts, data) belongs in `examples/`, not the package.
+- **Vendor- and site-neutral.** Diagnostics are written against the `Role` vocabulary
+  (`camber/model/roles.py`), never a specific BAS's tag names. Building-specific material
+  (tag maps, scan scripts, data) belongs in `examples/`, not the package. **Never name or
+  otherwise identify a real client site** in code, tests, docs, or the CHANGELOG — describe
+  the scenario generically (e.g. "a high-outside-air VAV design"), never the site.
 - **Clean-room.** Cite public standards (ASHRAE Guideline 36 / 14, Standard 55 /
   211, IPMVP, NIST APAR, PNNL Building Re-tuning, LBNL) for methods. Do **not**
   paste third-party or proprietary source code or copyrighted text.
@@ -102,6 +104,13 @@ This is enforced two ways:
   ```
 
   This sets `git config core.hooksPath .githooks`.
+
+  The pre-commit hook also consults an optional **local, gitignored** denylist —
+  copy `.githooks/denylist.local.example` to `.githooks/denylist.local` and add
+  patterns (one case-insensitive regex per line). Because that file is never
+  committed, it can hold sensitive terms such as a real client site name — the
+  right place for the site-neutral rule, since a *tracked* denylist would embed
+  the very name it exists to keep out.
 
 - **CI backstop.** The `attribution-guard` workflow
   (`.github/workflows/attribution-guard.yml`) scans tracked files and the PR's

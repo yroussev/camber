@@ -85,7 +85,7 @@ def detect_level_shifts(
     n = len(vals)
 
     # 1) binary segmentation -> breakpoint positions (with the split score)
-    breaks = []
+    breaks: list = []
     stack = [(0, n)]
     while stack and len(breaks) < max_shifts:
         lo, hi = stack.pop()

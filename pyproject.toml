@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.9.4"
+version = "0.9.5"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,7 +32,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "ruff>=0.6"]
+dev = ["pytest>=7", "ruff>=0.6", "mypy>=1.8"]
 # Docs site only (never a runtime dep): build the MkDocs site with `mkdocs build`.
 docs = ["mkdocs>=1.5", "mkdocs-material>=9.5"]
 brick = ["rdflib>=6"]   # robust Brick/RDF parsing (camber.interop.brick backend="rdflib")
@@ -82,6 +82,10 @@ camber = "camber.cli:main"
 [tool.setuptools.packages.find]
 include = ["camber*"]
 
+[tool.setuptools.package-data]
+# Ship the PEP 561 marker so downstream mypy trusts CAMBER's inline type hints.
+camber = ["py.typed"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
@@ -101,3 +105,14 @@ ignore = ["B905"]
 # `camber`, so imports legitimately follow executable code.
 "tests/*" = ["E402"]
 "examples/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["camber"]
+# Pragmatic floor for the 0.9.x hardening series: the optional-extra libraries (and the
+# heavy numeric stack) are import-ignored, and untyped function bodies aren't deep-checked
+# yet. This gates the declared type surface and ratchets up in later releases.
+ignore_missing_imports = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true

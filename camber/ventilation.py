@@ -146,7 +146,8 @@ def assess_62_1(
         vals = s.to_numpy(dtype=float)
         vals = vals[np.isfinite(vals)]
         n = int(len(vals))
-        measured = float(_AGG[aggregate](vals)) if n else float("nan")
+        reducer = _AGG[aggregate]
+        measured = float(reducer(vals)) if n else float("nan")  # type: ignore[operator]  # reducer
     else:
         measured = float(measured_oa_cfm)
         n = 1

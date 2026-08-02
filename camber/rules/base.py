@@ -236,7 +236,7 @@ class Registry:
             ):
                 continue
             frames[ref.equip] = frame
-        f = rule.analyze_fleet(frames)
+        f = rule.analyze_fleet(frames)  # type: ignore[attr-defined]  # only called on fleet rules
         # backstop: optional roles that were present on no equipment at all
         if frames:
             never = [
