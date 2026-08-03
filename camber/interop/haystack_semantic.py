@@ -50,7 +50,9 @@ def role_from_tags(tags) -> Role | None:
     if isinstance(tags, str):
         tagset = frozenset(tags.split())
     else:
-        tagset = frozenset(tags)
+        # tolerate a malformed collection: keep only string markers (a dict/None element would
+        # be unhashable or meaningless), so an unresolvable set simply yields None.
+        tagset = frozenset(t for t in tags if isinstance(t, str))
     for role, hint in _ROLE_TAGSETS:  # already ordered most-specific first
         if hint <= tagset:
             return role
@@ -67,7 +69,10 @@ def _point_tags(point) -> tuple:
             if k not in _NON_SEMANTIC and (v is True or v == "M" or v == "✓")
         }
         return str(name), frozenset(tags)
-    name, tags = point  # (name, tags) pair
+    try:
+        name, tags = point  # (name, tags) pair
+    except (TypeError, ValueError):
+        return "", frozenset()  # not a dict or (name, tags) pair -> unresolvable (skipped)
     tagset = frozenset(tags.split()) if isinstance(tags, str) else frozenset(tags)
     return str(name), tagset
 
