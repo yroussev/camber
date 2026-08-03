@@ -120,6 +120,16 @@ entry points on degenerate/adversarial input, and each real bug it found is fixe
 - **Mapping** rejects catastrophic-backtracking (ReDoS) regex patterns at config load.
 - **Determinism sweep** — `check_determinism` now nets `calibrate` / `best_model` / `detect_level_shifts`
   / cohort / `faultlab`, not just two spots.
+- **Analytics entry points (0.9.6)** — `forecast` / `disaggregate` / `tariff` reject a non-timestamp
+  index up front (they used to coerce a numeric index into nanosecond dates and return a plausible
+  wrong answer); `EnergyPrice` rejects a negative/NaN rate; `build_scorecard` rejects `None`. Empty
+  input stays graceful (empty in → empty out).
+- **Untrusted parsers (0.9.6)** — the hand-rolled Brick reader and the rdflib/Haystack/223P paths now
+  degrade on malformed input to a clear `ValueError` (or a partial result), never a raw `IndexError` /
+  rdflib `BadSyntax` / `AssertionError`: a triple missing its terminator, a predicate list with no
+  object, a literal containing the split characters, and a malformed tag set are all fuzzed and locked.
+- **Tariff billing (0.9.6)** — a malformed rate structure (empty `energy_rates`, or a schedule naming a
+  period with no rate) raises a clear error naming the period, instead of an `IndexError` mid-bill.
 
 ## Continuous benchmarking in CI
 

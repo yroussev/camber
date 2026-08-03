@@ -128,6 +128,9 @@ def build_scorecard(
     Each fault deducts ``fault_penalty`` and each warning ``warn_penalty`` from its category's 100.
     ``category_weights`` weights the overall average (default equal across :data:`CATEGORIES`).
     """
+    if findings is None:
+        raise ValueError("findings must be a list of Finding (got None)")
+    findings = list(findings)  # accept any iterable; we scan it twice (counts + len)
     by_cat = defaultdict(list)
     for f in findings:
         by_cat[_category_for(getattr(f, "rule", ""))].append(f)

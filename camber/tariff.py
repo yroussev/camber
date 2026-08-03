@@ -20,6 +20,7 @@ from dataclasses import asdict, dataclass, field
 import numpy as np
 import pandas as pd
 
+from ._validate import require_datetime_index
 from .timegrid import interval_hours as _interval_hours
 
 __all__ = [
@@ -85,6 +86,20 @@ def _sched(arr) -> np.ndarray:
     return np.zeros((12, 24), dtype=int) if arr is None else np.asarray(arr, dtype=int)
 
 
+def _rate_period(rates: list, p: int, kind: str) -> list:
+    """The ``p``-th period's tier list, or a clear error if the schedule outruns the rates.
+
+    A schedule (12x24 period grid) that names a period with no matching rate structure -- or an
+    empty rate list -- is a malformed tariff; say so instead of an ``IndexError`` deep in billing.
+    """
+    if not rates or p >= len(rates):
+        raise ValueError(
+            f"tariff {kind} schedule references period {p} but only {len(rates)} "
+            f"{kind} rate period(s) are defined"
+        )
+    return rates[p]
+
+
 def _tiered(qty: float, tiers: list) -> float:
     """Block-rate charge for ``qty`` over cumulative-bound ``tiers`` [(upper|None, rate)]."""
     cost, prev = 0.0, 0.0
@@ -106,6 +121,7 @@ def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
     demand is the per-period (TOU) or monthly (flat) peak kW, with an optional ratchet
     on the flat-demand peak. Months are billing months in the data.
     """
+    require_datetime_index(load_kw, "load_kw")
     s = load_kw.dropna()
     if s.empty:
         return BillResult([], 0.0, 0.0, 0.0, 0.0, 0)
@@ -135,21 +151,24 @@ def compute_bill(tariff: Tariff, load_kw: pd.Series) -> BillResult:
         # --- energy: sum kWh per TOU period, charge through that period's tiers ---
         e = 0.0
         for p in set(e_period[m].tolist()):
-            e += _tiered(float(kwh[m][e_period[m] == p].sum()), tariff.energy_rates[p])
+            e += _tiered(
+                float(kwh[m][e_period[m] == p].sum()),
+                _rate_period(tariff.energy_rates, p, "energy"),
+            )
         # --- demand ---
         d = 0.0
         peak = float(kw[m].max())
         if use_tou_demand:
             for p in set(d_period[m].tolist()):
                 pk = float(kw[m][d_period[m] == p].max())
-                d += _tiered(pk, tariff.demand_rates[p])
+                d += _tiered(pk, _rate_period(tariff.demand_rates, p, "demand"))
         if use_flat_demand:
             billed = peak
             if tariff.ratchet_pct > 0 and peaks:
                 billed = max(peak, tariff.ratchet_pct / 100.0 * max(peaks))
             assert tariff.flat_demand_months is not None  # use_flat_demand guards this
             fp = tariff.flat_demand_months[mon - 1]
-            d += _tiered(billed, tariff.flat_demand_rates[fp])
+            d += _tiered(billed, _rate_period(tariff.flat_demand_rates, fp, "flat-demand"))
         peaks.append(peak)
         f = tariff.fixed_monthly
         rows.append(
