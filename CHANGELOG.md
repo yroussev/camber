@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.9.6] — 2026-08-02
+
+Pre-1.0 hardening: **honest failures at the edges.** Analytics entry points and the untrusted
+parsers now degrade to a clear error or a partial result instead of a raw traceback or a
+plausible-looking wrong answer. No change on valid input.
+
+### Fixed / Added — input validation
+- **`forecast` / `disaggregate` / `tariff.compute_bill`** reject a non-`DatetimeIndex` series up
+  front (they previously coerced a numeric index into nanosecond timestamps and returned a
+  meaningless result). Empty input stays graceful. New private `camber._validate` helpers.
+- **`fault_economics.EnergyPrice`** rejects a negative or NaN rate at construction (rather than
+  "costing" a fault at a bogus rate); **`scorecard.build_scorecard`** rejects `None` and now
+  accepts any iterable of findings.
+
+### Fixed — adversarial fuzzing of the hand-rolled / untrusted parsers
+- **`interop.brick`** — the minimal Turtle reader no longer `IndexError`s on a predicate list with
+  no object, and `roles_from_brick`/`mapping_from_brick` normalize any backend parse failure
+  (rdflib `BadSyntax`/`AssertionError`, or a minimal-reader error) into a clear `ValueError`.
+- **`interop.haystack_semantic`** — `role_from_tags` tolerates a malformed tag collection (non-string
+  markers) and `roles_from_haystack` skips un-parseable points instead of crashing on an unpack.
+- **`tariff.compute_bill`** — a malformed rate structure (empty `energy_rates`, or a schedule naming
+  a period with no matching rate) raises a clear error naming the period, not an `IndexError`.
+- Regression tests: `tests/test_input_validation.py`, `tests/test_hardening_interop.py`,
+  `tests/test_hardening_reports_econ.py` (report builders confirmed robust on empty/single/large).
+
 ## [0.9.5] — 2026-08-02
 
 Pre-1.0 hardening: **CAMBER is now a typed library.** No API or behavior change (full suite

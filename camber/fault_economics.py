@@ -63,6 +63,16 @@ class EnergyPrice:
     electricity_per_kwh: float = 0.15
     gas_per_therm: float = 1.20
 
+    def __post_init__(self):
+        # A negative or NaN price would silently produce a meaningless (or negative) cost;
+        # reject it here rather than "cost" a fault at a bogus rate.
+        for name, v in (
+            ("electricity_per_kwh", self.electricity_per_kwh),
+            ("gas_per_therm", self.gas_per_therm),
+        ):
+            if v is None or v != v or v < 0:
+                raise ValueError(f"EnergyPrice.{name} must be a non-negative number, got {v!r}")
+
 
 @dataclass
 class EquipmentLoad:
