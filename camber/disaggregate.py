@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+from ._validate import require_datetime_index, require_series
 from .mandv.degreeday import degree_days
 from .timegrid import interval_hours
 
@@ -61,6 +62,8 @@ def disaggregate_load(
     best fit unless ``balance_point`` is given); the fitted, non-negative part is the **weather**
     component and the remainder is **other**. Returns energies and fractions.
     """
+    require_datetime_index(load, "load")
+    require_series(oat, "oat")
     df = pd.DataFrame({"load": load, "oat": oat}).dropna()
     if df.empty:
         return LoadComponents(

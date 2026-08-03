@@ -21,6 +21,8 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+from ._validate import require_datetime_index
+
 __all__ = [
     "seasonal_forecast",
     "AnomalyReport",
@@ -48,6 +50,11 @@ def seasonal_forecast(
     global-level blend, which biases them differently). Slots unseen in history fall back to the
     overall mean.
     """
+    require_datetime_index(history, "history")
+    if not isinstance(horizon_index, pd.DatetimeIndex):
+        raise ValueError(
+            f"horizon_index must be a pandas DatetimeIndex, got {type(horizon_index).__name__}"
+        )
     h = history.dropna()
     if h.empty:
         return pd.Series(index=horizon_index, dtype=float)
@@ -121,6 +128,7 @@ def forecast_anomalies(actual: pd.Series, forecast: pd.Series, *, k: float = 3.5
 def backtest(history: pd.Series, *, test_frac: float = 0.25, **fc_kw) -> dict:
     """Hold out the last ``test_frac`` of ``history``, forecast it, and report accuracy
     (MAE, MAPE, CV(RMSE)) — a quick honesty check on the forecaster for a given series."""
+    require_datetime_index(history, "history")
     h = history.dropna()
     n = len(h)
     cut = int(n * (1.0 - test_frac))

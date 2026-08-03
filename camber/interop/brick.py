@@ -93,7 +93,7 @@ def parse_triples(ttl: str):
             if len(pp) < 2:
                 continue
             pred, objs = pp[0], [o.strip() for o in pp[1].split(",") if o.strip()]
-            if pred == "a":
+            if pred == "a" and objs:
                 types[subj] = _local(objs[0])
             elif pred.endswith("hasPoint"):
                 has_point.setdefault(subj, []).extend(_local(o) for o in objs)
@@ -176,18 +176,27 @@ def parse_triples_rdflib(ttl: str):
 
 
 def _parse(ttl: str, backend: str):
-    """Dispatch to the requested parser backend; returns (types, has_point)."""
+    """Dispatch to the requested parser backend; returns (types, has_point).
+
+    A malformed model raises a clear ``ValueError`` rather than leaking the backend's own
+    exception (rdflib ``BadSyntax``/``AssertionError``, or a parse error from the minimal reader).
+    """
     if backend == "minimal":
-        return parse_triples(ttl)
-    if backend == "rdflib":
+        parser = parse_triples
+    elif backend == "rdflib":
         if not _have_rdflib():
             raise ImportError(
                 "rdflib not installed; `pip install camber-toolkit[brick]` or use backend='minimal'"
             )
-        return parse_triples_rdflib(ttl)
-    if backend == "auto":
-        return parse_triples_rdflib(ttl) if _have_rdflib() else parse_triples(ttl)
-    raise ValueError(f"unknown backend {backend!r} (use auto/rdflib/minimal)")
+        parser = parse_triples_rdflib
+    elif backend == "auto":
+        parser = parse_triples_rdflib if _have_rdflib() else parse_triples
+    else:
+        raise ValueError(f"unknown backend {backend!r} (use auto/rdflib/minimal)")
+    try:
+        return parser(ttl)
+    except Exception as e:  # normalize any backend parse failure into a clear error
+        raise ValueError(f"could not parse Brick/Turtle ({backend} backend): {e}") from e
 
 
 def roles_from_brick(ttl: str, *, backend: str = "auto") -> dict:
