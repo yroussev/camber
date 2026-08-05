@@ -7,14 +7,31 @@ the one cost that does grow with portfolio size.
 
 ## Layout
 
-One tidy long-form dataset, hive-partitioned by `site` then `year`:
+One tidy long-form dataset, hive-partitioned by `facility_id` then `year`:
 
 ```
-<root>/site=DemoSite/year=2024/part-*.parquet
+<root>/facility_id=fox-lodge-9f3a1c/year=2024/part-*.parquet
+<root>/_facilities.json     {"fox-lodge-9f3a1c": {"name": "Fox Lodge", ...}}
 ```
 
-A query for one site reads only that site's directory; a query for one year reads only that
-year's subdirectory.
+A query for one facility reads only that facility's directory; a query for one year reads only
+that year's subdirectory.
+
+## Facility identity (why an id, not a name)
+
+Each facility is keyed by a **stable, path-safe `facility_id`**, decoupled from its human display
+name — which, with any metadata, lives in a sibling `_facilities.json` registry
+(`camber.store.FacilityRegistry`). This is what makes a portfolio scale safely: a raw name used as
+the partition directory would collide when two facilities share a name, orphan history on a rename,
+and — worst — a space/unicode name would URL-encode the written directory while the writer's part
+counter looked for the un-encoded path, silently overwriting earlier data. `write_long`/
+`write_role_frame` validate the id up front (`require_facility_id`), so those failures can't happen.
+
+Supply your own stable id (an external building id), or derive one from a name with
+`camber.store.make_facility_id("Fox Lodge") -> "fox-lodge-9f3a1c"` (a slug + short hash; pass a
+more-specific seed when display names repeat). An older `site=<name>` store converts in place with
+`camber.store.migrate_site_to_facility(root)`. The read API addresses facilities by `facility_id`
+(the legacy `site=` argument and `/sites` endpoint remain as deprecated aliases).
 
 ## The three scale mechanisms
 
@@ -45,7 +62,7 @@ year's subdirectory.
 A synthetic generator + benchmark ships in the package:
 
 ```sh
-python -m camber.store.bench --sites 50 --equips 10 --days 30 --freq 1h
+python -m camber.store.bench --facilities 50 --equips 10 --days 30 --freq 1h
 ```
 
 It builds a portfolio and times the hot paths (`points`, single-equipment read, time-ranged
@@ -69,5 +86,5 @@ The first call after a write burst rebuilds it once (a projected scan — ~3.5 s
 themselves stay cheap because they only invalidate the catalog, never rewrite it (an earlier
 rewrite-on-every-write design made a bulk load ~5× slower — the invalidate-on-write design keeps
 write throughput intact). Further mitigations if even the cold rebuild matters: scope it with
-`points(site=…)`, or roll up + prune (`rollup` / `write_rollup` / `prune`) so old partitions are
+`points(facility_id=…)`, or roll up + prune (`rollup` / `write_rollup` / `prune`) so old partitions are
 smaller.
