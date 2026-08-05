@@ -4,6 +4,33 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.10.0] — 2026-08-04
+
+Portfolio-scale **facility identity**. The time-series store now keys each facility by a stable,
+path-safe **`facility_id`** rather than a raw `site` name, decoupling storage identity from the
+human display name — so a portfolio of many facilities scales without name collisions,
+rename-orphaning, or a silent data-loss bug. **Breaking** to the store + read-API surface (allowed
+pre-1.0), softened by deprecation aliases and a migration helper.
+
+### Added
+- **`camber.store.facilities`** — `make_facility_id(name)` (deterministic slug + short hash),
+  `valid_facility_id` / `require_facility_id` (path-safe validation), `FacilityRegistry`
+  (`_facilities.json`: `facility_id -> {name, ...metadata}`, with collision detection), and
+  `migrate_site_to_facility(root)` to convert an existing `site=<name>` store in place.
+- The store validates the id at write, so an unsafe name (space / `/` / unicode) is **rejected up
+  front** instead of URL-encoding the partition directory and silently overwriting earlier part
+  files — the previous `_next_seq` data-loss hazard, now impossible.
+- Record a facility's display name + metadata on write (`write_role_frame(..., name=, **meta)`);
+  read API gains `GET /facilities` returning `[{facility_id, name}]`.
+
+### Changed (breaking)
+- Store partition key `site` → **`facility_id`** (`<root>/facility_id=<id>/year=<Y>/`). The `site=`
+  parameter on `write_long`/`read_long`/`read_role_frame`/`points`/`rollup`/`prune`, and
+  `PointKey.site`, are renamed to `facility_id`. `ParquetStore.sites()` → **`facilities()`** (the
+  `sites()` alias is kept and emits a `DeprecationWarning`). The read-API `site=` query param and
+  `/sites` endpoint remain as deprecated aliases. Existing stores convert with
+  `migrate_site_to_facility`. See **[docs/SCALE.md](docs/SCALE.md)**.
+
 ## [0.9.6] — 2026-08-02
 
 Pre-1.0 hardening: **honest failures at the edges.** Analytics entry points and the untrusted

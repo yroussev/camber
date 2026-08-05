@@ -5,11 +5,12 @@ Routes are factored into a pure :func:`dispatch` function (method, path, query -
 :class:`http.server` handler is a thin wrapper that parses the request, calls
 ``dispatch``, and writes JSON. Read-only: only GET is served.
 
-Endpoints:
+Endpoints (facility_id addresses a facility; the legacy ``site=`` param is still accepted):
   GET /            | /about | /health   -> service info
-  GET /sites                            -> {"sites": [...]}
-  GET /points?site=&equip=&role=        -> {"points": [...], "count": n}
-  GET /history?site=&equip=&role=&start=&end=&limit=  -> {"history": [...], "count": n}
+  GET /facilities                       -> {"facilities": [{"facility_id","name"}, ...]}
+  GET /sites                            -> {"sites": [...]}   (deprecated alias)
+  GET /points?facility_id=&equip=&role=                       -> {"points": [...], "count": n}
+  GET /history?facility_id=&equip=&role=&start=&end=&limit=   -> {"history": [...], "count": n}
 """
 
 from __future__ import annotations
@@ -32,12 +33,14 @@ def dispatch(api: ReadAPI, method: str, path: str, query: dict):
         return 405, {"error": "method not allowed", "method": method}
     if path in ("/", "/about", "/health"):
         return 200, api.about()
-    if path == "/sites":
+    if path == "/facilities":
+        return 200, api.facilities()
+    if path == "/sites":  # deprecated alias
         return 200, api.sites()
     if path == "/points":
-        return 200, api.points(**_q(query, "site", "equip", "role"))
+        return 200, api.points(**_q(query, "facility_id", "site", "equip", "role"))
     if path == "/history":
-        kw = _q(query, "site", "equip", "role", "start", "end", "limit")
+        kw = _q(query, "facility_id", "site", "equip", "role", "start", "end", "limit")
         return 200, api.history(**kw)
     return 404, {"error": "not found", "path": path}
 

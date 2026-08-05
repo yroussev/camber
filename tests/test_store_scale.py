@@ -28,7 +28,7 @@ def _multi_year_store(root):
     rng = np.random.default_rng(0)
     for e in ("AHU_00", "AHU_01"):
         frame = pd.DataFrame({_ROLE: 50 + rng.normal(0, 5, len(idx))}, index=idx)
-        store.write_role_frame(frame, site="S1", equip=e, equip_class="ahu")
+        store.write_role_frame(frame, facility_id="S1", equip=e, equip_class="ahu")
     return store
 
 
@@ -60,10 +60,10 @@ def test_ranged_read_correct_after_pruning(tmp_path):
 def test_points_projects_catalog_columns_only(tmp_path):
     store = _multi_year_store(str(tmp_path / "store"))
     # the projected read used by points() must not pull ts/value
-    proj = store.read_long(columns=["site", "equip", "role"])
-    assert set(proj.columns) == {"site", "equip", "role"}
+    proj = store.read_long(columns=["facility_id", "equip", "role"])
+    assert set(proj.columns) == {"facility_id", "equip", "role"}
     pts = store.points()
-    assert {(p.site, p.equip, p.role) for p in pts} == {
+    assert {(p.facility_id, p.equip, p.role) for p in pts} == {
         ("S1", "AHU_00", _ROLE.value),
         ("S1", "AHU_01", _ROLE.value),
     }
@@ -73,19 +73,19 @@ def test_read_role_frame_fast_and_dup_paths_agree(tmp_path):
     store = ParquetStore(str(tmp_path / "store"))
     idx = pd.date_range("2024-01-01", periods=48, freq="1h")
     frame = pd.DataFrame({_ROLE: np.arange(48.0)}, index=idx)
-    store.write_role_frame(frame, site="S1", equip="AHU_00")
+    store.write_role_frame(frame, facility_id="S1", equip="AHU_00")
     # unique (ts, role) -> fast pivot path
-    wide = store.read_role_frame(site="S1", equip="AHU_00")
+    wide = store.read_role_frame(facility_id="S1", equip="AHU_00")
     assert list(wide[_ROLE]) == list(np.arange(48.0))
 
     # write the same timestamps again -> duplicates -> pivot_table(mean) path, still correct
-    store.write_role_frame(frame + 2.0, site="S1", equip="AHU_00")
-    wide2 = store.read_role_frame(site="S1", equip="AHU_00")
+    store.write_role_frame(frame + 2.0, facility_id="S1", equip="AHU_00")
+    wide2 = store.read_role_frame(facility_id="S1", equip="AHU_00")
     assert np.allclose(wide2[_ROLE].to_numpy(), np.arange(48.0) + 1.0)  # mean of x and x+2
 
 
 def test_benchmark_smoke(tmp_path):
-    res = benchmark(str(tmp_path / "bench"), sites=2, equips=2, roles=3, days=2, freq="1h")
+    res = benchmark(str(tmp_path / "bench"), facilities=2, equips=2, roles=3, days=2, freq="1h")
     assert res["rows"] > 0
     assert res["n_points"] == 2 * 2 * 3  # sites * equips * roles
     assert res["ranged_rows"] > 0
@@ -102,7 +102,7 @@ def test_benchmark_smoke(tmp_path):
 
 def test_synth_portfolio_row_count(tmp_path):
     store = ParquetStore(str(tmp_path / "s"))
-    rows = synth_portfolio(store, sites=2, equips=2, roles=2, days=1, freq="1h")
+    rows = synth_portfolio(store, facilities=2, equips=2, roles=2, days=1, freq="1h")
     assert rows == 2 * 2 * 2 * 24  # sites*equips*roles*hours
 
 
@@ -116,7 +116,7 @@ def test_writes_invalidate_then_points_caches(tmp_path):
     assert not os.path.isfile(os.path.join(store.root, "_catalog.json"))
 
     # first points() rebuilds once and caches it
-    assert {(p.site, p.equip, p.role) for p in store.points()} == expect
+    assert {(p.facility_id, p.equip, p.role) for p in store.points()} == expect
     assert os.path.isfile(os.path.join(store.root, "_catalog.json"))
 
     # the cache is now warm: a second call must NOT rescan partitions
@@ -124,27 +124,27 @@ def test_writes_invalidate_then_points_caches(tmp_path):
         raise AssertionError("points() rescanned partitions instead of using the cached catalog")
 
     store.read_long = _boom  # type: ignore[assignment]
-    assert {(p.site, p.equip, p.role) for p in store.points()} == expect
-    assert {(p.site, p.equip, p.role) for p in store.points(site="S1")} == expect
-    assert store.points(site="absent") == []
+    assert {(p.facility_id, p.equip, p.role) for p in store.points()} == expect
+    assert {(p.facility_id, p.equip, p.role) for p in store.points(facility_id="S1")} == expect
+    assert store.points(facility_id="absent") == []
 
 
 def test_write_reinvalidates_warm_cache(tmp_path):
     store = ParquetStore(str(tmp_path / "store"))
     idx = pd.date_range("2024-01-01", periods=24, freq="1h")
-    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=idx), site="S1", equip="A")
+    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=idx), facility_id="S1", equip="A")
     assert {p.equip for p in store.points()} == {"A"}  # builds cache
     assert os.path.isfile(os.path.join(store.root, "_catalog.json"))
-    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=idx), site="S1", equip="B")
+    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=idx), facility_id="S1", equip="B")
     assert not os.path.isfile(os.path.join(store.root, "_catalog.json"))  # write invalidated it
     assert {p.equip for p in store.points()} == {"A", "B"}  # rebuilt with both
 
 
 def test_points_cache_matches_scan(tmp_path):
     store = _multi_year_store(str(tmp_path / "store"))
-    cached = {(p.site, p.equip, p.role) for p in store.points()}
+    cached = {(p.facility_id, p.equip, p.role) for p in store.points()}
     os.remove(os.path.join(store.root, "_catalog.json"))  # force the scan fallback
-    scanned = {(p.site, p.equip, p.role) for p in store.points()}
+    scanned = {(p.facility_id, p.equip, p.role) for p in store.points()}
     assert cached == scanned
 
 
@@ -152,7 +152,7 @@ def test_rebuild_catalog_for_legacy_store(tmp_path):
     store = _multi_year_store(str(tmp_path / "store"))  # writes leave no catalog (invalidated)
     n = store.rebuild_catalog()
     assert n == 2 and os.path.isfile(os.path.join(store.root, "_catalog.json"))
-    assert {(p.site, p.equip, p.role) for p in store.points()} == {
+    assert {(p.facility_id, p.equip, p.role) for p in store.points()} == {
         ("S1", "AHU_00", _ROLE.value),
         ("S1", "AHU_01", _ROLE.value),
     }
@@ -163,7 +163,7 @@ def test_corrupt_catalog_falls_back_to_scan(tmp_path):
     with open(os.path.join(store.root, "_catalog.json"), "w") as fh:
         fh.write("{ not valid json")
     # a corrupt catalog is treated as absent -> scan still returns the right keys
-    assert {(p.site, p.equip, p.role) for p in store.points()} == {
+    assert {(p.facility_id, p.equip, p.role) for p in store.points()} == {
         ("S1", "AHU_00", _ROLE.value),
         ("S1", "AHU_01", _ROLE.value),
     }
@@ -173,10 +173,14 @@ def test_prune_drops_fully_removed_site_from_catalog(tmp_path):
     store = ParquetStore(str(tmp_path / "store"))
     old = pd.date_range("2022-01-01", periods=24, freq="1h")
     new = pd.date_range("2024-01-01", periods=24, freq="1h")
-    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=old), site="OLD", equip="A")
-    store.write_role_frame(pd.DataFrame({_ROLE: range(24)}, index=new), site="NEW", equip="A")
+    store.write_role_frame(
+        pd.DataFrame({_ROLE: range(24)}, index=old), facility_id="OLD", equip="A"
+    )
+    store.write_role_frame(
+        pd.DataFrame({_ROLE: range(24)}, index=new), facility_id="NEW", equip="A"
+    )
     store.prune(before_year=2023)  # removes all of OLD's partitions
-    assert {p.site for p in store.points()} == {"NEW"}  # OLD dropped from the catalog
+    assert {p.facility_id for p in store.points()} == {"NEW"}  # OLD dropped from the catalog
 
 
 def test_catalog_file_invisible_to_reads(tmp_path):
@@ -185,4 +189,4 @@ def test_catalog_file_invisible_to_reads(tmp_path):
     assert os.path.isfile(os.path.join(store.root, "_catalog.json"))
     # the _catalog.json at the root must not break dataset discovery or appear as a site
     assert not store.read_long().empty
-    assert "S1" in store.sites() and "_catalog.json" not in "".join(store.sites())
+    assert "S1" in store.facilities() and "_catalog.json" not in "".join(store.facilities())

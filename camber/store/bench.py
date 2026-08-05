@@ -5,7 +5,7 @@ and times the hot paths — catalog enumeration (`points`), a single-equipment r
 time-ranged read across the history, and a rollup — so a regression in column projection or
 year-partition pruning shows up as a number instead of a silent slowdown. Runnable:
 
-    python -m camber.store.bench --sites 50 --equips 20 --days 365 --freq 1h
+    python -m camber.store.bench --facilities 50 --equips 20 --days 365 --freq 1h
 
 Uses only numpy/pandas + the store itself (no benchmarking dependency).
 """
@@ -24,7 +24,7 @@ from .parquet_store import ParquetStore
 def synth_portfolio(
     store: ParquetStore,
     *,
-    sites: int = 10,
+    facilities: int = 10,
     equips: int = 10,
     roles: int = 4,
     days: int = 30,
@@ -32,21 +32,21 @@ def synth_portfolio(
     start: str = "2024-01-01",
     seed: int = 0,
 ) -> int:
-    """Write a synthetic portfolio (sites × equips, each with ``roles`` role-series). Returns
+    """Write a synthetic portfolio (facilities × equips, each with ``roles`` role-series). Returns
     total rows written. ``days`` may span years to exercise year partitioning."""
     rng = np.random.default_rng(seed)
     role_list = list(Role)[:roles]
     n = max(1, int(pd.Timedelta(days=days) / pd.Timedelta(freq)))
     idx = pd.date_range(start, periods=n, freq=freq)
     rows = 0
-    for s in range(sites):
-        site = f"site_{s:03d}"
+    for s in range(facilities):
+        facility_id = f"facility_{s:03d}"
         for e in range(equips):
             frame = pd.DataFrame(
                 {r: 50.0 + rng.normal(0, 5, len(idx)) for r in role_list}, index=idx
             )
             rows += store.write_role_frame(
-                frame, site=site, equip=f"AHU_{e:02d}", equip_class="ahu"
+                frame, facility_id=facility_id, equip=f"AHU_{e:02d}", equip_class="ahu"
             )
     return rows
 
@@ -54,7 +54,7 @@ def synth_portfolio(
 def benchmark(
     root: str,
     *,
-    sites: int = 10,
+    facilities: int = 10,
     equips: int = 10,
     roles: int = 4,
     days: int = 30,
@@ -66,11 +66,17 @@ def benchmark(
     Returns a dict of row/point counts and per-operation wall-clock seconds.
     """
     store = ParquetStore(root)
-    out: dict = {"sites": sites, "equips": equips, "roles": roles, "days": days, "freq": freq}
+    out: dict = {
+        "facilities": facilities,
+        "equips": equips,
+        "roles": roles,
+        "days": days,
+        "freq": freq,
+    }
 
     t0 = time.perf_counter()
     out["rows"] = synth_portfolio(
-        store, sites=sites, equips=equips, roles=roles, days=days, freq=freq, start=start
+        store, facilities=facilities, equips=equips, roles=roles, days=days, freq=freq, start=start
     )
     out["write_s"] = round(time.perf_counter() - t0, 4)
 
@@ -85,7 +91,7 @@ def benchmark(
     out["points_warm_s"] = round(time.perf_counter() - t0, 4)
 
     t0 = time.perf_counter()
-    store.read_role_frame(site="site_000", equip="AHU_00")
+    store.read_role_frame(facility_id="facility_000", equip="AHU_00")
     out["read_one_s"] = round(time.perf_counter() - t0, 4)
 
     mid = pd.Timestamp(start) + pd.Timedelta(days=days) / 2
@@ -95,7 +101,7 @@ def benchmark(
     out["ranged_rows"] = len(ranged)
 
     t0 = time.perf_counter()
-    store.rollup("D", site="site_000")
+    store.rollup("D", facility_id="facility_000")
     out["rollup_s"] = round(time.perf_counter() - t0, 4)
     return out
 
@@ -106,7 +112,7 @@ def _main(argv=None):  # pragma: no cover
 
     ap = argparse.ArgumentParser(description="Benchmark the CAMBER Parquet store at scale")
     ap.add_argument("--root", default=None, help="store root (default: a temp dir)")
-    ap.add_argument("--sites", type=int, default=10)
+    ap.add_argument("--facilities", type=int, default=10)
     ap.add_argument("--equips", type=int, default=10)
     ap.add_argument("--roles", type=int, default=4)
     ap.add_argument("--days", type=int, default=30)
@@ -117,7 +123,7 @@ def _main(argv=None):  # pragma: no cover
     root = args.root or tempfile.mkdtemp(prefix="camber-bench-")
     res = benchmark(
         root,
-        sites=args.sites,
+        facilities=args.facilities,
         equips=args.equips,
         roles=args.roles,
         days=args.days,

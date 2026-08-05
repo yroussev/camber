@@ -1,16 +1,18 @@
 """A Parquet-backed time-series store keyed to the semantic entity model.
 
-Layout: one tidy (long-form) dataset, hive-partitioned by ``site`` and ``year``,
+Layout: one tidy (long-form) dataset, hive-partitioned by ``facility_id`` and ``year``,
 so a portfolio of buildings lives under one root and a query touches only the
 partitions it needs::
 
-    <root>/site=DemoSite/year=2024/part-*.parquet
+    <root>/facility_id=fox-lodge-9f3a1c/year=2024/part-*.parquet
 
-Each row is ``(ts, equip, equip_class, role, value)`` plus the ``site``/``year``
-partition keys. Storing by *role* (the vendor-neutral meaning, see
-:mod:`camber.model.roles`) rather than the raw vendor token means a query reads
-the same column name on any building -- the store speaks the analytics layer's
-language, not the BAS's.
+Each row is ``(ts, equip, equip_class, role, value)`` plus the ``facility_id``/``year``
+partition keys. The ``facility_id`` is a stable, path-safe identifier (see
+:mod:`camber.store.facilities`); a facility's human display name and metadata live in a
+sibling ``_facilities.json`` registry, decoupled from the storage identity so a rename
+never orphans history and two same-named facilities never collide. Storing by *role* (the
+vendor-neutral meaning, see :mod:`camber.model.roles`) rather than the raw vendor token
+means a query reads the same column name on any building.
 
 Reads use pyarrow dataset filters (predicate pushdown on the partition keys and a
 row filter on ts/equip/role), then pivot to the wide, role-named frames the rules
@@ -32,7 +34,9 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.dataset as ds
 
+from .._deprecation import deprecated
 from ..model.roles import Role
+from .facilities import FacilityRegistry, require_facility_id
 
 # Stable column schema for the long-form store.
 _TS = "ts"
@@ -40,10 +44,10 @@ _VALUE = "value"
 _EQUIP = "equip"
 _CLASS = "equip_class"
 _ROLE = "role"
-_SITE = "site"
+_FACILITY = "facility_id"
 _YEAR = "year"
 
-# A cached catalog of distinct (site, equip, role) keys, written alongside the dataset so
+# A cached catalog of distinct (facility_id, equip, role) keys, written alongside the dataset so
 # points() needn't rescan every partition. Arrow's dataset discovery ignores leading-"_"
 # paths, so this file is invisible to reads.
 _CATALOG = "_catalog.json"
@@ -54,14 +58,13 @@ def _role_slug(r) -> str:
     return r.value if isinstance(r, Role) else str(r)
 
 
-def role_frame_to_long(
-    frame: pd.DataFrame, *, site: str, equip: str, equip_class: str = ""
-) -> pd.DataFrame:
+def role_frame_to_long(frame: pd.DataFrame, *, equip: str, equip_class: str = "") -> pd.DataFrame:
     """Melt a wide role-named frame (``resolve`` output) to the store's long form.
 
     ``frame`` has a DatetimeIndex and columns that are :class:`Role` members (or
     role slugs). NaNs are dropped -- the store holds observations, not a dense
-    grid. Returns columns ``[ts, equip, equip_class, role, value]``.
+    grid. Returns columns ``[ts, equip, equip_class, role, value]``. The
+    ``facility_id`` partition key is attached at write time by :meth:`ParquetStore.write_long`.
     """
     if frame is None or frame.empty:
         return pd.DataFrame(columns=[_TS, _EQUIP, _CLASS, _ROLE, _VALUE])
@@ -79,9 +82,9 @@ def role_frame_to_long(
 
 @dataclass(frozen=True)
 class PointKey:
-    """One stored series: which equipment, which role, at which site."""
+    """One stored series: which equipment, which role, at which facility."""
 
-    site: str
+    facility_id: str
     equip: str
     role: str
 
@@ -92,27 +95,35 @@ class ParquetStore:
     def __init__(self, root: str):
         self.root = root
 
-    # ------------------------------------------------------------------ write
-    def write_long(self, long: pd.DataFrame, *, site: str) -> int:
-        """Append a long-form frame (``role_frame_to_long`` shape) for one site.
+    def _registry(self) -> FacilityRegistry:
+        return FacilityRegistry(self.root)
 
-        Partitions by ``site``/``year``. Each call writes new part files (a
-        per-call basename counter avoids clobbering prior writes), so repeated
-        calls accumulate. Returns the number of rows written.
+    # ------------------------------------------------------------------ write
+    def write_long(self, long: pd.DataFrame, *, facility_id: str, name=None, **meta) -> int:
+        """Append a long-form frame (``role_frame_to_long`` shape) for one facility.
+
+        ``facility_id`` must be a path-safe id (see :func:`camber.store.require_facility_id`);
+        an unsafe id raises rather than silently corrupting the layout. Pass ``name=`` (and any
+        keyword metadata) to record the facility's display name in the registry. Partitions by
+        ``facility_id``/``year``; each call writes new part files (a per-call basename counter
+        avoids clobbering prior writes), so repeated calls accumulate. Returns rows written.
         """
+        require_facility_id(facility_id)
+        if name is not None or meta:
+            self._registry().register(facility_id, name=name, **meta)
         if long is None or long.empty:
             return 0
         df = long.copy()
         df[_TS] = pd.to_datetime(df[_TS])
-        df[_SITE] = site
+        df[_FACILITY] = facility_id
         df[_YEAR] = df[_TS].dt.year.astype("int32")
         table = pa.Table.from_pandas(df, preserve_index=False)
-        seq = self._next_seq(site)
+        seq = self._next_seq(facility_id)
         ds.write_dataset(
             table,
             self.root,
             format="parquet",
-            partitioning=[_SITE, _YEAR],
+            partitioning=[_FACILITY, _YEAR],
             partitioning_flavor="hive",
             existing_data_behavior="overwrite_or_ignore",
             basename_template=f"part-{seq}-{{i}}.parquet",
@@ -123,16 +134,38 @@ class ParquetStore:
         return len(df)
 
     def write_role_frame(
-        self, frame: pd.DataFrame, *, site: str, equip: str, equip_class: str = ""
+        self,
+        frame: pd.DataFrame,
+        *,
+        facility_id: str,
+        equip: str,
+        equip_class: str = "",
+        name=None,
+        **meta,
     ) -> int:
         """Convenience: melt a wide role-frame and append it. Returns rows written."""
         return self.write_long(
-            role_frame_to_long(frame, site=site, equip=equip, equip_class=equip_class), site=site
+            role_frame_to_long(frame, equip=equip, equip_class=equip_class),
+            facility_id=facility_id,
+            name=name,
+            **meta,
         )
 
-    def _next_seq(self, site: str) -> int:
-        """Monotonic per-site write counter, derived from existing part files."""
-        sdir = os.path.join(self.root, f"{_SITE}={site}")
+    def register_facility(self, facility_id: str, name=None, **meta) -> None:
+        """Record a facility's display ``name``/metadata without writing data."""
+        self._registry().register(facility_id, name=name, **meta)
+
+    def facility_name(self, facility_id: str) -> str:
+        """Display name for ``facility_id`` (falls back to the id when unregistered)."""
+        return self._registry().name(facility_id)
+
+    def facilities_meta(self) -> dict:
+        """The whole facilities registry ``{facility_id: {name, ...}}``."""
+        return self._registry().all()
+
+    def _next_seq(self, facility_id: str) -> int:
+        """Monotonic per-facility write counter, derived from existing part files."""
+        sdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
         n = 0
         for _dirpath, _dirs, files in os.walk(sdir):
             n += sum(1 for f in files if f.endswith(".parquet"))
@@ -151,7 +184,8 @@ class ParquetStore:
             with open(p, encoding="utf-8") as fh:
                 data = json.load(fh)
             return [
-                PointKey(site=k["site"], equip=k["equip"], role=k["role"]) for k in data["points"]
+                PointKey(facility_id=k["facility_id"], equip=k["equip"], role=k["role"])
+                for k in data["points"]
             ]
         except (json.JSONDecodeError, KeyError, TypeError, OSError):
             return None  # treat a corrupt/old catalog as absent -> fall back to a scan
@@ -159,8 +193,8 @@ class ParquetStore:
     def _write_catalog(self, keys) -> None:
         """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``."""
         os.makedirs(self.root, exist_ok=True)
-        rows = sorted({(k.site, k.equip, k.role) for k in keys})
-        payload = {"points": [{"site": s, "equip": e, "role": r} for s, e, r in rows]}
+        rows = sorted({(k.facility_id, k.equip, k.role) for k in keys})
+        payload = {"points": [{"facility_id": s, "equip": e, "role": r} for s, e, r in rows]}
         tmp = self._catalog_path() + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(payload, fh)
@@ -176,13 +210,13 @@ class ParquetStore:
                 pass
 
     def _scan_keys(self) -> list:
-        """Distinct (site, equip, role) keys via a projected scan (no ts/value payload)."""
-        long = self.read_long(columns=[_SITE, _EQUIP, _ROLE])
+        """Distinct (facility_id, equip, role) keys via a projected scan (no ts/value payload)."""
+        long = self.read_long(columns=[_FACILITY, _EQUIP, _ROLE])
         if long.empty:
             return []
         return [
-            PointKey(site=r[_SITE], equip=r[_EQUIP], role=r[_ROLE])
-            for _, r in long.drop_duplicates([_SITE, _EQUIP, _ROLE]).iterrows()
+            PointKey(facility_id=r[_FACILITY], equip=r[_EQUIP], role=r[_ROLE])
+            for _, r in long.drop_duplicates([_FACILITY, _EQUIP, _ROLE]).iterrows()
         ]
 
     def rebuild_catalog(self) -> int:
@@ -197,7 +231,7 @@ class ParquetStore:
         return ds.dataset(self.root, format="parquet", partitioning="hive")
 
     @staticmethod
-    def _build_filter(*, site=None, equips=None, roles=None, start=None, end=None):
+    def _build_filter(*, facility_id=None, equips=None, roles=None, start=None, end=None):
         """Assemble a pyarrow dataset filter, pruning ``year`` partitions from the ts range.
 
         Translating ``start``/``end`` into bounds on the ``year`` *partition* field (not just
@@ -210,8 +244,8 @@ class ParquetStore:
             nonlocal filt
             filt = expr if filt is None else (filt & expr)
 
-        if site is not None:
-            _and(ds.field(_SITE) == site)
+        if facility_id is not None:
+            _and(ds.field(_FACILITY) == facility_id)
         if equips is not None:
             _and(ds.field(_EQUIP).isin(list(equips)))
         if roles is not None:
@@ -227,7 +261,7 @@ class ParquetStore:
         return filt
 
     def read_long(
-        self, *, site=None, equips=None, roles=None, start=None, end=None, columns=None
+        self, *, facility_id=None, equips=None, roles=None, start=None, end=None, columns=None
     ) -> pd.DataFrame:
         """Tidy read with predicate pushdown. Returns long-form rows.
 
@@ -237,10 +271,12 @@ class ParquetStore:
         columns read from Parquet (projection) -- pass only what you need at scale.
         """
         if not os.path.isdir(self.root):
-            cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _SITE, _YEAR]
+            cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _FACILITY, _YEAR]
             return pd.DataFrame(columns=cols)
         dataset = self._dataset()
-        filt = self._build_filter(site=site, equips=equips, roles=roles, start=start, end=end)
+        filt = self._build_filter(
+            facility_id=facility_id, equips=equips, roles=roles, start=start, end=end
+        )
         table = dataset.to_table(filter=filt, columns=columns)
         df = table.to_pandas()
         if not df.empty and _TS in df.columns:
@@ -250,7 +286,7 @@ class ParquetStore:
     def read_role_frame(
         self,
         *,
-        site: str,
+        facility_id: str,
         equip: str,
         roles=None,
         start=None,
@@ -264,7 +300,7 @@ class ParquetStore:
         (mean-aggregated) or None for the stored grid.
         """
         long = self.read_long(
-            site=site,
+            facility_id=facility_id,
             equips=[equip],
             roles=roles,
             start=start,
@@ -290,12 +326,12 @@ class ParquetStore:
         return wide
 
     # --------------------------------------------------------------- catalog
-    def points(self, *, site=None) -> list:
-        """Distinct stored series as :class:`PointKey` (site, equip, role).
+    def points(self, *, facility_id=None) -> list:
+        """Distinct stored series as :class:`PointKey` (facility_id, equip, role).
 
         Reads the cached catalog (``_catalog.json``) so enumerating a portfolio's points needs
         no partition scan. Writes *invalidate* the catalog (cheap), so the first call after a
-        write burst rebuilds it once with a projected scan (site/equip/role columns only -- no
+        write burst rebuilds it once with a projected scan (facility/equip/role columns only -- no
         ts/value payload) and caches the result; subsequent calls are instant until the next
         write.
         """
@@ -305,27 +341,32 @@ class ParquetStore:
                 return []
             cached = self._scan_keys()
             self._write_catalog(cached)  # memoize until the next write invalidates it
-        return [k for k in cached if site is None or k.site == site]
+        return [k for k in cached if facility_id is None or k.facility_id == facility_id]
 
-    def sites(self) -> list:
-        """Distinct site ids present in the store."""
+    def facilities(self) -> list:
+        """Distinct facility ids present in the store (the partition directories)."""
         if not os.path.isdir(self.root):
             return []
         return sorted(
-            d.split("=", 1)[1] for d in os.listdir(self.root) if d.startswith(f"{_SITE}=")
+            d.split("=", 1)[1] for d in os.listdir(self.root) if d.startswith(f"{_FACILITY}=")
         )
+
+    @deprecated(since="0.10", remove_in="1.0", use="ParquetStore.facilities")
+    def sites(self) -> list:
+        """Deprecated alias for :meth:`facilities` (the key is a facility_id, not a site name)."""
+        return self.facilities()
 
     # ------------------------------------------------------- rollup / retention
     def rollup(
-        self, freq: str, *, site=None, equips=None, roles=None, agg: str = "mean"
+        self, freq: str, *, facility_id=None, equips=None, roles=None, agg: str = "mean"
     ) -> pd.DataFrame:
-        """Downsample stored history to ``freq`` per (site, equip, role).
+        """Downsample stored history to ``freq`` per (facility_id, equip, role).
 
         Returns a long-form frame with ``ts`` bucketed to the period and ``value``
         aggregated by ``agg`` ("mean"/"sum"/"max"/"min"). Use for retention rollups
         (keep raw recent, coarse history long) and portfolio-scale reads.
         """
-        long = self.read_long(site=site, equips=equips, roles=roles)
+        long = self.read_long(facility_id=facility_id, equips=equips, roles=roles)
         if long.empty:
             return long
         long = long.copy()
@@ -334,34 +375,38 @@ class ParquetStore:
             if freq == "D"
             else pd.to_datetime(long[_TS]).dt.to_period(freq).dt.start_time
         )
-        grouped = long.groupby([_SITE, _EQUIP, _CLASS, _ROLE, _TS])[_VALUE].agg(agg).reset_index()
+        grouped = (
+            long.groupby([_FACILITY, _EQUIP, _CLASS, _ROLE, _TS])[_VALUE].agg(agg).reset_index()
+        )
         return grouped.sort_values(_TS).reset_index(drop=True)
 
-    def write_rollup(self, freq: str, dest: ParquetStore, *, agg: str = "mean", site=None) -> int:
+    def write_rollup(
+        self, freq: str, dest: ParquetStore, *, agg: str = "mean", facility_id=None
+    ) -> int:
         """Compute a rollup and write it to another store; returns rows written."""
-        rolled = self.rollup(freq, site=site, agg=agg)
+        rolled = self.rollup(freq, facility_id=facility_id, agg=agg)
         if rolled.empty:
             return 0
         total = 0
-        for s, sub in rolled.groupby(_SITE):
-            total += dest.write_long(sub.drop(columns=[_SITE]), site=s)
+        for s, sub in rolled.groupby(_FACILITY):
+            total += dest.write_long(sub.drop(columns=[_FACILITY]), facility_id=s)
         return total
 
-    def prune(self, *, before_year: int, site=None) -> int:
+    def prune(self, *, before_year: int, facility_id=None) -> int:
         """Delete year partitions older than ``before_year`` (retention policy).
 
-        Removes ``site=*/year=Y`` directories with Y < ``before_year``. Returns the
+        Removes ``facility_id=*/year=Y`` directories with Y < ``before_year``. Returns the
         number of year partitions removed.
         """
         if not os.path.isdir(self.root):
             return 0
         removed = 0
-        site_dirs = (
-            [f"{_SITE}={site}"]
-            if site is not None
-            else [d for d in os.listdir(self.root) if d.startswith(f"{_SITE}=")]
+        fac_dirs = (
+            [f"{_FACILITY}={facility_id}"]
+            if facility_id is not None
+            else [d for d in os.listdir(self.root) if d.startswith(f"{_FACILITY}=")]
         )
-        for sd in site_dirs:
+        for sd in fac_dirs:
             spath = os.path.join(self.root, sd)
             if not os.path.isdir(spath):
                 continue
