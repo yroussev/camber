@@ -1149,12 +1149,25 @@
     "damper_census"
   ],
   "camber.store": [
+    "FacilityRegistry",
     "ParquetStore",
-    "role_frame_to_long"
+    "PointKey",
+    "make_facility_id",
+    "migrate_site_to_facility",
+    "require_facility_id",
+    "role_frame_to_long",
+    "valid_facility_id"
   ],
   "camber.store.bench": [
     "benchmark",
     "synth_portfolio"
+  ],
+  "camber.store.facilities": [
+    "FacilityRegistry",
+    "make_facility_id",
+    "migrate_site_to_facility",
+    "require_facility_id",
+    "valid_facility_id"
   ],
   "camber.store.parquet_store": [
     "ParquetStore",
