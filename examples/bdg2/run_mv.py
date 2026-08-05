@@ -29,7 +29,7 @@ from camber.mandv.stats import cv_rmse_max_for, fit_stats  # noqa: E402
 from camber.mandv.towt import fit_towt  # noqa: E402
 from camber.mandv.weather import c_to_f  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
-from camber.store import ParquetStore  # noqa: E402
+from camber.store import ParquetStore, make_facility_id  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "bdg2")
@@ -47,7 +47,12 @@ ELECTRIC = ["Panther_office_Patti", "Bull_office_Rob", "Gator_office_Carrie"]
 
 
 def _site_of(meta, b):
-    return meta.loc[b, "site_id"]
+    return meta.loc[b, "site_id"]  # BDG2 campus code (used for the weather join)
+
+
+def _facility_of(b):
+    """A stable, path-safe facility_id for a building (facility = building in BDG2)."""
+    return make_facility_id(b)
 
 
 def _oat_f(weather, site):
@@ -126,13 +131,22 @@ def storage_demo(meta, elec_csv, buildings):
     for b in present:
         s = df[b].loc[YEAR[0] : YEAR[1]].dropna()
         frame = pd.DataFrame({Role.POWER: s})
-        total += st.write_role_frame(frame, site=_site_of(meta, b), equip=b, equip_class="Meter")
+        # one facility per building; the campus code is kept as registry metadata
+        total += st.write_role_frame(
+            frame,
+            facility_id=_facility_of(b),
+            equip="meter",
+            equip_class="Meter",
+            name=b,
+            site_id=_site_of(meta, b),
+        )
     print(
-        f"ingested {total:,} observations from {len(present)} buildings across sites {st.sites()}"
+        f"ingested {total:,} observations from {len(present)} buildings "
+        f"across {len(st.facilities())} facilities"
     )
     print(f"catalog: {len(st.points())} stored series")
     one = present[0]
-    back = st.read_role_frame(site=_site_of(meta, one), equip=one)
+    back = st.read_role_frame(facility_id=_facility_of(one), equip="meter")
     print(
         f"tag-filtered read of {one}: {back.shape[0]:,} hourly rows, "
         f"roles {[r.value for r in back.columns]}"

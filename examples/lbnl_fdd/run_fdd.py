@@ -86,8 +86,10 @@ def main() -> int:
 
     print("\n=== 3. Storage (Parquet round-trip) ===")
     st = ParquetStore(tempfile.mkdtemp())
-    n = st.write_role_frame(base, site="LBNL_SDAHU", equip="AHU", equip_class="AHU")
-    back = st.read_role_frame(site="LBNL_SDAHU", equip="AHU")
+    n = st.write_role_frame(
+        base, facility_id="lbnl_sdahu", equip="AHU", equip_class="AHU", name="LBNL SDAHU"
+    )
+    back = st.read_role_frame(facility_id="lbnl_sdahu", equip="AHU")
     print(
         f"wrote {n:,} observations; read back {back.shape[0]:,} hourly rows x "
         f"{back.shape[1]} roles; round-trip ok={len(base) == len(back)}"
