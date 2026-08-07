@@ -1,0 +1,219 @@
+"""Streaming sustained-shift alarm on chiller approach drift, against a frozen baseline.
+
+:func:`camber.chillerbaseline.drift_stats` answers "how far above baseline did this period sit, on
+average?". That is a *period* verdict: it needs the window to be over, and a single number for the
+window hides whether the shift arrived as a step in week one or a ramp across week four. The
+operational question is narrower and earlier -- **has the approach moved up and stayed up?** -- and
+it wants answering sample by sample, as the data lands.
+
+That is exactly a tabular CUSUM, and :class:`camber.mandv.online.OnlineCusum` already implements
+one: two one-sided accumulators that ignore drift inside ``slack`` and raise an alarm when either
+exceeds ``limit``. It is written against any ``predict(driver) -> float``, and
+:meth:`camber.chillerbaseline.ApproachBaseline.predict` already matches that shape, so the load
+normalization comes along for free and **no change to** ``online.py`` **is needed**. Its
+accumulators are named for its original energy use (savings/waste); this module relabels them for
+approach, where the meaningful direction is *climbing*.
+
+Two robustness measures matter here and are worth stating plainly:
+
+* **Residual clipping.** A raw CUSUM is dominated by outliers -- one 20-sigma sensor dropout
+  accumulates more than a fortnight of genuine drift. The value fed to the accumulator is clipped to
+  ``clip_sigma`` around the prediction, so a spike contributes at most one sample's worth. The
+  residual *reported* is always the true unclipped one; only the accumulator sees the clipped value.
+* **A decision interval, gated on the shift still being present.** The accumulator crossing its
+  limit for a single sample is a candidate, not a verdict, so an alarm needs ``min_consecutive``
+  samples over the limit. That alone is not enough: a one-sided accumulator only decays by ``slack``
+  per sample, so a short burst that has completely ended still sits above the limit long afterwards
+  and would eventually satisfy any interval on its own. Each sample must therefore *also* be
+  currently elevated -- its own residual above ``slack`` -- for the interval to count. That is the
+  difference between "moved up and stayed up" and "moved up once and came back".
+
+The baseline is frozen (:mod:`camber.store.modelstore`), so accepting a new normal must also reset
+the accumulator: :meth:`ApproachDriftMonitor.rebase` does both together, since carrying CUSUM state
+across a baseline change would re-alarm on drift the operator has already accepted.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+
+import pandas as pd
+
+# The private cleaner is shared deliberately: the streaming alarm must score exactly the
+# population the period statistic scores, or the two would disagree about the same chiller for no
+# visible reason.
+from .chillerbaseline import _clean
+from .mandv.online import OnlineCusum
+
+__all__ = [
+    "CUSUM_CLIP_SIGMA",
+    "CUSUM_LIMIT_SIGMA",
+    "CUSUM_MIN_CONSECUTIVE",
+    "CUSUM_SLACK_SIGMA",
+    "DriftAlarmRun",
+    "DriftAlarmState",
+    "ApproachDriftMonitor",
+]
+
+# ---------------------------------------------------------------------------------------------
+# PROVISIONAL CUSUM PARAMETERS -- NOT YET VALIDATED AGAINST FIELD DATA.
+#
+# Textbook tabular-CUSUM tuning for detecting a ~1-sigma sustained shift is slack k = 0.5 sigma with
+# limit h = 4-5 sigma. The limit here is deliberately looser than that, because a month of hourly
+# trend is ~720 samples and h = 5 sigma has an in-control run length short enough to false-alarm
+# over a window that long. These are engineering-judgement starting points, not measurements: they
+# have never been checked against real chiller trend data with confirmed fouling events, and the
+# false-alarm/detection-delay trade-off they encode should be set from that data. All four are
+# constructor arguments, so tuning is a config change rather than a code change.
+# ---------------------------------------------------------------------------------------------
+CUSUM_SLACK_SIGMA = 0.5  # PROVISIONAL -- drift smaller than this is ignored
+CUSUM_LIMIT_SIGMA = 8.0  # PROVISIONAL -- accumulator level that constitutes a candidate alarm
+CUSUM_CLIP_SIGMA = 4.0  # PROVISIONAL -- per-sample outlier clamp fed to the accumulator
+CUSUM_MIN_CONSECUTIVE = 6  # PROVISIONAL -- decision interval, in consecutive elevated samples
+
+
+@dataclass
+class DriftAlarmState:
+    """Snapshot of the approach-drift CUSUM after folding one sample."""
+
+    n: int
+    residual_f: float  # true (unclipped) actual - predicted, degF; + = wider than baseline
+    climbing: float  # accumulator for a sustained *rise* in approach (degrading)
+    improving: float  # accumulator for a sustained *fall* in approach (recovered/serviced)
+    consecutive_over: int  # consecutive samples both over the limit and still elevated
+    alarming: bool  # the decision interval has been satisfied
+    alarm: str | None  # "drift" once alarming, else None
+
+    def as_dict(self) -> dict:
+        """Return the state as a plain dict."""
+        return asdict(self)
+
+
+@dataclass
+class DriftAlarmRun:
+    """Result of folding a whole period through the monitor."""
+
+    n: int  # samples scored after guards
+    alarmed: bool
+    first_alarm_n: int  # 1-based sample at which the alarm first raised, -1 if never
+    first_alarm_at: str  # index label at that sample, "" if never
+    peak_climbing: float  # highest the climbing accumulator reached, degF
+    limit_f: float  # the accumulator limit in use, degF
+    final_residual_f: float
+
+    def as_dict(self) -> dict:
+        """Return the run summary as a plain dict."""
+        return asdict(self)
+
+
+class ApproachDriftMonitor:
+    """Online sustained-shift alarm on approach residuals against a frozen baseline.
+
+    Wraps :class:`camber.mandv.online.OnlineCusum` and relabels its accumulators for approach: its
+    ``low`` side (sustained ``predicted < actual``) is a **climbing** approach and the direction
+    that matters; its ``high`` side is a sustained improvement, reported but never alarmed on.
+    """
+
+    def __init__(
+        self,
+        baseline,
+        *,
+        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL -- see the module note
+        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL
+        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL
+        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL
+    ):
+        if not baseline.sigma_f > 0:
+            raise ValueError(
+                "a baseline with no residual scatter cannot support a sigma-scaled CUSUM "
+                "(sigma_f must be > 0)"
+            )
+        self.slack_sigma = slack_sigma
+        self.limit_sigma = limit_sigma
+        self.clip_sigma = clip_sigma
+        self.min_consecutive = min_consecutive
+        self.baseline = baseline
+        self._start(baseline)
+
+    def _start(self, baseline) -> None:
+        """(Re)build the accumulator against ``baseline`` and clear all state."""
+        self.baseline = baseline
+        sigma = baseline.sigma_f
+        self.limit_f = self.limit_sigma * sigma
+        self.clip_f = self.clip_sigma * sigma
+        self._cusum = OnlineCusum(
+            baseline.predict, limit=self.limit_f, slack=self.slack_sigma * sigma
+        )
+        self._over = 0
+
+    def reset(self) -> None:
+        """Clear the accumulator, keeping the current baseline."""
+        self._start(self.baseline)
+
+    def rebase(self, baseline) -> None:
+        """Swap in a newly accepted baseline **and** clear the accumulator.
+
+        Both halves are required. A baseline moves only when an operator accepts a new normal
+        (:meth:`camber.store.modelstore.BaselineStore.accept_new_normal`); carrying the old
+        accumulator across that change would immediately re-alarm on drift already accepted.
+        """
+        if not baseline.sigma_f > 0:
+            raise ValueError("cannot rebase onto a baseline with no residual scatter")
+        self._start(baseline)
+
+    def update(self, tons, approach_f) -> DriftAlarmState:
+        """Fold one (load, approach) sample; return the alarm state after it."""
+        predicted = float(self.baseline.predict(tons))
+        actual = float(approach_f)
+        # Only the accumulator sees the clipped value; the reported residual stays truthful.
+        clipped = min(max(actual, predicted - self.clip_f), predicted + self.clip_f)
+        st = self._cusum.update(tons, clipped)
+        # Over the limit is necessary but not sufficient: the accumulator decays only by `slack` per
+        # sample, so an ended burst lingers above the limit for many samples. Require this sample to
+        # be elevated too, so the interval measures a shift that is still happening.
+        elevated = (clipped - predicted) > self._cusum.slack
+        self._over = self._over + 1 if (st.low >= self.limit_f and elevated) else 0
+        alarming = self._over >= self.min_consecutive
+        return DriftAlarmState(
+            n=st.n,
+            residual_f=round(actual - predicted, 4),
+            climbing=round(st.low, 4),
+            improving=round(st.high, 4),
+            consecutive_over=self._over,
+            alarming=alarming,
+            alarm="drift" if alarming else None,
+        )
+
+    def run(
+        self,
+        frame: pd.DataFrame,
+        *,
+        approach_col="approach_f",
+        tons_col: str = "tons",
+        min_tons: float = 5.0,
+        approach_range: tuple[float, float] = (0.0, 50.0),
+    ) -> DriftAlarmRun | None:
+        """Fold a whole period through the monitor in order; summarize when it first alarmed.
+
+        Applies the same load/plausibility guards the period statistic uses, so both read the same
+        samples. Returns ``None`` when the guards leave nothing to score.
+        """
+        w = _clean(frame, approach_col, tons_col, min_tons=min_tons, approach_range=approach_range)
+        if w.empty:
+            return None
+        first_n, first_at, peak, last = -1, "", 0.0, float("nan")
+        for label, tons, approach in zip(w.index, w["tons"].to_numpy(), w["approach"].to_numpy()):
+            st = self.update(tons, approach)
+            peak = max(peak, st.climbing)
+            last = st.residual_f
+            if st.alarming and first_n < 0:
+                first_n, first_at = st.n, str(label)
+        return DriftAlarmRun(
+            n=int(len(w)),
+            alarmed=first_n > 0,
+            first_alarm_n=first_n,
+            first_alarm_at=first_at,
+            peak_climbing=round(float(peak), 4),
+            limit_f=round(float(self.limit_f), 4),
+            final_residual_f=round(float(last), 4) if last == last else float("nan"),
+        )

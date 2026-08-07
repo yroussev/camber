@@ -296,13 +296,20 @@ and no-alarm on noise; model-store atomic write and reload.
 | **2** | `PeriodRule` + `Registry.run_periods` (explicit period pairs) | Low — additive protocol · **LANDED** |
 | **3** | `chiller_approach_drift` rule, scorecard category | Medium — first user-visible finding; thresholds still provisional · **LANDED** |
 | **5** | `modelstore.py` coefficient persistence, frozen with `accept_new_normal` | Medium — new durable artifact · **LANDED** |
-| **4** | `OnlineCusum` wiring for streaming drift alarms | Low — `online.py` unmodified · **remaining** |
+| **4** | `OnlineCusum` wiring for streaming drift alarms | Low — `online.py` unmodified · **LANDED** |
 
 Phases 2, 3 and 5 landed together: with the two policy decisions made, the period split, the drift
 Finding, and the frozen store are one coherent slice — a drift rule without persistence would refit
 its own reference and report nothing, so shipping 3 without 5 would have been misleading rather than
-merely incomplete. Phase 4 remains: it extends the same frozen baseline to streaming alarms and
-depends on nothing that is still open.
+merely incomplete. Phase 4 then landed on top, adding `camber/chillerdrift.py` and the
+`chiller_approach_drift_sustained` rule: `OnlineCusum` wrapped around the same frozen baseline, with
+outlier clipping and a presence-gated decision interval so a short burst cannot masquerade as a
+sustained shift. `online.py` is unmodified, as designed.
+
+**All five layers are now implemented.** The only thing outstanding is decision 3 (threshold
+validation), which gates production use of the severities but not the machinery. A survey of the
+gap review's remaining optional tiers is in
+[`chiller_gap_optional_tiers_feasibility.md`](chiller_gap_optional_tiers_feasibility.md).
 
 ## Open decisions
 
