@@ -185,6 +185,7 @@ _TEMPLATE_LIST = (
                 Role.ENERGY_RATE,
                 Role.COND_APPROACH_TEMP,
                 Role.EVAP_APPROACH_TEMP,
+                Role.SUBCOOLING_TEMP,
             }
         ),
     ),

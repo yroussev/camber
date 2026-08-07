@@ -100,6 +100,11 @@ class Role(str, Enum):
     EVAP_APPROACH_TEMP = (
         "evap_approach_temp"  # evaporator approach (CHW leaving - refrigerant), degF
     )
+    # Liquid-line subcooling (condensing temp - liquid line temp), degF. Like the approach roles
+    # this is a controller-reported *difference*, not a raw temperature: CAMBER has no refrigerant
+    # saturation-temperature or pressure role, so subcooling cannot be derived from a liquid-line
+    # temperature alone and must be mapped directly where the chiller publishes it.
+    SUBCOOLING_TEMP = "subcooling_temp"
 
     # --- energy / power ---
     POWER = "power"  # electric power (kW)
@@ -180,6 +185,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.RETURN_AIR_HUMIDITY: "return air humidity sensor",
     Role.COND_APPROACH_TEMP: "condenser refrig temp approach sensor",
     Role.EVAP_APPROACH_TEMP: "evaporator refrig temp approach sensor",
+    Role.SUBCOOLING_TEMP: "refrig subcooling temp sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }
