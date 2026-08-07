@@ -153,9 +153,9 @@ Backward-compatibility guarantees:
 - `run_periods` reuses `_merge_shared`, `_missing_optional`, and the `min_trust` sensor-health gate
   verbatim — the honesty and trust conventions apply identically.
 
-**Owner decision needed** — see "Open decisions" #1: whether periods are caller-supplied
-timestamp pairs (explicit, testable, no hidden state) or derived from a rolling "last N days vs the
-N days before that" convention (zero-configuration, but implicit).
+**DECIDED (decision 1): explicit `(start, end)` pairs.** `run_periods` takes caller-supplied bounds;
+either endpoint may be `None` for an open-ended side. No rolling-window convention — a reference
+window that moves on every re-run is neither auditable nor reproducible.
 
 ### Layer 3 — the drift statistic and its `Finding` — follow-up
 
@@ -230,7 +230,12 @@ JSON over parquet: coefficient sets are tens of rows, not millions; they need at
 human inspection more than they need columnar scans; and reusing `FaultLifecycle`'s pattern means no
 new dependency and a reviewed precedent for the atomic-write path.
 
-**Owner decision needed** — see "Open decisions" #2: baseline refit policy.
+**DECIDED (decision 2): freeze at commissioning; refit only on an explicit "accept new normal".**
+The baseline is fit once over the supplied baseline period, written with provenance, and thereafter
+only read. `BaselineStore.freeze` **refuses to overwrite** an existing record; moving the reference
+requires `accept_new_normal(...)`, which demands a non-empty `accepted_by` and `reason` and files
+the superseded record in `history`. No scheduled or automatic refit exists, by construction — a
+baseline refit from the window being judged would define away the drift it is meant to catch.
 
 ## File-by-file change list
 
@@ -287,28 +292,31 @@ and no-alarm on noise; model-store atomic write and reload.
 
 | Phase | Lands | Risk |
 |---|---|---|
-| **1** | `chillerbaseline.py` + tests + this plan | **None** — additive leaf module, no callers |
-| **2** | `PeriodRule` + `Registry.run_periods` | Low — additive protocol; needs decision #1 |
-| **3** | `chiller_approach_drift` rule, registration, scorecard, optional chart template | Medium — first user-visible finding; thresholds need field validation |
-| **4** | `OnlineCusum` wiring for streaming drift alarms | Low — `online.py` unmodified |
-| **5** | `modelstore.py` coefficient persistence | Medium — new durable artifact; needs decision #2 |
+| **1** | `chillerbaseline.py` + tests + this plan | **None** — additive leaf module, no callers · **LANDED** (PR #2) |
+| **2** | `PeriodRule` + `Registry.run_periods` (explicit period pairs) | Low — additive protocol · **LANDED** |
+| **3** | `chiller_approach_drift` rule, scorecard category | Medium — first user-visible finding; thresholds still provisional · **LANDED** |
+| **5** | `modelstore.py` coefficient persistence, frozen with `accept_new_normal` | Medium — new durable artifact · **LANDED** |
+| **4** | `OnlineCusum` wiring for streaming drift alarms | Low — `online.py` unmodified · **remaining** |
 
-Phases 3–5 are independently shippable once 2 lands. Phase 3 delivers the P0 outcome (the "approach
-has been climbing for weeks" alert) on batch runs; phase 4 extends it to streaming; phase 5 makes it
-correct across runs rather than within one.
+Phases 2, 3 and 5 landed together: with the two policy decisions made, the period split, the drift
+Finding, and the frozen store are one coherent slice — a drift rule without persistence would refit
+its own reference and report nothing, so shipping 3 without 5 would have been misleading rather than
+merely incomplete. Phase 4 remains: it extends the same frozen baseline to streaming alarms and
+depends on nothing that is still open.
 
-## Open decisions (owner input needed before phase 2)
+## Open decisions
 
-1. **How are baseline and current periods specified?** Explicit `(start, end)` pairs passed by the
-   caller (explicit, testable, no hidden state — recommended) versus a rolling convention such as
-   "last 30 days vs the 30 days before that" (zero-configuration, but implicit and harder to audit).
-   This determines `run_periods`' signature and cannot be changed cheaply afterwards.
-2. **Baseline refit policy.** Does a baseline freeze at commissioning (any drift ever is reported),
-   roll forward on a schedule (only recent drift is reported, slow multi-year fouling becomes
-   invisible), or refit only on an explicit operator "accept new normal" action (most correct,
-   most operational overhead)? This is the single biggest determinant of what the alert *means*.
-3. **Drift thresholds.** The °F and σ floors in layer 3 are proposals, not measurements. They should
-   be validated against real trend data with known fouling events before defaults are frozen.
+**Decided.** (1) Period specification — explicit `(start, end)` pairs; see layer 2.
+(2) Baseline refit policy — freeze at commissioning, move only via `accept_new_normal`; see layer 5.
+
+Still open:
+
+3. **Drift thresholds — OPEN, and the one thing blocking production use.** The °F and σ floors in
+   `rules/chiller_drift_rule.py` (`DRIFT_WARN_F`, `DRIFT_FAULT_F`, `DRIFT_WARN_SIGMA`,
+   `DRIFT_FAULT_SIGMA`) are engineering-judgement starting points, not measurements. They are
+   labelled `PROVISIONAL` in source and every Finding carries `metrics["thresholds_provisional"]`.
+   They need validation against real trend data with confirmed fouling events before anyone
+   dispatches on the severities.
 4. **Scope beyond approach.** The gap review's next tier — condenser-water range, cooling-tower
    approach-to-wet-bulb, head/condensing-pressure trend — is the *same* fit-baseline/compare-period
    machinery with different roles. Should layers 1–2 be generalized now (a role-agnostic
