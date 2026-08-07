@@ -83,6 +83,7 @@ class DriftAlarmState:
     consecutive_over: int  # consecutive samples both over the limit and still elevated
     alarming: bool  # the decision interval has been satisfied
     alarm: str | None  # "drift" once alarming, else None
+    alarm_direction: str | None = None  # "up" | "down" -- which side raised it
 
     def as_dict(self) -> dict:
         """Return the state as a plain dict."""
@@ -100,6 +101,8 @@ class DriftAlarmRun:
     peak_climbing: float  # highest the climbing accumulator reached, degF
     limit_f: float  # the accumulator limit in use, degF
     final_residual_f: float
+    alarm_direction: str | None = None  # "up" | "down" -- which side raised it first
+    peak_improving: float = 0.0  # highest the falling-side accumulator reached, degF
 
     def as_dict(self) -> dict:
         """Return the run summary as a plain dict."""
@@ -109,9 +112,14 @@ class DriftAlarmRun:
 class ApproachDriftMonitor:
     """Online sustained-shift alarm on approach residuals against a frozen baseline.
 
-    Wraps :class:`camber.mandv.online.OnlineCusum` and relabels its accumulators for approach: its
-    ``low`` side (sustained ``predicted < actual``) is a **climbing** approach and the direction
-    that matters; its ``high`` side is a sustained improvement, reported but never alarmed on.
+    Wraps :class:`camber.mandv.online.OnlineCusum` and relabels its accumulators: its ``low`` side
+    (sustained ``predicted < actual``) is a **climbing** signal, its ``high`` side a falling one.
+
+    ``direction`` selects which sides can alarm. The default ``"up"`` alarms only on a climbing
+    signal, which is right for approach -- fouling widens it and nothing else moves it the other
+    way. Some circuit signals are **two-sided**: liquid-line subcooling falls on undercharge and
+    rises on overcharge or non-condensables, so both directions are faults and a one-sided monitor
+    would miss half of them. Pass ``direction="both"`` for those.
     """
 
     def __init__(
@@ -122,16 +130,20 @@ class ApproachDriftMonitor:
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL
+        direction: str = "up",  # "up" (default, one-sided) | "both" (two-sided signals)
     ):
         if not baseline.sigma_f > 0:
             raise ValueError(
                 "a baseline with no residual scatter cannot support a sigma-scaled CUSUM "
                 "(sigma_f must be > 0)"
             )
+        if direction not in ("up", "both"):
+            raise ValueError(f"direction must be 'up' or 'both', got {direction!r}")
         self.slack_sigma = slack_sigma
         self.limit_sigma = limit_sigma
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
+        self.direction = direction
         self.baseline = baseline
         self._start(baseline)
 
@@ -145,6 +157,7 @@ class ApproachDriftMonitor:
             baseline.predict, limit=self.limit_f, slack=self.slack_sigma * sigma
         )
         self._over = 0
+        self._over_down = 0
 
     def reset(self) -> None:
         """Clear the accumulator, keeping the current baseline."""
@@ -171,17 +184,28 @@ class ApproachDriftMonitor:
         # Over the limit is necessary but not sufficient: the accumulator decays only by `slack` per
         # sample, so an ended burst lingers above the limit for many samples. Require this sample to
         # be elevated too, so the interval measures a shift that is still happening.
-        elevated = (clipped - predicted) > self._cusum.slack
-        self._over = self._over + 1 if (st.low >= self.limit_f and elevated) else 0
-        alarming = self._over >= self.min_consecutive
+        resid_clipped = clipped - predicted
+        self._over = (
+            self._over + 1 if (st.low >= self.limit_f and resid_clipped > self._cusum.slack) else 0
+        )
+        # The falling side is tracked always but only alarms when direction == "both".
+        self._over_down = (
+            self._over_down + 1
+            if (st.high >= self.limit_f and -resid_clipped > self._cusum.slack)
+            else 0
+        )
+        up = self._over >= self.min_consecutive
+        down = self.direction == "both" and self._over_down >= self.min_consecutive
+        alarming = up or down
         return DriftAlarmState(
             n=st.n,
             residual_f=round(actual - predicted, 4),
             climbing=round(st.low, 4),
             improving=round(st.high, 4),
-            consecutive_over=self._over,
+            consecutive_over=max(self._over, self._over_down if self.direction == "both" else 0),
             alarming=alarming,
             alarm="drift" if alarming else None,
+            alarm_direction=("up" if up else "down") if alarming else None,
         )
 
     def run(
@@ -201,19 +225,23 @@ class ApproachDriftMonitor:
         w = _clean(frame, approach_col, tons_col, min_tons=min_tons, approach_range=approach_range)
         if w.empty:
             return None
-        first_n, first_at, peak, last = -1, "", 0.0, float("nan")
+        first_n, first_at, first_dir = -1, "", None
+        peak_up, peak_down, last = 0.0, 0.0, float("nan")
         for label, tons, approach in zip(w.index, w["tons"].to_numpy(), w["approach"].to_numpy()):
             st = self.update(tons, approach)
-            peak = max(peak, st.climbing)
+            peak_up = max(peak_up, st.climbing)
+            peak_down = max(peak_down, st.improving)
             last = st.residual_f
             if st.alarming and first_n < 0:
-                first_n, first_at = st.n, str(label)
+                first_n, first_at, first_dir = st.n, str(label), st.alarm_direction
         return DriftAlarmRun(
             n=int(len(w)),
             alarmed=first_n > 0,
             first_alarm_n=first_n,
             first_alarm_at=first_at,
-            peak_climbing=round(float(peak), 4),
+            peak_climbing=round(float(peak_up), 4),
             limit_f=round(float(self.limit_f), 4),
             final_residual_f=round(float(last), 4) if last == last else float("nan"),
+            alarm_direction=first_dir,
+            peak_improving=round(float(peak_down), 4),
         )

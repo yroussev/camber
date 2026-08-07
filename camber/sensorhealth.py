@@ -86,9 +86,10 @@ PHYSICAL_BOUNDS: dict = {
     Role.FILTER_DIFF_PRESS: (-0.1, 10.0),
     Role.SUPPLY_AIR_HUMIDITY: (-2.0, 102.0),
     Role.RETURN_AIR_HUMIDITY: (-2.0, 102.0),
-    # refrigerant-side approach temperatures
+    # refrigerant-side approach / subcooling temperatures
     Role.COND_APPROACH_TEMP: (-5.0, 60.0),
     Role.EVAP_APPROACH_TEMP: (-5.0, 60.0),
+    Role.SUBCOOLING_TEMP: (-5.0, 60.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"

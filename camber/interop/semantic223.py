@@ -68,6 +68,7 @@ ROLE_TO_223 = {
     Role.ENERGY_RATE: ("Power", "Water"),
     Role.COND_APPROACH_TEMP: ("Temperature", "Refrigerant"),
     Role.EVAP_APPROACH_TEMP: ("Temperature", "Refrigerant"),
+    Role.SUBCOOLING_TEMP: ("Temperature", "Refrigerant"),
 }
 
 # Roles intentionally NOT in ROLE_TO_223: binary/enumerated status & command signals carry no QUDT
