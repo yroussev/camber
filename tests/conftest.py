@@ -1,13 +1,21 @@
 """Shared fixtures for the pre-1.0 stress/hardening pass.
 
-Dependency-light degenerate-frame factories (empty / 1-row / all-NaN / all-equal / duplicate-index /
-DST-dirty) so the adversarial tests share one set of generators. Seeded, deterministic, numpy/pandas
-+ stdlib only (no hypothesis).
+Dependency-light degenerate-frame factories (empty / 1-row / all-NaN / all-equal / dup-index /
+DST-dirty) so the adversarial tests share one set of generators. Seeded and deterministic. The
+example-based suites use numpy/pandas + stdlib only; the property-based suites
+(``test_properties*``) additionally use ``hypothesis`` under the ``ci`` profile registered below.
 """
 
 import numpy as np
 import pandas as pd
 import pytest
+from hypothesis import settings
+
+# A property-test profile tuned for CI: no per-example deadline (pandas/numpy ops are slow enough
+# to trip hypothesis's default timing check and flake), and a bounded example budget. A genuine
+# property failure is a real bug, reproducible from the seed hypothesis prints.
+settings.register_profile("ci", deadline=None, max_examples=100)
+settings.load_profile("ci")
 
 
 def _idx(n, freq="1h", start="2024-01-01"):
