@@ -36,6 +36,7 @@ __all__ = [
 _MODEL_TYPES = {
     "chiller_approach_cond": ApproachBaseline,
     "chiller_approach_evap": ApproachBaseline,
+    "chiller_subcooling": ApproachBaseline,
 }
 
 

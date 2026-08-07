@@ -998,6 +998,13 @@
   "camber.rules.chiller_rule": [
     "ChillerEfficiency"
   ],
+  "camber.rules.chiller_subcooling_rule": [
+    "ChillerSubcoolingDrift",
+    "SUBCOOLING_FAULT_F",
+    "SUBCOOLING_FAULT_SIGMA",
+    "SUBCOOLING_WARN_F",
+    "SUBCOOLING_WARN_SIGMA"
+  ],
   "camber.rules.chillerfleet_rule": [
     "ChillerStagingFleet"
   ],
