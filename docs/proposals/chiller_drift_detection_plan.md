@@ -128,10 +128,14 @@ Proposed mechanism — an **optional second protocol**, not a change to `Rule`:
 @runtime_checkable
 class PeriodRule(Protocol):
     """A diagnostic that compares a baseline window against a current window."""
+
     name: str
     roles_required: tuple
     roles_optional: tuple
-    def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding: ...
+
+    def analyze_periods(
+        self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame
+    ) -> Finding: ...
 ```
 
 and a sibling runner `Registry.run_periods(rule_name, equip_refs, mapping, *, baseline, current, ...)`
@@ -159,11 +163,11 @@ N days before that" convention (zero-configuration, but implicit).
 @dataclass
 class ApproachDrift:
     n_current: int
-    drift_f: float            # median residual of current vs baseline fit, at matched load
-    drift_sigma: float        # drift_f / baseline.sigma_f
+    drift_f: float  # median residual of current vs baseline fit, at matched load
+    drift_sigma: float  # drift_f / baseline.sigma_f
     slope_f_per_month: float  # trend of the residual within the current window
     pct_outside_2sigma: float
-    extrapolated: bool        # >10% of current load fell outside the fitted envelope
+    extrapolated: bool  # >10% of current load fell outside the fitted envelope
     coverage_start: str
     coverage_end: str
 ```
@@ -196,6 +200,7 @@ new/ongoing/resolved tracking, and SLA aging with **no change to `faultlifecycle
 
 ```python
 from camber.mandv.online import OnlineCusum
+
 cusum = OnlineCusum(baseline.predict, limit=..., slack=baseline.sigma_f * 0.5)
 for ts, row in current.iterrows():
     state = cusum.update(row[tons_col], row[approach_col])
