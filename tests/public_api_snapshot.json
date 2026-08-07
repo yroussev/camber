@@ -243,6 +243,15 @@
     "fit_approach_baseline",
     "tons_from_flow"
   ],
+  "camber.chillerdrift": [
+    "ApproachDriftMonitor",
+    "CUSUM_CLIP_SIGMA",
+    "CUSUM_LIMIT_SIGMA",
+    "CUSUM_MIN_CONSECUTIVE",
+    "CUSUM_SLACK_SIGMA",
+    "DriftAlarmRun",
+    "DriftAlarmState"
+  ],
   "camber.chillerstaging": [
     "ChillerFleetStagingResult",
     "ChillerStagingResult",
@@ -975,6 +984,9 @@
   ],
   "camber.rules.chiller_approach_rule": [
     "ChillerApproachFouling"
+  ],
+  "camber.rules.chiller_drift_alarm_rule": [
+    "ChillerApproachSustainedDrift"
   ],
   "camber.rules.chiller_drift_rule": [
     "ChillerApproachDrift",
