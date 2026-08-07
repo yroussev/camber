@@ -4,6 +4,28 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.10.1] — 2026-08-06
+
+Test-quality hardening: a **coverage gate** and **property-based tests**. Dev-facing only — no
+public API or runtime change (`public_api_snapshot.json` unaffected).
+
+### Added
+- **Coverage gate.** `pytest-cov` + `hypothesis` in the `dev` extra; `[tool.coverage]` config
+  (branch coverage, `source = ["camber"]`) + `[tool.pytest.ini_options]`. A dedicated `coverage`
+  CI job enforces `--cov-fail-under=90` (current total ~93%). Coverage was lifted with focused
+  tests on the reddest genuinely-testable modules (chart rendering branches, rule-wrapper severity
+  tiers, flat-analyzer serializers).
+- **Property-based tests** (`tests/test_properties.py`, `tests/test_properties_metamorphic.py`,
+  ~25 laws) under a CI `hypothesis` profile, across three tiers:
+  - *round-trip / idempotence* — `make_facility_id` path-safety (any string → a valid partition
+    key), `normalize_percent` double-scale idempotence, `coerce`/`tsparse` totality, `timegrid`
+    `regularize`.
+  - *invariants* — `wilson_interval` unit-range, `confusion` count conservation, `degree_days`
+    complementarity/monotonicity, `fit_stats` perfect-fit, `resample_energy` total-energy conservation.
+  - *metamorphic* — whole-week time-shift + bounded flow-scale / common-temp-offset invariance of the
+    reheat/overcooling/leakvalve analyzers, with negative controls pinning exactly where each
+    relation stops (a day-shift, an absolute-threshold scale, or a one-sided offset).
+
 ## [0.10.0] — 2026-08-04
 
 Portfolio-scale **facility identity**. The time-series store now keys each facility by a stable,
