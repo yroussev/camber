@@ -97,6 +97,28 @@ class FleetRule(Protocol):
         ...
 
 
+@runtime_checkable
+class PeriodRule(Protocol):
+    """A diagnostic that compares a **baseline** window against a **current** window.
+
+    :class:`Rule` collapses one frame to a verdict, so it can see a metric's *level* but never
+    its *trajectory*. A PeriodRule receives two explicitly-bounded slices of the same equipment
+    and reports how the current one differs from the baseline -- the shape a drift alert needs.
+
+    This is a **separate, optional protocol**: :class:`Rule` is unchanged, and a PeriodRule is
+    run by :meth:`Registry.run_periods` rather than :meth:`Registry.run`. A rule may implement
+    both, in which case ordinary single-frame pipelines keep working unmodified.
+    """
+
+    name: str
+    roles_required: tuple
+    roles_optional: tuple
+
+    def analyze_periods(
+        self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame
+    ) -> Finding: ...
+
+
 def _roles_to_load(rule) -> tuple:
     """Required + optional roles a rule wants resolved (optional may be absent)."""
     return tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
@@ -127,6 +149,30 @@ def _merge_shared(frame: pd.DataFrame, shared) -> pd.DataFrame:
         if role not in out.columns:
             out[role] = series.reindex(out.index).ffill(limit=4)
     return out
+
+
+def _as_bound(value):
+    """Coerce one period endpoint to a Timestamp; ``None`` stays open-ended."""
+    return None if value is None else pd.Timestamp(value)
+
+
+def _slice_period(frame: pd.DataFrame, period, *, label: str) -> pd.DataFrame:
+    """Slice a time-indexed frame to an explicit ``(start, end)`` pair (both bounds inclusive).
+
+    Periods are **explicit** by design: a rolling "last N days vs the N before" convention would
+    make the reference window implicit and unauditable, and would silently move every time the
+    analysis re-runs. Either endpoint may be ``None`` for an open-ended side.
+    """
+    try:
+        start, end = period
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} period must be a (start, end) pair, got {period!r}") from None
+    lo, hi = _as_bound(start), _as_bound(end)
+    if lo is not None and hi is not None and lo > hi:
+        raise ValueError(f"{label} period start {lo} is after its end {hi}")
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        raise TypeError(f"run_periods needs a time-indexed frame, got {type(frame.index).__name__}")
+    return frame.loc[lo:hi]
 
 
 class Registry:
@@ -200,6 +246,81 @@ class Registry:
                     )
                     continue
             f = rule.analyze(ref.equip, frame)
+            _note_missing_optional(f, _missing_optional(rule, frame))
+            if f is not None:
+                out.append(f)
+        return out
+
+    def run_periods(
+        self,
+        rule_name: str,
+        equip_refs,
+        mapping: MappingProvider,
+        *,
+        baseline,
+        current,
+        resample: str = "1h",
+        shared=None,
+        min_trust=None,
+    ) -> list[Finding]:
+        """Run a :class:`PeriodRule` across equipment, comparing two explicit time windows.
+
+        ``baseline`` and ``current`` are each an explicit ``(start, end)`` pair -- timestamps,
+        ISO strings, or ``None`` for an open-ended side. Each equipment is resolved **once** over
+        its full history and then sliced twice, so the two windows always come from one consistent
+        load and resample.
+
+        Equipment whose resolved frame lacks any required role is skipped, exactly as in
+        :meth:`run`. ``shared`` and ``min_trust`` behave identically too -- an untrusted required
+        input makes the rule decline with an ``info`` finding rather than report an equipment
+        fault. When a window resolves to no rows the rule also **declines**, with a caveat naming
+        the empty window: a chiller silently dropped from a drift report reads as "no drift",
+        which is precisely the false negative the honesty convention forbids.
+        """
+        rule = self.get(rule_name)
+        load = _roles_to_load(rule)
+        out: list[Finding] = []
+        for ref in equip_refs:
+            frame = resolve(ref, mapping, load, resample=resample)
+            frame = _merge_shared(frame, shared)
+            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+                continue
+            if min_trust is not None:
+                bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
+                if bad:
+                    out.append(
+                        Finding(
+                            rule=rule.name,
+                            equip=ref.equip,
+                            severity="info",
+                            metrics={
+                                "declined": True,
+                                "min_trust": min_trust,
+                                "untrusted_roles": [r.value for r in bad],
+                            },
+                            summary=(
+                                f"{ref.equip}: declined -- untrusted input(s): "
+                                + ", ".join(r.value for r in bad)
+                            ),
+                        )
+                    )
+                    continue
+            base_frame = _slice_period(frame, baseline, label="baseline")
+            cur_frame = _slice_period(frame, current, label="current")
+            empty = [n for n, fr in (("baseline", base_frame), ("current", cur_frame)) if fr.empty]
+            if empty:
+                out.append(
+                    Finding(
+                        rule=rule.name,
+                        equip=ref.equip,
+                        severity="info",
+                        metrics={"declined": True, "empty_periods": empty},
+                        summary=f"{ref.equip}: declined -- no data in the {'/'.join(empty)} period",
+                        caveats=[f"could not evaluate drift: {'/'.join(empty)} window has no rows"],
+                    )
+                )
+                continue
+            f = rule.analyze_periods(ref.equip, base_frame, cur_frame)  # type: ignore[attr-defined]
             _note_missing_optional(f, _missing_optional(rule, frame))
             if f is not None:
                 out.append(f)

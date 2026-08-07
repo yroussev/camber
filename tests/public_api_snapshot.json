@@ -937,6 +937,7 @@
     "FaultRegister",
     "Finding",
     "FleetRule",
+    "PeriodRule",
     "Ranked",
     "Registry",
     "RootCauseGroup",
@@ -955,6 +956,7 @@
   "camber.rules.base": [
     "Finding",
     "FleetRule",
+    "PeriodRule",
     "Registry",
     "Rule"
   ],
@@ -973,6 +975,13 @@
   ],
   "camber.rules.chiller_approach_rule": [
     "ChillerApproachFouling"
+  ],
+  "camber.rules.chiller_drift_rule": [
+    "ChillerApproachDrift",
+    "DRIFT_FAULT_F",
+    "DRIFT_FAULT_SIGMA",
+    "DRIFT_WARN_F",
+    "DRIFT_WARN_SIGMA"
   ],
   "camber.rules.chiller_rule": [
     "ChillerEfficiency"
@@ -1175,6 +1184,10 @@
     "migrate_site_to_facility",
     "require_facility_id",
     "valid_facility_id"
+  ],
+  "camber.store.modelstore": [
+    "BaselineRecord",
+    "BaselineStore"
   ],
   "camber.store.parquet_store": [
     "ParquetStore",
