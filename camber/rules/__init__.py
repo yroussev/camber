@@ -6,7 +6,7 @@ through :func:`builtin_registry`, not imported by name, so they are not re-expor
 (they remain importable by path, e.g. ``camber.rules.reheat_rule``).
 """
 
-from .base import Finding, FleetRule, Registry, Rule
+from .base import Finding, FleetRule, PeriodRule, Registry, Rule
 from .builtin import builtin_registry, is_fleet, rule_names
 from .triage import (
     SEVERITY_ORDER,
@@ -22,6 +22,7 @@ __all__ = [
     "Finding",
     "Rule",
     "FleetRule",
+    "PeriodRule",
     "Registry",
     "builtin_registry",
     "rule_names",

@@ -58,6 +58,7 @@ RULE_CATEGORY = {
     "co2_ventilation": "ventilation",
     "dcv_verification": "ventilation",
     # maintenance / controls
+    "chiller_approach_drift": "maintenance",
     "leaking_valve": "maintenance",
     "control_hunting": "maintenance",
     "damper_census": "maintenance",
