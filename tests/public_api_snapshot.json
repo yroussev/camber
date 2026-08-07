@@ -236,6 +236,13 @@
     "ChillerEfficiencyResult",
     "analyze_chiller_efficiency"
   ],
+  "camber.chillerbaseline": [
+    "ApproachBaseline",
+    "ApproachDrift",
+    "drift_stats",
+    "fit_approach_baseline",
+    "tons_from_flow"
+  ],
   "camber.chillerstaging": [
     "ChillerFleetStagingResult",
     "ChillerStagingResult",
