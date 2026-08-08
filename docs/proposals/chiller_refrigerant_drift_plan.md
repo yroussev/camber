@@ -93,16 +93,25 @@ its behaviour. Subcooling has no such legacy, so the period statistic and the su
 are reported in **one** Finding. "Subcooling has narrowed 2 °F and has stayed there for a fortnight"
 is a single work order, and splitting it would create two tickets an operator has to reconcile.
 
-## Provisional thresholds
+## Thresholds and their confidence
 
 `SUBCOOLING_WARN_F = 1.0`, `SUBCOOLING_FAULT_F = 2.0`, `SUBCOOLING_WARN_SIGMA = 3.0`,
-`SUBCOOLING_FAULT_SIGMA = 6.0` — all constructor-overridable, all labelled `PROVISIONAL`, with
+`SUBCOOLING_FAULT_SIGMA = 6.0` — all constructor-overridable, all **screening-grade**, with
 `metrics["thresholds_provisional"]` on every Finding.
 
-These are **empirically tuned starting points, not values established on the equipment being
+These are **characterised starting points, not values established on the equipment being
 monitored**, and they should be reviewed once a site has accumulated its own trend history with
 known charge events. As with approach, a finding must clear **both** a °F floor and a σ floor, in
 either direction.
+
+The magnitude floors and the CUSUM timing parameters are labelled separately, because they are not
+provisional in the same way (`camber/driftthresholds.py`): the °F/σ floors are `screening-grade`
+(characterised for the signal class, adequate for ranking equipment for a walkdown, not established
+on this equipment), while the temporal parameters are `provisional-untuned` (never tuned for these
+signals at all — their false-alarm rate and detection delay are unmeasured). Findings carry
+`magnitude_threshold_confidence` and/or `temporal_threshold_confidence` accordingly, so a downstream
+consumer can see which kind of claim it is holding. **Full temporal validation awaits real trended
+fault data** — chiller trends with confirmed, dated fault events.
 
 The σ floors sit higher than the approach rule's (3/6 versus 2/3). Subcooling's ordinary run-to-run
 scatter is wider relative to its fault response than an approach's, so a 2σ floor of the kind that
@@ -126,14 +135,23 @@ small addition on top of what now exists.
 
 ## Open decisions
 
-1. **Generalize `chillerbaseline.py`?** Now pressing: it is called on a non-approach column, and a
-   third signal (condenser-water range) is already recommended elsewhere. Rename/generalize to
-   `fit_baseline(y ~ x)` before that lands, or accept the naming drift permanently.
-2. **Threshold validation** remains open for both detectors, and now gates three rules' severities.
+1. **Generalize `chillerbaseline.py`? — DECIDED, DONE.** The core fit is now the metric-neutral
+   `fit_load_baseline(metric_col, load_col, ...)`, with `load_drift_stats` alongside it;
+   `fit_approach_baseline`, `fit_subcooling_baseline` and `drift_stats` are thin, behaviour-
+   identical wrappers, and `LoadBaseline`/`LoadDrift` carry `ApproachBaseline`/`ApproachDrift` as
+   aliases so nothing written against the old names breaks. Condenser-water range reuses the fit
+   with a column swap rather than a fourth copy of it.
+2. **Threshold validation** remains open for both detectors, and gates three rules' severities. It
+   is now split into two questions, because the two threshold classes need different evidence: the
+   magnitude floors need equipment-specific characterisation, the temporal parameters need trend
+   history containing confirmed, dated fault events. See "Thresholds and their confidence" above.
 3. **Is discharge-line temperature available?** Determines whether the deferred tier is a small
    addition or permanently closed.
-4. **Should subcooling alarm asymmetrically?** It is currently symmetric: a 2 °F rise and a 2 °F
-   fall score identically. If, operationally, one direction is more urgent than the other — a leak
-   is a refrigerant-loss and environmental issue, an overcharge usually is not — the floors should
-   be split per direction. That is a small change but it is an operational judgement, not a
-   technical one.
+4. **Should subcooling alarm asymmetrically? — DEFERRED, deliberately.** It is symmetric today: one
+   pair of floors applied to `|drift|`, with the sign reported separately
+   (`subcooling_drift_direction`, and the CUSUM's `alarm_direction` under `direction="both"`). A
+   tighter falling-side floor is defensible on operational grounds — a leak is a refrigerant-loss
+   and environmental issue, an overcharge usually is not — but there is no basis on which to set
+   *how much* tighter, and a wrong asymmetry is worse than none: it silently desensitises one half
+   of the fault space. Kept symmetric pending real-data validation. It remains an operational
+   judgement, not a technical one, so it is an owner decision when the data exists.

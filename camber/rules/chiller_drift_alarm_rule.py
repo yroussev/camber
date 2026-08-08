@@ -14,6 +14,12 @@ wide" and "it stepped up on the 8th and has stayed there" are different work ord
 
 Implemented as a subclass purely to reuse the frame preparation and the frozen-baseline lookup;
 it changes nothing in the period rule.
+
+Its severity rests entirely on **temporal** parameters, which are the weaker of the two threshold
+classes: untuned for this signal, with an unmeasured false-alarm rate (:mod:`camber.driftthresholds`
+and the note in :mod:`camber.chillerdrift`). Findings therefore carry
+``temporal_threshold_confidence`` and default to ``warn`` -- "worth looking at now", not a
+dispatch-grade verdict. Full temporal validation awaits real trended fault data.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from ..chillerdrift import (
     CUSUM_SLACK_SIGMA,
     ApproachDriftMonitor,
 )
+from ..driftthresholds import threshold_confidence
 from .base import Finding
 from .chiller_drift_rule import _LEGS, ChillerApproachDrift
 
@@ -44,11 +51,13 @@ class ChillerApproachSustainedDrift(ChillerApproachDrift):
         self,
         store,
         *,
-        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL -- see camber.chillerdrift
-        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL
-        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL
-        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL
-        alarm_severity: str = "warn",  # PROVISIONAL -- magnitude severity is the period rule's job
+        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see camber.chillerdrift
+        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
+        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
+        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
+        # capped at "warn" on purpose: an untuned temporal claim must not present as a fault, and
+        # magnitude severity is the period rule's job.
+        alarm_severity: str = "warn",
         **kw,
     ):
         super().__init__(store, **kw)
@@ -118,7 +127,9 @@ class ChillerApproachSustainedDrift(ChillerApproachDrift):
                 summary=f"{equip}: declined -- no leg could be scored against a frozen baseline",
                 caveats=caveats,
             )
-        metrics["thresholds_provisional"] = True  # CUSUM tuning awaits real fouling-event data
+        # This verdict is purely temporal, so it is labelled with the weaker grade and no magnitude
+        # grade: CUSUM tuning awaits real trended fault data.
+        metrics.update(threshold_confidence(magnitude=False, temporal=True))
         return Finding(
             rule=self.name,
             equip=equip,
