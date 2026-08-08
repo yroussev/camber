@@ -318,17 +318,35 @@ gap review's remaining optional tiers is in
 
 Still open:
 
-3. **Drift thresholds — OPEN, and the one thing blocking production use.** The °F and σ floors in
-   `rules/chiller_drift_rule.py` (`DRIFT_WARN_F`, `DRIFT_FAULT_F`, `DRIFT_WARN_SIGMA`,
-   `DRIFT_FAULT_SIGMA`) are engineering-judgement starting points, not measurements. They are
-   labelled `PROVISIONAL` in source and every Finding carries `metrics["thresholds_provisional"]`.
-   They need validation against real trend data with confirmed fouling events before anyone
-   dispatches on the severities.
-4. **Scope beyond approach.** The gap review's next tier — condenser-water range, cooling-tower
-   approach-to-wet-bulb, head/condensing-pressure trend — is the *same* fit-baseline/compare-period
-   machinery with different roles. Should layers 1–2 be generalized now (a role-agnostic
-   `fit_baseline(y_role ~ x_role)`) or kept chiller-approach-specific until a second consumer
-   actually exists? Recommendation: keep it specific; generalize when the second case arrives.
+3. **Drift thresholds — OPEN, and the one thing blocking production use.** Now split in two,
+   because the two classes of threshold are not provisional in the same way
+   (`camber/driftthresholds.py`):
+
+   - **Magnitude floors** — the °F and σ floors in `rules/chiller_drift_rule.py` (`DRIFT_WARN_F`,
+     `DRIFT_FAULT_F`, `DRIFT_WARN_SIGMA`, `DRIFT_FAULT_SIGMA`) and their subcooling siblings — are
+     `screening-grade`: the paired °F-and-σ construction behaves predictably across the range of
+     baselines these signals produce, which makes them usable for ranking equipment for a walkdown.
+     They are not established on the specific machines being monitored, so a local review should
+     precede dispatch.
+   - **Temporal / CUSUM parameters** — `CUSUM_SLACK_SIGMA`, `CUSUM_LIMIT_SIGMA`, `CUSUM_CLIP_SIGMA`,
+     `CUSUM_MIN_CONSECUTIVE` in `camber/chillerdrift.py` — are `provisional-untuned`. They are
+     textbook starting points adjusted by judgement for sample rate and have never been tuned for
+     these signals: the false-alarm rate and detection delay they produce are unmeasured, so their
+     run-length behaviour is a prediction. **Full temporal validation awaits real trended fault
+     data** — trends carrying confirmed, dated fault events. Until then a sustained alarm caps at
+     `warn` and reads as "worth looking at now", never as a dispatch-grade verdict.
+
+   Every Finding still carries `metrics["thresholds_provisional"]`, plus
+   `magnitude_threshold_confidence` and/or `temporal_threshold_confidence` naming which class its
+   severity actually rests on.
+4. **Scope beyond approach — DECIDED, and the generalization has landed.** The second consumer
+   arrived (liquid-line subcooling), so the recommendation's own trigger fired. Layer 1 is now
+   metric-neutral: `fit_load_baseline(metric_col, load_col, ...)` and `load_drift_stats(...)` are
+   the core, with `fit_approach_baseline`, `fit_subcooling_baseline` and `drift_stats` as thin,
+   behaviour-identical wrappers and `LoadBaseline`/`LoadDrift` aliased to the old
+   `ApproachBaseline`/`ApproachDrift` names. The rest of the gap review's tier — condenser-water
+   range, cooling-tower approach-to-wet-bulb, head/condensing-pressure trend — is now a column swap
+   on that fit rather than a new module each.
 5. **Suction/discharge superheat is out of scope and cannot be added without new instrumentation.**
    `superheat` appears nowhere in the repository, and `camber/model/roles.py` has no suction or
    discharge temperature roles — only `COND_APPROACH_TEMP` and `EVAP_APPROACH_TEMP`

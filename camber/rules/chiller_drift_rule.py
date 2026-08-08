@@ -24,7 +24,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import drift_stats, fit_approach_baseline, tons_from_flow
+from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
+from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from .base import Finding
 
@@ -42,22 +43,24 @@ _LEGS = (
 _RANK = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
 
 # ---------------------------------------------------------------------------------------------
-# PROVISIONAL THRESHOLDS -- NOT YET VALIDATED AGAINST FIELD DATA.
+# MAGNITUDE FLOORS -- SCREENING-GRADE (see camber.driftthresholds).
 #
-# These are engineering-judgement starting points, not measurements. They have never been checked
-# against real chiller trend data with confirmed fouling events, so they should be treated as a
-# placeholder to be tuned before anyone acts on this rule's severities in production. They are
-# deliberately module-level and overridable per instance (constructor arguments) so tuning is a
-# config change, not a code change.
+# The pairing is what earns the grade: a finding must clear BOTH a degF floor and a sigma floor. The
+# degF floor stops a very tight baseline (small residual sigma) from firing on a thermally
+# meaningless fraction of a degree; the sigma floor stops a noisy baseline from burying a real
+# widening. Together they behave predictably across the range of baselines this signal produces,
+# which is what makes them usable for ranking equipment for a walkdown.
 #
-# The pairing is intentional: a finding must clear BOTH a degF floor and a sigma floor. The degF
-# floor stops a very tight baseline (small residual sigma) from firing on a thermally meaningless
-# fraction of a degree; the sigma floor stops a noisy baseline from burying a real widening.
+# They are still not established on the specific machines being monitored, so they carry
+# MAGNITUDE_CONFIDENCE ("screening-grade") rather than a validated grade, and a local review should
+# precede dispatching on them. This is a *stronger* claim than the CUSUM timing parameters in
+# camber.chillerdrift can make -- those are untuned; these are characterized but not localized.
+# All four are module-level and overridable per instance, so tuning is a config change.
 # ---------------------------------------------------------------------------------------------
-DRIFT_WARN_F = 1.0  # PROVISIONAL
-DRIFT_FAULT_F = 2.0  # PROVISIONAL
-DRIFT_WARN_SIGMA = 2.0  # PROVISIONAL
-DRIFT_FAULT_SIGMA = 3.0  # PROVISIONAL
+DRIFT_WARN_F = 1.0  # screening-grade
+DRIFT_FAULT_F = 2.0  # screening-grade
+DRIFT_WARN_SIGMA = 2.0  # screening-grade
+DRIFT_FAULT_SIGMA = 3.0  # screening-grade
 
 
 class ChillerApproachDrift:
@@ -88,10 +91,10 @@ class ChillerApproachDrift:
         site: str = "",
         run_id: str = "",
         freeze_if_missing: bool = True,
-        drift_warn_f: float = DRIFT_WARN_F,  # PROVISIONAL -- see the module note
-        drift_fault_f: float = DRIFT_FAULT_F,  # PROVISIONAL
-        drift_warn_sigma: float = DRIFT_WARN_SIGMA,  # PROVISIONAL
-        drift_fault_sigma: float = DRIFT_FAULT_SIGMA,  # PROVISIONAL
+        drift_warn_f: float = DRIFT_WARN_F,  # screening-grade -- see the module note
+        drift_fault_f: float = DRIFT_FAULT_F,  # screening-grade
+        drift_warn_sigma: float = DRIFT_WARN_SIGMA,  # screening-grade
+        drift_fault_sigma: float = DRIFT_FAULT_SIGMA,  # screening-grade
         min_tons: float = 5.0,
     ):
         self.store = store
@@ -127,8 +130,8 @@ class ChillerApproachDrift:
                 f"could not evaluate {kind}: no frozen baseline and freezing is disabled"
             )
             return None
-        fit = fit_approach_baseline(
-            base_frame, approach_col=role, tons_col="tons", min_tons=self.min_tons
+        fit = fit_load_baseline(
+            base_frame, metric_col=role, load_col="tons", min_load=self.min_tons
         )
         if fit is None:
             caveats.append(
@@ -179,8 +182,8 @@ class ChillerApproachDrift:
             frozen = self._baseline_for(equip, role, kind, base_t, caveats)
             if frozen is None:
                 continue
-            drift = drift_stats(
-                frozen, cur_t, approach_col=role, tons_col="tons", min_tons=self.min_tons
+            drift = load_drift_stats(
+                frozen, cur_t, metric_col=role, load_col="tons", min_load=self.min_tons
             )
             if drift is None:
                 caveats.append(
@@ -217,7 +220,9 @@ class ChillerApproachDrift:
                 summary=f"{equip}: declined -- no leg could be scored against a frozen baseline",
                 caveats=caveats,
             )
-        metrics["thresholds_provisional"] = True  # see the module-level threshold note
+        # Severity here rests on magnitude floors only -- the sustained-shift rule owns the timing
+        # claim -- so this Finding is labelled screening-grade and carries no temporal grade.
+        metrics.update(threshold_confidence(magnitude=True))
         return Finding(
             rule=self.name,
             equip=equip,
