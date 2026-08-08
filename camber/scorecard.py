@@ -61,6 +61,7 @@ RULE_CATEGORY = {
     "chiller_approach_drift": "maintenance",
     "chiller_approach_drift_sustained": "maintenance",
     "chiller_subcooling_drift": "maintenance",
+    "chiller_cw_range_drift": "maintenance",
     "leaking_valve": "maintenance",
     "control_hunting": "maintenance",
     "damper_census": "maintenance",

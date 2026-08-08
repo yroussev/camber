@@ -344,9 +344,11 @@ Still open:
    metric-neutral: `fit_load_baseline(metric_col, load_col, ...)` and `load_drift_stats(...)` are
    the core, with `fit_approach_baseline`, `fit_subcooling_baseline` and `drift_stats` as thin,
    behaviour-identical wrappers and `LoadBaseline`/`LoadDrift` aliased to the old
-   `ApproachBaseline`/`ApproachDrift` names. The rest of the gap review's tier — condenser-water
-   range, cooling-tower approach-to-wet-bulb, head/condensing-pressure trend — is now a column swap
-   on that fit rather than a new module each.
+   `ApproachBaseline`/`ApproachDrift` names. Condenser-water range followed immediately as
+   `chiller_cw_range_drift` — a thin rule over `fit_load_baseline` with `metric_col` swapped to the
+   range, sharing the frozen store (`kind="chiller_cw_range"`) and the two-sided CUSUM. The
+   remainder of the gap review's tier — cooling-tower approach-to-wet-bulb, head/condensing-pressure
+   trend — is the same column swap when its instrumentation and appetite exist.
 5. **Suction/discharge superheat is out of scope and cannot be added without new instrumentation.**
    `superheat` appears nowhere in the repository, and `camber/model/roles.py` has no suction or
    discharge temperature roles — only `COND_APPROACH_TEMP` and `EVAP_APPROACH_TEMP`
