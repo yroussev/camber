@@ -61,6 +61,40 @@ def _rate(parsed) -> float:
     return 0.0 if n == 0 else float(parsed.notna().sum()) / n
 
 
+def _in_range(arr, lo: float, hi: float):
+    """``arr`` as float64 with non-finite and out-of-``[lo, hi]`` entries replaced by NaN.
+
+    pandas stores datetimes as int64 nanoseconds, so a unit conversion (``to_datetime(unit=…)``,
+    ``to_timedelta``) on ``inf`` or on a value past that range raises ``OverflowError`` *before*
+    ``errors="coerce"`` gets a say — ``'INFINITY'`` reads as a float via ``to_numeric``, so a
+    single such cell used to blow up the whole parse. Masking them here keeps them NaT.
+    """
+    with np.errstate(over="ignore", invalid="ignore"):
+        vals = pd.to_numeric(pd.Series(arr), errors="coerce").astype("float64")
+        raw = vals.to_numpy()
+        bad = ~np.isfinite(raw) | (raw < lo) | (raw > hi)
+        return vals.mask(bad)
+
+
+def _epoch_safe(arr, unit: str):
+    """``arr`` masked to the values ``to_datetime(unit=unit)`` can represent."""
+    try:
+        per_unit = float(pd.Timedelta(1, unit=unit).value)
+    except (ValueError, TypeError):
+        per_unit = 1.0
+    limit = float(np.iinfo(np.int64).max) / max(per_unit, 1.0)
+    return _in_range(arr, -limit, limit)
+
+
+def _excel_safe(arr):
+    """``arr`` masked to the serial-day offsets that land inside pandas' Timestamp bounds."""
+    # In int64 nanoseconds — subtracting the Timestamp bounds directly overflows Timedelta.
+    ns_per_day = 86_400 * 10**9
+    lo = (pd.Timestamp.min.value - _EXCEL_ORIGIN.value) / ns_per_day
+    hi = (pd.Timestamp.max.value - _EXCEL_ORIGIN.value) / ns_per_day
+    return _in_range(arr, lo + 1.0, hi - 1.0)
+
+
 def _numeric_kind(values):
     """If ``values`` are all numeric, classify as
     ('epoch_s'|'epoch_ms'|'excel'|None, numeric_array)."""
@@ -68,7 +102,13 @@ def _numeric_kind(values):
     nn = arr.dropna()
     if nn.empty or len(nn) < len(arr):  # any non-numeric -> treat as text timestamps
         return None, None
-    med = float(np.median(np.abs(nn.values)))
+    # Classify on the finite values only: one ``inf`` would otherwise drag the median past every
+    # threshold and mislabel an ordinary column as epoch nanoseconds.
+    finite = nn.to_numpy(dtype="float64")
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return None, None
+    med = float(np.median(np.abs(finite)))
     if med >= 1e14:
         return "epoch_ns", arr
     if med >= 1e11:
@@ -103,16 +143,18 @@ def parse_timestamps(
     if formats is None:
         kind, arr = _numeric_kind(s)
         if epoch_unit:
-            out = pd.to_datetime(
-                pd.to_numeric(s, errors="coerce"), unit=epoch_unit, errors="coerce"
-            )
+            out = pd.to_datetime(_epoch_safe(s, epoch_unit), unit=epoch_unit, errors="coerce")
             return _finish(out, assume_tz, naive)
         if kind == "excel":
-            out = _EXCEL_ORIGIN + pd.to_timedelta(arr, unit="D")
+            # errstate: pandas' day->ns cast does its float math on the NaN slots too, which
+            # trips a harmless numpy overflow warning once a masked-out cell is present.
+            with np.errstate(over="ignore", invalid="ignore"):
+                out = _EXCEL_ORIGIN + pd.to_timedelta(_excel_safe(arr), unit="D")
             return _finish(pd.DatetimeIndex(out), assume_tz, naive)
         if kind in ("epoch_s", "epoch_ms", "epoch_ns"):
             unit = {"epoch_s": "s", "epoch_ms": "ms", "epoch_ns": "ns"}[kind]
-            return _finish(pd.to_datetime(arr, unit=unit, errors="coerce"), assume_tz, naive)
+            out = pd.to_datetime(_epoch_safe(arr, unit), unit=unit, errors="coerce")
+            return _finish(out, assume_tz, naive)
 
     # 2) string timestamps: strip trailing tz abbrev, then try explicit formats, best
     # parse-rate wins
