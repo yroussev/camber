@@ -74,3 +74,44 @@ def test_explicit_format_override():
 def test_index_has_no_column_name():
     idx = parse_timestamps(pd.Series(["2024-01-01"], name="ts"))
     assert idx.name is None  # never carries the source column name
+
+
+# --- non-finite / overflowing numerics -> NaT (regression: OverflowError escaped coerce) ----
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["INFINITY"],  # to_numeric reads this as float inf -> int64-ns cast used to blow up
+        ["infinity", "-Infinity"],
+        [float("inf")],
+        [float("-inf")],
+        [float("inf"), float("-inf"), float("nan")],
+        ["1e400"],  # overflows to inf on the way through float
+        [1e300],  # finite but far past the int64-nanosecond range
+        [9.3e18],
+        [-9.3e18],
+    ],
+)
+def test_non_finite_numerics_coerce_to_nat(values):
+    idx = parse_timestamps(values)  # must not raise OverflowError
+    assert idx.isna().all() and len(idx) == len(values)
+
+
+def test_non_finite_does_not_poison_its_neighbours():
+    idx = parse_timestamps([1_700_000_000, float("inf"), 1_700_000_900])
+    assert idx[0] == pd.Timestamp("2023-11-14 22:13:20")
+    assert pd.isna(idx[1])
+    assert idx[2] == pd.Timestamp("2023-11-14 22:28:20")
+
+
+def test_out_of_range_excel_serial_coerces_without_disturbing_the_rest():
+    idx = parse_timestamps([45000.0, 1e300, 45000.5])  # median keeps this on the Excel path
+    assert idx[0] == pd.Timestamp("2023-03-15") and idx[2] == pd.Timestamp("2023-03-15 12:00")
+    assert pd.isna(idx[1])
+
+
+def test_explicit_epoch_unit_also_coerces_non_finite():
+    idx = parse_timestamps([float("inf"), 1_700_000_000, float("nan")], epoch_unit="s")
+    assert pd.isna(idx[0]) and pd.isna(idx[2])
+    assert idx[1] == pd.Timestamp("2023-11-14 22:13:20")
