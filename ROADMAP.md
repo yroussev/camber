@@ -159,9 +159,9 @@ A consolidation release — finish the validation and interop stories 0.5 opened
       See **[ONTOLOGY.md](docs/ONTOLOGY.md)**.
 - [x] **Broaden the real-data FDD benchmark (Tier 1)** — a cooling-coil-valve leakage **severity sweep**
       in the already-wired LBNL data (characterizes the under-firing leak detector) + a hardened fetcher.
-- [~] **Second labeled dataset (Tier 2)** — a second labeled chiller dataset would give the first real-data
-      validation of the refrigerant-side rules; **deferred pending an owner license-clearance** for
-      clean-room use.
+- [~] **Second labeled dataset (Tier 2)** — a fault-labeled chiller dataset would give the first
+      real-data validation of the refrigerant-side rules; **deferred pending a license-clean,
+      fault-labeled validation dataset** suitable for clean-room use.
 
 ## Delivered — v0.7.0 (IPMVP Option D — calibrated simulation)
 
@@ -205,7 +205,8 @@ The capability surface is broad and now hardened; 1.0 is a consolidation, not ne
       snapshot test (`tests/test_public_api.py`) that fails on any unreviewed surface change.
 - [ ] **Docs completeness** pass; enable the MkDocs **Pages** site (owner action — the workflow is built).
 - [ ] **Packaging & community** (carried) — conda-forge feedstock, Discussions, PEP-541 `camber` name.
-- [ ] **Labeled chiller benchmark** — if/when the license clears (carried from 0.6).
+- [ ] **Labeled chiller benchmark** — pending a license-clean, fault-labeled validation dataset
+      (carried from 0.6).
 - [ ] **Option D depth** (post-1.0) — 2R2C / multi-zone + an optional EnergyPlus `[energyplus]`
       cross-validator (mirroring the pvlib/BETTER own-it-then-cross-check pattern).
 
