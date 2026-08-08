@@ -295,7 +295,7 @@ inverse-modeling lineage), synthetic-fixture tested. **CAMBER now covers IPMVP O
 
 ### Docs
 - `docs/OPTION-D.md`; IPMVP A/B/C/D noted complete in `MANDV.md` + `CAPABILITIES.md`; ROADMAP marks
-  Option D delivered and reshapes Next-0.8 (RP-1043, Option-D depth, packaging).
+  Option D delivered and reshapes Next-0.8 (chiller benchmark, Option-D depth, packaging).
 
 ### Tests
 - +11 (1044 → 1055): `test_rc_model` — recovers a known model within tolerance, calibration is
@@ -328,8 +328,8 @@ dependency-light, clean-room/citable; synthetic-fixture tests + docs per capabil
 
 ### Deferred
 - **IPMVP Option D — calibrated simulation** → 0.7 (feasible as a dependency-light grey-box RC model).
-- **ASHRAE RP-1043 chiller dataset (Tier 2)** — real-data validation of the refrigerant-side rules,
-  pending an owner license-clearance for clean-room use.
+- **Second labeled chiller dataset (Tier 2)** — real-data validation of the refrigerant-side rules,
+  pending a license-clean, fault-labeled validation dataset.
 
 ### Tests
 - +13 net (1031 → 1044): `test_faultlab` (33/33, empty fixture-only), `test_haystack_semantic`,
