@@ -239,8 +239,13 @@
   "camber.chillerbaseline": [
     "ApproachBaseline",
     "ApproachDrift",
+    "LoadBaseline",
+    "LoadDrift",
     "drift_stats",
     "fit_approach_baseline",
+    "fit_load_baseline",
+    "fit_subcooling_baseline",
+    "load_drift_stats",
     "tons_from_flow"
   ],
   "camber.chillerdrift": [
@@ -321,6 +326,13 @@
   "camber.disaggregate": [
     "LoadComponents",
     "disaggregate_load"
+  ],
+  "camber.driftthresholds": [
+    "MAGNITUDE_CONFIDENCE",
+    "MAGNITUDE_NOTE",
+    "TEMPORAL_CONFIDENCE",
+    "TEMPORAL_NOTE",
+    "threshold_confidence"
   ],
   "camber.eval": [
     "BaselineCheck",

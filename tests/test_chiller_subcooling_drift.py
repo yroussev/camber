@@ -12,8 +12,9 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from camber.chillerbaseline import fit_approach_baseline  # noqa: E402
+from camber.chillerbaseline import fit_load_baseline, fit_subcooling_baseline  # noqa: E402
 from camber.chillerdrift import ApproachDriftMonitor  # noqa: E402
+from camber.driftthresholds import MAGNITUDE_CONFIDENCE, TEMPORAL_CONFIDENCE  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.rules.base import PeriodRule  # noqa: E402
 from camber.rules.builtin import builtin_registry, rule_names  # noqa: E402
@@ -110,11 +111,37 @@ def test_rising_subcooling_also_flags():
     assert f.metrics["subcooling_alarm_direction"] == "up"
 
 
-def test_both_directions_are_treated_symmetrically():
+def test_a_rise_and_an_equal_fall_score_identically_and_report_opposite_signs():
+    """Alarm symmetry: one pair of floors on |drift|, with the direction reported alongside.
+
+    Neither half of the charge fault space is known to deserve a tighter floor than the other, so
+    the magnitude scoring is symmetric and only the *sign* distinguishes them. If per-direction
+    floors are ever introduced, this test is the one that has to change deliberately.
+    """
     down = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_f": -2.5}))
     up = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_f": 2.5}))
-    assert down.severity == up.severity
+
+    # identical in magnitude, in degF and in sigma
+    assert down.severity == up.severity == "fault"
     assert abs(abs(down.metrics["subcooling_drift_f"]) - up.metrics["subcooling_drift_f"]) < 0.3
+    down_sigma = abs(down.metrics["subcooling_drift_sigma"])
+    assert abs(down_sigma - up.metrics["subcooling_drift_sigma"]) < 1.0
+
+    # opposite in sign, and the sign is reported both by the period statistic and by the CUSUM
+    assert down.metrics["subcooling_drift_f"] < 0 < up.metrics["subcooling_drift_f"]
+    assert down.metrics["subcooling_drift_direction"] == "down"
+    assert up.metrics["subcooling_drift_direction"] == "up"
+    assert down.metrics["subcooling_sustained_alarm"] is up.metrics["subcooling_sustained_alarm"]
+    assert down.metrics["subcooling_alarm_direction"] == "down"
+    assert up.metrics["subcooling_alarm_direction"] == "up"
+
+
+def test_the_finding_labels_its_two_threshold_classes_separately():
+    """Severity rests on screening-grade magnitude floors; the alarm on untuned temporal ones."""
+    f = _rule(BaselineStore()).analyze_periods("CH_1", *_base_and({"offset_f": -2.5}))
+    assert f.metrics["thresholds_provisional"] is True
+    assert f.metrics["magnitude_threshold_confidence"] == MAGNITUDE_CONFIDENCE
+    assert f.metrics["temporal_threshold_confidence"] == TEMPORAL_CONFIDENCE
 
 
 def test_a_steady_chiller_does_not_flag():
@@ -185,14 +212,13 @@ def test_accept_new_normal_resets_the_reference_and_silences_the_drift():
     base, drifted = _base_and({"offset_f": -2.5})
     assert rule.analyze_periods("CH_1", base, drifted).severity == "fault"
 
-    refit = fit_approach_baseline(
+    refit = fit_subcooling_baseline(
         pd.DataFrame(
             {
                 "tons": drifted[Role.CHW_FLOW] / 2.0,
                 Role.SUBCOOLING_TEMP: drifted[Role.SUBCOOLING_TEMP],
             }
-        ),
-        approach_col=Role.SUBCOOLING_TEMP,
+        )
     )
     rec = store.accept_new_normal(
         refit,
@@ -234,8 +260,9 @@ def test_the_monitor_default_stays_one_sided():
         },
         index=pd.date_range("2025-06-01", periods=n, freq="1h"),
     )
-    baseline = fit_approach_baseline(
-        pd.DataFrame(
+    baseline = fit_load_baseline(
+        metric_col="approach_f",
+        frame=pd.DataFrame(
             {
                 "tons": _tons(n, seed=1),
                 "approach_f": _INTERCEPT_F
@@ -243,7 +270,7 @@ def test_the_monitor_default_stays_one_sided():
                 + np.random.default_rng(4).normal(0, _SIGMA_F, n),
             },
             index=pd.date_range("2025-05-01", periods=n, freq="1h"),
-        )
+        ),
     )
     assert baseline is not None
     assert not ApproachDriftMonitor(baseline).run(frame).alarmed  # default: one-sided

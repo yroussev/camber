@@ -1,4 +1,8 @@
-"""Tests for the load-normalized chiller approach baseline (camber.chillerbaseline)."""
+"""Tests for the load-normalized chiller baseline (camber.chillerbaseline).
+
+All data here is synthetic: a linear metric-vs-load relationship plus Gaussian noise, with faults
+injected as explicit offsets or ramps. Nothing is drawn from any measured dataset.
+"""
 
 import os
 import sys
@@ -10,8 +14,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.chillerbaseline import (  # noqa: E402
     ApproachBaseline,
+    ApproachDrift,
+    LoadBaseline,
+    LoadDrift,
     drift_stats,
     fit_approach_baseline,
+    fit_load_baseline,
+    fit_subcooling_baseline,
+    load_drift_stats,
     tons_from_flow,
 )
 
@@ -186,3 +196,60 @@ def test_drift_slope_is_nan_without_a_usable_time_index():
     assert d is not None
     assert d.slope_f_per_month != d.slope_f_per_month  # NaN: no time axis to trend against
     assert d.coverage_start == ""
+
+
+# --------------------------------------------------------------------------- generic core
+
+
+def test_the_generic_fit_and_the_approach_wrapper_are_the_same_fit():
+    """The wrapper is a spelling, not a variant: identical coefficients, identical decisions."""
+    frame = _chiller()
+    generic = fit_load_baseline(frame, metric_col="approach_f", load_col="tons")
+    wrapped = fit_approach_baseline(frame)
+    assert generic is not None and wrapped is not None
+    assert generic == wrapped
+    assert generic.as_dict() == wrapped.as_dict()
+
+    # the guards agree too, including the paths that decline
+    narrow = _chiller()
+    narrow["tons"] = 150.0
+    assert fit_load_baseline(narrow, metric_col="approach_f") is None
+    assert fit_approach_baseline(narrow) is None
+    assert fit_load_baseline(_chiller(n=12), metric_col="approach_f") is None
+    assert fit_approach_baseline(_chiller(n=12)) is None
+
+    # and every knob maps across, so a non-default call agrees as well
+    assert fit_load_baseline(
+        frame, metric_col="approach_f", min_load=60.0, min_samples=50, min_load_span=25.0
+    ) == fit_approach_baseline(frame, min_tons=60.0, min_samples=50, min_tons_span=25.0)
+
+
+def test_the_subcooling_wrapper_is_the_same_fit_under_its_own_column_name():
+    frame = _chiller().rename(columns={"approach_f": "subcooling_temp"})
+    generic = fit_load_baseline(frame, metric_col="subcooling_temp", load_col="tons")
+    wrapped = fit_subcooling_baseline(frame)
+    assert generic is not None and generic == wrapped
+    # same numbers as the approach fit on the same data -- the metric name changes nothing
+    assert generic.as_dict() == fit_approach_baseline(_chiller()).as_dict()
+
+
+def test_the_generic_scorer_and_the_drift_wrapper_agree():
+    baseline = fit_load_baseline(_chiller(start="2025-05-01", seed=1), metric_col="approach_f")
+    assert baseline is not None
+    drifting = _chiller(start="2025-06-01", seed=2, ramp_f=4.0)
+
+    generic = load_drift_stats(baseline, drifting, metric_col="approach_f", load_col="tons")
+    wrapped = drift_stats(baseline, drifting)
+    assert generic is not None and generic == wrapped
+    # including the decline path
+    assert load_drift_stats(baseline, _chiller(n=4), metric_col="approach_f") is None
+    assert drift_stats(baseline, _chiller(n=4)) is None
+
+
+def test_the_approach_names_are_aliases_of_the_generic_types():
+    """Kept so callers and the persisted model-kind registry written pre-generalization work."""
+    assert ApproachBaseline is LoadBaseline
+    assert ApproachDrift is LoadDrift
+    b = fit_load_baseline(_chiller(), metric_col="approach_f")
+    assert isinstance(b, ApproachBaseline)
+    assert ApproachBaseline.from_dict(b.as_dict()) == b

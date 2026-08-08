@@ -31,6 +31,13 @@ Two robustness measures matter here and are worth stating plainly:
 The baseline is frozen (:mod:`camber.store.modelstore`), so accepting a new normal must also reset
 the accumulator: :meth:`ApproachDriftMonitor.rebase` does both together, since carrying CUSUM state
 across a baseline change would re-alarm on drift the operator has already accepted.
+
+**On the confidence of the four parameters below.** They are a weaker class of threshold than the
+magnitude floors the period rules use, and :mod:`camber.driftthresholds` says why at length: the
+magnitude floors are screening-grade, these are provisional and untuned. Full temporal validation
+-- measuring the false-alarm rate and detection delay these actually produce -- awaits real trended
+fault data, i.e. chiller trends with confirmed, dated fault events. Findings that rest on them are
+labelled ``temporal_threshold_confidence`` so the distinction survives out of the source.
 """
 
 from __future__ import annotations
@@ -56,20 +63,23 @@ __all__ = [
 ]
 
 # ---------------------------------------------------------------------------------------------
-# PROVISIONAL CUSUM PARAMETERS -- NOT YET VALIDATED AGAINST FIELD DATA.
+# TEMPORAL PARAMETERS -- PROVISIONAL AND UNTUNED FOR THESE SIGNALS (camber.driftthresholds).
 #
 # Textbook tabular-CUSUM tuning for detecting a ~1-sigma sustained shift is slack k = 0.5 sigma with
 # limit h = 4-5 sigma. The limit here is deliberately looser than that, because a month of hourly
 # trend is ~720 samples and h = 5 sigma has an in-control run length short enough to false-alarm
 # over a window that long. These are engineering-judgement starting points, not measurements: they
-# have never been checked against real chiller trend data with confirmed fouling events, and the
-# false-alarm/detection-delay trade-off they encode should be set from that data. All four are
-# constructor arguments, so tuning is a config change rather than a code change.
+# have never been checked against real chiller trend data with confirmed fault events, and the
+# false-alarm/detection-delay trade-off they encode should be set from that data. That makes them a
+# weaker class of threshold than the magnitude floors in the period rules, which are screening-grade
+# -- so they carry TEMPORAL_CONFIDENCE ("provisional-untuned"), not MAGNITUDE_CONFIDENCE, and
+# severities resting on them must not be read as dispatch-grade. All four are constructor arguments,
+# so tuning is a config change rather than a code change.
 # ---------------------------------------------------------------------------------------------
-CUSUM_SLACK_SIGMA = 0.5  # PROVISIONAL -- drift smaller than this is ignored
-CUSUM_LIMIT_SIGMA = 8.0  # PROVISIONAL -- accumulator level that constitutes a candidate alarm
-CUSUM_CLIP_SIGMA = 4.0  # PROVISIONAL -- per-sample outlier clamp fed to the accumulator
-CUSUM_MIN_CONSECUTIVE = 6  # PROVISIONAL -- decision interval, in consecutive elevated samples
+CUSUM_SLACK_SIGMA = 0.5  # PROVISIONAL/UNTUNED -- drift smaller than this is ignored
+CUSUM_LIMIT_SIGMA = 8.0  # PROVISIONAL/UNTUNED -- accumulator level constituting a candidate alarm
+CUSUM_CLIP_SIGMA = 4.0  # PROVISIONAL/UNTUNED -- per-sample outlier clamp fed to the accumulator
+CUSUM_MIN_CONSECUTIVE = 6  # PROVISIONAL/UNTUNED -- decision interval, in consecutive samples
 
 
 @dataclass
@@ -126,10 +136,10 @@ class ApproachDriftMonitor:
         self,
         baseline,
         *,
-        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL -- see the module note
-        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL
-        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL
-        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL
+        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see the module note
+        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
+        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
+        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
         direction: str = "up",  # "up" (default, one-sided) | "both" (two-sided signals)
     ):
         if not baseline.sigma_f > 0:
@@ -221,14 +231,18 @@ class ApproachDriftMonitor:
 
         Applies the same load/plausibility guards the period statistic uses, so both read the same
         samples. Returns ``None`` when the guards leave nothing to score.
+
+        The argument spelling is the approach one this class was written against; the underlying
+        cleaner is metric-neutral, so any load-dependent degF column works (subcooling, condenser-
+        water range) by passing its column key as ``approach_col``.
         """
-        w = _clean(frame, approach_col, tons_col, min_tons=min_tons, approach_range=approach_range)
+        w = _clean(frame, approach_col, tons_col, min_load=min_tons, metric_range=approach_range)
         if w.empty:
             return None
         first_n, first_at, first_dir = -1, "", None
         peak_up, peak_down, last = 0.0, 0.0, float("nan")
-        for label, tons, approach in zip(w.index, w["tons"].to_numpy(), w["approach"].to_numpy()):
-            st = self.update(tons, approach)
+        for label, tons, metric in zip(w.index, w["tons"].to_numpy(), w["metric"].to_numpy()):
+            st = self.update(tons, metric)
             peak_up = max(peak_up, st.climbing)
             peak_down = max(peak_down, st.improving)
             last = st.residual_f
