@@ -304,6 +304,7 @@
   "camber.coolingtower": [
     "CoolingTowerResult",
     "analyze_cooling_tower_approach",
+    "cw_range_f",
     "stull_wetbulb_f"
   ],
   "camber.cost": [
@@ -996,6 +997,14 @@
   ],
   "camber.rules.chiller_approach_rule": [
     "ChillerApproachFouling"
+  ],
+  "camber.rules.chiller_cw_range_rule": [
+    "CW_RANGE_FAULT_F",
+    "CW_RANGE_FAULT_SIGMA",
+    "CW_RANGE_PLAUSIBLE_F",
+    "CW_RANGE_WARN_F",
+    "CW_RANGE_WARN_SIGMA",
+    "ChillerCwRangeDrift"
   ],
   "camber.rules.chiller_drift_alarm_rule": [
     "ChillerApproachSustainedDrift"
