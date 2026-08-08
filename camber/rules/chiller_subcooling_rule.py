@@ -21,18 +21,18 @@ of the approach rule:
    the rule *declines with a caveat* when it is absent, rather than being silently skipped -- a
    chiller missing from a charge report must not read as a chiller with good charge.
 
-Everything else is the machinery the approach detectors already use: the same load-normalized
-baseline fit (:mod:`camber.chillerbaseline`), the same frozen-with-provenance coefficient store
-(:mod:`camber.store.modelstore`), and the same streaming CUSUM (:mod:`camber.chillerdrift`) run
-two-sided. Subcooling is load-dependent, so the comparison is made at matched load for the same
-reason approach is.
+Everything else is the machinery the approach detectors already use: the same metric-neutral
+load-normalized fit (:func:`camber.chillerbaseline.fit_load_baseline`), the same
+frozen-with-provenance coefficient store (:mod:`camber.store.modelstore`), and the same streaming
+CUSUM (:mod:`camber.chillerdrift`) run two-sided. Subcooling is load-dependent, so the comparison is
+made at matched load for the same reason approach is.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import drift_stats, fit_approach_baseline, tons_from_flow
+from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -40,6 +40,7 @@ from ..chillerdrift import (
     CUSUM_SLACK_SIGMA,
     ApproachDriftMonitor,
 )
+from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
 from .base import Finding
 
@@ -52,22 +53,27 @@ _ROLE_TO_COL = {
 _KIND = "chiller_subcooling"
 
 # ---------------------------------------------------------------------------------------------
-# PROVISIONAL THRESHOLDS -- empirically tuned, not yet confirmed on the equipment being monitored.
+# MAGNITUDE FLOORS -- SCREENING-GRADE (see camber.driftthresholds).
 #
-# These are starting points chosen from observed behaviour of this signal class, not values
-# established on the chillers this will run against, and they should be reviewed once the site has
-# accumulated its own trend history with known charge events. All are constructor arguments, so
-# tuning is a config change rather than a code change.
+# Characterized from the observed behaviour of this signal class, not established on the chillers
+# this will run against; review once the site has accumulated its own trend history with known
+# charge events. All are constructor arguments, so tuning is a config change, not a code change.
 #
 # The floors sit higher, in sigma, than the approach rule's. Subcooling's run-to-run scatter is
 # wider relative to its fault response than an approach's, so a 2-sigma floor of the kind that
 # suits approach sits inside this signal's ordinary variation. As with approach, a finding must
-# clear BOTH a degF floor and a sigma floor, in either direction.
+# clear BOTH a degF floor and a sigma floor.
+#
+# **Both floors are applied to |drift|, symmetrically** -- see the class docstring. Asymmetric,
+# per-direction floors are a plausible future refinement (a leak/undercharge may deserve a tighter
+# falling-side floor than an overcharge does on the rising side), but there is no basis on which to
+# set the asymmetry yet, so it is deliberately deferred pending real-data validation. A wrong
+# asymmetry is worse than none: it would quietly desensitize one half of the fault space.
 # ---------------------------------------------------------------------------------------------
-SUBCOOLING_WARN_F = 1.0  # PROVISIONAL
-SUBCOOLING_FAULT_F = 2.0  # PROVISIONAL
-SUBCOOLING_WARN_SIGMA = 3.0  # PROVISIONAL
-SUBCOOLING_FAULT_SIGMA = 6.0  # PROVISIONAL
+SUBCOOLING_WARN_F = 1.0  # screening-grade, applied to |drift|
+SUBCOOLING_FAULT_F = 2.0  # screening-grade, applied to |drift|
+SUBCOOLING_WARN_SIGMA = 3.0  # screening-grade, applied to |drift|
+SUBCOOLING_FAULT_SIGMA = 6.0  # screening-grade, applied to |drift|
 
 
 class ChillerSubcoolingDrift:
@@ -83,6 +89,16 @@ class ChillerSubcoolingDrift:
     (``chiller_approach_fouling``) predates the drift work and had to keep its behaviour; subcooling
     has no such legacy, and "subcooling has moved 2 °F and has been there for a fortnight" is a
     single work order rather than two.
+
+    **Alarm symmetry.** Scoring is symmetric in magnitude and signed in reporting: :meth:`_severity`
+    compares ``abs(drift_f)`` and ``abs(drift_sigma)`` against one pair of floors, so an equal rise
+    and fall score identically, while ``subcooling_drift_direction`` (and the CUSUM's
+    ``alarm_direction``, run with ``direction="both"``) says which way it went. That is deliberate:
+    both directions are genuine faults and neither is known to deserve a tighter floor than the
+    other. The approach detectors stay one-sided (monitor default ``direction="up"``), because
+    fouling only ever widens an approach. Per-direction floors are a future option, deferred until
+    real trended fault data can say how much tighter the falling side should be -- see the module
+    threshold note.
     """
 
     name = "chiller_subcooling_drift"
@@ -96,14 +112,14 @@ class ChillerSubcoolingDrift:
         site: str = "",
         run_id: str = "",
         freeze_if_missing: bool = True,
-        warn_f: float = SUBCOOLING_WARN_F,  # PROVISIONAL -- see the module note
-        fault_f: float = SUBCOOLING_FAULT_F,  # PROVISIONAL
-        warn_sigma: float = SUBCOOLING_WARN_SIGMA,  # PROVISIONAL
-        fault_sigma: float = SUBCOOLING_FAULT_SIGMA,  # PROVISIONAL
-        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL
-        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL
-        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL
-        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL
+        warn_f: float = SUBCOOLING_WARN_F,  # screening-grade -- see the module note
+        fault_f: float = SUBCOOLING_FAULT_F,  # screening-grade
+        warn_sigma: float = SUBCOOLING_WARN_SIGMA,  # screening-grade
+        fault_sigma: float = SUBCOOLING_FAULT_SIGMA,  # screening-grade
+        slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see camber.chillerdrift
+        limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
+        clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
+        min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
         min_tons: float = 5.0,
     ):
         self.store = store
@@ -139,11 +155,11 @@ class ChillerSubcoolingDrift:
                 f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
             )
             return None
-        fit = fit_approach_baseline(
+        fit = fit_load_baseline(
             base_frame,
-            approach_col=Role.SUBCOOLING_TEMP,
-            tons_col="tons",
-            min_tons=self.min_tons,
+            metric_col=Role.SUBCOOLING_TEMP,
+            load_col="tons",
+            min_load=self.min_tons,
         )
         if fit is None:
             caveats.append(
@@ -165,7 +181,12 @@ class ChillerSubcoolingDrift:
 
     # ------------------------------------------------------------------ severity
     def _severity(self, drift, caveats) -> str:
-        """Two-sided severity: magnitude must clear both the degF and the sigma floor."""
+        """Two-sided severity: |drift| must clear both the degF and the sigma floor.
+
+        Symmetric by construction -- one pair of floors, applied to the magnitude -- so a rise and
+        an equal fall return the same severity. The direction is reported separately rather than
+        being folded into the score.
+        """
         mag_f = abs(drift.drift_f)
         if drift.drift_sigma != drift.drift_sigma:  # NaN: baseline had no residual scatter
             caveats.append("baseline had no residual scatter, so drift is judged on degF alone")
@@ -209,12 +230,12 @@ class ChillerSubcoolingDrift:
                 caveats=caveats,
             )
 
-        drift = drift_stats(
+        drift = load_drift_stats(
             frozen,
             cur_t,
-            approach_col=Role.SUBCOOLING_TEMP,
-            tons_col="tons",
-            min_tons=self.min_tons,
+            metric_col=Role.SUBCOOLING_TEMP,
+            load_col="tons",
+            min_load=self.min_tons,
         )
         if drift is None:
             caveats.append(f"could not evaluate {_KIND}: no loaded samples in the current period")
@@ -239,7 +260,6 @@ class ChillerSubcoolingDrift:
             "subcooling_n_current": drift.n_current,
             "subcooling_baseline_sigma_f": frozen.sigma_f,
             "subcooling_baseline_frozen_at": rec.frozen_at if rec else "",
-            "thresholds_provisional": True,
         }
         if drift.extrapolated:
             caveats.append(
@@ -274,6 +294,9 @@ class ChillerSubcoolingDrift:
                     "subcooling_alarm_direction": run.alarm_direction,
                 }
             )
+        # Severity is magnitude-driven (screening-grade); the sustained-alarm metrics, when present,
+        # add a temporal claim that rests on the weaker, untuned parameters -- label both.
+        metrics.update(threshold_confidence(magnitude=True, temporal=run is not None))
 
         arrow = "widened" if direction == "up" else "narrowed"
         return Finding(

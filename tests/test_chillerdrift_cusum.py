@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.chillerbaseline import fit_approach_baseline  # noqa: E402
 from camber.chillerdrift import ApproachDriftMonitor  # noqa: E402
+from camber.driftthresholds import TEMPORAL_CONFIDENCE  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.rules.chiller_drift_alarm_rule import ChillerApproachSustainedDrift  # noqa: E402
 from camber.rules.chiller_drift_rule import ChillerApproachDrift  # noqa: E402
@@ -162,6 +163,9 @@ def test_rule_emits_a_distinct_sustained_finding():
     assert f.metrics["cond_sustained_alarm"] is True
     assert f.metrics["cond_first_alarm_at"].startswith("2025-06")
     assert f.metrics["thresholds_provisional"] is True
+    # a purely temporal verdict: labelled with the weaker grade, and no magnitude grade at all
+    assert f.metrics["temporal_threshold_confidence"] == TEMPORAL_CONFIDENCE
+    assert "magnitude_threshold_confidence" not in f.metrics
 
 
 def test_rule_is_quiet_on_a_stable_chiller():

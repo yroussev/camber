@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.chillerbaseline import fit_approach_baseline  # noqa: E402
+from camber.driftthresholds import MAGNITUDE_CONFIDENCE  # noqa: E402
 from camber.model.mapping import MappingProvider  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.resolve import discover  # noqa: E402
@@ -101,6 +102,9 @@ def test_drifting_chiller_flags_against_a_frozen_baseline():
     assert 3.0 < f.metrics["cond_slope_f_per_month"] < 5.5  # still climbing
     assert f.metrics["thresholds_provisional"] is True  # severities are not yet field-validated
     assert f.metrics["cond_baseline_frozen_at"] == "2025-07-01T00:00"
+    # this rule's severity is a magnitude claim only -- it makes no claim about timing
+    assert f.metrics["magnitude_threshold_confidence"] == MAGNITUDE_CONFIDENCE
+    assert "temporal_threshold_confidence" not in f.metrics
 
 
 def test_a_stable_chiller_does_not_flag():

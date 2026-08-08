@@ -24,7 +24,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 
-from ..chillerbaseline import ApproachBaseline
+from ..chillerbaseline import LoadBaseline
 from ..integrate.tickets import fingerprint
 
 __all__ = [
@@ -34,9 +34,9 @@ __all__ = [
 
 # kind -> the model class whose ``from_dict`` rebuilds it. New model families register here.
 _MODEL_TYPES = {
-    "chiller_approach_cond": ApproachBaseline,
-    "chiller_approach_evap": ApproachBaseline,
-    "chiller_subcooling": ApproachBaseline,
+    "chiller_approach_cond": LoadBaseline,
+    "chiller_approach_evap": LoadBaseline,
+    "chiller_subcooling": LoadBaseline,
 }
 
 
