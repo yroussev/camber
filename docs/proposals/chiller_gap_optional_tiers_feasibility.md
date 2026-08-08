@@ -18,7 +18,7 @@ what the P0 work fixed for approach.
 
 | Tier | Classification | Verdict |
 |---|---|---|
-| Condenser-water range / ΔT | **FEASIBLE NOW** | **Build** — the only real coverage gap, and it is small |
+| Condenser-water range / ΔT | **FEASIBLE NOW** | **BUILT** — `chiller_cw_range_drift`, the only real coverage gap, and it was small |
 | Cooling-tower approach-to-wet-bulb | **FEASIBLE NOW** — already built | **Park the metric; consider drift** |
 | PNNL CHW / CW reset detection | **FEASIBLE NOW** — already built | **Park** |
 | PNNL chiller staging detection | **FEASIBLE NOW** — already built | **Park** |
@@ -43,12 +43,28 @@ gate — `min_range_f: float = 2.0  # CW range below this == not really rejectin
 (`coolingtower.py:78`). It is used to decide whether the tower is working, then discarded. Nothing
 diagnoses the range itself.
 
-**Why it is worth building.** A narrowing condenser-water range at constant load is the classic
+**Why it is worth building.** A drifting condenser-water range at constant load is the classic
 signature of condenser-side flow problems — a fouled or throttled condenser, a failing CW pump, a
 stuck balancing valve — and it is *independent evidence* for the same fault the approach drift
 detects. Two agreeing indicators from different physics is what turns a drift alert into a
 confident work order. There is also a direct precedent in the codebase: `hw_plant_deltat` is the
 hot-water analogue and is already a registered rule, so the shape is established.
+
+> **Correction, made when the detector was built.** An earlier revision of this note said a
+> *narrowing* range is the flow-problem signature. That has the sign backwards for the
+> load-normalized comparison this rule actually makes. The energy balance is
+> `Q_cond = 500 × gpm × range`; at matched chiller load `Q_cond` is essentially fixed, so range is
+> **inversely** proportional to condenser-water flow. Reduced flow — a restricted bundle, a
+> degrading pump, a throttled or drifting balancing valve, a fouling strainer — therefore **widens**
+> the range. A *narrowing* range means the opposite: too much flow, or flow bypassing the condenser
+> (an opened bypass, short-circuiting, a balancing valve backed off), which wastes pump energy and
+> returns colder water than the tower was selected for. Both are genuine faults with different
+> causes, so the detector is two-sided: symmetric on magnitude, with the sign reported.
+>
+> This also sharpens the "independent evidence" claim. A scale layer that impedes *heat transfer*
+> without much restricting *flow* widens the approach and barely moves the range; a partly-closed
+> balancing valve does the reverse. The two signals fail independently, which is exactly why they
+> corroborate each other when they do move together.
 
 **How it reuses the P0 machinery.** Range is load-dependent in the same way approach is — it widens
 as tons rise, because the same flow carries more heat. So it is the identical problem:
@@ -59,6 +75,13 @@ the sustained-shift alarm. In practice this is a small generalization of `chille
 approach-specific to a role-agnostic `fit_baseline(y ~ x)` plus a thin rule — which is precisely the
 "generalize when the second consumer arrives" trigger flagged as open decision 4 in the plan.
 **This tier is that second consumer.**
+
+**Status: built.** The generalization landed first (`fit_load_baseline` / `load_drift_stats`), and
+`camber/rules/chiller_cw_range_rule.py` is the thin rule on top of it — a column swap, not a new
+module of machinery. The range subtraction itself is now
+`camber.coolingtower.cw_range_f`, extracted from the gate above so the two consumers share one sign
+convention rather than each spelling it out. Coefficients freeze under `kind="chiller_cw_range"`,
+and the sustained-shift alarm is the same `ApproachDriftMonitor` run `direction="both"`.
 
 ## 2. Cooling-tower approach-to-wet-bulb — FEASIBLE NOW, but **already built**
 
