@@ -27,9 +27,32 @@ import pandas as pd
 
 __all__ = [
     "stull_wetbulb_f",
+    "cw_range_f",
     "CoolingTowerResult",
     "analyze_cooling_tower_approach",
 ]
+
+
+def cw_range_f(
+    frame: pd.DataFrame,
+    *,
+    supply_col: str = "CWS_Temp",
+    return_col: str = "CWR_Temp",
+) -> pd.Series:
+    """Condenser-water **range** (°F): ``CW_return - CW_supply``, the rise across the condenser.
+
+    One subtraction, but the sign convention matters and more than one diagnostic depends on it, so
+    it lives in one place. This module uses it as an "is the tower actually rejecting heat?" gate;
+    :mod:`camber.rules.chiller_cw_range_rule` fits a load-normalized baseline to it and scores its
+    drift, which is the condenser-side *hydraulic* signal (range is inversely proportional to
+    condenser-water flow at matched load).
+
+    Raises :class:`KeyError` if either column is absent -- range cannot be derived from one end.
+    """
+    missing = [c for c in (supply_col, return_col) if c not in frame.columns]
+    if missing:
+        raise KeyError(f"cw_range_f needs column(s) {missing}")
+    return frame[return_col] - frame[supply_col]
 
 
 def stull_wetbulb_f(oat_f, rh_pct):
@@ -112,12 +135,12 @@ def analyze_cooling_tower_approach(
         fan = work["TowerFanSpeed"].reindex(w.index)
         w = w[fan > min_fan_pct]
     elif "CWR_Temp" in w.columns:
-        w = w[(w.CWR_Temp - w.CWS_Temp) >= min_range_f]
+        w = w[cw_range_f(w) >= min_range_f]
     if len(w) < 10:
         return None
 
     approach = (w.CWS_Temp - w._wb).clip(lower=-2)  # can't beat wet-bulb (allow noise)
-    rng = (w.CWR_Temp - w.CWS_Temp) if "CWR_Temp" in w.columns else None
+    rng = cw_range_f(w) if "CWR_Temp" in w.columns else None
     high = float((approach > design_approach_f + high_margin_f).mean())
 
     return CoolingTowerResult(
