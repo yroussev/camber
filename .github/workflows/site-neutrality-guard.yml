@@ -1,0 +1,97 @@
+name: site-neutrality-guard
+
+# Enforced backstop for the vendor-/site-neutrality rule: no committed file,
+# commit message, or generated release note may name a real client building,
+# its BAS site code, or a licence-encumbered third-party dataset.
+#
+# Local git hooks (.githooks/) are opt-in and are bypassed entirely by pushes
+# made by github-actions[bot], so this CI job is the net that always runs.
+#
+# The denylist lives in .github/scripts/site_neutrality_patterns.py, base64-
+# encoded so that the guard does not itself re-document the private site name
+# in plaintext. Every pattern is contextual: a bare place name never matches,
+# because the place is a legitimate public weather-station / TMY3-EPW climate
+# reference that `weather/` content must keep using freely.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: read
+
+jobs:
+  site-neutrality-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scan tracked files, CHANGELOG, and commit messages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The guard's own files hold the patterns as data; never scan them.
+          exclude=(
+            ':(exclude).github/scripts/site_neutrality_patterns.py'
+            ':(exclude).github/workflows/site-neutrality-guard.yml'
+            ':(exclude).githooks/denylist.local'
+            ':(exclude).githooks/denylist.local.example'
+          )
+
+          fail=0
+
+          echo "== Scanning tracked files =="
+          while IFS=$'\t' read -r pat why; do
+            [ -n "$pat" ] || continue
+            if git grep -iInE -- "$pat" -- . "${exclude[@]}"; then
+              echo "::error::Tracked content matches a site-neutrality rule ($why)"
+              fail=1
+            fi
+          done < <(python3 .github/scripts/site_neutrality_patterns.py)
+
+          echo "== Scanning CHANGELOG.md =="
+          while IFS=$'\t' read -r pat why; do
+            [ -n "$pat" ] || continue
+            if grep -inE -- "$pat" CHANGELOG.md; then
+              echo "::error::CHANGELOG.md matches a site-neutrality rule ($why)"
+              fail=1
+            fi
+          done < <(python3 .github/scripts/site_neutrality_patterns.py)
+
+          echo "== Scanning commit messages in range =="
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            before="${{ github.event.before }}"
+            if [ -z "$before" ] || [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              range="${{ github.sha }} -1"
+            else
+              range="${before}..${{ github.sha }}"
+            fi
+          fi
+
+          msgs="$(git log --format='%H %s%n%b' $range || true)"
+          while IFS=$'\t' read -r pat why; do
+            [ -n "$pat" ] || continue
+            if printf '%s\n' "$msgs" | grep -inE -- "$pat"; then
+              echo "::error::A commit message in the range matches a site-neutrality rule ($why)"
+              fail=1
+            fi
+          done < <(python3 .github/scripts/site_neutrality_patterns.py)
+
+          if [ "$fail" -ne 0 ]; then
+            echo "site-neutrality-guard failed: keep the project vendor-/site-neutral."
+            echo "A bare public weather/climate reference is allowed; a building, BAS"
+            echo "site code, or licence-encumbered dataset reference is not."
+            exit 1
+          fi
+          echo "site-neutrality-guard passed."

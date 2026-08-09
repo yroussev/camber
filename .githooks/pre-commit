@@ -38,6 +38,8 @@ added="$(git diff --cached --no-color -- . \
   ':(exclude).githooks/denylist.local' \
   ':(exclude).githooks/denylist.local.example' \
   ':(exclude).github/workflows/attribution-guard.yml' \
+  ':(exclude).github/workflows/site-neutrality-guard.yml' \
+  ':(exclude).github/scripts/site_neutrality_patterns.py' \
   | grep '^+' | grep -v '^+++' || true)"
 
 if [ -n "$added" ]; then
@@ -53,7 +55,30 @@ if [ -n "$added" ]; then
   done
 fi
 
-# 3) Block added lines matching a LOCAL, gitignored denylist. Because the file is never
+# 3) Block added lines that are not site-neutral. This denylist is CHECKED IN
+#    (unlike the local one below) so it protects every clone, and it is shared
+#    with .githooks/commit-msg and .github/workflows/site-neutrality-guard.yml.
+#    Patterns are base64-encoded in that script so the guard does not itself
+#    re-document the private site name in plaintext. They are contextual: a
+#    bare public weather-station / TMY3-EPW climate reference never matches.
+patterns_script="$(git rev-parse --show-toplevel)/.github/scripts/site_neutrality_patterns.py"
+if [ -f "$patterns_script" ] && [ -n "$added" ] && command -v python3 >/dev/null 2>&1; then
+  while IFS=$'\t' read -r pat why; do
+    [ -n "$pat" ] || continue
+    if printf '%s\n' "$added" | grep -iqE -- "$pat"; then
+      echo "------------------------------------------------------------------" >&2
+      echo "COMMIT REJECTED: staged content is not site-neutral." >&2
+      echo "Matched rule: $why" >&2
+      echo "CAMBER never names a real client building, its BAS site code, or a" >&2
+      echo "licence-encumbered third-party dataset. Describe it generically." >&2
+      echo "A bare public weather-station / climate reference is fine." >&2
+      echo "------------------------------------------------------------------" >&2
+      fail=1
+    fi
+  done < <(python3 "$patterns_script")
+fi
+
+# 4) Block added lines matching a LOCAL, gitignored denylist. Because the file is never
 #    committed (.gitignore), it can safely hold sensitive terms -- e.g. a real client site
 #    name -- without embedding them in the repo, which a tracked denylist would. One
 #    case-insensitive extended-regex per line; blank lines and '#' comments are ignored.

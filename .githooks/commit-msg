@@ -35,4 +35,29 @@ for pat in "${patterns[@]}"; do
   fi
 done
 
+# Site-neutrality denylist, shared with .githooks/pre-commit and
+# .github/workflows/site-neutrality-guard.yml. Patterns are base64-encoded in
+# that script so the guard does not re-document the private site name in
+# plaintext; they are contextual, so a bare public weather/climate reference
+# never trips them.
+patterns_script="$(git rev-parse --show-toplevel)/.github/scripts/site_neutrality_patterns.py"
+if [ -f "$patterns_script" ] && command -v python3 >/dev/null 2>&1; then
+  while IFS=$'\t' read -r pat why; do
+    [ -n "$pat" ] || continue
+    if grep -iqE -- "$pat" "$msg_file"; then
+      echo "------------------------------------------------------------------" >&2
+      echo "COMMIT REJECTED: commit message is not site-neutral." >&2
+      echo "" >&2
+      echo "Matched rule: $why" >&2
+      echo "" >&2
+      echo "CAMBER never names a real client building, its BAS site code, or a" >&2
+      echo "licence-encumbered third-party dataset. Describe the case generically" >&2
+      echo "(e.g. 'the reference building', 'a field case') and commit again." >&2
+      echo "A bare public weather-station / climate reference is fine." >&2
+      echo "------------------------------------------------------------------" >&2
+      exit 1
+    fi
+  done < <(python3 "$patterns_script")
+fi
+
 exit 0
