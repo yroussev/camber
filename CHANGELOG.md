@@ -4,6 +4,39 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.12.0] — 2026-08-10
+
+**Refrigerant-side feed diagnosis and threshold calibration.** A suction-superheat drift detector
+completes the charge/feed pair with subcooling, and a new validation harness turns the drift
+detectors' screening-grade thresholds into calibrated ones once labelled fault data exists.
+
+### Added
+- **`camber.rules.chiller_superheat_rule.ChillerSuperheatDrift`** — suction-superheat drift, the
+  evaporator-side counterpart to subcooling. Two-sided (falling superheat = overfeed / liquid-floodback
+  risk; rising = starvation / undercharge / restriction), load-normalized against a frozen baseline,
+  with the same period-statistic + sustained-shift CUSUM readout as the other drift rules. A period
+  rule, run via `Registry.run_periods`; instrumentation-gated (declines with a caveat when the point
+  is absent) exactly like subcooling.
+- **`Role.SUPERHEAT_TEMP`** — suction superheat, a controller-reported difference mapped directly
+  (like `SUBCOOLING_TEMP`; CAMBER has no saturation-temperature/pressure role to derive it from).
+  Mapped in the ASHRAE 223P interop as `("Temperature", "Refrigerant")`.
+- **`camber.driftvalidation`** — a calibration harness for the drift detectors' thresholds (all of
+  which are already constructor arguments). `evaluate(build_rule, cases)` scores a detector against
+  labelled `(baseline, current)` period pairs and returns precision / recall / F1 on top of CAMBER's
+  FDD confusion matrix (`camber.eval.confusion`); `sweep(build_rule, cases, grid, objective=...)`
+  searches a grid of threshold settings for the operating point that maximizes an objective
+  (`f1` / `recall` / `precision` / `accuracy` / `youden`), breaking ties toward fewer false positives.
+  It does not lower the shipped screening-grade defaults — it is the tool for replacing them with
+  calibrated values once real labelled fault data exists.
+- **docs/CHILLER-DRIFT.md** — a page covering the whole chiller refrigerant-drift family (approach,
+  subcooling, superheat, condenser-water range), the frozen-baseline + CUSUM design, the two
+  threshold-confidence classes, and the calibration workflow.
+
+### Notes
+- Refrigerant *pressure* roles remain deliberately absent: CAMBER adds a role only once a shipped
+  detector consumes it, so pressure-based diagnostics (e.g. head-pressure trend) are deferred until a
+  detector needs them.
+
 ## [0.11.0] — 2026-08-10
 
 **Chiller drift-detection** — catching a chiller that degrades *over time*, not just one that reads

@@ -37,6 +37,7 @@ _MODEL_TYPES = {
     "chiller_approach_cond": LoadBaseline,
     "chiller_approach_evap": LoadBaseline,
     "chiller_subcooling": LoadBaseline,
+    "chiller_superheat": LoadBaseline,
     "chiller_cw_range": LoadBaseline,
 }
 

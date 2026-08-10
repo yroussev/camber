@@ -23,6 +23,7 @@ nav:
   - Ecosystem: ECOSYSTEM.md
   - Analytics:
       - Packaged / DX FDD: FDD-DX.md
+      - Chiller drift & calibration: CHILLER-DRIFT.md
       - M&V: MANDV.md
       - "M&V: Option D (calibrated sim)": OPTION-D.md
       - Streaming / online: STREAMING.md
