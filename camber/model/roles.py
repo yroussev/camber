@@ -105,6 +105,12 @@ class Role(str, Enum):
     # saturation-temperature or pressure role, so subcooling cannot be derived from a liquid-line
     # temperature alone and must be mapped directly where the chiller publishes it.
     SUBCOOLING_TEMP = "subcooling_temp"
+    # Suction superheat (suction temp - evaporator saturation temp), degF. The evaporator-side
+    # counterpart to SUBCOOLING_TEMP: also a controller-reported *difference* (for the same reason —
+    # no saturation-temperature/pressure role exists to derive it from a suction temperature) and
+    # mapped directly where the chiller publishes it. Low superheat = the evaporator is overfed
+    # (liquid-floodback risk); high superheat = it is starved (underfeed / undercharge / restrict).
+    SUPERHEAT_TEMP = "superheat_temp"
 
     # --- energy / power ---
     POWER = "power"  # electric power (kW)
@@ -186,6 +192,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.COND_APPROACH_TEMP: "condenser refrig temp approach sensor",
     Role.EVAP_APPROACH_TEMP: "evaporator refrig temp approach sensor",
     Role.SUBCOOLING_TEMP: "refrig subcooling temp sensor",
+    Role.SUPERHEAT_TEMP: "refrig superheat temp sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

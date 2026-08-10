@@ -335,6 +335,14 @@
     "TEMPORAL_NOTE",
     "threshold_confidence"
   ],
+  "camber.driftvalidation": [
+    "DetectorScore",
+    "LabeledCase",
+    "SweepResult",
+    "evaluate",
+    "positive_from_severity",
+    "sweep"
+  ],
   "camber.eval": [
     "BaselineCheck",
     "BenchmarkReport",
@@ -1025,6 +1033,13 @@
     "SUBCOOLING_FAULT_SIGMA",
     "SUBCOOLING_WARN_F",
     "SUBCOOLING_WARN_SIGMA"
+  ],
+  "camber.rules.chiller_superheat_rule": [
+    "ChillerSuperheatDrift",
+    "SUPERHEAT_FAULT_F",
+    "SUPERHEAT_FAULT_SIGMA",
+    "SUPERHEAT_WARN_F",
+    "SUPERHEAT_WARN_SIGMA"
   ],
   "camber.rules.chillerfleet_rule": [
     "ChillerStagingFleet"
