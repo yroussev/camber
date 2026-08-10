@@ -1,7 +1,7 @@
 # conda-forge recipe for camber-toolkit. Ready to submit via staged-recipes once the {{ version }}
 # sdist is on PyPI: the only field to fill is `sha256` (from the published sdist). See docs/DEPLOY.md.
 {% set name = "camber-toolkit" %}
-{% set version = "0.4.0" %}
+{% set version = "0.11.0" %}
 
 package:
   name: {{ name|lower }}
@@ -11,7 +11,7 @@ source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
   # sha256 of the published sdist; get it with:
   #   curl -sL https://pypi.org/pypi/{{ name }}/{{ version }}/json | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
-  sha256: PLACEHOLDER  # fill from the published 0.4.0 sdist at submission time
+  sha256: PLACEHOLDER  # fill from the published 0.11.0 sdist at submission time
 
 build:
   noarch: python
@@ -27,7 +27,7 @@ requirements:
     - setuptools >=64
   run:
     - python >=3.10
-    - numpy >=1.24,<2
+    - numpy >=1.24,<3
     - pandas >=2.0,<3
     - matplotlib-base >=3.7
     - pyarrow >=14

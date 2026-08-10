@@ -19,6 +19,8 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
+from .timegrid import interval_hours as _interval_hours
+
 __all__ = [
     "DemandResponseResult",
     "demand_response",
@@ -96,9 +98,6 @@ def demand_response(
         pct_shed=round(energy_shed / base_kwh, 4) if base_kwh else float("nan"),
         rebound_kwh=round(rebound, 2),
     )
-
-
-from .timegrid import interval_hours as _interval_hours  # noqa: E402
 
 
 @dataclass

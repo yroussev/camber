@@ -33,7 +33,7 @@ the runtime deps, the `camber` entry point, and a `run_constrained` for the opti
 Pinned to the current version; the only field to fill is `sha256`, from the published sdist:
 
 ```bash
-curl -sL https://pypi.org/pypi/camber-toolkit/0.4.0/json \
+curl -sL https://pypi.org/pypi/camber-toolkit/0.11.0/json \
   | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
 ```
 

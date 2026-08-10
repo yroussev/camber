@@ -4,6 +4,46 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.11.0] — 2026-08-10
+
+**Chiller drift-detection** — catching a chiller that degrades *over time*, not just one that reads
+badly right now: a load-normalized baseline, then streaming and period-based FDD scored against it,
+plus modern-stack support (numpy 2.x, Python 3.12/3.13). The drift thresholds ship **screening-grade**
+and every finding says so — they rank a walkdown, they do not dispatch a truck (see below).
+
+### Added — chiller drift-detection
+- **`camber.chillerbaseline`** — load-normalized baselines: fit `metric ~ f(tons)` and score how far a
+  later period sits above it. `fit_approach_baseline` / `fit_load_baseline` / `fit_subcooling_baseline`
+  (with `ApproachBaseline` / `LoadBaseline`), `drift_stats` / `load_drift_stats` (with `ApproachDrift` /
+  `LoadDrift`), and `tons_from_flow`. A baseline can be frozen via `camber.store.modelstore`, so later
+  runs score against a fixed reference rather than a moving average that drifts along with the fault.
+- **`camber.chillerdrift`** — `ApproachDriftMonitor`, a streaming *sustained-shift* alarm (tabular CUSUM,
+  reusing `camber.mandv.online.OnlineCusum`) that answers "has approach moved up **and stayed up**?"
+  instead of firing on a single hot hour. Emits `DriftAlarmState` / `DriftAlarmRun`.
+- **`camber.driftthresholds`** — `threshold_confidence()`, which rides on each finding and grades a
+  threshold into one of two honest classes: **magnitude floors = screening-grade** (fit to rank, not to
+  dispatch) and **temporal/CUSUM parameters = provisional-untuned** (not yet validated against labelled
+  fault data). Screening-grade is a documented posture here, not a hidden assumption.
+- **New FDD rules**, each usable in the batch registry: `ChillerApproachDrift` (period-over-period
+  approach rise), `ChillerApproachSustainedDrift` (the streaming CUSUM alarm as a rule),
+  `ChillerSubcoolingDrift` (two-sided liquid-line-subcooling drift — a refrigerant-charge signal), and
+  `ChillerCwRangeDrift` (condenser-water range / ΔT drift — the condenser-side hydraulic signal). Each
+  carries both an absolute (°F) and a normalized (σ) threshold.
+- **Period-based FDD** — a `PeriodRule` protocol and `Registry.run_periods(...)` in `camber.rules.base`,
+  so a rule can score a sequence of reporting periods (e.g. each week against the frozen baseline)
+  rather than a single window.
+- **`Role.SUBCOOLING_TEMP`** — a controller-reported liquid-line-subcooling difference. CAMBER has no
+  refrigerant saturation-temperature or pressure role, so subcooling is mapped directly where a chiller
+  publishes it, not derived.
+
+### Changed
+- **numpy 2 support** — the dependency pin widens from `numpy>=1.24,<2` to `numpy>=1.24,<3`; CI proves
+  both ends (a numpy-1.x floor leg plus numpy-2.x on the default legs). No source change was required.
+- **Python 3.12 and 3.13** are now tested and advertised — the CI and release matrices cover 3.10–3.13
+  and the classifiers are updated. The supported floor stays 3.10.
+- Internal tidy, no API or behavior change: curated `__all__` on `camber.mandv.online` and
+  `camber.rules.online`; a stray mid-module import hoisted in `camber.geb`.
+
 ## [0.10.1] — 2026-08-06
 
 Test-quality hardening: a **coverage gate** and **property-based tests**. Dev-facing only — no
