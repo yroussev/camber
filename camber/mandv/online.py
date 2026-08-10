@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+__all__ = ["CusumState", "OnlineCusum", "AnomalyState", "RollingAnomaly"]
+
 
 @dataclass
 class CusumState:
@@ -49,7 +51,7 @@ class OnlineCusum:
         self.low = 0.0
 
     def reset(self) -> None:
-        self.n = self.cusum = self.high = self.low = 0
+        self.n = 0
         self.cusum = self.high = self.low = 0.0
 
     def update(self, driver, actual) -> CusumState:
