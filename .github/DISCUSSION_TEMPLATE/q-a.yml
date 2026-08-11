@@ -1,0 +1,26 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking! First skim the [docs](https://github.com/yroussev/camber/tree/main/docs)
+        and existing discussions in case it's already answered.
+
+        **Keep it vendor- and site-neutral.** Describe your scenario generically (e.g. "a
+        high-outside-air VAV design") and **never paste a real client site name or raw building
+        data** — reduce any example to a small synthetic snippet.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+      description: The question, and what you've already tried.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: CAMBER version, Python version, and a minimal synthetic example if relevant.
+    validations:
+      required: false

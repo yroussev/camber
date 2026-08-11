@@ -30,17 +30,18 @@ populates it; the API pods mount it read-only.
 
 [`deploy/conda/meta.yaml`](../deploy/conda/meta.yaml) is a submission-ready recipe (`noarch: python`,
 the runtime deps, the `camber` entry point, and a `run_constrained` for the optional `[ml]` extra).
-Pinned to the current version; the only field to fill is `sha256`, from the published sdist:
+Pinned to **0.12.0** with the published sdist's `sha256` already filled in — the recipe is complete
+and submission-ready. To re-derive the hash for a future version:
 
 ```bash
-curl -sL https://pypi.org/pypi/camber-toolkit/0.11.0/json \
+curl -sL https://pypi.org/pypi/camber-toolkit/0.12.0/json \
   | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
 ```
 
-Then submit via [`conda-forge/staged-recipes`](https://github.com/conda-forge/staged-recipes) (a PR
-that creates the feedstock — a **repo-owner action**). Once the feedstock exists, its bot opens
-version-bump PRs automatically on each PyPI release. Until then, install from PyPI:
-`pip install camber-toolkit`.
+Then submit via [`conda-forge/staged-recipes`](https://github.com/conda-forge/staged-recipes): fork
+it, drop this file at `recipes/camber-toolkit/meta.yaml`, and open a PR (this creates the feedstock —
+a **repo-owner action**). Once the feedstock exists, its bot opens version-bump PRs automatically on
+each PyPI release. Until then, install from PyPI: `pip install camber-toolkit`.
 
 ## Docs site (GitHub Pages)
 

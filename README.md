@@ -172,6 +172,13 @@ for the layered design, [ROADMAP.md](ROADMAP.md) for what's planned and where to
 [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the OSS-integration strategy, and the
 [Code of Conduct](CODE_OF_CONDUCT.md). Security reports: see [SECURITY.md](SECURITY.md).
 
+## Community & support
+
+Usage questions and ideas: [GitHub Discussions](https://github.com/yroussev/camber/discussions).
+Bugs and concrete feature requests: [Issues](https://github.com/yroussev/camber/issues). Please keep
+everything **vendor- and site-neutral** — describe scenarios generically and never post a real client
+site name or raw building data.
+
 ## Provenance
 
 This is a clean-room implementation. Algorithms are reimplemented from public
