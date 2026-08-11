@@ -88,6 +88,14 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   cycling), `filter_fouling` (filter ΔP at/above change-out), and `chiller_approach_fouling`
   (condenser/evaporator approach-temperature degradation — refrigerant-side fouling without
   refrigerant-pressure sensors). New equipment templates: **RTU, HeatPump/VRF, DOAS, FCU**.
+- **Chiller drift detection & calibration** ([CHILLER-DRIFT.md](CHILLER-DRIFT.md)) — catches a chiller
+  degrading *over time* against its own frozen, load-normalized baseline: condenser/evaporator
+  **approach** drift, liquid-line **subcooling** (refrigerant charge), suction **superheat**
+  (evaporator feed), and condenser-water **range** (hydraulics). Each pairs a period statistic with a
+  streaming sustained-shift **CUSUM** alarm and labels its thresholds honestly (screening-grade
+  magnitude floors vs. provisional-untuned CUSUM timing). `camber.driftvalidation` calibrates those
+  thresholds against labelled fault data (precision/recall + a threshold sweep). Period rules, run via
+  `Registry.run_periods` with a frozen baseline store.
 - **G36 §5.16.14 engine** — `fdd_g36.run_g36_afdd` scores AHU fault conditions **FC1–FC15** with
   operating-state gating; cross-validated vs open-fdd and accuracy-scored in the synthetic harness
   ([VALIDATION.md](VALIDATION.md)).

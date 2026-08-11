@@ -1,0 +1,26 @@
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Propose a new diagnostic, M&V model, ingest adapter, ontology mapping, or improvement.
+        Check the [roadmap](https://github.com/yroussev/camber/blob/main/ROADMAP.md) first — it may
+        already be planned.
+
+        Methods should draw on **public** standards; please don't paste proprietary or copyrighted
+        material, and keep examples vendor- and site-neutral.
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What capability, and the problem it solves.
+    validations:
+      required: true
+  - type: textarea
+    id: standard
+    attributes:
+      label: Standard / method (if any)
+      description: A public standard or method it builds on (ASHRAE G36/14, Standard 55/211, IPMVP, NIST APAR, PNNL, LBNL, ...).
+    validations:
+      required: false

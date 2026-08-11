@@ -80,8 +80,9 @@ No code needed — add a tag→role mapping (a JSON file like the ones under
 ## Commits and pull requests
 
 - Small, focused commits with descriptive messages.
-- Open a PR against `main`; CI (ruff lint + format check, and pytest on Python 3.10 and
-  3.11) must pass.
+- Open a PR against `main`; CI must pass — ruff lint + format check, mypy, the coverage gate, the
+  pytest matrix on Python 3.10–3.13 (with a numpy-1.x and numpy-2.x leg), and the attribution /
+  site-neutrality guards.
 - Fill in the PR template and link any related issue.
 
 ## No AI-assistant attribution
