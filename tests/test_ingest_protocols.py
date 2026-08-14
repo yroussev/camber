@@ -295,6 +295,7 @@ def test_adapters_reference_no_write_services():
     import ast
 
     import camber.ingest.bacnet as bmod
+    import camber.ingest.bacnet_discovery as dmod
     import camber.ingest.modbus as mmod
     import camber.ingest.mqtt_stream as qmod
     import camber.ingest.opcua as omod
@@ -312,7 +313,7 @@ def test_adapters_reference_no_write_services():
         "set_value",
         "write_attribute",
     }
-    for mod in (bmod, mmod, qmod, omod):
+    for mod in (bmod, dmod, mmod, qmod, omod):
         tree = ast.parse(open(mod.__file__, encoding="utf-8").read())
         names = set()
         for node in ast.walk(tree):

@@ -4,6 +4,34 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.13.0] — 2026-08-14
+
+**BACnet discovery + vendor proprietary-property bridge.** CAMBER can now *discover* a BACnet network
+(not just read a point list it was handed) and bootstrap a point→Role mapping from what it finds, with
+an optional bridge to [ace-bacnet-devices](https://github.com/ACE-IoT-Solutions/ace-bacnet-devices)
+(MIT) for typed decoding of vendor proprietary properties. All read-only.
+
+### Added
+- **`camber.ingest.bacnet_discovery`** — read-only device/object discovery. `discover(client)`
+  enumerates a network (Who-Is/I-Am → `object-list` → descriptive metadata) via an **injected**
+  `DiscoveryClient` (core builds no bacpypes3 app, so it's testable without a network), returning
+  `DiscoveredDevice`/`DiscoveredObject`. `discovery_to_points` (Trend-Log objects → `BacnetPoint` for
+  the existing read adapter), `discovery_to_inventory` + `to_rows` (a flat per-object inventory). The
+  service/property allowlists (`DISCOVERY_SERVICES`, `DISCOVERY_READ_PROPERTIES`) are asserted
+  read-only by the same AST guard as the read adapter — no write/command path.
+- **`camber.interop.bacnet`** — the discovery→role adapter mirroring `interop.haystack_semantic`.
+  `roles_from_bacnet` / `mapping_from_bacnet` bridge each object's name + object type + engineering
+  units to a `Role` (candidate roles bounded by object-type ∩ unit, then ranked by the existing
+  `camber.mapping_assist` suggester); `review_bacnet` shapes the rest into `review_unmapped`
+  suggestions. `normalize_bacnet_unit` and the `BACNET_UNIT_TO_TOKEN` / `OBJECT_TYPE_ROLE_HINT` tables.
+- **`camber.interop.bacnet_vendor`** — optional `[bacnet-vendor]` bridge to ace-bacnet-devices:
+  `install_vendor_decoders` (register typed decoders into a bacpypes3 stack — at client-construction
+  time; gracefully no-ops when the extra is absent), `available_vendors`, and `vendor_hint_tokens` /
+  `vendor_aliases` (surface the vendor catalog as mapping hints; aliases are strict to avoid
+  mis-mapping). New optional extra `bacnet-vendor = ["ace-bacnet-devices>=0.2"]`.
+- **docs/INGEST-PROTOCOLS.md** — a BACnet discovery recipe (build a `DiscoveryClient`, register vendor
+  decoders at app-build time, `discover` → `mapping_from_bacnet` → `review_bacnet`).
+
 ## [0.12.0] — 2026-08-10
 
 **Refrigerant-side feed diagnosis and threshold calibration.** A suction-superheat drift detector

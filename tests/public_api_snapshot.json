@@ -435,9 +435,14 @@
   ],
   "camber.ingest": [
     "BacnetPoint",
+    "BacnetPointRecord",
     "BacnetSource",
     "BacnetTarget",
     "CleaningLog",
+    "DISCOVERY_SERVICES",
+    "DiscoveredDevice",
+    "DiscoveredObject",
+    "DiscoveryClient",
     "HaystackAdapter",
     "IngestProfile",
     "LongCsvAdapter",
@@ -458,6 +463,9 @@
     "clean",
     "client_transport",
     "decode_registers",
+    "discover",
+    "discovery_to_inventory",
+    "discovery_to_points",
     "gap_count",
     "get_profile",
     "history_to_series",
@@ -477,6 +485,19 @@
     "BacnetTarget",
     "READ_SERVICES",
     "trendlog_to_series"
+  ],
+  "camber.ingest.bacnet_discovery": [
+    "BacnetPointRecord",
+    "DISCOVERY_READ_PROPERTIES",
+    "DISCOVERY_SERVICES",
+    "DiscoveredDevice",
+    "DiscoveredObject",
+    "DiscoveryClient",
+    "TREND_OBJECT_TYPES",
+    "discover",
+    "discovery_to_inventory",
+    "discovery_to_points",
+    "to_rows"
   ],
   "camber.ingest.base": [
     "SourceAdapter"
@@ -572,10 +593,13 @@
     "equip_haystack_tags",
     "equip_to_223",
     "haystack_tags",
+    "mapping_from_bacnet",
     "mapping_from_brick",
     "mapping_from_haystack",
+    "review_bacnet",
     "role_223_quantity",
     "role_from_tags",
+    "roles_from_bacnet",
     "roles_from_brick",
     "roles_from_haystack",
     "site_from_223",
@@ -583,6 +607,20 @@
     "site_to_223",
     "site_to_ttl",
     "to_brick"
+  ],
+  "camber.interop.bacnet": [
+    "BACNET_UNIT_TO_TOKEN",
+    "OBJECT_TYPE_ROLE_HINT",
+    "mapping_from_bacnet",
+    "normalize_bacnet_unit",
+    "review_bacnet",
+    "roles_from_bacnet"
+  ],
+  "camber.interop.bacnet_vendor": [
+    "available_vendors",
+    "install_vendor_decoders",
+    "vendor_aliases",
+    "vendor_hint_tokens"
   ],
   "camber.interop.better": [
     "compare_changepoint",
