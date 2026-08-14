@@ -126,10 +126,11 @@ class BacnetSource:
                     'pip install "camber-toolkit[bacnet]"'
                 ) from e
             raise NotImplementedError(
-                "no BACnet client injected. The bacpypes3-backed client (incl. experimental "
-                "BACnet/SC) is configured per deployment; inject a client exposing "
-                "read_trend_log(object_id) and read_present_value(object_id). See docs/"
-                "INGEST-PROTOCOLS.md."
+                "no BACnet client injected. Build the read-only bacpypes3-backed default with "
+                "camber.ingest.bacnet_client.bacnet_read_client(target) and pass it as "
+                "BacnetSource(points, target, client=...), or inject any client exposing "
+                "read_trend_log(object_id) and read_present_value(object_id). See "
+                "docs/INGEST-PROTOCOLS.md."
             )
         return self._client
 

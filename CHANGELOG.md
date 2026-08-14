@@ -4,6 +4,47 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.14.0] — 2026-08-14
+
+**A read-only bacpypes3 client — BACnet works out of the box.** 0.13.0 gave BACnet discovery its brains
+(discover → inventory → role mapping) but left the network wiring to the caller. This ships the hands: a
+concrete, read-only bacpypes3-backed client implementing both the discovery and read seams, configurable
+via API, YAML/JSON, or CLI. Live polling stays the fallback — historian-first remains recommended.
+
+### Added
+- **`camber.ingest.bacnet_client`** — `Bacpypes3Client`, a read-only **sync facade** over a bacpypes3
+  async `Application` implementing both the `DiscoveryClient` protocol and the `BacnetSource` read
+  client (managed background event loop; dashed→camelCase object-type normalization; Trend-Log records
+  → `(timestamp, value)`). Builders `bacnet_read_client(target)` / `bacnet_discovery_client()` /
+  `discover_default()` construct a real client from a `BacnetClientConfig`; the async app is **injected**
+  so all shaping is unit-tested with no bacpypes3 and no network — the real `Application` factory is the
+  only network-touching code. Read-only by construction (asserted by the ingest AST guard).
+- **`BacnetClientConfig`** — deployment config (local device identity, interface/BBMD binding, timeout,
+  Who-Is device range) settable three equivalent ways: the **API**, a **YAML/JSON file** (`from_file`),
+  or the new **`camber bacnet-discover`** CLI.
+- **`camber bacnet-discover`** CLI — discover a network read-only and bootstrap a role mapping,
+  configured via `--config` (YAML/JSON) and/or flags.
+- **Unicast / known-address discovery** — `camber.ingest.bacnet_discovery.discover_addresses(client,
+  addresses)` (with `BacnetClientConfig.known_addresses` and `camber bacnet-discover --device`)
+  enumerates specific device addresses by a **directed** (unicast) Who-Is, for **segmented / cloud
+  networks** where broadcast Who-Is doesn't reach devices without a BBMD. `who_is` gains an optional
+  directed `address`.
+
+### Changed
+- `camber.interop.bacnet.normalize_bacnet_unit` now also accepts bacpypes3's **dashed** unit strings
+  (`degrees-fahrenheit`), alongside the camelCase name and the integer code.
+- `BacnetSource`'s no-client error now points at `bacnet_read_client(target)`.
+
+### Notes
+- bacpypes3 is upstream **Pre-Alpha (0.0.x)** and **BACnet/SC is experimental**; this client is
+  best-effort (one `Application` per process; BBMD for cross-subnet Who-Is) and the historian / SQL /
+  Haystack path stays recommended for production.
+- The live path is validated by `tests/integration/test_bacnet_live.py` — an in-memory bacpypes3
+  `VirtualNetwork` simulated device driven through the real client (Who-Is, object-list enumeration,
+  ReadPropertyMultiple, present-value, unit→role mapping) plus Trend-Log record shaping against real
+  `LogRecord`/`EngineeringUnits` objects. Skip-guarded (needs bacpypes3 + `CAMBER_BACNET_LIVE=1`), so
+  it stays out of the default suite but is deterministic and reproducible.
+
 ## [0.13.0] — 2026-08-14
 
 **BACnet discovery + vendor proprietary-property bridge.** CAMBER can now *discover* a BACnet network

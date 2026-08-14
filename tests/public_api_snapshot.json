@@ -434,10 +434,12 @@
     "analyze_co2_ventilation"
   ],
   "camber.ingest": [
+    "BacnetClientConfig",
     "BacnetPoint",
     "BacnetPointRecord",
     "BacnetSource",
     "BacnetTarget",
+    "Bacpypes3Client",
     "CleaningLog",
     "DISCOVERY_SERVICES",
     "DiscoveredDevice",
@@ -460,10 +462,14 @@
     "SqlSource",
     "WideCsvAdapter",
     "assess",
+    "bacnet_discovery_client",
+    "bacnet_read_client",
     "clean",
     "client_transport",
     "decode_registers",
     "discover",
+    "discover_addresses",
+    "discover_default",
     "discovery_to_inventory",
     "discovery_to_points",
     "gap_count",
@@ -486,6 +492,13 @@
     "READ_SERVICES",
     "trendlog_to_series"
   ],
+  "camber.ingest.bacnet_client": [
+    "BacnetClientConfig",
+    "Bacpypes3Client",
+    "bacnet_discovery_client",
+    "bacnet_read_client",
+    "discover_default"
+  ],
   "camber.ingest.bacnet_discovery": [
     "BacnetPointRecord",
     "DISCOVERY_READ_PROPERTIES",
@@ -495,6 +508,7 @@
     "DiscoveryClient",
     "TREND_OBJECT_TYPES",
     "discover",
+    "discover_addresses",
     "discovery_to_inventory",
     "discovery_to_points",
     "to_rows"

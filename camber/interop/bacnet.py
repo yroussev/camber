@@ -75,12 +75,23 @@ _UNIT_CODE_TO_NAME = {
 _STAGE_ROLES = (Role.COMPRESSOR_STAGE, Role.HEAT_STAGE)
 
 
+def _unit_key(s) -> str:
+    """Separator/case-insensitive key so ``degreesFahrenheit`` == ``degrees-fahrenheit``."""
+    return "".join(ch for ch in str(s).lower() if ch.isalnum())
+
+
+# BACNET_UNIT_TO_TOKEN keyed by the separator-insensitive form, so units rendered as the camelCase
+# enum name OR the dashed ASN.1 string (bacpypes3 does the latter) both resolve.
+_UNIT_TOKEN_BY_KEY = {_unit_key(k): v for k, v in BACNET_UNIT_TO_TOKEN.items()}
+
+
 def normalize_bacnet_unit(units) -> str:
     """Reduce a BACnet ``units`` to a :data:`camber.mapping_assist.ROLE_UNIT` token, or ``""``.
 
-    Accepts the ``EngineeringUnits`` enum *name* (``"degreesFahrenheit"``), an enum object exposing
-    ``.name``, or the standard integer code (``64``). Anything unrecognized returns ``""`` (the
-    caller then falls back to name-only matching), never raises.
+    Accepts the ``EngineeringUnits`` enum name (``"degreesFahrenheit"``), the dashed ASN.1 string
+    (``"degrees-fahrenheit"``, what bacpypes3 renders), an enum object exposing ``.name``, or the
+    standard integer code (``64``). Anything unrecognized returns ``""`` (the caller then falls back
+    to name-only matching), never raises.
     """
     if units is None or isinstance(units, bool):
         return ""
@@ -90,7 +101,7 @@ def normalize_bacnet_unit(units) -> str:
         name = getattr(units, "name", None) or str(units)
         if name.isdigit():
             name = _UNIT_CODE_TO_NAME.get(int(name), "")
-    return BACNET_UNIT_TO_TOKEN.get(name, "")
+    return BACNET_UNIT_TO_TOKEN.get(name) or _UNIT_TOKEN_BY_KEY.get(_unit_key(name), "")
 
 
 def _object_type_family(object_type) -> str | None:

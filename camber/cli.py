@@ -214,6 +214,42 @@ def _cmd_charts(args) -> int:
     return 0
 
 
+def _cmd_bacnet_discover(args) -> int:  # pragma: no cover - drives a live BACnet network
+    """Discover a BACnet network (read-only) and bootstrap a role mapping."""
+    import json as _json
+
+    from .ingest.bacnet_client import BacnetClientConfig, discover_default
+    from .ingest.bacnet_discovery import discovery_to_inventory, to_rows
+    from .interop.bacnet import roles_from_bacnet
+
+    cfg = BacnetClientConfig.from_file(args.config) if args.config else BacnetClientConfig()
+    if args.local_address:
+        cfg.local_address = args.local_address
+    if args.instance is not None:
+        cfg.local_device_id = args.instance
+    if args.timeout is not None:
+        cfg.timeout = args.timeout
+    if args.range_low is not None and args.range_high is not None:
+        cfg.device_range = (args.range_low, args.range_high)
+    if args.device:
+        cfg.known_addresses = tuple(args.device)  # unicast discovery, skips broadcast Who-Is
+
+    devices = discover_default(cfg)
+    objs = [o for d in devices for o in d.objects]
+    rows = to_rows(discovery_to_inventory(devices))
+    roles = roles_from_bacnet(objs)
+    print(
+        f"discovered {len(devices)} device(s), {len(objs)} object(s); "
+        f"bootstrapped {len(roles)} role mapping(s)"
+    )
+    if args.out:
+        payload = {"inventory": rows, "roles": {n: r.value for n, r in roles.items()}}
+        with open(args.out, "w", encoding="utf-8") as fh:
+            _json.dump(payload, fh, indent=2, default=str)
+        print(f"wrote {args.out}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
@@ -271,6 +307,31 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pc.add_argument("--out", default="out", help="output directory for PNGs/JSON")
     pc.set_defaults(func=_cmd_charts)
+
+    pb = sub.add_parser(
+        "bacnet-discover",
+        help="discover a BACnet network (read-only) and bootstrap a role mapping",
+    )
+    pb.add_argument(
+        "--config", help="YAML/JSON BacnetClientConfig file (see docs/INGEST-PROTOCOLS.md)"
+    )
+    pb.add_argument(
+        "--local-address",
+        dest="local_address",
+        help="interface/IP[:port] to bind on a multi-homed host",
+    )
+    pb.add_argument("--instance", type=int, help="this host's BACnet device instance")
+    pb.add_argument("--timeout", type=float, help="per-request timeout (s)")
+    pb.add_argument("--range-low", dest="range_low", type=int, help="Who-Is low device instance")
+    pb.add_argument("--range-high", dest="range_high", type=int, help="Who-Is high device instance")
+    pb.add_argument(
+        "--device",
+        dest="device",
+        action="append",
+        help="known device address (repeatable) — unicast discovery, skips broadcast Who-Is",
+    )
+    pb.add_argument("--out", help="write the discovered inventory + roles as JSON to this path")
+    pb.set_defaults(func=_cmd_bacnet_discover)
     return ap
 
 

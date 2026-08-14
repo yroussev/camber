@@ -109,6 +109,52 @@ only affects the app it runs on, so it can't retroactively re-decode an app buil
 proprietary reads come back typed. Its catalog also feeds mapping hints (`vendor_hint_tokens` /
 `vendor_aliases`), where `vendor_aliases` is deliberately strict so it never silently mis-maps a point.
 
+### Default client (`camber.ingest.bacnet_client`) — bacpypes3, read-only
+
+Rather than hand-write the `DiscoveryClient` / read client, use the bundled bacpypes3-backed default
+(the `[bacnet]` extra). It's a **read-only sync facade** — it only ever calls `who_is` /
+`read_property` / `read_property_multiple` / `read_range` (asserted by the ingest read-only AST guard)
+— and implements **both** roles:
+
+```python
+from camber.ingest.bacnet import BacnetSource, BacnetPoint, BacnetTarget
+from camber.ingest.bacnet_client import BacnetClientConfig, bacnet_read_client, discover_default
+
+cfg = BacnetClientConfig(local_address="0.0.0.0/24:47808", device_range=(1, 4194303))
+
+devices = discover_default(cfg)  # discover a network -> bootstrap a mapping
+
+target = BacnetTarget(address="10.0.0.5")  # then read a known device's Trend Logs
+src = BacnetSource(
+    [BacnetPoint("SAT", ("trendLog", 3))], target, client=bacnet_read_client(target, cfg)
+)
+df = src.load_points(["SAT"])
+```
+
+**Configure it three equivalent ways** — the **API** (`BacnetClientConfig(...)`), a **YAML/JSON file**
+(`BacnetClientConfig.from_file("bacnet.yml")`), or the **CLI** (`camber bacnet-discover --config
+bacnet.yml`). A YAML config:
+
+```yaml
+local_address: "0.0.0.0/24:47808"   # interface/IP[:port] to bind (multi-homed host / BBMD)
+local_device_id: 599                 # this host's BACnet device instance
+local_object_name: camber
+vendor_id: 555
+timeout: 10.0
+device_range: [1, 4194303]           # Who-Is device-instance window
+```
+
+**Segmented / cloud networks:** broadcast Who-Is doesn't cross subnets without a BBMD, so set
+`known_addresses` (config) / `--device <addr>` (CLI, repeatable) to enumerate specific devices by a
+**directed** (unicast) Who-Is instead — `discover_default` uses `discover_addresses` automatically when
+addresses are given.
+
+**Caveats (best-effort, by design):** one `Application` per process (it binds the BACnet UDP port); on
+a multi-homed host pin `local_address`, and register with a **BBMD** for cross-subnet broadcast Who-Is;
+bacpypes3 is upstream **Pre-Alpha (0.0.x)** and **BACnet/SC is experimental**. Only the injected-client
+seam is unit-tested — the live client is validated against a simulated device, not in CI — so the
+**historian / SQL / Haystack path stays recommended for production**.
+
 ## OPC-UA — `camber.ingest.opcua`
 
 The analytics-friendly OPC-UA source is a **historizing node**, whose retained timestamped values

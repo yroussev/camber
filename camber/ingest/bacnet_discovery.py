@@ -95,9 +95,9 @@ class DiscoveryClient(Protocol):
     Each method maps to an allowlisted read/broadcast service — there is intentionally no write.
     """
 
-    def who_is(self, low: int | None = None, high: int | None = None):
-        """Broadcast Who-Is; yield I-Am results as ``(device_instance, address[, vendor_id])``
-        tuples (or dicts with those keys)."""
+    def who_is(self, low: int | None = None, high: int | None = None, address=None):
+        """Who-Is — broadcast, or **directed** to ``address`` (unicast) when given. Yields I-Am
+        results as ``(device_instance, address[, vendor_id])`` tuples (or dicts with those keys)."""
         ...
 
     def read_object_list(self, address: str, device_instance: int):
@@ -141,38 +141,68 @@ def discover(
 
     Returns a list of :class:`DiscoveredDevice`, each with its :class:`DiscoveredObject` list.
     """
+    _run_vendor_bridge(vendor_bridge)
+    low, high = device_range or (None, None)
+    devices: list = []
+    for iam in client.who_is(low, high):
+        inst, addr, vid = _unpack_iam(iam)
+        devices.append(_enumerate_device(client, inst, addr, vid, read_present_value))
+    return devices
+
+
+def discover_addresses(
+    client, addresses, *, read_present_value: bool = False, vendor_bridge=None
+) -> list:
+    """Enumerate a **known set of device addresses** directly, without a broadcast Who-Is.
+
+    For each address a *directed* (unicast) Who-Is confirms the device instance/vendor, then its
+    objects are enumerated exactly as :func:`discover` does. This is the path for **segmented or
+    cloud networks**, where broadcast Who-Is doesn't reach devices without a BBMD. ``addresses`` is
+    an iterable of BACnet address strings (e.g. ``"10.0.0.5"`` or ``"10.0.0.5:47808"``).
+
+    Returns a list of :class:`DiscoveredDevice`, same shape as :func:`discover`.
+    """
+    _run_vendor_bridge(vendor_bridge)
+    devices: list = []
+    for addr in addresses:
+        for iam in client.who_is(None, None, addr):  # directed/unicast Who-Is to this address
+            inst, iaddr, vid = _unpack_iam(iam)
+            devices.append(
+                _enumerate_device(client, inst, iaddr or str(addr), vid, read_present_value)
+            )
+    return devices
+
+
+def _run_vendor_bridge(vendor_bridge) -> None:
     if vendor_bridge is not None:
         try:
             vendor_bridge()
         except Exception:  # best-effort; a raising bridge must never break discovery
             pass
-    low, high = device_range or (None, None)
-    devices: list = []
-    for iam in client.who_is(low, high):
-        inst, addr, vid = _unpack_iam(iam)
-        dev = DiscoveredDevice(instance=inst, address=addr, vendor_id=vid)
-        for oid in client.read_object_list(addr, inst):
-            otype, oinst = oid[0], oid[1]
-            meta = (
-                client.read_object_metadata(addr, (otype, oinst), DISCOVERY_READ_PROPERTIES) or {}
+
+
+def _enumerate_device(client, inst, addr, vid, read_present_value):
+    """Read one device's object-list + per-object descriptive metadata into a DiscoveredDevice."""
+    dev = DiscoveredDevice(instance=inst, address=addr, vendor_id=vid)
+    for oid in client.read_object_list(addr, inst):
+        otype, oinst = oid[0], oid[1]
+        meta = client.read_object_metadata(addr, (otype, oinst), DISCOVERY_READ_PROPERTIES) or {}
+        name = str(meta.get("object-name") or "")
+        dev.objects.append(
+            DiscoveredObject(
+                device_instance=inst,
+                address=addr,
+                object_id=(otype, oinst),
+                object_name=name,
+                units=str(meta.get("units") or ""),
+                description=str(meta.get("description") or ""),
+                present_value=(meta.get("present-value") if read_present_value else None),
+                is_trend=otype in TREND_OBJECT_TYPES,
             )
-            name = str(meta.get("object-name") or "")
-            dev.objects.append(
-                DiscoveredObject(
-                    device_instance=inst,
-                    address=addr,
-                    object_id=(otype, oinst),
-                    object_name=name,
-                    units=str(meta.get("units") or ""),
-                    description=str(meta.get("description") or ""),
-                    present_value=(meta.get("present-value") if read_present_value else None),
-                    is_trend=otype in TREND_OBJECT_TYPES,
-                )
-            )
-            if otype == "device" and name and not dev.object_name:
-                dev.object_name = name
-        devices.append(dev)
-    return devices
+        )
+        if otype == "device" and name and not dev.object_name:
+            dev.object_name = name
+    return dev
 
 
 def discovery_to_points(devices, *, trend_only: bool = True) -> list:
@@ -234,6 +264,7 @@ __all__ = [
     "BacnetPointRecord",
     "DiscoveryClient",
     "discover",
+    "discover_addresses",
     "discovery_to_points",
     "discovery_to_inventory",
     "to_rows",
