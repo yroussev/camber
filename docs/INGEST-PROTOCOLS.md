@@ -71,6 +71,44 @@ bacpypes3 wrapper configured per deployment), or — recommended for production 
 through a **historian/gateway that already speaks SC** on the OT side and read it via the SQL or
 Haystack adapter.
 
+### Discovery — `camber.ingest.bacnet_discovery`
+
+The read adapter above reads a point list you already have; **discovery builds that list**.
+`discover(client)` enumerates a network read-only — Who-Is / I-Am for devices, then ReadProperty
+`object-list` and ReadPropertyMultiple of descriptive properties (`object-name`, `units`,
+`description`) per object — and returns `DiscoveredDevice` / `DiscoveredObject` records. Its service
+and property allowlists (`DISCOVERY_SERVICES`, `DISCOVERY_READ_PROPERTIES`) are asserted read-only by
+the same AST guard as the read adapter; there is no write path.
+
+Like `BacnetSource`, the network I/O is an **injected** `DiscoveryClient` (core builds no bacpypes3
+app), so discovery is testable without a network. A deployment implements three read methods
+(`who_is`, `read_object_list`, `read_object_metadata`) over bacpypes3:
+
+```python
+from camber.ingest.bacnet_discovery import discover, discovery_to_points, discovery_to_inventory
+from camber.interop.bacnet import mapping_from_bacnet, review_bacnet
+
+devices = discover(my_client)  # read-only enumeration
+points = discovery_to_points(devices)  # Trend-Log objects -> BacnetPoint (feed BacnetSource)
+rows = discovery_to_inventory(devices)  # a flat per-object inventory
+
+objs = [o for d in devices for o in d.objects]
+mapping = mapping_from_bacnet(objs)  # bootstrap a point -> Role mapping
+review = review_bacnet(objs, mapping)  # advisory suggestions for the rest
+```
+
+The mapping bridges each object's **name**, **object type**, and **engineering units** to a
+vendor-neutral `Role`, reusing the assisted-mapping suggester (`camber.mapping_assist`). It is a
+bootstrap for operator review, never an unattended remap.
+
+**Vendor proprietary properties (`camber.interop.bacnet_vendor`, `[bacnet-vendor]`).** Real vendor
+devices expose proprietary properties (identifiers ≥512) a generic stack can't decode. The optional
+bridge to [ace-bacnet-devices](https://github.com/ACE-IoT-Solutions/ace-bacnet-devices) (MIT) supplies
+typed decoders: call `install_vendor_decoders()` **when you build the bacpypes3 client** — registration
+only affects the app it runs on, so it can't retroactively re-decode an app built without it — and
+proprietary reads come back typed. Its catalog also feeds mapping hints (`vendor_hint_tokens` /
+`vendor_aliases`), where `vendor_aliases` is deliberately strict so it never silently mis-maps a point.
+
 ## OPC-UA — `camber.ingest.opcua`
 
 The analytics-friendly OPC-UA source is a **historizing node**, whose retained timestamped values

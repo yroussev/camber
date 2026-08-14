@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.12.0"
+version = "0.13.0"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -70,6 +70,10 @@ mqtt = ["paho-mqtt>=1.6"]
 # BACnet property / Trend-Log reads incl. experimental BACnet/SC (bacpypes3, MIT). SC needs an
 # operational certificate + hub URI; prefer a historian/gateway for production BACnet.
 bacnet = ["bacpypes3>=0.0.98"]
+# Vendor proprietary-property typed decoding + role-mapping hints via ace-bacnet-devices (MIT): a
+# static catalog of PICS-extracted extensions. Optional bridge in camber.interop.bacnet_vendor; the
+# BACnet discovery + role-mapping core needs none of it.
+bacnet-vendor = ["ace-bacnet-devices>=0.2"]
 # OPC-UA value/history reads (asyncua / opcua-asyncio). NOTE: asyncua is LGPL-3.0 -- kept as an
 # optional, dynamically-imported dependency only (never vendored/bundled). camber.ingest.opcua
 # imports it lazily; the core needs none of it.

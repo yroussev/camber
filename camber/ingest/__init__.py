@@ -14,6 +14,16 @@ from .bacnet import (
     BacnetTarget,
     trendlog_to_series,
 )
+from .bacnet_discovery import (
+    DISCOVERY_SERVICES,
+    BacnetPointRecord,
+    DiscoveredDevice,
+    DiscoveredObject,
+    DiscoveryClient,
+    discover,
+    discovery_to_inventory,
+    discovery_to_points,
+)
 from .csv_long import LongCsvAdapter
 from .csv_perpoint import PerPointCsvAdapter
 from .csv_wide import WideCsvAdapter
@@ -72,6 +82,14 @@ __all__ = [
     "BacnetPoint",
     "BacnetTarget",
     "trendlog_to_series",
+    "discover",
+    "discovery_to_points",
+    "discovery_to_inventory",
+    "DiscoveredDevice",
+    "DiscoveredObject",
+    "DiscoveryClient",
+    "BacnetPointRecord",
+    "DISCOVERY_SERVICES",
     "OpcUaSource",
     "OpcUaPoint",
     "OpcUaSecurity",
