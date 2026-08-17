@@ -4,6 +4,20 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.16.0] — 2026-08-17
+
+**Condenser-loop drift diagnosis** — one localized verdict from the condenser-side drift detectors.
+
+### Added
+- **`camber.condenserdrift.diagnose_condenser_drift`** (+ `CondenserDriftDiagnosis`) — synthesizes the
+  three condenser-side drift Findings (chiller condenser-approach leg, condenser-water range,
+  cooling-tower approach) into one diagnosis: it names the localized cause of each drifting signal
+  (tube fouling / scale · reduced CW flow vs. bypass · tower heat-rejection), isolates the chiller
+  condenser leg from the evaporator leg the approach rule also scores, and flags **corroboration** when
+  two or more signals drift together — turning a set of screening-grade alerts into a prioritized,
+  localized walkdown. Stays screening-grade (corroboration raises priority, not the severity tier);
+  pure over Findings.
+
 ## [0.15.0] — 2026-08-17
 
 **Cooling-tower approach drift** — the condenser-water loop's heat-rejection detector, over time.

@@ -12,6 +12,6 @@ starting with ``_``, is public and covered by CAMBER's SemVer promise from 1.0 o
 each module's ``__all__`` is its curated public surface.
 """
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 __all__ = ["__version__"]
