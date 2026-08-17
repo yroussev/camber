@@ -39,6 +39,7 @@ _MODEL_TYPES = {
     "chiller_subcooling": LoadBaseline,
     "chiller_superheat": LoadBaseline,
     "chiller_cw_range": LoadBaseline,
+    "cooling_tower_approach": LoadBaseline,
 }
 
 

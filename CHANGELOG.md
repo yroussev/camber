@@ -4,6 +4,21 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.15.0] — 2026-08-17
+
+**Cooling-tower approach drift** — the condenser-water loop's heat-rejection detector, over time.
+
+### Added
+- **`camber.rules.coolingtower_drift_rule.CoolingTowerApproachDrift`** — tracks a cooling tower's
+  approach (`CW supply − wet-bulb`) drifting **up** from a frozen, load-normalized baseline: the
+  fouled-fill / plugged-nozzle / reduced-airflow signal that shows weeks before a static
+  approach-vs-design check trips. One-sided (fouling only widens an approach), with the same
+  period-statistic + sustained-shift CUSUM readout and screening-grade threshold labelling as the
+  chiller drift detectors. A period rule (run via `Registry.run_periods`); declines with a caveat when
+  there's no condenser-water supply temperature or wet-bulb source.
+- **`camber.coolingtower.tower_approach_f`** — the tower approach as a series (CW supply − wet-bulb,
+  measured or Stull-derived from OAT + RH), the metric the drift rule fits its baseline on.
+
 ## [0.14.0] — 2026-08-14
 
 **A read-only bacpypes3 client — BACnet works out of the box.** 0.13.0 gave BACnet discovery its brains

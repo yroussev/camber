@@ -28,9 +28,43 @@ import pandas as pd
 __all__ = [
     "stull_wetbulb_f",
     "cw_range_f",
+    "tower_approach_f",
     "CoolingTowerResult",
     "analyze_cooling_tower_approach",
 ]
+
+
+def tower_approach_f(
+    frame: pd.DataFrame,
+    *,
+    supply_col: str = "CWS_Temp",
+    wetbulb_col: str = "WetBulb",
+    oat_col: str = "OAT",
+    rh_col: str = "RH",
+) -> pd.Series:
+    """Cooling-tower **approach** (°F): ``CW_supply - wet_bulb`` (CW leaving the tower).
+
+    The gap the tower actually achieves toward ambient wet-bulb — the same subtraction
+    :func:`analyze_cooling_tower_approach` scores as a level, exposed here as a series so
+    :mod:`camber.rules.coolingtower_drift_rule` can fit a load-normalized baseline and track its
+    **drift** (a widening approach at matched load is the fouling/scale/reduced-airflow signal).
+
+    Wet-bulb is taken from ``wetbulb_col`` when present, else derived from ``oat_col`` + ``rh_col``
+    via :func:`stull_wetbulb_f` (no psychrometric dependency). Raises :class:`KeyError` if it has
+    neither a supply temperature nor any wet-bulb source — an approach needs both ends.
+    """
+    if supply_col not in frame.columns:
+        raise KeyError(f"tower_approach_f needs column {supply_col!r}")
+    if wetbulb_col in frame.columns:
+        wb = frame[wetbulb_col]
+    elif oat_col in frame.columns and rh_col in frame.columns:
+        wb = pd.Series(stull_wetbulb_f(frame[oat_col], frame[rh_col]), index=frame.index)
+    else:
+        raise KeyError(
+            f"tower_approach_f needs {wetbulb_col!r}, or both {oat_col!r} and {rh_col!r} "
+            "to derive it"
+        )
+    return frame[supply_col] - wb
 
 
 def cw_range_f(

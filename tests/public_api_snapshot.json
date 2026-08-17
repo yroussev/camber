@@ -305,7 +305,8 @@
     "CoolingTowerResult",
     "analyze_cooling_tower_approach",
     "cw_range_f",
-    "stull_wetbulb_f"
+    "stull_wetbulb_f",
+    "tower_approach_f"
   ],
   "camber.cost": [
     "EnergyRate",
@@ -1116,6 +1117,14 @@
   ],
   "camber.rules.condenserwater_rule": [
     "CondenserWaterReset"
+  ],
+  "camber.rules.coolingtower_drift_rule": [
+    "CoolingTowerApproachDrift",
+    "TOWER_APPROACH_FAULT_F",
+    "TOWER_APPROACH_FAULT_SIGMA",
+    "TOWER_APPROACH_PLAUSIBLE_F",
+    "TOWER_APPROACH_WARN_F",
+    "TOWER_APPROACH_WARN_SIGMA"
   ],
   "camber.rules.coolingtower_rule": [
     "CoolingTowerApproach"
