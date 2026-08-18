@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.18.0] — 2026-08-18
+
+**Head pressure joins the condenser-loop diagnosis** — the co-movement verdict now reads four signals.
+
+### Changed
+- **`camber.condenserdrift.diagnose_condenser_drift`** now folds in the `chiller_head_pressure_drift`
+  Finding as a fourth condenser-side signal (cause: *condenser high-side pressure rising — fouling /
+  non-condensables*), so a rising discharge pressure both contributes a localized cause and
+  **corroborates** with the condenser-approach, CW-range and tower-approach signals — the high-value
+  case where the gauge pressure confirms the approach-derived fouling. The head-pressure **confound is
+  disambiguated by the tower signal**: a co-moving entering-CW-temperature rise *backed by* a degrading
+  tower approach reads as corroborating a real heat-rejection fault, while the same rise with a quiet
+  tower is flagged as likely ambient / high-load rather than a high-side fault. Stays screening-grade
+  and pure over Findings; existing three-signal behaviour is unchanged when no head-pressure Finding is
+  present.
+
 ## [0.17.0] — 2026-08-17
 
 **Head- / condensing-pressure drift** — the high-side companion to condenser-approach drift, plus the

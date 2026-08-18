@@ -1,6 +1,6 @@
 """Tests for the condenser-loop drift co-movement diagnosis (camber.condenserdrift).
 
-Synthetic Findings stand in for the three condenser-side drift rules; nothing runs the rules or
+Synthetic Findings stand in for the four condenser-side drift rules; nothing runs the rules or
 touches data.
 """
 
@@ -31,6 +31,13 @@ def _cwr(sev="fault", drift_f=2.5, direction="up"):
 
 def _tower(sev="warn", drift_f=2.0):
     return _f("cooling_tower_approach_drift", sev, tower_approach_drift_f=drift_f)
+
+
+def _hp(sev="fault", drift_psi=8.0, cw_shift=None):
+    metrics = {"head_pressure_drift_psi": drift_psi}
+    if cw_shift is not None:
+        metrics["cw_supply_shift_f"] = cw_shift
+    return _f("chiller_head_pressure_drift", sev, **metrics)
 
 
 # --------------------------------------------------------------------------- empty / steady
@@ -127,3 +134,81 @@ def test_non_condenser_findings_are_ignored():
     other = _f("chiller_subcooling_drift", "fault", subcooling_drift_f=3.0)
     d = diagnose_condenser_drift([other])
     assert d.causes == [] and d.severity == "ok"  # subcooling isn't a condenser-loop signal
+
+
+# --------------------------------------------------------------------------- head pressure
+
+
+def test_head_pressure_rise_is_a_high_side_cause():
+    d = diagnose_condenser_drift([_hp("fault", 8.0)])
+    assert d.severity == "fault"
+    assert d.causes == ["condenser high-side pressure rising (fouling / non-condensables)"]
+    assert d.corroborated is False
+    assert d.signals["chiller_head_pressure_drift"]["drift_f"] == 8.0
+
+
+def test_an_ok_head_pressure_is_not_a_cause():
+    """A quiet (or falling, one-sided-ok) head-pressure signal must not register as a fault."""
+    d = diagnose_condenser_drift([_hp("ok", -6.0)])
+    assert d.severity == "ok" and d.causes == []
+    assert d.signals["chiller_head_pressure_drift"]["cause"] is None
+
+
+def test_head_pressure_and_condenser_approach_corroborate_and_rank_worst_first():
+    """The high-value case: the gauge pressure confirms the approach-derived fouling."""
+    d = diagnose_condenser_drift([_cond("fault", 2.5, 4.0), _hp("warn", 3.0)])
+    assert d.corroborated is True
+    assert d.severity == "fault"
+    assert d.causes == [
+        "condenser tube fouling or scale",  # fault first
+        "condenser high-side pressure rising (fouling / non-condensables)",  # warn second
+    ]
+    assert "corroborate" in d.summary
+
+
+def test_head_pressure_confound_flags_ambient_when_the_tower_is_quiet():
+    """Head pressure up with a co-moving CW-temp rise but no tower fault -> likely ambient."""
+    d = diagnose_condenser_drift([_hp("fault", 8.0, cw_shift=6.0)])
+    assert d.severity == "fault"  # still a ranked signal
+    assert any("ambient" in c and "did not degrade" in c for c in d.caveats)
+
+
+def test_head_pressure_confound_reads_as_corroborating_when_the_tower_also_degrades():
+    """The same CW-temp rise, but a degrading tower explains it -> corroboration, not a confound."""
+    d = diagnose_condenser_drift([_hp("fault", 8.0, cw_shift=6.0), _tower("fault", 3.5)])
+    assert d.corroborated is True
+    assert any("corroborating, not confounded" in c for c in d.caveats)
+    assert not any("ambient" in c for c in d.caveats)
+
+
+def test_head_pressure_confound_silent_when_cw_shift_is_small():
+    """A negligible CW-temp shift raises no confound caveat -- a clean high-side signal."""
+    d = diagnose_condenser_drift([_hp("fault", 8.0, cw_shift=0.5)])
+    assert d.causes == ["condenser high-side pressure rising (fouling / non-condensables)"]
+    assert not any("ambient" in c or "entering-CW-temperature" in c for c in d.caveats)
+
+
+def test_head_pressure_confound_silent_when_cw_supply_not_reported():
+    """No cw_supply_shift_f metric (CW supply unmapped) -> no confound caveat, still a cause."""
+    d = diagnose_condenser_drift([_hp("fault", 8.0)])
+    assert d.causes == ["condenser high-side pressure rising (fouling / non-condensables)"]
+    assert not any("entering-CW-temperature" in c for c in d.caveats)
+
+
+def test_a_declined_head_pressure_is_a_caveat_not_a_cause():
+    declined = _f(
+        "chiller_head_pressure_drift", "info", declined=True, reason="discharge_not_mapped"
+    )
+    d = diagnose_condenser_drift([_tower("fault", 3.5), declined])
+    assert d.causes == ["cooling-tower heat rejection degrading"]  # tower only
+    assert any("discharge_not_mapped" in c for c in d.caveats)
+    assert d.corroborated is False
+
+
+def test_all_four_signals_corroborate():
+    d = diagnose_condenser_drift(
+        [_cond("fault", 2.5, 4.0), _cwr("warn", 2.0, "up"), _tower("warn", 2.0), _hp("fault", 8.0)]
+    )
+    assert d.corroborated is True and d.severity == "fault"
+    assert len(d.causes) == 4
+    assert d.causes[0] == "condenser tube fouling or scale"  # a fault ranks first

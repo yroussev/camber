@@ -1,23 +1,32 @@
 """Condenser-loop drift **co-movement diagnosis** — turn scattered alerts into a work order.
 
-Three drift detectors watch the same condenser-water loop, and each is deliberately narrow:
+Four drift detectors watch the same condenser-water loop, and each is deliberately narrow:
 
 * :class:`camber.rules.chiller_drift_rule.ChillerApproachDrift` (condenser leg) — the chiller's own
   **heat transfer** (tube fouling / scale widens the refrigerant-to-water approach);
 * :class:`camber.rules.chiller_cw_range_rule.ChillerCwRangeDrift` — the condenser-water **flow**
   (range widens when flow falls, narrows on a bypass / short-circuit);
 * :class:`camber.rules.coolingtower_drift_rule.CoolingTowerApproachDrift` — the tower's **heat
-  rejection** (approach to wet-bulb widens as fill fouls / airflow drops).
+  rejection** (approach to wet-bulb widens as fill fouls / airflow drops);
+* :class:`camber.rules.chiller_head_pressure_rule.ChillerHeadPressureDrift` — the **high-side
+  pressure** itself (discharge / condensing pressure climbs on fouling / non-condensables), read off
+  the gauge and often the earliest of the four.
 
 They fail *independently* — a tube scaling impedes heat without restricting flow; a throttled valve
 does the reverse; a fouled tower is a third thing entirely — so each alone localizes a different
 subsystem. But when they move **together** the diagnosis is far stronger and more specific than any
-one (e.g. condenser approach *and* tower approach both widening points at system-wide scaling /
-water-chemistry, not one bad heat exchanger). :func:`diagnose_condenser_drift` reads the individual
-Findings, names the localized cause of each drifting signal, and flags **corroboration** when
-two or more agree — the thing that turns a set of screening-grade alerts into an actionable,
-prioritized walkdown. It stays screening-grade: corroboration raises priority, not the
-severity tier, and never becomes a dispatch-grade verdict on its own.
+one (e.g. condenser approach *and* head pressure *and* tower approach all widening points at
+system-wide scaling / water-chemistry, not one bad heat exchanger). :func:`diagnose_condenser_drift`
+reads the individual Findings, names the localized cause of each drifting signal, and flags
+**corroboration** when two or more agree — the thing that turns a set of screening-grade alerts into
+an actionable, prioritized walkdown. It stays screening-grade: corroboration raises priority, not
+the severity tier, and never becomes a dispatch-grade verdict on its own.
+
+Head pressure carries a confound the others don't — it also climbs with entering condenser-water
+temperature, which load normalization does not remove. The diagnosis uses the *tower* signal to
+disambiguate: a co-moving CW-temperature rise **backed by** a degrading tower approach corroborates
+a real heat-rejection fault reaching the high side, while the same rise with a quiet tower is
+flagged as likely ambient / high-load, not a fault.
 
 Pure over Findings — no data, no I/O — it composes after a ``Registry.run_periods``.
 """
@@ -32,6 +41,7 @@ from .rules.chiller_drift_rule import (
     DRIFT_WARN_F,
     DRIFT_WARN_SIGMA,
 )
+from .rules.chiller_head_pressure_rule import CW_CONFOUND_WARN_F
 
 __all__ = ["CondenserDriftDiagnosis", "diagnose_condenser_drift"]
 
@@ -88,8 +98,8 @@ def diagnose_condenser_drift(findings, *, equip: str | None = None) -> Condenser
 
     ``findings`` is an iterable of :class:`camber.rules.base.Finding` (from ``run_periods``); the
     condenser-side ones (``chiller_approach_drift`` condenser leg, ``chiller_cw_range_drift``,
-    ``cooling_tower_approach_drift``) are picked out by rule name and the rest ignored. A declined
-    signal is recorded as a caveat, not a cause.
+    ``cooling_tower_approach_drift``, ``chiller_head_pressure_drift``) are picked out by rule name
+    and the rest ignored. A declined signal is recorded as a caveat, not a cause.
     """
     fs = list(findings)
     by_rule = {getattr(f, "rule", None): f for f in fs}
@@ -146,6 +156,40 @@ def diagnose_condenser_drift(findings, *, equip: str | None = None) -> Condenser
             m.get("tower_approach_drift_f"),
             "cooling-tower heat rejection degrading",
         )
+
+    # chiller head / condensing pressure — the high-side pressure on the same loop. A single-signal,
+    # one-sided rule (only a rise faults), so its Finding severity is the signal severity. Placed
+    # after the tower block so its confound check can see whether the tower corroborates a CW rise.
+    hpf = by_rule.get("chiller_head_pressure_drift")
+    if hpf is not None and not _declined(hpf):
+        m = hpf.metrics
+        _record(
+            "chiller_head_pressure_drift",
+            hpf.severity,
+            m.get("head_pressure_drift_psi"),
+            "condenser high-side pressure rising (fouling / non-condensables)",
+        )
+        # The head-pressure confound: it also climbs with entering condenser-water temperature,
+        # which load normalization does not remove. When the rule reports a co-moving CW-supply
+        # rise, let the tower signal disambiguate — a degrading tower explains (and corroborates)
+        # the rise; a quiet tower means the rise is likely ambient / high-load, not a fault.
+        cw_shift = m.get("cw_supply_shift_f")
+        rising = hpf.severity in ("warn", "fault")
+        if rising and cw_shift is not None and cw_shift >= CW_CONFOUND_WARN_F:
+            tower = signals.get("cooling_tower_approach_drift")
+            if tower is not None and tower["cause"] is not None:
+                caveats.append(
+                    f"head pressure and cooling-tower approach are drifting together with a "
+                    f"+{cw_shift:.1f}°F entering-CW-temperature rise — consistent with degrading "
+                    "heat rejection reaching the chiller high side (corroborating, not confounded)"
+                )
+            else:
+                caveats.append(
+                    f"head pressure rose with a +{cw_shift:.1f}°F entering-CW-temperature shift "
+                    "while tower approach did not degrade — some or all of the high-side climb may "
+                    "be ambient / high-load heat rejection rather than a fault; confirm before "
+                    "attributing it to fouling or non-condensables"
+                )
 
     severity = "ok"
     for sev, _cause in scored:

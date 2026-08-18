@@ -42,14 +42,18 @@ downstream in the chiller too. The tower approach is one-sided (fouling only wid
 against a load-normalized baseline just like the chiller detectors; wet-bulb is taken measured, or
 derived from outdoor dry-bulb + RH (Stull) when it isn't a BAS point.
 
-**One condenser-loop verdict.** These three condenser-side signals fail *independently* (a scaling
-tube, a throttled valve, and a fouled tower are three different faults) but corroborate when a problem
-is system-wide. `camber.condenserdrift.diagnose_condenser_drift(findings)` reads the individual drift
-Findings and returns one localized `CondenserDriftDiagnosis` — naming the cause of each drifting signal
-(tube fouling/scale · reduced CW flow vs. bypass · tower heat-rejection) and flagging **corroboration**
-when two or more agree. It isolates the chiller condenser leg from the evaporator leg (the approach
-rule scores both), and stays screening-grade: corroboration raises priority and specificity, not the
-severity tier — the thing that turns a set of screening alerts into a work order.
+**One condenser-loop verdict.** These four condenser-side signals fail *independently* (a scaling
+tube, a throttled valve, a fouled tower, and a rising high-side pressure localize different things) but
+corroborate when a problem is system-wide. `camber.condenserdrift.diagnose_condenser_drift(findings)`
+reads the individual drift Findings and returns one localized `CondenserDriftDiagnosis` — naming the
+cause of each drifting signal (tube fouling/scale · reduced CW flow vs. bypass · tower heat-rejection ·
+high-side pressure rising) and flagging **corroboration** when two or more agree. It isolates the
+chiller condenser leg from the evaporator leg (the approach rule scores both), and for head pressure it
+uses the tower signal to disambiguate the entering-CW-temperature confound — a co-moving CW-temp rise
+*backed by* a degrading tower corroborates a real heat-rejection fault, while the same rise with a
+quiet tower is flagged as likely ambient rather than a high-side fault. Stays screening-grade:
+corroboration raises priority and specificity, not the severity tier — the thing that turns a set of
+screening alerts into a work order.
 
 **Head pressure is the high side, read directly.** `ChillerHeadPressureDrift` trends the discharge /
 condensing pressure (`Role.DISCHARGE_PRESSURE`, psig) — the same fault modes that widen the condenser
