@@ -14,6 +14,13 @@ from .bacnet import (
     BacnetTarget,
     trendlog_to_series,
 )
+from .bacnet_client import (
+    BacnetClientConfig,
+    Bacpypes3Client,
+    bacnet_discovery_client,
+    bacnet_read_client,
+    discover_default,
+)
 from .bacnet_discovery import (
     DISCOVERY_SERVICES,
     BacnetPointRecord,
@@ -21,6 +28,7 @@ from .bacnet_discovery import (
     DiscoveredObject,
     DiscoveryClient,
     discover,
+    discover_addresses,
     discovery_to_inventory,
     discovery_to_points,
 )
@@ -83,6 +91,7 @@ __all__ = [
     "BacnetTarget",
     "trendlog_to_series",
     "discover",
+    "discover_addresses",
     "discovery_to_points",
     "discovery_to_inventory",
     "DiscoveredDevice",
@@ -90,6 +99,11 @@ __all__ = [
     "DiscoveryClient",
     "BacnetPointRecord",
     "DISCOVERY_SERVICES",
+    "Bacpypes3Client",
+    "BacnetClientConfig",
+    "bacnet_read_client",
+    "bacnet_discovery_client",
+    "discover_default",
     "OpcUaSource",
     "OpcUaPoint",
     "OpcUaSecurity",
