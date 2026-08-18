@@ -45,6 +45,7 @@ _MODEL_TYPES = {
     "pump_flow": LoadBaseline,
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
+    "loop_dp": LoadBaseline,
 }
 
 

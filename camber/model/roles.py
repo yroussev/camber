@@ -59,6 +59,7 @@ class Role(str, Enum):
     HW_SUPPLY_TEMP = "hw_supply_temp"  # hot-water supply temp
     HW_RETURN_TEMP = "hw_return_temp"  # hot-water return temp
     HW_DIFF_PRESS = "hw_diff_press"  # hot-water loop differential pressure
+    HW_DIFF_PRESS_SP = "hw_diff_press_sp"  # hot-water loop DP setpoint
     HW_PUMP_SPEED = "hw_pump_speed"  # hot-water pump VFD speed (%)
     HW_FLOW = "hw_flow"  # hot-water volumetric flow (gpm)
 
@@ -185,6 +186,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.HW_RETURN_TEMP: "hot water entering temp sensor",
     Role.HW_DIFF_PRESS: "hot water delta pressure sensor",
     Role.HW_PUMP_SPEED: "hot water pump speed cmd",
+    Role.HW_DIFF_PRESS_SP: "hot water delta pressure sp",
     Role.HW_FLOW: "hot water flow sensor",
     Role.CHW_SUPPLY_TEMP: "chilled water leaving temp sensor",
     Role.CHW_RETURN_TEMP: "chilled water entering temp sensor",

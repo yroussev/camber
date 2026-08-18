@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.29.0] — 2026-08-18
+
+**Hydronic loop DP drift** — the system-resistance / control detector, reset-schedule aware.
+
+### Added
+- **`camber.rules.loop_dp_rule.LoopDPDrift`** — tracks a loop's differential pressure drifting from a
+  frozen, flow-normalized `DP ~ f(flow)` baseline (system curve DP ∝ Q²). **Two-sided**: a *rise* at
+  matched flow is added system resistance / valve-authority loss; a *fall* is a bypass / stuck-open
+  valve. **The reset-schedule confound is handled, not just flagged:** when a DP-setpoint point is
+  mapped the rule measures the concurrent setpoint shift and **judges on the residual drift not
+  explained by it** — a DP move fully accounted for by a reset does not fault (it is reported as a
+  caveat), and a move only partly explained is demoted to the residual's tier. Loop-parameterized;
+  declines loudly when DP or the flow normalizer is unmapped; not auto-registered.
+- **`camber.model.roles.Role.HW_DIFF_PRESS_SP`** — hot-water loop DP setpoint (parallels
+  `CHW_DIFF_PRESS_SP`), wired for the reset confound on the hot-water side.
+
 ## [0.28.0] — 2026-08-18
 
 **Hydronic loop delta-T drift** — the low-ΔT-syndrome detector.

@@ -1220,6 +1220,16 @@
     "LoopDeltaTDrift",
     "MIN_LOAD"
   ],
+  "camber.rules.loop_dp_rule": [
+    "DP_FAULT",
+    "DP_FAULT_SIGMA",
+    "DP_PLAUSIBLE",
+    "DP_SP_CONFOUND",
+    "DP_WARN",
+    "DP_WARN_SIGMA",
+    "LoopDPDrift",
+    "MIN_LOAD"
+  ],
   "camber.rules.oafraction_rule": [
     "OutdoorAirFraction"
   ],

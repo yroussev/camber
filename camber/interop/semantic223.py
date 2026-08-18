@@ -50,6 +50,7 @@ ROLE_TO_223 = {
     Role.CHW_SUPPLY_TEMP_SP: ("Temperature", "Water"),
     Role.CHW_DIFF_PRESS: ("Pressure", "Water"),
     Role.CHW_DIFF_PRESS_SP: ("Pressure", "Water"),
+    Role.HW_DIFF_PRESS_SP: ("Pressure", "Water"),
     Role.CHW_PUMP_SPEED: ("DimensionlessRatio", "Water"),
     Role.HW_SUPPLY_TEMP: ("Temperature", "Water"),
     Role.HW_RETURN_TEMP: ("Temperature", "Water"),

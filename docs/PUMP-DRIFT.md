@@ -20,6 +20,7 @@ equip identifies which pump.
 | `PumpFlowDrift` | flow | pump speed (Q ∝ N) | down | pump wear (impeller/wear-ring), clogged strainer, cavitation, entrained air — a flow **deficit** at matched speed |
 | `PumpHeadDrift` | differential head | pump speed (H ∝ N²) | down | pump wear directly — a head **deficit** at matched speed; with flow, disambiguates pump-wear from system-resistance |
 | `LoopDeltaTDrift` | loop ΔT (return − supply) | flow (or speed proxy) | both | low-ΔT syndrome (collapse: overpumping, fouled coils, stuck valves, bypass) vs underflow/starvation (widen) |
+| `LoopDPDrift` | loop differential pressure | flow (system curve DP ∝ Q²) | both | rising system resistance / valve-authority loss vs bypass / stuck-open — with the DP-reset schedule subtracted out |
 
 **Flow-at-matched-speed is the pump-wear signal.** A healthy VFD pump delivers a repeatable flow at a
 given speed; a deficit means the pump (or its suction) has degraded. It is **one-sided down** — only a
