@@ -97,6 +97,17 @@ suction) or on starvation (rising superheat + falling suction) is a strong, spec
 disagreement is called ambiguous rather than asserted — the low-side twin of the tower-disambiguates-
 head-pressure check on the condenser side. Screening-grade and pure over Findings.
 
+**One whole-machine verdict.** `camber.chillerdiag.diagnose_chiller_drift(findings)` rolls both side
+diagnoses into a single per-chiller `ChillerDriftDiagnosis` and adds the cross-side reasoning neither
+side can do alone: only the condenser side degrading localizes to the condenser loop, only the
+evaporator side to the evaporator, but **both sides drifting together** points at a *circuit-wide*
+cause (refrigerant charge, non-condensables, a compressor / metering fault) rather than one fouled
+heat exchanger. Liquid-line subcooling folds in as the dedicated charge signal — a subcooling drift
+alongside both sides moving corroborates a charge / inventory problem. It reports a `locus` (steady ·
+condenser · evaporator · charge · whole-machine) and a `machine_wide` flag, so a screening pass can
+separate "one exchanger needs a walkdown" from "gauge the whole machine". Screening-grade; re-uses the
+side diagnoses unchanged.
+
 ### Instrumentation gating
 
 Subcooling and superheat are **controller-reported differences**, and discharge/suction pressure are

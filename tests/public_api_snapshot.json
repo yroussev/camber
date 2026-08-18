@@ -248,6 +248,10 @@
     "load_drift_stats",
     "tons_from_flow"
   ],
+  "camber.chillerdiag": [
+    "ChillerDriftDiagnosis",
+    "diagnose_chiller_drift"
+  ],
   "camber.chillerdrift": [
     "ApproachDriftMonitor",
     "CUSUM_CLIP_SIGMA",

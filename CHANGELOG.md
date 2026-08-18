@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.21.0] — 2026-08-18
+
+**Whole-machine chiller drift roll-up** — one per-chiller verdict from both side diagnoses.
+
+### Added
+- **`camber.chillerdiag.diagnose_chiller_drift`** (+ `ChillerDriftDiagnosis`) — rolls the condenser
+  (`condenserdrift`) and evaporator (`evaporatordrift`) side diagnoses into a single per-chiller
+  verdict and adds the **cross-side reasoning** neither side can do alone: only the condenser side
+  degrading localizes to the condenser loop, only the evaporator side to the evaporator, but **both
+  sides drifting together** points at a *circuit-wide* cause (refrigerant charge, non-condensables, a
+  compressor / metering fault) rather than one fouled heat exchanger. Liquid-line **subcooling** is
+  folded in as the dedicated charge signal — a subcooling drift alongside both sides moving
+  corroborates a charge / inventory problem. Reports a `locus` (steady · condenser · evaporator ·
+  charge · whole-machine) and a `machine_wide` flag so a screening pass can separate "one exchanger
+  needs a walkdown" from "gauge the whole machine". Re-uses the side diagnoses unchanged; stays
+  screening-grade; pure over Findings.
+
 ## [0.20.0] — 2026-08-18
 
 **Evaporator-loop drift diagnosis** — the low-side mirror of the condenser co-movement verdict.
