@@ -4,6 +4,26 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.22.0] — 2026-08-18
+
+**Physics-grounded synthetic validation** — characterize the whole drift stack without a dataset.
+
+### Added
+- **`camber.driftsim`** — a physically consistent synthetic chiller generator that produces
+  `(baseline, current)` role-frame pairs for a healthy chiller and for the standard centrifugal-chiller
+  fault families (condenser fouling · reduced condenser/evaporator water flow · tower degradation ·
+  under/overcharge · non-condensables · excess oil), imposing each fault's known signature on the
+  right channels at a graded severity. Refrigerant pressures come from a monotone illustrative
+  saturation curve (`saturation_psig`) applied to the condensing/evaporating temperatures, so head and
+  suction pressures move correctly with the faults. Helpers run the **whole drift suite + roll-up**
+  end-to-end (`build_chiller_suite`, `diagnose_frames`) and score the roll-up's localization
+  (`locus_confusion`) — plus `SimulatedCase.to_labeled(relevant=…)` to feed the existing
+  `camber.driftvalidation` per-detector ROC / threshold sweep. On clear faults (severity ≥ 3) the
+  roll-up localizes to the correct `locus` at ~100% with no false alarms on healthy periods, and
+  degrades gracefully at marginal severity — turning the stack's *screening-grade* thresholds into
+  *characterized* ones (real-data tuning still applies where labelled data exists). Deterministic;
+  core deps only.
+
 ## [0.21.0] — 2026-08-18
 
 **Whole-machine chiller drift roll-up** — one per-chiller verdict from both side diagnoses.

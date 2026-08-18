@@ -337,6 +337,18 @@
     "LoadComponents",
     "disaggregate_load"
   ],
+  "camber.driftsim": [
+    "ChillerFault",
+    "FAULTS",
+    "LocusConfusion",
+    "SimulatedCase",
+    "build_chiller_suite",
+    "diagnose_frames",
+    "locus_confusion",
+    "make_cases",
+    "saturation_psig",
+    "simulate_case"
+  ],
   "camber.driftthresholds": [
     "MAGNITUDE_CONFIDENCE",
     "MAGNITUDE_NOTE",

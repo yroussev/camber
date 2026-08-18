@@ -136,6 +136,22 @@ Every threshold above is a **constructor argument**, so tuning is a config chang
 When you have chiller periods with **confirmed, dated fault events**, `camber.driftvalidation` turns
 that evidence into a calibrated operating point.
 
+**No labelled data yet? Characterize on physics.** `camber.driftsim` generates physically consistent
+`(baseline, current)` frame pairs for a healthy chiller and for the standard fault families (condenser
+fouling, reduced CW/evaporator flow, tower degradation, under/overcharge, non-condensables, excess
+oil), imposing each fault's known signature at a graded severity. It runs the whole suite + roll-up
+end-to-end (`diagnose_frames`) and scores localization (`locus_confusion`) — on clear faults the
+roll-up lands on the right `locus` at ~100% with no false alarms on healthy periods, and its
+`SimulatedCase.to_labeled(relevant=…)` feeds the same `evaluate`/`sweep` per-detector ROC below. This
+turns *screening-grade* thresholds into *characterized* ones; real-data tuning still refines them.
+
+```python
+from camber.driftsim import make_cases, locus_confusion
+
+lc = locus_confusion(make_cases(), min_severity=3)  # localization on the clear faults
+print(lc.accuracy, lc.as_dict()["matrix"])
+```
+
 ```python
 from camber.driftvalidation import LabeledCase, evaluate, sweep
 from camber.rules.chiller_superheat_rule import ChillerSuperheatDrift
