@@ -357,6 +357,10 @@
     "confusion",
     "correct_diagnosis_rate"
   ],
+  "camber.evaporatordrift": [
+    "EvaporatorDriftDiagnosis",
+    "diagnose_evaporator_drift"
+  ],
   "camber.fault_economics": [
     "DEFAULTS",
     "DEFAULT_MODELS",

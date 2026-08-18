@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.20.0] — 2026-08-18
+
+**Evaporator-loop drift diagnosis** — the low-side mirror of the condenser co-movement verdict.
+
+### Added
+- **`camber.evaporatordrift.diagnose_evaporator_drift`** (+ `EvaporatorDriftDiagnosis`) — synthesizes
+  the three evaporator-side drift Findings (chiller **evaporator-approach** leg, **superheat**,
+  **suction-pressure**) into one localized diagnosis: it names each drifting signal's cause
+  (evaporator tube fouling/scale · overfeed-floodback vs. starvation from superheat · heat-transfer
+  loss/low-charge vs. overfeed/flooding from suction pressure), isolates the evaporator leg from the
+  condenser leg the approach rule also scores, and flags **corroboration** when two or more agree.
+  Superheat and suction pressure are two reads on the same feed/charge axis, so it **cross-checks**
+  them — both agreeing on overfeed (falling superheat + rising suction) or starvation (rising
+  superheat + falling suction) is a strong, specific verdict, while a disagreement is called ambiguous
+  rather than asserted (the evaporator-side twin of `condenserdrift`'s confound disambiguation). Stays
+  screening-grade; pure over Findings.
+
 ## [0.19.0] — 2026-08-18
 
 **Suction / evaporating-pressure drift** — the low-side companion to evaporator-approach drift, and

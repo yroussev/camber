@@ -85,6 +85,18 @@ subcooling falls on undercharge and rises on overcharge; superheat falls on over
 risk) and rises on starvation. The magnitude is scored symmetrically and the **direction is reported
 alongside**, so an equal rise and fall score identically while the sign says which fault it is.
 
+**One evaporator-loop verdict.** Mirroring the condenser side, three evaporator-side signals — the
+chiller's **evaporator-approach** leg (heat transfer), **superheat** (feed), and **suction pressure**
+(the low-side pressure itself) — combine in `camber.evaporatordrift.diagnose_evaporator_drift(findings)`,
+which returns one localized `EvaporatorDriftDiagnosis` naming each cause (tube fouling/scale ·
+overfeed-floodback vs. starvation · heat-transfer loss/low-charge vs. overfeed/flooding) and flagging
+**corroboration** when two or more agree. It isolates the evaporator leg from the condenser leg (the
+approach rule scores both). Because superheat and suction pressure are two reads on the same
+feed/charge axis, it **cross-checks** them: both agreeing on overfeed (falling superheat + rising
+suction) or on starvation (rising superheat + falling suction) is a strong, specific verdict, while a
+disagreement is called ambiguous rather than asserted — the low-side twin of the tower-disambiguates-
+head-pressure check on the condenser side. Screening-grade and pure over Findings.
+
 ### Instrumentation gating
 
 Subcooling and superheat are **controller-reported differences**, and discharge/suction pressure are
