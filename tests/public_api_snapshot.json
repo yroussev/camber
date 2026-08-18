@@ -1224,6 +1224,16 @@
   "camber.rules.overcooling_severity_rule": [
     "OvercoolingSeverity"
   ],
+  "camber.rules.pump_flow_rule": [
+    "DP_CONFOUND",
+    "FLOW_FAULT_GPM",
+    "FLOW_FAULT_SIGMA",
+    "FLOW_PLAUSIBLE",
+    "FLOW_WARN_GPM",
+    "FLOW_WARN_SIGMA",
+    "MIN_SPEED",
+    "PumpFlowDrift"
+  ],
   "camber.rules.reheat_min_rule": [
     "ReheatMinimization"
   ],

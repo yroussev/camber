@@ -63,7 +63,7 @@ ROLE_UNIT: dict[str, frozenset] = {
     "pct": _PERCENT_ROLES,
     "%": _PERCENT_ROLES,
     "cfm": frozenset({Role.AIRFLOW, Role.OA_AIRFLOW}),
-    "gpm": frozenset({Role.CHW_FLOW}),
+    "gpm": frozenset({Role.CHW_FLOW, Role.HW_FLOW}),
     "kw": frozenset({Role.POWER}),
     "kwh": frozenset({Role.POWER}),
     "inwc": frozenset({Role.DUCT_STATIC}),

@@ -4,6 +4,29 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.26.0] — 2026-08-18
+
+**Pump flow-at-speed drift** — the first of the hydronic drift family, plus a one-sided-down CUSUM.
+
+### Added
+- **`camber.rules.pump_flow_rule.PumpFlowDrift`** — tracks a pump's flow-at-matched-speed drifting
+  **down** from a frozen, load-normalized `flow ~ f(speed)` baseline (affinity Q ∝ N): the wear
+  signal (worn impeller/wear-ring, clogged strainer, cavitation, entrained air) that shows before a
+  pump is pegged, where the existing static pump heuristics can't. One-sided down (a surplus at
+  matched speed is not a fault). **The system-resistance confound is surfaced:** a deficit that
+  co-moves with rising loop DP points at a throttled/stuck-closed valve downstream, not pump wear —
+  reported and caveated. Loop-parameterized (defaults to chilled-water roles; `flow_role`/`speed_role`
+  point it at a hot-water loop); optionally masks to running samples via a pump-status point; declines
+  loudly when flow or speed is unmapped. Not auto-registered; run via `Registry.run_periods`.
+- **`camber.model.roles.Role.HW_FLOW` / `PUMP_STATUS`** — the first hydronic-flow and pump-status
+  roles, wired end-to-end (Haystack hints, 223P quantity/status classification, physical bounds,
+  `gpm` unit token, `STATUS_ROLES`).
+
+### Changed
+- **`camber.chillerdrift.ApproachDriftMonitor`** gains a `direction="down"` mode (alongside `up` /
+  `both`) — the sustained-shift CUSUM can now alarm on a falling signal, which the pump flow-deficit
+  detector needs. Additive; existing one-sided-up and two-sided callers are unchanged.
+
 ## [0.25.0] — 2026-08-18
 
 **Chiller roll-up → CMMS ticket / notify path** — route the whole-machine verdict to where it acts.

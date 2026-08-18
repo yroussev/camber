@@ -60,6 +60,7 @@ class Role(str, Enum):
     HW_RETURN_TEMP = "hw_return_temp"  # hot-water return temp
     HW_DIFF_PRESS = "hw_diff_press"  # hot-water loop differential pressure
     HW_PUMP_SPEED = "hw_pump_speed"  # hot-water pump VFD speed (%)
+    HW_FLOW = "hw_flow"  # hot-water volumetric flow (gpm)
 
     # --- chilled-water plant ---
     CHW_SUPPLY_TEMP = "chw_supply_temp"  # chilled-water supply temp
@@ -69,6 +70,7 @@ class Role(str, Enum):
     CHW_DIFF_PRESS_SP = "chw_diff_press_sp"  # chilled-water loop DP setpoint
     CHW_PUMP_SPEED = "chw_pump_speed"  # chilled-water pump VFD speed (%)
     CHW_FLOW = "chw_flow"  # chilled-water volumetric flow (gpm)
+    PUMP_STATUS = "pump_status"  # pump running (1) / off (0); gates pump drift to running samples
 
     # --- condenser water / cooling tower ---
     CW_SUPPLY_TEMP = "cw_supply_temp"  # condenser water leaving the tower (to condenser)
@@ -146,6 +148,7 @@ STATUS_ROLES: frozenset = frozenset(
         Role.COMPRESSOR_STATUS,
         Role.CONDENSER_FAN_STATUS,
         Role.REVERSING_VALVE_CMD,
+        Role.PUMP_STATUS,
     }
 )
 
@@ -181,6 +184,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.HW_RETURN_TEMP: "hot water entering temp sensor",
     Role.HW_DIFF_PRESS: "hot water delta pressure sensor",
     Role.HW_PUMP_SPEED: "hot water pump speed cmd",
+    Role.HW_FLOW: "hot water flow sensor",
     Role.CHW_SUPPLY_TEMP: "chilled water leaving temp sensor",
     Role.CHW_RETURN_TEMP: "chilled water entering temp sensor",
     Role.CHW_SUPPLY_TEMP_SP: "chilled water leaving temp sp",
@@ -188,6 +192,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.CHW_DIFF_PRESS_SP: "chilled water delta pressure sp",
     Role.CHW_PUMP_SPEED: "chilled water pump speed cmd",
     Role.CHW_FLOW: "chilled water flow sensor",
+    Role.PUMP_STATUS: "pump run sensor",
     Role.CW_SUPPLY_TEMP: "condenser water leaving temp sensor",
     Role.CW_RETURN_TEMP: "condenser water entering temp sensor",
     Role.TOWER_FAN_SPEED: "cooling tower fan speed cmd",

@@ -95,6 +95,8 @@ PHYSICAL_BOUNDS: dict = {
     # several hundred psig, so these bounds only reject sensor dropouts / impossible values.
     Role.DISCHARGE_PRESSURE: (-15.0, 700.0),
     Role.SUCTION_PRESSURE: (-15.0, 400.0),
+    # hydronic flow (gpm) — same wide bound as the chilled-water flow role
+    Role.HW_FLOW: (-1.0, 1e6),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -117,6 +119,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
+        Role.HW_FLOW,
         Role.POWER,
         Role.DUCT_STATIC,
     }

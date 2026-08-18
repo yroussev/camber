@@ -127,9 +127,11 @@ class ApproachDriftMonitor:
 
     ``direction`` selects which sides can alarm. The default ``"up"`` alarms only on a climbing
     signal, which is right for approach -- fouling widens it and nothing else moves it the other
-    way. Some circuit signals are **two-sided**: liquid-line subcooling falls on undercharge and
-    rises on overcharge or non-condensables, so both directions are faults and a one-sided monitor
-    would miss half of them. Pass ``direction="both"`` for those.
+    way. ``"down"`` alarms only on a falling signal -- right for a pump's flow-at-matched-speed,
+    where a *deficit* is the fault (impeller wear, a clogged strainer) and a surplus is not. Some
+    circuit signals are **two-sided**: liquid-line subcooling falls on undercharge and rises on
+    overcharge or non-condensables, so both directions are faults and a one-sided monitor would miss
+    half of them. Pass ``direction="both"`` for those.
     """
 
     def __init__(
@@ -147,8 +149,8 @@ class ApproachDriftMonitor:
                 "a baseline with no residual scatter cannot support a sigma-scaled CUSUM "
                 "(sigma_f must be > 0)"
             )
-        if direction not in ("up", "both"):
-            raise ValueError(f"direction must be 'up' or 'both', got {direction!r}")
+        if direction not in ("up", "down", "both"):
+            raise ValueError(f"direction must be 'up', 'down' or 'both', got {direction!r}")
         self.slack_sigma = slack_sigma
         self.limit_sigma = limit_sigma
         self.clip_sigma = clip_sigma
@@ -204,15 +206,18 @@ class ApproachDriftMonitor:
             if (st.high >= self.limit_f and -resid_clipped > self._cusum.slack)
             else 0
         )
-        up = self._over >= self.min_consecutive
-        down = self.direction == "both" and self._over_down >= self.min_consecutive
+        up = self.direction in ("up", "both") and self._over >= self.min_consecutive
+        down = self.direction in ("down", "both") and self._over_down >= self.min_consecutive
         alarming = up or down
         return DriftAlarmState(
             n=st.n,
             residual_f=round(actual - predicted, 4),
             climbing=round(st.low, 4),
             improving=round(st.high, 4),
-            consecutive_over=max(self._over, self._over_down if self.direction == "both" else 0),
+            consecutive_over=max(
+                self._over if self.direction in ("up", "both") else 0,
+                self._over_down if self.direction in ("down", "both") else 0,
+            ),
             alarming=alarming,
             alarm="drift" if alarming else None,
             alarm_direction=("up" if up else "down") if alarming else None,

@@ -36,6 +36,7 @@ ROLE_TO_223 = {
     Role.OUTDOOR_CO2: ("MoleFraction", "Air"),
     Role.OUTDOOR_RH: ("RelativeHumidity", "Air"),
     Role.CHW_FLOW: ("VolumeFlowRate", "Water"),
+    Role.HW_FLOW: ("VolumeFlowRate", "Water"),
     Role.COOL_VALVE: ("PositionRatio", "Water"),
     Role.HEAT_VALVE: ("PositionRatio", "Water"),
     Role.OA_DAMPER: ("PositionRatio", "Air"),
@@ -90,6 +91,7 @@ _NO_223_QUANTITY = frozenset(
         Role.CONDENSER_FAN_STATUS,
         Role.HEAT_STAGE,
         Role.REVERSING_VALVE_CMD,
+        Role.PUMP_STATUS,
     }
 )
 

@@ -42,6 +42,7 @@ _MODEL_TYPES = {
     "cooling_tower_approach": LoadBaseline,
     "chiller_head_pressure": LoadBaseline,
     "chiller_suction_pressure": LoadBaseline,
+    "pump_flow": LoadBaseline,
 }
 
 
