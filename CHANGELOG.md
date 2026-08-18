@@ -4,6 +4,17 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.24.0] — 2026-08-18
+
+**Chiller diagnosis in the site report** — the whole-machine verdict lands in the owner-facing page.
+
+### Changed
+- **`camber.report.build_site_report`** now accepts an optional `diagnoses=` argument (the chiller
+  drift roll-ups from `camber.chillerdiag.diagnose_chiller_drift`) and renders the
+  `chiller_diagnosis_table` just under the health scorecard — so the per-machine locus / severity /
+  machine-wide verdict rides along with the scorecard, findings and action plan in one self-contained
+  HTML page. Backward compatible: omit `diagnoses` and the report is unchanged.
+
 ## [0.23.0] — 2026-08-18
 
 **Surface the chiller roll-up in export + reporting** — the whole-machine verdict where it acts.

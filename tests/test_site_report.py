@@ -94,3 +94,38 @@ def test_scorecard_grade_reflects_faults():
     html = build_site_report(_df(), findings=_findings())
     # a fault + a warn -> not a clean A; the overall grade chip is present
     assert "Health scorecard" in html and "actionable finding" in html
+
+
+def _diagnoses():
+    from camber.chillerdiag import diagnose_chiller_drift
+
+    return [
+        diagnose_chiller_drift(
+            [
+                Finding(
+                    rule="chiller_head_pressure_drift",
+                    equip="CH-1",
+                    severity="fault",
+                    metrics={"head_pressure_drift_psi": 8.0},
+                ),
+                Finding(
+                    rule="chiller_superheat_drift",
+                    equip="CH-1",
+                    severity="fault",
+                    metrics={"superheat_drift_direction": "up", "superheat_drift_f": 3.0},
+                ),
+            ],
+            equip="CH-1",
+        )
+    ]
+
+
+def test_diagnoses_add_a_chiller_verdict_table():
+    html = build_site_report(_df(), findings=_findings(), diagnoses=_diagnoses())
+    assert "Chiller drift diagnosis" in html
+    assert "CH-1" in html and "whole-machine" in html
+
+
+def test_diagnoses_are_optional():
+    html = build_site_report(_df(), findings=_findings())
+    assert "Chiller drift diagnosis" not in html

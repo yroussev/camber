@@ -15,6 +15,7 @@ import html as _html
 from ..actionplan import action_plan_html, build_action_plan
 from ..rules.triage import rank_findings
 from ..scorecard import build_scorecard
+from .chiller import chiller_diagnosis_table
 from .dashboard import (
     _SECTION_TITLES,
     _STYLE,
@@ -49,6 +50,7 @@ def build_site_report(
     df,
     *,
     findings=None,
+    diagnoses=None,
     rules=None,
     frames=None,
     loads=None,
@@ -63,8 +65,9 @@ def build_site_report(
 
     ``df`` is the wide role/point frame for the charts. ``findings`` drives the scorecard, ranked
     action plan (``loads``/``price`` cost the plan), and — with ``rules`` (and optional
-    per-equipment ``frames``) — the pattern-J evidence. ``sections`` chooses which dashboard chart
-    sections to include (A/B/E/I).
+    per-equipment ``frames``) — the pattern-J evidence. ``diagnoses`` (chiller drift roll-ups from
+    :func:`camber.chillerdiag.diagnose_chiller_drift`) add a whole-machine verdict table just under
+    the scorecard. ``sections`` chooses which dashboard chart sections to include (A/B/E/I).
     """
     style = _STYLE + _SC_STYLE
     parts = [
@@ -75,6 +78,9 @@ def build_site_report(
 
     if findings:
         parts.append("<h2>Health scorecard</h2>" + _scorecard_html(build_scorecard(findings)))
+
+    if diagnoses:
+        parts.append(chiller_diagnosis_table(diagnoses))
 
     for letter in sections:
         img = _section_image(
