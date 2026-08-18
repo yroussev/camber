@@ -41,6 +41,15 @@ downstream in the chiller too. The tower approach is one-sided (fouling only wid
 against a load-normalized baseline just like the chiller detectors; wet-bulb is taken measured, or
 derived from outdoor dry-bulb + RH (Stull) when it isn't a BAS point.
 
+**One condenser-loop verdict.** These three condenser-side signals fail *independently* (a scaling
+tube, a throttled valve, and a fouled tower are three different faults) but corroborate when a problem
+is system-wide. `camber.condenserdrift.diagnose_condenser_drift(findings)` reads the individual drift
+Findings and returns one localized `CondenserDriftDiagnosis` — naming the cause of each drifting signal
+(tube fouling/scale · reduced CW flow vs. bypass · tower heat-rejection) and flagging **corroboration**
+when two or more agree. It isolates the chiller condenser leg from the evaporator leg (the approach
+rule scores both), and stays screening-grade: corroboration raises priority and specificity, not the
+severity tier — the thing that turns a set of screening alerts into a work order.
+
 **Subcooling and superheat are complementary.** Subcooling watches the condenser/liquid side (how much
 liquid is standing in the condenser); superheat watches the evaporator/suction side (whether the
 evaporator is fed correctly). Both are **two-sided** because both directions are genuine faults —

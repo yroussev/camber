@@ -291,6 +291,10 @@
     "pmv_f",
     "ppd"
   ],
+  "camber.condenserdrift": [
+    "CondenserDriftDiagnosis",
+    "diagnose_condenser_drift"
+  ],
   "camber.condenserwater": [
     "CondenserWaterResetResult",
     "analyze_cw_reset"
