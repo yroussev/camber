@@ -32,6 +32,14 @@ off the same frozen baseline:
 | `ChillerSubcoolingDrift` | liquid-line subcooling | two-sided | refrigerant **charge** (under/overcharge, non-condensables) |
 | `ChillerSuperheatDrift` | suction superheat | two-sided | evaporator **feed** (overfeed/floodback vs. starvation) |
 | `ChillerCwRangeDrift` | condenser-water range / ΔT | two-sided | condenser-side hydraulics |
+| `CoolingTowerApproachDrift` | tower approach (CW supply − wet-bulb) | one-sided (up) | tower heat rejection (fouled/scaled fill, plugged nozzles, reduced airflow) |
+
+**The condenser side pairs up.** `ChillerCwRangeDrift` (hydraulics) and `CoolingTowerApproachDrift`
+(tower heat rejection) sit on the same condenser water loop as the chiller's condenser approach — a
+widening tower approach raises condenser-water temperature, chiller lift, and kW/ton, so it shows up
+downstream in the chiller too. The tower approach is one-sided (fouling only widens it) and is scored
+against a load-normalized baseline just like the chiller detectors; wet-bulb is taken measured, or
+derived from outdoor dry-bulb + RH (Stull) when it isn't a BAS point.
 
 **Subcooling and superheat are complementary.** Subcooling watches the condenser/liquid side (how much
 liquid is standing in the condenser); superheat watches the evaporator/suction side (whether the
