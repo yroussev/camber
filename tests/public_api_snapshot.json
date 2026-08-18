@@ -1100,6 +1100,15 @@
     "SUBCOOLING_WARN_F",
     "SUBCOOLING_WARN_SIGMA"
   ],
+  "camber.rules.chiller_suction_pressure_rule": [
+    "CHW_CONFOUND_WARN_F",
+    "ChillerSuctionPressureDrift",
+    "PRESSURE_PLAUSIBLE",
+    "SUCTION_PRESSURE_FAULT_PSI",
+    "SUCTION_PRESSURE_FAULT_SIGMA",
+    "SUCTION_PRESSURE_WARN_PSI",
+    "SUCTION_PRESSURE_WARN_SIGMA"
+  ],
   "camber.rules.chiller_superheat_rule": [
     "ChillerSuperheatDrift",
     "SUPERHEAT_FAULT_F",

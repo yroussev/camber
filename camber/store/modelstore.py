@@ -41,6 +41,7 @@ _MODEL_TYPES = {
     "chiller_cw_range": LoadBaseline,
     "cooling_tower_approach": LoadBaseline,
     "chiller_head_pressure": LoadBaseline,
+    "chiller_suction_pressure": LoadBaseline,
 }
 
 

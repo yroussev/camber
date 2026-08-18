@@ -4,6 +4,24 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.19.0] — 2026-08-18
+
+**Suction / evaporating-pressure drift** — the low-side companion to evaporator-approach drift, and
+the pressure-domain twin of head-pressure drift on the evaporator side.
+
+### Added
+- **`camber.rules.chiller_suction_pressure_rule.ChillerSuctionPressureDrift`** — tracks a chiller's
+  suction (evaporating) pressure drifting from a frozen, load-normalized baseline: a **fall** at
+  matched load is the evaporator heat-transfer-loss / undercharge / starved-feed signature, a **rise**
+  is overfeed / flooding. **Two-sided** (both directions are faults, scored on `|drift|` with the sign
+  reported), gauged directly off the low side. Shares the head-pressure rule's threshold philosophy
+  (same screening-grade psi + sigma floors — both are raw refrigerant pressures) and its confound
+  honesty: the **chilled-water-reset confound** is surfaced — suction pressure tracks CHW supply
+  temperature, so a co-moving CHW-supply shift is reported and caveated as possibly setpoint-driven
+  rather than an evaporator fault. Same period-statistic + two-sided sustained-shift CUSUM readout as
+  the subcooling detector. Instrumentation-gated (declines loudly when no suction-pressure point is
+  mapped); not auto-registered (needs an injected `BaselineStore`); run via `Registry.run_periods`.
+
 ## [0.18.0] — 2026-08-18
 
 **Head pressure joins the condenser-loop diagnosis** — the co-movement verdict now reads four signals.

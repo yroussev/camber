@@ -34,6 +34,7 @@ off the same frozen baseline:
 | `ChillerCwRangeDrift` | condenser-water range / ΔT | two-sided | condenser-side hydraulics |
 | `CoolingTowerApproachDrift` | tower approach (CW supply − wet-bulb) | one-sided (up) | tower heat rejection (fouled/scaled fill, plugged nozzles, reduced airflow) |
 | `ChillerHeadPressureDrift` | discharge / condensing pressure | one-sided (up) | high-side heat rejection (fouling/scale, non-condensables, reduced CW flow), read off the gauge |
+| `ChillerSuctionPressureDrift` | suction / evaporating pressure | two-sided | low-side evaporator condition — a fall is heat-transfer loss / low charge / starved feed, a rise is overfeed / flooding |
 
 **The condenser side pairs up.** `ChillerCwRangeDrift` (hydraulics) and `CoolingTowerApproachDrift`
 (tower heat rejection) sit on the same condenser water loop as the chiller's condenser approach — a
@@ -67,6 +68,15 @@ heat-rejection/ambient-driven, not a high-side fault); a mapped `Role.SUCTION_PR
 condensing-over-suction *lift* as further context. Absolute head pressure is refrigerant-dependent, so
 the **sigma floor carries the weight** (self-scaling against the baseline's own scatter) and the psi
 floor is only a coarse backstop.
+
+**Suction pressure is the low side, read directly.** `ChillerSuctionPressureDrift` is the evaporator
+twin: it trends the suction / evaporating pressure (`Role.SUCTION_PRESSURE`, psig). At matched load a
+*fall* is the evaporator heat-transfer-loss / low-charge / starved-feed signature and a *rise* is
+overfeed / flooding, so unlike head pressure it is **two-sided** (both directions are faults, scored on
+magnitude with the sign reported), sharing head pressure's psi/σ floors because it is the same raw-gauge
+signal class. Its confound is the mirror of head pressure's: suction pressure tracks *chilled-water*
+supply temperature, so a chilled-water reset lifts it with no fault — the rule reports the concurrent
+CHW-supply shift and **caveats a co-moving move** as possibly setpoint-driven.
 
 **Subcooling and superheat are complementary.** Subcooling watches the condenser/liquid side (how much
 liquid is standing in the condenser); superheat watches the evaporator/suction side (whether the
