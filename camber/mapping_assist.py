@@ -70,6 +70,8 @@ ROLE_UNIT: dict[str, frozenset] = {
     "inh2o": frozenset({Role.DUCT_STATIC}),
     "ppm": frozenset({Role.CO2}),
     "rh": frozenset({Role.OUTDOOR_RH}),
+    "psi": frozenset({Role.DISCHARGE_PRESSURE, Role.SUCTION_PRESSURE}),
+    "psig": frozenset({Role.DISCHARGE_PRESSURE, Role.SUCTION_PRESSURE}),
 }
 
 

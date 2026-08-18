@@ -101,16 +101,30 @@ class Role(str, Enum):
         "evap_approach_temp"  # evaporator approach (CHW leaving - refrigerant), degF
     )
     # Liquid-line subcooling (condensing temp - liquid line temp), degF. Like the approach roles
-    # this is a controller-reported *difference*, not a raw temperature: CAMBER has no refrigerant
-    # saturation-temperature or pressure role, so subcooling cannot be derived from a liquid-line
-    # temperature alone and must be mapped directly where the chiller publishes it.
+    # this is a controller-reported *difference*, not a raw temperature: CAMBER models no
+    # refrigerant saturation curve (the discharge/suction pressure roles below are raw pressures,
+    # not saturation temperatures), so subcooling cannot be derived from a liquid-line temperature
+    # alone and must be mapped directly where the chiller publishes it.
     SUBCOOLING_TEMP = "subcooling_temp"
     # Suction superheat (suction temp - evaporator saturation temp), degF. The evaporator-side
     # counterpart to SUBCOOLING_TEMP: also a controller-reported *difference* (for the same reason —
-    # no saturation-temperature/pressure role exists to derive it from a suction temperature) and
-    # mapped directly where the chiller publishes it. Low superheat = the evaporator is overfed
-    # (liquid-floodback risk); high superheat = it is starved (underfeed / undercharge / restrict).
+    # no saturation curve is modelled, so it can't be derived from a suction temperature and the
+    # suction-pressure role together) and mapped directly where the chiller publishes it. Low
+    # superheat = the evaporator is overfed (liquid-floodback risk); high superheat = it is starved
+    # (underfeed / undercharge / restriction).
     SUPERHEAT_TEMP = "superheat_temp"
+    # Discharge (head / condensing) refrigerant pressure, psig — the high-side pressure. Climbs as
+    # the condenser loses its ability to reject heat: tube fouling / scale, non-condensables in the
+    # circuit, high entering condenser-water temperature, or reduced CW flow. A *raw* pressure, not
+    # a saturation temperature — CAMBER models no refrigerant saturation curve, so it is neither
+    # converted to a condensing temperature nor used to derive subcooling; it is trended in its own
+    # right (see camber.rules.chiller_head_pressure_rule).
+    DISCHARGE_PRESSURE = "discharge_pressure"
+    # Suction (evaporating) refrigerant pressure, psig — the low-side pressure, and the evaporator
+    # counterpart to DISCHARGE_PRESSURE. Optional enriching context for the head-pressure detector
+    # (the condensing-over-suction *lift*, which helps separate a genuine high-side fault from an
+    # ambient-/load-driven rise). Also a raw pressure, mapped directly where the chiller reports it.
+    SUCTION_PRESSURE = "suction_pressure"
 
     # --- energy / power ---
     POWER = "power"  # electric power (kW)
@@ -193,6 +207,8 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.EVAP_APPROACH_TEMP: "evaporator refrig temp approach sensor",
     Role.SUBCOOLING_TEMP: "refrig subcooling temp sensor",
     Role.SUPERHEAT_TEMP: "refrig superheat temp sensor",
+    Role.DISCHARGE_PRESSURE: "discharge refrig pressure sensor",
+    Role.SUCTION_PRESSURE: "suction refrig pressure sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

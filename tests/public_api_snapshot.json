@@ -1081,6 +1081,15 @@
     "DRIFT_WARN_F",
     "DRIFT_WARN_SIGMA"
   ],
+  "camber.rules.chiller_head_pressure_rule": [
+    "CW_CONFOUND_WARN_F",
+    "ChillerHeadPressureDrift",
+    "HEAD_PRESSURE_FAULT_PSI",
+    "HEAD_PRESSURE_FAULT_SIGMA",
+    "HEAD_PRESSURE_WARN_PSI",
+    "HEAD_PRESSURE_WARN_SIGMA",
+    "PRESSURE_PLAUSIBLE"
+  ],
   "camber.rules.chiller_rule": [
     "ChillerEfficiency"
   ],
