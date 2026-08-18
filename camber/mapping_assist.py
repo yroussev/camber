@@ -70,8 +70,9 @@ ROLE_UNIT: dict[str, frozenset] = {
     "inh2o": frozenset({Role.DUCT_STATIC}),
     "ppm": frozenset({Role.CO2}),
     "rh": frozenset({Role.OUTDOOR_RH}),
-    "psi": frozenset({Role.DISCHARGE_PRESSURE, Role.SUCTION_PRESSURE}),
+    "psi": frozenset({Role.DISCHARGE_PRESSURE, Role.SUCTION_PRESSURE, Role.PUMP_HEAD}),
     "psig": frozenset({Role.DISCHARGE_PRESSURE, Role.SUCTION_PRESSURE}),
+    "ft": frozenset({Role.PUMP_HEAD}),  # feet of head — a pump-specific unit
 }
 
 

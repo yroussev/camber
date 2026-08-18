@@ -71,6 +71,7 @@ class Role(str, Enum):
     CHW_PUMP_SPEED = "chw_pump_speed"  # chilled-water pump VFD speed (%)
     CHW_FLOW = "chw_flow"  # chilled-water volumetric flow (gpm)
     PUMP_STATUS = "pump_status"  # pump running (1) / off (0); gates pump drift to running samples
+    PUMP_HEAD = "pump_head"  # pump differential head (discharge - suction across the pump), psi
 
     # --- condenser water / cooling tower ---
     CW_SUPPLY_TEMP = "cw_supply_temp"  # condenser water leaving the tower (to condenser)
@@ -193,6 +194,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.CHW_PUMP_SPEED: "chilled water pump speed cmd",
     Role.CHW_FLOW: "chilled water flow sensor",
     Role.PUMP_STATUS: "pump run sensor",
+    Role.PUMP_HEAD: "pump delta pressure sensor",
     Role.CW_SUPPLY_TEMP: "condenser water leaving temp sensor",
     Role.CW_RETURN_TEMP: "condenser water entering temp sensor",
     Role.TOWER_FAN_SPEED: "cooling tower fan speed cmd",

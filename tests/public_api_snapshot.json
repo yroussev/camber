@@ -1234,6 +1234,16 @@
     "MIN_SPEED",
     "PumpFlowDrift"
   ],
+  "camber.rules.pump_head_rule": [
+    "FLOW_CONFOUND",
+    "HEAD_FAULT_PSI",
+    "HEAD_FAULT_SIGMA",
+    "HEAD_PLAUSIBLE",
+    "HEAD_WARN_PSI",
+    "HEAD_WARN_SIGMA",
+    "MIN_SPEED",
+    "PumpHeadDrift"
+  ],
   "camber.rules.reheat_min_rule": [
     "ReheatMinimization"
   ],

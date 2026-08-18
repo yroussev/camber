@@ -97,6 +97,8 @@ PHYSICAL_BOUNDS: dict = {
     Role.SUCTION_PRESSURE: (-15.0, 400.0),
     # hydronic flow (gpm) — same wide bound as the chilled-water flow role
     Role.HW_FLOW: (-1.0, 1e6),
+    # pump differential head (psi) — wide; only rejects dropouts / impossible values
+    Role.PUMP_HEAD: (-5.0, 300.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -120,6 +122,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.AIRFLOW,
         Role.CHW_FLOW,
         Role.HW_FLOW,
+        Role.PUMP_HEAD,
         Role.POWER,
         Role.DUCT_STATIC,
     }

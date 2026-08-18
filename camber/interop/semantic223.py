@@ -37,6 +37,7 @@ ROLE_TO_223 = {
     Role.OUTDOOR_RH: ("RelativeHumidity", "Air"),
     Role.CHW_FLOW: ("VolumeFlowRate", "Water"),
     Role.HW_FLOW: ("VolumeFlowRate", "Water"),
+    Role.PUMP_HEAD: ("Pressure", "Water"),
     Role.COOL_VALVE: ("PositionRatio", "Water"),
     Role.HEAT_VALVE: ("PositionRatio", "Water"),
     Role.OA_DAMPER: ("PositionRatio", "Air"),

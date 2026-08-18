@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.27.0] — 2026-08-18
+
+**Pump head-at-speed drift** — the direct pump-condition read, and the flow-vs-head disambiguator.
+
+### Added
+- **`camber.rules.pump_head_rule.PumpHeadDrift`** — tracks a pump's differential head drifting **down**
+  from a frozen `head ~ f(speed)` baseline (affinity H ∝ N²): a head deficit at matched speed is the
+  less-ambiguous pump-wear read (worn impeller/wear-ring, cavitation, internal recirculation) and, with
+  flow, disambiguates pump-wear from system-resistance (flow↓ **and** head↓ → the pump; flow↓ with head
+  steady → the distribution). One-sided down; **instrumentation-gated** (declines loudly when no
+  pump-head point is mapped). **The operating-point confound is surfaced:** head also falls riding down
+  the pump curve at higher flow, so a head deficit that co-moves with a flow rise is reported and
+  caveated. Loop-parameterized; not auto-registered.
+- **`camber.model.roles.Role.PUMP_HEAD`** — per-pump differential head (psi), wired end-to-end
+  (Haystack hint, 223P `Pressure`/`Water`, physical bounds, `psi`/`ft` unit tokens).
+
 ## [0.26.0] — 2026-08-18
 
 **Pump flow-at-speed drift** — the first of the hydronic drift family, plus a one-sided-down CUSUM.
