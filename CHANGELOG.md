@@ -4,6 +4,21 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.30.0] — 2026-08-18
+
+**Per-loop pump/hydronic drift diagnosis** — one localized verdict, with the flow-vs-head call.
+
+### Added
+- **`camber.pumpdrift.diagnose_pump_drift`** (+ `PumpDriftDiagnosis`) — synthesizes the four
+  pump/hydronic drift Findings (pump flow, pump head, loop ΔT, loop DP) into one per-loop diagnosis:
+  it names each drifting signal's localized cause, flags **corroboration** when two or more agree, and
+  runs the **flow-vs-head disambiguation** no single signal can — a flow deficit **and** head deficit
+  is the pump itself (impeller/wear-ring/cavitation); a flow deficit with **steady head** is the
+  distribution (a throttled valve downstream), not the pump; a flow deficit with **no head point** is
+  called ambiguous. It splits the loop into a mechanical (pump) and a hydraulic (distribution) side,
+  reports a `locus` (steady · pump · distribution · loop-wide) and a `loop_wide` flag, and stays
+  screening-grade; pure over Findings.
+
 ## [0.29.0] — 2026-08-18
 
 **Hydronic loop DP drift** — the system-resistance / control detector, reset-schedule aware.

@@ -34,6 +34,24 @@ the concurrent DP shift and **caveats** a deficit that co-moves with *rising* DP
 signature, not pump wear. (The head-drift detector and the loop diagnosis, coming next in the family,
 resolve it further: flow↓ **and** head↓ → the pump; flow↓ with head steady → the distribution.)
 
+## One per-loop verdict
+
+The four detectors fail *independently* (a worn impeller, a throttled valve, a fouled coil, and a
+lost DP setpoint are different faults) but corroborate when a problem is loop-wide.
+`camber.pumpdrift.diagnose_pump_drift(findings)` reads them and returns one localized
+`PumpDriftDiagnosis` — naming each cause, flagging **corroboration** when two or more agree, and
+running the **flow-vs-head disambiguation** that no single signal can do:
+
+- flow deficit **and** head deficit at matched speed → **the pump itself** (impeller / wear-ring /
+  cavitation), corroborated;
+- flow deficit with head **steady** → **the distribution** (a throttled / stuck-closed valve
+  downstream), not pump wear — look at the loop, not the impeller;
+- flow deficit with **no head point** → called ambiguous rather than asserted.
+
+It splits the loop into a mechanical (pump) and a hydraulic (distribution) side and reports a `locus`
+(steady · pump · distribution · loop-wide) with a `loop_wide` flag — the pump-side analog of
+`condenserdrift`'s tower-disambiguates-head-pressure check. Screening-grade; pure over Findings.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

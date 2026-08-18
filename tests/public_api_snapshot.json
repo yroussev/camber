@@ -969,6 +969,10 @@
     "measure_suffix",
     "parse_point"
   ],
+  "camber.pumpdrift": [
+    "PumpDriftDiagnosis",
+    "diagnose_pump_drift"
+  ],
   "camber.pv": [
     "G_REF_KW_M2",
     "PvSummary",
