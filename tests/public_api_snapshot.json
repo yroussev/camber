@@ -1211,6 +1211,15 @@
   "camber.rules.leakvalve_rule": [
     "LeakingValve"
   ],
+  "camber.rules.loop_deltat_rule": [
+    "DELTAT_FAULT_F",
+    "DELTAT_FAULT_SIGMA",
+    "DELTAT_PLAUSIBLE",
+    "DELTAT_WARN_F",
+    "DELTAT_WARN_SIGMA",
+    "LoopDeltaTDrift",
+    "MIN_LOAD"
+  ],
   "camber.rules.oafraction_rule": [
     "OutdoorAirFraction"
   ],

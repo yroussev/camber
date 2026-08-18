@@ -118,15 +118,21 @@ def _object_type_family(object_type) -> str | None:
 
 
 def _candidate_roles(object_type, unit_token) -> tuple:
-    """The candidate Role vocabulary for one object = object-type family ∩ unit-implied roles."""
+    """The candidate Role vocabulary for one object = object-type family ∩ unit-implied roles.
+
+    The unit- and status-implied sets are frozensets, whose iteration order is not stable; the
+    vocabulary is returned **sorted by role slug** so that when the name-suggester ties two equally
+    plausible candidates (e.g. a ``gpm`` tag against both ``chw_flow`` and ``hw_flow``) the winner
+    is deterministic rather than dependent on set ordering.
+    """
     fam = _object_type_family(object_type)
     if fam == "status":
-        return tuple(STATUS_ROLES)
+        return tuple(sorted(STATUS_ROLES, key=lambda r: r.value))
     if fam == "stage":
         return _STAGE_ROLES
     unit_roles = ROLE_UNIT.get(unit_token, frozenset())
     if unit_roles:  # analog/container with a known unit → constrain to that unit's roles
-        return tuple(unit_roles)
+        return tuple(sorted(unit_roles, key=lambda r: r.value))
     return tuple(Role)  # unknown unit → let the object name decide across the whole vocabulary
 
 

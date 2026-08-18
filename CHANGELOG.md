@@ -4,6 +4,27 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.28.0] — 2026-08-18
+
+**Hydronic loop delta-T drift** — the low-ΔT-syndrome detector.
+
+### Added
+- **`camber.rules.loop_deltat_rule.LoopDeltaTDrift`** — tracks a hydronic loop's temperature
+  difference drifting from a frozen, flow-normalized `ΔT ~ f(flow)` baseline. **Two-sided**: a
+  *collapse* at matched flow is the classic low-ΔT syndrome (overpumping, fouled/air-bound coils,
+  stuck-open valves, a bypass short-circuit) that wastes pump energy and starves distribution; a
+  *widening* is underflow / starvation. Flow is the normalizer **by design** — the loop's own thermal
+  load is `flow × ΔT`, so normalizing ΔT on load would be circular; flow is the non-circular proxy
+  (and pump speed is the affinity fallback where no flow point exists). Loop-parameterized by the
+  warm/cool temperature pair (chilled-water warm=return/cool=supply, hot-water warm=supply/cool=return)
+  and the normalizer; declines loudly when an input is unmapped; not auto-registered.
+
+### Fixed
+- **`camber.interop.bacnet._candidate_roles`** now returns its unit-/status-implied candidate
+  vocabulary sorted by role slug, so BACnet name-suggestion is deterministic when two roles tie (e.g.
+  a `gpm` tag against both `chw_flow` and `hw_flow` after the hot-water flow role was added) instead
+  of depending on frozenset iteration order.
+
 ## [0.27.0] — 2026-08-18
 
 **Pump head-at-speed drift** — the direct pump-condition read, and the flow-vs-head disambiguator.
