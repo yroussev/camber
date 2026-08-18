@@ -90,6 +90,11 @@ PHYSICAL_BOUNDS: dict = {
     Role.COND_APPROACH_TEMP: (-5.0, 60.0),
     Role.EVAP_APPROACH_TEMP: (-5.0, 60.0),
     Role.SUBCOOLING_TEMP: (-5.0, 60.0),
+    # refrigerant-side pressures, psig. Wide and refrigerant-neutral: low-pressure refrigerants
+    # (e.g. R-123) can sit near or below atmospheric while high-pressure ones (e.g. R-410A) run
+    # several hundred psig, so these bounds only reject sensor dropouts / impossible values.
+    Role.DISCHARGE_PRESSURE: (-15.0, 700.0),
+    Role.SUCTION_PRESSURE: (-15.0, 400.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"

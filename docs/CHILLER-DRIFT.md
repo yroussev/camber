@@ -33,6 +33,7 @@ off the same frozen baseline:
 | `ChillerSuperheatDrift` | suction superheat | two-sided | evaporator **feed** (overfeed/floodback vs. starvation) |
 | `ChillerCwRangeDrift` | condenser-water range / ΔT | two-sided | condenser-side hydraulics |
 | `CoolingTowerApproachDrift` | tower approach (CW supply − wet-bulb) | one-sided (up) | tower heat rejection (fouled/scaled fill, plugged nozzles, reduced airflow) |
+| `ChillerHeadPressureDrift` | discharge / condensing pressure | one-sided (up) | high-side heat rejection (fouling/scale, non-condensables, reduced CW flow), read off the gauge |
 
 **The condenser side pairs up.** `ChillerCwRangeDrift` (hydraulics) and `CoolingTowerApproachDrift`
 (tower heat rejection) sit on the same condenser water loop as the chiller's condenser approach — a
@@ -50,6 +51,19 @@ when two or more agree. It isolates the chiller condenser leg from the evaporato
 rule scores both), and stays screening-grade: corroboration raises priority and specificity, not the
 severity tier — the thing that turns a set of screening alerts into a work order.
 
+**Head pressure is the high side, read directly.** `ChillerHeadPressureDrift` trends the discharge /
+condensing pressure (`Role.DISCHARGE_PRESSURE`, psig) — the same fault modes that widen the condenser
+approach (fouling/scale, non-condensables, reduced CW flow) also raise head pressure, but the pressure
+is directly instrumented, often earlier, and it is what a mechanic actually gauges. It is **one-sided**
+like approach (only a rise is a fault) and scored against the same load-normalized frozen baseline. **Its
+confound is stated, not hidden:** head pressure also climbs with entering condenser-water temperature and
+ambient wet-bulb, which load normalization does *not* remove — so when a CW-supply point is mapped the
+rule reports the concurrent CW-supply shift and **caveats a co-moving rise** (some of the climb may be
+heat-rejection/ambient-driven, not a high-side fault); a mapped `Role.SUCTION_PRESSURE` adds the
+condensing-over-suction *lift* as further context. Absolute head pressure is refrigerant-dependent, so
+the **sigma floor carries the weight** (self-scaling against the baseline's own scatter) and the psi
+floor is only a coarse backstop.
+
 **Subcooling and superheat are complementary.** Subcooling watches the condenser/liquid side (how much
 liquid is standing in the condenser); superheat watches the evaporator/suction side (whether the
 evaporator is fed correctly). Both are **two-sided** because both directions are genuine faults —
@@ -59,11 +73,12 @@ alongside**, so an equal rise and fall score identically while the sign says whi
 
 ### Instrumentation gating
 
-Subcooling and superheat are **controller-reported differences** — CAMBER has no refrigerant
-saturation-temperature or pressure role, so they cannot be derived from a raw temperature and must be
-mapped directly (`Role.SUBCOOLING_TEMP`, `Role.SUPERHEAT_TEMP`). Many chillers do not publish them, so
-these roles are **optional** and the rule **declines with a caveat** when a point is absent — a chiller
-missing from a charge/feed report must never read as a healthy one.
+Subcooling and superheat are **controller-reported differences**, and discharge/suction pressure are
+**raw pressures** — CAMBER models no refrigerant saturation curve, so none of them can be derived from a
+plain temperature and each must be mapped directly (`Role.SUBCOOLING_TEMP`, `Role.SUPERHEAT_TEMP`,
+`Role.DISCHARGE_PRESSURE`). Many chillers do not publish a given point, so the rule that depends on it
+**declines with a caveat** when it is absent — a chiller missing from a charge/feed/high-side report must
+never read as a healthy one.
 
 ## Thresholds are honest about what they are
 

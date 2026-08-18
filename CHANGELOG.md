@@ -4,6 +4,28 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.17.0] — 2026-08-17
+
+**Head- / condensing-pressure drift** — the high-side companion to condenser-approach drift, plus the
+refrigerant-pressure roles it needs.
+
+### Added
+- **`camber.model.roles.Role.DISCHARGE_PRESSURE` / `SUCTION_PRESSURE`** — the first refrigerant-side
+  *pressure* roles (psig). Raw pressures, not saturation temperatures (CAMBER models no refrigerant
+  saturation curve). Wired end-to-end: Haystack hints, physical bounds, a `psi`/`psig` mapping-unit
+  token, and an ASHRAE-223P `("Pressure", "Refrigerant")` quantity/medium.
+- **`camber.rules.chiller_head_pressure_rule.ChillerHeadPressureDrift`** — tracks a chiller's head /
+  condensing pressure drifting **up** from a frozen, load-normalized baseline: the fouling /
+  non-condensables / reduced-CW-flow signal, read directly off the discharge-pressure gauge and often
+  earlier than the computed approach. One-sided (a fall is not a high-side fault), with the same
+  period-statistic + sustained-shift CUSUM readout and screening-grade threshold labelling as the
+  approach and subcooling detectors. **The CW-temperature confound is surfaced, not hidden:** when a
+  condenser-water supply point is mapped it reports the concurrent CW-supply shift and caveats a
+  co-moving rise (some of the climb may be ambient / heat-rejection-driven); a mapped suction pressure
+  adds the condensing-over-suction lift as context. Instrumentation-gated — declines loudly when no
+  discharge-pressure point is mapped rather than reading as a healthy high side. Not auto-registered
+  (needs an injected `BaselineStore`); run via `Registry.run_periods`.
+
 ## [0.16.0] — 2026-08-17
 
 **Condenser-loop drift diagnosis** — one localized verdict from the condenser-side drift detectors.
