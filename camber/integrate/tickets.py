@@ -85,6 +85,70 @@ def findings_to_tickets(
     return out
 
 
+def diagnosis_to_ticket(diagnosis, *, site: str = "", source: str = "camber") -> dict:
+    """Render one chiller drift roll-up as a neutral, JSON-serializable CMMS ticket dict.
+
+    A whole-machine verdict from :func:`camber.chillerdiag.diagnose_chiller_drift` is a single work
+    order, not one per drifting signal, so it tickets under a stable ``chiller_drift`` fingerprint
+    (recurring drift updates one ticket). ``machine_wide`` and ``locus`` ride along so a CMMS rule
+    can escalate the "gauge the whole machine" cases. Duck-typed (``equip``/``severity``/``locus``/
+    ``machine_wide``/``causes``/``summary``) so any roll-up-shaped object works.
+    """
+    equip = _attr(diagnosis, "equip")
+    severity = _attr(diagnosis, "severity", "ok")
+    locus = _attr(diagnosis, "locus", "")
+    machine_wide = bool(_attr(diagnosis, "machine_wide", False))
+    causes = list(_attr(diagnosis, "causes", []) or [])
+    summary = _attr(diagnosis, "summary", "")
+    priority = SEVERITY_TO_PRIORITY.get(severity, "low")
+    scope = "whole-machine" if machine_wide else (locus or "chiller")
+    title = f"[{priority.upper()}] chiller drift ({scope}) on {equip or 'chiller'}".strip()
+    body = summary or f"chiller drift flagged {severity} ({locus}) on {equip}."
+    if causes:
+        body += " — causes: " + "; ".join(causes)
+    return {
+        "fingerprint": fingerprint(site, equip, "chiller_drift"),
+        "title": title,
+        "body": body,
+        "priority": priority,
+        "status": "open",
+        "site": site,
+        "equip": equip,
+        "rule": "chiller_drift",
+        "severity": severity,
+        "locus": locus,
+        "machine_wide": machine_wide,
+        "causes": causes,
+        "source": source,
+        "location": f"{site} / {equip}".strip(" /"),
+    }
+
+
+def diagnoses_to_tickets(
+    diagnoses,
+    *,
+    site: str = "",
+    actionable_only: bool = True,
+    machine_wide_only: bool = False,
+    source: str = "camber",
+) -> list:
+    """Map many chiller roll-ups to tickets.
+
+    ``actionable_only`` (default) keeps just ``fault``/``warn`` verdicts; ``machine_wide_only``
+    keeps only the circuit-wide "gauge the whole machine" cases — the high-value subset an operator
+    wants routed.
+    """
+    out = []
+    for d in diagnoses:
+        sev = _attr(d, "severity", "ok")
+        if actionable_only and sev not in _ACTIONABLE:
+            continue
+        if machine_wide_only and not bool(_attr(d, "machine_wide", False)):
+            continue
+        out.append(diagnosis_to_ticket(d, site=site, source=source))
+    return out
+
+
 def collect_transport():
     """A no-network transport that records payloads; returns (transport, sink).
 
@@ -138,6 +202,29 @@ class Notifier:
     def emit_findings(self, findings, *, site: str = "", actionable_only: bool = True) -> list:
         """Convert findings to tickets and send each; returns the tickets sent."""
         tickets = findings_to_tickets(findings, site=site, actionable_only=actionable_only)
+        for t in tickets:
+            self.send(t)
+        return tickets
+
+    def emit_diagnoses(
+        self,
+        diagnoses,
+        *,
+        site: str = "",
+        actionable_only: bool = True,
+        machine_wide_only: bool = False,
+    ) -> list:
+        """Convert chiller roll-ups to tickets and send each; returns the tickets sent.
+
+        ``machine_wide_only`` routes just the circuit-wide verdicts (the gauge-the-whole-machine
+        cases) through the transport.
+        """
+        tickets = diagnoses_to_tickets(
+            diagnoses,
+            site=site,
+            actionable_only=actionable_only,
+            machine_wide_only=machine_wide_only,
+        )
         for t in tickets:
             self.send(t)
         return tickets

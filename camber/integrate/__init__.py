@@ -23,6 +23,8 @@ from .notify import (
 from .tickets import (
     Notifier,
     collect_transport,
+    diagnoses_to_tickets,
+    diagnosis_to_ticket,
     finding_to_ticket,
     findings_to_tickets,
     webhook_transport,
@@ -33,6 +35,8 @@ __all__ = [
     "collect_transport",
     "finding_to_ticket",
     "findings_to_tickets",
+    "diagnosis_to_ticket",
+    "diagnoses_to_tickets",
     "webhook_transport",
     "dispatch_findings",
     "format_for",

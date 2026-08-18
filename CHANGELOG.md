@@ -4,6 +4,20 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.25.0] — 2026-08-18
+
+**Chiller roll-up → CMMS ticket / notify path** — route the whole-machine verdict to where it acts.
+
+### Added
+- **`camber.integrate.diagnosis_to_ticket` / `diagnoses_to_tickets`** (+ `Notifier.emit_diagnoses`) —
+  turn the chiller drift roll-ups (`camber.chillerdiag.diagnose_chiller_drift`) into neutral,
+  JSON-serializable CMMS ticket dicts and route them through the existing pluggable transport
+  (webhook / email / in-memory). A whole-machine verdict is one work order, not one per drifting
+  signal, so it tickets under a stable `chiller_drift` fingerprint (recurring drift updates one
+  ticket) with `machine_wide` / `locus` / `causes` carried for CMMS escalation rules. A
+  `machine_wide_only` filter routes just the circuit-wide "gauge the whole machine" cases — the
+  high-value subset to page on. Duck-typed; no new dependency.
+
 ## [0.24.0] — 2026-08-18
 
 **Chiller diagnosis in the site report** — the whole-machine verdict lands in the owner-facing page.
