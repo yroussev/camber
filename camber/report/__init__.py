@@ -1,6 +1,7 @@
 """Report: audit and reporting outputs."""
 
 from .audit import ECM, AuditReport, Benchmark
+from .chiller import chiller_diagnosis_table
 from .dashboard import build_dashboard, fig_to_base64
 from .fleet import BuildingSummary, FleetReport, build_fleet_report
 from .linking import (
@@ -20,6 +21,7 @@ __all__ = [
     "build_fleet_report",
     "build_dashboard",
     "build_site_report",
+    "chiller_diagnosis_table",
     "fig_to_base64",
     "carpet_svg_html",
     "multitrend_svg_html",

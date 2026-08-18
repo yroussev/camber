@@ -7,7 +7,12 @@ collects in-memory; a stdlib webhook transport is provided), so the deterministi
 core can drive action without coupling to any one vendor's API.
 """
 
-from .export import export_findings, findings_to_frame
+from .export import (
+    diagnoses_to_frame,
+    export_diagnoses,
+    export_findings,
+    findings_to_frame,
+)
 from .notify import (
     dispatch_findings,
     email_transport,
@@ -36,4 +41,6 @@ __all__ = [
     "email_transport",
     "findings_to_frame",
     "export_findings",
+    "diagnoses_to_frame",
+    "export_diagnoses",
 ]

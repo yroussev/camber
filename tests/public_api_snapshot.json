@@ -596,8 +596,10 @@
   "camber.integrate": [
     "Notifier",
     "collect_transport",
+    "diagnoses_to_frame",
     "dispatch_findings",
     "email_transport",
+    "export_diagnoses",
     "export_findings",
     "finding_to_ticket",
     "findings_to_frame",
@@ -608,6 +610,8 @@
     "webhook_transport"
   ],
   "camber.integrate.export": [
+    "diagnoses_to_frame",
+    "export_diagnoses",
     "export_findings",
     "findings_to_frame"
   ],
@@ -1002,6 +1006,7 @@
     "build_fleet_report",
     "build_site_report",
     "carpet_svg_html",
+    "chiller_diagnosis_table",
     "fig_to_base64",
     "interactive_scatter_html",
     "multitrend_svg_html",
@@ -1011,6 +1016,9 @@
     "AuditReport",
     "Benchmark",
     "ECM"
+  ],
+  "camber.report.chiller": [
+    "chiller_diagnosis_table"
   ],
   "camber.report.dashboard": [
     "build_dashboard",

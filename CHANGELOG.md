@@ -4,6 +4,20 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.23.0] — 2026-08-18
+
+**Surface the chiller roll-up in export + reporting** — the whole-machine verdict where it acts.
+
+### Added
+- **`camber.integrate.export.diagnoses_to_frame` / `export_diagnoses`** — flatten the chiller drift
+  roll-ups (`camber.chillerdiag.ChillerDriftDiagnosis`) into a one-row-per-machine table (locus ·
+  severity · machine_wide · per-side severities · charge cause · joined causes · caveat count ·
+  stable fingerprint) and write CSV / JSON / Parquet, mirroring the findings export — the shape a BI
+  tool or screening dashboard ranks and filters on.
+- **`camber.report.chiller_diagnosis_table`** — a self-contained HTML `<table>` of the roll-up
+  verdicts, ranked worst-severity first, flagging machine-wide cases; a standalone renderer to splice
+  into a site or fleet report. Pure string building; no new dependency.
+
 ## [0.22.0] — 2026-08-18
 
 **Physics-grounded synthetic validation** — characterize the whole drift stack without a dataset.
