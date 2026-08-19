@@ -973,6 +973,10 @@
     "PumpDriftDiagnosis",
     "diagnose_pump_drift"
   ],
+  "camber.pumpplantdiag": [
+    "PumpPlantDiagnosis",
+    "diagnose_pump_plant"
+  ],
   "camber.pv": [
     "G_REF_KW_M2",
     "PvSummary",

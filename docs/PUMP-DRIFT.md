@@ -53,6 +53,16 @@ It splits the loop into a mechanical (pump) and a hydraulic (distribution) side 
 (steady · pump · distribution · loop-wide) with a `loop_wide` flag — the pump-side analog of
 `condenserdrift`'s tower-disambiguates-head-pressure check. Screening-grade; pure over Findings.
 
+## One per-plant verdict
+
+Real plants run several pumps. `camber.pumpplantdiag.diagnose_pump_plant(diagnoses)` rolls the
+per-loop `PumpDriftDiagnosis` objects into one plant verdict with the cross-pump reasoning: exactly
+one pump drifting → **single-pump** (stage the spare, schedule that impeller); two or more loops on
+the **distribution** side → a shared/central hydraulic cause (plant-wide low-ΔT, a decoupler bypass, a
+control problem) is more likely than several independent pumps; two or more pumps otherwise →
+**plant-wide** (a common-mode cause — suction, water chemistry, a shared drive). It reports a plant
+`locus` (steady · single-pump · distribution · plant-wide) and a plain-language `recommendation`.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

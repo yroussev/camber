@@ -4,6 +4,21 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.32.0] — 2026-08-18
+
+**Per-plant pump roll-up** — which pump to stage/service, or a shared cause.
+
+### Added
+- **`camber.pumpplantdiag.diagnose_pump_plant`** (+ `PumpPlantDiagnosis`) — rolls the per-loop pump
+  diagnoses across a plant's pumps (lead/lag, primary/secondary, per-zone) into one verdict with the
+  cross-pump reasoning no single loop can do: exactly one pump drifting → **single-pump** (stage the
+  spare, schedule that impeller); two or more loops drifting on the **distribution** side → a shared /
+  central hydraulic cause (plant-wide low-ΔT, a decoupler bypass, a control problem) is more likely
+  than several independent pumps — look there first; two or more pumps otherwise → **plant-wide** (a
+  common-mode cause: suction conditions, water chemistry, a shared drive/control). Reports a plant
+  `locus` (steady · single-pump · distribution · plant-wide), the worst severity, the nested per-loop
+  diagnoses, and a plain-language `recommendation`. Screening-grade; pure over the per-loop diagnoses.
+
 ## [0.31.0] — 2026-08-18
 
 **Pump power drift + fold-in** — the wire-to-water efficiency signal, corroborating the pump side.
