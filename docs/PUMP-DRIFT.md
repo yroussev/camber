@@ -67,5 +67,7 @@ control problem) is more likely than several independent pumps; two or more pump
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.
 As with the chiller family, `camber.driftvalidation` (`LabeledCase` / `evaluate` / `sweep`) tunes them
-once labelled pump-fault periods exist, and a physics generator (affinity laws + system curve) will
-characterize the family end-to-end without a dataset.
+once labelled pump-fault periods exist, and the physics generator `camber.pumpsim` (affinity laws + system
+curve) characterizes the family end-to-end without a dataset — on clear faults the loop diagnosis
+localizes to the right `locus` at ~100% with no false alarms on healthy loops or a DP-reset schedule,
+and it proves the flow-vs-head disambiguation (impeller wear → pump, clogged strainer → distribution).

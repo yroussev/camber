@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.33.0] — 2026-08-18
+
+**Physics-grounded pump validation** — characterize the pump drift stack without a dataset.
+
+### Added
+- **`camber.pumpsim`** — the pump-family mirror of `camber.driftsim`: a physically consistent synthetic
+  generator (affinity laws Q ∝ N, H ∝ N², P ∝ Q + the system curve) that produces `(baseline, current)`
+  role-frame pairs for a healthy pump loop and for the standard pump/hydronic fault families (impeller
+  wear · cavitation · bearing drag · entrained air · clogged strainer · overpumping · valve-authority
+  loss · a DP-reset negative), imposing each fault's known signature at a graded severity. Helpers run
+  the **whole pump suite + loop diagnosis** end-to-end (`build_pump_suite`, `diagnose_pump_frames`) and
+  score the diagnosis' localization (`locus_confusion`); `SimulatedCase.to_labeled(relevant=…)` feeds
+  the existing `camber.driftvalidation` per-detector ROC. On clear faults (severity ≥ 3) the loop
+  diagnosis localizes to the correct `locus` at ~100% with no false alarms on healthy loops **or a
+  DP-reset schedule**, proves the flow-vs-head disambiguation (impeller wear → pump, clogged strainer →
+  distribution), and degrades gracefully at marginal severity. Deterministic; core deps only.
+
 ## [0.32.0] — 2026-08-18
 
 **Per-plant pump roll-up** — which pump to stage/service, or a shared cause.

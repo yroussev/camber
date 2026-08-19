@@ -977,6 +977,17 @@
     "PumpPlantDiagnosis",
     "diagnose_pump_plant"
   ],
+  "camber.pumpsim": [
+    "FAULTS",
+    "LocusConfusion",
+    "PumpFault",
+    "SimulatedCase",
+    "build_pump_suite",
+    "diagnose_pump_frames",
+    "locus_confusion",
+    "make_cases",
+    "simulate_case"
+  ],
   "camber.pv": [
     "G_REF_KW_M2",
     "PvSummary",
