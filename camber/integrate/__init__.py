@@ -11,7 +11,9 @@ from .export import (
     diagnoses_to_frame,
     export_diagnoses,
     export_findings,
+    export_pump_diagnoses,
     findings_to_frame,
+    pump_diagnoses_to_frame,
 )
 from .notify import (
     dispatch_findings,
@@ -47,4 +49,6 @@ __all__ = [
     "export_findings",
     "diagnoses_to_frame",
     "export_diagnoses",
+    "pump_diagnoses_to_frame",
+    "export_pump_diagnoses",
 ]

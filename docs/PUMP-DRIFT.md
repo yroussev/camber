@@ -63,6 +63,15 @@ control problem) is more likely than several independent pumps; two or more pump
 **plant-wide** (a common-mode cause — suction, water chemistry, a shared drive). It reports a plant
 `locus` (steady · single-pump · distribution · plant-wide) and a plain-language `recommendation`.
 
+## Surfacing the verdict
+
+The per-loop and per-plant verdicts flow downstream like the chiller ones:
+`camber.integrate.export.pump_diagnoses_to_frame` / `export_pump_diagnoses` write one row per loop
+(locus · severity · loop_wide · corroborated · causes · fingerprint) to CSV/JSON/Parquet, and
+`camber.report.pump_diagnosis_table` renders a worst-first HTML table. `build_site_report(...,
+pump_diagnoses=[...])` splices that table into the owner-facing site report, alongside the chiller
+verdict table.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

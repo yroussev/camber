@@ -10,6 +10,7 @@ from .linking import (
     multitrend_svg_html,
     selection_bus_html,
 )
+from .pump import pump_diagnosis_table
 from .site import build_site_report
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "build_dashboard",
     "build_site_report",
     "chiller_diagnosis_table",
+    "pump_diagnosis_table",
     "fig_to_base64",
     "carpet_svg_html",
     "multitrend_svg_html",

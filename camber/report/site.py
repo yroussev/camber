@@ -24,6 +24,7 @@ from .dashboard import (
     _section_image,
     render_evidence_blocks,
 )
+from .pump import pump_diagnosis_table
 
 _SC_STYLE = (
     ".sc{font-size:15px;margin:10px 0}.grade{font-size:30px;font-weight:700}"
@@ -51,6 +52,7 @@ def build_site_report(
     *,
     findings=None,
     diagnoses=None,
+    pump_diagnoses=None,
     rules=None,
     frames=None,
     loads=None,
@@ -67,7 +69,9 @@ def build_site_report(
     action plan (``loads``/``price`` cost the plan), and — with ``rules`` (and optional
     per-equipment ``frames``) — the pattern-J evidence. ``diagnoses`` (chiller drift roll-ups from
     :func:`camber.chillerdiag.diagnose_chiller_drift`) add a whole-machine verdict table just under
-    the scorecard. ``sections`` chooses which dashboard chart sections to include (A/B/E/I).
+    the scorecard; ``pump_diagnoses`` (from :func:`camber.pumpdrift.diagnose_pump_drift`) add a
+    per-loop pump verdict table alongside it. ``sections`` chooses which dashboard chart sections to
+    include (A/B/E/I).
     """
     style = _STYLE + _SC_STYLE
     parts = [
@@ -81,6 +85,9 @@ def build_site_report(
 
     if diagnoses:
         parts.append(chiller_diagnosis_table(diagnoses))
+
+    if pump_diagnoses:
+        parts.append(pump_diagnosis_table(pump_diagnoses))
 
     for letter in sections:
         img = _section_image(

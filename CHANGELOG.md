@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.34.0] — 2026-08-18
+
+**Pump drift in export + reporting** — the loop verdict where it acts, completing the pump family.
+
+### Added
+- **`camber.integrate.export.pump_diagnoses_to_frame` / `export_pump_diagnoses`** — flatten the
+  per-loop pump drift diagnoses (`camber.pumpdrift.PumpDriftDiagnosis`) into a one-row-per-loop table
+  (locus · severity · loop_wide · corroborated · joined causes · caveat count · stable fingerprint)
+  and write CSV / JSON / Parquet, mirroring the findings and chiller-diagnosis exports.
+- **`camber.report.pump_diagnosis_table`** — a self-contained HTML table of the loop verdicts, ranked
+  worst-first, flagging loop-wide cases; a standalone renderer to splice into a report.
+
+### Changed
+- **`camber.report.build_site_report`** gains an optional `pump_diagnoses=` argument that renders the
+  `pump_diagnosis_table` alongside the chiller verdict table, just under the health scorecard.
+  Backward compatible.
+
 ## [0.33.0] — 2026-08-18
 
 **Physics-grounded pump validation** — characterize the pump drift stack without a dataset.

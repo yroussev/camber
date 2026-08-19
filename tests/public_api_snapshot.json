@@ -603,10 +603,12 @@
     "email_transport",
     "export_diagnoses",
     "export_findings",
+    "export_pump_diagnoses",
     "finding_to_ticket",
     "findings_to_frame",
     "findings_to_tickets",
     "format_for",
+    "pump_diagnoses_to_frame",
     "slack_payload",
     "teams_payload",
     "webhook_transport"
@@ -615,7 +617,9 @@
     "diagnoses_to_frame",
     "export_diagnoses",
     "export_findings",
-    "findings_to_frame"
+    "export_pump_diagnoses",
+    "findings_to_frame",
+    "pump_diagnoses_to_frame"
   ],
   "camber.integrate.notify": [
     "dispatch_findings",
@@ -1033,6 +1037,7 @@
     "fig_to_base64",
     "interactive_scatter_html",
     "multitrend_svg_html",
+    "pump_diagnosis_table",
     "selection_bus_html"
   ],
   "camber.report.audit": [
@@ -1059,6 +1064,9 @@
     "interactive_scatter_html",
     "multitrend_svg_html",
     "selection_bus_html"
+  ],
+  "camber.report.pump": [
+    "pump_diagnosis_table"
   ],
   "camber.report.site": [
     "build_site_report"

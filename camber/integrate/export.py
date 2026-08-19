@@ -15,6 +15,20 @@ from .tickets import _attr, fingerprint
 
 _BASE_COLS = ["fingerprint", "site", "equip", "rule", "severity", "summary"]
 
+# One row per pump-loop verdict; the columns a screening dashboard ranks and filters on.
+_PUMP_DIAG_COLS = [
+    "fingerprint",
+    "site",
+    "equip",
+    "locus",
+    "severity",
+    "loop_wide",
+    "corroborated",
+    "causes",
+    "n_caveats",
+    "summary",
+]
+
 # One row per chiller roll-up verdict; the whole-machine columns a screening dashboard wants.
 _DIAG_COLS = [
     "fingerprint",
@@ -132,6 +146,46 @@ def export_diagnoses(
     ``format`` is inferred from the file extension when None. JSON is written as records.
     """
     df = diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    return _write_frame(df, path, format)
+
+
+def pump_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+    """Flatten per-loop pump drift diagnoses into a DataFrame (one row per loop).
+
+    ``diagnoses`` is an iterable of :class:`camber.pumpdrift.PumpDriftDiagnosis` (or anything with
+    that shape). Each row carries the loop verdict — ``locus``, ``severity``, ``loop_wide``,
+    ``corroborated``, the joined ``causes`` and a caveat count. ``columns`` restricts/orders output.
+    """
+    rows = []
+    for d in diagnoses:
+        equip = _attr(d, "equip", "")
+        rows.append(
+            {
+                "fingerprint": fingerprint(site, equip, "pump_drift"),
+                "site": site,
+                "equip": equip,
+                "locus": _attr(d, "locus", ""),
+                "severity": _attr(d, "severity", "ok"),
+                "loop_wide": bool(_attr(d, "loop_wide", False)),
+                "corroborated": bool(_attr(d, "corroborated", False)),
+                "causes": "; ".join(_attr(d, "causes", []) or []),
+                "n_caveats": len(_attr(d, "caveats", []) or []),
+                "summary": _attr(d, "summary", ""),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if columns is not None:
+        df = df.reindex(columns=list(columns))
+    elif not df.empty:
+        df = df.reindex(columns=[c for c in _PUMP_DIAG_COLS if c in df.columns])
+    return df
+
+
+def export_pump_diagnoses(
+    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+) -> int:
+    """Write per-loop pump drift diagnoses to ``path`` as CSV / JSON / Parquet; return the count."""
+    df = pump_diagnoses_to_frame(diagnoses, site=site, columns=columns)
     return _write_frame(df, path, format)
 
 
