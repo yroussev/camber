@@ -1267,6 +1267,15 @@
     "MIN_SPEED",
     "PumpHeadDrift"
   ],
+  "camber.rules.pump_power_rule": [
+    "MIN_LOAD",
+    "POWER_FAULT_KW",
+    "POWER_FAULT_SIGMA",
+    "POWER_PLAUSIBLE",
+    "POWER_WARN_KW",
+    "POWER_WARN_SIGMA",
+    "PumpPowerDrift"
+  ],
   "camber.rules.reheat_min_rule": [
     "ReheatMinimization"
   ],

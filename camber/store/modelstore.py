@@ -43,6 +43,7 @@ _MODEL_TYPES = {
     "chiller_head_pressure": LoadBaseline,
     "chiller_suction_pressure": LoadBaseline,
     "pump_flow": LoadBaseline,
+    "pump_power": LoadBaseline,
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
     "loop_dp": LoadBaseline,

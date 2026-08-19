@@ -4,6 +4,19 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.31.0] — 2026-08-18
+
+**Pump power drift + fold-in** — the wire-to-water efficiency signal, corroborating the pump side.
+
+### Added
+- **`camber.rules.pump_power_rule.PumpPowerDrift`** — tracks a pump's electrical power drifting **up**
+  from a frozen `power ~ f(flow)` baseline (P ∝ Q³): a power *excess* at matched flow is wire-to-water
+  efficiency loss (bearing/seal drag, a degrading motor/drive, internal recirculation, off-BEP
+  operation) — the energy-cost complement to the flow/head detectors. One-sided up; reuses the generic
+  `Role.POWER` on the pump equip-frame (no new role); declines loudly when power or flow is unmapped.
+- **`camber.pumpdrift.diagnose_pump_drift`** now folds `pump_power_drift` in as a **pump-side
+  (mechanical)** signal — a power excess corroborates a flow/head-derived pump fault.
+
 ## [0.30.0] — 2026-08-18
 
 **Per-loop pump/hydronic drift diagnosis** — one localized verdict, with the flow-vs-head call.

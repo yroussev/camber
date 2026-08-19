@@ -9,7 +9,9 @@ Four drift detectors watch one hydronic loop, and each is deliberately narrow:
 * :class:`camber.rules.loop_deltat_rule.LoopDeltaTDrift` -- the loop's ΔT (a *collapse* is low-ΔT
   syndrome, a *widening* is starvation);
 * :class:`camber.rules.loop_dp_rule.LoopDPDrift` -- the loop's differential pressure (a *rise* is
-  added system resistance, a *fall* is a bypass).
+  added system resistance, a *fall* is a bypass);
+* :class:`camber.rules.pump_power_rule.PumpPowerDrift` -- the pump's power-at-matched-flow (a *rise*
+  is wire-to-water efficiency loss), a corroborating mechanical (pump-side) signal.
 
 :func:`diagnose_pump_drift` reads the individual Findings, names each drifting signal's localized
 cause, flags **corroboration** when two or more agree, and -- the headline -- runs the
@@ -82,8 +84,8 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
 
     ``findings`` is an iterable of :class:`camber.rules.base.Finding` (from ``run_periods``); the
     pump/hydronic ones (``pump_flow_drift``, ``pump_head_drift``, ``loop_deltat_drift``,
-    ``loop_dp_drift``) are picked out by rule name and the rest ignored. A declined signal is a
-    caveat, not a cause.
+    ``loop_dp_drift``, ``pump_power_drift``) are picked out by rule name and the rest ignored. A
+    declined signal is a caveat, not a cause.
     """
     fs = list(findings)
     if equip is None:
@@ -166,6 +168,18 @@ def diagnose_pump_drift(findings, *, equip: str | None = None) -> PumpDriftDiagn
             else "bypass / short-circuit"
         )
         _record("loop_dp_drift", pf.severity, m.get("loop_dp_drift"), cause, "distribution")
+
+    # --- pump power: mechanical (a rise is efficiency loss) --------------------------------------
+    wf = _get(fs, "pump_power_drift")
+    if wf is not None and not _declined(wf, caveats):
+        if wf.severity in _DEGRADING:
+            _record(
+                "pump_power_drift",
+                wf.severity,
+                wf.metrics.get("pump_power_drift_kw"),
+                "pump efficiency loss (wire-to-water / mechanical drag / recirculation)",
+                "pump",
+            )
 
     # --- synthesis -------------------------------------------------------------------------------
     severity = "ok"
