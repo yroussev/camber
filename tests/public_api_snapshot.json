@@ -1223,6 +1223,15 @@
     "POWER_WARN_SIGMA",
     "STATIC_CONFOUND"
   ],
+  "camber.rules.filter_loading_rule": [
+    "FILTER_DP_PLAUSIBLE",
+    "FILTER_FAULT_INWC",
+    "FILTER_FAULT_SIGMA",
+    "FILTER_WARN_INWC",
+    "FILTER_WARN_SIGMA",
+    "FilterLoadingDrift",
+    "MIN_AIRFLOW"
+  ],
   "camber.rules.filter_rule": [
     "FilterFouling"
   ],

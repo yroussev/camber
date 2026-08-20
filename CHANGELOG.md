@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.36.0] — 2026-08-19
+
+**Air-filter loading drift** — the dirty-filter detector, normalized for airflow.
+
+### Added
+- **`camber.rules.filter_loading_rule.FilterLoadingDrift`** — tracks a filter's pressure drop drifting
+  **up** at matched airflow from a frozen (clean-filter) `filterDP ~ f(airflow)` baseline. A filter's
+  DP rises monotonically as its media loads, but it also grows with face velocity, so on a VAV system
+  raw DP confuses "more air" with "dirtier"; the system curve is quadratic in flow (ΔP ∝ Q²), so the
+  residual at matched airflow isolates the loading (physics per Chimack & Sellers, ACEEE Summer
+  Study). One-sided up — a DP *fall* is a filter change (a welcome reset), not a fault. Filter DP is
+  measured across the filter, so the signal is filter-specific (a wetted coil or duct restriction that
+  raises *system* static does not move it); airflow is the only confound and normalization removes it.
+  A sustained rise is the "schedule a filter change" signal, weeks before a static alarm. Reuses the
+  existing `FILTER_DIFF_PRESS` + `AIRFLOW` roles (no new role); declines loudly when either is
+  unmapped; not auto-registered.
+
 ## [0.35.0] — 2026-08-19
 
 **Supply-fan efficiency drift** — the first of the AHU / air-side drift family.

@@ -19,6 +19,7 @@ the chiller drift rules complement the static approach check.
 | Detector | Signal | Normalizer | Sided | Catches |
 |---|---|---|---|---|
 | `FanEfficiencyDrift` | supply-fan power | airflow (cfm) | up | wire-to-air efficiency loss — a slipping/worn belt, bearing drag, a degrading motor/VFD, or the fan pushed off its curve; a power **excess** at matched airflow |
+| `FilterLoadingDrift` | filter differential pressure | airflow (cfm) | up | filter loading (dirty filter) — a DP **rise** at matched airflow; a fall is a filter change |
 
 **Fan efficiency is the air-side energy signal.** A healthy fan draws a repeatable power at a given
 airflow; more power at matched airflow is efficiency loss. It is **one-sided up** and reuses the
