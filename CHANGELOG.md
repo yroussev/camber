@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.37.0] — 2026-08-19
+
+**Duct static-pressure control drift** — reset-schedule aware, the air-side twin of loop-DP drift.
+
+### Added
+- **`camber.rules.duct_static_rule.DuctStaticControlDrift`** — tracks a VAV system's duct static
+  drifting from a frozen, airflow-normalized `static ~ f(airflow)` baseline. **Two-sided**: a *fall*
+  at matched airflow means the fan can no longer hold setpoint (fan/belt degradation, a leakier duct
+  system); a *rise* is over-pressurization (a static sensor reading low, a stuck downstream damper, or
+  collapsed demand with the setpoint stuck). **The static-reset (Guideline-36 trim-and-respond)
+  confound is handled, not just flagged:** when a duct-static-setpoint point is mapped the rule judges
+  on the residual drift *not* explained by the setpoint move — a static move fully accounted for by a
+  reset does not fault (reported as a caveat), and a partial one is demoted to the residual tier. The
+  air-side twin of `loop_dp_rule`. Reuses the existing `DUCT_STATIC` / `AIRFLOW` / `DUCT_STATIC_SP`
+  roles (no new role); declines loudly when static or airflow is unmapped; not auto-registered.
+
 ## [0.36.0] — 2026-08-19
 
 **Air-filter loading drift** — the dirty-filter detector, normalized for airflow.

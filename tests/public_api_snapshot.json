@@ -1210,6 +1210,16 @@
   "camber.rules.coolingtower_rule": [
     "CoolingTowerApproach"
   ],
+  "camber.rules.duct_static_rule": [
+    "DuctStaticControlDrift",
+    "MIN_AIRFLOW",
+    "STATIC_FAULT_INWC",
+    "STATIC_FAULT_SIGMA",
+    "STATIC_PLAUSIBLE",
+    "STATIC_SP_CONFOUND",
+    "STATIC_WARN_INWC",
+    "STATIC_WARN_SIGMA"
+  ],
   "camber.rules.economizer_lockout_rule": [
     "EconomizerHighLimit"
   ],

@@ -46,6 +46,7 @@ _MODEL_TYPES = {
     "pump_power": LoadBaseline,
     "fan_efficiency": LoadBaseline,
     "filter_loading": LoadBaseline,
+    "duct_static": LoadBaseline,
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
     "loop_dp": LoadBaseline,
