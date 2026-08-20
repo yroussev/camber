@@ -4,6 +4,26 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.38.0] — 2026-08-19
+
+**Coil heat-transfer drift** — valve-position creep at matched delivered air-ΔT.
+
+### Added
+- **`camber.rules.coil_valve_rule.CoilValveDrift`** — detects a cooling or heating coil losing
+  heat-transfer capacity (fouling, waterside starvation / low flow, air bypass, valve-authority loss)
+  as **valve creep at matched delivered air-ΔT**: the valve opening further over time to hold SAT. The
+  ΔT (MIXED_AIR ↔ SUPPLY_AIR) is the exogenous weather-driven demand and the valve is the endogenous
+  response, so `valve ~ f(ΔT)` isolates the coil's transfer function — fouling raises valve-at-matched-ΔT
+  with the weather unchanged. It's the **leading** indicator to `satcontrol_rule`'s off-setpoint failure
+  (fires weeks before the valve pins). One-sided up (a valve *fall* is a capacity gain). **Economizer
+  samples are gated out** (during free cooling the cool valve is driven by mixed-air control, not coil
+  demand); the **waterside-reset confound is caveated** (colder CHW / hotter HW needs less valve). A
+  known screening limitation — the sensible air-ΔT misses a wet cooling coil's latent load — is stated
+  in the docs. Coil-parameterized (a cooling and a heating coil on one AHU freeze under distinct model
+  kinds); reuses only existing roles; declines loudly when the valve or air-temperature pair is
+  unmapped; not auto-registered. Grounded in Sellers, *Relative Accuracy* (a coil ΔT is more
+  trustworthy than absolute temps).
+
 ## [0.37.0] — 2026-08-19
 
 **Duct static-pressure control drift** — reset-schedule aware, the air-side twin of loop-DP drift.

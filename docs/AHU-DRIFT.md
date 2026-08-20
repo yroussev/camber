@@ -21,6 +21,7 @@ the chiller drift rules complement the static approach check.
 | `FanEfficiencyDrift` | supply-fan power | airflow (cfm) | up | wire-to-air efficiency loss — a slipping/worn belt, bearing drag, a degrading motor/VFD, or the fan pushed off its curve; a power **excess** at matched airflow |
 | `FilterLoadingDrift` | filter differential pressure | airflow (cfm) | up | filter loading (dirty filter) — a DP **rise** at matched airflow; a fall is a filter change |
 | `DuctStaticControlDrift` | duct static pressure | airflow (cfm) | both | fall = fan cannot hold setpoint (degradation/leakage) vs rise = over-pressurization (sensor-low/stuck damper) — with the static-reset schedule subtracted out |
+| `CoilValveDrift` | cool/heat valve position | delivered air-ΔT (MAT↔SAT) | up | coil fouling / waterside starvation / air bypass / valve-authority loss — valve creep before SAT control fails (econ-gated; waterside-reset caveated) |
 
 **Fan efficiency is the air-side energy signal.** A healthy fan draws a repeatable power at a given
 airflow; more power at matched airflow is efficiency loss. It is **one-sided up** and reuses the

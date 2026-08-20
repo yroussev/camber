@@ -1190,6 +1190,19 @@
   "camber.rules.cohort": [
     "CohortDeviation"
   ],
+  "camber.rules.coil_valve_rule": [
+    "CoilValveDrift",
+    "DELTAT_PLAUSIBLE",
+    "ECON_DAMPER_OPEN",
+    "MIN_DELTAT",
+    "VALVE_DEADBAND",
+    "VALVE_FAULT_PCT",
+    "VALVE_FAULT_SIGMA",
+    "VALVE_PLAUSIBLE",
+    "VALVE_WARN_PCT",
+    "VALVE_WARN_SIGMA",
+    "WATER_CONFOUND"
+  ],
   "camber.rules.compressor_cycle_rule": [
     "CompressorShortCycle"
   ],
