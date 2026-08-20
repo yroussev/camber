@@ -44,6 +44,7 @@ _MODEL_TYPES = {
     "chiller_suction_pressure": LoadBaseline,
     "pump_flow": LoadBaseline,
     "pump_power": LoadBaseline,
+    "fan_efficiency": LoadBaseline,
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
     "loop_dp": LoadBaseline,

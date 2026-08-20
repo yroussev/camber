@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.35.0] — 2026-08-19
+
+**Supply-fan efficiency drift** — the first of the AHU / air-side drift family.
+
+### Added
+- **`camber.rules.fan_efficiency_rule.FanEfficiencyDrift`** — tracks a supply fan's power drifting
+  **up** from a frozen `power ~ f(airflow)` baseline: a power *excess* at matched airflow is
+  wire-to-air efficiency loss (a slipping/worn belt, bearing drag, a degrading motor/VFD, or the fan
+  pushed off its curve) — the air-side twin of `PumpPowerDrift`, and a direct energy-cost signal since
+  fan energy is a large share of an AHU's use. One-sided up; reuses the generic `Role.POWER` on the
+  AHU equip-frame (no new role) with `Role.AIRFLOW` as the normalizer. **The duct-static confound is
+  surfaced:** fan power also rises when the static setpoint is raised, so a power excess that co-moves
+  with rising duct static is reported and caveated. Declines loudly when power or airflow is unmapped;
+  not auto-registered. First of the air-side family (docs/AHU-DRIFT.md), complementing the static
+  `economizer_lockout` / `satreset` / `staticreset` rules.
+
 ## [0.34.0] — 2026-08-18
 
 **Pump drift in export + reporting** — the loop verdict where it acts, completing the pump family.

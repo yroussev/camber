@@ -1213,6 +1213,16 @@
   "camber.rules.economizer_lockout_rule": [
     "EconomizerHighLimit"
   ],
+  "camber.rules.fan_efficiency_rule": [
+    "FanEfficiencyDrift",
+    "MIN_AIRFLOW",
+    "POWER_FAULT_KW",
+    "POWER_FAULT_SIGMA",
+    "POWER_PLAUSIBLE",
+    "POWER_WARN_KW",
+    "POWER_WARN_SIGMA",
+    "STATIC_CONFOUND"
+  ],
   "camber.rules.filter_rule": [
     "FilterFouling"
   ],
