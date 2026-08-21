@@ -26,6 +26,7 @@ from .dashboard import (
     _section_image,
     render_evidence_blocks,
 )
+from .evaporator import evaporator_diagnosis_table
 from .pump import pump_diagnosis_table
 
 _SC_STYLE = (
@@ -55,6 +56,7 @@ def build_site_report(
     findings=None,
     diagnoses=None,
     condenser_diagnoses=None,
+    evaporator_diagnoses=None,
     pump_diagnoses=None,
     ahu_diagnoses=None,
     rules=None,
@@ -75,7 +77,9 @@ def build_site_report(
     :func:`camber.chillerdiag.diagnose_chiller_drift`) add a whole-machine verdict table just under
     the scorecard; ``condenser_diagnoses`` (per-loop heat-rejection roll-ups from
     :func:`camber.condenserdrift.diagnose_condenser_drift`) add a condenser-loop table by it;
-    ``pump_diagnoses`` (from :func:`camber.pumpdrift.diagnose_pump_drift`) add a per-loop pump
+    ``evaporator_diagnoses`` (from :func:`camber.evaporatordrift.diagnose_evaporator_drift`) add a
+    per-loop evaporator / CHW verdict table too; ``pump_diagnoses`` (from
+    :func:`camber.pumpdrift.diagnose_pump_drift`) add a per-loop pump
     verdict table alongside it; ``ahu_diagnoses`` (from :func:`camber.ahudrift.diagnose_ahu_drift`)
     add a per-AHU air-side verdict table too. ``sections`` chooses which dashboard chart sections to
     include (A/B/E/I).
@@ -95,6 +99,9 @@ def build_site_report(
 
     if condenser_diagnoses:
         parts.append(condenser_diagnosis_table(condenser_diagnoses))
+
+    if evaporator_diagnoses:
+        parts.append(evaporator_diagnosis_table(evaporator_diagnoses))
 
     if pump_diagnoses:
         parts.append(pump_diagnosis_table(pump_diagnoses))

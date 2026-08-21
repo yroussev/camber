@@ -297,6 +297,58 @@ def export_condenser_diagnoses(
     return _write_frame(df, path, format)
 
 
+# One row per evaporator / chilled-water loop; the low-side verdict a dashboard ranks/filters on.
+# Like the condenser diagnosis it carries no locus / loop-wide flag (only corroborated).
+_EVAPORATOR_DIAG_COLS = [
+    "fingerprint",
+    "site",
+    "equip",
+    "severity",
+    "corroborated",
+    "causes",
+    "n_caveats",
+    "summary",
+]
+
+
+def evaporator_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+    """Flatten per-loop evaporator / CHW drift diagnoses into a DataFrame (one row per loop).
+
+    ``diagnoses`` is an iterable of :class:`camber.evaporatordrift.EvaporatorDriftDiagnosis` (or
+    anything with that shape). Each row carries the loop verdict — ``severity``,
+    ``corroborated``, the joined ``causes`` and a caveat count. ``columns`` restricts/orders output.
+    """
+    rows = []
+    for d in diagnoses:
+        equip = _attr(d, "equip", "")
+        rows.append(
+            {
+                "fingerprint": fingerprint(site, equip, "evaporator_drift"),
+                "site": site,
+                "equip": equip,
+                "severity": _attr(d, "severity", "ok"),
+                "corroborated": bool(_attr(d, "corroborated", False)),
+                "causes": "; ".join(_attr(d, "causes", []) or []),
+                "n_caveats": len(_attr(d, "caveats", []) or []),
+                "summary": _attr(d, "summary", ""),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if columns is not None:
+        df = df.reindex(columns=list(columns))
+    elif not df.empty:
+        df = df.reindex(columns=[c for c in _EVAPORATOR_DIAG_COLS if c in df.columns])
+    return df
+
+
+def export_evaporator_diagnoses(
+    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+) -> int:
+    """Write per-loop evaporator diagnoses to ``path`` (CSV / JSON / Parquet); return the count."""
+    df = evaporator_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    return _write_frame(df, path, format)
+
+
 def _write_frame(df: pd.DataFrame, path: str, format: str | None) -> int:
     fmt = (format or path.rsplit(".", 1)[-1]).lower()
     if fmt == "csv":

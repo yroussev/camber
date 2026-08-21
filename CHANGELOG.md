@@ -4,6 +4,25 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.48.0] — 2026-08-21
+
+**Evaporator / chilled-water drift in export + reporting** — the low-side verdict where it acts,
+bringing the evaporator family toward parity with the chiller/pump/AHU/condenser ones.
+
+### Added
+- **`camber.integrate.export.evaporator_diagnoses_to_frame` / `export_evaporator_diagnoses`** —
+  flatten the per-loop evaporator / CHW drift diagnoses
+  (`camber.evaporatordrift.EvaporatorDriftDiagnosis`) into a one-row-per-loop table (severity ·
+  corroborated · joined causes · caveat count · stable fingerprint) and write CSV / JSON / Parquet.
+  Like the condenser diagnosis it carries no locus / loop-wide flag, so those columns are absent.
+- **`camber.report.evaporator_diagnosis_table`** — a self-contained HTML table of the evaporator
+  verdicts, ranked worst-first, flagging corroborated loops.
+
+### Changed
+- **`camber.report.build_site_report`** gains an optional `evaporator_diagnoses=` argument that
+  renders the `evaporator_diagnosis_table` between the condenser and pump verdict tables. Backward
+  compatible.
+
 ## [0.47.0] — 2026-08-21
 
 **One-way cybersecure edge→cloud forwarder** — `camber.edge`: push BAS trend data to an org cloud

@@ -667,9 +667,11 @@
     "diagnosis_to_ticket",
     "dispatch_findings",
     "email_transport",
+    "evaporator_diagnoses_to_frame",
     "export_ahu_diagnoses",
     "export_condenser_diagnoses",
     "export_diagnoses",
+    "export_evaporator_diagnoses",
     "export_findings",
     "export_pump_diagnoses",
     "finding_to_ticket",
@@ -685,9 +687,11 @@
     "ahu_diagnoses_to_frame",
     "condenser_diagnoses_to_frame",
     "diagnoses_to_frame",
+    "evaporator_diagnoses_to_frame",
     "export_ahu_diagnoses",
     "export_condenser_diagnoses",
     "export_diagnoses",
+    "export_evaporator_diagnoses",
     "export_findings",
     "export_pump_diagnoses",
     "findings_to_frame",
@@ -1108,6 +1112,7 @@
     "carpet_svg_html",
     "chiller_diagnosis_table",
     "condenser_diagnosis_table",
+    "evaporator_diagnosis_table",
     "fig_to_base64",
     "interactive_scatter_html",
     "multitrend_svg_html",
@@ -1132,6 +1137,9 @@
     "build_dashboard",
     "fig_to_base64",
     "render_evidence_blocks"
+  ],
+  "camber.report.evaporator": [
+    "evaporator_diagnosis_table"
   ],
   "camber.report.fleet": [
     "BuildingSummary",

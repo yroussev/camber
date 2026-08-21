@@ -105,6 +105,14 @@ suction) or on starvation (rising superheat + falling suction) is a strong, spec
 disagreement is called ambiguous rather than asserted — the low-side twin of the tower-disambiguates-
 head-pressure check on the condenser side. Screening-grade and pure over Findings.
 
+**Surfacing the verdict.** Like the condenser side, the per-loop evaporator verdicts flow downstream:
+`camber.integrate.export.evaporator_diagnoses_to_frame` / `export_evaporator_diagnoses` write one row
+per loop (severity · corroborated · joined causes · caveat count · fingerprint — **no locus /
+loop-wide** column, as the diagnosis carries neither) to CSV/JSON/Parquet, and
+`camber.report.evaporator_diagnosis_table` renders a worst-first HTML table.
+`build_site_report(..., evaporator_diagnoses=[...])` splices it into the owner-facing site report,
+alongside the chiller, condenser, pump, and AHU verdict tables.
+
 **One whole-machine verdict.** `camber.chillerdiag.diagnose_chiller_drift(findings)` rolls both side
 diagnoses into a single per-chiller `ChillerDriftDiagnosis` and adds the cross-side reasoning neither
 side can do alone: only the condenser side degrading localizes to the condenser loop, only the
