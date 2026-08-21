@@ -1256,6 +1256,17 @@
     "STATIC_WARN_INWC",
     "STATIC_WARN_SIGMA"
   ],
+  "camber.rules.economizer_damper_rule": [
+    "DAMPER_PLAUSIBLE",
+    "DENOM_MIN_F",
+    "ECON_FAULT_PCT",
+    "ECON_FAULT_SIGMA",
+    "ECON_WARN_PCT",
+    "ECON_WARN_SIGMA",
+    "EconomizerDamperDrift",
+    "MIN_COMMAND",
+    "OAF_PLAUSIBLE"
+  ],
   "camber.rules.economizer_lockout_rule": [
     "EconomizerHighLimit"
   ],

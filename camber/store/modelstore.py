@@ -49,6 +49,7 @@ _MODEL_TYPES = {
     "duct_static": LoadBaseline,
     "coil_valve_cool": LoadBaseline,
     "coil_valve_heat": LoadBaseline,
+    "economizer_damper": LoadBaseline,
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
     "loop_dp": LoadBaseline,

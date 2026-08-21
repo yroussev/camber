@@ -4,6 +4,28 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.42.0] — 2026-08-21
+
+**Economizer OA-delivery drift** — the fifth AHU air-side detector, completing the family's
+mechanical coverage (fan · filter · duct-static · coil · **economizer damper**).
+
+### Added
+- **`camber.rules.economizer_damper_rule.EconomizerDamperDrift`** — catches an outdoor-air damper no
+  longer delivering its baseline outdoor-air fraction *for the same command*: linkage slipping, seals
+  leaking, the blade sticking, minimum-position creep. Freezes an `OAF ~ f(damper command)` baseline
+  (`OAF = 100·(RAT−MAT)/(RAT−OAT)`) and scores the current period's OA-fraction residual at matched
+  command. **Two-sided:** a residual up = a leaking / stuck-open damper (excess outdoor air), down = a
+  stuck or slipping-closed damper (lost free cooling / under-ventilation). Reuses the existing `OAT` /
+  `RETURN_AIR_TEMP` / `MIXED_AIR_TEMP` / `OA_DAMPER` roles (no new role); registers a
+  `economizer_damper` model kind. It is a *mechanical* delivery check, not a sequence check — an
+  economizer commanded wrong for the conditions remains the job of `economizer_lockout_rule` /
+  `freecoolingmissed_rule`. Confounds handled: the mixed-air sensor stratifies badly and sits in the
+  ratio's numerator, so a standing caveat (Sellers, *Relative Accuracy*) flags it and the magnitude
+  floor sits above that noise; ill-conditioned rows (`|RAT−OAT|` small) are excluded before the fit
+  and the excluded fraction reported. Screening-grade; declines loudly when a required point is
+  unmapped or the damper command never sweeps a usable range. Rolling it into `diagnose_ahu_drift` as
+  a fifth `outdoor-air` locus is a follow-on.
+
 ## [0.41.0] — 2026-08-21
 
 **AHU drift in export + reporting** — the air-side verdict where it acts, completing the AHU family.

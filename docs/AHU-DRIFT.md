@@ -22,6 +22,7 @@ the chiller drift rules complement the static approach check.
 | `FilterLoadingDrift` | filter differential pressure | airflow (cfm) | up | filter loading (dirty filter) — a DP **rise** at matched airflow; a fall is a filter change |
 | `DuctStaticControlDrift` | duct static pressure | airflow (cfm) | both | fall = fan cannot hold setpoint (degradation/leakage) vs rise = over-pressurization (sensor-low/stuck damper) — with the static-reset schedule subtracted out |
 | `CoilValveDrift` | cool/heat valve position | delivered air-ΔT (MAT↔SAT) | up | coil fouling / waterside starvation / air bypass / valve-authority loss — valve creep before SAT control fails (econ-gated; waterside-reset caveated) |
+| `EconomizerDamperDrift` | outdoor-air fraction (temp-inferred) | OA-damper command (%) | both | up = damper leaking / stuck-open (excess OA) vs down = damper stuck/slipping closed (lost free cooling / under-ventilation) — degenerate-mixing gated, MAT-stratification caveated |
 
 **Fan efficiency is the air-side energy signal.** A healthy fan draws a repeatable power at a given
 airflow; more power at matched airflow is efficiency loss. It is **one-sided up** and reuses the
@@ -30,6 +31,22 @@ normalizer — the air-side twin of `PumpPowerDrift`. **Its confound is stated:*
 when the *duct-static setpoint* is raised (the fan works harder to hold a higher static), so when a
 duct-static point is mapped the rule reports the concurrent static shift and caveats a power excess
 that co-moves with rising static.
+
+**The economizer detector watches OA delivery, not OA logic.** A healthy OA damper delivers a
+repeatable outdoor-air fraction for a given command; `EconomizerDamperDrift` freezes an `OAF ~
+f(command)` baseline — where `OAF = 100·(RAT−MAT)/(RAT−OAT)` (`camber.oafraction`) — and scores the
+current period's OA-fraction residual **at matched command**, so mechanical drift (linkage slipping,
+seals leaking, the blade sticking, minimum-position creep) shows up as delivery moving while the
+command stays put. It is **two-sided**: more OA than baseline = a leaking / stuck-open damper (excess
+outdoor air), less OA = a stuck or slipping-closed damper (lost free cooling, possible
+under-ventilation). It is *not* a sequence check — an economizer commanded wrong for the conditions is
+the job of `economizer_lockout_rule` and `freecoolingmissed_rule`. Two confounds are handled: the
+mixed-air sensor stratifies badly and sits in the numerator, so a standing caveat (Sellers, *Relative
+Accuracy*) flags that and the magnitude floor is set high above it; and where outdoor and return air
+are too close (`|RAT−OAT|` small) the ratio is ill-conditioned, so those rows are excluded before the
+fit. Reuses `OAT` / `RETURN_AIR_TEMP` / `MIXED_AIR_TEMP` / `OA_DAMPER`; no new role. Rolling the
+economizer into `diagnose_ahu_drift` as a fifth `outdoor-air` locus is a follow-on; today it surfaces
+as its own finding.
 
 ## One per-AHU verdict
 
