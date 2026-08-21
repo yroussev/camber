@@ -50,6 +50,15 @@ It splits the AHU into fan (mechanical) / air-path (filter + static) / coil side
 (steady · fan · air-path · coil · ahu-wide) with an `ahu_wide` flag, and names a cooling and a heating
 coil separately. Screening-grade; pure over Findings.
 
+## Surfacing the verdict
+
+The per-AHU verdicts flow downstream like the chiller and pump ones:
+`camber.integrate.export.ahu_diagnoses_to_frame` / `export_ahu_diagnoses` write one row per AHU (locus
+· severity · ahu_wide · corroborated · causes · fingerprint) to CSV/JSON/Parquet, and
+`camber.report.ahu_diagnosis_table` renders a worst-first HTML table. `build_site_report(...,
+ahu_diagnoses=[...])` splices that table into the owner-facing site report, alongside the chiller and
+pump verdict tables.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

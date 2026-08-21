@@ -15,6 +15,7 @@ import html as _html
 from ..actionplan import action_plan_html, build_action_plan
 from ..rules.triage import rank_findings
 from ..scorecard import build_scorecard
+from .ahu import ahu_diagnosis_table
 from .chiller import chiller_diagnosis_table
 from .dashboard import (
     _SECTION_TITLES,
@@ -53,6 +54,7 @@ def build_site_report(
     findings=None,
     diagnoses=None,
     pump_diagnoses=None,
+    ahu_diagnoses=None,
     rules=None,
     frames=None,
     loads=None,
@@ -70,8 +72,9 @@ def build_site_report(
     per-equipment ``frames``) — the pattern-J evidence. ``diagnoses`` (chiller drift roll-ups from
     :func:`camber.chillerdiag.diagnose_chiller_drift`) add a whole-machine verdict table just under
     the scorecard; ``pump_diagnoses`` (from :func:`camber.pumpdrift.diagnose_pump_drift`) add a
-    per-loop pump verdict table alongside it. ``sections`` chooses which dashboard chart sections to
-    include (A/B/E/I).
+    per-loop pump verdict table alongside it; ``ahu_diagnoses`` (from
+    :func:`camber.ahudrift.diagnose_ahu_drift`) add a per-AHU air-side verdict table too.
+    ``sections`` chooses which dashboard chart sections to include (A/B/E/I).
     """
     style = _STYLE + _SC_STYLE
     parts = [
@@ -88,6 +91,9 @@ def build_site_report(
 
     if pump_diagnoses:
         parts.append(pump_diagnosis_table(pump_diagnoses))
+
+    if ahu_diagnoses:
+        parts.append(ahu_diagnosis_table(ahu_diagnoses))
 
     for letter in sections:
         img = _section_image(

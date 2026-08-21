@@ -610,12 +610,14 @@
   ],
   "camber.integrate": [
     "Notifier",
+    "ahu_diagnoses_to_frame",
     "collect_transport",
     "diagnoses_to_frame",
     "diagnoses_to_tickets",
     "diagnosis_to_ticket",
     "dispatch_findings",
     "email_transport",
+    "export_ahu_diagnoses",
     "export_diagnoses",
     "export_findings",
     "export_pump_diagnoses",
@@ -629,7 +631,9 @@
     "webhook_transport"
   ],
   "camber.integrate.export": [
+    "ahu_diagnoses_to_frame",
     "diagnoses_to_frame",
+    "export_ahu_diagnoses",
     "export_diagnoses",
     "export_findings",
     "export_pump_diagnoses",
@@ -1044,6 +1048,7 @@
     "BuildingSummary",
     "ECM",
     "FleetReport",
+    "ahu_diagnosis_table",
     "build_dashboard",
     "build_fleet_report",
     "build_site_report",
@@ -1054,6 +1059,9 @@
     "multitrend_svg_html",
     "pump_diagnosis_table",
     "selection_bus_html"
+  ],
+  "camber.report.ahu": [
+    "ahu_diagnosis_table"
   ],
   "camber.report.audit": [
     "AuditReport",

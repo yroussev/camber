@@ -189,6 +189,61 @@ def export_pump_diagnoses(
     return _write_frame(df, path, format)
 
 
+# One row per AHU verdict; the air-side columns a screening dashboard ranks and filters on.
+_AHU_DIAG_COLS = [
+    "fingerprint",
+    "site",
+    "equip",
+    "locus",
+    "severity",
+    "ahu_wide",
+    "corroborated",
+    "causes",
+    "n_caveats",
+    "summary",
+]
+
+
+def ahu_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+    """Flatten per-AHU air-side drift diagnoses into a DataFrame (one row per AHU).
+
+    ``diagnoses`` is an iterable of :class:`camber.ahudrift.AhuDriftDiagnosis` (or anything with
+    that shape). Each row carries the AHU verdict — ``locus``, ``severity``, ``ahu_wide``,
+    ``corroborated``, the joined ``causes`` and a caveat count. ``columns`` restricts/orders output.
+    """
+    rows = []
+    for d in diagnoses:
+        equip = _attr(d, "equip", "")
+        rows.append(
+            {
+                "fingerprint": fingerprint(site, equip, "ahu_drift"),
+                "site": site,
+                "equip": equip,
+                "locus": _attr(d, "locus", ""),
+                "severity": _attr(d, "severity", "ok"),
+                "ahu_wide": bool(_attr(d, "ahu_wide", False)),
+                "corroborated": bool(_attr(d, "corroborated", False)),
+                "causes": "; ".join(_attr(d, "causes", []) or []),
+                "n_caveats": len(_attr(d, "caveats", []) or []),
+                "summary": _attr(d, "summary", ""),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if columns is not None:
+        df = df.reindex(columns=list(columns))
+    elif not df.empty:
+        df = df.reindex(columns=[c for c in _AHU_DIAG_COLS if c in df.columns])
+    return df
+
+
+def export_ahu_diagnoses(
+    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+) -> int:
+    """Write per-AHU air-side drift diagnoses to ``path`` (CSV / JSON / Parquet); return count."""
+    df = ahu_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    return _write_frame(df, path, format)
+
+
 def _write_frame(df: pd.DataFrame, path: str, format: str | None) -> int:
     fmt = (format or path.rsplit(".", 1)[-1]).lower()
     if fmt == "csv":

@@ -1,5 +1,6 @@
 """Report: audit and reporting outputs."""
 
+from .ahu import ahu_diagnosis_table
 from .audit import ECM, AuditReport, Benchmark
 from .chiller import chiller_diagnosis_table
 from .dashboard import build_dashboard, fig_to_base64
@@ -24,6 +25,7 @@ __all__ = [
     "build_site_report",
     "chiller_diagnosis_table",
     "pump_diagnosis_table",
+    "ahu_diagnosis_table",
     "fig_to_base64",
     "carpet_svg_html",
     "multitrend_svg_html",

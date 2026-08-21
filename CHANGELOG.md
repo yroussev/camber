@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.41.0] — 2026-08-21
+
+**AHU drift in export + reporting** — the air-side verdict where it acts, completing the AHU family.
+
+### Added
+- **`camber.integrate.export.ahu_diagnoses_to_frame` / `export_ahu_diagnoses`** — flatten the per-AHU
+  air-side drift diagnoses (`camber.ahudrift.AhuDriftDiagnosis`) into a one-row-per-AHU table (locus ·
+  severity · ahu_wide · corroborated · joined causes · caveat count · stable fingerprint) and write
+  CSV / JSON / Parquet, mirroring the findings, chiller- and pump-diagnosis exports.
+- **`camber.report.ahu_diagnosis_table`** — a self-contained HTML table of the AHU verdicts, ranked
+  worst-first, flagging AHU-wide cases; a standalone renderer to splice into a report.
+
+### Changed
+- **`camber.report.build_site_report`** gains an optional `ahu_diagnoses=` argument that renders the
+  `ahu_diagnosis_table` alongside the chiller and pump verdict tables, under the health scorecard.
+  Backward compatible.
+
 ## [0.40.0] — 2026-08-21
 
 **Physics-grounded AHU validation** — characterize the air-side drift stack without a dataset.
