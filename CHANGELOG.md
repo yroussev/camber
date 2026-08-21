@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.43.0] — 2026-08-21
+
+**Economizer wired into the per-AHU verdict** — `diagnose_ahu_drift` now consumes the economizer
+drift detector as the fifth `outdoor-air` locus, completing the AHU roll-up.
+
+### Changed
+- **`camber.ahudrift.diagnose_ahu_drift`** now reads `economizer_damper_drift` and localizes it to a
+  new **`outdoor-air`** side (economizer OA mixing). It is an *independent* side like a coil: it
+  contributes a localized cause (up = damper leaking / stuck-open = excess OA; down = stuck or
+  slipping closed = lost free cooling / under-ventilation), corroborates with other signals, and can
+  make the verdict `ahu-wide` — but it is held **outside** the fan-power disambiguation by design,
+  because its signal is outdoor-air fraction, not fan power. A declined economizer finding is a
+  caveat, not a cause. `AhuDriftDiagnosis.locus` gains the `outdoor-air` value; no API change
+  (existing fields, `as_dict`, and `__all__` are unchanged). The `outdoor-air` locus is not yet
+  exercised by `camber.ahusim`'s confusion matrix — the OA-mixing simulation regime is a documented
+  follow-on.
+
 ## [0.42.0] — 2026-08-21
 
 **Economizer OA-delivery drift** — the fifth AHU air-side detector, completing the family's

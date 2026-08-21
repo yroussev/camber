@@ -57,7 +57,29 @@ def _steady(equip="AHU_3"):
     return diagnose_ahu_drift([], equip=equip)
 
 
+def _outdoor_air(equip="AHU_4"):
+    return diagnose_ahu_drift(
+        [
+            _f(
+                "economizer_damper_drift",
+                "fault",
+                equip,
+                econ_oa_fraction_drift_pct=24.0,
+                econ_oa_fraction_drift_direction="up",
+            )
+        ],
+        equip=equip,
+    )
+
+
 # --------------------------------------------------------------------------- export
+
+
+def test_the_outdoor_air_locus_flows_through_export_and_report():
+    """The economizer's outdoor-air locus is a free string (no enum), so it surfaces unchanged."""
+    df = ahu_diagnoses_to_frame([_outdoor_air()], site="SITE")
+    assert df.iloc[0]["locus"] == "outdoor-air"
+    assert "outdoor-air" in ahu_diagnosis_table([_outdoor_air()])
 
 
 def test_frame_one_row_per_ahu_with_the_verdict():

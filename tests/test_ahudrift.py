@@ -1,6 +1,6 @@
 """Tests for the per-AHU air-side drift co-movement diagnosis (camber.ahudrift).
 
-Synthetic Findings stand in for the four AHU detectors; nothing runs the rules or touches data.
+Synthetic Findings stand in for the five AHU detectors; nothing runs the rules or touches data.
 """
 
 import os
@@ -41,6 +41,15 @@ def _coil(sev="fault", which="cooling", pct=16.0):
         coil_valve_which=which,
         coil_valve_drift_pct=pct,
         coil_valve_drift_direction="up",
+    )
+
+
+def _econ(sev="fault", direction="up", pct=24.0):
+    return _f(
+        "economizer_damper_drift",
+        sev,
+        econ_oa_fraction_drift_pct=pct if direction == "up" else -pct,
+        econ_oa_fraction_drift_direction=direction,
     )
 
 
@@ -133,6 +142,46 @@ def test_two_coils_fall_back_to_the_summary_token():
     d = diagnose_ahu_drift([cool])
     assert "coil_valve_drift:cooling" in d.signals
     assert any("cooling-coil" in c for c in d.causes)
+
+
+# --------------------------------------------------------------------------- economizer
+
+
+def test_economizer_over_delivery_alone_is_outdoor_air():
+    d = diagnose_ahu_drift([_econ("fault", "up")])
+    assert d.locus == "outdoor-air"
+    assert any("over-delivering outdoor air" in c for c in d.causes)
+    assert d.signals["economizer_damper_drift"]["side"] == "outdoor-air"
+
+
+def test_economizer_under_delivery_alone_is_outdoor_air():
+    d = diagnose_ahu_drift([_econ("fault", "down")])
+    assert d.locus == "outdoor-air"
+    assert any("under-delivering outdoor air" in c and "lost free cooling" in c for c in d.causes)
+
+
+def test_economizer_plus_coil_is_ahu_wide_and_corroborated():
+    d = diagnose_ahu_drift([_econ("fault", "up"), _coil("warn", "cooling")])
+    assert d.ahu_wide is True and d.locus == "ahu-wide" and d.corroborated is True
+    assert any("over-delivering outdoor air" in c for c in d.causes)
+    assert any("cooling-coil" in c for c in d.causes)
+    assert d.causes[0].startswith("economizer over-delivering")  # fault outranks the warn coil
+
+
+def test_declined_economizer_is_a_caveat_not_a_cause():
+    declined = _f(
+        "economizer_damper_drift", "info", declined=True, reason="economizer_inputs_not_mapped"
+    )
+    d = diagnose_ahu_drift([_coil("fault", "cooling"), declined])
+    assert d.locus == "coil" and d.corroborated is False
+    assert any("economizer_inputs_not_mapped" in c for c in d.caveats)
+
+
+def test_economizer_does_not_trigger_the_fan_disambiguation():
+    """The economizer is an independent side; fan-power excess with it stays ambiguous (Case D)."""
+    d = diagnose_ahu_drift([_fan("fault"), _econ("fault", "up")])
+    assert d.locus == "ahu-wide" and d.corroborated is True  # sides {fan, outdoor-air}
+    assert any("no filter or duct-static point is mapped" in c for c in d.caveats)
 
 
 # --------------------------------------------------------------------------- ahu-wide / ranking

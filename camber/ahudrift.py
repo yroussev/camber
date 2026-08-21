@@ -1,6 +1,6 @@
 """AHU air-side drift **co-movement diagnosis** -- localize an air handler's drift to one subsystem.
 
-Four drift detectors watch one air handler, and each is deliberately narrow:
+Five drift detectors watch one air handler, and each is deliberately narrow:
 
 * :class:`camber.rules.fan_efficiency_rule.FanEfficiencyDrift` -- fan power-at-matched-airflow (an
   *excess* is wire-to-air efficiency loss);
@@ -9,7 +9,10 @@ Four drift detectors watch one air handler, and each is deliberately narrow:
 * :class:`camber.rules.duct_static_rule.DuctStaticControlDrift` -- duct static-at-matched-airflow (a
   *fall* is the fan not holding setpoint, a *rise* is over-pressurization);
 * :class:`camber.rules.coil_valve_rule.CoilValveDrift` -- coil valve-at-matched-ΔT (a *creep* is
-  coil heat-transfer loss); a cooling and a heating coil can each drift, so up to two appear.
+  coil heat-transfer loss); a cooling and a heating coil can each drift, so up to two appear;
+* :class:`camber.rules.economizer_damper_rule.EconomizerDamperDrift` -- outdoor-air
+  fraction-at-matched-damper-command (an *up* is a leaking / stuck-open damper, a *down* is a stuck
+  or slipping-closed one).
 
 :func:`diagnose_ahu_drift` reads the individual Findings, names each drifting signal's localized
 cause, flags **corroboration** when two or more agree, and -- the headline -- runs the **fan-power
@@ -24,10 +27,13 @@ resistance* (a loading filter, a rising duct static); the filter and static sign
 * fan-power excess with a **clean** filter and **steady** static -> the fan itself;
 * fan-power excess with **no** filter or static point mapped -> ambiguous, and the rule says so.
 
-It splits the AHU into a **fan** (mechanical), an **air-path** (filter + static delivery), and a
-**coil** (heat transfer) side, reports a ``locus`` (steady · fan · air-path · coil · ahu-wide) + an
-``ahu_wide`` flag (more than one side drifting), and stays screening-grade -- corroboration raises
-priority and specificity, not the severity tier. This is the air-side twin of
+It splits the AHU into a **fan** (mechanical), an **air-path** (filter + static delivery), a
+**coil** (heat transfer), and an **outdoor-air** (economizer OA mixing) side, reports a ``locus``
+(steady · fan · air-path · coil · outdoor-air · ahu-wide) + an ``ahu_wide`` flag (more than one side
+drifting), and stays screening-grade -- corroboration raises priority and specificity, not the
+severity tier. The economizer is an independent side (like a coil): it corroborates and can make the
+verdict AHU-wide, but it is deliberately **outside** the fan-power disambiguation, because its
+signal is outdoor-air fraction, not fan power. This is the air-side twin of
 :func:`camber.pumpdrift.diagnose_pump_drift`'s flow-vs-head check. Pure over Findings -- no data, no
 I/O.
 """
@@ -46,13 +52,14 @@ _FAN_CAUSE = "fan mechanical degradation (belt slip / bearing drag / motor or VF
 
 @dataclass
 class AhuDriftDiagnosis:
-    """A single per-AHU verdict synthesized from the four air-side drift Findings.
+    """A single per-AHU verdict synthesized from the five air-side drift Findings.
 
     ``severity`` is the worst of the contributing signals; ``locus`` says where the drift sits
-    (``steady`` · ``fan`` · ``air-path`` · ``coil`` · ``ahu-wide``); ``ahu_wide`` is True when more
-    than one AHU side is drifting; ``causes`` are the localized causes (worst-first); ``signals``
-    maps each rule (coils keyed ``coil_valve_drift:<which>``) to ``{drift, severity, cause, side}``;
-    ``corroborated`` is True when two or more signals drift together.
+    (``steady`` · ``fan`` · ``air-path`` · ``coil`` · ``outdoor-air`` · ``ahu-wide``); ``ahu_wide``
+    is True when more than one AHU side is drifting; ``causes`` are the localized causes
+    (worst-first); ``signals`` maps each rule (coils keyed ``coil_valve_drift:<which>``) to
+    ``{drift, severity, cause, side}``; ``corroborated`` is True when two or more signals drift
+    together.
     """
 
     equip: str
@@ -91,8 +98,8 @@ def diagnose_ahu_drift(findings, *, equip: str | None = None) -> AhuDriftDiagnos
 
     ``findings`` is an iterable of :class:`camber.rules.base.Finding` (from ``run_periods``); the
     air-side ones (``fan_efficiency_drift``, ``filter_loading_drift``, ``duct_static_drift``,
-    ``coil_valve_drift``) are picked out by rule name and the rest ignored. A declined signal is a
-    caveat, not a cause.
+    ``coil_valve_drift``, ``economizer_damper_drift``) are picked out by rule name and the rest
+    ignored. A declined signal is a caveat, not a cause.
     """
     fs = list(findings)
     if equip is None:
@@ -223,6 +230,25 @@ def diagnose_ahu_drift(findings, *, equip: str | None = None) -> AhuDriftDiagnos
             "coil",
         )
 
+    # --- economizer: OA-delivery, an independent side (NOT part of the fan-power disambiguation) --
+    ef = _get(fs, "economizer_damper_drift")
+    if ef is not None and not _declined(ef, caveats) and ef.severity in _DEGRADING:
+        m = ef.metrics
+        up = m.get("econ_oa_fraction_drift_direction") == "up"
+        cause = (
+            "economizer over-delivering outdoor air (OA damper leaking / stuck or slipping open)"
+            if up
+            else "economizer under-delivering outdoor air (OA damper stuck or slipping closed -- "
+            "lost free cooling / under-ventilation)"
+        )
+        _record(
+            "economizer_damper_drift",
+            ef.severity,
+            m.get("econ_oa_fraction_drift_pct"),
+            cause,
+            "outdoor-air",
+        )
+
     # --- synthesis -------------------------------------------------------------------------------
     severity = "ok"
     for sev, _c, _s in scored:
@@ -247,8 +273,8 @@ def diagnose_ahu_drift(findings, *, equip: str | None = None) -> AhuDriftDiagnos
         )
     if ahu_wide:
         caveats.append(
-            "more than one AHU subsystem (fan / air-path / coil) is drifting -- an AHU-wide cause "
-            "is more likely than one component"
+            "more than one AHU subsystem (fan / air-path / coil / outdoor-air) is drifting -- an "
+            "AHU-wide cause is more likely than one component"
         )
 
     if not causes:

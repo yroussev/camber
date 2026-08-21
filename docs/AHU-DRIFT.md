@@ -44,15 +44,14 @@ the job of `economizer_lockout_rule` and `freecoolingmissed_rule`. Two confounds
 mixed-air sensor stratifies badly and sits in the numerator, so a standing caveat (Sellers, *Relative
 Accuracy*) flags that and the magnitude floor is set high above it; and where outdoor and return air
 are too close (`|RAT−OAT|` small) the ratio is ill-conditioned, so those rows are excluded before the
-fit. Reuses `OAT` / `RETURN_AIR_TEMP` / `MIXED_AIR_TEMP` / `OA_DAMPER`; no new role. Rolling the
-economizer into `diagnose_ahu_drift` as a fifth `outdoor-air` locus is a follow-on; today it surfaces
-as its own finding.
+fit. Reuses `OAT` / `RETURN_AIR_TEMP` / `MIXED_AIR_TEMP` / `OA_DAMPER`; no new role. `diagnose_ahu_drift`
+consumes it as the fifth `outdoor-air` locus (see below).
 
 ## One per-AHU verdict
 
-The four detectors fail *independently* (a slipping belt, a dirty filter, a lost static setpoint, and
-a fouled coil are different faults) but corroborate when a problem is AHU-wide.
-`camber.ahudrift.diagnose_ahu_drift(findings)` reads them and returns one localized
+The five detectors fail *independently* (a slipping belt, a dirty filter, a lost static setpoint, a
+fouled coil, and a drifting OA damper are different faults) but corroborate when a problem is
+AHU-wide. `camber.ahudrift.diagnose_ahu_drift(findings)` reads them and returns one localized
 `AhuDriftDiagnosis` — naming each cause, flagging **corroboration** when two or more agree, and running
 the **fan-power disambiguation** that no single signal can do (the air-side twin of `pumpdrift`'s
 flow-vs-head check):
@@ -63,9 +62,13 @@ flow-vs-head check):
 - fan-power excess with a **clean** filter and **steady** static → the **fan itself**;
 - fan-power excess with **no** filter or static point → called ambiguous rather than asserted.
 
-It splits the AHU into fan (mechanical) / air-path (filter + static) / coil sides, reports a `locus`
-(steady · fan · air-path · coil · ahu-wide) with an `ahu_wide` flag, and names a cooling and a heating
-coil separately. Screening-grade; pure over Findings.
+It splits the AHU into fan (mechanical) / air-path (filter + static) / coil / outdoor-air (economizer
+OA mixing) sides, reports a `locus` (steady · fan · air-path · coil · outdoor-air · ahu-wide) with an
+`ahu_wide` flag, and names a cooling and a heating coil separately. The economizer is an **independent
+side** (like a coil): it corroborates and can make the verdict AHU-wide, but it is deliberately
+**outside** the fan-power disambiguation, because its signal is outdoor-air fraction, not fan power.
+Screening-grade; pure over Findings. (The `outdoor-air` locus is not yet exercised by `ahusim`'s
+confusion matrix — the OA-mixing regime is a documented follow-on, like the heating-coil regime.)
 
 ## Surfacing the verdict
 
