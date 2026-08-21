@@ -4,6 +4,26 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.39.0] — 2026-08-19
+
+**Per-AHU co-movement diagnosis** — the air-side analog of `diagnose_pump_drift`.
+
+### Added
+- **`camber.ahudrift.diagnose_ahu_drift`** (+ `AhuDriftDiagnosis`) — synthesizes the four air-side
+  drift Findings (fan efficiency, filter loading, duct static, coil valve) into one per-AHU diagnosis:
+  it names each drifting signal's localized cause, flags **corroboration** when two or more agree, and
+  runs the **fan-power disambiguation** no single signal can — a fan-power excess **with** a loading
+  filter or rising duct static is the *air path* (fix the filter/duct first; the fan power is
+  corroborating), **with** a falling duct static is *fan degradation*, with a **clean** filter and
+  **steady** static is the *fan itself*, and with **no** filter/static point is called ambiguous. It
+  splits the AHU into fan (mechanical) / air-path (filter + static) / coil sides, reports a `locus`
+  (steady · fan · air-path · coil · ahu-wide) and an `ahu_wide` flag, names a cooling and a heating
+  coil separately, and stays screening-grade; pure over Findings.
+
+### Changed
+- **`camber.rules.coil_valve_rule.CoilValveDrift`** now emits a `coil_valve_which` metric
+  (`"cooling"`/`"heating"`) so the AHU diagnosis can name and de-duplicate the two coils. Additive.
+
 ## [0.38.0] — 2026-08-19
 
 **Coil heat-transfer drift** — valve-position creep at matched delivered air-ΔT.

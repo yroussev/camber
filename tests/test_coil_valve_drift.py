@@ -96,6 +96,7 @@ def test_valve_creep_flags_fouling():
     assert f.metrics["coil_valve_sustained_alarm"] is True
     assert f.metrics["coil_valve_alarm_direction"] == "up"
     assert "fouling" in f.summary and "cooling-coil" in f.summary
+    assert f.metrics["coil_valve_which"] == "cooling"
 
 
 def test_a_healthy_coil_does_not_flag():
@@ -143,6 +144,7 @@ def test_it_reparameterizes_to_a_heating_coil_under_a_distinct_kind():
     f = rule.analyze_periods("AHU_1", heat("2025-05-01", 1), heat("2025-06-01", 2, foul=16.0))
     assert f.severity == "fault" and f.metrics["coil_valve_drift_direction"] == "up"
     assert "heating-coil" in f.summary
+    assert f.metrics["coil_valve_which"] == "heating"
     # heating freezes under its own kind, never colliding with a cooling coil on the same equip
     assert store.get("SITE", "AHU_1", "coil_valve_heat") is not None
     assert store.get("SITE", "AHU_1", "coil_valve_cool") is None

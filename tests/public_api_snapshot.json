@@ -64,6 +64,10 @@
     "AHU_MEASURES",
     "analyze_ahu"
   ],
+  "camber.ahudrift": [
+    "AhuDriftDiagnosis",
+    "diagnose_ahu_drift"
+  ],
   "camber.anomaly": [
     "AnomalyResult",
     "detect_anomalies"

@@ -31,6 +31,25 @@ when the *duct-static setpoint* is raised (the fan works harder to hold a higher
 duct-static point is mapped the rule reports the concurrent static shift and caveats a power excess
 that co-moves with rising static.
 
+## One per-AHU verdict
+
+The four detectors fail *independently* (a slipping belt, a dirty filter, a lost static setpoint, and
+a fouled coil are different faults) but corroborate when a problem is AHU-wide.
+`camber.ahudrift.diagnose_ahu_drift(findings)` reads them and returns one localized
+`AhuDriftDiagnosis` — naming each cause, flagging **corroboration** when two or more agree, and running
+the **fan-power disambiguation** that no single signal can do (the air-side twin of `pumpdrift`'s
+flow-vs-head check):
+
+- fan-power excess **with** a loading filter or a rising duct static → the **air path** (fix the
+  filter / check the ductwork first; the fan power is corroborating, not a separate fan fault);
+- fan-power excess **with** the duct static falling below setpoint → **fan degradation**;
+- fan-power excess with a **clean** filter and **steady** static → the **fan itself**;
+- fan-power excess with **no** filter or static point → called ambiguous rather than asserted.
+
+It splits the AHU into fan (mechanical) / air-path (filter + static) / coil sides, reports a `locus`
+(steady · fan · air-path · coil · ahu-wide) with an `ahu_wide` flag, and names a cooling and a heating
+coil separately. Screening-grade; pure over Findings.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

@@ -357,6 +357,7 @@ class CoilValveDrift:
             "coil_valve_n_current": drift.n_current,
             "coil_valve_baseline_sigma_pct": frozen.sigma_f,
             "coil_valve_baseline_frozen_at": rec.frozen_at if rec else "",
+            "coil_valve_which": self._label,  # "cooling" | "heating" -- for the AHU diagnosis
             "coil_deltat_median_f": round(float(cur_t[_DELTAT].median()), 3)
             if len(cur_t)
             else None,
