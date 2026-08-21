@@ -188,6 +188,23 @@ cc = cause_confusion(
 print(cc.accuracy, cc.corroboration_accuracy, cc.as_dict()["matrix"])
 ```
 
+**The evaporator side has the same physics validator.** `camber.evaporatorsim` characterizes
+`diagnose_evaporator_drift` (also cause + corroboration, no `locus`) with a `CauseConfusion` too. It
+models the low side through **one shared feed latent**: an overfeed lowers superheat **and** raises
+suction pressure together, a starvation raises superheat **and** lowers suction — so the two feed
+reads co-move and the diagnosis's superheat-vs-suction cross-check fires for real. Evaporator fouling
+widens the approach alone. It includes the negative confound `chw_reset` — a chilled-water-supply
+shift that lifts suction through the evaporating-temperature chain while superheat stays quiet, which
+the cross-check correctly does **not** corroborate. On clear faults it names the right cause and sets
+the right corroboration flag at ~100% with no false alarms.
+
+```python
+from camber.evaporatorsim import make_cases, cause_confusion
+
+cc = cause_confusion(make_cases(), min_severity=3)
+print(cc.accuracy, cc.corroboration_accuracy, cc.as_dict()["matrix"])
+```
+
 ```python
 from camber.driftvalidation import LabeledCase, evaluate, sweep
 from camber.rules.chiller_superheat_rule import ChillerSuperheatDrift

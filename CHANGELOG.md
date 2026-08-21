@@ -4,6 +4,25 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.49.0] — 2026-08-21
+
+**Evaporator / chilled-water physics validator** — `camber.evaporatorsim`, completing the evaporator
+family to parity with the chiller/pump/AHU/condenser sims (detectors → diagnosis → sim → surfacing).
+
+### Added
+- **`camber.evaporatorsim`** — a physics-grounded synthetic generator for the evaporator / low side
+  that runs the three real evaporator drift detectors + `diagnose_evaporator_drift` end-to-end
+  without a dataset. Because the diagnosis produces a *cause + corroboration* verdict (no `locus`),
+  it scores a **`CauseConfusion`** (mirroring `camber.condensersim`). The low side is coupled through
+  one shared feed latent — an overfeed lowers superheat and raises suction pressure together, a
+  starvation raises superheat and lowers suction — so the superheat-vs-suction cross-check fires
+  emergently and the diagnosis corroborates it; evaporator fouling widens the approach alone. Includes
+  the negative confound `chw_reset` (a chilled-water-supply shift lifts suction via the evaporating
+  temperature with superheat quiet), which the cross-check correctly does not corroborate. On clear
+  faults it names the right cause with the right corroboration flag at ~100% and no false alarms.
+  Public API: `EvaporatorFault`, `FAULTS`, `SimulatedCase`, `simulate_case`, `make_cases`,
+  `build_evaporator_suite`, `diagnose_evaporator_frames`, `CauseConfusion`, `cause_confusion`.
+
 ## [0.48.0] — 2026-08-21
 
 **Evaporator / chilled-water drift in export + reporting** — the low-side verdict where it acts,

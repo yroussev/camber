@@ -441,6 +441,17 @@
     "EvaporatorDriftDiagnosis",
     "diagnose_evaporator_drift"
   ],
+  "camber.evaporatorsim": [
+    "CauseConfusion",
+    "EvaporatorFault",
+    "FAULTS",
+    "SimulatedCase",
+    "build_evaporator_suite",
+    "cause_confusion",
+    "diagnose_evaporator_frames",
+    "make_cases",
+    "simulate_case"
+  ],
   "camber.fault_economics": [
     "DEFAULTS",
     "DEFAULT_MODELS",
