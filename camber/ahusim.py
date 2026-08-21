@@ -16,8 +16,14 @@ filter loading presents as filter-up + power-up (→ air-path),
 while a *fan-mechanical* fault raises power alone (→ fan). The coupling is emergent -- one filter
 delta feeds both channels via the shared component-pressure model, not a hand-tuned pair.
 
-v1 models the cooling coil as the single active coil (an econ-off cooling-season regime; a heating
-regime is a documented follow-on). Deterministic given a seed; numpy / pandas only (core deps).
+The cooling coil is the single active coil (a heating regime is a documented follow-on), but the
+mixing box **is** modeled: ``MIXED_AIR_TEMP`` is a genuine outdoor/return-air mix driven by a swept
+OA-damper command, so the economizer detector's outdoor-air-fraction signal (and its ``outdoor-air``
+locus) is exercised. To keep the cooling-coil signal invariant under that mix, ``SUPPLY_AIR_TEMP``
+is derived as ``MAT - dt`` -- so the coil's air-ΔT ``MIXED_AIR_TEMP - SUPPLY_AIR_TEMP == dt`` by
+construction, regardless of the mix. (A consequence: ``SUPPLY_AIR_TEMP`` is a derived, cosmetically
+low value; it is only ever read as the difference ``MAT - SAT`` by the one coil detector, and no
+suite gate checks its absolute level.) Deterministic given a seed; numpy / pandas only (core deps).
 """
 
 from __future__ import annotations
@@ -61,6 +67,28 @@ _V0 = 15.0  # healthy cooling-valve intercept, %
 _V_SLOPE = 1.5  # valve %/degF of ΔT
 _CHWS = 44.0
 
+# Outdoor-air / economizer mixing regime (the outdoor-air locus). MAT is a real OA/RA mix so the
+# economizer detector reads OAF = 100*(RAT-MAT)/(RAT-OAT); OAT stays far enough from RAT that
+# |RAT-OAT| clears the detector's DENOM_MIN_F=10 degenerate gate. The OA damper sits at a minimum-
+# position band with whole-DAY economizing excursions (decorrelated from the 24h coil/airflow
+# cycle), so a majority of samples stay non-economizing (the coil fit keeps its ΔT span) while the
+# command still sweeps >10pp for the economizer fit.
+_RAT = 74.0  # return-air temperature
+_RAT_NOISE = 0.4
+_OAT_MID = 56.0  # outdoor-air diurnal mean
+_OAT_SWING = 6.0
+_OAT_NOISE = 1.0
+_OAT_CLIP = (48.0, 63.0)  # keeps |RAT-OAT| >= ~10 for the mixing ratio
+_ECON_OAF_INTERCEPT = 8.0  # delivered OA fraction (%) at zero damper command
+_ECON_OAF_SLOPE = 0.9  # delivered OA fraction (%) per % of damper command
+_MAT_SENSOR_NOISE = 0.5  # mixed-air sensor noise (degF) -> the OAF residual scatter (~3pp)
+_OA_MIN = 15.0  # minimum-position damper band floor, %
+_ECON_SWING = 45.0  # economizing excursion amplitude, %
+_ECON_PERIOD_D = 5.0  # whole-day economizing period (days)
+_ECON_PHASE = 0.6
+_DAMPER_NOISE = 1.0
+_ECON_DAMPER_OPEN = 25.0  # economizing threshold (matches coil_valve's ECON_DAMPER_OPEN)
+
 # Per-channel run-to-run noise (1-sigma), sized against the detector sigma floors.
 _Q_NOISE = 120.0
 _POWER_NOISE = 0.30
@@ -82,12 +110,13 @@ class AhuFault:
     """
 
     name: str
-    expected_locus: str  # steady | fan | air-path | coil | ahu-wide
+    expected_locus: str  # steady | fan | air-path | coil | outdoor-air | ahu-wide
     d_filter_resist_frac: float = 0.0  # filter resistance up -> filter DP AND fan power (coupled)
     d_fan_power_frac: float = 0.0  # fan efficiency loss -> fan power only
     d_static: float = 0.0  # additive duct-static residual at matched airflow (+up / -down)
     d_static_sp: float = 0.0  # additive setpoint change; static tracks it (a reset, must not alarm)
     d_cool_valve: float = 0.0  # additive cooling-valve % at matched ΔT (coil fouling)
+    d_oa_fraction: float = 0.0  # delivered-OAF offset (pp) at matched command (+over / -under)
     extra_power_noise: float = 0.0  # bearing-drag roughness
 
 
@@ -104,6 +133,10 @@ FAULTS: dict[str, AhuFault] = {
         "over_pressurization", "air-path", d_static=0.13, d_fan_power_frac=0.03
     ),
     "cooling_coil_fouling": AhuFault("cooling_coil_fouling", "coil", d_cool_valve=5.0),
+    "econ_damper_leak": AhuFault("econ_damper_leak", "outdoor-air", d_oa_fraction=8.0),
+    "econ_damper_stuck_closed": AhuFault(
+        "econ_damper_stuck_closed", "outdoor-air", d_oa_fraction=-8.0
+    ),
     "static_reset": AhuFault(
         "static_reset", "steady", d_static_sp=0.15
     ),  # negative: must not alarm
@@ -146,21 +179,46 @@ def _frame(n: int, *, start: str, seed: int, fault: AhuFault | None, severity: i
     valve = (
         _V0 + _V_SLOPE * dt + (f.d_cool_valve * s if f else 0.0) + rng.normal(0, _VALVE_NOISE, n)
     )
+    # Hoisted out of the frame literal to lock its RNG-stream position (draw #6): all outdoor-air
+    # mixing draws below are appended AFTER it, so the fan/filter/static channels stay bit-identical
+    # to the pre-mixing generator and the existing four-locus confusion matrix is undisturbed.
+    filt_channel = filt_dp_mean + rng.normal(0, _FILT_NOISE, n)
+
+    # --- outdoor-air / economizer mixing (draws appended last; see the note above) ----------------
+    hh = np.arange(n)
+    oat = (
+        _OAT_MID
+        + _OAT_SWING * np.sin((hh % 24 - 15) / 24 * 2 * np.pi)
+        + rng.normal(0, _OAT_NOISE, n)
+    )
+    oat = np.clip(oat, *_OAT_CLIP)
+    rat = _RAT + rng.normal(0, _RAT_NOISE, n)
+    day = hh // 24
+    econ_frac = np.clip(np.sin(2 * np.pi * day / _ECON_PERIOD_D - _ECON_PHASE), 0.0, 1.0)
+    oa_damper = np.clip(
+        _OA_MIN + _ECON_SWING * econ_frac + rng.normal(0, _DAMPER_NOISE, n), 0.0, 100.0
+    )
+    d_oaf = f.d_oa_fraction * s if f else 0.0
+    oaf_delivered = _ECON_OAF_INTERCEPT + _ECON_OAF_SLOPE * oa_damper + d_oaf
+    mat = rat - (oaf_delivered / 100.0) * (rat - oat) + rng.normal(0, _MAT_SENSOR_NOISE, n)
+    sat = mat - dt  # so the coil air-ΔT (MAT - SAT == dt) is invariant under the mix
 
     return pd.DataFrame(
         {
             Role.AIRFLOW: q,
             Role.SUPPLY_FAN_STATUS: np.ones(n),
             Role.POWER: power,
-            Role.FILTER_DIFF_PRESS: filt_dp_mean + rng.normal(0, _FILT_NOISE, n),
+            Role.FILTER_DIFF_PRESS: filt_channel,
             Role.DUCT_STATIC: duct_static,
             Role.DUCT_STATIC_SP: np.full(n, static_sp),
             Role.COOL_VALVE: np.clip(valve, 0.0, 100.0),
-            Role.MIXED_AIR_TEMP: _SAT + dt,
-            Role.SUPPLY_AIR_TEMP: np.full(n, _SAT),
+            Role.MIXED_AIR_TEMP: mat,
+            Role.SUPPLY_AIR_TEMP: sat,
+            Role.OAT: oat,
+            Role.RETURN_AIR_TEMP: rat,
             Role.CHW_SUPPLY_TEMP: np.full(n, _CHWS),
-            Role.ECON_CMD: np.zeros(n),
-            Role.OA_DAMPER: np.full(n, 15.0),
+            Role.ECON_CMD: (oa_damper > _ECON_DAMPER_OPEN).astype(float),
+            Role.OA_DAMPER: oa_damper,
         },
         index=idx,
     )
@@ -251,6 +309,7 @@ def build_ahu_suite(store, *, site: str = "SIM", run_id: str = "SIM", coils=("co
     """The air-side drift detectors that feed the AHU diagnosis, sharing one ``store``."""
     from .rules.coil_valve_rule import CoilValveDrift
     from .rules.duct_static_rule import DuctStaticControlDrift
+    from .rules.economizer_damper_rule import EconomizerDamperDrift
     from .rules.fan_efficiency_rule import FanEfficiencyDrift
     from .rules.filter_loading_rule import FilterLoadingDrift
 
@@ -258,6 +317,7 @@ def build_ahu_suite(store, *, site: str = "SIM", run_id: str = "SIM", coils=("co
         FanEfficiencyDrift(store, site=site, run_id=run_id),
         FilterLoadingDrift(store, site=site, run_id=run_id),
         DuctStaticControlDrift(store, site=site, run_id=run_id),
+        EconomizerDamperDrift(store, site=site, run_id=run_id),
     ]
     suite += [CoilValveDrift(store, site=site, run_id=run_id, coil=c) for c in coils]
     return suite

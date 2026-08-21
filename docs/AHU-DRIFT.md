@@ -67,8 +67,8 @@ OA mixing) sides, reports a `locus` (steady · fan · air-path · coil · outdoo
 `ahu_wide` flag, and names a cooling and a heating coil separately. The economizer is an **independent
 side** (like a coil): it corroborates and can make the verdict AHU-wide, but it is deliberately
 **outside** the fan-power disambiguation, because its signal is outdoor-air fraction, not fan power.
-Screening-grade; pure over Findings. (The `outdoor-air` locus is not yet exercised by `ahusim`'s
-confusion matrix — the OA-mixing regime is a documented follow-on, like the heating-coil regime.)
+Screening-grade; pure over Findings. (The `outdoor-air` locus is exercised end-to-end by `ahusim`'s
+confusion matrix via an OA/RA mixing regime — see Calibration.)
 
 ## Surfacing the verdict
 
@@ -86,7 +86,13 @@ As with the other families, `camber.driftvalidation` tunes them once labelled AH
 and the physics generator `camber.ahusim` (system curve ΔP ∝ Q² + fan laws) characterizes the family
 end-to-end without a dataset — on clear faults the AHU diagnosis localizes to the right `locus` at
 ~100% with no false alarms on healthy AHUs or a static-reset schedule, and it proves the fan-power
-disambiguation (`filter_loading → air-path` vs `fan_belt_slip → fan`).
+disambiguation (`filter_loading → air-path` vs `fan_belt_slip → fan`). All five loci are exercised,
+including **`outdoor-air`**: the generator models a genuine OA/RA mixing box (`MAT` a real mix of a
+swept OA-damper command) with two economizer faults — a leaking / stuck-open damper (over-delivery)
+and a stuck / slipping-closed one (under-delivery). To keep the coil signal invariant under the mix,
+`SUPPLY_AIR_TEMP` is derived as `MAT − dt`, so the cooling-coil air-ΔT stays `dt` by construction
+while `MAT` floats — an economizer fault localizes to `outdoor-air` alone and leaves the other four
+families untouched.
 
 ```python
 from camber.ahusim import make_cases, locus_confusion

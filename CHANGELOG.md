@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.44.0] — 2026-08-21
+
+**ahusim exercises the outdoor-air locus** — the physics validator now models the economizer OA
+mixing box, so the fifth AHU locus is characterized end-to-end alongside the original four.
+
+### Changed
+- **`camber.ahusim`** gains an outdoor-air / economizer mixing regime. `MIXED_AIR_TEMP` is now a
+  genuine outdoor/return-air mix driven by a swept `OA_DAMPER` command (`OAT` and `RETURN_AIR_TEMP`
+  channels added), so the economizer detector's OA-fraction signal is exercised; `SUPPLY_AIR_TEMP` is
+  derived as `MAT − dt` so the cooling-coil air-ΔT is preserved by construction and the existing four
+  fault families stay bit-identical (the confusion matrix is undisturbed). Adds an `AhuFault`
+  `d_oa_fraction` lever and two faults — `econ_damper_leak` (over-delivery, up) and
+  `econ_damper_stuck_closed` (under-delivery, down), both `expected_locus="outdoor-air"` — and wires
+  `EconomizerDamperDrift` into `build_ahu_suite`. On clear faults the diagnosis localizes all five
+  loci at ~100% with no economizer false alarms on healthy AHUs. No public API change (new symbols
+  are internal constants, a dataclass field, and `FAULTS` data).
+
 ## [0.43.0] — 2026-08-21
 
 **Economizer wired into the per-AHU verdict** — `diagnose_ahu_drift` now consumes the economizer

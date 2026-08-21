@@ -78,6 +78,37 @@ def test_healthy_and_static_reset_do_not_false_alarm():
         assert diagnose_ahu_frames(c.baseline, c.current, equip=c.equip).locus == "steady"
 
 
+# --------------------------------------------------------------------------- outdoor-air / econ
+
+
+def test_economizer_fault_localizes_to_outdoor_air_with_direction():
+    """A leaking damper (over-delivery, up) and a stuck-closed one (under-delivery, down)."""
+    leak = diagnose_ahu_frames(*_fp("econ_damper_leak", 4, 61))
+    stuck = diagnose_ahu_frames(*_fp("econ_damper_stuck_closed", 4, 62))
+    assert leak.locus == "outdoor-air"
+    assert leak.signals["economizer_damper_drift"]["side"] == "outdoor-air"
+    assert any("over-delivering outdoor air" in c for c in leak.causes)
+    assert stuck.locus == "outdoor-air"
+    assert any("under-delivering outdoor air" in c for c in stuck.causes)
+
+
+def test_economizer_severity_gradient():
+    """Localization for the economizer fault climbs weak -> strong, like the other families."""
+    weak = locus_confusion(
+        make_cases(seed0=70, faults=["econ_damper_leak"], severities=(1,), n_healthy=0)
+    )
+    strong = locus_confusion(
+        make_cases(seed0=70, faults=["econ_damper_leak"], severities=(4,), n_healthy=0)
+    )
+    assert weak.accuracy < strong.accuracy and strong.accuracy >= 0.9
+
+
+def test_a_swept_damper_does_not_starve_the_coil_fit():
+    """The whole-day economizing sweep still leaves the cooling-coil family localizable."""
+    c = simulate_case("cooling_coil_fouling", 4, seed=63)
+    assert diagnose_ahu_frames(c.baseline, c.current, equip=c.equip).locus == "coil"
+
+
 # --------------------------------------------------------------------------- the money test
 
 
