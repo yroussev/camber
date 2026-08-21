@@ -4,6 +4,26 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.46.0] — 2026-08-21
+
+**Condenser heat-rejection physics validator** — `camber.condensersim`, closing the condenser family
+to parity with the chiller/pump/AHU sims (detectors → diagnosis → sim → surfacing).
+
+### Added
+- **`camber.condensersim`** — a physics-grounded synthetic generator for the condenser-water /
+  cooling-tower loop that runs the four real condenser drift detectors + `diagnose_condenser_drift`
+  end-to-end without a dataset. Because the diagnosis produces a *cause + corroboration* verdict (it
+  has no `locus`), the validator scores a **`CauseConfusion`** (did it name the expected cause, with
+  the right corroboration flag?) rather than a locus confusion. The loop is coupled through two
+  shared quantities — condensing temperature `TCOND = CWS + condenser approach` and entering water
+  `CWS = wet-bulb + tower approach` — so co-movement is emergent: tube scaling widens the condenser
+  approach and lifts head pressure (corroborated system-side scaling); a fouling tower lifts `CWS`
+  and head pressure. It includes the negative confound `ambient_cw_rise` (a CW/head rise with a quiet
+  tower) that the head-pressure confound demotes to likely-ambient rather than flagging. On clear
+  faults it names the right cause and sets the right corroboration flag at ~100% with no false
+  alarms. Public API: `CondenserFault`, `FAULTS`, `SimulatedCase`, `simulate_case`, `make_cases`,
+  `build_condenser_suite`, `diagnose_condenser_frames`, `CauseConfusion`, `cause_confusion`.
+
 ## [0.45.0] — 2026-08-21
 
 **Condenser heat-rejection drift in export + reporting** — the condenser-loop verdict where it acts,

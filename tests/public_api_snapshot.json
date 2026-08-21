@@ -314,6 +314,17 @@
     "CondenserDriftDiagnosis",
     "diagnose_condenser_drift"
   ],
+  "camber.condensersim": [
+    "CauseConfusion",
+    "CondenserFault",
+    "FAULTS",
+    "SimulatedCase",
+    "build_condenser_suite",
+    "cause_confusion",
+    "diagnose_condenser_frames",
+    "make_cases",
+    "simulate_case"
+  ],
   "camber.condenserwater": [
     "CondenserWaterResetResult",
     "analyze_cw_reset"

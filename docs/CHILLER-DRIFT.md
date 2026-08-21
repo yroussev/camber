@@ -160,6 +160,26 @@ lc = locus_confusion(make_cases(), min_severity=3)  # localization on the clear 
 print(lc.accuracy, lc.as_dict()["matrix"])
 ```
 
+**The condenser heat-rejection family has its own physics validator.** Because
+`diagnose_condenser_drift` produces a *cause + corroboration* verdict (not a `locus`),
+`camber.condensersim` characterizes it with a `CauseConfusion` instead: it models the coupled loop —
+condensing temperature `TCOND = CWS + condenser approach`, entering water `CWS = wet-bulb + tower
+approach` — so co-movement is emergent (tube scaling widens the condenser approach **and** lifts head
+pressure; a fouling tower lifts `CWS` **and** head pressure), and it includes the negative confound
+`ambient_cw_rise` — a CW/head rise with a **quiet tower** that the head-pressure confound must demote
+to likely-ambient rather than flag. On clear faults it names the right cause and sets the right
+corroboration flag at ~100% with no false alarms, and `SimulatedCase.to_labeled(relevant=…)` feeds
+the same per-detector ROC.
+
+```python
+from camber.condensersim import make_cases, cause_confusion
+
+cc = cause_confusion(
+    make_cases(), min_severity=3
+)  # cause detection + corroboration on clear faults
+print(cc.accuracy, cc.corroboration_accuracy, cc.as_dict()["matrix"])
+```
+
 ```python
 from camber.driftvalidation import LabeledCase, evaluate, sweep
 from camber.rules.chiller_superheat_rule import ChillerSuperheatDrift
