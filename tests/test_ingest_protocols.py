@@ -324,3 +324,59 @@ def test_adapters_reference_no_write_services():
                 names.add(node.id)
         bad = names & forbidden
         assert not bad, f"{mod.__name__} references write/command service(s): {bad}"
+
+
+def test_edge_modules_are_readonly_and_one_way():
+    """Structural guard on camber.edge: no BAS-write service, no inbound listener, no TLS-disable.
+
+    The edge forwarder must be provably one-way — read-only toward the BAS, outbound-only toward the
+    cloud (it never binds/listens), and it must never weaken TLS verification. Enforced on the AST
+    every ``camber/edge`` module, not on prose.
+    """
+    import ast
+    import os
+
+    import camber.edge as edge_pkg
+
+    forbidden_write = {
+        "WriteProperty",
+        "write_register",
+        "write_coil",
+        "write_registers",
+        "write_coils",
+        "publish",
+        "writeproperty",
+        "write_value",
+        "write_values",
+        "set_value",
+        "write_attribute",
+    }
+    forbidden_listen = {
+        "bind",
+        "listen",
+        "accept",
+        "recv",
+        "recvfrom",
+        "recvmsg",
+        "socket",
+        "create_server",
+        "ThreadingHTTPServer",
+        "HTTPServer",
+        "BaseHTTPRequestHandler",
+    }
+    forbidden_tls = {"_create_unverified_context", "CERT_NONE", "_https_verify_certificates"}
+    forbidden = forbidden_write | forbidden_listen | forbidden_tls
+
+    edge_dir = os.path.dirname(edge_pkg.__file__)
+    pyfiles = [os.path.join(edge_dir, f) for f in os.listdir(edge_dir) if f.endswith(".py")]
+    assert pyfiles, "no camber.edge modules found to guard"
+    for path in pyfiles:
+        tree = ast.parse(open(path, encoding="utf-8").read())
+        names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute):
+                names.add(node.attr)
+            elif isinstance(node, ast.Name):
+                names.add(node.id)
+        bad = names & forbidden
+        assert not bad, f"{os.path.basename(path)} references forbidden identifier(s): {bad}"

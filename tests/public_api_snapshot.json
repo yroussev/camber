@@ -390,6 +390,44 @@
     "positive_from_severity",
     "sweep"
   ],
+  "camber.edge": [
+    "AzureBlobSink",
+    "BatchResult",
+    "DrainResult",
+    "EdgeConfig",
+    "Forwarder",
+    "GcsSink",
+    "PresignedHttpsSink",
+    "S3Sink",
+    "Sink",
+    "Spool",
+    "SpoolEntry",
+    "build_forwarder",
+    "collect_sink",
+    "load_config"
+  ],
+  "camber.edge.config": [
+    "EdgeConfig",
+    "build_forwarder",
+    "load_config"
+  ],
+  "camber.edge.forwarder": [
+    "BatchResult",
+    "Forwarder"
+  ],
+  "camber.edge.sink": [
+    "AzureBlobSink",
+    "GcsSink",
+    "PresignedHttpsSink",
+    "S3Sink",
+    "Sink",
+    "collect_sink"
+  ],
+  "camber.edge.spool": [
+    "DrainResult",
+    "Spool",
+    "SpoolEntry"
+  ],
   "camber.eval": [
     "BaselineCheck",
     "BenchmarkReport",

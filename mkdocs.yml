@@ -45,6 +45,7 @@ nav:
       - Fault lifecycle: FAULT-LIFECYCLE.md
       - Scale: SCALE.md
       - Deployment: DEPLOY.md
+      - Edge → cloud deployment: EDGE-DEPLOY.md
       - Security: SECURITY.md
       - Validation: VALIDATION.md
       - API stability & deprecation: API-STABILITY.md

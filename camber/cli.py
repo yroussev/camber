@@ -250,6 +250,55 @@ def _cmd_bacnet_discover(args) -> int:  # pragma: no cover - drives a live BACne
     return 0
 
 
+def _cmd_edge_run(args) -> int:
+    from .edge.config import build_forwarder, load_config
+
+    cfg = load_config(args.config)
+    fwd = build_forwarder(cfg)
+    print(f"edge: forwarding facility '{cfg.facility_id}' every {cfg.interval:.0f}s (one-way)")
+    fwd.run(cfg.interval)
+    return 0
+
+
+def _cmd_edge_send_once(args) -> int:
+    from .edge.config import build_forwarder, load_config
+
+    cfg = load_config(args.config)
+    fwd = build_forwarder(cfg)
+    res = fwd.poll_once()
+    print(
+        f"edge: facility '{res.facility_id}' rows={res.rows} parts={res.spooled} "
+        f"forwarded={res.forwarded} window={res.window}"
+    )
+    return 0
+
+
+def _cmd_edge_status(args) -> int:
+    from .edge.config import load_config
+    from .edge.spool import Spool
+
+    cfg = load_config(args.config)
+    count, nbytes = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes).depth()
+    print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
+    return 0
+
+
+def _cmd_edge_selftest(args) -> int:
+    """Dry-run through an in-memory sink: prove read-only + build the batches without any egress."""
+    from .edge.config import build_forwarder, load_config
+    from .edge.sink import collect_sink
+
+    cfg = load_config(args.config)
+    sink, log = collect_sink()
+    fwd = build_forwarder(cfg, sink=sink)
+    res = fwd.poll_once()
+    print(f"edge selftest: would send {len(log)} object(s); rows={res.rows}")
+    for obj in log:
+        print(f"  {obj['key']} ({len(obj['data'])} bytes)")
+    print("no real sink touched; no BAS write path exists (see docs/EDGE-DEPLOY.md).")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
@@ -332,6 +381,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pb.add_argument("--out", help="write the discovered inventory + roles as JSON to this path")
     pb.set_defaults(func=_cmd_bacnet_discover)
+
+    ped = sub.add_parser(
+        "edge", help="one-way edge→cloud BAS forwarder (read-only in, outbound-only out)"
+    )
+    edsub = ped.add_subparsers(dest="edge_cmd", required=True)
+    er = edsub.add_parser("run", help="run the forwarder daemon (poll → spool → push, on a loop)")
+    er.add_argument("config", help="edge config JSON (no secrets; see docs/EDGE-DEPLOY.md)")
+    er.set_defaults(func=_cmd_edge_run)
+    es = edsub.add_parser(
+        "send-once", help="one poll+push (for cron / Windows Task Scheduler — the IT-friendly path)"
+    )
+    es.add_argument("config")
+    es.set_defaults(func=_cmd_edge_send_once)
+    est = edsub.add_parser("status", help="show the local spool depth (pending batches / bytes)")
+    est.add_argument("config")
+    est.set_defaults(func=_cmd_edge_status)
+    esf = edsub.add_parser(
+        "selftest", help="dry-run through an in-memory sink (no egress; proves the read-only path)"
+    )
+    esf.add_argument("config")
+    esf.set_defaults(func=_cmd_edge_selftest)
     return ap
 
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.46.0"
+version = "0.47.0"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -82,6 +82,14 @@ opcua = ["asyncua>=1.0"]
 # Trains on the caller's / synthetic labels; ships NO pretrained weights. camber.mapping_assist
 # imports it lazily behind _require(); the numpy FeatureSuggester baseline needs none of it.
 ml = ["scikit-learn>=1.3"]
+# One-way edge→cloud forwarder (camber.edge). The DEFAULT path — read-only ingest, quality-gate,
+# Parquet spool, and the presigned-HTTPS PresignedHttpsSink — needs NO new deps (stdlib urllib/ssl +
+# core pyarrow), so `edge` is an empty marker. The SDK sinks (for sites that mandate direct scoped
+# credentials) are the only ones pulling libraries, each lazily imported. See docs/EDGE-DEPLOY.md.
+edge = []
+edge-s3 = ["boto3>=1.34"]
+edge-azure = ["azure-storage-blob>=12"]
+edge-gcs = ["google-cloud-storage>=2"]
 
 [project.scripts]
 camber = "camber.cli:main"

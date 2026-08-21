@@ -125,3 +125,43 @@ def test_charts_demo_backward_compatible(tmp_path, capsys):
 def test_no_subcommand_errors():
     with pytest.raises(SystemExit):
         main([])
+
+
+# --------------------------------------------------------------------------- edge subcommand
+
+
+def _edge_config(tmp_path):
+    """A per-point CSV source + a collect sink, so `edge` runs with no network."""
+    src = tmp_path / "src"
+    src.mkdir()
+    idx = pd.date_range("2024-06-01", periods=48, freq="1h")
+    _write_point(str(src), "AHU_1", "SupplyAir", pd.Series(np.linspace(50, 70, 48), index=idx))
+    cfg = {
+        "facility_id": "cli-fac-1",
+        "source": {"kind": "csv_perpoint", "folder": str(src)},
+        "sink": {"kind": "collect"},
+        "mapping": {"aliases": {"AHU_1_SupplyAir": "supply_air_temp"}},
+        "spool_dir": str(tmp_path / "spool"),
+    }
+    p = tmp_path / "edge.json"
+    p.write_text(json.dumps(cfg))
+    return str(p)
+
+
+def test_edge_send_once_smoke(tmp_path, capsys):
+    rc = main(["edge", "send-once", _edge_config(tmp_path)])
+    assert rc == 0
+    assert "cli-fac-1" in capsys.readouterr().out
+
+
+def test_edge_status_reports_spool_depth(tmp_path, capsys):
+    rc = main(["edge", "status", _edge_config(tmp_path)])
+    assert rc == 0
+    assert "pending" in capsys.readouterr().out
+
+
+def test_edge_selftest_touches_no_real_sink(tmp_path, capsys):
+    rc = main(["edge", "selftest", _edge_config(tmp_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "would send" in out and "no real sink touched" in out

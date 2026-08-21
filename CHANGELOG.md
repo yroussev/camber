@@ -4,6 +4,41 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.47.0] — 2026-08-21
+
+**One-way cybersecure edge→cloud forwarder** — `camber.edge`: push BAS trend data to an org cloud
+data lake from a Raspberry Pi or a Windows BAS front-end, built to pass IT/network-security review.
+
+### Added
+- **`camber.edge`** — a one-way forwarder that reads BAS trends **read-only** (historian-first; live
+  BACnet/BACnet-SC/Modbus/OPC-UA only when there is no historian), maps point→role, runs
+  `quality.assess` (report-only), serializes Parquet **directly into the `ParquetStore`
+  `facility_id=/year=` Hive layout** (so the cloud reads it with the existing
+  `read_long`/`ReadAPI`, zero transform), and **store-and-forwards it outbound-only** through a
+  pluggable `Sink`. Public API: `Sink`, `PresignedHttpsSink`, `S3Sink`, `AzureBlobSink`, `GcsSink`,
+  `collect_sink`, `Spool`, `SpoolEntry`, `DrainResult`, `Forwarder`, `BatchResult`, `EdgeConfig`,
+  `load_config`, `build_forwarder`.
+  - **`PresignedHttpsSink`** (default) — stdlib `urllib` HTTPS PUT to a short-lived presigned URL (or
+    a per-object broker), **no long-lived cloud credentials on the edge**, TLS verification never
+    disabled, single-host egress allowlist. SDK sinks (S3/Azure/GCS) are behind new
+    `edge-s3`/`edge-azure`/`edge-gcs` extras; the default path adds **zero new dependencies**.
+  - **`Spool`** — a durable, crash-safe store-and-forward queue (atomic enqueue, write-ahead
+    journal, retry+backoff, backfill after reboot, bounded-disk eviction with a logged WARNING) so a
+    connectivity loss never loses a batch.
+  - **`camber edge` CLI** — `run` (daemon), `send-once` (cron / Windows Task Scheduler),
+    `status` (spool depth), `selftest` (dry-run through an in-memory sink; proves the read-only path
+    with no egress).
+- **`docs/EDGE-DEPLOY.md`** — the IT-approval security dossier: the one-way reference architecture,
+  the enforced-properties table (each mapped to the test that proves it), NIST SP 800-82r3 / ISA-62443
+  / ASHRAE-135 mapping, Pi (systemd) + Windows (Task Scheduler) install recipes, and an
+  egress-allowlist request template.
+
+### Changed
+- The read-only ingest AST guard (`tests/test_ingest_protocols.py`) now also scans every
+  `camber/edge` module and fails if it references a BAS-write service, an inbound-listener identifier
+  (`bind`/`listen`/`accept`/`recv`/`socket`/`*HTTPServer`), or a TLS-disabling identifier — so the
+  edge is *provably* read-only toward the BAS and one-way toward the cloud.
+
 ## [0.46.0] — 2026-08-21
 
 **Condenser heat-rejection physics validator** — `camber.condensersim`, closing the condenser family
