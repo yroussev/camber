@@ -54,4 +54,14 @@ coil separately. Screening-grade; pure over Findings.
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.
 As with the other families, `camber.driftvalidation` tunes them once labelled AHU-fault periods exist,
-and a physics generator will characterize the family end-to-end without a dataset.
+and the physics generator `camber.ahusim` (system curve ΔP ∝ Q² + fan laws) characterizes the family
+end-to-end without a dataset — on clear faults the AHU diagnosis localizes to the right `locus` at
+~100% with no false alarms on healthy AHUs or a static-reset schedule, and it proves the fan-power
+disambiguation (`filter_loading → air-path` vs `fan_belt_slip → fan`).
+
+```python
+from camber.ahusim import make_cases, locus_confusion
+
+lc = locus_confusion(make_cases(), min_severity=3)
+print(lc.accuracy, lc.as_dict()["matrix"])
+```

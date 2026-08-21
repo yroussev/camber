@@ -4,6 +4,27 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.40.0] — 2026-08-21
+
+**Physics-grounded AHU validation** — characterize the air-side drift stack without a dataset.
+
+### Added
+- **`camber.ahusim`** — the air-side mirror of `camber.pumpsim` / `camber.driftsim`: a physically
+  consistent synthetic generator that produces `(baseline, current)` role-frame pairs for a healthy
+  air handler and for the standard air-side fault families (fan belt slip · bearing drag · filter
+  loading · duct-static loss · over-pressurization · cooling-coil fouling · a static-reset negative),
+  imposing each fault's signature at a graded severity. **The channels are coupled through the system
+  curve** (ΔP ∝ Q²): fan power is computed from the sum of component pressures, so a **loading filter
+  raises the filter-DP channel AND fan power** (the fan fights more upstream drop) — the emergent
+  co-move that makes the diagnosis's **fan-power disambiguation** real (filter loading → air-path;
+  fan-mechanical → fan). Helpers run the whole suite + AHU diagnosis end-to-end (`build_ahu_suite`,
+  `diagnose_ahu_frames`) and score localization (`locus_confusion`); `SimulatedCase.to_labeled` feeds
+  the existing `driftvalidation` per-detector ROC. On clear faults (severity ≥ 3) the diagnosis
+  localizes to the correct `locus` at ~100% with no false alarms on healthy AHUs **or a static-reset
+  schedule**, proves the fan-power disambiguation routes correctly, and degrades gracefully at
+  marginal severity. v1 models the cooling coil as the single active coil (a heating regime is a
+  documented follow-on). Deterministic; core deps only; no dataset shipped.
+
 ## [0.39.0] — 2026-08-19
 
 **Per-AHU co-movement diagnosis** — the air-side analog of `diagnose_pump_drift`.

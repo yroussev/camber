@@ -68,6 +68,17 @@
     "AhuDriftDiagnosis",
     "diagnose_ahu_drift"
   ],
+  "camber.ahusim": [
+    "AhuFault",
+    "FAULTS",
+    "LocusConfusion",
+    "SimulatedCase",
+    "build_ahu_suite",
+    "diagnose_ahu_frames",
+    "locus_confusion",
+    "make_cases",
+    "simulate_case"
+  ],
   "camber.anomaly": [
     "AnomalyResult",
     "detect_anomalies"
