@@ -9,8 +9,10 @@ core can drive action without coupling to any one vendor's API.
 
 from .export import (
     ahu_diagnoses_to_frame,
+    condenser_diagnoses_to_frame,
     diagnoses_to_frame,
     export_ahu_diagnoses,
+    export_condenser_diagnoses,
     export_diagnoses,
     export_findings,
     export_pump_diagnoses,
@@ -55,4 +57,6 @@ __all__ = [
     "export_pump_diagnoses",
     "ahu_diagnoses_to_frame",
     "export_ahu_diagnoses",
+    "condenser_diagnoses_to_frame",
+    "export_condenser_diagnoses",
 ]

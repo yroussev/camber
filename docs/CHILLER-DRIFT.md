@@ -56,6 +56,14 @@ quiet tower is flagged as likely ambient rather than a high-side fault. Stays sc
 corroboration raises priority and specificity, not the severity tier — the thing that turns a set of
 screening alerts into a work order.
 
+**Surfacing the verdict.** The per-loop verdicts flow downstream like the chiller, pump, and AHU
+ones: `camber.integrate.export.condenser_diagnoses_to_frame` / `export_condenser_diagnoses` write one
+row per loop (severity · corroborated · joined causes · caveat count · fingerprint — note there is
+**no locus / loop-wide** column, since the condenser diagnosis carries neither) to CSV/JSON/Parquet,
+and `camber.report.condenser_diagnosis_table` renders a worst-first HTML table.
+`build_site_report(..., condenser_diagnoses=[...])` splices that table into the owner-facing site
+report, alongside the chiller, pump, and AHU verdict tables.
+
 **Head pressure is the high side, read directly.** `ChillerHeadPressureDrift` trends the discharge /
 condensing pressure (`Role.DISCHARGE_PRESSURE`, psig) — the same fault modes that widen the condenser
 approach (fouling/scale, non-condensables, reduced CW flow) also raise head pressure, but the pressure

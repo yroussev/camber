@@ -4,6 +4,25 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.45.0] — 2026-08-21
+
+**Condenser heat-rejection drift in export + reporting** — the condenser-loop verdict where it acts,
+bringing the heat-rejection family toward parity with the chiller/pump/AHU ones.
+
+### Added
+- **`camber.integrate.export.condenser_diagnoses_to_frame` / `export_condenser_diagnoses`** — flatten
+  the per-loop condenser heat-rejection diagnoses (`camber.condenserdrift.CondenserDriftDiagnosis`)
+  into a one-row-per-loop table (severity · corroborated · joined causes · caveat count · stable
+  fingerprint) and write CSV / JSON / Parquet. Unlike the AHU/chiller tables the condenser diagnosis
+  carries no locus / loop-wide flag, so those columns are absent by design.
+- **`camber.report.condenser_diagnosis_table`** — a self-contained HTML table of the condenser
+  verdicts, ranked worst-first, flagging corroborated loops; a standalone renderer to splice into a
+  report.
+
+### Changed
+- **`camber.report.build_site_report`** gains an optional `condenser_diagnoses=` argument that renders
+  the `condenser_diagnosis_table` between the chiller and pump verdict tables. Backward compatible.
+
 ## [0.44.0] — 2026-08-21
 
 **ahusim exercises the outdoor-air locus** — the physics validator now models the economizer OA

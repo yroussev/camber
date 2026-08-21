@@ -17,6 +17,7 @@ from ..rules.triage import rank_findings
 from ..scorecard import build_scorecard
 from .ahu import ahu_diagnosis_table
 from .chiller import chiller_diagnosis_table
+from .condenser import condenser_diagnosis_table
 from .dashboard import (
     _SECTION_TITLES,
     _STYLE,
@@ -53,6 +54,7 @@ def build_site_report(
     *,
     findings=None,
     diagnoses=None,
+    condenser_diagnoses=None,
     pump_diagnoses=None,
     ahu_diagnoses=None,
     rules=None,
@@ -71,10 +73,12 @@ def build_site_report(
     action plan (``loads``/``price`` cost the plan), and — with ``rules`` (and optional
     per-equipment ``frames``) — the pattern-J evidence. ``diagnoses`` (chiller drift roll-ups from
     :func:`camber.chillerdiag.diagnose_chiller_drift`) add a whole-machine verdict table just under
-    the scorecard; ``pump_diagnoses`` (from :func:`camber.pumpdrift.diagnose_pump_drift`) add a
-    per-loop pump verdict table alongside it; ``ahu_diagnoses`` (from
-    :func:`camber.ahudrift.diagnose_ahu_drift`) add a per-AHU air-side verdict table too.
-    ``sections`` chooses which dashboard chart sections to include (A/B/E/I).
+    the scorecard; ``condenser_diagnoses`` (per-loop heat-rejection roll-ups from
+    :func:`camber.condenserdrift.diagnose_condenser_drift`) add a condenser-loop table by it;
+    ``pump_diagnoses`` (from :func:`camber.pumpdrift.diagnose_pump_drift`) add a per-loop pump
+    verdict table alongside it; ``ahu_diagnoses`` (from :func:`camber.ahudrift.diagnose_ahu_drift`)
+    add a per-AHU air-side verdict table too. ``sections`` chooses which dashboard chart sections to
+    include (A/B/E/I).
     """
     style = _STYLE + _SC_STYLE
     parts = [
@@ -88,6 +92,9 @@ def build_site_report(
 
     if diagnoses:
         parts.append(chiller_diagnosis_table(diagnoses))
+
+    if condenser_diagnoses:
+        parts.append(condenser_diagnosis_table(condenser_diagnoses))
 
     if pump_diagnoses:
         parts.append(pump_diagnosis_table(pump_diagnoses))
