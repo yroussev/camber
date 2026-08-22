@@ -4,6 +4,26 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.50.0] — 2026-08-22
+
+**First VAV zone-terminal drift detector** — opens a new drift family for the terminal box, the
+leading indicator to the instantaneous zone rules.
+
+### Added
+- **`camber.rules.vav_airflow_rule.VavAirflowDrift`** — catches a VAV box's damper creeping open at
+  matched commanded airflow: a slipping/worn actuator, a stuck linkage, or rising upstream duct-static
+  starvation makes the box spend its reserve damper authority to hold the same flow, weeks before the
+  instantaneous `airflow_tracking` undershoot check fires. Freezes a `damper ~ f(commanded airflow)`
+  baseline and scores the current period's damper residual at matched command; **one-sided up** (less
+  damper is an authority gain, not a fault). The airflow-setpoint confound is neutralized *by
+  construction* (the setpoint is the load axis), and an upstream duct-static fall (via the runner's
+  `shared` channel) is surfaced as a starvation caveat + `vav_upstream_starvation_suspected` metric so
+  the box is never silently blamed for a plant problem. `load_role=AIRFLOW` is a constructor option
+  for boxes without a mapped setpoint. Reuses existing roles (`DAMPER` / `AIRFLOW_SP`); registers a
+  `vav_damper` model kind. Screening-grade; declines loudly on unmapped inputs or a command that never
+  sweeps. Not auto-registered (injected `BaselineStore`; run via `Registry.run_periods`). New family
+  doc `docs/VAV-DRIFT.md`.
+
 ## [0.49.0] — 2026-08-21
 
 **Evaporator / chilled-water physics validator** — `camber.evaporatorsim`, completing the evaporator
