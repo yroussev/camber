@@ -4,6 +4,24 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.52.0] — 2026-08-22
+
+**Per-box VAV drift verdict** — `diagnose_vav_drift` rolls the two VAV detectors into one localized
+diagnosis with the upstream-vs-box disambiguation.
+
+### Added
+- **`camber.vavdrift.diagnose_vav_drift` / `VavDriftDiagnosis`** — synthesize the `vav_airflow_drift`
+  and `vav_reheat_valve_drift` Findings for one box into a single localized verdict: names each cause,
+  flags corroboration when both agree, and runs the **upstream-vs-box disambiguation** (the headline,
+  the terminal-box twin of `diagnose_ahu_drift`'s fan-power resolution). A damper creep is ambiguous
+  between the box's own actuator/linkage failing and upstream duct-static starvation (a plant fault);
+  the airflow detector's `vav_upstream_starvation_suspected` flag resolves it — creep + flag → locus
+  `upstream` ("fix the plant, not the box"), creep without it → locus `airflow`. Reheat creep → locus
+  `reheat` (a co-moving HW-supply fall is caveated). Reports a `locus`
+  (steady · airflow · reheat · upstream · box-wide) + a `box_wide` flag; an `upstream` verdict is a
+  plant symptom **excluded** from `box_wide`, so only two real box faults (airflow + reheat) read as
+  box-wide. Screening-grade; pure over Findings.
+
 ## [0.51.0] — 2026-08-22
 
 **Second VAV zone-terminal drift detector** — reheat-coil heat-transfer drift, the leading indicator

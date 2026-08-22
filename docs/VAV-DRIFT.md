@@ -61,9 +61,25 @@ MIXED_AIR_TEMP` entering, ΔT = warm − cool) since the box's own discharge alr
 same reheat), not subtracted. `load_basis="deltat"` is a constructor option for boxes without a
 mapped flow. Freezes under model kind `vav_reheat_valve`.
 
-## One per-box verdict (future)
+## One per-box verdict
 
-As the family grows (a per-box co-movement diagnosis), `diagnose_vav_drift` will roll the box's drift
-signals together — disambiguating "box starved by low upstream static" vs "damper actuator failing"
-vs "reheat coil fouling / HW starvation" by which signals move together and whether an upstream AHU
-duct-static fault co-moves — the terminal-box analog of `diagnose_ahu_drift`.
+The two detectors fail *independently* (a failing damper actuator and a fouling reheat coil are
+different faults) but corroborate when a box is broadly degrading.
+`camber.vavdrift.diagnose_vav_drift(findings)` reads them and returns one localized
+`VavDriftDiagnosis` — naming each cause, flagging **corroboration** when both agree, and running the
+**upstream-vs-box disambiguation** that no single signal can settle (the terminal-box twin of
+`diagnose_ahu_drift`'s fan-power disambiguation):
+
+- damper creep **with** `vav_upstream_starvation_suspected` (the creep co-moves with an upstream
+  duct-static fall) → the drift is a **plant** symptom — the AHU can't hold static, so the box damper
+  creeps open; locus `upstream`, "fix the plant, not the box";
+- damper creep **without** it → the box's own flow-authority loss; locus `airflow`;
+- reheat-valve creep → reheat coil fouling / HW starvation / valve-authority loss; locus `reheat`
+  (a co-moving HW-supply fall is caveated as a possible waterside-reset effect).
+
+It splits the box into an **airflow** (damper authority) and a **reheat** (coil) subsystem, reports a
+`locus` (steady · airflow · reheat · upstream · box-wide) with a `box_wide` flag. An `upstream`
+verdict is a **plant symptom and is deliberately excluded from `box_wide`** — an AHU static problem
+must not read as a broadly-failing box, so `upstream + reheat` resolves to locus `reheat` (with an
+upstream caveat), and only `airflow + reheat` (two real box faults) is `box-wide`. Screening-grade;
+pure over Findings.
