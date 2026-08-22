@@ -1499,6 +1499,21 @@
     "MIN_COMMAND_CFM",
     "VavAirflowDrift"
   ],
+  "camber.rules.vav_reheat_valve_rule": [
+    "AIRFLOW_PLAUSIBLE",
+    "DELTAT_PLAUSIBLE",
+    "DUTY_PLAUSIBLE",
+    "MIN_DELTAT",
+    "MIN_DUTY",
+    "VALVE_DEADBAND",
+    "VALVE_FAULT_PCT",
+    "VALVE_FAULT_SIGMA",
+    "VALVE_PLAUSIBLE",
+    "VALVE_WARN_PCT",
+    "VALVE_WARN_SIGMA",
+    "VavReheatValveDrift",
+    "WATER_CONFOUND"
+  ],
   "camber.rules.ventilation_rule": [
     "DemandControlledVentilation",
     "VentilationRateProcedure"

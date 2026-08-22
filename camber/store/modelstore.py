@@ -51,6 +51,7 @@ _MODEL_TYPES = {
     "coil_valve_heat": LoadBaseline,
     "economizer_damper": LoadBaseline,
     "vav_damper": LoadBaseline,
+    "vav_reheat_valve": LoadBaseline,
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
     "loop_dp": LoadBaseline,

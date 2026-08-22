@@ -24,6 +24,9 @@ nav:
   - Analytics:
       - Packaged / DX FDD: FDD-DX.md
       - Chiller drift & calibration: CHILLER-DRIFT.md
+      - Pump / hydronic drift: PUMP-DRIFT.md
+      - AHU / air-side drift: AHU-DRIFT.md
+      - VAV / zone-terminal drift: VAV-DRIFT.md
       - M&V: MANDV.md
       - "M&V: Option D (calibrated sim)": OPTION-D.md
       - Streaming / online: STREAMING.md

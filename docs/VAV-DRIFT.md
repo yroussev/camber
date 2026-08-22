@@ -20,6 +20,7 @@ rules lead the static approach check.
 | Detector | Signal | Normalizer | Sided | Catches |
 |---|---|---|---|---|
 | `VavAirflowDrift` | damper position | commanded airflow (cfm) | up | flow-authority loss — a slipping/worn actuator, a stuck linkage, or rising upstream duct-static starvation: the damper **creeps open** to hold the same commanded flow, weeks before `airflow_tracking` sees an undershoot |
+| `VavReheatValveDrift` | reheat valve position | reheat duty ≈ airflow × ΔT (cfm·°F) | up | reheat-coil heat-transfer loss — waterside fouling/scale, low HW flow/ΔT, air bypass, or valve-authority loss: the reheat valve **creeps open** to deliver the same reheat, weeks before the box misses setpoint and `reheat_penalty` / `reheat_minimization_g36` see it |
 
 **Airflow tracking is the leading indicator to `airflow_tracking`.** A healthy box drives its damper
 to make measured airflow track the commanded airflow setpoint. As the actuator/linkage wears or the
@@ -44,9 +45,25 @@ so it never silently blames the box for a plant problem. Reuses only existing ro
 (`DAMPER` / `AIRFLOW_SP`; `load_role=AIRFLOW` is a constructor option for boxes without a mapped
 setpoint). Freezes under model kind `vav_damper`.
 
+**Reheat-valve creep is the leading indicator to `reheat_penalty` / `reheat_minimization_g36`.** A
+box's hot-water reheat coil losing heat-transfer capacity (waterside fouling/scale, low HW flow or
+ΔT, air bypass, valve-authority loss) opens its valve **further** to deliver the same reheat — weeks
+before it runs out of valve and misses setpoint. `VavReheatValveDrift` freezes a `valve ~ f(reheat
+duty)` baseline and scores the current period's valve residual **at matched duty**, one-sided up (a
+valve fall is a capacity gain, not a fault). The load is the **reheat duty ≈ airflow × ΔT**, not ΔT
+alone: unlike an AHU coil at fixed design airflow, a VAV box's airflow varies (`Q ∝ airflow × ΔT`),
+and — contrary to the tempting "G36 pins reheat at min flow" simplification — flow rises toward
+heating-max in the high heating loop (exactly the regime `reheat_minimization_g36` flags), so duty is
+correct across both regimes while ΔT-alone is confounded. The box's **entering primary air is mapped
+to `MIXED_AIR_TEMP`** (the coil-valve heating convention: `warm = SUPPLY_AIR_TEMP` discharge, `cool =
+MIXED_AIR_TEMP` entering, ΔT = warm − cool) since the box's own discharge already owns
+`SUPPLY_AIR_TEMP`; no new role. A colder **HW-supply reset** is caveated (it needs more valve for the
+same reheat), not subtracted. `load_basis="deltat"` is a constructor option for boxes without a
+mapped flow. Freezes under model kind `vav_reheat_valve`.
+
 ## One per-box verdict (future)
 
-As the family grows (reheat-valve creep, and a per-box co-movement diagnosis), `diagnose_vav_drift`
-will roll the box's drift signals together — disambiguating "box starved by low upstream static" vs
-"damper actuator failing" vs "reheat coil fouling" by which signals move together and whether an
-upstream AHU duct-static fault co-moves — the terminal-box analog of `diagnose_ahu_drift`.
+As the family grows (a per-box co-movement diagnosis), `diagnose_vav_drift` will roll the box's drift
+signals together — disambiguating "box starved by low upstream static" vs "damper actuator failing"
+vs "reheat coil fouling / HW starvation" by which signals move together and whether an upstream AHU
+duct-static fault co-moves — the terminal-box analog of `diagnose_ahu_drift`.

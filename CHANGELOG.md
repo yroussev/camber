@@ -4,6 +4,32 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.51.0] — 2026-08-22
+
+**Second VAV zone-terminal drift detector** — reheat-coil heat-transfer drift, the leading indicator
+to the instantaneous reheat rules. Also wires the AHU / pump / VAV drift-family docs into the site
+nav (they existed but were only cross-linked).
+
+### Added
+- **`camber.rules.vav_reheat_valve_rule.VavReheatValveDrift`** — catches a VAV box's hot-water reheat
+  coil losing heat-transfer capacity (waterside fouling/scale, low HW flow or ΔT, air bypass,
+  valve-authority loss): the reheat valve creeps open to deliver the same reheat, weeks before the box
+  misses setpoint and `reheat_penalty` / `reheat_minimization_g36` see it. Freezes a
+  `valve ~ f(reheat duty)` baseline and scores the current period's valve residual at matched duty;
+  **one-sided up** (a valve fall is a capacity gain, not a fault). The load is the **reheat duty ≈
+  airflow × ΔT**, not ΔT alone — a VAV box's airflow varies, and G36 reheat is not reliably pinned at
+  min flow (flow rises in the high heating loop, the regime `reheat_minimization_g36` flags), so duty
+  is correct across both regimes. The box's entering primary air is mapped to `MIXED_AIR_TEMP` (the
+  coil-valve heating convention), so no new role is added; a colder HW-supply reset is caveated, not
+  subtracted; `load_basis="deltat"` is a constructor option for boxes without a mapped flow. Registers
+  a `vav_reheat_valve` model kind. Screening-grade; declines loudly. Not auto-registered (injected
+  `BaselineStore`).
+
+### Changed
+- **Docs nav** — the `PUMP-DRIFT`, `AHU-DRIFT`, and `VAV-DRIFT` family pages are now listed under
+  Analytics (previously present but only reachable via cross-links). `docs/VAV-DRIFT.md` gains the
+  reheat detector.
+
 ## [0.50.0] — 2026-08-22
 
 **First VAV zone-terminal drift detector** — opens a new drift family for the terminal box, the
