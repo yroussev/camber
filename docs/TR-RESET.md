@@ -17,6 +17,8 @@ rules.
 | Rule | Signal | Sided | Catches |
 |---|---|---|---|
 | `supply_air_reset_compliance` | supply-air temp vs the G36 OAT-reset target | up (too cold) | supply air held **colder than the G36 §5.16.2.2.b OAT→SAT target** — an avoidable reheat/energy opportunity |
+| `sat_reset_effectiveness` | supply-air-temp **setpoint** vs the request-implied T&R trajectory | two-sided | a SAT reset that is **stuck**, **not responding**, **not trimming**, or **diverging** vs its own zone requests |
+| `static_reset_effectiveness` | duct-static **setpoint** vs the request-implied T&R trajectory | two-sided | a duct-static reset that is **stuck**, **not responding**, **not trimming**, or **diverging** vs its own zone requests |
 
 **SAT-reset compliance vs the existing `supply_air_reset`.** These are complementary detectors on the
 same signal. `supply_air_reset` (`camber.satreset`) asks the **shape** question — does supply air get
@@ -37,14 +39,40 @@ can match its own reset schedule (`make_rule("supply_air_reset_compliance", oat_
 Thresholds are screening / opportunity-grade (provisional-untuned). OAT is building-level and arrives
 via the runner's `shared` channel; the rule declines loudly when it is unmapped.
 
+## Reset effectiveness — is the reset actually trimming-and-responding?
+
+`supply_air_reset_compliance` above asks whether SAT sits at the right *target*; **reset
+effectiveness** asks whether the reset *mechanism* works at all. Given the plant's own aggregated
+per-cycle **reset-request** count (`SAT_RESET_REQUESTS` / `STATIC_PRESSURE_REQUESTS`) alongside the
+actual reset **setpoint** (`SUPPLY_AIR_TEMP_SP` / `DUCT_STATIC_SP`), the rule reconstructs the
+setpoint that Trim-and-Respond *should* have produced (`tr_simulate`, G36 §5.1.14) and compares it to
+the trended setpoint. It flags four modes:
+
+- **stuck** — the setpoint barely moves while the request pattern would have moved it (a frozen or
+  overridden reset);
+- **not responding** — under sustained demand the setpoint sits at the energy-saving (trim) end
+  instead of responding toward demand (zones starve);
+- **not trimming** — while zones are idle the setpoint stays parked at the demand end (energy wasted);
+- **diverges** — the setpoint moves the *opposite* way to the T&R command on most cycles (an inverted
+  or mis-wired reset).
+
+It ships as two instances — `sat_reset_effectiveness` (supply-air-temp setpoint, °F, `SAT_TR` preset)
+and `static_reset_effectiveness` (duct-static setpoint, in. w.c., `STATIC_TR` preset) — sharing one
+reset-agnostic `camber.g36_reset.reset_effectiveness` analyzer. It is **two-sided** (both starving and
+wasting are faults) and **warn-level** (an operational opportunity, not a hard equipment fault).
+Unlike the compliance rule it needs the reset **setpoint and the request count** both mapped, so it
+declines loudly on the common trend export that carries no request point. The reconstructed-trajectory
+error (`mean_abs_error_sp`) is **informational only** — a coarser trend cadence than the controller
+inflates it, so the verdict rests on the cadence-robust mode detectors above, not the raw error.
+Thresholds are screening / opportunity-grade (provisional-untuned).
+
 ## Family roadmap
 
-This is the first of the Trim-and-Respond family. The next items build on the same
-`camber.g36_reset` engine:
+The remaining Trim-and-Respond item builds on the same `camber.g36_reset` engine:
 
-- **Reset effectiveness** — compute the per-zone requests from the zone fleet
-  (`cooling_sat_requests` / `static_pressure_requests`), run the expected T&R trajectory
-  (`tr_simulate`), and compare it to the actual setpoint: is the reset actually trimming and
-  responding, or stuck?
-- **Rogue-zone census** — a fleet analytic that finds the one zone monopolizing the requests and
-  dragging the whole reset (so the plant serves one bad box at everyone else's energy expense).
+- **Rogue-zone census** — a fleet analytic that computes the per-zone requests
+  (`cooling_sat_requests` / `static_pressure_requests`) across the zone fleet and finds the one zone
+  monopolizing the requests and dragging the whole reset (so the plant serves one bad box at everyone
+  else's energy expense). This is the zone-fleet path deferred from reset-effectiveness, which the
+  current fleet runner cannot yet express (it hands rules a flat per-equipment frame map with no
+  zone→AHU grouping).

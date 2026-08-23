@@ -35,6 +35,10 @@ class Role(str, Enum):
     DUCT_STATIC_SP = "duct_static_sp"
     AIRFLOW_SP = "airflow_sp"
 
+    # --- reset requests (G36 trim-and-respond); the aggregated per-cycle request count ---
+    SAT_RESET_REQUESTS = "sat_reset_requests"
+    STATIC_PRESSURE_REQUESTS = "static_pressure_requests"
+
     # --- valves / coils / dampers (command or position, %) ---
     HEAT_VALVE = "heat_valve"  # heating-coil / reheat valve position
     COOL_VALVE = "cool_valve"  # cooling-coil valve position
@@ -167,6 +171,8 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.HEAT_SP: "zone air temp heating sp",
     Role.SUPPLY_AIR_TEMP_SP: "discharge air temp sp",
     Role.DUCT_STATIC_SP: "duct air pressure sp",
+    Role.SAT_RESET_REQUESTS: "discharge air temp reset request point",
+    Role.STATIC_PRESSURE_REQUESTS: "duct air pressure reset request point",
     Role.AIRFLOW_SP: "discharge air flow sp",
     Role.HEAT_VALVE: "heating valve cmd",
     Role.COOL_VALVE: "cooling valve cmd",

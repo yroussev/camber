@@ -509,12 +509,14 @@
     "free_cooling_opportunity"
   ],
   "camber.g36_reset": [
+    "ResetEffectivenessResult",
     "SATResetComplianceResult",
     "SAT_TR",
     "STATIC_TR",
     "TRParams",
     "cooling_sat_requests",
     "oat_sat_setpoint",
+    "reset_effectiveness",
     "sat_reset_compliance",
     "static_pressure_requests",
     "tr_simulate",
@@ -1464,6 +1466,9 @@
   ],
   "camber.rules.reheat_rule": [
     "ReheatPenalty"
+  ],
+  "camber.rules.reset_effectiveness_rule": [
+    "ResetEffectiveness"
   ],
   "camber.rules.satcontrol_rule": [
     "SupplyAirControl"

@@ -4,6 +4,34 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.56.0] — 2026-08-23
+
+**Reset effectiveness (G36 Trim-and-Respond) — Arc B item 2.** Where `supply_air_reset_compliance`
+(0.55.0) asks whether the reset sits at the right *target*, this asks whether the reset *mechanism*
+works at all: does the actual reset setpoint follow the Trim-and-Respond trajectory the plant's own
+requests imply?
+
+### Added
+- **`camber.g36_reset.reset_effectiveness`** + `ResetEffectivenessResult` — a reset-agnostic analyzer
+  that reconstructs the expected setpoint from the per-cycle reset-request count (`tr_simulate`,
+  G36 §5.1.14) and scores the trended setpoint against it, classifying four failure modes: **stuck**
+  (flat while requests demand movement), **not responding** (parked at the energy-saving end under
+  demand — zones starve), **not trimming** (parked at the demand end while idle — energy wasted), and
+  **diverges** (moving the wrong way vs the T&R command). The reconstructed-trajectory error
+  (`mean_abs_error_sp`) is informational only; the verdict rests on the cadence-robust mode detectors.
+- **`camber.rules.reset_effectiveness_rule.ResetEffectiveness`** — shipped as two registered instances,
+  `sat_reset_effectiveness` (supply-air-temp setpoint, °F, `SAT_TR` preset) and
+  `static_reset_effectiveness` (duct-static setpoint, in. w.c., `STATIC_TR` preset). Two-sided
+  (starving and wasting both fault), warn-level. Needs the reset **setpoint and the request count**
+  both mapped, declining loudly on trend exports that carry no request point.
+- **`Role.SAT_RESET_REQUESTS`** / **`Role.STATIC_PRESSURE_REQUESTS`** — the aggregated per-cycle
+  reset-request count points, with Haystack mapping hints.
+
+### Notes
+- The zone-fleet path (computing the requests from the zone census rather than a mapped point) is
+  deferred to the planned rogue-zone census: the current fleet runner hands rules a flat
+  per-equipment frame map with no zone→AHU grouping, so it cannot yet express it.
+
 ## [0.55.0] — 2026-08-23
 
 **SAT-reset compliance (G36) — Arc B begins.** Opens a new Trim-and-Respond / Guideline-36 reset

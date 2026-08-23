@@ -36,6 +36,7 @@ from .overcooling_rule import OvercoolingMinFlow
 from .overcooling_severity_rule import OvercoolingSeverity
 from .reheat_min_rule import ReheatMinimization
 from .reheat_rule import ReheatPenalty
+from .reset_effectiveness_rule import ResetEffectiveness
 from .satcontrol_rule import SupplyAirControl
 from .satreset_compliance_rule import SupplyAirResetCompliance
 from .satreset_rule import SupplyAirReset
@@ -99,6 +100,8 @@ def _extra_instances():
     return [
         CohortDeviation(Role.AIRFLOW, name="cohort_airflow"),
         CohortDeviation(Role.SPACE_TEMP, name="cohort_space_temp"),
+        ResetEffectiveness(reset="sat"),
+        ResetEffectiveness(reset="static"),
     ]
 
 

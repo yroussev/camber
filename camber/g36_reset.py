@@ -35,6 +35,8 @@ __all__ = [
     "static_pressure_requests",
     "SATResetComplianceResult",
     "sat_reset_compliance",
+    "ResetEffectivenessResult",
+    "reset_effectiveness",
 ]
 
 
@@ -187,6 +189,151 @@ def sat_reset_compliance(
         mean_gap_f=round(float(gap.mean()), 2),
         actual_sat_median=round(float(np.median(actual)), 1),
         g36_target_median=round(float(np.median(target)), 1),
+        coverage_start=str(df.index.min()),
+        coverage_end=str(df.index.max()),
+    )
+
+
+@dataclass
+class ResetEffectivenessResult:
+    """Actual reset setpoint vs the T&R trajectory it should have produced from the requests.
+
+    ``stuck`` is the setpoint barely moving while the request pattern demands movement;
+    ``not_responding`` is the setpoint parked at the energy-saving (trim) end while zones are
+    calling for the opposite; ``not_trimming`` is the setpoint parked at the demand end while zones
+    are idle (wasting energy). ``diverges`` is the setpoint moving the wrong way vs the T&R command
+    on most cycles. ``mean_abs_error_sp`` is informational only (a coarser trend cadence than the
+    controller inflates it), so the verdict rests on the cadence-robust modes above.
+    """
+
+    equip: str
+    n: int
+    unit: str
+    actual_sp_range: float
+    expected_sp_range: float
+    mean_abs_error_sp: float
+    pct_cycles_wrong_direction: float
+    pct_high_demand_unresponsive: float | None  # None when too few high-demand cycles to judge
+    pct_idle_untrimmed: float | None  # None when too few idle cycles to judge
+    stuck: bool
+    not_responding: bool | None
+    not_trimming: bool | None
+    diverges: bool
+    effective: bool
+    reason: str
+    coverage_start: str
+    coverage_end: str
+
+    def as_dict(self):
+        """Return the result as a plain dict."""
+        from dataclasses import asdict
+
+        return asdict(self)
+
+
+def reset_effectiveness(
+    df,
+    equip,
+    *,
+    sp_col,
+    requests_col,
+    params: TRParams,
+    unit: str = "degF",
+    min_cycles: int = 12,
+    flat_frac: float = 0.10,
+    expected_move_frac: float = 0.25,
+    pinned_frac: float = 0.15,
+    mode_frac: float = 0.60,
+    min_mode_cycles: int = 10,
+    wrong_dir_frac: float = 0.50,
+) -> ResetEffectivenessResult | None:
+    """Compare an actual reset setpoint to the G36 Trim-&-Respond trajectory its requests imply.
+
+    Given the per-cycle request count (``requests_col``) and the actual reset setpoint (``sp_col``),
+    runs :func:`tr_simulate` to get the setpoint T&R *should* have produced, then scores whether the
+    reset is **stuck** (flat while demand moves), **not responding** (parked at the trim end under
+    demand), **not trimming** (parked at the demand end while idle), or **diverging** (moving the
+    wrong way). Reset-agnostic (SAT in °F with ``SAT_TR`` / static in in. w.c. with ``STATIC_TR``);
+    returns ``None`` when a column is unmapped or there are fewer than ``min_cycles`` usable rows.
+    """
+    if sp_col not in df.columns or requests_col not in df.columns:
+        return None
+    band = params.sp_max - params.sp_min
+    w = df[[sp_col, requests_col]].dropna()
+    w = w[(w[sp_col] >= params.sp_min - band) & (w[sp_col] <= params.sp_max + band)]
+    if len(w) < min_cycles:
+        return None
+    actual = w[sp_col].to_numpy(dtype=float)
+    req = np.clip(np.round(w[requests_col].to_numpy(dtype=float)), 0, None).astype(int)
+    expected = tr_simulate(req, params)
+
+    actual_range = float(np.ptp(actual))
+    expected_range = float(np.ptp(expected))
+    trim_end = params.sp_max if params.sp_trim > 0 else params.sp_min  # energy-saving end
+    demand_end = params.sp_min if params.sp_trim > 0 else params.sp_max  # meeting-demand end
+    eff = req - params.ignored  # >0 = a net demand cycle
+
+    # stuck: setpoint barely moves while the request pattern would have moved it
+    stuck = actual_range <= flat_frac * band and expected_range >= expected_move_frac * band
+
+    # not responding: under net demand, the setpoint sits at the trim (energy-saving) end
+    hi = eff > 0
+    pct_unresponsive: float | None = None
+    not_responding: bool | None = None
+    if int(hi.sum()) >= min_mode_cycles:
+        at_trim = np.abs(actual[hi] - trim_end) <= pinned_frac * band
+        unresp = round(100.0 * float(at_trim.mean()), 1)
+        pct_unresponsive = unresp
+        not_responding = unresp >= 100.0 * mode_frac
+
+    # not trimming: while idle, the setpoint sits at the demand end (wasting energy)
+    idle = eff <= 0
+    pct_untrimmed: float | None = None
+    not_trimming: bool | None = None
+    if int(idle.sum()) >= min_mode_cycles:
+        at_demand = np.abs(actual[idle] - demand_end) <= pinned_frac * band
+        untrim = round(100.0 * float(at_demand.mean()), 1)
+        pct_untrimmed = untrim
+        not_trimming = untrim >= 100.0 * mode_frac
+
+    # diverges: on cycles where T&R commanded a real move, the actual moved the opposite way
+    exp_move = np.diff(expected)
+    act_move = np.diff(actual)
+    moved = np.abs(exp_move) > 1e-9
+    if int(moved.sum()) > 0:
+        pct_wrong = round(100.0 * float((act_move[moved] * exp_move[moved] < 0).mean()), 1)
+    else:
+        pct_wrong = 0.0
+    diverges = pct_wrong >= 100.0 * wrong_dir_frac
+
+    effective = not (stuck or not_responding is True or not_trimming is True or diverges)
+    if stuck:
+        reason = "stuck"
+    elif not_responding is True:
+        reason = "not_responding"
+    elif not_trimming is True:
+        reason = "not_trimming"
+    elif diverges:
+        reason = "diverges"
+    else:
+        reason = "effective"
+
+    return ResetEffectivenessResult(
+        equip=equip,
+        n=int(len(w)),
+        unit=unit,
+        actual_sp_range=round(actual_range, 3),
+        expected_sp_range=round(expected_range, 3),
+        mean_abs_error_sp=round(float(np.mean(np.abs(actual - expected))), 3),
+        pct_cycles_wrong_direction=pct_wrong,
+        pct_high_demand_unresponsive=pct_unresponsive,
+        pct_idle_untrimmed=pct_untrimmed,
+        stuck=bool(stuck),
+        not_responding=not_responding,
+        not_trimming=not_trimming,
+        diverges=bool(diverges),
+        effective=bool(effective),
+        reason=reason,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
     )

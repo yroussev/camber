@@ -28,7 +28,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .g36_reset import oat_sat_setpoint
+from .g36_reset import SAT_TR, STATIC_TR, oat_sat_setpoint, tr_simulate
 from .model.roles import Role
 
 __all__ = [
@@ -95,6 +95,32 @@ def _sat_reset_compliance(idx, *, faulty):
     else:
         sat = oat_sat_setpoint(oat) + rng.normal(0, 0.3, len(idx))  # tracks the G36 OAT target
     return pd.DataFrame({Role.SUPPLY_AIR_TEMP: sat, Role.OAT: oat}, index=idx)
+
+
+def _reset_requests_blocks(idx):
+    """Per-cycle request count on alternating 2-day demand (6) / idle (0) blocks."""
+    days = ((idx - idx[0]) / pd.Timedelta("1D")).astype(int).to_numpy()
+    return np.where((days // 2) % 2 == 0, 6, 0).astype(float)
+
+
+def _sat_reset_effectiveness(idx, *, faulty):
+    rng = np.random.default_rng(0)
+    req = _reset_requests_blocks(idx)
+    if faulty:
+        sp = np.full(len(idx), 60.0) + rng.normal(0, 0.05, len(idx))  # frozen mid-band
+    else:
+        sp = tr_simulate(req, SAT_TR) + rng.normal(0, 0.03, len(idx))  # follows the T&R trajectory
+    return pd.DataFrame({Role.SUPPLY_AIR_TEMP_SP: sp, Role.SAT_RESET_REQUESTS: req}, index=idx)
+
+
+def _static_reset_effectiveness(idx, *, faulty):
+    rng = np.random.default_rng(0)
+    req = _reset_requests_blocks(idx)
+    if faulty:
+        sp = np.full(len(idx), 0.8) + rng.normal(0, 0.005, len(idx))  # frozen mid-band
+    else:
+        sp = tr_simulate(req, STATIC_TR) + rng.normal(0, 0.005, len(idx))  # follows the trajectory
+    return pd.DataFrame({Role.DUCT_STATIC_SP: sp, Role.STATIC_PRESSURE_REQUESTS: req}, index=idx)
 
 
 def _unmet(idx, *, faulty):
@@ -391,6 +417,8 @@ SCENARIOS: dict = {
     "reheat_penalty": _reheat,
     "supply_air_reset": _sat_reset,
     "supply_air_reset_compliance": _sat_reset_compliance,
+    "sat_reset_effectiveness": _sat_reset_effectiveness,
+    "static_reset_effectiveness": _static_reset_effectiveness,
     "unmet_setpoint_hours": _unmet,
     "economizer_high_limit": _economizer,
     "free_cooling_missed": _free_cooling,

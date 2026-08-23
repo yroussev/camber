@@ -13,11 +13,19 @@ from camber.g36_reset import (  # noqa: E402
     STATIC_TR,
     cooling_sat_requests,
     oat_sat_setpoint,
+    reset_effectiveness,
     sat_reset_compliance,
     static_pressure_requests,
     tr_simulate,
     tr_step,
 )
+
+
+def _req_blocks(idx):
+    """Alternating 2-day demand(6)/idle(0) request blocks (mirrors the faultlab scenario)."""
+    days = ((idx - idx[0]) / pd.Timedelta("1D")).astype(int).to_numpy()
+    return np.where((days // 2) % 2 == 0, 6.0, 0.0)
+
 
 # ---- trim & respond ----
 
@@ -105,3 +113,101 @@ def test_sat_reset_compliance_ok_when_following():
     df = pd.DataFrame({"SAT": target, "OAT": oat}, index=idx)
     r = sat_reset_compliance(df, "AHU_2", min_clg_sat=55, t_max=65, oat_min=60, oat_max=70)
     assert r.pct_below_g36_target < 5  # SAT follows the target
+
+
+# ---- reset effectiveness (actual setpoint vs the request-implied T&R trajectory) ----
+
+
+def _sat_idx(days=21):
+    return pd.date_range("2025-07-07", periods=days * 24, freq="1h")
+
+
+def test_reset_effectiveness_effective_when_following():
+    idx = _sat_idx()
+    req = _req_blocks(idx)
+    sp = tr_simulate(req, SAT_TR)  # setpoint exactly follows T&R
+    df = pd.DataFrame({"SP": sp, "REQ": req}, index=idx)
+    r = reset_effectiveness(df, "AHU_1", sp_col="SP", requests_col="REQ", params=SAT_TR)
+    assert r.effective is True
+    assert r.reason == "effective"
+    assert not (r.stuck or r.diverges)
+    assert r.mean_abs_error_sp == 0.0
+
+
+def test_reset_effectiveness_stuck_when_flat():
+    idx = _sat_idx()
+    req = _req_blocks(idx)  # requests demand large movement
+    df = pd.DataFrame({"SP": np.full(len(idx), 60.0), "REQ": req}, index=idx)  # frozen setpoint
+    r = reset_effectiveness(df, "AHU_1", sp_col="SP", requests_col="REQ", params=SAT_TR)
+    assert r.stuck is True
+    assert r.effective is False
+    assert r.reason == "stuck"  # stuck outranks the other modes
+
+
+def test_reset_effectiveness_not_responding_parked_at_trim_end():
+    idx = _sat_idx()
+    req = np.full(len(idx), 6.0)  # sustained demand everywhere
+    # setpoint sits at the energy-saving (trim=high) end instead of responding down
+    sp = 64.3 + 0.7 * np.sin(np.arange(len(idx)) / 3.0)  # 63.6..65.0, range > flat floor
+    df = pd.DataFrame({"SP": sp, "REQ": req}, index=idx)
+    r = reset_effectiveness(df, "AHU_1", sp_col="SP", requests_col="REQ", params=SAT_TR)
+    assert r.not_responding is True
+    assert r.not_trimming is None  # no idle cycles to judge
+    assert r.stuck is False
+    assert r.reason == "not_responding"
+
+
+def test_reset_effectiveness_not_trimming_parked_at_demand_end():
+    idx = _sat_idx()
+    req = np.zeros(len(idx))  # idle everywhere -> should trim up
+    sp = 55.7 + 0.7 * np.sin(np.arange(len(idx)) / 3.0)  # 55.0..56.4, parked at demand=low end
+    df = pd.DataFrame({"SP": sp, "REQ": req}, index=idx)
+    r = reset_effectiveness(df, "AHU_1", sp_col="SP", requests_col="REQ", params=SAT_TR)
+    assert r.not_trimming is True
+    assert r.not_responding is None  # no high-demand cycles to judge
+    assert r.stuck is False
+    assert r.reason == "not_trimming"
+
+
+def test_reset_effectiveness_diverges_when_inverted():
+    # Too few high-demand (9) and too few idle (6) cycles to judge the parked-at-an-end modes
+    # (both fall to None), so a setpoint that moves the wrong way is diagnosed as *diverges*.
+    idx = pd.date_range("2025-07-07", periods=15, freq="1h")
+    req = np.array([4.0] * 9 + [0.0] * 6)
+    expected = tr_simulate(req, SAT_TR)
+    sp = (expected.min() + expected.max()) - expected  # mirror image: moves the wrong way
+    df = pd.DataFrame({"SP": sp, "REQ": req}, index=idx)
+    r = reset_effectiveness(df, "AHU_1", sp_col="SP", requests_col="REQ", params=SAT_TR)
+    assert r.diverges is True
+    assert r.pct_cycles_wrong_direction >= 50
+    assert r.stuck is False
+    assert r.not_responding is None  # too few high-demand cycles to judge
+    assert r.not_trimming is None  # too few idle cycles to judge
+    assert r.reason == "diverges"
+
+
+def test_reset_effectiveness_static_family_effective():
+    idx = _sat_idx()
+    req = _req_blocks(idx)
+    sp = tr_simulate(req, STATIC_TR)
+    df = pd.DataFrame({"SP": sp, "REQ": req}, index=idx)
+    r = reset_effectiveness(
+        df, "AHU_1", sp_col="SP", requests_col="REQ", params=STATIC_TR, unit="in. w.c."
+    )
+    assert r.effective is True
+    assert r.unit == "in. w.c."
+    assert r.as_dict()["reason"] == "effective"
+
+
+def test_reset_effectiveness_none_on_missing_or_short():
+    idx = _sat_idx(days=1)
+    req = _req_blocks(idx)
+    good = pd.DataFrame({"SP": tr_simulate(req, SAT_TR), "REQ": req}, index=idx)
+    # missing request column
+    assert (
+        reset_effectiveness(good[["SP"]], "A", sp_col="SP", requests_col="REQ", params=SAT_TR)
+        is None
+    )
+    # too few rows
+    short = good.iloc[:5]
+    assert reset_effectiveness(short, "A", sp_col="SP", requests_col="REQ", params=SAT_TR) is None

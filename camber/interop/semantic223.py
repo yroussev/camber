@@ -94,6 +94,8 @@ _NO_223_QUANTITY = frozenset(
         Role.HEAT_STAGE,
         Role.REVERSING_VALVE_CMD,
         Role.PUMP_STATUS,
+        Role.SAT_RESET_REQUESTS,  # dimensionless G36 trim-&-respond request count
+        Role.STATIC_PRESSURE_REQUESTS,  # dimensionless G36 trim-&-respond request count
     }
 )
 
