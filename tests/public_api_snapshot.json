@@ -1660,6 +1660,17 @@
     "VavDriftDiagnosis",
     "diagnose_vav_drift"
   ],
+  "camber.vavsim": [
+    "FAULTS",
+    "LocusConfusion",
+    "SimulatedCase",
+    "VavFault",
+    "build_vav_suite",
+    "diagnose_vav_frames",
+    "locus_confusion",
+    "make_cases",
+    "simulate_case"
+  ],
   "camber.ventilation": [
     "DEFAULT_EZ",
     "DcvResult",

@@ -4,6 +4,27 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.53.0] — 2026-08-22
+
+**VAV physics validator** — `camber.vavsim`, characterizing the terminal-box drift family end-to-end
+and directly measuring the plant-vs-box disambiguation.
+
+### Added
+- **`camber.vavsim`** — a physics-grounded synthetic generator for the VAV zone terminal that runs
+  the two real VAV drift detectors + `diagnose_vav_drift` end-to-end without a dataset. Because the
+  diagnosis returns a `locus`, it scores a **`LocusConfusion`** (like `ahusim`/`pumpsim`) over the
+  five loci — steady · airflow · reheat · upstream · box-wide. The generator models a single
+  **two-regime diurnal box**: occupied-daytime cooling (swept command + modulating damper + closed
+  reheat) feeds `VavAirflowDrift`, night/morning heating (min airflow + modulating reheat valve)
+  feeds `VavReheatValveDrift` — each detector's gating carves out its regime. The **upstream-vs-box
+  disambiguation is directly measured**: `damper_authority_loss → airflow` and `upstream_starvation
+  → upstream` inject the same damper creep, but only the latter also drops the upstream `DUCT_STATIC`
+  (tripping `vav_upstream_starvation_suspected`); `box_wide → box-wide`. A mild `hw_reset` is a
+  `steady` negative (the reheat HW confound is a caveat, not a locus demotion — noted honestly). On
+  clear faults it localizes all five loci at ~100% with no false alarms. Public API: `VavFault`,
+  `FAULTS`, `SimulatedCase`, `simulate_case`, `make_cases`, `build_vav_suite`, `diagnose_vav_frames`,
+  `LocusConfusion`, `locus_confusion`.
+
 ## [0.52.0] — 2026-08-22
 
 **Per-box VAV drift verdict** — `diagnose_vav_drift` rolls the two VAV detectors into one localized

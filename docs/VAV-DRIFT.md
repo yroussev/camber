@@ -83,3 +83,32 @@ verdict is a **plant symptom and is deliberately excluded from `box_wide`** — 
 must not read as a broadly-failing box, so `upstream + reheat` resolves to locus `reheat` (with an
 upstream caveat), and only `airflow + reheat` (two real box faults) is `box-wide`. Screening-grade;
 pure over Findings.
+
+## Calibration
+
+Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.
+As with the other families, `camber.driftvalidation` tunes them once labelled VAV-fault periods
+exist, and the physics generator `camber.vavsim` characterizes the family end-to-end without a
+dataset. Because the diagnosis returns a `locus`, it scores a **`LocusConfusion`** over the five loci
+(steady · airflow · reheat · upstream · box-wide) — like `ahusim`/`pumpsim`, not the `CauseConfusion`
+of the condenser/evaporator sims.
+
+The generator models a **single two-regime diurnal box**: occupied-daytime cooling (a swept command
++ modulating damper + closed reheat) feeds `VavAirflowDrift`, and night/morning heating (minimum
+airflow + a modulating reheat valve) feeds `VavReheatValveDrift` — each detector's gating carves out
+its own regime. The **upstream-vs-box disambiguation is directly measured**: `damper_authority_loss →
+airflow` and `upstream_starvation → upstream` inject the *same* damper creep, and only the latter also
+drops the upstream `DUCT_STATIC` (tripping `vav_upstream_starvation_suspected`); `box_wide → box-wide`.
+On clear faults the diagnosis localizes at ~100% with no false alarms on healthy boxes.
+
+**One honest asymmetry:** the airflow detector cleanly re-routes an upstream cause to a distinct
+locus, but the reheat detector only *caveats* a hot-water-reset creep (its HW confound is a caveat,
+not a locus demotion). So the generator carries a *mild* `hw_reset` as a `steady` negative, and the
+fire-with-caveat behavior of a *strong* HW reset is covered by a dedicated test.
+
+```python
+from camber.vavsim import make_cases, locus_confusion
+
+lc = locus_confusion(make_cases(), min_severity=3)
+print(lc.accuracy, lc.as_dict()["matrix"])
+```
