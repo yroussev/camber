@@ -37,6 +37,7 @@ from .overcooling_severity_rule import OvercoolingSeverity
 from .reheat_min_rule import ReheatMinimization
 from .reheat_rule import ReheatPenalty
 from .satcontrol_rule import SupplyAirControl
+from .satreset_compliance_rule import SupplyAirResetCompliance
 from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
@@ -52,6 +53,7 @@ from .zones_rule import ZonesHeatCoolCensus
 RULE_CLASSES: list[type] = [
     SimultaneousHeatCool,
     SupplyAirReset,
+    SupplyAirResetCompliance,
     ReheatPenalty,
     OvercoolingMinFlow,
     OvercoolingSeverity,

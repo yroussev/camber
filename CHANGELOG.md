@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.55.0] — 2026-08-23
+
+**SAT-reset compliance (G36) — Arc B begins.** Opens a new Trim-and-Respond / Guideline-36 reset
+analytics family by wiring the dormant `camber.g36_reset` engine into a rule.
+
+### Added
+- **`camber.rules.satreset_compliance_rule.SupplyAirResetCompliance`** (`supply_air_reset_compliance`)
+  — flags supply air held **colder than the G36 §5.16.2.2.b OAT→SAT reset target** (an avoidable
+  reheat/energy opportunity), wrapping the existing-but-unwired `camber.g36_reset.sat_reset_compliance`
+  analyzer. Compares actual SAT to the OAT-*computed* target (not to a mapped setpoint), so it works
+  on a typical SAT+OAT trend export. Complementary to the existing `supply_air_reset` slope check:
+  one asks "does it reset up at all?", this asks "is it colder than the G36 target?". One-sided
+  (too-cold-vs-target), warn-level (opportunity, not a fault), with a mean-gap floor so trivial gaps
+  don't flag; the four G36 map parameters are constructor args for site-specific schedules.
+  Auto-registered; declines loudly when OAT is unmapped or too few rows. New family doc
+  `docs/TR-RESET.md`.
+
 ## [0.54.0] — 2026-08-22
 
 **VAV drift in export + reporting** — the per-box verdict where it acts, completing the VAV

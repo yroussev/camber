@@ -1468,6 +1468,9 @@
   "camber.rules.satcontrol_rule": [
     "SupplyAirControl"
   ],
+  "camber.rules.satreset_compliance_rule": [
+    "SupplyAirResetCompliance"
+  ],
   "camber.rules.satreset_rule": [
     "SupplyAirReset"
   ],

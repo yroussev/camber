@@ -28,6 +28,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .g36_reset import oat_sat_setpoint
 from .model.roles import Role
 
 __all__ = [
@@ -80,6 +81,20 @@ def _sat_reset(idx, *, faulty):
         {Role.SUPPLY_AIR_TEMP: sat, Role.COOL_VALVE: np.full(len(idx), 60.0), Role.OAT: oat},
         index=idx,
     )
+
+
+def _sat_reset_compliance(idx, *, faulty):
+    rng = np.random.default_rng(0)
+    oat = (
+        65 + 4 * np.sin((idx.hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 1, len(idx))
+    )  # mild 60-70
+    if faulty:
+        sat = np.full(len(idx), 54.0) + rng.normal(
+            0, 0.3, len(idx)
+        )  # pinned cold, below G36 target
+    else:
+        sat = oat_sat_setpoint(oat) + rng.normal(0, 0.3, len(idx))  # tracks the G36 OAT target
+    return pd.DataFrame({Role.SUPPLY_AIR_TEMP: sat, Role.OAT: oat}, index=idx)
 
 
 def _unmet(idx, *, faulty):
@@ -375,6 +390,7 @@ SCENARIOS: dict = {
     "simultaneous_heat_cool": _simul,
     "reheat_penalty": _reheat,
     "supply_air_reset": _sat_reset,
+    "supply_air_reset_compliance": _sat_reset_compliance,
     "unmet_setpoint_hours": _unmet,
     "economizer_high_limit": _economizer,
     "free_cooling_missed": _free_cooling,
