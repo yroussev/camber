@@ -19,6 +19,8 @@ rules.
 | `supply_air_reset_compliance` | supply-air temp vs the G36 OAT-reset target | up (too cold) | supply air held **colder than the G36 §5.16.2.2.b OAT→SAT target** — an avoidable reheat/energy opportunity |
 | `sat_reset_effectiveness` | supply-air-temp **setpoint** vs the request-implied T&R trajectory | two-sided | a SAT reset that is **stuck**, **not responding**, **not trimming**, or **diverging** vs its own zone requests |
 | `static_reset_effectiveness` | duct-static **setpoint** vs the request-implied T&R trajectory | two-sided | a duct-static reset that is **stuck**, **not responding**, **not trimming**, or **diverging** vs its own zone requests |
+| `sat_rogue_zone_census` | per-zone SAT reset-request rate across the zone fleet | one-sided (monopolizer) | one chronically over-demanding zone **monopolizing the SAT requests** and dragging the reset colder than the fleet needs |
+| `static_rogue_zone_census` | per-zone duct-static reset-request rate across the zone fleet | one-sided (monopolizer) | one chronically over-demanding zone **monopolizing the duct-static requests** and dragging the reset higher than the fleet needs |
 
 **SAT-reset compliance vs the existing `supply_air_reset`.** These are complementary detectors on the
 same signal. `supply_air_reset` (`camber.satreset`) asks the **shape** question — does supply air get
@@ -66,13 +68,40 @@ error (`mean_abs_error_sp`) is **informational only** — a coarser trend cadenc
 inflates it, so the verdict rests on the cadence-robust mode detectors above, not the raw error.
 Thresholds are screening / opportunity-grade (provisional-untuned).
 
-## Family roadmap
+## Rogue-zone census — which zone is dragging the reset?
 
-The remaining Trim-and-Respond item builds on the same `camber.g36_reset` engine:
+The two rules above look at the reset *setpoint*; this one looks at the *demand side* that drives it.
+In G36 the SAT / duct-static reset responds to the **high-percentile of per-zone requests** (§5.14.8),
+so **one chronically over-demanding zone can monopolize the requests and drag the whole reset** —
+forcing a colder supply-air temperature or higher duct static than the rest of the fleet needs. The
+plant then serves one bad box at everyone else's energy expense.
 
-- **Rogue-zone census** — a fleet analytic that computes the per-zone requests
-  (`cooling_sat_requests` / `static_pressure_requests`) across the zone fleet and finds the one zone
-  monopolizing the requests and dragging the whole reset (so the plant serves one bad box at everyone
-  else's energy expense). This is the zone-fleet path deferred from reset-effectiveness, which the
-  current fleet runner cannot yet express (it hands rules a flat per-equipment frame map with no
-  zone→AHU grouping).
+`sat_rogue_zone_census` and `static_rogue_zone_census` are **fleet** rules (many zones in, one
+aggregate Finding out). Across the zone fleet each computes every zone's per-cycle request series — a
+vectorized form of `cooling_sat_requests` / `static_pressure_requests` — then scores each zone by its
+**share** of the group's total requests and the **fraction of active cycles on which it holds the
+binding (maximum) request**. A zone is flagged as a **rogue** when it both holds the binding request a
+dominant fraction of the time *and* commands a disproportionate share of the requests. Requiring both
+is what keeps a uniformly-busy fleet quiet: when every zone is equally hot they all tie at the binding
+max, but their shares are equal, so none is singled out.
+
+**Topology honesty.** Deciding that a zone drags *AHU-1's* reset requires knowing which zones AHU-1
+serves — and the fleet interface carries no served-by topology. By default the census therefore pools
+all zones **building-wide** and attaches a loud confound caveat: a zone flagged in the single pool may
+simply serve a genuinely hotter air handler than its neighbours, so it is a **screening signal only**.
+When a caller supplies a `groups` map (`{zone: ahu}` or a `zone → ahu` callable) the census scopes
+**per air handler** (a rogue is compared only to its siblings, reported in `rogue_by_group`) and the
+confound caveat drops. It also declines loudly — demoting a clean "ok" to `info` — when zones were
+unevaluable or no zone generated any request (the reset is not demand-bound, so nothing can be
+dragging it). Thresholds are screening / opportunity-grade (provisional-untuned).
+
+## Family complete
+
+With the rogue-zone census the Trim-and-Respond / G36-reset family is complete: **SAT-reset
+compliance** (does the reset sit at the right target?), **reset effectiveness** for SAT and static
+(does the reset actually trim and respond?), and the **rogue-zone census** for SAT and static (is one
+zone dragging the reset?) — all five detectors built on the shared `camber.g36_reset` engine
+(`oat_sat_setpoint`, `tr_step` / `tr_simulate`, `cooling_sat_requests` / `static_pressure_requests`).
+The one remaining enhancement is **automatic zone→AHU discovery**: the census already *accepts* a
+grouping, but the fleet runner does not yet *derive* one from the site model, so per-AHU scoping is
+opt-in until that topology channel exists.

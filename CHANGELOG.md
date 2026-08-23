@@ -4,6 +4,36 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.57.0] — 2026-08-23
+
+**Rogue-zone census (G36 Trim-and-Respond) — Arc B item 3; family complete.** Where the compliance
+and effectiveness rules look at the reset *setpoint*, this looks at the *demand side* that drives it:
+in G36 the SAT / duct-static reset responds to the high-percentile of per-zone requests (§5.14.8), so
+one chronically over-demanding zone can monopolize the requests and drag the whole reset — the plant
+then serves one bad box at everyone else's energy expense.
+
+### Added
+- **`camber.g36_reset.rogue_zone_census`** + `RogueZoneCensusResult` — a fleet analytic that computes
+  each zone's per-cycle reset-request series (a vectorized `cooling_sat_requests` /
+  `static_pressure_requests`), pools zones by an optional `groups` map, and per group scores each zone
+  by its **share** of the group's total requests and the **fraction of active cycles it holds the
+  binding (maximum) request**. A zone is a **rogue** when it clears both — requiring both keeps a
+  uniformly-busy fleet quiet (equal shares → no one singled out).
+- **`camber.rules.rogue_zone_census_rule.RogueZoneCensus`** — a `FleetRule` shipped as two registered
+  instances, `sat_rogue_zone_census` (zone temp vs cooling setpoint) and `static_rogue_zone_census`
+  (zone airflow vs setpoint and damper). Warn-level; names the worst offender; declines to `info`
+  when zones were unevaluable or no zone generated any request.
+
+### Notes
+- **No new roles** (reuses `SPACE_TEMP` / `COOL_SP` / `AIRFLOW` / `AIRFLOW_SP` / `DAMPER`).
+- **Topology honesty:** without a zone→AHU map the census pools zones building-wide and attaches a
+  loud confound caveat (a flagged zone may simply serve a hotter loop — a screening signal only);
+  supplying `groups` (`{zone: ahu}` dict or `zone → ahu` callable) scopes it per air handler and
+  drops the caveat. The deferred piece is *automatic* zone→AHU discovery: the census accepts a
+  grouping, the fleet runner does not yet derive one.
+- Completes the Trim-and-Respond / G36-reset family (five detectors on the shared `camber.g36_reset`
+  engine). Screening-grade thresholds.
+
 ## [0.56.0] — 2026-08-23
 
 **Reset effectiveness (G36 Trim-and-Respond) — Arc B item 2.** Where `supply_air_reset_compliance`

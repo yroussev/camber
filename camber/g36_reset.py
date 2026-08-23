@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
 
 __all__ = [
     "TRParams",
@@ -37,6 +38,8 @@ __all__ = [
     "sat_reset_compliance",
     "ResetEffectivenessResult",
     "reset_effectiveness",
+    "RogueZoneCensusResult",
+    "rogue_zone_census",
 ]
 
 
@@ -336,4 +339,242 @@ def reset_effectiveness(
         reason=reason,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+    )
+
+
+@dataclass
+class RogueZoneCensusResult:
+    """Which zone(s) monopolize an air handler's reset requests and drag the whole reset.
+
+    In G36 the SAT / duct-static reset responds to the high-percentile of per-zone *requests*
+    (§5.14.8), so one chronically over-demanding zone can hold the binding constraint and force a
+    colder / higher setpoint than the rest of the fleet needs. A zone is a **rogue** when it both
+    holds the binding (maximum) request a dominant fraction of the active cycles **and** commands a
+    disproportionate share of the group's total requests. Without a zone->AHU topology the zones are
+    pooled building-wide (``grouped=False``) and this is a screening signal only -- see ``caveats``.
+    """
+
+    reset: str
+    grouped: bool
+    n_zones_evaluated: int
+    n_groups: int
+    total_requests: int
+    zone_request_rate: dict
+    zone_request_share: dict
+    zone_binding_frac: dict
+    rogues: list
+    rogue_by_group: dict
+    worst_zone: str | None
+    worst_zone_share: float | None
+    unevaluable_zones: list
+    caveats: list
+    coverage_start: str
+    coverage_end: str
+
+    def as_dict(self):
+        """Return the result as a plain dict."""
+        from dataclasses import asdict
+
+        return asdict(self)
+
+
+def _group_of(groups, zone: str) -> str:
+    """Resolve a zone's group key: a callable, a {zone: group} dict, or the single pool."""
+    if groups is None:
+        return "<fleet>"
+    if callable(groups):
+        return str(groups(zone))
+    return str(groups.get(zone, "<ungrouped>"))
+
+
+def _sat_requests_series(frame, temp_col, cool_sp_col, *, hi_f, mid_f):
+    """Vectorized cooling SAT-reset requests for one zone (G36 §5.14.8.1, tiers 3/2/0).
+
+    The scalar's tier-1 (cooling-loop > 95%) is omitted -- there is no per-zone cooling-loop role --
+    so a marginal caller below +``mid_f`` is under-counted by at most one request; it cannot
+    manufacture a rogue (dominance rests on the +``mid_f`` / +``hi_f`` tiers).
+    """
+    w = frame[[temp_col, cool_sp_col]].dropna()
+    over = (w[temp_col] - w[cool_sp_col]).to_numpy(dtype=float)
+    req = np.where(over >= hi_f, 3.0, np.where(over >= mid_f, 2.0, 0.0))
+    return pd.Series(req, index=w.index)
+
+
+def _static_requests_series(frame, flow_col, flow_sp_col, damper_col, *, fan_thr):
+    """Vectorized duct-static-reset requests for one zone (G36 §5.14.8.2, tiers 3/2/1/0)."""
+    w = frame[[flow_col, flow_sp_col, damper_col]].dropna()
+    flow = w[flow_col].to_numpy(dtype=float)
+    sp = w[flow_sp_col].to_numpy(dtype=float)
+    damper = w[damper_col].to_numpy(dtype=float)
+    ratio = np.divide(
+        flow, sp, out=np.full(flow.shape, np.inf), where=sp > 0
+    )  # sp<=0 -> never <thr
+    hot = damper > fan_thr
+    req = np.where(
+        hot & (ratio < 0.50),
+        3.0,
+        np.where(hot & (ratio < 0.70), 2.0, np.where(hot, 1.0, 0.0)),
+    )
+    return pd.Series(req, index=w.index)
+
+
+def rogue_zone_census(
+    frames,
+    *,
+    reset: str = "sat",
+    groups=None,
+    temp_col=None,
+    cool_sp_col=None,
+    flow_col=None,
+    flow_sp_col=None,
+    damper_col=None,
+    dominance_frac: float = 0.50,
+    share_mult: float = 2.0,
+    min_share: float = 0.30,
+    min_active_cycles: int = 10,
+    min_zones_per_group: int = 2,
+    hi_f: float = 5.0,
+    mid_f: float = 3.0,
+    fan_thr: float = 95.0,
+) -> RogueZoneCensusResult | None:
+    """Find the zone(s) monopolizing a G36 reset across a fleet of terminal zones.
+
+    Given ``frames`` = ``{zone: role-frame}``, computes each zone's per-cycle reset-request series
+    (SAT via temp/cool-sp when ``reset="sat"``, duct-static via flow/flow-sp/damper when
+    ``reset="static"``), pools zones by ``groups`` (a ``{zone: group}`` dict, a ``zone->group``
+    callable, or ``None`` = one building-wide ``<fleet>`` pool), and per group scores each zone by
+    its share of the group's total requests and the fraction of *active* cycles it holds the binding
+    (maximum) request. A zone is a **rogue** when ``zone_binding_frac >= dominance_frac`` and
+    ``zone_request_share >= max(min_share, share_mult / n_zones)``. Returns ``None`` only for an
+    empty fleet; otherwise a :class:`RogueZoneCensusResult` (possibly with no rogues, only caveats).
+    Screening / opportunity-grade thresholds (provisional-untuned).
+    """
+    if reset not in ("sat", "static"):
+        raise ValueError(f"reset must be 'sat' or 'static', got {reset!r}")
+    if not frames:
+        return None
+
+    series: dict = {}
+    unevaluable: list = []
+    starts, ends = [], []
+    for zone, frame in frames.items():
+        if frame is None or getattr(frame, "empty", True):
+            unevaluable.append(zone)
+            continue
+        if reset == "sat":
+            have = temp_col in frame.columns and cool_sp_col in frame.columns
+            s = (
+                _sat_requests_series(frame, temp_col, cool_sp_col, hi_f=hi_f, mid_f=mid_f)
+                if have
+                else None
+            )
+        else:
+            have = all(c in frame.columns for c in (flow_col, flow_sp_col, damper_col))
+            s = (
+                _static_requests_series(frame, flow_col, flow_sp_col, damper_col, fan_thr=fan_thr)
+                if have
+                else None
+            )
+        if s is None:
+            unevaluable.append(zone)
+            continue
+        s = s[~s.index.duplicated(keep="last")]
+        if len(s) < min_active_cycles:
+            unevaluable.append(zone)
+            continue
+        series[zone] = s
+        starts.append(s.index.min())
+        ends.append(s.index.max())
+
+    zone_rate: dict = {}
+    zone_share: dict = {}
+    zone_binding: dict = {}
+    rogue_by_group: dict = {}
+    collapsed: list = []
+    total_requests = 0.0
+
+    groups_map: dict = {}
+    for zone in series:
+        groups_map.setdefault(_group_of(groups, zone), []).append(zone)
+
+    for g, zones in groups_map.items():
+        R = pd.concat({z: series[z] for z in zones}, axis=1)
+        arr = R.to_numpy(dtype=float)
+        keep = ~np.all(np.isnan(arr), axis=1)
+        arr = arr[keep]
+        grp_total = float(np.nansum(arr)) if arr.size else 0.0
+        total_requests += grp_total
+        if arr.size:
+            row_max = np.nanmax(arr, axis=1)
+            active = row_max > 0
+            n_active = int(active.sum())
+        else:
+            row_max = np.empty(0)
+            active = np.empty(0, dtype=bool)
+            n_active = 0
+        for zi, z in enumerate(R.columns):
+            col = arr[:, zi] if arr.size else np.empty(0)
+            zone_rate[z] = (
+                round(float(np.nanmean(col)), 3) if col.size and not np.all(np.isnan(col)) else 0.0
+            )
+            zone_share[z] = round(float(np.nansum(col) / grp_total), 3) if grp_total > 0 else 0.0
+            if n_active > 0:
+                is_max = active & (col == row_max)  # NaN never equals row_max -> excluded
+                zone_binding[z] = round(int(is_max.sum()) / n_active, 3)
+            else:
+                zone_binding[z] = 0.0
+        # a group needs >= min_zones_per_group real zones to attribute a rogue
+        if len(zones) < min_zones_per_group or grp_total <= 0:
+            collapsed.append(g)
+            continue
+        share_thr = max(min_share, share_mult / len(zones))
+        rg = sorted(
+            z for z in zones if zone_binding[z] >= dominance_frac and zone_share[z] >= share_thr
+        )
+        if rg:
+            rogue_by_group[g] = rg
+
+    rogues = sorted({z for zs in rogue_by_group.values() for z in zs})
+    worst = max(rogues, key=lambda z: (zone_binding[z], zone_share[z])) if rogues else None
+
+    caveats: list = []
+    if reset == "sat":
+        caveats.append(
+            "SAT request tier-1 (zone cooling-loop > 95%) not evaluated -- no per-zone "
+            "cooling-loop signal; census may under-count marginal callers"
+        )
+    if total_requests <= 0 and series:
+        caveats.append(
+            "no zone generated any reset request in the window -- the reset is not demand-bound, "
+            "so no zone can be dragging it"
+        )
+    if unevaluable:
+        caveats.append(
+            f"{len(unevaluable)} zone(s) not evaluated (missing request signals or too few rows): "
+            f"census may under-count"
+        )
+    collapsed_real = [g for g in collapsed if len(groups_map.get(g, [])) < min_zones_per_group]
+    if collapsed_real:
+        caveats.append(
+            f"{len(collapsed_real)} group(s) had too few zones to attribute a rogue "
+            f"(need >= {min_zones_per_group})"
+        )
+
+    return RogueZoneCensusResult(
+        reset=reset,
+        grouped=groups is not None,
+        n_zones_evaluated=len(series),
+        n_groups=len(groups_map),
+        total_requests=int(round(total_requests)),
+        zone_request_rate=zone_rate,
+        zone_request_share=zone_share,
+        zone_binding_frac=zone_binding,
+        rogues=rogues,
+        rogue_by_group=rogue_by_group,
+        worst_zone=worst,
+        worst_zone_share=(zone_share[worst] if worst else None),
+        unevaluable_zones=sorted(map(str, unevaluable)),
+        caveats=caveats,
+        coverage_start=str(min(starts)) if starts else "",
+        coverage_end=str(max(ends)) if ends else "",
     )

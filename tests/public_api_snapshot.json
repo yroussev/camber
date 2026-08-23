@@ -510,6 +510,7 @@
   ],
   "camber.g36_reset": [
     "ResetEffectivenessResult",
+    "RogueZoneCensusResult",
     "SATResetComplianceResult",
     "SAT_TR",
     "STATIC_TR",
@@ -517,6 +518,7 @@
     "cooling_sat_requests",
     "oat_sat_setpoint",
     "reset_effectiveness",
+    "rogue_zone_census",
     "sat_reset_compliance",
     "static_pressure_requests",
     "tr_simulate",
@@ -1469,6 +1471,9 @@
   ],
   "camber.rules.reset_effectiveness_rule": [
     "ResetEffectiveness"
+  ],
+  "camber.rules.rogue_zone_census_rule": [
+    "RogueZoneCensus"
   ],
   "camber.rules.satcontrol_rule": [
     "SupplyAirControl"
