@@ -88,14 +88,28 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   cycling), `filter_fouling` (filter ΔP at/above change-out), and `chiller_approach_fouling`
   (condenser/evaporator approach-temperature degradation — refrigerant-side fouling without
   refrigerant-pressure sensors). New equipment templates: **RTU, HeatPump/VRF, DOAS, FCU**.
-- **Chiller drift detection & calibration** ([CHILLER-DRIFT.md](CHILLER-DRIFT.md)) — catches a chiller
-  degrading *over time* against its own frozen, load-normalized baseline: condenser/evaporator
-  **approach** drift, liquid-line **subcooling** (refrigerant charge), suction **superheat**
-  (evaporator feed), and condenser-water **range** (hydraulics). Each pairs a period statistic with a
-  streaming sustained-shift **CUSUM** alarm and labels its thresholds honestly (screening-grade
-  magnitude floors vs. provisional-untuned CUSUM timing). `camber.driftvalidation` calibrates those
-  thresholds against labelled fault data (precision/recall + a threshold sweep). Period rules, run via
-  `Registry.run_periods` with a frozen baseline store.
+- **Drift-detection families** — catches equipment degrading *over time* against its own frozen,
+  load-normalized baseline (the "is this slowly getting worse than it used to be, at matched load?"
+  question), all on one shared engine (`camber.chillerbaseline` / `camber.chillerdrift`), each pairing
+  a period statistic with a streaming sustained-shift **CUSUM** alarm and honest threshold labels
+  (screening-grade magnitude floors vs. provisional-untuned CUSUM timing):
+  - **Chiller** ([CHILLER-DRIFT.md](CHILLER-DRIFT.md)) — condenser/evaporator **approach**, liquid-line
+    **subcooling** (charge), suction **superheat** (evaporator feed), condenser-water **range**.
+  - **Pump / hydronic** ([PUMP-DRIFT.md](PUMP-DRIFT.md)) — the distribution side at matched *duty*.
+  - **AHU / air-side** ([AHU-DRIFT.md](AHU-DRIFT.md)) — supply fans, coils, filters, duct-static
+    control, with a per-AHU co-movement roll-up (`diagnose_ahu_drift`) that names the locus.
+  - **VAV / zone-terminal** ([VAV-DRIFT.md](VAV-DRIFT.md)) — the box's damper, airflow tracking, and
+    reheat coil, with a per-box roll-up (`diagnose_vav_drift`) disambiguating box vs upstream starvation.
+  Each family ships a physics simulator (`ahusim` / `condensersim` / `evaporatorsim` / `vavsim`) for
+  ROC validation; `camber.driftvalidation` calibrates thresholds against labelled data. Period rules,
+  run via `Registry.run_periods` with a frozen baseline store.
+- **Trim-and-Respond / G36 reset analytics** ([TR-RESET.md](TR-RESET.md)) — asks whether the plant's
+  **setpoint-reset logic** does what ASHRAE Guideline 36 intends (`camber.g36_reset` engine). Five
+  detectors: `supply_air_reset_compliance` (SAT held colder than the §5.16.2.2 OAT→SAT target — a
+  reheat opportunity), `sat`/`static_reset_effectiveness` (does the reset setpoint actually trim and
+  respond to its zone requests, or is it stuck / not-responding / not-trimming / diverging?), and
+  `sat`/`static_rogue_zone_census` (fleet rules finding the one zone monopolizing the requests and
+  dragging the whole reset). Screening / opportunity-grade.
 - **G36 §5.16.14 engine** — `fdd_g36.run_g36_afdd` scores AHU fault conditions **FC1–FC15** with
   operating-state gating; cross-validated vs open-fdd and accuracy-scored in the synthetic harness
   ([VALIDATION.md](VALIDATION.md)).
