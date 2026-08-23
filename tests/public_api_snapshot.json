@@ -685,6 +685,7 @@
     "export_evaporator_diagnoses",
     "export_findings",
     "export_pump_diagnoses",
+    "export_vav_diagnoses",
     "finding_to_ticket",
     "findings_to_frame",
     "findings_to_tickets",
@@ -692,6 +693,7 @@
     "pump_diagnoses_to_frame",
     "slack_payload",
     "teams_payload",
+    "vav_diagnoses_to_frame",
     "webhook_transport"
   ],
   "camber.integrate.export": [
@@ -705,8 +707,10 @@
     "export_evaporator_diagnoses",
     "export_findings",
     "export_pump_diagnoses",
+    "export_vav_diagnoses",
     "findings_to_frame",
-    "pump_diagnoses_to_frame"
+    "pump_diagnoses_to_frame",
+    "vav_diagnoses_to_frame"
   ],
   "camber.integrate.notify": [
     "dispatch_findings",
@@ -1128,7 +1132,8 @@
     "interactive_scatter_html",
     "multitrend_svg_html",
     "pump_diagnosis_table",
-    "selection_bus_html"
+    "selection_bus_html",
+    "vav_diagnosis_table"
   ],
   "camber.report.ahu": [
     "ahu_diagnosis_table"
@@ -1169,6 +1174,9 @@
   ],
   "camber.report.site": [
     "build_site_report"
+  ],
+  "camber.report.vav": [
+    "vav_diagnosis_table"
   ],
   "camber.resolve": [
     "EquipRef",

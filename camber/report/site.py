@@ -28,6 +28,7 @@ from .dashboard import (
 )
 from .evaporator import evaporator_diagnosis_table
 from .pump import pump_diagnosis_table
+from .vav import vav_diagnosis_table
 
 _SC_STYLE = (
     ".sc{font-size:15px;margin:10px 0}.grade{font-size:30px;font-weight:700}"
@@ -59,6 +60,7 @@ def build_site_report(
     evaporator_diagnoses=None,
     pump_diagnoses=None,
     ahu_diagnoses=None,
+    vav_diagnoses=None,
     rules=None,
     frames=None,
     loads=None,
@@ -81,8 +83,9 @@ def build_site_report(
     per-loop evaporator / CHW verdict table too; ``pump_diagnoses`` (from
     :func:`camber.pumpdrift.diagnose_pump_drift`) add a per-loop pump
     verdict table alongside it; ``ahu_diagnoses`` (from :func:`camber.ahudrift.diagnose_ahu_drift`)
-    add a per-AHU air-side verdict table too. ``sections`` chooses which dashboard chart sections to
-    include (A/B/E/I).
+    add a per-AHU air-side verdict table too; ``vav_diagnoses`` (from
+    :func:`camber.vavdrift.diagnose_vav_drift`) add a per-box VAV zone-terminal verdict table as
+    well. ``sections`` chooses which dashboard chart sections to include (A/B/E/I).
     """
     style = _STYLE + _SC_STYLE
     parts = [
@@ -108,6 +111,9 @@ def build_site_report(
 
     if ahu_diagnoses:
         parts.append(ahu_diagnosis_table(ahu_diagnoses))
+
+    if vav_diagnoses:
+        parts.append(vav_diagnosis_table(vav_diagnoses))
 
     for letter in sections:
         img = _section_image(

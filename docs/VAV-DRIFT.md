@@ -84,6 +84,13 @@ must not read as a broadly-failing box, so `upstream + reheat` resolves to locus
 upstream caveat), and only `airflow + reheat` (two real box faults) is `box-wide`. Screening-grade;
 pure over Findings.
 
+**Surfacing the verdict.** The per-box verdicts flow downstream like the chiller, condenser,
+evaporator, pump, and AHU ones: `camber.integrate.export.vav_diagnoses_to_frame` /
+`export_vav_diagnoses` write one row per box (locus · severity · box_wide · corroborated · causes ·
+caveat count · fingerprint) to CSV/JSON/Parquet, and `camber.report.vav_diagnosis_table` renders a
+worst-first HTML table. `build_site_report(..., vav_diagnoses=[...])` splices that table into the
+owner-facing site report, alongside the plant, pump, and AHU verdict tables.
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

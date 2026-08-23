@@ -18,8 +18,10 @@ from .export import (
     export_evaporator_diagnoses,
     export_findings,
     export_pump_diagnoses,
+    export_vav_diagnoses,
     findings_to_frame,
     pump_diagnoses_to_frame,
+    vav_diagnoses_to_frame,
 )
 from .notify import (
     dispatch_findings,
@@ -63,4 +65,6 @@ __all__ = [
     "export_condenser_diagnoses",
     "evaporator_diagnoses_to_frame",
     "export_evaporator_diagnoses",
+    "vav_diagnoses_to_frame",
+    "export_vav_diagnoses",
 ]

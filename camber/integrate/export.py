@@ -349,6 +349,62 @@ def export_evaporator_diagnoses(
     return _write_frame(df, path, format)
 
 
+# One row per VAV box verdict; the terminal-box columns a dashboard ranks and filters on. Like the
+# AHU diagnosis it carries a locus + a wide flag (here ``box_wide``).
+_VAV_DIAG_COLS = [
+    "fingerprint",
+    "site",
+    "equip",
+    "locus",
+    "severity",
+    "box_wide",
+    "corroborated",
+    "causes",
+    "n_caveats",
+    "summary",
+]
+
+
+def vav_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+    """Flatten per-box VAV drift diagnoses into a DataFrame (one row per box).
+
+    ``diagnoses`` is an iterable of :class:`camber.vavdrift.VavDriftDiagnosis` (or anything with
+    that shape). Each row carries the box verdict — ``locus``, ``severity``, ``box_wide``,
+    ``corroborated``, the joined ``causes`` and a caveat count. ``columns`` restricts/orders output.
+    """
+    rows = []
+    for d in diagnoses:
+        equip = _attr(d, "equip", "")
+        rows.append(
+            {
+                "fingerprint": fingerprint(site, equip, "vav_drift"),
+                "site": site,
+                "equip": equip,
+                "locus": _attr(d, "locus", ""),
+                "severity": _attr(d, "severity", "ok"),
+                "box_wide": bool(_attr(d, "box_wide", False)),
+                "corroborated": bool(_attr(d, "corroborated", False)),
+                "causes": "; ".join(_attr(d, "causes", []) or []),
+                "n_caveats": len(_attr(d, "caveats", []) or []),
+                "summary": _attr(d, "summary", ""),
+            }
+        )
+    df = pd.DataFrame(rows)
+    if columns is not None:
+        df = df.reindex(columns=list(columns))
+    elif not df.empty:
+        df = df.reindex(columns=[c for c in _VAV_DIAG_COLS if c in df.columns])
+    return df
+
+
+def export_vav_diagnoses(
+    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+) -> int:
+    """Write per-box VAV drift diagnoses to ``path`` (CSV / JSON / Parquet); return the count."""
+    df = vav_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    return _write_frame(df, path, format)
+
+
 def _write_frame(df: pd.DataFrame, path: str, format: str | None) -> int:
     fmt = (format or path.rsplit(".", 1)[-1]).lower()
     if fmt == "csv":

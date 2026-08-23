@@ -15,6 +15,7 @@ from .linking import (
 )
 from .pump import pump_diagnosis_table
 from .site import build_site_report
+from .vav import vav_diagnosis_table
 
 __all__ = [
     "AuditReport",
@@ -30,6 +31,7 @@ __all__ = [
     "evaporator_diagnosis_table",
     "pump_diagnosis_table",
     "ahu_diagnosis_table",
+    "vav_diagnosis_table",
     "fig_to_base64",
     "carpet_svg_html",
     "multitrend_svg_html",

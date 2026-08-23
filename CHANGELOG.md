@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.54.0] — 2026-08-22
+
+**VAV drift in export + reporting** — the per-box verdict where it acts, completing the VAV
+zone-terminal drift family (detectors → diagnosis → sim → surfacing).
+
+### Added
+- **`camber.integrate.export.vav_diagnoses_to_frame` / `export_vav_diagnoses`** — flatten the per-box
+  VAV drift diagnoses (`camber.vavdrift.VavDriftDiagnosis`) into a one-row-per-box table (locus ·
+  severity · box_wide · corroborated · joined causes · caveat count · stable fingerprint) and write
+  CSV / JSON / Parquet. Like the AHU table it carries a locus + a wide flag (`box_wide`).
+- **`camber.report.vav_diagnosis_table`** — a self-contained HTML table of the VAV verdicts, ranked
+  worst-first, flagging box-wide cases; a standalone renderer to splice into a report.
+
+### Changed
+- **`camber.report.build_site_report`** gains an optional `vav_diagnoses=` argument that renders the
+  `vav_diagnosis_table` after the AHU table. Backward compatible.
+
 ## [0.53.0] — 2026-08-22
 
 **VAV physics validator** — `camber.vavsim`, characterizing the terminal-box drift family end-to-end
