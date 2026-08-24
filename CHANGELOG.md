@@ -4,6 +4,30 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.62.0] — 2026-08-24
+
+**Fault economics for the Trim-and-Respond reset family.** Extends `camber.fault_economics` so the
+reset family's findings can be ranked by money, not just severity — triage-grade, honest, and
+uncosted-by-design where the physics doesn't support a dollar figure.
+
+### Added
+- **`supply_air_reset_compliance`** cost model → avoidable **terminal reheat** (reheat-coil capacity ×
+  below-target hours × diversity, **scaled by the `mean_gap_f` below-target gap**); uncosted without
+  `EquipmentLoad.heating_capacity_kbtuh`.
+- **`sat`/`static_reset_effectiveness`** cost model (dispatched on the failure `reason`): `not_trimming`
+  → wasted **fan** energy (static, needs `fan_kw`) or avoidable **reheat** (SAT, needs coil capacity).
+  `not_responding` (comfort/capacity risk), `stuck` and `diverges` (indeterminate energy sign) are
+  **uncosted by design** — an honest basis, never a fabricated `$`.
+- Two documented assumptions (`g36_gap_ref_f`, `reset_fan_excess_frac`) in `DEFAULTS`; `_reheat_gas`
+  gains an `intensity_scale` so a marginal gap costs proportionally less.
+
+### Notes
+- Registered in `DEFAULT_MODELS`, so the new models flow through `rank_by_cost` / the scorecard /
+  action plan with no call-site changes; the public API surface is unchanged (estimators are private).
+- **Drift families remain uncosted by design** (documented + a lock test): a drift is a leading
+  recommission indicator whose magnitude is a condition-space residual, not a priceable energy
+  quantity. Fleet-rule (rogue/cohort) costing lands next, after the per-air-handler load attribution.
+
 ## [0.61.0] — 2026-08-24
 
 **AHU cohort-starvation diagnosis (topology-aware fleet analytics — arc item 4).** The common-mode

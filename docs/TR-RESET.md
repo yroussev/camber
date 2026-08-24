@@ -142,6 +142,24 @@ air handler with the same provenance/coverage-aware caveat (semantic drops it, h
 partial pools the remainder). The SAT variant carries an extra caveat: a whole cohort running warm can
 be a genuinely hot design-day rather than a capacity fault, so corroborate with OAT before acting.
 
+## Dollar impact
+
+`camber.fault_economics` prices the reset family's findings so an operator can rank the backlog by
+**money**, not just severity (triage-grade, not audit-grade):
+
+- **`supply_air_reset_compliance`** → avoidable **terminal reheat**: reheat-coil capacity ×
+  below-target hours × diversity, **scaled by the below-target gap** (`mean_gap_f`) so a bigger gap
+  costs more. Needs the reheat-coil sizing (`EquipmentLoad.heating_capacity_kbtuh`), else uncosted.
+- **`static_reset_effectiveness` (`not_trimming`)** → wasted **fan** energy (static SP parked high
+  while zones are idle): `fan_kw` × idle-untrimmed fraction × excess. **`sat_reset_effectiveness`
+  (`not_trimming`)** → avoidable **reheat** (SAT parked cold).
+- The other reset-effectiveness modes are **uncosted by design** — `not_responding` (zones *starve*)
+  is a comfort/capacity risk, and `stuck` / `diverges` have an indeterminate energy sign; the
+  estimator returns an honest basis rather than fabricating a dollar figure.
+
+The fleet rules (rogue-zone census, cohort starvation) are costed separately once per-air-handler
+sizing can be attributed to their `<fleet>`-level findings.
+
 ## Family complete
 
 The Trim-and-Respond / G36-reset family now spans **seven** detectors on the shared `camber.g36_reset`

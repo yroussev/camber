@@ -141,7 +141,14 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   an assignment/status workflow, SLA/aging tracking, and atomic JSON persistence. Flags:
   `magnitude_key`, `actionable_only`, `reopen_on_recurrence`, `auto_resolve_absent`.
 - **Fault economics** — `fault_economics`: per-fault annual $ impact → rank by money. Flags:
-  `params` (assumptions), `models`, `min_severity` (via `rank_by_cost`).
+  `params` (assumptions), `models`, `min_severity` (via `rank_by_cost`). Triage-grade `DEFAULT_MODELS`
+  cover simultaneous heat/cool, reheat, chiller/tower/pump efficiency, duct-static, boiler cycling,
+  and the **Trim-and-Respond reset family** (SAT-below-target and static/SAT reset-not-trimming →
+  reheat/fan waste; `not_responding`/`stuck`/`diverges` are comfort/indeterminate → **uncosted by
+  design**). Drift findings are also **uncosted by design** — a drift is a leading recommission
+  indicator, not a spend (its magnitude is a condition-space residual, not a priceable energy
+  quantity). Every estimate carries its `basis` + `assumptions` and returns *uncosted* (never a
+  fabricated figure) when the sizing it needs is missing.
 - **Ventilation (ASHRAE 62.1)** — `ventilation.assess_62_1` (Ventilation Rate Procedure: required vs
   delivered OA, deficit) and `assess_dcv` (DCV modulation vs occupancy/CO₂), with the
   `VentilationRateProcedure` / `DemandControlledVentilation` rules and `Role.OA_AIRFLOW`. Flags:

@@ -53,6 +53,8 @@ DEFAULTS = {
     "fan_excess_frac": 0.15,  # supply-fan power wasted when duct static rides high
     "pump_excess_frac": 0.15,  # loop-pump power wasted when it rides the curve (no DP reset)
     "per_start_loss": 0.005,  # boiler standby/purge loss per excess start/day (capped at 10%)
+    "g36_gap_ref_f": 5.0,  # SAT gap (°F) at which below-target reheat is assumed ~at full diversity
+    "reset_fan_excess_frac": 0.15,  # fan power wasted while a static reset sits un-trimmed
 }
 
 
@@ -132,14 +134,18 @@ def _price(elec_kwh, gas_therms, price):
 # --------------------------------------------------------------------------- #
 
 
-def _reheat_gas(metrics, load, price, P, *, pct_keys, with_cooling):
-    """Reheat / simultaneous-H/C gas (and, if paired, the cooling it fights)."""
+def _reheat_gas(metrics, load, price, P, *, pct_keys, with_cooling, intensity_scale=1.0):
+    """Reheat / simultaneous-H/C gas (and, if paired, the cooling it fights).
+
+    ``intensity_scale`` (0..1) optionally scales the reheat output by a fault-specific intensity
+    (e.g. a SAT below-target *gap*), so a marginal fault costs less than a severe one.
+    """
     cap = load.heating_capacity_kbtuh
     if not cap:
         return 0.0, 0.0, "needs EquipmentLoad.heating_capacity_kbtuh", {}
     frac = _frac(_num(metrics, *pct_keys))
     div, eff = P["reheat_diversity"], P["boiler_efficiency"]
-    gas_kbtu_out = cap * load.annual_hours * frac * div
+    gas_kbtu_out = cap * load.annual_hours * frac * div * intensity_scale
     gas_therms = gas_kbtu_out / _KBTU_PER_THERM / eff
     elec_kwh = 0.0
     used = {"faulted_frac": round(frac, 3), "reheat_diversity": div, "boiler_efficiency": eff}
@@ -276,11 +282,79 @@ def _est_boiler_cycle(m, load, price, P):
     )
 
 
+def _est_sat_reset_compliance(m, load, price, P):
+    """Avoidable terminal reheat from supply air held colder than the G36 OAT-reset target.
+
+    Below-target SAT sustains reheat; cost = reheat-coil capacity x below-target hours x diversity,
+    scaled by the below-target *gap* (a bigger gap = more reheat). Needs the reheat coil sizing.
+    """
+    gap = _num(m, "mean_gap_f") or 0.0
+    gap_scale = max(0.0, min(1.0, gap / P["g36_gap_ref_f"]))
+    elec, gas, basis, used = _reheat_gas(
+        m,
+        load,
+        price,
+        P,
+        pct_keys=("pct_below_g36_target",),
+        with_cooling=False,
+        intensity_scale=gap_scale,
+    )
+    if gas > 0 or elec > 0:
+        used["gap_scale"] = round(gap_scale, 3)
+        return elec, gas, "sat-below-g36-target->reheat", used
+    return elec, gas, basis, used  # uncosted (missing capacity, or no gap) passthrough
+
+
+def _est_reset_effectiveness(m, load, price, P):
+    """Cost a reset-effectiveness fault by its failure mode; comfort-only modes stay uncosted.
+
+    ``not_trimming`` = the setpoint parked at the demand end while zones are idle: static wastes
+    **fan** power (SP too high), SAT wastes **reheat** (SAT too cold). ``not_responding`` /
+    ``stuck`` / ``diverges`` are comfort/capacity or sign-indeterminate faults -- uncosted, not
+    fabricated.
+    """
+    reason = (m or {}).get("reason")
+    reset = (m or {}).get("reset")
+    if reason == "not_trimming":
+        if reset == "static":
+            if not load.fan_kw:
+                return 0.0, 0.0, "needs EquipmentLoad.fan_kw", {}
+            frac = _frac(_num(m, "pct_idle_untrimmed"))
+            excess = P["reset_fan_excess_frac"]
+            elec = load.fan_kw * load.annual_hours * frac * excess
+            return (
+                elec,
+                0.0,
+                "static-reset-not-trimming->fan",
+                {"idle_untrimmed_frac": round(frac, 3), "reset_fan_excess_frac": excess},
+            )
+        if reset == "sat":
+            elec, gas, basis, used = _reheat_gas(
+                m, load, price, P, pct_keys=("pct_idle_untrimmed",), with_cooling=False
+            )
+            if gas > 0:
+                return elec, gas, "sat-reset-not-trimming->reheat", used
+            return elec, gas, basis, used
+        return 0.0, 0.0, f"reset not_trimming (unknown reset {reset!r}) -- uncosted", {}
+    if reason == "not_responding":
+        return 0.0, 0.0, "comfort/capacity risk (reset not_responding) -- not an energy waste", {}
+    if reason == "stuck":
+        return 0.0, 0.0, "reset stuck -- energy sign indeterminate, uncosted by design", {}
+    if reason == "diverges":
+        return 0.0, 0.0, "reset diverges (mis-wired) -- comfort risk, uncosted", {}
+    if reason == "effective":
+        return 0.0, 0.0, "reset effective -- no waste", {}
+    return 0.0, 0.0, "reset-effectiveness reason unavailable -- uncosted", {}
+
+
 # rule name -> estimator
 DEFAULT_MODELS = {
     "simultaneous_heat_cool": _est_simultaneous,
     "reheat_penalty": _est_reheat_penalty,
     "reheat_minimization_g36": _est_reheat_min,
+    "supply_air_reset_compliance": _est_sat_reset_compliance,
+    "sat_reset_effectiveness": _est_reset_effectiveness,
+    "static_reset_effectiveness": _est_reset_effectiveness,
     "chiller_efficiency": _est_chiller,
     "cooling_tower_approach": _est_cooling_tower,
     "hw_pump_dp_reset": _est_pump,

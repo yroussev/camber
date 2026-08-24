@@ -168,3 +168,134 @@ def test_total_cost_rollup():
     roll = total_cost(costs)
     assert roll["n_costed"] == 1 and roll["n_uncosted"] == 1
     assert roll["annual_cost_usd"] > 0
+
+
+# ---- Trim-and-Respond reset family cost models (0.62.0) ----
+
+
+def test_sat_reset_compliance_costs_reheat():
+    f = _f(
+        "supply_air_reset_compliance", "AHU-1", "warn", pct_below_g36_target=60.0, mean_gap_f=5.0
+    )
+    c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=200.0), PRICE)
+    assert c.costed
+    assert c.gas_therms > 0 and c.electricity_kwh == 0
+    assert "reheat" in c.basis
+    assert c.assumptions["gap_scale"] == 1.0
+
+
+def test_sat_reset_compliance_gap_scales_cost():
+    load = EquipmentLoad(heating_capacity_kbtuh=200.0)
+    full = estimate_cost(
+        _f("supply_air_reset_compliance", "A", "warn", pct_below_g36_target=60, mean_gap_f=5.0),
+        load,
+        PRICE,
+    )
+    half = estimate_cost(
+        _f("supply_air_reset_compliance", "A", "warn", pct_below_g36_target=60, mean_gap_f=2.5),
+        load,
+        PRICE,
+    )
+    assert abs(half.gas_therms - full.gas_therms / 2) < 1e-6  # gap halved -> cost halved
+
+
+def test_sat_reset_compliance_uncosted_without_capacity():
+    c = estimate_cost(
+        _f("supply_air_reset_compliance", "A", "warn", pct_below_g36_target=60, mean_gap_f=5.0),
+        EquipmentLoad(),
+        PRICE,
+    )
+    assert not c.costed
+    assert "heating_capacity_kbtuh" in c.basis
+
+
+def test_static_reset_not_trimming_costs_fan():
+    f = _f(
+        "static_reset_effectiveness",
+        "AHU-1",
+        "warn",
+        reason="not_trimming",
+        reset="static",
+        pct_idle_untrimmed=70.0,
+    )
+    c = estimate_cost(f, EquipmentLoad(fan_kw=20.0), PRICE)
+    assert c.costed
+    assert c.electricity_kwh > 0 and c.gas_therms == 0
+    assert "fan" in c.basis
+
+
+def test_static_reset_not_trimming_uncosted_without_fan_kw():
+    f = _f(
+        "static_reset_effectiveness",
+        "A",
+        "warn",
+        reason="not_trimming",
+        reset="static",
+        pct_idle_untrimmed=70.0,
+    )
+    c = estimate_cost(f, EquipmentLoad(), PRICE)
+    assert not c.costed
+    assert "fan_kw" in c.basis
+
+
+def test_sat_reset_not_trimming_costs_reheat():
+    f = _f(
+        "sat_reset_effectiveness",
+        "A",
+        "warn",
+        reason="not_trimming",
+        reset="sat",
+        pct_idle_untrimmed=50.0,
+    )
+    c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=150.0), PRICE)
+    assert c.costed and c.gas_therms > 0
+    assert "reheat" in c.basis
+
+
+def test_reset_not_responding_is_comfort_uncosted():
+    f = _f("sat_reset_effectiveness", "A", "warn", reason="not_responding", reset="sat")
+    c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=200.0), PRICE)
+    assert not c.costed
+    assert c.annual_cost_usd == 0.0  # no dollar fabricated for a comfort/capacity fault
+    assert "comfort" in c.basis
+
+
+def test_reset_stuck_and_diverges_uncosted():
+    for reason, needle in (("stuck", "indeterminate"), ("diverges", "comfort")):
+        c = estimate_cost(
+            _f("static_reset_effectiveness", "A", "warn", reason=reason, reset="static"),
+            EquipmentLoad(fan_kw=20.0),
+            PRICE,
+        )
+        assert not c.costed and needle in c.basis
+
+
+def test_reset_family_flows_through_rank_by_cost():
+    # a new model participates in the money ranker with zero extra wiring
+    findings = [
+        _f("supply_air_reset_compliance", "AHU-1", "warn", pct_below_g36_target=60, mean_gap_f=5.0),
+        _f(
+            "static_reset_effectiveness",
+            "AHU-2",
+            "warn",
+            reason="not_trimming",
+            reset="static",
+            pct_idle_untrimmed=80.0,
+        ),
+    ]
+    loads = {
+        "AHU-1": EquipmentLoad(heating_capacity_kbtuh=300.0),
+        "AHU-2": EquipmentLoad(fan_kw=25.0),
+    }
+    ranked = rank_by_cost(findings, loads, PRICE)
+    assert all(fc.costed for fc in ranked)
+    assert ranked[0].annual_cost_usd >= ranked[1].annual_cost_usd  # sorted worst-dollars-first
+
+
+def test_drift_family_uncosted_by_design():
+    # drift is a leading recommission indicator, not a spend -> no cost model, uncosted
+    c = estimate_cost(
+        _f("chiller_drift", "CH-1", "warn", drift_f=1.5), EquipmentLoad(cooling_tons=300.0), PRICE
+    )
+    assert not c.costed
+    assert "no cost model" in c.basis
