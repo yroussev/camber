@@ -4,6 +4,36 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.64.0] — 2026-08-24
+
+**Real-data validation of the AHU air-side drift family (LBNL FDD).** Extends the LBNL benchmark to
+score the newer drift detectors on labeled real faults, and documents — honestly — which new families
+the public datasets can and cannot validate.
+
+### Added
+- **`examples/lbnl_fdd/benchmark.py` drift-scoring path** — scores `coil_valve_drift` (target = coil
+  leak, real TPR), `economizer_damper_drift` (target = stuck damper, real TPR with a command-vs-position
+  caveat), and `duct_static_drift` (specificity only) on the LBNL SDAHU data via
+  `camber.driftvalidation.evaluate` (baseline = fault-free run, current = each labeled fault run). The
+  `drift.*` metrics flow through the existing `--json` / `--gate` / `--update-baseline` path; NaN
+  metrics (a specificity-only detector has no recall) are omitted to keep the JSON valid.
+- **`tests/test_lbnl_benchmark.py`** — locks the case-builder + scorer plumbing on synthetic
+  SDAHU-shaped frames (always runs, no download); the real-data scoring test skips when the ~580 MB
+  LBNL CSVs are absent (they run in the benchmark CI job).
+
+### Notes
+- **Honest feasibility matrix** in `docs/VALIDATION.md`: fan-efficiency / filter drift need points the
+  SDAHU sim doesn't export (synthetic-only); chiller/pump/VAV drift are air-side-absent here; the
+  reset-effectiveness detectors need the per-cycle reset-**request** point; and the multi-zone
+  rogue-zone / cohort-starvation census have **no vendorable public multi-zone-fleet fault dataset**
+  (a real gap) — all validated on the synthetic whole-suite harness (`camber.faultlab`) instead.
+- BDG2 is meter-level → M&V/anomaly only, not component FDD. Documents the open-licensed datasets that
+  would close the gaps (CC-BY LBNL sibling subsets incl. the *simulated* chiller plant that sidesteps
+  the encumbered ASHRAE chiller-FDD dataset; the CC-BY Korean office AHU set) and the ones to avoid
+  (re-uploads of that encumbered chiller dataset; the CC-BY-NC-ND multi-zone VAV set — research-only,
+  not vendorable).
+- No `camber/` change → public-API snapshot unchanged; all new code is in `examples/` + tests.
+
 ## [0.63.0] — 2026-08-24
 
 **Fault economics for the fleet reset rules (rogue-zone census & cohort starvation).** Completes the

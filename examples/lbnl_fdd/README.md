@@ -55,6 +55,18 @@ The benchmark **measures** these gaps (the leak under-fire; the dual-duct
 transferability loss) rather than hides them — which is the point of evaluating a
 rule library against public labeled data.
 
+### AHU-drift validation
+
+`benchmark.py` also scores the AHU air-side **drift** detectors the SDAHU data can support, via
+`camber.driftvalidation` (baseline = the fault-free annual run, current = each labeled fault run):
+**coil-valve drift** (target = coil-valve leak — a real TPR), **economizer-damper drift** (target =
+stuck damper — real TPR *if* `OA_DMPR` is the command; otherwise it reduces to the OA-fraction level
+check), and **duct-static-control drift** (no labeled fault in the fetched set → specificity only).
+Fan-efficiency and filter-loading drift need fan-power / filter-DP points the SDAHU simulation does
+not export, so they stay synthetic-only; the multi-zone rogue/cohort census and the reset-request
+detectors aren't validatable on a single simulated AHU at all. See `docs/VALIDATION.md` for the full
+feasibility matrix and the open-licensed datasets that would close the gaps.
+
 ## Data & license
 
 Dataset: **LBNL Fault Detection and Diagnostics Datasets**, by LBNL/PNNL/NREL/

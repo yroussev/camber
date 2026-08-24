@@ -52,6 +52,39 @@ modulating-valve **leak detector under-fires** — gaps the benchmark *measures*
 than hides. The pooled interval is the defensible headline; the small-n per-family
 numbers are reported with their uncertainty.
 
+### Drift-family real-data validation (which detectors the data can honestly test)
+
+The newer **drift** and **Trim-and-Respond reset** families are only partly validatable on the
+public datasets we have, and `examples/lbnl_fdd/benchmark.py` now scores exactly what the LBNL SDAHU
+data can support (via `camber.driftvalidation.evaluate`: baseline = fault-free run, current = a
+labeled fault run):
+
+| Detector | On LBNL SDAHU | Why |
+|---|---|---|
+| `coil_valve_drift` | **real TPR** (target = coil-valve leak) | all required points mapped; the clean case |
+| `economizer_damper_drift` | **real TPR, with a caveat** (target = stuck damper) | fires cleanly only if `OA_DMPR` is the *command* — if it's the stuck actual position, it reduces to the level check `outdoor_air_fraction` already covers |
+| `duct_static_drift` | **specificity only** | no labeled duct-static fault in the fetched set → false-positive rate only |
+| `fan_efficiency_drift`, `filter_loading_drift` | **synthetic-only** | need `POWER` / `FILTER_DIFF_PRESS` points the SDAHU simulation does not export |
+| chiller / pump / VAV drift | **synthetic-only here** | LBNL SDAHU is air-side; see the sibling datasets below |
+| `*_reset_effectiveness` | **synthetic-only** | needs the per-cycle reset-**request** point, absent from LBNL |
+| `*_rogue_zone_census`, `*_cohort_starvation` | **synthetic-only (a real gap)** | need a *fleet of zones with per-zone requests*; a single simulated AHU is not a zone fleet, and no vendorable public multi-zone-fleet fault dataset exists |
+
+These are honest boundaries, not oversights: where the data can't support a real-fault score, the
+family is validated on the synthetic whole-suite harness below (`camber.faultlab`) and said so here.
+
+**BDG2 is meter-level** — whole-building energy + weather with no component point trends — so it
+validates the **M&V / forecast / anomaly** track (below), *not* component FDD; the drift/reset
+detectors' required roles (approach, valve %, damper, requests) simply don't exist in it.
+
+**Datasets that would close the gaps (open-licensed, not yet wired):** the CC-BY LBNL FDD **sibling
+subsets** — chiller-plant (the open, *simulated* chiller FDD source, sidestepping the
+a licence-encumbered ASHRAE chiller-FDD dataset), VAV fan-power-unit (single-box VAV faults, incl.
+reheat valve),
+and RTU/DDAHU/FCU — plus the CC-BY **Korean large-office AHU** semi-labelled real-BMS set. A
+commercially-usable *labeled multi-zone VAV fleet* remains the one unfilled gap (the one real match,
+ORNL's FRP set, is CC-BY-**NC-ND** — research-only, not vendorable); the reset-request signal has no
+public archive and would have to be **generated** from the open Modelica Buildings G36 sequences.
+
 ## FDD accuracy — synthetic whole-suite harness
 
 LBNL's public data labels only a handful of AHU fault modes, so it can accuracy-score only a few

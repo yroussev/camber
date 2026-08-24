@@ -25,10 +25,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import pandas as pd  # noqa: E402
 
+from camber.driftvalidation import LabeledCase, evaluate  # noqa: E402
 from camber.eval import benchmark  # noqa: E402
 from camber.model.mapping import MappingProvider  # noqa: E402
+from camber.rules.coil_valve_rule import CoilValveDrift  # noqa: E402
+from camber.rules.duct_static_rule import DuctStaticControlDrift  # noqa: E402
+from camber.rules.economizer_damper_rule import EconomizerDamperDrift  # noqa: E402
 from camber.rules.leakvalve_rule import LeakingValve  # noqa: E402
 from camber.rules.oafraction_rule import OutdoorAirFraction  # noqa: E402
+from camber.store.modelstore import BaselineStore  # noqa: E402
 from camber.units import normalize_percent_frame  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -168,6 +173,96 @@ def metrics_dict(label, records):
     }
 
 
+# --------------------------------------------------------------------------- #
+# Drift-family real-data validation (SDAHU only).
+#
+# Only the AHU air-side *drift* detectors whose required points LBNL actually exports can be scored
+# on real labeled faults: coil-valve drift (target = valve leak) and economizer-damper drift
+# (target = stuck damper) get real TPR; duct-static-control drift has no labeled fault in the
+# set, so it contributes a specificity (false-positive) number only. Fan-efficiency and filter
+# drift need POWER / FILTER_DIFF_PRESS points the SDAHU sim does not export -> synthetic-only
+# (camber.faultlab). The multi-zone rogue/cohort census and the reset-request detectors are not
+# validatable on a single simulated AHU at all. See docs/VALIDATION.md for the full matrix.
+#
+# A drift detector freezes its baseline the first time it sees a period, so each case pairs the
+# fault-free run's first 60% (baseline) with a *current* window: the fault-free tail (a genuine
+# negative) or a faulted run (a positive). A run targeting a *different* fault is a cross-negative.
+# --------------------------------------------------------------------------- #
+
+DRIFT_DETECTORS = {
+    "coil_valve_drift": {
+        "build": lambda: CoilValveDrift(BaselineStore(), site="lbnl_sdahu", run_id="bench"),
+        "positive": "coi_leakage",  # labeled fault this detector targets
+        "cross_negative": ("damper_stuck",),  # a fault it does NOT target -> negative
+    },
+    "economizer_damper_drift": {
+        "build": lambda: EconomizerDamperDrift(BaselineStore(), site="lbnl_sdahu", run_id="bench"),
+        "positive": "damper_stuck",
+        "cross_negative": ("coi_leakage",),
+    },
+    "duct_static_drift": {  # specificity only: no labeled duct-static fault in the fetched set
+        "build": lambda: DuctStaticControlDrift(BaselineStore(), site="lbnl_sdahu", run_id="bench"),
+        "positive": None,
+        "cross_negative": ("damper_stuck", "coi_leakage"),
+    },
+}
+
+
+def build_drift_cases(frames, det, *, baseline_frac=0.6, fault_free="AHU_annual.csv"):
+    """Build labeled drift cases from ``{scenario_csv: role_frame}`` for one detector spec.
+
+    The fault-free run is split baseline (first ``baseline_frac``) vs a healthy current tail (a
+    ``fault=False`` negative). Runs whose name starts with ``det["positive"]`` are ``fault=True``;
+    runs matching ``det["cross_negative"]`` are ``fault=False``. Pure + deterministic (unit-testable
+    without the dataset).
+    """
+    ff = frames.get(fault_free)
+    if ff is None or len(ff) < 20:
+        return []
+    cut = int(len(ff) * baseline_frac)
+    baseline, healthy_tail = ff.iloc[:cut], ff.iloc[cut:]
+    cases = [LabeledCase("lbnl_sdahu", baseline, healthy_tail, fault=False, name="fault-free-tail")]
+    pos, negs = det.get("positive"), det.get("cross_negative") or ()
+    for name, frame in frames.items():
+        if name == fault_free:
+            continue
+        if pos and name.startswith(pos):
+            cases.append(LabeledCase("lbnl_sdahu", baseline, frame, fault=True, name=name))
+        elif any(name.startswith(p) for p in negs):
+            cases.append(LabeledCase("lbnl_sdahu", baseline, frame, fault=False, name=name))
+    return cases
+
+
+def score_drift(sdahu_frames):
+    """Score the runnable AHU-drift detectors on the SDAHU frames; return the flat metrics dict."""
+    metrics = {}
+    print("\n=== AHU air-side drift (SDAHU, camber.driftvalidation) ===")
+    for name, det in DRIFT_DETECTORS.items():
+        cases = build_drift_cases(sdahu_frames, det)
+        pos = sum(1 for c in cases if c.fault)
+        if len(cases) < 2 or (det["positive"] and pos == 0):
+            print(f"  {name:24s} skipped (no usable cases)")
+            continue
+        score = evaluate(det["build"], cases)
+        c = score.confusion
+        fpr = round(c.fp / (c.fp + c.tn), 4) if (c.fp + c.tn) else 0.0
+        kind = "specificity" if det["positive"] is None else "TPR"
+        print(
+            f"  {name:24s} recall {score.recall} precision {score.precision} "
+            f"f1 {score.f1} fpr {fpr}  (n={score.n}, {kind})"
+        )
+        # omit NaN metrics (a specificity-only detector has no recall/precision) -> valid JSON
+        for key, val in (
+            ("recall", score.recall),
+            ("precision", score.precision),
+            ("f1", score.f1),
+            ("fpr", fpr),
+        ):
+            if val == val:  # not NaN
+                metrics[f"drift.{name}.{key}"] = round(val, 4)
+    return metrics
+
+
 def main(argv=None) -> int:
     import argparse
 
@@ -193,6 +288,18 @@ def main(argv=None) -> int:
             print_scores(fam["label"], recs)
             metrics.update(metrics_dict(fam["label"], recs))
             pooled.extend(recs)
+
+    # AHU air-side drift-family validation (SDAHU only — the family with the full air-side points)
+    sdahu = FAMILIES[0]
+    sd_mapping = MappingProvider.from_dict(json.load(open(os.path.join(HERE, sdahu["mapping"]))))
+    sd_base = os.path.join(DATA, sdahu["dir"])
+    sd_frames = {
+        fname: load_role_frame(os.path.join(sd_base, fname), sd_mapping)
+        for fname, _ in sdahu["scenarios"]
+        if os.path.exists(os.path.join(sd_base, fname))
+    }
+    if sd_frames:
+        metrics.update(score_drift(sd_frames))
 
     families_present = sum(
         1
