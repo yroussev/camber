@@ -4,6 +4,25 @@ Extend CAMBER without forking it: ship a rule, an ingest adapter, or a report fo
 separate package (discovered via Python **entry points**), or register one **in-process**.
 Plugins are duck-typed against the existing protocols — no base class to import.
 
+```mermaid
+flowchart LR
+  ep["pyproject entry-points (camber.rules / adapters / reports)"]
+  inproc["in-process register()"]
+  reg["PluginRegistry"]
+  validate["per-plugin validate"]
+  errors["errors (isolated)"]
+  apply["apply_rules"]
+  merged["merged rule Registry"]
+  ep -- "load_entrypoints" --> reg
+  inproc --> reg
+  reg --> validate
+  validate -- "on mismatch" --> errors
+  validate -- ok --> apply
+  apply --> merged
+```
+
+*Entry-point and in-process plugins load into one `PluginRegistry`; failures are isolated in `errors`.*
+
 | Kind | Entry-point group | Must look like |
 |---|---|---|
 | rule | `camber.rules` | `name`, `roles_required`, and `analyze(equip, frame)` (or `analyze_fleet`) |

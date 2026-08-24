@@ -7,6 +7,20 @@ and Trim-and-Respond (T&R) loops driven by per-zone *requests*. When that reset 
 mis-scheduled, or dominated by one rogue zone, the plant burns avoidable reheat and fan energy while
 every instantaneous check still reads "in range."
 
+```mermaid
+flowchart TD
+    zones["per-zone temps"] --> req["requests (cooling_sat_requests / static_pressure_requests)"]
+    req --> tr["Trim-and-Respond (tr_simulate)"]
+    oat[OAT] --> map["OAT to SAT target (oat_sat_setpoint)"]
+    tr --> sp["reset setpoint (SAT / duct static)"]
+    map --> comp["supply_air_reset_compliance (right target?)"]
+    sp --> eff["reset_effectiveness (trimming and responding?)"]
+    req --> rogue["rogue_zone_census (one zone dragging?)"]
+    req --> cohort["cohort_starvation (whole AHU starved?)"]
+```
+
+*Zone requests drive Trim-and-Respond to a setpoint; the four detector questions read compliance, effectiveness, rogue zones, and cohort starvation off that pipeline.*
+
 CAMBER already ships the G36 primitives in `camber.g36_reset` (the OAT→SAT map `oat_sat_setpoint`,
 the T&R loop `tr_step`/`tr_simulate` with the `SAT_TR`/`STATIC_TR` parameter presets, and the per-zone
 request generators `cooling_sat_requests`/`static_pressure_requests`). This family wires them into

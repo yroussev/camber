@@ -8,6 +8,22 @@ CalTRACK/IPMVP vocabulary and shows how to cross-check against
 [OpenEEmeter (eemeter)](https://github.com/openeemeter/eemeter), the reference
 open-source CalTRACK implementation.
 
+*IPMVP Option-C / CalTRACK NMEC pipeline: fit a weather baseline, project it onto reporting weather, and report avoided energy with an uncertainty band.*
+
+```mermaid
+flowchart LR
+    bl["Baseline (energy, temp)"] --> fit["best_model / towt"]
+    fit --> gof["fit_stats: CV(RMSE), NMBE"]
+    gof -- "G14 acceptance tier" --> avoided
+    rep["Reporting (energy, temp)"] --> proj["Adjusted baseline"]
+    fit -- "project onto reporting weather" --> proj
+    proj --> avoided["avoided_energy_savings"]
+    avoided --> out["Savings + FSU band"]
+    rep --> nre["detect_non_routine"]
+    nre -- "exclude days and refit" --> fit
+    avoided --> cusum["cusum tracking"]
+```
+
 ## Terminology bridge
 
 | IPMVP / CalTRACK term | CAMBER |

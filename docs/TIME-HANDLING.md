@@ -5,6 +5,20 @@ abbreviation), so daylight-saving transitions leave two artifacts: the **fall-ba
 (duplicate timestamps) and the **spring-forward** hour is missing (a gap). Concatenated overlapping
 exports duplicate timestamps too. `camber.timegrid` centralizes robust handling.
 
+```mermaid
+flowchart LR
+  raw["naive local BAS export"] --> realio["camber.realio (strip PDT/PST)"]
+  realio --> load["load_csv (dedupe='first')"]
+  load --> reg["regularize (sort + de-dup DST fall-back)"]
+  reg --> iv["interval_hours (modal width)"]
+  reg --> loc["localize (tz, resolve ambiguous/nonexistent)"]
+  loc --> anom["dst_anomalies (health check)"]
+  reg --> analytics["analytics (naive local time)"]
+  loc --> energy["hour-accurate energy across DST"]
+```
+
+*Duplicate/gap DST artifacts are collapsed on ingest; timezone is attached only when hour-accurate energy needs it.*
+
 ```python
 from camber.timegrid import interval_hours, regularize, localize, dst_anomalies
 

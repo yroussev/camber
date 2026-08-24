@@ -7,6 +7,22 @@ D** answers the *counterfactual* — "what would this building use if we fixed t
 is a dependency-light, clean-room implementation (numpy only; ISO 13790 simple-hourly / ASHRAE
 inverse-modeling lineage). It completes the IPMVP set: **A, B, C, and now D** all ship.
 
+*Calibrate a forward 1R1C model to metered energy, gate it on G14, then re-run the same model under as-found vs as-corrected control for a modeled saving.*
+
+```mermaid
+flowchart LR
+    oat["oat"] --> cal["calibrate"]
+    sched["schedule"] --> cal
+    met["metered_energy"] --> cal
+    cal -- "grid tau + OLS" --> model["RCModel(ua_eff, gain_eff, tau)"]
+    cal --> gate{"G14 gate: CV(RMSE) <= 30%"}
+    gate -- "accept" --> run["predict: as-found vs as-corrected"]
+    model --> run
+    run --> sv["option_d_savings"]
+    sv --> out["avoided_energy + G14 FSU band"]
+    gate -- "reject" --> none["no saving claimed"]
+```
+
 ## The model — a 1R1C grey box
 
 `RCModel(ua_eff, gain_eff, tau)` is a single-zone, single-time-constant thermal model:

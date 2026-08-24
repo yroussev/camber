@@ -9,6 +9,18 @@ loop. Each recommendation is *grounded*: it names the source finding + rule and 
 sequence-of-operations guidance (ASHRAE Guideline 36 / PNNL Re-tuning) behind the correction, and
 targets come from documented, override-able defaults (no fabricated site-specific values).
 
+```mermaid
+flowchart LR
+  finding["actionable finding"] --> recommend["recommend / recommend_findings"]
+  rule["source rule + archetype"] --> recommend
+  params["DEFAULT_PARAMS (override-able targets)"] --> recommend
+  g36["G36 / PNNL Re-tuning guidance"] --> recommend
+  recommend --> rec["Recommendation (action, suggested, standard, advisory=True)"]
+  rec --> operator["operator reviews (human in the loop)"]
+  operator -. "never auto-writes" .-> bas["BAS / OT"]
+```
+*Advisory only: a grounded `Recommendation` reaches an operator, never a BAS command.*
+
 ## Use
 
 ```python

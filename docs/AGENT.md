@@ -4,6 +4,20 @@
 natural-language Q&A — strictly grounded in the analytics layer, provider-agnostic, and fully useful
 with **no LLM wired at all**.
 
+```mermaid
+flowchart LR
+  q["question / findings"] --> ctx["build_context -> Context of Facts"]
+  ctx --> block["to_prompt_block (only surface to model)"]
+  block --> client{"complete() client wired?"}
+  client -- no --> tmpl["explain_from_facts (deterministic template)"]
+  client -- yes --> llm["LLM answer (cite every [id])"]
+  llm --> verify["verify.check (strict)"]
+  verify -- grounded --> ans["Grounded (cited rule + standard)"]
+  verify -- empty --> tmpl
+  tmpl --> ans
+```
+*Facts are the only surface shown to a model; strict verification repairs or falls back to the template.*
+
 Three principles, enforced in code (`tests/test_agent_readonly_guard.py`):
 
 1. **Grounded** — an answer may only cite facts CAMBER produced, and every number it states must be

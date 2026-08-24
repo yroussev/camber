@@ -8,6 +8,21 @@
 - **Demand-Controlled Ventilation (DCV)** — does the outdoor air actually *modulate* with
   occupancy/CO₂, or is it static (DCV not working)?
 
+```mermaid
+flowchart TD
+  frame["role-frame (OA airflow, CO2, occupancy)"] --> vrp["assess_62_1 (VRP)"]
+  frame --> dcv["assess_dcv (DCV)"]
+  rates["OA_RATES_62_1 (Table 6.1)"] --> req["required_oa_cfm (Voz)"]
+  req --> vrp
+  vrp --> vstatus["status: under / adequate / over"]
+  dcv --> dstatus["status: functioning / static / uncorrelated"]
+  vstatus --> rule1["ventilation_rate_62_1 rule"]
+  dstatus --> rule2["dcv_verification rule"]
+  rule1 --> finding["Finding (warn / fault)"]
+  rule2 --> finding
+```
+*Two independent checks: is enough OA delivered (VRP), and does OA modulate with demand (DCV).*
+
 ## The VRP requirement
 
 ASHRAE 62.1 sets the zone outdoor-air requirement as

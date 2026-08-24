@@ -6,6 +6,24 @@ worse than it used to be, at matched load?" The pump / hydronic family asks the 
 frozen-baseline engine (`camber.chillerbaseline`, `camber.chillerdrift`), only with a *duty*
 normalizer (pump speed or flow) in place of thermal tons.
 
+```mermaid
+flowchart TD
+    base["load-normalized baseline (camber.chillerbaseline, duty = speed/flow)"] --> det
+    subgraph det["per-detector drift + CUSUM (camber.chillerdrift)"]
+        d1[PumpFlowDrift]
+        d2[PumpHeadDrift]
+        d3[LoopDeltaTDrift]
+        d4[LoopDPDrift]
+        d5[PumpPowerDrift]
+    end
+    det --> loop["diagnose_pump_drift (per-loop locus, flow-vs-head)"]
+    loop --> plant["diagnose_pump_plant (per-plant verdict)"]
+    plant --> report["site report / export"]
+    sim["camber.pumpsim (affinity laws)"] -. validates .-> loop
+```
+
+*Duty-normalized baselines feed five per-detector drifts; co-movement rolls up per-loop, then per-plant, with pumpsim as the physics check.*
+
 Like the chiller detectors, each is a **period rule** (`Registry.run_periods`), freezes a
 load-normalized baseline into a `BaselineStore` on first use, reports a period statistic **and** a
 sustained-shift CUSUM alarm, labels its thresholds *screening-grade* / *provisional-untuned*

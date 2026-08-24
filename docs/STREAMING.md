@@ -4,6 +4,23 @@ Batch analytics score a finished period; a live BAS feed wants the same signals 
 arrives. These monitors are incremental (bounded state, O(1)–O(window) per sample) and pair with
 the read-only streaming ingest (`camber.ingest.mqtt_stream`).
 
+*Each sample folds into the online monitors; alarms and rule transitions emit only on a sustained shift, not every sample.*
+
+```mermaid
+sequenceDiagram
+    participant Feed as BAS feed (mqtt_stream)
+    participant Cusum as OnlineCusum
+    participant Roll as RollingAnomaly
+    participant FDD as OnlineFDD
+    Feed->>Cusum: update(driver, actual)
+    Cusum-->>Feed: CusumState, alarm savings or waste
+    Feed->>Roll: push residual
+    Roll-->>Feed: is_anomaly when abs(z) >= k
+    Feed->>FDD: push(equip, row, ts)
+    Note over FDD: trailing window, re-run rules
+    FDD-->>Feed: Transition only on verdict change
+```
+
 ## Online M&V — `camber.mandv.online`
 
 - **`OnlineCusum(predict, *, limit, slack)`** — running CUSUM of *(baseline-predicted − actual)*.

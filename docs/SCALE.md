@@ -5,6 +5,21 @@ buildings over years of interval data lives under one root and a query touches o
 needs. This note explains the three mechanisms that keep reads fast, how to measure them, and
 the one cost that does grow with portfolio size.
 
+```mermaid
+flowchart TD
+  q["query (facility_id, start/end, roles)"] --> flt["_build_filter"]
+  flt -- facility_id + year bounds --> prune["partition pruning"]
+  flt -- needed columns --> proj["column projection"]
+  prune --> part["facility_id=.../year=... partitions"]
+  proj --> part
+  part --> pivot["fast-path pivot"]
+  pivot --> frame["role-named frame (flat per-equip read)"]
+  write["write_long / write_role_frame"] -- invalidate --> cat["_catalog.json (cached)"]
+  cat --> points["points() enumeration"]
+```
+
+*A per-equipment read opens one building's one-year partition regardless of portfolio size.*
+
 ## Layout
 
 One tidy long-form dataset, hive-partitioned by `facility_id` then `year`:

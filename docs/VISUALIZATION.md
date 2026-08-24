@@ -6,6 +6,24 @@ supplied `Axes`, and lazy-import pyplot. The 0.2 MVP is the **A → B → E → 
 self-contained HTML assembler; the primitives (load carpet, CUSUM, energy signature) shipped in
 0.1.
 
+```mermaid
+flowchart LR
+  df["role-frame (wide df)"] --> readiness["charts.readiness (A)"]
+  df --> multitrend["charts.multitrend (B)"]
+  df --> carpet["charts.carpet (E)"]
+  df --> quality["charts.quality_dashboard (I)"]
+  df --> diag["charts.diagnostic / oat_scatter"]
+  rules["rules"] --> ev["Evidence (pattern J)"]
+  diag --> ev
+  readiness --> dash["build_dashboard / build_site_report"]
+  multitrend --> dash
+  carpet --> dash
+  quality --> dash
+  ev --> dash
+  dash --> html["self-contained HTML (base64 PNG / inline SVG)"]
+```
+*The role-frame feeds each chart primitive; rules render evidence, and the assembler inlines them into one HTML page.*
+
 ## The MVP slice
 
 | Pattern | Module | What it shows |

@@ -4,6 +4,22 @@ CAMBER's `Role` vocabulary is the hub; `camber.interop` maps it to and from the 
 models other tools share, so an already-tagged building needs no hand-written mapping and CAMBER's
 model can be exported for downstream use.
 
+```mermaid
+flowchart LR
+  brick["Brick model (ttl)"]
+  hay["Haystack tags"]
+  s223["ASHRAE 223P (ttl)"]
+  role["Role vocabulary"]
+  brick -- "mapping_from_brick" --> role
+  hay -- "roles_from_haystack" --> role
+  s223 -- "site_from_223" --> role
+  role -- "to_brick" --> brick
+  role -- "haystack_tags" --> hay
+  role -- "site_to_223" --> s223
+```
+
+*The `Role` vocabulary is the hub: `camber.interop` imports from and exports to each ontology.*
+
 ## Brick
 
 - **Import** — `mapping_from_brick` / `roles_from_brick` derive `Role` mappings from a Brick model

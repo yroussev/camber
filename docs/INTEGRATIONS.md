@@ -4,6 +4,31 @@ Get findings *out* — to ticketing, chat, email, and BI/warehouse — without c
 vendor. Everything here operates on the **findings layer** and is read-only toward the BAS: it
 pushes results to people and systems, never to a controller.
 
+```mermaid
+flowchart LR
+  findings["Findings"]
+  ticket["finding_to_ticket"]
+  dispatch["dispatch_findings (severity filter, dedupe)"]
+  fmt["format_for"]
+  webhook["webhook / CMMS"]
+  slack["slack"]
+  teams["teams"]
+  export["export_findings"]
+  frame["findings_to_frame"]
+  files["csv / json / parquet"]
+  findings --> ticket
+  ticket --> dispatch
+  dispatch --> fmt
+  fmt --> webhook
+  fmt --> slack
+  fmt --> teams
+  findings --> export
+  export --> frame
+  frame --> files
+```
+
+*Findings render to tickets, then dispatch to chat/CMMS channels or export to a tabular warehouse frame.*
+
 `camber.integrate` provides three layers:
 
 1. **Ticket render** (`tickets.py`) — `finding_to_ticket` / `findings_to_tickets` map a Finding to

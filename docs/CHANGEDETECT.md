@@ -5,6 +5,19 @@ the change-point *models* (energy vs temperature) in `camber.mandv`. It answers 
 commissioning questions without being told the date: did a control change take effect? did a fixed
 measure persist or silently regress? did equipment degrade?
 
+*Binary segmentation: find the most likely single change point, gate it on a two-sample statistic, then recurse on each half.*
+
+```mermaid
+flowchart LR
+    series["series"] --> detect["detect_level_shifts"]
+    detect -- "maximize CUSUM" --> cp["candidate change point"]
+    cp --> gate{"two-sample z gate"}
+    gate -- "significant" --> recurse["recurse on each half"]
+    recurse --> detect
+    gate -- "not significant" --> done["shifts: before/after from adjacent segments"]
+    done --> largest["largest_shift"]
+```
+
 ```python
 from camber.changedetect import detect_level_shifts, largest_shift
 

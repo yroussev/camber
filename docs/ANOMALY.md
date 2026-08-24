@@ -4,6 +4,20 @@ Any single anomaly test has a blind spot: a robust point test misses a slow regi
 change-point test misses isolated spikes; both miss a series that's simply full of gaps.
 `camber.anomaly` fuses three signals CAMBER already computes into one verdict:
 
+*Three canonical detectors — point outliers, level shifts, data quality — fuse into one severity verdict.*
+
+```mermaid
+flowchart LR
+    series["series"] --> pt["point anomalies (median/MAD)"]
+    fc["forecast (optional)"] --> pt
+    series --> cp["change points (changedetect)"]
+    series --> q["data quality (ingest.quality)"]
+    pt --> fuse["detect_anomalies"]
+    cp --> fuse
+    q --> fuse
+    fuse --> sev["severity: ok / warn / fault"]
+```
+
 ```python
 from camber.anomaly import detect_anomalies
 

@@ -14,6 +14,25 @@ raw BAS/meter data
   → [report]    Std-211 audit deliverables
 ```
 
+```mermaid
+flowchart LR
+  raw["raw BAS/meter data"] --> ingest["ingest (source adapters)"]
+  ingest -- named point series --> model["model (roles + mapping + entities)"]
+  model --> resolve["resolve.discover / resolve()"]
+  resolve -- role-named frame --> rules["rules (FDD Registry)"]
+  resolve -- role-named frame --> mandv["mandv (M&V / change-point)"]
+  rules -- Findings --> report["report (Std-211 audit)"]
+  mandv --> report
+  ingest -.-> store["store (ParquetStore)"]
+  store -.-> resolve
+  interop["interop (Brick/Haystack)"] -.-> model
+  rules --> integrate["integrate (tickets/notify)"]
+  store -.-> api["api (read-only HTTP)"]
+  report --> charts["charts (visuals)"]
+```
+
+*The role-named frame is the lingua franca: everything downstream of `resolve` is written against roles, not vendor tags.*
+
 Around the pipeline: `store/` (persistence), `interop/` (Brick/Haystack),
 `integrate/` (tickets/notifications), `api/` (read API), `charts/` (visuals).
 

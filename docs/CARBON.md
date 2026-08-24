@@ -3,6 +3,21 @@
 Two layers: annual/average from fuel totals (`camber.carbon`), and **hourly / marginal Scope-2**
 from interval electricity (`camber.carbon_hourly`).
 
+*Annual CO2e from fuel totals, plus hourly Scope-2 where a time-varying factor times interval load yields the timing-aware footprint.*
+
+```mermaid
+flowchart LR
+    fuel["consumption_by_fuel"] --> ann["carbon.emissions"]
+    ann --> annco2["annual CO2e"]
+    load["load_kw"] --> he["hourly_emissions"]
+    ef["hourly_factor (kgCO2/kWh)"] --> he
+    he --> eff["effective_factor + timing_premium"]
+    load --> mva["marginal_vs_average"]
+    avg["average_factor"] --> mva
+    marg["marginal_factor"] --> mva
+    mva --> gap["co2e_avg vs co2e_marginal"]
+```
+
 ## Annual — `camber.carbon`
 
 `emissions(consumption_by_fuel, factors=…)` → CO₂e from `{fuel: amount}` with per-fuel factors

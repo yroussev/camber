@@ -5,6 +5,19 @@ How CAMBER's results are kept honest and checkable. The project's promise is
 an independent implementation, or labeled ground truth — and uncertainty is reported,
 not hidden.
 
+```mermaid
+flowchart LR
+    synth["synthetic faults (camber.faultlab)"] --> ev["camber.eval (confusion, TPR/FPR)"]
+    lbnl["real LBNL FDD data"] --> ev
+    bdg2["real BDG2 meters (G14 acceptance)"] --> mv["M&V acceptance rate"]
+    ev --> ci["metrics_with_ci (Wilson CI)"]
+    mv --> ci
+    ci --> gate["check_against_baseline (CI gate)"]
+    gate --> report["published accuracy"]
+```
+
+*Synthetic and real (LBNL, BDG2) benchmarks flow through the eval framework into CI-reported accuracy with confidence intervals and a baseline gate.*
+
 ## Principles
 
 - **Clean-room & citable.** Every method cites a public standard (ASHRAE G36/G14/Std-55/

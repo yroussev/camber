@@ -7,6 +7,18 @@ The API serves GET only (`/about` `/health` `/sites` `/points` `/history`) and n
 BAS/OT. Keep it behind the cluster boundary or an authenticating ingress — see
 [SECURITY.md](SECURITY.md).
 
+*Runtime topology: a separate writer populates the store out-of-band; the API pods only read.*
+
+```mermaid
+flowchart LR
+  writer["Batch writer (analysis + ParquetStore)"] -- "populates out-of-band" --> store["Parquet store (ReadOnlyMany PVC / object store)"]
+  img["ghcr.io/yroussev/camber image"] -- "runs" --> api["Read-only API (2 non-root replicas)"]
+  store -- "read-only mount" --> api
+  ingress["Authenticating ingress"] -- "GET requests" --> api
+  api -- "serves /about /health /sites /points /history" --> ingress
+  api -. "never writes to BAS/OT" .-> bas["BAS / OT"]
+```
+
 ## Docker / Compose
 
 The primary path. See [../DOCKER.md](../DOCKER.md): `docker compose up api` serves the API over

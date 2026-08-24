@@ -16,6 +16,24 @@ A **config** is the same declarative JSON that drives `camber.config.run_config`
 equipment, rules — see the config examples). `run`/`report` execute it; `explain`/`ask` build the
 grounded [agent](AGENT.md) context from the run and answer over it.
 
+*Command map: a shared config drives `run`/`report`; the run context grounds `explain`/`ask`.*
+
+```mermaid
+flowchart TD
+  camber["camber console script"]
+  cfg["config.json (run_config)"]
+  camber --> run["run: execute config, write findings"]
+  camber --> report["report: HTML audit report"]
+  camber --> explain["explain: grounded explanation"]
+  camber --> ask["ask: grounded Q&A"]
+  camber --> fleet["fleet: portfolio rollup + triage"]
+  camber --> charts["charts: legacy AHU HeC charts"]
+  cfg -- "drives" --> run
+  cfg -- "drives" --> report
+  run -- "grounded run context" --> explain
+  run -- "grounded run context" --> ask
+```
+
 A `rules` entry is either a bare name or a `{"name", "params"}` object that overrides that rule's
 constructor for the run — e.g. a high-outside-air building setting its design minimum:
 

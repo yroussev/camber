@@ -8,6 +8,20 @@ diagnostic runs on a `Role`-mapped frame, not vendor tags), clean-room (each met
 standard; every rule ships a synthetic fixture), dependency-light (stdlib + numpy / pandas / pyarrow
 / matplotlib), and **read-only toward the BAS/OT**.
 
+```mermaid
+flowchart LR
+  bas["raw BAS trend exports"] --> roles["Role-mapped frame"]
+  roles --> fdd["FDD (rules)"]
+  roles --> mv["M&V (mandv)"]
+  roles --> rcx["RCx (rcx)"]
+  fdd --> findings["ranked, auditable findings"]
+  mv --> findings
+  rcx --> findings
+  findings --> out["audit report + integrations"]
+```
+
+*One `Role`-mapped frame feeds every diagnostic; findings are ranked, cited, and exportable.*
+
 - **New here?** Start with the **[Capabilities reference](CAPABILITIES.md)** — every capability, its
   key API, the option flags that tune it, and the standard it cites, grouped by layer.
 - **How it fits together:** the **[Architecture](ARCHITECTURE.md)** and the

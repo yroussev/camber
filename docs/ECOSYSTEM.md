@@ -7,6 +7,22 @@ them wholesale — it is to **integrate them as optional extras** so the core st
 light while users who need depth can opt in, and so we don't reinvent
 well-trodden wheels.
 
+```mermaid
+flowchart TD
+  core["CAMBER core (role model + FDD/M&V/RCx + Std-211 + ParquetStore)"]
+  core -- brick extra --> brick["rdflib / py-brickschema"]
+  core -- haystack extra --> hay["phable / pyhaystack"]
+  core -- pv extra --> pv["pvlib"]
+  core -- psychro extra --> psy["PsychroLib"]
+  core -- tariff extra --> pysam["NREL PySAM"]
+  ee["OpenEEmeter / eemeter"] -- cross-check --> core
+  better["LBNL BETTER"] -- cross-check --> core
+  openfdd["open-fdd"] -- G36 cross-validate --> core
+  volttron["Eclipse VOLTTRON"] -- data source --> core
+```
+
+*Own the distinctive core; integrate mature libraries as optional extras and cross-checks, never forks.*
+
 > License notes: items marked ✓ were verified during research; items marked
 > "confirm" are from general knowledge — check the repo's LICENSE before depending.
 

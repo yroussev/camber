@@ -4,6 +4,24 @@ Efficiency uses *less* energy; a grid-interactive building also *shifts and shed
 to price and grid-carbon signals. `camber.geb` quantifies that potential from interval load —
 pairing with `camber.demand` (peak analytics), `camber.tariff` (rates), and `camber.carbon`.
 
+*From interval load and a supplied grid signal: quantify shed, headroom, carbon-shift value, and timing — advisory analytics, not control.*
+
+```mermaid
+flowchart LR
+    load["interval load_kw"] --> dr["demand_response"]
+    base["baseline_kw"] --> dr
+    dr --> shed["shed / rebound kWh"]
+    load --> flex["flexibility"]
+    flex --> head["sheddable headroom"]
+    load --> shift["carbon_aware_shift"]
+    ef["hourly_emissions_factor"] --> shift
+    shift --> co2["co2_saved_kg"]
+    load --> score["operation_score"]
+    sig["price / carbon signal"] --> score
+    score --> timing["timing score vs flat"]
+    shed --> oadr["interop.openadr report"]
+```
+
 ## Demand response — `demand_response`
 
 Quantify a DR event against an expected baseline:

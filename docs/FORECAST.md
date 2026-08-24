@@ -4,6 +4,19 @@
 deterministic core, plus anomaly detection off its residual. No ML dependency (numpy/pandas only);
 honest about being a transparent baseline, not a black-box model.
 
+*Time-of-week shape plus drift produces a forecast; deviations beyond a robust residual band become learned-normal anomalies.*
+
+```mermaid
+flowchart LR
+    hist["history"] --> fc["seasonal_forecast"]
+    fc -- "time-of-week mean + drift" --> pred["forecast"]
+    pred --> bt["backtest: MAE / MAPE / CV(RMSE)"]
+    act["actual"] --> anom["forecast_anomalies"]
+    pred --> anom
+    anom -- "residual > k*robust-sigma" --> flags["anomaly intervals"]
+    pred --> roll["online.RollingAnomaly"]
+```
+
 ## Forecast — `seasonal_forecast`
 
 ```python

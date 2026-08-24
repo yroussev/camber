@@ -9,6 +9,29 @@ CAMBER's primary ingest path is the **historian / SQL / Haystack** tier (see
   dependency-light), and
 - is **read-only by construction** — it references no write/command service (enforced by test).
 
+```mermaid
+flowchart LR
+  modbus["ModbusSource (modbus)"]
+  mqtt["MqttStreamSource (mqtt)"]
+  bacnet["BacnetSource (bacnet)"]
+  opcua["OpcUaSource (opcua)"]
+  sql["SqlSource"]
+  haystack["HaystackAdapter"]
+  csv["WideCsvAdapter"]
+  proto["SourceAdapter protocol"]
+  frame["role-frame"]
+  modbus -- implements --> proto
+  mqtt -- implements --> proto
+  bacnet -- implements --> proto
+  opcua -- implements --> proto
+  sql -- implements --> proto
+  haystack -- implements --> proto
+  csv -- implements --> proto
+  proto -- "point_names / load_points / units" --> frame
+```
+
+*Every protocol adapter satisfies the same read-only `SourceAdapter` shape and fans into one role-frame.*
+
 | Protocol | Module | Extra | Library | License | Shape |
 |---|---|---|---|---|---|
 | Modbus TCP | `camber.ingest.modbus` | `[modbus]` | pymodbus | BSD-3 | snapshot / poll |

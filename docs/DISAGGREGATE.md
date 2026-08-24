@@ -3,6 +3,20 @@
 `camber.disaggregate` splits an interval load into three transparent components — the framing behind
 baseload reduction, envelope/HVAC targeting, and setback opportunity:
 
+*Three components that sum exactly to the metered load: an always-on floor, the weather-explained part, and an honest remainder.*
+
+```mermaid
+flowchart LR
+    load["load_kw"] --> dis["disaggregate_load"]
+    oat["oat"] --> dis
+    dis --> base["baseload (low-percentile floor)"]
+    dis --> weather["weather (heating + cooling about balance_point)"]
+    dis --> other["other (remainder)"]
+    base --> sum["sum to total load"]
+    weather --> sum
+    other --> sum
+```
+
 ```python
 from camber.disaggregate import disaggregate_load
 

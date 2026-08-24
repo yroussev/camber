@@ -5,6 +5,29 @@ a rule can't run on a point it can't find. `camber.model.mapping.MappingProvider
 alias or regex, and `camber.mapping_confidence` scores how sure that resolution is. `camber.mapping_assist`
 adds the missing piece: when a tag **doesn't** resolve, propose the most likely roles.
 
+```mermaid
+flowchart LR
+  token["BAS point token"]
+  feat["FeatureSuggester"]
+  ml["MLSuggester (ml)"]
+  llm["LLMSuggester"]
+  score["mapping_confidence re-score"]
+  sugg["RoleSuggestion (ranked)"]
+  review["review_unmapped list"]
+  operator["operator confirms + edits mapping"]
+  token --> feat
+  token --> ml
+  token --> llm
+  feat --> score
+  ml --> score
+  llm --> score
+  score --> sugg
+  sugg --> review
+  review -- advisory --> operator
+```
+
+*Any suggester proposes; the deterministic `mapping_confidence` re-score arbitrates; the operator applies.*
+
 It is **advisory only, by construction** — it returns a ranked, human-confirmed review list and
 **never mutates a `MappingProvider`**. A confirmed suggestion is applied by the operator editing the
 mapping spec (`MappingProvider.from_dict`), the same boundary `camber.aso` keeps toward the BAS.

@@ -8,6 +8,22 @@ self-contained HTML page that answers, top to bottom:
 - **What should we do?** — the ranked action plan (finding + $/yr + advisory recommendation).
 - **How do we know?** — each finding's pattern-J evidence chart.
 
+```mermaid
+flowchart LR
+  findings["findings"] --> bsr["build_site_report"]
+  rules["rules (registry)"] --> bsr
+  loads["loads / price"] --> bsr
+  bsr --> sc["scorecard (A-F grade)"]
+  bsr --> ap["actionplan (finding + $/yr)"]
+  bsr --> dash["dashboard sections (A/B/E/I)"]
+  bsr --> ev["pattern-J evidence"]
+  sc --> html["site.html (self-contained)"]
+  ap --> html
+  dash --> html
+  ev --> html
+```
+*One `build_site_report` call fuses scorecard, action plan, dashboard sections and evidence into one HTML page.*
+
 ```python
 from camber.report import build_site_report
 

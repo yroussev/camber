@@ -5,6 +5,19 @@ load (or fan-status) series — what hours it really runs, versus what the sched
 setback verification, demand-response eligibility, and onboarding (a detected schedule seeds the
 occupancy model).
 
+*Inference flow: `detect_schedule` thresholds the load, takes the per-hour majority into a `WeeklySchedule`, then `compare_schedule` diffs it against the stated hours.*
+
+```mermaid
+flowchart LR
+  load["Interval load_kw / fan-status series"] --> thr["Threshold = base + 0.5 x (peak - base), from 10th/90th pct"]
+  thr --> mark["Mark each interval on/off"]
+  mark --> maj["Majority state per hour-of-week (168 slots)"]
+  maj --> sch["WeeklySchedule (days, occupied_fraction)"]
+  stated["Stated schedule (weekday 9-5)"] --> cmp["compare_schedule"]
+  sch --> cmp
+  cmp --> out["extra_runtime_slots, n_missing, agreement"]
+```
+
 ```python
 from camber.schedule import detect_schedule, compare_schedule
 

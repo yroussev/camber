@@ -7,6 +7,20 @@ terminal** — the VAV box's damper, airflow tracking, and reheat coil — reusi
 load-normalized frozen-baseline engine (`camber.chillerbaseline`, `camber.chillerdrift`), with the
 box's own **commanded airflow** as the load normalizer.
 
+```mermaid
+flowchart TD
+    base["load-normalized baseline (camber.chillerbaseline, load = commanded airflow)"] --> det
+    subgraph det["per-detector drift + CUSUM (camber.chillerdrift)"]
+        d1["VavAirflowDrift (damper creep)"]
+        d2["VavReheatValveDrift (reheat valve creep)"]
+    end
+    det --> box["diagnose_vav_drift (per-box locus, upstream-vs-box)"]
+    box --> report["site report / export"]
+    sim["camber.vavsim (LocusConfusion)"] -. validates .-> box
+```
+
+*Command-normalized baselines feed the damper- and reheat-valve creep detectors; co-movement rolls up per-box, with vavsim as the physics check.*
+
 Like the other families, each detector is a **period rule** (`Registry.run_periods`), freezes a
 load-normalized baseline into a `BaselineStore` on first use, reports a period statistic **and** a
 sustained-shift CUSUM alarm, labels its thresholds *screening-grade* / *provisional-untuned*, and

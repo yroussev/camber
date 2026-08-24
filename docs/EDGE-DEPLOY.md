@@ -22,6 +22,17 @@ document is written for the IT / network-security team that must approve the edg
                                                                                           existing ReadAPI + FDD/M&V
 ```
 
+*One-way only: the edge sits in IT/DMZ, reads the BAS read-only, and never listens — the sole conduit is outbound 443 to one host.*
+
+```mermaid
+flowchart LR
+  bas["BAS / historian (control zone)"] -- "read-only" --> edge["camber.edge Forwarder (IT / DMZ): read, map, quality-gate, Parquet, spool"]
+  edge -- "HTTPS 443 (outbound only, single allowlisted host)" --> obj["Cloud object store (facility_id= / year=)"]
+  obj -- "Hive layout, no transform" --> ps["ParquetStore"]
+  ps -- "read_long / read_role_frame" --> api["ReadAPI + FDD / M&V"]
+  obj -- "no inbound conduit; edge never listens" --x edge
+```
+
 - **Historian-first.** Prefer reading a historian / SQL / Haystack API (`camber.ingest.sql`,
   `camber.ingest.haystack`) — NIST SP 800-82 places historians at a low trust tier reached through a
   one-way conduit. Live protocol polling is the exception.

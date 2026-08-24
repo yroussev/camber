@@ -7,6 +7,23 @@ duct-static control — reusing the exact same load-normalized frozen-baseline e
 (`camber.chillerbaseline`, `camber.chillerdrift`), with an *air-side duty* normalizer (airflow) in
 place of thermal tons.
 
+```mermaid
+flowchart TD
+    base["load-normalized baseline (camber.chillerbaseline, duty = airflow)"] --> det
+    subgraph det["per-detector drift + CUSUM (camber.chillerdrift)"]
+        d1[FanEfficiencyDrift]
+        d2[FilterLoadingDrift]
+        d3[DuctStaticControlDrift]
+        d4[CoilValveDrift]
+        d5[EconomizerDamperDrift]
+    end
+    det --> ahu["diagnose_ahu_drift (per-AHU locus, fan-power disambig)"]
+    ahu --> report["site report / export"]
+    sim["camber.ahusim (fan laws)"] -. validates .-> ahu
+```
+
+*Airflow-normalized baselines feed five per-detector drifts; co-movement rolls up into one per-AHU locus, with ahusim as the physics check.*
+
 Like the other families, each detector is a **period rule** (`Registry.run_periods`), freezes a
 load-normalized baseline into a `BaselineStore` on first use, reports a period statistic **and** a
 sustained-shift CUSUM alarm, labels its thresholds *screening-grade* / *provisional-untuned*, and

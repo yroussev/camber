@@ -6,6 +6,29 @@ plant serves which air handler, which air handler serves which zones. It is the 
 lets fleet analytics stop treating a building as one flat pool of equipment and start reasoning per
 system: *"which of **AHU-1's** zones is dragging its reset?"* rather than *"which zone building-wide?"*
 
+```mermaid
+flowchart TD
+  chw["CHW plant"]
+  ahu1["AHU-1"]
+  ahu2["AHU-2"]
+  vav1["VAV-1"]
+  vav2["VAV-2"]
+  vav3["VAV-3"]
+  gmap["group_map (zone to ahu)"]
+  fleet["Registry.run_fleet"]
+  chw -- feeds --> ahu1
+  chw -- feeds --> ahu2
+  ahu1 -- feeds --> vav1
+  ahu1 -- feeds --> vav2
+  ahu2 -- feeds --> vav3
+  vav1 --> gmap
+  vav2 --> gmap
+  vav3 --> gmap
+  gmap -- "per-system grouping" --> fleet
+```
+
+*The served-by graph resolves each terminal's nearest system; `group_map` feeds that grouping to `run_fleet`.*
+
 ## The model
 
 A `Topology` is a directed graph over **equipment-id strings**. An edge `(parent, child)` means

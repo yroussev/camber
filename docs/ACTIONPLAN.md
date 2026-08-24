@@ -5,6 +5,18 @@ findings), **what it costs** (`camber.fault_economics`), and **what to do** (`ca
 actionable finding becomes an `ActionItem` with its estimated annual dollar impact and its advisory
 recommendation, ranked **worst-dollars-first** (severity breaks ties).
 
+```mermaid
+flowchart LR
+  findings["FDD findings"] --> bap["build_action_plan"]
+  econ["fault_economics ($/yr)"] --> bap
+  aso["aso (what to do)"] --> bap
+  bap --> item["ActionItem (equip, rule, cost, recommendation)"]
+  item --> rank["rank worst-dollars-first (severity ties)"]
+  rank --> plan["prioritized action plan"]
+  plan --> out["action_plan_html / audit report section"]
+```
+*Three layers fuse per finding, then rank into one prioritized punch list.*
+
 ```python
 from camber.actionplan import build_action_plan, action_plan_html
 from camber.fault_economics import EnergyPrice, EquipmentLoad

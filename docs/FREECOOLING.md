@@ -5,6 +5,19 @@ business case that funds the fix. Where the `outdoor_air_fraction` rule *detects
 counts how many hours ran mechanical cooling while it was cool enough to cool for free, and (given a
 cooling-power series and a price) the recoverable energy and dollars.
 
+```mermaid
+flowchart LR
+  oat["oat"] --> avail{"OAT below high_limit_f (free cooling available)"}
+  cool["cool_valve"] --> mech{"mechanical cooling running (> active_thresh)"}
+  avail -- yes --> mech
+  mech -- yes --> hours["hours_missed"]
+  kw["cooling_kw"] --> energy["recoverable_kwh (x recover_frac)"]
+  hours --> energy
+  price["price_per_kwh"] --> savings["savings_usd"]
+  energy --> savings
+```
+*Free-cooling hours are missed when it is cool out yet mechanical cooling runs; power and price value them.*
+
 ```python
 from camber.freecooling import free_cooling_opportunity
 

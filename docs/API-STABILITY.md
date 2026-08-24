@@ -80,6 +80,18 @@ lifecycle:
 3. **Remove.** The name is removed only in a MAJOR release, listed under **Removed** in the
    CHANGELOG.
 
+```mermaid
+stateDiagram-v2
+  [*] --> Public
+  Public --> Deprecated : announce, DeprecationWarning
+  Deprecated --> Deprecated : keeps working and warns
+  Deprecated --> Removed : MAJOR release only
+  Removed --> [*]
+  note right of Deprecated : at least one full minor, and until the next MAJOR
+```
+
+*A public name is never removed without a full warning window; removal happens only at a MAJOR.*
+
 So: to stay current, run your test suite with deprecation warnings visible
 (`python -W error::DeprecationWarning` to make them hard failures), and act on them before the
 next major. You will never be surprised by a removal you weren't warned about a full release

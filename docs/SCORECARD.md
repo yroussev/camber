@@ -3,6 +3,22 @@
 `camber.scorecard` synthesizes FDD findings into the one-glance summary an owner or portfolio
 manager reads: per-category scores (energy, comfort, ventilation, maintenance) and an overall grade.
 
+```mermaid
+flowchart LR
+  findings["findings"] --> cat["RULE_CATEGORY map"]
+  cat --> energy["energy"]
+  cat --> comfort["comfort"]
+  cat --> vent["ventilation"]
+  cat --> maint["maintenance"]
+  energy --> pen["deduct by severity (clamp 0-100)"]
+  comfort --> pen
+  vent --> pen
+  maint --> pen
+  pen --> roll["weighted mean (category_weights)"]
+  roll --> grade["overall_score / overall_grade (A-F)"]
+```
+*Findings map to categories, penalise from 100 by severity, then roll up to one overall grade.*
+
 ```python
 from camber.scorecard import build_scorecard
 

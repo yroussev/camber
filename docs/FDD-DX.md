@@ -6,6 +6,27 @@ heat pumps / VRF, DOAS/ERV, fan-coil units (FCU)**, and **refrigerant-side chill
 always, rules key off `Role`s (not vendor tags), each ships a synthetic fixture, and each is
 accuracy-scored in the [synthetic benchmark](VALIDATION.md).
 
+```mermaid
+flowchart LR
+    roles["Roles (compressor_status, filter_diff_press, cond_approach_temp, ...)"] --> tmpl["Equipment templates (RTU / HeatPump / DOAS / FCU)"]
+    tmpl -- "completeness gating" --> rules
+    subgraph rules["camber.rules.builtin — DX detectors"]
+        r1[compressor_short_cycle]
+        r2[compressor_staging]
+        r3[heatpump_defrost]
+        r4[filter_fouling]
+        r5[chiller_approach_fouling]
+    end
+    r1 --> find[Findings]
+    r2 --> find
+    r3 --> find
+    r4 --> find
+    r5 --> find
+    find --> bench["synthetic benchmark (VALIDATION.md)"]
+```
+
+*Role-keyed DX detectors, gated by per-unit completeness, fan into Findings scored by the benchmark.*
+
 ## New roles
 
 Status/stage and refrigerant-side signals (all with `PHYSICAL_BOUNDS` + a Haystack hint):

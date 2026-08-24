@@ -8,6 +8,24 @@ Everything is vendor-neutral via the `Role` model, dependency-light (stdlib + nu
 pyarrow / matplotlib), and clean-room (every method cites a public standard; every rule ships a
 synthetic fixture).
 
+```mermaid
+flowchart TD
+  src["BAS sources (CSV/SQL/Haystack/Modbus/MQTT/BACnet/OPC-UA)"] --> ingest["Ingest (SourceAdapter)"]
+  ingest --> model["Semantic model (Role + MappingProvider + entities)"]
+  model --> fdd["FDD (rules.Registry)"]
+  model --> mv["M&V (mandv change-point / TOWT)"]
+  model --> stream["Streaming (OnlineFDD / OnlineCusum / forecast)"]
+  model --> domain["Domain analytics (comfort/carbon/GEB/ventilation)"]
+  fdd --> triage["Triage + lifecycle (rules.triage / faultlifecycle)"]
+  triage --> advisory["Advisory (aso / actionplan / scorecard)"]
+  mv --> report["Reporting (AuditReport / fleet)"]
+  advisory --> report
+  domain --> report
+  report --> platform["Platform (store / api / integrate / plugins / charts)"]
+```
+
+*The capability families, all speaking the vendor-neutral `Role` model.*
+
 ---
 
 ## Ingest

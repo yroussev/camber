@@ -9,6 +9,22 @@ operational store on top.
 A fault is keyed by the stable **(site, equip, rule) fingerprint**, so the same issue is one
 record across runs rather than a new alert each time.
 
+*The durable state machine `FaultLifecycle` tracks: open, acknowledged, in_progress, resolved, plus suppressed.*
+
+```mermaid
+stateDiagram-v2
+  [*] --> open: new actionable finding
+  open --> open: recurrence bumps occurrences
+  open --> acknowledged: acknowledge
+  acknowledged --> in_progress: start
+  in_progress --> resolved: resolve
+  open --> resolved: resolve or auto_resolve_absent
+  resolved --> open: reopen or recurrence
+  open --> suppressed: suppress
+  suppressed --> open: reopen
+  resolved --> [*]
+```
+
 ## Folding runs
 
 ```python

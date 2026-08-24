@@ -25,6 +25,17 @@ A read-only analytics tool that *touches* an OT/BAS network still introduces rea
 5. **Sensitive data.** Occupancy, schedules and setpoint telemetry carry physical-security and
    privacy implications even though they are "just trends."
 
+*Trust boundaries: trends flow up through a one-way conduit; the read-only adapters import no write service, so no path leads back to the controllers.*
+
+```mermaid
+flowchart LR
+  ctrl["Controllers / devices"] -- "trends up" --> hist["Historian / SQL / Haystack (low-trust tier)"]
+  hist == "one-way conduit / data diode (default)" ==> ingest["camber.ingest (sql, haystack, modbus, bacnet, mqtt_stream)"]
+  ctrl -. "live read-only via gateway (exception)" .-> ingest
+  ingest -- "read services only" --> fdd["FDD / M&V (read-only analytics, IT/DMZ)"]
+  ingest -- "no write / command service" --x ctrl
+```
+
 ## Design rules
 
 ### 1. Prefer the historian / SQL / Haystack tier — this is the default posture

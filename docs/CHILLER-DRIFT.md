@@ -5,6 +5,21 @@ Most FDD asks "is this reading bad **right now**?" Drift detection asks a harder
 check while its condenser fouls, its charge leaks, or its evaporator feed degrades over months. CAMBER
 catches that by comparing the machine **to its own frozen past, at matched load**.
 
+```mermaid
+flowchart TD
+    base["load-normalized baseline (fit_load_baseline, metric ~ f(tons))"] --> stat["period statistic (load_drift_stats)"]
+    base --> cusum["streaming CUSUM (ApproachDriftMonitor)"]
+    stat --> find[per-detector Findings]
+    cusum --> find
+    find --> cond["diagnose_condenser_drift (condenser loop)"]
+    find --> evap["diagnose_evaporator_drift (evaporator loop)"]
+    cond --> whole["diagnose_chiller_drift (whole-machine locus)"]
+    evap --> whole
+    whole --> report["site report / export"]
+```
+
+*Frozen-baseline fit feeds a period statistic and a streaming CUSUM; per-side roll-ups combine into one whole-machine verdict.*
+
 All of these detectors are **period rules** — run them with
 [`Registry.run_periods`](API-STABILITY.md) against a baseline period and a current period. Each
 freezes a load-normalized baseline into a [`BaselineStore`](SCALE.md) on first use, so the reference
@@ -160,6 +175,18 @@ end-to-end (`diagnose_frames`) and scores localization (`locus_confusion`) — o
 roll-up lands on the right `locus` at ~100% with no false alarms on healthy periods, and its
 `SimulatedCase.to_labeled(relevant=…)` feeds the same `evaluate`/`sweep` per-detector ROC below. This
 turns *screening-grade* thresholds into *characterized* ones; real-data tuning still refines them.
+
+```mermaid
+flowchart LR
+    sim["physics sims (driftsim / condensersim / evaporatorsim)"] --> cases["make_cases ((baseline, current) pairs)"]
+    cases --> diag["diagnose_frames (suite + roll-up)"]
+    diag --> loc["locus_confusion / cause_confusion (localization)"]
+    cases --> lbl["SimulatedCase.to_labeled"]
+    lbl --> roc["driftvalidation evaluate / sweep (per-detector ROC)"]
+    roc --> cal[calibrated thresholds]
+```
+
+*Without labelled data, physics sims characterize localization and per-detector ROC; real fault periods then calibrate.*
 
 ```python
 from camber.driftsim import make_cases, locus_confusion

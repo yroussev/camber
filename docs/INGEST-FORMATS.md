@@ -6,6 +6,29 @@ per-vendor exports** to test against (they're proprietary and site-specific). So
 **vendor profiles** capture each tool's documented CSV conventions. All ingest adapters share these,
 so a new format is handled once, everywhere.
 
+```mermaid
+flowchart LR
+  export["BAS CSV export"]
+  profile["IngestProfile (delimiter, tz, separators)"]
+  wide["WideCsvAdapter"]
+  perpoint["PerPointCsvAdapter"]
+  long["LongCsvAdapter"]
+  ts["parse_timestamps"]
+  coerce["coerce_numeric / coerce_status"]
+  frame["standard wide frame"]
+  export -- "load_csv(profile=...)" --> profile
+  profile --> wide
+  profile --> perpoint
+  profile --> long
+  wide --> ts
+  perpoint --> ts
+  long --> ts
+  ts --> coerce
+  coerce --> frame
+```
+
+*A vendor profile selects the CSV shape; the shared parsers normalize every variant to one frame.*
+
 ## Timestamps — `camber.tsparse.parse_timestamps`
 
 One parser behind every adapter. It strips a trailing timezone abbreviation (`PDT`/`GMT` — but not an

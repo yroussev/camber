@@ -77,6 +77,22 @@ No code needed — add a tag→role mapping (a JSON file like the ones under
 - Clear module and function docstrings that explain the *why*, not just the *what*. Match
   the idioms of the surrounding code.
 
+## Docs & diagrams
+
+- Docs live in `docs/` and build with **MkDocs (Material)**; add new pages to the `nav` in
+  `mkdocs.yml`.
+- Diagrams are **inline Mermaid** — a fenced ` ```mermaid ` block, rendered client-side by
+  mkdocs-material (enabled via the `pymdownx.superfences` custom fence). No external tool or
+  image assets; a diagram is authored where it belongs, in the page. Conventions:
+  - Prefer `flowchart LR`/`TD`; use `sequenceDiagram` for protocols/handshakes and
+    `stateDiagram-v2` for lifecycles. Keep it to ~5–14 nodes.
+  - **Theme-safe:** do *not* set custom colors (`style`/`classDef`/`fill:#…`) — the theme
+    renders Mermaid light/dark, and hardcoded light colors break dark mode. Structure only.
+  - **Syntax-safe:** quote any node label containing `()`/`:`/`,`/`/`/`[]`
+    (e.g. `n1["role-frame (ts,equip,role,value)"]`); never use `end` as a node id (it closes a
+    `subgraph`); keep ids alphanumeric.
+  - Use the real module/function/class names, and keep content vendor/site-neutral.
+
 ## Commits and pull requests
 
 - Small, focused commits with descriptive messages.
