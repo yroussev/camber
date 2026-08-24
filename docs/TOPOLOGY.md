@@ -44,16 +44,22 @@ import cycle and stays agnostic about equipment classes. Questions that *are* cl
 ```python
 from camber.model.topology import Topology
 
-topo = Topology.from_parent_map({
-    "VAV-1": "AHU-1", "VAV-2": "AHU-1",   # zones served by AHU-1
-    "VAV-3": "AHU-2",                      # a zone served by AHU-2
-    "AHU-1": "CHW", "AHU-2": "CHW",        # both AHUs served by the chilled-water plant
-})
+topo = Topology.from_parent_map(
+    {
+        "VAV-1": "AHU-1",
+        "VAV-2": "AHU-1",  # zones served by AHU-1
+        "VAV-3": "AHU-2",  # a zone served by AHU-2
+        "AHU-1": "CHW",
+        "AHU-2": "CHW",  # both AHUs served by the chilled-water plant
+    }
+)
 
-topo.zones_of("AHU-1")        # ('VAV-1', 'VAV-2')  -- an AHU's terminal zones
-topo.zones_of("CHW")          # ('VAV-1', 'VAV-2', 'VAV-3')  -- transitive leaves
-topo.ancestors("VAV-1")       # frozenset({'AHU-1', 'CHW'})
-topo.group_map(["VAV-1", "VAV-2", "VAV-3"])   # {'VAV-1': 'AHU-1', 'VAV-2': 'AHU-1', 'VAV-3': 'AHU-2'}
+topo.zones_of("AHU-1")  # ('VAV-1', 'VAV-2')  -- an AHU's terminal zones
+topo.zones_of("CHW")  # ('VAV-1', 'VAV-2', 'VAV-3')  -- transitive leaves
+topo.ancestors("VAV-1")  # frozenset({'AHU-1', 'CHW'})
+topo.group_map(
+    ["VAV-1", "VAV-2", "VAV-3"]
+)  # {'VAV-1': 'AHU-1', 'VAV-2': 'AHU-1', 'VAV-3': 'AHU-2'}
 ```
 
 ## Construction
