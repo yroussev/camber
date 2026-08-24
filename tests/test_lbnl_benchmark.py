@@ -141,3 +141,72 @@ def test_real_data_drift_scoring_produces_metrics():
     }
     metrics = B.score_drift(frames)
     assert any(k.startswith("drift.coil_valve_drift.") for k in metrics)
+
+
+# ---- FPU (VAV zone-terminal drift) plumbing ----
+
+
+def _fpu_frame(n=480, *, seed=0, damper_stuck=None, reheat_leak=0.0):
+    """A synthetic FPU west-zone role-frame with the points the VAV drift detectors need."""
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2025-01-01", periods=n, freq="1h")
+    t = np.arange(n)
+    aflow_sp = np.clip(300 + 300 * (0.5 + 0.5 * np.sin(t / 12)), 200, 700)  # swept airflow setpoint
+    damper = (
+        np.full(n, damper_stuck)
+        if damper_stuck is not None
+        else np.clip(aflow_sp / 7.0 + rng.normal(0, 3, n), 0, 100)
+    )
+    mat = np.full(n, 55.0) + rng.normal(0, 0.4, n)  # AHU supply (box entering, cool)
+    valve = np.clip(40 + 40 * np.sin(t / 15) + rng.normal(0, 3, n), 0, 100)  # reheat valve command
+    sat = mat + valve * 0.15 + reheat_leak * 6 + rng.normal(0, 0.3, n)  # discharge (warm w/ reheat)
+    return pd.DataFrame(
+        {
+            Role.DAMPER: damper,
+            Role.AIRFLOW_SP: aflow_sp,
+            Role.AIRFLOW: aflow_sp + rng.normal(0, 10, n),
+            Role.HEAT_VALVE: valve,
+            Role.MIXED_AIR_TEMP: mat,
+            Role.SUPPLY_AIR_TEMP: sat,
+        },
+        index=idx,
+    )
+
+
+def _fpu_frames():
+    return {
+        "PFPU_FaultFree.csv": _fpu_frame(seed=1),
+        "PFPU_VAVDMPRStuck_100%.csv": _fpu_frame(seed=2, damper_stuck=95.0),
+        "PFPU_ReheatVLVLeak_80%MaxFlow.csv": _fpu_frame(seed=3, reheat_leak=1.0),
+    }
+
+
+def test_fpu_build_drift_cases_labels():
+    B = _bench()
+    cases = B.build_drift_cases(
+        _fpu_frames(), B.FPU_DRIFT_DETECTORS["vav_airflow_drift"], fault_free="PFPU_FaultFree.csv"
+    )
+    # fault-free-tail (neg) + VAVDMPRStuck (pos) + ReheatVLVLeak (cross-neg)
+    assert len(cases) == 3
+    by_name = {c.name: c.fault for c in cases}
+    assert by_name["fault-free-tail"] is False
+    assert any(c.fault for c in cases if c.name.startswith("PFPU_VAVDMPRStuck"))
+    assert all(not c.fault for c in cases if c.name.startswith("PFPU_ReheatVLV"))
+    assert all(c.equip == "lbnl_fpu" for c in cases)
+
+
+def test_fpu_score_drift_emits_valid_keys():
+    B = _bench()
+    m = B.score_drift(
+        _fpu_frames(), B.FPU_DRIFT_DETECTORS, fault_free="PFPU_FaultFree.csv", label="FPU"
+    )
+    assert any(k.startswith("drift.vav_airflow_drift.") for k in m)
+    for v in m.values():
+        assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
+
+
+def test_fpu_detectors_registered_and_multi_positive():
+    B = _bench()
+    assert set(B.FPU_DRIFT_DETECTORS) == {"vav_airflow_drift", "vav_reheat_valve_drift"}
+    # airflow-drift targets both damper-stuck AND airflow-sensor-bias faults (tuple of prefixes)
+    assert isinstance(B.FPU_DRIFT_DETECTORS["vav_airflow_drift"]["positive"], tuple)

@@ -33,6 +33,8 @@ from camber.rules.duct_static_rule import DuctStaticControlDrift  # noqa: E402
 from camber.rules.economizer_damper_rule import EconomizerDamperDrift  # noqa: E402
 from camber.rules.leakvalve_rule import LeakingValve  # noqa: E402
 from camber.rules.oafraction_rule import OutdoorAirFraction  # noqa: E402
+from camber.rules.vav_airflow_rule import VavAirflowDrift  # noqa: E402
+from camber.rules.vav_reheat_valve_rule import VavReheatValveDrift  # noqa: E402
 from camber.store.modelstore import BaselineStore  # noqa: E402
 from camber.units import normalize_percent_frame  # noqa: E402
 
@@ -207,6 +209,25 @@ DRIFT_DETECTORS = {
     },
 }
 
+# VAV zone-terminal drift on the LBNL Fan-Power-Unit subset (the West-zone box is the one faulted).
+# vav_airflow_drift (DAMPER ~ AIRFLOW_SP) targets the damper-stuck + airflow-sensor-bias faults;
+# vav_reheat_valve_drift (reheat valve at matched duty) targets the reheat-valve leak/stuck + coil
+# fouling faults. Each is a cross-negative for the other. Single box -> no rogue/cohort here.
+FPU_DRIFT_DETECTORS = {
+    "vav_airflow_drift": {
+        "build": lambda: VavAirflowDrift(BaselineStore(), site="lbnl_fpu", run_id="bench"),
+        "equip": "lbnl_fpu",
+        "positive": ("PFPU_VAVDMPRStuck", "PFPU_SensorBias_VAVAirflow"),
+        "cross_negative": ("PFPU_ReheatVLV", "PFPU_ReheatCoil"),
+    },
+    "vav_reheat_valve_drift": {
+        "build": lambda: VavReheatValveDrift(BaselineStore(), site="lbnl_fpu", run_id="bench"),
+        "equip": "lbnl_fpu",
+        "positive": ("PFPU_ReheatVLV", "PFPU_ReheatCoil"),
+        "cross_negative": ("PFPU_VAVDMPRStuck", "PFPU_SensorBias_VAVAirflow"),
+    },
+}
+
 
 def build_drift_cases(frames, det, *, baseline_frac=0.6, fault_free="AHU_annual.csv"):
     """Build labeled drift cases from ``{scenario_csv: role_frame}`` for one detector spec.
@@ -221,24 +242,33 @@ def build_drift_cases(frames, det, *, baseline_frac=0.6, fault_free="AHU_annual.
         return []
     cut = int(len(ff) * baseline_frac)
     baseline, healthy_tail = ff.iloc[:cut], ff.iloc[cut:]
-    cases = [LabeledCase("lbnl_sdahu", baseline, healthy_tail, fault=False, name="fault-free-tail")]
-    pos, negs = det.get("positive"), det.get("cross_negative") or ()
+    equip = det.get("equip", "lbnl_sdahu")
+    cases = [LabeledCase(equip, baseline, healthy_tail, fault=False, name="fault-free-tail")]
+    pos = det.get("positive")
+    pos = (pos,) if isinstance(pos, str) else (pos or ())  # str or tuple of positive-fault prefixes
+    negs = det.get("cross_negative") or ()
     for name, frame in frames.items():
         if name == fault_free:
             continue
-        if pos and name.startswith(pos):
-            cases.append(LabeledCase("lbnl_sdahu", baseline, frame, fault=True, name=name))
+        if any(name.startswith(p) for p in pos):
+            cases.append(LabeledCase(equip, baseline, frame, fault=True, name=name))
         elif any(name.startswith(p) for p in negs):
-            cases.append(LabeledCase("lbnl_sdahu", baseline, frame, fault=False, name=name))
+            cases.append(LabeledCase(equip, baseline, frame, fault=False, name=name))
     return cases
 
 
-def score_drift(sdahu_frames):
-    """Score the runnable AHU-drift detectors on the SDAHU frames; return the flat metrics dict."""
+def score_drift(frames, detectors=None, *, fault_free="AHU_annual.csv", label="AHU air-side drift"):
+    """Score a set of drift detectors on ``frames``; return the flat metrics dict.
+
+    ``detectors`` defaults to the SDAHU air-side set; pass a subset-specific dict (e.g. the FPU VAV
+    set) with its own ``fault_free`` baseline file to score another equipment subset with the same
+    machinery.
+    """
+    detectors = detectors if detectors is not None else DRIFT_DETECTORS
     metrics = {}
-    print("\n=== AHU air-side drift (SDAHU, camber.driftvalidation) ===")
-    for name, det in DRIFT_DETECTORS.items():
-        cases = build_drift_cases(sdahu_frames, det)
+    print(f"\n=== {label} (camber.driftvalidation) ===")
+    for name, det in detectors.items():
+        cases = build_drift_cases(frames, det, fault_free=fault_free)
         pos = sum(1 for c in cases if c.fault)
         if len(cases) < 2 or (det["positive"] and pos == 0):
             print(f"  {name:24s} skipped (no usable cases)")
@@ -299,7 +329,28 @@ def main(argv=None) -> int:
         if os.path.exists(os.path.join(sd_base, fname))
     }
     if sd_frames:
-        metrics.update(score_drift(sd_frames))
+        metrics.update(score_drift(sd_frames, label="AHU air-side drift (SDAHU)"))
+
+    # VAV zone-terminal drift on the Fan-Power-Unit subset (opt-in via fetch.py --fpu)
+    fpu_map_path = os.path.join(HERE, "mapping_fpu.json")
+    fpu_base = os.path.join(DATA, "fpu")
+    if os.path.exists(os.path.join(fpu_base, "PFPU_FaultFree.csv")) and os.path.exists(
+        fpu_map_path
+    ):
+        fpu_mapping = MappingProvider.from_dict(json.load(open(fpu_map_path)))
+        fpu_frames = {
+            f: load_role_frame(os.path.join(fpu_base, f), fpu_mapping)
+            for f in os.listdir(fpu_base)
+            if f.endswith(".csv")
+        }
+        metrics.update(
+            score_drift(
+                fpu_frames,
+                FPU_DRIFT_DETECTORS,
+                fault_free="PFPU_FaultFree.csv",
+                label="VAV zone-terminal drift (FPU)",
+            )
+        )
 
     families_present = sum(
         1

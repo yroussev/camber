@@ -65,7 +65,8 @@ labeled fault run):
 | `economizer_damper_drift` | **real TPR, with a caveat** (target = stuck damper) | fires cleanly only if `OA_DMPR` is the *command* — if it's the stuck actual position, it reduces to the level check `outdoor_air_fraction` already covers |
 | `duct_static_drift` | **specificity only** | no labeled duct-static fault in the fetched set → false-positive rate only |
 | `fan_efficiency_drift`, `filter_loading_drift` | **synthetic-only** | need `POWER` / `FILTER_DIFF_PRESS` points the SDAHU simulation does not export |
-| chiller / pump / VAV drift | **synthetic-only here** | LBNL SDAHU is air-side; see the sibling datasets below |
+| `vav_airflow_drift`, `vav_reheat_valve_drift` | **real TPR on the LBNL FPU subset** | the fan-power-unit subset carries per-box damper / airflow+setpoint / reheat-valve / discharge-temp — airflow drift targets the damper-stuck + airflow-sensor-bias faults, reheat-valve drift the reheat-valve leak/stuck + coil-fouling faults (baseline = fault-free run, current = the West-zone faulted run) |
+| chiller / pump drift | **synthetic-only here** | LBNL SDAHU/FPU are air-side; the CC-BY LBNL chiller-plant subset would validate chiller drift but its download path is currently unresolvable (see below) |
 | `*_reset_effectiveness` | **synthetic-only** | needs the per-cycle reset-**request** point, absent from LBNL |
 | `*_rogue_zone_census`, `*_cohort_starvation` | **synthetic-only (a real gap)** | need a *fleet of zones with per-zone requests*; a single simulated AHU is not a zone fleet, and no vendorable public multi-zone-fleet fault dataset exists |
 
@@ -76,10 +77,13 @@ family is validated on the synthetic whole-suite harness below (`camber.faultlab
 validates the **M&V / forecast / anomaly** track (below), *not* component FDD; the drift/reset
 detectors' required roles (approach, valve %, damper, requests) simply don't exist in it.
 
-**Datasets that would close the gaps.** The genuinely usable (commercially-licensed) path is the
-CC-BY LBNL FDD **sibling subsets** — chiller-plant (the open, *simulated* chiller FDD source, which
-sidesteps a licence-encumbered ASHRAE chiller-FDD dataset), VAV fan-power-unit (single-box VAV faults
-incl. the reheat valve), and RTU/DDAHU/FCU — same schema as the SDAHU slice already wired.
+**Sibling subsets — wired and pending.** The **VAV fan-power-unit (FPU)** subset is now wired
+(`fetch.py --fpu` + `mapping_fpu.json`), scoring `vav_airflow_drift` and `vav_reheat_valve_drift` on
+its labeled per-box faults — same CC-BY schema as the SDAHU slice. The **chiller-plant** subset (the
+open, *simulated* chiller FDD source that would validate the chiller-drift family and sidesteps a
+licence-encumbered ASHRAE chiller-FDD dataset) is listed in the LBNL collection but its folder serves
+no file listing and no standard download URL resolves — wiring it is **blocked pending the exact
+download path** (the OSTI file manifest or an LBNL contact). RTU/DDAHU/FCU remain available too.
 
 The tempting real-BMS AHU/VAV sets are, on inspection, **not usable for a commercial toolkit's
 committed benchmark**: the only publicly-downloadable version of the widely-cited Korean large-office

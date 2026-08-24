@@ -1,0 +1,13 @@
+{
+  "_comment": "LBNL FDD Fan-Power Unit (FPU; parallel PFPU / series SFPU) point -> CAMBER Role mapping. Faults are imposed in the WEST zone (column suffix _W), so the _W VAV-box columns are the device under test (the _I/_S/_E zones stay healthy). The reheat ΔT for the reheat-valve detector is VAV_DAT_W (leaving, warm) minus the AHU supply SA_TEMP (entering the box, cool). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Validates the VAV zone-terminal drift family (airflow/damper and reheat-valve) on real (simulated) labeled faults.",
+  "aliases": {
+    "VAV_DMPR_W": "damper",
+    "VAV_PM_CFM_SP_W": "airflow_sp",
+    "VAV_PM_CFM_W": "airflow",
+    "RH_VLV_W": "heat_valve",
+    "VAV_DAT_W": "supply_air_temp",
+    "SA_TEMP": "mixed_air_temp",
+    "SA_SP": "duct_static",
+    "RM_TEMP_W": "space_temp"
+  }
+}

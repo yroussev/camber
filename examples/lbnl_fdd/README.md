@@ -22,7 +22,8 @@ python examples/lbnl_fdd/fetch.py            # SDAHU zip (~580 MB), extract the 
 python examples/lbnl_fdd/run_fdd.py          # mapping -> completeness -> store -> detection
 python examples/lbnl_fdd/run_brick.py        # derive the role mapping from the Brick (.ttl) model
 python examples/lbnl_fdd/fetch.py --families # also FCU + DDAHU (large: ~0.5 + ~1.7 GB)
-python examples/lbnl_fdd/benchmark.py        # FDD-accuracy across equipment families
+python examples/lbnl_fdd/fetch.py --fpu      # also the VAV fan-power-unit subset (VAV-drift)
+python examples/lbnl_fdd/benchmark.py        # FDD-accuracy + drift (AHU air-side + FPU VAV) scores
 ```
 
 `run_brick.py` parses the dataset's Brick model and derives the point→role mapping

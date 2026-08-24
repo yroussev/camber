@@ -4,6 +4,30 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.65.0] — 2026-08-24
+
+**Real-data validation of the VAV zone-terminal drift family (LBNL Fan-Power-Unit subset).** Wires the
+CC-BY LBNL FPU subset into the benchmark, turning two "synthetic-only" verdicts into real-data ones.
+
+### Added
+- **`examples/lbnl_fdd/fetch.py --fpu`** — fetches the LBNL Fan-Power-Unit subset (basename-matched
+  extraction, robust to the archive layout) + **`mapping_fpu.json`** (the West-zone box + AHU points
+  → roles; the West zone is the one faulted, so the other zones stay healthy).
+- **`examples/lbnl_fdd/benchmark.py`** now scores **`vav_airflow_drift`** (target = damper-stuck +
+  airflow-sensor-bias faults) and **`vav_reheat_valve_drift`** (target = reheat-valve leak/stuck +
+  coil-fouling) on the FPU data via `camber.driftvalidation.evaluate` (baseline = fault-free run,
+  current = each labeled fault run). `build_drift_cases`/`score_drift` generalized to take a
+  subset-specific detector set + baseline file + multiple positive-fault prefixes.
+- **`tests/test_lbnl_benchmark.py`** — FPU case-builder + scorer plumbing tests on synthetic
+  FPU-shaped frames (always run); real-data scoring runs in the benchmark CI job with the data.
+
+### Notes
+- **The LBNL chiller-plant subset is not yet wired: its download path is unresolvable** — the folder
+  is listed in the collection but serves no file listing and no standard URL resolves (would need the
+  OSTI file manifest or an LBNL contact). Documented in `docs/VALIDATION.md`. The encumbered ASHRAE
+  chiller dataset is never named.
+- No `camber/` change → public-API snapshot unchanged; new code is `examples/` + tests.
+
 ## [0.64.0] — 2026-08-24
 
 **Real-data validation of the AHU air-side drift family (LBNL FDD).** Extends the LBNL benchmark to

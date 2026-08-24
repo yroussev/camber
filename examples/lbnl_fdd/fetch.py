@@ -80,6 +80,27 @@ FAMILY_SETS = [
 ]
 
 
+# Fan-power VAV terminal-unit set (opt-in via --fpu) for the VAV zone-terminal DRIFT benchmark.
+# Faults are imposed in the WEST zone; the parallel-FPU (PFPU) CSVs are extracted by basename (the
+# archive's internal folder prefix isn't assumed). Members cover the fault-free baseline plus a
+# spread of the two detectors' target faults (damper/airflow-sensor for airflow drift; reheat-valve
+# leak/stuck/coil-fouling for reheat-valve drift).
+FPU_URL = "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FPU/LBNL_FDD_Data_Sets_FPU.zip"
+FPU_MEMBERS = [
+    "PFPU_FaultFree.csv",
+    "PFPU_VAVDMPRStuck_50%.csv",
+    "PFPU_VAVDMPRStuck_100%.csv",
+    "PFPU_SensorBias_VAVAirflow_-400CFM.csv",
+    "PFPU_SensorBias_VAVAirflow_+400CFM.csv",
+    "PFPU_ReheatVLVLeak_50%MaxFlow.csv",
+    "PFPU_ReheatVLVLeak_80%MaxFlow.csv",
+    "PFPU_ReheatVLVStuck_0%.csv",
+    "PFPU_ReheatVLVStuck_100%.csv",
+    "PFPU_ReheatCoilFouling_Waterside_Severe.csv",
+]
+FPU_REQUIRED = ["PFPU_FaultFree.csv", "PFPU_VAVDMPRStuck_100%.csv"]
+
+
 def _fetch_ttl():
     """Fetch the small Brick (.ttl) model used by the Brick-interop example."""
     ttl_dir = os.path.join(DATA, "ttl")
@@ -96,12 +117,14 @@ def _fetch_ttl():
                     f.write(src.read())
 
 
-def _fetch_set(subdir, url, size, members, zip_name, required=None):
+def _fetch_set(subdir, url, size, members, zip_name, required=None, match_basename=False):
     """Download ``url`` (if absent) and extract ``members`` into DATA/subdir.
 
     ``required`` (default = all members) is the subset whose local presence means "already fetched".
     Optional members (severity variants that may not exist in every zip release) extract when
     present but never gate the no-op, so a broadened catalog can't cause an endless re-download.
+    ``match_basename`` matches each target by file *basename* against the zip members (robust to an
+    unknown internal folder prefix), used where the archive layout isn't known ahead of time.
     """
     out = os.path.join(DATA, subdir)
     os.makedirs(out, exist_ok=True)
@@ -115,16 +138,20 @@ def _fetch_set(subdir, url, size, members, zip_name, required=None):
         urllib.request.urlretrieve(url, zpath)
     print(f"Extracting the {subdir.upper()} CSVs ...")
     with zipfile.ZipFile(zpath) as z:
-        available = set(z.namelist())
+        names = z.namelist()
+        by_base = {os.path.basename(n): n for n in names}
         for m in members:
-            if m not in available:
+            member = (
+                by_base.get(os.path.basename(m)) if match_basename else (m if m in names else None)
+            )
+            if member is None:
                 # a labeled fault CSV not present in this release of the zip — skip, don't crash.
                 # benchmark.py already guards each scenario with os.path.exists, so a missing member
                 # simply isn't scored. Keeps the fetch robust as the fault catalog is broadened.
                 print(f"  (skipped, not in zip: {os.path.basename(m)})")
                 continue
             dest = os.path.join(out, os.path.basename(m))
-            with z.open(m) as src, open(dest, "wb") as f:
+            with z.open(member) as src, open(dest, "wb") as f:
                 f.write(src.read())
             print(f"  {os.path.basename(m)}")
     print(f"Done. CSVs in {out}\n(You may delete {zpath} to reclaim disk.)")
@@ -137,9 +164,20 @@ def main(argv=None) -> int:
     if "--families" in argv:
         for subdir, url, size, members in FAMILY_SETS:
             _fetch_set(subdir, url, size, members, f"LBNL_{subdir.upper()}.zip")
-    else:
+    if "--fpu" in argv:
+        _fetch_set(
+            "fpu",
+            FPU_URL,
+            "~1 GB",
+            FPU_MEMBERS,
+            "LBNL_FPU.zip",
+            required=FPU_REQUIRED,
+            match_basename=True,
+        )
+    if "--families" not in argv and "--fpu" not in argv:
         print(
-            "\n(Add --families to also fetch FCU + DDAHU for the full cross-equipment benchmark.)"
+            "\n(Add --families to fetch FCU + DDAHU for the cross-equipment benchmark, "
+            "or --fpu for the VAV fan-power-unit drift benchmark.)"
         )
     return 0
 
