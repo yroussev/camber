@@ -76,14 +76,20 @@ family is validated on the synthetic whole-suite harness below (`camber.faultlab
 validates the **M&V / forecast / anomaly** track (below), *not* component FDD; the drift/reset
 detectors' required roles (approach, valve %, damper, requests) simply don't exist in it.
 
-**Datasets that would close the gaps (open-licensed, not yet wired):** the CC-BY LBNL FDD **sibling
-subsets** — chiller-plant (the open, *simulated* chiller FDD source, sidestepping the
-a licence-encumbered ASHRAE chiller-FDD dataset), VAV fan-power-unit (single-box VAV faults, incl.
-reheat valve),
-and RTU/DDAHU/FCU — plus the CC-BY **Korean large-office AHU** semi-labelled real-BMS set. A
-commercially-usable *labeled multi-zone VAV fleet* remains the one unfilled gap (the one real match,
-ORNL's FRP set, is CC-BY-**NC-ND** — research-only, not vendorable); the reset-request signal has no
-public archive and would have to be **generated** from the open Modelica Buildings G36 sequences.
+**Datasets that would close the gaps.** The genuinely usable (commercially-licensed) path is the
+CC-BY LBNL FDD **sibling subsets** — chiller-plant (the open, *simulated* chiller FDD source, which
+sidesteps a licence-encumbered ASHRAE chiller-FDD dataset), VAV fan-power-unit (single-box VAV faults
+incl. the reheat valve), and RTU/DDAHU/FCU — same schema as the SDAHU slice already wired.
+
+The tempting real-BMS AHU/VAV sets are, on inspection, **not usable for a commercial toolkit's
+committed benchmark**: the only publicly-downloadable version of the widely-cited Korean large-office
+AHU set is a reduced sample (all-faulted, two coarse labels, no supply-air setpoint, stacked AHUs —
+no fault-free baseline to score against), and the richer modern real-labeled AHU/VAV datasets
+(multi-building office/auditorium/hospital; the RBC/G36 collection with fault-free baselines; the ORNL
+multi-zone VAV fleet) are all **CC-BY-NC-ND** — research-only, not vendorable. So a commercially-usable
+*labeled multi-zone VAV fleet* remains the one unfilled gap, and the G36 **reset-request** signal
+(also only in NC-ND G36 simulations) would have to be **generated** from the open Modelica Buildings
+G36 sequences rather than downloaded.
 
 ## FDD accuracy — synthetic whole-suite harness
 
