@@ -190,3 +190,52 @@ def test_both_families_registered_as_builtins():
     names = builtin_registry().names()
     assert "sat_rogue_zone_census" in names
     assert "static_rogue_zone_census" in names
+
+
+# ---- topology-driven auto-scoping (0.60.0) ----
+
+from camber.model.topology import Topology  # noqa: E402
+
+_GM = {"Z1": "AHU1", "Z2": "AHU1", "Z3": "AHU2", "Z4": "AHU2", "Z5": "AHU2"}
+
+
+def _rogue_fleet():
+    return {"Z1": _sat_zone(6.0), **{f"Z{i}": _sat_zone(0.0) for i in range(2, 6)}}
+
+
+def test_semantic_topology_scopes_per_ahu_and_drops_caveat():
+    topo = Topology.from_parent_map(_GM, provenance="semantic")
+    f = RogueZoneCensus(reset="sat").analyze_fleet(_rogue_fleet(), topology=topo)
+    assert f.metrics["grouped"] is True
+    assert f.metrics["rogue_by_group"] == {"AHU1": ["Z1"]}
+    assert f.metrics["grouping_provenance"] == "semantic"
+    assert not any("inferred from equipment naming" in c for c in f.caveats)
+    assert not any("no zone->AHU topology supplied" in c for c in f.caveats)
+
+
+def test_heuristic_topology_keeps_softened_caveat():
+    topo = Topology.from_parent_map(_GM, provenance="heuristic")
+    f = RogueZoneCensus(reset="sat").analyze_fleet(_rogue_fleet(), topology=topo)
+    assert f.metrics["rogue_by_group"] == {"AHU1": ["Z1"]}  # still scoped per-AHU
+    assert any("inferred from equipment naming" in c for c in f.caveats)  # ... but provisional
+
+
+def test_partial_coverage_pools_remainder_and_caveats():
+    topo = Topology.from_parent_map({"Z1": "AHU1", "Z2": "AHU1"}, provenance="semantic")
+    f = RogueZoneCensus(reset="sat").analyze_fleet(_rogue_fleet(), topology=topo)
+    assert f.metrics["n_zones_ungrouped"] == 3  # Z3,Z4,Z5 uncovered
+    assert any("not covered by the served-by model" in c for c in f.caveats)
+
+
+def test_topology_zero_coverage_falls_back_building_wide():
+    topo = Topology.from_parent_map({"OTHER": "AHUX"}, provenance="heuristic")
+    f = RogueZoneCensus(reset="sat").analyze_fleet(_rogue_fleet(), topology=topo)
+    assert f.metrics["grouped"] is False
+    assert any("covered no evaluated zone" in c for c in f.caveats)
+
+
+def test_no_topology_preserves_building_wide_behavior():
+    # regression: analyze_fleet with no topology reproduces the pre-0.60.0 pooled + full caveat
+    f = RogueZoneCensus(reset="sat").analyze_fleet(_rogue_fleet())
+    assert f.metrics["grouped"] is False
+    assert any("no zone->AHU topology supplied" in c for c in f.caveats)

@@ -92,8 +92,12 @@ class FleetRule(Protocol):
     roles_required: tuple
     roles_optional: tuple
 
-    def analyze_fleet(self, frames: dict) -> Finding:
-        """Run over {equip: role-frame}; return one aggregate Finding."""
+    def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
+        """Run over {equip: role-frame}; return one aggregate Finding.
+
+        ``topology`` is an optional :class:`camber.model.topology.Topology`; grouping-aware fleet
+        rules (e.g. the rogue-zone census) use it to scope per system, others ignore it.
+        """
         ...
 
 
@@ -133,6 +137,23 @@ def _note_missing_optional(finding, missing) -> None:
     """Record absent optional roles on a Finding (backstop for the honesty convention)."""
     if finding is not None and missing:
         finding.metrics.setdefault("_missing_optional", [getattr(r, "value", r) for r in missing])
+
+
+def _heuristic_topology(equip_refs):
+    """A naming-heuristic served-by graph from the fleet's equip refs (provenance="heuristic").
+
+    The refs carry ``equip`` (id) and ``equip_class`` but not the ``id``/``space`` shape
+    :func:`camber.topology_infer.topology_from_naming` reads, so each is shimmed into a light shim.
+    """
+    from types import SimpleNamespace
+
+    from ..topology_infer import topology_from_naming
+
+    shims = [
+        SimpleNamespace(id=r.equip, equip_class=r.equip_class, space=getattr(r, "space", ""))
+        for r in equip_refs
+    ]
+    return topology_from_naming(shims)
 
 
 def _merge_shared(frame: pd.DataFrame, shared) -> pd.DataFrame:
@@ -335,6 +356,7 @@ class Registry:
         resample: str = "1h",
         shared=None,
         min_trust=None,
+        topology=None,
     ) -> Finding:
         """Run a FleetRule: resolve every equipment, pass the set as one batch.
 
@@ -343,6 +365,12 @@ class Registry:
         each frame as in :meth:`run`. ``min_trust`` applies the same sensor-health gate
         per equipment: a unit whose required inputs aren't trusted is left out of the
         fleet batch rather than corrupting the aggregate.
+
+        ``topology`` is an optional :class:`camber.model.topology.Topology` handed to the rule
+        so a grouping-aware analytic can scope per system (e.g. the rogue-zone census per air
+        handler). When it is ``None`` and the rule opts in via ``wants_topology``, a naming
+        served-by graph is auto-built from the ``equip_refs`` -- so the census auto-scopes even
+        with no semantic model (that heuristic grouping carries a screening caveat downstream).
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
@@ -357,7 +385,9 @@ class Registry:
             ):
                 continue
             frames[ref.equip] = frame
-        f = rule.analyze_fleet(frames)  # type: ignore[attr-defined]  # only called on fleet rules
+        if topology is None and getattr(rule, "wants_topology", False):
+            topology = _heuristic_topology(equip_refs)
+        f = rule.analyze_fleet(frames, topology=topology)  # type: ignore[attr-defined]  # fleet only
         # backstop: optional roles that were present on no equipment at all
         if frames:
             never = [

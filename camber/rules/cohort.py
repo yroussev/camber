@@ -34,7 +34,7 @@ class CohortDeviation:
         self.name = name or f"cohort_deviation_{getattr(role, 'name', str(role))}".lower()
         self.roles_required = (role,)
 
-    def analyze_fleet(self, frames: dict) -> Finding:
+    def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run across the cohort's role-frames; return one aggregate Finding."""
         res = cohort_deviation(
             frames, self.role, k=self.k, summary=self.summary, min_cohort=self.min_cohort

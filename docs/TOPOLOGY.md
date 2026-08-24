@@ -84,6 +84,15 @@ much to trust the result:
 | `group_of(id, pred=…)` | the grouping key for one terminal (its nearest matching ancestor) |
 | `group_map(ids, pred=…)` | `{id: group}`, **omitting** ids with no resolvable group |
 
+## Consumed by fleet analytics
+
+The `{zone: ahu}` grouping from `group_map` is what turns a building-wide fleet analytic into a
+per-system one. `Registry.run_fleet` hands the topology to grouping-aware fleet rules: the
+**rogue-zone census** ([TR-RESET.md](TR-RESET.md)) uses it to scope per air handler. `provenance`
+drives how much the result is trusted — a `semantic` grouping drops the census's confound caveat,
+a `heuristic` one keeps a softened screening caveat. When no topology is passed, `run_fleet`
+auto-builds a naming-heuristic one from the equipment ids so the census still auto-scopes.
+
 ## Honesty is built into the type
 
 Topology is often incomplete, so the type degrades rather than guesses:

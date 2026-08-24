@@ -26,7 +26,7 @@ class ChillerStagingFleet:
         # How fully a single chiller can be loaded before the next must stage on.
         self.redundancy_ceiling = redundancy_ceiling
 
-    def analyze_fleet(self, frames: dict) -> Finding:
+    def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run across the chillers' role-frames; return one aggregate Finding."""
         if not frames:
             return Finding(

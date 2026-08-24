@@ -85,15 +85,28 @@ dominant fraction of the time *and* commands a disproportionate share of the req
 is what keeps a uniformly-busy fleet quiet: when every zone is equally hot they all tie at the binding
 max, but their shares are equal, so none is singled out.
 
-**Topology honesty.** Deciding that a zone drags *AHU-1's* reset requires knowing which zones AHU-1
-serves — and the fleet interface carries no served-by topology. By default the census therefore pools
-all zones **building-wide** and attaches a loud confound caveat: a zone flagged in the single pool may
-simply serve a genuinely hotter air handler than its neighbours, so it is a **screening signal only**.
-When a caller supplies a `groups` map (`{zone: ahu}` or a `zone → ahu` callable) the census scopes
-**per air handler** (a rogue is compared only to its siblings, reported in `rogue_by_group`) and the
-confound caveat drops. It also declines loudly — demoting a clean "ok" to `info` — when zones were
-unevaluable or no zone generated any request (the reset is not demand-bound, so nothing can be
-dragging it). Thresholds are screening / opportunity-grade (provisional-untuned).
+**Topology honesty (auto-scoping).** Deciding that a zone drags *AHU-1's* reset requires knowing
+which zones AHU-1 serves. The census now scopes **per air handler automatically** whenever a
+served-by [topology](TOPOLOGY.md) is available, and the caveat it attaches reflects how trustworthy
+that grouping is:
+
+- **Semantic topology** (from a Brick `feeds` / Haystack `ahuRef` model, passed as
+  `run_fleet(..., topology=site.topology)`) — the census scopes per air handler (a rogue is compared
+  only to its siblings, in `rogue_by_group`) and the confound caveat **drops**.
+- **Naming-heuristic topology** — when no semantic model is supplied, `Registry.run_fleet`
+  **auto-builds** a grouping from the equipment ids themselves (`AHU_1_VAV_3` under `AHU_1`), so the
+  census scopes per-AHU even with no model — but keeps a **softened screening caveat** because the
+  grouping is inferred, not verified.
+- **Partial coverage** — zones the topology does not cover are pooled together (building-wide
+  fallback) and that remainder is caveated; the covered zones are still scoped.
+- **No topology** — the original **building-wide** pool with the full confound caveat (a zone flagged
+  in the single pool may simply serve a hotter air handler, so it is a **screening signal only**).
+
+The grouping and its provenance are recorded in the finding's metrics (`grouped`,
+`grouping_provenance`, `n_zones_ungrouped`). The census also declines loudly — demoting a clean "ok"
+to `info` — when zones were unevaluable or no zone generated any request (the reset is not
+demand-bound, so nothing can be dragging it). Thresholds are screening / opportunity-grade
+(provisional-untuned).
 
 ## Family complete
 

@@ -4,6 +4,32 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.60.0] — 2026-08-24
+
+**Topology-aware fleet grouping (topology-aware fleet analytics — arc item 3, the payoff).** The
+fleet runner now hands a served-by `Topology` to grouping-aware rules, so the **rogue-zone census
+auto-scopes per air handler** instead of pooling every zone building-wide.
+
+### Added
+- **`Registry.run_fleet(..., topology=None)`** — passes a served-by `Topology` to the rule. When it is
+  `None` and the rule opts in (`wants_topology`), a **naming-heuristic** grouping is auto-built from
+  the fleet's own equipment ids, so the census scopes per-AHU even with no semantic model.
+- **`FleetRule.analyze_fleet(self, frames, *, topology=None)`** — the protocol gains an optional
+  topology channel; the four non-grouping fleet rules ignore it (behaviour unchanged).
+
+### Changed
+- **`sat`/`static_rogue_zone_census`** now scope **per air handler** whenever a topology is available,
+  with a provenance/coverage-aware caveat: a **semantic** grouping (Brick `feeds` / Haystack `ahuRef`)
+  **drops** the confound caveat; a **heuristic** (naming-inferred) grouping keeps a softened screening
+  caveat; **partial** coverage pools the uncovered remainder building-wide and caveats it; **no**
+  topology retains the original building-wide pool + full caveat. New metrics `grouping_provenance`
+  and `n_zones_ungrouped` record the grouping used.
+
+### Notes
+- Backward compatible: every existing `run_fleet` caller and a census with no topology reproduce the
+  pre-0.60.0 output exactly. Heuristic auto-scoping is screening-grade and always labelled as such —
+  never a false-confident per-AHU verdict.
+
 ## [0.59.0] — 2026-08-24
 
 **Automatic served-by topology population (topology-aware fleet analytics — arc item 2).** Builds a

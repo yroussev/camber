@@ -20,7 +20,7 @@ class DamperCensus:
     roles_required = (Role.DAMPER,)
     roles_optional = (Role.WARMUP, Role.COOLDOWN)
 
-    def analyze_fleet(self, frames: dict) -> Finding:
+    def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run the diagnostic across the fleet's role-frames; return one aggregate Finding."""
         if not frames:
             return Finding(
