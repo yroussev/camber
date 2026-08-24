@@ -157,8 +157,16 @@ be a genuinely hot design-day rather than a capacity fault, so corroborate with 
   is a comfort/capacity risk, and `stuck` / `diverges` have an indeterminate energy sign; the
   estimator returns an honest basis rather than fabricating a dollar figure.
 
-The fleet rules (rogue-zone census, cohort starvation) are costed separately once per-air-handler
-sizing can be attributed to their `<fleet>`-level findings.
+- **`sat`/`static_rogue_zone_census`** → the whole air handler over-services (colder SAT / higher
+  static) because one zone drags the reset: reheat / fan waste scaled by the rogue's request share
+  (`worst_zone_share`). **Uncosted** when the census is *ungrouped* (a building-wide screening signal,
+  not a per-AHU verdict).
+- **`static_cohort_starvation`** → sustained **fan** over-pressure from the upstream fault, scaled by
+  the cohort's sustained fraction; **`sat_cohort_starvation`** is unmet-load/comfort → **uncosted**.
+
+Because these findings are fleet-level (`equip="<fleet>"`), the estimator attributes sizing to the
+**offending air handler** named in the metrics (`worst_group`, or the group holding `worst_zone`), so
+a `{equip: EquipmentLoad}` map keyed by AHU costs each starved/dragged handler on its own fan/coil.
 
 ## Family complete
 

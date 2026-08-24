@@ -4,6 +4,30 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.63.0] — 2026-08-24
+
+**Fault economics for the fleet reset rules (rogue-zone census & cohort starvation).** Completes the
+Trim-and-Respond reset family's dollar-impact coverage, with per-air-handler load attribution for the
+fleet-level findings.
+
+### Added
+- **`sat`/`static_rogue_zone_census`** cost model → the whole air handler over-services because one
+  zone drags the reset: avoidable **reheat** (SAT) / **fan** (static) scaled by the rogue's request
+  share (`worst_zone_share`). Uncosted when the census is *ungrouped* (building-wide screening only)
+  or the AHU sizing is missing.
+- **`static_cohort_starvation`** cost model → sustained **fan** over-pressure from the upstream fault,
+  scaled by the cohort's sustained fraction (`worst_group_frac`); **`sat_cohort_starvation`** is
+  unmet-load/comfort → **uncosted by design**.
+- **`<fleet>`-finding load attribution** — a new `_resolve_load` / `_fleet_load` path resolves sizing
+  for `equip="<fleet>"` findings to the **offending air handler** named in the metrics (`worst_group`,
+  or the group holding `worst_zone`), so a `{equip: EquipmentLoad}` map keyed by AHU costs each
+  handler on its own fan/coil. Applied consistently in `cost_findings` and `annotate_costs`.
+
+### Notes
+- Registered in `DEFAULT_MODELS`; flows through `rank_by_cost` / scorecard / action plan with no
+  call-site changes; public API surface unchanged (estimators + helpers are private). With this the
+  entire Trim-and-Respond reset family is money-rankable (drift remains uncosted-by-design).
+
 ## [0.62.0] — 2026-08-24
 
 **Fault economics for the Trim-and-Respond reset family.** Extends `camber.fault_economics` so the

@@ -347,6 +347,76 @@ def _est_reset_effectiveness(m, load, price, P):
     return 0.0, 0.0, "reset-effectiveness reason unavailable -- uncosted", {}
 
 
+def _est_rogue_zone_census(m, load, price, P):
+    """A rogue zone drags the whole air handler's reset colder/higher than the fleet needs.
+
+    The avoidable waste is the offending AHU's reheat (SAT) or fan (static) over-service, scaled by
+    the rogue zone's share of the group's requests (``worst_zone_share``). Uncosted when the census
+    is ungrouped (building-wide pooling is only a screening signal) or the AHU sizing is missing.
+    """
+    if not m.get("grouped"):
+        return 0.0, 0.0, "census ungrouped (building-wide) -- uncosted screening signal", {}
+    reset = m.get("reset")
+    share = max(0.0, min(1.0, _num(m, "worst_zone_share") or 0.0))
+    if reset == "static":
+        if not load.fan_kw:
+            return 0.0, 0.0, "needs EquipmentLoad.fan_kw", {}
+        elec = load.fan_kw * load.annual_hours * share * P["reset_fan_excess_frac"]
+        return (
+            elec,
+            0.0,
+            "rogue-zone-drags-static->fan",
+            {
+                "worst_zone_share": round(share, 3),
+                "reset_fan_excess_frac": P["reset_fan_excess_frac"],
+            },
+        )
+    if reset == "sat":
+        cap = load.heating_capacity_kbtuh
+        if not cap:
+            return 0.0, 0.0, "needs EquipmentLoad.heating_capacity_kbtuh", {}
+        div, eff = P["reheat_diversity"], P["boiler_efficiency"]
+        gas = cap * load.annual_hours * div * share / _KBTU_PER_THERM / eff
+        return (
+            0.0,
+            gas,
+            "rogue-zone-drags-sat->reheat",
+            {
+                "worst_zone_share": round(share, 3),
+                "reheat_diversity": div,
+                "boiler_efficiency": eff,
+            },
+        )
+    return 0.0, 0.0, f"rogue census (unknown reset {reset!r}) -- uncosted", {}
+
+
+def _est_cohort_starvation(m, load, price, P):
+    """A whole AHU cohort starved (static) = sustained high fan from an upstream fault.
+
+    Static cohort starvation prices the fan over-pressure via the worst group's sustained fraction.
+    SAT cohort starvation is unmet-load / a possible design-day (a comfort/capacity signal), so it
+    is **uncosted by design** -- not a fabricated dollar.
+    """
+    reset = m.get("reset")
+    if reset == "sat":
+        return 0.0, 0.0, "cohort starvation (SAT) -- unmet-load/comfort, uncosted", {}
+    if reset == "static":
+        if not load.fan_kw:
+            return 0.0, 0.0, "needs EquipmentLoad.fan_kw", {}
+        frac = max(0.0, min(1.0, _num(m, "worst_group_frac") or 0.0))
+        elec = load.fan_kw * load.annual_hours * frac * P["reset_fan_excess_frac"]
+        return (
+            elec,
+            0.0,
+            "cohort-starvation-static->fan",
+            {
+                "worst_group_frac": round(frac, 3),
+                "reset_fan_excess_frac": P["reset_fan_excess_frac"],
+            },
+        )
+    return 0.0, 0.0, f"cohort starvation (unknown reset {reset!r}) -- uncosted", {}
+
+
 # rule name -> estimator
 DEFAULT_MODELS = {
     "simultaneous_heat_cool": _est_simultaneous,
@@ -355,6 +425,10 @@ DEFAULT_MODELS = {
     "supply_air_reset_compliance": _est_sat_reset_compliance,
     "sat_reset_effectiveness": _est_reset_effectiveness,
     "static_reset_effectiveness": _est_reset_effectiveness,
+    "sat_rogue_zone_census": _est_rogue_zone_census,
+    "static_rogue_zone_census": _est_rogue_zone_census,
+    "sat_cohort_starvation": _est_cohort_starvation,
+    "static_cohort_starvation": _est_cohort_starvation,
     "chiller_efficiency": _est_chiller,
     "cooling_tower_approach": _est_cooling_tower,
     "hw_pump_dp_reset": _est_pump,
@@ -417,6 +491,36 @@ def _load_for(loads, equip):
     return loads.get(equip, EquipmentLoad())
 
 
+def _fleet_load(loads, metrics):
+    """Resolve the offending air handler's load for a fleet-level (``<fleet>``) finding.
+
+    Rogue/cohort findings carry ``equip="<fleet>"``, but the AHU whose waste is priced is named in
+    the metrics (cohort: ``worst_group``; rogue: the group in ``rogue_by_group`` containing
+    ``worst_zone``). Key the ``{equip: EquipmentLoad}`` map by that AHU; fall back to a ``<fleet>``
+    entry (or a shared load) when the AHU isn't sized.
+    """
+    if not isinstance(loads, dict):
+        return _load_for(loads, "<fleet>")
+    ahu = metrics.get("worst_group")
+    if ahu is None:
+        wz = metrics.get("worst_zone")
+        for grp, zones in (metrics.get("rogue_by_group") or {}).items():
+            if wz in zones:
+                ahu = grp
+                break
+    if ahu is not None and ahu in loads:
+        return loads[ahu]
+    return _load_for(loads, "<fleet>")
+
+
+def _resolve_load(loads, finding):
+    """The :class:`EquipmentLoad` for a finding -- AHU-attributed for fleet-level findings."""
+    equip = _attr(finding, "equip", "")
+    if equip == "<fleet>":
+        return _fleet_load(loads, _attr(finding, "metrics", {}) or {})
+    return _load_for(loads, equip)
+
+
 def cost_findings(
     findings,
     loads=None,
@@ -428,9 +532,7 @@ def cost_findings(
     """Estimate cost for many findings. ``loads`` is one :class:`EquipmentLoad` for all, or a
     ``{equip: EquipmentLoad}`` map (missing equipment get defaults)."""
     return [
-        estimate_cost(
-            f, _load_for(loads, _attr(f, "equip", "")), price, params=params, models=models
-        )
+        estimate_cost(f, _resolve_load(loads, f), price, params=params, models=models)
         for f in findings
     ]
 
@@ -448,9 +550,7 @@ def annotate_costs(
     ``rank_findings(..., magnitude_key="annual_cost_usd")``. Returns the findings."""
     out = list(findings)
     for f in out:
-        fc = estimate_cost(
-            f, _load_for(loads, _attr(f, "equip", "")), price, params=params, models=models
-        )
+        fc = estimate_cost(f, _resolve_load(loads, f), price, params=params, models=models)
         m = _attr(f, "metrics", None)
         if isinstance(m, dict):
             m["annual_cost_usd"] = fc.annual_cost_usd

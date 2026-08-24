@@ -299,3 +299,99 @@ def test_drift_family_uncosted_by_design():
     )
     assert not c.costed
     assert "no cost model" in c.basis
+
+
+# ---- fleet-rule (rogue / cohort) cost models + <fleet> load attribution (0.63.0) ----
+
+
+def _fleet(rule, **metrics):
+    return Finding(rule=rule, equip="<fleet>", severity="warn", metrics=metrics, summary="")
+
+
+def test_rogue_static_costs_fan_when_grouped():
+    f = _fleet(
+        "static_rogue_zone_census",
+        grouped=True,
+        reset="static",
+        worst_zone="Z1",
+        worst_zone_share=0.8,
+        rogue_by_group={"AHU1": ["Z1"]},
+    )
+    c = estimate_cost(f, EquipmentLoad(fan_kw=25.0), PRICE)
+    assert c.costed and c.electricity_kwh > 0 and "fan" in c.basis
+    assert c.assumptions["worst_zone_share"] == 0.8
+
+
+def test_rogue_sat_costs_reheat_when_grouped():
+    f = _fleet(
+        "sat_rogue_zone_census",
+        grouped=True,
+        reset="sat",
+        worst_zone="Z1",
+        worst_zone_share=0.6,
+        rogue_by_group={"AHU1": ["Z1"]},
+    )
+    c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=200.0), PRICE)
+    assert c.costed and c.gas_therms > 0 and "reheat" in c.basis
+
+
+def test_rogue_ungrouped_is_uncosted_screening():
+    f = _fleet("static_rogue_zone_census", grouped=False, reset="static", worst_zone_share=0.8)
+    c = estimate_cost(f, EquipmentLoad(fan_kw=25.0), PRICE)
+    assert not c.costed and "ungrouped" in c.basis
+
+
+def test_cohort_static_costs_fan():
+    f = _fleet(
+        "static_cohort_starvation",
+        grouped=True,
+        reset="static",
+        worst_group="AHU1",
+        worst_group_frac=0.9,
+    )
+    c = estimate_cost(f, EquipmentLoad(fan_kw=25.0), PRICE)
+    assert c.costed and c.electricity_kwh > 0 and "fan" in c.basis
+
+
+def test_cohort_sat_is_uncosted_comfort():
+    f = _fleet(
+        "sat_cohort_starvation", grouped=True, reset="sat", worst_group="AHU1", worst_group_frac=0.9
+    )
+    c = estimate_cost(f, EquipmentLoad(heating_capacity_kbtuh=200.0), PRICE)
+    assert not c.costed and c.annual_cost_usd == 0.0 and "comfort" in c.basis
+
+
+def test_fleet_load_attributed_by_worst_group():
+    # two starved AHUs, only AHU1 sized -> AHU1 costs, AHU2 uncosted (needs its own fan_kw)
+    findings = [
+        _fleet(
+            "static_cohort_starvation",
+            grouped=True,
+            reset="static",
+            worst_group="AHU1",
+            worst_group_frac=0.9,
+        ),
+        _fleet(
+            "static_cohort_starvation",
+            grouped=True,
+            reset="static",
+            worst_group="AHU2",
+            worst_group_frac=0.9,
+        ),
+    ]
+    fcs = cost_findings(findings, {"AHU1": EquipmentLoad(fan_kw=25.0)}, PRICE)
+    assert fcs[0].costed and not fcs[1].costed
+
+
+def test_rogue_load_attributed_via_rogue_by_group():
+    # rogue finding: worst_zone -> its AHU via rogue_by_group -> that AHU's load
+    f = _fleet(
+        "static_rogue_zone_census",
+        grouped=True,
+        reset="static",
+        worst_zone="Z7",
+        worst_zone_share=0.7,
+        rogue_by_group={"AHU2": ["Z7"]},
+    )
+    fcs = cost_findings([f], {"AHU2": EquipmentLoad(fan_kw=30.0)}, PRICE)
+    assert fcs[0].costed and fcs[0].electricity_kwh > 0
