@@ -498,6 +498,18 @@
     "irr",
     "npv"
   ],
+  "camber.fleetlab": [
+    "ARCHETYPES",
+    "Fleet",
+    "FleetLabel",
+    "RESETS",
+    "attribution",
+    "coverage",
+    "generate_fleet",
+    "labeled_records",
+    "run_detectors",
+    "targets"
+  ],
   "camber.forecast": [
     "AnomalyReport",
     "backtest",

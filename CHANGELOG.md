@@ -4,6 +4,40 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.67.0] — 2026-08-24
+
+**Validation of the G36 reset fleet family on a generated labeled multi-zone fleet.** Closes the one
+unfilled validation gap `docs/VALIDATION.md` carried: the multi-zone rogue-zone census,
+cohort-starvation, and reset-effectiveness detectors could never be accuracy-scored on public data (no
+vendorable labeled multi-zone-fleet fault dataset exists), so they are now scored on a fleet
+*generated* from the public ASHRAE Guideline 36 Trim-&-Respond logic — never copying any encumbered
+simulation.
+
+### Added
+- **`camber/fleetlab.py`** — a clean-room generator + validation harness. `generate_fleet(...)` emits
+  a physically-coherent labeled fleet (per-zone role-frames whose requests aggregate into the T&R
+  reset via `g36_reset.tr_simulate`, a served-by `Topology`, and a ground-truth `FleetLabel`) with one
+  injected fault: a rogue zone, a starved cohort, or an inert reset in one of four G36 failure modes.
+  `labeled_records`/`targets`/`attribution`/`coverage` score the six detectors (3 × SAT + static) with
+  `camber.eval.benchmark`, adding an **attribution** rate (did it name the right zone / air handler /
+  failure mode?) on top of TPR/FPR, with genuine cross-archetype negatives.
+- **`examples/fleet_fdd/benchmark.py`** + committed `benchmark-baseline.json` — the CI-gated runner
+  (`--json`/`--gate`/`--tol`/`--update-baseline`), deterministic, no download.
+- **`tests/test_fleetlab.py`** + **`tests/test_fleet_benchmark.py`** — always-run plumbing: generator
+  determinism, label correctness, per-archetype firing + attribution, fault-free/cross-archetype
+  quiet, and the runner reproducing its committed baseline at `tol 0.0`.
+
+### Changed
+- **`docs/VALIDATION.md`** — the three `*_reset_effectiveness` / `*_rogue_zone_census` /
+  `*_cohort_starvation` "synthetic-only (a real gap)" verdicts flip to scored, with a new
+  fleet-validation section (mermaid, the attribution guard, the honest internal-validity framing, and
+  the deferred Modelica Buildings cross-check — revised BSD-3, but needs a Modelica toolchain outside
+  the dependency-light envelope). `ROADMAP.md` ticks the labeled-multi-zone-fleet item.
+
+### Notes
+- New public module `camber.fleetlab` → `tests/public_api_snapshot.json` regenerated. No new runtime
+  dependency (numpy/pandas + stdlib). The encumbered ASHRAE chiller dataset is never named.
+
 ## [0.66.0] — 2026-08-24
 
 **Real-data validation of the plant-level chiller detectors (LBNL chiller-plant subset).** Wires the

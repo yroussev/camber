@@ -12,6 +12,8 @@ on:
     paths:
       - "camber/**"
       - "examples/lbnl_fdd/**"
+      - "examples/synthetic_fdd/**"
+      - "examples/fleet_fdd/**"
       - "examples/bdg2/**"
       - ".github/workflows/benchmark.yml"
 
@@ -34,6 +36,11 @@ jobs:
         run: |
           python examples/synthetic_fdd/benchmark.py \
             --gate examples/synthetic_fdd/benchmark-baseline.json --tol 0.0
+
+      - name: Fleet reset accuracy (generated, no download) + gate
+        run: |
+          python examples/fleet_fdd/benchmark.py \
+            --gate examples/fleet_fdd/benchmark-baseline.json --tol 0.0
 
       - name: Cache LBNL datasets
         uses: actions/cache@v4

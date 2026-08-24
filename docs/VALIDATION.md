@@ -68,8 +68,8 @@ labeled fault run):
 | `vav_airflow_drift`, `vav_reheat_valve_drift` | **real TPR on the LBNL FPU subset** | the fan-power-unit subset carries per-box damper / airflow+setpoint / reheat-valve / discharge-temp — airflow drift targets the damper-stuck + airflow-sensor-bias faults, reheat-valve drift the reheat-valve leak/stuck + coil-fouling faults (baseline = fault-free run, current = the West-zone faulted run) |
 | `chiller_efficiency`, `cooling_tower_approach` | **real TPR on the LBNL chiller-plant subset** (baseline-calibrated) | the plant subset carries chiller power + CHW loop and tower supply-temp + wet-bulb; each detector's absolute design ceiling is calibrated from the fault-free run (commissioning-style), then scored against the labeled physical faults — tower fouling / PID for the tower approach, plus three-way-bypass leak/stuck for chiller kW/ton |
 | refrigerant-side chiller drift (`*_approach_*`, subcooling, superheat), pump drift | **synthetic-only** | the LBNL chiller-plant subset is *water-side only* — it exports **no** refrigerant-side points (evaporator/condenser approach, subcooling, superheat) and no pump-head/flow trends, so those detectors can't be scored on it |
-| `*_reset_effectiveness` | **synthetic-only** | needs the per-cycle reset-**request** point, absent from LBNL |
-| `*_rogue_zone_census`, `*_cohort_starvation` | **synthetic-only (a real gap)** | need a *fleet of zones with per-zone requests*; a single simulated AHU is not a zone fleet, and no vendorable public multi-zone-fleet fault dataset exists |
+| `*_reset_effectiveness` | **scored on a generated fleet** (TPR + failure-mode attribution) | the per-cycle reset-**request** point is *generated* from the fleet via G36 Trim-&-Respond, not downloaded; scored on all four failure modes (stuck / not-responding / not-trimming / diverges) for both SAT and static — see `camber.fleetlab` below |
+| `*_rogue_zone_census`, `*_cohort_starvation` | **scored on a generated labeled fleet** (TPR/FPR + correct zone/AHU attribution) | a clean-room G36 T&R fleet generator (`camber.fleetlab`) emits per-zone role-frames + served-by topology + ground-truth labels; no public multi-zone-fleet dataset is vendorable, so the fleet is *generated* from the public ASHRAE G36 §5.14.8 request logic, not downloaded |
 
 These are honest boundaries, not oversights: where the data can't support a real-fault score, the
 family is validated on the synthetic whole-suite harness below (`camber.faultlab`) and said so here.
@@ -95,10 +95,47 @@ committed benchmark**: the only publicly-downloadable version of the widely-cite
 AHU set is a reduced sample (all-faulted, two coarse labels, no supply-air setpoint, stacked AHUs —
 no fault-free baseline to score against), and the richer modern real-labeled AHU/VAV datasets
 (multi-building office/auditorium/hospital; the RBC/G36 collection with fault-free baselines; the ORNL
-multi-zone VAV fleet) are all **CC-BY-NC-ND** — research-only, not vendorable. So a commercially-usable
-*labeled multi-zone VAV fleet* remains the one unfilled gap, and the G36 **reset-request** signal
-(also only in NC-ND G36 simulations) would have to be **generated** from the open Modelica Buildings
-G36 sequences rather than downloaded.
+multi-zone VAV fleet) are all **CC-BY-NC-ND** — research-only, not vendorable. So no *real* labeled
+multi-zone VAV fleet is committable — which is why the reset/fleet family is validated on a
+**generated** fleet (next section) rather than downloaded, exactly as the G36 authors intend the
+public Trim-&-Respond logic to be reused.
+
+### Multi-zone fleet + reset validation (generated — `camber.fleetlab`)
+
+The rogue-zone census, cohort-starvation, and reset-effectiveness detectors need something no
+vendorable public dataset provides — a *fleet* of zones with per-zone reset **requests** and a
+served-by topology. So `camber.fleetlab` **generates** it from the public ASHRAE Guideline 36
+Trim-&-Respond logic itself (§5.1.14 / §5.14.8), never copying any encumbered simulation. The fleet is
+physically coherent: each zone's per-cycle requests come from the same G36 request rules the detectors
+consume, are aggregated per air handler, and the healthy reset setpoint is literally
+`g36_reset.tr_simulate` of that aggregate — so the reset a detector scores is the true T&R response to
+the fleet's own demand. One fault is then injected per fleet (a rogue zone, a starved cohort, or an
+inert reset in one of four G36 failure modes), and `examples/fleet_fdd/benchmark.py` scores all six
+detectors (3 detectors × SAT + static) with `camber.eval.benchmark`, CI-gated at `tol 0.0`.
+
+```mermaid
+flowchart LR
+    gen["generate_fleet<br/>(G36 Trim-&-Respond)"] --> zf["per-zone frames<br/>+ topology + labels"]
+    zf --> census["rogue_zone_census<br/>cohort_starvation"]
+    zf --> reset["reset_effectiveness<br/>(fleet-derived requests)"]
+    census --> ev["eval.benchmark<br/>TPR / FPR + attribution"]
+    reset --> ev
+    ev --> gate["check_against_baseline<br/>(CI gate, tol 0.0)"]
+```
+
+Crucially the score is more than a fire/no-fire bit: an **attribution** rate checks each detector
+named the *right* zone (`worst_zone`), the *right* air handler (`worst_group`), or the *right* reset
+failure mode (`reason`) — the guard against a generator so easy that firing is meaningless — and each
+detector carries genuine negatives (the fault-free fleet plus the cross-archetypes: a rogue fleet is a
+cohort/​reset negative and vice-versa) so FPR is actually measured, not assumed. This is
+**internal-validity** accuracy (does the detector correctly identify the G36 pattern it claims to);
+external validity rests on the citation of the public G36 standard, not on real data — stated plainly
+because no real labeled fleet is vendorable.
+
+**Future external validity.** The open **Modelica Buildings Library** G36 sequences (revised BSD-3 —
+license-clean) could cross-check the generated reset-request signal, but executing them needs a
+Modelica toolchain (OpenModelica/Dymola) outside this project's dependency-light envelope, so it is
+deferred; the generator instead cites the G36 standard directly.
 
 ## FDD accuracy — synthetic whole-suite harness
 

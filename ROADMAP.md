@@ -205,8 +205,13 @@ The capability surface is broad and now hardened; 1.0 is a consolidation, not ne
       snapshot test (`tests/test_public_api.py`) that fails on any unreviewed surface change.
 - [ ] **Docs completeness** pass; enable the MkDocs **Pages** site (owner action — the workflow is built).
 - [ ] **Packaging & community** (carried) — conda-forge feedstock, Discussions, PEP-541 `camber` name.
-- [ ] **Labeled chiller benchmark** — pending a license-clean, fault-labeled validation dataset
-      (carried from 0.6).
+- [~] **Labeled chiller benchmark** — the plant-level chiller/tower detectors are now real-data-scored
+      on the CC-BY LBNL chiller-plant subset (`fetch.py --chiller`); the refrigerant-side family stays
+      synthetic-only pending a license-clean set with refrigerant points (carried from 0.6).
+- [x] **Labeled multi-zone VAV fleet** — no vendorable real fleet exists, so the rogue/cohort/reset
+      family is validated on a *generated* G36 Trim-&-Respond fleet (`camber.fleetlab` +
+      `examples/fleet_fdd`), CI-gated, with correct-attribution scoring. See
+      [VALIDATION.md](docs/VALIDATION.md).
 - [ ] **Option D depth** (post-1.0) — 2R2C / multi-zone + an optional EnergyPlus `[energyplus]`
       cross-validator (mirroring the pvlib/BETTER own-it-then-cross-check pattern).
 
