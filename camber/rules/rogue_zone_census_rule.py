@@ -27,6 +27,7 @@ from typing import Any
 
 from ..g36_reset import rogue_zone_census
 from ..model.roles import Role
+from ._topology_grouping import resolve_grouping
 from .base import Finding
 
 # reset key -> (roles_required, human label)
@@ -34,23 +35,6 @@ _RESETS: dict[str, tuple[tuple[Role, ...], str]] = {
     "sat": ((Role.SPACE_TEMP, Role.COOL_SP), "supply-air-temp"),
     "static": ((Role.AIRFLOW, Role.AIRFLOW_SP, Role.DAMPER), "duct-static"),
 }
-
-_NO_TOPOLOGY_CAVEAT = (
-    "no zone->AHU topology supplied; zones pooled building-wide -- a zone flagged here may simply "
-    "serve a different, hotter loop. Screening signal only"
-)
-_HEURISTIC_CAVEAT = (
-    "zone->AHU grouping inferred from equipment naming (screening-grade, not a verified served-by "
-    "model); a per-AHU rogue here is provisional"
-)
-_PARTIAL_CAVEAT = (
-    "{n} zone(s) not covered by the served-by model were pooled together (building-wide fallback); "
-    "their attribution is confounded"
-)
-_ZERO_COVERAGE_CAVEAT = (
-    "served-by topology supplied but covered no evaluated zone; zones pooled building-wide -- "
-    "screening signal only"
-)
 
 
 class RogueZoneCensus:
@@ -102,34 +86,6 @@ class RogueZoneCensus:
             "damper_col": Role.DAMPER,
         }
 
-    def _resolve_grouping(self, frame_keys, topology):
-        """Pick the effective ``{zone: ahu}`` grouping + its provenance/coverage caveats.
-
-        Precedence: a supplied ``topology`` (its ``group_map`` over the actual zones, with a caveat
-        keyed to its ``provenance`` and coverage) beats a constructor ``groups`` beats no grouping
-        (today's building-wide pool + full confound caveat). Returns
-        ``(effective_groups, caveats, provenance, n_ungrouped)``.
-        """
-        keys = list(frame_keys)
-        if topology is not None:
-            gm = topology.group_map(keys)  # pred=None -> a zone's direct parent (its AHU)
-            if not gm:  # topology covered no evaluated zone -> honest building-wide fallback
-                return None, [_ZERO_COVERAGE_CAVEAT], topology.provenance, len(keys)
-            uncovered = [z for z in keys if z not in gm]
-            caveats = []
-            if topology.provenance == "heuristic":
-                caveats.append(_HEURISTIC_CAVEAT)
-            if uncovered:
-                caveats.append(_PARTIAL_CAVEAT.format(n=len(uncovered)))
-            return gm, caveats, topology.provenance, len(uncovered)
-        if self.groups is not None:
-            uncovered = (
-                [z for z in keys if z not in self.groups] if isinstance(self.groups, dict) else []
-            )
-            caveats = [_PARTIAL_CAVEAT.format(n=len(uncovered))] if uncovered else []
-            return self.groups, caveats, "explicit", len(uncovered)
-        return None, [_NO_TOPOLOGY_CAVEAT], None, 0
-
     def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run the rogue-zone census across the fleet's zone role-frames; one aggregate Finding.
 
@@ -145,8 +101,8 @@ class RogueZoneCensus:
                 summary=f"no zones carrying {self._label} reset-request signals",
             )
 
-        groups, grouping_caveats, provenance, n_ungrouped = self._resolve_grouping(
-            frames.keys(), topology
+        groups, grouping_caveats, provenance, n_ungrouped = resolve_grouping(
+            self.groups, frames.keys(), topology
         )
         res = rogue_zone_census(
             frames,

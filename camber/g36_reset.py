@@ -40,6 +40,8 @@ __all__ = [
     "reset_effectiveness",
     "RogueZoneCensusResult",
     "rogue_zone_census",
+    "CohortStarvationResult",
+    "cohort_starvation",
 ]
 
 
@@ -418,6 +420,60 @@ def _static_requests_series(frame, flow_col, flow_sp_col, damper_col, *, fan_thr
     return pd.Series(req, index=w.index)
 
 
+def _build_request_series(
+    frames,
+    *,
+    reset,
+    temp_col,
+    cool_sp_col,
+    flow_col,
+    flow_sp_col,
+    damper_col,
+    hi_f,
+    mid_f,
+    fan_thr,
+    min_active_cycles,
+):
+    """Per-zone reset-request series for a fleet -> ``(series, unevaluable, starts, ends)``.
+
+    Shared by :func:`rogue_zone_census` and :func:`cohort_starvation`. A zone with no frame, missing
+    role columns, or fewer than ``min_active_cycles`` usable rows is added to ``unevaluable`` and
+    skipped; duplicate timestamps are deduped (keep last).
+    """
+    series: dict = {}
+    unevaluable: list = []
+    starts, ends = [], []
+    for zone, frame in frames.items():
+        if frame is None or getattr(frame, "empty", True):
+            unevaluable.append(zone)
+            continue
+        if reset == "sat":
+            have = temp_col in frame.columns and cool_sp_col in frame.columns
+            s = (
+                _sat_requests_series(frame, temp_col, cool_sp_col, hi_f=hi_f, mid_f=mid_f)
+                if have
+                else None
+            )
+        else:
+            have = all(c in frame.columns for c in (flow_col, flow_sp_col, damper_col))
+            s = (
+                _static_requests_series(frame, flow_col, flow_sp_col, damper_col, fan_thr=fan_thr)
+                if have
+                else None
+            )
+        if s is None:
+            unevaluable.append(zone)
+            continue
+        s = s[~s.index.duplicated(keep="last")]
+        if len(s) < min_active_cycles:
+            unevaluable.append(zone)
+            continue
+        series[zone] = s
+        starts.append(s.index.min())
+        ends.append(s.index.max())
+    return series, unevaluable, starts, ends
+
+
 def rogue_zone_census(
     frames,
     *,
@@ -454,37 +510,19 @@ def rogue_zone_census(
     if not frames:
         return None
 
-    series: dict = {}
-    unevaluable: list = []
-    starts, ends = [], []
-    for zone, frame in frames.items():
-        if frame is None or getattr(frame, "empty", True):
-            unevaluable.append(zone)
-            continue
-        if reset == "sat":
-            have = temp_col in frame.columns and cool_sp_col in frame.columns
-            s = (
-                _sat_requests_series(frame, temp_col, cool_sp_col, hi_f=hi_f, mid_f=mid_f)
-                if have
-                else None
-            )
-        else:
-            have = all(c in frame.columns for c in (flow_col, flow_sp_col, damper_col))
-            s = (
-                _static_requests_series(frame, flow_col, flow_sp_col, damper_col, fan_thr=fan_thr)
-                if have
-                else None
-            )
-        if s is None:
-            unevaluable.append(zone)
-            continue
-        s = s[~s.index.duplicated(keep="last")]
-        if len(s) < min_active_cycles:
-            unevaluable.append(zone)
-            continue
-        series[zone] = s
-        starts.append(s.index.min())
-        ends.append(s.index.max())
+    series, unevaluable, starts, ends = _build_request_series(
+        frames,
+        reset=reset,
+        temp_col=temp_col,
+        cool_sp_col=cool_sp_col,
+        flow_col=flow_col,
+        flow_sp_col=flow_sp_col,
+        damper_col=damper_col,
+        hi_f=hi_f,
+        mid_f=mid_f,
+        fan_thr=fan_thr,
+        min_active_cycles=min_active_cycles,
+    )
 
     zone_rate: dict = {}
     zone_share: dict = {}
@@ -573,6 +611,189 @@ def rogue_zone_census(
         rogue_by_group=rogue_by_group,
         worst_zone=worst,
         worst_zone_share=(zone_share[worst] if worst else None),
+        unevaluable_zones=sorted(map(str, unevaluable)),
+        caveats=caveats,
+        coverage_start=str(min(starts)) if starts else "",
+        coverage_end=str(max(ends)) if ends else "",
+    )
+
+
+@dataclass
+class CohortStarvationResult:
+    """Whether whole *cohorts* of an air handler's zones are demand-starved at once.
+
+    The common-mode twin of :class:`RogueZoneCensusResult`: where a rogue is one zone dominating the
+    requests, a **starved cohort** is most/all of an AHU's zones requesting the reset simultaneously
+    -- a pattern that points at one upstream fault (duct-static setpoint capped, supply fan maxed, a
+    restricted upstream damper) rather than N independent zone faults. ``group_sustained_frac`` is
+    the fraction of active cycles on which >= ``cohort_frac`` of a group's zones request at once.
+    """
+
+    reset: str
+    grouped: bool
+    n_zones_evaluated: int
+    n_groups: int
+    total_requests: int
+    group_sustained_frac: dict
+    group_zone_count: dict
+    group_active_cycles: dict
+    starved_groups: list
+    starved_detail: dict
+    worst_group: str | None
+    worst_group_frac: float | None
+    unevaluable_zones: list
+    caveats: list
+    coverage_start: str
+    coverage_end: str
+
+    def as_dict(self):
+        """Return the result as a plain dict."""
+        from dataclasses import asdict
+
+        return asdict(self)
+
+
+def cohort_starvation(
+    frames,
+    *,
+    reset: str = "static",
+    groups=None,
+    temp_col=None,
+    cool_sp_col=None,
+    flow_col=None,
+    flow_sp_col=None,
+    damper_col=None,
+    cohort_frac: float = 0.75,
+    sustained_frac: float = 0.50,
+    min_active_cycles: int = 10,
+    min_zones_per_group: int = 3,
+    hi_f: float = 5.0,
+    mid_f: float = 3.0,
+    fan_thr: float = 95.0,
+) -> CohortStarvationResult | None:
+    """Find air handlers whose whole zone cohort is demand-starved at once (an upstream fault).
+
+    Given ``frames`` = ``{zone: role-frame}``, computes each zone's per-cycle reset-request series
+    (``reset="static"`` via flow/flow-sp/damper -- primary -- or ``"sat"`` via temp/cool-sp),
+    pools zones by ``groups`` (``{zone: group}`` dict / ``zone->group`` callable / ``None`` = one
+    building-wide pool), and per group measures ``group_sustained_frac`` -- the fraction of *active*
+    cycles on which at least ``cohort_frac`` of the group's zones request at once. A group is
+    **starved** when it has >= ``min_zones_per_group`` zones, >= ``min_active_cycles`` active rows,
+    and ``group_sustained_frac >= sustained_frac``. This is the opposite shape to
+    :func:`rogue_zone_census` (a lone dominant zone never reaches ``cohort_frac``; a starved cohort
+    shares requests too evenly to be a rogue). Returns ``None`` only for an empty fleet. Screening /
+    opportunity-grade thresholds (provisional-untuned).
+    """
+    if reset not in ("sat", "static"):
+        raise ValueError(f"reset must be 'sat' or 'static', got {reset!r}")
+    if not frames:
+        return None
+
+    series, unevaluable, starts, ends = _build_request_series(
+        frames,
+        reset=reset,
+        temp_col=temp_col,
+        cool_sp_col=cool_sp_col,
+        flow_col=flow_col,
+        flow_sp_col=flow_sp_col,
+        damper_col=damper_col,
+        hi_f=hi_f,
+        mid_f=mid_f,
+        fan_thr=fan_thr,
+        min_active_cycles=min_active_cycles,
+    )
+
+    groups_map: dict = {}
+    for zone in series:
+        groups_map.setdefault(_group_of(groups, zone), []).append(zone)
+
+    group_sustained: dict = {}
+    group_count: dict = {}
+    group_active: dict = {}
+    starved_detail: dict = {}
+    starved: list = []
+    collapsed: list = []
+    total_requests = 0.0
+
+    for g, zones in groups_map.items():
+        R = pd.concat({z: series[z] for z in zones}, axis=1)
+        arr = R.to_numpy(dtype=float)
+        keep = ~np.all(np.isnan(arr), axis=1)
+        arr = arr[keep]
+        total_requests += float(np.nansum(arr)) if arr.size else 0.0
+        group_count[g] = len(zones)
+        if arr.size:
+            present = np.sum(~np.isnan(arr), axis=1)  # zones with data this cycle
+            requesting = np.nansum(arr >= 1, axis=1)  # NaN >= 1 is False -> excluded
+            row_max = np.nanmax(arr, axis=1)
+            active = (present > 0) & (row_max > 0)
+            n_active = int(active.sum())
+            if n_active > 0:
+                frac = np.divide(
+                    requesting,
+                    present,
+                    out=np.zeros_like(requesting, dtype=float),
+                    where=present > 0,
+                )
+                cohort_demand = active & (frac >= cohort_frac)
+                sustained = int(cohort_demand.sum()) / n_active
+            else:
+                sustained = 0.0
+        else:
+            n_active = 0
+            sustained = 0.0
+        group_active[g] = n_active
+        group_sustained[g] = round(sustained, 3)
+        if len(zones) < min_zones_per_group:
+            collapsed.append(g)
+            continue
+        if n_active >= min_active_cycles and sustained >= sustained_frac:
+            starved.append(g)
+            starved_detail[g] = {
+                "n_zones": len(zones),
+                "sustained_frac": round(sustained, 3),
+                "n_active": n_active,
+            }
+
+    starved = sorted(starved)
+    worst = max(starved, key=lambda g: group_sustained[g]) if starved else None
+
+    caveats: list = []
+    if reset == "sat":
+        caveats.append(
+            "SAT-side cohort demand can reflect a genuinely hot outdoor condition (design-day) "
+            "rather than a capacity/reset fault; corroborate with OAT / supply_air_reset_compliance"
+        )
+    if total_requests <= 0 and series:
+        caveats.append(
+            "no zone generated any reset request in the window -- the reset is not demand-bound, "
+            "so no cohort can be starved"
+        )
+    if unevaluable:
+        caveats.append(
+            f"{len(unevaluable)} zone(s) not evaluated (missing request signals or too few rows): "
+            f"census may under-count"
+        )
+    collapsed_real = [g for g in collapsed if len(groups_map.get(g, [])) < min_zones_per_group]
+    if collapsed_real:
+        caveats.append(
+            f"{len(collapsed_real)} group(s) had too few zones to judge a cohort "
+            f"(need >= {min_zones_per_group})"
+        )
+
+    return CohortStarvationResult(
+        reset=reset,
+        grouped=groups is not None,
+        n_zones_evaluated=len(series),
+        n_groups=len(groups_map),
+        total_requests=int(round(total_requests)),
+        group_sustained_frac=group_sustained,
+        group_zone_count=group_count,
+        group_active_cycles=group_active,
+        starved_groups=starved,
+        starved_detail=starved_detail,
+        worst_group=worst,
+        worst_group_frac=(group_sustained[worst] if worst else None),
         unevaluable_zones=sorted(map(str, unevaluable)),
         caveats=caveats,
         coverage_start=str(min(starts)) if starts else "",

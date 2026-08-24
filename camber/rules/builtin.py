@@ -18,6 +18,7 @@ from .chillerstaging_rule import ChillerStaging
 from .chwplant_rule import CHWPlantReset
 from .chwpump_rule import CHWPumpDPReset
 from .cohort import CohortDeviation
+from .cohort_starvation_rule import CohortStarvation
 from .compressor_cycle_rule import CompressorShortCycle
 from .compressor_stage_rule import CompressorStaging
 from .condenserwater_rule import CondenserWaterReset
@@ -105,6 +106,8 @@ def _extra_instances():
         ResetEffectiveness(reset="static"),
         RogueZoneCensus(reset="sat"),
         RogueZoneCensus(reset="static"),
+        CohortStarvation(reset="sat"),
+        CohortStarvation(reset="static"),
     ]
 
 

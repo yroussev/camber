@@ -21,6 +21,8 @@ rules.
 | `static_reset_effectiveness` | duct-static **setpoint** vs the request-implied T&R trajectory | two-sided | a duct-static reset that is **stuck**, **not responding**, **not trimming**, or **diverging** vs its own zone requests |
 | `sat_rogue_zone_census` | per-zone SAT reset-request rate across the zone fleet | one-sided (monopolizer) | one chronically over-demanding zone **monopolizing the SAT requests** and dragging the reset colder than the fleet needs |
 | `static_rogue_zone_census` | per-zone duct-static reset-request rate across the zone fleet | one-sided (monopolizer) | one chronically over-demanding zone **monopolizing the duct-static requests** and dragging the reset higher than the fleet needs |
+| `static_cohort_starvation` | per-zone request rate, **cohort-wide simultaneity** per AHU | cohort common-mode | most/all of an AHU's zones requesting the duct-static reset at once → **one upstream fault** (fan/static SP/upstream damper), not N zone faults |
+| `sat_cohort_starvation` | per-zone request rate, **cohort-wide simultaneity** per AHU | cohort common-mode | most/all of an AHU's zones requesting the SAT reset at once → cooling/reset maxed (caveated as a possible design-day) |
 
 **SAT-reset compliance vs the existing `supply_air_reset`.** These are complementary detectors on the
 same signal. `supply_air_reset` (`camber.satreset`) asks the **shape** question — does supply air get
@@ -108,13 +110,31 @@ to `info` — when zones were unevaluable or no zone generated any request (the 
 demand-bound, so nothing can be dragging it). Thresholds are screening / opportunity-grade
 (provisional-untuned).
 
+## Cohort starvation — the common-mode twin
+
+The rogue-zone census finds an **outlier** — one zone dominating the requests. Its mirror image is a
+**common-mode** pattern: when *most or all* of an air handler's zones raise reset requests at the same
+time, that is not many independent zone faults, it is **one upstream fault the reset cannot fix** — a
+duct-static setpoint capped too low, a supply fan maxed out or failing, or a restricted upstream
+damper (SAT side: cooling capacity or the reset maxed). `static_cohort_starvation` and
+`sat_cohort_starvation` group each AHU's zones (per the same [topology](TOPOLOGY.md) machinery) and
+flag a group when a high fraction of its zones request *simultaneously* on a sustained fraction of the
+active cycles. The finding names the air handler and says **look upstream, not at individual zones**.
+
+The two twins are provably distinct shapes on the *same* signal: a lone rogue never reaches the
+cohort-wide fraction, and a starved cohort shares its requests too evenly to concentrate in one zone —
+so a rogue never trips starvation and a starved cohort never trips the rogue census. Both scope per
+air handler with the same provenance/coverage-aware caveat (semantic drops it, heuristic softens it,
+partial pools the remainder). The SAT variant carries an extra caveat: a whole cohort running warm can
+be a genuinely hot design-day rather than a capacity fault, so corroborate with OAT before acting.
+
 ## Family complete
 
-With the rogue-zone census the Trim-and-Respond / G36-reset family is complete: **SAT-reset
-compliance** (does the reset sit at the right target?), **reset effectiveness** for SAT and static
-(does the reset actually trim and respond?), and the **rogue-zone census** for SAT and static (is one
-zone dragging the reset?) — all five detectors built on the shared `camber.g36_reset` engine
-(`oat_sat_setpoint`, `tr_step` / `tr_simulate`, `cooling_sat_requests` / `static_pressure_requests`).
-The one remaining enhancement is **automatic zone→AHU discovery**: the census already *accepts* a
-grouping, but the fleet runner does not yet *derive* one from the site model, so per-AHU scoping is
-opt-in until that topology channel exists.
+The Trim-and-Respond / G36-reset family now spans **seven** detectors on the shared `camber.g36_reset`
+engine (`oat_sat_setpoint`, `tr_step` / `tr_simulate`, `cooling_sat_requests` /
+`static_pressure_requests`): **SAT-reset compliance** (does the reset sit at the right target?),
+**reset effectiveness** for SAT and static (does the reset actually trim and respond?), the
+**rogue-zone census** for SAT and static (is one zone dragging the reset?), and its common-mode twin
+**cohort starvation** for SAT and static (is a whole AHU cohort starved by an upstream fault?). The
+census family scopes per air handler automatically via the served-by [topology](TOPOLOGY.md) —
+semantic (from a Brick/Haystack model) or a naming heuristic `run_fleet` auto-builds.

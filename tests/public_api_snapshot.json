@@ -509,12 +509,14 @@
     "free_cooling_opportunity"
   ],
   "camber.g36_reset": [
+    "CohortStarvationResult",
     "ResetEffectivenessResult",
     "RogueZoneCensusResult",
     "SATResetComplianceResult",
     "SAT_TR",
     "STATIC_TR",
     "TRParams",
+    "cohort_starvation",
     "cooling_sat_requests",
     "oat_sat_setpoint",
     "reset_effectiveness",
@@ -1308,6 +1310,9 @@
   ],
   "camber.rules.cohort": [
     "CohortDeviation"
+  ],
+  "camber.rules.cohort_starvation_rule": [
+    "CohortStarvation"
   ],
   "camber.rules.coil_valve_rule": [
     "CoilValveDrift",

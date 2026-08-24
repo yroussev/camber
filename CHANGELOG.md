@@ -4,6 +4,32 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.61.0] — 2026-08-24
+
+**AHU cohort-starvation diagnosis (topology-aware fleet analytics — arc item 4).** The common-mode
+twin of the rogue-zone census: where a rogue is one zone monopolizing an air handler's reset, a
+starved cohort is most/all of an AHU's zones requesting at once — one upstream fault (duct-static SP
+capped, supply fan maxed, restricted upstream damper), not N zone faults. A cross-layer call only the
+served-by topology makes possible.
+
+### Added
+- **`camber.g36_reset.cohort_starvation`** + `CohortStarvationResult` — per AHU group, measures the
+  fraction of active cycles on which at least `cohort_frac` of the group's zones request the reset at
+  once; flags a group as starved when that sustained fraction clears `sustained_frac` (with group-size
+  and active-cycle floors). Provably distinct from the rogue statistic: a lone dominant zone never
+  reaches the cohort fraction, and a starved cohort shares requests too evenly to be a rogue.
+- **`camber.rules.cohort_starvation_rule.CohortStarvation`** — a `FleetRule` shipped as two instances,
+  `static_cohort_starvation` (airflow vs setpoint and damper — the primary case) and
+  `sat_cohort_starvation` (zone temp vs cooling setpoint, caveated as a possible design-day). Scopes
+  per air handler via the served-by topology (`wants_topology=True`), names the AHU, and says "look
+  upstream, not at individual zones". Warn-level.
+
+### Changed
+- Internal refactor (no behaviour change): the shared per-zone request-series builder
+  (`_build_request_series`) and the topology grouping-resolution + caveat matrix
+  (`camber.rules._topology_grouping`) are factored out so the rogue-zone census and cohort-starvation
+  twins stay byte-identical.
+
 ## [0.60.0] — 2026-08-24
 
 **Topology-aware fleet grouping (topology-aware fleet analytics — arc item 3, the payoff).** The
