@@ -44,6 +44,7 @@ nav:
       - Ingest protocols: INGEST-PROTOCOLS.md
       - Ingest formats: INGEST-FORMATS.md
       - Ontology / interop: ONTOLOGY.md
+      - Served-by topology: TOPOLOGY.md
       - Integrations: INTEGRATIONS.md
       - Plugins: PLUGINS.md
       - Fault lifecycle: FAULT-LIFECYCLE.md

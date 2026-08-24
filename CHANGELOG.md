@@ -4,6 +4,35 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.58.0] — 2026-08-24
+
+**Served-by topology model (topology-aware fleet analytics — arc foundation).** Adds a vocabulary for
+*which equipment serves which* (plant → AHU → zone), the missing piece that lets fleet analytics scope
+per system instead of pooling a whole building. No analytic consumes it yet; automatic population and
+runner auto-scoping land in the following minors.
+
+### Added
+- **`camber.model.topology.Topology`** — a frozen directed served-by graph over equipment ids
+  (edge `(parent, child)` = parent serves child). Explicit builders (`from_edges`, `from_parent_map`,
+  `from_site`) and cycle-safe queries (`children_of` / `parents_of`, `descendants` / `ancestors`,
+  `roots` / `leaves`, `zones_of`, `nearest_ancestor`, `group_of`, `group_map`). Layers are not
+  hard-coded — plant/AHU/zone emerge from edge direction; class-aware queries take a predicate, so the
+  graph stays id-only (no `Equip` dependency, no import cycle).
+- **`Site.topology`** — a defaulted field carrying a `Site`'s served-by graph (empty by default, so
+  every existing `Site(...)` constructor is unaffected).
+
+### Notes
+- Honesty is built into the type: a partial graph returns empty for unknown ids and `group_map`
+  **omits** them (so a consumer keeps its building-wide fallback for the remainder); a cyclic input is
+  broken into a best-effort DAG with removed edges recorded in `dropped_cycle_edges` (never a hang);
+  and `provenance` (`explicit` / `semantic` / `heuristic`) lets downstream caveat a heuristic graph.
+- No new roles; no behavior change to any existing analytic.
+- **Release note:** versions **0.26.0 and 0.27.0 were withheld from PyPI.** Those two tags fall in the
+  window where `HW_FLOW` had been added (0.26.0) but the deterministic BACnet role tie-break had not
+  yet landed (fixed in 0.28.0), so an ambiguous gpm "Flow" point resolved `chw_flow`/`hw_flow`
+  nondeterministically and their CI was unreliable. Both tags remain on GitHub; PyPI therefore skips
+  from 0.25.0 to 0.28.0.
+
 ## [0.57.0] — 2026-08-23
 
 **Rogue-zone census (G36 Trim-and-Respond) — Arc B item 3; family complete.** Where the compliance

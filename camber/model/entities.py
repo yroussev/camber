@@ -20,9 +20,10 @@ completeness/runnable helpers duck-type on rule objects (``.name`` /
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .roles import Role
+from .topology import Topology
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,7 @@ class Site:
     climate_zone: str = ""  # e.g. "CA CZ15"
     equips: tuple = ()  # tuple[Equip]
     spaces: tuple = ()  # tuple[Space]
+    topology: Topology = field(default_factory=Topology)  # served-by graph over equip ids
 
     def of_class(self, equip_class: str) -> tuple:
         """All equipment of a given class."""

@@ -19,6 +19,7 @@ from .entities import (
 )
 from .mapping import MappingProvider
 from .roles import HAYSTACK_HINT, STATUS_ROLES, Role
+from .topology import Topology
 
 __all__ = [
     "Role",
@@ -28,6 +29,7 @@ __all__ = [
     "Equip",
     "Space",
     "Site",
+    "Topology",
     "EquipTemplate",
     "TEMPLATES",
     "template_for",
