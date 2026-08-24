@@ -10,8 +10,10 @@ four stuck-damper severities). Re-run is a no-op if the CSVs are already present
 
 With ``--families``: also fetches the fan-coil-unit (FCU) and dual-duct-AHU (DDAHU)
 scenarios so benchmark.py can score the detector suite ACROSS equipment families.
-These are large (FCU ~0.5 GB, DDAHU ~1.7 GB zipped); skip unless you want the full
-cross-equipment benchmark. The _data/ dir is git-ignored.
+``--fpu`` adds the VAV fan-power-unit subset (VAV zone-terminal drift) and ``--chiller``
+the chiller-plant subset (the plant-level chiller / cooling-tower detectors). These are
+large (FCU ~0.5 GB, DDAHU ~1.7 GB, FPU ~1 GB, chiller ~0.8 GB zipped); skip unless you
+want that benchmark. The _data/ dir is git-ignored.
 """
 
 from __future__ import annotations
@@ -101,6 +103,31 @@ FPU_MEMBERS = [
 FPU_REQUIRED = ["PFPU_FaultFree.csv", "PFPU_VAVDMPRStuck_100%.csv"]
 
 
+# Chiller-plant set (opt-in via --chiller) for the PLANT-LEVEL detector benchmark. The plant data
+# has no refrigerant-side points, so only chiller_efficiency (kW/ton) and cooling_tower_approach are
+# runnable; members are the fault-free baseline plus the physical heat-rejection faults those two
+# detectors target (cooling-tower fouling + PID, three-way-bypass leak/stuck) and a sensor-bias run
+# (a genuine negative for a physical detector). Extracted by basename (archive prefix not assumed).
+CHILLER_URL = (
+    "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_Chiller_Plant/"
+    "LBNL_FDD_Data_Sets_Chiller_Plant.zip"
+)
+CHILLER_MEMBERS = [
+    "ChillerPlant.csv",  # fault-free baseline (calibration + a negative)
+    "ChillerPlant_coolingtower_fouling_065.csv",
+    "ChillerPlant_coolingtower_fouling_080.csv",
+    "ChillerPlant_coolingtower_fouling_095.csv",
+    "ChillerPlant_coolingtower_PI.csv",
+    "ChillerPlant_bypass_leakage_025.csv",
+    "ChillerPlant_bypass_leakage_050.csv",
+    "ChillerPlant_bypass_leakage_075.csv",
+    "ChillerPlant_bypass_stuck_050.csv",
+    "ChillerPlant_bypass_stuck_075.csv",
+    "ChillerPlant_chiller_bias_2.csv",  # CHW-temp sensor bias — physical-detector negative
+]
+CHILLER_REQUIRED = ["ChillerPlant.csv", "ChillerPlant_coolingtower_fouling_095.csv"]
+
+
 def _fetch_ttl():
     """Fetch the small Brick (.ttl) model used by the Brick-interop example."""
     ttl_dir = os.path.join(DATA, "ttl")
@@ -174,10 +201,21 @@ def main(argv=None) -> int:
             required=FPU_REQUIRED,
             match_basename=True,
         )
-    if "--families" not in argv and "--fpu" not in argv:
+    if "--chiller" in argv:
+        _fetch_set(
+            "chiller",
+            CHILLER_URL,
+            "~0.8 GB",
+            CHILLER_MEMBERS,
+            "LBNL_Chiller_Plant.zip",
+            required=CHILLER_REQUIRED,
+            match_basename=True,
+        )
+    if not any(f in argv for f in ("--families", "--fpu", "--chiller")):
         print(
             "\n(Add --families to fetch FCU + DDAHU for the cross-equipment benchmark, "
-            "or --fpu for the VAV fan-power-unit drift benchmark.)"
+            "--fpu for the VAV fan-power-unit drift benchmark, or --chiller for the "
+            "chiller-plant plant-level benchmark.)"
         )
     return 0
 

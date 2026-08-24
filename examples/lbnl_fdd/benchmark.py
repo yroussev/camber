@@ -28,7 +28,9 @@ import pandas as pd  # noqa: E402
 from camber.driftvalidation import LabeledCase, evaluate  # noqa: E402
 from camber.eval import benchmark  # noqa: E402
 from camber.model.mapping import MappingProvider  # noqa: E402
+from camber.rules.chiller_rule import ChillerEfficiency  # noqa: E402
 from camber.rules.coil_valve_rule import CoilValveDrift  # noqa: E402
+from camber.rules.coolingtower_rule import CoolingTowerApproach  # noqa: E402
 from camber.rules.duct_static_rule import DuctStaticControlDrift  # noqa: E402
 from camber.rules.economizer_damper_rule import EconomizerDamperDrift  # noqa: E402
 from camber.rules.leakvalve_rule import LeakingValve  # noqa: E402
@@ -293,6 +295,93 @@ def score_drift(frames, detectors=None, *, fault_free="AHU_annual.csv", label="A
     return metrics
 
 
+# --------------------------------------------------------------------------- #
+# Chiller-plant plant-level validation (opt-in via fetch.py --chiller).
+#
+# The LBNL chiller-plant data carries no refrigerant-side points (evaporator/condenser approach,
+# subcooling, superheat), so the refrigerant-side chiller-drift detectors are NOT runnable on it and
+# stay synthetic-only (camber.faultlab). What IS runnable are the two PLANT-LEVEL detectors:
+# `chiller_efficiency` (kW/ton from metered power + CHW loop) and `cooling_tower_approach` (tower CW
+# supply vs wet-bulb). Both use an equipment-specific *absolute* design ceiling, which the simulated
+# chiller/tower curves don't publish -- so instead of guessing it, we CALIBRATE each detector's
+# ceiling from the plant's own fault-free run (commissioning practice: set the design bar to the
+# healthy baseline), then score the labeled physical heat-rejection faults. The fault-free run then
+# reads ~1.0x (ok) by construction, so the informative number is the TPR on the faults: does a
+# fouled tower / bypassed condenser loop push the metric past the rule's warn ratio? A sensor-bias
+# run is a genuine negative for a *physical* detector (the plant is healthy, only a sensor lies) and
+# measures the detector's robustness to instrument faults. See docs/VALIDATION.md.
+# --------------------------------------------------------------------------- #
+
+CHILLER_FAULT_FREE = "ChillerPlant.csv"
+CHILLER_DETECTORS = {
+    "cooling_tower_approach": {
+        # tower fouling (fouled fill -> can't approach wet-bulb) + condenser-loop PID mistuning
+        "make": lambda design=7.0: CoolingTowerApproach(design_approach_f=design),
+        "metric": "approach_median_f",
+        "positive": ("ChillerPlant_coolingtower_fouling", "ChillerPlant_coolingtower_PI"),
+    },
+    "chiller_efficiency": {
+        # anything that raises chiller lift -> kW/ton: warmer condenser water from a fouled tower,
+        # a bypassed three-way valve (leak/stuck), or condenser-loop PID mistuning
+        "make": lambda design=0.85: ChillerEfficiency(design_kw_per_ton=design),
+        "metric": "kw_per_ton_median",
+        "positive": (
+            "ChillerPlant_coolingtower_fouling",
+            "ChillerPlant_coolingtower_PI",
+            "ChillerPlant_bypass_leakage",
+            "ChillerPlant_bypass_stuck",
+        ),
+    },
+}
+
+
+def _calibrated_metric(det, frame):
+    """Return the detector's baseline metric on ``frame`` (None if the run is unusable)."""
+    find = det["make"]().analyze("CH1", frame)
+    val = find.metrics.get(det["metric"]) if find.metrics else None
+    return val if (val is not None and val == val) else None  # not NaN
+
+
+def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant heat rejection"):
+    """Score the plant-level chiller detectors on ``{scenario_csv: role_frame}``; return metrics.
+
+    Each detector's absolute design ceiling is calibrated from the fault-free run's healthy median
+    (the metric is data-derived and design-independent), then the calibrated detector runs on every
+    scenario. A run whose name starts with a detector's ``positive`` prefix is a target fault (it
+    should fire); every other run -- fault-free and sensor-bias -- is a negative (stays quiet). Pure
+    and deterministic given the frames, so it's unit-testable on synthetic plant-shaped frames.
+    """
+    metrics = {}
+    ff = frames.get(fault_free)
+    print(f"\n=== {label} (plant-level detectors, baseline-calibrated) ===")
+    if ff is None:
+        print("  (fault-free baseline absent — skipped)")
+        return metrics
+    for name, det in CHILLER_DETECTORS.items():
+        healthy = _calibrated_metric(det, ff)
+        if healthy is None:
+            print(f"  {name:24s} skipped (no healthy baseline metric)")
+            continue
+        rule = det["make"](healthy)  # design ceiling := the healthy plant's own median
+        tp = fn = fp = tn = 0
+        for fname, frame in sorted(frames.items()):
+            fired = rule.analyze("CH1", frame).severity in ("warn", "fault")
+            if any(fname.startswith(p) for p in det["positive"]):
+                tp, fn = tp + fired, fn + (not fired)
+            else:
+                fp, tn = fp + fired, tn + (not fired)
+        tpr = tp / (tp + fn) if (tp + fn) else float("nan")
+        fpr = fp / (fp + tn) if (fp + tn) else float("nan")
+        print(
+            f"  {name:24s} design~{healthy:.2f}  TPR {tpr:.0%} (n={tp + fn})  "
+            f"FPR {fpr:.0%} (n={fp + tn})"
+        )
+        for key, val in (("tpr", tpr), ("fpr", fpr)):
+            if val == val:  # omit NaN -> valid JSON
+                metrics[f"chiller.{name}.{key}"] = round(val, 4)
+    return metrics
+
+
 def main(argv=None) -> int:
     import argparse
 
@@ -351,6 +440,20 @@ def main(argv=None) -> int:
                 label="VAV zone-terminal drift (FPU)",
             )
         )
+
+    # Chiller-plant plant-level detectors (opt-in via fetch.py --chiller)
+    chiller_map_path = os.path.join(HERE, "mapping_chiller.json")
+    chiller_base = os.path.join(DATA, "chiller")
+    if os.path.exists(os.path.join(chiller_base, CHILLER_FAULT_FREE)) and os.path.exists(
+        chiller_map_path
+    ):
+        chiller_mapping = MappingProvider.from_dict(json.load(open(chiller_map_path)))
+        chiller_frames = {
+            f: load_role_frame(os.path.join(chiller_base, f), chiller_mapping)
+            for f in os.listdir(chiller_base)
+            if f.endswith(".csv")
+        }
+        metrics.update(score_chiller(chiller_frames))
 
     families_present = sum(
         1

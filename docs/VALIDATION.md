@@ -66,7 +66,8 @@ labeled fault run):
 | `duct_static_drift` | **specificity only** | no labeled duct-static fault in the fetched set → false-positive rate only |
 | `fan_efficiency_drift`, `filter_loading_drift` | **synthetic-only** | need `POWER` / `FILTER_DIFF_PRESS` points the SDAHU simulation does not export |
 | `vav_airflow_drift`, `vav_reheat_valve_drift` | **real TPR on the LBNL FPU subset** | the fan-power-unit subset carries per-box damper / airflow+setpoint / reheat-valve / discharge-temp — airflow drift targets the damper-stuck + airflow-sensor-bias faults, reheat-valve drift the reheat-valve leak/stuck + coil-fouling faults (baseline = fault-free run, current = the West-zone faulted run) |
-| chiller / pump drift | **synthetic-only here** | LBNL SDAHU/FPU are air-side; the CC-BY LBNL chiller-plant subset would validate chiller drift but its download path is currently unresolvable (see below) |
+| `chiller_efficiency`, `cooling_tower_approach` | **real TPR on the LBNL chiller-plant subset** (baseline-calibrated) | the plant subset carries chiller power + CHW loop and tower supply-temp + wet-bulb; each detector's absolute design ceiling is calibrated from the fault-free run (commissioning-style), then scored against the labeled physical faults — tower fouling / PID for the tower approach, plus three-way-bypass leak/stuck for chiller kW/ton |
+| refrigerant-side chiller drift (`*_approach_*`, subcooling, superheat), pump drift | **synthetic-only** | the LBNL chiller-plant subset is *water-side only* — it exports **no** refrigerant-side points (evaporator/condenser approach, subcooling, superheat) and no pump-head/flow trends, so those detectors can't be scored on it |
 | `*_reset_effectiveness` | **synthetic-only** | needs the per-cycle reset-**request** point, absent from LBNL |
 | `*_rogue_zone_census`, `*_cohort_starvation` | **synthetic-only (a real gap)** | need a *fleet of zones with per-zone requests*; a single simulated AHU is not a zone fleet, and no vendorable public multi-zone-fleet fault dataset exists |
 
@@ -77,13 +78,17 @@ family is validated on the synthetic whole-suite harness below (`camber.faultlab
 validates the **M&V / forecast / anomaly** track (below), *not* component FDD; the drift/reset
 detectors' required roles (approach, valve %, damper, requests) simply don't exist in it.
 
-**Sibling subsets — wired and pending.** The **VAV fan-power-unit (FPU)** subset is now wired
-(`fetch.py --fpu` + `mapping_fpu.json`), scoring `vav_airflow_drift` and `vav_reheat_valve_drift` on
-its labeled per-box faults — same CC-BY schema as the SDAHU slice. The **chiller-plant** subset (the
-open, *simulated* chiller FDD source that would validate the chiller-drift family and sidesteps a
-licence-encumbered ASHRAE chiller-FDD dataset) is listed in the LBNL collection but its folder serves
-no file listing and no standard download URL resolves — wiring it is **blocked pending the exact
-download path** (the OSTI file manifest or an LBNL contact). RTU/DDAHU/FCU remain available too.
+**Sibling subsets — wired.** The **VAV fan-power-unit (FPU)** subset is wired (`fetch.py --fpu` +
+`mapping_fpu.json`), scoring `vav_airflow_drift` and `vav_reheat_valve_drift` on its labeled per-box
+faults. The **chiller-plant** subset is now wired too (`fetch.py --chiller` + `mapping_chiller.json`)
+— the open, *simulated* chiller FDD source that validates the **plant-level** chiller detectors and
+sidesteps a licence-encumbered ASHRAE chiller-FDD dataset. It is **water-side only** (no refrigerant
+points), so it scores `chiller_efficiency` and `cooling_tower_approach` but not the refrigerant-side
+chiller-drift family. Because the simulated chiller/tower design curves aren't published, each
+detector's absolute design ceiling is **calibrated from the plant's own fault-free run** (commissioning
+practice) rather than guessed, so the informative number is the TPR on the labeled physical faults;
+sensor-bias runs act as genuine negatives (the plant is healthy, only a sensor lies). RTU/DDAHU/FCU
+remain available too.
 
 The tempting real-BMS AHU/VAV sets are, on inspection, **not usable for a commercial toolkit's
 committed benchmark**: the only publicly-downloadable version of the widely-cited Korean large-office

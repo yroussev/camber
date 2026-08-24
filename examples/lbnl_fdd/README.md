@@ -23,7 +23,8 @@ python examples/lbnl_fdd/run_fdd.py          # mapping -> completeness -> store 
 python examples/lbnl_fdd/run_brick.py        # derive the role mapping from the Brick (.ttl) model
 python examples/lbnl_fdd/fetch.py --families # also FCU + DDAHU (large: ~0.5 + ~1.7 GB)
 python examples/lbnl_fdd/fetch.py --fpu      # also the VAV fan-power-unit subset (VAV-drift)
-python examples/lbnl_fdd/benchmark.py        # FDD-accuracy + drift (AHU air-side + FPU VAV) scores
+python examples/lbnl_fdd/fetch.py --chiller  # also the chiller-plant subset (plant-level detectors)
+python examples/lbnl_fdd/benchmark.py        # FDD-accuracy + drift (AHU + FPU) + chiller-plant scores
 ```
 
 `run_brick.py` parses the dataset's Brick model and derives the point→role mapping
@@ -67,6 +68,18 @@ Fan-efficiency and filter-loading drift need fan-power / filter-DP points the SD
 not export, so they stay synthetic-only; the multi-zone rogue/cohort census and the reset-request
 detectors aren't validatable on a single simulated AHU at all. See `docs/VALIDATION.md` for the full
 feasibility matrix and the open-licensed datasets that would close the gaps.
+
+### Chiller-plant validation (`--chiller`)
+
+`benchmark.py` also scores the **plant-level** chiller detectors on the CC-BY LBNL chiller-plant
+subset (`mapping_chiller.json`): **chiller-efficiency** (kW/ton, target = tower fouling / PID +
+three-way-bypass leak/stuck — all raise chiller lift) and **cooling-tower approach** (CW-supply vs
+wet-bulb, target = tower fouling / PID). The simulated chiller/tower design curves aren't published,
+so each detector's absolute design ceiling is **calibrated from the plant's own fault-free run**
+(commissioning practice) rather than guessed — the informative number is then the TPR on the labeled
+physical faults, with sensor-bias runs as genuine negatives. The subset is **water-side only** (no
+refrigerant points), so the refrigerant-side chiller-drift family (evaporator/condenser approach,
+subcooling, superheat) stays synthetic-only.
 
 ## Data & license
 

@@ -4,6 +4,32 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.66.0] — 2026-08-24
+
+**Real-data validation of the plant-level chiller detectors (LBNL chiller-plant subset).** Wires the
+CC-BY LBNL chiller-plant subset into the benchmark, turning the chiller `chiller_efficiency` /
+`cooling_tower_approach` detectors from synthetic-only into real-data-scored — the open, *simulated*
+chiller FDD source that sidesteps a licence-encumbered ASHRAE chiller-FDD dataset.
+
+### Added
+- **`examples/lbnl_fdd/fetch.py --chiller`** — fetches the LBNL chiller-plant subset (basename-matched
+  extraction) + **`mapping_chiller.json`** (chiller-1 power + CHW loop and tower-1 supply-temp +
+  wet-bulb → roles; the plant-level points the runnable detectors need).
+- **`examples/lbnl_fdd/benchmark.py` `score_chiller`** — scores **`chiller_efficiency`** (kW/ton;
+  target = tower fouling / PID + three-way-bypass leak/stuck) and **`cooling_tower_approach`** (CW
+  supply vs wet-bulb; target = tower fouling / PID) on the labeled physical faults. Because the
+  simulated chiller/tower design curves aren't published, each detector's absolute design ceiling is
+  **calibrated from the plant's own fault-free run** (commissioning practice) rather than guessed, so
+  the informative number is the TPR on the faults; sensor-bias runs act as genuine negatives.
+- **`tests/test_lbnl_benchmark.py`** — chiller calibrate-and-fire + metric-key + empty-baseline +
+  registration plumbing tests on synthetic plant-shaped frames (always run).
+
+### Notes
+- The subset is **water-side only** — it exports no refrigerant-side points (evaporator/condenser
+  approach, subcooling, superheat), so the refrigerant-side chiller-drift family stays synthetic-only.
+  Documented in `docs/VALIDATION.md`; the encumbered ASHRAE chiller dataset is never named.
+- No `camber/` change → public-API snapshot unchanged; new code is `examples/` + tests.
+
 ## [0.65.0] — 2026-08-24
 
 **Real-data validation of the VAV zone-terminal drift family (LBNL Fan-Power-Unit subset).** Wires the
@@ -22,9 +48,8 @@ CC-BY LBNL FPU subset into the benchmark, turning two "synthetic-only" verdicts 
   FPU-shaped frames (always run); real-data scoring runs in the benchmark CI job with the data.
 
 ### Notes
-- **The LBNL chiller-plant subset is not yet wired: its download path is unresolvable** — the folder
-  is listed in the collection but serves no file listing and no standard URL resolves (would need the
-  OSTI file manifest or an LBNL contact). Documented in `docs/VALIDATION.md`. The encumbered ASHRAE
+- The LBNL chiller-plant subset is not yet wired here (its download path was still unresolved at this
+  release; resolved and wired in 0.66.0). Documented in `docs/VALIDATION.md`. The encumbered ASHRAE
   chiller dataset is never named.
 - No `camber/` change → public-API snapshot unchanged; new code is `examples/` + tests.
 

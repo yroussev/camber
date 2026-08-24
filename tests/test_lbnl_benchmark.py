@@ -210,3 +210,79 @@ def test_fpu_detectors_registered_and_multi_positive():
     assert set(B.FPU_DRIFT_DETECTORS) == {"vav_airflow_drift", "vav_reheat_valve_drift"}
     # airflow-drift targets both damper-stuck AND airflow-sensor-bias faults (tuple of prefixes)
     assert isinstance(B.FPU_DRIFT_DETECTORS["vav_airflow_drift"]["positive"], tuple)
+
+
+# --- chiller-plant plant-level detectors (baseline-calibrated snapshot path) ----------------- #
+
+
+def _chiller_frame(n=48, *, seed=0, kw_per_ton=0.6, approach_f=7.0):
+    """A synthetic chiller-plant role-frame with a controllable kW/ton and tower approach.
+
+    Flow (500 gpm) and loop dT (10 F) fix the load at ~208 tons, so chiller power sets kW/ton;
+    wet-bulb (75 F) is fixed, so the CW supply temp sets the tower approach. Both metrics are what
+    the calibrated detectors key on.
+    """
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2025-07-01", periods=n, freq="1h")
+    chws, chwr, flow = 44.0, 54.0, 500.0  # dT = 10 F -> tons = 500*10/24 ~= 208
+    tons = flow * (chwr - chws) / 24.0
+    power = kw_per_ton * tons
+    wetbulb = 75.0
+    cws = wetbulb + approach_f
+    return pd.DataFrame(
+        {
+            Role.POWER: power + rng.normal(0, 0.5, n),
+            Role.CHW_SUPPLY_TEMP: chws + rng.normal(0, 0.1, n),
+            Role.CHW_RETURN_TEMP: chwr + rng.normal(0, 0.1, n),
+            Role.CHW_FLOW: flow + rng.normal(0, 2, n),
+            Role.CW_SUPPLY_TEMP: cws + rng.normal(0, 0.1, n),
+            Role.CW_RETURN_TEMP: cws + 10 + rng.normal(0, 0.1, n),  # range ~10 F
+            Role.WETBULB_TEMP: wetbulb + rng.normal(0, 0.1, n),
+            Role.TOWER_FAN_SPEED: 80.0 + rng.normal(0, 1, n),
+            Role.OAT: 88.0 + rng.normal(0, 1, n),
+        },
+        index=idx,
+    )
+
+
+def _chiller_frames():
+    # fault-free (healthy), a severe cooling-tower-fouling fault (high approach AND high kW/ton),
+    # and a CHW-temp sensor-bias run that leaves the physical metrics healthy (a true negative).
+    return {
+        "ChillerPlant.csv": _chiller_frame(seed=1),
+        "ChillerPlant_coolingtower_fouling_095.csv": _chiller_frame(
+            seed=2, kw_per_ton=0.98, approach_f=15.0
+        ),
+        "ChillerPlant_chiller_bias_2.csv": _chiller_frame(seed=3),
+    }
+
+
+def test_chiller_calibrates_and_fires_on_physical_fault():
+    B = _bench()
+    m = B.score_chiller(_chiller_frames())
+    # the fouling run raises both approach and kW/ton past the calibrated ceiling -> TPR 100%
+    assert m["chiller.cooling_tower_approach.tpr"] == 1.0
+    assert m["chiller.chiller_efficiency.tpr"] == 1.0
+    # the healthy + sensor-bias runs stay quiet against a baseline-calibrated ceiling -> FPR 0%
+    assert m["chiller.cooling_tower_approach.fpr"] == 0.0
+    assert m["chiller.chiller_efficiency.fpr"] == 0.0
+
+
+def test_chiller_score_metric_keys_are_valid_floats():
+    B = _bench()
+    for v in B.score_chiller(_chiller_frames()).values():
+        assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
+
+
+def test_chiller_score_empty_without_fault_free_baseline():
+    B = _bench()
+    frames = {"ChillerPlant_coolingtower_fouling_095.csv": _chiller_frame(kw_per_ton=0.98)}
+    assert B.score_chiller(frames) == {}
+
+
+def test_chiller_detectors_registered():
+    B = _bench()
+    assert set(B.CHILLER_DETECTORS) == {"cooling_tower_approach", "chiller_efficiency"}
+    # chiller_efficiency targets the tower-fouling/PID AND the three-way-bypass faults
+    pos = B.CHILLER_DETECTORS["chiller_efficiency"]["positive"]
+    assert any(p.endswith("bypass_leakage") for p in pos) and any("fouling" in p for p in pos)

@@ -1,0 +1,14 @@
+{
+  "_comment": "LBNL FDD Chiller-Plant point -> CAMBER Role mapping. The plant has three chillers (_1/_2/_3) and three cooling towers; chiller 1 and tower 1 are the analysed units (the sensor-bias and tower-fouling faults are imposed on unit 1). Maps ONLY the plant-level points the runnable detectors need: chiller kW/ton (power + CHW loop) for chiller_efficiency, and the cooling-tower supply temp + wet-bulb for cooling_tower_approach. The dataset carries NO refrigerant-side points (evaporator/condenser approach, subcooling, superheat), so the refrigerant-side chiller-drift detectors stay synthetic-only -- see docs/VALIDATION.md. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
+  "aliases": {
+    "CHL_POW_1": "power",
+    "CHL_SW_TEMP_1": "chw_supply_temp",
+    "CHL_RW_TEMP_1": "chw_return_temp",
+    "CHL_CW_FLOW_1": "chw_flow",
+    "CT_SW_TEMP_1": "cw_supply_temp",
+    "CT_RW_TEMP_1": "cw_return_temp",
+    "CT_FAN_SPD_1": "tower_fan_speed",
+    "OA_TEMP_WB": "wetbulb_temp",
+    "OA_TEMP": "oat"
+  }
+}
