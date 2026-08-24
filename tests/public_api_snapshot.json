@@ -752,7 +752,9 @@
     "site_from_ttl",
     "site_to_223",
     "site_to_ttl",
-    "to_brick"
+    "to_brick",
+    "topology_from_brick",
+    "topology_from_haystack"
   ],
   "camber.interop.bacnet": [
     "BACNET_UNIT_TO_TOKEN",
@@ -778,7 +780,8 @@
     "parse_triples",
     "parse_triples_rdflib",
     "roles_from_brick",
-    "roles_from_triples"
+    "roles_from_triples",
+    "topology_from_brick"
   ],
   "camber.interop.export": [
     "ROLE_TO_BRICK_PART",
@@ -790,7 +793,8 @@
   "camber.interop.haystack_semantic": [
     "mapping_from_haystack",
     "role_from_tags",
-    "roles_from_haystack"
+    "roles_from_haystack",
+    "topology_from_haystack"
   ],
   "camber.interop.openadr": [
     "openadr_report_json",
@@ -1662,6 +1666,9 @@
     "interval_hours",
     "localize",
     "regularize"
+  ],
+  "camber.topology_infer": [
+    "topology_from_naming"
   ],
   "camber.tsparse": [
     "parse_timestamps"

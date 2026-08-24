@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from ..model.mapping import MappingProvider
 from ..model.roles import HAYSTACK_HINT, Role
+from ..model.topology import Topology
 
 # role -> its hint tag-set, largest (most specific) first so the first subset match wins the
 # tie-break
@@ -97,3 +98,48 @@ def mapping_from_haystack(points) -> MappingProvider:
     return MappingProvider.from_dict(
         {"aliases": {name: role.value for name, role in roles.items()}}
     )
+
+
+def _entity_id(entity) -> str:
+    """The subject id of a Haystack entity dict (``id`` / ``dis`` / ``navName``), or ``""``."""
+    if isinstance(entity, dict):
+        return str(entity.get("id") or entity.get("dis") or entity.get("navName") or "")
+    return ""
+
+
+def _ref_target(value):
+    """Resolve a Haystack ``Ref`` to its target id (``"@AHU_1"`` or ``{"val": "@AHU_1"}`` -> id)."""
+    if isinstance(value, str):
+        return value[1:] if value.startswith("@") else value or None
+    if isinstance(value, dict):
+        inner = value.get("val") or value.get("id")
+        if isinstance(inner, str):
+            return inner[1:] if inner.startswith("@") else inner or None
+    return None
+
+
+def topology_from_haystack(entities, *, parent_refs=("ahuRef", "equipRef")) -> Topology:
+    """Build a served-by :class:`~camber.model.topology.Topology` from Haystack reference tags.
+
+    Reads ``ahuRef`` (a terminal served by an air handler) and ``equipRef`` (equipment nested under
+    parent equipment) into edges ``(parent, child)`` with ``provenance="semantic"``. ``equipRef`` is
+    only followed for entities carrying the ``equip`` marker: on a *point*, ``equipRef`` is point
+    ownership (handled by :func:`roles_from_haystack`), not a served-by relation. ``siteRef`` /
+    ``spaceRef`` are not served-by and are ignored. Entities with no id, and refs whose value is not
+    a resolvable id, are skipped -- incomplete tagging degrades to a partial graph, never a crash.
+    """
+    edges: list = []
+    for e in entities:
+        child = _entity_id(e)
+        if not child:
+            continue
+        is_equip = isinstance(e, dict) and e.get("equip") in (True, "M", "✓")
+        for ref in parent_refs:
+            if not isinstance(e, dict) or ref not in e:
+                continue
+            if ref == "equipRef" and not is_equip:
+                continue  # a point's equipRef is ownership, not served-by
+            parent = _ref_target(e.get(ref))
+            if parent:
+                edges.append((parent, child))
+    return Topology.from_edges(edges, provenance="semantic")

@@ -25,6 +25,7 @@ import re
 
 from ..model.mapping import MappingProvider
 from ..model.roles import Role
+from ..model.topology import Topology
 
 # Unambiguous Brick point class (local name) -> Role.
 DIRECT_CLASS_TO_ROLE = {
@@ -217,3 +218,64 @@ def mapping_from_brick(ttl: str, *, backend: str = "auto") -> MappingProvider:
     return MappingProvider.from_dict(
         {"aliases": {name: role.value for name, role in roles.items()}}
     )
+
+
+def _predicate_links(ttl: str, predicate: str, backend: str) -> dict:
+    """Return ``{subject_local -> [object_local, ...]}`` for a predicate, via the chosen backend.
+
+    A generic served-by-relation reader (``feeds`` / ``isFedBy``) that mirrors the two backends the
+    rest of this module uses -- rdflib when available (any Turtle), else the zero-dependency minimal
+    grammar of :func:`parse_triples` (which tracks only ``a`` / ``hasPoint``, so relations are read
+    here). Local names only, so prefix spelling does not matter.
+    """
+    use_rdflib = backend == "rdflib" or (backend == "auto" and _have_rdflib())
+    if use_rdflib:
+        import rdflib
+
+        g = rdflib.Graph()
+        try:
+            g.parse(data=ttl, format="turtle")
+        except Exception as e:
+            raise ValueError(f"could not parse Turtle ({backend} backend): {e}") from e
+        out: dict = {}
+        for s, p, o in g:
+            if _local(str(p)) == predicate:
+                out.setdefault(_local(str(s)), []).append(_local(str(o)))
+        return out
+    # minimal parser: same statement grammar as parse_triples
+    lines = [
+        ln.strip()
+        for ln in ttl.splitlines()
+        if ln.strip() and not ln.strip().startswith(("@prefix", "#", "@base"))
+    ]
+    out = {}
+    for stmt in re.split(r"\s\.\s", " ".join(lines) + " "):
+        stmt = stmt.strip().rstrip(".").strip()
+        parts = stmt.split(None, 1)
+        if len(parts) < 2:
+            continue
+        subj, rest = _local(parts[0]), parts[1]
+        for grp in rest.split(";"):
+            pp = grp.strip().split(None, 1)
+            if len(pp) < 2:
+                continue
+            pred, objs = pp[0], [o.strip() for o in pp[1].split(",") if o.strip()]
+            if pred.endswith(predicate):
+                out.setdefault(subj, []).extend(_local(o) for o in objs)
+    return out
+
+
+def topology_from_brick(ttl: str, *, backend: str = "auto") -> Topology:
+    """Build a served-by :class:`~camber.model.topology.Topology` from a Brick model.
+
+    Reads ``brick:feeds`` (edge parent->child as-is) and ``brick:isFedBy`` (edge inverted), the
+    authoritative flow relations, into a served-by graph with ``provenance="semantic"``. Containment
+    (``hasPart``) is deliberately not treated as served-by. ``backend`` behaves as in
+    :func:`roles_from_brick`. A model with no flow relations yields an empty topology.
+    """
+    edges: list = []
+    for parent, children in _predicate_links(ttl, "feeds", backend).items():
+        edges.extend((parent, child) for child in children)
+    for child, parents in _predicate_links(ttl, "isFedBy", backend).items():
+        edges.extend((parent, child) for parent in parents)
+    return Topology.from_edges(edges, provenance="semantic")

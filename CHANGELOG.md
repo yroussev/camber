@@ -4,6 +4,36 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.59.0] — 2026-08-24
+
+**Automatic served-by topology population (topology-aware fleet analytics — arc item 2).** Builds a
+`Topology` (0.58.0) from a building's existing semantic model, or — as a last resort — its naming
+conventions, each stamped with a `provenance` so consumers know how much to trust it.
+
+### Added
+- **`camber.interop.topology_from_brick(ttl, *, backend="auto")`** — a served-by `Topology` from Brick
+  `feeds` (edge parent→child) and `isFedBy` (inverted); `provenance="semantic"`. `hasPart`
+  (containment) is deliberately not treated as served-by. Reuses both parser backends (rdflib when
+  present, else the zero-dependency minimal reader).
+- **`site_from_ttl` now auto-populates `Site.topology`** from those relations — a Brick building with
+  `feeds` needs no extra call (empty topology when the model has no flow relations; no regression).
+- **`camber.interop.topology_from_haystack(entities, *, parent_refs=("ahuRef","equipRef"))`** — a
+  served-by `Topology` from Haystack reference tags; `provenance="semantic"`. `equipRef` is followed
+  only for `equip`-marked entities (a point's `equipRef` is ownership, handled by `roles_from_haystack`,
+  not served-by); `siteRef` / `spaceRef` are ignored.
+- **`camber.topology_infer.topology_from_naming(equips, *, ahu_classes=…, terminal_classes=…)`** — the
+  screening-grade fallback: links a terminal to an air handler by a shared space label or an
+  `AHU_1_VAV_3`-style id prefix, emitting an edge only when exactly one AHU matches (ambiguous /
+  unmatched terminals skipped). `provenance="heuristic"` so consumers can caveat it.
+
+### Notes
+- Honest degradation throughout: unresolved refs / malformed inputs are skipped or raise a clear
+  `ValueError` (Brick, matching `roles_from_brick`); cyclic relations are broken into a DAG by the
+  `Topology` core; empty inputs yield an empty topology.
+- **ASHRAE 223P** served-by extraction is **deferred** — 223P models flow as a multi-hop, medium-typed
+  connection graph (not a single parent ref) and CAMBER emits none of it; Brick `feeds` covers the
+  authoritative-semantic layer today.
+
 ## [0.58.0] — 2026-08-24
 
 **Served-by topology model (topology-aware fleet analytics — arc foundation).** Adds a vocabulary for

@@ -195,7 +195,9 @@ def site_from_ttl(ttl: str, *, backend: str = "auto") -> Site:
         )
 
     equips.sort(key=lambda e: e.id)
-    return Site(id=site_id, equips=tuple(equips))
+    # served-by topology from brick:feeds / isFedBy (empty when the model has no flow relations)
+    topology = _brick.topology_from_brick(ttl, backend=backend)
+    return Site(id=site_id, equips=tuple(equips), topology=topology)
 
 
 def _has_part(ttl: str, backend: str) -> dict:

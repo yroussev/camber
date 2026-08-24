@@ -128,9 +128,7 @@ def test_site_carries_topology_with_empty_default():
 
 def test_diamond_graph_dedups_visits():
     # ROOT -> A -> {B, C} -> D: D and (searching higher) A are each reached two ways -> visited once
-    t = Topology.from_edges(
-        [("ROOT", "A"), ("A", "B"), ("A", "C"), ("B", "D"), ("C", "D")]
-    )
+    t = Topology.from_edges([("ROOT", "A"), ("A", "B"), ("A", "C"), ("B", "D"), ("C", "D")])
     assert t.descendants("A") == frozenset({"B", "C", "D"})
     assert t.ancestors("D") == frozenset({"A", "B", "C", "ROOT"})
     assert t.nearest_ancestor("D", lambda e: e == "A") == "A"  # BFS dedups the two paths to A

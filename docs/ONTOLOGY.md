@@ -13,6 +13,9 @@ model can be exported for downstream use.
   addition to the temperatures, pressures, valves, dampers, and fans already supported.
 - **Whole-site round-trip** — `site_to_ttl` / `site_from_ttl` round-trip a Site→Equip→Point model
   (with relationships); minimal parser by default, rdflib used when the `[brick]` extra is present.
+- **Served-by topology** — `topology_from_brick(ttl)` builds a `Topology` (see
+  [TOPOLOGY.md](TOPOLOGY.md)) from `brick:feeds` / `isFedBy`; `site_from_ttl` auto-populates
+  `Site.topology` from those relations.
 
 ## Project Haystack
 
@@ -23,6 +26,8 @@ model can be exported for downstream use.
   when its hint tag-set is a subset of the point's tags; the **most specific** hint wins ties (so
   `…temp sp` beats `…temp sensor`). Accepts `(name, tags)` pairs or Haystack tag dicts. All 54 roles
   round-trip export→import. `camber/interop/haystack_semantic.py`.
+- **Served-by topology** — `topology_from_haystack(entities)` builds a `Topology` from `ahuRef` /
+  `equipRef` reference tags (see [TOPOLOGY.md](TOPOLOGY.md)).
 
 ## ASHRAE 223P (minimal profile)
 
@@ -66,3 +71,8 @@ of 223P that maps cleanly from CAMBER's model; it does not assert full Standard-
 (which requires validation against the published SHACL shapes and richer connection/medium
 modeling). Serialization is plain Turtle and the reader is a string parser, so no new dependency
 is required.
+
+**Served-by topology from 223P is deferred.** 223P models flow as a multi-hop connection graph
+(`Equipment → ConnectionPoint → Connection → ConnectionPoint → Equipment`, medium-typed) rather than
+a single parent reference, and CAMBER emits none of it, so extracting a served-by `Topology` from
+223P is left to a later release — Brick `feeds` (above) covers the authoritative-semantic layer today.

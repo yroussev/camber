@@ -42,9 +42,35 @@ topo.group_map(["VAV-1", "VAV-2", "VAV-3"])   # {'VAV-1': 'AHU-1', 'VAV-2': 'AHU
 - `Topology.from_site(site)` — the graph a `Site` carries (a new defaulted `Site.topology` field), or
   the empty graph.
 
-Populating a topology **automatically** — from Brick `feeds` / `isFedBy`, Haystack `equipRef` /
-`ahuRef`, or a naming/space-prefix heuristic — is layered on top of this model in a following release;
-this foundation ships the explicit builders only.
+## Automatic population
+
+Beyond the explicit builders, a topology can be **derived** from a building's existing semantic model
+or, failing that, its naming conventions. Each builder stamps a `provenance` so a consumer knows how
+much to trust the result:
+
+| Builder | Source | Provenance |
+|---|---|---|
+| `camber.interop.topology_from_brick(ttl)` | Brick `feeds` / `isFedBy` relations | `semantic` |
+| `camber.interop.topology_from_haystack(entities)` | Haystack `ahuRef` / `equipRef` refs | `semantic` |
+| `camber.topology_infer.topology_from_naming(equips)` | equipment id-prefix / shared space label | `heuristic` |
+| ASHRAE 223P `connects` | — | *deferred* (see below) |
+
+- **Brick** reads `brick:feeds` (edge parent→child) and `brick:isFedBy` (inverted); containment
+  (`hasPart`) is deliberately *not* treated as served-by. `site_from_ttl` now **auto-populates**
+  `Site.topology` from these relations, so a Brick building with `feeds` needs no extra call.
+- **Haystack** reads `ahuRef` (a terminal served by an air handler) and `equipRef` (equipment nested
+  under a parent). A *point's* `equipRef` is point ownership, not served-by, so `equipRef` is only
+  followed for entities carrying the `equip` marker. `siteRef` / `spaceRef` are ignored (a site is
+  not served-by equipment).
+- **Naming/space heuristic** is the **screening-grade fallback of last resort** — a shared space
+  label or an `AHU_1_VAV_3`-style id prefix is a *guess*, not a verified edge. It emits an edge only
+  when exactly one air handler matches (ambiguous or unmatched terminals are skipped), and it stamps
+  `provenance="heuristic"` so a consumer can attach a screening caveat. Its real-world yield is modest
+  (equipment `space` is often unset), which is expected for a last-resort inference.
+- **ASHRAE 223P** connection modeling (`s223:connects` / connection-points, medium-typed) is a
+  multi-hop graph heavier than a single parent reference, and CAMBER does not yet emit it, so
+  topology extraction from 223P is **deferred** to a later release; Brick `feeds` covers the
+  authoritative-semantic layer today.
 
 ## Queries
 
