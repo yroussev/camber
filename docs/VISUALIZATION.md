@@ -235,4 +235,4 @@ self-contained CSP-safe file. `selection_bus_html()`, `carpet_svg_html(series, â
 
 This is the dependency-light MVP: rich, self-contained HTML rather than a live web UI. The fuller
 interactive vision (brush-linked views, agent narration, continuous refresh) is in the
-[ROADMAP](../ROADMAP.md) Visualizations section.
+[ROADMAP](https://github.com/yroussev/camber/blob/main/ROADMAP.md) Visualizations section.

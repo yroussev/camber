@@ -21,12 +21,12 @@ flowchart LR
 
 ## Docker / Compose
 
-The primary path. See [../DOCKER.md](../DOCKER.md): `docker compose up api` serves the API over
+The primary path. See [../DOCKER.md](https://github.com/yroussev/camber/blob/main/DOCKER.md): `docker compose up api` serves the API over
 `./data/store`; the multi-arch image is at `ghcr.io/yroussev/camber`.
 
 ## Kubernetes
 
-[`deploy/k8s/camber-api.yaml`](../deploy/k8s/camber-api.yaml) — a namespace, a read-only PVC for the
+[`deploy/k8s/camber-api.yaml`](https://github.com/yroussev/camber/blob/main/deploy/k8s/camber-api.yaml) — a namespace, a read-only PVC for the
 store, a 2-replica non-root Deployment (readiness/liveness on `/health`, resource limits, read-only
 root FS), and a `ClusterIP` Service.
 
@@ -40,7 +40,7 @@ populates it; the API pods mount it read-only.
 
 ## conda-forge
 
-[`deploy/conda/meta.yaml`](../deploy/conda/meta.yaml) is a submission-ready recipe (`noarch: python`,
+[`deploy/conda/meta.yaml`](https://github.com/yroussev/camber/blob/main/deploy/conda/meta.yaml) is a submission-ready recipe (`noarch: python`,
 the runtime deps, the `camber` entry point, and a `run_constrained` for the optional `[ml]` extra).
 Pinned to **0.12.0** with the published sdist's `sha256` already filled in — the recipe is complete
 and submission-ready. To re-derive the hash for a future version:
@@ -57,7 +57,7 @@ each PyPI release. Until then, install from PyPI: `pip install camber-toolkit`.
 
 ## Docs site (GitHub Pages)
 
-[`.github/workflows/pages.yml`](../.github/workflows/pages.yml) builds the MkDocs site
+[`.github/workflows/pages.yml`](https://github.com/yroussev/camber/blob/main/.github/workflows/pages.yml) builds the MkDocs site
 (`mkdocs build`) and deploys it to GitHub Pages on every push to `main` that touches `docs/`
 or `mkdocs.yml`. Enabling it is a **one-time repo-owner action**: *Settings → Pages → Source: GitHub
 Actions*. Build locally with `pip install -e .[docs] && mkdocs serve`.

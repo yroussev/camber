@@ -25,15 +25,15 @@ requests, please use [Issues](https://github.com/yroussev/camber/issues) instead
 
 - **Vendor- and site-neutral, always.** Describe scenarios generically and **never** post a real
   client site name or raw building data — reduce examples to small synthetic snippets. This mirrors
-  the rule in [CONTRIBUTING.md](../../CONTRIBUTING.md) and is enforced in the codebase itself.
+  the rule in [CONTRIBUTING.md](https://github.com/yroussev/camber/blob/main/CONTRIBUTING.md) and is enforced in the codebase itself.
 - **Public methods only.** Cite public standards (ASHRAE, IPMVP, NIST, PNNL, LBNL); don't paste
   proprietary or copyrighted material.
-- Be kind — the [Code of Conduct](../../CODE_OF_CONDUCT.md) applies here too.
+- Be kind — the [Code of Conduct](https://github.com/yroussev/camber/blob/main/CODE_OF_CONDUCT.md) applies here too.
 
 ### Pointers
 
-- New here? Start with the [README](../../README.md) and
+- New here? Start with the [README](https://github.com/yroussev/camber/blob/main/README.md) and
   [docs/CAPABILITIES.md](../CAPABILITIES.md).
-- Curious where it's going? See the [ROADMAP](../../ROADMAP.md).
-- Want to contribute? [CONTRIBUTING.md](../../CONTRIBUTING.md) covers the vendor-neutral,
+- Curious where it's going? See the [ROADMAP](https://github.com/yroussev/camber/blob/main/ROADMAP.md).
+- Want to contribute? [CONTRIBUTING.md](https://github.com/yroussev/camber/blob/main/CONTRIBUTING.md) covers the vendor-neutral,
   clean-room, dependency-light ground rules.

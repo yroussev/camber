@@ -1,7 +1,7 @@
 # Ventilation verification — ASHRAE 62.1 VRP & DCV
 
 `camber.ventilation` does the explicit **code-rate** ventilation check that complements the CO₂
-*proxy* in [`camber.iaq`](../camber/iaq.py) and the OA-fraction diagnostic in `camber.oafraction`.
+*proxy* in [`camber.iaq`](https://github.com/yroussev/camber/blob/main/camber/iaq.py) and the OA-fraction diagnostic in `camber.oafraction`.
 
 - **Ventilation Rate Procedure (VRP)** — is the *delivered* outdoor air at least the ASHRAE 62.1
   requirement for the zone?

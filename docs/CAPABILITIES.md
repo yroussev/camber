@@ -317,11 +317,11 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
   in-process, duck-typed against the existing protocols with per-plugin error isolation. See
   **[PLUGINS.md](PLUGINS.md)**.
 - **Distribution & deployment** — slim multi-stage Docker image + compose bundle
-  ([DOCKER.md](../DOCKER.md)), PyPI (`camber-toolkit`) + GHCR via the tag-driven release workflow,
+  ([DOCKER.md](https://github.com/yroussev/camber/blob/main/DOCKER.md)), PyPI (`camber-toolkit`) + GHCR via the tag-driven release workflow,
   CI on 3.10/3.11, and reference Kubernetes / conda-recipe manifests (`deploy/`). See
   **[DEPLOY.md](DEPLOY.md)**.
 
 ---
 
 See also: [ARCHITECTURE.md](ARCHITECTURE.md), [ECOSYSTEM.md](ECOSYSTEM.md) (fork-vs-depend
-analysis), and the [ROADMAP](../ROADMAP.md).
+analysis), and the [ROADMAP](https://github.com/yroussev/camber/blob/main/ROADMAP.md).

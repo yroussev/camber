@@ -137,7 +137,7 @@ Our G36 AHU fault engine (`camber.fdd_g36`) is a clean-room implementation of th
 ASHRAE Guideline 36 §5.16.14 fault conditions. To check it independently, we
 cross-validated it against [open-fdd](https://github.com/bbartling/open-fdd) (MIT) —
 a separate, independently-authored G36 FDD library — on the **public LBNL simulated
-single-duct AHU dataset** (the CC-BY dataset the [`examples/lbnl_fdd`](../examples/lbnl_fdd)
+single-duct AHU dataset** (the CC-BY dataset the [`examples/lbnl_fdd`](https://github.com/yroussev/camber/tree/main/examples/lbnl_fdd)
 example uses). Running on a public, downloadable dataset makes this corroboration
 fully reproducible and shareable, with no client data involved.
 
