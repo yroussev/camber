@@ -142,4 +142,6 @@ The one remaining IPMVP boundary, now shipped: a dependency-light 1R1C grey-box 
 ASHRAE G14 acceptance test), then run under an as-corrected control to give a **pre-implementation
 modeled saving** with a G14 uncertainty band — the counterfactual the `ecm_savings` upper bound stands
 in for. Refuses to claim a saving when the calibration fails the gate. So CAMBER now covers **IPMVP
-Options A, B, C, and D**. See **[OPTION-D.md](OPTION-D.md)**.
+Options A, B, C, and D**. A **2R2C** thermal-mass variant (`RC2Model`/`calibrate2`), **multi-zone**
+stacked-OLS calibration (`calibrate_zones`), and an optional **EnergyPlus** cross-validator
+(`interop.energyplus`) add depth on the same grid-τ/OLS/G14 footing. See **[OPTION-D.md](OPTION-D.md)**.

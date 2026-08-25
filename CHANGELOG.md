@@ -4,6 +4,37 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.69.0] — 2026-08-24
+
+**Option-D depth — a 2R2C thermal-mass grey-box, multi-zone calibration, and an EnergyPlus
+cross-validator.** Extends IPMVP Option-D (`camber.mandv.rc_model`) beyond the 1R1C core, each addition
+preserving its honesty invariant: grid the nonlinear time-constant(s), OLS the linear
+conductances/gains, gate on ASHRAE G14, no scipy. The 1R1C path is unchanged.
+
+### Added
+- **2R2C** — `RC2Model(ua_env, uc_mass, gain_eff, tau_air, tau_mass, w)` + `calibrate2(...)`: a slow
+  thermal-mass node coupled to the air node, capturing the post-re-entry recovery tail a single `tau`
+  can't. Grids `(tau_air, tau_mass, w)` and OLS-fits the conductances, with `p=6` in the G14 gate. On
+  mass-dominated data it beats 1R1C on CV(RMSE) (the test that earns the complexity).
+- **Multi-zone** — `calibrate_zones(oat, schedules, metered_energy, *, order=1|2)` +
+  `MultiZoneModel`/`ZoneModel`: several zones whose hourly predictions sum to the whole-building meter,
+  calibrated by stacking their basis columns into one OLS. Reuses `option_d_savings` unchanged (pass
+  per-zone schedule dicts). Candid about the whole-building split being under-determined without
+  differing schedules or sub-metering.
+- **`camber.interop.energyplus.compare_option_d`** (`[energyplus]` extra, `eppy`) — runs a
+  user-supplied IDF under as-found/as-corrected control and diffs its avoided energy against the
+  grey-box saving, returning an `agreement` block. The runner is injectable, so the compare logic is
+  fully tested without the E+ engine (own-it-then-cross-check, like the pvlib/BETTER bridges).
+
+### Changed
+- `docs/OPTION-D.md` gains 2R2C / multi-zone / EnergyPlus sections (dropping the "out of scope" note);
+  `docs/MANDV.md`, `docs/CAPABILITIES.md`, `ROADMAP.md` reference the depth.
+
+### Notes
+- New public names (`RC2Model`, `calibrate2`, `ZoneModel`, `MultiZoneModel`, `calibrate_zones`, and the
+  `camber.interop.energyplus` module) → `tests/public_api_snapshot.json` regenerated. The 2R2C +
+  multi-zone core adds **no** runtime dependency (numpy only); `[energyplus]` is an optional extra.
+
 ## [0.68.0] — 2026-08-24
 
 **A unified validation & credibility dossier + a `camber validate` command.** CAMBER validates itself

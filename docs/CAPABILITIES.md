@@ -177,8 +177,10 @@ TOWT (`mandv.towt`), fit statistics + G14 fractional savings uncertainty (`mandv
 (`mandv.retrofit_isolation`), CalTRACK alignment (`mandv.caltrack`), a **variable-base degree-day**
 baseline (`mandv.degreeday`, HDD/CDD regression with an auto-fit balance point), **IPMVP Option A**
 (`mandv.option_a`, measured Δparameter × stipulated duty), and **IPMVP Option D** (`mandv.rc_model`, a
-1R1C grey-box model calibrated to metered energy — grid-τ + OLS, G14-gated — run as-found vs
-as-corrected for a modeled pre-implementation saving; see **[OPTION-D.md](OPTION-D.md)**). **CAMBER now
+1R1C **or 2R2C** grey-box calibrated to metered energy — grid-τ + OLS, G14-gated — run as-found vs
+as-corrected for a modeled pre-implementation saving, with **multi-zone** stacked-OLS calibration and
+an optional **EnergyPlus** cross-validator (`interop.energyplus`); see **[OPTION-D.md](OPTION-D.md)**).
+**CAMBER now
 covers IPMVP Options A/B/C/D.** Flags: `confidence`, `exclude_non_routine`, model `kinds`, `aggregate`,
 `balance_point`, `interval`.
 

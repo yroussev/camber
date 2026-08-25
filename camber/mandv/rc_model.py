@@ -26,6 +26,7 @@ deterministic.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -110,9 +111,14 @@ class RCModel:
 
 @dataclass
 class Calibration:
-    """A calibrated :class:`RCModel` with its ASHRAE G14 fit statistics."""
+    """A calibrated model with its ASHRAE G14 fit statistics.
 
-    model: RCModel
+    ``model`` is duck-typed on ``.predict`` / ``.as_dict``: a 1R1C :class:`RCModel`, a 2R2C
+    :class:`RC2Model`, or a :class:`MultiZoneModel` (its ``predict`` takes a per-zone dict).
+    :func:`option_d_savings` consumes any of them unchanged.
+    """
+
+    model: Any
     fit: FitStats
     tau_grid_n: int = 0
 
@@ -268,3 +274,290 @@ def option_d_savings(calibration, oat, as_found_schedule, as_corrected_schedule)
         basis=basis,
         fit=fit.as_dict() if fit is not None else None,
     )
+
+
+# --------------------------------------------------------------------------- 2R2C (thermal mass)
+#
+# The 1R1C model has one time-constant, so it can only represent a single free-float/recovery decay.
+# A mass-dominated building keeps *drawing* recovery energy for hours after re-entry as its thermal
+# mass recharges -- a slow tail one tau cannot fit. The 2R2C model adds a second (slow) state, the
+# thermal-mass node, coupled to the air node. Crucially it keeps the module's honesty invariant: the
+# two time-constants (tau_air, tau_mass) plus a dimensionless air-exposure weight w are the ONLY
+# nonlinear parameters and govern the state recursion *independently* of the linear conductances, so
+# calibration still grids them and OLS-fits the (ua_env, uc_mass, gain) linear params. numpy-only.
+
+
+def _design2(oat, schedule, tau_air: float, tau_mass: float, w: float):
+    """Per-hour basis columns ``(dh_env, dh_mass, cond)`` for the 2R2C linear params given the taus.
+
+    Two states evolve by a fixed linear recursion driven only by ``(tau_air, tau_mass, w)``: the air
+    node ``Ta`` (fast) relaxes toward ``w*OAT + (1-w)*Tm`` during setback and is pinned to setpoint
+    while conditioned; the mass node ``Tm`` (slow) always relaxes toward the air node. On
+    conditioned hours the energy to hold setpoint is ``ua_env*dh_env + uc_mass*dh_mass - gain*cond``
+    where ``dh_env`` is the envelope loss + fast air re-entry recovery and ``dh_mass`` is the heat
+    the warm air sheds into the still-cold mass (nonzero after re-entry -- the mass-dominated tail).
+    """
+    oat, sp, cond = _as_arrays(oat, schedule)
+    n = len(oat)
+    da = 1.0 - np.exp(-1.0 / max(float(tau_air), 1e-6))  # fast air relaxation fraction / hour
+    dm = 1.0 - np.exp(-1.0 / max(float(tau_mass), 1e-6))  # slow mass relaxation fraction / hour
+    dh_env = np.zeros(n)
+    dh_mass = np.zeros(n)
+    ta_prev = float(sp[0])
+    tm_prev = float(sp[0])
+    for t in range(n):
+        if cond[t] > 0:
+            recovery = max(sp[t] - ta_prev, 0.0) if (t > 0 and cond[t - 1] == 0) else 0.0
+            dh_env[t] = max(sp[t] - oat[t], 0.0) + recovery
+            dh_mass[t] = max(sp[t] - tm_prev, 0.0)  # air sheds heat into the cold mass
+            ta_cur = float(sp[t])  # air pinned to setpoint
+            tm_cur = tm_prev + (sp[t] - tm_prev) * dm  # mass recharges toward setpoint
+        elif t == 0:
+            ta_cur = float(oat[0])
+            tm_cur = float(oat[0])
+        else:
+            target = w * oat[t] + (1.0 - w) * tm_prev  # air relaxes toward OAT + mass
+            ta_cur = ta_prev + (target - ta_prev) * da
+            tm_cur = tm_prev + (ta_prev - tm_prev) * dm
+        ta_prev, tm_prev = ta_cur, tm_cur
+    return dh_env, dh_mass, cond
+
+
+@dataclass(frozen=True)
+class RC2Model:
+    """A calibrated 2R2C grey box: an air node + a slow thermal-mass node (effective params)."""
+
+    ua_env: float  # envelope conductance (air <-> OAT), metered energy per °F·h
+    uc_mass: float  # coupling conductance (air <-> mass), metered energy per °F·h
+    gain_eff: float  # internal + solar gain offset per conditioned hour
+    tau_air: float  # fast air time-constant (hours)
+    tau_mass: float  # slow thermal-mass time-constant (hours)
+    w: float  # air-node OAT-exposure weight in [0, 1] (the rest couples to the mass)
+
+    def predict(self, oat, schedule) -> np.ndarray:
+        """Hourly metered HVAC energy for ``oat`` under ``schedule`` (clamped at 0 -- physical)."""
+        dh_env, dh_mass, cond = _design2(oat, schedule, self.tau_air, self.tau_mass, self.w)
+        return np.maximum(self.ua_env * dh_env + self.uc_mass * dh_mass - self.gain_eff * cond, 0.0)
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def _nonaccepted(n: int, p: int, note: str) -> FitStats:
+    """A NaN, non-accepted FitStats for the degrade-don't-raise paths."""
+    nan = float("nan")
+    return FitStats(
+        n=n, p=p, r2=nan, rmse=nan, cv_rmse=nan, nmbe=nan, f_stat=nan, accept=False, notes=note
+    )
+
+
+def calibrate2(
+    oat,
+    schedule,
+    metered_energy,
+    *,
+    interval: str = "hourly",
+    tau_air_grid=None,
+    tau_mass_grid=None,
+    w_grid=None,
+) -> Calibration:
+    """Calibrate an :class:`RC2Model` to ``metered_energy`` (grid the taus + ``w``, OLS the rest).
+
+    Keeps the 1R1C design: the nonlinear ``(tau_air, tau_mass, w)`` are gridded and the linear
+    ``(ua_env, uc_mass, gain_eff)`` are least-squares fit at each grid point; the best CV(RMSE)
+    wins, then a coarse->fine refine on the taus. Acceptance is the same ASHRAE G14 gate, with
+    ``p=6`` so the extra parameters are honestly penalized. Degrades (returns a non-accepted
+    :class:`Calibration`) rather than raising on thin/degenerate data -- the savings layer then
+    refuses to claim a number. numpy-only, deterministic.
+    """
+    oat = np.asarray(oat, dtype=float)
+    y = np.asarray(metered_energy, dtype=float)
+    if len(y) < 6 or int(np.isfinite(y).sum()) < 6:
+        note = "insufficient data to calibrate 2R2C (need >= 6 finite points)"
+        return Calibration(
+            model=RC2Model(*([float("nan")] * 6)), fit=_nonaccepted(len(y), 6, note), tau_grid_n=0
+        )
+
+    def _fit_at2(ta, tm, w):
+        dh_env, dh_mass, cond = _design2(oat, schedule, ta, tm, w)
+        beta, *_ = np.linalg.lstsq(np.column_stack([dh_env, dh_mass, -cond]), y, rcond=None)
+        model = RC2Model(
+            ua_env=float(beta[0]),
+            uc_mass=float(beta[1]),
+            gain_eff=float(beta[2]),
+            tau_air=float(ta),
+            tau_mass=float(tm),
+            w=float(w),
+        )
+        return float(np.sum((y - model.predict(oat, schedule)) ** 2)), model
+
+    ta_grid = np.asarray(tau_air_grid) if tau_air_grid is not None else np.linspace(1.0, 12.0, 12)
+    tm_grid = (
+        np.asarray(tau_mass_grid) if tau_mass_grid is not None else np.linspace(12.0, 200.0, 16)
+    )
+    ws = np.asarray(w_grid) if w_grid is not None else np.array([0.4, 0.6, 0.8])
+    best_sse, model = float("inf"), None
+    n_evals = 0
+    for ta in ta_grid:
+        for tm in tm_grid:
+            if tm <= ta:  # the mass node must be the slower one
+                continue
+            for w in ws:
+                sse, cand = _fit_at2(ta, tm, float(w))
+                n_evals += 1
+                if sse < best_sse:
+                    best_sse, model = sse, cand
+    # coarse -> fine refine on the taus around the best coarse point (w fixed at its best)
+    if tau_air_grid is None and tau_mass_grid is None and model is not None:
+        sa = ta_grid[1] - ta_grid[0]
+        sm = tm_grid[1] - tm_grid[0]
+        for ta in np.linspace(max(model.tau_air - sa, 1e-3), model.tau_air + sa, 7):
+            for tm in np.linspace(max(model.tau_mass - sm, ta + 1e-3), model.tau_mass + sm, 7):
+                sse, cand = _fit_at2(ta, tm, model.w)
+                n_evals += 1
+                if sse < best_sse:
+                    best_sse, model = sse, cand
+
+    if model is None:  # every grid point skipped (degenerate grid) -> degrade, don't raise
+        return Calibration(
+            model=RC2Model(*([float("nan")] * 6)),
+            fit=_nonaccepted(len(y), 6, "empty tau grid"),
+            tau_grid_n=n_evals,
+        )
+    yhat = model.predict(oat, schedule)
+    try:
+        fit: FitStats | None = fit_stats(y, yhat, p=6, cv_rmse_max=cv_rmse_max_for(interval))
+    except ValueError:
+        fit = None
+    if fit is None or not np.isfinite(model.ua_env) or fit.cv_rmse != fit.cv_rmse:
+        fit = _nonaccepted(len(y), 6, "2R2C calibration produced a non-finite fit")
+    return Calibration(model=model, fit=fit, tau_grid_n=n_evals)
+
+
+# --------------------------------------------------------------------------- multi-zone
+#
+# Several zones, each with its own control schedule, whose hourly predictions SUM to the metered
+# whole-building energy. The grid+OLS invariant is preserved by STACKING every zone's basis columns
+# into one design matrix and least-squares fitting all zones' linear params at once, given one
+# shared gridded time-constant set. Identifiability honesty: whole-building energy under-determines
+# the split of conductance across zones -- it is recoverable only when the zones' schedules differ
+# (breaking the column collinearity) or when each zone is sub-metered. For per-zone confidence, call
+# the single-zone `calibrate` / `calibrate2` per zone instead (each supports its own tau).
+
+
+@dataclass(frozen=True)
+class ZoneModel:
+    """One zone's calibrated model (a 1R1C :class:`RCModel` or a 2R2C :class:`RC2Model`)."""
+
+    name: str
+    model: Any  # RCModel | RC2Model (duck-typed .predict / .as_dict)
+
+    def as_dict(self) -> dict:
+        return {"name": self.name, "model": self.model.as_dict()}
+
+
+@dataclass(frozen=True)
+class MultiZoneModel:
+    """A fleet of :class:`ZoneModel` whose hourly predictions sum to the whole-building energy."""
+
+    zones: tuple
+
+    def predict(self, oat, schedules) -> np.ndarray:
+        """Sum each zone's hourly energy. ``schedules`` is ``{zone_name: schedule}``."""
+        total = None
+        for z in self.zones:
+            e = z.model.predict(oat, schedules[z.name])
+            total = e if total is None else total + e
+        return total if total is not None else np.zeros(len(np.asarray(oat)))
+
+    def as_dict(self) -> dict:
+        return {"zones": [z.as_dict() for z in self.zones]}
+
+
+def calibrate_zones(
+    oat, schedules, metered_energy, *, order: int = 1, interval: str = "hourly", tau_grid=None
+) -> Calibration:
+    """Jointly calibrate a multi-zone model to whole-building ``metered_energy`` (stacked OLS).
+
+    ``schedules`` is ``{zone_name: {"setpoint", "conditioned"}}``. Every zone contributes its basis
+    columns (1R1C when ``order=1``, 2R2C when ``order=2``) built at one **shared** gridded
+    time-constant set; the columns are stacked and a single least-squares fit recovers all zones'
+    linear params. The G14 acceptance gate counts all free params (linear + shared nonlinear).
+    Returns a :class:`Calibration` whose ``model`` is a :class:`MultiZoneModel`; it flows through
+    :func:`option_d_savings` unchanged when the as-found / as-corrected args are per-zone schedule
+    dicts. Degrades (non-accepted) rather than raising on thin/degenerate data.
+    """
+    if order not in (1, 2):
+        raise ValueError(f"order must be 1 or 2, got {order!r}")
+    oat = np.asarray(oat, dtype=float)
+    y = np.asarray(metered_energy, dtype=float)
+    names = list(schedules)
+    z = len(names)
+    per_zone_cols = 2 if order == 1 else 3
+    p = z * per_zone_cols + (1 if order == 1 else 3)  # linear params + shared nonlinear
+    if not names or len(y) < p or int(np.isfinite(y).sum()) < p:
+        note = f"insufficient data to calibrate {z} zone(s) at order {order}"
+        return Calibration(model=MultiZoneModel(zones=()), fit=_nonaccepted(len(y), p, note))
+
+    def _stack(params):
+        cols = []
+        for name in names:
+            if order == 1:
+                ddh, cond = _design(oat, schedules[name], params[0])
+                cols += [ddh, -cond]
+            else:
+                dh_env, dh_mass, cond = _design2(oat, schedules[name], *params)
+                cols += [dh_env, dh_mass, -cond]
+        return np.column_stack(cols)
+
+    def _build(params, beta):
+        zones = []
+        for zi, name in enumerate(names):
+            b = beta[zi * per_zone_cols : (zi + 1) * per_zone_cols]
+            if order == 1:
+                m: object = RCModel(ua_eff=float(b[0]), gain_eff=float(b[1]), tau=float(params[0]))
+            else:
+                m = RC2Model(
+                    ua_env=float(b[0]),
+                    uc_mass=float(b[1]),
+                    gain_eff=float(b[2]),
+                    tau_air=float(params[0]),
+                    tau_mass=float(params[1]),
+                    w=float(params[2]),
+                )
+            zones.append(ZoneModel(name=name, model=m))
+        return MultiZoneModel(zones=tuple(zones))
+
+    grid: list[tuple[float, ...]]
+    if order == 1:
+        grid = [(t,) for t in (np.asarray(tau_grid) if tau_grid is not None else _tau_grid())]
+    else:
+        grid = [
+            (ta, tm, w)
+            for ta in np.linspace(1.0, 12.0, 10)
+            for tm in np.linspace(12.0, 200.0, 12)
+            for w in (0.4, 0.6, 0.8)
+            if tm > ta
+        ]
+    best_sse, model, n_evals = float("inf"), None, 0
+    for params in grid:
+        X = _stack(params)
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        cand = _build(params, beta)
+        sse = float(np.sum((y - cand.predict(oat, schedules)) ** 2))
+        n_evals += 1
+        if sse < best_sse:
+            best_sse, model = sse, cand
+
+    if model is None:  # empty grid -> degrade, don't raise
+        return Calibration(
+            model=MultiZoneModel(zones=()), fit=_nonaccepted(len(y), p, "empty tau grid")
+        )
+    yhat = model.predict(oat, schedules)
+    try:
+        fit: FitStats | None = fit_stats(y, yhat, p=p, cv_rmse_max=cv_rmse_max_for(interval))
+    except ValueError:
+        fit = None
+    if fit is None or fit.cv_rmse != fit.cv_rmse:
+        fit = _nonaccepted(len(y), p, "multi-zone calibration produced a non-finite fit")
+    return Calibration(model=model, fit=fit, tau_grid_n=n_evals)

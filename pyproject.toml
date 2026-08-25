@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.68.0"
+version = "0.69.0"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,6 +61,11 @@ psychro = ["psychrolib>=2"]
 # and temperature-aware PVWatts yield, beyond camber.pv's flat-PR monitoring. BSD-3.
 # camber.interop.pvlib_bridge imports it lazily; the core needs none of it.
 pv = ["pvlib>=0.10"]
+# EnergyPlus cross-validation of an Option-D counterfactual via eppy (MIT). Runs a user-supplied IDF
+# under as-found/as-corrected control and diffs it against camber.mandv.rc_model's grey-box saving.
+# eppy is pip-installable; *running* an IDF also needs an installed EnergyPlus engine. camber.interop.
+# energyplus imports it lazily (injectable runner); the core needs none of it.
+energyplus = ["eppy>=0.5"]
 # Read-only network ingest adapters (camber.ingest.*). Each imports its protocol library
 # lazily and never issues a write/command service. See docs/INGEST-PROTOCOLS.md + SECURITY.md.
 # Modbus TCP register polling (pymodbus, BSD-3-Clause).

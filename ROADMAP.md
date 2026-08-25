@@ -212,8 +212,10 @@ The capability surface is broad and now hardened; 1.0 is a consolidation, not ne
       family is validated on a *generated* G36 Trim-&-Respond fleet (`camber.fleetlab` +
       `examples/fleet_fdd`), CI-gated, with correct-attribution scoring. See
       [VALIDATION.md](docs/VALIDATION.md).
-- [ ] **Option D depth** (post-1.0) — 2R2C / multi-zone + an optional EnergyPlus `[energyplus]`
-      cross-validator (mirroring the pvlib/BETTER own-it-then-cross-check pattern).
+- [x] **Option D depth** — a **2R2C** thermal-mass grey-box (`RC2Model`/`calibrate2`), **multi-zone**
+      stacked-OLS calibration (`calibrate_zones`/`MultiZoneModel`), and an optional **EnergyPlus**
+      `[energyplus]` cross-validator (`interop.energyplus.compare_option_d`, injectable runner) — all
+      preserving the grid-nonlinear/OLS-linear/G14 invariant. See [docs/OPTION-D.md](docs/OPTION-D.md).
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
 

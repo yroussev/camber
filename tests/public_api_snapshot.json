@@ -802,6 +802,9 @@
     "roles_from_triples",
     "topology_from_brick"
   ],
+  "camber.interop.energyplus": [
+    "compare_option_d"
+  ],
   "camber.interop.export": [
     "ROLE_TO_BRICK_PART",
     "ROLE_TO_BRICK_POINT_CLASS",
@@ -963,9 +966,14 @@
   ],
   "camber.mandv.rc_model": [
     "Calibration",
+    "MultiZoneModel",
     "OptionDSavings",
+    "RC2Model",
     "RCModel",
+    "ZoneModel",
     "calibrate",
+    "calibrate2",
+    "calibrate_zones",
     "daily_schedule",
     "option_d_savings"
   ],
