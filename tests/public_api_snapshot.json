@@ -1762,6 +1762,7 @@
   ],
   "camber.weather_source": [
     "FILL_VALUE",
+    "cached_transport",
     "fetch_nasa_power",
     "nasa_power_transport",
     "nasa_power_url",

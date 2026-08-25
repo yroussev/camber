@@ -170,3 +170,122 @@ def test_determinism():
     a = ws.oat_reference(0, 0, "20240101", "20240101", transport=_transport(payload), tz="UTC")
     b = ws.oat_reference(0, 0, "20240101", "20240101", transport=_transport(payload), tz="UTC")
     pd.testing.assert_series_equal(a, b)
+
+
+# --------------------------------------------------------------------------- multi-year chunking
+
+
+class _Counter:
+    """A URL-aware transport that counts calls and returns hourly data covering the URL's window."""
+
+    def __init__(self, param="T2M", empty_for=()):
+        self.calls = 0
+        self.param = param
+        self.empty_for = set(empty_for)  # start-dates whose chunk returns an empty block
+
+    def __call__(self, url):
+        from urllib.parse import parse_qs, urlparse
+
+        self.calls += 1
+        q = parse_qs(urlparse(url).query)
+        s, e = q["start"][0], q["end"][0]
+        if s in self.empty_for:
+            return {"properties": {"parameter": {self.param: {}}}}
+        keys, d = {}, pd.Timestamp(s)
+        while d <= pd.Timestamp(e):
+            for h in range(24):
+                keys[f"{d.strftime('%Y%m%d')}{h:02d}"] = 5.0
+            d += pd.Timedelta(days=1)
+        return {"properties": {"parameter": {self.param: keys}}}
+
+
+def test_multi_year_request_issues_one_call_per_year():
+    c = _Counter()
+    df = ws.fetch_nasa_power(0, 0, "20220601", "20240315", transport=c, tz="UTC")
+    assert c.calls == 3  # 2022, 2023, 2024 calendar-year chunks
+    assert df.index.is_unique and df.index.is_monotonic_increasing
+    assert df.index.min() == pd.Timestamp("2022-06-01 00:00", tz="UTC")
+    assert df.index.max() == pd.Timestamp("2024-03-15 23:00", tz="UTC")
+
+
+def test_single_year_request_makes_one_call():
+    c = _Counter()
+    ws.fetch_nasa_power(0, 0, "20240101", "20240601", transport=c)
+    assert c.calls == 1  # no regression: a within-year window is a single request
+
+
+def test_chunk_seam_has_no_duplicate_or_missing_hour():
+    c = _Counter()
+    df = ws.fetch_nasa_power(0, 0, "20221215", "20230115", transport=c, tz="UTC")  # crosses a seam
+    expected = pd.date_range("2022-12-15 00:00", "2023-01-15 23:00", freq="1h", tz="UTC")
+    assert len(df) == len(expected) and (df.index == expected).all()  # contiguous, no dup/gap
+
+
+def test_partial_empty_chunk_is_tolerated():
+    c = _Counter(empty_for={"20230101"})  # the 2023 chunk comes back empty
+    df = ws.fetch_nasa_power(0, 0, "20220601", "20231231", transport=c, tz="UTC")
+    assert df.index.max().year == 2022 and len(df) > 0  # the covered year still returns
+
+
+def test_all_empty_chunks_raise():
+    c = _Counter(empty_for={"20240101"})
+    with pytest.raises(ValueError, match="no T2M data"):
+        ws.fetch_nasa_power(0, 0, "20240101", "20240601", transport=c)
+
+
+# --------------------------------------------------------------------------- on-disk cache
+
+
+def test_cached_transport_hit_serves_from_disk(tmp_path):
+    inner = _Counter()
+    cached = ws.cached_transport(inner, str(tmp_path))
+    url = ws.nasa_power_url(0, 0, "20240101", "20240101")
+    a, b = cached(url), cached(url)
+    assert inner.calls == 1 and a == b  # second call served from disk
+    assert any(f.endswith(".json") for f in os.listdir(tmp_path))
+
+
+def test_cached_transport_miss_delegates_per_url(tmp_path):
+    inner = _Counter()
+    cached = ws.cached_transport(inner, str(tmp_path))
+    cached(ws.nasa_power_url(0, 0, "20240101", "20240101"))
+    cached(ws.nasa_power_url(1, 1, "20240101", "20240101"))  # different URL -> another fetch
+    assert inner.calls == 2
+
+
+def test_cached_transport_ttl_expiry_with_injected_clock(tmp_path):
+    import datetime as dt
+
+    inner = _Counter()
+    now = [dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)]
+    cached = ws.cached_transport(
+        inner, str(tmp_path), ttl=dt.timedelta(hours=1), clock=lambda: now[0]
+    )
+    url = ws.nasa_power_url(0, 0, "20240101", "20240101")
+    cached(url)  # write
+    now[0] += dt.timedelta(minutes=30)
+    cached(url)  # fresh -> hit
+    assert inner.calls == 1
+    now[0] += dt.timedelta(hours=2)
+    cached(url)  # expired -> re-fetch
+    assert inner.calls == 2
+
+
+def test_cached_transport_corrupt_file_refetches(tmp_path):
+    import hashlib
+
+    inner = _Counter()
+    cached = ws.cached_transport(inner, str(tmp_path))
+    url = ws.nasa_power_url(0, 0, "20240101", "20240101")
+    key = hashlib.sha256(url.encode()).hexdigest()
+    (tmp_path / f"{key}.json").write_text("{not valid json")  # torn write
+    cached(url)  # self-heals: treats as a miss
+    assert inner.calls == 1
+
+
+def test_cached_transport_composes_with_fetch(tmp_path):
+    inner = _Counter()
+    cached = ws.cached_transport(inner, str(tmp_path))
+    for _ in range(2):
+        ws.fetch_nasa_power(0, 0, "20240101", "20240101", transport=cached, tz="UTC")
+    assert inner.calls == 1  # the second fetch is served entirely from disk

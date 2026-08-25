@@ -28,6 +28,10 @@ normalization baseline, keep using `mandv.weather.load_epw`.
 
 from __future__ import annotations
 
+import datetime as _dt
+import hashlib
+import json
+import os
 from collections.abc import Callable, Sequence
 
 import pandas as pd
@@ -38,6 +42,7 @@ __all__ = [
     "FILL_VALUE",
     "nasa_power_url",
     "nasa_power_transport",
+    "cached_transport",
     "fetch_nasa_power",
     "oat_reference",
 ]
@@ -101,6 +106,54 @@ def nasa_power_transport(*, timeout: float = 30.0) -> Callable[[str], dict]:
     return transport
 
 
+def _default_clock() -> _dt.datetime:
+    return _dt.datetime.now(_dt.timezone.utc)
+
+
+def cached_transport(
+    inner: Callable[[str], dict],
+    cache_dir: str,
+    *,
+    ttl: _dt.timedelta | None = None,
+    clock: Callable[[], _dt.datetime] | None = None,
+) -> Callable[[str], dict]:
+    """Wrap a transport with a dependency-light on-disk cache keyed by URL (composes with any).
+
+    Each URL's parsed JSON is memoized to ``<cache_dir>/<sha256(url)>.json`` (an atomic write via
+    ``os.replace``); a hit returns the stored copy, a miss delegates to ``inner`` and writes it.
+    NASA POWER historical reanalysis is stable, so the default is **cache-forever** (``ttl=None``);
+    the most recent ~months can be revised, so pass a ``ttl`` for windows touching recent data. A
+    corrupt/torn cache file is treated as a miss (self-healing). ``clock`` (default UTC ``now``) is
+    injectable so TTL expiry is deterministic in tests; it should return a tz-aware UTC datetime.
+    stdlib ``json``/``hashlib``/``os`` only.
+    """
+    tick = clock or _default_clock
+
+    def transport(url: str) -> dict:
+        os.makedirs(cache_dir, exist_ok=True)
+        path = os.path.join(cache_dir, hashlib.sha256(url.encode("utf-8")).hexdigest() + ".json")
+        if os.path.exists(path):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    env = json.load(f)
+                fresh = (
+                    ttl is None or (tick() - _dt.datetime.fromisoformat(env["fetched_utc"])) < ttl
+                )
+                if fresh:
+                    return env["payload"]
+            except (json.JSONDecodeError, OSError, KeyError, ValueError):
+                pass  # corrupt / torn write / bad timestamp -> treat as a miss and re-fetch
+        payload = inner(url)
+        env = {"fetched_utc": tick().isoformat(), "url": url, "payload": payload}
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(env, f)
+        os.replace(tmp, path)  # atomic publish (mirror store/facilities._write, edge/spool.enqueue)
+        return payload
+
+    return transport
+
+
 def _index(keys, tz: str) -> pd.DatetimeIndex:
     """Parse ``YYYYMMDDHH`` keys to a DatetimeIndex; UTC-aware, or DST-correct naive-local."""
     idx = pd.to_datetime(list(keys), format="%Y%m%d%H", utc=True)
@@ -109,6 +162,52 @@ def _index(keys, tz: str) -> pd.DatetimeIndex:
     return idx.tz_convert(tz).tz_localize(
         None
     )  # naive local civil time (joins to a BAS trend index)
+
+
+class _NoData(ValueError):
+    """A NASA POWER response with a valid but *empty* parameter block (no hours in the window)."""
+
+
+def _year_chunks(start, end) -> list[tuple[str, str]]:
+    """Split ``[start, end]`` into consecutive calendar-year ``(YYYYMMDD, YYYYMMDD)`` windows.
+
+    NASA POWER hourly rejects a window longer than ~1 year. Calendar-year chunks share **no day** at
+    a seam (one ends Dec-31, the next starts Jan-01), so no hour is duplicated or dropped.
+    """
+    s = pd.Timestamp(_yyyymmdd(start))
+    e = pd.Timestamp(_yyyymmdd(end))
+    if e < s:
+        raise ValueError(f"end {end!r} is before start {start!r}")
+    out = []
+    for y in range(s.year, e.year + 1):
+        cs = max(s, pd.Timestamp(year=y, month=1, day=1))
+        ce = min(e, pd.Timestamp(year=y, month=12, day=31))
+        out.append((cs.strftime("%Y%m%d"), ce.strftime("%Y%m%d")))
+    return out
+
+
+def _fetch_one(latitude, longitude, start, end, *, parameters, transport, tz) -> pd.DataFrame:
+    """Fetch a single ≤1-year window; raise :class:`_NoData` on a valid-but-empty block."""
+    payload = transport(nasa_power_url(latitude, longitude, start, end, parameters=parameters))
+    try:
+        param_block = payload["properties"]["parameter"]
+    except (KeyError, TypeError) as e:
+        raise ValueError("NASA POWER response missing properties.parameter") from e
+
+    columns: dict = {}
+    for p in parameters:
+        raw = param_block.get(p)
+        if not raw:
+            raise _NoData(
+                f"NASA POWER returned no {p} data for ({latitude}, {longitude}) {start}..{end}"
+            )
+        keys = sorted(raw)  # chronological YYYYMMDDHH keys
+        values = pd.Series([float(raw[k]) for k in keys], index=_index(keys, tz), dtype=float)
+        values = values.where(values > FILL_VALUE)  # -999 fill -> NaN (never treated as -999 °C)
+        if p == "T2M":
+            values = c_to_f(values)  # °C -> °F, matching load_epw's contract
+        columns[_PARAM_COL.get(p, p.lower())] = values
+    return pd.DataFrame(columns)
 
 
 def fetch_nasa_power(
@@ -124,32 +223,32 @@ def fetch_nasa_power(
 ) -> pd.DataFrame:
     """Fetch hourly NASA POWER weather as a DataFrame (``oat_f`` in °F; ``rh_pct`` when requested).
 
-    ``transport`` (default the stdlib one) is ``callable(url) -> parsed-JSON dict`` — inject a
-    canned one to run offline. ``tz`` is ``"UTC"`` (tz-aware) or a site IANA zone (naive local;
-    see the module docstring). Missing hours (``<= FILL_VALUE``) become NaN; a response with no data
-    for a requested parameter raises ``ValueError``. numpy/pandas + stdlib only, deterministic.
+    Multi-year windows work transparently: the request is split into calendar-year chunks (NASA
+    POWER caps a single hourly request at ~1 year), one transport call per year, concatenated into a
+    single unique, sorted hourly index. ``transport`` (default the stdlib one) is
+    ``callable(url) -> parsed-JSON dict`` — inject a canned one to run offline, or wrap it with
+    :func:`cached_transport`. ``tz`` is ``"UTC"`` (tz-aware) or a site IANA zone (naive local; see
+    the module docstring). Missing hours (``<= FILL_VALUE``) become NaN; a request returning no data
+    for a parameter across *every* chunk raises ``ValueError``. numpy/pandas + stdlib.
     """
     transport = transport or nasa_power_transport(timeout=timeout)
-    payload = transport(nasa_power_url(latitude, longitude, start, end, parameters=parameters))
-    try:
-        param_block = payload["properties"]["parameter"]
-    except (KeyError, TypeError) as e:
-        raise ValueError("NASA POWER response missing properties.parameter") from e
-
-    columns: dict = {}
-    for p in parameters:
-        raw = param_block.get(p)
-        if not raw:
-            raise ValueError(
-                f"NASA POWER returned no {p} data for ({latitude}, {longitude}) {start}..{end}"
+    frames = []
+    for cs, ce in _year_chunks(start, end):
+        try:
+            frames.append(
+                _fetch_one(
+                    latitude, longitude, cs, ce, parameters=parameters, transport=transport, tz=tz
+                )
             )
-        keys = sorted(raw)  # chronological YYYYMMDDHH keys
-        values = pd.Series([float(raw[k]) for k in keys], index=_index(keys, tz), dtype=float)
-        values = values.where(values > FILL_VALUE)  # -999 fill -> NaN (never treated as -999 °C)
-        if p == "T2M":
-            values = c_to_f(values)  # °C -> °F, matching load_epw's contract
-        columns[_PARAM_COL.get(p, p.lower())] = values
-    return pd.DataFrame(columns)
+        except _NoData:
+            continue  # a covered-but-empty year (e.g. running into an undefined range) — skip it
+    if not frames:
+        raise _NoData(
+            f"NASA POWER returned no {parameters[0]} data for "
+            f"({latitude}, {longitude}) {start}..{end}"
+        )
+    frame = pd.concat(frames)
+    return frame[~frame.index.duplicated(keep="first")].sort_index()
 
 
 def oat_reference(

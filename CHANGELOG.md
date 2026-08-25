@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.71.0] — 2026-08-25
+
+**Complete the weather-fetch adapter: multi-year requests + an on-disk cache.** Rounds out
+`camber.weather_source` (0.70) with the two pieces its docs flagged as deferred, staying entirely
+within the stdlib-only, injectable-transport, offline-testable design.
+
+### Added
+- **Transparent multi-year chunking** in `fetch_nasa_power` — NASA POWER caps a single hourly request
+  at ~1 year, so the request is split into **calendar-year** chunks (one call per year) and
+  concatenated into a single unique, sorted hourly index. A multi-year request just works; the public
+  signature is unchanged. Calendar-year seams share no day, so no hour is duplicated or dropped.
+- **`camber.weather_source.cached_transport(inner, cache_dir, *, ttl, clock)`** — a dependency-light
+  on-disk cache decorator that composes with any transport (default or test double). Memoizes each
+  URL's parsed JSON to `<cache_dir>/<sha256(url)>.json` with an atomic write; corrupt files self-heal;
+  cache-forever by default (historical reanalysis is stable) with an optional `ttl` for revised recent
+  months; `clock` is injected so TTL expiry is deterministic in tests.
+
+### Changed
+- `docs/WEATHER.md` documents multi-year requests + the on-disk cache (drops the two "not yet here"
+  notes; NOAA/ISD station ingest remains a deferred future arc).
+
+### Notes
+- New public name `cached_transport` → `tests/public_api_snapshot.json` regenerated. No new runtime
+  dependency (stdlib `urllib`/`json`/`hashlib`/`os` + pandas). Existing 0.70 API + tests unchanged.
+
 ## [0.70.0] — 2026-08-25
 
 **A live weather-fetch adapter (NASA POWER).** CAMBER could weather-normalize M&V and validate an OAT
