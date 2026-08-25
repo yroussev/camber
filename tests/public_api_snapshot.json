@@ -1760,6 +1760,13 @@
     "makeup_gpm",
     "min_night_flow"
   ],
+  "camber.weather_source": [
+    "FILL_VALUE",
+    "fetch_nasa_power",
+    "nasa_power_transport",
+    "nasa_power_url",
+    "oat_reference"
+  ],
   "camber.zones": [
     "ZONE_MEASURES",
     "time_of_week_profile",

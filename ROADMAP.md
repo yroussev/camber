@@ -495,7 +495,9 @@ every rule shipping a synthetic fixture that proves detection. **All shipped in 
       `trusted_roles` gate built on the ingest quality stats) wired into the rule runner
       and config (`trust_gate`); `camber.sensordrift` (bias / drift-per-month / tracking
       correlation vs an independent reference — validating the OAT/OSA sensor against
-      external weather such as NASA POWER, a station, or a TMY series); and
+      external weather such as NASA POWER, a station, or a TMY series; the NASA POWER fetch
+      itself now ships as `camber.weather_source`, dependency-light with an injectable
+      transport — see [docs/WEATHER.md](docs/WEATHER.md)); and
       `camber.mapping_confidence` (how surely each BAS tag resolved to its role — alias
       vs pattern, ambiguity, physical data-fit — to focus onboarding review).
 - [x] **Methods validation & scientific credibility** — `camber.validation` adds Wilson

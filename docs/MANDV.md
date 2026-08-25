@@ -34,6 +34,7 @@ flowchart LR
 | Avoided energy use | `mandv.stats.avoided_energy_savings` |
 | Fractional savings uncertainty (FSU) | G14 Annex-B, in the same call |
 | Normalized annual savings | drive the models with a typical year (`mandv.weather` TMY/EPW) |
+| Live actual weather (any lat/lon) | `weather_source.oat_reference` — NASA POWER fetch, see [WEATHER.md](WEATHER.md) |
 | Cumulative savings tracking | `mandv.cusum` |
 
 ## Method correspondence

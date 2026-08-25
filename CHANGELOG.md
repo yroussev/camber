@@ -4,6 +4,32 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.70.0] — 2026-08-25
+
+**A live weather-fetch adapter (NASA POWER).** CAMBER could weather-normalize M&V and validate an OAT
+sensor against an external reference, but only from a *local* EPW/TMY file or a series you brought
+yourself. This fetches one — hourly historical temperature (and optional RH) from NASA POWER, a free,
+keyless, global reanalysis service — in the exact °F Series shape those consumers already accept.
+
+### Added
+- **`camber.weather_source`** — `oat_reference(lat, lon, start, end, ...)` → a °F OAT Series
+  (`name="oat_f"`, matching `mandv.weather.load_epw`) that drops straight into
+  `sensordrift.compare_to_reference` and M&V normalization; `fetch_nasa_power(...)` → a DataFrame
+  (`oat_f` + optional `rh_pct`); `nasa_power_url(...)` (pure URL builder) and `nasa_power_transport(...)`
+  (the default stdlib-`urllib` transport). Dependency-light with an **injectable transport** (mirrors
+  `ingest.haystack.http_json_transport`), so every parse/unit/timezone/fill path is tested offline.
+- **Timezone handling** is explicit (`tz="UTC"` tz-aware, or a site IANA zone → DST-correct naive-local
+  that inner-joins to a BAS trend) — the one thing a naive fetch gets silently wrong, so it's tested
+  for the exact UTC→local hour mapping. NASA's `-999` fill becomes `NaN`, not a bogus `-999 °C`.
+
+### Changed
+- New `docs/WEATHER.md` (+ nav); `docs/MANDV.md`, `docs/CAPABILITIES.md`, `ROADMAP.md` reference it.
+
+### Notes
+- New public module `camber.weather_source` → `tests/public_api_snapshot.json` regenerated. **No new
+  runtime dependency** (stdlib `urllib`/`json` + pandas). No API key needed. On-disk caching,
+  NOAA-station ingest, and multi-year chunking are noted as future work.
+
 ## [0.69.0] — 2026-08-24
 
 **Option-D depth — a 2R2C thermal-mass grey-box, multi-zone calibration, and an EnergyPlus
