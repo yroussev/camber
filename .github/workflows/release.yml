@@ -188,6 +188,19 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Generate the validation dossier (HTML + JSON) to attach to the release
+        # camber validate live-recomputes the synthetic + generated-fleet tracks and renders the
+        # cited real-data tracks; it is deterministic and version-anchored, so the tagged release
+        # ships the exact credibility artifact for that version.
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install .
+          camber validate --html dossier.html --json dossier.json
+          echo "----- dossier (text) -----"; camber validate
       - name: Extract changelog notes for this tag
         run: |
           set -euo pipefail
@@ -198,35 +211,38 @@ jobs:
             echo "See CHANGELOG.md for the ${GITHUB_REF_NAME} changes." > RELEASE_NOTES.md
           fi
           echo "----- notes -----"; cat RELEASE_NOTES.md
-      - name: Site-neutrality gate on the generated release notes
-        # The notes are cut from CHANGELOG.md by the step above and published
-        # verbatim. This job runs as github-actions[bot], which bypasses the
-        # local .githooks entirely, so the check has to happen here.
+      - name: Site-neutrality gate on the published artifacts (notes + dossier)
+        # The notes are cut from CHANGELOG.md and the dossier is generated from the package; both are
+        # published verbatim. This job runs as github-actions[bot], which bypasses the local .githooks
+        # entirely, so the check has to happen here — across every artifact we attach.
         run: |
           set -euo pipefail
           fail=0
           while IFS=$'\t' read -r pat why; do
             [ -n "$pat" ] || continue
-            if grep -inE -- "$pat" RELEASE_NOTES.md; then
-              echo "::error::Release notes match a site-neutrality rule ($why)"
+            if grep -inE -- "$pat" RELEASE_NOTES.md dossier.html dossier.json; then
+              echo "::error::A published artifact matches a site-neutrality rule ($why)"
               fail=1
             fi
           done < <(python3 .github/scripts/site_neutrality_patterns.py)
           if [ "$fail" -ne 0 ]; then
-            echo "Refusing to publish release notes that name a client site or a"
-            echo "licence-encumbered dataset. Fix the CHANGELOG section for this tag."
+            echo "Refusing to publish an artifact that names a client site or a"
+            echo "licence-encumbered dataset. Fix the CHANGELOG section (or the dossier source)."
             exit 1
           fi
-          echo "release notes are site-neutral."
-      - name: Create GitHub Release (idempotent)
+          echo "release notes + dossier are site-neutral."
+      - name: Create GitHub Release (idempotent) + attach the validation dossier
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "release ${GITHUB_REF_NAME} already exists; skipping"; exit 0
+            echo "release ${GITHUB_REF_NAME} already exists; refreshing the dossier assets"
+            gh release upload "${GITHUB_REF_NAME}" dossier.html dossier.json --clobber
+            exit 0
           fi
           gh release create "${GITHUB_REF_NAME}" \
             --title "CAMBER ${GITHUB_REF_NAME}" \
             --notes-file RELEASE_NOTES.md \
-            --verify-tag
+            --verify-tag \
+            dossier.html dossier.json

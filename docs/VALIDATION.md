@@ -274,3 +274,7 @@ release artifact).
 The cited figures can't silently rot: `tests/test_dossier.py` cross-checks the BDG2 numbers **exactly**
 against the committed `examples/bdg2/benchmark-baseline.json` and the LBNL numbers against the pooled
 OA-fraction row in this document — a drift fails CI.
+
+Every tagged release **attaches the dossier** (`dossier.html` + `dossier.json`) as a GitHub Release
+asset, generated from the packaged version — so each release ships its own version-anchored
+credibility artifact (site-neutrality-gated alongside the release notes).
