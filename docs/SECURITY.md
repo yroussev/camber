@@ -67,6 +67,12 @@ Run CAMBER in IT/DMZ, never inside the control VLAN; cross the boundary through 
 data diode. Use read-only DB accounts, monitoring-scoped BACnet/SC certificates, and read-only
 Modbus register maps where the gateway supports them.
 
+The **read-only HTTP API + live `/ui` dashboard** (`camber serve` / `camber.api.server`) is GET-only
+(no write endpoints) and binds `127.0.0.1` by default; the `/ui` HTML is served with a strict
+same-origin `Content-Security-Policy` and loads no external asset. It ships **no authentication** —
+binding it to a non-localhost interface (`--host` / `CAMBER_API_HOST`) is your decision, and if you
+do, put it behind your own authenticating reverse proxy / network controls.
+
 ### 4. Secrets and TLS
 
 No secrets in the repository — credentials come from environment variables or a secret manager

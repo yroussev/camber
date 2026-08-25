@@ -320,8 +320,10 @@ shipped in 0.1.0; the two `[~]` items have remainders tracked under **Next — 0
 (Continuous-benchmark CI and outbound integrations shipped in **0.2.0**. Real-time/streaming,
 fault-lifecycle-at-scale, and the plugin API also landed in 0.2.0.)
 
-- [~] **Interactive dashboards / web UI** — the self-contained HTML dashboard (A/B/E/I + evidence
-      + a brush-able scatter) shipped in 0.2/0.3; a live web UI with cross-panel linking remains.
+- [x] **Interactive dashboards / web UI** — the self-contained HTML dashboard (A/B/E/I + evidence
+      + a brush-able scatter) shipped in 0.2/0.3; a **live web UI** with cross-panel linking now
+      ships too (`camber.api.ui`, `GET /ui` / `camber serve`) — vanilla-JS, polling, `window.CAMBER`
+      linking. A live carpet panel + agent narration remain nice-to-haves.
 - [x] **Agentic query & triage** — natural-language questions over the model and
       history, and plain-language fault explanations — strictly grounded in the
       deterministic layers, citing the rule + data behind every claim (never the

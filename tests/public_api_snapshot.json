@@ -98,6 +98,9 @@
     "make_server",
     "serve"
   ],
+  "camber.api.ui": [
+    "live_dashboard_html"
+  ],
   "camber.aso": [
     "DEFAULT_PARAMS",
     "RECOMMENDERS",

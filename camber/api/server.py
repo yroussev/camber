@@ -20,6 +20,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .read import ReadAPI
+from .ui import live_dashboard_html
+
+# Strict same-origin CSP for the inline-JS/CSS live dashboard (the app ships no external asset; the
+# only network it does is the same-origin fetch/poll of the read-only JSON endpoints).
+_UI_CSP = (
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+    "object-src 'none'"
+)
 
 
 def _q(query: dict, *keys):
@@ -28,9 +37,15 @@ def _q(query: dict, *keys):
 
 
 def dispatch(api: ReadAPI, method: str, path: str, query: dict):
-    """Route a request to the read API. Returns ``(status_code, body_dict)``."""
+    """Route a request to the read API. Returns ``(status_code, body)``.
+
+    ``body`` is a JSON-serializable dict for every endpoint except the live dashboard route
+    ``/ui``, which returns the dashboard HTML as a ``str`` (the handler serves it as ``text/html``).
+    """
     if method != "GET":
         return 405, {"error": "method not allowed", "method": method}
+    if path in ("/ui", "/ui/"):  # the live web dashboard (HTML; fetches the JSON endpoints below)
+        return 200, live_dashboard_html()
     if path in ("/", "/about", "/health"):
         return 200, api.about()
     if path == "/facilities":
@@ -49,16 +64,21 @@ class ReadAPIHandler(BaseHTTPRequestHandler):
     """BaseHTTPRequestHandler bound to a ReadAPI via ``server.api``."""
 
     def do_GET(self):  # noqa: N802 (stdlib naming)
-        """Parse the request, dispatch to the read API, and write the JSON response."""
+        """Parse the request, dispatch, and write the response (JSON, or HTML for ``/ui``)."""
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
         try:
             status, body = dispatch(self.server.api, "GET", parsed.path, query)
         except Exception as exc:  # never leak a stack trace over the wire
             status, body = 500, {"error": "internal error", "detail": str(exc)}
-        payload = json.dumps(body).encode("utf-8")
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        if isinstance(body, str):  # the /ui live-dashboard HTML
+            payload = body.encode("utf-8")
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Security-Policy", _UI_CSP)
+        else:
+            payload = json.dumps(body).encode("utf-8")
+            self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)

@@ -10,6 +10,7 @@ Subcommands:
     camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] # portfolio rollup + triage
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
+    camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -117,6 +118,16 @@ def _cmd_validate(args) -> int:
     if args.html:
         open(args.html, "w").write(dossier.to_html())
         print(f"wrote {args.html}")
+    return 0
+
+
+def _cmd_serve(args) -> int:  # pragma: no cover - blocking server loop
+    from .api.server import serve
+    from .store import ParquetStore
+
+    print(f"CAMBER read-only API + live dashboard on http://{args.host}:{args.port}/ui")
+    print("(read-only, GET-only; bind stays on localhost unless you change --host)")
+    serve(ParquetStore(args.store), host=args.host, port=args.port)
     return 0
 
 
@@ -381,6 +392,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--full", action="store_true", help="include per-detector / per-family breakdown metrics"
     )
     pv.set_defaults(func=_cmd_validate)
+
+    psv = sub.add_parser("serve", help="serve the read-only API + live web dashboard (/ui)")
+    psv.add_argument("store", help="path to the ParquetStore directory")
+    psv.add_argument(
+        "--host", default="127.0.0.1", help="bind host (default 127.0.0.1 / localhost)"
+    )
+    psv.add_argument("--port", type=int, default=8080, help="bind port (default 8080)")
+    psv.set_defaults(func=_cmd_serve)
 
     pb = sub.add_parser(
         "bacnet-discover",

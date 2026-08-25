@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.72.0] — 2026-08-25
+
+**A live web dashboard served by the read-only API.** The self-contained HTML dashboard is a one-shot
+snapshot; this adds its live counterpart — a framework-free page that fetches the running store and
+polls, so views refresh as new data lands. Bridges the two halves that already existed (the stdlib
+read-only API and the `window.CAMBER` cross-panel selection bus) with no new dependency.
+
+### Added
+- **`camber.api.ui.live_dashboard_html()`** + a **`GET /ui`** route on `ReadAPIHandler` — a single
+  vanilla-JS page (inline JS/SVG, no framework, no CDN) that fetches `/facilities`/`/points`/`/history`
+  same-origin, renders facility/equip/role selectors + a synchronized multitrend, brush-links via the
+  shipped `window.CAMBER` bus, and **polls** (default 15 s, adjustable, with a Live toggle). The JSON
+  endpoints are unchanged; the HTML route carries a strict same-origin `Content-Security-Policy`.
+- **`camber serve <store> [--host --port]`** CLI verb — starts the read-only API + live `/ui`.
+
+### Changed
+- `dispatch` now returns HTML (a `str`) for `/ui` and JSON (a `dict`) for every other route; the
+  handler branches content-type accordingly. `docs/VISUALIZATION.md`, `CAPABILITIES.md`, `CLI.md`,
+  and `SECURITY.md` document the live UI + its read-only/localhost/CSP posture.
+
+### Notes
+- Read-only (GET-only) and `127.0.0.1`-bound by default; no auth (documented). New public module
+  `camber.api.ui` → `tests/public_api_snapshot.json` regenerated. No new runtime dependency (stdlib
+  `http.server` + vanilla JS). A live carpet panel + agent narration remain nice-to-haves.
+
 ## [0.71.0] — 2026-08-25
 
 **Complete the weather-fetch adapter: multi-year requests + an on-disk cache.** Rounds out

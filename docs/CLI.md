@@ -11,7 +11,13 @@ camber ask "<question>" --config <config.json>  # grounded natural-language Q&A 
 camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
+camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 ```
+
+`camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
+`http://127.0.0.1:8080/ui` (facility/equip/role selectors + a synchronized multitrend, brush-linked
+and polling). Read-only (GET-only), localhost-bound by default; see
+[VISUALIZATION.md](VISUALIZATION.md) and [SECURITY.md](SECURITY.md).
 
 A **config** is the same declarative JSON that drives `camber.config.run_config` (source, mapping,
 equipment, rules — see the config examples). `run`/`report` execute it; `explain`/`ask` build the

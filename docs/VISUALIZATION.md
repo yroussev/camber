@@ -231,8 +231,28 @@ system; panels A and I stay PNG (aggregate matrices, not timestamp-indexed). Sti
 self-contained CSP-safe file. `selection_bus_html()`, `carpet_svg_html(series, …)`, and
 `multitrend_svg_html(df, cols, spans=…)` build the pieces; `interactive_scatter_html(...)` the scatter.
 
+## Live web UI (0.72)
+
+Everything above is a **one-shot** self-contained file. `camber.api.ui` adds its **live** counterpart:
+a single vanilla-JS page served by the read-only API at **`GET /ui`** that fetches the running store
+(`/facilities`, `/points`, `/history`) and **polls**, so the views refresh as new data lands
+("continuous, not one-shot"). It reuses the same `window.CAMBER` selection bus — brushing the
+synchronized multitrend links to a timestamp readout exactly like the static panels.
+
+```sh
+camber serve /path/to/store          # read-only API + live dashboard at http://127.0.0.1:8080/ui
+python -m camber.api.server /path/to/store 8080   # equivalent; JSON endpoints unchanged
+```
+
+Framework-free and dependency-light: stdlib `http.server` + inline vanilla JS/SVG, **no framework, no
+CDN, no external asset** (a strict `Content-Security-Policy` header is sent on the HTML route). It is
+**read-only** (GET-only) and binds `127.0.0.1` by default — exposing it on a public interface is your
+decision and adds no auth (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
+**carpet/heatmap** panel; the live multitrend + selectors + cross-panel linking + polling ship now.
+
 ## Scope
 
-This is the dependency-light MVP: rich, self-contained HTML rather than a live web UI. The fuller
-interactive vision (brush-linked views, agent narration, continuous refresh) is in the
-[ROADMAP](https://github.com/yroussev/camber/blob/main/ROADMAP.md) Visualizations section.
+The static builders remain the dependency-light, self-contained artifact for reports and offline
+sharing; the live `/ui` is for watching a running store. Agent narration on the live view is the
+remaining item in the [ROADMAP](https://github.com/yroussev/camber/blob/main/ROADMAP.md)
+Visualizations section.
