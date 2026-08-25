@@ -1,6 +1,6 @@
 # CAMBER capabilities reference
 
-A single index of what CAMBER 0.4 does, grouped by the building-analytics layers, with the key
+A single index of what CAMBER does, grouped by the building-analytics layers, with the key
 API, the **option flags** that tune each capability, the module, and the standard it cites.
 Deeper write-ups are linked where they exist.
 

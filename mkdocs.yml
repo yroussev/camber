@@ -36,12 +36,23 @@ nav:
       - Grid-interactive (GEB): GEB.md
       - Carbon: CARBON.md
       - Ventilation: VENTILATION.md
+      - Free-cooling / economizer: FREECOOLING.md
+      - Operational change-point: CHANGEDETECT.md
+      - Anomaly ensemble: ANOMALY.md
+      - Load disaggregation: DISAGGREGATE.md
+      - Schedule inference: SCHEDULE.md
       - Visualization: VISUALIZATION.md
+  - Advisory & reporting:
+      - Advisory optimization (ASO): ASO.md
+      - Prioritized action plan: ACTIONPLAN.md
+      - Building health scorecard: SCORECARD.md
+      - Site report: SITE-REPORT.md
   - AI-assist:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md
   - Platform:
       - CLI: CLI.md
+      - Time handling & DST: TIME-HANDLING.md
       - Ingest protocols: INGEST-PROTOCOLS.md
       - Ingest formats: INGEST-FORMATS.md
       - Ontology / interop: ONTOLOGY.md
@@ -55,6 +66,11 @@ nav:
       - Security: SECURITY.md
       - Validation: VALIDATION.md
       - API stability & deprecation: API-STABILITY.md
+# Internal working docs (historical release plans + design proposals) stay in the repo for
+# contributors but are not part of the published site.
+exclude_docs: |
+  dev/
+  proposals/
 markdown_extensions:
   - admonition
   - tables
