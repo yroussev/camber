@@ -502,7 +502,9 @@ every rule shipping a synthetic fixture that proves detection. **All shipped in 
       cross-equipment benchmark now publishes its accuracy *with* CIs, and
       [docs/VALIDATION.md](docs/VALIDATION.md) is the methods write-up (validation
       philosophy, labeled-data accuracy, open-fdd cross-validation, M&V/eemeter check,
-      uncertainty + reproducibility). Remaining (Phase 3): continuous-benchmark CI.
+      uncertainty + reproducibility). `camber validate` (`camber.dossier`) now aggregates all
+      four validation tracks into one text/HTML/JSON credibility artifact (a versioned,
+      diff-able release attachment). Remaining (Phase 3): continuous-benchmark CI.
 
 ### Money & compliance
 

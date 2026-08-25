@@ -157,6 +157,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
 - **Accuracy + CI gating** — `eval.benchmark` + `validation.metrics_with_ci` (Wilson CIs), and
   `eval.check_against_baseline` to gate accuracy (TPR/FPR/diagnosis) against a committed baseline in
   CI (`--json` / `--gate` / `--tol` / `--update-baseline`). See **[VALIDATION.md](VALIDATION.md)**.
+- **Validation dossier** — `camber.dossier` / `camber validate` aggregates all four validation tracks
+  (synthetic, generated-fleet, real-data FDD, real-data M&V) into one text/HTML/JSON credibility
+  artifact: live-recomputed pure tracks + cited real-data results with Wilson CIs and honest
+  boundaries. See **[VALIDATION.md](VALIDATION.md)**.
 
 ## Sequence-of-Operations conformance
 

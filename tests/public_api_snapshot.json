@@ -363,6 +363,11 @@
     "LoadComponents",
     "disaggregate_load"
   ],
+  "camber.dossier": [
+    "TrackResult",
+    "ValidationDossier",
+    "build_dossier"
+  ],
   "camber.driftsim": [
     "ChillerFault",
     "FAULTS",

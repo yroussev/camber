@@ -10,6 +10,7 @@ camber explain <config.json> [--llm-cmd CMD]    # grounded plain-language explan
 camber ask "<question>" --config <config.json>  # grounded natural-language Q&A over the run
 camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
+camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
 ```
 
 A **config** is the same declarative JSON that drives `camber.config.run_config` (source, mapping,
@@ -28,6 +29,7 @@ flowchart TD
   camber --> ask["ask: grounded Q&A"]
   camber --> fleet["fleet: portfolio rollup + triage"]
   camber --> charts["charts: legacy AHU HeC charts"]
+  camber --> validate["validate: validation dossier (text/HTML/JSON)"]
   cfg -- "drives" --> run
   cfg -- "drives" --> report
   run -- "grounded run context" --> explain

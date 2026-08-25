@@ -4,6 +4,35 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.68.0] — 2026-08-24
+
+**A unified validation & credibility dossier + a `camber validate` command.** CAMBER validates itself
+four ways (synthetic whole-suite FDD, generated multi-zone fleet FDD, real-data FDD on LBNL, real-data
+M&V on BDG2), each with its own benchmark and CI gate but no single artifact. This adds one — a
+legible, sellable capstone across all four tracks, in text / self-contained HTML / JSON.
+
+### Added
+- **`camber/dossier.py`** — `build_dossier()` → `ValidationDossier` / `TrackResult`. It
+  **live-recomputes** the two pure tracks (`faultlab`, `fleetlab`) on every run (deterministic, no
+  download) and **cites** the two real-data tracks (LBNL FDD, BDG2 M&V) from committed reference
+  figures with provenance + a reproduce command. Rates carry 95% Wilson intervals
+  (`camber.validation`); each track shows a LIVE/CITED tag, coverage, and its honest boundary. The
+  HTML is a single self-contained file (no external assets, pure-CSS CI bars, `camber.report`
+  theme-safe style). No wall-clock timestamp — anchored on the package version, so builds are
+  byte-identical.
+- **`camber validate`** CLI verb — `--html` / `--json` / `--full`.
+- **`tests/test_dossier.py`** — plumbing + two **anti-rot** cross-checks: the cited BDG2 figures must
+  equal the committed `examples/bdg2/benchmark-baseline.json` exactly, and the cited LBNL figures must
+  match the pooled OA-fraction row in `docs/VALIDATION.md` — a drift fails CI.
+
+### Changed
+- **`docs/VALIDATION.md`** gains a "The unified dossier — `camber validate`" section; `docs/CLI.md`,
+  `docs/CAPABILITIES.md`, and `ROADMAP.md` reference the new verb.
+
+### Notes
+- New public module `camber.dossier` → `tests/public_api_snapshot.json` regenerated. No new runtime
+  dependency (numpy/pandas + stdlib). Only CC-BY datasets already named in the docs are named.
+
 ## [0.67.0] — 2026-08-24
 
 **Validation of the G36 reset fleet family on a generated labeled multi-zone fleet.** Closes the one

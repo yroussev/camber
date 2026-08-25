@@ -9,6 +9,7 @@ Subcommands:
     camber ask "<question>" --config <config.json> [--llm-cmd CMD]   # grounded Q&A over the run
     camber fleet   '<glob>' [--ask Q] [--out f.html] [--llm-cmd CMD] # portfolio rollup + triage
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
+    camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -102,6 +103,20 @@ def _cmd_report(args) -> int:
     html = report.to_html(recommend=True)
     open(args.out, "w").write(html)
     print(f"wrote {args.out}  ({len(res.findings)} findings)")
+    return 0
+
+
+def _cmd_validate(args) -> int:
+    from .dossier import build_dossier
+
+    dossier = build_dossier(full=args.full)
+    print(dossier.to_text())
+    if args.json:
+        json.dump(dossier.as_dict(), open(args.json, "w"), indent=2)
+        print(f"wrote {args.json}")
+    if args.html:
+        open(args.html, "w").write(dossier.to_html())
+        print(f"wrote {args.html}")
     return 0
 
 
@@ -356,6 +371,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pc.add_argument("--out", default="out", help="output directory for PNGs/JSON")
     pc.set_defaults(func=_cmd_charts)
+
+    pv = sub.add_parser(
+        "validate", help="unified validation & credibility dossier (text, HTML, JSON)"
+    )
+    pv.add_argument("--html", help="write the self-contained HTML dossier to this path")
+    pv.add_argument("--json", help="write the machine-readable dossier JSON to this path")
+    pv.add_argument(
+        "--full", action="store_true", help="include per-detector / per-family breakdown metrics"
+    )
+    pv.set_defaults(func=_cmd_validate)
 
     pb = sub.add_parser(
         "bacnet-discover",

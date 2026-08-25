@@ -251,4 +251,26 @@ metric missing from the current run fails too (a detector was removed/renamed). 
 or the benchmark — fetching the CC-BY datasets (cached), gating against the committed baseline
 (or seeding one if absent), and uploading the metrics artifact.
 
-> Remaining: capture a packaged "published accuracy" run as a versioned release artifact.
+## The unified dossier — `camber validate`
+
+`camber validate` (module `camber.dossier`) pulls all four tracks into one artifact — text, a
+self-contained HTML page, or JSON — so the whole credibility story is legible in one place:
+
+```sh
+camber validate                       # print the text summary
+camber validate --html dossier.html   # write the self-contained HTML dossier
+camber validate --json dossier.json   # machine-readable, for release attachment
+camber validate --full                # add per-detector / per-family breakdown metrics
+```
+
+It **live-recomputes** the two pure tracks (synthetic `faultlab` + generated `fleetlab`) on every
+run — no download, deterministic — and **cites** the two real-data tracks (LBNL FDD, BDG2 M&V) from
+committed reference figures with provenance and a reproduce command, because they need large
+datasets. The distinction is shown explicitly (a LIVE vs CITED tag on each track), rates carry their
+95% Wilson intervals, and each track states its coverage and honest boundary. The dossier embeds no
+timestamp — it is anchored on the package version, so two builds are byte-identical (a diff-able
+release artifact).
+
+The cited figures can't silently rot: `tests/test_dossier.py` cross-checks the BDG2 numbers **exactly**
+against the committed `examples/bdg2/benchmark-baseline.json` and the LBNL numbers against the pooled
+OA-fraction row in this document — a drift fails CI.
