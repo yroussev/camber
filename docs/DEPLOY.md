@@ -40,13 +40,18 @@ populates it; the API pods mount it read-only.
 
 ## conda-forge
 
-[`deploy/conda/meta.yaml`](https://github.com/yroussev/camber/blob/main/deploy/conda/meta.yaml) is a submission-ready recipe (`noarch: python`,
-the runtime deps, the `camber` entry point, and a `run_constrained` for the optional `[ml]` extra).
-Pinned to **0.12.0** with the published sdist's `sha256` already filled in — the recipe is complete
-and submission-ready. To re-derive the hash for a future version:
+[`deploy/conda/meta.yaml`](https://github.com/yroussev/camber/blob/main/deploy/conda/meta.yaml) is a
+submission-ready recipe: `noarch: python`, the runtime deps (`matplotlib-base` is the conda-forge
+name), the `camber` entry point, `run_constrained` pins for the conda-forge-packaged optional extras
+(`[ml]`/`[brick]`/`[pv]`/`[psychro]`/`[energyplus]`), the conda-forge lint fields (`license_family`,
+`doc_url`, `dev_url`, a `description`), and a `test` block that imports the package, runs
+`camber --help` / `camber validate`, and `pip check`s the deps.
+
+**Before submitting**, set `{{ version }}` to the release you are packaging (ideally the latest
+published on PyPI) and refresh the sdist `sha256` for *that* version so the pair matches:
 
 ```bash
-curl -sL https://pypi.org/pypi/camber-toolkit/0.12.0/json \
+curl -sL https://pypi.org/pypi/camber-toolkit/<version>/json \
   | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
 ```
 

@@ -1,5 +1,12 @@
 # conda-forge recipe for camber-toolkit (noarch: python). Submit via conda-forge/staged-recipes to
-# create the feedstock; pinned to the published {{ version }} sdist with its sha256. See docs/DEPLOY.md.
+# create the feedstock (a repo-owner action); after that its bot auto-opens a version-bump PR on each
+# PyPI release. See docs/DEPLOY.md.
+#
+# BEFORE SUBMITTING: set {{ version }} to the release you are packaging (ideally the latest published
+# on PyPI) and refresh the sha256 of *that* version's sdist:
+#   curl -sL https://pypi.org/pypi/camber-toolkit/<version>/json \
+#     | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
+# The pinned pair below (version + sha256) must match, or the build fails.
 {% set name = "camber-toolkit" %}
 {% set version = "0.12.0" %}
 
@@ -9,14 +16,12 @@ package:
 
 source:
   url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  # sha256 of the published sdist; get it with:
-  #   curl -sL https://pypi.org/pypi/{{ name }}/{{ version }}/json | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
   sha256: d5d7c1bd4982fab53279a0978d0288aebe68dd4652f579cec509a318b1fb3290
 
 build:
   noarch: python
   number: 0
-  script: {{ PYTHON }} -m pip install . -vv
+  script: {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
   entry_points:
     - camber = camber.cli:main
 
@@ -25,6 +30,7 @@ requirements:
     - python >=3.10
     - pip
     - setuptools >=64
+    - wheel
   run:
     - python >=3.10
     - numpy >=1.24,<3
@@ -32,20 +38,39 @@ requirements:
     - matplotlib-base >=3.7
     - pyarrow >=14
   run_constrained:
-    # optional [ml] extra — the learned point-mapping backend (camber.mapping_assist.MLSuggester)
-    - scikit-learn >=1.3
+    # Optional extras — not installed by this recipe, but constrained to a compatible version if the
+    # user adds them. Mirrors the pip extras in pyproject.toml (only those packaged on conda-forge).
+    - scikit-learn >=1.3     # [ml]      — learned point-mapping backend
+    - rdflib >=6             # [brick]   — robust Brick/RDF parsing
+    - pvlib >=0.10           # [pv]      — irradiance transposition / PVWatts bridge
+    - psychrolib >=2         # [psychro] — exact ASHRAE psychrometrics + wet-bulb cross-check
+    - eppy >=0.5             # [energyplus] — Option-D EnergyPlus cross-validator bridge
 
 test:
   imports:
     - camber
+    - camber.mandv
+    - camber.rules
   commands:
     - camber --help
+    - camber validate            # the validation dossier runs from the installed package
+    - pip check
+  requires:
+    - pip
 
 about:
   home: https://github.com/yroussev/camber
   license: Apache-2.0
+  license_family: Apache
   license_file: LICENSE
   summary: Vendor-neutral building-automation-system trend analysis (FDD, M&V, RCx)
+  description: |
+    CAMBER is a dependency-light, vendor-neutral toolkit for building-automation-system (BAS) trend
+    analysis: fault detection & diagnostics (ASHRAE G36 / PNNL Re-tuning), measurement & verification
+    (IPMVP A/B/C/D), and retro-commissioning, all speaking a common Role vocabulary. Every method
+    cites a public standard and ships a synthetic fixture proving detection.
+  doc_url: https://github.com/yroussev/camber/blob/main/docs
+  dev_url: https://github.com/yroussev/camber
 
 extra:
   recipe-maintainers:
