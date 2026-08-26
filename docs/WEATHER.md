@@ -25,9 +25,40 @@ PY
 | `fetch_nasa_power(lat, lon, start, end, *, parameters, transport, tz, timeout)` | `DataFrame` | `oat_f` (°F) + `rh_pct` when requested |
 | `oat_reference(lat, lon, start, end, *, transport, tz, timeout)` | `Series` | just the °F OAT reference (NaNs dropped) |
 | `cached_transport(inner, cache_dir, *, ttl, clock)` | `callable(url) -> dict` | wrap any transport with an on-disk cache |
+| `geocode(address, *, transport, limit, user_agent, timeout)` | `GeoResult` | address → top match `(latitude, longitude, display_name)` |
+| `oat_reference_for(address, start, end, *, tz, geocode_transport, transport, ...)` | `Series` | geocode an address, then fetch its °F OAT |
+| `nominatim_url(address, *, limit)` · `nominatim_transport(*, user_agent, timeout)` | `str` · `callable(url) -> dict` | the geocoder's URL builder + default transport |
 
 `start`/`end` accept `YYYYMMDD` / `YYYY-MM-DD` strings or date/datetime objects. `parameters` are NASA
-POWER codes (`T2M` = 2 m air temperature, `RH2M` = 2 m relative humidity).
+POWER codes (`T2M` = 2 m air temperature, `RH2M` = 2 m relative humidity). `GeoResult` is a frozen
+`(latitude, longitude, display_name)` value with `.as_dict()`.
+
+## Geocoding — fetch by address, not just coordinates
+
+NASA POWER is a lat/lon *point* query, so to fetch weather "for an address" you geocode it first, via
+[OpenStreetMap Nominatim](https://nominatim.openstreetmap.org) — also **free and keyless**:
+
+```python
+from camber.weather_source import geocode, oat_reference_for
+
+g = geocode("Chicago, IL")
+print(g.display_name)  # "Chicago, Cook County, Illinois, United States" — confirm the match
+print(g.latitude, g.longitude)
+
+# or, one call: geocode the address then fetch its OAT reference
+ref = oat_reference_for("Chicago, IL", "2024-01-01", "2024-12-31", tz="America/Chicago")
+```
+
+For an **uncertain** address, geocode first and check `.display_name` before fetching. The resolved
+place is also attached to `ref.attrs["geocode"]` (best-effort metadata).
+
+- **Precision is a non-issue.** NASA POWER is a ~0.5° (~50 km) reanalysis grid, so city/ZIP-level
+  geocoding is plenty — this is a *convenience*, not an address-precision claim.
+- **Usage policy.** Nominatim requests send a descriptive `User-Agent` (built in) and ask for ≤ ~1
+  request/second with caching — so cache your lookups: `cached_transport(nominatim_transport(),
+  cache_dir)` composes with `geocode` exactly like it does with the NASA transport.
+- **Timezone still isn't derived** from the address (no dependency-light lat/lon→zone) — pass the site
+  IANA `tz` to `oat_reference_for`, the same load-bearing switch as `oat_reference` (below).
 
 ## Timezone — read this before you join it to a sensor
 

@@ -289,3 +289,122 @@ def test_cached_transport_composes_with_fetch(tmp_path):
     for _ in range(2):
         ws.fetch_nasa_power(0, 0, "20240101", "20240101", transport=cached, tz="UTC")
     assert inner.calls == 1  # the second fetch is served entirely from disk
+
+
+# --------------------------------------------------------------------------- geocoding (by address)
+
+
+def _canned_geo(lat="41.8755616", lon="-87.6244212", name=None):
+    """A Nominatim search response (a JSON *array*); generic 'Chicago, IL' — no real client site."""
+    name = name or "Chicago, Cook County, Illinois, United States"
+    return [{"lat": lat, "lon": lon, "display_name": name, "type": "city"}]
+
+
+class _GeoCounter:
+    """A URL-aware Nominatim transport that counts calls and echoes a canned array."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, url):
+        self.calls += 1
+        return _canned_geo()
+
+
+def test_nominatim_url_encoding():
+    url = ws.nominatim_url("Chicago, IL", limit=3)
+    assert url.startswith(ws._NOMINATIM_URL + "?")
+    assert "format=json" in url and "limit=3" in url
+    assert "q=Chicago%2C+IL" in url  # URL-encoded query
+
+
+def test_geocode_parses_top_match():
+    g = ws.geocode("Chicago, IL", transport=_transport(_canned_geo()))
+    assert isinstance(g, ws.GeoResult)
+    assert g.latitude == pytest.approx(41.8755616) and isinstance(g.latitude, float)
+    assert g.longitude == pytest.approx(-87.6244212)
+    assert "Chicago" in g.display_name
+
+
+def test_geocode_as_dict_roundtrips():
+    g = ws.geocode("Chicago, IL", transport=_transport(_canned_geo()))
+    assert g.as_dict() == {
+        "latitude": g.latitude,
+        "longitude": g.longitude,
+        "display_name": g.display_name,
+    }
+
+
+def test_geocode_no_match_raises():
+    with pytest.raises(ValueError, match="no geocoding match"):
+        ws.geocode("nowhere at all", transport=_transport([]))
+
+
+def test_geocode_malformed_row_raises():
+    with pytest.raises(ValueError, match="lat/lon"):
+        ws.geocode("x", transport=_transport([{"display_name": "no coords"}]))
+
+
+def test_geocode_limit_passed_through():
+    seen = {}
+
+    def t(url):
+        seen["url"] = url
+        return _canned_geo()
+
+    ws.geocode("Chicago, IL", transport=t, limit=5)
+    assert "limit=5" in seen["url"]
+
+
+def test_nominatim_transport_sets_user_agent(monkeypatch):
+    import urllib.request
+
+    captured = {}
+
+    class _Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, *a, **k):
+        captured["ua"] = req.get_header("User-agent")
+        return _Resp(b"[]")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    ws.nominatim_transport()("https://example.test/x")
+    assert captured["ua"] and "camber" in captured["ua"].lower()  # a non-default UA is set
+
+
+def test_oat_reference_for_composes_both_transports():
+    s = ws.oat_reference_for(
+        "Chicago, IL",
+        "20240101",
+        "20240101",
+        geocode_transport=_transport(_canned_geo()),
+        transport=_transport(_canned(params=("T2M",))),
+        tz="UTC",
+    )
+    assert s.name == "oat_f" and s.iloc[0] == pytest.approx(41.0)  # 5 °C -> 41 °F
+    assert "Chicago" in s.attrs["geocode"]["display_name"]  # resolved place attached
+
+
+def test_oat_reference_for_tz_local_is_naive():
+    s = ws.oat_reference_for(
+        "Chicago, IL",
+        "20240101",
+        "20240101",
+        geocode_transport=_transport(_canned_geo()),
+        transport=_transport(_canned(params=("T2M",))),
+        tz="America/Los_Angeles",
+    )
+    assert s.index.tz is None  # naive local (the tz caveat holds on the convenience path)
+
+
+def test_cached_transport_composes_with_geocode(tmp_path):
+    inner = _GeoCounter()
+    cached = ws.cached_transport(inner, str(tmp_path))
+    for _ in range(2):
+        ws.geocode("Chicago, IL", transport=cached)
+    assert inner.calls == 1  # second geocode served from disk (satisfies the "cache" usage policy)

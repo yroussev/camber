@@ -33,6 +33,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass
 
 import pandas as pd
 
@@ -45,11 +46,21 @@ __all__ = [
     "cached_transport",
     "fetch_nasa_power",
     "oat_reference",
+    "GeoResult",
+    "nominatim_url",
+    "nominatim_transport",
+    "geocode",
+    "oat_reference_for",
 ]
 
 _BASE_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
 FILL_VALUE = -999.0  # NASA POWER hourly missing sentinel (values <= this are dropped to NaN)
 _PARAM_COL = {"T2M": "oat_f", "RH2M": "rh_pct"}  # NASA parameter -> output column
+
+# OpenStreetMap Nominatim geocoding (free, keyless). Its usage policy requires a descriptive
+# User-Agent and asks for <= ~1 request/second + caching (compose with cached_transport).
+_NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+_DEFAULT_USER_AGENT = "camber-toolkit (https://github.com/yroussev/camber)"
 
 
 def _yyyymmdd(d) -> str:
@@ -271,3 +282,107 @@ def oat_reference(
         latitude, longitude, start, end, transport=transport, tz=tz, timeout=timeout
     )
     return df["oat_f"].dropna()
+
+
+# --------------------------------------------------------------------------- geocoding (by address)
+#
+# NASA POWER is a lat/lon point query, so to fetch weather "for an address" you first geocode it.
+# OpenStreetMap Nominatim is free and keyless (like NASA POWER). Precision honesty: NASA POWER is a
+# ~0.5° (~50 km) reanalysis grid, so city/ZIP-level geocoding is plenty — a *convenience*, not an
+# address-precision claim. Uses the same injectable ``callable(url) -> dict`` transport seam, so it
+# is offline-testable and composes with :func:`cached_transport`.
+
+
+@dataclass(frozen=True)
+class GeoResult:
+    """The top geocoding match: coordinates plus the human-readable place to confirm it."""
+
+    latitude: float
+    longitude: float
+    display_name: str
+
+    def as_dict(self) -> dict:
+        """Return the result as a plain dict."""
+        return asdict(self)
+
+
+def nominatim_url(address, *, limit: int = 1) -> str:
+    """Build the Nominatim search URL (pure — the testable half; URL-encodes the address)."""
+    from urllib.parse import urlencode
+
+    query = urlencode({"q": address, "format": "json", "limit": limit})
+    return f"{_NOMINATIM_URL}?{query}"
+
+
+def nominatim_transport(
+    *, user_agent: str = _DEFAULT_USER_AGENT, timeout: float = 30.0
+) -> Callable[[str], dict]:
+    """Return the default stdlib-``urllib`` transport for Nominatim: ``callable(url) -> dict``.
+
+    Sends a descriptive ``User-Agent`` (Nominatim's usage policy blocks the default urllib UA); stay
+    <= ~1 request/second and cache results (wrap with :func:`cached_transport`).
+    """
+    import json as _json
+    from urllib.request import Request, urlopen
+
+    def transport(url: str) -> dict:  # pragma: no cover - the one real-network path
+        request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json"})
+        with urlopen(request, timeout=timeout) as resp:  # noqa: S310 - https Nominatim endpoint
+            return _json.loads(resp.read().decode("utf-8"))
+
+    return transport
+
+
+def geocode(
+    address,
+    *,
+    transport: Callable[[str], dict] | None = None,
+    limit: int = 1,
+    user_agent: str = _DEFAULT_USER_AGENT,
+    timeout: float = 30.0,
+) -> GeoResult:
+    """Geocode an address / place name to coordinates via OpenStreetMap Nominatim (free, keyless).
+
+    Returns the top match as a :class:`GeoResult` — ``.display_name`` (e.g. "Chicago, Cook County,
+    Illinois, United States") lets you confirm it before fetching weather. Inject a ``transport``
+    (canned JSON) to run offline, or wrap :func:`nominatim_transport` with :func:`cached_transport`.
+    Raises ``ValueError`` on no match or a malformed row. stdlib ``urllib``/``json`` only.
+    """
+    transport = transport or nominatim_transport(user_agent=user_agent, timeout=timeout)
+    rows = transport(nominatim_url(address, limit=limit))
+    if not rows:
+        raise ValueError(f"no geocoding match for {address!r}")
+    top = rows[0]
+    try:
+        return GeoResult(float(top["lat"]), float(top["lon"]), str(top["display_name"]))
+    except (KeyError, TypeError, ValueError) as e:
+        raise ValueError(f"Nominatim row missing lat/lon/display_name: {top!r}") from e
+
+
+def oat_reference_for(
+    address,
+    start,
+    end,
+    *,
+    tz: str = "UTC",
+    geocode_transport: Callable[[str], dict] | None = None,
+    transport: Callable[[str], dict] | None = None,
+    user_agent: str = _DEFAULT_USER_AGENT,
+    timeout: float = 30.0,
+) -> pd.Series:
+    """Geocode ``address``, then fetch the °F OAT reference series for it (geocode + oat_reference).
+
+    A convenience over :func:`geocode` + :func:`oat_reference`: returns the same °F Series
+    (``name="oat_f"``) that drops into ``sensordrift.compare_to_reference`` / M&V. Two transport
+    seams — ``geocode_transport`` (Nominatim) and ``transport`` (NASA POWER) — so both halves are
+    offline-injectable. The resolved place is attached to ``series.attrs["geocode"]`` (best-effort).
+    ``tz`` is **not** derived from the address (no dependency-light lat/lon->zone) — pass the site
+    IANA zone for a naive-local index that joins to a BAS trend; a wrong ``tz`` silently offsets it.
+    For an uncertain address, geocode first and confirm ``.display_name`` before fetching.
+    """
+    g = geocode(address, transport=geocode_transport, user_agent=user_agent, timeout=timeout)
+    series = oat_reference(
+        g.latitude, g.longitude, start, end, transport=transport, tz=tz, timeout=timeout
+    )
+    series.attrs["geocode"] = g.as_dict()  # non-fragile metadata; pandas may drop attrs across ops
+    return series

@@ -1765,11 +1765,16 @@
   ],
   "camber.weather_source": [
     "FILL_VALUE",
+    "GeoResult",
     "cached_transport",
     "fetch_nasa_power",
+    "geocode",
     "nasa_power_transport",
     "nasa_power_url",
-    "oat_reference"
+    "nominatim_transport",
+    "nominatim_url",
+    "oat_reference",
+    "oat_reference_for"
   ],
   "camber.zones": [
     "ZONE_MEASURES",

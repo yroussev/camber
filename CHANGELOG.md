@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.73.0] — 2026-08-25
+
+**Fetch weather by address, not just coordinates.** Adds a keyless geocoder to `camber.weather_source`
+so you can specify a location by place name; NASA POWER is a lat/lon point query, so an address is
+geocoded to coordinates first.
+
+### Added
+- **`geocode(address, *, transport, limit, user_agent, timeout)`** → a frozen **`GeoResult`**
+  `(latitude, longitude, display_name)` (the display name lets you confirm the match) via OpenStreetMap
+  **Nominatim** — also free and keyless. Plus `nominatim_url(...)` (pure builder) and
+  `nominatim_transport(...)` (default stdlib transport that sends the policy-required `User-Agent`).
+- **`oat_reference_for(address, start, end, *, tz, geocode_transport, transport, ...)`** — a
+  convenience that geocodes then fetches, returning the same °F OAT Series as `oat_reference` (with the
+  resolved place on `series.attrs["geocode"]`). Two transport seams, both offline-injectable.
+
+### Changed
+- `docs/WEATHER.md` gains a "Geocoding — fetch by address" section (the keyless/User-Agent/rate-limit
+  policy, the ~50 km-grid precision honesty, and the still-explicit `tz` caveat).
+
+### Notes
+- New public names (`GeoResult`, `geocode`, `nominatim_url`, `nominatim_transport`,
+  `oat_reference_for`) → `tests/public_api_snapshot.json` regenerated. **No new runtime dependency**
+  (stdlib `urllib`/`json`). `geocode` composes with `cached_transport` (satisfies Nominatim's
+  cache-your-lookups policy). `tz` is not derived from the address — still an explicit param.
+
 ## [0.72.0] — 2026-08-25
 
 **A live web dashboard served by the read-only API.** The self-contained HTML dashboard is a one-shot
