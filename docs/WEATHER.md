@@ -1,11 +1,11 @@
-# Live weather fetch — NASA POWER (`camber.weather_source`)
+# Weather fetch — NASA POWER + NOAA/ISD (`camber.weather_source`)
 
 CAMBER's weather-dependent analytics — M&V weather normalization and OAT-sensor validation — need an
 external temperature series. Until now you brought your own (a local EPW/TMY file via
-`mandv.weather.load_epw`, or any series you already had). `camber.weather_source` **fetches** one:
-hourly historical air temperature (and optionally relative humidity) from **NASA POWER**
-(<https://power.larc.nasa.gov>) — a free, keyless, global reanalysis service — in the exact °F Series
-shape (`name="oat_f"`) those consumers already accept.
+`mandv.weather.load_epw`, or any series you already had). `camber.weather_source` **fetches** one from
+either of two free, keyless providers — **NASA POWER** (global reanalysis; the default below) and
+**NOAA/ISD** (real weather stations; see the [NOAA/ISD section](#noaaisd-station-data-a-second-station-precise-provider))
+— in the exact °F Series shape (`name="oat_f"`) those consumers already accept.
 
 ```sh
 # no API key, global coverage; returns a °F pandas Series
@@ -28,10 +28,14 @@ PY
 | `geocode(address, *, transport, limit, user_agent, timeout)` | `GeoResult` | address → top match `(latitude, longitude, display_name)` |
 | `oat_reference_for(address, start, end, *, tz, geocode_transport, transport, ...)` | `Series` | geocode an address, then fetch its °F OAT |
 | `nominatim_url(address, *, limit)` · `nominatim_transport(*, user_agent, timeout)` | `str` · `callable(url) -> dict` | the geocoder's URL builder + default transport |
+| `oat_reference_isd(lat, lon, start, end, *, transport, catalog_transport, tz, ...)` | `Series` | **NOAA/ISD** station-precise °F OAT (nearest covering station) |
+| `isd_nearest_station(lat, lon, start, end, *, transport, stations, ...)` | `IsdStation` | nearest ISD station covering the window |
+| `isd_stations(*, transport, timeout)` · `fetch_isd(usaf, wban, start, end, *, ...)` | `list[IsdStation]` · `DataFrame` | the station catalog · one station's hourly °F |
+| `isd_transport(*, timeout)` · `cached_bytes_transport(inner, cache_dir, *, ttl, clock)` | `callable(url) -> bytes` | the ISD default transport + its on-disk cache |
 
 `start`/`end` accept `YYYYMMDD` / `YYYY-MM-DD` strings or date/datetime objects. `parameters` are NASA
-POWER codes (`T2M` = 2 m air temperature, `RH2M` = 2 m relative humidity). `GeoResult` is a frozen
-`(latitude, longitude, display_name)` value with `.as_dict()`.
+POWER codes (`T2M` = 2 m air temperature, `RH2M` = 2 m relative humidity). `GeoResult` and `IsdStation`
+are frozen values with `.as_dict()`.
 
 ## Geocoding — fetch by address, not just coordinates
 
@@ -123,5 +127,34 @@ file self-heals (treated as a miss). NASA POWER historical reanalysis is **stabl
 cache-forever; the most recent ~months can be revised, so pass a `ttl` (a `datetime.timedelta`) for
 windows that touch recent data. `clock` is injectable for deterministic TTL tests.
 
-**Not (yet) here:** NOAA/ISD station ingest (a different provider shape — station lookup + fixed-width
-ISD-Lite — tracked as a separate future arc).
+## NOAA/ISD station data (a second, station-precise provider)
+
+NASA POWER is a global reanalysis on a **~0.5° (~50 km) grid**. When you want a *real weather station*
+near the site, `camber.weather_source` also fetches **NOAA's Integrated Surface Database (ISD-Lite)** —
+also keyless. `oat_reference_isd` finds the nearest station covering your window and returns the same
+°F `oat_f` Series:
+
+```python
+from camber.weather_source import oat_reference_isd, isd_nearest_station
+
+st = isd_nearest_station(41.88, -87.63, "2023-01-01", "2023-12-31")
+print(st.name, st.usaf, st.wban)  # confirm the station it picked
+
+ref = oat_reference_isd(41.88, -87.63, "2023-01-01", "2023-12-31", tz="America/Chicago")
+# ref -> °F Series (name "oat_f"); the resolved station is on ref.attrs["isd_station"]
+```
+
+**Station-precise but gappy — the honest trade-off.** ISD is a *point* measurement at a real station,
+higher spatial fidelity than NASA's grid **when a station is nearby** — but it is **gappy** (stations
+go offline; missing hours are common → dropped to NaN) and **sparse** (no station near remote sites;
+coverage windows vary — `isd_nearest_station` filters to stations whose record spans your window and
+raises if none does). So: **ISD when a nearby station covers the window and you want station fidelity;
+NASA POWER for global coverage, a gap-free series, or anywhere without a station.** They complement.
+
+- **Endpoints** (keyless): the station catalog
+  <https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv> (~5 MB) and per-station-per-year gzipped
+  hourly files under `.../isd-lite/`. Air temp is tenths of °C; the `-9999` missing sentinel → NaN.
+- **Timezone** is the same load-bearing switch as the NASA path (pass the site IANA `tz`; see above).
+- **Caching.** ISD uses a **bytes** transport (gzipped/CSV, not JSON), so it has its own cache
+  decorator — `cached_bytes_transport(isd_transport(), cache_dir)`. Cache the 5 MB catalog, or resolve
+  the station list once with `isd_stations()` and pass it to `isd_nearest_station(..., stations=…)`.

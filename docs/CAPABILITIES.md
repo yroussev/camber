@@ -133,8 +133,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   ([VALIDATION.md](VALIDATION.md)).
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
-  reference — fetch one with `weather_source.oat_reference` (by lat/lon) or `oat_reference_for` (by
-  address, via a keyless geocoder), a keyless NASA POWER pull; see **[WEATHER.md](WEATHER.md)**),
+  reference — fetch one with `weather_source.oat_reference` (NASA POWER by lat/lon), `oat_reference_for`
+  (by address, via a keyless geocoder), or `oat_reference_isd` (station-precise, NOAA/ISD); see
+  **[WEATHER.md](WEATHER.md)**),
   `mapping_confidence`. The runner's `min_trust` flag makes a rule decline when its inputs aren't
   trusted.
 - **Prioritization & lifecycle** — `rules.triage`: `rank_findings` (severity, or a magnitude/cost

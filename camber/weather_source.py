@@ -28,9 +28,13 @@ normalization baseline, keep using `mandv.weather.load_epw`.
 
 from __future__ import annotations
 
+import csv
 import datetime as _dt
+import gzip
 import hashlib
+import io
 import json
+import math
 import os
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
@@ -51,6 +55,14 @@ __all__ = [
     "nominatim_transport",
     "geocode",
     "oat_reference_for",
+    # NOAA/ISD-Lite station source (a second provider; a bytes transport, not JSON)
+    "IsdStation",
+    "isd_transport",
+    "cached_bytes_transport",
+    "isd_stations",
+    "isd_nearest_station",
+    "fetch_isd",
+    "oat_reference_isd",
 ]
 
 _BASE_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
@@ -61,6 +73,12 @@ _PARAM_COL = {"T2M": "oat_f", "RH2M": "rh_pct"}  # NASA parameter -> output colu
 # User-Agent and asks for <= ~1 request/second + caching (compose with cached_transport).
 _NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 _DEFAULT_USER_AGENT = "camber-toolkit (https://github.com/yroussev/camber)"
+
+# NOAA Integrated Surface Database (ISD-Lite), keyless. Station catalog + per-station-per-year
+# gzipped hourly files. Missing sentinel is -9999; air temp is in tenths of °C.
+_ISD_HISTORY_URL = "https://www.ncei.noaa.gov/pub/data/noaa/isd-history.csv"
+_ISD_DATA_BASE = "https://www.ncei.noaa.gov/pub/data/noaa/isd-lite"
+_ISD_MISSING = -9999
 
 
 def _yyyymmdd(d) -> str:
@@ -385,4 +403,255 @@ def oat_reference_for(
         g.latitude, g.longitude, start, end, transport=transport, tz=tz, timeout=timeout
     )
     series.attrs["geocode"] = g.as_dict()  # non-fragile metadata; pandas may drop attrs across ops
+    return series
+
+
+# --------------------------------------------------------------------------- NOAA/ISD-Lite station
+#
+# A second, *station-precise* weather source: real NOAA/NCEI stations (vs NASA POWER's ~0.5°
+# (~50 km) reanalysis grid). Higher spatial fidelity when a station is nearby, but **gappy**
+# (stations offline; missing hours are common) and **sparse** (no station near remote sites; the
+# coverage window varies) -- so it complements, not replaces, NASA POWER (global + gap-free +
+# coarse). Returns the
+# same °F ``oat_f`` Series contract and reuses the same ``_index`` timezone switch.
+#
+# ISD is not JSON: the catalog is CSV and the hourly files are gzipped fixed-width, so this uses a
+# **different transport type** -- ``callable(url) -> bytes`` (the parser decodes) -- with its own
+# default factory (:func:`isd_transport`) and cache sibling (:func:`cached_bytes_transport`). The
+# bytes seam does NOT compose with the JSON seam (``nasa_power_transport`` / ``cached_transport``).
+
+
+@dataclass(frozen=True)
+class IsdStation:
+    """A NOAA ISD station: identity, coordinates, and its ``YYYYMMDD`` coverage window."""
+
+    usaf: str
+    wban: str
+    name: str
+    latitude: float
+    longitude: float
+    begin: str  # YYYYMMDD (first day of record)
+    end: str  # YYYYMMDD (last day of record)
+
+    def as_dict(self) -> dict:
+        """Return the station as a plain dict."""
+        return asdict(self)
+
+
+def isd_transport(*, timeout: float = 30.0) -> Callable[[str], bytes]:
+    """Return the default stdlib transport for NOAA ISD: ``callable(url) -> raw bytes``.
+
+    A *different* contract from :func:`nasa_power_transport` (raw ``bytes``, not parsed JSON) --
+    the ISD catalog is CSV and the hourly files are gzipped, so the parser decodes. Inject a canned
+    one to run offline, or wrap with :func:`cached_bytes_transport` (the JSON
+    :func:`cached_transport` does not apply to bytes).
+    """
+    from urllib.request import Request, urlopen
+
+    def transport(url: str) -> bytes:  # pragma: no cover - the one real-network path
+        with urlopen(Request(url), timeout=timeout) as resp:  # noqa: S310 - https NCEI endpoint
+            return resp.read()
+
+    return transport
+
+
+def cached_bytes_transport(
+    inner: Callable[[str], bytes],
+    cache_dir: str,
+    *,
+    ttl: _dt.timedelta | None = None,
+    clock: Callable[[], _dt.datetime] | None = None,
+) -> Callable[[str], bytes]:
+    """On-disk cache for a **bytes** transport (the ISD analog of :func:`cached_transport`).
+
+    Memoizes each URL's raw bytes to ``<cache_dir>/<sha256(url)>.bin`` (an ISO-timestamp header line
+    then the payload), with an atomic ``os.replace``. Caching matters here: the station catalog is
+    ~5 MB and per-year files repeat. Default cache-forever (``ttl=None``); ``clock`` (tz-aware UTC)
+    is injectable so TTL expiry is deterministic in tests; a corrupt file self-heals.
+    """
+    tick = clock or _default_clock
+
+    def transport(url: str) -> bytes:
+        os.makedirs(cache_dir, exist_ok=True)
+        path = os.path.join(cache_dir, hashlib.sha256(url.encode("utf-8")).hexdigest() + ".bin")
+        if os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    header, _, payload = f.read().partition(b"\n")
+                stamp = _dt.datetime.fromisoformat(header.decode("ascii"))
+                if ttl is None or (tick() - stamp) < ttl:
+                    return payload
+            except (OSError, ValueError):
+                pass  # corrupt / torn / bad timestamp -> treat as a miss and re-fetch
+        payload = inner(url)
+        tmp = path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(tick().isoformat().encode("ascii") + b"\n" + payload)
+        os.replace(tmp, path)  # atomic publish (mirror cached_transport / store.facilities._write)
+        return payload
+
+    return transport
+
+
+def _haversine_km(lat1, lon1, lat2, lon2) -> float:
+    """Great-circle distance (km) between two lat/lon points (stdlib math only)."""
+    r = 6371.0088
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlmb = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def isd_stations(
+    *, transport: Callable[[str], bytes] | None = None, timeout: float = 30.0
+) -> list[IsdStation]:
+    """Fetch + parse the NOAA ISD station catalog (``isd-history.csv``) into :class:`IsdStation`.
+
+    The catalog is ~5 MB; wrap ``transport`` with :func:`cached_bytes_transport`, or pass the result
+    to :func:`isd_nearest_station` via ``stations=`` to avoid re-downloading. Rows with a blank or
+    null-island (``0.000``) latitude/longitude are skipped.
+    """
+    transport = transport or isd_transport(timeout=timeout)
+    text = transport(_ISD_HISTORY_URL).decode("utf-8", "replace")
+    out: list[IsdStation] = []
+    for row in csv.DictReader(io.StringIO(text)):
+        lat, lon = (row.get("LAT") or "").strip(), (row.get("LON") or "").strip()
+        if lat in ("", "0.000") or lon in ("", "0.000"):
+            continue
+        try:
+            out.append(
+                IsdStation(
+                    usaf=(row.get("USAF") or "").strip(),
+                    wban=(row.get("WBAN") or "").strip(),
+                    name=(row.get("STATION NAME") or "").strip(),
+                    latitude=float(lat),
+                    longitude=float(lon),
+                    begin=(row.get("BEGIN") or "").strip(),
+                    end=(row.get("END") or "").strip(),
+                )
+            )
+        except ValueError:
+            continue  # unparseable lat/lon -> skip
+    return out
+
+
+def isd_nearest_station(
+    latitude,
+    longitude,
+    start,
+    end,
+    *,
+    transport: Callable[[str], bytes] | None = None,
+    stations: list[IsdStation] | None = None,
+    timeout: float = 30.0,
+) -> IsdStation:
+    """Nearest ISD station to ``(latitude, longitude)`` whose coverage spans ``[start, end]``.
+
+    Great-circle (haversine) nearest among stations with ``begin <= start`` and ``end >= end`` (so a
+    decommissioned or not-yet-begun station isn't picked). Pass ``stations=`` (from
+    :func:`isd_stations`) to skip the ~5 MB catalog download. Raises ``ValueError`` if none covers.
+    """
+    cat = stations if stations is not None else isd_stations(transport=transport, timeout=timeout)
+    s, e = _yyyymmdd(start), _yyyymmdd(end)
+    covering = [st for st in cat if st.begin and st.end and st.begin <= s and st.end >= e]
+    if not covering:
+        raise ValueError(f"no ISD station covers ({latitude}, {longitude}) {start}..{end}")
+    return min(
+        covering, key=lambda st: _haversine_km(latitude, longitude, st.latitude, st.longitude)
+    )
+
+
+def _parse_isd_lite(raw: bytes, tz: str, *, dew_point: bool) -> pd.DataFrame:
+    """Parse one gzipped ISD-Lite year into a °F frame (``oat_f``; ``dewpt_f`` when requested)."""
+    lines = gzip.decompress(raw).decode("ascii", "replace").splitlines()
+    keys, temps, dews = [], [], []
+    for line in lines:
+        f = line.split()
+        if len(f) < 6:
+            continue
+        keys.append(f"{int(f[0]):04d}{int(f[1]):02d}{int(f[2]):02d}{int(f[3]):02d}")
+        temps.append(int(f[4]))
+        dews.append(int(f[5]))
+
+    def _degf(vals):
+        s = pd.Series([float(v) for v in vals], dtype=float)
+        s = s.where(s != _ISD_MISSING)  # -9999 -> NaN
+        return c_to_f(s / 10.0)  # tenths of °C -> °C -> °F
+
+    if not keys:
+        return pd.DataFrame({"oat_f": pd.Series(dtype=float)})
+    idx = _index(keys, tz)
+    cols = {"oat_f": _degf(temps).to_numpy()}
+    if dew_point:
+        cols["dewpt_f"] = _degf(dews).to_numpy()
+    return pd.DataFrame(cols, index=idx)
+
+
+def fetch_isd(
+    usaf,
+    wban,
+    start,
+    end,
+    *,
+    transport: Callable[[str], bytes] | None = None,
+    tz: str = "UTC",
+    timeout: float = 30.0,
+    dew_point: bool = False,
+) -> pd.DataFrame:
+    """Fetch hourly NOAA ISD-Lite data for a station (``oat_f`` °F; ``dewpt_f`` when requested).
+
+    One gzipped file per calendar year in ``[start, end]``, concatenated into a single unique,
+    sorted index and trimmed to the window. ``-9999`` becomes NaN; air temp (tenths of °C) becomes
+    °F. ``tz`` is the SAME switch as the NASA path: ``"UTC"`` (tz-aware) or a site IANA zone (naive
+    local). Raises ``ValueError`` if no year returned data. stdlib ``gzip``/``urllib`` + pandas.
+    """
+    transport = transport or isd_transport(timeout=timeout)
+    s, e = pd.Timestamp(_yyyymmdd(start)), pd.Timestamp(_yyyymmdd(end)) + pd.Timedelta(hours=23)
+    frames = []
+    for year in range(s.year, e.year + 1):
+        raw = transport(f"{_ISD_DATA_BASE}/{year}/{usaf}-{wban}-{year}.gz")
+        df = _parse_isd_lite(
+            raw, "UTC", dew_point=dew_point
+        )  # parse+filter in UTC, tz-switch after
+        if not df.empty:
+            frames.append(
+                df[(df.index >= s.tz_localize("UTC")) & (df.index <= e.tz_localize("UTC"))]
+            )
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        raise ValueError(f"no ISD data for {usaf}-{wban} {start}..{end}")
+    frame = pd.concat(frames)
+    frame = frame[~frame.index.duplicated(keep="first")].sort_index()
+    if tz.upper() != "UTC":  # apply the naive-local switch after the UTC-based windowing
+        frame.index = frame.index.tz_convert(tz).tz_localize(None)
+    return frame
+
+
+def oat_reference_isd(
+    latitude,
+    longitude,
+    start,
+    end,
+    *,
+    transport: Callable[[str], bytes] | None = None,
+    catalog_transport: Callable[[str], bytes] | None = None,
+    tz: str = "UTC",
+    timeout: float = 30.0,
+) -> pd.Series:
+    """Find the nearest covering ISD station to a lat/lon, then fetch its °F OAT reference series.
+
+    A station-precise counterpart to :func:`oat_reference`: returns the same °F ``oat_f`` Series
+    (NaNs dropped) with the resolved station on ``series.attrs["isd_station"]``. Two transport seams
+    (``catalog_transport`` for the station list, ``transport`` for the hourly data), both
+    offline-injectable. ``tz`` is explicit (the same load-bearing switch as :func:`oat_reference`).
+    """
+    station = isd_nearest_station(
+        latitude, longitude, start, end, transport=catalog_transport, timeout=timeout
+    )
+    df = fetch_isd(
+        station.usaf, station.wban, start, end, transport=transport, tz=tz, timeout=timeout
+    )
+    series = df["oat_f"].dropna()
+    series.attrs["isd_station"] = station.as_dict()
     return series

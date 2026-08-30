@@ -1766,15 +1766,22 @@
   "camber.weather_source": [
     "FILL_VALUE",
     "GeoResult",
+    "IsdStation",
+    "cached_bytes_transport",
     "cached_transport",
+    "fetch_isd",
     "fetch_nasa_power",
     "geocode",
+    "isd_nearest_station",
+    "isd_stations",
+    "isd_transport",
     "nasa_power_transport",
     "nasa_power_url",
     "nominatim_transport",
     "nominatim_url",
     "oat_reference",
-    "oat_reference_for"
+    "oat_reference_for",
+    "oat_reference_isd"
   ],
   "camber.zones": [
     "ZONE_MEASURES",

@@ -4,6 +4,45 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.74.0] — 2026-08-30
+
+**A second weather provider: real NOAA weather stations.** NASA POWER (0.70+) is a global ~50 km
+reanalysis grid; this adds **NOAA's Integrated Surface Database (ISD-Lite)** — also keyless — so you
+can pull from a *real weather station* near the site. `oat_reference_isd` finds the nearest station
+covering your window and returns the identical °F `oat_f` Series the weather-normalization and
+OAT-sensor-validation consumers already accept, so it drops into `sensordrift.compare_to_reference`
+and `mandv.weather` unchanged.
+
+### Added
+- **`oat_reference_isd(lat, lon, start, end, *, transport, catalog_transport, tz, timeout)`** — the
+  station-precise counterpart to `oat_reference`: resolves the nearest covering station, fetches its
+  hourly °F, and attaches the resolved station to `series.attrs["isd_station"]`.
+- **`isd_nearest_station(lat, lon, start, end, *, transport, stations, timeout)`** — haversine-nearest
+  station **filtered to those whose record spans the window** (skips decommissioned / not-yet-begun);
+  raises a clear `ValueError` when no station covers it.
+- **`isd_stations(*, transport, timeout)`** → `list[IsdStation]` (the parsed catalog; null-island
+  `0.000/0.000` rows skipped) and **`fetch_isd(usaf, wban, start, end, *, transport, tz, timeout,
+  dew_point)`** → a `DataFrame` of one station's hourly °F (per-year gz files concatenated to a unique,
+  sorted index; tenths-of-°C → °F; `-9999` → `NaN`; optional `dewpt_f`).
+- **`IsdStation`** (frozen value, `.as_dict()`), **`isd_transport(*, timeout)`** (the default stdlib
+  **bytes** transport), and **`cached_bytes_transport(inner, cache_dir, *, ttl, clock)`** — the bytes
+  sibling of `cached_transport` (ISD payloads are gzipped/CSV, not JSON), memoizing to
+  `<cache_dir>/<sha256(url)>.bin` with the same atomic-write / self-healing / injectable-clock TTL
+  behavior.
+
+### Changed
+- `docs/WEATHER.md` becomes a two-provider guide (NASA POWER + NOAA/ISD), with a "NOAA/ISD station
+  data" section on the station-precise-but-gappy trade-off, endpoints, tz caveat, and bytes caching.
+  `docs/CAPABILITIES.md` and the mkdocs nav name both providers.
+
+### Notes
+- Seven new public names under `camber.weather_source` → `tests/public_api_snapshot.json` regenerated.
+  **No new runtime dependency** (stdlib `urllib`/`gzip`/`csv`/`math` + pandas). ISD is a **second
+  transport seam** (bytes, vs. the NASA path's JSON) — both offline-injectable, so every parse /
+  nearest-station / tz / missing-value / cache path is tested with no network. **Honest trade-off:**
+  ISD is station-precise but gappy and sparse (no station near remote sites); NASA POWER stays the
+  choice for global coverage and a gap-free series. They complement.
+
 ## [0.73.0] — 2026-08-25
 
 **Fetch weather by address, not just coordinates.** Adds a keyless geocoder to `camber.weather_source`
