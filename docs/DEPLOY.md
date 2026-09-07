@@ -40,25 +40,29 @@ populates it; the API pods mount it read-only.
 
 ## conda-forge
 
-[`deploy/conda/meta.yaml`](https://github.com/yroussev/camber/blob/main/deploy/conda/meta.yaml) is a
-submission-ready recipe: `noarch: python`, the runtime deps (`matplotlib-base` is the conda-forge
-name), the `camber` entry point, `run_constrained` pins for the conda-forge-packaged optional extras
-(`[ml]`/`[brick]`/`[pv]`/`[psychro]`/`[energyplus]`), the conda-forge lint fields (`license_family`,
-`doc_url`, `dev_url`, a `description`), and a `test` block that imports the package, runs
-`camber --help` / `camber validate`, and `pip check`s the deps.
+[`deploy/conda/recipe.yaml`](https://github.com/yroussev/camber/blob/main/deploy/conda/recipe.yaml) is
+the source-of-truth recipe in the **v1 `recipe.yaml`** format (rattler-build; conda-forge deprecated
+the v0 `meta.yaml`): `noarch: python`, the runtime deps (`matplotlib-base` is the conda-forge name),
+the `camber` entry point, `license_file: [LICENSE, NOTICE]`, and a `tests` block that imports the
+package, `pip check`s the deps, and runs `camber --help` against both the minimum and latest Python.
+It deliberately omits `run_constrained` (several optional extras aren't packaged on conda-forge, which
+would fail lint) — those can be added in a follow-up feedstock PR.
 
-**Before submitting**, set `{{ version }}` to the release you are packaging (ideally the latest
-published on PyPI) and refresh the sdist `sha256` for *that* version so the pair matches:
+Validate it locally before submitting: `conda-smithy lint recipes/camber-toolkit` and a full
+`rattler-build build --recipe recipe.yaml -c conda-forge` (downloads the sdist, verifies the `sha256`,
+resolves deps, runs the test block). To retarget a new release, bump `context.version` and refresh the
+sdist `sha256` for *that* version so the pair matches:
 
 ```bash
 curl -sL https://pypi.org/pypi/camber-toolkit/<version>/json \
   | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
 ```
 
-Then submit via [`conda-forge/staged-recipes`](https://github.com/conda-forge/staged-recipes): fork
-it, drop this file at `recipes/camber-toolkit/meta.yaml`, and open a PR (this creates the feedstock —
-a **repo-owner action**). Once the feedstock exists, its bot opens version-bump PRs automatically on
-each PyPI release. Until then, install from PyPI: `pip install camber-toolkit`.
+Submit via [`conda-forge/staged-recipes`](https://github.com/conda-forge/staged-recipes): fork it,
+drop this file at `recipes/camber-toolkit/recipe.yaml`, and open a PR (this creates the feedstock —
+the listed `recipe-maintainers` handle must comment agreeing to maintain). Once the feedstock exists,
+`regro-cf-autotick-bot` opens version-bump PRs automatically on each PyPI release. Until then, install
+from PyPI: `pip install camber-toolkit`.
 
 ## Docs site (GitHub Pages)
 
