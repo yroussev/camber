@@ -334,9 +334,11 @@
   ],
   "camber.config": [
     "RunResult",
+    "drift_store_path",
     "load_config",
     "run_config",
-    "run_config_file"
+    "run_config_file",
+    "run_drift_config"
   ],
   "camber.coolingtower": [
     "CoolingTowerResult",
@@ -370,6 +372,15 @@
     "TrackResult",
     "ValidationDossier",
     "build_dossier"
+  ],
+  "camber.driftrun": [
+    "DRIFT_FAMILIES",
+    "DriftFamily",
+    "DriftFamilyResult",
+    "DriftResult",
+    "build_drift_suite",
+    "family_names",
+    "run_drift"
   ],
   "camber.driftsim": [
     "ChillerFault",
@@ -1169,12 +1180,14 @@
     "carpet_svg_html",
     "chiller_diagnosis_table",
     "condenser_diagnosis_table",
+    "drift_report_html",
     "evaporator_diagnosis_table",
     "fig_to_base64",
     "interactive_scatter_html",
     "multitrend_svg_html",
     "pump_diagnosis_table",
     "selection_bus_html",
+    "threshold_confidence_html",
     "vav_diagnosis_table"
   ],
   "camber.report.ahu": [
@@ -1195,6 +1208,10 @@
     "build_dashboard",
     "fig_to_base64",
     "render_evidence_blocks"
+  ],
+  "camber.report.drift": [
+    "drift_report_html",
+    "threshold_confidence_html"
   ],
   "camber.report.evaporator": [
     "evaporator_diagnosis_table"

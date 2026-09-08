@@ -250,13 +250,9 @@ def make_cases(
 
 def build_vav_suite(store, *, site: str = "SIM", run_id: str = "SIM") -> list:
     """The two VAV drift detectors that feed the diagnosis, sharing one ``store``."""
-    from .rules.vav_airflow_rule import VavAirflowDrift
-    from .rules.vav_reheat_valve_rule import VavReheatValveDrift
+    from .driftrun import build_drift_suite
 
-    return [
-        VavAirflowDrift(store, site=site, run_id=run_id),
-        VavReheatValveDrift(store, site=site, run_id=run_id),
-    ]
+    return build_drift_suite("vav", store, site=site, run_id=run_id)
 
 
 def diagnose_vav_frames(

@@ -4,6 +4,65 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.75.0] — 2026-09-08
+
+**The drift family becomes reachable without writing Python.** Releases 0.40–0.67 built ~20 drift
+detectors across six families (AHU air-side, chiller, condenser, evaporator, pump, VAV) with
+per-family roll-ups and HTML tables — but they are `PeriodRule`s, so they never appeared in the
+single-frame `builtin_registry()` that config-driven runs and the CLI use. There was no `drift`
+config section and no `camber drift` subcommand: the largest capability in the toolkit could only be
+driven from a script. This adds the missing layer — *equipment discovery → period slicing → suite →
+roll-up → output* — plus the baseline lifecycle the comparison depends on.
+
+### Added
+- **`camber.driftrun`** — the family runner and the single source of truth for suite membership.
+  `DRIFT_FAMILIES` / `DriftFamily` / `family_names()`, `build_drift_suite(family, store, …)`, and
+  `run_drift(refs_by_class, mapping, *, store, families, baseline, current, …)` → `DriftResult` /
+  `DriftFamilyResult`. The six `build_*_suite` helpers in the `*sim` modules now delegate here, so
+  the production path and the physics-validation path cannot diverge (a parity test pins the exact
+  classes and ordering each one returns).
+- **A `drift` section in the JSON config** — `store` / `baseline` / `current` / `run_id` plus a
+  `families` list (`class`, `family`, and the optional `coils` / `plant` / `sustained_alarm` and
+  per-family window overrides). `camber run` scores drift alongside the ordinary rules and folds the
+  verdicts, caveats and tables into the audit report. New `config.run_drift_config` and
+  `config.drift_store_path` run or locate just the drift half.
+- **`camber drift run | report | freeze | list`** — score a current window against the frozen
+  baselines, write the standalone HTML page, establish missing references (`--dry-run` shows what it
+  would do), and inspect what is frozen and on whose say-so (`--equip` / `--kind` / `--json`).
+- **`camber.report.drift_report_html`** — one page composing every family's existing verdict table,
+  the plant roll-up, the threshold-confidence banner, and an *Equipment not evaluated* table. Plus
+  `threshold_confidence_html()`.
+
+### Fixed
+- **Scorecard category parity.** Twenty-eight shipped rules had no `RULE_CATEGORY` entry and fell
+  through to `"other"` — including four drift rules (`chiller_superheat_drift`,
+  `chiller_suction_pressure_drift`, `chiller_head_pressure_drift`, `cooling_tower_approach_drift`)
+  whose four siblings *were* mapped to `"maintenance"`, so half the chiller drift family scored
+  outside the maintenance grade. All are now categorized (the drift family as `maintenance`, the G36
+  Trim-&-Respond reset family as `energy`), and a new parity test fails if any shipped rule is added
+  without one.
+
+### Notes
+- **The write policy is a verb, not a setting.** Every drift rule defaults `freeze_if_missing=True`
+  and writes the reference inline, so a scheduled run would quietly mint baselines from whatever
+  window the config called "baseline" — circular by construction. `run`/`report` and the config
+  section always pass `False` and never save; only `freeze` creates, and it still refuses to
+  overwrite. Moving a reference remains `BaselineStore.accept_new_normal`'s attributed decision.
+- **Untested is not steady.** Two paths leave an equipment unscored — no required role resolved, or
+  every detector declined (nothing frozen, an untrusted input, an empty window) — and both would
+  roll up to `severity="ok"`, `locus="steady"`, asserting a negative nobody tested. Neither is
+  diagnosed now: the equipment is listed under `unevaluated` with the reason, in the terminal, in
+  `drift.json` and in the HTML, and the no-role case also emits an `info` Finding so it reaches the
+  audit report's caveats.
+- **Screening-grade, un-suppressibly.** Every drift command prints and every drift page renders the
+  two-class threshold note from `camber.driftthresholds`; `drift.json` carries the block. There is
+  no flag to hide it.
+- Two same-named `coil_valve_drift` instances (cooling + heating) cannot share one `Registry`, which
+  keys on `rule.name` — each rule runs through its own one-entry scratch registry, reusing all of
+  `run_periods` unchanged. No change to `camber/rules/base.py`.
+- Six new public names across two new modules → `tests/public_api_snapshot.json` regenerated. **No
+  new dependency** (stdlib `json`/`argparse`/`html` + the existing numeric stack).
+
 ## [0.74.1] — 2026-09-08
 
 **Fix: `camber` CLI crashed on a legacy Windows (cp1252) console.** The help text and finding

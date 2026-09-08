@@ -290,24 +290,9 @@ def make_cases(
 
 def build_chiller_suite(store, *, site: str = "SIM", run_id: str = "SIM") -> list:
     """The seven chiller drift detectors that feed the roll-up, sharing one baseline ``store``."""
-    from .rules.chiller_cw_range_rule import ChillerCwRangeDrift
-    from .rules.chiller_drift_rule import ChillerApproachDrift
-    from .rules.chiller_head_pressure_rule import ChillerHeadPressureDrift
-    from .rules.chiller_subcooling_rule import ChillerSubcoolingDrift
-    from .rules.chiller_suction_pressure_rule import ChillerSuctionPressureDrift
-    from .rules.chiller_superheat_rule import ChillerSuperheatDrift
-    from .rules.coolingtower_drift_rule import CoolingTowerApproachDrift
+    from .driftrun import build_drift_suite
 
-    classes = (
-        ChillerApproachDrift,
-        ChillerCwRangeDrift,
-        CoolingTowerApproachDrift,
-        ChillerHeadPressureDrift,
-        ChillerSubcoolingDrift,
-        ChillerSuperheatDrift,
-        ChillerSuctionPressureDrift,
-    )
-    return [cls(store, site=site, run_id=run_id) for cls in classes]
+    return build_drift_suite("chiller", store, site=site, run_id=run_id)
 
 
 def diagnose_frames(

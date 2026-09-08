@@ -105,6 +105,19 @@ caveat count · fingerprint) to CSV/JSON/Parquet, and `camber.report.vav_diagnos
 worst-first HTML table. `build_site_report(..., vav_diagnoses=[...])` splices that table into the
 owner-facing site report, alongside the plant, pump, and AHU verdict tables.
 
+## Running the family
+
+From a config, no Python needed — add a `drift` section naming this family (`"family": "vav"`) and run
+`camber drift freeze` once to establish the references, then `camber drift run` to score. `camber
+run` folds the verdicts into the ordinary audit report. Only `freeze` (and the attributed
+`accept_new_normal`) ever writes a baseline; scoring is read-only. See
+**[CLI.md](CLI.md#drift-baselines)**.
+
+```sh
+camber drift freeze config.json      # establish the references (refuses to overwrite)
+camber drift run    config.json      # score current vs baseline, worst-first
+```
+
 ## Calibration
 
 Thresholds are constructor arguments (screening-grade); the CUSUM parameters are provisional-untuned.

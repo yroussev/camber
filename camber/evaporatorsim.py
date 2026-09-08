@@ -260,15 +260,9 @@ def make_cases(
 
 def build_evaporator_suite(store, *, site: str = "SIM", run_id: str = "SIM") -> list:
     """The three evaporator-side drift detectors that feed the diagnosis, sharing one ``store``."""
-    from .rules.chiller_drift_rule import ChillerApproachDrift
-    from .rules.chiller_suction_pressure_rule import ChillerSuctionPressureDrift
-    from .rules.chiller_superheat_rule import ChillerSuperheatDrift
+    from .driftrun import build_drift_suite
 
-    return [
-        ChillerApproachDrift(store, site=site, run_id=run_id),
-        ChillerSuperheatDrift(store, site=site, run_id=run_id),
-        ChillerSuctionPressureDrift(store, site=site, run_id=run_id),
-    ]
+    return build_drift_suite("evaporator", store, site=site, run_id=run_id)
 
 
 def diagnose_evaporator_frames(

@@ -307,20 +307,9 @@ def make_cases(
 
 def build_ahu_suite(store, *, site: str = "SIM", run_id: str = "SIM", coils=("cooling",)) -> list:
     """The air-side drift detectors that feed the AHU diagnosis, sharing one ``store``."""
-    from .rules.coil_valve_rule import CoilValveDrift
-    from .rules.duct_static_rule import DuctStaticControlDrift
-    from .rules.economizer_damper_rule import EconomizerDamperDrift
-    from .rules.fan_efficiency_rule import FanEfficiencyDrift
-    from .rules.filter_loading_rule import FilterLoadingDrift
+    from .driftrun import build_drift_suite
 
-    suite = [
-        FanEfficiencyDrift(store, site=site, run_id=run_id),
-        FilterLoadingDrift(store, site=site, run_id=run_id),
-        DuctStaticControlDrift(store, site=site, run_id=run_id),
-        EconomizerDamperDrift(store, site=site, run_id=run_id),
-    ]
-    suite += [CoilValveDrift(store, site=site, run_id=run_id, coil=c) for c in coils]
-    return suite
+    return build_drift_suite("ahu", store, site=site, run_id=run_id, coils=coils)
 
 
 def diagnose_ahu_frames(

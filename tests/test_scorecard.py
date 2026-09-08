@@ -72,3 +72,30 @@ def test_weights_and_jsonable():
     assert (
         "categories" in heavy.as_dict() and heavy.as_dict()["overall_grade"] == heavy.overall_grade
     )
+
+
+def test_every_shipped_rule_has_a_category():
+    """No shipped rule may fall through to "other" — the guard the drift family needed.
+
+    ``_category_for`` deliberately returns "other" for an unknown name (above), which is right for
+    a plugin or a caller's own rule but wrong for one CAMBER ships: four drift rules sat in "other"
+    for several releases, outside the maintenance grade their four siblings counted toward. This
+    fails the moment a new built-in or drift rule is added without a category.
+    """
+    from camber.driftrun import DRIFT_FAMILIES, build_drift_suite
+    from camber.rules.builtin import rule_names
+    from camber.scorecard import RULE_CATEGORY
+    from camber.store.modelstore import BaselineStore
+
+    shipped = set(rule_names())
+    for family in DRIFT_FAMILIES:
+        suite = build_drift_suite(family, BaselineStore(), sustained_alarm=True)
+        shipped |= {r.name for r in suite}
+
+    assert not shipped - set(RULE_CATEGORY), (
+        f"shipped rules with no scorecard category: {sorted(shipped - set(RULE_CATEGORY))}"
+    )
+    assert not set(RULE_CATEGORY) - shipped, (
+        f"categories for rules that no longer ship: {sorted(set(RULE_CATEGORY) - shipped)}"
+    )
+    assert set(RULE_CATEGORY.values()) <= set(CATEGORIES)

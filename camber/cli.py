@@ -325,6 +325,146 @@ def _cmd_edge_selftest(args) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- drift subcommands
+#
+# The baseline store is written by exactly two verbs -- `freeze` (create a missing reference) and
+# `accept` (move an existing one, attributed). `run`/`report` open it read-only: a run that mints
+# the baseline it scores against would define away the very drift it is meant to catch.
+
+
+def _drift_banner() -> str:
+    from .driftthresholds import MAGNITUDE_NOTE, TEMPORAL_NOTE
+
+    return f"\nHow to read these severities:\n  - {MAGNITUDE_NOTE}.\n  - {TEMPORAL_NOTE}."
+
+
+def _drift_load(args):
+    """Load a config file and the base dir its relative paths resolve against."""
+    from .config import load_config
+
+    return load_config(args.config), os.path.dirname(os.path.abspath(args.config))
+
+
+def _print_drift(result) -> None:
+    rank = {"fault": 0, "warn": 1, "info": 2, "ok": 3}
+    for fam in result.families:
+        print(
+            f"\n{fam.label} — {fam.equip_class}  (baseline {tuple(fam.baseline)} "
+            f"vs current {tuple(fam.current)})"
+        )
+        if not fam.diagnoses:
+            print("  no equipment produced a verdict")
+        for d in sorted(fam.diagnoses, key=lambda x: rank.get(x.severity, 9)):
+            causes = "; ".join(getattr(d, "causes", []) or []) or "steady"
+            print(f"  [{d.severity:5s}] {d.equip:12s} locus={d.locus:14s} {causes}")
+        if fam.plant is not None:
+            print(f"  plant: {fam.plant.summary}")
+        for row in fam.unevaluated:
+            why = row.get("reason", "not evaluated")
+            detail = (
+                ", ".join(row.get("declined") or [])
+                if row.get("declined")
+                else "needs " + ", ".join(row.get("roles_required") or [])
+            )
+            print(f"  [ n/a ] {row['equip']:12s} not evaluated — {why} ({detail})")
+    print(_drift_banner())
+
+
+def _cmd_drift_run(args) -> int:
+    from .config import run_drift_config
+
+    cfg, base = _drift_load(args)
+    res = run_drift_config(cfg, base_dir=base, run_id=args.run_id or None)
+    if res is None:
+        print("config has no 'drift' section (or it names no families) — nothing to do")
+        return 0
+    _print_drift(res)
+    if args.out:
+        os.makedirs(args.out, exist_ok=True)
+        dpath = os.path.join(args.out, "drift.json")
+        json.dump(res.as_dict(), open(dpath, "w"), indent=2, default=str)
+        fpath = os.path.join(args.out, "findings.json")
+        json.dump([f.as_dict() for f in res.findings], open(fpath, "w"), indent=2, default=str)
+        print(f"\nwrote {dpath}\nwrote {fpath}")
+    return 0
+
+
+def _cmd_drift_report(args) -> int:
+    from .config import run_drift_config
+    from .report.drift import drift_report_html
+
+    cfg, base = _drift_load(args)
+    res = run_drift_config(cfg, base_dir=base, run_id=args.run_id or None)
+    if res is None:
+        print("config has no 'drift' section (or it names no families) — nothing to do")
+        return 0
+    open(args.out, "w").write(drift_report_html(res))
+    n = sum(len(f.diagnoses) for f in res.families)
+    print(f"wrote {args.out}  ({n} verdict(s) across {len(res.families)} family/families)")
+    return 0
+
+
+def _cmd_drift_freeze(args) -> int:
+    """Create the missing baselines a drift comparison measures against — the only create path."""
+    from .config import drift_store_path, run_drift_config
+    from .store.modelstore import BaselineStore
+
+    cfg, base = _drift_load(args)
+    path = drift_store_path(cfg, base_dir=base)
+    store = BaselineStore.load(path)
+    before = {r.fingerprint for r in store.records()}
+    res = run_drift_config(
+        cfg, base_dir=base, freeze_if_missing=True, run_id=args.run_id or None, store=store
+    )
+    if res is None:
+        print("config has no 'drift' section (or it names no families) — nothing to do")
+        return 0
+    after = {r.fingerprint for r in store.records()}
+    new = len(after - before)
+    if args.dry_run:
+        print(
+            f"dry run: would freeze {new} new baseline(s); {len(before)} already frozen "
+            f"(left untouched). {path} not written."
+        )
+        return 0
+    print(f"froze {new} new baseline(s); {len(before)} already frozen (left untouched)")
+    if new:
+        store.save(path)
+        print(f"wrote {path}")
+    else:
+        print(f"{path} left unchanged (nothing new to freeze)")
+    print(_drift_banner())
+    return 0
+
+
+def _cmd_drift_list(args) -> int:
+    from .config import drift_store_path
+    from .store.modelstore import BaselineStore
+
+    cfg, base = _drift_load(args)
+    path = drift_store_path(cfg, base_dir=base)
+    recs = BaselineStore.load(path).records()
+    if args.equip:
+        recs = [r for r in recs if r.equip in set(args.equip)]
+    if args.kind:
+        recs = [r for r in recs if r.kind in set(args.kind)]
+    if not recs:
+        print(f"no frozen baselines in {path} (run `camber drift freeze` first)")
+    for r in recs:
+        window = f"{r.period_start}..{r.period_end}".strip(".")
+        who = f" accepted_by={r.accepted_by}" if r.accepted_by else ""
+        sup = f" supersedes={r.supersedes}" if r.supersedes else ""
+        hist = f" history={len(r.history)}" if r.history else ""
+        print(
+            f"{r.equip:14s} {r.kind:26s} frozen_at={r.frozen_at or '-'} [{window}]"
+            f"{who}{sup}{hist}  {r.reason}"
+        )
+    if args.json:
+        json.dump([r.as_dict() for r in recs], open(args.json, "w"), indent=2, default=str)
+        print(f"wrote {args.json}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
@@ -425,6 +565,41 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     pb.add_argument("--out", help="write the discovered inventory + roles as JSON to this path")
     pb.set_defaults(func=_cmd_bacnet_discover)
+
+    pdr = sub.add_parser(
+        "drift", help="baseline-vs-current drift across a detector family (see docs/*-DRIFT.md)"
+    )
+    drsub = pdr.add_subparsers(dest="drift_cmd", required=True)
+
+    dr = drsub.add_parser("run", help="score the current window against the frozen baselines")
+    dr.add_argument("config", help="analysis config JSON with a 'drift' section")
+    dr.add_argument("--out", help="output dir for drift.json + findings.json")
+    dr.add_argument("--run-id", default="", help="stamp this run id on the results")
+    dr.set_defaults(func=_cmd_drift_run)
+
+    drp = drsub.add_parser("report", help="write the drift verdicts as a standalone HTML page")
+    drp.add_argument("config")
+    drp.add_argument("--out", required=True, help="HTML file to write")
+    drp.add_argument("--run-id", default="")
+    drp.set_defaults(func=_cmd_drift_report)
+
+    drf = drsub.add_parser(
+        "freeze",
+        help="create the missing baselines (the ONLY create path; never overwrites one)",
+    )
+    drf.add_argument("config")
+    drf.add_argument("--run-id", default="", help="stamp this run id as the baselines' frozen_at")
+    drf.add_argument(
+        "--dry-run", action="store_true", help="report what would be frozen without writing"
+    )
+    drf.set_defaults(func=_cmd_drift_freeze)
+
+    drl = drsub.add_parser("list", help="show the frozen baselines and their provenance")
+    drl.add_argument("config")
+    drl.add_argument("--equip", action="append", help="filter to this equipment (repeatable)")
+    drl.add_argument("--kind", action="append", help="filter to this model kind (repeatable)")
+    drl.add_argument("--json", help="also write the records as JSON to this path")
+    drl.set_defaults(func=_cmd_drift_list)
 
     ped = sub.add_parser(
         "edge", help="one-way edge→cloud BAS forwarder (read-only in, outbound-only out)"

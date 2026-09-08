@@ -45,6 +45,18 @@ RULE_CATEGORY = {
     "economizer_high_limit": "energy",
     "free_cooling_missed": "energy",
     "static_pressure_reset": "energy",
+    "compressor_short_cycle": "energy",
+    "compressor_staging": "energy",
+    "heatpump_defrost": "energy",
+    # the G36 Trim-&-Respond reset family: a reset that can't rise costs plant energy, which is
+    # also how camber.fault_economics prices all four of them
+    "supply_air_reset_compliance": "energy",
+    "sat_reset_effectiveness": "energy",
+    "static_reset_effectiveness": "energy",
+    "sat_rogue_zone_census": "energy",
+    "static_rogue_zone_census": "energy",
+    "sat_cohort_starvation": "energy",
+    "static_cohort_starvation": "energy",
     # comfort
     "unmet_setpoint_hours": "comfort",
     "overcooling_min_flow": "comfort",
@@ -58,13 +70,35 @@ RULE_CATEGORY = {
     "co2_ventilation": "ventilation",
     "dcv_verification": "ventilation",
     # maintenance / controls
+    "leaking_valve": "maintenance",
+    "control_hunting": "maintenance",
+    "damper_census": "maintenance",
+    "chiller_approach_fouling": "maintenance",
+    "filter_fouling": "maintenance",
+    # the drift family (camber.driftrun): every one of these measures a *condition* against a
+    # frozen baseline, so the whole family is maintenance regardless of which loop it watches.
+    # Kept complete on purpose -- test_scorecard's parity test fails if a new drift rule is added
+    # without a category, which is how four of them silently fell into "other".
     "chiller_approach_drift": "maintenance",
     "chiller_approach_drift_sustained": "maintenance",
     "chiller_subcooling_drift": "maintenance",
     "chiller_cw_range_drift": "maintenance",
-    "leaking_valve": "maintenance",
-    "control_hunting": "maintenance",
-    "damper_census": "maintenance",
+    "chiller_superheat_drift": "maintenance",
+    "chiller_suction_pressure_drift": "maintenance",
+    "chiller_head_pressure_drift": "maintenance",
+    "cooling_tower_approach_drift": "maintenance",
+    "fan_efficiency_drift": "maintenance",
+    "filter_loading_drift": "maintenance",
+    "duct_static_drift": "maintenance",
+    "coil_valve_drift": "maintenance",
+    "economizer_damper_drift": "maintenance",
+    "pump_flow_drift": "maintenance",
+    "pump_head_drift": "maintenance",
+    "pump_power_drift": "maintenance",
+    "loop_deltat_drift": "maintenance",
+    "loop_dp_drift": "maintenance",
+    "vav_airflow_drift": "maintenance",
+    "vav_reheat_valve_drift": "maintenance",
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")

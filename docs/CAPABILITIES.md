@@ -120,7 +120,12 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     reheat coil, with a per-box roll-up (`diagnose_vav_drift`) disambiguating box vs upstream starvation.
   Each family ships a physics simulator (`ahusim` / `condensersim` / `evaporatorsim` / `vavsim`) for
   ROC validation; `camber.driftvalidation` calibrates thresholds against labelled data. Period rules,
-  run via `Registry.run_periods` with a frozen baseline store.
+  run via `Registry.run_periods` with a frozen baseline store. Driven from a config's `drift`
+  section or `camber drift run|report|freeze|list` (`camber.driftrun`) — one page per run via
+  `report.drift_report_html`. Scoring is read-only toward the store; only `freeze` creates a
+  reference and only the attributed `accept_new_normal` moves one, and an equipment nothing could
+  evaluate is listed as *not evaluated* rather than diagnosed steady. See
+  **[CLI.md](CLI.md#drift-baselines)**.
 - **Trim-and-Respond / G36 reset analytics** ([TR-RESET.md](TR-RESET.md)) — asks whether the plant's
   **setpoint-reset logic** does what ASHRAE Guideline 36 intends (`camber.g36_reset` engine). Five
   detectors: `supply_air_reset_compliance` (SAT held colder than the §5.16.2.2 OAT→SAT target — a
@@ -318,8 +323,9 @@ rollups, retention pruning, **year-partition pruning + column projection + cache
 
 - **Config-driven runs** — `config`: one JSON config (source → mapping → equipment → rules →
   report) runs a whole analysis: `python -m camber.config run.json`.
-- **CLI** — the `camber` console script: `run` / `report` / `explain` / `ask` / `fleet` / `charts`
-  subcommands, with a vendor-neutral `--llm-cmd` seam for the agent. See **[CLI.md](CLI.md)**.
+- **CLI** — the `camber` console script: `run` / `report` / `explain` / `ask` / `fleet` / `charts` /
+  `validate` / `serve` / `drift` / `edge` subcommands, with a vendor-neutral `--llm-cmd` seam for the
+  agent. See **[CLI.md](CLI.md)**.
 - **Plugins** — `plugins`: third-party rules / ingest adapters / report formats discovered via
   Python entry points (`camber.rules` / `camber.adapters` / `camber.reports`) or registered
   in-process, duck-typed against the existing protocols with per-plugin error isolation. See

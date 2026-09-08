@@ -20,6 +20,11 @@ mapping, which equipment to discover, which rules to run, and what report to wri
         # kwargs for this run (e.g. a high-outside-air building's design minimum damper).
       "soo": [{"class": "AHU", "library": "g36_ahu"},
               {"class": "AHU", "spec": "ahu_sequence.json"}],
+      "drift": {"store": "baselines.json",
+                "baseline": ["2025-03-01", "2025-05-31"],
+                "current":  ["2026-06-01", "2026-08-31"],
+                "families": [{"class": "AHU", "family": "ahu", "coils": ["cooling"]},
+                             {"class": "CH",  "family": "chiller"}]},
       "report": {"level": 2, "climate_zone": "CA CZ15", "out_text": "audit.txt"}
     }
 
@@ -27,6 +32,12 @@ The optional ``soo`` section evaluates Sequence-of-Operations conformance per
 equipment class -- either a packaged library sequence (``library``: ``g36_ahu`` /
 ``g36_plant``) or a JSON clause spec (``spec``) -- merging the per-clause Findings into
 the run.
+
+The optional ``drift`` section scores a **current** window against a frozen **baseline** one for
+each configured detector family (:mod:`camber.driftrun`), merging its Findings into the run. It is
+strictly read-only toward the baseline store: a config-driven run never creates or moves a frozen
+reference, because a run that mints the baseline it scores against is circular. Creating one is
+``camber drift freeze``; moving one is ``camber drift accept`` (see :mod:`camber.cli`).
 
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
@@ -40,19 +51,24 @@ import os
 from dataclasses import dataclass, field
 from glob import glob
 
+from .driftrun import DRIFT_FAMILIES, family_names, run_drift
 from .model.mapping import MappingProvider
 from .model.roles import Role
 from .realio import load_point
 from .report.audit import AuditReport, Benchmark
+from .report.drift import drift_report_html
 from .resolve import discover, discover_terminals, resolve
 from .rules.base import _merge_shared
 from .rules.builtin import builtin_registry, is_fleet, make_rule
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
+from .store.modelstore import BaselineStore
 
 __all__ = [
     "RunResult",
     "run_config",
+    "run_drift_config",
+    "drift_store_path",
     "load_config",
     "run_config_file",
 ]
@@ -70,6 +86,7 @@ class RunResult:
     findings: list  # all Findings produced
     report: AuditReport | None = None
     rules_run: list = field(default_factory=list)
+    drift: object | None = None  # DriftResult when the config has a "drift" section
 
 
 def _path(base: str, p: str) -> str:
@@ -104,11 +121,24 @@ def _source_folders(source: dict, base_dir: str) -> list:
     return out
 
 
-def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
-    """Execute a config dict: discover equipment, run the named rules, build a report.
+@dataclass
+class _Prepared:
+    """The source/mapping/equipment context every config-driven entry point needs."""
 
-    Paths in the config resolve against ``base_dir``. Unknown rule names raise
-    ``KeyError`` (fail fast on a typo).
+    site: str
+    resample: str
+    mapping: MappingProvider
+    shared: dict | None
+    refs: list
+    refs_by_class: dict
+    min_trust: float | None
+
+
+def _prepare(config: dict, base_dir: str) -> _Prepared:
+    """Resolve a config's source, mapping, shared points and discovered equipment.
+
+    Shared by :func:`run_config` and :func:`run_drift_config` so the two entry points discover
+    equipment identically -- a drift run must see exactly the equipment the ordinary run does.
     """
     site = config.get("site", "")
     resample = config.get("resample", "1h")
@@ -126,8 +156,8 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         oat = load_point(_path(base_dir, so["file"]), "oat").resample(resample).mean()
         shared = {Role.OAT: oat}
 
-    refs = []
-    refs_by_class: dict = {}  # class -> [EquipRef], for class-targeted SOO specs
+    refs: list = []
+    refs_by_class: dict = {}  # class -> [EquipRef], for class-targeted SOO / drift specs
     for eq in config.get("equipment", []):
         marker = eq.get("marker", "SpaceTemp")
         if eq["class"] == "TERMINAL":  # union of all terminal-unit types
@@ -140,6 +170,56 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     # Optional sensor-health gate: a rule whose required inputs aren't trusted declines
     # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
+    return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust)
+
+
+def _drift_window(spec: dict, key: str, *, required: bool = True):
+    """Validate and return one ``(start, end)`` window from a drift spec.
+
+    Explicit windows are the whole point of a drift comparison, so a malformed one fails fast and
+    names the offending key rather than surfacing three frames deep inside the period slicer.
+    """
+    win = spec.get(key)
+    if win is None:
+        if required:
+            raise ValueError(f"drift.{key} is required: a drift run compares two explicit windows")
+        return None
+    if isinstance(win, str) or len(list(win)) != 2:
+        raise ValueError(f"drift.{key} must be a [start, end] pair, got {win!r}")
+    return tuple(win)
+
+
+def _drift_families(spec: dict, refs_by_class: dict) -> list:
+    """Validate the ``drift.families`` entries against the config's equipment classes."""
+    out = []
+    for entry in spec.get("families", []):
+        cls = entry["class"]
+        fam = entry["family"]
+        if cls not in refs_by_class:
+            raise ValueError(
+                f"drift family class {cls!r} is not in the config's equipment list "
+                f"(known: {sorted(refs_by_class)})"
+            )
+        if fam not in DRIFT_FAMILIES:
+            raise KeyError(f"unknown drift family {fam!r} (known: {family_names()})")
+        e = dict(entry)
+        for key in ("baseline", "current"):
+            if key in e:
+                win = _drift_window(e, key)
+                e[key] = win
+        out.append(e)
+    return out
+
+
+def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
+    """Execute a config dict: discover equipment, run the named rules, build a report.
+
+    Paths in the config resolve against ``base_dir``. Unknown rule names raise
+    ``KeyError`` (fail fast on a typo).
+    """
+    prep = _prepare(config, base_dir)
+    site, resample, mapping, shared = prep.site, prep.resample, prep.mapping, prep.shared
+    refs, refs_by_class, min_trust = prep.refs, prep.refs_by_class, prep.min_trust
 
     reg = builtin_registry()
     findings, ran = [], []
@@ -186,6 +266,19 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             findings += soo_findings(frame, spec, ref.equip)
         ran.append(f"soo:{cls}:{entry.get('library') or entry.get('spec')}")
 
+    # Optional drift comparison: score a current window against the frozen baseline store for
+    # each configured family. Read-only toward the store by construction -- freeze_if_missing is
+    # False and the store is never saved here (see the module docstring).
+    drift = None
+    if config.get("drift") is not None:
+        drift = run_drift_config(config, base_dir=base_dir, prepared=prep)
+        if drift is not None:
+            findings += drift.findings
+            ran += [
+                f"drift:{e['class']}:{e['family']}"
+                for e in _drift_families(config["drift"], refs_by_class)
+            ]
+
     report = None
     rep = config.get("report")
     if rep is not None:
@@ -208,11 +301,82 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 known = {"electricity_per_kwh", "gas_per_therm"}
                 price = EnergyPrice(**{k: v for k, v in rep["price"].items() if k in known})
             body = report.to_html(recommend=bool(rep.get("recommend")), price=price)
+            if drift is not None:
+                body += "\n" + drift_report_html(drift, standalone=False)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
                 fh.write("<html><body>\n" + body + "\n</body></html>\n")
 
     return RunResult(
-        site=site, equipment=len(refs), findings=findings, report=report, rules_run=ran
+        site=site,
+        equipment=len(refs),
+        findings=findings,
+        report=report,
+        rules_run=ran,
+        drift=drift,
+    )
+
+
+def drift_store_path(config: dict, *, base_dir: str = ".") -> str:
+    """The baseline-store path a config's ``drift`` section names, resolved against ``base_dir``.
+
+    Raises ``ValueError`` when the config has no ``drift.store`` -- every drift command needs one.
+    """
+    dspec = config.get("drift") or {}
+    if not dspec.get("store"):
+        raise ValueError(
+            "drift.store is required: a drift comparison needs a frozen baseline store "
+            "(create one with `camber drift freeze`)"
+        )
+    return _path(base_dir, dspec["store"])
+
+
+def run_drift_config(
+    config: dict,
+    *,
+    base_dir: str = ".",
+    freeze_if_missing: bool = False,
+    run_id: str | None = None,
+    store=None,
+    prepared=None,
+):
+    """Run only a config's ``drift`` section, returning a :class:`camber.driftrun.DriftResult`.
+
+    ``None`` when the config has no ``drift`` section (or it names no families). The baseline store
+    is **read** by default: ``freeze_if_missing`` creates a missing reference and is the caller's
+    responsibility to save afterwards -- only ``camber drift freeze`` passes ``True``, so an
+    ordinary run can never mint the baseline it is scoring against.
+
+    Pass ``store`` to own the :class:`~camber.store.modelstore.BaselineStore` yourself -- the
+    freeze path needs the mutated object back in order to save it. ``prepared`` is an internal
+    optimization (reusing an already-discovered equipment set); callers pass only the config.
+    """
+    dspec = config.get("drift")
+    if dspec is None:
+        return None
+    if not dspec.get("store"):
+        raise ValueError(
+            "drift.store is required: a drift comparison needs a frozen baseline store "
+            "(create one with `camber drift freeze`)"
+        )
+    prep = prepared if prepared is not None else _prepare(config, base_dir)
+    fams = _drift_families(dspec, prep.refs_by_class)
+    if not fams:
+        return None
+    if store is None:
+        store = BaselineStore.load(drift_store_path(config, base_dir=base_dir))
+    return run_drift(
+        prep.refs_by_class,
+        prep.mapping,
+        store=store,
+        families=fams,
+        baseline=_drift_window(dspec, "baseline"),
+        current=_drift_window(dspec, "current"),
+        site=prep.site,
+        run_id=run_id if run_id is not None else dspec.get("run_id", ""),
+        resample=prep.resample,
+        shared=prep.shared,
+        min_trust=prep.min_trust,
+        freeze_if_missing=freeze_if_missing,
     )
 
 

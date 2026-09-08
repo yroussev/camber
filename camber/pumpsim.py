@@ -228,14 +228,9 @@ def make_cases(
 
 def build_pump_suite(store, *, site: str = "SIM", run_id: str = "SIM") -> list:
     """The five pump/hydronic drift detectors feeding the loop diagnosis, sharing one ``store``."""
-    from .rules.loop_deltat_rule import LoopDeltaTDrift
-    from .rules.loop_dp_rule import LoopDPDrift
-    from .rules.pump_flow_rule import PumpFlowDrift
-    from .rules.pump_head_rule import PumpHeadDrift
-    from .rules.pump_power_rule import PumpPowerDrift
+    from .driftrun import build_drift_suite
 
-    classes = (PumpFlowDrift, PumpHeadDrift, LoopDeltaTDrift, LoopDPDrift, PumpPowerDrift)
-    return [cls(store, site=site, run_id=run_id) for cls in classes]
+    return build_drift_suite("pump", store, site=site, run_id=run_id)
 
 
 def diagnose_pump_frames(

@@ -12,6 +12,7 @@ camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across confi
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
+camber drift   run|report|freeze|list <config.json>              # baseline-vs-current drift
 ```
 
 `camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
@@ -36,8 +37,10 @@ flowchart TD
   camber --> fleet["fleet: portfolio rollup + triage"]
   camber --> charts["charts: legacy AHU HeC charts"]
   camber --> validate["validate: validation dossier (text/HTML/JSON)"]
+  camber --> drift["drift: baseline-vs-current drift + baseline lifecycle"]
   cfg -- "drives" --> run
   cfg -- "drives" --> report
+  cfg -- "drives" --> drift
   run -- "grounded run context" --> explain
   run -- "grounded run context" --> ask
 ```
@@ -71,6 +74,71 @@ claims are repaired (or the answer falls back to the template).
 `camber fleet 'sites/*/config.json' --ask "which building wastes the most?"` runs each config, builds a
 [fleet rollup](SITE-REPORT.md), and answers the question grounded in per-building facts (EUI, fault
 counts, recoverable $/yr). Add `--out fleet.html` for the rollup report.
+
+## Drift & baselines
+
+The [drift detectors](CHILLER-DRIFT.md) compare a **current** window against a **frozen baseline**
+one, so they need two things an ordinary run does not: explicit windows, and a durable place to keep
+the reference. Both live in a `drift` section of the same config:
+
+```json
+"drift": {
+  "store":    "baselines.json",
+  "baseline": ["2025-03-01", "2025-05-31"],
+  "current":  ["2026-06-01", "2026-08-31"],
+  "families": [
+    {"class": "AHU",  "family": "ahu", "coils": ["cooling", "heating"]},
+    {"class": "CH",   "family": "chiller", "sustained_alarm": true},
+    {"class": "CHWP", "family": "pump", "plant": "CHW plant"},
+    {"class": "VAV",  "family": "vav", "baseline": ["2025-04-01", "2025-05-31"]}
+  ]
+}
+```
+
+`family` is one of `ahu · chiller · condenser · evaporator · pump · vav`; each `class` must appear in
+the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump)
+adds the cross-pump roll-up; `sustained_alarm` (chiller) appends the opt-in CUSUM alarm rule. A
+family may override `baseline` / `current` — a chiller re-commissioned later has its own reference
+window. Any `trust_gate`, `shared_oat` and `resample` settings apply unchanged.
+
+With that section present, `camber run` scores drift alongside the ordinary rules and folds the
+verdicts into the audit report. The `drift` subcommands drive it directly:
+
+```sh
+camber drift freeze config.json          # establish the references (the only create path)
+camber drift list   config.json          # what is frozen, and on whose say-so
+camber drift run    config.json --out d/ # score current vs baseline; writes drift.json + findings.json
+camber drift report config.json --out drift.html
+```
+
+### The write policy is a verb, not a setting
+
+A run that mints the baseline it scores against is circular: whatever the equipment is doing now
+becomes, by construction, normal. So **only `freeze` creates a reference**, and it refuses to
+overwrite one that already exists (`--dry-run` shows what it would do). `run` and `report` open the
+store read-only and leave the file byte-identical. Moving an existing reference is a separate,
+attributed operator decision — `BaselineStore.accept_new_normal`, which records who accepted it and
+why, and keeps the superseded record in `history`.
+
+There is deliberately no `--reason` on `freeze`: the initial reason string lives inside each
+detector, so the flag would not be honoured.
+
+### Untested is not steady
+
+Two things can leave an equipment unscored — no detector's required roles resolved, or every
+detector *declined* (nothing frozen yet, an untrusted input, an empty window). Both would roll up to
+`severity=ok, locus=steady`, which asserts a negative nobody tested. Neither is diagnosed: the
+equipment is listed under **Equipment not evaluated** with the reason, in the terminal, in
+`drift.json`, and in the HTML.
+
+### Severities are screening-grade
+
+Every drift command prints, and every drift page renders, the two-class threshold-confidence note:
+magnitude floors are *screening-grade* (characterized for the signal class, not established on your
+machines) and the CUSUM timing parameters are *provisional-untuned*. There is no flag to suppress
+it. Read a drift finding as "worth a walkdown", not as a dispatch-grade verdict — see
+[CHILLER-DRIFT.md](CHILLER-DRIFT.md#calibrating-the-thresholds) for how to calibrate.
+
 
 ## Backward compatibility
 

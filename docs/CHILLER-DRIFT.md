@@ -161,6 +161,19 @@ provisional in the same way:
 Read a sustained alarm as "worth looking at now," never as a dispatch-grade verdict — until you
 calibrate.
 
+## Running the family
+
+From a config, no Python needed — add a `drift` section naming this family (`"family": "chiller"`) and run
+`camber drift freeze` once to establish the references, then `camber drift run` to score. `camber
+run` folds the verdicts into the ordinary audit report. Only `freeze` (and the attributed
+`accept_new_normal`) ever writes a baseline; scoring is read-only. See
+**[CLI.md](CLI.md#drift-baselines)**.
+
+```sh
+camber drift freeze config.json      # establish the references (refuses to overwrite)
+camber drift run    config.json      # score current vs baseline, worst-first
+```
+
 ## Calibrating the thresholds
 
 Every threshold above is a **constructor argument**, so tuning is a config change, not a code change.
