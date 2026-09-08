@@ -256,10 +256,11 @@ This was previously restated in four places, each drifting out of date. It is tr
 | GitHub **Discussions** | **Enabled**, with all six categories created. Remaining: post the pinned welcome from `docs/dev/DISCUSSIONS-WELCOME.md`. |
 | **conda-forge** | **Submitted** — `conda-forge/staged-recipes#34742`, open since 2026-09-06; `deploy/conda/recipe.yaml` tracks the current version. The feedstock does not exist until that PR merges. (Its `win_64` build is what caught the 0.74.1 cp1252 CLI bug.) |
 | **PEP-541** `camber` name | **Filed** 2026-06-13 — `pypi/support#11042`, still open with the PyPI admins. `camber-toolkit` is the permanent distribution name either way. See `docs/dev/PEP-541-REQUEST.md`. |
-| **MkDocs site** | **Built, not published.** `mkdocs.yml` and `.github/workflows/pages.yml` are complete; the workflow is `workflow_dispatch`-only and Pages has never been deployed. One owner action: run it once (`configure-pages` enables Pages on that first run), then re-arm the commented-out `push:` trigger. |
-| Repo **description + topics** | **Still empty** — the one genuinely unstarted item. |
+| **MkDocs site** | **Live** at <https://yroussev.github.io/camber/> (2026-09-08). The push trigger on `pages.yml` is armed, so docs changes on `main` republish automatically. |
+| Repo **description + topics** | **Set** (2026-09-08). |
 
-Three of the five are waiting on someone outside the repo; only the last two are ours to finish.
+Both of the items that were ours to finish are done; the remaining three wait on people outside the
+repo (a PyPI admin, a conda-forge reviewer, and a welcome post).
 
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
