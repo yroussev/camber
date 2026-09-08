@@ -67,9 +67,13 @@ from PyPI: `pip install camber-toolkit`.
 ## Docs site (GitHub Pages)
 
 [`.github/workflows/pages.yml`](https://github.com/yroussev/camber/blob/main/.github/workflows/pages.yml) builds the MkDocs site
-(`mkdocs build`) and deploys it to GitHub Pages on every push to `main` that touches `docs/`
-or `mkdocs.yml`. Enabling it is a **one-time repo-owner action**: *Settings → Pages → Source: GitHub
-Actions*. Build locally with `pip install -e .[docs] && mkdocs serve`.
+(`mkdocs build`) and deploys it to GitHub Pages. It is **manual-trigger only** (`workflow_dispatch`)
+until the first run succeeds: `gh workflow run pages.yml`, or *Actions → Docs (GitHub Pages) → Run
+workflow*. The job runs `actions/configure-pages` with `enablement: true`, so that first run turns
+Pages on via the API — no repo-settings click is normally needed (if it is refused, set *Settings →
+Pages → Source: GitHub Actions* and re-run). Once a run is green, re-arm the commented-out `push:`
+trigger in the workflow to auto-publish on docs changes. Build locally with
+`pip install -e .[docs] && mkdocs serve`.
 
 ## Hosted demo
 
