@@ -394,11 +394,13 @@ def _cmd_drift_report(args) -> int:
     from .report.drift import drift_report_html
 
     cfg, base = _drift_load(args)
-    res = run_drift_config(cfg, base_dir=base, run_id=args.run_id or None)
+    res = run_drift_config(
+        cfg, base_dir=base, run_id=args.run_id or None, evidence=bool(args.charts)
+    )
     if res is None:
         print("config has no 'drift' section (or it names no families) — nothing to do")
         return 0
-    open(args.out, "w").write(drift_report_html(res))
+    open(args.out, "w").write(drift_report_html(res, charts=bool(args.charts)))
     n = sum(len(f.diagnoses) for f in res.families)
     print(f"wrote {args.out}  ({n} verdict(s) across {len(res.families)} family/families)")
     return 0
@@ -641,6 +643,11 @@ def _build_parser() -> argparse.ArgumentParser:
     drp.add_argument("config")
     drp.add_argument("--out", required=True, help="HTML file to write")
     drp.add_argument("--run-id", default="")
+    drp.add_argument(
+        "--charts",
+        action="store_true",
+        help="embed each finding's evidence chart (the period on its frozen baseline's band)",
+    )
     drp.set_defaults(func=_cmd_drift_report)
 
     drf = drsub.add_parser(

@@ -56,6 +56,7 @@ from .driftthresholds import threshold_confidence
 from .evaporatordrift import diagnose_evaporator_drift
 from .pumpdrift import diagnose_pump_drift
 from .pumpplantdiag import diagnose_pump_plant
+from .resolve import resolve
 from .rules.base import Finding, Registry
 from .vavdrift import diagnose_vav_drift
 
@@ -266,6 +267,9 @@ class DriftFamilyResult:
     findings: list = field(default_factory=list)
     unevaluated: list = field(default_factory=list)
     plant: Any = None
+    # {(equip, rule_name): Evidence} when run_drift was asked for it. Deliberately absent from
+    # as_dict(): an Evidence carries a prepared DataFrame, which is not JSON.
+    evidence: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         """A JSON-friendly view (diagnoses and findings flattened to plain dicts)."""
@@ -344,6 +348,35 @@ def _required_roles(suite) -> list:
     return out
 
 
+def _family_evidence(suite, refs, mapping, by_equip, current, *, resample, shared) -> dict:
+    """Build each rule's pattern-J evidence for the equipment that produced a real verdict.
+
+    Skipped for equipment whose findings were all declines: there is no claim to illustrate, and a
+    scatter with no band would invite the reader to judge it by eye.
+    """
+    from .charts.evidence import drift_evidence
+    from .rules.base import _merge_shared, _roles_to_load, _slice_period
+
+    scored = {eq for eq, fs in by_equip.items() if not all(_declined(f) for f in fs)}
+    out: dict = {}
+    for ref in refs:
+        if ref.equip not in scored:
+            continue
+        for rule in suite:
+            frame = _merge_shared(
+                resolve(ref, mapping, _roles_to_load(rule), resample=resample), shared
+            )
+            if frame is None or frame.empty:
+                continue
+            window = _slice_period(frame, current, label="current")
+            if window.empty:
+                continue
+            ev = drift_evidence(rule, ref.equip, window)
+            if ev is not None:
+                out[(ref.equip, rule.name)] = ev
+    return out
+
+
 def run_drift(
     refs_by_class: dict,
     mapping,
@@ -358,6 +391,7 @@ def run_drift(
     shared=None,
     min_trust=None,
     freeze_if_missing: bool = False,
+    evidence: bool = False,
 ) -> DriftResult:
     """Run the configured drift families over discovered equipment and roll each one up.
 
@@ -370,6 +404,11 @@ def run_drift(
     ``freeze_if_missing`` defaults to **False**: a run that scores drift must not also create the
     reference it scores against. Pass ``True`` only from an explicit freeze command, and save the
     store yourself afterwards.
+
+    ``evidence`` additionally builds each rule's pattern-J chart spec -- the current period on the
+    frozen baseline's band (:func:`camber.charts.evidence.drift_evidence`) -- into
+    :attr:`DriftFamilyResult.evidence`. Off by default because it re-resolves each equipment's
+    current window, which a scoring run does not otherwise need.
     """
     out = DriftResult(
         site=site, run_id=run_id, store_path=getattr(store, "path", "") or "", families=[]
@@ -459,6 +498,12 @@ def run_drift(
             )
         unevaluated.sort(key=lambda r: r["equip"])
 
+        ev_map: dict = {}
+        if evidence:
+            ev_map = _family_evidence(
+                suite, refs, mapping, by_equip, cur_win, resample=resample, shared=shared
+            )
+
         plant = None
         if fam_name == "pump" and entry.get("plant"):
             plant = diagnose_pump_plant(diagnoses, plant=entry["plant"])
@@ -474,6 +519,7 @@ def run_drift(
                 findings=findings,
                 unevaluated=unevaluated,
                 plant=plant,
+                evidence=ev_map,
             )
         )
     return out

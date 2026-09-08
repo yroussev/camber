@@ -156,11 +156,13 @@
     "cumulative_savings",
     "cusum_plot",
     "diagnostic_scatter",
+    "drift_evidence",
     "economizer_template",
     "energy_signature",
     "evidence_descriptor",
     "fault_multitrend",
     "finding_evidence",
+    "fitted_band",
     "hec_metrics",
     "load_carpet",
     "load_duration_chart",
@@ -209,6 +211,7 @@
   ],
   "camber.charts.evidence": [
     "Evidence",
+    "drift_evidence",
     "evidence_descriptor",
     "finding_evidence",
     "render_evidence"

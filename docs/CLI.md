@@ -109,6 +109,7 @@ camber drift freeze config.json          # establish the references (the only cr
 camber drift list   config.json          # what is frozen, and on whose say-so
 camber drift run    config.json --out d/ # score current vs baseline; writes drift.json + findings.json
 camber drift report config.json --out drift.html
+camber drift report config.json --out drift.html --charts   # + each finding's evidence chart
 ```
 
 When a fix lands, the reference *should* move — on someone's say-so:
@@ -149,6 +150,17 @@ detector *declined* (nothing frozen yet, an untrusted input, an empty window). B
 `severity=ok, locus=steady`, which asserts a negative nobody tested. Neither is diagnosed: the
 equipment is listed under **Equipment not evaluated** with the reason, in the terminal, in
 `drift.json`, and in the HTML.
+
+### Every finding shows its own evidence
+
+`--charts` embeds, per finding, the **current period scattered on that detector's frozen baseline
+band** — the comparison the rule actually made, rather than a trend of the raw points, which would
+show the levels and hide the movement. A loading filter reads as ~100% of the period outside the
+band while a healthy unit sits near the ~5% you'd expect outside ±2σ, so the chart separates the two
+cases rather than decorating the verdict.
+
+Equipment with nothing frozen gets **no chart** rather than a scatter with no line to judge it by,
+and the plain page (without `--charts`) stays pure text and tables with no matplotlib import.
 
 ### Severities are screening-grade
 

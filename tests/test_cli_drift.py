@@ -251,3 +251,32 @@ def test_accept_after_a_fix_clears_the_drift(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "[fault]" not in out
     assert "[ok" in out
+
+
+def test_report_charts_embeds_evidence_figures(tmp_path, capsys):
+    """--charts turns the text page into one that shows the comparison the detector made."""
+    cfg, _ = _make_site(str(tmp_path))
+    main(["drift", "freeze", cfg])
+    capsys.readouterr()
+
+    plain = os.path.join(str(tmp_path), "plain.html")
+    charted = os.path.join(str(tmp_path), "charts.html")
+    assert main(["drift", "report", cfg, "--out", plain]) == 0
+    assert main(["drift", "report", cfg, "--out", charted, "--charts"]) == 0
+
+    plain_html, charted_html = open(plain).read(), open(charted).read()
+    assert "<figure>" not in plain_html  # the default page stays dependency-free text
+    # five AHU detectors x the two evaluated air handlers (AHU_3 is unevaluated, so no chart)
+    assert charted_html.count("<figure>") == 10
+    assert "data:image/png;base64," in charted_html
+    assert "Evidence — the current period on each frozen baseline" in charted_html
+    # the banner survives either way
+    assert "screening-grade" in plain_html and "screening-grade" in charted_html
+
+
+def test_report_charts_before_freeze_shows_no_figures(tmp_path, capsys):
+    """Nothing frozen means nothing to plot against — no chart rather than a bare scatter."""
+    cfg, _ = _make_site(str(tmp_path))
+    dest = os.path.join(str(tmp_path), "charts.html")
+    assert main(["drift", "report", cfg, "--out", dest, "--charts"]) == 0
+    assert "<figure>" not in open(dest).read()

@@ -10,6 +10,13 @@ no base class, back-compatible; rules without it are unaffected). An :class:`Evi
 needs; :func:`render_evidence` dispatches to that renderer over the equipment's frame. This wires
 the existing charts (`multitrend`, `oat_scatter`, `diagnostic`, `carpet`) into the FDD layer without
 re-implementing any of them.
+
+**Drift rules** are the one family that cannot use the default: their claim is not "these values are
+wrong" but "these values have moved off a frozen line", so the evidence is the current period
+scattered on that baseline's own band (:func:`camber.charts.diagnostic.fitted_band`), and the
+columns the band is fitted on are often *derived* (a chiller's ``tons``, a coil's air-ΔT) rather
+than raw roles. :func:`drift_evidence` builds that Evidence from any drift rule, and
+:attr:`Evidence.frame` carries the prepared columns to the renderer.
 """
 
 from __future__ import annotations
@@ -31,6 +38,10 @@ class Evidence:
     template: object = None  # a DiagnosticTemplate for the "diagnostic" renderer
     label: str = "violation"  # span label
     title: str = ""
+    # A prepared frame to render *instead of* the caller's role-frame. Rules whose model is fitted
+    # on derived columns (a chiller's ``tons``, a coil's air-DT) cannot point a renderer at raw
+    # roles, so they hand over the frame they actually fitted. None = use the caller's frame.
+    frame: object = None
 
 
 def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
@@ -41,6 +52,8 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
     """
     from ..model.roles import Role
 
+    if evidence.frame is not None:
+        frame = evidence.frame  # the rule prepared its own (derived) columns
     r = evidence.renderer
     if r == "diagnostic":
         from .diagnostic import diagnostic_scatter
@@ -77,14 +90,75 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
     )
 
 
+def drift_evidence(rule, equip: str, frame: pd.DataFrame, *, k: float = 2.0):
+    """Evidence for a **drift** rule: the current period scattered on its frozen baseline's band.
+
+    Duck-typed over any drift rule that declares two methods, so one implementation serves the whole
+    family and a new detector opts in by declaring them:
+
+    * ``drift_signature() -> (kind, load_col, metric_col)`` — the frozen-model kind to look up, and
+      the x/y columns the baseline was fitted on (a :class:`Role`, or a string for a derived one);
+    * ``drift_frame(frame)`` — the prepared frame those columns live on.
+
+    Returns ``None`` when nothing is frozen for this equipment yet, when the prepared frame lacks
+    the fitted columns, or when the rule does not declare the attributes -- i.e. exactly when there
+    is no baseline to show the reading against. A drift chart with no band would invite the reader
+    to judge the scatter by eye, which is the comparison the frozen baseline exists to make.
+    """
+    signature = getattr(rule, "drift_signature", None)
+    prepare = getattr(rule, "drift_frame", None)
+    if not callable(signature) or not callable(prepare):
+        return None
+    kind, load, metric = signature()
+    if not kind or load is None or metric is None:
+        return None
+
+    store = getattr(rule, "store", None)
+    model = None if store is None else store.model_for(getattr(rule, "site", ""), equip, kind)
+    if model is None:
+        return None
+
+    try:
+        prepared = prepare(frame)
+    except Exception:  # noqa: BLE001 - a rule that cannot prepare simply has no evidence to show
+        return None
+    if prepared is None or getattr(prepared, "empty", True):
+        return None
+    for col in (load, metric):
+        try:
+            _col(prepared, col)
+        except KeyError:
+            return None
+
+    from .diagnostic import fitted_band
+
+    name = getattr(rule, "name", "drift")
+    return Evidence(
+        renderer="diagnostic",
+        template=fitted_band(
+            model,
+            load,
+            metric,
+            k=k,
+            name=f"{equip}: {name}",
+            xlabel=getattr(load, "name", str(load)),
+            ylabel=getattr(metric, "name", str(metric)),
+        ),
+        frame=prepared,
+        title=f"{equip}: {name} vs frozen baseline",
+    )
+
+
 def finding_evidence(rule, equip: str, frame: pd.DataFrame):
     """Return an :class:`Evidence` for a rule's finding, or None.
 
     A rule may implement a tailored ``evidence(equip, frame)`` hook (which can shade the specific
-    violating spans). When it doesn't — or the hook declines — every rule still gets **default**
-    evidence: a multi-trend of the ``roles_required`` present in the frame, i.e. the data the rule
-    examined. So pattern J covers the whole rule library, present and future, without a per-rule
-    map.
+    violating spans); a **drift** rule instead declares ``drift_signature``/``drift_frame`` and gets
+    its frozen-baseline band via :func:`drift_evidence`. When neither applies — or both decline —
+    every rule still gets **default** evidence: a multi-trend of the ``roles_required`` present in
+    the frame, i.e. the data the rule examined. So pattern J covers the whole rule library, present
+    and future, without a per-rule map.
+
     Returns None only when no required role is plottable (e.g. a fleet finding with no single
     frame).
     """
@@ -93,6 +167,13 @@ def finding_evidence(rule, equip: str, frame: pd.DataFrame):
         ev = hook(equip, frame)
         if ev is not None:
             return ev
+    # Drift rules opt in with drift_signature/drift_frame rather than a bespoke hook: their evidence
+    # is the current period on the frozen baseline's band, which one implementation can build for
+    # the whole family. Tried before the default trend, which would show the levels and hide the
+    # only thing the rule actually claims -- movement away from that line.
+    ev = drift_evidence(rule, equip, frame)
+    if ev is not None:
+        return ev
     # fleet/aggregate rules have no single-equipment frame -> no default evidence (a shared df is
     # not "this finding's" data); only per-equipment rules fall back to a default trend.
     if hasattr(rule, "analyze_fleet"):

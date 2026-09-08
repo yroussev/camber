@@ -194,6 +194,15 @@ class PumpHeadDrift:
             )
 
     # ------------------------------------------------------------------ the rule
+    # ------------------------------------------------------------------ pattern J evidence
+    def drift_signature(self):
+        """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
+        return _KIND, self.speed_role, self.head_role
+
+    def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """The prepared frame :meth:`drift_signature`'s columns live on (head at matched speed)."""
+        return self._running(frame)
+
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score the current period's head-at-speed vs the frozen baseline; return a Finding."""
         caveats: list = []

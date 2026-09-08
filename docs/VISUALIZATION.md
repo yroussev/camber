@@ -118,6 +118,7 @@ if you have a reason to extrapolate. `k` is a band *width*, not a severity thres
 own screening-grade sigma floors decide what warns or faults.
 
 ### J — rules as a chart engine (the keystone)
+
 Every rule that can mark its violating timestamps **renders its own evidence** — the chart *is* the
 audit evidence and the report figure. A rule opts in with an optional, duck-typed hook:
 ```python
@@ -141,6 +142,16 @@ the specific violation: `simultaneous_heat_cool` & `outdoor_air_fraction` (diagn
 shaded). Every *other* rule falls back to a **default** multitrend of the roles it examined — so the
 whole library (present and future rules) carries evidence, no per-rule map required. Fleet findings
 (no single equipment frame) render none.
+
+**Drift rules are the one family the default would misrepresent.** Their claim is not "these values
+are wrong" but "these values have moved off a frozen line", and a trend of the raw roles shows the
+levels while hiding exactly that. So each of them declares
+`drift_signature() -> (kind, load_col, metric_col)` and `drift_frame(frame)` instead of a bespoke
+hook, and `drift_evidence(rule, equip, frame)` builds the chart the detector reasons about: the
+current period scattered on its frozen baseline's [`fitted_band`](#g-templated-subsystem-diagnostic-scatters).
+`finding_evidence` tries it before the default trend. A rule with **nothing frozen returns `None`** —
+a scatter with no band would invite the reader to judge it by eye, which is the comparison the frozen
+baseline exists to make. From the CLI: `camber drift report … --charts`.
 
 The dashboard wires it automatically — pass `rules=`:
 ```python

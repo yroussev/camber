@@ -225,6 +225,15 @@ class VavAirflowDrift:
             )
 
     # ------------------------------------------------------------------ the rule
+    # ------------------------------------------------------------------ pattern J evidence
+    def drift_signature(self):
+        """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
+        return _KIND, _LOAD, _METRIC
+
+    def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """The prepared frame the baseline is fitted on (damper at matched commanded cfm)."""
+        return self._prepared(frame)[0]
+
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score the current period's damper-at-command vs the frozen baseline; return a Finding."""
         caveats: list = []

@@ -278,6 +278,15 @@ class CoilValveDrift:
             )
 
     # ------------------------------------------------------------------ the rule
+    # ------------------------------------------------------------------ pattern J evidence
+    def drift_signature(self):
+        """The per-coil frozen-model kind and the (ΔT, valve) columns it is fitted on."""
+        return self._kind, _DELTAT, _METRIC
+
+    def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """The prepared valve-vs-air-ΔT frame, masked to active, non-economizer samples."""
+        return self._prepared(frame)[0]
+
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score the current period's coil valve-at-ΔT vs the frozen baseline; return a Finding."""
         caveats: list = []

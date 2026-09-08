@@ -171,6 +171,15 @@ class DuctStaticControlDrift:
         return "ok"
 
     # ------------------------------------------------------------------ the rule
+    # ------------------------------------------------------------------ pattern J evidence
+    def drift_signature(self):
+        """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
+        return _KIND, self.airflow_role, self.static_role
+
+    def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """The prepared frame the baseline is fitted on (duct static at matched airflow)."""
+        return self._running(frame)
+
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score the current period's duct static vs the frozen baseline; return a Finding."""
         caveats: list = []

@@ -162,6 +162,15 @@ class FilterLoadingDrift:
         return "ok"
 
     # ------------------------------------------------------------------ the rule
+    # ------------------------------------------------------------------ pattern J evidence
+    def drift_signature(self):
+        """The frozen-model kind and the (load, metric) columns the baseline is fitted on."""
+        return _KIND, self.airflow_role, self.dp_role
+
+    def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """The prepared frame the baseline is fitted on (filter DP at matched airflow)."""
+        return self._running(frame)
+
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score the current period's filter DP-at-airflow vs the frozen baseline -> a Finding."""
         caveats: list = []

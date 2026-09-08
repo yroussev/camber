@@ -168,6 +168,20 @@ class ChillerApproachDrift:
         return "ok"
 
     # ------------------------------------------------------------------ the rule
+    # ------------------------------------------------------------------ pattern J evidence
+    def drift_signature(self):
+        """The frozen-model kind and the (load, metric) columns the baseline is fitted on.
+
+        This rule scores **two** legs; the evidence chart shows the **condenser** one, which is the
+        required leg and the broader detector (the evaporator leg enriches the finding but is
+        optional, so it is not always there to plot).
+        """
+        return "chiller_approach_cond", "tons", Role.COND_APPROACH_TEMP
+
+    def drift_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """The prepared ``tons`` + approach frame the baseline is fitted on."""
+        return self._with_tons(frame)
+
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score ``current`` against the frozen baseline for ``equip``; return a Finding."""
         base_t, cur_t = self._with_tons(baseline), self._with_tons(current)

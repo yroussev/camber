@@ -372,6 +372,7 @@ def run_drift_config(
     freeze_if_missing: bool = False,
     run_id: str | None = None,
     store=None,
+    evidence: bool = False,
     prepared=None,
 ):
     """Run only a config's ``drift`` section, returning a :class:`camber.driftrun.DriftResult`.
@@ -381,8 +382,10 @@ def run_drift_config(
     responsibility to save afterwards -- only ``camber drift freeze`` passes ``True``, so an
     ordinary run can never mint the baseline it is scoring against.
 
-    Pass ``store`` to own the :class:`~camber.store.modelstore.BaselineStore` yourself -- the
-    freeze path needs the mutated object back in order to save it. ``prepared`` is an internal
+    ``evidence`` additionally builds each rule's pattern-J chart spec (see
+    :func:`camber.driftrun.run_drift`). Pass ``store`` to own the
+    :class:`~camber.store.modelstore.BaselineStore` yourself -- the freeze path needs the mutated
+    object back in order to save it. ``prepared`` is an internal
     optimization (reusing an already-discovered equipment set); callers pass only the config.
     """
     dspec = config.get("drift")
@@ -412,6 +415,7 @@ def run_drift_config(
         shared=prep.shared,
         min_trust=prep.min_trust,
         freeze_if_missing=freeze_if_missing,
+        evidence=evidence,
     )
 
 

@@ -4,6 +4,47 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.78.0] — 2026-09-08
+
+**Every drift finding now renders its own evidence.** 0.77.0 built `fitted_band` — a baseline's own
+fitted line as a plottable band — but nothing was connected to it: of the ~20 drift rules, **none**
+had an `evidence()` hook, so pattern J fell back to a default multitrend of the raw roles. For a
+drift detector that default is actively misleading: it shows the *levels* and hides the *movement*,
+which is the only thing the rule claims.
+
+### Added
+- **`camber.charts.evidence.drift_evidence(rule, equip, frame)`** — builds the chart a drift rule
+  actually reasons about: the current period scattered on its frozen baseline's band. Duck-typed
+  over two new methods every drift rule now declares — `drift_signature() -> (kind, load_col,
+  metric_col)` and `drift_frame(frame)` — so one implementation serves the whole family and a new
+  detector opts in by declaring them.
+- **`Evidence.frame`** — a prepared frame to render instead of the caller's role-frame. Most drift
+  baselines are fitted on *derived* columns (a chiller's `tons`, a coil's air-ΔT) that no raw
+  role-frame carries, so the rule hands over the frame it actually fitted.
+- **`camber drift report --charts`** — embeds those charts in the drift page, and
+  `run_drift(..., evidence=True)` / `run_drift_config(..., evidence=True)` build them. Off by
+  default: it re-resolves each equipment's current window, which a scoring run doesn't need, and the
+  plain page stays pure text and tables with no matplotlib import.
+- `finding_evidence` tries the drift band before the default trend, so the dashboard picks it up too.
+
+### Fixed
+- **`fitted_band` was never exported from `camber.charts`** (0.77.0 added it to
+  `camber.charts.diagnostic` only, unlike its four sibling constructors). Now exported.
+- **Three rules unwrapped their prepared frame wrongly** — `economizer_damper_drift`,
+  `vav_airflow_drift` and `vav_reheat_valve_drift` call a `_prepared()` that returns
+  `(frame, excluded_fraction)`, and took the tuple. Found by an AST check across all 20 rules after
+  the first one showed up as a silently missing chart, then pinned by a per-family coverage test.
+
+### Notes
+- **A rule with nothing frozen produces no chart, deliberately.** A scatter with no band invites the
+  reader to judge the cloud by eye — precisely the comparison the frozen baseline exists to make.
+- The charts separate the cases rather than decorating the verdict: on the `examples/drift` site an
+  injected loading filter reads **100%** of the period outside the band (and fan power **93%**, the
+  corroboration the roll-up reports), while the healthy unit sits at 3–6% — about what you expect
+  outside ±2σ.
+- Two new public names → `tests/public_api_snapshot.json` regenerated. No new dependency; matplotlib
+  stays lazy-imported and is not touched unless `--charts` is passed.
+
 ## [0.77.0] — 2026-09-08
 
 **A drift baseline becomes something you can plot.** The drift detectors score residuals against a

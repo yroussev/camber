@@ -12,9 +12,12 @@ siblings) each render one family's roll-ups. This composes them into one page fo
   Findings and are therefore never diagnosed (see :mod:`camber.driftrun`); listing them keeps the
   page from reading as a clean bill of health for a machine nobody tested.
 
-Pure string building — ``html.escape``, no matplotlib, no new dependency — matching the standalone
-renderer convention of the per-family tables. Input is duck-typed, so any object with the same
-shape renders.
+Pure string building by default — ``html.escape``, matching the standalone renderer convention of
+the per-family tables. ``charts=True`` additionally embeds each finding's **pattern-J evidence**:
+the current period scattered on its frozen baseline's band, which is the comparison the detector
+actually made. That path imports matplotlib lazily, so the default page still needs nothing.
+
+Input is duck-typed, so any object with the same shape renders.
 """
 
 from __future__ import annotations
@@ -79,8 +82,42 @@ def _unevaluated_table(rows) -> str:
     )
 
 
+def _evidence_figures(fam) -> str:
+    """Embed the family's pattern-J evidence charts; empty string when there are none."""
+    evidence = dict(getattr(fam, "evidence", {}) or {})
+    if not evidence:
+        return ""
+
+    import matplotlib
+
+    matplotlib.use("Agg")  # a report is never rendered interactively
+    import matplotlib.pyplot as plt
+
+    from ..charts.evidence import render_evidence
+    from .dashboard import fig_to_base64
+
+    blocks = []
+    for (equip, rule_name), ev in sorted(evidence.items()):
+        fig = None
+        try:
+            fig, ax = plt.subplots(figsize=(7, 4))
+            render_evidence(ev, getattr(ev, "frame", None), ax=ax)
+            img = fig_to_base64(fig)  # closes fig on success
+        except Exception:  # noqa: BLE001 - one unrenderable chart must not lose the whole report
+            if fig is not None:
+                plt.close(fig)
+            continue
+        caption = _html.escape(f"{equip} — {rule_name}")
+        blocks.append(
+            f"<figure><img src='{img}' alt='{caption}'><figcaption>{caption}</figcaption></figure>"
+        )
+    if not blocks:
+        return ""
+    return "<h3>Evidence — the current period on each frozen baseline</h3>" + "".join(blocks)
+
+
 def drift_report_html(
-    result, *, title: str = "CAMBER drift report", standalone: bool = True
+    result, *, title: str = "CAMBER drift report", standalone: bool = True, charts: bool = False
 ) -> str:
     """Render a whole :class:`camber.driftrun.DriftResult` as HTML.
 
@@ -88,6 +125,9 @@ def drift_report_html(
     body into a larger report (as the config-driven run's audit HTML does). An empty result renders
     an explicit placeholder rather than a blank page — and the threshold banner is emitted either
     way.
+
+    ``charts`` embeds each finding's evidence chart (needs ``run_drift(..., evidence=True)``, whose
+    Evidence objects the result carries); without it the page stays dependency-free text and tables.
     """
     fams = list(getattr(result, "families", []) or [])
     site = str(getattr(result, "site", "") or "")
@@ -137,6 +177,9 @@ def drift_report_html(
                 )
                 + "</p>"
             )
+
+        if charts:
+            body.append(_evidence_figures(fam))
 
         for row in getattr(fam, "unevaluated", []) or []:
             unevaluated.append({**row, "family": name})

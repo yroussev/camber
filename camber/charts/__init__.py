@@ -20,11 +20,18 @@ from .diagnostic import (
     band,
     diagnostic_scatter,
     economizer_template,
+    fitted_band,
     no_simultaneous_template,
     reset_line,
 )
 from .energy_signature import energy_signature
-from .evidence import Evidence, evidence_descriptor, finding_evidence, render_evidence
+from .evidence import (
+    Evidence,
+    drift_evidence,
+    evidence_descriptor,
+    finding_evidence,
+    render_evidence,
+)
 from .loadprofile_chart import load_duration_chart, load_profile_chart
 from .multitrend import fault_multitrend, mask_to_spans
 from .oat_scatter import CloudShape, brush_back, classify_shape, oat_scatter
@@ -53,6 +60,8 @@ __all__ = [
     "energy_signature",
     "render_evidence",
     "finding_evidence",
+    "drift_evidence",
+    "fitted_band",
     "evidence_descriptor",
     "Evidence",
     "load_profile_chart",
