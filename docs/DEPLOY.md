@@ -67,13 +67,19 @@ from PyPI: `pip install camber-toolkit`.
 ## Docs site (GitHub Pages)
 
 [`.github/workflows/pages.yml`](https://github.com/yroussev/camber/blob/main/.github/workflows/pages.yml) builds the MkDocs site
-(`mkdocs build`) and deploys it to GitHub Pages. It is **manual-trigger only** (`workflow_dispatch`)
-until the first run succeeds: `gh workflow run pages.yml`, or *Actions → Docs (GitHub Pages) → Run
-workflow*. The job runs `actions/configure-pages` with `enablement: true`, so that first run turns
-Pages on via the API — no repo-settings click is normally needed (if it is refused, set *Settings →
-Pages → Source: GitHub Actions* and re-run). Once a run is green, re-arm the commented-out `push:`
-trigger in the workflow to auto-publish on docs changes. Build locally with
-`pip install -e .[docs] && mkdocs serve`.
+(`mkdocs build`) and deploys it to GitHub Pages, on every push to `main` that touches `docs/`,
+`mkdocs.yml` or the workflow itself, plus a manual `workflow_dispatch`. The site is live at
+<https://yroussev.github.io/camber/>. Build locally with `pip install -e .[docs] && mkdocs serve`.
+
+**Enabling Pages on a fork or a new repo** is a one-time action, and `enablement: true` on
+`actions/configure-pages` is *not* reliably enough on its own: the workflow's `GITHUB_TOKEN` is
+often refused with `Create Pages site failed. Error: Resource not accessible by integration`, which
+is what happened here. Enable it with a credential that can, then run the workflow:
+
+```sh
+gh api -X POST repos/:owner/:repo/pages -f build_type=workflow   # or: Settings → Pages → Source: GitHub Actions
+gh workflow run pages.yml
+```
 
 ## Hosted demo
 
