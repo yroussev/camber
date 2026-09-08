@@ -29,6 +29,13 @@ forbids. So neither is diagnosed: the equipment lands in :attr:`DriftFamilyResul
 the reason, and the no-role case also gets an ``info`` Finding naming the roles the family needed
 (the declines are already Findings of their own), so the absence travels into the report.
 
+**Moving a reference is an operator's signature.** :func:`refit_baselines` re-fits a family over an
+acceptance window and :func:`accept_new_normal_from_periods` hands the results to
+:meth:`camber.store.modelstore.BaselineStore.accept_new_normal`, which requires who accepted it and
+why. The re-fit reuses each rule's *own* fit -- run the suite against a scratch in-memory store and
+harvest what it froze -- rather than a second copy of the fitting logic that could drift out of sync
+with the detector it is meant to feed.
+
 **Freezing is a verb, not a setting.** Every drift rule defaults ``freeze_if_missing=True`` and
 writes the reference inline, so a scheduled run would quietly mint baselines from whatever window
 the config happened to label "baseline". :func:`run_drift` defaults it to ``False`` and never saves;
@@ -60,6 +67,8 @@ __all__ = [
     "family_names",
     "build_drift_suite",
     "run_drift",
+    "refit_baselines",
+    "accept_new_normal_from_periods",
 ]
 
 
@@ -465,6 +474,107 @@ def run_drift(
                 findings=findings,
                 unevaluated=unevaluated,
                 plant=plant,
+            )
+        )
+    return out
+
+
+# ------------------------------------------------------------------ moving a frozen reference
+
+
+def refit_baselines(
+    family: str,
+    refs,
+    mapping,
+    *,
+    period,
+    site: str = "",
+    run_id: str = "",
+    resample: str = "1h",
+    shared=None,
+    min_trust=None,
+    coils=("cooling",),
+    sustained_alarm: bool = False,
+) -> dict:
+    """Re-fit one family's baselines over ``period``, without touching any real store.
+
+    Returns ``{(equip, kind): fitted model}``. The fit is not reimplemented here: the suite is run
+    against a **scratch in-memory** :class:`~camber.store.modelstore.BaselineStore` with
+    ``freeze_if_missing=True`` and whatever it froze is harvested. That way each model comes from
+    its own detector -- same metric and load columns, same minimum-load filter, plausibility bounds
+    and running-status gate -- and cannot drift away from the rule it will be compared against.
+
+    A detector that cannot fit over ``period`` simply produces no entry; the caller reports the
+    absence rather than substituting something.
+    """
+    from .store.modelstore import BaselineStore
+
+    scratch = BaselineStore()
+    suite = build_drift_suite(
+        family,
+        scratch,
+        site=site,
+        run_id=run_id,
+        freeze_if_missing=True,
+        coils=tuple(coils),
+        sustained_alarm=sustained_alarm,
+    )
+    for rule in suite:
+        _run_one(
+            rule,
+            refs,
+            mapping,
+            baseline=period,
+            current=period,
+            resample=resample,
+            shared=shared,
+            min_trust=min_trust,
+        )
+    return {(rec.equip, rec.kind): rec.model() for rec in scratch.records()}
+
+
+def accept_new_normal_from_periods(
+    store,
+    refits: dict,
+    *,
+    site: str,
+    accepted_by: str,
+    reason: str,
+    at: str,
+    equips=None,
+    kinds=None,
+    period=("", ""),
+) -> list:
+    """Supersede frozen baselines with the re-fits in ``refits`` -- an attributed operator decision.
+
+    ``refits`` is :func:`refit_baselines` output. ``equips`` restricts which equipment move (there
+    is deliberately no "accept everything" default: pass the equipment explicitly); ``kinds``
+    optionally narrows to particular model kinds. ``accepted_by`` and ``reason`` are forwarded to
+    :meth:`camber.store.modelstore.BaselineStore.accept_new_normal`, which rejects an empty either
+    way -- an unattributed baseline change is indistinguishable from the automatic refit the freeze
+    policy exists to prevent.
+
+    Returns the superseding records, sorted by ``(equip, kind)``. The caller is responsible for
+    saving the store.
+    """
+    want_equips = None if equips is None else set(equips)
+    want_kinds = None if kinds is None else set(kinds)
+    out = []
+    for (equip, kind), model in sorted(refits.items()):
+        if want_equips is not None and equip not in want_equips:
+            continue
+        if want_kinds is not None and kind not in want_kinds:
+            continue
+        out.append(
+            store.accept_new_normal(
+                model,
+                site=site,
+                equip=equip,
+                kind=kind,
+                accepted_by=accepted_by,
+                reason=reason,
+                at=at,
+                period=period,
             )
         )
     return out

@@ -465,6 +465,66 @@ def _cmd_drift_list(args) -> int:
     return 0
 
 
+def _cmd_drift_accept(args) -> int:
+    """Move frozen references to a newly fitted normal — an attributed operator decision."""
+    from datetime import datetime, timezone
+
+    from .config import drift_refit, drift_store_path, load_config
+    from .driftrun import accept_new_normal_from_periods
+    from .store.modelstore import BaselineStore
+
+    cfg, base = _drift_load(args)
+    path = drift_store_path(cfg, base_dir=base)
+    store = BaselineStore.load(path)
+    at = args.run_id or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    period = tuple(args.period) if args.period else None
+
+    want_equips = set(args.equip)
+    want_kinds = set(args.kind) if args.kind else None
+    before = {(r.equip, r.kind): r.frozen_at for r in store.records()}
+    unknown = want_equips - {e for e, _ in before}
+    for equip in sorted(unknown):
+        print(f"note: {equip} has no frozen baseline yet — accepting will establish one")
+
+    refits = drift_refit(cfg, base_dir=base, period=period, run_id=at)
+    window = period or tuple(load_config(args.config)["drift"]["current"])
+
+    # Say what could not be re-fit rather than silently moving fewer references than asked for.
+    for equip, kind in sorted(before):
+        if equip not in want_equips or (want_kinds and kind not in want_kinds):
+            continue
+        if (equip, kind) not in refits:
+            print(f"could not refit {kind!r} for {equip} over {window} — leaving it frozen")
+
+    recs = accept_new_normal_from_periods(
+        store,
+        refits,
+        site=cfg.get("site", ""),
+        accepted_by=args.by,
+        reason=args.reason,
+        at=at,
+        equips=want_equips,
+        kinds=args.kind or None,
+        period=window,
+    )
+    for r in recs:
+        prev = before.get((r.equip, r.kind), "-")
+        print(
+            f"{r.equip}/{r.kind}: frozen_at {prev} -> {r.frozen_at} "
+            f"(supersedes {r.supersedes or '-'}, history now {len(r.history)})"
+        )
+    if args.dry_run:
+        print(f"dry run: would move {len(recs)} baseline(s). {path} not written.")
+        return 0
+    if recs:
+        store.save(path)
+        print(f"moved {len(recs)} baseline(s) — accepted by {args.by}: {args.reason}")
+        print(f"wrote {path}")
+    else:
+        print(f"nothing to accept; {path} left unchanged")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="camber", description="CAMBER — BAS trend analysis (FDD / M&V / RCx)"
@@ -600,6 +660,29 @@ def _build_parser() -> argparse.ArgumentParser:
     drl.add_argument("--kind", action="append", help="filter to this model kind (repeatable)")
     drl.add_argument("--json", help="also write the records as JSON to this path")
     drl.set_defaults(func=_cmd_drift_list)
+
+    dra = drsub.add_parser(
+        "accept",
+        help="move a frozen baseline to a new normal (attributed; --by and --reason required)",
+    )
+    dra.add_argument("config")
+    dra.add_argument(
+        "--equip", action="append", required=True, help="equipment to move (repeatable; required)"
+    )
+    dra.add_argument("--kind", action="append", help="narrow to this model kind (repeatable)")
+    dra.add_argument("--by", required=True, help="who is accepting the new normal")
+    dra.add_argument(
+        "--reason", required=True, help="why the baseline moved (e.g. 'belt replaced')"
+    )
+    dra.add_argument(
+        "--period",
+        nargs=2,
+        metavar=("START", "END"),
+        help="window to re-fit over (default: the config's drift.current — what it is doing now)",
+    )
+    dra.add_argument("--run-id", default="", help="stamp as frozen_at (default: now, UTC)")
+    dra.add_argument("--dry-run", action="store_true", help="show what would move without writing")
+    dra.set_defaults(func=_cmd_drift_accept)
 
     ped = sub.add_parser(
         "edge", help="one-way edge→cloud BAS forwarder (read-only in, outbound-only out)"

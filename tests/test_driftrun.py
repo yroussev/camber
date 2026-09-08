@@ -17,8 +17,10 @@ from camber.ahusim import build_ahu_suite, simulate_case  # noqa: E402
 from camber.condensersim import build_condenser_suite  # noqa: E402
 from camber.driftrun import (  # noqa: E402
     DRIFT_FAMILIES,
+    accept_new_normal_from_periods,
     build_drift_suite,
     family_names,
+    refit_baselines,
     run_drift,
 )
 from camber.driftsim import build_chiller_suite  # noqa: E402
@@ -231,3 +233,93 @@ def test_as_dict_carries_the_threshold_confidence_block(tmp_path):
     assert tc["magnitude_threshold_confidence"] == "screening-grade"
     assert tc["temporal_threshold_confidence"] == "provisional-untuned"
     assert payload["families"][0]["family"] == "ahu"
+
+
+# --------------------------------------------------------------------------- moving a reference
+
+
+def test_refit_baselines_returns_a_model_per_fittable_kind(tmp_path):
+    trends, mapping = _make_site(tmp_path)
+    refits = refit_baselines("ahu", _refs(trends)["AHU"], mapping, period=_CUR, site="T")
+
+    assert {k for _, k in refits} == {
+        "fan_efficiency",
+        "filter_loading",
+        "duct_static",
+        "economizer_damper",
+        "coil_valve_cool",
+    }
+    assert {e for e, _ in refits} == {"AHU_1", "AHU_2"}  # AHU_3 has nothing to fit
+    assert all(hasattr(m, "as_dict") for m in refits.values())
+
+
+def test_refit_baselines_touches_no_real_store(tmp_path):
+    """The fits come from a scratch store, so the caller's reference is untouched."""
+    trends, mapping = _make_site(tmp_path)
+    store = BaselineStore()
+    refit_baselines("ahu", _refs(trends)["AHU"], mapping, period=_CUR, site="T")
+    assert store.records() == []
+
+
+def test_accept_is_scoped_attributed_and_keeps_history(tmp_path):
+    trends, mapping = _make_site(tmp_path)
+    store = BaselineStore()
+    _run(tmp_path, store, freeze_if_missing=True)
+    first = {(r.equip, r.kind): r.frozen_at for r in store.records()}
+
+    refits = refit_baselines("ahu", _refs(trends)["AHU"], mapping, period=_CUR, site="T")
+    recs = accept_new_normal_from_periods(
+        store,
+        refits,
+        site="T",
+        accepted_by="A. Engineer",
+        reason="filter replaced",
+        at="2026-01-01",
+        equips=["AHU_1"],
+        period=_CUR,
+    )
+
+    assert {r.equip for r in recs} == {"AHU_1"}  # scoped: AHU_2 is untouched
+    for r in recs:
+        assert r.accepted_by == "A. Engineer" and r.reason == "filter replaced"
+        assert r.supersedes == first[(r.equip, r.kind)]
+        assert len(r.history) == 1
+    assert store.get("T", "AHU_2", "fan_efficiency").accepted_by == ""
+
+
+def test_accept_requires_attribution(tmp_path):
+    trends, mapping = _make_site(tmp_path)
+    store = BaselineStore()
+    _run(tmp_path, store, freeze_if_missing=True)
+    refits = refit_baselines("ahu", _refs(trends)["AHU"], mapping, period=_CUR, site="T")
+
+    for bad in ({"accepted_by": "  ", "reason": "r"}, {"accepted_by": "a", "reason": ""}):
+        with pytest.raises(ValueError):
+            accept_new_normal_from_periods(
+                store, refits, site="T", at="2026-01-01", equips=["AHU_1"], **bad
+            )
+
+
+def test_accept_makes_the_drift_go_away(tmp_path):
+    """The whole point of the verb: after accepting, the drifted unit reads as the new normal."""
+    trends, mapping = _make_site(tmp_path)
+    store = BaselineStore()
+    _run(tmp_path, store, freeze_if_missing=True)
+    assert (
+        next(d for d in _run(tmp_path, store).families[0].diagnoses if d.equip == "AHU_1").severity
+        != "ok"
+    )
+
+    refits = refit_baselines("ahu", _refs(trends)["AHU"], mapping, period=_CUR, site="T")
+    accept_new_normal_from_periods(
+        store,
+        refits,
+        site="T",
+        accepted_by="A. Engineer",
+        reason="filter replaced",
+        at="2026-01-01",
+        equips=["AHU_1"],
+        period=_CUR,
+    )
+    after = next(d for d in _run(tmp_path, store).families[0].diagnoses if d.equip == "AHU_1")
+    assert after.severity == "ok" and after.locus == "steady"

@@ -1,0 +1,41 @@
+{
+  "site": "DriftDemo",
+  "resample": "1h",
+  "source": {
+    "kind": "perpoint_csv",
+    "folder": "trends"
+  },
+  "mapping": {
+    "path": "mapping.json"
+  },
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker": "Airflow"
+    }
+  ],
+  "drift": {
+    "store": "baselines.json",
+    "baseline": [
+      "2025-05-01",
+      "2025-05-30"
+    ],
+    "current": [
+      "2025-06-01",
+      "2025-07-01"
+    ],
+    "families": [
+      {
+        "class": "AHU",
+        "family": "ahu",
+        "coils": [
+          "cooling"
+        ]
+      }
+    ]
+  },
+  "report": {
+    "level": 2,
+    "out_html": "audit.html"
+  }
+}

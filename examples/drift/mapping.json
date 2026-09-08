@@ -1,0 +1,18 @@
+{
+  "aliases": {
+    "Airflow": "airflow",
+    "ChwSupplyTemp": "chw_supply_temp",
+    "CoolValve": "cool_valve",
+    "DuctStatic": "duct_static",
+    "DuctStaticSp": "duct_static_sp",
+    "EconCmd": "econ_cmd",
+    "FilterDiffPress": "filter_diff_press",
+    "MixedAirTemp": "mixed_air_temp",
+    "OaDamper": "oa_damper",
+    "Oat": "oat",
+    "Power": "power",
+    "ReturnAirTemp": "return_air_temp",
+    "SupplyAirTemp": "supply_air_temp",
+    "SupplyFanStatus": "supply_fan_status"
+  }
+}

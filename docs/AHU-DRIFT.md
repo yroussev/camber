@@ -107,6 +107,7 @@ run` folds the verdicts into the ordinary audit report. Only `freeze` (and the a
 ```sh
 camber drift freeze config.json      # establish the references (refuses to overwrite)
 camber drift run    config.json      # score current vs baseline, worst-first
+camber drift accept config.json --equip <EQ> --by <NAME> --reason "<what changed>"
 ```
 
 ## Calibration

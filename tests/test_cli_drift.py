@@ -1,7 +1,8 @@
-"""Tests for the ``camber drift`` subcommands: run / report / freeze / list.
+"""Tests for the ``camber drift`` subcommands: run / report / freeze / list / accept.
 
-The write policy is the thing under test as much as the output: ``run`` and ``report`` must leave
-the baseline store byte-identical, and ``freeze`` must never overwrite an existing reference.
+The write policy is as much under test as the output: ``run`` and ``report`` must leave the baseline
+store byte-identical, ``freeze`` must never overwrite an existing reference, and ``accept`` must
+refuse to move one without an attributed who and why.
 """
 
 import json
@@ -9,6 +10,7 @@ import os
 import sys
 
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -169,3 +171,83 @@ def test_list_before_freeze_says_so(tmp_path, capsys):
     cfg, _ = _make_site(str(tmp_path))
     assert main(["drift", "list", cfg]) == 0
     assert "no frozen baselines" in capsys.readouterr().out
+
+
+def test_accept_moves_the_reference_with_attribution(tmp_path, capsys):
+    cfg, store = _make_site(str(tmp_path))
+    main(["drift", "freeze", cfg, "--run-id", "2025-06-01"])
+    capsys.readouterr()
+
+    rc = main(
+        [
+            "drift",
+            "accept",
+            cfg,
+            "--equip",
+            "AHU_1",
+            "--by",
+            "A. Engineer",
+            "--reason",
+            "filter replaced",
+            "--run-id",
+            "2026-01-01",
+        ]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "frozen_at 2025-06-01 -> 2026-01-01" in out
+    assert "moved 5 baseline(s) — accepted by A. Engineer: filter replaced" in out
+
+    main(["drift", "list", cfg])
+    listed = capsys.readouterr().out
+    assert "accepted_by=A. Engineer" in listed and "supersedes=2025-06-01" in listed
+    assert "history=1" in listed
+    # scoped: AHU_2 was not touched
+    assert all("accepted_by" not in ln for ln in listed.splitlines() if ln.startswith("AHU_2"))
+
+
+def test_accept_dry_run_writes_nothing(tmp_path, capsys):
+    cfg, store = _make_site(str(tmp_path))
+    main(["drift", "freeze", cfg, "--run-id", "2025-06-01"])
+    capsys.readouterr()
+    before = open(store).read()
+
+    assert (
+        main(
+            ["drift", "accept", cfg, "--equip", "AHU_1", "--by", "A", "--reason", "r", "--dry-run"]
+        )
+        == 0
+    )
+    assert "would move 5 baseline(s)" in capsys.readouterr().out
+    assert open(store).read() == before
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["drift", "accept", "CFG", "--equip", "AHU_1", "--by", "A"],  # no --reason
+        ["drift", "accept", "CFG", "--equip", "AHU_1", "--reason", "r"],  # no --by
+        ["drift", "accept", "CFG", "--by", "A", "--reason", "r"],  # no --equip
+    ],
+)
+def test_accept_refuses_without_attribution_or_scope(tmp_path, argv):
+    """Argparse rejects it before any code runs — the store is never even opened."""
+    cfg, _ = _make_site(str(tmp_path))
+    with pytest.raises(SystemExit) as ei:
+        main([cfg if a == "CFG" else a for a in argv])
+    assert ei.value.code == 2
+
+
+def test_accept_after_a_fix_clears_the_drift(tmp_path, capsys):
+    cfg, _ = _make_site(str(tmp_path))
+    main(["drift", "freeze", cfg])
+    capsys.readouterr()
+    main(["drift", "run", cfg])
+    assert "[fault]" in capsys.readouterr().out
+
+    main(["drift", "accept", cfg, "--equip", "AHU_1", "--by", "A", "--reason", "filter replaced"])
+    capsys.readouterr()
+    main(["drift", "run", cfg])
+    out = capsys.readouterr().out
+    assert "[fault]" not in out
+    assert "[ok" in out

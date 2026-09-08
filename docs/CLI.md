@@ -12,7 +12,7 @@ camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across confi
 camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU HeC charts
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
-camber drift   run|report|freeze|list <config.json>              # baseline-vs-current drift
+camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 ```
 
 `camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
@@ -111,14 +111,33 @@ camber drift run    config.json --out d/ # score current vs baseline; writes dri
 camber drift report config.json --out drift.html
 ```
 
+When a fix lands, the reference *should* move — on someone's say-so:
+
+```sh
+camber drift accept config.json --equip AHU_1 --by "A. Engineer" --reason "filter replaced"
+```
+
+
 ### The write policy is a verb, not a setting
 
 A run that mints the baseline it scores against is circular: whatever the equipment is doing now
 becomes, by construction, normal. So **only `freeze` creates a reference**, and it refuses to
 overwrite one that already exists (`--dry-run` shows what it would do). `run` and `report` open the
-store read-only and leave the file byte-identical. Moving an existing reference is a separate,
-attributed operator decision — `BaselineStore.accept_new_normal`, which records who accepted it and
-why, and keeps the superseded record in `history`.
+store read-only and leave the file byte-identical.
+
+**`accept` moves.** `--by` and `--reason` are required at the argparse level, so the command exits
+before any code runs without them (`BaselineStore.accept_new_normal` re-rejects an empty one as the
+backstop), and `--equip` is explicit and repeatable — there is no blanket "accept everything".
+`--kind` narrows further; `--period START END` picks the window to re-fit over, defaulting to
+`drift.current`, because accepting a new normal means *what it is doing now is the reference*.
+`--dry-run` shows the moves without writing. The superseded record is kept in `history`, so what was
+normal, when, and on whose authority stays answerable.
+
+The re-fit is not a second copy of the fitting logic: `camber.driftrun.refit_baselines` runs the
+family against a **scratch in-memory store** and harvests what it froze, so each model comes from its
+own detector — same metric and load columns, same minimum-load filter and plausibility bounds — and
+cannot drift away from the rule it will be compared against. A detector that cannot fit over the
+window is reported (`could not refit … — leaving it frozen`) rather than skipped silently.
 
 There is deliberately no `--reason` on `freeze`: the initial reason string lives inside each
 detector, so the flag would not be honoured.

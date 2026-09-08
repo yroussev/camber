@@ -51,7 +51,7 @@ import os
 from dataclasses import dataclass, field
 from glob import glob
 
-from .driftrun import DRIFT_FAMILIES, family_names, run_drift
+from .driftrun import DRIFT_FAMILIES, family_names, refit_baselines, run_drift
 from .model.mapping import MappingProvider
 from .model.roles import Role
 from .realio import load_point
@@ -69,6 +69,7 @@ __all__ = [
     "run_config",
     "run_drift_config",
     "drift_store_path",
+    "drift_refit",
     "load_config",
     "run_config_file",
 ]
@@ -328,6 +329,40 @@ def drift_store_path(config: dict, *, base_dir: str = ".") -> str:
             "(create one with `camber drift freeze`)"
         )
     return _path(base_dir, dspec["store"])
+
+
+def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str = "") -> dict:
+    """Re-fit every configured drift family's baselines over an acceptance window.
+
+    Returns ``{(equip, kind): fitted model}`` merged across the families, ready for
+    :func:`camber.driftrun.accept_new_normal_from_periods`. ``period`` defaults to the config's
+    ``drift.current`` window -- accepting a new normal means "what it is doing *now* is the
+    reference". Nothing is written: the fits come from a scratch store.
+    """
+    dspec = config.get("drift")
+    if dspec is None:
+        return {}
+    prep = _prepare(config, base_dir)
+    fams = _drift_families(dspec, prep.refs_by_class)
+    win = tuple(period) if period else _drift_window(dspec, "current")
+    out: dict = {}
+    for entry in fams:
+        out.update(
+            refit_baselines(
+                entry["family"],
+                prep.refs_by_class.get(entry["class"], []),
+                prep.mapping,
+                period=win,
+                site=prep.site,
+                run_id=run_id,
+                resample=prep.resample,
+                shared=prep.shared,
+                min_trust=prep.min_trust,
+                coils=tuple(entry.get("coils") or ("cooling",)),
+                sustained_alarm=bool(entry.get("sustained_alarm")),
+            )
+        )
+    return out
 
 
 def run_drift_config(

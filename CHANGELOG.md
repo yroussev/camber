@@ -4,6 +4,39 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.76.0] — 2026-09-08
+
+**Moving a drift baseline becomes a signed operator decision you can run.** 0.75.0 made the drift
+family reachable and gave it a create path (`camber drift freeze`); the reference could still only
+be *moved* from Python. This adds the second write verb and the runnable walkthrough that shows why
+there are two.
+
+### Added
+- **`camber drift accept <config> --equip EQ --by NAME --reason TEXT`** — supersede a frozen
+  baseline with one re-fit over an acceptance window. `--by` and `--reason` are `required=True` at
+  the argparse level, so the command exits 2 before any code runs without them
+  (`BaselineStore.accept_new_normal` re-rejects an empty one as the backstop). `--equip` is
+  repeatable and required — there is no blanket "accept everything". `--kind` narrows further,
+  `--period START END` picks the re-fit window (default: the config's `drift.current`, because
+  accepting a new normal means *what it is doing now is the reference*), and `--dry-run` shows the
+  moves without writing. Prints `frozen_at <old> -> <new> (supersedes …, history now N)` per record.
+- **`camber.driftrun.refit_baselines`** and **`accept_new_normal_from_periods`**, plus
+  **`config.drift_refit`** which re-fits every configured family over one window.
+- **`examples/drift/`** — a data-free, network-free walkthrough (`make_data.py` + `mapping.json` +
+  `config.json` + README) over three air handlers: one with an injected loading filter, one healthy,
+  and one whose points never resolve. It runs the whole loop `freeze → run → accept → run` and ends
+  with the drift cleared, which is the point of the third verb.
+
+### Notes
+- **The re-fit is the detector's own.** Rather than reimplementing each rule's fit, `refit_baselines`
+  runs the family against a **scratch in-memory** `BaselineStore` with `freeze_if_missing=True` and
+  harvests what it froze. Every model therefore comes from the rule it will later be compared
+  against — same metric and load columns, same minimum-load filter, plausibility bounds and
+  running-status gate — and cannot drift out of sync with it. A detector that cannot fit over the
+  window produces no entry, and `accept` says so (`could not refit … — leaving it frozen`) instead
+  of substituting something.
+- No new dependency; four new public names → `tests/public_api_snapshot.json` regenerated.
+
 ## [0.75.0] — 2026-09-08
 
 **The drift family becomes reachable without writing Python.** Releases 0.40–0.67 built ~20 drift

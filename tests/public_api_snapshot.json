@@ -334,6 +334,7 @@
   ],
   "camber.config": [
     "RunResult",
+    "drift_refit",
     "drift_store_path",
     "load_config",
     "run_config",
@@ -378,8 +379,10 @@
     "DriftFamily",
     "DriftFamilyResult",
     "DriftResult",
+    "accept_new_normal_from_periods",
     "build_drift_suite",
     "family_names",
+    "refit_baselines",
     "run_drift"
   ],
   "camber.driftsim": [
