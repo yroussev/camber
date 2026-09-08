@@ -200,6 +200,7 @@
     "band",
     "diagnostic_scatter",
     "economizer_template",
+    "fitted_band",
     "no_simultaneous_template",
     "reset_line"
   ],

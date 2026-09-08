@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.77.0] — 2026-09-08
+
+**A drift baseline becomes something you can plot.** The drift detectors score residuals against a
+frozen, load-normalized line — but that line had no renderer, so the comparison stayed inside the
+rule and every drift finding's evidence had to be described rather than shown. The chiller
+drift-detection plan called for a `fitted_band` constructor and it was the one line item never built.
+
+### Added
+- **`camber.charts.diagnostic.fitted_band(baseline, x, y, *, k=2.0, within_envelope=True, …)`** — a
+  pattern-G `DiagnosticTemplate` whose expected band is a frozen `LoadBaseline`'s own fitted line ±
+  `k` residual sigmas. Rebuild a model from the baseline store, hand it to `diagnostic_scatter`, and
+  the current period is plotted against exactly what the detector compares it to.
+
+### Notes
+- Every other template constructor here encodes a band someone *designed* (a reset schedule, a high
+  limit); this is the first that encodes one the equipment *earned*.
+- **Outside the fitted load envelope the band is `NaN`.** Two things follow, both deliberate: the
+  shaded region shows a visible gap where there is no claim, and a point out there is **not** counted
+  as a violation — judging a reading against an extrapolated fit is the same asserted negative the
+  drift rules refuse to make. `within_envelope=False` opts into extrapolating.
+- `k` is a band *width*, not a severity threshold: the detectors' own sigma floors decide what warns
+  or faults, and those remain screening-grade (`camber.driftthresholds`).
+- One new public name → `tests/public_api_snapshot.json` regenerated. No new dependency; matplotlib
+  stays lazy-imported.
+
 ## [0.76.0] — 2026-09-08
 
 **Moving a drift baseline becomes a signed operator decision you can run.** 0.75.0 made the drift

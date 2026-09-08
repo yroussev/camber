@@ -98,6 +98,25 @@ endpoints), `economizer` (OA damper open for free cooling, minimum when hot), `n
 (heating valve must be ~0 when cooling is active). Build your own with `band`, `reset_line`,
 `economizer_template`, `no_simultaneous_template`. Flags: `shade`, `tolerance`.
 
+**Plotting a drift baseline.** Those templates all encode a band someone *designed*. `fitted_band`
+encodes one the equipment **earned** — a frozen [drift baseline](CHILLER-DRIFT.md)'s own fitted line
+± *k* residual sigmas — so the comparison the drift detectors actually make (residuals against the
+frozen line at matched load) becomes visible instead of staying inside the rule:
+
+```python
+from camber.charts.diagnostic import diagnostic_scatter, fitted_band
+from camber.store.modelstore import BaselineStore
+
+model = BaselineStore.load("baselines.json").model_for("Site", "CH_1", "chiller_approach_cond")
+ax, violating = diagnostic_scatter(current_frame, fitted_band(model, "tons", "approach_f", k=2))
+```
+
+Outside the load envelope the baseline was fitted on, the band is `NaN`: the shaded region shows a
+**gap** and points there are **not** counted as violations. Judging a reading against an extrapolated
+fit is the same asserted negative the drift rules refuse to make — pass `within_envelope=False` only
+if you have a reason to extrapolate. `k` is a band *width*, not a severity threshold; the detectors'
+own screening-grade sigma floors decide what warns or faults.
+
 ### J — rules as a chart engine (the keystone)
 Every rule that can mark its violating timestamps **renders its own evidence** — the chart *is* the
 audit evidence and the report figure. A rule opts in with an optional, duck-typed hook:

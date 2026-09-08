@@ -7,7 +7,8 @@ should never both be open. A **diagnostic scatter** plots the measured behavior 
 browse-able chart and a rule's evidence.
 
 A :class:`DiagnosticTemplate` names the two roles to plot and an ``expected(x) -> (low, high)``
-band;
+band -- either one someone *designed* (a reset schedule, a high limit) or, via
+:func:`fitted_band`, one the equipment *earned*: a frozen drift baseline's own line +/- k sigma;
 :func:`diagnostic_scatter` renders it and returns the **violating mask** (feeding pattern J — every
 rule renders its evidence). A small packaged :data:`TEMPLATES` set covers the common subsystems, and
 the constructors (:func:`band`, :func:`reset_line`, :func:`economizer_template`,
@@ -154,6 +155,55 @@ def reset_line(
     def expected(xv):
         yhat = y1 + slope * (np.clip(xv, xlo, xhi) - x1)
         return yhat - tol, yhat + tol
+
+    return DiagnosticTemplate(name, x, y, expected, xlabel, ylabel, cite)
+
+
+def fitted_band(
+    baseline,
+    x,
+    y,
+    *,
+    k: float = 2.0,
+    name: str = "fitted baseline",
+    cite: str = "",
+    xlabel: str = "",
+    ylabel: str = "",
+    within_envelope: bool = True,
+) -> DiagnosticTemplate:
+    """A **fitted** expected band: a drift baseline's own line ± ``k`` residual sigmas.
+
+    The other constructors here encode a band someone *designed* (a reset schedule, a high limit).
+    This one encodes a band the equipment *earned*: ``baseline`` is a frozen
+    :class:`camber.chillerbaseline.LoadBaseline` (anything with ``predict``, ``sigma_f``,
+    ``tons_min`` and ``tons_max``), so plotting a current period against it shows exactly what the
+    drift detectors score -- residuals against the frozen line at matched load -- instead of leaving
+    the comparison invisible.
+
+    ``within_envelope`` (the default) returns ``NaN`` bounds outside the load envelope the baseline
+    was fitted on. Two useful things follow: :func:`diagnostic_scatter` leaves a **gap** in the
+    shaded region there, so the chart shows where there is no claim; and a point out there compares
+    false against a NaN bound, so it is **not counted as a violation**. Judging a reading against an
+    extrapolated fit is exactly the asserted negative the drift rules refuse to make -- pass
+    ``within_envelope=False`` only if you have a reason to extrapolate.
+
+    ``k`` is a *band width*, not a severity threshold: the detectors' own sigma floors decide what
+    warns or faults, and those are screening-grade (:mod:`camber.driftthresholds`).
+    """
+    sigma = float(getattr(baseline, "sigma_f", 0.0) or 0.0)
+    lo_tons = float(getattr(baseline, "tons_min", float("-inf")))
+    hi_tons = float(getattr(baseline, "tons_max", float("inf")))
+
+    def expected(xv):
+        xa = np.asarray(xv, dtype=float)
+        yhat = np.asarray(baseline.predict(xa), dtype=float)
+        half = k * sigma
+        low, high = yhat - half, yhat + half
+        if within_envelope:
+            outside = (xa < lo_tons) | (xa > hi_tons)
+            low = np.where(outside, np.nan, low)
+            high = np.where(outside, np.nan, high)
+        return low, high
 
     return DiagnosticTemplate(name, x, y, expected, xlabel, ylabel, cite)
 
