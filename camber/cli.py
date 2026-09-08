@@ -449,8 +449,27 @@ def _build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def _ensure_utf8_streams():
+    """Force stdout/stderr to UTF-8 so CLI output never crashes on a legacy console.
+
+    Help text and finding summaries contain non-ASCII (``—``, ``°``, ``→``); on a Windows
+    ``cp1252`` console argparse's ``--help`` write raises ``UnicodeEncodeError``. Reconfiguring
+    to UTF-8 (with ``backslashreplace`` as a belt-and-braces fallback) makes every code path
+    encodable on any platform. No-op where the stream can't be reconfigured (e.g. replaced by a
+    plain buffer in an embedding host).
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="backslashreplace")
+            except (ValueError, OSError):  # pragma: no cover - defensive; stream not reconfigurable
+                pass
+
+
 def main(argv=None):
     """CLI entry point: parse args and dispatch to the requested subcommand."""
+    _ensure_utf8_streams()
     args = _build_parser().parse_args(argv)
     return args.func(args)
 

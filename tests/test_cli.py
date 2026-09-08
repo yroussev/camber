@@ -165,3 +165,25 @@ def test_edge_selftest_touches_no_real_sink(tmp_path, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "would send" in out and "no real sink touched" in out
+
+
+def test_cli_help_survives_cp1252_console(monkeypatch):
+    """`camber --help` must not crash on a legacy cp1252 console (Windows).
+
+    The top-level help lists the ``edge`` subcommand whose help text contains ``→`` (U+2192),
+    which cp1252 cannot encode — argparse writing it to a cp1252 stdout raises UnicodeEncodeError.
+    ``main()`` reconfigures stdout/stderr to UTF-8 first, so every code path stays encodable. This
+    is the regression conda-forge's win_64 build caught.
+    """
+    import io
+
+    out = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="")
+    err = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", newline="")
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(sys, "stderr", err)
+    with pytest.raises(SystemExit) as exc:  # argparse --help exits 0
+        main(["--help"])
+    assert exc.value.code == 0
+    out.flush()
+    text = out.buffer.getvalue().decode("utf-8")
+    assert "CAMBER" in text and "→" in text  # rendered the arrow; no UnicodeEncodeError

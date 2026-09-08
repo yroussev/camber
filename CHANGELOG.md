@@ -4,6 +4,23 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.74.1] — 2026-09-08
+
+**Fix: `camber` CLI crashed on a legacy Windows (cp1252) console.** The help text and finding
+summaries contain non-ASCII characters (`—`, `°`, `→`); on a non-UTF-8 console, argparse writing
+`--help` (which lists the `edge` subcommand, whose help contains `→`) raised `UnicodeEncodeError`.
+`main()` now reconfigures `stdout`/`stderr` to UTF-8 (with a `backslashreplace` fallback) before
+parsing, so every CLI code path is encodable on any platform.
+
+### Fixed
+- **Windows CLI portability** — `camber --help` and all CLI output no longer crash on a `cp1252`
+  console. Caught by the conda-forge `win_64` build; regression-tested against a simulated cp1252
+  stdout in `tests/test_cli.py`.
+
+### Notes
+- Patch release: no public-API change (`_ensure_utf8_streams` is private) → snapshot unchanged, no
+  new dependency. The `deploy/conda/recipe.yaml` and the conda-forge submission bump to 0.74.1.
+
 ## [0.74.0] — 2026-08-30
 
 **A second weather provider: real NOAA weather stations.** NASA POWER (0.70+) is a global ~50 km
