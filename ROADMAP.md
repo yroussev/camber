@@ -56,10 +56,10 @@ delivered record). What it includes, by layer:
 - [x] Public GitHub repository (`yroussev/camber`).
 - [x] **0.1.0 on PyPI** as `camber-toolkit` via Trusted Publishing (OIDC, no stored token),
       a multi-arch GHCR image, and a GitHub release — all from the tag-driven workflow.
-- [ ] Enable Discussions; confirm issue/PR templates surface; add repo topics/description.
-- [ ] (Optional) Publish README/ARCHITECTURE as a small docs site (MkDocs).
-- [ ] (Tracking) Reclaim the bare `camber` PyPI name (PEP-541 request filed) — optional;
-      `camber-toolkit` is the permanent distribution name regardless.
+- [x] Discussions enabled (all six categories); issue / PR / discussion templates in place.
+- [~] Docs site, conda-forge, repo metadata, PEP-541 — see
+      **[Packaging & community — current status](#packaging--community--current-status)** below,
+      which is the single place this is tracked.
 
 ## Delivered — v0.2.0
 
@@ -101,8 +101,8 @@ vanilla JS, no web framework). Continues the Visualizations build order past the
       `rules.cohort`).
 - [x] **Interactive linking** — a brush-able inline-SVG scatter (`report.linking`); box-select →
       linked timestamp readout.
-- [ ] **Packaging & community** — conda-forge feedstock, a MkDocs docs site, GitHub Discussions,
-      and the PEP-541 `camber` name request.
+- [~] **Packaging & community** — tracked in one place now: see
+      **[Packaging & community — current status](#packaging--community--current-status)**.
 
 Deferred to **0.4**: grounded agentic query & explanation (NL over the deterministic core, cited),
 and ML-assisted point mapping — both behind an optional, provider-agnostic seam.
@@ -123,8 +123,8 @@ The two deferred AI-assist tracks, built dependency-light and provider-agnostic.
       number-traceability verification, a deterministic template fallback (fully useful with **no LLM
       wired**), and a fully **provider-agnostic** seam — no vendor named, no SDK, no network; an
       AST guard proves it. See **[AGENT.md](docs/AGENT.md)**.
-- [ ] **Packaging & community** — conda-forge feedstock submission, MkDocs site on GitHub Pages,
-      Discussions, and the PEP-541 `camber` name request (carried from 0.3).
+- [~] **Packaging & community** — tracked in one place now: see
+      **[Packaging & community — current status](#packaging--community--current-status)**.
 
 ## Delivered — v0.5.0 (deepen FDD + validation; agent CLI + portfolio)
 
@@ -195,6 +195,35 @@ A consolidation release — finish the validation and interop stories 0.5 opened
       with Wilson CIs), gated in CI against a real committed baseline. See
       **[VALIDATION.md](docs/VALIDATION.md)**.
 
+## Delivered — the 0.10–0.76 series
+
+The named milestones above stop at 0.9 because everything since has landed *under* the Road-to-1.0
+umbrella rather than as new milestones. `CHANGELOG.md` is the per-release record; the arcs were:
+
+- **Drift detection** — the largest arc. Six families that ask "has this been *drifting* from its own
+  frozen baseline?" rather than "is this value wrong now?": chiller (approach, CW range, tower, head
+  pressure, subcooling, superheat, suction pressure), condenser, evaporator, pump/hydronic, AHU
+  air-side, and VAV zone-terminal — each with a co-movement roll-up that localizes the drift, a
+  frozen-baseline store with a freeze / accept-new-normal policy, and a physics simulator for ROC
+  validation. **0.75–0.76** made the whole family reachable from a config and the CLI
+  (`camber drift run|report|freeze|list|accept`), which is where it stopped being Python-only.
+- **G36 Trim-and-Respond reset analytics** — reset compliance and effectiveness, the **rogue-zone
+  census** (which zone monopolizes a reset and drags it), and its common-mode twin **cohort
+  starvation**.
+- **Topology-aware fleet analytics** — a served-by model populated from Brick / Haystack / naming,
+  so fleet rules auto-scope per air handler instead of over the whole building.
+- **A sustained real-data validation push** — AHU air-side, VAV zone-terminal, plant-level chiller
+  and the generated G36 reset fleet, each scored and CI-gated, converting "synthetic-only" verdicts
+  into real-data ones **and stating plainly which ones cannot be converted**. Culminating in
+  `camber validate`, one credibility dossier.
+- **IPMVP Option-D depth** — 2R2C thermal mass, multi-zone stacked-OLS calibration, an optional
+  EnergyPlus cross-validator.
+- **A weather-source track** — two keyless providers (NASA POWER's global grid, NOAA/ISD's real
+  stations) plus a geocoder, so outdoor conditions can be fetched by address. No new dependency.
+- **Platform** — a live web dashboard served by the read-only API (`camber serve`), a one-way
+  cybersecure **edge forwarder**, and fault economics extended across the newer families.
+
+
 ## Road to 1.0
 
 The capability surface is broad and now hardened; 1.0 is a consolidation, not new features.
@@ -203,8 +232,9 @@ The capability surface is broad and now hardened; 1.0 is a consolidation, not ne
       across every subpackage + all 70 flat modules, a written contract + deprecation policy in
       **[API-STABILITY.md](docs/API-STABILITY.md)**, `camber._deprecation` machinery, and a
       snapshot test (`tests/test_public_api.py`) that fails on any unreviewed surface change.
-- [ ] **Docs completeness** pass; enable the MkDocs **Pages** site (owner action — the workflow is built).
-- [ ] **Packaging & community** (carried) — conda-forge feedstock, Discussions, PEP-541 `camber` name.
+- [x] **Docs completeness** pass (the MkDocs nav covers the published tree; internal notes excluded).
+      Publishing the site is the one remaining owner action — see the status block below.
+- [~] **Packaging & community** — see the status block below.
 - [~] **Labeled chiller benchmark** — the plant-level chiller/tower detectors are now real-data-scored
       on the CC-BY LBNL chiller-plant subset (`fetch.py --chiller`); the refrigerant-side family stays
       synthetic-only pending a license-clean set with refrigerant points (carried from 0.6).
@@ -216,6 +246,21 @@ The capability surface is broad and now hardened; 1.0 is a consolidation, not ne
       stacked-OLS calibration (`calibrate_zones`/`MultiZoneModel`), and an optional **EnergyPlus**
       `[energyplus]` cross-validator (`interop.energyplus.compare_option_d`, injectable runner) — all
       preserving the grid-nonlinear/OLS-linear/G14 invariant. See [docs/OPTION-D.md](docs/OPTION-D.md).
+
+### Packaging & community — current status
+
+This was previously restated in four places, each drifting out of date. It is tracked **here only**.
+
+| Item | State |
+|---|---|
+| GitHub **Discussions** | **Enabled**, with all six categories created. Remaining: post the pinned welcome from `docs/dev/DISCUSSIONS-WELCOME.md`. |
+| **conda-forge** | **Submitted** — `conda-forge/staged-recipes#34742`, open since 2026-09-06; `deploy/conda/recipe.yaml` tracks the current version. The feedstock does not exist until that PR merges. (Its `win_64` build is what caught the 0.74.1 cp1252 CLI bug.) |
+| **PEP-541** `camber` name | **Filed** 2026-06-13 — `pypi/support#11042`, still open with the PyPI admins. `camber-toolkit` is the permanent distribution name either way. See `docs/dev/PEP-541-REQUEST.md`. |
+| **MkDocs site** | **Built, not published.** `mkdocs.yml` and `.github/workflows/pages.yml` are complete; the workflow is `workflow_dispatch`-only and Pages has never been deployed. One owner action: run it once (`configure-pages` enables Pages on that first run), then re-arm the commented-out `push:` trigger. |
+| Repo **description + topics** | **Still empty** — the one genuinely unstarted item. |
+
+Three of the five are waiting on someone outside the repo; only the last two are ours to finish.
+
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
 

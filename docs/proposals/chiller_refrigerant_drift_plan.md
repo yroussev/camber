@@ -1,7 +1,22 @@
 # Proposal: the refrigerant-circuit drift set
 
-**Status:** in progress — condenser approach and subcooling implemented · **Companion to:**
+**Status:** delivered, except discharge superheat · **Companion to:**
 [`chiller_drift_detection_plan.md`](chiller_drift_detection_plan.md)
+
+> **Where this landed (updated 2026-09-08).** The scoping table below is preserved as the record of
+> the decision; the build went further than it describes. `camber/model/roles.py` now defines
+> `SUBCOOLING_TEMP`, `SUPERHEAT_TEMP`, `DISCHARGE_PRESSURE` and `SUCTION_PRESSURE`, and four
+> refrigerant-side rules ship: `chiller_subcooling_drift`, `chiller_superheat_drift`,
+> `chiller_suction_pressure_drift` and `chiller_head_pressure_drift`. **Discharge superheat remains
+> the one deferred item** — it needs a discharge-line temperature role most BAS do not map, and it
+> was the weakest detector on the class characterized here (tracked as issue #6, to be revisited
+> when both the instrumentation and a licence-clean labelled set exist).
+>
+> Two decisions from this note are still open, and both wait on the same thing — real trended fault
+> data: **threshold validation** (the floors are `screening-grade`, the CUSUM parameters
+> `provisional-untuned`; see `camber/driftthresholds.py`) and the **per-direction asymmetry**
+> deliberately not guessed at in `chiller_subcooling_rule.py`, `chiller_superheat_rule.py` and
+> `chiller_suction_pressure_rule.py`.
 
 The P0 work built one detector — condenser approach drift against a frozen, load-normalized
 baseline — and the machinery under it (`chillerbaseline`, `modelstore`, `chillerdrift`, the

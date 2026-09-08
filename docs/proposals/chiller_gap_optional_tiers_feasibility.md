@@ -1,7 +1,16 @@
 # Feasibility of the remaining chiller-gap tiers, against CAMBER's actual data model
 
-**Status:** evaluation only — nothing here is built · **Companion to:**
+**Status:** evaluated; the recommendation was executed · **Companion to:**
 [`chiller_drift_detection_plan.md`](chiller_drift_detection_plan.md)
+
+> **Where this landed (updated 2026-09-08).** This note was written as an evaluation, and its
+> recommendation has since been built — and exceeded. Tier 1 (condenser-water range) ships as
+> `camber/rules/chiller_cw_range_rule.py`. Tier 2's advice was "park the metric, consider the
+> drift"; the drift rule ships as `camber/rules/coolingtower_drift_rule.py`. Tier 5 was "park until
+> the points exist" — they exist, and `camber/rules/chiller_head_pressure_rule.py` ships. Tiers 3
+> and 4 (PNNL-style reset and staging detection) remain correctly parked, and the honest residual
+> gap this note identified — **multi-chiller sequencing optimization**, which needs plant-level
+> sequencing *intent* as an input — is still unscheduled.
 
 The gap review listed four tiers after the P0 approach-drift work: condenser-water range/ΔT,
 cooling-tower approach-to-wet-bulb, head/condensing-pressure trend, and PNNL-style reset + staging

@@ -7,9 +7,18 @@ package still *imports* as `camber` (the distribution name and the import name n
 outcome here. Reclaiming `camber` would only let us also publish under the canonical name and redirect
 newcomers who `pip install camber` by reflex.
 
-This file is a **ready-to-file draft** for the repo owner. Filing is a repo-owner action — an AI
-assistant cannot and should not file it. Fill the bracketed placeholders with real evidence before
-submitting; do **not** submit unverified claims.
+> **Status: filed, awaiting PyPI admins.** The request was submitted on **2026-06-13** as
+> [`pypi/support#11042`](https://github.com/pypi/support/issues/11042) ("PEP 541 Request: camber")
+> and is still open. Nothing is required in this repo: the outcome rests with the PyPI
+> administrators, and `camber-toolkit` remains the distribution name whichever way it goes. Watch
+> that issue for movement, and see *After a successful transfer* below for what to do if it lands.
+>
+> The sections that follow are the original pre-filing draft, kept as the record of what was
+> submitted and on what grounds. Their unfilled `[placeholders]` and checkboxes are historical —
+> the filed issue carries the real values — so do **not** treat them as outstanding work.
+
+This file was a **ready-to-file draft** for the repo owner. Filing is a repo-owner action — an AI
+assistant cannot and should not file it.
 
 ## Is this eligible?
 
@@ -55,7 +64,7 @@ Open an issue on the PyPI support tracker using the name-request template:
 > **Evidence:**
 > - Current `camber` project state: `[releases / last-release date / links, or "no releases"]`
 > - Contact attempt: `[method, date, outcome]`
-> - My project's activity: `camber-toolkit` — `[N releases, latest v0.12.0 on <date>], `
+> - My project's activity: `camber-toolkit` — `[N releases, latest version on <date>], `
 >   [CI, docs, and a multi-arch container image]; source and history at
 >   <https://github.com/yroussev/camber>.
 >
