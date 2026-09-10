@@ -65,3 +65,22 @@ def test_forecast_residual_path():
 def test_jsonable():
     d = detect_anomalies(_clean()).as_dict()
     assert d["severity"] == "ok" and "change_points" in d and isinstance(d["point_anomalies"], list)
+
+
+def test_intermittent_meter_still_faults_documents_the_limitation():
+    """Pins a *deferred* limitation so it stays visible rather than being forgotten.
+
+    `camber.ingest.quality` now reads a duty-cycled point within its two regimes, and
+    `sensorhealth.sensor_trust` opts into that per role — but `detect_anomalies` is role-blind, so
+    its quality door stays pooled, and its point test independently counts every burst. A healthy
+    HHW BTU meter therefore still reads `fault` here. Fixing it means routing both doors, which is
+    a real design question (is a burst an anomaly with no forecast? often yes).
+    """
+    rng = np.random.default_rng(0)
+    base = np.where(np.arange(720) % 24 < 3, 50.0, 0.0)
+    vals = np.clip(base + rng.normal(0, 1.5, 720), 0.0, None)
+    s = pd.Series(vals, index=pd.date_range("2024-01-01", periods=720, freq="1h"))
+
+    res = detect_anomalies(s)
+    assert res.severity == "fault"  # not desired, but true — and now recorded
+    assert res.n_point_anomalies > 0

@@ -8,6 +8,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from camber.ingest.quality import assess  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 from camber.sensorhealth import (  # noqa: E402
     PHYSICAL_BOUNDS,
@@ -140,3 +141,78 @@ def test_mixing_consistency_missing_inputs_info():
 def test_bounds_table_covers_core_roles():
     for r in (Role.OAT, Role.SUPPLY_AIR_TEMP, Role.COOL_VALVE, Role.POWER):
         assert r in PHYSICAL_BOUNDS
+
+
+# --- intermittent (duty-cycled) points ------------------------------------- #
+
+
+def _burst(duty, *, n=720, hi=50.0, noise=0.03, seed=0):
+    """A healthy duty-cycled point: `hi` during a daily block, ~0 otherwise. No faults."""
+    rng = np.random.default_rng(seed)
+    k = max(1, int(24 * duty))
+    base = np.where(np.arange(n) % 24 < k, hi, 0.0)
+    vals = np.clip(base + rng.normal(0, hi * noise, n), 0.0, None)
+    return pd.Series(vals, index=pd.date_range("2024-01-01", periods=n, freq="1h"))
+
+
+def test_intermittent_meter_is_trusted_not_gated_out():
+    """The reported bug: a healthy burst meter scored low enough to silently suppress rules."""
+    t = sensor_trust(_burst(0.12), Role.ENERGY_RATE)
+
+    assert t.trust >= 0.9 and t.verdict == "trusted"
+    assert "intermittent" in t.flags  # says *why* it scored well
+    assert "outliers" not in t.flags
+
+
+def test_intermittent_roles_are_trusted_across_the_duty_range():
+    cases = [
+        (Role.HW_FLOW, _burst(0.40)),
+        (Role.AIRFLOW, _burst(0.60, hi=9000.0)),
+        (Role.CHW_FLOW, _burst(0.80)),
+    ]
+    for role, series in cases:
+        t = sensor_trust(series, role)
+        assert t.trust >= 0.9, (role, t.trust)
+        assert not untrusted_roles(pd.DataFrame({role: series}), [role], min_trust=0.5)
+
+
+def test_status_role_at_low_duty_is_trusted():
+    """Five rules take a status role as *required*, so the defect gated those too."""
+    vals = np.where(np.arange(720) % 24 < 4, 1.0, 0.0)
+    s = pd.Series(vals, index=pd.date_range("2024-01-01", periods=720, freq="1h"))
+    t = sensor_trust(s, Role.BOILER_STATUS)
+    assert t.trust >= 0.9 and "intermittent" in t.flags
+
+
+def test_railed_flow_stays_untrusted():
+    """The sharp case: a genuine fault on a role that IS in the allow-list must not be masked."""
+    rng = np.random.default_rng(7)
+    vals = 40.0 + rng.normal(0, 3.0, 720)
+    vals[rng.random(720) < 0.30] = 0.0  # scattered rail -- not a duty cycle
+    s = pd.Series(vals, index=pd.date_range("2024-01-01", periods=720, freq="1h"))
+
+    t = sensor_trust(s, Role.HW_FLOW)
+    assert t.trust < 0.5 and t.verdict == "untrusted"
+    assert "intermittent" not in t.flags
+
+
+def test_bimodal_analog_sensor_is_flagged_but_not_exonerated():
+    """A role outside the allow-list gets the pooled score -- the flag is information, not mercy."""
+    vals = np.where((np.arange(720) // 24) % 2 == 0, 55.0, 75.0)
+    s = pd.Series(vals, index=pd.date_range("2024-01-01", periods=720, freq="1h"))
+
+    t = sensor_trust(s, Role.SUPPLY_AIR_TEMP)
+    assert "bimodal" in t.flags
+    assert "intermittent" not in t.flags
+    assert t.outlier_frac == 0.0  # reported pooled, unmasked
+
+
+def test_continuous_sensor_trust_is_unchanged():
+    """Golden: nothing about a well-behaved analog point moves."""
+    rng = np.random.default_rng(1)
+    idx = pd.date_range("2024-01-01", periods=720, freq="1h")
+    oat = 60 + 15 * np.sin(np.arange(720) / 24 * 2 * np.pi) + rng.normal(0, 1, 720)
+    t = sensor_trust(pd.Series(oat, index=idx), Role.OAT)
+    assert t.trust > 0.99 and t.verdict == "trusted"
+    assert t.flags == []  # in particular: no "bimodal" -- a sine is one population
+    assert assess(pd.Series(oat, index=idx)).n_regimes == 1

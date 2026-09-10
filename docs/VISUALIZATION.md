@@ -61,6 +61,11 @@ quality_dashboard(df, metrics=("coverage", "score", "flatline_frac", "outlier_fr
 A heatmap colored so **green = good** for every metric (higher-is-better and lower-is-better are
 both mapped correctly). Built from `camber.ingest.quality.assess`.
 
+An opt-in fifth metric, `regime_outlier_frac` ("outliers (in-regime)"), reports outliers judged
+*within* each regime of a duty-cycled point. Showing it **beside** `outlier_frac` is how a reader
+sees a two-regime read rather than having it applied invisibly: a large gap between the two columns
+means the point cycles. A metric that could not be computed renders blank rather than as zero.
+
 ## Deepening the catalog (0.3)
 
 Beyond the MVP slice, 0.3 builds the pattern catalog toward **rules as a chart engine** — every

@@ -50,7 +50,13 @@ Adapters normalize any source to named point series on a common time grid (`Sour
   experimental BACnet/SC (`[bacnet]`), OPC-UA (`[opcua]`). Read-only by construction; historian-first
   posture. Per-adapter flags documented in INGEST-PROTOCOLS.md.
 - **Data quality** — `ingest.quality.assess` (coverage, gaps, flatline, outliers, duplicate
-  timestamps, composite score) and `clean`. Flags: `expected_freq`, `drop_outliers`.
+  timestamps, composite score) and `clean`. Also reads **two-regime** structure
+  (`n_regimes` / `regime_threshold` / `regime_outlier_frac`) so a duty-cycled point — a BTU meter, a
+  lead pump, a status — is not scored as broken for cycling; a split is claimed only on mass **and**
+  separation **and** temporal coherence, so a randomly-railed sensor is never mistaken for a
+  schedule. Pooled `outlier_frac` keeps its meaning and is never masked. Flags: `expected_freq`,
+  `drop_outliers`, `regime_aware` (off by default — `sensorhealth` opts in per role, since scoring a
+  duty cycle as normal is the direction that could mask a fault).
 - **Time / DST** — `timegrid`: `interval_hours`, `regularize` (sort + de-duplicate the DST fall-back
   hour), `localize` (tz-localize resolving DST ambiguous/nonexistent), `dst_anomalies`. `load_csv`
   de-duplicates timestamps by default. See **[TIME-HANDLING.md](TIME-HANDLING.md)**.

@@ -19,6 +19,10 @@ _METRICS = {
     "score": (True, "score"),
     "flatline_frac": (False, "flatline"),
     "outlier_frac": (False, "outliers"),
+    # Opt-in: outliers judged within each regime, so a duty-cycled point is not scored as broken
+    # (see camber.ingest.quality). Kept out of the default tuple so existing dashboards are
+    # unchanged -- showing it *beside* "outliers" is how a reader spots a two-regime read.
+    "regime_outlier_frac": (False, "outliers (in-regime)"),
 }
 
 
@@ -39,7 +43,10 @@ def quality_matrix(
     for i, c in enumerate(points):
         rep = assess(df[c], expected_freq=expected_freq)
         for j, m in enumerate(metrics):
-            v = float(getattr(rep, m))
+            value = getattr(rep, m, None)
+            if value is None:
+                continue  # untestable -> stays NaN, which the heatmap renders blank (honest)
+            v = float(value)
             raw[i, j] = v
             higher_better = _METRICS.get(m, (True, m))[0]
             good[i, j] = v if higher_better else 1.0 - v

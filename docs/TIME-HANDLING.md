@@ -47,6 +47,11 @@ dst_anomalies(
 by default, and `camber.ingest.quality.assess` reports `n_duplicate_ts`. The robust outlier detector
 also no longer crashes on a non-unique (duplicate-timestamp) index.
 
+**Order matters for the two-regime read.** `assess`'s temporal-coherence gate measures run lengths
+**in index order**, so an unsorted export can make a real duty cycle look like scatter (and be
+scored pooled, the conservative direction). Run `timegrid.regularize` — sort + de-duplicate —
+before `assess` on any export whose ordering you don't control.
+
 **Still local time:** analytics operate on naive local time (correct for occupancy/schedule logic).
 For hour-accurate energy across a DST-transition day, `localize` to a tz first, or note the ~1-hour
 difference on those two days a year.

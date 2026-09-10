@@ -4,6 +4,67 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.79.0] — 2026-09-09
+
+**A healthy duty-cycled point could silently switch a diagnostic off.** `ingest.quality.assess`
+assumes a series is one population, so an intermittent signal — an HHW BTU meter near zero except
+during heating events, a lead pump, a 0/1 status — has every legitimate burst counted as an outlier.
+That score *is* the trust score (`sensorhealth.py`: `trust = q.score * (1 - rng_pen)`), and a role
+below `trust_gate.min_trust` makes a rule **decline to fire**. So the layer built to prevent false
+negatives was manufacturing them.
+
+Measured on a healthy synthetic meter (720 hourly samples, no faults injected), the score was not
+merely low but **chaotic** — 0.166 to 0.998 with no monotonic relation to duty cycle, because
+`_mad_z` switches between its MAD branch and its meanAD fallback as the median crosses into the "on"
+band. Four of seven duty cycles landed under 0.5. A building's lead pump and its standby pump could
+score 0.166 and 0.998 on identical health. Five rules take a **status** role as *required*
+(`boiler_summer_lockout`, `boiler_short_cycle`, `compressor_short_cycle`, `compressor_staging`,
+`hw_plant_deltat`), so the reach went well past BTU meters.
+
+### Fixed
+- **`assess` now reads two-regime structure** and reports the outlier count judged *within* each
+  regime. A duty-cycled point scores ~0.998 across the whole 0.10–0.80 duty range instead of
+  swinging 0.166–0.998, and nothing in that sweep is gated at `min_trust=0.5`.
+- `sensorhealth.sensor_trust` opts in per role via a new `_INTERMITTENT_ROLES` allow-list (BTU/flow/
+  airflow/power/stage roles, unioned with `STATUS_ROLES`), mirroring the existing `_SENSOR_ROLES`
+  precedent. An HHW meter goes `0.741 / suspect / ["outliers"]` → `0.998 / trusted /
+  ["intermittent"]`.
+
+### Added
+- `QualityReport.n_regimes` / `regime_threshold` / `n_regime_outliers` / `regime_outlier_frac`,
+  tri-state per the honesty convention: `None` means the split could not be **tested**, never "no
+  split found".
+- `assess(..., *, regime_aware=False)` — keyword-only and defaulted, so the stable import path is
+  unchanged.
+- Two `sensor_trust` flags: `intermittent` (an expected duty cycle; explains why outliers were read
+  within-regime) and `bimodal` (a point that should have one population has two — new information
+  the tool did not previously surface, carrying no penalty).
+- An opt-in `regime_outlier_frac` metric in the pattern-I quality dashboard, kept out of the default
+  set so existing dashboards are unchanged; a metric that cannot be computed now renders blank
+  rather than raising.
+
+### Notes
+- **A split is claimed only on mass *and* separation *and* temporal coherence.** Mass is what keeps
+  spike detection intact — a lone spike is ~5% of the samples and never qualifies, so
+  `[10.0]*20 + [10000.0]` still flags exactly one point. Coherence is what stops the fix becoming a
+  masking bug: a flow meter randomly railed to zero for 30% of the record has median run length 1,
+  is refused a split, and stays `untrusted` at 0.397. A real duty cycle persists (4–48 samples).
+- **The pooled `n_outliers` / `outlier_frac` never change meaning and are never masked** — that is
+  what keeps a two-regime read visible next to the plain one.
+- `regime_aware` is **off by default** and enabled per role, because scoring a duty cycle as normal
+  is the direction that could hide a fault; a role-blind caller therefore cannot mask anything.
+  Flipping the default is a follow-up once there is field evidence.
+- **Deferred, and pinned by tests so they stay visible:** `anomaly.detect_anomalies` still returns
+  `fault` on a healthy intermittent meter — it is role-blind *and* its point test independently
+  counts every burst, so fixing the quality door alone does not fix it. An in-range sensor railing
+  between two plausible values in long blocks still scores ~0.99 (`longest_flatline` measures the
+  longest single run); this change neither creates nor closes that gap, but `n_regimes` now makes
+  the structure visible. A contiguous rail on an allow-listed role remains undecidable from values
+  alone — the house answer is to corroborate with a mapped status point.
+- No new dependency; no public-API surface change (the new names are private, the new fields are
+  dataclass attributes, the new parameter is keyword-only) — `tests/public_api_snapshot.json` is
+  unchanged and `tests/test_public_api.py` passes unmodified.
+
 ## [0.78.0] — 2026-09-08
 
 **Every drift finding now renders its own evidence.** 0.77.0 built `fitted_band` — a baseline's own

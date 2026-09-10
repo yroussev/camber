@@ -63,6 +63,14 @@ def detect_anomalies(
     behaviour; without it the residual is against the series' own robust centre. Severity is
     ``fault`` when point anomalies exceed ``fault_frac``, ≥2 change points occur, or quality drops
     below ``fault_quality``; ``warn`` for any single signal (or quality below ``warn_quality``).
+
+    **Known limitation on intermittent series.** This call is role-blind, so the data-quality signal
+    is the pooled one -- it does not use the two-regime read that :mod:`camber.ingest.quality`
+    computes and that :func:`camber.sensorhealth.sensor_trust` opts into per role. Independently,
+    the point test above counts every legitimate burst of a duty-cycled point, so a healthy BTU
+    meter at ~12% duty still exceeds ``fault_frac`` on its own. Both doors would have to change for
+    this to read such a point as healthy; for a trust decision use ``sensor_trust``, which is
+    role-aware, or pass a ``forecast`` so the point test measures against expected behaviour.
     """
     s = series.dropna()
     n = len(s)

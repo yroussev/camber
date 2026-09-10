@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from .ingest.quality import assess
-from .model.roles import Role
+from .model.roles import STATUS_ROLES, Role
 
 __all__ = [
     "PHYSICAL_BOUNDS",
@@ -129,6 +129,30 @@ _SENSOR_ROLES: frozenset = frozenset(
 )
 
 
+# Roles whose value distribution is legitimately **two-regime**: the equipment duty-cycles, so an
+# "off" band and an "on" band are both normal operation rather than a data fault. The robust outlier
+# test assumes one population, so for these roles it is read within each regime (see
+# camber.ingest.quality). Deliberately a short allow-list -- for every other role a two-mode
+# distribution is suspicious, not exonerating, and enabling this where it is not physically expected
+# is the one way this layer could mask a real fault. Status points are 0/1 by definition, and five
+# rules take one as a *required* role, so they are unioned in rather than re-listed.
+_INTERMITTENT_ROLES: frozenset = (
+    frozenset(
+        {
+            Role.ENERGY_RATE,  # BTU meter: near zero except during a heating/cooling event
+            Role.HW_FLOW,
+            Role.CHW_FLOW,
+            Role.AIRFLOW,
+            Role.OA_AIRFLOW,
+            Role.POWER,
+            Role.COMPRESSOR_STAGE,
+            Role.HEAT_STAGE,
+        }
+    )
+    | STATUS_ROLES
+)
+
+
 def range_violation_frac(series: pd.Series, role) -> float:
     """Fraction of non-null samples physically outside the role's plausible bounds.
 
@@ -166,7 +190,8 @@ class SensorTrust:
 
 def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
     """Score one point's trustworthiness from quality stats + physical-range checks."""
-    q = assess(series, expected_freq)
+    intermittent = role in _INTERMITTENT_ROLES
+    q = assess(series, expected_freq, regime_aware=intermittent)
     rng = range_violation_frac(series, role)
     rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)  # out-of-range is serious
     trust = q.score * (1.0 - rng_pen)
@@ -176,13 +201,21 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
         flags.append("low_coverage")
     if q.n_gaps > 0:
         flags.append("gaps")
-    if q.outlier_frac > 0.05:
+    out_frac = q.outlier_frac
+    if intermittent and q.regime_outlier_frac is not None:
+        out_frac = q.regime_outlier_frac  # judged within each regime, so a duty cycle isn't a fault
+    if out_frac > 0.05:
         flags.append("outliers")
     if rng == rng and rng > 0.01:
         flags.append("out_of_range")
     if role in _SENSOR_ROLES and q.flatline_frac > 0.5:
         flags.append("stuck")
         trust *= 0.5  # a stuck analog sensor is bad
+    if q.n_regimes == 2:
+        # Two meanings, both honest, neither a penalty: for a duty-cycled role this explains why
+        # the outliers were read within-regime; for anything else it is new information -- a point
+        # that should have one population has two, which is a "look here", not a verdict.
+        flags.append("intermittent" if intermittent else "bimodal")
 
     trust = round(float(max(0.0, min(1.0, trust))), 4)
     verdict = "trusted" if trust >= 0.8 else ("suspect" if trust >= 0.5 else "untrusted")

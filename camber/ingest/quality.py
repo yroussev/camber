@@ -16,14 +16,35 @@ status held at 0/1). ``assess`` reports flatline extent as a neutral signal and
 the composite score weights it lightly; treat a high flatline fraction as "look
 here," not "bad data," and use the role to judge.
 
-A matching caveat for outliers on *intermittent* signals: the robust test assumes
-the bulk of the series is the normal regime, so a mostly-zero meter with real
-bursts (e.g. an HHW BTU meter that is near-zero except during heating events)
-flags every legitimate burst as an outlier and scores low. That is a property of
-the signal's shape, not bad data -- for intermittent/event-driven points read the
-outlier count as "this isn't a smooth sensor," not "this is broken." A
-regime-aware check is future work; today, interpret the score with the role and
-the expected duty cycle in mind.
+**Intermittent signals and the two-regime read.** The robust test assumes the bulk of the series is
+one normal population. A mostly-off meter with real bursts (an HHW BTU meter near zero except during
+heating events, a lead pump, a duty-cycled status point) breaks that assumption: every legitimate
+burst reads as an outlier and the score collapses -- not a little, but chaotically, because
+:func:`_mad_z` switches between its MAD branch and its meanAD fallback as the median crosses into
+the "on" band.
+
+So ``assess`` also looks for a **two-regime** structure and, when it finds one, reports the outlier
+count read *within each regime* (``regime_outlier_frac``). A split is claimed only when all three of
+these hold, because each rules out a different way of being wrong:
+
+* **mass** -- both regimes carry real weight, which is what separates a regime (many samples in a
+  band) from a spike (one sample far away), and what keeps genuine spike detection intact;
+* **separation** -- the two centres are far apart relative to the scatter *within* them, so an
+  ordinary continuous signal is not cut in half;
+* **temporal coherence** -- each regime persists in runs. Real duty cycles persist; comms dropouts
+  and error-sentinel scatter do not. Without this a flow meter railed to zero at random would look
+  like a healthy duty cycle and its faults would be masked.
+
+**The pooled ``n_outliers`` / ``outlier_frac`` never change meaning and are never masked** -- they
+stay the whole-series answer, so a two-regime read is always visible next to the plain one.
+
+This is a *distributional* test, not an on/off oracle: ``regime_threshold`` is not a setpoint and
+not a schedule (a mapped status point stays the right oracle for "was it running"), it finds at most
+two modes, and it cannot tell "off because the plant is off" from "off because the sensor railed to
+a plausible constant for a long block". Because splitting is the direction that could *mask* a
+fault, the composite ``score`` uses the regime read only when the caller opts in with
+``regime_aware=True``; :mod:`camber.sensorhealth` turns it on for the roles where a duty cycle is
+physically expected.
 """
 
 from __future__ import annotations
@@ -41,6 +62,21 @@ _MAD_SCALE = 0.6745
 # more than half the values are identical -- common for near-constant BAS points
 # with an occasional spike, where plain MAD would miss the spike entirely.
 _MEANAD_SCALE = 1.253314
+
+# ---------------------------------------------------------------------------------------------
+# Two-regime split gates. A split is claimed only when ALL THREE pass, because each rules out a
+# different way of being wrong, and claiming one wrongly is the direction that MASKS a fault.
+# These are judgement calls tuned against failure modes (a spike, a sine, a scattered rail), not
+# against fixtures; they are module-level so a caller can retune without editing the algorithm.
+# ---------------------------------------------------------------------------------------------
+_REGIME_MIN_N = 24  # a day of hourly data; below this no split is attempted at all
+_REGIME_MIN_FRAC = 0.05  # each regime holds >= 5% of the samples ...
+_REGIME_MIN_COUNT = 8  # ... and >= 8 of them (the mass gate: a lone spike can never qualify)
+_REGIME_MIN_SEPARATION = 6.0  # centre gap in pooled within-regime MADs (a sine scores ~2.9)
+_REGIME_MIN_RUN = 2.0  # median run length of each regime, in samples (the coherence gate)
+_REGIME_BINS = 256
+_REGIME_WINSOR = (1.0, 99.0)  # percentiles the histogram is clipped to before thresholding
+_REGIME_SEP_FRAC = 0.25  # share of the on/off gap a within-regime deviation must exceed
 
 
 def infer_freq(index: pd.DatetimeIndex):
@@ -72,16 +108,139 @@ def _mad_z(values: np.ndarray) -> np.ndarray:
     return np.zeros_like(values, dtype="float64")
 
 
-def outlier_mask(series: pd.Series, cutoff: float = _MAD_Z_CUTOFF) -> pd.Series:
-    """Boolean mask of robust (MAD-based) outliers among the non-null values."""
+@dataclass(frozen=True)
+class _RegimeSplit:
+    """A qualifying two-regime split of one series: where it cuts, and how well separated."""
+
+    threshold: float
+    separation: float
+    n_low: int
+    n_high: int
+    high: np.ndarray  # bool mask over the non-null values, True = the "on" regime
+
+
+def _otsu_threshold(values: np.ndarray):
+    """Otsu's two-class threshold over a winsorised histogram, or ``None`` if degenerate.
+
+    Winsorising first is load-bearing: one 20x spike otherwise collapses the histogram into a
+    single bin and the threshold lands between the bulk and the spike, which would destroy exactly
+    the spike detection this must preserve. Values are *classified* un-winsorised, so a spike still
+    lands in the high regime and is still tested there.
+    """
+    v = values[np.isfinite(values)]
+    if len(v) < 3:
+        return None
+    lo_p, hi_p = np.percentile(v, _REGIME_WINSOR)
+    w = np.clip(v, lo_p, hi_p)
+    lo, hi = float(w.min()), float(w.max())
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        return None
+    counts, edges = np.histogram(w, bins=_REGIME_BINS, range=(lo, hi))
+    total = counts.sum()
+    if total == 0:
+        return None
+    centres = (edges[:-1] + edges[1:]) / 2.0
+    weight_lo = np.cumsum(counts)
+    weight_hi = total - weight_lo
+    valid = (weight_lo > 0) & (weight_hi > 0)
+    if not valid.any():
+        return None
+    csum = np.cumsum(counts * centres)
+    mean_lo = np.divide(csum, weight_lo, out=np.zeros_like(csum), where=weight_lo > 0)
+    mean_hi = np.divide(csum[-1] - csum, weight_hi, out=np.zeros_like(csum), where=weight_hi > 0)
+    between = weight_lo * weight_hi * (mean_lo - mean_hi) ** 2
+    between[~valid] = -1.0
+    return float(edges[int(np.argmax(between)) + 1])
+
+
+def _median_run_length(mask: np.ndarray) -> float:
+    """Median length of the consecutive runs of ``True`` in ``mask`` (0.0 when there are none)."""
+    if not mask.any():
+        return 0.0
+    padded = np.concatenate(([0], mask.astype("int8"), [0]))
+    edges = np.diff(padded)
+    starts = np.flatnonzero(edges == 1)
+    ends = np.flatnonzero(edges == -1)
+    return float(np.median(ends - starts)) if len(starts) else 0.0
+
+
+def _regime_split(values: np.ndarray):
+    """A qualifying two-regime split of ``values``, or ``None`` when the series is one population.
+
+    Applies the mass, separation and temporal-coherence gates in that order (see the module
+    docstring). Returning ``None`` is the safe answer: the caller then uses the ordinary pooled
+    test, which is what today's behaviour already is.
+    """
+    n = len(values)
+    if n < _REGIME_MIN_N:
+        return None
+    threshold = _otsu_threshold(values)
+    if threshold is None:
+        return None
+    high = values > threshold
+    n_high = int(high.sum())
+    n_low = n - n_high
+
+    floor = max(_REGIME_MIN_COUNT, int(np.ceil(_REGIME_MIN_FRAC * n)))
+    if min(n_low, n_high) < floor:  # mass: a lone spike is not a regime
+        return None
+
+    lo_v, hi_v = values[~high], values[high]
+    med_lo, med_hi = float(np.median(lo_v)), float(np.median(hi_v))
+    mad_lo = float(np.median(np.abs(lo_v - med_lo)))
+    mad_hi = float(np.median(np.abs(hi_v - med_hi)))
+    spread = mad_lo + mad_hi
+    separation = float("inf") if spread == 0 else (med_hi - med_lo) / spread
+    if separation < _REGIME_MIN_SEPARATION:  # separation: don't bisect a continuous signal
+        return None
+
+    if min(_median_run_length(high), _median_run_length(~high)) < _REGIME_MIN_RUN:
+        return None  # coherence: scatter is a fault, a duty cycle persists
+
+    return _RegimeSplit(
+        threshold=threshold, separation=separation, n_low=n_low, n_high=n_high, high=high
+    )
+
+
+def _mask_from(series: pd.Series, flag) -> pd.Series:
+    """Shared shell: drop nulls, let ``flag(values)`` decide, write back positionally.
+
+    Positional (not index-aligned) so a non-unique duplicate-timestamp index stays safe.
+    """
     s = series.dropna()
     notna = series.notna().to_numpy()
     vals = np.zeros(len(series), dtype=bool)
     if len(s) < 3:
         return pd.Series(vals, index=series.index)
-    z = np.abs(_mad_z(s.to_numpy(dtype="float64")))
-    vals[notna] = z > cutoff  # positional -> robust to a non-unique (duplicate-ts) index
+    vals[notna] = flag(s.to_numpy(dtype="float64"))
     return pd.Series(vals, index=series.index)
+
+
+def outlier_mask(series: pd.Series, cutoff: float = _MAD_Z_CUTOFF) -> pd.Series:
+    """Boolean mask of robust (MAD-based) outliers among the non-null values."""
+    return _mask_from(series, lambda v: np.abs(_mad_z(v)) > cutoff)
+
+
+def _regime_outlier_flags(values: np.ndarray, split, cutoff: float) -> np.ndarray:
+    """Robust outliers judged *within* each regime, so a duty cycle is not itself the outlier.
+
+    A point must be a robust outlier in its own regime **and** displaced from that regime's centre
+    by a meaningful share of the gap between the two -- otherwise a regime that sits at (or is
+    clipped to) zero has near-zero MAD, the meanAD fallback fires inside it, and it flags its own
+    noise. A genuine spike inside the "on" band still clears both tests.
+    """
+    out = np.zeros(len(values), dtype=bool)
+    med_lo = float(np.median(values[~split.high]))
+    med_hi = float(np.median(values[split.high]))
+    gap = med_hi - med_lo
+    for sel in (split.high, ~split.high):
+        if sel.sum() < 3:
+            continue
+        sub = values[sel]
+        centre = float(np.median(sub))
+        far_enough = np.abs(sub - centre) > _REGIME_SEP_FRAC * gap
+        out[sel] = (np.abs(_mad_z(sub)) > cutoff) & far_enough
+    return out
 
 
 def longest_flatline(series: pd.Series) -> int:
@@ -117,6 +276,12 @@ class QualityReport:
     expected_freq: object  # inferred/declared interval (Timedelta or None)
     score: float  # composite quality 0..1 (1 = clean)
     n_duplicate_ts: int = 0  # duplicate timestamps (DST fall-back / concatenated exports)
+    # Two-regime read (see the module docstring). Tri-state per the honesty convention:
+    # None means the split could not be TESTED (too few samples), never "no split found".
+    n_regimes: int | None = None  # 1 or 2; None when untestable
+    regime_threshold: float | None = None  # the split value; None unless n_regimes == 2
+    n_regime_outliers: int | None = None  # outliers judged within their own regime
+    regime_outlier_frac: float | None = None  # n_regime_outliers / n
 
     def as_dict(self):
         """Return as a plain dict (expected_freq stringified)."""
@@ -125,11 +290,17 @@ class QualityReport:
         return d
 
 
-def assess(series: pd.Series, expected_freq=None) -> QualityReport:
+def assess(series: pd.Series, expected_freq=None, *, regime_aware: bool = False) -> QualityReport:
     """Compute a :class:`QualityReport` without modifying the series.
 
     ``expected_freq`` (a pandas-parseable interval) overrides the inferred
     sampling interval used for gap detection.
+
+    The two-regime read is **always computed and reported**; ``regime_aware`` only decides whether
+    the composite ``score`` uses it instead of the pooled outlier fraction. It is off by default
+    because scoring a duty cycle as normal is the direction that could mask a fault -- so it is
+    opted into per role by :func:`camber.sensorhealth.sensor_trust`, where the role is known. The
+    pooled ``n_outliers`` / ``outlier_frac`` are never masked either way.
     """
     total = len(series)
     n_missing = int(series.isna().sum())
@@ -143,10 +314,30 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
     out_frac = (n_out / n) if n else 0.0
     n_dup = int(pd.DatetimeIndex(series.index).duplicated().sum())
 
+    # The two-regime read. Always computed and reported; only the composite score is gated on
+    # regime_aware, because using it is the direction that could mask a fault.
+    values = series.dropna().to_numpy(dtype="float64")
+    n_regimes: int | None = None
+    threshold: float | None = None
+    n_reg_out: int | None = None
+    reg_frac: float | None = None
+    if len(values) >= 3:
+        split = _regime_split(values)
+        n_regimes = 2 if split is not None else 1
+        if split is None:
+            n_reg_out, reg_frac = n_out, out_frac
+        else:
+            threshold = round(float(split.threshold), 4)
+            flags = _regime_outlier_flags(values, split, _MAD_Z_CUTOFF)
+            n_reg_out = int(flags.sum())
+            reg_frac = (n_reg_out / n) if n else 0.0
+
+    out_used = reg_frac if (regime_aware and reg_frac is not None) else out_frac
+
     # Composite: coverage dominates; outliers penalize moderately; an extreme
     # flatline (whole series stuck) contributes lightly since some points are
     # legitimately constant.
-    score = coverage * (1.0 - min(out_frac * 2.0, 1.0)) * (1.0 - 0.2 * flat_frac)
+    score = coverage * (1.0 - min(out_used * 2.0, 1.0)) * (1.0 - 0.2 * flat_frac)
     score = float(max(0.0, min(1.0, score)))
     return QualityReport(
         n=n,
@@ -160,6 +351,10 @@ def assess(series: pd.Series, expected_freq=None) -> QualityReport:
         expected_freq=exp,
         score=round(score, 4),
         n_duplicate_ts=n_dup,
+        n_regimes=n_regimes,
+        regime_threshold=threshold,
+        n_regime_outliers=n_reg_out,
+        regime_outlier_frac=None if reg_frac is None else round(reg_frac, 4),
     )
 
 
