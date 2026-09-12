@@ -246,3 +246,30 @@ if __name__ == "__main__":
         print(f"wrote {_SNAPSHOT}")
     else:
         print(json.dumps(compute_public_surface(), indent=2, sort_keys=True))
+
+
+def test_version_is_consistent_across_the_package():
+    """``camber.__version__`` must match ``pyproject.toml``.
+
+    ``__version__`` is a promised public name (it is in the snapshot above), so a stale value is a
+    user-visible lie about what they installed. The release checklist says to bump both; this makes
+    forgetting one fail the suite instead of shipping. Five stacked minors once drifted this way.
+    """
+    init = open(os.path.join(_PKG, "__init__.py"), encoding="utf-8").read()
+    pyproject = open(os.path.join(_ROOT, "pyproject.toml"), encoding="utf-8").read()
+
+    declared = next(
+        n.value.value
+        for n in ast.parse(init).body
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "__version__" for t in n.targets)
+    )
+    packaged = next(
+        line.split("=", 1)[1].strip().strip('"')
+        for line in pyproject.splitlines()
+        if line.startswith("version = ")
+    )
+    assert declared == packaged, (
+        f"camber.__version__ is {declared!r} but pyproject.toml says {packaged!r} — "
+        "bump both (see RELEASING.md, pre-release checklist item 2)"
+    )
