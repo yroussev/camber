@@ -64,6 +64,18 @@ score 0.166 and 0.998 on identical health. Five rules take a **status** role as 
 - No new dependency; no public-API surface change (the new names are private, the new fields are
   dataclass attributes, the new parameter is keyword-only) — `tests/public_api_snapshot.json` is
   unchanged and `tests/test_public_api.py` passes unmodified.
+- **Packaging, landed after the tag was cut:** `deploy/conda/recipe.yaml` and the conda-forge
+  submission (`conda-forge/staged-recipes#34742`) were retargeted from 0.74.1 to 0.79.0, with the
+  sdist `sha256` verified by hashing the published artifact rather than reading the PyPI API.
+  Runtime dependencies are unchanged across 0.75–0.79, so only the version, hash and documentation
+  URL moved; `linux_64` / `osx_64` / `win_64` all build green. The recipe's `documentation` now
+  points at the MkDocs site instead of `github.com/.../blob/main/docs` — the old link worked (it
+  301s to `/tree/`) but it is a file browser that also surfaces `docs/dev/` and `docs/proposals/`,
+  internal notes the docs site deliberately excludes.
+- **Release-process fix:** `camber/__init__.py` had been left at `0.74.1` while `pyproject.toml`
+  advanced through 0.75–0.79, so every commit in the stack was internally inconsistent. Caught
+  during the pre-release checks and corrected before any tag was pushed; `tests/test_public_api.py`
+  now fails if the two ever drift again.
 
 ## [0.78.0] — 2026-09-08
 
