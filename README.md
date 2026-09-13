@@ -14,10 +14,16 @@ The core idea: points are mapped to a small vocabulary of vendor-neutral **roles
 against those roles. Map a building's tags once and the whole rule set runs on it
 — one rule, all equipment, any BAS.
 
+## Documentation
+
+**[yroussev.github.io/camber](https://yroussev.github.io/camber/)** — the rendered docs, with
+search. Everything below is a summary of it.
+
 ## What it does
 
 Full API-level detail — every capability, its flags, and the standard it cites — is in
-**[docs/CAPABILITIES.md](docs/CAPABILITIES.md)**.
+**[docs/CAPABILITIES.md](docs/CAPABILITIES.md)**
+([on the site](https://yroussev.github.io/camber/CAPABILITIES/)).
 
 - **Ingest** — per-point and wide/tabular CSV, a long/tall adapter, named **vendor profiles** and a
   multi-format timestamp/value parser (ISO / US / EU-dayfirst / BAS / epoch / Excel-serial), a

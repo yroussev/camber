@@ -34,6 +34,16 @@ dependencies = [
   "pyarrow>=14",
 ]
 
+# Shown as the "Project links" sidebar on the PyPI page. Without these the package has no link
+# back to its own docs, source or changelog, which is how 0.62-0.79 shipped. These key names are
+# the ones PyPI gives recognised icons to.
+[project.urls]
+Homepage = "https://github.com/yroussev/camber"
+Documentation = "https://yroussev.github.io/camber/"
+Repository = "https://github.com/yroussev/camber"
+Changelog = "https://github.com/yroussev/camber/blob/main/CHANGELOG.md"
+Issues = "https://github.com/yroussev/camber/issues"
+
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov>=5", "hypothesis>=6", "ruff>=0.6", "mypy>=1.8"]
 # Docs site only (never a runtime dep): build the MkDocs site with `mkdocs build`.
