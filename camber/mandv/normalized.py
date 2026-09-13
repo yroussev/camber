@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-_TVAL = {0.80: 1.282, 0.90: 1.645, 0.95: 1.960, 0.975: 2.241, 0.99: 2.326}
+from .stats import _rel_unc_projected, _t_value
 
 
 def normalized_annual_consumption(model, temps) -> float:
@@ -53,13 +53,6 @@ class NormalizedSavings:
         return asdict(self)
 
 
-def _rel_unc(cv_rmse: float, n: int, m: int) -> float:
-    """G14 Annex-B fractional uncertainty of a single projected sum over ``m`` periods."""
-    if cv_rmse != cv_rmse or n <= 0 or m <= 0:
-        return float("nan")
-    return 1.26 * cv_rmse * np.sqrt((n / m) * (1.0 + 2.0 / n))
-
-
 def normalized_savings(
     baseline_model,
     reporting_model,
@@ -70,13 +63,26 @@ def normalized_savings(
     reporting_cv_rmse: float | None = None,
     n_reporting: int | None = None,
     confidence: float = 0.90,
+    p_baseline: int = 2,
+    p_reporting: int | None = None,
+    rho: float | None = None,
 ) -> NormalizedSavings:
     """Weather-normalized annual savings between two fitted models over a normal year.
 
     Projects ``baseline_model`` and ``reporting_model`` onto ``normal_temps`` (the typical
     year) and differences their NAC. Provide each model's fit CV(RMSE) and number of fit
-    points for the G14 uncertainty band; if the reporting fit stats are omitted they default
-    to the baseline's. ``confidence`` selects the t-multiplier (0.90 -> 1.645).
+    points for the uncertainty band; if the reporting fit stats are omitted they default to the
+    baseline's. ``confidence`` selects the t-multiplier.
+
+    **The band does not depend on how many periods you normalize onto.** Both sides here are model
+    *projections*, so there is no measured energy and no residual noise to average down over
+    ``normal_temps`` -- only parameter error, which every projected period shares. Measured
+    directly, the spread of a projected total is flat across a 730x range in the number of periods.
+    That is why this uses :func:`camber.mandv.stats._rel_unc_projected` (OLS average leverage) and
+    not the G14 measured-savings kernel, which carries a ``1/m`` term and would be several times too
+    narrow at hourly resolution. ``p_baseline`` / ``p_reporting`` are the models' parameter counts;
+    ``rho`` is the residual lag-1 autocorrelation (see
+    :func:`camber.mandv.stats.lag1_autocorrelation`), widening the band when supplied.
     """
     temps = np.asarray(normal_temps, dtype=float)
     m = int(len(temps))
@@ -87,8 +93,11 @@ def normalized_savings(
 
     r_cv = reporting_cv_rmse if reporting_cv_rmse is not None else baseline_cv_rmse
     r_n = n_reporting if n_reporting is not None else n_baseline
-    rel_b, rel_r = _rel_unc(baseline_cv_rmse, n_baseline, m), _rel_unc(r_cv, r_n, m)
-    t = _TVAL.get(round(confidence, 3), 1.645)
+    r_p = p_reporting if p_reporting is not None else p_baseline
+    rho_used = 0.0 if rho is None or not np.isfinite(rho) else float(rho)
+    rel_b = _rel_unc_projected(baseline_cv_rmse, n_fit=n_baseline, p_fit=p_baseline, rho=rho_used)
+    rel_r = _rel_unc_projected(r_cv, n_fit=r_n, p_fit=r_p, rho=rho_used)
+    t = _t_value(confidence)
     if rel_b == rel_b and rel_r == rel_r:
         abs_unc = t * float(np.sqrt((rel_b * nac_b) ** 2 + (rel_r * nac_r) ** 2))
     else:

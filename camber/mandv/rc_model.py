@@ -31,8 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .normalized import _rel_unc
-from .stats import FitStats, cv_rmse_max_for, fit_stats
+from .stats import FitStats, _rel_unc_projected, cv_rmse_max_for, fit_stats
 
 # --------------------------------------------------------------------------- schedule helper
 
@@ -252,7 +251,16 @@ def option_d_savings(calibration, oat, as_found_schedule, as_corrected_schedule)
     avoided = e_found - e_corr
     frac = avoided / e_found if e_found > 0 else float("nan")
     if valid and frac == frac and frac not in (0.0,):
-        fsu = _rel_unc(getattr(fit, "cv_rmse", float("nan")), len(oat), len(oat)) / abs(frac)
+        # Both sides are simulated, so this is the projected kernel: parameter error only, no
+        # 1/m term. The old call passed len(oat) as *both* n and m, which made the bracket
+        # collapse to ~1 and left the band with no sample-size content at all.
+        rho = getattr(fit, "rho_lag1", None)
+        fsu = _rel_unc_projected(
+            getattr(fit, "cv_rmse", float("nan")),
+            n_fit=len(oat),
+            p_fit=getattr(fit, "p", 2) or 2,
+            rho=0.0 if rho is None else rho,
+        ) / abs(frac)
         basis = "IPMVP Option D (calibrated simulation)"
     else:
         fsu = float("nan")

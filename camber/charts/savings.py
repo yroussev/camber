@@ -44,7 +44,7 @@ def savings_chart(
     p_baseline: int,
     cv_rmse: float,
     confidence: float = 0.90,
-    rho: float = 0.0,
+    rho: float | None = None,
     ax=None,
     title: str | None = None,
     ylabel: str = "Energy",

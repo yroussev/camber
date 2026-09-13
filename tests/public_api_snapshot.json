@@ -1016,7 +1016,8 @@
     "SavingsResult",
     "avoided_energy_savings",
     "cv_rmse_max_for",
-    "fit_stats"
+    "fit_stats",
+    "lag1_autocorrelation"
   ],
   "camber.mandv.towt": [
     "TOWTModel",

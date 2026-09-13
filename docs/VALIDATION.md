@@ -190,6 +190,17 @@ Change-point / TOWT models report ASHRAE Guideline 14 fit statistics (CV(RMSE), 
 **fractional savings uncertainty** with every saving. The CalTRACK alignment and an
 **eemeter cross-check recipe** (no dependency added) are documented in [MANDV.md](MANDV.md).
 
+**The FSU kernel was wrong until 0.80.0** and is now checked two ways. The bracket had `n′` where
+the published form has `n/n′`, which made every band a factor of `√n` too wide — 19× for a year of
+daily data — and made the autocorrelation correction move it the *wrong way*. The corrected form was
+verified against Reddy & Claridge (2000) as reproduced in the public BPA/LBNL/NYSERDA M&V guides
+(the ASHRAE text is paywalled and was not consulted, consistent with the clean-room rule), and
+independently against a Monte Carlo of AR(1)-residual fits. Honesty runs in both directions here: a
+19× band overstates nothing, but it makes a defensible saving look unusable, and the ρ hook
+understated. The `examples/bdg2` harness now also reports the **measured** lag-1 residual
+autocorrelation across real meters, so the correction rests on CAMBER's own number rather than a
+literature range.
+
 ## Tariffs & finance
 
 The native tariff engine is cross-checkable against **NREL PySAM `UtilityRate5`** (the

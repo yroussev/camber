@@ -41,6 +41,7 @@ class NMECResult:
     baseline_n: int  # baseline days used (after any NRE exclusion)
     savings: SavingsResult  # avoided energy + fractional savings uncertainty
     n_non_routine_excluded: int = 0  # baseline days dropped as non-routine events
+    baseline_rho: float | None = None  # lag-1 residual autocorrelation; None if not estimable
 
     def as_dict(self) -> dict:
         """Return the result (with the nested savings) as a plain dict."""
@@ -90,7 +91,14 @@ def caltrack_savings(
 
     model = best_model(base["oat"].to_numpy(), base["energy"].to_numpy())
     p = N_PARAMS[model.kind]
-    st = fit_stats(base["energy"].to_numpy(), model.predict(base["oat"].to_numpy()), p)
+    # the daily frame is on a regular grid, so the residuals' lag-1 autocorrelation is meaningful
+    # and feeds the savings band's effective-sample-size correction
+    st = fit_stats(
+        base["energy"].to_numpy(),
+        model.predict(base["oat"].to_numpy()),
+        p,
+        time_index=base.index,
+    )
 
     rep = daily_energy_vs_temp(
         reporting_energy, reporting_temp, rate_is_energy_rate=rate_is_energy_rate
@@ -105,6 +113,7 @@ def caltrack_savings(
         n_baseline=st.n,
         p_baseline=p,
         confidence=confidence,
+        rho=st.rho_lag1,
     )
 
     return NMECResult(
@@ -113,6 +122,7 @@ def caltrack_savings(
         baseline_nmbe=st.nmbe,
         baseline_r2=st.r2,
         baseline_n=st.n,
+        baseline_rho=st.rho_lag1,
         savings=savings,
         n_non_routine_excluded=excluded,
     )

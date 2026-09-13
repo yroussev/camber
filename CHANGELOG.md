@@ -4,6 +4,80 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.80.0] — 2026-09-13
+
+**Every fractional savings uncertainty CAMBER has ever reported was wrong.** The ASHRAE G14 Annex-B
+bracket was transcribed with `n′` where the published form has `n/n′`. One substitution, two
+defects, three copies.
+
+**The band was √n too wide.** At ρ=0 the bracket became `(n/m)(1+2/n)` instead of `(1+2/n)/m` — a
+factor of `n` under the root. On a near-perfect fit (CV(RMSE) 2.87%, 365 baseline days, 90 reporting
+days, clean 20% saving) CAMBER reported **19.9% ± 60.4%**; the published form gives **± 3.1%**. The
+ratio is 19.105 against √365 = 19.105. A textbook-quality M&V result was being reported as
+statistically unusable.
+
+**And the autocorrelation correction ran backwards.** `(n′/m)(1+2/n′)` collapses algebraically to
+`(n′+2)/m`, strictly *increasing* in `n′` — so passing `rho`, documented as
+"autocorrelation-adjusted", made the band **narrower**. Nothing ever passed it, which is the only
+reason this did not compound: `caltrack_savings` and `isolation_savings` had no `rho` parameter at
+all, and the one site that could pass it forwarded its own `0.0` default.
+
+### Fixed
+- **`mandv.stats.avoided_energy_savings`** now computes
+  `t·1.26·CV·√((n/n′)·(1+2/n)·(1/m))/F`, with `(n/n′)` written as a literal factor so the expression
+  reads term-for-term against the published one. More autocorrelation now correctly *widens* the
+  band.
+- **`mandv.normalized`** had a second, independent copy of the same bracket with no `rho` hook at
+  all; **`mandv.rc_model`** (Option D) imported it and called it with `n == m`, which collapsed the
+  bracket to ≈1 and left Option D's band with **no sample-size content whatsoever**. Both now use a
+  shared kernel.
+- **The t-table silently substituted.** `stats.py` held three confidence levels and fell back to
+  1.645 for anything else, so `confidence=0.99` quietly returned a **90%** band; `normalized.py`
+  had a different five-entry table. Now one df-aware table that raises `ValueError` on an
+  unsupported level. (A monthly model at df=7 needs t=1.895, not 1.645 — a 15% understatement in
+  the dishonest direction.)
+
+### Added
+- **`mandv.stats.lag1_autocorrelation`** — the ρ the correction needs, estimated from residuals.
+  Returns `None`, never `0.0`, when it cannot be estimated: `0.0` asserts independence nobody
+  tested. Non-finite residuals invalidate the pairs on both sides; pass a `time_index` and only
+  pairs one modal interval apart are admitted, so a gap never glues its neighbours together.
+  Negative estimates are clamped to 0 — a noisy negative would narrow the band.
+- **`FitStats.rho_lag1`** and a keyword-only `fit_stats(..., time_index=)`. Required rather than
+  cosmetic: `fit_stats` drops non-finite rows, which compresses the array and would otherwise make
+  non-adjacent residuals look neighbouring.
+- `caltrack_savings` estimates ρ from its baseline residuals and applies it automatically;
+  `SavingsResult` gains `rho`, `n_effective` and `fsu_autocorrelation_adjusted` so a reader can tell
+  an adjusted band from an unadjusted one. `NMECResult` gains `baseline_rho`.
+- `examples/bdg2` now reports the **measured** lag-1 residual autocorrelation across ~2,044 real
+  meters (`rho_metrics`: median, p10/p90, fraction above 0.3). Reported and archived but deliberately
+  **ungated** — a descriptive distribution is not a pass/fail quantity.
+
+### Notes
+- **Two kernels, and the boundary is physical, not modular.** `measured − projected` carries the
+  reporting period's residual noise, which averages down over `m`. `projected − projected` (NAC,
+  Option D) contains no measured energy — only parameter error, shared by every projected period —
+  so its band does **not** depend on how many periods you project onto. Measured directly, the
+  spread of a projected total is flat across a 730× range in `m`. An earlier draft of this fix used
+  one shared kernel; that would have been ~4× too **narrow** at 8760 hourly periods, replacing a
+  conservative error with an overconfident one in a documented case.
+- **Different provenance, stated.** The measured kernel is the published G14 expression, `1.26` and
+  all. The projected kernel is `CV·√(p/n)` — plain OLS average leverage, citable as regression
+  theory. G14's empirical constant is deliberately *not* carried across to a case it was never
+  derived for.
+- **Verified two ways**, neither of them the paywalled standard: reconstruction from Reddy & Claridge
+  (2000) as reproduced in the public BPA/LBNL/NYSERDA M&V guides, and an independent Monte Carlo of
+  AR(1)-residual fits. Consistent with the project's clean-room rule; say so rather than implying
+  the standard was read.
+- **Why the tests did not catch it:** every existing uncertainty assertion was `> 0`, `isfinite`, or
+  monotonic in the savings fraction. All of them pass both before and after a 19× correction. They
+  are replaced with pinned magnitudes, a pinned ρ direction, an m-scaling test, and a test that the
+  projected kernel is invariant to the projection length.
+- Out of scope and named: the Sun & Baltazar polynomial refinement of `1.26`; autocorrelation in the
+  CUSUM/online control limits (a different literature); an exact design-matrix projection
+  uncertainty to replace the `√(p/n)` approximation.
+- One new public name → `tests/public_api_snapshot.json` regenerated. No new dependency.
+
 ## [0.79.0] — 2026-09-09
 
 **A healthy duty-cycled point could silently switch a diagnostic off.** `ingest.quality.assess`

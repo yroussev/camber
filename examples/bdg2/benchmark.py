@@ -61,6 +61,34 @@ def acceptance_metrics(records, label: str) -> dict:
     }
 
 
+def rho_metrics(records, label: str) -> dict:
+    """Flatten per-building residual autocorrelation → ``{label.median_rho/_p10/_p90/...}``.
+
+    CAMBER's savings bands correct for serial correlation via an effective sample size
+    ``n(1-rho)/(1+rho)``. That correction is only as good as the rho behind it, so this measures the
+    **actual** distribution across real meters rather than quoting a literature range. Buildings
+    where rho could not be estimated are excluded from the quantiles and counted separately --
+    treating an unestimable rho as 0.0 would assert independence nobody tested.
+
+    Deterministic; no data access. ``records`` = ``[{"rho_lag1": float | None}, ...]``.
+    """
+    rhos = sorted(r["rho_lag1"] for r in records if r.get("rho_lag1") is not None)
+    n = len(rhos)
+    if not n:
+        return {f"{label}.n_with_rho": 0}
+
+    def _q(frac: float) -> float:
+        return rhos[min(n - 1, max(0, int(round(frac * (n - 1)))))]
+
+    return {
+        f"{label}.median_rho": round(statistics.median(rhos), 4),
+        f"{label}.p10_rho": round(_q(0.10), 4),
+        f"{label}.p90_rho": round(_q(0.90), 4),
+        f"{label}.frac_rho_gt_0_3": round(sum(1 for r in rhos if r > 0.3) / n, 4),
+        f"{label}.n_with_rho": n,
+    }
+
+
 def eui_metrics(euis) -> dict:
     """Portfolio EUI rollup metrics via report.build_fleet_report (real-scale percentile check)."""
     from camber.report.fleet import build_fleet_report
@@ -114,8 +142,14 @@ def score_meter(meta, weather, meter_csv, *, min_hours=24 * 150, min_days=60):
             if len(d) < min_days:
                 continue
             m = best_model(d["oat"].values, d["energy"].values)
+            # pass the index so fit_stats can also measure the residuals' lag-1 autocorrelation --
+            # the quantity the G14 savings band's effective-sample-size correction needs
             st = fit_stats(
-                d["energy"].values, m.predict(d["oat"].values), N_PARAMS[m.kind], cv_rmse_max=cvmax
+                d["energy"].values,
+                m.predict(d["oat"].values),
+                N_PARAMS[m.kind],
+                cv_rmse_max=cvmax,
+                time_index=d.index,
             )
         except Exception:
             continue
@@ -124,6 +158,7 @@ def score_meter(meta, weather, meter_csv, *, min_hours=24 * 150, min_days=60):
                 "building": b,
                 "cv_rmse": float(st.cv_rmse),
                 "accept": bool(st.accept),
+                "rho_lag1": st.rho_lag1,  # None when not estimable; never coerced to 0.0
                 "annual_kwh": float(e.sum()),
             }
         )
@@ -146,8 +181,10 @@ def metrics_dict() -> dict:
             continue
         recs = score_meter(meta, weather, path)
         m.update(acceptance_metrics(recs, label))
+        m.update(rho_metrics(recs, label))
         all_recs.extend((r, meter) for r in recs)
     m.update(acceptance_metrics([r for r, _ in all_recs], "pooled"))
+    m.update(rho_metrics([r for r, _ in all_recs], "pooled"))
     # EUI rollup from annual energy / floor area (sqft or sqm→sqft)
     area_col = "sqft" if "sqft" in meta.columns else ("sqm" if "sqm" in meta.columns else None)
     euis = []

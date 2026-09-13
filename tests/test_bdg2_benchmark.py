@@ -60,3 +60,31 @@ def test_eui_metrics_drops_nan_eui():
     B = _bench()
     m = B.eui_metrics([100.0, float("nan"), None, 50.0])
     assert m["eui.n_buildings"] == 2
+
+
+def test_rho_metrics_shape_and_quantiles():
+    """The real-data residual-autocorrelation distribution behind the savings-band correction."""
+    b = _bench()
+    recs = [{"rho_lag1": r} for r in (0.05, 0.2, 0.35, 0.5, 0.8)]
+    m = b.rho_metrics(recs, "daily")
+
+    assert m["daily.median_rho"] == 0.35
+    assert m["daily.p10_rho"] == 0.05
+    assert m["daily.p90_rho"] == 0.8
+    assert m["daily.frac_rho_gt_0_3"] == 0.6
+    assert m["daily.n_with_rho"] == 5
+
+
+def test_rho_metrics_excludes_unestimable_rather_than_counting_it_as_zero():
+    """Treating an unestimable rho as 0.0 would assert an independence nobody tested."""
+    b = _bench()
+    recs = [{"rho_lag1": 0.4}, {"rho_lag1": 0.6}, {"rho_lag1": None}, {}]
+    m = b.rho_metrics(recs, "pooled")
+
+    assert m["pooled.n_with_rho"] == 2  # the two estimable ones
+    assert m["pooled.median_rho"] == 0.5  # not dragged toward 0 by the missing ones
+
+
+def test_rho_metrics_with_nothing_estimable():
+    b = _bench()
+    assert b.rho_metrics([{"rho_lag1": None}], "daily") == {"daily.n_with_rho": 0}

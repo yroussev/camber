@@ -32,7 +32,8 @@ flowchart LR
 | Baseline model | `mandv.models.best_model` (change-point 2P–5P) / `mandv.towt` (hourly) |
 | Goodness of fit — CV(RMSE), NMBE | `mandv.stats.fit_stats` |
 | Avoided energy use | `mandv.stats.avoided_energy_savings` |
-| Fractional savings uncertainty (FSU) | G14 Annex-B, in the same call |
+| Fractional savings uncertainty (FSU) | G14 Annex-B, in the same call — `t·1.26·CV·√((n/n′)(1+2/n)/m)/F` |
+| Autocorrelation correction | `n′ = n(1−ρ)/(1+ρ)`; ρ from `stats.lag1_autocorrelation`, carried on `FitStats.rho_lag1` |
 | Normalized annual savings | drive the models with a typical year (`mandv.weather` TMY/EPW) |
 | Live actual weather (any lat/lon) | `weather_source.oat_reference` — NASA POWER fetch, see [WEATHER.md](WEATHER.md) |
 | Cumulative savings tracking | `mandv.cusum` |
@@ -57,6 +58,26 @@ res = caltrack_savings(
 print(res.model_kind, round(res.baseline_r2, 3))
 print(res.savings.savings_pct, "±", res.savings.fractional_uncertainty)  # fractions
 ```
+
+### Two uncertainty kernels, and why
+
+Which kernel applies depends on whether the savings difference contains **measured** energy:
+
+- **`measured − projected`** (Option C avoided energy, Option B isolation) carries the reporting
+  period's own residual noise, which averages down over the `m` reporting points. This is the G14
+  Annex-B form above.
+- **`projected − projected`** (normalized annual savings, Option D) contains no measured energy at
+  all — only parameter error, shared by every projected period. Its band is therefore **independent
+  of how many periods you normalize onto**, and uses `CV·√(p/n)`, the OLS average leverage.
+
+The two have deliberately different provenance: the measured kernel is the published G14 expression,
+constant and all; the projected one is textbook regression theory, cited as such rather than
+borrowing G14's empirical `1.26` for a case it was never derived for.
+
+Serial correlation widens both, via `n′`. Daily whole-building residuals are routinely correlated,
+so an unadjusted band is optimistic — `caltrack_savings` estimates ρ from the baseline residuals
+automatically. Strictly the *reporting*-period ρ is wanted, but those residuals contain the saving
+itself, so the baseline fit's ρ is the standard substitution.
 
 ## Acceptance thresholds — and where we differ from CalTRACK
 

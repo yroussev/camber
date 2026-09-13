@@ -196,7 +196,8 @@ uncertainty** carried as a ± band on the running total — savings *and* how su
 quality (CV(RMSE)) annotates the baseline's credibility. `cumulative_savings(...)` returns the raw
 `(index, cum_baseline, cum_actual, cum_avoided)` arrays. Reuses `mandv.stats.avoided_energy_savings`
 and any `predict()`-able baseline (`mandv.models.best_model`). Flags: `confidence`, `rho`
-(autocorrelation), `ylabel`.
+(lag-1 residual autocorrelation — raises the band; `None`, the default, leaves it unadjusted and
+says so on the result), `ylabel`.
 
 ### F — load profiles & load-duration curves
 ```python
