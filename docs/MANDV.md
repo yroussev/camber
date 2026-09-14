@@ -43,8 +43,24 @@ flowchart LR
 - **CalTRACK Daily** ↔ CAMBER daily change-point: aggregate to daily energy vs
   daily-mean temperature, fit the inverse model, project onto reporting weather.
   This is exactly what `mandv.caltrack.caltrack_savings()` does end-to-end.
-- **CalTRACK Hourly** ↔ CAMBER `mandv.towt` (time-of-week & temperature). Wiring a
-  one-call hourly NMEC is on the roadmap.
+- **Hourly NMEC** ↔ `mandv.caltrack.caltrack_savings_hourly`, on a **TOWT** baseline
+  (`mandv.towt`, the LBNL Mathieu et al. time-of-week & temperature model).
+  **This is not the CalTRACK Hourly specification** — that method is a different estimator:
+
+  | CalTRACK Hourly | CAMBER `mandv.towt` |
+  |---|---|
+  | per-calendar-month segmented models, weighted | one pooled model over the baseline |
+  | six **fixed** temperature bin edges | `n_temp_segments` **quantile-spaced** breakpoints |
+  | occupancy from a month × hour-of-week lookup, from a preliminary daily model's residuals | occupancy from bin-mean load vs the median of bin means |
+  | 365-day data sufficiency, hard limits enforced | hour count **plus** per-hour-of-week-bin coverage |
+
+  So these are defensible IPMVP Option-C savings on a published baseline model, not
+  eemeter-comparable numbers. Same posture as the daily method — see the CalTRACK note below.
+
+  **Expect a band comparable to the daily method, not tighter.** Hourly residuals are strongly
+  serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction bites: measured
+  on a 20-week synthetic, n=3360 hours becomes n_eff=282 and the band widens from 1.6% at ρ=0 to
+  9.7% at ρ=0.85. Finer data does not buy proportionally more certainty.
 - **Billing/monthly** ↔ change-point on monthly data (looser CV(RMSE) tier).
 
 ## Quick use

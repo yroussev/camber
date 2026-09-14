@@ -13,7 +13,9 @@ hot reporting year doesn't flatter or penalize the result.
 Uncertainty follows ASHRAE Guideline 14 Annex B: each projected NAC carries a fractional
 uncertainty 1.26 * CV(RMSE) * sqrt((n/M) * (1 + 2/n)) (M normal-year periods, n model-fit
 points), and the two are combined in quadrature at the chosen confidence. numpy only;
-operates on any model with a ``predict(temps)`` method (e.g. a change-point or TOWT model).
+operates on any model with a ``predict(temps)`` method -- a change-point model directly, or a TOWT
+model wrapped in :class:`camber.mandv.towt.TOWTAtIndex` (its own ``predict`` takes an index *and*
+temperatures, so it cannot be passed here bare).
 """
 
 from __future__ import annotations

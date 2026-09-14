@@ -4,6 +4,59 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.81.0] — 2026-09-13
+
+**Hourly NMEC, and three documented claims that were false.** 0.80.0 fixed the savings-uncertainty
+kernel; that was the real blocker for an hourly path. This wires one up — and fixes the claims that
+said it already existed.
+
+### Fixed
+- **`docs/VALIDATION.md` said "Change-point / TOWT models report … fractional savings uncertainty
+  with every saving".** False for the TOWT half: *no code path anywhere* could produce an FSU from a
+  TOWT model. `TOWTModel.predict(index, temp)` takes two arguments while all five savings consumers
+  call `predict(T)` and coerce with `np.asarray(..., dtype=float)` first, so the timestamps could
+  not be passed at all.
+- **`camber/mandv/normalized.py` claimed it "operates on any model with a `predict(temps)` method
+  (e.g. a change-point or TOWT model)".** Passing a TOWT model raised `TypeError`. No test covered
+  it, so nothing caught it.
+- **`docs/MANDV.md` equated `mandv.towt` with CalTRACK Hourly.** It is a different estimator; the
+  page now carries the differences table.
+- **`TOWTModel.predict` silently produced a wrong baseline on unseen hours.** The one-hot design has
+  a column per hour-of-week bin *observed at fit*, so a bin the baseline never saw yielded an
+  all-zero row and the prediction collapsed to the temperature term. Measured: a weekday-only fit
+  projected onto a weekend predicts **−1.2** where the truth is **40** — a negative baseline, which
+  reads downstream as a large negative saving, with no error and no NaN. It now raises, naming the
+  bins and the row count. Returning NaN was rejected: those hours would vanish from a savings sum
+  without saying so.
+- **The daily `caltrack_savings` judged its fit by the 0.20 default** rather than
+  `cv_rmse_max_for("daily")` = 0.30, then discarded the verdict entirely. Now judged against the
+  right gate and surfaced as `baseline_accepted` / `cv_rmse_max`.
+
+### Added
+- **`caltrack_savings_hourly`** → `HourlyNMECResult`: hourly NMEC / IPMVP Option-C on a TOWT
+  baseline, reusing `intervalfit.hourly_energy_vs_temp` (which had zero production callers until
+  now) and 0.80.0's corrected kernel, ρ estimator and df-aware t-table.
+- **`towt.TOWTAtIndex`** — binds a reporting index so a TOWT model satisfies the one-argument
+  `predict(temp)` contract, unblocking all five consumers with no signature change to any of them.
+- **`TOWTModel.covers(index)`** — ask before projecting.
+
+### Notes
+- **Sufficiency is coverage, not row count.** A TOWT design has a column per hour-of-week bin, so a
+  bin seen once is a fitted level carrying no information. `fit_towt`'s own 50-observation guard
+  cannot be the constraint — 50 hours cannot populate 168 bins. `min_hours` **and**
+  `min_obs_per_bin` must both pass.
+- **Expect a band comparable to the daily method, not tighter.** Hourly residuals are strongly
+  serially correlated. Measured on a 20-week synthetic: n=3360 hours → n_eff=282 at ρ=0.85, and the
+  band goes 1.6% (ρ=0) → 9.7% (ρ=0.85). More data at a finer interval does not buy proportionally
+  more certainty; a band that ignored this would be the overconfident one.
+- **Non-routine screening is day-level.** Hourly residuals are heavier-tailed, and trimming
+  individual hours on residual magnitude would bias CV(RMSE) down and so *narrow* the band — the
+  dishonest direction. Whole days are excluded or none.
+- **Not CalTRACK Hourly, and does not claim to be.** That specification prescribes per-calendar-month
+  segmented models, six fixed temperature bin edges and residual-derived occupancy; CAMBER's TOWT is
+  pooled, quantile-spaced and load-median. Same posture the daily method already takes.
+- Three new public names → `tests/public_api_snapshot.json` regenerated. No new dependency.
+
 ## [0.80.0] — 2026-09-13
 
 **Every fractional savings uncertainty CAMBER has ever reported was wrong.** The ASHRAE G14 Annex-B

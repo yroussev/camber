@@ -95,12 +95,35 @@ class TOWTModel:
     split: bool
 
     def predict(self, index, temp) -> np.ndarray:
-        """Predict energy for the given timestamps and temperatures."""
-        tow = hour_of_week(pd.DatetimeIndex(index))
+        """Predict energy for the given timestamps and temperatures.
+
+        Raises ``ValueError`` if any timestamp falls in an hour-of-week bin the fit never saw. The
+        one-hot design has a column per *observed* bin, so an unseen bin would otherwise produce an
+        all-zero row and the prediction would silently collapse to the temperature term alone --
+        measurably, a weekday-only fit projected onto a weekend predicts **-1.2** where the truth is
+        **40**. A negative baseline reads downstream as a large negative saving, with no error and
+        no NaN to notice. Failing loudly is the only honest option: returning NaN would instead make
+        those hours vanish from a savings sum without saying so.
+        """
+        idx = pd.DatetimeIndex(index)
+        tow = hour_of_week(idx)
+        unseen = np.setdiff1d(np.unique(tow), self.bins)
+        if len(unseen):
+            n_rows = int(np.isin(tow, unseen).sum())
+            raise ValueError(
+                f"cannot project: {len(unseen)} hour-of-week bin(s) were never seen at fit "
+                f"({n_rows} of {len(tow)} timestamps), e.g. {sorted(unseen)[:5]}. The baseline "
+                "does not cover this period's schedule -- refit over a window that does, or "
+                "restrict the projection to covered hours."
+            )
         X = _build_design(
             tow, np.asarray(temp, dtype="float64"), self.bins, self.breakpoints, self.occ_bins
         )
         return X @ self.beta
+
+    def covers(self, index) -> bool:
+        """Whether every hour-of-week bin in ``index`` was present at fit (see :meth:`predict`)."""
+        return not len(np.setdiff1d(np.unique(hour_of_week(pd.DatetimeIndex(index))), self.bins))
 
 
 def fit_towt(
@@ -142,3 +165,32 @@ def fit_towt(
         n_params=int(rank),
         split=occ_split,
     )
+
+
+class TOWTAtIndex:
+    """A TOWT model bound to one period's timestamps, exposing the one-argument ``predict(temp)``.
+
+    Every savings consumer in :mod:`camber.mandv` calls ``model.predict(T)`` with a single array and
+    coerces it first with ``np.asarray(..., dtype=float)`` -- so a DatetimeIndex cannot be smuggled
+    through that argument, and :class:`TOWTModel`, which needs the timestamps to compute
+    hour-of-week, cannot be passed directly. Binding the index into a wrapper lets a TOWT
+    baseline flow through :func:`camber.mandv.stats.avoided_energy_savings`,
+    :func:`camber.mandv.nonroutine.residual_outliers` and the savings chart unchanged.
+
+    ``temp`` must align with ``index`` positionally, which holds for the consumers above because
+    they mask non-finite values *after* calling ``predict``.
+    """
+
+    def __init__(self, model: TOWTModel, index):
+        self.model = model
+        self.index = pd.DatetimeIndex(index)
+
+    def predict(self, temp) -> np.ndarray:
+        """Predict energy at the bound timestamps for ``temp`` (same length and order)."""
+        temp = np.asarray(temp, dtype="float64")
+        if len(temp) != len(self.index):
+            raise ValueError(
+                f"temp has {len(temp)} values but the bound index has {len(self.index)}; "
+                "TOWTAtIndex requires them to align positionally"
+            )
+        return self.model.predict(self.index, temp)

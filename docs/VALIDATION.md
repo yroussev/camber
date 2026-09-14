@@ -187,7 +187,9 @@ single-signal gating convention are in [ECOSYSTEM.md](ECOSYSTEM.md).
 ## M&V
 
 Change-point / TOWT models report ASHRAE Guideline 14 fit statistics (CV(RMSE), NMBE) and
-**fractional savings uncertainty** with every saving. The CalTRACK alignment and an
+**fractional savings uncertainty** with every saving. (True of TOWT only since 0.81.0 — before that
+no code path could produce an FSU from a TOWT model at all, because its `predict` takes an index as
+well as temperatures and every savings consumer passes one array.) The CalTRACK alignment and an
 **eemeter cross-check recipe** (no dependency added) are documented in [MANDV.md](MANDV.md).
 
 **The FSU kernel was wrong until 0.80.0** and is now checked two ways. The bracket had `n′` where
