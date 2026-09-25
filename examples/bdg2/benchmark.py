@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import pandas as pd  # noqa: E402
 
-from camber.eval import check_against_baseline  # noqa: E402
+from camber.eval import baseline_report, check_against_baseline  # noqa: E402
 from camber.validation import wilson_interval  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -241,13 +241,10 @@ def main(argv=None) -> int:
         json.dump(m, open(args.update_baseline, "w"), indent=2, sort_keys=True)
         print(f"wrote baseline -> {args.update_baseline}")
     if args.gate:
-        chk = check_against_baseline(m, json.load(open(args.gate)), tol=args.tol)
+        chk = check_against_baseline(m, json.load(open(args.gate)), tol=args.tol, strict_new=True)
+        print(baseline_report(chk, label="BDG2 benchmark", tol=args.tol))
         if not chk.passed:
-            print("\n✗ BDG2 BENCHMARK REGRESSION:")
-            for k, b, c, d in chk.regressions:
-                print(f"    {k}: {b} -> {c} ({d:+})")
             return 2
-        print(f"\n✓ gate OK — {chk.unchanged} stable, {len(chk.improvements)} improved")
     return 0
 
 

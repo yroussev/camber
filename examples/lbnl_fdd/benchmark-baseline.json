@@ -1,0 +1,22 @@
+{
+  "DDAHU (dual-duct AHU).accuracy": 0.3333,
+  "DDAHU (dual-duct AHU).correct_diagnosis": 0.5,
+  "DDAHU (dual-duct AHU).fpr": 1.0,
+  "DDAHU (dual-duct AHU).tpr": 0.5,
+  "FCU (fan-coil unit).accuracy": 1.0,
+  "FCU (fan-coil unit).correct_diagnosis": 1.0,
+  "FCU (fan-coil unit).fpr": 0.0,
+  "FCU (fan-coil unit).tpr": 1.0,
+  "SDAHU (single-duct AHU).accuracy": 0.8333,
+  "SDAHU (single-duct AHU).correct_diagnosis": 0.8,
+  "SDAHU (single-duct AHU).fpr": 0.0,
+  "SDAHU (single-duct AHU).tpr": 0.8,
+  "drift.coil_valve_drift.fpr": 0.0,
+  "drift.coil_valve_drift.recall": 0.0,
+  "drift.economizer_damper_drift.fpr": 0.0,
+  "drift.economizer_damper_drift.recall": 0.0,
+  "pooled.accuracy": 0.7692,
+  "pooled.correct_diagnosis": 0.8,
+  "pooled.fpr": 0.3333,
+  "pooled.tpr": 0.8
+}

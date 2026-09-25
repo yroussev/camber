@@ -67,6 +67,34 @@ Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old 
 - `CO2` / `OUTDOOR_CO2` physical bounds in the sensor-health gate, and stuck-flat detection for
   zone CO₂.
 
+### Hardening — benchmarks and validation claims
+- **The benchmark gates never saw a newly scored detector.** `check_against_baseline` only walked
+  keys already in the baseline, so a metric the baseline had never seen was silently ungated — six
+  synthetic-suite metrics (the three reset rules added in 0.55–0.56), fifteen BDG2 ρ metrics (0.80.0), and
+  every LBNL metric, because **no LBNL baseline was ever committed**: CI's LBNL step took its "seed
+  a baseline" branch on every run and gated nothing. The check now lists `unbaselined` metrics and,
+  with `strict_new=True` (all four gate scripts), fails on them. `examples/lbnl_fdd/benchmark-baseline.json`
+  is committed for the CI-fetched families; the synthetic and BDG2 baselines are refreshed (no
+  existing value changed). New `eval.baseline_report` replaces four copies of the gate printout,
+  one of which dropped missing metrics without naming them.
+- **Declined drift cases were scored as correct negatives.** `driftvalidation.evaluate` treated a
+  detector that could not test its claim (no fittable baseline, nothing scoreable) as "did not
+  fire": a healthy decline became a true negative and a faulted one a miss. `duct_static_drift`
+  declines all six LBNL cases and was reported as **FPR 0.0 / specificity** it never measured.
+  Declines are now excluded and counted in `DetectorScore.n_declined`; an unmeasured FPR is
+  omitted, not 0.0. Two plumbing tests had only passed because of this and now test a detector that
+  actually scores.
+- **`docs/VALIDATION.md` said "real TPR" for drift detectors whose real-data recall is zero.** The
+  measured numbers were never written down. Now they are: SDAHU `coil_valve_drift` **0/1**,
+  `economizer_damper_drift` **0/4**; FPU `vav_airflow_drift` **0/4**, `vav_reheat_valve_drift`
+  **0/5**; chiller plant `chiller_efficiency` **TPR 5/9, FPR 1/2**, and `cooling_tower_approach`
+  does not score at all. The reheat-valve result (−0% even for a valve stuck open) looks like a
+  detector or mapping defect and is being investigated separately.
+- `RELEASING.md` gains the two lessons of the 0.80/0.81 release: push stacked tags oldest-first and
+  wait for each `image` job (`:latest` otherwise goes to whichever finishes last), and review the
+  conda-forge autotick PR's dependencies. `deploy/conda/recipe.yaml` is now documented as a mirror of
+  the feedstock's recipe and synced to 0.81.0.
+
 ### Notes
 - **Validated on simulation only.** No licence-clean public dataset carries both CO₂ and OA trends:
   the CC-BY LBNL AHU and fan-coil exports have OA flow and damper position but no CO₂ column.
@@ -79,7 +107,7 @@ Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old 
   occupancy; that can mimic DCV and is not detected.
 - The system-level ASHRAE 62.1 VRP (the shipped check compares an air handler's OA to one zone's
   requirement) is next.
-- Five new public names → `tests/public_api_snapshot.json` regenerated. No new dependency.
+- Six new public names → `tests/public_api_snapshot.json` regenerated. No new dependency.
 
 ## [0.81.0] — 2026-09-13
 

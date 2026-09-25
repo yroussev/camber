@@ -98,11 +98,12 @@ def _f1(precision: float, recall: float) -> float:
 class DetectorScore:
     """Precision/recall/F1 over a set of labelled cases, plus the confusion counts."""
 
-    n: int
+    n: int  # cases scored (declined cases excluded)
     confusion: Confusion
     precision: float
     recall: float
     f1: float
+    n_declined: int = 0  # cases where the detector declined -- neither a detection nor a negative
 
     def as_dict(self) -> dict:
         """Flat, JSON-friendly metrics (confusion counts + derived rates)."""
@@ -112,6 +113,7 @@ class DetectorScore:
             "precision": self.precision,
             "recall": self.recall,
             "f1": self.f1,
+            "n_declined": self.n_declined,
         }
 
 
@@ -127,18 +129,32 @@ def evaluate(
     store) -- called once per case so no case's frozen baseline leaks into another. Each case is run
     through ``analyze_periods`` and its Finding's severity is reduced to a detection via
     :func:`positive_from_severity`; the detections are compared to the ``fault`` labels.
+
+    A case the detector **declines** (``metrics["declined"]``: it could not test its claim -- no
+    fittable baseline, nothing scoreable in the window) is left out of the confusion matrix and
+    counted in ``n_declined``. Scoring it would book a healthy decline as a true negative and a
+    faulted one as a miss -- a specificity the detector never demonstrated.
     """
     cases = list(cases)
     labels, preds = [], []
+    n_declined = 0
     for case in cases:
         rule = build_rule()
         finding = rule.analyze_periods(case.equip, case.baseline, case.current)
+        if (getattr(finding, "metrics", None) or {}).get("declined"):
+            n_declined += 1
+            continue
         labels.append(bool(case.fault))
         preds.append(positive_from_severity(finding.severity, min_severity=min_severity))
     c = confusion(labels, preds)
     precision, recall = _precision(c), c.true_positive_rate
     return DetectorScore(
-        n=len(cases), confusion=c, precision=precision, recall=recall, f1=_f1(precision, recall)
+        n=len(labels),
+        confusion=c,
+        precision=precision,
+        recall=recall,
+        f1=_f1(precision, recall),
+        n_declined=n_declined,
     )
 
 

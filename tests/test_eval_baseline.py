@@ -70,3 +70,40 @@ def test_benchmark_metrics_dict_shape():
     m = bench.metrics_dict("sdahu", records)
     assert set(m) == {"sdahu.tpr", "sdahu.fpr", "sdahu.accuracy", "sdahu.correct_diagnosis"}
     assert all(isinstance(v, float) for v in m.values())
+
+
+def test_unbaselined_metric_is_reported_not_silently_passed():
+    """A newly scored detector the baseline has never seen is not gated -- say so."""
+    cur = dict(_BASE)
+    cur["new_rule.tpr"] = 0.0
+    lax = check_against_baseline(cur, _BASE)
+    assert lax.passed and lax.unbaselined == ["new_rule.tpr"]
+    strict = check_against_baseline(cur, _BASE, strict_new=True)
+    assert not strict.passed and strict.unbaselined == ["new_rule.tpr"]
+    assert check_against_baseline(dict(_BASE), _BASE, strict_new=True).passed
+
+
+def test_unbaselined_ignored_when_metrics_restricted():
+    cur = dict(_BASE)
+    cur["new_rule.tpr"] = 0.0
+    chk = check_against_baseline(cur, _BASE, metrics=list(_BASE)[:1], strict_new=True)
+    assert chk.passed and chk.unbaselined == []
+
+
+def test_baseline_report_lists_regressions_missing_and_unbaselined():
+    from camber.eval import baseline_report
+
+    cur = {k: v for k, v in _BASE.items()}
+    first = next(iter(cur))
+    cur.pop(first)
+    cur["new_rule.tpr"] = 1.0
+    text = baseline_report(check_against_baseline(cur, _BASE, strict_new=True), label="x", tol=0.0)
+    assert "GATE FAILED" in text and "missing from current run" in text
+    assert "NOT gated" in text and "new_rule.tpr" in text
+    ok = baseline_report(check_against_baseline(dict(_BASE), _BASE), label="x", tol=0.0)
+    assert "gate OK" in ok and "NOT gated" not in ok
+
+
+def test_baseline_check_positional_backcompat():
+    chk = BaselineCheck(True, [], [], 3, [])
+    assert chk.unbaselined == [] and chk.as_dict()["unbaselined"] == []

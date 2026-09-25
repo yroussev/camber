@@ -458,6 +458,7 @@
     "BaselineCheck",
     "BenchmarkReport",
     "Confusion",
+    "baseline_report",
     "benchmark",
     "check_against_baseline",
     "confusion",

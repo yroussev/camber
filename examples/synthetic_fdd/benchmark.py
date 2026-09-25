@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from camber import faultlab  # noqa: E402
-from camber.eval import benchmark, check_against_baseline  # noqa: E402
+from camber.eval import baseline_report, benchmark, check_against_baseline  # noqa: E402
 
 
 def metrics_dict() -> dict:
@@ -110,18 +110,10 @@ def main(argv=None) -> int:
         json.dump(m, open(args.update_baseline, "w"), indent=2, sort_keys=True)
         print(f"wrote baseline -> {args.update_baseline}")
     if args.gate:
-        chk = check_against_baseline(m, json.load(open(args.gate)), tol=args.tol)
+        chk = check_against_baseline(m, json.load(open(args.gate)), tol=args.tol, strict_new=True)
+        print(baseline_report(chk, label="synthetic benchmark", tol=args.tol))
         if not chk.passed:
-            print(f"\n✗ SYNTHETIC BENCHMARK REGRESSION (tol {args.tol}):")
-            for k, b, c, d in chk.regressions:
-                print(f"    {k}: {b} -> {c}  ({d:+})")
-            for k in chk.missing:
-                print(f"    {k}: missing from current run")
             return 2
-        print(
-            f"\n✓ gate OK — {chk.unchanged} stable, "
-            f"{len(chk.improvements)} improved, none regressed"
-        )
     return 0
 
 

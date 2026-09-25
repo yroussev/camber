@@ -61,9 +61,12 @@ rule library against public labeled data.
 
 `benchmark.py` also scores the AHU air-side **drift** detectors the SDAHU data can support, via
 `camber.driftvalidation` (baseline = the fault-free annual run, current = each labeled fault run):
-**coil-valve drift** (target = coil-valve leak — a real TPR), **economizer-damper drift** (target =
-stuck damper — real TPR *if* `OA_DMPR` is the command; otherwise it reduces to the OA-fraction level
-check), and **duct-static-control drift** (no labeled fault in the fetched set → specificity only).
+**coil-valve drift** (target = coil-valve leak), **economizer-damper drift** (target = stuck damper;
+only meaningful *if* `OA_DMPR` is the command — otherwise it reduces to the OA-fraction level check),
+and **duct-static-control drift** (no labeled fault in the fetched set). Measured today: **recall 0/1
+and 0/4** — the faults move the drift statistic (up to ~2σ) but not past the warn threshold — and
+duct-static drift declines every case, so it has no specificity number either. Declined cases are
+excluded from the score and reported as `n_declined`.
 Fan-efficiency and filter-loading drift need fan-power / filter-DP points the SDAHU simulation does
 not export, so they stay synthetic-only; the multi-zone rogue/cohort census and the reset-request
 detectors aren't validatable on a single simulated AHU at all. See `docs/VALIDATION.md` for the full

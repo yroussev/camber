@@ -10,10 +10,11 @@ correct-diagnosis rate.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 __all__ = [
     "Confusion",
+    "baseline_report",
     "confusion",
     "correct_diagnosis_rate",
     "BenchmarkReport",
@@ -173,6 +174,7 @@ class BaselineCheck:
     improvements: list  # [(metric, baseline, current, delta)] better than tol
     unchanged: int
     missing: list  # metrics present in the baseline but absent now (treated as failing)
+    unbaselined: list = field(default_factory=list)  # metrics now emitted but never baselined
 
     def as_dict(self) -> dict:
         return {
@@ -181,6 +183,7 @@ class BaselineCheck:
             "improvements": self.improvements,
             "unchanged": self.unchanged,
             "missing": self.missing,
+            "unbaselined": self.unbaselined,
         }
 
 
@@ -191,6 +194,7 @@ def check_against_baseline(
     tol: float = 0.02,
     lower_is_better=_LOWER_IS_BETTER,
     metrics=None,
+    strict_new: bool = False,
 ) -> BaselineCheck:
     """Compare flat metric dicts and flag regressions beyond ``tol`` (for CI gating).
 
@@ -199,7 +203,13 @@ def check_against_baseline(
     metric regresses when it *falls* past ``tol``. A baseline metric missing from ``current``
     counts as a failure (a detector was removed/renamed). ``metrics`` restricts the comparison to
     a subset. ``passed`` is true when there are no regressions and nothing missing.
+
+    A metric in ``current`` that the baseline has never seen is listed in ``unbaselined`` -- it is
+    **not gated**, so a newly scored detector can regress to zero without failing anything. With
+    ``strict_new=True`` any unbaselined metric also fails the check, forcing the baseline to be
+    refreshed when coverage grows. (Ignored when ``metrics`` restricts the comparison.)
     """
+    unbaselined = [] if metrics else sorted(k for k in current if k not in baseline)
     keys = list(metrics) if metrics else list(baseline)
     regressions, improvements, missing, unchanged = [], [], [], 0
     for k in keys:
@@ -221,9 +231,30 @@ def check_against_baseline(
         else:
             unchanged += 1
     return BaselineCheck(
-        passed=(not regressions and not missing),
+        passed=(not regressions and not missing and not (strict_new and unbaselined)),
         regressions=regressions,
         improvements=improvements,
         unchanged=unchanged,
         missing=missing,
+        unbaselined=unbaselined,
     )
+
+
+def baseline_report(chk: BaselineCheck, *, label: str, tol: float) -> str:
+    """The gate verdict for a :class:`BaselineCheck`, as the benchmark scripts print it."""
+    if chk.passed:
+        lines = [
+            f"\n✓ {label} gate OK — {chk.unchanged} stable, "
+            f"{len(chk.improvements)} improved, none regressed"
+        ]
+    else:
+        lines = [f"\n✗ {label} GATE FAILED (tol {tol}):"]
+        lines += [f"    {k}: {b} -> {c}  ({d:+})" for k, b, c, d in chk.regressions]
+        lines += [f"    {k}: missing from current run" for k in chk.missing]
+    if chk.unbaselined:
+        lines.append(
+            f"  {len(chk.unbaselined)} metric(s) not in the baseline, so NOT gated -- refresh it "
+            "with --update-baseline:"
+        )
+        lines += [f"    {k}" for k in chk.unbaselined]
+    return "\n".join(lines)

@@ -1,13 +1,13 @@
-# conda-forge recipe for camber-toolkit (v1 recipe.yaml / rattler-build). This is the
-# source-of-truth copy submitted to conda-forge/staged-recipes to create the feedstock;
-# after the feedstock exists, regro-cf-autotick-bot opens version-bump PRs on each PyPI
-# release. To retarget: bump context.version and refresh source.sha256 for that sdist:
+# conda-forge recipe for camber-toolkit (v1 recipe.yaml / rattler-build). A MIRROR of
+# conda-forge/camber-toolkit-feedstock's recipe/recipe.yaml, which is the source of truth since the
+# feedstock went live (2026-09-24). New versions land there as regro-cf-autotick-bot PRs after each
+# PyPI release; after merging one, copy the version + sha256 here so the two don't drift:
 #   curl -sL https://pypi.org/pypi/camber-toolkit/<version>/json \
 #     | jq -r '.urls[] | select(.packagetype=="sdist") | .digests.sha256'
-# See docs/DEPLOY.md.
+# See docs/DEPLOY.md and RELEASING.md.
 context:
   name: camber-toolkit
-  version: "0.79.0"
+  version: "0.81.0"
 
 package:
   name: ${{ name|lower }}
@@ -15,7 +15,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/${{ name|replace('-', '_') }}-${{ version }}.tar.gz
-  sha256: f2d0f61de20e0a418d3e1724a8734e5498baa1e994fad5229536a15e60423708
+  sha256: 36dcb3b80d7311ae0b399ebacffa7b70f9b6c41fe9d3690425ff137d58e83c28
 
 build:
   noarch: python

@@ -182,11 +182,13 @@ def metrics_dict(label, records):
 #
 # Only the AHU air-side *drift* detectors whose required points LBNL actually exports can be scored
 # on real labeled faults: coil-valve drift (target = valve leak) and economizer-damper drift
-# (target = stuck damper) get real TPR; duct-static-control drift has no labeled fault in the
-# set, so it contributes a specificity (false-positive) number only. Fan-efficiency and filter
-# drift need POWER / FILTER_DIFF_PRESS points the SDAHU sim does not export -> synthetic-only
-# (camber.faultlab). The multi-zone rogue/cohort census and the reset-request detectors are not
-# validatable on a single simulated AHU at all. See docs/VALIDATION.md for the full matrix.
+# (target = stuck damper) get a real recall -- currently 0/1 and 0/4, see docs/VALIDATION.md.
+# Duct-static-control drift has no labeled fault in the set and declines every case, so it
+# contributes no number at all (declines are excluded, never scored as negatives).
+# Fan-efficiency and filter drift need POWER / FILTER_DIFF_PRESS points the SDAHU sim does not
+# export -> synthetic-only (camber.faultlab). The multi-zone rogue/cohort census and the
+# reset-request detectors are not validatable on a single simulated AHU at all. See
+# docs/VALIDATION.md for the full matrix.
 #
 # A drift detector freezes its baseline the first time it sees a period, so each case pairs the
 # fault-free run's first 60% (baseline) with a *current* window: the fault-free tail (a genuine
@@ -277,11 +279,12 @@ def score_drift(frames, detectors=None, *, fault_free="AHU_annual.csv", label="A
             continue
         score = evaluate(det["build"], cases)
         c = score.confusion
-        fpr = round(c.fp / (c.fp + c.tn), 4) if (c.fp + c.tn) else 0.0
+        # no negative case evaluated -> no specificity measured (NaN, omitted), never a false 0.0
+        fpr = round(c.fp / (c.fp + c.tn), 4) if (c.fp + c.tn) else float("nan")
         kind = "specificity" if det["positive"] is None else "TPR"
         print(
             f"  {name:24s} recall {score.recall} precision {score.precision} "
-            f"f1 {score.f1} fpr {fpr}  (n={score.n}, {kind})"
+            f"f1 {score.f1} fpr {fpr}  (n={score.n} scored, {score.n_declined} declined, {kind})"
         )
         # omit NaN metrics (a specificity-only detector has no recall/precision) -> valid JSON
         for key, val in (
@@ -481,21 +484,17 @@ def main(argv=None) -> int:
         json.dump(metrics, open(args.update_baseline, "w"), indent=2, sort_keys=True)
         print(f"wrote baseline -> {args.update_baseline}")
     if args.gate:
-        from camber.eval import check_against_baseline
+        from camber.eval import baseline_report, check_against_baseline
 
         baseline = json.load(open(args.gate))
-        chk = check_against_baseline(metrics, baseline, tol=args.tol)
+        # The committed baseline covers what CI fetches (--families). The opt-in FPU / chiller
+        # subsets (~7 GB extracted) are too large for the CI cache, so their metrics are never
+        # baselined: with them present locally, report them as ungated rather than fail.
+        opt_in = [d for d in ("fpu", "chiller") if os.path.isdir(os.path.join(DATA, d))]
+        chk = check_against_baseline(metrics, baseline, tol=args.tol, strict_new=not opt_in)
+        print(baseline_report(chk, label="LBNL benchmark", tol=args.tol))
         if not chk.passed:
-            print(f"\n✗ BENCHMARK REGRESSION (tol {args.tol}):")
-            for k, b, c, d in chk.regressions:
-                print(f"    {k}: {b} -> {c}  ({d:+})")
-            for k in chk.missing:
-                print(f"    {k}: missing from current run")
             return 2
-        print(
-            f"\n✓ benchmark gate OK — {chk.unchanged} stable, "
-            f"{len(chk.improvements)} improved, none regressed"
-        )
     return 0
 
 

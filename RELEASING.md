@@ -48,6 +48,23 @@ Release. One-time setup before the first tag:
 
 Then a release is just `git tag -a v<ver> -m "…" && git push origin v<ver>`.
 
+### Stacked releases — push tags oldest first, one at a time
+
+When several held versions go out together, push the tags **in version order and wait for each
+release run's `image` job to finish before pushing the next**. Every run pushes the GHCR image's
+`:latest` tag, and runs for different tags proceed in parallel, so if an older version's image
+finishes last it silently takes `:latest`. The `release` workflow's concurrency group is per-tag
+and never cancels, so waiting is the only ordering there is.
+
+### After the release — conda-forge
+
+`regro-cf-autotick-bot` opens a version-bump PR on
+[`conda-forge/camber-toolkit-feedstock`](https://github.com/conda-forge/camber-toolkit-feedstock)
+a few hours after the PyPI upload. Review it before merging: the bot bumps only version + `sha256`
+and does not notice a changed dependency, so compare the recipe's `requirements.run` with
+`pyproject.toml`. Then mirror the version + hash into `deploy/conda/recipe.yaml`. See
+[docs/DEPLOY.md](docs/DEPLOY.md#conda-forge).
+
 ## Manual path — tag and GitHub release
 
 ```sh

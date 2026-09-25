@@ -100,18 +100,31 @@ def test_build_drift_cases_empty_without_fault_free():
 
 def test_evaluate_confusion_totals_match_case_count():
     B = _bench()
+    det = B.DRIFT_DETECTORS["economizer_damper_drift"]  # scores every case on this fixture
+    cases = B.build_drift_cases(_frames(), det)
+    score = evaluate(det["build"], cases)
+    assert score.n + score.n_declined == len(cases)
+    c = score.confusion
+    assert c.tp + c.fp + c.tn + c.fn == score.n
+
+
+def test_declined_cases_are_not_scored_as_negatives():
+    """coil_valve_drift can't fit this fixture's baseline and declines every case. Those declines
+    must not become true negatives (a specificity it never demonstrated) or misses."""
+    B = _bench()
     det = B.DRIFT_DETECTORS["coil_valve_drift"]
     cases = B.build_drift_cases(_frames(), det)
     score = evaluate(det["build"], cases)
-    assert score.n == len(cases)
-    c = score.confusion
-    assert c.tp + c.fp + c.tn + c.fn == len(cases)
+    assert score.n == 0 and score.n_declined == len(cases) == 3
+    assert score.confusion.tn == 0 and score.confusion.fn == 0
 
 
 def test_score_drift_emits_valid_metric_keys():
     B = _bench()
     m = B.score_drift(_frames())
-    assert any(k.startswith("drift.coil_valve_drift.") for k in m)
+    assert any(k.startswith("drift.economizer_damper_drift.") for k in m)
+    # an all-declined detector measured nothing -> it emits nothing (not a 0.0 FPR)
+    assert not any(k.startswith("drift.coil_valve_drift.") for k in m)
     # every emitted value is a finite rate in [0, 1] (NaN metrics are omitted, keeping JSON valid)
     for v in m.values():
         assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
