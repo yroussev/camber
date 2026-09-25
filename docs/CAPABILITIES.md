@@ -164,10 +164,12 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   quantity). Every estimate carries its `basis` + `assumptions` and returns *uncosted* (never a
   fabricated figure) when the sizing it needs is missing.
 - **Ventilation (ASHRAE 62.1)** — `ventilation.assess_62_1` (Ventilation Rate Procedure: required vs
-  delivered OA, deficit) and `assess_dcv` (DCV modulation vs occupancy/CO₂), with the
-  `VentilationRateProcedure` / `DemandControlledVentilation` rules and `Role.OA_AIRFLOW`. Flags:
-  `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `min_corr`, `min_modulation`. See
-  **[VENTILATION.md](VENTILATION.md)**.
+  delivered OA, deficit) and `assess_dcv` (is OA raised when CO₂/occupancy is high, judged on
+  occupied, non-economizing samples via `economizer_active_mask`), with the
+  `VentilationRateProcedure` / `DemandControlledVentilation` rules, the `DcvSystemVerification`
+  fleet rule (zone CO₂ joined to the serving air handler's OA via the served-by topology) and
+  `Role.OA_AIRFLOW`. Flags: `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `co2_setpoint`,
+  `oa_floor`, `min_modulation`, `min_lift_ppm`. See **[VENTILATION.md](VENTILATION.md)**.
 - **Accuracy + CI gating** — `eval.benchmark` + `validation.metrics_with_ci` (Wilson CIs), and
   `eval.check_against_baseline` to gate accuracy (TPR/FPR/diagnosis) against a committed baseline in
   CI (`--json` / `--gate` / `--tol` / `--update-baseline`). See **[VALIDATION.md](VALIDATION.md)**.

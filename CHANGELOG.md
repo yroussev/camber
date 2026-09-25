@@ -4,6 +4,83 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.82.0] — 2026-09-25
+
+**DCV verification judged the economizer, not the DCV.** On a normally modelled building
+`dcv_verification` evaluated nothing: CO₂ lives on the VAV zones, OA on the air handler, and no
+equipment frame had both. Where it did run, it scored whatever moved OA — usually the economizer.
+
+Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old check vs new rule:
+
+| Case | 0.81.0 | 0.82.0 |
+|---|---|---|
+| Working proportional DCV + economizer | uncorrelated (corr −0.81) | functioning (ok) |
+| Working PI DCV + economizer | uncorrelated (corr −0.82) | functioning (ok) |
+| Static DCV + economizer | uncorrelated (corr −0.78) | **static (warn)** |
+| Static DCV + morning warm-up closure, no WARMUP flag | **functioning** (corr 0.71) | static (warn) |
+| Working DCV, lightly occupied building | **static** | insufficient (info) |
+
+### Fixed
+- **Economizer periods were judged as DCV.** OA follows `max(economizer, DCV minimum)`; while
+  economizing it tracks outdoor temperature. Those samples are now excluded, from `ECON_CMD` (any
+  nonzero hourly mean) or, failing that, inferred from `OAT` + `HEAT_VALVE`. With no economizer
+  evidence at all, an "uncorrelated" verdict drops to `info` with a caveat.
+- **A closed damper made a stuck DCV look responsive.** A warm-up closure inside the occupied
+  window put OA at 0 while CO₂ was low, which read as a response. OA at or below 2% of its p95 is
+  now excluded and reported as `closed_pct`. Fan-off / partial-fan hours (`SUPPLY_FAN_STATUS`) and
+  `WARMUP` / `COOLDOWN` are excluded too.
+- **The `OCCUPANCY` point was loaded and never used.** It now gates the occupied mask. The rule's
+  documented fallback to occupancy *as demand* could not run (CO₂ is required) and is no longer
+  claimed; binary occupancy demand still works through `assess_dcv`.
+- **Flat or low demand produced a verdict.** A building whose CO₂ never reached the level where DCV
+  should respond read "static"; flat CO₂ read "uncorrelated". Both are now `insufficient`, with a
+  `reason`.
+- **One spike could flip the verdict.** `modulation` used raw max/min; it now uses p5–p95, and the
+  "OA at minimum" band for the CO₂-breach check is built from the robust minimum.
+- **Duplicate timestamps crashed the rule** (`cannot reindex on an axis with duplicate labels`).
+
+### Changed
+- `assess_dcv`'s verdict compares CO₂ when OA was raised with CO₂ when OA sat at its floor
+  (`demand_lift`, ppm) instead of a Pearson correlation. Correlation is still reported, as a
+  diagnostic. `min_corr` is **deprecated** and ignored (warns; removal in 1.0).
+- `dcv_verification` returns nothing for a frame with CO₂ but no OA signal (a VAV zone) instead of
+  an `info` "declined" finding on every zone; `dcv_system_verification` reports zone coverage.
+- `modulation` is now the robust p5–p95 range, so its values differ from 0.81.0.
+
+### Added
+- **`dcv_system_verification`** (`DcvSystemVerification`), an auto-registered fleet rule: zone CO₂
+  joined to the serving air handler's OA through the served-by topology (a naming-heuristic
+  grouping caps severity at `warn`), per-timestamp maximum across zones, with zone sensors that are
+  implausible, stuck or offset when unoccupied excluded. One finding with a `per_ahu` breakdown.
+- **`economizer_active_mask`**, `DEFAULT_DCV_ENGAGE_PPM`, `DEFAULT_ECON_HIGH_LIMIT_F`.
+- OA-floor sub-checks — `below_floor_pct` (62.1 dynamic-reset floor `Ra·Az`) and
+  `excess_at_low_demand_pct` (DCV not saving energy) — via `oa_floor` / the rule's `oa_floor_cfm`
+  (a number or `{equip: cfm}`); `breach_fault_pct`, `below_floor_fault_pct`, `excess_warn_pct`.
+- New `DcvResult` fields (all defaulted, so positional construction still works): `demand_lift`,
+  `reason`, `demand_span`, `oa_low_demand`, `oa_high_demand`, `n_econ_excluded`, `econ_excluded`,
+  `below_floor_pct`, `excess_at_low_demand_pct`, `closed_pct`.
+- **`faultlab.dcv_sim`** — the simulator above (proportional / PI / static DCV, economizer, warm-up
+  closure, fan schedule). The `dcv_verification` benchmark scenario now uses it: TPR 1.0 / FPR 0.0.
+- `OA_AIRFLOW` and `AIRFLOW` are optional roles on the AHU template (`OA_AIRFLOW` on RTU), so an
+  air handler's OA flow is discovered at all. Completeness scores for AHUs and RTUs without those
+  points go down.
+- `CO2` / `OUTDOOR_CO2` physical bounds in the sensor-health gate, and stuck-flat detection for
+  zone CO₂.
+
+### Notes
+- **Validated on simulation only.** No licence-clean public dataset carries both CO₂ and OA trends:
+  the CC-BY LBNL AHU and fan-coil exports have OA flow and damper position but no CO₂ column.
+- **Pearson correlation was not the main defect.** In simulation an integral loop still correlates
+  at 0.48–0.66 once the economizer and closures are excluded. The economizer, closed-damper samples
+  and outliers were what broke the old check.
+- **Without `ECON_CMD`, expect `insufficient` more often.** The OAT-only fallback discards all mild
+  weather. That is the honest answer.
+- A fixed OA damper on a variable-speed fan moves OA flow with fan speed, which tends to follow
+  occupancy; that can mimic DCV and is not detected.
+- The system-level ASHRAE 62.1 VRP (the shipped check compares an air handler's OA to one zone's
+  requirement) is next.
+- Five new public names → `tests/public_api_snapshot.json` regenerated. No new dependency.
+
 ## [0.81.0] — 2026-09-13
 
 **Hourly NMEC, and three documented claims that were false.** 0.80.0 fixed the savings-uncertainty

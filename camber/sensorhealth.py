@@ -99,6 +99,9 @@ PHYSICAL_BOUNDS: dict = {
     Role.HW_FLOW: (-1.0, 1e6),
     # pump differential head (psi) — wide; only rejects dropouts / impossible values
     Role.PUMP_HEAD: (-5.0, 300.0),
+    # CO₂, ppm -- nothing real sits below ~250 (outdoor is ~420); above 10000 is a sentinel
+    Role.CO2: (250.0, 10000.0),
+    Role.OUTDOOR_CO2: (250.0, 1000.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -125,6 +128,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.PUMP_HEAD,
         Role.POWER,
         Role.DUCT_STATIC,
+        Role.CO2,
     }
 )
 

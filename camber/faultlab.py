@@ -33,6 +33,7 @@ from .model.roles import Role
 
 __all__ = [
     "SCENARIOS",
+    "dcv_sim",
     "labeled_records",
     "g36_accuracy",
     "cross_fire",
@@ -257,14 +258,88 @@ def _co2(idx, *, faulty):
     return pd.DataFrame({Role.CO2: np.full(n, co2)}, index=idx)
 
 
-def _dcv(idx, *, faulty):
-    n = len(idx)
-    co2 = 400 + 400 * np.abs(np.sin(np.linspace(0, 6 * (n / 60), n)))
-    # fault: OA airflow flat while CO2 swings (DCV not modulating); clean: OA tracks CO2
-    oa = np.full(n, 250.0) if faulty else 100.0 + 0.3 * co2
-    return pd.DataFrame(
-        {Role.OA_AIRFLOW: pd.Series(oa, index=idx), Role.CO2: pd.Series(co2, index=idx)}, index=idx
+def dcv_sim(
+    idx,
+    *,
+    control: str = "proportional",
+    economizer: bool = True,
+    warmup_closure: bool = False,
+    occupancy_scale: float = 1.0,
+    engage_ppm: float = 700.0,
+    full_ppm: float = 1100.0,
+    co2_setpoint: float = 1000.0,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """Simulate one air handler's OA under DCV + an economizer, with the zone CO₂ it produces.
+
+    A well-mixed zone mass balance ``V·dC/dt = N·G·10⁶ − Q·(C − C_out)`` (``G`` = 0.0105 cfm of
+    CO₂ per person, a sedentary-adult generation rate) stepped at 5 minutes and averaged to
+    ``idx``'s frequency. The OA command is ``max(economizer, DCV)`` while the fan runs:
+
+    - ``control="proportional"`` -- OA ramps linearly from the area floor at ``engage_ppm`` to
+      design OA at ``full_ppm`` (a CO₂-reset DCV);
+    - ``control="pi"`` -- an integral-dominated loop holding CO₂ at ``co2_setpoint``;
+    - ``control="static"`` -- OA fixed at design (DCV not functioning).
+
+    The economizer runs when 50 °F < OAT < 70 °F and the heating valve is shut; ``warmup_closure``
+    holds the damper shut from 07:00 to 08:00 with the ``WARMUP`` flag set. Returns a role frame
+    with OA_AIRFLOW, CO2, OAT, HEAT_VALVE, ECON_CMD, SUPPLY_FAN_STATUS and WARMUP. Deterministic
+    for a given ``seed``.
+    """
+    idx = pd.DatetimeIndex(idx)
+    fine = pd.date_range(idx[0], idx[-1] + (idx[1] - idx[0]), freq="5min", inclusive="left")
+    rng = np.random.default_rng(seed)
+    hour = fine.hour + fine.minute / 60.0
+    weekday = fine.dayofweek < 5
+    day_n = (fine.normalize() - fine[0].normalize()).days.to_numpy()
+    day_scale = (0.55 + 0.45 * rng.random(int(day_n.max()) + 1))[day_n] * occupancy_scale
+    shape = np.clip(np.minimum(hour - 7.5, 17.5 - hour), 0.0, 1.0)  # ramps in/out 07:30-17:30
+    shape = shape * np.where((hour >= 12) & (hour < 13), 0.6, 1.0)  # lunch dip
+    people = np.where(weekday, 60.0 * shape * day_scale, 0.0)
+    fan = weekday & (hour >= 6) & (hour < 19)
+    oat = 60.0 + 16.0 * np.sin(2 * np.pi * (hour - 9) / 24) + 6.0 * np.sin(2 * np.pi * day_n / 9)
+    heat = np.where(fan & (oat < 50.0), np.clip((50.0 - oat) * 8.0, 0.0, 100.0), 0.0)
+    warm = fan & (hour >= 7) & (hour < 8) if warmup_closure else np.zeros(len(fine), dtype=bool)
+    econ_on = economizer & fan & ~warm & (oat > 50.0) & (oat < 70.0) & (heat <= 0.0)
+    econ_oa = np.where(econ_on, 2500.0 + 120.0 * (70.0 - oat), 0.0)
+
+    floor, design, vol, c_out, gen = 720.0, 1020.0, 50_000.0, 420.0, 0.0105e6
+    c = c_out
+    oa_pi = floor
+    oa_out = np.empty(len(fine))
+    co2 = np.empty(len(fine))
+    for k in range(len(fine)):
+        if control == "static":
+            dcv = design
+        elif control == "pi":
+            oa_pi = float(np.clip(oa_pi + 1.5 * (c - co2_setpoint), floor, 2.0 * design))
+            dcv = oa_pi
+        else:
+            frac = np.clip((c - engage_ppm) / (full_ppm - engage_ppm), 0.0, 1.0)
+            dcv = floor + (design - floor) * frac
+        q = max(dcv, econ_oa[k]) if fan[k] and not warm[k] else 0.0
+        q_eff = q + 60.0  # infiltration keeps an unventilated space from rising without bound
+        c = c + 5.0 * (people[k] * gen - q_eff * (c - c_out)) / vol
+        oa_out[k] = q
+        co2[k] = c + rng.normal(0.0, 8.0)
+    fine_frame = pd.DataFrame(
+        {
+            Role.OA_AIRFLOW: oa_out,
+            Role.CO2: co2,
+            Role.OAT: oat,
+            Role.HEAT_VALVE: heat,
+            Role.ECON_CMD: econ_on.astype(float),
+            Role.SUPPLY_FAN_STATUS: fan.astype(float),
+            Role.WARMUP: warm.astype(float),
+        },
+        index=fine,
     )
+    return fine_frame.resample(idx.freq or pd.infer_freq(idx)).mean().reindex(idx)
+
+
+def _dcv(idx, *, faulty):
+    # fault: DCV fixed at design OA while an economizer runs; clean: a working CO2 reset
+    return dcv_sim(idx, control="static" if faulty else "proportional")
 
 
 def _chw_reset(idx, *, faulty):

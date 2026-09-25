@@ -424,6 +424,7 @@ RECOMMENDERS = {
     "boiler_short_cycle": _rec_boiler_cycle,
     "leaking_valve": _rec_leaking_valve,
     "dcv_verification": _rec_dcv,
+    "dcv_system_verification": _rec_dcv,
 }
 
 

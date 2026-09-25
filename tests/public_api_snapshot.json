@@ -494,6 +494,7 @@
     "SCENARIOS",
     "coverage",
     "cross_fire",
+    "dcv_sim",
     "g36_accuracy",
     "labeled_records",
     "targets"
@@ -1605,6 +1606,7 @@
     "WATER_CONFOUND"
   ],
   "camber.rules.ventilation_rule": [
+    "DcvSystemVerification",
     "DemandControlledVentilation",
     "VentilationRateProcedure"
   ],
@@ -1765,12 +1767,15 @@
     "simulate_case"
   ],
   "camber.ventilation": [
+    "DEFAULT_DCV_ENGAGE_PPM",
+    "DEFAULT_ECON_HIGH_LIMIT_F",
     "DEFAULT_EZ",
     "DcvResult",
     "OA_RATES_62_1",
     "VrpResult",
     "assess_62_1",
     "assess_dcv",
+    "economizer_active_mask",
     "oa_rates_for",
     "required_oa_cfm"
   ],

@@ -131,6 +131,8 @@ _TEMPLATE_LIST = (
                 Role.OAT,
                 Role.OCCUPANCY,
                 Role.ECON_CMD,
+                Role.OA_AIRFLOW,
+                Role.AIRFLOW,
             }
         ),
     ),
@@ -219,6 +221,7 @@ _TEMPLATE_LIST = (
                 Role.CONDENSER_FAN_STATUS,
                 Role.HEAT_STAGE,
                 Role.OA_DAMPER,
+                Role.OA_AIRFLOW,
                 Role.ECON_CMD,
                 Role.OAT,
                 Role.RETURN_AIR_TEMP,

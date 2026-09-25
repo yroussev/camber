@@ -47,7 +47,7 @@ from .simul_hc import SimultaneousHeatCool
 from .static_rule import DamperCensus
 from .staticreset_rule import StaticPressureReset
 from .unmet_rule import UnmetHours
-from .ventilation_rule import DemandControlledVentilation
+from .ventilation_rule import DcvSystemVerification, DemandControlledVentilation
 from .zones_rule import ZonesHeatCoolCensus
 
 # Every shipped rule. Per-equipment rules first, then fleet rules.
@@ -91,6 +91,7 @@ RULE_CLASSES: list[type] = [
     FilterFouling,
     ChillerApproachFouling,
     ChillerStagingFleet,
+    DcvSystemVerification,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

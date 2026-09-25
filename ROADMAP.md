@@ -510,8 +510,12 @@ every rule shipping a synthetic fixture that proves detection. **All shipped in 
 - [~] **IAQ & ventilation analytics** — the air-quality axis alongside Std-55 thermal
       comfort. *Shipped:* CO₂-based ventilation adequacy (`camber.iaq` / `co2_ventilation`
       rule) — under-ventilation (elevated occupied CO₂) and over-ventilation (CO₂ near
-      outdoor), differential to measured/assumed outdoor CO₂. Remaining: explicit ASHRAE
-      62.1 OA-rate checks and demand-controlled-ventilation (DCV) verification.
+      outdoor), differential to measured/assumed outdoor CO₂; a zone-level ASHRAE 62.1 VRP
+      check and DCV verification (0.1.0), with DCV rebuilt in **0.82.0** to judge only
+      occupied, non-economizing samples and to join zone CO₂ to the serving air handler's OA
+      (`dcv_system_verification`). Remaining: a **system-level** 62.1 VRP (multiple-zone
+      `Vot = Vou/Ev`, mode-aware `Ez`, OA estimated from temperatures when there is no flow
+      station) — the shipped check compares an air handler's OA to one zone's requirement.
 - [x] **Demand & peak analytics** — `camber.demand`: peak demand + drivers (hour/day,
       coincident peak hour, peakiness), load factor, baseload, night/weekend
       baseload-anomaly detection, and peak-shave demand-charge value. Deeper than the
