@@ -263,7 +263,7 @@ def _chiller_frame(n=48, *, seed=0, kw_per_ton=0.6, approach_f=7.0):
             Role.CW_SUPPLY_TEMP: cws + rng.normal(0, 0.1, n),
             Role.CW_RETURN_TEMP: cws + 10 + rng.normal(0, 0.1, n),  # range ~10 F
             Role.WETBULB_TEMP: wetbulb + rng.normal(0, 0.1, n),
-            Role.TOWER_FAN_SPEED: 80.0 + rng.normal(0, 1, n),
+            Role.TOWER_FAN_SPEED: 95.0 + rng.normal(0, 1, n),  # design weather: fan near full
             Role.OAT: 88.0 + rng.normal(0, 1, n),
         },
         index=idx,

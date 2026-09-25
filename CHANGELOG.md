@@ -110,12 +110,23 @@ Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old 
     rescaled from 0–1.** `camber.units.PERCENT_ROLES` missed them though the sensor-health bounds
     treat them as percent, so a BAS trending tower fan speed as a fraction never cleared
     `cooling_tower_approach`'s "fan > 5%" gate and the rule never ran — on any site, not just here. A
-    test now holds `PERCENT_ROLES` in step with the bounds. Running at last, the tower rule measures
-    **TPR 0/4, FPR 4/7**: fouling and PI mistuning move the approach ~1 °F (under its margin), and it
-    fires on the bypass-valve runs, where the whole plant restages for reasons not established.
+    test now holds `PERCENT_ROLES` in step with the bounds. Running at last, the tower rule fired on
+    every condenser-bypass-valve run — see the next entry.
   What is left is genuine: severe reheat-coil fouling leaves no trace in the box's trended points,
   a high-reading airflow sensor is out of a one-sided detector's scope, and duct-static drift still
   declines every case.
+- **`cooling_tower_approach` called a healthy tower fouled whenever it held a minimum
+  condenser-water temperature.** Plants keep condenser water above a floor (~60 °F) in cold weather,
+  so the tower deliberately leaves water far above wet-bulb + design with its fan idling — a high
+  approach that is correct control. The rule judged every fan-running hour, so it fired on all five
+  LBNL condenser-bypass-valve runs (a leaking bypass keeps the tower running all winter at its floor,
+  holding its setpoint to 0.0 °F with the fan at minimum). Approach is now judged only at **high fan
+  effort** (`min_effort_pct=90`), the CTI basis for a tower's capability; a tower that never reaches
+  it declines. Without a trended fan speed the old gate applies, with a caveat. The LBNL result:
+  TPR 0/3, FPR 0/2, 6 declined (was FPR 4/7). Fouling is visible at high fan (20% of hours above
+  design + 3 °F at 65% capacity vs 0% healthy) but the median-based severity stays `ok` — not tuned
+  here, because tuning a threshold on the validation set would only fit it. `score_chiller` also
+  stopped scoring declined runs as negatives, the bug fixed in `driftvalidation` above.
 - `RELEASING.md` gains the two lessons of the 0.80/0.81 release: push stacked tags oldest-first and
   wait for each `image` job (`:latest` otherwise goes to whichever finishes last), and review the
   conda-forge autotick PR's dependencies. `deploy/conda/recipe.yaml` is now documented as a mirror of

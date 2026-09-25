@@ -40,23 +40,47 @@ class CoolingTowerApproach:
         Role.TOWER_FAN_SPEED,
     )
 
-    def __init__(self, design_approach_f: float = 7.0):
+    def __init__(self, design_approach_f: float = 7.0, *, min_effort_pct: float | None = 90.0):
         # Tower/climate-specific: confirm against the tower schedule / selection.
         self.design_approach_f = design_approach_f
+        self.min_effort_pct = min_effort_pct
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         res = analyze_cooling_tower_approach(
-            legacy, equip, design_approach_f=self.design_approach_f
+            legacy,
+            equip,
+            design_approach_f=self.design_approach_f,
+            min_effort_pct=self.min_effort_pct,
         )
         if res is None:
+            if Role.TOWER_FAN_SPEED in frame.columns and self.min_effort_pct is not None:
+                return Finding(
+                    rule=self.name,
+                    equip=equip,
+                    severity="info",
+                    metrics={"declined": True},
+                    summary=(
+                        f"{equip}: approach not judged -- the tower fan never reached "
+                        f"{self.min_effort_pct:.0f}% (at part fan the approach is the "
+                        "controller's choice, not the tower's limit)"
+                    ),
+                    caveats=["could not evaluate tower approach: too few hours at high fan effort"],
+                )
             return Finding(
                 rule=self.name,
                 equip=equip,
                 severity="info",
                 summary="insufficient data (need CW supply temp + wet-bulb or OAT+RH)",
+            )
+        caveats = []
+        if res.effort_gated is None:
+            caveats.append(
+                "no tower fan speed trended: hours the tower was deliberately held above its best "
+                "approach (a minimum condenser-water temperature in cold weather) could not be "
+                "excluded, so a high approach may be correct control"
             )
         ratio = res.approach_median_f / res.design_approach_f if res.design_approach_f else 0.0
         if ratio >= 1.7:
@@ -76,9 +100,13 @@ class CoolingTowerApproach:
                 "pct_hours_high_approach": res.pct_hours_high_approach,
                 "wetbulb_source": res.wetbulb_source,
                 "n_operating": res.n_operating,
+                "effort_gated": res.effort_gated,
+                "n_low_effort_excluded": res.n_low_effort_excluded,
             },
+            caveats=caveats,
             summary=(
-                f"{equip}: tower approach median {res.approach_median_f:.1f}F "
+                f"{equip}: tower approach median {res.approach_median_f:.1f}F"
+                f"{' at high fan' if res.effort_gated else ''} "
                 f"vs design {res.design_approach_f:.1f}F "
                 f"({res.pct_hours_high_approach:.0f}% of operating hours high; "
                 f"wet-bulb {res.wetbulb_source})"

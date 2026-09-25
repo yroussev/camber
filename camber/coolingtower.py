@@ -120,6 +120,8 @@ class CoolingTowerResult:
     design_approach_f: float
     coverage_start: str
     coverage_end: str
+    effort_gated: bool | None = None  # True = judged only at high fan effort; None = no fan trend
+    n_low_effort_excluded: int | None = None  # fan-on hours below the effort gate (not judged)
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -134,6 +136,7 @@ def analyze_cooling_tower_approach(
     high_margin_f: float = 3.0,  # approach above design+margin == high
     min_range_f: float = 2.0,  # CW range below this == not really rejecting heat
     min_fan_pct: float = 5.0,  # tower fan above this == operating (if available)
+    min_effort_pct: float | None = 90.0,  # judge approach only at/above this fan speed
 ) -> CoolingTowerResult | None:
     """Compute tower approach from CW supply temp and wet-bulb (measured or derived).
 
@@ -141,6 +144,15 @@ def analyze_cooling_tower_approach(
     ``RH`` (to derive wet-bulb). Optional ``CWR_Temp`` gives the range and gates
     "operating"; ``TowerFanSpeed`` gates operating when present. ``design_approach_f``
     is the equipment-specific judgment; the floors are stability guards.
+
+    **Approach is judged at high fan effort** (``TowerFanSpeed >= min_effort_pct``) when the fan
+    is trended. A tower's capability is its approach at full fan (CTI rating practice); at part
+    fan the approach is whatever the controller chose. That matters in cold weather: plants hold
+    a *minimum* condenser-water temperature (commonly ~60 F), so the tower deliberately leaves
+    water well above wet-bulb + design with its fan at minimum -- a high approach that is correct
+    control, not a defect. Judging those hours fired the rule on healthy towers. Returns ``None``
+    when the tower never reached the effort gate (nothing to judge). ``min_effort_pct=None``
+    restores the old "fan running" gate.
     """
     if "CWS_Temp" not in df.columns:
         return None
@@ -165,9 +177,16 @@ def analyze_cooling_tower_approach(
         w = w[w.CWR_Temp.between(40, 130)]
 
     # "operating": fan running if we have it, else real heat rejection (CW range)
+    effort_gated = None
+    n_low_effort = None
     if "TowerFanSpeed" in work.columns:
         fan = work["TowerFanSpeed"].reindex(w.index)
         w = w[fan > min_fan_pct]
+        if min_effort_pct is not None:
+            hard = fan.reindex(w.index) >= min_effort_pct
+            n_low_effort = int((~hard).sum())
+            w = w[hard]
+            effort_gated = True
     elif "CWR_Temp" in w.columns:
         w = w[cw_range_f(w) >= min_range_f]
     if len(w) < 10:
@@ -187,4 +206,6 @@ def analyze_cooling_tower_approach(
         design_approach_f=float(design_approach_f),
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        effort_gated=effort_gated,
+        n_low_effort_excluded=n_low_effort,
     )

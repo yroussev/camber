@@ -110,3 +110,43 @@ def test_rule_missing_roles_reports_info():
     n = 24
     frame = pd.DataFrame({Role.CW_SUPPLY_TEMP: np.full(n, 80.0)}, index=_idx(n))
     assert CoolingTowerApproach().analyze("CT-1", frame).severity == "info"
+
+
+def _winter_floor_frame(n=96):
+    """A healthy tower in cold weather held at a 60F minimum condenser-water temperature: the fan
+    idles at its minimum and the leaving water sits far above wet-bulb + design -- by control."""
+    idx = pd.date_range("2025-01-06", periods=n, freq="1h")
+    return pd.DataFrame(
+        {
+            Role.CW_SUPPLY_TEMP: np.full(n, 60.0),
+            Role.WETBULB_TEMP: np.full(n, 40.0),  # approach 20F, all of it the setpoint floor
+            Role.TOWER_FAN_SPEED: np.full(n, 29.0),
+        },
+        index=idx,
+    )
+
+
+def test_minimum_leaving_temp_at_part_fan_is_not_a_fault():
+    """The LBNL chiller-plant bypass runs: the tower ran all winter at its 60F floor with the fan
+    at minimum, and the approach rule called it a fouled tower."""
+    got = CoolingTowerApproach(design_approach_f=8.0).analyze("CT-1", _winter_floor_frame())
+    assert got.severity == "info" and got.metrics["declined"] is True
+    # the old "fan running" gate reproduces the false alarm
+    old = CoolingTowerApproach(design_approach_f=8.0, min_effort_pct=None).analyze(
+        "CT-1", _winter_floor_frame()
+    )
+    assert old.severity == "fault"
+
+
+def test_high_approach_at_full_fan_still_fires():
+    frame = _winter_floor_frame()
+    frame[Role.TOWER_FAN_SPEED] = 100.0  # fan flat out, still 20F off wet-bulb: cannot reject heat
+    got = CoolingTowerApproach(design_approach_f=8.0).analyze("CT-1", frame)
+    assert got.severity == "fault" and got.metrics["effort_gated"] is True
+
+
+def test_no_fan_trend_is_caveated():
+    frame = _winter_floor_frame().drop(columns=[Role.TOWER_FAN_SPEED])
+    got = CoolingTowerApproach(design_approach_f=8.0).analyze("CT-1", frame)
+    assert got.metrics["effort_gated"] is None
+    assert any("minimum condenser-water temperature" in c for c in got.caveats)

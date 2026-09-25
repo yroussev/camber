@@ -384,9 +384,13 @@ def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant
             print(f"  {name:24s} skipped (no healthy baseline metric)")
             continue
         rule = det["make"](healthy)  # design ceiling := the healthy plant's own median
-        tp = fn = fp = tn = 0
+        tp = fn = fp = tn = declined = 0
         for fname, frame in sorted(frames.items()):
-            fired = rule.analyze("CH1", frame).severity in ("warn", "fault")
+            finding = rule.analyze("CH1", frame)
+            if (finding.metrics or {}).get("declined"):
+                declined += 1  # could not test its claim: neither a detection nor a negative
+                continue
+            fired = finding.severity in ("warn", "fault")
             if any(fname.startswith(p) for p in det["positive"]):
                 tp, fn = tp + fired, fn + (not fired)
             else:
@@ -395,7 +399,7 @@ def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant
         fpr = fp / (fp + tn) if (fp + tn) else float("nan")
         print(
             f"  {name:24s} design~{healthy:.2f}  TPR {tpr:.0%} (n={tp + fn})  "
-            f"FPR {fpr:.0%} (n={fp + tn})"
+            f"FPR {fpr:.0%} (n={fp + tn})  {declined} declined"
         )
         for key, val in (("tpr", tpr), ("fpr", fpr)):
             if val == val:  # omit NaN -> valid JSON

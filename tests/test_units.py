@@ -70,7 +70,7 @@ def test_tower_rule_runs_on_fraction_fan_speed():
         {
             Role.CW_SUPPLY_TEMP: np.full(48, 85.0),
             Role.WETBULB_TEMP: np.full(48, 70.0),  # 15F approach: high
-            Role.TOWER_FAN_SPEED: np.full(48, 0.8),  # a 0-1 BAS point
+            Role.TOWER_FAN_SPEED: np.full(48, 0.95),  # a 0-1 BAS point, fan near full
         },
         index=idx,
     )
