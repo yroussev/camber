@@ -57,7 +57,7 @@ delivered record). What it includes, by layer:
 - [x] **0.1.0 on PyPI** as `camber-toolkit` via Trusted Publishing (OIDC, no stored token),
       a multi-arch GHCR image, and a GitHub release — all from the tag-driven workflow.
 - [x] Discussions enabled (all six categories); issue / PR / discussion templates in place.
-- [~] Docs site, conda-forge, repo metadata, PEP-541 — see
+- [~] Docs site, conda-forge, repo metadata, PEP-541 — all but PEP-541 are done; see
       **[Packaging & community — current status](#packaging--community--current-status)** below,
       which is the single place this is tracked.
 
@@ -85,9 +85,9 @@ platform items pulled forward from *Later — toward 1.0* / *Horizon*.
       workflow, SLA/aging).
 - [x] **Plugin API** — `camber.plugins` (entry-point + in-process rules/adapters/reports).
 - [~] **Packaged deployments** — reference Kubernetes manifests + a conda recipe *skeleton*
-      (`deploy/`). Remaining: a conda-forge feedstock submission and a hosted demo → 0.3.
+      (`deploy/`). The conda-forge feedstock went live on 2026-09-24; a hosted demo remains.
 
-## Next — 0.3 (visualization depth)
+## Delivered — v0.3.0 (visualization depth)
 
 Deepen the differentiator — *charts and faults are the same artifact* — into a full
 **rules-as-a-chart-engine**, dependency-light (matplotlib + stdlib; interactivity is inlined
@@ -254,13 +254,13 @@ This was previously restated in four places, each drifting out of date. It is tr
 | Item | State |
 |---|---|
 | GitHub **Discussions** | **Enabled**, with all six categories created. Remaining: post the pinned welcome from `docs/dev/DISCUSSIONS-WELCOME.md`. |
-| **conda-forge** | **Submitted** — `conda-forge/staged-recipes#34742`, open since 2026-09-06; `deploy/conda/recipe.yaml` tracks the current version. The feedstock does not exist until that PR merges. (Its `win_64` build is what caught the 0.74.1 cp1252 CLI bug.) |
+| **conda-forge** | **Live** (2026-09-24) — `conda-forge/staged-recipes#34742` merged and [`camber-toolkit-feedstock`](https://github.com/conda-forge/camber-toolkit-feedstock) now builds `conda install -c conda-forge camber-toolkit`. New releases arrive as version-bump PRs on the feedstock; `deploy/conda/recipe.yaml` is a mirror of its recipe. (The staged-recipes `win_64` build is what caught the 0.74.1 cp1252 CLI bug.) |
 | **PEP-541** `camber` name | **Filed** 2026-06-13 — `pypi/support#11042`, still open with the PyPI admins. `camber-toolkit` is the permanent distribution name either way. See `docs/dev/PEP-541-REQUEST.md`. |
 | **MkDocs site** | **Live** at <https://yroussev.github.io/camber/> (2026-09-08). The push trigger on `pages.yml` is armed, so docs changes on `main` republish automatically. |
 | Repo **description + topics** | **Set** (2026-09-08). |
 
-Both of the items that were ours to finish are done; the remaining three wait on people outside the
-repo (a PyPI admin, a conda-forge reviewer, and a welcome post).
+Everything that was ours to finish is done except the Discussions welcome post; the only item waiting on
+someone outside the repo is the PEP-541 request (a PyPI admin).
 
 
 ## Delivered in 0.1.0 — diagnosis depth & portfolio  *(originally Phase 1)*
@@ -292,7 +292,7 @@ Sharpen the "diagnosis, not just detection" edge and scale to many buildings —
 
 Mature OSS integrated as **optional extras** rather than reinvented — see
 [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md) for the fork-vs-depend analysis. All of the below
-shipped in 0.1.0; the two `[~]` items have remainders tracked under **Next — 0.2**.
+shipped in 0.1.0; the two `[~]` items state their remainders inline.
 
 - [~] **More ingest adapters** — *Shipped:* a SQL/historian reader (`camber.ingest.sql`),
       and **read-only network protocol adapters** — Modbus TCP (`[modbus]`, pymodbus),
@@ -382,14 +382,14 @@ fault-lifecycle-at-scale, and the plugin API also landed in 0.2.0.)
 - [x] **Fault lifecycle at scale** — persistent store + assignment/SLA/aging (0.2.0).
 - [x] **Plugin API** — entry-point + in-process extension points (0.2.0).
 - [~] **Packaged deployments** — reference Kubernetes manifests + a conda recipe skeleton (0.2.0);
-      conda-forge feedstock + a hosted demo tracked under **Next — 0.3**.
+      conda-forge feedstock live (2026-09-24). Remaining: a hosted demo.
 
 ## Visualizations
 
 A capability area that cuts across ingest, FDD, M&V, and reporting. 0.1.0 shipped the first
 **static chart primitives** (load carpet, CUSUM, energy signature); the **interactive MVP
-(`A → B → E → I`) is tracked under Next — 0.2**, and this section is the fuller vision for what
-CAMBER's visual layer should become. It is a **clean-room distillation from public
+(`A → B → E → I`) shipped in 0.2.0** and the rest of the catalog in 0.3.0. This section is the
+fuller vision for what CAMBER's visual layer should become. It is a **clean-room distillation from public
 building-analytics literature and tools** (e.g. PNNL Re-tuning, LBNL, and
 university energy-dashboard work) — capabilities and ideas in our own
 words, no copied code, assets, or text. A longer write-up with explicit sources is
@@ -497,7 +497,7 @@ patterns A–J are now built.
 Tracks beyond the original phased plan, each consistent with CAMBER's contract —
 vendor-neutral via the `Role` model, clean-room and citable, dependency-light, and
 every rule shipping a synthetic fixture that proves detection. **All shipped in 0.1.0**
-(the two `[~]` items have remainders tracked under **Next — 0.2**).
+(the two `[~]` items state their remainders inline).
 
 ### Diagnostic breadth
 
