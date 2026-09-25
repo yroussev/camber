@@ -28,7 +28,11 @@ __all__ = [
     "normalize_percent_frame",
 ]
 
-# Roles whose magnitude is a position/percent (0-100) that rules threshold on.
+# Roles whose magnitude is a position/percent (0-100) that rules threshold on. Every role
+# :data:`camber.sensorhealth.PHYSICAL_BOUNDS` bounds as a percent belongs here -- a test holds the
+# two in step. (Until 0.82.0 the tower-fan and HW-pump speeds and the humidities were missing, so a
+# 0-1 tower fan speed never cleared the tower rule's "fan running > 5%" gate and the rule never
+# ran.)
 PERCENT_ROLES = frozenset(
     {
         Role.HEAT_VALVE,
@@ -37,6 +41,11 @@ PERCENT_ROLES = frozenset(
         Role.DAMPER,
         Role.SUPPLY_FAN_SPEED,
         Role.CHW_PUMP_SPEED,
+        Role.HW_PUMP_SPEED,
+        Role.TOWER_FAN_SPEED,
+        Role.OUTDOOR_RH,
+        Role.SUPPLY_AIR_HUMIDITY,
+        Role.RETURN_AIR_HUMIDITY,
     }
 )
 

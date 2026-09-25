@@ -84,12 +84,38 @@ Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old 
   Declines are now excluded and counted in `DetectorScore.n_declined`; an unmeasured FPR is
   omitted, not 0.0. Two plumbing tests had only passed because of this and now test a detector that
   actually scores.
-- **`docs/VALIDATION.md` said "real TPR" for drift detectors whose real-data recall is zero.** The
-  measured numbers were never written down. Now they are: SDAHU `coil_valve_drift` **0/1**,
-  `economizer_damper_drift` **0/4**; FPU `vav_airflow_drift` **0/4**, `vav_reheat_valve_drift`
-  **0/5**; chiller plant `chiller_efficiency` **TPR 5/9, FPR 1/2**, and `cooling_tower_approach`
-  does not score at all. The reheat-valve result (−0% even for a valve stuck open) looks like a
-  detector or mapping defect and is being investigated separately.
+- **The real-data drift validation was scoring the wrong things — four bugs in the benchmark, one in
+  the library.** `docs/VALIDATION.md` had said "real TPR" since 0.64–0.66 without ever writing a
+  number down; measured, every AHU and VAV drift detector scored **0**. Each zero traced to a defect:
+  - **The fan-powered-box mapping pointed at a healthy box.** Its comment said the faults are imposed
+    on the West zone (`_W`); diffing each faulted run against the fault-free one shows they are on the
+    **South** box (`_S`). Remapped: `vav_airflow_drift` **0/4 → 3/3**, `vav_reheat_valve_drift`
+    **0/5 → 1/2**, no false positives.
+  - **Valves and dampers were read from their measured positions** where the datasets also carry the
+    controller demand (`*_DM`). CAMBER's rules read these roles as commands, and a stuck device's
+    position is exactly what hides its fault: against its position a stuck damper's OA fraction
+    matches, so `economizer_damper_drift` scored **0/4**; against the command it scores **4/4**
+    (11–17σ). All four LBNL mappings now use the demand columns; the main per-family scores are
+    unchanged.
+  - **Positives contradicted the detectors' documented design.** The coil-valve, reheat-valve and
+    VAV-airflow drift detectors are one-sided *up* — the controller opening further for the same duty.
+    A leaking or stuck-open valve does the opposite (the demand falls), yet it was listed as their
+    target. Those faults are now cross-negatives, chosen from each rule's docstring rather than its
+    results; `coil_valve_drift` becomes specificity-only (its targets aren't in the set) with **1 false
+    alarm in 6** (a stuck-open OA damper's latent load, a confound the rule documents).
+  - **The chiller dataset's wet-bulb and dry-bulb labels are swapped.** `OA_TEMP_WB` exceeds `OA_TEMP`
+    in 97% of rows, and read as labelled the tower would cool water below wet-bulb half the time;
+    read the other way its approach is 5.9–12.5 °F and never below. Remapped.
+  - **Library bug: `TOWER_FAN_SPEED` (and `HW_PUMP_SPEED` and the three humidity roles) were never
+    rescaled from 0–1.** `camber.units.PERCENT_ROLES` missed them though the sensor-health bounds
+    treat them as percent, so a BAS trending tower fan speed as a fraction never cleared
+    `cooling_tower_approach`'s "fan > 5%" gate and the rule never ran — on any site, not just here. A
+    test now holds `PERCENT_ROLES` in step with the bounds. Running at last, the tower rule measures
+    **TPR 0/4, FPR 4/7**: fouling and PI mistuning move the approach ~1 °F (under its margin), and it
+    fires on the bypass-valve runs, where the whole plant restages for reasons not established.
+  What is left is genuine: severe reheat-coil fouling leaves no trace in the box's trended points,
+  a high-reading airflow sensor is out of a one-sided detector's scope, and duct-static drift still
+  declines every case.
 - `RELEASING.md` gains the two lessons of the 0.80/0.81 release: push stacked tags oldest-first and
   wait for each `image` job (`:latest` otherwise goes to whichever finishes last), and review the
   conda-forge autotick PR's dependencies. `deploy/conda/recipe.yaml` is now documented as a mirror of

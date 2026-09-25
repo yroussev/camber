@@ -181,8 +181,8 @@ def metrics_dict(label, records):
 # Drift-family real-data validation (SDAHU only).
 #
 # Only the AHU air-side *drift* detectors whose required points LBNL actually exports can be scored
-# on real labeled faults: coil-valve drift (target = valve leak) and economizer-damper drift
-# (target = stuck damper) get a real recall -- currently 0/1 and 0/4, see docs/VALIDATION.md.
+# on real labeled faults: economizer-damper drift (target = stuck damper) gets a real recall;
+# coil-valve drift's targets (fouling / starvation) aren't in the set, so it is specificity-only.
 # Duct-static-control drift has no labeled fault in the set and declines every case, so it
 # contributes no number at all (declines are excluded, never scored as negatives).
 # Fan-efficiency and filter drift need POWER / FILTER_DIFF_PRESS points the SDAHU sim does not
@@ -195,11 +195,22 @@ def metrics_dict(label, records):
 # negative) or a faulted run (a positive). A run targeting a *different* fault is a cross-negative.
 # --------------------------------------------------------------------------- #
 
+# Positives are the faults a detector's *documented physics* says it sees -- chosen from the rule's
+# docstring, not from its results. The coil-valve, reheat-valve and VAV-airflow drift detectors are
+# all ONE-SIDED UP: they flag the controller having to open a valve/damper *further* for the same
+# duty (fouling, waterside starvation, authority loss, a device stuck closed). A leaking or stuck-
+# open valve does the opposite -- it delivers capacity the controller didn't ask for, so the demand
+# *falls* -- and a high-reading airflow sensor makes the damper close. Those faults are **cross-
+# negatives** here: the detector is right to stay silent, and firing on one (a leak misread as
+# fouling) counts as a false positive. Until 0.82.0 they were listed as positives, which scored a
+# detector against a direction it explicitly does not claim.
 DRIFT_DETECTORS = {
     "coil_valve_drift": {
         "build": lambda: CoilValveDrift(BaselineStore(), site="lbnl_sdahu", run_id="bench"),
-        "positive": "coi_leakage",  # labeled fault this detector targets
-        "cross_negative": ("damper_stuck",),  # a fault it does NOT target -> negative
+        # its targets (coil fouling / starvation) are not in the SDAHU set -> specificity only;
+        # the coil-valve *leak* is an opposite-direction fault (leaking_valve's job)
+        "positive": None,
+        "cross_negative": ("damper_stuck", "coi_leakage"),
     },
     "economizer_damper_drift": {
         "build": lambda: EconomizerDamperDrift(BaselineStore(), site="lbnl_sdahu", run_id="bench"),
@@ -213,22 +224,29 @@ DRIFT_DETECTORS = {
     },
 }
 
-# VAV zone-terminal drift on the LBNL Fan-Power-Unit subset (the West-zone box is the one faulted).
-# vav_airflow_drift (DAMPER ~ AIRFLOW_SP) targets the damper-stuck + airflow-sensor-bias faults;
-# vav_reheat_valve_drift (reheat valve at matched duty) targets the reheat-valve leak/stuck + coil
-# fouling faults. Each is a cross-negative for the other. Single box -> no rogue/cohort here.
+# VAV zone-terminal drift on the LBNL Fan-Power-Unit subset (the South-zone box is the one faulted).
+# vav_airflow_drift (DAMPER ~ AIRFLOW_SP, one-sided up) targets a stuck damper and a LOW-reading
+# airflow sensor (the controller opens further); a high-reading sensor closes the damper -> cross-
+# negative. vav_reheat_valve_drift (reheat-valve demand at matched duty, one-sided up) targets a
+# valve stuck closed and coil fouling; a stuck-open or leaking valve lowers the demand -> cross-
+# negative. Single box -> no rogue/cohort here.
 FPU_DRIFT_DETECTORS = {
     "vav_airflow_drift": {
         "build": lambda: VavAirflowDrift(BaselineStore(), site="lbnl_fpu", run_id="bench"),
         "equip": "lbnl_fpu",
-        "positive": ("PFPU_VAVDMPRStuck", "PFPU_SensorBias_VAVAirflow"),
-        "cross_negative": ("PFPU_ReheatVLV", "PFPU_ReheatCoil"),
+        "positive": ("PFPU_VAVDMPRStuck", "PFPU_SensorBias_VAVAirflow_-400CFM"),
+        "cross_negative": ("PFPU_Reheat", "PFPU_SensorBias_VAVAirflow_+400CFM"),
     },
     "vav_reheat_valve_drift": {
         "build": lambda: VavReheatValveDrift(BaselineStore(), site="lbnl_fpu", run_id="bench"),
         "equip": "lbnl_fpu",
-        "positive": ("PFPU_ReheatVLV", "PFPU_ReheatCoil"),
-        "cross_negative": ("PFPU_VAVDMPRStuck", "PFPU_SensorBias_VAVAirflow"),
+        "positive": ("PFPU_ReheatVLVStuck_0%", "PFPU_ReheatCoilFouling"),
+        "cross_negative": (
+            "PFPU_VAVDMPRStuck",
+            "PFPU_SensorBias",
+            "PFPU_ReheatVLVStuck_100%",
+            "PFPU_ReheatVLVLeak",
+        ),
     },
 }
 

@@ -71,13 +71,25 @@ def _frames():
 
 def test_build_drift_cases_labels_positive_and_cross_negative():
     B = _bench()
-    cases = B.build_drift_cases(_frames(), B.DRIFT_DETECTORS["coil_valve_drift"])
-    # fault-free-tail (negative) + coi_leakage (positive) + damper_stuck (cross-negative)
+    cases = B.build_drift_cases(_frames(), B.DRIFT_DETECTORS["economizer_damper_drift"])
+    # fault-free-tail (negative) + damper_stuck (positive) + coi_leakage (cross-negative)
     assert len(cases) == 3
     by_name = {c.name: c.fault for c in cases}
     assert by_name["fault-free-tail"] is False
-    assert any(c.fault for c in cases if c.name.startswith("coi_leakage"))
-    assert all(not c.fault for c in cases if c.name.startswith("damper_stuck"))
+    assert any(c.fault for c in cases if c.name.startswith("damper_stuck"))
+    assert all(not c.fault for c in cases if c.name.startswith("coi_leakage"))
+
+
+def test_one_sided_detectors_do_not_claim_opposite_direction_faults():
+    """coil_valve_drift is one-sided UP (fouling / starvation); a leaking valve lowers the demand,
+    so the leak is a cross-negative -- scored against it only if it misfires."""
+    B = _bench()
+    cases = B.build_drift_cases(_frames(), B.DRIFT_DETECTORS["coil_valve_drift"])
+    assert not any(c.fault for c in cases)
+    assert any(c.name.startswith("coi_leakage") for c in cases)
+    fpu = B.FPU_DRIFT_DETECTORS["vav_reheat_valve_drift"]
+    assert "PFPU_ReheatVLVLeak" in fpu["cross_negative"]
+    assert "PFPU_ReheatVLVStuck_100%" in fpu["cross_negative"]
 
 
 def test_build_drift_cases_baseline_and_current_disjoint():

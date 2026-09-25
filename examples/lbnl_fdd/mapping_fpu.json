@@ -1,13 +1,13 @@
 {
-  "_comment": "LBNL FDD Fan-Power Unit (FPU; parallel PFPU / series SFPU) point -> CAMBER Role mapping. Faults are imposed in the WEST zone (column suffix _W), so the _W VAV-box columns are the device under test (the _I/_S/_E zones stay healthy). The reheat ΔT for the reheat-valve detector is VAV_DAT_W (leaving, warm) minus the AHU supply SA_TEMP (entering the box, cool). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Validates the VAV zone-terminal drift family (airflow/damper and reheat-valve) on real (simulated) labeled faults.",
+  "_comment": "LBNL FDD Fan-Power Unit (FPU; parallel PFPU / series SFPU) point -> CAMBER Role mapping. Faults are imposed in the SOUTH zone (column suffix _S): diffing each faulted run against PFPU_FaultFree shows the changed columns are RH_*_S / VAV_*_S, so the _S box is the device under test (the _E/_I/_W zones stay healthy; until 0.82.0 this mapping pointed at _W and scored a healthy box). The reheat valve is the controller DEMAND (RH_VLV_DM_S), not the measured position: the drift detector reads how far the controller has to open the valve, and a stuck or leaking valve's position is exactly what the controller cannot see. VAV_DMPR_S has no demand twin in this dataset, so it is the position. The reheat dT for the reheat-valve detector is VAV_DAT_S (leaving, warm) minus the AHU supply SA_TEMP (entering the box, cool). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
   "aliases": {
-    "VAV_DMPR_W": "damper",
-    "VAV_PM_CFM_SP_W": "airflow_sp",
-    "VAV_PM_CFM_W": "airflow",
-    "RH_VLV_W": "heat_valve",
-    "VAV_DAT_W": "supply_air_temp",
+    "VAV_DMPR_S": "damper",
+    "VAV_PM_CFM_SP_S": "airflow_sp",
+    "VAV_PM_CFM_S": "airflow",
+    "RH_VLV_DM_S": "heat_valve",
+    "VAV_DAT_S": "supply_air_temp",
     "SA_TEMP": "mixed_air_temp",
     "SA_SP": "duct_static",
-    "RM_TEMP_W": "space_temp"
+    "RM_TEMP_S": "space_temp"
   }
 }

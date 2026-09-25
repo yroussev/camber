@@ -1,9 +1,9 @@
 {
-  "_comment": "LBNL FDD single-duct AHU (SDAHU) point name -> CAMBER Role mapping. A second BAS naming convention (vs the per-building examples), proving the role/mapping layer is vendor-neutral: adding a dataset is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Note this AHU has a cooling coil only (no heating valve), so heat-coil rules are correctly gated out by completeness validation.",
+  "_comment": "LBNL FDD single-duct AHU (SDAHU) point name -> CAMBER Role mapping. A second BAS naming convention (vs the per-building examples), proving the role/mapping layer is vendor-neutral: adding a dataset is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Note this AHU has a cooling coil only (no heating valve), so heat-coil rules are correctly gated out by completeness validation. Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions.",
   "aliases": {
-    "CHWC_VLV": "cool_valve",
+    "CHWC_VLV_DM": "cool_valve",
     "MA_TEMP": "mixed_air_temp",
-    "OA_DMPR": "oa_damper",
+    "OA_DMPR_DM": "oa_damper",
     "OA_TEMP": "oat",
     "RA_TEMP": "return_air_temp",
     "SA_CFM": "airflow",
