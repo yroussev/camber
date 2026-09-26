@@ -170,17 +170,24 @@ class SATResetComplianceResult:
 
 
 def sat_reset_compliance(
-    df, equip, *, sat_col="SAT", oat_col="OAT", tol_f=1.0, **reset_kwargs
+    df, equip, *, sat_col="SAT", oat_col="OAT", tol_f=1.0, gate=None, **reset_kwargs
 ) -> SATResetComplianceResult | None:
     """Compare actual SAT to the G36 OAT-based reset target.
 
     Flags how often the plant holds SAT colder than G36 would (a reheat/energy
     opportunity). Needs only SAT and OAT -- not zone requests -- so it works on
     typical trend exports. ``reset_kwargs`` pass through to oat_sat_setpoint.
+
+    ``gate`` (optional boolean Series on ``df``'s index) keeps only the samples where it is True --
+    e.g. fan-on and occupied, so a unit sitting off overnight (SAT drifting toward room temperature)
+    is not scored against a reset it was never running. ``None`` keeps every sample (the historical
+    behaviour; SAT is only range-filtered to 40-90 °F).
     """
     if sat_col not in df.columns or oat_col not in df.columns:
         return None
     w = df[[sat_col, oat_col]].dropna()
+    if gate is not None:
+        w = w[pd.Series(gate).reindex(w.index).fillna(False).astype(bool)]
     w = w[(w[sat_col] > 40) & (w[sat_col] < 90)]
     if len(w) < 10:
         return None

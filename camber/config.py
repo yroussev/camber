@@ -98,6 +98,7 @@ import datetime as _dt
 import json
 import os
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from glob import glob
 
@@ -149,6 +150,16 @@ class RunResult:
     facility_id: str | None = None  # the identity per-facility state is keyed by
     workspace: str | None = None  # the portfolio workspace root, when the run is inside one
     faults: dict | None = None  # the fault-lifecycle fold (new/ongoing/...) with a "faults" section
+    # The registry the run actually used -- built-ins with any per-rule "params" overrides
+    # applied -- so evidence and reports judge with the configured rule instances.
+    registry: object | None = None
+    # A lazy resolver ``frame_for(equip, roles=None) -> DataFrame | None``: the equipment's role
+    # frame (shared OAT merged in), loaded on first request and memoized. Never a dict of frames.
+    frame_for: Callable | None = None
+    refs: list = field(default_factory=list)  # the discovered equipment references
+    data_sources: list = field(default_factory=list)  # ingest provenance (dataset, licence, ...)
+    config: dict | None = None  # the config dict the run executed
+    base_dir: str = "."  # what the config's relative paths resolve against
 
 
 def _path(base: str, p: str) -> str:
@@ -810,7 +821,37 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         facility_id=ctx.facility_id if ctx else None,
         workspace=ctx.workspace if ctx else None,
         faults=faults,
+        registry=reg,
+        frame_for=_frame_resolver(prep),
+        refs=list(refs),
+        data_sources=list(prep.data_sources),
+        config=config,
+        base_dir=base_dir,
     )
+
+
+def _frame_resolver(prep: _Prepared) -> Callable:
+    """A lazy, memoizing ``frame_for(equip, roles=None)`` over a prepared run's equipment.
+
+    ``roles`` defaults to every :class:`~camber.model.roles.Role` (the resolver loads only those the
+    equipment actually has). Unknown equipment returns ``None``. Frames are resolved on first use,
+    so a run that never renders evidence never pays for the load.
+    """
+    by_equip = {r.equip: r for r in prep.refs}
+    cache: dict = {}
+
+    def frame_for(equip, roles=None):
+        ref = by_equip.get(equip)
+        if ref is None:
+            return None
+        key = (equip, None if roles is None else tuple(roles))
+        if key not in cache:
+            want = tuple(Role) if roles is None else tuple(roles)
+            frame = resolve(ref, prep.mapping, want, resample=prep.resample)
+            cache[key] = _merge_shared(frame, prep.shared)
+        return cache[key]
+
+    return frame_for
 
 
 def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -> dict:

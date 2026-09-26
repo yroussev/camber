@@ -1632,6 +1632,7 @@
     "SupplyAirControl"
   ],
   "camber.rules.satreset_compliance_rule": [
+    "GATE_DEFAULT",
     "SupplyAirResetCompliance"
   ],
   "camber.rules.satreset_rule": [
@@ -1729,6 +1730,7 @@
   ],
   "camber.sensorhealth": [
     "ConsistencyResult",
+    "FAN_GATED_ROLES",
     "PHYSICAL_BOUNDS",
     "SensorTrust",
     "co2_outdoor_consistency",

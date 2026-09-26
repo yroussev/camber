@@ -16,6 +16,7 @@ from ..actionplan import action_plan_html, build_action_plan
 from ..rules.triage import rank_findings
 from ..scorecard import build_scorecard
 from .ahu import ahu_diagnosis_table
+from .audit import data_sources_html
 from .chiller import chiller_diagnosis_table
 from .condenser import condenser_diagnosis_table
 from .dashboard import (
@@ -70,6 +71,7 @@ def build_site_report(
     rank_by: str = "cost",
     top_n: int = 20,
     normalize: bool = True,
+    data_sources=None,
 ) -> str:
     """Assemble a self-contained site-report HTML string.
 
@@ -86,13 +88,19 @@ def build_site_report(
     add a per-AHU air-side verdict table too; ``vav_diagnoses`` (from
     :func:`camber.vavdrift.diagnose_vav_drift`) add a per-box VAV zone-terminal verdict table as
     well. ``sections`` chooses which dashboard chart sections to include (A/B/E/I).
+
+    ``data_sources`` (provenance dicts, see :func:`camber.config.data_sources`) adds the "Data
+    source & licence" block first in the body -- with the research-only banner for NC / ND data.
     """
     style = _STYLE + _SC_STYLE
     parts = [
         f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
         f"<title>{_html.escape(title)}</title></head><body>",
-        f"<h1>{_html.escape(title)}</h1>",
     ]
+    src = data_sources_html(data_sources)
+    if src:
+        parts.append(src)
+    parts.append(f"<h1>{_html.escape(title)}</h1>")
 
     if findings:
         parts.append("<h2>Health scorecard</h2>" + _scorecard_html(build_scorecard(findings)))

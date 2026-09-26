@@ -23,7 +23,11 @@ import pandas as pd
 
 from ..g36_reset import sat_reset_compliance
 from ..model.roles import Role
+from ..schedules import effective_occupied_mask, fan_on_mask
 from .base import Finding
+
+# Whether the rule gates on fan-on / occupied samples by default (see the class docstring).
+GATE_DEFAULT = True
 
 
 class SupplyAirResetCompliance:
@@ -39,7 +43,17 @@ class SupplyAirResetCompliance:
 
     name = "supply_air_reset_compliance"
     roles_required = (Role.SUPPLY_AIR_TEMP,)
-    roles_optional = (Role.OAT,)
+    roles_optional = (
+        Role.OAT,
+        # operating-state gates: fan status, else speed, else airflow; a trended occupancy point
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
+        Role.AIRFLOW,
+        Role.OCCUPANCY,
+    )
+
+    #: the G36 §5.16.2.2.b defaults; any other value means the map came from the site
+    G36_DEFAULTS = {"min_clg_sat": 55.0, "t_max": 65.0, "oat_min": 60.0, "oat_max": 70.0}
 
     def __init__(
         self,
@@ -51,8 +65,14 @@ class SupplyAirResetCompliance:
         tol_f: float = 1.0,  # per-sample "below target" tolerance (°F)
         warn_pct: float = 40.0,  # warn when below target this % of hours ...
         warn_gap_f: float = 2.0,  # ... AND the mean gap clears this floor (°F)
+        fan_gate: bool = GATE_DEFAULT,  # judge only fan-on samples (when a fan signal exists)
+        occupied_only: bool = GATE_DEFAULT,  # ... and only occupied ones
+        reset_source: str | None = None,  # provenance label; None = infer from the parameters
     ):
         self.tol_f = tol_f
+        self.fan_gate = fan_gate
+        self.occupied_only = occupied_only
+        self.reset_source = reset_source
         self.warn_pct = warn_pct
         self.warn_gap_f = warn_gap_f
         self._reset_kwargs = {
@@ -61,6 +81,36 @@ class SupplyAirResetCompliance:
             "oat_min": oat_min,
             "oat_max": oat_max,
         }
+
+    @property
+    def source(self) -> str:
+        """Where the OAT->SAT map came from: ``"g36_default"`` or ``"configured"`` (or a label)."""
+        if self.reset_source:
+            return self.reset_source
+        same = all(float(self._reset_kwargs[k]) == v for k, v in self.G36_DEFAULTS.items())
+        return "g36_default" if same else "configured"
+
+    def _gate(self, frame: pd.DataFrame):
+        """``(mask | None, metrics)``: the fan-on / occupied samples to judge, and how."""
+        mask = None
+        fan_src = "off"
+        if self.fan_gate:
+            fan, fan_src = fan_on_mask(frame)
+            mask = fan
+        occ_src = "off"
+        if self.occupied_only:
+            occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+            trended = occ is not None and occ.notna().any()
+            occ_src = "trended occupancy" if trended else "assumed schedule (weekdays 07-18)"
+            occ_mask = effective_occupied_mask(frame.index, occ=occ)
+            mask = occ_mask if mask is None else (mask & occ_mask)
+        meta = {
+            "reset_source": self.source,
+            "fan_gate": fan_src,
+            "occupancy_gate": occ_src,
+            "n_gated": None if mask is None else int(mask.sum()),
+        }
+        return mask, meta
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Score supply air against the G36 OAT-reset target; return a Finding."""
@@ -77,12 +127,14 @@ class SupplyAirResetCompliance:
                 ],
             )
 
+        gate, gate_meta = self._gate(frame)
         res = sat_reset_compliance(
             frame,
             equip,
             sat_col=Role.SUPPLY_AIR_TEMP,
             oat_col=Role.OAT,
             tol_f=self.tol_f,
+            gate=gate,
             **self._reset_kwargs,
         )
         if res is None:
@@ -90,7 +142,11 @@ class SupplyAirResetCompliance:
                 rule=self.name,
                 equip=equip,
                 severity="info",
-                metrics={"declined": True, "reason": "insufficient in-range SAT+OAT rows (<10)"},
+                metrics={
+                    "declined": True,
+                    "reason": "insufficient in-range SAT+OAT rows (<10)",
+                    **gate_meta,
+                },
                 summary=f"{equip}: declined -- too few valid SAT/OAT samples for G36 compliance",
                 caveats=["SAT-reset compliance not evaluated: fewer than 10 usable rows"],
             )
@@ -109,6 +165,7 @@ class SupplyAirResetCompliance:
             "n": res.n,
             "warn_pct_threshold": self.warn_pct,
             "warn_gap_floor_f": self.warn_gap_f,
+            **gate_meta,
         }
         tail = "reheat/energy opportunity" if severity == "warn" else "tracks the G36 reset target"
         summary = (

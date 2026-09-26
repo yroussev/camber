@@ -47,6 +47,7 @@ __all__ = [
     "range_violation_frac",
     "SensorTrust",
     "sensor_trust",
+    "FAN_GATED_ROLES",
     "frame_sensor_health",
     "trusted_roles",
     "untrusted_roles",
@@ -286,8 +287,54 @@ class SensorTrust:
         return d
 
 
-def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
-    """Score one point's trustworthiness from quality stats + physical-range checks."""
+# Roles whose reading only means something while air moves past the sensor: with the supply fan
+# off, a duct temperature settles to the plenum, and a flow / static transmitter sits at zero -- a
+# long identical run there is the unit being off, not a stuck sensor. The gated trust mode judges
+# flatline on fan-on samples for these roles only (an outdoor or space temperature keeps its
+# meaning with the fan off, so it is never gated).
+FAN_GATED_ROLES: frozenset = frozenset(
+    {
+        Role.SUPPLY_AIR_TEMP,
+        Role.MIXED_AIR_TEMP,
+        Role.RETURN_AIR_TEMP,
+        Role.AIRFLOW,
+        Role.OA_AIRFLOW,
+        Role.DUCT_STATIC,
+        Role.SUPPLY_AIR_HUMIDITY,
+        Role.RETURN_AIR_HUMIDITY,
+    }
+)
+
+# Fewer gated samples than this and the gated flatline read falls back to the whole series.
+_MIN_GATED = 24
+
+
+def _gated_flatline_frac(series: pd.Series, gate: pd.Series) -> float | None:
+    """Longest identical run *within contiguous gated stretches*, over the gated sample count.
+
+    A run is broken wherever the gate goes False, so hours of the unit sitting off never join a
+    run. ``None`` when too few gated samples exist to judge.
+    """
+    g = pd.Series(gate).reindex(series.index).fillna(False).astype(bool)
+    s = pd.to_numeric(series, errors="coerce")
+    on = s[g].dropna()
+    if len(on) < _MIN_GATED:
+        return None
+    seg = (~g).cumsum()[g].reindex(on.index)  # one id per contiguous gated stretch
+    changed = on.ne(on.shift()) | seg.ne(seg.shift())
+    longest = int(changed.cumsum().value_counts().max())
+    return longest / len(on)
+
+
+def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> SensorTrust:
+    """Score one point's trustworthiness from quality stats + physical-range checks.
+
+    ``gate`` (optional boolean Series, e.g. fan-on from :func:`camber.schedules.fan_on_mask`)
+    switches on the **gated** mode for the roles in :data:`FAN_GATED_ROLES`: the flatline read (the
+    ``stuck`` flag and its share of the score) is taken over the gated samples only, so a duct
+    sensor holding a constant value while the unit is off is not called stuck. Coverage, range and
+    outlier reads are unchanged. With ``gate=None`` (the default) nothing changes.
+    """
     intermittent = role in _INTERMITTENT_ROLES
     q = assess(
         series,
@@ -299,6 +346,13 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
     rng = range_violation_frac(series, role)
     rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)  # out-of-range is serious
     trust = q.score * (1.0 - rng_pen)
+    flat_frac = q.flatline_frac
+    if gate is not None and role in FAN_GATED_ROLES:
+        gated = _gated_flatline_frac(series, gate)
+        if gated is not None:
+            # swap the ungated flatline share of the composite score for the gated one
+            trust = trust / (1.0 - 0.2 * q.flatline_frac) * (1.0 - 0.2 * gated)
+            flat_frac = round(gated, 4)
 
     flags = []
     if q.coverage < 0.9:
@@ -316,7 +370,7 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
         flags.append("outliers")
     if rng == rng and rng > 0.01:
         flags.append("out_of_range")
-    if role in _SENSOR_ROLES and q.flatline_frac > 0.5:
+    if role in _SENSOR_ROLES and flat_frac > 0.5:
         flags.append("stuck")
         trust *= 0.5  # a stuck analog sensor is bad
     if percent_scale_suspect(series, role):
@@ -337,7 +391,7 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
         role=role.value if isinstance(role, Role) else str(role),
         n=q.n,
         coverage=q.coverage,
-        flatline_frac=q.flatline_frac,
+        flatline_frac=flat_frac,
         outlier_frac=q.outlier_frac,
         range_violation_frac=rng,
         trust=trust,
@@ -346,10 +400,22 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
     )
 
 
-def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None) -> dict:
-    """Trust score every role-column of a role-frame -> ``{Role: SensorTrust}``."""
+def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None, gate=None) -> dict:
+    """Trust score every role-column of a role-frame -> ``{Role: SensorTrust}``.
+
+    ``gate`` is passed to :func:`sensor_trust` (gated mode for the fan-dependent roles); pass
+    ``"fan"`` to derive it from the frame's own fan signal via
+    :func:`camber.schedules.fan_on_mask` (ungated when the frame has none).
+    """
+    if isinstance(gate, str):
+        if gate != "fan":
+            raise ValueError(f"gate must be a boolean Series, 'fan' or None, got {gate!r}")
+        from .schedules import fan_on_mask
+
+        gate = fan_on_mask(frame)[0]
     return {
-        role: sensor_trust(frame[role], role, expected_freq=expected_freq) for role in frame.columns
+        role: sensor_trust(frame[role], role, expected_freq=expected_freq, gate=gate)
+        for role in frame.columns
     }
 
 

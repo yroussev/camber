@@ -219,6 +219,7 @@ def build_dashboard(
     interactive: bool = False,
     link_x=None,
     link_y=None,
+    data_sources=None,
 ) -> str:
     """Build a self-contained HTML dashboard string.
 
@@ -234,13 +235,21 @@ def build_dashboard(
     x and the first other column for y. Option flags: ``sections`` (subset of A/B/E/I), ``rank_by``
     ("severity"/"cost"), ``top_n``, ``carpet_col``, ``multitrend_cols``, ``normalize``, ``rules``,
     ``evidence``, ``interactive``, ``link_x``, ``link_y``.
+
+    ``data_sources`` (provenance dicts, see :func:`camber.config.data_sources`) adds the "Data
+    source & licence" block first in the body -- with the research-only banner for NC / ND data.
     """
+    from .audit import data_sources_html
+
     style = _STYLE + (LINK_STYLE if interactive else "")
     parts = [
         f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
         f"<title>{_html.escape(title)}</title></head><body>",
-        f"<h1>{_html.escape(title)}</h1>",
     ]
+    src = data_sources_html(data_sources)
+    if src:
+        parts.append(src)
+    parts.append(f"<h1>{_html.escape(title)}</h1>")
     if interactive:
         parts.append(selection_bus_html())  # cross-panel selection bus (once, before the panels)
     for letter in sections:
