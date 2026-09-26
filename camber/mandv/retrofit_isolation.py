@@ -182,6 +182,7 @@ class IsolationSavings:
     declined_reason: str | None = None
     caveats: list = field(default_factory=list)
     fsu_extrapolation_factor: float | None = None
+    kernel: str = "g14"  # the uncertainty kernel ("g14" | "exact")
 
     def as_dict(self):
         d = asdict(self)
@@ -200,6 +201,7 @@ def isolation_savings(
     model: DriverModel | None = None,
     cv_rmse_max: float = 0.20,
     extrapolation: ExtrapolationPolicy | None = None,
+    kernel: str = "g14",
 ) -> IsolationSavings:
     """Option-B avoided energy for an isolated, sub-metered system.
 
@@ -211,7 +213,7 @@ def isolation_savings(
 
     The reporting drivers are checked against the baseline's (per-column and, for several drivers,
     leverage) support; a severe extrapolation declines by default (``extrapolation``, see
-    :func:`camber.mandv.stats.avoided_energy_savings`).
+    :func:`camber.mandv.stats.avoided_energy_savings`, which also documents ``kernel``).
     """
     yb = np.asarray(baseline_energy, dtype=float)
     yr = np.asarray(reporting_energy, dtype=float)
@@ -235,6 +237,7 @@ def isolation_savings(
         p_baseline=model.p,
         confidence=confidence,
         extrapolation=extrapolation,
+        kernel=kernel,
     )
     return IsolationSavings(
         option="B",
@@ -256,6 +259,7 @@ def isolation_savings(
         declined_reason=sav.declined_reason,
         caveats=list(sav.caveats),
         fsu_extrapolation_factor=sav.fsu_extrapolation_factor,
+        kernel=kernel,
     )
 
 
@@ -269,6 +273,7 @@ def isolation_normalized_savings(
     confidence: float = 0.90,
     cv_rmse_max: float = 0.20,
     extrapolation: ExtrapolationPolicy | None = None,
+    kernel: str = "g14",
 ):
     """Option-B savings normalized to a fixed reference driver set (e.g. a normal year/load).
 
@@ -304,4 +309,5 @@ def isolation_normalized_savings(
         n_reporting=mr.n,
         confidence=confidence,
         extrapolation=extrapolation,
+        kernel=kernel,
     )

@@ -23,9 +23,26 @@ with it is never widened again for extrapolation. Change points are treated as k
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from .coverage import _as_2d, _design, _FitRecord
+
+
+@dataclass(frozen=True)
+class ProjectionVariance:
+    """The exact variance terms of one model's projected total over a set of rows."""
+
+    v_param: float  # kappa * s2 * g'Ag
+    v_noise: float  # kappa * s2 * m
+    g: np.ndarray  # sum of the design rows
+    df: int | None  # residual degrees of freedom of the fit (n - p)
+    m: int  # rows projected onto
+    s2: float
+    kappa: float
+    rho: float | None  # the rho used (None = unknown; kappa is then 1 and the band unadjusted)
+    total: float  # the projected total, g @ beta where known, else sum of predictions
 
 
 def _unwrap(model):
@@ -88,3 +105,73 @@ def design_names(model) -> tuple:
     if spec[0] == "affine":
         return ("intercept",) + tuple(rec.names)
     raise TypeError(f"unknown design spec {spec!r}")
+
+
+def projection_variance(model, drivers, *, rows=None, rho=None, index=None) -> ProjectionVariance:
+    """Exact ``V_param`` / ``V_noise`` of ``model``'s projected total at ``drivers``.
+
+    ``rows`` (a boolean mask aligned to ``drivers``) selects the rows actually summed -- the
+    savings functions pass the rows that entered their sums. ``rho`` overrides the fit record's
+    residual autocorrelation; with neither, ``kappa`` is 1 and the result is unadjusted
+    (``rho=None``). Raises ``TypeError`` when the model carries no ``(X'X)^-1`` and ``s2`` -- a
+    model not fitted by CAMBER, or one built by hand.
+    """
+    rec = fit_record(model)
+    if rec is None or rec.xtx_pinv is None or rec.s2 is None:
+        raise TypeError(
+            f"kernel='exact' needs a model fitted by CAMBER (it records (X'X)^-1 and s2); "
+            f"{type(model).__name__} carries neither"
+        )
+    X = design_rows(model, drivers, index=index)
+    if rows is not None:
+        X = X[np.asarray(rows, dtype=bool)]
+    X = X[np.all(np.isfinite(X), axis=1)]
+    m = int(len(X))
+    g = X.sum(axis=0)
+    r = rho if rho is not None else rec.rho
+    if r is None or not np.isfinite(r) or r <= 0:
+        kappa = 1.0
+    elif r >= 1:
+        kappa = float("inf")
+    else:
+        kappa = (1.0 + r) / (1.0 - r)
+    s2 = float(rec.s2)
+    v_param = float(kappa * s2 * (g @ rec.xtx_pinv @ g))
+    v_noise = float(kappa * s2 * m)
+    df = None if rec.n is None or rec.p is None else int(rec.n) - int(rec.p)
+    beta = _beta(model)
+    total = float(g @ beta) if beta is not None and len(beta) == len(g) else float("nan")
+    return ProjectionVariance(
+        v_param=v_param,
+        v_noise=v_noise,
+        g=g,
+        df=df,
+        m=m,
+        s2=s2,
+        kappa=kappa,
+        rho=None if r is None else float(r),
+        total=total,
+    )
+
+
+def _beta(model):
+    """The coefficient vector matching :func:`design_rows`, or ``None``."""
+    inner, _ = _unwrap(model)
+    beta = getattr(inner, "beta", None)
+    if beta is not None:  # TOWT
+        return np.asarray(beta, dtype=float)
+    try:
+        names = design_names(inner)
+    except TypeError:
+        return None
+    rec = fit_record(inner)
+    kind = rec.design[0] if rec is not None and rec.design else None
+    if kind == "cp":
+        return np.array([float(inner.coeffs[nm]) for nm in names])
+    if kind == "dd":
+        vals = {"base": inner.base, "heating_slope": inner.heating_slope}
+        vals["cooling_slope"] = inner.cooling_slope
+        return np.array([float(vals[nm]) for nm in names])
+    if kind == "affine":
+        return np.array([float(inner.intercept), *map(float, inner.coef)])
+    return None

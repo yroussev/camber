@@ -25,7 +25,7 @@ from dataclasses import asdict, dataclass, field
 import numpy as np
 
 from .coverage import ExtrapolationPolicy, _fsu_factor, _worst, assess_coverage
-from .stats import _rel_unc_projected, _t_value, _widen
+from .stats import _check_kernel, _rel_unc_projected, _t_value, _widen
 
 
 def normalized_annual_consumption(model, temps) -> float:
@@ -66,6 +66,7 @@ class NormalizedSavings:
     declined_reason: str | None = None
     caveats: list = field(default_factory=list)
     fsu_extrapolation_factor: float | None = None
+    kernel: str = "g14"  # "g14" (CV*sqrt(p/n) per model) | "exact" (OLS g'Ag per model)
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
@@ -86,6 +87,7 @@ def normalized_savings(
     p_reporting: int | None = None,
     rho: float | None = None,
     extrapolation: ExtrapolationPolicy | None = None,
+    kernel: str = "g14",
 ) -> NormalizedSavings:
     """Weather-normalized annual savings between two fitted models over a normal year.
 
@@ -109,7 +111,15 @@ def normalized_savings(
     is graded (``extrapolation``, :class:`~camber.mandv.coverage.ExtrapolationPolicy`); a moderate
     one widens that side's term by the projected-kernel factor ``k = sqrt(s'As / s_c'As_c)``, and a
     severe one declines by default.
+
+    **Kernel.** ``kernel="exact"`` replaces each side's ``CV * sqrt(p/n)`` by the exact OLS
+    parameter variance of its projected total, ``kappa * s2 * g'Ag`` (no noise term: nothing here
+    is measured), combined in quadrature (IPMVP 2012 B-19; BPA 2024 §5.9) at ``t`` on the smaller
+    of the two fits' degrees of freedom. It carries the leverage of the normal year itself, so
+    ``fsu_extrapolation_factor`` is 1.0. It needs CAMBER-fitted models; the fit statistics
+    arguments are then unused, and ``rho=None`` falls back to each fit's recorded rho.
     """
+    _check_kernel(kernel)
     pol = extrapolation or ExtrapolationPolicy()
     temps = np.asarray(normal_temps, dtype=float)
     m = int(len(temps))
@@ -130,13 +140,18 @@ def normalized_savings(
     else:
         abs_unc = float("nan")
 
+    if kernel == "exact":
+        abs_unc = _exact_projected_band(baseline_model, reporting_model, temps, rho, confidence)
+
     cov_b = assess_coverage(baseline_model, temps, policy=pol)
     cov_r = assess_coverage(reporting_model, temps, policy=pol)
     caveats = [f"baseline model: {c}" for c in cov_b.caveats]
     caveats += [f"reporting model: {c}" for c in cov_r.caveats]
     tier = _worst(cov_b.tier, cov_r.tier)
     factor = None
-    if tier in ("moderate", "severe"):
+    if kernel == "exact":
+        factor = 1.0  # the normal year's leverage is already inside the exact kernel
+    elif tier in ("moderate", "severe"):
         kb = kr = 1.0
         for side, cov, model in (
             ("baseline", cov_b, baseline_model),
@@ -172,6 +187,7 @@ def normalized_savings(
         coverage_reporting=cov_r.as_dict(),
         caveats=caveats,
         fsu_extrapolation_factor=None if factor is None else round(factor, 4),
+        kernel=kernel,
     )
     if tier == "severe" and pol.decline:
         reasons = [
@@ -188,3 +204,15 @@ def normalized_savings(
         if cov_r.tier == "severe":
             res.nac_reporting = None
     return res
+
+
+def _exact_projected_band(baseline_model, reporting_model, temps, rho, confidence) -> float:
+    """``t(df_min) * sqrt(V_param,b + V_param,r)`` of two projected totals (exact kernel)."""
+    from ._design import projection_variance
+
+    pb = projection_variance(baseline_model, temps, rho=rho)
+    pr = projection_variance(reporting_model, temps, rho=rho)
+    dfs = [d for d in (pb.df, pr.df) if d is not None]
+    t = _t_value(confidence, min(dfs) if dfs else None)
+    var = pb.v_param + pr.v_param
+    return t * float(np.sqrt(var)) if np.isfinite(var) and var >= 0 else float("nan")

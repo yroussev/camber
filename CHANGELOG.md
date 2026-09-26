@@ -55,6 +55,14 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   `logical_signs` apply them to a fitted model. The t and F tails are computed in the standard
   library (a continued-fraction incomplete beta), checked against closed forms and the NIST StRD
   *Norris* certified values. `FitStats` gains trailing `f_pvalue` and `adj_r2`.
+- **An exact uncertainty kernel**, `kernel="exact"` on `avoided_energy_savings`,
+  `normalized_savings`, `isolation_savings` and `isolation_normalized_savings` (default `"g14"`,
+  unchanged): the OLS projection variance `kappa*s2*(g'Ag + m)` of the fitted model at the
+  application conditions (textbook OLS; BPA/SBW 2017 §3.3), with `t` on the fit's `n - p` degrees
+  of freedom. It carries the leverage of extrapolating itself, so `fsu_extrapolation_factor` is
+  1.0 under it. In a seeded Monte Carlo on change-point data with AR(1) residuals (rho
+  estimated), its nominal 90% band covered 90.2%, 90.0% and 86.6% at rho = 0, 0.4 and 0.8.
+  `SavingsResult`, `NormalizedSavings` and `IsolationSavings` record the `kernel` used.
 - The single private fit record (#20) also carries the fit's residual variance `s2`, `n`, `p`
   and `rho`; `fit_model`, `best_model`, `fit_driver_model` and `fit_degree_day` take a
   keyword-only `time_index` so `rho` is recorded, and `fit_towt` records it from its own index.

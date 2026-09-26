@@ -189,6 +189,7 @@ class SavingsResult:
     declined_reason: str | None = None
     caveats: list = field(default_factory=list)
     fsu_extrapolation_factor: float | None = None
+    kernel: str = "g14"  # the uncertainty kernel that produced the band ("g14" | "exact")
 
     def as_dict(self):
         """Return as a plain dict."""
@@ -352,6 +353,7 @@ def avoided_energy_savings(
     confidence: float = 0.90,
     rho: float | None = None,
     extrapolation: ExtrapolationPolicy | None = None,
+    kernel: str = "g14",
 ) -> SavingsResult:
     """IPMVP Option-C avoided energy use with G14 Annex-B fractional uncertainty.
 
@@ -379,7 +381,17 @@ def avoided_energy_savings(
     the policy says ``decline=False``. Reporting rows without a finite projection or actual energy
     are excluded from the sums and counted (``coverage["n_used"]`` vs ``["n_report"]``), not
     dropped silently.
+
+    **Kernel.** ``kernel="g14"`` (the default) is the G14 expression above. ``kernel="exact"`` is
+    the OLS projection variance of the baseline at the reporting drivers,
+    ``Var = kappa * s2 * (g'Ag + m)`` with ``g`` the sum of the reporting design rows and ``A`` the
+    baseline ``(X'X)^-1`` (:mod:`camber.mandv._design`), at ``t`` on the fit's ``n - p`` degrees
+    of freedom. It already carries the leverage of the reporting conditions, so it is never
+    widened again: ``fsu_extrapolation_factor`` is 1.0. It needs a model fitted by CAMBER (one that
+    records ``(X'X)^-1`` and ``s2``); with ``rho=None`` it uses the rho the fit recorded from a
+    ``time_index``, where the G14 kernel stays unadjusted.
     """
+    _check_kernel(kernel)
     pol = extrapolation or ExtrapolationPolicy()
     T_report = np.asarray(T_report, dtype=float)
     y_report = np.asarray(y_report, dtype=float)
@@ -394,15 +406,22 @@ def avoided_energy_savings(
     savings_pct = avoided / base_sum if base_sum != 0 else float("nan")
 
     rho_used = 0.0 if rho is None or not np.isfinite(rho) else float(rho)
-    frac_unc = _fsu_measured(
-        cv_rmse,
-        n_fit=n_baseline,
-        m_report=m,
-        savings_fraction=savings_pct if savings_pct != 0 else float("nan"),
-        confidence=confidence,
-        rho=rho_used,
-        p_fit=p_baseline,
-    )
+    rho_known = rho is not None
+    if kernel == "exact":
+        abs_exact, rho_x, _ = _exact_band(baseline_model, T_report, mask, rho, confidence)
+        frac_unc = abs_exact / abs(avoided) if avoided else float("nan")
+        rho_known = rho_x is not None
+        rho_used = 0.0 if rho_x is None else max(0.0, float(rho_x))
+    else:
+        frac_unc = _fsu_measured(
+            cv_rmse,
+            n_fit=n_baseline,
+            m_report=m,
+            savings_fraction=savings_pct if savings_pct != 0 else float("nan"),
+            confidence=confidence,
+            rho=rho_used,
+            p_fit=p_baseline,
+        )
     abs_unc = abs(avoided) * frac_unc if np.isfinite(frac_unc) else float("nan")
     n_eff = _n_effective(n_baseline, rho_used)
 
@@ -416,7 +435,9 @@ def avoided_energy_savings(
             "(no finite baseline projection or actual energy)"
         )
     k = None
-    if cov.tier in ("moderate", "severe"):
+    if kernel == "exact":
+        k = 1.0  # the leverage of the reporting drivers is already inside the exact kernel
+    elif cov.tier in ("moderate", "severe"):
         k = _fsu_factor(baseline_model, T_report[mask], m=m, projected_kernel=False, policy=pol)
         frac_unc, note = _widen(frac_unc, k, pol, towt="unit" in cov.info)
         if note:
@@ -432,19 +453,42 @@ def avoided_energy_savings(
         fractional_uncertainty=round(frac_unc, 4) if np.isfinite(frac_unc) else float("nan"),
         confidence=confidence,
         abs_uncertainty=round(abs_unc, 2) if np.isfinite(abs_unc) else float("nan"),
-        rho=None if rho is None else round(rho_used, 4),
-        fsu_autocorrelation_adjusted=bool(rho is not None and rho_used > 0.0),
+        rho=round(rho_used, 4) if rho_known else None,
+        fsu_autocorrelation_adjusted=bool(rho_known and rho_used > 0.0),
         n_effective=round(n_eff, 2) if np.isfinite(n_eff) else None,
         coverage=cov.as_dict(),
         caveats=caveats,
         fsu_extrapolation_factor=None if k is None else round(k, 4),
+        kernel=kernel,
     )
     if declined:
         _decline(res, cov.reason)
     return res
 
 
+_KERNELS = ("g14", "exact")
+
+
+def _check_kernel(kernel: str) -> None:
+    if kernel not in _KERNELS:
+        raise ValueError(f"unknown kernel {kernel!r}; use one of {_KERNELS}")
+
+
+def _exact_band(model, drivers, rows, rho, confidence: float) -> tuple:
+    """``(abs_uncertainty, rho_used, df)`` of a measured-minus-projected saving by the exact
+    kernel: ``t(df) * sqrt(V_param + V_noise)`` of ``model`` at ``drivers[rows]``."""
+    from ._design import projection_variance
+
+    pv = projection_variance(model, drivers, rows=rows, rho=rho)
+    var = pv.v_param + pv.v_noise
+    t = _t_value(confidence, pv.df)
+    band = t * math.sqrt(var) if np.isfinite(var) and var >= 0 else float("nan")
+    return band, pv.rho, pv.df
+
+
 _DECLINED_FIELDS = (
+    "savings",
+    "projected",
     "avoided_energy",
     "baseline_projected",
     "savings_pct",
