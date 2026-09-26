@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from ..model.roles import HAYSTACK_HINT, Role
 
-# Direct role -> Brick point class (the inverse of brick.DIRECT_CLASS_TO_ROLE).
+# Direct role -> Brick point class. Every class here must import back to the same role through
+# brick.DIRECT_CLASS_TO_ROLE (tests/test_export.py enumerates both tables so they cannot drift).
 ROLE_TO_BRICK_POINT_CLASS = {
     Role.MIXED_AIR_TEMP: "Mixed_Air_Temperature_Sensor",
     Role.OAT: "Outside_Air_Temperature_Sensor",
@@ -29,6 +30,25 @@ ROLE_TO_BRICK_POINT_CLASS = {
     Role.CO2: "CO2_Sensor",
     Role.OUTDOOR_CO2: "Outside_Air_CO2_Sensor",
     Role.OUTDOOR_RH: "Outside_Air_Humidity_Sensor",
+    Role.WETBULB_TEMP: "Outside_Air_Wet_Bulb_Temperature_Sensor",
+    Role.SUPPLY_AIR_HUMIDITY: "Supply_Air_Humidity_Sensor",
+    Role.RETURN_AIR_HUMIDITY: "Return_Air_Humidity_Sensor",
+    Role.FILTER_DIFF_PRESS: "Filter_Differential_Pressure_Sensor",
+    Role.COOL_SP: "Zone_Air_Cooling_Temperature_Setpoint",
+    Role.HEAT_SP: "Zone_Air_Heating_Temperature_Setpoint",
+    Role.HW_SUPPLY_TEMP: "Hot_Water_Supply_Temperature_Sensor",
+    Role.HW_RETURN_TEMP: "Hot_Water_Return_Temperature_Sensor",
+    Role.HW_DIFF_PRESS: "Hot_Water_Differential_Pressure_Sensor",
+    Role.HW_DIFF_PRESS_SP: "Hot_Water_Differential_Pressure_Setpoint",
+    Role.HW_FLOW: "Hot_Water_Flow_Sensor",
+    Role.CHW_SUPPLY_TEMP: "Chilled_Water_Supply_Temperature_Sensor",
+    Role.CHW_RETURN_TEMP: "Chilled_Water_Return_Temperature_Sensor",
+    Role.CHW_SUPPLY_TEMP_SP: "Chilled_Water_Supply_Temperature_Setpoint",
+    Role.CHW_DIFF_PRESS: "Chilled_Water_Differential_Pressure_Sensor",
+    Role.CHW_DIFF_PRESS_SP: "Chilled_Water_Differential_Pressure_Setpoint",
+    Role.CHW_FLOW: "Chilled_Water_Flow_Sensor",
+    Role.CW_SUPPLY_TEMP: "Entering_Condenser_Water_Temperature_Sensor",
+    Role.CW_RETURN_TEMP: "Leaving_Condenser_Water_Temperature_Sensor",
 }
 
 # Context roles -> (part name, part Brick class, point Brick class). The part is

@@ -788,6 +788,7 @@
   ],
   "camber.interop": [
     "ROLE_TO_223",
+    "brick_mapping_report",
     "equip_haystack_tags",
     "equip_to_223",
     "haystack_tags",
@@ -827,10 +828,16 @@
     "fit_changepoint"
   ],
   "camber.interop.brick": [
+    "ALIAS_CLASS_TO_ROLE",
+    "AMBIGUOUS_CLASSES",
+    "BrickMappingReport",
+    "BrickPointMapping",
     "DIRECT_CLASS_TO_ROLE",
+    "brick_mapping_report",
     "mapping_from_brick",
     "parse_triples",
     "parse_triples_rdflib",
+    "report_from_triples",
     "roles_from_brick",
     "roles_from_triples",
     "topology_from_brick"

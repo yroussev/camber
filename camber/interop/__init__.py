@@ -5,7 +5,12 @@ needs no hand-written mapping. See :mod:`camber.interop.brick`.
 """
 
 from .bacnet import mapping_from_bacnet, review_bacnet, roles_from_bacnet
-from .brick import mapping_from_brick, roles_from_brick, topology_from_brick
+from .brick import (
+    brick_mapping_report,
+    mapping_from_brick,
+    roles_from_brick,
+    topology_from_brick,
+)
 from .export import equip_haystack_tags, haystack_tags, to_brick
 from .haystack_semantic import (
     mapping_from_haystack,
@@ -23,6 +28,7 @@ from .semantic223 import (
 from .site_model import site_from_ttl, site_to_ttl
 
 __all__ = [
+    "brick_mapping_report",
     "mapping_from_brick",
     "roles_from_brick",
     "topology_from_brick",
