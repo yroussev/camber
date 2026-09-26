@@ -30,17 +30,23 @@ def test_fetch_skips_absent_members_and_extracts_present(tmp_path, monkeypatch, 
     data = tmp_path / "lbnl"
     monkeypatch.setattr(fetch, "DATA", str(data))
     os.makedirs(data, exist_ok=True)
-    # a zip with the REQUIRED core present but the optional leak-severity variants ABSENT
+    # a zip with the REQUIRED core present, asked for one extra member it does NOT contain
     _make_zip(str(data / "LBNL_SDAHU.zip"), fetch.REQUIRED)
+    absent = "LBNL_FDD_Dataset_SDAHU/not_in_this_release_annual.csv"
 
     fetch._fetch_set(
-        "sdahu", "http://unused", "0", fetch.MEMBERS, "LBNL_SDAHU.zip", required=fetch.REQUIRED
+        "sdahu",
+        "http://unused",
+        "0",
+        list(fetch.MEMBERS) + [absent],
+        "LBNL_SDAHU.zip",
+        required=fetch.REQUIRED,
     )
 
     out = data / "sdahu"
     for m in fetch.REQUIRED:
         assert (out / os.path.basename(m)).exists()  # every core member extracted
-    assert not (out / "coi_leakage_010_annual.csv").exists()  # absent optional skipped, no crash
+    assert not (out / os.path.basename(absent)).exists()  # absent member skipped, no crash
     assert "skipped, not in zip" in capsys.readouterr().out
 
 

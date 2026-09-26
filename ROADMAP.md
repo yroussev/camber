@@ -157,8 +157,9 @@ A consolidation release — finish the validation and interop stories 0.5 opened
       `mapping_from_haystack`, closing the round-trip to Brick parity) + ASHRAE **223P** broadened from
       21 to **44 of 54 roles** (full plant/DX/refrigerant; status/command roles documented as unmapped).
       See **[ONTOLOGY.md](docs/ONTOLOGY.md)**.
-- [x] **Broaden the real-data FDD benchmark (Tier 1)** — a cooling-coil-valve leakage **severity sweep**
-      in the already-wired LBNL data (characterizes the under-firing leak detector) + a hardened fetcher.
+- [x] **Broaden the real-data FDD benchmark (Tier 1)** — a hardened fetcher. The planned
+      cooling-coil-valve leakage **severity sweep** turned out not to exist: the published leak files at
+      010/025/040/050 % are byte-identical, so the benchmark scores the one leak run once.
 - [~] **Second labeled dataset (Tier 2)** — a fault-labeled chiller dataset would give the first
       real-data validation of the refrigerant-side rules; **deferred pending a license-clean,
       fault-labeled validation dataset** suitable for clean-room use.

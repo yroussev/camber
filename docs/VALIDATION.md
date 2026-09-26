@@ -163,8 +163,11 @@ their injected faults) — the fixture-only list is now empty; the 5 fleet rules
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This
 complements — does not replace — the real-data LBNL benchmark above (external validity on real equipment),
-which 0.6 broadened with a **cooling-coil-valve leakage severity sweep** (010–100%) to characterize the
-leak detector that the pooled result showed under-firing.
+which 0.6 set out to broaden with a cooling-coil-valve leakage **severity sweep**. That sweep does not
+exist: the published SDAHU zip's `coi_leakage_010/025/040/050` files are byte-identical (one simulation
+under four labels) and there is no 100 % file, so the benchmark scores the single leak run once. (The
+four `oa_bias_*` files are likewise one run, and the FCU set's cooling / heating "airside minor fouling"
+files are identical.)
 
 ## M&V accuracy — real-data acceptance on BDG2
 

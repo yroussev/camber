@@ -67,10 +67,8 @@ FAMILIES = [
             # cooling-coil-valve leakage severity sweep (characterizes the leak detector, which
             # under-fires at low severity — each missing CSV is skipped via the
             # os.path.exists guard)
-            ("coi_leakage_010_annual.csv", "valve_leak"),
-            ("coi_leakage_025_annual.csv", "valve_leak"),
+            # one leak run only: the zip's coi_leakage_010/025/040/050 are byte-identical copies
             ("coi_leakage_050_annual.csv", "valve_leak"),
-            ("coi_leakage_100_annual.csv", "valve_leak"),
         ],
     },
     {

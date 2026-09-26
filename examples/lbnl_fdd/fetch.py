@@ -34,25 +34,18 @@ TTL_ZIP_URL = (
 )
 MEMBERS = [
     "LBNL_FDD_Dataset_SDAHU/AHU_annual.csv",
-    # cooling-coil-valve leakage severity sweep (benchmark.py scores leaking_valve across
-    # severities)
-    "LBNL_FDD_Dataset_SDAHU/coi_leakage_010_annual.csv",
-    "LBNL_FDD_Dataset_SDAHU/coi_leakage_025_annual.csv",
+    # cooling-coil-valve leakage. The published zip's coi_leakage_010/025/040/050 files are
+    # byte-identical (same CRC-32 and size) -- one simulation under four labels -- and there is no
+    # _100 file, so only one leak run exists; fetching the copies would score it several times.
     "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
-    "LBNL_FDD_Dataset_SDAHU/coi_leakage_100_annual.csv",
     # stuck-damper severities for the FDD-accuracy benchmark (benchmark.py)
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_010_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_025_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_075_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_100_annual_short.csv",
 ]
-# The proven-present core (baseline + one leak + the four dampers); the extra leak severities above
-# are optional (may be absent in some zip releases) and don't gate the "already fetched" no-op.
-REQUIRED = [
-    m
-    for m in MEMBERS
-    if "coi_leakage_010" not in m and "coi_leakage_025" not in m and "coi_leakage_100" not in m
-]
+# Every member above is present in the published zip; all gate the "already fetched" no-op.
+REQUIRED = list(MEMBERS)
 
 # Extra equipment families for the cross-equipment benchmark (opt-in via --families).
 # (subdir, zip url, ~size note, [zip members to extract])
