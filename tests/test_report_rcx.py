@@ -536,3 +536,21 @@ def test_free_cooling_table_does_not_count_an_integrated_economizer(tmp_path, ca
     stable = (fr[Role.RETURN_AIR_TEMP] - fr[Role.OAT]).abs() >= 5
     # only the hours where the balance cannot be judged fall back to the damper signal
     assert int(row[2].replace(",", "")) <= int((cooling & ~stable).sum())
+
+
+def test_box_by_hour_labels_sample_counts():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from camber.charts.boxhour import box_by_hour
+
+    idx = pd.date_range("2026-03-02", periods=24 * 14, freq="h")
+    s = pd.Series(1.0, index=idx)
+    on = pd.Series((idx.hour >= 6) & (idx.hour < 18) | (idx == idx[2]), index=idx)
+    fig, ax = plt.subplots()
+    box_by_hour(s, mask=on, ax=ax)
+    labels = {t.get_text(): t.get_color() for t in ax.texts}
+    assert labels["n=14"] == "#555" and labels["n=1"] == "#b3261e"
+    plt.close(fig)

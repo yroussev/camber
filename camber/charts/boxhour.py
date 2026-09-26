@@ -38,8 +38,9 @@ def box_by_hour(
 ):
     """Draw one box per hour of day for ``series`` (only where ``mask`` is True). Returns the Axes.
 
-    Hours with no samples are left empty (not drawn as zero). Fliers are hidden by default so a few
-    transients do not dominate the scale.
+    Hours with no samples are left empty (not drawn as zero). Each box is labelled with its sample
+    count (red under 10), so a handful of night-cycle samples is not read as a daily pattern.
+    Fliers are hidden by default so a few transients do not dominate the scale.
     """
     import matplotlib.pyplot as plt
 
@@ -54,6 +55,22 @@ def box_by_hour(
             showfliers=showfliers,
             manage_ticks=False,  # keep the x axis in hours, not box ordinals
         )
+        # sample count per hour: a box of 2 samples must not read like a box of 300. Drawn inside
+        # a headroom band at the top of the axes, clear of the title and the boxes.
+        lo, hi = ax.get_ylim()
+        ax.set_ylim(lo, hi + 0.18 * (hi - lo))
+        for h, v in groups.items():
+            ax.text(
+                h,
+                0.985,
+                f"n={len(v)}",
+                transform=ax.get_xaxis_transform(),
+                ha="center",
+                va="top",
+                fontsize=6,
+                rotation=90,
+                color="#555" if len(v) >= 10 else "#b3261e",
+            )
     ax.set_xlim(-0.8, 23.8)
     ax.set_xticks(range(0, 24, 2))
     ax.set_xticklabels([str(h) for h in range(0, 24, 2)])
