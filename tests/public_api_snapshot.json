@@ -370,6 +370,19 @@
     "tou_energy_cost",
     "water_cost"
   ],
+  "camber.datasets": [
+    "DatasetEntry",
+    "FetchResult",
+    "IngestResult",
+    "catalog",
+    "config_template",
+    "fetch",
+    "get",
+    "ingest",
+    "remove",
+    "score",
+    "status"
+  ],
   "camber.demand": [
     "BaseloadResult",
     "DemandResult",

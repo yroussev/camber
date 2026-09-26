@@ -1,0 +1,3100 @@
+{
+ "schema": 1,
+ "datasets": [
+  {
+   "id": "lbnl-sdahu",
+   "title": "LBNL simulated single-duct AHU (labelled faults)",
+   "summary": "One simulated single-duct VAV air handler (cooling coil only, OA economizer) for a year at 1-minute resolution: a fault-free run plus stuck OA dampers, cooling-coil valve leaks and stuck valves, and OA / coil sensor biases at several severities.",
+   "teaches": [
+    "outdoor-air fraction and a stuck outdoor-air damper",
+    "leaking cooling-coil valve",
+    "fault onset seen by drift detectors (spliced run)",
+    "scoring detectors against ground-truth labels"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "dois": [
+    "10.25984/1881324"
+   ],
+   "landing_url": "https://data.openei.org/submissions/5763",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "simulated",
+   "labeled_faults": true,
+   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.openei.org/submissions/5763",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "equipment": "1 single-duct AHU (cooling coil, economizer, 5 zone temperatures)",
+   "labels": {
+    "targets": {
+     "outdoor_air_fraction": "damper",
+     "leaking_valve": "valve_leak"
+    },
+    "fault_types": {
+     "damper": "OA damper stuck at a fixed position",
+     "valve_leak": "cooling-coil valve leaks when commanded closed",
+     "valve_stuck": "cooling-coil valve stuck",
+     "sensor_bias": "OA-temperature or coil-temperature sensor offset"
+    }
+   },
+   "files": [
+    {
+     "name": "LBNL_FDD_Data_Sets_SDAHU.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/LBNL_FDD_Data_Sets_SDAHU.zip",
+     "size": 607666899,
+     "sha256": "8295fcf0f55bc955937cb4ec0198512c28e5ede32e6bbf735257b0df55426471",
+     "pinned": true,
+     "etag": "\"243842d3-5ea4db2f0cf80\"",
+     "archive": "zip",
+     "extracted_size": 2894503088,
+     "members": [
+      "LBNL_FDD_Dataset_SDAHU/AHU_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_bias_-2_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_bias_-4_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_bias_2_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_bias_4_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_leakage_010_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_leakage_025_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_leakage_040_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_stuck_010_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_stuck_025_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_stuck_050_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/coi_stuck_075_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/damper_stuck_010_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/damper_stuck_025_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/damper_stuck_075_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/damper_stuck_100_annual_short.csv",
+      "LBNL_FDD_Dataset_SDAHU/oa_bias_-2_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/oa_bias_-4_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/oa_bias_2_annual.csv",
+      "LBNL_FDD_Dataset_SDAHU/oa_bias_4_annual.csv"
+     ]
+    },
+    {
+     "name": "LBNL_FDD_Data_Sets_SDAHU_ttl.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_SDAHU/LBNL_FDD_Data_Sets_SDAHU_ttl.zip",
+     "size": 840,
+     "sha256": "82182c86eb94871da32f62bf4ddd562b1e41a15cea8bd5a13e02d27789603995",
+     "pinned": true,
+     "etag": "\"348-5ea4db3255e61\"",
+     "archive": "zip",
+     "extracted_size": 3057,
+     "members": [
+      "LBNL_FDD_Data_Sets_SDAHU_ttl.ttl"
+     ],
+     "role": "brick_model"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "fault-free + 4 stuck-damper + 3 valve-leak runs (the LBNL benchmark's SDAHU set) and a spliced fault-onset run",
+     "files": "all",
+     "runs": [
+      "fault_free",
+      "damper_stuck_010",
+      "damper_stuck_025",
+      "damper_stuck_075",
+      "damper_stuck_100_short",
+      "coi_leakage_010",
+      "coi_leakage_025",
+      "coi_leakage_050"
+     ]
+    },
+    "full": {
+     "description": "every run in the archive",
+     "files": "all",
+     "runs": "all"
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-sdahu",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "lbnl_sdahu.json",
+    "units": {},
+    "quirks": [
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "SA_SPSPT"
+      ],
+      "lt": -100,
+      "note": "In every faulted run SA_SPSPT is a constant -400.25 (a placeholder, not a setpoint); masked to missing."
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "SA_SP"
+      ],
+      "gt": 100,
+      "note": "In the fault-free run SA_SP is a flat ~402 (the 1.61 inH2O setpoint expressed in Pa), not a measured static pressure; masked to missing. In the faulted runs SA_SP is the measured static in inH2O."
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "SA_CFM magnitudes (~3e5) are implausible for cfm and the units are undocumented; treat the airflow role as relative, not absolute."
+     }
+    ],
+    "runs": [
+     {
+      "id": "fault_free",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/AHU_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "coi_bias_m2",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_bias_-2_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coi_bias_m4",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_bias_-4_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coi_bias_2",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_bias_2_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coi_bias_4",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_bias_4_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coi_leakage_010",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_010_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "coi_leakage_025",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_025_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "coi_leakage_040",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_040_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "coi_leakage_050",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "coi_stuck_010",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_stuck_010_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "coi_stuck_025",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_stuck_025_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "coi_stuck_050",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_stuck_050_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "coi_stuck_075",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/coi_stuck_075_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "damper_stuck_010",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/damper_stuck_010_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "damper_stuck_025",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/damper_stuck_025_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "damper_stuck_075",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/damper_stuck_075_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "damper_stuck_100_short",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/damper_stuck_100_annual_short.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "oa_bias_m2",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_-2_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "oa_bias_m4",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_-4_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "oa_bias_2",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_2_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "oa_bias_4",
+      "file": "LBNL_FDD_Data_Sets_SDAHU.zip",
+      "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_4_annual.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     }
+    ],
+    "derived": [
+     {
+      "op": "splice",
+      "base": "fault_free",
+      "fault": "damper_stuck_025",
+      "onset": "2018-07-01",
+      "equip": "AHU",
+      "class": "AHU"
+     }
+    ]
+   },
+   "suggested_analyses": {
+    "rules": [
+     "outdoor_air_fraction",
+     "leaking_valve",
+     "economizer_high_limit"
+    ],
+    "config_template": "lbnl-sdahu.json"
+   },
+   "known_issues": [
+    "Supply static pressure is inconsistent across runs: the fault-free run exports the setpoint in Pa under SA_SP, the faulted runs a -400.25 placeholder under SA_SPSPT. Both are masked at ingest, so static-pressure rules decline where the data is bad.",
+    "Valve and damper signals are 0-1 fractions; they are rescaled to percent.",
+    "Valves and dampers map to the controller demand columns (*_DM), not the measured positions: a stuck device's position hides the fault the rules look for.",
+    "damper_stuck_100 is a short run (about 7 months).",
+    "The coi_leakage_010/025/040/050 members are byte-identical (same size and CRC), as are the four oa_bias_* members: they are one run each, not a severity sweep, so they cannot measure how detection varies with severity."
+   ],
+   "store_bytes_estimate": 60000000
+  },
+  {
+   "id": "lbnl-fcu",
+   "title": "LBNL simulated fan-coil unit (labelled faults)",
+   "summary": "One simulated four-pipe fan-coil unit with an OA damper for a year at 1-minute resolution: fault-free plus OA damper stuck/leaking, coil valve leaks and sticks, coil fouling, filter restriction, sensor biases and control faults.",
+   "teaches": [
+    "the same rules on a second naming convention (only the mapping changes)",
+    "outdoor-air fraction on a small unit (10% design minimum OA)",
+    "simultaneous heating and cooling on a four-pipe unit"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "dois": [
+    "10.25984/1881324"
+   ],
+   "landing_url": "https://data.openei.org/submissions/5763",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "simulated",
+   "labeled_faults": true,
+   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.openei.org/submissions/5763",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "equipment": "1 fan-coil unit (cooling + heating coils, OA damper, one zone)",
+   "labels": {
+    "targets": {
+     "outdoor_air_fraction": "damper"
+    },
+    "fault_types": {
+     "damper": "OA damper stuck or leaking",
+     "valve_leak": "coil valve leakage",
+     "valve_stuck": "coil valve stuck",
+     "coil_fouling": "air- or water-side coil fouling",
+     "filter_restriction": "filter restriction",
+     "fan_restriction": "fan outlet blockage",
+     "oa_blockage": "outdoor-air inlet blockage",
+     "sensor_bias": "room-temperature sensor offset",
+     "control": "reversed or unstable control"
+    }
+   },
+   "files": [
+    {
+     "name": "LBNL_FDD_Data_Sets_FCU.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FCU/LBNL_FDD_Data_Sets_FCU.zip",
+     "size": 530633129,
+     "sha256": "24074a7b4161fcc184638829755f36cb2b06d330caf58102adc34eca504cd8af",
+     "pinned": true,
+     "etag": "\"1fa0d1a9-5e58564e5451c\"",
+     "archive": "zip",
+     "extracted_size": 4129636364,
+     "members": [
+      "LBNL_FDD_Dataset_FCU/FCU_Control_CoolingReverse.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Control_HeatingReverse.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Control_Unstable.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_FanOutletBlockage.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_FaultFree.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_FilterRestriction_10%.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_FilterRestriction_20%.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_FilterRestriction_50%.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Airside_Minor.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Airside_Moderate.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Airside_Severe.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Waterside_Minor.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Waterside_Moderate.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Waterside_Severe.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Minor.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Moderate.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Severe.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Waterside_Minor.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Waterside_Moderate.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Waterside_Severe.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OABlockage.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_20.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_50.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_80.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_0.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_100.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_30.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_50.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_80.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_+2C.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_+4C.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_-2C.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_-4C.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Cooling_20.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Cooling_50.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Cooling_80.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Heating_20.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Heating_50.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Heating_80.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_0.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_100.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_20.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_50.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_80.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_0.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_100.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_20.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_50.csv",
+      "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_80.csv"
+     ]
+    },
+    {
+     "name": "LBNL_FDD_Data_Sets_FCU_ttl.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FCU/LBNL_FDD_Data_Sets_FCU_ttl.zip",
+     "size": 572,
+     "sha256": "d3e6f658e5c05f0b1e452845f3880573a56a92f0f9fbc96e0ed8f623062286c3",
+     "pinned": true,
+     "etag": "\"23c-5e6f2574adfae\"",
+     "archive": "zip",
+     "extracted_size": 1529,
+     "members": [
+      "LBNL_FDD_Data_Sets_FCU_ttl.ttl"
+     ],
+     "role": "brick_model"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "fault-free + 3 OA-damper runs (the LBNL benchmark's FCU set)",
+     "files": "all",
+     "runs": [
+      "fault_free",
+      "OADMPRStuck_0",
+      "OADMPRStuck_100",
+      "OADMPRLeak_50"
+     ]
+    },
+    "full": {
+     "description": "every run in the archive",
+     "files": "all",
+     "runs": "all"
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-fcu",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "lbnl_fcu.json",
+    "units": {},
+    "quirks": [],
+    "runs": [
+     {
+      "id": "Control_CoolingReverse",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Control_CoolingReverse.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "control"
+     },
+     {
+      "id": "Control_HeatingReverse",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Control_HeatingReverse.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "control"
+     },
+     {
+      "id": "Control_Unstable",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Control_Unstable.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "control"
+     },
+     {
+      "id": "FanOutletBlockage",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_FanOutletBlockage.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "fan_restriction"
+     },
+     {
+      "id": "fault_free",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_FaultFree.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": ""
+     },
+     {
+      "id": "FilterRestriction_10pct",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_FilterRestriction_10%.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "filter_restriction"
+     },
+     {
+      "id": "FilterRestriction_20pct",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_FilterRestriction_20%.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "filter_restriction"
+     },
+     {
+      "id": "FilterRestriction_50pct",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_FilterRestriction_50%.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "filter_restriction"
+     },
+     {
+      "id": "Fouling_Cooling_Airside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Airside_Minor.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Airside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Airside_Moderate.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Airside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Airside_Severe.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Waterside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Waterside_Minor.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Waterside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Waterside_Moderate.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Waterside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Cooling_Waterside_Severe.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Airside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Minor.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Airside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Moderate.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Airside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Severe.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Waterside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Waterside_Minor.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Waterside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Waterside_Moderate.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Waterside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Waterside_Severe.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "OABlockage",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OABlockage.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "oa_blockage"
+     },
+     {
+      "id": "OADMPRLeak_20",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_20.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRLeak_50",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_50.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRLeak_80",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRLeak_80.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRStuck_0",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_0.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRStuck_100",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_100.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRStuck_30",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_30.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRStuck_50",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_50.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "OADMPRStuck_80",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_80.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "damper"
+     },
+     {
+      "id": "SensorBias_RMTemp_p2C",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_+2C.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_RMTemp_p4C",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_+4C.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_RMTemp_m2C",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_-2C.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_RMTemp_m4C",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_SensorBias_RMTemp_-4C.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "VLVLeak_Cooling_20",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Cooling_20.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "VLVLeak_Cooling_50",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Cooling_50.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "VLVLeak_Cooling_80",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Cooling_80.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "VLVLeak_Heating_20",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Heating_20.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "VLVLeak_Heating_50",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Heating_50.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "VLVLeak_Heating_80",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVLeak_Heating_80.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_leak"
+     },
+     {
+      "id": "VLVStuck_Cooling_0",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_0.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_100",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_100.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_20",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_20.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_50",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_50.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_80",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Cooling_80.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_0",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_0.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_100",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_100.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_20",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_20.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_50",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_50.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_80",
+      "file": "LBNL_FDD_Data_Sets_FCU.zip",
+      "member": "LBNL_FDD_Dataset_FCU/FCU_VLVStuck_Heating_80.csv",
+      "equip": "FCU",
+      "class": "FCU",
+      "label": "valve_stuck"
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "outdoor_air_fraction",
+     "simultaneous_heat_cool",
+     "unmet_setpoint_hours"
+    ],
+    "config_template": "lbnl-fcu.json"
+   },
+   "known_issues": [
+    "Valves and dampers map to the controller demand columns (*_DM).",
+    "Timestamps are month-first (MM/DD/YYYY HH:MM).",
+    "FCU_Fouling_Cooling_Airside_Minor and FCU_Fouling_Heating_Airside_Minor are byte-identical (same size and CRC); one of the two labels is wrong."
+   ],
+   "store_bytes_estimate": 20000000
+  },
+  {
+   "id": "lbnl-ddahu",
+   "title": "LBNL simulated dual-duct AHU (labelled faults)",
+   "summary": "One simulated dual-duct (hot deck / cold deck) air handler serving four zones for a year at 1-minute resolution: fault-free plus stuck OA and terminal dampers, stuck valves, coil fouling, sensor biases and unstable sequences.",
+   "teaches": [
+    "where a temperature-based OA-fraction diagnostic degrades (dual-duct mixing)",
+    "measuring a detector's transferability gap instead of hiding it"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "dois": [
+    "10.25984/1881324"
+   ],
+   "landing_url": "https://data.openei.org/submissions/5763",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "simulated",
+   "labeled_faults": true,
+   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.openei.org/submissions/5763",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "equipment": "1 dual-duct AHU + 4 dual-duct terminal boxes",
+   "labels": {
+    "targets": {
+     "outdoor_air_fraction": "damper"
+    },
+    "fault_types": {
+     "damper": "OA damper stuck",
+     "terminal_damper": "hot- or cold-deck terminal damper stuck",
+     "valve_stuck": "coil valve stuck",
+     "coil_fouling": "coil fouling",
+     "sensor_bias": "supply temperature / static pressure sensor offset",
+     "control": "unstable heating/cooling sequence"
+    }
+   },
+   "files": [
+    {
+     "name": "LBNL_FDD_Data_Sets_DDAHU.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_DDAHU/LBNL_FDD_Data_Sets_DDAHU.zip",
+     "size": 1775170872,
+     "sha256": "bac73c863ca4ecad52846dbdd41d5daf9d844619e928f01b9eb18c1546d45c50",
+     "pinned": true,
+     "etag": "\"69cef538-5e6f6a61ce233\"",
+     "archive": "zip",
+     "extracted_size": 17362235964,
+     "members": [
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_CoolSeqUnstable.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_0.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_100.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_20.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_50.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_80.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_0.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_100.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_20.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_50.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_80.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_0.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_100.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_28.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_45.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_80.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_FaultFree.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Airside_Minor.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Airside_Moderate.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Airside_Severe.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Waterside_Minor.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Waterside_Moderate.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Waterside_Severe.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Airside_Minor.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Airside_Moderate.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Airside_Severe.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Waterside_Minor.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Waterside_Moderate.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Waterside_Severe.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_HeatSeqUnstable.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_+2C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_+4C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_-2C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_-4C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_+2inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_+4inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_-2inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_-4inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_+2C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_+4C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_-2C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_-4C.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_+2inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_+4inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_-2inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_-4inwg.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_0_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_100_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_20_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_50_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_80_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_0_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_100_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_20_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_50_.csv",
+      "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_80_.csv"
+     ]
+    },
+    {
+     "name": "LBNL_FDD_Data_Sets_DDAHU_ttl.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_DDAHU/LBNL_FDD_Data_Sets_DDAHU_ttl.zip",
+     "size": 1747,
+     "sha256": "dbc45c416c79fdb2c3030e1acb72b44b9724a3eccec8192fe62be00e4c810272",
+     "pinned": true,
+     "etag": "\"6d3-5e6f425458580\"",
+     "archive": "zip",
+     "extracted_size": 11409,
+     "members": [
+      "LBNL_FDD_Data_Sets_DDAHU_ttl.ttl"
+     ],
+     "role": "brick_model"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "fault-free + 2 stuck-OA-damper runs (the LBNL benchmark's set)",
+     "files": "all",
+     "runs": [
+      "fault_free",
+      "DMPRStuck_OA_0",
+      "DMPRStuck_OA_100"
+     ]
+    },
+    "full": {
+     "description": "every run in the archive",
+     "files": "all",
+     "runs": "all"
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-ddahu",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "lbnl_ddahu.json",
+    "units": {},
+    "quirks": [],
+    "runs": [
+     {
+      "id": "CoolSeqUnstable",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_CoolSeqUnstable.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "control"
+     },
+     {
+      "id": "DMPRStuck_Cold_0",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_0.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Cold_100",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_100.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Cold_20",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_20.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Cold_50",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_50.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Cold_80",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Cold_80.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Hot_0",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_0.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Hot_100",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_100.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Hot_20",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_20.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Hot_50",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_50.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_Hot_80",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_Hot_80.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "DMPRStuck_OA_0",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_0.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "DMPRStuck_OA_100",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_100.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "DMPRStuck_OA_28",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_28.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "DMPRStuck_OA_45",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_45.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "DMPRStuck_OA_80",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_DMPRStuck_OA_80.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "damper"
+     },
+     {
+      "id": "fault_free",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_FaultFree.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "Fouling_Cooling_Airside_Minor",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Airside_Minor.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Airside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Airside_Moderate.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Airside_Severe",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Airside_Severe.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Waterside_Minor",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Waterside_Minor.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Waterside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Waterside_Moderate.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Cooling_Waterside_Severe",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Cooling_Waterside_Severe.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Airside_Minor",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Airside_Minor.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Airside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Airside_Moderate.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Airside_Severe",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Airside_Severe.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Waterside_Minor",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Waterside_Minor.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Waterside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Waterside_Moderate.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "Fouling_Heating_Waterside_Severe",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_Fouling_Heating_Waterside_Severe.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "HeatSeqUnstable",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_HeatSeqUnstable.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "control"
+     },
+     {
+      "id": "SensorBias_CSA_p2C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_+2C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSA_p4C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_+4C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSA_m2C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_-2C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSA_m4C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSA_-4C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSP_p2inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_+2inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSP_p4inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_+4inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSP_m2inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_-2inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_CSP_m4inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_CSP_-4inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSA_p2C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_+2C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSA_p4C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_+4C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSA_m2C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_-2C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSA_m4C",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSA_-4C.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSP_p2inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_+2inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSP_p4inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_+4inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSP_m2inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_-2inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SensorBias_HSP_m4inwg",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_SensorBias_HSP_-4inwg.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "VLVStuck_Cooling_0",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_0_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_100",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_100_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_20",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_20_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_50",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_50_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Cooling_80",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Cooling_80_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_0",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_0_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_100",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_100_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_20",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_20_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_50",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_50_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "VLVStuck_Heating_80",
+      "file": "LBNL_FDD_Data_Sets_DDAHU.zip",
+      "member": "LBNL_FDD_Dataset_DDAHU/DualDuct_VLVStuck_Heating_80_.csv",
+      "equip": "DDAHU",
+      "class": "AHU",
+      "label": "valve_stuck"
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "outdoor_air_fraction",
+     "simultaneous_heat_cool"
+    ],
+    "config_template": "lbnl-ddahu.json"
+   },
+   "known_issues": [
+    "Each run's CSV is ~300 MB uncompressed; the full subset extracts ~17 GB.",
+    "Timestamps are month-first (MM/DD/YYYY HH:MM)."
+   ],
+   "store_bytes_estimate": 15000000
+  },
+  {
+   "id": "lbnl-fpu",
+   "title": "LBNL simulated fan-powered VAV terminal units (labelled faults)",
+   "summary": "Parallel (PFPU) and series (SFPU) fan-powered VAV boxes on one AHU for a year at 1-minute resolution: 31 runs each -- fault-free plus stuck VAV dampers, airflow and room-temperature sensor biases, reheat-valve leaks and sticks, reheat-coil fouling, unstable control and a restricted box fan. Faults are on the South-zone box.",
+   "teaches": [
+    "zone-terminal airflow tracking and reheat",
+    "which box is the device under test (diff the faulted run against fault-free)"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "dois": [
+    "10.25984/1881324"
+   ],
+   "landing_url": "https://data.openei.org/submissions/5763",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "simulated",
+   "labeled_faults": true,
+   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.openei.org/submissions/5763",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "equipment": "4 fan-powered VAV boxes (_I/_W/_S/_E zones) per variant; the _S box is mapped",
+   "labels": {
+    "targets": {},
+    "fault_types": {
+     "terminal_damper": "VAV damper stuck",
+     "valve_leak": "reheat valve leakage",
+     "valve_stuck": "reheat valve stuck",
+     "coil_fouling": "reheat coil fouling",
+     "sensor_bias": "airflow or room-temperature sensor offset",
+     "control": "unstable damper or room-temperature control",
+     "fan_restriction": "box fan flow restriction"
+    }
+   },
+   "files": [
+    {
+     "name": "LBNL_FDD_Data_Sets_FPU.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FPU/LBNL_FDD_Data_Sets_FPU.zip",
+     "size": 2192058781,
+     "sha256": "fb49b149b7cafd58723677383369601d9b1f9a33c2af8f2bb0ca0488b14a51f8",
+     "pinned": true,
+     "etag": "\"82a8299d-5ea63c0a2deb6\"",
+     "archive": "zip",
+     "extracted_size": 18290902586,
+     "members": [
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_FaultFree.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Airside_Minor.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Airside_Moderate.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Airside_Severe.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Waterside_Minor.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Waterside_Moderate.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Waterside_Severe.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVLeak_20%MaxFlow.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVLeak_50%MaxFlow.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVLeak_80%MaxFlow.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_0%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_100%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_20%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_50%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_80%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_RMTEMPUnstable.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_+2C.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_+4C.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_-2C.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_-4C.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_+200CFM.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_+400CFM.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_-200CFM.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_-400CFM.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_0%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_100%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_20%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_50%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_80%.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRUnstable.csv",
+      "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVFanRestrictFlow.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_FaultFree.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Airside_Minor.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Airside_Moderate.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Airside_Severe.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Waterside_Minor.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Waterside_Moderate.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Waterside_Severe.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVLeak_20%MaxFlow.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVLeak_50%MaxFlow.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVLeak_80%MaxFlow.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_0%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_100%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_20%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_50%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_80%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_RMTEMPUnstable.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_+2C.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_+4C.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_-2C.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_-4C.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_+200CFM.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_+400CFM.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_-200CFM.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_-400CFM.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_0%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_100%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_20%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_50%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_80%.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRUnstable.csv",
+      "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVFanRestrictFlow.csv"
+     ]
+    },
+    {
+     "name": "LBNL_FDD_Data_Sets_FPU_ttl.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_FPU/LBNL_FDD_Data_Sets_FPU_ttl.zip",
+     "size": 3302,
+     "sha256": "919cc9e13224937827d42fa5cb69e8291e4a885b823431da2eee5dbd73eb1e3e",
+     "pinned": true,
+     "etag": "\"ce6-5ea63c14d95ba\"",
+     "archive": "zip",
+     "extracted_size": 21474,
+     "members": [
+      "LBNL_FDD_Data_Sets_PFPU_ttl.ttl",
+      "LBNL_FDD_Data_Sets_SFPU_ttl.ttl"
+     ],
+     "role": "brick_model"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "parallel-FPU fault-free + 2 stuck-damper + a stuck and a leaking reheat valve",
+     "files": "all",
+     "runs": [
+      "PFPU__fault_free",
+      "PFPU__VAVDMPRStuck_50pct",
+      "PFPU__VAVDMPRStuck_100pct",
+      "PFPU__ReheatVLVStuck_0pct",
+      "PFPU__ReheatVLVLeak_50pctMaxFlow"
+     ]
+    },
+    "full": {
+     "description": "all 62 runs (31 PFPU + 31 SFPU)",
+     "files": "all",
+     "runs": "all"
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-fpu",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "lbnl_fpu.json",
+    "units": {},
+    "quirks": [],
+    "runs": [
+     {
+      "id": "PFPU__fault_free",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_FaultFree.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "PFPU__ReheatCoilFouling_Airside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Airside_Minor.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "PFPU__ReheatCoilFouling_Airside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Airside_Moderate.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "PFPU__ReheatCoilFouling_Airside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Airside_Severe.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "PFPU__ReheatCoilFouling_Waterside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Waterside_Minor.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "PFPU__ReheatCoilFouling_Waterside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Waterside_Moderate.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "PFPU__ReheatCoilFouling_Waterside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatCoilFouling_Waterside_Severe.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "PFPU__ReheatVLVLeak_20pctMaxFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVLeak_20%MaxFlow.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_leak"
+     },
+     {
+      "id": "PFPU__ReheatVLVLeak_50pctMaxFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVLeak_50%MaxFlow.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_leak"
+     },
+     {
+      "id": "PFPU__ReheatVLVLeak_80pctMaxFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVLeak_80%MaxFlow.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_leak"
+     },
+     {
+      "id": "PFPU__ReheatVLVStuck_0pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_0%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "PFPU__ReheatVLVStuck_100pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_100%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "PFPU__ReheatVLVStuck_20pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_20%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "PFPU__ReheatVLVStuck_50pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_50%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "PFPU__ReheatVLVStuck_80pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_ReheatVLVStuck_80%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "PFPU__RMTEMPUnstable",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_RMTEMPUnstable.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "control"
+     },
+     {
+      "id": "PFPU__SensorBias_RMTEMP_p2C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_+2C.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_RMTEMP_p4C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_+4C.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_RMTEMP_m2C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_-2C.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_RMTEMP_m4C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_RMTEMP_-4C.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_VAVAirflow_p200CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_+200CFM.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_VAVAirflow_p400CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_+400CFM.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_VAVAirflow_m200CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_-200CFM.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__SensorBias_VAVAirflow_m400CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_-400CFM.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "PFPU__VAVDMPRStuck_0pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_0%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "PFPU__VAVDMPRStuck_100pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_100%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "PFPU__VAVDMPRStuck_20pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_20%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "PFPU__VAVDMPRStuck_50pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_50%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "PFPU__VAVDMPRStuck_80pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRStuck_80%.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "PFPU__VAVDMPRUnstable",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVDMPRUnstable.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "control"
+     },
+     {
+      "id": "PFPU__VAVFanRestrictFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_VAVFanRestrictFlow.csv",
+      "equip": "PFPU",
+      "class": "VAV",
+      "label": "fan_restriction"
+     },
+     {
+      "id": "SFPU__fault_free",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_FaultFree.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "SFPU__ReheatCoilFouling_Airside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Airside_Minor.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "SFPU__ReheatCoilFouling_Airside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Airside_Moderate.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "SFPU__ReheatCoilFouling_Airside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Airside_Severe.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "SFPU__ReheatCoilFouling_Waterside_Minor",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Waterside_Minor.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "SFPU__ReheatCoilFouling_Waterside_Moderate",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Waterside_Moderate.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "SFPU__ReheatCoilFouling_Waterside_Severe",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatCoilFouling_Waterside_Severe.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "coil_fouling"
+     },
+     {
+      "id": "SFPU__ReheatVLVLeak_20pctMaxFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVLeak_20%MaxFlow.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_leak"
+     },
+     {
+      "id": "SFPU__ReheatVLVLeak_50pctMaxFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVLeak_50%MaxFlow.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_leak"
+     },
+     {
+      "id": "SFPU__ReheatVLVLeak_80pctMaxFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVLeak_80%MaxFlow.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_leak"
+     },
+     {
+      "id": "SFPU__ReheatVLVStuck_0pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_0%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "SFPU__ReheatVLVStuck_100pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_100%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "SFPU__ReheatVLVStuck_20pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_20%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "SFPU__ReheatVLVStuck_50pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_50%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "SFPU__ReheatVLVStuck_80pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_ReheatVLVStuck_80%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "valve_stuck"
+     },
+     {
+      "id": "SFPU__RMTEMPUnstable",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_RMTEMPUnstable.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "control"
+     },
+     {
+      "id": "SFPU__SensorBias_RMTEMP_p2C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_+2C.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_RMTEMP_p4C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_+4C.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_RMTEMP_m2C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_-2C.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_RMTEMP_m4C",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_RMTEMP_-4C.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_VAVAirflow_p200CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_+200CFM.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_VAVAirflow_p400CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_+400CFM.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_VAVAirflow_m200CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_-200CFM.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__SensorBias_VAVAirflow_m400CFM",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_-400CFM.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "SFPU__VAVDMPRStuck_0pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_0%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "SFPU__VAVDMPRStuck_100pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_100%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "SFPU__VAVDMPRStuck_20pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_20%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "SFPU__VAVDMPRStuck_50pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_50%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "SFPU__VAVDMPRStuck_80pct",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRStuck_80%.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "terminal_damper"
+     },
+     {
+      "id": "SFPU__VAVDMPRUnstable",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVDMPRUnstable.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "control"
+     },
+     {
+      "id": "SFPU__VAVFanRestrictFlow",
+      "file": "LBNL_FDD_Data_Sets_FPU.zip",
+      "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_VAVFanRestrictFlow.csv",
+      "equip": "SFPU",
+      "class": "VAV",
+      "label": "fan_restriction"
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "airflow_tracking",
+     "reheat_minimization_g36",
+     "unmet_setpoint_hours"
+    ],
+    "config_template": "lbnl-fpu.json"
+   },
+   "known_issues": [
+    "Faults are imposed on the SOUTH zone box (_S columns); the other zones stay healthy.",
+    "The reheat valve maps to the demand column (RH_VLV_DM_S); VAV_DMPR_S has no demand twin and is the measured position.",
+    "Scenario ids replace '%' with 'pct', '+' with 'p' and a leading '-' with 'm'.",
+    "No detector targets are declared yet: score reports overall detection only."
+   ],
+   "store_bytes_estimate": 30000000
+  },
+  {
+   "id": "lbnl-chiller",
+   "title": "LBNL simulated chiller plant (labelled faults)",
+   "summary": "A simulated water-side chiller plant (3 chillers, 3 cooling towers, primary and secondary loops) for a year at 1-minute resolution: fault-free plus cooling-tower fouling and PI mistuning, a condenser-bypass valve leaking or stuck, chiller fouling and sensor biases. No refrigerant-side points.",
+   "teaches": [
+    "chiller kW/ton and cooling-tower approach",
+    "calibrating a design ceiling from the plant's own fault-free run",
+    "why a label swap in a published dataset must be fixed before analysis"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "dois": [
+    "10.25984/1881324"
+   ],
+   "landing_url": "https://data.openei.org/submissions/5763",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "simulated",
+   "labeled_faults": true,
+   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.openei.org/submissions/5763",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "equipment": "3 chillers, 3 cooling towers, primary/secondary CHW loops; unit 1 mapped",
+   "labels": {
+    "targets": {},
+    "fault_types": {
+     "tower_fouling": "cooling-tower fill fouling",
+     "chiller_fouling": "chiller heat-exchanger fouling",
+     "bypass_valve": "condenser-water bypass (three-way) valve leaking or stuck",
+     "sensor_bias": "chiller, tower or secondary-loop pressure sensor offset",
+     "control": "cooling-tower PI mistuning"
+    }
+   },
+   "files": [
+    {
+     "name": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_Chiller_Plant/LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+     "size": 1570938957,
+     "sha256": "058a8cc420dbb7772c3aa56bf118c98612fd91a64780b8a023ada4f2c7f7f1cb",
+     "pinned": true,
+     "etag": "\"5da2a04d-63a11f19585f9\"",
+     "archive": "zip",
+     "extracted_size": 10286000894,
+     "members": [
+      "ChillerPlant.csv",
+      "ChillerPlant_bypass_leakage_025.csv",
+      "ChillerPlant_bypass_leakage_050.csv",
+      "ChillerPlant_bypass_leakage_075.csv",
+      "ChillerPlant_bypass_stuck_050.csv",
+      "ChillerPlant_bypass_stuck_075.csv",
+      "ChillerPlant_chiller_bias_-1.csv",
+      "ChillerPlant_chiller_bias_-2.csv",
+      "ChillerPlant_chiller_bias_1.csv",
+      "ChillerPlant_chiller_bias_2.csv",
+      "ChillerPlant_chiller_fouling_065.csv",
+      "ChillerPlant_chiller_fouling_095.csv",
+      "ChillerPlant_coolingtower_bias_-1.csv",
+      "ChillerPlant_coolingtower_bias_-2.csv",
+      "ChillerPlant_coolingtower_bias_1.csv",
+      "ChillerPlant_coolingtower_bias_2.csv",
+      "ChillerPlant_coolingtower_fouling_065.csv",
+      "ChillerPlant_coolingtower_fouling_080.csv",
+      "ChillerPlant_coolingtower_fouling_095.csv",
+      "ChillerPlant_coolingtower_PI.csv",
+      "ChillerPlant_secondary_chilled_water_pressure_bias_-010.csv",
+      "ChillerPlant_secondary_chilled_water_pressure_bias_-020.csv",
+      "ChillerPlant_secondary_chilled_water_pressure_bias_010.csv",
+      "ChillerPlant_secondary_chilled_water_pressure_bias_020.csv"
+     ]
+    },
+    {
+     "name": "LBNL_FDD_Data_Sets_Chiller_Plant_ttl.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_Chiller_Plant/LBNL_FDD_Data_Sets_Chiller_Plant_ttl.zip",
+     "size": 1328,
+     "sha256": "19287cef4feddd71fdff69815fb80974a409e164d6559b7d2186c7b3f15b41ac",
+     "pinned": true,
+     "etag": "\"530-5e9d39ea046e2\"",
+     "archive": "zip",
+     "extracted_size": 8424,
+     "members": [
+      "LBNL_FDD_Data_Sets_chiller_plant.ttl"
+     ],
+     "role": "brick_model"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "fault-free + tower fouling + stuck bypass + a sensor bias",
+     "files": "all",
+     "runs": [
+      "fault_free",
+      "coolingtower_fouling_095",
+      "bypass_stuck_075",
+      "chiller_bias_2"
+     ]
+    },
+    "full": {
+     "description": "all 24 runs",
+     "files": "all",
+     "runs": "all"
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-chiller",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "lbnl_chiller.json",
+    "units": {},
+    "quirks": [
+     {
+      "op": "swap",
+      "action": "fix",
+      "columns": [
+       "OA_TEMP",
+       "OA_TEMP_WB"
+      ],
+      "note": "The exported outdoor dry-bulb (OA_TEMP) and wet-bulb (OA_TEMP_WB) columns are swapped relative to the dataset inventory: the tower leaving-water setpoint tracks OA_TEMP + 8 F (median error 0.28 F) and OA_TEMP_WB exceeds OA_TEMP in 97% of rows. Swapped back before mapping."
+     },
+     {
+      "op": "swap",
+      "action": "fix",
+      "columns": [
+       "CWL_SEC_SW_TEMP",
+       "CWL_SEC_RW_TEMP"
+      ],
+      "note": "The secondary chilled-water loop's supply and return temperatures are swapped: as labelled, return is colder than supply in 98% of flowing hours. Swapped back before mapping (the primary loop is correct)."
+     }
+    ],
+    "runs": [
+     {
+      "id": "fault_free",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": ""
+     },
+     {
+      "id": "bypass_leakage_025",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_bypass_leakage_025.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "bypass_valve"
+     },
+     {
+      "id": "bypass_leakage_050",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_bypass_leakage_050.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "bypass_valve"
+     },
+     {
+      "id": "bypass_leakage_075",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_bypass_leakage_075.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "bypass_valve"
+     },
+     {
+      "id": "bypass_stuck_050",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_bypass_stuck_050.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "bypass_valve"
+     },
+     {
+      "id": "bypass_stuck_075",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_bypass_stuck_075.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "bypass_valve"
+     },
+     {
+      "id": "chiller_bias_m1",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_chiller_bias_-1.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "chiller_bias_m2",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_chiller_bias_-2.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "chiller_bias_1",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_chiller_bias_1.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "chiller_bias_2",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_chiller_bias_2.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "chiller_fouling_065",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_chiller_fouling_065.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "chiller_fouling"
+     },
+     {
+      "id": "chiller_fouling_095",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_chiller_fouling_095.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "chiller_fouling"
+     },
+     {
+      "id": "coolingtower_bias_m1",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_bias_-1.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coolingtower_bias_m2",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_bias_-2.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coolingtower_bias_1",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_bias_1.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coolingtower_bias_2",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_bias_2.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "coolingtower_fouling_065",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_fouling_065.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "tower_fouling"
+     },
+     {
+      "id": "coolingtower_fouling_080",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_fouling_080.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "tower_fouling"
+     },
+     {
+      "id": "coolingtower_fouling_095",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_fouling_095.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "tower_fouling"
+     },
+     {
+      "id": "coolingtower_PI",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_coolingtower_PI.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "control"
+     },
+     {
+      "id": "secondary_chilled_water_pressure_bias_m010",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_secondary_chilled_water_pressure_bias_-010.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "secondary_chilled_water_pressure_bias_m020",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_secondary_chilled_water_pressure_bias_-020.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "secondary_chilled_water_pressure_bias_010",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_secondary_chilled_water_pressure_bias_010.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "secondary_chilled_water_pressure_bias_020",
+      "file": "LBNL_FDD_Data_Sets_Chiller_Plant.zip",
+      "member": "ChillerPlant_secondary_chilled_water_pressure_bias_020.csv",
+      "equip": "PLANT",
+      "class": "CHW_PLANT",
+      "label": "sensor_bias"
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "chiller_efficiency",
+     "cooling_tower_approach"
+    ],
+    "config_template": "lbnl-chiller.json"
+   },
+   "known_issues": [
+    "Two label swaps in the export (outdoor wet/dry-bulb; secondary-loop supply/return) are fixed at ingest; see the quirks.",
+    "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
+    "Water-side only: the refrigerant-side chiller drift detectors cannot run on it."
+   ],
+   "store_bytes_estimate": 12000000
+  },
+  {
+   "id": "lbnl-boiler",
+   "title": "LBNL simulated boiler plant (labelled faults, Brick model)",
+   "summary": "A simulated hot-water plant (2 boilers, 2 pumps, one loop) for a year at 1-minute resolution: fault-free plus boiler fouling, PI mistuning and boiler / loop temperature and pressure sensor biases, with the plant's Brick model.",
+   "teaches": [
+    "hot-water loop differential-pressure reset",
+    "why a Brick On_Off_Status on a boiler is an enable, not proof of firing",
+    "a detection gap: boiler fouling is invisible to temperature-only rules"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "dois": [
+    "10.25984/1881324"
+   ],
+   "landing_url": "https://data.openei.org/submissions/5763",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "simulated",
+   "labeled_faults": true,
+   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.openei.org/submissions/5763",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "equipment": "2 boilers, 2 hot-water pumps, 1 loop; boiler/pump 1 mapped",
+   "labels": {
+    "targets": {},
+    "fault_types": {
+     "boiler_fouling": "boiler heat-exchanger fouling",
+     "sensor_bias": "boiler / loop temperature or pressure sensor offset",
+     "control": "boiler PI mistuning"
+    }
+   },
+   "files": [
+    {
+     "name": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_Boiler_Plant/LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+     "size": 317766502,
+     "sha256": "b182eaa660e07066a825df1acda36e3111da9882f8d3d48d0ebd56ab95c35709",
+     "pinned": true,
+     "etag": "\"12f0bb66-5ea4fa2c72f33\"",
+     "archive": "zip",
+     "extracted_size": 2242400650,
+     "members": [
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_-2.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_-4.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_2.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_4.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_foul_065.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_foul_080.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_foul_095.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_PI.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_-10.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_-20.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_10.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_20.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_-2.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_-4.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_2.csv",
+      "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_4.csv"
+     ]
+    },
+    {
+     "name": "LBNL_FDD_Data_Sets_Boiler_Plant_ttl.zip",
+     "url": "https://fdddata.lbl.gov/data/Simulated_LBNL_FDD_Data_Sets_Boiler_Plant/LBNL_FDD_Data_Sets_Boiler_Plant_ttl.zip",
+     "size": 713,
+     "sha256": "94c0ffa93e2a699ec5591543b5673b0a2a70cba54c7b04ec5f476e699399a1a3",
+     "pinned": true,
+     "etag": "\"2c9-5e9ee42a91207\"",
+     "archive": "zip",
+     "extracted_size": 2155,
+     "members": [
+      "LBNL_FDD_Data_Sets_Boiler_Plant_ttl.ttl"
+     ],
+     "role": "brick_model"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "fault-free + fouling + PI mistuning + a temperature sensor bias",
+     "files": "all",
+     "runs": [
+      "fault_free",
+      "boiler_foul_095",
+      "boiler_PI",
+      "hot_water_temp_bias_2"
+     ]
+    },
+    "full": {
+     "description": "all 17 runs",
+     "files": "all",
+     "runs": "all"
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-boiler",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "lbnl_boiler.json",
+    "units": {},
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; rules needing boiler_status decline on this plant."
+     }
+    ],
+    "runs": [
+     {
+      "id": "fault_free",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": ""
+     },
+     {
+      "id": "boiler_bias_m2",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_-2.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "boiler_bias_m4",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_-4.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "boiler_bias_2",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_2.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "boiler_bias_4",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_bias_4.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "boiler_foul_065",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_foul_065.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "boiler_fouling"
+     },
+     {
+      "id": "boiler_foul_080",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_foul_080.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "boiler_fouling"
+     },
+     {
+      "id": "boiler_foul_095",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_foul_095.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "boiler_fouling"
+     },
+     {
+      "id": "boiler_PI",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_boiler_PI.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "control"
+     },
+     {
+      "id": "hot_water_pressure_bias_m10",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_-10.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_pressure_bias_m20",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_-20.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_pressure_bias_10",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_10.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_pressure_bias_20",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_pressure_bias_20.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_temp_bias_m2",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_-2.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_temp_bias_m4",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_-4.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_temp_bias_2",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_2.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     },
+     {
+      "id": "hot_water_temp_bias_4",
+      "file": "LBNL_FDD_Data_Sets_Boiler_Plant.zip",
+      "member": "LBNL_FDD_Dataset_Boiler_Plant/BoilerPlant_hot_water_temp_bias_4.csv",
+      "equip": "PLANT",
+      "class": "HW_PLANT",
+      "label": "sensor_bias"
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "hw_pump_dp_reset"
+    ],
+    "config_template": "lbnl-boiler.json"
+   },
+   "known_issues": [
+    "The boiler status points are enables (see the quirk); boiler_status is not mapped.",
+    "Gas use is a cumulative counter (BOI_GAS_CSUM_*) with no CAMBER role yet, so boiler fouling (a gas-per-heat signature) has no detector."
+   ],
+   "store_bytes_estimate": 8000000
+  },
+  {
+   "id": "bdg2",
+   "title": "Building Data Genome 2 (whole-building meters)",
+   "summary": "3,053 hourly whole-building energy meters from 1,636 non-residential buildings on 19 sites, 2016-2017: electricity, chilled water, steam, hot water, gas, water, irrigation and solar, with site weather and building metadata.",
+   "teaches": [
+    "change-point M&V baselines (ASHRAE Guideline 14 acceptance)",
+    "weather normalization with the site's own weather station",
+    "portfolio storage: one facility per site, one equipment per building meter"
+   ],
+   "publisher": "Building and Urban Data Science (BUDS) Lab, National University of Singapore",
+   "citation": "Miller, C., Kathirgamanathan, A., Picchetti, B. et al. (2020). The Building Data Genome Project 2, energy meter data from the ASHRAE Great Energy Predictor III competition. Scientific Data 7, 368. doi:10.1038/s41597-020-00712-x",
+   "dois": [
+    "10.1038/s41597-020-00712-x"
+   ],
+   "landing_url": "https://github.com/buds-lab/building-data-genome-project-2",
+   "licence": "CC-BY-SA-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://raw.githubusercontent.com/buds-lab/building-data-genome-project-2/master/LICENSE",
+    "expect": "Attribution-ShareAlike 4.0"
+   },
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "whole-building meters (no HVAC points)",
+   "timezone": "naive local time per site (metadata.csv 'timezone')",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "metadata.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/metadata/metadata.csv",
+     "size": 272024,
+     "sha256": "992d0b29f24f96ad4332bc4dbb534b7bdd7dd2689aad093f94e93068ecddca02",
+     "pinned": true,
+     "etag": "\"992d0b29f24f96ad4332bc4dbb534b7bdd7dd2689aad093f94e93068ecddca02\"",
+     "archive": null,
+     "role": "metadata"
+    },
+    {
+     "name": "weather.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/weather/weather.csv",
+     "size": 19457782,
+     "sha256": "a8189f1c6acdf3b9933a9e6354b8e7c1278cd56a7075929623a17565d44f04bd",
+     "pinned": true,
+     "etag": "\"a8189f1c6acdf3b9933a9e6354b8e7c1278cd56a7075929623a17565d44f04bd\"",
+     "archive": null,
+     "role": "weather"
+    },
+    {
+     "name": "raw/electricity.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/electricity.csv",
+     "size": 174239039,
+     "sha256": "039d909d8981e2d69eaeb366144e6ab7e84fa5e7e216aee42bddd95384a66418",
+     "pinned": true,
+     "etag": "\"039d909d8981e2d69eaeb366144e6ab7e84fa5e7e216aee42bddd95384a66418\"",
+     "archive": null,
+     "role": "meter_raw:electricity"
+    },
+    {
+     "name": "raw/chilledwater.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/chilledwater.csv",
+     "size": 78842043,
+     "sha256": "6a225cc78fb778f5b4bf0d4ebd34e3b544e20900776be2241c425dae07d0c119",
+     "pinned": true,
+     "etag": "\"6a225cc78fb778f5b4bf0d4ebd34e3b544e20900776be2241c425dae07d0c119\"",
+     "archive": null,
+     "role": "meter_raw:chilledwater"
+    },
+    {
+     "name": "raw/steam.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/steam.csv",
+     "size": 46742607,
+     "sha256": "1eefcbc22859194c792727d8bf261dae29d1d32ecc6c6d52f1b098debebb7442",
+     "pinned": true,
+     "etag": "\"1eefcbc22859194c792727d8bf261dae29d1d32ecc6c6d52f1b098debebb7442\"",
+     "archive": null,
+     "role": "meter_raw:steam"
+    },
+    {
+     "name": "raw/hotwater.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/hotwater.csv",
+     "size": 24943565,
+     "sha256": "a0c582941b45b06542da5769337b9fd33c721dc4adeafab7db955e1523d96d4e",
+     "pinned": true,
+     "etag": "\"a0c582941b45b06542da5769337b9fd33c721dc4adeafab7db955e1523d96d4e\"",
+     "archive": null,
+     "role": "meter_raw:hotwater"
+    },
+    {
+     "name": "raw/gas.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/gas.csv",
+     "size": 20181931,
+     "sha256": "e196b7b29b290f099f011efe50b55ee0fe565270d1bd654b3d936b72332e65e7",
+     "pinned": true,
+     "etag": "\"e196b7b29b290f099f011efe50b55ee0fe565270d1bd654b3d936b72332e65e7\"",
+     "archive": null,
+     "role": "meter_raw:gas"
+    },
+    {
+     "name": "raw/water.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/water.csv",
+     "size": 15641460,
+     "sha256": "fa51cc382f3edc185bd6e232631c01b41ebd05adc51b5af5e5026d7beffdfd01",
+     "pinned": true,
+     "etag": "\"fa51cc382f3edc185bd6e232631c01b41ebd05adc51b5af5e5026d7beffdfd01\"",
+     "archive": null,
+     "role": "meter_raw:water"
+    },
+    {
+     "name": "raw/irrigation.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/irrigation.csv",
+     "size": 3154282,
+     "sha256": "bf951cd66103ee02f6b01dae8cb2e9b54a4c997b5f3018fa79ba9d7ea9d5f35d",
+     "pinned": true,
+     "etag": "\"bf951cd66103ee02f6b01dae8cb2e9b54a4c997b5f3018fa79ba9d7ea9d5f35d\"",
+     "archive": null,
+     "role": "meter_raw:irrigation"
+    },
+    {
+     "name": "raw/solar.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/raw/solar.csv",
+     "size": 743887,
+     "sha256": "efa65f32b1661b733bd29818c097a2ddc2f36034bdce7bd757d87bfe13af0ead",
+     "pinned": true,
+     "etag": "\"efa65f32b1661b733bd29818c097a2ddc2f36034bdce7bd757d87bfe13af0ead\"",
+     "archive": null,
+     "role": "meter_raw:solar"
+    },
+    {
+     "name": "cleaned/electricity_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/electricity_cleaned.csv",
+     "size": 174977911,
+     "sha256": "b6ffc9b4dfcefe5c753594730a08ae822b0d50fec6815abb8f185591e6c630a3",
+     "pinned": true,
+     "etag": "\"b6ffc9b4dfcefe5c753594730a08ae822b0d50fec6815abb8f185591e6c630a3\"",
+     "archive": null,
+     "role": "meter_cleaned:electricity"
+    },
+    {
+     "name": "cleaned/chilledwater_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/chilledwater_cleaned.csv",
+     "size": 77005463,
+     "sha256": "8211aaf210379af50cbf7af87579d12414c3500d3e3f4dea725761c93a172bcd",
+     "pinned": true,
+     "etag": "\"8211aaf210379af50cbf7af87579d12414c3500d3e3f4dea725761c93a172bcd\"",
+     "archive": null,
+     "role": "meter_cleaned:chilledwater"
+    },
+    {
+     "name": "cleaned/steam_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/steam_cleaned.csv",
+     "size": 45422530,
+     "sha256": "ea5956c49ed1d6cc1b611a752b5a9dc3bcd4d45ddcd674e53b3c41661a6d3b9b",
+     "pinned": true,
+     "etag": "\"ea5956c49ed1d6cc1b611a752b5a9dc3bcd4d45ddcd674e53b3c41661a6d3b9b\"",
+     "archive": null,
+     "role": "meter_cleaned:steam"
+    },
+    {
+     "name": "cleaned/hotwater_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/hotwater_cleaned.csv",
+     "size": 24362948,
+     "sha256": "9714f1e803c88f7efe294480e8a32c61317e84edc65ad55ea7e9fc3282e80fce",
+     "pinned": true,
+     "etag": "\"9714f1e803c88f7efe294480e8a32c61317e84edc65ad55ea7e9fc3282e80fce\"",
+     "archive": null,
+     "role": "meter_cleaned:hotwater"
+    },
+    {
+     "name": "cleaned/gas_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/gas_cleaned.csv",
+     "size": 22002654,
+     "sha256": "b3b059d32e8a16a92fb274e2e90483fac9b7797e42a9e07840ab9df130266405",
+     "pinned": true,
+     "etag": "\"b3b059d32e8a16a92fb274e2e90483fac9b7797e42a9e07840ab9df130266405\"",
+     "archive": null,
+     "role": "meter_cleaned:gas"
+    },
+    {
+     "name": "cleaned/water_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/water_cleaned.csv",
+     "size": 15394905,
+     "sha256": "cf3474e7d3ca89b7e04674ef80ed6d6248473f5ccd523b1624ad73625d5fb220",
+     "pinned": true,
+     "etag": "\"cf3474e7d3ca89b7e04674ef80ed6d6248473f5ccd523b1624ad73625d5fb220\"",
+     "archive": null,
+     "role": "meter_cleaned:water"
+    },
+    {
+     "name": "cleaned/irrigation_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/irrigation_cleaned.csv",
+     "size": 3072060,
+     "sha256": "dc36305ba5b9a0e4b908b3e481d89ce6fc21b276e0e2a9df565f74e1b6c8e773",
+     "pinned": true,
+     "etag": "\"dc36305ba5b9a0e4b908b3e481d89ce6fc21b276e0e2a9df565f74e1b6c8e773\"",
+     "archive": null,
+     "role": "meter_cleaned:irrigation"
+    },
+    {
+     "name": "cleaned/solar_cleaned.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/cleaned/solar_cleaned.csv",
+     "size": 736027,
+     "sha256": "4a419a993b084d41f7ef7014261350db889eb7bec6cf657c0dae446ad6717181",
+     "pinned": true,
+     "etag": "\"4a419a993b084d41f7ef7014261350db889eb7bec6cf657c0dae446ad6717181\"",
+     "archive": null,
+     "role": "meter_cleaned:solar"
+    },
+    {
+     "name": "kaggle/kaggle.csv",
+     "url": "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/meters/kaggle/kaggle.csv",
+     "size": 896816677,
+     "sha256": "67e6d3e82cc737d28389845fc5e526711705fc264fd178a7a0b6f8f3d8d3c82e",
+     "pinned": true,
+     "etag": "\"67e6d3e82cc737d28389845fc5e526711705fc264fd178a7a0b6f8f3d8d3c82e\"",
+     "archive": null,
+     "role": "kaggle"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "metadata + weather + cleaned electricity and chilled-water meters for up to 4 buildings on each of 10 sites (plus the buildings the M&V example uses)",
+     "files": [
+      "metadata.csv",
+      "weather.csv",
+      "cleaned/electricity_cleaned.csv",
+      "cleaned/chilledwater_cleaned.csv"
+     ],
+     "sites": [
+      "Fox",
+      "Eagle",
+      "Bull",
+      "Hog",
+      "Panther",
+      "Peacock",
+      "Bobcat",
+      "Moose",
+      "Swan",
+      "Robin"
+     ],
+     "meters": [
+      "electricity",
+      "chilledwater"
+     ],
+     "max_buildings_per_site": 4,
+     "include_buildings": [
+      "Fox_lodging_Stephen",
+      "Fox_lodging_Stephan",
+      "Eagle_health_Athena",
+      "Bull_education_Magaret",
+      "Hog_education_Hallie",
+      "Panther_office_Patti",
+      "Bull_office_Rob",
+      "Robin_office_Antonina"
+     ]
+    },
+    "full": {
+     "description": "all 19 files (raw, cleaned and the competition subset); ingest reads every site and every cleaned meter",
+     "files": "all",
+     "sites": "all",
+     "meters": [
+      "electricity",
+      "chilledwater",
+      "steam",
+      "hotwater",
+      "gas",
+      "water",
+      "irrigation",
+      "solar"
+     ],
+     "max_buildings_per_site": null,
+     "include_buildings": []
+    }
+   },
+   "ingest": {
+    "adapter": "bdg2",
+    "facility": "ds-bdg2",
+    "resample": "1h",
+    "meter_source": "cleaned",
+    "meter_roles": {
+     "electricity": "power"
+    },
+    "default_meter_role": "energy_rate",
+    "weather_units": {
+     "oat": "degC"
+    },
+    "quirks": [],
+    "runs": [],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "bdg2.json"
+   },
+   "known_issues": [
+    "Licence is CC-BY-SA 4.0 (the repository LICENSE): analysis and commercial use are fine; a redistributed adaptation of the data must keep the same licence.",
+    "Meter readings are hourly energy per interval; they are stored as an hourly-mean rate (numerically equal), electricity under 'power' and the other meters under 'energy_rate'.",
+    "One facility per site (ds-bdg2-<site>); each building meter is an equipment '<building>__<meter>' of class '<METER>_METER'. Weather (airTemperature, degC) is converted to F on equipment 'weather'.",
+    "kaggle/kaggle.csv (the competition subset, numeric building ids) is downloaded by the full subset but not ingested; it is known to mix units across sites."
+   ],
+   "store_bytes_estimate": 25000000
+  }
+ ]
+}

@@ -6,7 +6,9 @@ completely different point-naming conventions *and* ship ground-truth fault labe
 they're an end-to-end test of:
 
 - **Mapping** — LBNL point names (`CHWC_VLV`, `SA_TEMP`, `OA_DMPR`, …) → CAMBER
-  roles via `mapping*.json` (a config file, not code) — one per equipment family.
+  roles via a mapping file (config, not code) — one per equipment family. The mappings ship
+  with the dataset catalog (`camber/datasets/mappings/lbnl_*.json`), the single source of truth
+  for these examples and `camber datasets ingest`.
 - **Completeness** — the entity model reports the SDAHU is cooling-only (no heating
   valve) and gates heat-coil rules accordingly.
 - **Storage** — the role-frame round-trips through the Parquet store.
@@ -29,7 +31,7 @@ python examples/lbnl_fdd/benchmark.py        # FDD-accuracy + drift (AHU + FPU) 
 
 `run_brick.py` parses the dataset's Brick model and derives the point→role mapping
 automatically (cooling vs heating valve, OA damper, supply fan resolved from the
-equipment relationships) — no hand-written `mapping.json` — then runs the pipeline
+equipment relationships) — no hand-written mapping — then runs the pipeline
 on it.
 
 ### Cross-equipment benchmark
@@ -40,7 +42,7 @@ conventions** — single-duct AHU (SDAHU), fan-coil unit (FCU), and dual-duct AH
 (DDAHU) — and scores each family plus the pooled set with the generalized harness
 (`camber.eval.benchmark`): overall detection, **per-detector** confusion against
 each detector's target fault, and the correct-diagnosis rate. The *same* role-based
-rules run unchanged across all three; only the `mapping_*.json` config and the unit's
+rules run unchanged across all three; only the `lbnl_*.json` mapping and the unit's
 design-minimum OA differ. (Runs on whatever's downloaded; SDAHU-only without
 `--families`.)
 
@@ -74,7 +76,8 @@ feasibility matrix and the open-licensed datasets that would close the gaps.
 ### Chiller-plant validation (`--chiller`)
 
 `benchmark.py` also scores the **plant-level** chiller detectors on the CC-BY LBNL chiller-plant
-subset (`mapping_chiller.json`): **chiller-efficiency** (kW/ton, target = tower fouling / PID +
+subset (`lbnl_chiller.json`, plus the catalog's `fix` quirk that swaps the exported
+wet-bulb/dry-bulb columns back): **chiller-efficiency** (kW/ton, target = tower fouling / PID +
 three-way-bypass leak/stuck — all raise chiller lift) and **cooling-tower approach** (CW-supply vs
 wet-bulb, target = tower fouling / PID). The simulated chiller/tower design curves aren't published,
 so each detector's absolute design ceiling is **calibrated from the plant's own fault-free run**
@@ -89,6 +92,8 @@ Dataset: **LBNL Fault Detection and Diagnostics Datasets**, by LBNL/PNNL/NREL/
 ORNL/Drexel — Creative Commons Attribution (CC-BY).
 <https://www.osti.gov/dataexplorer/biblio/dataset/1881324>
 
-Data is **not** bundled; `fetch.py` downloads it to `examples/_data/` (git-ignored).
+Data is **not** bundled; `fetch.py` downloads it to `examples/_data/` (git-ignored). The same data
+is in CAMBER's dataset catalog (`camber datasets fetch lbnl-sdahu`, see `docs/DATASETS.md`), which
+verifies checksums and ingests it into a Parquet store for `camber run` / `camber report`.
 The dataset also ships Brick (`.ttl`) semantic models, a natural fit for a future
 Haystack/Brick interop example.

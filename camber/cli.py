@@ -11,6 +11,7 @@ Subcommands:
     camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # the legacy AHU HeC charts
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
+    camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -327,6 +328,264 @@ def _cmd_edge_selftest(args) -> int:
     for obj in log:
         print(f"  {obj['key']} ({len(obj['data'])} bytes)")
     print("no real sink touched; no BAS write path exists (see docs/EDGE-DEPLOY.md).")
+    return 0
+
+
+# --------------------------------------------------------------------------- datasets subcommands
+#
+# The open dataset catalog (camber.datasets). Exit codes: 2 = checksum mismatch (a changed upstream
+# file is never accepted), 3 = licence gate (research-only data needs --accept-noncommercial),
+# 4 = not enough disk. Imports stay lazy so `camber --help` never pays for them.
+
+_DS_EXIT_CHECKSUM, _DS_EXIT_LICENCE, _DS_EXIT_DISK = 2, 3, 4
+
+
+def _ds_entries(args, *, include_research: bool):
+    from . import datasets as ds
+
+    if getattr(args, "all", False):
+        return ds.catalog(licence="all" if include_research else "commercial")
+    return [ds.get(i) for i in args.ids]
+
+
+def _ds_errors(fn):
+    """Map catalog errors onto the documented exit codes, printing the reason."""
+
+    def wrapped(args) -> int:
+        from .datasets._archive import UnsafeArchive
+        from .datasets._fetch import ChecksumMismatch, FetchError, InsufficientSpace
+
+        try:
+            return fn(args)
+        except ChecksumMismatch as e:
+            print(f"error: {e}", file=sys.stderr)
+            return _DS_EXIT_CHECKSUM
+        except PermissionError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return _DS_EXIT_LICENCE
+        except InsufficientSpace as e:
+            print(f"error: {e}", file=sys.stderr)
+            return _DS_EXIT_DISK
+        except (FetchError, UnsafeArchive, FileNotFoundError, KeyError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+
+    wrapped.__name__ = fn.__name__
+    return wrapped
+
+
+def _mb(n) -> str:
+    from .datasets._fetch import human_bytes
+
+    return human_bytes(n or 0)
+
+
+@_ds_errors
+def _cmd_datasets_list(args) -> int:
+    from . import datasets as ds
+
+    rows = ds.catalog(licence=args.licence, kind=args.kind, labeled=True if args.labeled else None)
+    if args.json:
+        print(json.dumps([e.as_dict() for e in rows], indent=2))
+        return 0
+    head = f"{'id':14s} {'licence':16s} {'access':13s} {'kind':9s} {'labels':6s} {'default':>9s}"
+    print(f"{head}  title")
+    for e in rows:
+        print(
+            f"{e.id:14s} {e.licence:16s} {e.access:13s} {e.kind:9s} "
+            f"{'yes' if e.labeled_faults else 'no':6s} {_mb(e.download_bytes()):>9s}  {e.title}"
+        )
+    print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
+    return 0
+
+
+@_ds_errors
+def _cmd_datasets_info(args) -> int:
+    from . import datasets as ds
+
+    e = ds.get(args.id)
+    if args.json:
+        print(json.dumps(e.as_dict(), indent=2))
+        return 0
+    print(f"{e.title}  [{e.id}]\n\n{e.summary}\n")
+    print(f"publisher : {e.publisher}")
+    print(f"licence   : {e.licence} ({e.access})" + ("  share-alike" if e.share_alike else ""))
+    print(f"source    : {e.landing_url}")
+    print(f"cite      : {e.citation}")
+    if e.dois:
+        print(f"doi       : {', '.join(e.dois)}")
+    print(f"kind      : {e.kind}; labelled faults: {'yes' if e.labeled_faults else 'no'}")
+    if e.equipment:
+        print(f"equipment : {e.equipment}")
+    if e.teaches:
+        print("teaches   : " + "; ".join(e.teaches))
+    print("\nsubsets:")
+    for name, sub in e.subsets.items():
+        nruns = len(e.runs(name)) if e.ingest.get("runs") else 0
+        runs = f", {nruns} run(s)" if nruns else ""
+        print(
+            f"  {name:8s} {_mb(e.download_bytes(name)):>9s}{runs} -- {sub.get('description', '')}"
+        )
+    rules = (e.suggested_analyses or {}).get("rules")
+    if rules:
+        print("\nsuggested rules: " + ", ".join(rules))
+    if e.known_issues:
+        print("\nknown issues:")
+        for k in e.known_issues:
+            print(f"  - {k}")
+    return 0
+
+
+def _progress_printer():
+    import time
+
+    state = {"t": 0.0}
+
+    def cb(name, done, total):
+        now = time.monotonic()
+        if done != total and now - state["t"] < 0.5:
+            return
+        state["t"] = now
+        tot = f"/{_mb(total)}" if total else ""
+        end = "\n" if total and done >= total else ""
+        print(f"\r  {name}: {_mb(done)}{tot}", end=end, file=sys.stderr, flush=True)
+
+    return cb
+
+
+@_ds_errors
+def _cmd_datasets_fetch(args) -> int:
+    from . import datasets as ds
+
+    if not args.all and not args.ids:
+        print("error: name dataset id(s) or pass --all", file=sys.stderr)
+        return 1
+    entries = _ds_entries(args, include_research=args.licence == "all")
+    for e in entries:
+        print(f"fetching {e.id} ({args.subset or 'default'}, {_mb(e.download_bytes(args.subset))})")
+        res = ds.fetch(
+            e.id,
+            subset=args.subset,
+            data_dir=args.dir,
+            accept_noncommercial=args.accept_noncommercial,
+            progress=None if args.quiet else _progress_printer(),
+        )
+        for f in res.files:
+            state = "verified (already present)" if f["skipped"] else "downloaded + verified"
+            print(f"  {f['name']}: {state}, sha256 {f['sha256'][:12]}…")
+        for w in res.warnings:
+            print(f"  warning: {w}")
+        if res.acknowledged:
+            print(f"  licence acknowledged: {e.licence} (research / non-commercial use only)")
+        print(f"  licence: {e.licence}. Please cite: {res.citation}\n")
+    return 0
+
+
+@_ds_errors
+def _cmd_datasets_ingest(args) -> int:
+    from . import datasets as ds
+
+    if not args.all and not args.ids:
+        print("error: name dataset id(s) or pass --all", file=sys.stderr)
+        return 1
+    sname = args.subset or "default"
+    entries = _ds_entries(args, include_research=True)
+    if args.all:  # only what has been fetched for this subset
+        fetched = {r["id"] for r in ds.status(data_dir=args.dir) if r["fetched"].get(sname)}
+        entries = [e for e in entries if e.id in fetched and sname in e.subsets]
+    for e in entries:
+        res = ds.ingest(
+            e.id,
+            args.store,
+            subset=args.subset,
+            data_dir=args.dir,
+            force=args.force,
+            progress=None if args.quiet else (lambda m: print(f"  {m}", file=sys.stderr)),
+        )
+        if res.skipped:
+            print(f"{e.id}: up to date in {res.store} ({', '.join(res.facilities)}) -- skipped")
+            continue
+        print(
+            f"{e.id}: ingested {res.rows:,} rows, {res.equipment} equipment into "
+            f"{', '.join(res.facilities)} ({res.store})"
+        )
+        for n in res.notes:
+            print(f"  quirk {n}")
+        for w in res.warnings:
+            print(f"  warning: {w}")
+    return 0
+
+
+@_ds_errors
+def _cmd_datasets_status(args) -> int:
+    from . import datasets as ds
+
+    rows = ds.status(data_dir=args.dir, store=args.store)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    for r in rows:
+        got = [s for s, ok in r["fetched"].items() if ok]
+        fetched = ",".join(got) if got else "-"
+        ing = ", ".join(r["ingested"]) if r["ingested"] else "-"
+        print(
+            f"{r['id']:14s} fetched: {fetched:14s} on disk: {_mb(r['bytes_on_disk']):>9s}  "
+            f"ingested: {ing}"
+        )
+    return 0
+
+
+@_ds_errors
+def _cmd_datasets_remove(args) -> int:
+    from . import datasets as ds
+
+    res = ds.remove(args.id, data_dir=args.dir, store=args.store, purge_store=args.purge_store)
+    print(f"{args.id}: freed {_mb(res['freed_bytes'])}")
+    if res["facilities_dropped"]:
+        print(f"  dropped from the store: {', '.join(res['facilities_dropped'])}")
+    return 0
+
+
+@_ds_errors
+def _cmd_datasets_config(args) -> int:
+    from . import datasets as ds
+
+    cfg = ds.config_template(args.id, args.store, facility_id=args.facility, out=args.out)
+    if args.out:
+        print(f"wrote {args.out} (facility {cfg['source']['facility_id']})")
+        print(f"next: camber report {args.out} --out report.html")
+    else:
+        print(json.dumps(cfg, indent=2))
+    return 0
+
+
+@_ds_errors
+def _cmd_datasets_score(args) -> int:
+    from . import datasets as ds
+
+    res = ds.score(args.id, args.store, findings=args.findings, facility_id=args.facility)
+    if args.json:
+        print(json.dumps(res, indent=2, default=str))
+        return 0
+    o = res["overall"]
+    print(
+        f"{res['dataset_id']} ({res['facility_id']}, subset {res['subset']}): {res['n']} scenarios"
+    )
+    print(
+        f"overall detection: TPR {o['tpr']:.0%} [{o['tpr_ci'][0]:.0%}-{o['tpr_ci'][1]:.0%}]  "
+        f"FPR {o['fpr']:.0%} [{o['fpr_ci'][0]:.0%}-{o['fpr_ci'][1]:.0%}]  "
+        f"accuracy {o['accuracy']:.0%}"
+    )
+    cd = res["correct_diagnosis"]
+    if cd == cd:
+        print(f"correct diagnosis (right detector for the fault): {cd:.0%}")
+    for name, c in res["per_detector"].items():
+        print(
+            f"  {name:22s} TPR {c['tpr']:.0%} [{c['tpr_ci'][0]:.0%}-{c['tpr_ci'][1]:.0%}]  "
+            f"FPR {c['fpr']:.0%} [{c['fpr_ci'][0]:.0%}-{c['fpr_ci'][1]:.0%}]  (n={c['n']})"
+        )
+    for r in res["records"]:
+        print(f"  {r['equip']:36s} truth={r['truth'] or 'fault-free':14s} fired={r['fired']}")
     return 0
 
 
@@ -719,6 +978,85 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     esf.add_argument("config")
     esf.set_defaults(func=_cmd_edge_selftest)
+
+    pds = sub.add_parser(
+        "datasets", help="open dataset catalog: fetch, verify, ingest and score (docs/DATASETS.md)"
+    )
+    dssub = pds.add_subparsers(dest="datasets_cmd", required=True)
+
+    dsl = dssub.add_parser("list", help="list catalog datasets")
+    dsl.add_argument("--licence", choices=["commercial", "all"], default="all")
+    dsl.add_argument("--kind", choices=["simulated", "real", "lab"])
+    dsl.add_argument("--labeled", action="store_true", help="only datasets with fault labels")
+    dsl.add_argument("--json", action="store_true")
+    dsl.set_defaults(func=_cmd_datasets_list)
+
+    dsi = dssub.add_parser("info", help="details, licence and citation of one dataset")
+    dsi.add_argument("id")
+    dsi.add_argument("--json", action="store_true")
+    dsi.set_defaults(func=_cmd_datasets_info)
+
+    def _targets(p, *, fetching: bool):
+        p.add_argument("ids", nargs="*", help="dataset id(s)")
+        p.add_argument(
+            "--all",
+            action="store_true",
+            help="every open-tier dataset (add --licence all for research-only ones too)"
+            if fetching
+            else "every dataset that has been fetched",
+        )
+        p.add_argument("--subset", help="subset name (default: 'default'; 'full' for everything)")
+        p.add_argument("--dir", help="cache directory (default: $CAMBER_DATA_DIR or ~/.cache)")
+        p.add_argument("--quiet", action="store_true", help="no progress output")
+
+    dsf = dssub.add_parser("fetch", help="download + verify (size, sha256) from the publisher")
+    _targets(dsf, fetching=True)
+    dsf.add_argument("--licence", choices=["commercial", "all"], default="commercial")
+    dsf.add_argument(
+        "--accept-noncommercial",
+        dest="accept_noncommercial",
+        action="store_true",
+        help="acknowledge a research-only (NC/ND) licence; recorded in acknowledgements.json",
+    )
+    dsf.set_defaults(func=_cmd_datasets_fetch)
+
+    dsg = dssub.add_parser("ingest", help="normalize fetched data into a Parquet store")
+    _targets(dsg, fetching=False)
+    dsg.add_argument("--store", required=True, help="ParquetStore directory")
+    dsg.add_argument("--force", action="store_true", help="re-ingest even if unchanged")
+    dsg.set_defaults(func=_cmd_datasets_ingest)
+
+    dss = dssub.add_parser("status", help="what is fetched, its size on disk, what is ingested")
+    dss.add_argument("--dir")
+    dss.add_argument("--store")
+    dss.add_argument("--json", action="store_true")
+    dss.set_defaults(func=_cmd_datasets_status)
+
+    dsr = dssub.add_parser("remove", help="delete a dataset's downloads (and store facilities)")
+    dsr.add_argument("id")
+    dsr.add_argument("--dir")
+    dsr.add_argument("--store")
+    dsr.add_argument(
+        "--purge-store", dest="purge_store", action="store_true", help="also drop its facilities"
+    )
+    dsr.set_defaults(func=_cmd_datasets_remove)
+
+    dsc = dssub.add_parser("config", help="write a ready-to-run config for an ingested dataset")
+    dsc.add_argument("id")
+    dsc.add_argument("--store", required=True)
+    dsc.add_argument("--out", help="config JSON to write (default: print it)")
+    dsc.add_argument("--facility", help="facility id (multi-facility datasets such as bdg2)")
+    dsc.set_defaults(func=_cmd_datasets_config)
+
+    dsk = dssub.add_parser("score", help="score findings against the ingested fault labels")
+    dsk.add_argument("id")
+    dsk.add_argument("--store", required=True)
+    dsk.add_argument(
+        "--findings", help="findings.json from `camber run --out` (default: run the template)"
+    )
+    dsk.add_argument("--facility")
+    dsk.add_argument("--json", action="store_true")
+    dsk.set_defaults(func=_cmd_datasets_score)
     return ap
 
 

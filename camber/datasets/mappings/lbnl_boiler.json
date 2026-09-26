@@ -1,0 +1,13 @@
+{
+  "_comment": "LBNL FDD boiler-plant point -> CAMBER Role mapping, at the plant (loop) level: two boilers (_1/_2) and two hot-water pumps feed one loop; boiler 1 and pump 1 are the lead units. Derived from the dataset's own Brick model (LBNL_FDD_Data_Sets_Boiler_Plant_ttl) and checked against the data. BOI_STA_1 / BOI_STA_2 are NOT mapped: the Brick model types them On_Off_Status, and in this simulation they are the boiler ENABLE (on all season), not burner firing -- mapping one to boiler_status would read every enabled-but-idle hour as firing (short-cycle, summer-lockout and plant-delta-T rules would all misfire). The gas meters (BOI_GAS_CSUM_*, a cumulative sum) and the heating-demand point (SEC_POW) have no CAMBER role yet. Units are IP as exported (temperatures in F). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
+  "aliases": {
+    "HWL_SW_TEMP": "hw_supply_temp",
+    "HWL_RW_TEMP": "hw_return_temp",
+    "HWL_DP": "hw_diff_press",
+    "HWL_DPSPT": "hw_diff_press_sp",
+    "BOI_FLOW_1": "hw_flow",
+    "PM_SPD_1": "hw_pump_speed",
+    "PM_STA_1": "pump_status",
+    "OA_TEMP": "oat"
+  }
+}

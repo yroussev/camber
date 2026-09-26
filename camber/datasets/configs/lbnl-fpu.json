@@ -1,0 +1,23 @@
+{
+  "_comment": "Run template for lbnl-fpu: zone-terminal rules on the South-zone box of each fan-powered VAV scenario (equipment PFPU__<scenario> / SFPU__<scenario>).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-fpu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "airflow"
+    }
+  ],
+  "rules": [
+    "airflow_tracking",
+    "reheat_minimization_g36",
+    "unmet_setpoint_hours"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -3,7 +3,7 @@
 Exercises the full stack against a *different* BAS naming convention than the
 per-building examples, using a dataset with ground-truth fault labels:
 
-1. Mapping       -- LBNL point names -> CAMBER roles via mapping.json.
+1. Mapping       -- LBNL point names -> CAMBER roles via the catalog's lbnl_sdahu.json.
 2. Completeness  -- the entity model reports what's instrumented and which rules
                     can run (this AHU is cooling-only, so heat-coil rules are
                     correctly gated out).
@@ -20,6 +20,7 @@ import json
 import os
 import sys
 import tempfile
+from importlib.resources import files
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -35,7 +36,12 @@ from camber.units import normalize_percent_frame  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SDAHU = os.path.join(HERE, "..", "_data", "lbnl", "sdahu")
-MAPPING = MappingProvider.from_dict(json.load(open(os.path.join(HERE, "mapping.json"))))
+# the SDAHU mapping ships with the dataset catalog (camber/datasets/mappings/lbnl_sdahu.json)
+MAPPING = MappingProvider.from_dict(
+    json.loads(
+        files("camber.datasets").joinpath("mappings").joinpath("lbnl_sdahu.json").read_text("utf-8")
+    )
+)
 
 
 def load_role_frame(csv: str) -> pd.DataFrame:

@@ -1,0 +1,27 @@
+{
+  "_comment": "Run template for the lbnl-sdahu catalog entry. `camber datasets config lbnl-sdahu --store DIR --out cfg.json` fills in the store path. Hourly resample and a 20% design-minimum OA reproduce the LBNL benchmark's SDAHU scoring (examples/lbnl_fdd/benchmark.py); every scenario is an equipment AHU__<scenario>, so one run scores them all.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-sdahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "outdoor_air_fraction",
+      "params": {
+        "min_oa_pct": 20.0
+      }
+    },
+    "leaking_valve"
+  ],
+  "report": {
+    "level": 2
+  }
+}

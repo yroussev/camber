@@ -1,0 +1,45 @@
+{
+  "_comment": "Run template for bdg2: a daily change-point M&V baseline (ASHRAE Guideline 14) for every chilled-water and electricity meter of one site, weather-normalized on the site's own outdoor temperature. `camber datasets config bdg2 --facility ds-bdg2-<site>` picks the site (default: the first one ingested).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-bdg2-fox"
+  },
+  "resample": "1h",
+  "shared_oat": {
+    "equip": "weather",
+    "role": "oat"
+  },
+  "equipment": [
+    {
+      "class": "CHILLEDWATER_METER"
+    },
+    {
+      "class": "ELECTRICITY_METER"
+    }
+  ],
+  "rules": [],
+  "mv": [
+    {
+      "class": "CHILLEDWATER_METER",
+      "role": "energy_rate",
+      "period": [
+        "2016-01-01",
+        "2016-12-31"
+      ],
+      "interval": "daily"
+    },
+    {
+      "class": "ELECTRICITY_METER",
+      "role": "power",
+      "period": [
+        "2016-01-01",
+        "2016-12-31"
+      ],
+      "interval": "daily"
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

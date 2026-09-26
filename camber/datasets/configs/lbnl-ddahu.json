@@ -1,0 +1,27 @@
+{
+  "_comment": "Run template for lbnl-ddahu: OA fraction at the mixing box with a 20% design-minimum OA (the LBNL benchmark's DDAHU setting). Expect it to degrade here -- the transferability gap the benchmark reports.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-ddahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "outdoor_air_fraction",
+      "params": {
+        "min_oa_pct": 20.0
+      }
+    },
+    "simultaneous_heat_cool"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -155,9 +155,7 @@ def test_all_three_drift_detectors_registered():
 @pytest.mark.skipif(not os.path.exists(_REAL_DATA), reason="LBNL data absent (run fetch.py)")
 def test_real_data_drift_scoring_produces_metrics():
     B = _bench()
-    mapping = B.MappingProvider.from_dict(
-        __import__("json").load(open(os.path.join(B.HERE, "mapping.json")))
-    )
+    mapping = B.MappingProvider.from_dict(B.packaged_mapping("lbnl_sdahu.json"))
     base = os.path.join(B.DATA, "sdahu")
     frames = {
         fname: B.load_role_frame(os.path.join(base, fname), mapping)

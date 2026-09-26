@@ -12,7 +12,10 @@ cross-equipment benchmark -- the LBNL FDD performance-evaluation approach applie
 across the rule library and across equipment types, so coverage gaps are measured,
 not guessed.
 
-Run fetch.py (with --families for FCU/DDAHU) first.
+Run fetch.py (with --families for FCU/DDAHU) first. The point -> role mappings are the ones the
+dataset catalog ships (``camber/datasets/mappings/lbnl_*.json``, one source of truth for this
+benchmark and ``camber datasets ingest``); the chiller plant's labelling fix is the catalog entry's
+``fix`` quirk, applied here exactly as the ingester applies it.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from importlib.resources import files
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -40,6 +44,20 @@ from camber.rules.vav_reheat_valve_rule import VavReheatValveDrift  # noqa: E402
 from camber.store.modelstore import BaselineStore  # noqa: E402
 from camber.units import normalize_percent_frame  # noqa: E402
 
+
+def packaged_mapping(name):
+    """A mapping JSON shipped with the dataset catalog (``camber/datasets/mappings/<name>``)."""
+    text = files("camber.datasets").joinpath("mappings").joinpath(name).read_text("utf-8")
+    return json.loads(text)
+
+
+def catalog_quirks(dataset_id):
+    """The ingest quirks the catalog declares for ``dataset_id`` (applied before mapping)."""
+    from camber.datasets import get
+
+    return get(dataset_id).ingest.get("quirks", [])
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "lbnl")
 
@@ -55,7 +73,7 @@ FAMILIES = [
     {
         "label": "SDAHU (single-duct AHU)",
         "dir": "sdahu",
-        "mapping": "mapping.json",
+        "mapping": "lbnl_sdahu.json",
         "min_oa_pct": 20.0,
         "use_leak": True,
         "scenarios": [
@@ -74,7 +92,7 @@ FAMILIES = [
     {
         "label": "FCU (fan-coil unit)",
         "dir": "fcu",
-        "mapping": "mapping_fcu.json",
+        "mapping": "lbnl_fcu.json",
         "min_oa_pct": 10.0,
         "use_leak": False,
         "scenarios": [
@@ -87,7 +105,7 @@ FAMILIES = [
     {
         "label": "DDAHU (dual-duct AHU)",
         "dir": "ddahu",
-        "mapping": "mapping_ddahu.json",
+        "mapping": "lbnl_ddahu.json",
         "min_oa_pct": 20.0,
         "use_leak": False,
         "scenarios": [
@@ -99,23 +117,30 @@ FAMILIES = [
 ]
 
 
-def load_role_frame(csv, mapping):
-    """Read one LBNL CSV into an hourly role-named frame via the family's mapping."""
-    df = (
-        pd.read_csv(
-            csv, usecols=lambda c: c == "Datetime" or mapping.role_of(c), parse_dates=["Datetime"]
-        )
-        .set_index("Datetime")
-        .resample("1h")
-        .mean()
-    )
+def load_role_frame(csv, mapping, quirks=None):
+    """Read one LBNL CSV into an hourly role-named frame via the family's mapping.
+
+    ``quirks`` are catalog ``fix`` quirks applied to the raw columns before mapping (the chiller
+    plant's swapped wet/dry-bulb columns); their columns are read even when unmapped.
+    """
+    from camber.datasets._quirks import apply_quirks, quirk_columns
+
+    extra = quirk_columns(quirks)
+    df = pd.read_csv(
+        csv,
+        usecols=lambda c: c == "Datetime" or c in extra or mapping.role_of(c),
+        parse_dates=["Datetime"],
+    ).set_index("Datetime")
+    if quirks:
+        df, _ = apply_quirks(df, quirks)
+    df = df.resample("1h").mean()
     frame = pd.DataFrame({mapping.role_of(c): df[c] for c in df.columns if mapping.role_of(c)})
     return normalize_percent_frame(frame)
 
 
 def score_family(fam):
     """Run the family's detectors over its scenarios; return the records list."""
-    mapping = MappingProvider.from_dict(json.load(open(os.path.join(HERE, fam["mapping"]))))
+    mapping = MappingProvider.from_dict(packaged_mapping(fam["mapping"]))
     detectors = [OutdoorAirFraction(min_oa_pct=fam["min_oa_pct"])]
     if fam["use_leak"]:
         detectors.append(LeakingValve())
@@ -433,7 +458,7 @@ def main(argv=None) -> int:
 
     # AHU air-side drift-family validation (SDAHU only — the family with the full air-side points)
     sdahu = FAMILIES[0]
-    sd_mapping = MappingProvider.from_dict(json.load(open(os.path.join(HERE, sdahu["mapping"]))))
+    sd_mapping = MappingProvider.from_dict(packaged_mapping(sdahu["mapping"]))
     sd_base = os.path.join(DATA, sdahu["dir"])
     sd_frames = {
         fname: load_role_frame(os.path.join(sd_base, fname), sd_mapping)
@@ -444,12 +469,9 @@ def main(argv=None) -> int:
         metrics.update(score_drift(sd_frames, label="AHU air-side drift (SDAHU)"))
 
     # VAV zone-terminal drift on the Fan-Power-Unit subset (opt-in via fetch.py --fpu)
-    fpu_map_path = os.path.join(HERE, "mapping_fpu.json")
     fpu_base = os.path.join(DATA, "fpu")
-    if os.path.exists(os.path.join(fpu_base, "PFPU_FaultFree.csv")) and os.path.exists(
-        fpu_map_path
-    ):
-        fpu_mapping = MappingProvider.from_dict(json.load(open(fpu_map_path)))
+    if os.path.exists(os.path.join(fpu_base, "PFPU_FaultFree.csv")):
+        fpu_mapping = MappingProvider.from_dict(packaged_mapping("lbnl_fpu.json"))
         fpu_frames = {
             f: load_role_frame(os.path.join(fpu_base, f), fpu_mapping)
             for f in os.listdir(fpu_base)
@@ -465,14 +487,12 @@ def main(argv=None) -> int:
         )
 
     # Chiller-plant plant-level detectors (opt-in via fetch.py --chiller)
-    chiller_map_path = os.path.join(HERE, "mapping_chiller.json")
     chiller_base = os.path.join(DATA, "chiller")
-    if os.path.exists(os.path.join(chiller_base, CHILLER_FAULT_FREE)) and os.path.exists(
-        chiller_map_path
-    ):
-        chiller_mapping = MappingProvider.from_dict(json.load(open(chiller_map_path)))
+    if os.path.exists(os.path.join(chiller_base, CHILLER_FAULT_FREE)):
+        chiller_mapping = MappingProvider.from_dict(packaged_mapping("lbnl_chiller.json"))
+        chiller_quirks = catalog_quirks("lbnl-chiller")
         chiller_frames = {
-            f: load_role_frame(os.path.join(chiller_base, f), chiller_mapping)
+            f: load_role_frame(os.path.join(chiller_base, f), chiller_mapping, chiller_quirks)
             for f in os.listdir(chiller_base)
             if f.endswith(".csv")
         }

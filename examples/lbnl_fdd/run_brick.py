@@ -1,8 +1,8 @@
 """Brick interop: derive the role mapping from the LBNL Brick model, then analyze.
 
-Instead of hand-writing mapping.json, parse the building's Brick (.ttl) model and
-let CAMBER derive point -> role automatically (cooling vs heating valve, OA damper,
-supply fan, etc. resolved from the equipment relationships). Then prove the derived
+Instead of hand-writing a mapping (the catalog ships lbnl_sdahu.json), parse the building's
+Brick (.ttl) model and let CAMBER derive point -> role automatically (cooling vs heating valve,
+OA damper, supply fan, etc. resolved from the equipment relationships). Then prove the derived
 mapping drives the pipeline: completeness validation + a diagnostic, identical to
 the hand-mapped path.
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from importlib.resources import files
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -41,12 +42,15 @@ def main() -> int:
     for name, role in sorted(derived.items()):
         print(f"  {name:14s} -> {role.value}")
 
-    # compare coverage to the hand-written mapping.json
-    hand = json.load(open(os.path.join(HERE, "mapping.json")))["aliases"]
+    # compare coverage to the hand-written lbnl_sdahu.json
+    hand_text = (
+        files("camber.datasets").joinpath("mappings").joinpath("lbnl_sdahu.json").read_text("utf-8")
+    )
+    hand = json.loads(hand_text)["aliases"]
     hand_pts = {k.upper() for k in hand}
     auto_pts = {k.upper() for k in derived}
     print(
-        f"\nhand-written mapping.json covers {len(hand_pts)} points; the Brick model "
+        f"\nhand-written lbnl_sdahu.json covers {len(hand_pts)} points; the Brick model "
         f"auto-derives {len(auto_pts)} (no hand mapping needed)."
     )
     extra = sorted(auto_pts - hand_pts)

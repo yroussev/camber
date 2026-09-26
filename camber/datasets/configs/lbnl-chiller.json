@@ -1,0 +1,32 @@
+{
+  "_comment": "Run template for lbnl-chiller: plant-level kW/ton and cooling-tower approach on chiller/tower 1. The simulated design curves are not published, so each rule's design ceiling is CALIBRATED from the fault_free run's own median (commissioning practice, as examples/lbnl_fdd/benchmark.py does): 1.44 kW/ton and an 8.1 F approach. With the rules' generic defaults every run, including fault_free, would read as a fault.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-chiller"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "CHW_PLANT",
+      "marker_role": "power"
+    }
+  ],
+  "rules": [
+    {
+      "name": "chiller_efficiency",
+      "params": {
+        "design_kw_per_ton": 1.44
+      }
+    },
+    {
+      "name": "cooling_tower_approach",
+      "params": {
+        "design_approach_f": 8.1
+      }
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}
