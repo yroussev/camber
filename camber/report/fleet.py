@@ -52,6 +52,7 @@ class FleetReport:
     peer_median_eui: float | None = None
     fleet_top_rules: list = field(default_factory=list)  # [(rule, n_buildings)]
     total_annual_cost_usd: float | None = None  # fleet-wide recoverable waste ($)
+    cost_estimated: bool = False  # costs were estimated (a price was given), costed or not
 
     def worst_by_faults(self):
         """Buildings ordered by actionable-fault burden (faults, then warnings)."""
@@ -77,6 +78,8 @@ class FleetReport:
             L.append(
                 f"Estimated recoverable waste: ${self.total_annual_cost_usd:,.0f}/yr fleet-wide"
             )
+        elif self.cost_estimated:
+            L.append("Estimated recoverable waste: -- (no costed findings)")
         L.append("\nCross-sectional EUI (most efficient first):")
         for b in self.by_efficiency():
             extra = []
@@ -115,6 +118,8 @@ class FleetReport:
                 f"<p><b>Estimated recoverable waste:</b> "
                 f"${self.total_annual_cost_usd:,.0f}/yr fleet-wide</p>"
             )
+        elif self.cost_estimated:
+            parts.append("<p><b>Estimated recoverable waste:</b> &mdash; (no costed findings)</p>")
         parts.append(
             "<h2>Cross-sectional EUI</h2><table border='1' cellpadding='4'>"
             "<tr><th>Site</th><th>EUI</th><th>Percentile</th>"
@@ -165,7 +170,9 @@ def _building_cost(b, price, loads, cost_params):
 
     site_loads = (loads or {}).get(b.get("site", ""))
     costs = cost_findings(b.get("findings", []), site_loads, price, params=cost_params)
-    return total_cost(costs)["annual_cost_usd"]
+    t = total_cost(costs)
+    # nothing costed is "no estimate", not "$0 of waste"
+    return t["annual_cost_usd"] if t["n_costed"] else None
 
 
 def build_fleet_report(
@@ -238,4 +245,5 @@ def build_fleet_report(
         peer_median_eui=median,
         fleet_top_rules=rule_buildings.most_common(top_n),
         total_annual_cost_usd=total,
+        cost_estimated=price is not None or any_cost,
     )

@@ -186,8 +186,9 @@ def _report_rcx(args, cfg, base) -> int:
     with open(args.out, "w") as fh:
         fh.write(rep.to_html())
     k = rep.kpis
+    dollars = f"${k['annual_cost_usd']:,.0f}/yr costed" if k["n_costed"] else "no costed issues"
     print(
-        f"wrote {args.out}  (rcx: {k['n_issues']} issues, ${k['annual_cost_usd']:,.0f}/yr costed, "
+        f"wrote {args.out}  (rcx: {k['n_issues']} issues, {dollars}, "
         f"{k['n_conditional']} conditional, {k['n_declined']} declined checks)"
     )
     w = rep.week

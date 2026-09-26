@@ -992,8 +992,9 @@ def build_rcx_report(
         (min(i.min() for i in idx_all), max(i.max() for i in idx_all)) if idx_all else (None, None)
     )
     kpis = {
-        "annual_cost_usd": totals["annual_cost_usd"],
-        "at_risk_usd": totals["at_risk_usd"],
+        "annual_cost_usd": totals["annual_cost_usd"] if totals["n_costed"] else None,
+        "n_costed": totals["n_costed"],
+        "at_risk_usd": totals["at_risk_usd"] or None,
         "n_issues": totals["n_issues"],
         "n_uncosted": totals["n_uncosted"],
         "n_conditional": totals["n_conditional"],
@@ -1195,8 +1196,14 @@ def _sec_summary(S) -> dict:
     from ..aso import recommend
 
     o, issues, k = S["o"], S["issues"], S["kpis"]
+    # a dollar figure only when something is costed -- "$0" would read as "nothing to fix"
+    costed = (
+        ("Costed issues, $/yr", _fmt_usd(k["annual_cost_usd"]))
+        if k["n_costed"]
+        else ("$/yr: no costed issues", "—")
+    )
     kp = [
-        ("Costed issues, $/yr", _fmt_usd(k["annual_cost_usd"])),
+        costed,
         ("Uncosted / conditional issues", f"{k['n_uncosted']} / {k['n_conditional']}"),
         (
             "Data coverage",

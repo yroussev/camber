@@ -470,3 +470,25 @@ def test_oat_reference_fetch_is_opt_in_and_errors_are_reported(run, captured, mo
     bad = RcxOptions(sections=("data",), oat_reference={"csv": "/no/such/file.csv"})
     texts = [b.get("text", "") for b in build_rcx_report(run, options=bad).sections[0]["blocks"]]
     assert any("could not be loaded" in t for t in texts)
+
+
+def test_no_costed_issues_shows_a_dash_not_zero_dollars(tmp_path, captured):
+    fx.make_store(tmp_path)
+    run = run_config(fx.config(), base_dir=str(tmp_path))  # no sizing -> nothing costed
+    rep = build_rcx_report(run, options=RcxOptions(sections=("summary",)))
+    assert rep.kpis["n_costed"] == 0 and rep.kpis["annual_cost_usd"] is None
+    kpis = next(b for b in rep.sections[0]["blocks"] if b["kind"] == "kpis")["items"]
+    assert kpis[0] == {"label": "$/yr: no costed issues", "value": "—"}
+    assert "$0" not in rep.to_html()
+
+
+def test_fleet_total_is_not_zero_when_nothing_is_costed():
+    from camber.fault_economics import EnergyPrice
+    from camber.report.fleet import build_fleet_report
+    from camber.rules.base import Finding
+
+    fs = [Finding("leaking_valve", "DemoAHU", "warn")]  # no cost model
+    fr = build_fleet_report([{"site": "Demo", "eui": None, "findings": fs}], price=EnergyPrice())
+    assert fr.total_annual_cost_usd is None and fr.cost_estimated
+    assert "no costed findings" in fr.to_text() and "no costed findings" in fr.to_html()
+    assert "$0" not in fr.to_text()
