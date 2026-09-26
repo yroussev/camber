@@ -113,4 +113,6 @@ Downloads and extracted members live in the cache: `$CAMBER_DATA_DIR`, else
 `$XDG_CACHE_HOME/camber/datasets`, else `~/.cache/camber/datasets` (override per command with
 `--dir`). `camber datasets status` shows what is fetched and how much disk it uses;
 `camber datasets remove <id>` deletes it (`--purge-store` also drops its facilities from a store).
+Dropped facility ids are tombstoned and so never reused for another building; re-ingesting the
+*same* dataset reclaims its own id (see [PORTFOLIO.md](PORTFOLIO.md#facility-identity)).
 See [SECURITY.md](SECURITY.md) section 7 for the download guarantees.

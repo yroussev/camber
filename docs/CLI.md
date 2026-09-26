@@ -14,6 +14,8 @@ camber validate [--html d.html] [--json d.json] [--full]         # validation cr
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+camber portfolio init|adopt|status|audit                          # portfolio workspace
+camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
 ```
 
 `camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
@@ -207,6 +209,37 @@ equipment is discovered by the class recorded at ingest (`{"class": "AHU", "mark
 a stored equipment (`{"equip": "weather", "role": "oat"}`). An `mv` section fits a daily
 change-point M&V baseline per meter (`{"class": "CHILLEDWATER_METER", "role": "energy_rate",
 "period": [start, end]}`).
+
+## Portfolio and facility lifecycle
+
+`camber portfolio` manages a **workspace**: one directory holding a portfolio's store, retention
+policy, append-only audit log and single-writer lock. `camber facility` moves facilities through
+their lifecycle (see [PORTFOLIO.md](PORTFOLIO.md)):
+
+```
+camber portfolio init <root>                           # create a workspace (idempotent)
+camber portfolio adopt <store> [root] --reason R       # wrap an existing store; moves nothing
+camber portfolio status [--json]                       # counts by state, holds, lock, policy
+camber portfolio audit [--facility ID] [--json]        # who did what, when, and why
+
+camber facility add <name> [--id ID] [--owner O] [--tag T]... [--activate] --reason R
+camber facility list [--state S] [--json]
+camber facility show <id> [--json]                     # record, effective retention, audit trail
+camber facility rename <id> "<new display name>" --reason R
+camber facility activate|suspend|resume <id> --reason R
+```
+
+Every command except `init` and `adopt` takes `--workspace PATH`, else `$CAMBER_PORTFOLIO`, else
+the current directory. Every change requires `--reason`, which is audited with the OS user and
+host. A change takes the workspace lock without waiting. A second concurrent change is refused
+with `portfolio is locked by <pid>@<host> since <ts>` (exit code 1).
+
+`add` creates a facility as `provisioning` unless `--activate` is given. Its id defaults to one
+derived from the name. Ids are never reused: a removed id is tombstoned. `offboard`, `restore`,
+`archive` and `purge` are defined but answer "available in a later release" (exit code 2).
+
+Analyses skip facilities that are not active. A store-backed `camber run` on a suspended facility
+warns and finds no equipment unless the config source sets `"include_inactive": true`.
 
 ## Backward compatibility
 

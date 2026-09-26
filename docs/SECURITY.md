@@ -122,6 +122,24 @@ building networks. Its guarantees:
 The cache lives in `$CAMBER_DATA_DIR`, else `$XDG_CACHE_HOME/camber/datasets`, else
 `~/.cache/camber/datasets`. CAMBER redistributes none of the data (see `NOTICE`).
 
+### 8. Portfolio administration
+
+CAMBER has no authentication yet, so **filesystem write access to the portfolio root is admin**.
+Anyone who can write to the workspace directory (`_portfolio.json`, `_audit.ndjson`, `_lock`,
+`store/`) can add, suspend, resume and rename facilities, and can edit or delete the files
+directly. Protect the root with ordinary operating-system permissions: a dedicated service
+account or group, no world-writable modes, and backups that include `_audit.ndjson`.
+
+Every lifecycle action is audited with the OS user (`getpass.getuser()`), the host and a
+mandatory `--reason`. Each line is `fsync`ed to the append-only `_audit.ndjson`. This is an
+attribution record, not tamper-proofing: the user name is whatever the process runs as, and
+someone with write access can alter the file. Ship the log to a write-once store if you need
+stronger guarantees.
+
+A single-writer lock (`_lock`) serializes admin changes. `camber serve` stays GET-only: it
+*shows* each facility's lifecycle state but cannot change it. Real roles arrive with the
+multi-tenant roadmap item. See [PORTFOLIO.md](PORTFOLIO.md).
+
 ## References
 
 - NIST SP 800-82r3 — Guide to OT Security — https://csrc.nist.gov/News/2023/nist-publishes-sp-800-82-revision-3

@@ -54,6 +54,7 @@ nav:
   - Platform:
       - CLI: CLI.md
       - Open datasets: DATASETS.md
+      - Portfolio lifecycle: PORTFOLIO.md
       - Time handling & DST: TIME-HANDLING.md
       - Ingest protocols: INGEST-PROTOCOLS.md
       - Ingest formats: INGEST-FORMATS.md

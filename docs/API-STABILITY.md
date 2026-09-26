@@ -52,6 +52,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `IngestResult`, `catalog`, `get`, `fetch`, `ingest`, `status`, `remove`, `config_template`,
   `score`. The catalog's *content* (`catalog.json`: entries, subsets, pinned checksums) is data, not
   API, and changes whenever a publisher reissues a file or an entry is added.
+- **`camber.portfolio`** (added in 0.87) -- the portfolio workspace and facility lifecycle:
+  `Portfolio`, `PortfolioLocked`, `LifecycleError`, `STATES`, `TRANSITIONS`, `DELETING`,
+  `DEFAULT_POLICY`, `allowed_actions`, `transition`, `find_workspace`, `is_workspace`, and the
+  `camber portfolio` / `camber facility` commands. The on-disk formats (`_portfolio.json` with
+  its `schema_version`, `_audit.ndjson`, the registry-v2 fields) are versioned and read
+  back-compatibly. See [PORTFOLIO.md](PORTFOLIO.md).
 
 ## What the version number means
 
