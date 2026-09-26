@@ -170,7 +170,7 @@ leak detector that the pooled result showed under-firing.
 
 The M&V analogue of the LBNL FDD accuracy benchmark: `examples/bdg2/benchmark.py` scores the **ASHRAE
 Guideline 14 baseline-model acceptance rate** on **real** whole-building meters (Building Data Genome 2,
-CC-BY, ~2,000 meters). For each building it fits the daily change-point inverse model of energy vs
+CC-BY-SA 4.0, ~2,000 meters). For each building it fits the daily change-point inverse model of energy vs
 outdoor temperature and asks whether the fit meets the G14 gate (CV(RMSE) ≤ 30% daily); the headline is
 the fraction that pass, with a Wilson CI. Committed baseline, gated in the benchmark CI job.
 

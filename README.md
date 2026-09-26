@@ -196,7 +196,7 @@ The toolkit is data-agnostic. Two open sources are wired as runnable examples
   (`--fpu`) and the chiller-plant set (`--chiller`). Which detectors each subset can *honestly*
   test — and which stay synthetic-only — is stated in [VALIDATION.md](docs/VALIDATION.md).
 - **[Building Data Genome Project 2](https://github.com/buds-lab/building-data-genome-project-2)**
-  (CC-BY) — 3,053 whole-building hourly meters. `examples/bdg2/` fits the
+  (CC-BY-SA 4.0) — 3,053 whole-building hourly meters. `examples/bdg2/` fits the
   G14/IPMVP change-point engine (textbook 3PC on cooling energy, R² 0.78–0.94)
   and ingests the portfolio into the store.
 

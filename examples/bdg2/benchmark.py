@@ -2,7 +2,7 @@
 
 The M&V analogue of the LBNL FDD accuracy benchmark: instead of scoring fault detection on labeled
 faults, this scores the **ASHRAE Guideline 14 baseline-model acceptance rate** on **real**
-whole-building meters (Building Data Genome 2, CC-BY). For each building it fits the daily
+whole-building meters (Building Data Genome 2, CC-BY-SA 4.0). For each building it fits the daily
 change-point inverse model of energy vs outdoor temperature and asks whether the fit meets the
 G14 gate (CV(RMSE) ≤ 30% daily); the headline is the fraction of real buildings that pass, with a
 Wilson confidence interval — an honest, reproducible statement of how the engine performs in

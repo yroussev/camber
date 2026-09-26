@@ -8,7 +8,7 @@ and the ``camber validate`` CLI verb:
   injected fault + a G36 FC engine. **Live-recomputed** here (deterministic, no download).
 * **Generated fleet FDD** (`camber.fleetlab`) — the G36 reset fleet detectors scored on a generated
   labeled multi-zone fleet, with correct-attribution. **Live-recomputed** (no download).
-* **Real-data FDD (LBNL, CC-BY)** and **real-data M&V (BDG2, CC-BY)** — scored on public labeled
+* **Real-data FDD (LBNL, CC-BY)** and **real-data M&V (BDG2, CC-BY-SA)** — scored on public labeled
   datasets that need large downloads, so their headline results are carried here as **cited
   reference results** (with provenance + a reproduce command), not recomputed at import time. Two
   tests (see ``tests/test_dossier.py``) fail the build if a cited figure drifts from the committed
@@ -159,7 +159,7 @@ _REFERENCE: dict = {
         "provenance": "LBNL FDD (CC-BY); reproduce via examples/lbnl_fdd/benchmark.py",
     },
     "bdg2_mv": {
-        "title": "Real-data M&V — BDG2 (CC-BY)",
+        "title": "Real-data M&V — BDG2 (CC-BY-SA)",
         "rates": {
             "acceptance": RateCI(0.1526, 0.1377, 0.1689, 2044),  # pooled G14 baseline-model accept
             "acceptance_chilledwater": RateCI(0.3552, 0.3152, 0.3974, 518),
@@ -174,7 +174,7 @@ _REFERENCE: dict = {
             "whole-building energy is messy — half the chilled-water meters sit near the 30% "
             "CV(RMSE) acceptance line; acceptance (not TPR/FPR) is the M&V metric"
         ),
-        "provenance": "BDG2 (CC-BY); reproduce via examples/bdg2/benchmark.py",
+        "provenance": "BDG2 (CC-BY-SA); reproduce via examples/bdg2/benchmark.py",
     },
 }
 

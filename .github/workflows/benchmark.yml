@@ -87,7 +87,7 @@ jobs:
           path: examples/_data/bdg2
           key: bdg2-${{ hashFiles('examples/bdg2/fetch.py') }}
 
-      - name: Fetch BDG2 (CC-BY)
+      - name: Fetch BDG2 (CC-BY-SA)
         run: python examples/bdg2/fetch.py
 
       - name: Run M&V benchmark + gate against baseline

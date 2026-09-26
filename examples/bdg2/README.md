@@ -22,7 +22,10 @@ python examples/bdg2/run_mv.py
 ## Data & license
 
 Dataset: **Building Data Genome Project 2** (Miller et al., *Scientific Data*,
-2020) — Creative Commons Attribution (CC-BY).
+2020). The data are licensed **Creative Commons Attribution-ShareAlike 4.0 (CC-BY-SA 4.0)** — the
+repository's `LICENSE`; the *paper* describing them is CC-BY, which is where earlier CAMBER docs
+got "CC-BY" from. Commercial use and analysis are permitted; a redistributed *adapted* version of the
+data must carry the same licence.
 <https://github.com/buds-lab/building-data-genome-project-2>
 
 Data is **not** bundled; `fetch.py` pulls it from the repo's Git-LFS media

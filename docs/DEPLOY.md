@@ -88,7 +88,7 @@ gh workflow run pages.yml
 
 ## Hosted demo
 
-The site can carry a self-contained demo — the runnable examples on public CC-BY datasets
+The site can carry a self-contained demo — the runnable examples on openly licensed datasets (LBNL FDD, CC-BY; BDG2, CC-BY-SA)
 (`examples/lbnl_fdd`, `examples/bdg2`) plus a rendered site report — as static Pages content, needing
 no infrastructure beyond the Pages deploy above.
 

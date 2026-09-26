@@ -76,6 +76,11 @@ back what the exporter wrote, and point-name matching got 3 of 16 real names rig
   parameters. Snapshot regenerated. No new dependency. Benchmark baselines unchanged.
 - `docs/ONTOLOGY.md` coverage corrected: Brick import 45/64, export 39/64, Haystack 64/64, 223P
   51/64 (its previous count was stale).
+- **BDG2's licence was misstated as CC-BY.** The data repository is **CC-BY-SA 4.0**
+  (Attribution-ShareAlike); the *paper* describing it is CC-BY, which is where "CC-BY" came from.
+  Commercial use and analysis are unaffected; a redistributed *adapted* version of the data must stay
+  CC-BY-SA. Corrected in the README, `docs/VALIDATION.md`, `docs/DEPLOY.md`, the `camber validate`
+  dossier and `examples/bdg2/`.
 
 ## [0.84.0] — 2026-09-25
 
