@@ -1601,7 +1601,7 @@ def _sat_tier_blocks(S, e) -> list:
         occ_pt = _col(fr, Role.OCCUPANCY)
         if occ_pt is not None:
             legacy["Occupancy"] = occ_pt
-        res = analyze_satreset(legacy, e, oat=_col(fr, Role.OAT))
+        res = analyze_satreset(legacy, e, oat=_col(fr, Role.OAT), gate=S["gates"].get(e))
         if res is not None:
             slope = "—" if res.slope_per_F is None else f"{res.slope_per_F:+.2f} °F/°F"
             blocks.append(

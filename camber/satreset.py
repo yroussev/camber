@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 import numpy as np
+import pandas as pd
 
 from .schedules import occupied_mask
 
@@ -88,8 +89,13 @@ def analyze_satreset(
     low_sat_f=58.0,
     slope_flat=0.10,
     spread_tight=3.0,
+    gate=None,
 ):
     """Diagnose SAT reset behavior for one AHU. ``df`` columns are measure names.
+
+    ``gate`` (optional boolean Series on ``df``'s index, e.g. fan-on from
+    :func:`camber.schedules.fan_on_mask`) keeps only the samples where it is True: with the fan
+    off the "supply" sensor reads unconditioned plenum air, which is not a reset.
 
     Verdict cutoffs are OUR diagnostic thresholds (judgment, not a standard); the
     regression itself is standard OLS:
@@ -103,6 +109,11 @@ def analyze_satreset(
     if "SupplyAir" not in df.columns:
         return None
     work = df.copy()
+    if gate is not None:
+        g = pd.Series(gate)
+        if not g.index.equals(work.index):  # a gate built on the same frame aligns by position
+            g = g.reindex(work.index)
+        work = work[g.fillna(False).astype(bool).to_numpy()]
     if occupied_only:
         work = work[
             occupied_mask(

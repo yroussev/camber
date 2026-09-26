@@ -147,3 +147,43 @@ def test_sat_reset_evidence_draws_the_samples_the_slope_is_fitted_on():
     assert ev.renderer == "oat_scatter" and ev.template is None
     assert len(ev.frame.dropna()) == f.metrics["n_considered"]
     assert (ev.frame[Role.SUPPLY_AIR_TEMP] < 60).all()  # the parked, fan-off SAT is not drawn
+
+
+def _sat_fan_frame():
+    """SAT held at 55 °F while the fan runs; fan-off hours read warm plenum air (65-78 °F) even
+    though the cooling demand signal is still up -- the leak the fan gate closes."""
+    idx = pd.date_range("2026-06-01", periods=24 * 14, freq="h")
+    rng = np.random.default_rng(5)
+    occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    fan = occ & (idx.hour != 12)  # one fan-off hour per occupied day
+    oat = np.linspace(50, 95, len(idx))
+    sat = np.where(fan, 55.0 + rng.normal(0, 0.2, len(idx)), 65.0 + 0.3 * (oat - 50))
+    return pd.DataFrame(
+        {
+            Role.SUPPLY_AIR_TEMP: sat,
+            Role.OAT: oat,
+            Role.COOL_VALVE: np.where(occ, 40.0, 0.0),
+            Role.SUPPLY_FAN_STATUS: fan.astype(float),
+        },
+        index=idx,
+    )
+
+
+def test_sat_reset_fit_and_evidence_are_fan_gated():
+    from camber.rules.satreset_rule import SupplyAirReset
+
+    frame = _sat_fan_frame()
+    gated = SupplyAirReset().analyze("DemoAHU", frame)
+    ungated = SupplyAirReset(fan_gate=False).analyze("DemoAHU", frame)
+    assert gated.metrics["fan_gate"] == "fan status" and ungated.metrics["fan_gate"] == "off"
+    # the fan-off plenum readings inflate the spread and bend the slope when left in
+    assert ungated.metrics["sat_std"] > 2 and gated.metrics["sat_std"] < 0.5
+    assert abs(gated.metrics["slope_per_F"]) < 0.01 < abs(ungated.metrics["slope_per_F"])
+    assert "pinned low" in gated.summary and gated.severity == "warn"
+    ev = SupplyAirReset().evidence("DemoAHU", frame)
+    assert len(ev.frame.dropna()) == gated.metrics["n_considered"]
+    assert ev.frame[Role.SUPPLY_AIR_TEMP].max() < 60
+    # the three fan signals are alternatives: none is "missing" when status is trended
+    assert "supply_fan_speed" not in gated.metrics["_missing_optional"]
+    no_fan = SupplyAirReset().analyze("DemoAHU", frame.drop(columns=[Role.SUPPLY_FAN_STATUS]))
+    assert "supply_fan_status" in no_fan.metrics["_missing_optional"]
