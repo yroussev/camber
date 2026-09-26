@@ -12,3 +12,7 @@ their checksums; `camber datasets fetch` downloads each file from its publisher
 onto the user's machine. The data remains under its publisher's licence, which
 the user accepts by downloading it; cite the publisher as the catalog entry
 states.
+
+The test suite includes the NIST Statistical Reference Dataset "Norris" (36 rows; a
+U.S. Government work, not subject to copyright in the United States) to check CAMBER's
+regression statistics against NIST's certified values.
