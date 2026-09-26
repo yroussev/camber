@@ -26,7 +26,7 @@ Electricity Use, with Application to Demand Response," IEEE Trans. Smart Grid
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -93,6 +93,15 @@ class TOWTModel:
     beta: np.ndarray  # OLS coefficients
     n_params: int  # effective parameters (design rank), for stats dof
     split: bool
+    # the one private fit-time record (mode x temperature cell counts; camber.mandv.coverage)
+    _fit_record: object = field(default=None, repr=False, compare=False)
+
+    def coverage(self, index, temp, *, projected=None, policy=None):
+        """How well the baseline's (mode x temperature cell) support covers these hours (see
+        :func:`camber.mandv.coverage.towt_coverage`)."""
+        from .coverage import towt_coverage
+
+        return towt_coverage(self, index, temp, projected=projected, policy=policy)
 
     def predict(self, index, temp) -> np.ndarray:
         """Predict energy for the given timestamps and temperatures.
@@ -157,6 +166,8 @@ def fit_towt(
 
     X = _build_design(tow, t, bins, breakpoints, occ_bins)
     beta, _res, rank, _sv = np.linalg.lstsq(X, y, rcond=None)
+    from .coverage import _safe, _towt_fit_record
+
     return TOWTModel(
         bins=bins,
         breakpoints=breakpoints,
@@ -164,6 +175,7 @@ def fit_towt(
         beta=beta,
         n_params=int(rank),
         split=occ_split,
+        _fit_record=_safe(_towt_fit_record, tow, t, breakpoints, occ_bins),
     )
 
 
@@ -194,3 +206,9 @@ class TOWTAtIndex:
                 "TOWTAtIndex requires them to align positionally"
             )
         return self.model.predict(self.index, temp)
+
+    def coverage(self, temp, *, projected=None, policy=None):
+        """Coverage of the bound hours at ``temp`` (:func:`camber.mandv.coverage.towt_coverage`)."""
+        from .coverage import towt_coverage
+
+        return towt_coverage(self.model, self.index, temp, projected=projected, policy=policy)

@@ -45,6 +45,36 @@ class CategoricalModel:
                 out[sel] = m.predict(T[sel])
         return out
 
+    def coverage(self, T, cat, *, projected=None, policy=None):
+        """Coverage of ``(T, cat)``: each row against its category's fitted temperature range; a
+        row in a category the baseline never fitted is unsupported (it has no projection)."""
+        from .coverage import _categorical_coverage
+
+        return _categorical_coverage(self, T, cat, projected=projected, policy=policy)
+
+    def at(self, cat) -> _CategoricalAt:
+        """Bind reporting categories, giving a one-argument ``predict(T)`` / ``coverage(T)`` model
+        that flows through :func:`camber.mandv.stats.avoided_energy_savings` (rows in unseen
+        categories are then counted as unsupported and excluded rather than dropped silently)."""
+        return _CategoricalAt(self, cat)
+
+
+class _CategoricalAt:
+    """A :class:`CategoricalModel` bound to one period's categories (see its ``at``)."""
+
+    def __init__(self, model: CategoricalModel, cat):
+        self.model = model
+        self.cat = np.asarray(cat)
+
+    def predict(self, T) -> np.ndarray:
+        T = np.asarray(T, dtype=float)
+        if len(T) != len(self.cat):
+            raise ValueError(f"T has {len(T)} values but {len(self.cat)} categories are bound")
+        return self.model.predict(T, self.cat)
+
+    def coverage(self, T, *, projected=None, policy=None):
+        return self.model.coverage(T, self.cat, projected=projected, policy=policy)
+
 
 def fit_categorical(
     T,

@@ -964,6 +964,14 @@
     "CategoricalModel",
     "fit_categorical"
   ],
+  "camber.mandv.coverage": [
+    "Coverage",
+    "ExtrapolationPolicy",
+    "TIERS",
+    "assess_coverage",
+    "support_of",
+    "towt_coverage"
+  ],
   "camber.mandv.cusum": [
     "CusumResult",
     "control_exceedances",

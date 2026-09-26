@@ -21,7 +21,7 @@ because both are written against any object exposing ``predict()``.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
@@ -43,6 +43,26 @@ class DriverModel:
     sse: float
     n: int
     p: int  # parameters (len(coef) + 1)
+    # the one private fit-time record (support, pinv(X'X), ...; camber.mandv.coverage)
+    _fit_record: object = field(default=None, repr=False, compare=False)
+
+    def coverage(self, X, *, projected=None, policy=None):
+        """How well the baseline drivers cover ``X``: per-column ranges plus a leverage test for
+        multi-driver models (a :class:`~camber.mandv.coverage.Coverage`). A constant model has no
+        driver to cover and returns ``not_evaluated``."""
+        from .coverage import _linear_coverage, _not_evaluated
+
+        if not len(self.coef):
+            from .coverage import ExtrapolationPolicy
+
+            a = np.asarray(X)
+            n = int(a.shape[0]) if a.ndim >= 1 else 1
+            return _not_evaluated(
+                n,
+                "a constant (no-driver) model has no range to cover",
+                policy or ExtrapolationPolicy(),
+            )
+        return _linear_coverage(self, X, projected=projected, policy=policy)
 
     def predict(self, X):
         coef = np.asarray(self.coef, dtype=float)
@@ -86,12 +106,16 @@ def fit_driver_model(driver, energy) -> DriverModel:
     beta, *_ = np.linalg.lstsq(A, y, rcond=None)
     yhat = A @ beta
     sse = float(np.sum((y - yhat) ** 2))
+    from .coverage import _linear_fit_record, _safe
+
+    names = ("driver",) if X.shape[1] == 1 else tuple(f"driver[{j}]" for j in range(X.shape[1]))
     return DriverModel(
         intercept=float(beta[0]),
         coef=tuple(float(c) for c in beta[1:]),
         sse=sse,
         n=len(y),
         p=A.shape[1],
+        _fit_record=_safe(_linear_fit_record, X, names, ("affine",)),
     )
 
 

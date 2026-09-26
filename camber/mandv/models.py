@@ -38,10 +38,24 @@ class ChangePointModel:
     sse: float  # sum of squared residuals at the fit
     n: int  # number of observations
     _predict: object = field(default=None, repr=False)
+    # (min, max) of the finite temperatures the model was fitted on; None when built by hand
+    fit_range: tuple | None = None
+    # the one private fit-time record (support, pinv(X'X), ...; camber.mandv.coverage)
+    _fit_record: object = field(default=None, repr=False, compare=False)
 
     def predict(self, T):
         """Predicted energy for temperature(s) T (scalar or array)."""
         return self._predict(np.asarray(T, dtype=float))
+
+    def coverage(self, T, *, projected=None, policy=None):
+        """How well the fitted temperature range covers ``T``.
+
+        Returns a :class:`~camber.mandv.coverage.Coverage`; see
+        :func:`~camber.mandv.coverage.assess_coverage`.
+        """
+        from .coverage import _linear_coverage
+
+        return _linear_coverage(self, T, projected=projected, policy=policy)
 
 
 # --- design matrices for each model kind, given change point(s) ---
@@ -77,6 +91,37 @@ def _design_5p(T, tlo, thi):  # heating below tlo, deadband, cooling above thi
             np.maximum(0.0, T - thi),
         ]
     )  # cooling arm
+
+
+def _design_for(kind: str, change_points: tuple):
+    """The least-squares design ``T -> X`` of a fitted model, given its change point(s).
+
+    Keyed on the number of change points, not ``kind``: the 5P fitters fall back to a 2P line
+    (keeping ``kind="5P"`` with ``change_points=()``) when no dead-band fits. Zero-intercept kinds
+    have no constant column. ``X @ beta`` reproduces :meth:`ChangePointModel.predict`.
+    """
+    cps = tuple(float(c) for c in change_points)
+    if not cps:
+        return _design_2p
+    if len(cps) == 1:
+        tc = cps[0]
+        if kind == "3PC":
+            return lambda T: _design_3pc(T, tc)
+        if kind == "3PH":
+            return lambda T: _design_3ph(T, tc)
+        if kind == "3PHZ":
+            return lambda T: np.maximum(0.0, tc - T).reshape(-1, 1)
+        if kind == "3PCZ":
+            return lambda T: np.maximum(0.0, T - tc).reshape(-1, 1)
+        if kind == "4P":
+            return lambda T: _design_4p(T, tc)
+    if len(cps) == 2:
+        tlo, thi = cps
+        if kind == "5P":
+            return lambda T: _design_5p(T, tlo, thi)
+        if kind == "5PZ":
+            return lambda T: np.column_stack([np.maximum(0.0, tlo - T), np.maximum(0.0, T - thi)])
+    raise ValueError(f"no design for kind {kind!r} with change points {cps}")
 
 
 def _lstsq_sse(X, y):
@@ -283,8 +328,17 @@ def fit_model(T, y, kind: str, *, objective: str = "sse") -> ChangePointModel:
     else:
         res = _FITTERS[kind](T, y)
     coeffs, sse, cps, pred = res
+    from .coverage import _linear_fit_record, _safe
+
     return ChangePointModel(
-        kind=kind, coeffs=coeffs, change_points=cps, sse=sse, n=len(T), _predict=pred
+        kind=kind,
+        coeffs=coeffs,
+        change_points=cps,
+        sse=sse,
+        n=len(T),
+        _predict=pred,
+        fit_range=(float(T.min()), float(T.max())),
+        _fit_record=_safe(_linear_fit_record, T, ("oat",), ("cp", kind, tuple(cps))),
     )
 
 

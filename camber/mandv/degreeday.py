@@ -11,7 +11,7 @@ numpy only; fit statistics reuse :func:`camber.mandv.stats.fit_stats`.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -34,14 +34,29 @@ class DegreeDayModel:
     heating_slope: float  # energy per HDD (0 if kind excludes heating)
     cooling_slope: float  # energy per CDD (0 if kind excludes cooling)
     fit: object  # camber.mandv.stats.FitStats
+    # the one private fit-time record (support, pinv(X'X), ...; camber.mandv.coverage)
+    _fit_record: object = field(default=None, repr=False, compare=False)
 
     def predict(self, tavg):
         """Predicted energy for period average temperature(s) ``tavg``."""
         hdd, cdd = degree_days(tavg, self.balance_point)
         return self.base + self.heating_slope * hdd + self.cooling_slope * cdd
 
+    def coverage(self, tavg, *, projected=None, policy=None):
+        """How well the fitted temperature range covers ``tavg`` (a
+        :class:`~camber.mandv.coverage.Coverage`)."""
+        from .coverage import _linear_coverage
+
+        return _linear_coverage(self, tavg, projected=projected, policy=policy)
+
     def as_dict(self) -> dict:
-        d = asdict(self)
+        d = {
+            "kind": self.kind,
+            "balance_point": self.balance_point,
+            "base": self.base,
+            "heating_slope": self.heating_slope,
+            "cooling_slope": self.cooling_slope,
+        }
         d["fit"] = self.fit.as_dict() if hasattr(self.fit, "as_dict") else self.fit
         return d
 
@@ -107,6 +122,8 @@ def fit_degree_day(
             best = (key, bp, base, hs, cs, fs)
     assert best is not None  # candidates is non-empty, so the loop always sets best
     _, bp, base, hs, cs, fs = best
+    from .coverage import _linear_fit_record, _safe
+
     return DegreeDayModel(
         kind=kind,
         balance_point=round(float(bp), 2),
@@ -114,4 +131,5 @@ def fit_degree_day(
         heating_slope=round(hs, 4),
         cooling_slope=round(cs, 4),
         fit=fs,
+        _fit_record=_safe(_linear_fit_record, tavg, ("tavg",), ("dd", kind, round(float(bp), 2))),
     )
