@@ -42,6 +42,17 @@ from the subpackages and modules, not from `camber` directly.
   public, but where they surface an upstream type or option, that part follows the upstream
   library's compatibility, not CAMBER's.
 
+### Provisional surfaces
+
+A few public modules are marked **provisional**: they follow the naming rule above and are locked
+by the snapshot test, but their names and signatures may still change in a MINOR release (with a
+CHANGELOG entry, without a deprecation window) until they are declared stable.
+
+- **`camber.datasets`** (added in 0.86) -- the open dataset catalog: `DatasetEntry`, `FetchResult`,
+  `IngestResult`, `catalog`, `get`, `fetch`, `ingest`, `status`, `remove`, `config_template`,
+  `score`. The catalog's *content* (`catalog.json`: entries, subsets, pinned checksums) is data, not
+  API, and changes whenever a publisher reissues a file or an entry is added.
+
 ## What the version number means
 
 From `1.0.0`, CAMBER follows Semantic Versioning `MAJOR.MINOR.PATCH`:

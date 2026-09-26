@@ -13,6 +13,7 @@ camber charts  (--csv F | --demo reheat) [--ahu N] [--out DIR]   # legacy AHU He
 camber validate [--html d.html] [--json d.json] [--full]         # validation credibility dossier
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
+camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 ```
 
 `camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
@@ -170,6 +171,42 @@ machines) and the CUSUM timing parameters are *provisional-untuned*. There is no
 it. Read a drift finding as "worth a walkdown", not as a dispatch-grade verdict — see
 [CHILLER-DRIFT.md](CHILLER-DRIFT.md#calibrating-the-thresholds) for how to calibrate.
 
+
+## Open datasets
+
+`camber datasets` fetches open building datasets from their publishers, verifies them, ingests
+them into a Parquet store and writes a ready-to-run config (see [DATASETS.md](DATASETS.md)):
+
+```
+camber datasets list [--licence commercial|all] [--kind simulated|real|lab] [--labeled] [--json]
+camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, quirks
+camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
+camber datasets ingest <id>... | --all --store DIR [--subset S] [--force]
+camber datasets status [--dir D] [--store DIR] [--json]
+camber datasets remove <id> [--dir D] [--store DIR --purge-store]
+camber datasets config <id> --store DIR [--out cfg.json] [--facility ID]
+camber datasets score  <id> --store DIR [--findings findings.json] [--json]
+```
+
+`fetch --all` takes the open tier only; research-only (NC/ND) datasets also need `--licence all`
+**and** `--accept-noncommercial`. Exit codes: `2` checksum mismatch (the file is kept as `.bad`),
+`3` licence gate, `4` not enough disk, `1` any other error. A typical session:
+
+```
+camber datasets fetch lbnl-sdahu
+camber datasets ingest lbnl-sdahu --store lab_store
+camber datasets config lbnl-sdahu --store lab_store --out sdahu.json
+camber report sdahu.json --out sdahu.html        # carries the dataset's citation + licence
+camber datasets score lbnl-sdahu --store lab_store
+```
+
+The config it writes uses a **store source** -- `"source": {"kind": "store", "store": "...",
+"facility_id": "ds-lbnl-sdahu"}` -- which works for any Parquet store, not only catalog data:
+equipment is discovered by the class recorded at ingest (`{"class": "AHU", "marker_role":
+"mixed_air_temp"}`), no mapping is needed (the store already holds roles), and `shared_oat` may name
+a stored equipment (`{"equip": "weather", "role": "oat"}`). An `mv` section fits a daily
+change-point M&V baseline per meter (`{"class": "CHILLEDWATER_METER", "role": "energy_rate",
+"period": [start, end]}`).
 
 ## Backward compatibility
 

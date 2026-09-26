@@ -5,3 +5,10 @@ This product includes software for analyzing Building Automation System (BAS)
 trend data. Its algorithms are reimplemented from public standards (ASHRAE
 Guideline 36, Guideline 14, Standard 55, Standard 211; IPMVP; PNNL Building
 Re-tuning; NIST APAR). No third-party source code is included.
+
+CAMBER redistributes no datasets. The dataset catalog (camber/datasets/catalog.json)
+records where open building datasets are published, under which licence, and
+their checksums; `camber datasets fetch` downloads each file from its publisher
+onto the user's machine. The data remains under its publisher's licence, which
+the user accepts by downloading it; cite the publisher as the catalog entry
+states.

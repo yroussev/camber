@@ -92,6 +92,36 @@ SC support is currently labelled experimental.
 Log every connection and every point/property read with source and timestamp so the tool's
 footprint on the OT network is auditable.
 
+### 7. Outbound downloads (the dataset catalog)
+
+`camber datasets fetch` (and `camber.datasets.fetch`) is the one place CAMBER downloads files from
+the internet. It never runs on its own -- only when a user names a dataset -- and it never talks to
+building networks. Its guarantees:
+
+- **HTTPS only**, including after redirects: the opener refuses any redirect to a non-`https` URL
+  and the final URL is re-checked. Catalog validation rejects any non-`https` URL at review time.
+- **Pinned content**: every catalog file carries its size and SHA-256. A download that does not
+  match is moved to `<file>.bad` and the fetch fails (exit code 2) -- a changed upstream file is
+  never silently accepted. An unpinned file is downloaded with a warning and its hash recorded.
+- **Atomic, resumable writes**: bytes stream to `<file>.part` (with an ETag sidecar for
+  `Range`/`If-Range` resume), are `fsync`ed, verified, then `os.replace`d into place.
+- **Disk pre-check**: free space is checked before a download or an extraction starts
+  (exit code 4), with the numbers.
+- **Safe extraction**: archives are validated member-by-member *before* anything is written --
+  absolute paths, `..` traversal (zip-slip), symlinks, hardlinks and device files are refused, and
+  file-count, total-size and compression-ratio caps stop decompression bombs. Members are written
+  to a temporary name and renamed, so an interrupted extract leaves no truncated file.
+- **Licence gate**: a research-only (non-commercial / no-derivatives) dataset is refused unless
+  the user passes `--accept-noncommercial` (`accept_noncommercial=True`); there is deliberately no
+  environment-variable bypass. Each acceptance is appended to `acknowledgements.json` in the cache,
+  and every report built from such data carries a do-not-redistribute banner (exit code 3 when the
+  gate refuses).
+- **Stdlib only**: `urllib`, `zipfile`/`tarfile`, `hashlib` -- no new dependency, a descriptive
+  `User-Agent`, an explicit timeout.
+
+The cache lives in `$CAMBER_DATA_DIR`, else `$XDG_CACHE_HOME/camber/datasets`, else
+`~/.cache/camber/datasets`. CAMBER redistributes none of the data (see `NOTICE`).
+
 ## References
 
 - NIST SP 800-82r3 — Guide to OT Security — https://csrc.nist.gov/News/2023/nist-publishes-sp-800-82-revision-3
