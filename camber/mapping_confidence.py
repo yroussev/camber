@@ -11,6 +11,9 @@ downstream. This scores how much to trust each resolution from three signals:
 - **data fit** -- when the point's data is available, does it respect the role's physical
   bounds? A tag mapped to OAT whose values sit at 0-100 (a valve, not a temperature) is
   almost certainly mismapped; this reuses :data:`camber.sensorhealth.PHYSICAL_BOUNDS`.
+  Bounds cannot see a *scale* error inside the range -- a fan-speed percent mapped to a cfm
+  airflow role sits comfortably inside any airflow bound -- so an airflow point bounded to
+  0-100 is also flagged (``scale_suspect``, :func:`camber.sensorhealth.percent_scale_suspect`).
 
 The output flags the low-confidence and ambiguous mappings (and the unmapped tokens) so
 an onboarding reviewer can spend their attention where it's actually needed instead of
@@ -24,7 +27,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from .model.mapping import MappingProvider
-from .sensorhealth import range_violation_frac
+from .sensorhealth import percent_scale_suspect, range_violation_frac
 
 __all__ = [
     "MappingConfidence",
@@ -83,6 +86,10 @@ def score_token(
             if rv > 0.1:  # data doesn't physically fit the role
                 flags.append("data_mismatch")
                 conf *= 1.0 - min(rv * 2.0, 1.0)
+        if percent_scale_suspect(series, role):
+            # in range but on the wrong scale: 0-100 on a cfm role is a percent, not an airflow
+            flags.append("scale_suspect")
+            conf *= 0.6
 
     conf = round(max(0.0, min(1.0, conf)), 4)
     verdict = "high" if conf >= 0.8 else ("medium" if conf >= 0.5 else "low")
@@ -109,7 +116,7 @@ def review(
     """Summarize a mapping review: what's solid, what needs a human look.
 
     Returns ``{"scored", "needs_review", "unmapped", "n"}`` where ``needs_review`` is the
-    mapped tokens below ``min_confidence`` (or ambiguous / data-mismatched) and
+    mapped tokens below ``min_confidence`` (or ambiguous / data-mismatched / scale-suspect) and
     ``unmapped`` is tokens that didn't resolve at all.
     """
     scored = score_mapping(tokens, mapping, series_by_token)
@@ -118,6 +125,11 @@ def review(
         s
         for s in scored
         if s.basis != "unmapped"
-        and (s.confidence < min_confidence or s.ambiguous or "data_mismatch" in s.flags)
+        and (
+            s.confidence < min_confidence
+            or s.ambiguous
+            or "data_mismatch" in s.flags
+            or "scale_suspect" in s.flags
+        )
     ]
     return {"scored": scored, "needs_review": needs, "unmapped": unmapped, "n": len(scored)}
