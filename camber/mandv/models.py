@@ -47,6 +47,54 @@ class ChangePointModel:
         """Predicted energy for temperature(s) T (scalar or array)."""
         return self._predict(np.asarray(T, dtype=float))
 
+    def as_dict(self) -> dict:
+        """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model.
+
+        Carries the kind, the named coefficients and change points at full precision, the fit's
+        ``sse`` / ``n`` / ``fit_range`` and the private fit record (support, ``(X'X)^-1``, ``s2``,
+        ``rho``), so a rebuilt model predicts, grades coverage and computes uncertainty exactly
+        as the fitted one.
+        """
+        from .coverage import _FitRecord
+
+        rec = self._fit_record
+        return {
+            "type": "ChangePointModel",
+            "kind": self.kind,
+            "coeffs": {k: float(v) for k, v in self.coeffs.items()},
+            "change_points": [float(c) for c in self.change_points],
+            "sse": float(self.sse),
+            "n": int(self.n),
+            "fit_range": None if self.fit_range is None else [float(x) for x in self.fit_range],
+            "fit_record": rec.as_dict() if isinstance(rec, _FitRecord) else None,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> ChangePointModel:
+        """Rebuild a model written by :meth:`as_dict`.
+
+        Prediction is rebuilt from the kind and coefficients through the model's design
+        (:func:`_design_for`), which reproduces the fitted model's predictions exactly --
+        including the zero-intercept kinds and a 5P that fell back to a line.
+        """
+        from .coverage import _FitRecord
+
+        kind = d["kind"]
+        cps = tuple(float(c) for c in d.get("change_points") or ())
+        coeffs = {k: float(v) for k, v in d["coeffs"].items()}
+        beta = [coeffs[nm] for nm in _coef_names(kind, cps)]
+        fr = d.get("fit_range")
+        return cls(
+            kind=kind,
+            coeffs=coeffs,
+            change_points=cps,
+            sse=float(d["sse"]),
+            n=int(d["n"]),
+            _predict=_predict_from_design(kind, cps, beta),
+            fit_range=None if fr is None else (float(fr[0]), float(fr[1])),
+            _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+        )
+
     def coverage(self, T, *, projected=None, policy=None):
         """How well the fitted temperature range covers ``T``.
 
@@ -122,6 +170,41 @@ def _design_for(kind: str, change_points: tuple):
         if kind == "5PZ":
             return lambda T: np.column_stack([np.maximum(0.0, tlo - T), np.maximum(0.0, T - thi)])
     raise ValueError(f"no design for kind {kind!r} with change points {cps}")
+
+
+def _coef_names(kind: str, change_points: tuple) -> tuple:
+    """Coefficient names in design-column order (:func:`_design_for`) for a kind and its CPs."""
+    if not change_points:  # 2P, and a 5P / 5PZ that fell back to a line
+        return ("base", "slope")
+    names = {
+        "3PC": ("base", "cool_slope"),
+        "3PH": ("base", "heat_slope"),
+        "3PHZ": ("heat_slope",),
+        "3PCZ": ("cool_slope",),
+        "4P": ("base", "left_slope", "right_slope"),
+        "5P": ("base", "heat_slope", "cool_slope"),
+        "5PZ": ("heat_slope", "cool_slope"),
+    }
+    if kind not in names:
+        raise ValueError(f"unknown change-point kind {kind!r}")
+    return names[kind]
+
+
+def _predict_from_design(kind: str, change_points: tuple, beta):
+    """``T -> X(T) beta``, accumulated column by column in the fitters' own order (so the rebuilt
+    prediction is bit-identical to the fitted closure, not merely close)."""
+    design = _design_for(kind, change_points)
+    b = [float(v) for v in beta]
+
+    def predict(T):
+        t = np.asarray(T, dtype=float)
+        X = design(np.atleast_1d(t))
+        out = X[:, 0] * b[0]
+        for j in range(1, len(b)):
+            out = out + X[:, j] * b[j]
+        return out[0] if t.ndim == 0 else out.reshape(t.shape)
+
+    return predict
 
 
 def _lstsq_sse(X, y):
@@ -308,17 +391,21 @@ N_PARAMS = {"2P": 2, "3PC": 3, "3PH": 3, "3PHZ": 2, "3PCZ": 2, "4P": 4, "5P": 5,
 _OBJECTIVE_AWARE = {"3PC", "3PH", "4P"}
 
 
-def fit_model(T, y, kind: str, *, objective: str = "sse") -> ChangePointModel:
+def fit_model(T, y, kind: str, *, objective: str = "sse", time_index=None) -> ChangePointModel:
     """Fit one model ``kind`` to (temperature, energy) data.
 
     ``objective``: "sse" (default, minimize squared error) or "bias" (choose the
     change point that minimizes |Net Determination Bias|, per ASHRAE Guideline 14).
     The bias
     option applies to single-change-point models (3PC/3PH/4P); others ignore it.
+
+    ``time_index`` (aligned to ``T``) lets the fit record the residuals' lag-1 autocorrelation,
+    which the exact uncertainty kernel uses when no ``rho`` is passed to it.
     """
     T = np.asarray(T, dtype=float)
     y = np.asarray(y, dtype=float)
     mask = np.isfinite(T) & np.isfinite(y)
+    idx = None if time_index is None else np.asarray(time_index)[mask]
     T, y = T[mask], y[mask]
     if len(T) < 3:
         raise ValueError("need >=3 finite points to fit")
@@ -330,32 +417,54 @@ def fit_model(T, y, kind: str, *, objective: str = "sse") -> ChangePointModel:
     coeffs, sse, cps, pred = res
     from .coverage import _linear_fit_record, _safe
 
+    n, p = len(T), N_PARAMS[kind]
     return ChangePointModel(
         kind=kind,
         coeffs=coeffs,
         change_points=cps,
         sse=sse,
-        n=len(T),
+        n=n,
         _predict=pred,
         fit_range=(float(T.min()), float(T.max())),
-        _fit_record=_safe(_linear_fit_record, T, ("oat",), ("cp", kind, tuple(cps))),
+        _fit_record=_safe(
+            _linear_fit_record,
+            T,
+            ("oat",),
+            ("cp", kind, tuple(cps)),
+            s2=sse / (n - p) if n > p else None,
+            n=n,
+            p=p,
+            rho=_safe(_rho_of, y - np.asarray(pred(T), dtype=float), idx),
+        ),
     )
 
 
-def best_model(T, y, kinds=("2P", "3PC", "3PH", "4P", "5P")) -> ChangePointModel:
+def _rho_of(resid, index):
+    """Lag-1 residual autocorrelation when a time index is known, else ``None``."""
+    if index is None:
+        return None
+    from .stats import lag1_autocorrelation
+
+    return lag1_autocorrelation(resid, index=index)
+
+
+def best_model(
+    T, y, kinds=("2P", "3PC", "3PH", "4P", "5P"), *, time_index=None
+) -> ChangePointModel:
     """Fit several model kinds and return the best by adjusted goodness of fit.
 
     Selection uses CV(RMSE) penalized for parameters (more parameters must earn
     their keep) -- a simple BIC-like guard against overfitting with 5P. The
     "heating/cooling goes to zero" kinds (3PHZ/3PCZ) are not in the default set
     (they encode a modeling assumption -- no base load -- the caller opts into);
-    pass them explicitly via ``kinds`` when appropriate.
+    pass them explicitly via ``kinds`` when appropriate. ``time_index`` is passed to
+    :func:`fit_model`.
     """
     n_params = N_PARAMS
     best, best_score = None, np.inf
     for k in kinds:
         try:
-            m = fit_model(T, y, k)
+            m = fit_model(T, y, k, time_index=time_index)
         except Exception:
             continue
         p = n_params[k]

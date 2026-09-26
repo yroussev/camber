@@ -182,8 +182,14 @@ class _FitRecord:
     baseline, ``values`` holds each driver column's finite baseline values, sorted; ``design`` is a
     picklable spec for :func:`_design` and ``xtx_pinv`` the baseline ``pinv(X'X)`` for that design
     (the leverage test and the FSU widening factor use it). A TOWT fit carries its cell counts in
-    ``towt`` instead. Deliberately the single place fit-time state lives, so it can grow (residual
-    variance, n, rho, serialisation) without scattering private attributes across the models.
+    ``towt`` instead. Deliberately the single place fit-time state lives, so it can grow without
+    scattering private attributes across the models.
+
+    The fit's own statistics live here too (#21): ``s2`` the residual variance ``SSE/(n-p)``, ``n``
+    the fitted points, ``p`` the parameter count the model reports (change points included) and
+    ``rho`` the residuals' lag-1 autocorrelation -- ``None`` unless the fit was given a time index.
+    A TOWT record also carries ``xtx_pinv`` (of its full design), which the exact projection
+    variance uses; its ``design`` stays ``None`` so coverage treats it as TOWT, never as linear.
     """
 
     names: tuple = ()
@@ -192,11 +198,96 @@ class _FitRecord:
     xtx_pinv: np.ndarray | None = None
     h_max: float | None = None
     towt: _TOWTCells | None = None
+    s2: float | None = None
+    n: int | None = None
+    p: int | None = None
+    rho: float | None = None
 
     @property
     def linear(self) -> bool:
         """Whether this record describes a linear-in-parameters driver support."""
         return bool(self.values)
+
+    def as_dict(self) -> dict:
+        """A JSON-safe dict of the record (arrays as lists; non-finite numbers as ``None``)."""
+        towt = None
+        if self.towt is not None:
+            c = self.towt
+            towt = {
+                "breakpoints": _floats(c.breakpoints),
+                "modes": list(c.modes),
+                "counts": np.asarray(c.counts).astype(int).tolist(),
+                "mode_min": _floats(c.mode_min),
+                "mode_max": _floats(c.mode_max),
+                "tow_counts": np.asarray(c.tow_counts).astype(int).tolist(),
+            }
+        return {
+            "names": list(self.names),
+            "values": [_floats(v) for v in self.values],
+            "design": _spec_out(self.design),
+            "xtx_pinv": None if self.xtx_pinv is None else np.asarray(self.xtx_pinv).tolist(),
+            "h_max": _float_or_none(self.h_max),
+            "towt": towt,
+            "s2": _float_or_none(self.s2),
+            "n": None if self.n is None else int(self.n),
+            "p": None if self.p is None else int(self.p),
+            "rho": _float_or_none(self.rho),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict | None) -> _FitRecord | None:
+        """Rebuild a record written by :meth:`as_dict` (``None`` passes through)."""
+        if d is None:
+            return None
+        towt = None
+        if d.get("towt") is not None:
+            c = d["towt"]
+            towt = _TOWTCells(
+                breakpoints=_arr(c["breakpoints"]),
+                modes=tuple(c["modes"]),
+                counts=np.asarray(c["counts"], dtype=int),
+                mode_min=_arr(c["mode_min"]),
+                mode_max=_arr(c["mode_max"]),
+                tow_counts=np.asarray(c["tow_counts"], dtype=int),
+            )
+        A = d.get("xtx_pinv")
+        return cls(
+            names=tuple(d.get("names") or ()),
+            values=tuple(_arr(v) for v in d.get("values") or ()),
+            design=_spec_in(d.get("design")),
+            xtx_pinv=None if A is None else np.asarray(A, dtype=float),
+            h_max=d.get("h_max"),
+            towt=towt,
+            s2=d.get("s2"),
+            n=d.get("n"),
+            p=d.get("p"),
+            rho=d.get("rho"),
+        )
+
+
+def _float_or_none(x):
+    return None if x is None or not np.isfinite(x) else float(x)
+
+
+def _floats(a) -> list:
+    return [_float_or_none(v) for v in np.asarray(a, dtype=float).ravel()]
+
+
+def _arr(v) -> np.ndarray:
+    return np.array([np.nan if x is None else x for x in v], dtype=float)
+
+
+def _spec_out(spec):
+    """A design spec as JSON: ``("cp", kind, (tc, ...))`` -> ``["cp", kind, [tc, ...]]``."""
+    if spec is None:
+        return None
+    return [spec[0], *[list(map(float, x)) if isinstance(x, tuple) else x for x in spec[1:]]]
+
+
+def _spec_in(spec):
+    if spec is None:
+        return None
+    return (spec[0], *[tuple(x) if isinstance(x, list) else x for x in spec[1:]])
 
 
 def _design(spec: tuple, D: np.ndarray) -> np.ndarray:
@@ -228,8 +319,11 @@ def _as_2d(x) -> np.ndarray:
     return a[:, None] if a.ndim == 1 else a
 
 
-def _linear_fit_record(drivers, names, design: tuple | None) -> _FitRecord | None:
-    """Record the finite baseline support (and ``pinv(X'X)``) of a fitted linear baseline."""
+def _linear_fit_record(
+    drivers, names, design: tuple | None, *, s2=None, n=None, p=None, rho=None
+) -> _FitRecord | None:
+    """Record the finite baseline support (and ``pinv(X'X)``) of a fitted linear baseline, plus
+    the fit's residual variance ``s2``, point and parameter counts and ``rho``."""
     D = _as_2d(drivers)
     D = D[np.all(np.isfinite(D), axis=1)]
     if not len(D):
@@ -241,7 +335,17 @@ def _linear_fit_record(drivers, names, design: tuple | None) -> _FitRecord | Non
         A = np.linalg.pinv(X.T @ X)
         h = np.einsum("ij,jk,ik->i", X, A, X)
         h_max = float(np.max(h)) if len(h) else None
-    return _FitRecord(tuple(names), values, design, A, h_max)
+    return _FitRecord(
+        tuple(names),
+        values,
+        design,
+        A,
+        h_max,
+        s2=_float_or_none(s2),
+        n=None if n is None else int(n),
+        p=None if p is None else int(p),
+        rho=rho,
+    )
 
 
 def _safe(fn, *args, **kwargs):
@@ -593,8 +697,11 @@ def _towt_segments(t: np.ndarray, bps: np.ndarray) -> np.ndarray:
     return np.where(t > bps[-1], n_seg, seg)
 
 
-def _towt_fit_record(tow, temp, breakpoints, occ_bins) -> _FitRecord | None:
-    """Record the (mode x temperature cell) support of a TOWT fit."""
+def _towt_fit_record(
+    tow, temp, breakpoints, occ_bins, *, X=None, s2=None, n=None, p=None, rho=None
+) -> _FitRecord | None:
+    """Record the (mode x temperature cell) support of a TOWT fit, plus ``pinv(X'X)`` of its
+    design ``X`` and the fit's residual variance, counts and ``rho`` when given."""
     t = np.asarray(temp, dtype=float)
     tow = np.asarray(tow)
     ok = np.isfinite(t)
@@ -616,7 +723,15 @@ def _towt_fit_record(tow, temp, breakpoints, occ_bins) -> _FitRecord | None:
     mode_max = np.array(
         [t[mode == i].max() if (mode == i).any() else np.nan for i in range(len(modes))]
     )
-    return _FitRecord(towt=_TOWTCells(bps, modes, counts, mode_min, mode_max, tow_counts))
+    A = None if X is None else np.linalg.pinv(X.T @ X)
+    return _FitRecord(
+        towt=_TOWTCells(bps, modes, counts, mode_min, mode_max, tow_counts),
+        xtx_pinv=A,
+        s2=_float_or_none(s2),
+        n=None if n is None else int(n),
+        p=None if p is None else int(p),
+        rho=rho,
+    )
 
 
 def towt_coverage(model, index, temp, *, projected=None, policy=None) -> Coverage:

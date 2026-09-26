@@ -38,6 +38,17 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   policy (`ExtrapolationPolicy.from_dict`; unknown keys are an error). `mv_baseline` findings gain
   `oat_fit_min`, `oat_fit_max`, `oat_support_lo`, `oat_support_hi` and `rho`.
 
+### Added — M&V foundations for rebaselining (#21, phase 21a)
+- **Model serialisation.** `as_dict()` / `from_dict()` on `ChangePointModel`, `DriverModel`,
+  `DegreeDayModel` and `TOWTModel` round-trip through JSON losslessly: prediction is rebuilt from
+  the kind and coefficients through the model's design and is bit-identical to the fitted model
+  (zero-intercept kinds and a 5P that fell back to a line included), and the private fit record
+  travels with it, so coverage and uncertainty are unchanged. `DriverModel.as_dict()` now reports
+  full-precision coefficients (it rounded to 6 decimals) plus `type` and `fit_record`.
+- The single private fit record (#20) also carries the fit's residual variance `s2`, `n`, `p`
+  and `rho`; `fit_model`, `best_model`, `fit_driver_model` and `fit_degree_day` take a
+  keyword-only `time_index` so `rho` is recorded, and `fit_towt` records it from its own index.
+
 ### Changed
 - **Severe extrapolation declines by default**: `avoided_energy`, `baseline_projected`,
   `savings_pct`, `fractional_uncertainty` and `abs_uncertainty` (and `IsolationSavings.savings` /

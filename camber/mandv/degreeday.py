@@ -58,7 +58,32 @@ class DegreeDayModel:
             "cooling_slope": self.cooling_slope,
         }
         d["fit"] = self.fit.as_dict() if hasattr(self.fit, "as_dict") else self.fit
+        from .coverage import _FitRecord
+
+        rec = self._fit_record
+        d["type"] = "DegreeDayModel"
+        d["fit_record"] = rec.as_dict() if isinstance(rec, _FitRecord) else None
         return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> DegreeDayModel:
+        """Rebuild a model written by :meth:`as_dict` (unknown ``fit`` keys are ignored)."""
+        from .coverage import _FitRecord
+        from .stats import FitStats
+
+        fit = d.get("fit")
+        if isinstance(fit, dict):
+            known = set(FitStats.__dataclass_fields__)
+            fit = FitStats(**{k: v for k, v in fit.items() if k in known})
+        return cls(
+            kind=d["kind"],
+            balance_point=float(d["balance_point"]),
+            base=float(d["base"]),
+            heating_slope=float(d["heating_slope"]),
+            cooling_slope=float(d["cooling_slope"]),
+            fit=fit,
+            _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+        )
 
 
 def _fit_at(tavg, energy, bp: float, kind: str):
@@ -88,12 +113,14 @@ def fit_degree_day(
     balance_range=(50.0, 70.0),
     step: float = 1.0,
     kind: str = "both",
+    time_index=None,
 ) -> DegreeDayModel:
     """Fit ``E = base + a·HDD + b·CDD``. Returns a :class:`DegreeDayModel`.
 
     ``tavg``/``energy`` are per-period average temperature and energy (e.g. monthly). If
     ``balance_point`` is None, it's chosen from ``balance_range`` (stepped by ``step``) by minimum
     CV(RMSE). ``kind`` restricts to ``"heating"``/``"cooling"`` or fits ``"both"`` legs.
+    ``time_index`` (aligned to ``tavg``) lets the fit record the residuals' lag-1 autocorrelation.
     """
     if kind not in ("heating", "cooling", "both"):
         raise ValueError("kind must be 'heating', 'cooling', or 'both'")
@@ -102,6 +129,7 @@ def fit_degree_day(
     if len(tavg) != len(energy):
         raise ValueError("tavg and energy must be the same length")
     finite = np.isfinite(tavg) & np.isfinite(energy)  # drop NaN/inf pairs (a missing bill month)
+    idx = None if time_index is None else np.asarray(time_index)[finite]
     tavg, energy = tavg[finite], energy[finite]
     p = 3 if kind == "both" else 2  # intercept + one or two slopes
     if len(tavg) <= p:  # need > p points, else the fit is degenerate
@@ -123,13 +151,27 @@ def fit_degree_day(
     assert best is not None  # candidates is non-empty, so the loop always sets best
     _, bp, base, hs, cs, fs = best
     from .coverage import _linear_fit_record, _safe
+    from .models import _rho_of
 
-    return DegreeDayModel(
+    model = DegreeDayModel(
         kind=kind,
         balance_point=round(float(bp), 2),
         base=round(base, 3),
         heating_slope=round(hs, 4),
         cooling_slope=round(cs, 4),
         fit=fs,
-        _fit_record=_safe(_linear_fit_record, tavg, ("tavg",), ("dd", kind, round(float(bp), 2))),
     )
+    # the record's s2 is the reported (rounded) model's, so an exact band matches its predictions
+    resid = energy - model.predict(tavg)
+    n = len(energy)
+    model._fit_record = _safe(
+        _linear_fit_record,
+        tavg,
+        ("tavg",),
+        ("dd", kind, round(float(bp), 2)),
+        s2=float(resid @ resid) / (n - p),
+        n=n,
+        p=p,
+        rho=_safe(_rho_of, resid, idx),
+    )
+    return model

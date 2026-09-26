@@ -96,6 +96,38 @@ class TOWTModel:
     # the one private fit-time record (mode x temperature cell counts; camber.mandv.coverage)
     _fit_record: object = field(default=None, repr=False, compare=False)
 
+    def as_dict(self) -> dict:
+        """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model."""
+        from .coverage import _FitRecord
+
+        rec = self._fit_record
+        return {
+            "type": "TOWTModel",
+            "bins": [int(b) for b in self.bins],
+            "breakpoints": [float(b) for b in self.breakpoints],
+            "occ_bins": None if self.occ_bins is None else sorted(int(b) for b in self.occ_bins),
+            "beta": [float(b) for b in self.beta],
+            "n_params": int(self.n_params),
+            "split": bool(self.split),
+            "fit_record": rec.as_dict() if isinstance(rec, _FitRecord) else None,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> TOWTModel:
+        """Rebuild a model written by :meth:`as_dict`."""
+        from .coverage import _FitRecord
+
+        occ = d.get("occ_bins")
+        return cls(
+            bins=np.asarray(d["bins"], dtype=int),
+            breakpoints=np.asarray(d["breakpoints"], dtype=float),
+            occ_bins=None if occ is None else frozenset(int(b) for b in occ),
+            beta=np.asarray(d["beta"], dtype=float),
+            n_params=int(d["n_params"]),
+            split=bool(d["split"]),
+            _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+        )
+
     def coverage(self, index, temp, *, projected=None, policy=None):
         """How well the baseline's (mode x temperature cell) support covers these hours (see
         :func:`camber.mandv.coverage.towt_coverage`)."""
@@ -167,15 +199,29 @@ def fit_towt(
     X = _build_design(tow, t, bins, breakpoints, occ_bins)
     beta, _res, rank, _sv = np.linalg.lstsq(X, y, rcond=None)
     from .coverage import _safe, _towt_fit_record
+    from .models import _rho_of
 
+    resid = y - X @ beta
+    n, p = len(y), int(rank)
     return TOWTModel(
         bins=bins,
         breakpoints=breakpoints,
         occ_bins=occ_bins,
         beta=beta,
-        n_params=int(rank),
+        n_params=p,
         split=occ_split,
-        _fit_record=_safe(_towt_fit_record, tow, t, breakpoints, occ_bins),
+        _fit_record=_safe(
+            _towt_fit_record,
+            tow,
+            t,
+            breakpoints,
+            occ_bins,
+            X=X,
+            s2=float(resid @ resid) / (n - p) if n > p else None,
+            n=n,
+            p=p,
+            rho=_safe(_rho_of, resid, idx),
+        ),
     )
 
 

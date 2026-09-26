@@ -75,19 +75,41 @@ class DriverModel:
         return self.intercept + A @ coef
 
     def as_dict(self):
+        """A JSON-safe dict from which :meth:`from_dict` rebuilds an identical model (full
+        precision, plus the private fit record)."""
+        from .coverage import _FitRecord
+
+        rec = self._fit_record
         return {
-            "intercept": round(self.intercept, 6),
-            "coef": [round(c, 6) for c in self.coef],
-            "sse": round(self.sse, 4),
-            "n": self.n,
-            "p": self.p,
+            "type": "DriverModel",
+            "intercept": float(self.intercept),
+            "coef": [float(c) for c in self.coef],
+            "sse": float(self.sse),
+            "n": int(self.n),
+            "p": int(self.p),
+            "fit_record": rec.as_dict() if isinstance(rec, _FitRecord) else None,
         }
 
+    @classmethod
+    def from_dict(cls, d: dict) -> DriverModel:
+        """Rebuild a model written by :meth:`as_dict`."""
+        from .coverage import _FitRecord
 
-def fit_driver_model(driver, energy) -> DriverModel:
+        return cls(
+            intercept=float(d["intercept"]),
+            coef=tuple(float(c) for c in d["coef"]),
+            sse=float(d["sse"]),
+            n=int(d["n"]),
+            p=int(d["p"]),
+            _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+        )
+
+
+def fit_driver_model(driver, energy, *, time_index=None) -> DriverModel:
     """Least-squares fit of sub-meter ``energy`` on its ``driver`` (1-D, 2-D, or None).
 
-    ``driver=None`` fits a constant (mean) model. NaN rows are dropped pairwise.
+    ``driver=None`` fits a constant (mean) model. NaN rows are dropped pairwise. ``time_index``
+    (aligned to ``energy``) lets the fit record the residuals' lag-1 autocorrelation.
     """
     y = np.asarray(energy, dtype=float)
     if driver is None:
@@ -102,21 +124,33 @@ def fit_driver_model(driver, energy) -> DriverModel:
     if X.ndim == 1:
         X = X[:, None]
     mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
+    idx = None if time_index is None else np.asarray(time_index)[mask]
     X, y = X[mask], y[mask]
     A = np.hstack([np.ones((len(X), 1)), X])
     beta, *_ = np.linalg.lstsq(A, y, rcond=None)
     yhat = A @ beta
     sse = float(np.sum((y - yhat) ** 2))
     from .coverage import _linear_fit_record, _safe
+    from .models import _rho_of
 
     names = ("driver",) if X.shape[1] == 1 else tuple(f"driver[{j}]" for j in range(X.shape[1]))
+    n, p = len(y), A.shape[1]
     return DriverModel(
         intercept=float(beta[0]),
         coef=tuple(float(c) for c in beta[1:]),
         sse=sse,
-        n=len(y),
-        p=A.shape[1],
-        _fit_record=_safe(_linear_fit_record, X, names, ("affine",)),
+        n=n,
+        p=p,
+        _fit_record=_safe(
+            _linear_fit_record,
+            X,
+            names,
+            ("affine",),
+            s2=sse / (n - p) if n > p else None,
+            n=n,
+            p=p,
+            rho=_safe(_rho_of, y - yhat, idx),
+        ),
     )
 
 
