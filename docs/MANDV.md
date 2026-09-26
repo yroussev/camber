@@ -196,6 +196,23 @@ res = caltrack_savings(
 )
 ```
 
+**Config runs.** A config `mv` entry (see [CLI.md](CLI.md)) that names a `reporting_period`
+emits one `mv_savings` finding per meter alongside its `mv_baseline`:
+
+```json
+{"class": "CHILLEDWATER_METER", "role": "energy_rate",
+ "period": ["2016-01-01", "2016-06-30"], "reporting_period": ["2016-09-15", "2016-11-30"],
+ "extrapolation": {"decline_share": 0.30}}
+```
+
+Its metrics carry `avoided_energy`, `savings_pct`, `fsu`, `fsu_extrapolation_factor` and the
+coverage (`coverage_tier`, `share_points_outside`, `share_energy_outside`, `max_beyond_rel`); the
+baseline finding records the OAT support it was judged against (`oat_fit_min`, `oat_fit_max`,
+`oat_support_lo`, `oat_support_hi`) and its residual `rho`, now estimated because the daily index
+is passed to the fit statistics. A severe extrapolation — a winter baseline against a summer — is
+an `info` finding with `metrics["declined"]` true, a `declined_reason` and a caveat, never a number.
+`extrapolation` takes the `ExtrapolationPolicy` fields; an unknown key is an error.
+
 `assess_coverage(model, drivers)` is direction-agnostic: it grades any fitted model against any
 driver set, so the same call checks a reporting model projected back onto baseline conditions.
 

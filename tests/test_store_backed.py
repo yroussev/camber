@@ -448,3 +448,97 @@ def test_mv_declines_without_data_or_weather(tmp_path, monkeypatch):
     cfg["mv"][0]["interval"] = "hourly"
     with pytest.raises(ValueError, match="daily"):
         run_config(cfg)
+
+
+def _mv_store(tmp_path, *, saving=0.15):
+    """One meter over a year: cooling energy above 65 F, a ``saving`` from 2016-07-01 on."""
+    st = ParquetStore(str(tmp_path / "mvs"))
+    idx = pd.date_range("2016-01-01", "2016-12-31 23:00", freq="1h")
+    rng = np.random.default_rng(21)
+    doy = idx.dayofyear.to_numpy()
+    oat = (
+        55
+        - 25 * np.cos((doy - 15) / 365 * 2 * np.pi)
+        + 8 * np.sin((idx.hour.to_numpy() - 9) / 24 * 2 * np.pi)
+        + rng.normal(0, 2, len(idx))
+    )
+    rate = 20 + 3.0 * np.maximum(0, oat - 60) + rng.normal(0, 1.5, len(idx))
+    rate = np.where(idx >= "2016-07-01", rate * (1 - saving), rate)
+    st.write_role_frame(
+        pd.DataFrame({Role.POWER: rate, Role.OAT: oat}, index=idx),
+        facility_id="f",
+        equip="meter",
+        equip_class="M",
+    )
+    return {
+        "source": {"kind": "store", "store": st.root, "facility_id": "f"},
+        "equipment": [{"class": "M"}],
+        "mv": [{"class": "M", "role": "power"}],
+    }
+
+
+def test_mv_baseline_reports_its_oat_support(tmp_path):
+    cfg = _mv_store(tmp_path)
+    cfg["mv"][0]["period"] = ["2016-01-01", "2016-06-30"]
+    (f,) = [f for f in run_config(cfg).findings if f.rule == "mv_baseline"]
+    m = f.metrics
+    assert m["oat_fit_min"] <= m["oat_support_lo"] < m["oat_support_hi"] <= m["oat_fit_max"]
+    assert 20 < m["oat_fit_min"] < 40 and 70 < m["oat_fit_max"] < 90
+    assert m["rho"] is not None  # time_index passed: rho is estimated
+    assert not [x for x in run_config(cfg).findings if x.rule == "mv_savings"]
+    json.dumps(f.metrics, allow_nan=False)
+
+
+def test_mv_reporting_period_emits_a_savings_finding(tmp_path):
+    cfg = _mv_store(tmp_path)
+    # the first half-year spans cold to warm; a mild autumn window sits inside it
+    cfg["mv"][0]["period"] = ["2016-01-01", "2016-06-30"]
+    cfg["mv"][0]["reporting_period"] = ["2016-09-15", "2016-11-30"]
+    out = run_config(cfg)
+    (s,) = [f for f in out.findings if f.rule == "mv_savings"]
+    m = s.metrics
+    assert s.severity == "info" and m["declined"] is False
+    for k in ("avoided_energy", "savings_pct", "fsu", "fsu_extrapolation_factor", "coverage_tier"):
+        assert k in m
+    assert m["coverage_tier"] in ("in_range", "moderate")
+    assert 0.05 < m["savings_pct"] < 0.25 and m["fsu"] > 0
+    assert m["reporting_period"] == ["2016-09-15", "2016-11-30"]
+    assert "avoided energy" in s.summary
+    json.dumps(m, allow_nan=False)
+
+
+def test_mv_q1_baseline_against_q3_declines(tmp_path):
+    cfg = _mv_store(tmp_path)
+    cfg["mv"][0]["period"] = ["2016-01-01", "2016-03-31"]
+    cfg["mv"][0]["reporting_period"] = ["2016-07-01", "2016-09-30"]
+    cfg["mv"][0]["min_days"] = 30
+    (s,) = [f for f in run_config(cfg).findings if f.rule == "mv_savings"]
+    assert s.severity == "info"
+    assert s.metrics["declined"] is True and "SEVERE" in s.metrics["declined_reason"]
+    assert s.metrics["avoided_energy"] is None and s.metrics["reporting_actual"] > 0
+    assert s.metrics["coverage_tier"] == "severe"
+    assert any("SEVERE extrapolation" in c for c in s.caveats)
+    assert "declined" in s.summary
+    # the policy is tunable from config: opting out computes it anyway, under the caveat
+    cfg["mv"][0]["extrapolation"] = {"decline": False}
+    (s2,) = [f for f in run_config(cfg).findings if f.rule == "mv_savings"]
+    assert s2.metrics["declined"] is False and s2.metrics["avoided_energy"] is not None
+    cfg["mv"][0]["extrapolation"] = {"nope": 1}
+    with pytest.raises(ValueError, match="unknown extrapolation"):
+        run_config(cfg)
+
+
+def test_mv_savings_declines_without_baseline_or_reporting_data(tmp_path):
+    cfg = _mv_store(tmp_path)
+    cfg["mv"][0]["period"] = ["2016-01-01", "2016-01-10"]  # too short for a baseline
+    cfg["mv"][0]["reporting_period"] = ["2016-07-01", "2016-09-30"]
+    by_rule = {f.rule: f for f in run_config(cfg).findings}
+    assert by_rule["mv_savings"].metrics["declined"] is True
+    assert "no baseline" in by_rule["mv_savings"].summary
+    cfg["mv"][0]["period"] = ["2016-01-01", "2016-06-30"]
+    cfg["mv"][0]["reporting_period"] = ["2018-01-01", "2018-02-01"]  # no data there
+    by_rule = {f.rule: f for f in run_config(cfg).findings}
+    assert "no usable reporting-period days" in by_rule["mv_savings"].summary
+    cfg["mv"][0]["reporting_period"] = ["2016-07-01"]
+    with pytest.raises(ValueError, match="reporting_period"):
+        run_config(cfg)

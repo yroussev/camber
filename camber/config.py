@@ -35,11 +35,21 @@ the run.
 
 The optional ``mv`` section fits a daily change-point M&V baseline (ASHRAE Guideline 14 / IPMVP,
 :mod:`camber.mandv`) to every equipment of a class: ``[{"class": "CHILLEDWATER_METER", "role":
-"energy_rate", "period": ["2016-01-01", "2016-12-31"]}]``. The energy role is read as an hourly rate
-and integrated to daily energy against the daily-mean OAT (the equipment's own ``oat`` role, else
-``shared_oat``); each meter yields one ``mv_baseline`` Finding carrying the chosen model and its
-R², CV(RMSE) and NMBE -- ``ok`` when the fit meets the daily G14 acceptance, ``info`` when it does
-not (a weak weather dependence is a property of the meter, not an equipment fault).
+"energy_rate", "period": ["2016-01-01", "2016-12-31"]}]``. The energy role is read as an hourly
+rate and integrated to daily energy against the daily-mean OAT (the equipment's own ``oat`` role,
+else ``shared_oat``); each meter yields one ``mv_baseline`` Finding carrying the chosen model and
+its R², CV(RMSE), NMBE, residual lag-1 autocorrelation ``rho`` and the baseline's OAT support
+(``oat_fit_min`` / ``oat_fit_max``, the fitted range, and ``oat_support_lo`` / ``oat_support_hi``,
+the support band) -- ``ok`` when the fit meets the daily G14 acceptance, ``info`` when it does not
+(a weak weather dependence is a property of the meter, not an equipment fault). An entry that also
+names a ``"reporting_period": [start, end]`` gets one ``mv_savings`` Finding per meter: the
+baseline projected onto the reporting days (IPMVP Option C avoided energy) with ``avoided_energy``,
+``savings_pct``, ``fsu`` (fractional savings uncertainty at 90%), ``fsu_extrapolation_factor`` and
+the coverage metrics (``coverage_tier``, ``share_points_outside``, ``share_energy_outside``,
+``max_beyond_rel``). When the reporting period lies far outside the baseline's conditions (coverage
+``severe``) the saving is **declined**: ``severity="info"``, ``metrics["declined"]`` true with
+``declined_reason``, and a caveat, never a number. The optional ``"extrapolation": {...}`` keys
+tune the grading (:class:`~camber.mandv.coverage.ExtrapolationPolicy`; an unknown key is an error).
 
 The optional ``drift`` section scores a **current** window against a frozen **baseline** one for
 each configured detector family (:mod:`camber.driftrun`), merging its Findings into the run. It is
@@ -454,21 +464,106 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
 
 
-def _mv_declined(equip: str, why: str):
+def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline"):
     from .rules.base import Finding
 
+    what = "M&V savings" if rule == "mv_savings" else "M&V baseline"
     return Finding(
-        rule="mv_baseline",
+        rule=rule,
         equip=equip,
         severity="info",
-        metrics={"declined": True},
-        summary=f"{equip}: M&V baseline declined -- {why}",
-        caveats=[f"M&V baseline not fitted: {why}"],
+        metrics={"declined": True, "declined_reason": why},
+        summary=f"{equip}: {what} declined -- {why}",
+        caveats=[f"{what} not {'computed' if rule == 'mv_savings' else 'fitted'}: {why}"],
+    )
+
+
+def _mv_window(entry: dict, key: str):
+    """Validate one optional ``[start, end]`` window of an ``mv`` entry."""
+    win = entry.get(key)
+    if win is None:
+        return None
+    if not (isinstance(win, (list, tuple)) and len(win) == 2):
+        raise ValueError(f"mv.{key} must be a [start, end] pair, got {win!r}")
+    return win
+
+
+def _finite_or_none(x):
+    import math
+
+    return None if x is None or (isinstance(x, float) and not math.isfinite(x)) else x
+
+
+def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> object:
+    """One ``mv_savings`` Finding: the baseline projected onto the reporting period (#20)."""
+    from .mandv.models import N_PARAMS
+    from .mandv.stats import avoided_energy_savings
+    from .rules.base import Finding
+
+    sav = avoided_energy_savings(
+        model,
+        daily_r["oat"].values,
+        daily_r["energy"].values,
+        cv_rmse=st.cv_rmse,
+        n_baseline=st.n,
+        p_baseline=N_PARAMS[model.kind],
+        rho=st.rho_lag1,
+        extrapolation=policy,
+    )
+    cov = sav.coverage or {}
+    metrics = {
+        "reporting_period": [str(window[0]), str(window[1])],
+        "n_report_days": int(len(daily_r)),
+        "avoided_energy": sav.avoided_energy,
+        "baseline_projected": sav.baseline_projected,
+        "reporting_actual": sav.reporting_actual,
+        "savings_pct": _finite_or_none(sav.savings_pct),
+        "fsu": _finite_or_none(sav.fractional_uncertainty),
+        "abs_uncertainty": _finite_or_none(sav.abs_uncertainty),
+        "confidence": sav.confidence,
+        "fsu_extrapolation_factor": sav.fsu_extrapolation_factor,
+        "rho": sav.rho,
+        "coverage_tier": cov.get("tier"),
+        "share_points_outside": cov.get("share_points_outside"),
+        "share_energy_outside": cov.get("share_energy_outside"),
+        "max_beyond_rel": cov.get("max_beyond_rel"),
+        "n_outside": cov.get("n_outside"),
+        "declined": bool(sav.declined),
+    }
+    caveats = list(sav.caveats)
+    if not st.accept:
+        caveats.append(
+            "the baseline does not meet daily G14 acceptance; this saving is for information only"
+        )
+    if sav.declined:
+        metrics["declined_reason"] = sav.declined_reason
+        summary = (
+            f"{equip}: M&V savings declined -- the baseline does not cover the reporting period "
+            f"({cov.get('share_points_outside', 0):.0%} of reporting days outside its support)"
+        )
+    else:
+        pct = metrics["savings_pct"]
+        band = metrics["abs_uncertainty"]
+        summary = (
+            f"{equip}: avoided energy {sav.avoided_energy:,.0f}"
+            + (f" ({pct:.1%})" if pct is not None else "")
+            + (f" ± {band:,.0f} at {sav.confidence:.0%}" if band is not None else "")
+            + f" over {len(daily_r)} reporting days; baseline coverage {cov.get('tier')}"
+        )
+    return Finding(
+        rule="mv_savings",
+        equip=equip,
+        severity="info",
+        metrics=metrics,
+        summary=summary,
+        caveats=caveats,
     )
 
 
 def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
-    """One ``mv_baseline`` Finding per equipment: a daily change-point fit vs outdoor temp."""
+    """Per equipment: an ``mv_baseline`` Finding (a daily change-point fit vs outdoor temp) and,
+    when the entry names a ``reporting_period``, an ``mv_savings`` Finding (#20)."""
+    from .mandv.coverage import ExtrapolationPolicy, support_of
     from .mandv.intervalfit import daily_energy_vs_temp
     from .mandv.models import N_PARAMS, best_model
     from .mandv.stats import cv_rmse_max_for, fit_stats
@@ -477,32 +572,43 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     if entry.get("interval", "daily") != "daily":
         raise ValueError("mv.interval: only 'daily' change-point baselines are supported")
     role = Role(entry.get("role", Role.ENERGY_RATE.value))
-    period = entry.get("period")
+    period = _mv_window(entry, "period")
+    reporting = _mv_window(entry, "reporting_period")
+    policy = ExtrapolationPolicy.from_dict(entry.get("extrapolation"))
     min_days = int(entry.get("min_days", 60))
     cv_max = cv_rmse_max_for("daily")
     out = []
+
+    def declined(equip, why):
+        out.append(_mv_declined(equip, why))
+        if reporting is not None:
+            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings"))
+
     for ref in refs:
-        frame = resolve(ref, prep.mapping, (role, Role.OAT), resample="1h")
-        frame = _merge_shared(frame, prep.shared)
-        if frame is None or frame.empty or role not in frame.columns:
-            out.append(_mv_declined(ref.equip, f"no {role.value} data"))
+        full = resolve(ref, prep.mapping, (role, Role.OAT), resample="1h")
+        full = _merge_shared(full, prep.shared)
+        if full is None or full.empty or role not in full.columns:
+            declined(ref.equip, f"no {role.value} data")
             continue
-        if Role.OAT not in frame.columns:
-            out.append(_mv_declined(ref.equip, "no outdoor temperature (oat or shared_oat)"))
+        if Role.OAT not in full.columns:
+            declined(ref.equip, "no outdoor temperature (oat or shared_oat)")
             continue
-        if period:
-            frame = frame.loc[period[0] : period[1]]
+        frame = full.loc[period[0] : period[1]] if period else full
         daily = daily_energy_vs_temp(frame[role].dropna(), frame[Role.OAT].dropna())
         if len(daily) < min_days:
-            out.append(_mv_declined(ref.equip, f"only {len(daily)} usable days (< {min_days})"))
+            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
             continue
         model = best_model(daily["oat"].values, daily["energy"].values)
+        # the index lets fit_stats estimate the residuals' lag-1 autocorrelation (rho), which
+        # the savings band needs; without it rho stays None and the band is unadjusted
         st = fit_stats(
             daily["energy"].values,
             model.predict(daily["oat"].values),
             N_PARAMS[model.kind],
             cv_rmse_max=cv_max,
+            time_index=daily.index,
         )
+        sup = support_of(daily["oat"].values, quantile=policy.support_quantile)
         verdict = "meets" if st.accept else "does not meet"
         out.append(
             Finding(
@@ -517,6 +623,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     "nmbe": st.nmbe,
                     "accept": bool(st.accept),
                     "change_points": [round(float(t), 2) for t in model.change_points],
+                    "rho": st.rho_lag1,
+                    "oat_fit_min": sup["fit_min"],
+                    "oat_fit_max": sup["fit_max"],
+                    "oat_support_lo": sup["support_lo"],
+                    "oat_support_hi": sup["support_hi"],
                 },
                 summary=(
                     f"{ref.equip}: {model.kind} baseline, R2 {st.r2:.2f}, CV(RMSE) "
@@ -524,6 +635,17 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                 ),
             )
         )
+        if reporting is None:
+            continue
+        rframe = full.loc[reporting[0] : reporting[1]]
+        r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
+        daily_r = daily_energy_vs_temp(r_e, r_t) if len(r_e) and len(r_t) else None
+        if daily_r is None or daily_r.empty:
+            out.append(
+                _mv_declined(ref.equip, "no usable reporting-period days", rule="mv_savings")
+            )
+            continue
+        out.append(_mv_savings_finding(ref.equip, model, st, daily_r, policy, reporting))
     return out
 
 

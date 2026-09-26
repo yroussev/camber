@@ -31,6 +31,12 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   response flat beyond the fitted range. `caltrack_savings` caveats a baseline shorter than 365
   days. The savings chart rug-marks out-of-support points, suffixes a moderate title and draws a
   declined saving as "extrapolated — not a saving" with no band.
+- Config `mv` entries take an optional `"reporting_period": [start, end]`, emitting one
+  `mv_savings` finding per meter (`avoided_energy`, `savings_pct`, `fsu`,
+  `fsu_extrapolation_factor` and the coverage metrics; a severe extrapolation is an `info` finding
+  with `metrics["declined"]`, the reason and a caveat), and an optional `"extrapolation": {...}`
+  policy (`ExtrapolationPolicy.from_dict`; unknown keys are an error). `mv_baseline` findings gain
+  `oat_fit_min`, `oat_fit_max`, `oat_support_lo`, `oat_support_hi` and `rho`.
 
 ### Changed
 - **Severe extrapolation declines by default**: `avoided_energy`, `baseline_projected`,
@@ -46,6 +52,8 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   e.g. a `CategoricalModel` category the baseline never fitted. The rows are now counted
   (`coverage["n_used"]` vs `["n_report"]`), caveated and, for an unseen category, graded as
   unsupported (#20).
+- The config `mv` path passed no time index to the fit statistics, so the residual
+  autocorrelation `rho` was never estimated and any band from it would have been unadjusted.
 
 ## [0.86.0] — 2026-09-26
 

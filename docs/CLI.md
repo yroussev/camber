@@ -212,7 +212,12 @@ equipment is discovered by the class recorded at ingest (`{"class": "AHU", "mark
 "mixed_air_temp"}`), no mapping is needed (the store already holds roles), and `shared_oat` may name
 a stored equipment (`{"equip": "weather", "role": "oat"}`). An `mv` section fits a daily
 change-point M&V baseline per meter (`{"class": "CHILLEDWATER_METER", "role": "energy_rate",
-"period": [start, end]}`).
+"period": [start, end]}`), reported as an `mv_baseline` finding with its fit statistics and OAT
+support (`oat_fit_min`/`oat_fit_max`, `oat_support_lo`/`oat_support_hi`). Add
+`"reporting_period": [start, end]` for an `mv_savings` finding per meter (avoided energy, `fsu`,
+coverage); a reporting period outside the baseline's conditions is declined rather than reported,
+and `"extrapolation": {...}` tunes that policy (see
+[MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining)).
 
 ## Portfolio and facility lifecycle
 
