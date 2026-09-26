@@ -250,3 +250,58 @@ def test_in_range_railing_sensor_is_a_known_blind_spot():
     assert q.score > 0.95  # not caught -- recorded, not asserted as correct
     assert q.n_regimes == 2  # but the structure is reported
     assert q.regime_threshold is not None
+
+
+# --- the shape-aware read (skewed / tightly-controlled signals) -------------- #
+
+
+def _idle_then_ramp(n=24 * 60, seed=0):
+    """A healthy HW pump: idles at 29 % half the day, then ramps smoothly with load. No faults."""
+    rng = np.random.default_rng(seed)
+    h = np.arange(n) % 24
+    load = np.clip(np.sin((h - 6) / 16 * np.pi), 0.0, None)  # 06:00-22:00 load hump
+    speed = 29.0 + 55.0 * load**2 + rng.normal(0, 0.1, n)
+    return _series(list(speed))
+
+
+def test_skewed_operating_tail_is_not_outliers_on_the_shape_read():
+    s = _idle_then_ramp()
+    q = assess(s, shape_aware=True, scale_floor=1.0)
+    assert q.outlier_frac > 0.1  # the defect: pooled read calls load operation outliers
+    assert q.shape_outlier_frac < 0.02  # the fix
+    assert q.score > 0.95
+    assert assess(s).score < 0.8  # opt-in: the default score is unchanged
+
+
+def test_scale_floor_ignores_deviations_inside_sensor_precision():
+    """A loop DP held at setpoint: MAD ~0, so float noise was scored as outliers."""
+    rng = np.random.default_rng(0)
+    vals = 480.52 + rng.choice([0.0, 0.0, 0.0, 0.01, -0.01], 720) + rng.normal(0, 1e-5, 720)
+    s = _series(list(vals))
+    assert assess(s).outlier_frac > 0.2  # the defect
+    assert assess(s, shape_aware=True, scale_floor=2.4).shape_outlier_frac == 0.0
+
+
+def test_shape_read_still_catches_spikes_in_a_skewed_series():
+    vals = _idle_then_ramp().to_numpy().copy()
+    vals[[100, 400, 900]] = [950.0, 1000.0, -300.0]  # glitches far outside the operating range
+    q = assess(_series(list(vals)), shape_aware=True, scale_floor=1.0)
+    assert q.n_shape_outliers >= 3
+
+
+def test_shape_read_does_not_absorb_a_scattered_rail():
+    """The coherence guard: the two-sided scale alone would swallow a 30 % scattered rail."""
+    rng = np.random.default_rng(7)
+    vals = 40.0 + rng.normal(0, 3.0, 720)
+    vals[rng.random(720) < 0.30] = 0.0
+    q = assess(_series(list(vals)), shape_aware=True, scale_floor=0.2)
+    assert q.shape_outlier_frac == q.outlier_frac > 0.25
+    assert q.score < 0.5
+
+
+def test_shape_read_matches_pooled_on_symmetric_noise():
+    rng = np.random.default_rng(3)
+    vals = rng.normal(50, 5, 2000)
+    vals[::200] = 500.0
+    q = assess(_series(list(vals)), shape_aware=True)
+    assert abs(q.shape_outlier_frac - q.outlier_frac) < 0.002

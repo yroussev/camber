@@ -45,6 +45,34 @@ a plausible constant for a long block". Because splitting is the direction that 
 fault, the composite ``score`` uses the regime read only when the caller opts in with
 ``regime_aware=True``; :mod:`camber.sensorhealth` turns it on for the roles where a duty cycle is
 physically expected.
+
+**Skewed and tightly-controlled signals: the shape-aware read.** The same one-population assumption
+breaks a second way on a healthy plant. A loop differential pressure held at setpoint, or a supply
+temperature controlled to a fraction of a degree, has a MAD far below any physically meaningful
+deviation, so float noise and ordinary 1 degF swings score as "outliers". A pump that idles at
+minimum speed for half the year and then ramps smoothly with load has a tight mode at the idle
+speed and a broad, continuous tail -- one population, but a skewed one -- and the whole of its load
+operation reads as outliers against the idle mode's MAD. Neither is bimodal enough for the regime
+split, so the regime read does not help. On a fault-free simulated boiler plant this scored the
+loop flow, DP and pump speed 0.2-0.3, low enough to gate every hydronic diagnostic off.
+
+``assess`` therefore also reports a **shape-aware** outlier read (``shape_outlier_frac``). It
+differs from the pooled test in exactly two ways, each with its own guard:
+
+* **a scale floor** (``scale_floor``, in series units, supplied by the caller who knows the role):
+  the robust scale never drops below the sensor's plausible measurement precision, so a deviation
+  inside that precision is never an outlier. Always applied when given -- a deviation smaller than
+  what the instrument can resolve is not evidence of anything.
+* **a two-sided scale** (the "double MAD"; Rosenmai 2013, Leys et al. 2013): each side of the median
+  gets its own MAD, so a long one-sided operating tail is judged against its own spread. Its
+  breakdown point is a quarter of the series rather than half, so a 30 % scattered rail to zero
+  *would* be absorbed on its own -- hence the guard: the points the two-sided scale excuses must be
+  **temporally coherent** (median run length >= ``_REGIME_MIN_RUN``), the same gate that keeps a
+  comms dropout from passing as a duty cycle. Load operation persists for hours; scatter does not.
+  When the excused points are scattered, the read falls back to the (floored) pooled test.
+
+As with the regime read, ``outlier_frac`` keeps its pooled, unmasked meaning, and the composite
+``score`` uses the shape-aware read only when the caller opts in with ``shape_aware=True``.
 """
 
 from __future__ import annotations
@@ -243,6 +271,52 @@ def _regime_outlier_flags(values: np.ndarray, split, cutoff: float) -> np.ndarra
     return out
 
 
+def _floored_z(values: np.ndarray, scale_floor: float | None) -> np.ndarray:
+    """Pooled modified z-score whose scale never drops below ``scale_floor`` (std-equivalent)."""
+    z = _mad_z(values)
+    if not scale_floor or scale_floor <= 0:
+        return z
+    dev = values - np.median(values)
+    # the floored score is the smaller of the two: a floor can only *shrink* a z-score
+    return np.sign(z) * np.minimum(np.abs(z), np.abs(dev) / scale_floor)
+
+
+def _two_sided_z(values: np.ndarray, scale_floor: float | None) -> np.ndarray:
+    """Double-MAD modified z-score: each side of the median judged against its own spread.
+
+    Each side's MAD is taken over the deviations of the samples on that side (median-valued samples
+    count on both, as in the standard double MAD). Falls back per side exactly as :func:`_mad_z`
+    does (meanAD when a side's MAD is 0) and applies the same ``scale_floor``. For a symmetric
+    series both side-MADs equal the pooled MAD, so the score matches the pooled one.
+    """
+    med = np.median(values)
+    dev = values - med
+    z = np.zeros_like(values, dtype="float64")
+    for side, pool in ((dev > 0, dev >= 0), (dev < 0, dev <= 0)):
+        if not side.any():
+            continue
+        absdev = np.abs(dev[pool])
+        mad = float(np.median(absdev))
+        scale = mad / _MAD_SCALE if mad > 0 else _MEANAD_SCALE * float(np.mean(absdev))
+        if scale_floor and scale_floor > 0:
+            scale = max(scale, scale_floor)
+        if scale > 0:
+            z[side] = dev[side] / scale
+    return z
+
+
+def _shape_outlier_flags(
+    values: np.ndarray, scale_floor: float | None, cutoff: float
+) -> np.ndarray:
+    """The shape-aware outlier read (see the module docstring): floored, two-sided, coherent."""
+    pooled = np.abs(_floored_z(values, scale_floor)) > cutoff
+    two_sided = np.abs(_two_sided_z(values, scale_floor)) > cutoff
+    excused = pooled & ~two_sided
+    if excused.any() and _median_run_length(excused) < _REGIME_MIN_RUN:
+        return pooled  # the excused points are scatter, not operation: don't absorb them
+    return pooled & two_sided
+
+
 def longest_flatline(series: pd.Series) -> int:
     """Length of the longest run of identical consecutive (non-null) values."""
     s = series.dropna()
@@ -282,6 +356,9 @@ class QualityReport:
     regime_threshold: float | None = None  # the split value; None unless n_regimes == 2
     n_regime_outliers: int | None = None  # outliers judged within their own regime
     regime_outlier_frac: float | None = None  # n_regime_outliers / n
+    # Shape-aware read (see the module docstring): None when untestable (< 3 samples).
+    n_shape_outliers: int | None = None  # floored, two-sided, coherence-gated outliers
+    shape_outlier_frac: float | None = None  # n_shape_outliers / n
 
     def as_dict(self):
         """Return as a plain dict (expected_freq stringified)."""
@@ -290,7 +367,14 @@ class QualityReport:
         return d
 
 
-def assess(series: pd.Series, expected_freq=None, *, regime_aware: bool = False) -> QualityReport:
+def assess(
+    series: pd.Series,
+    expected_freq=None,
+    *,
+    regime_aware: bool = False,
+    shape_aware: bool = False,
+    scale_floor: float | None = None,
+) -> QualityReport:
     """Compute a :class:`QualityReport` without modifying the series.
 
     ``expected_freq`` (a pandas-parseable interval) overrides the inferred
@@ -301,6 +385,11 @@ def assess(series: pd.Series, expected_freq=None, *, regime_aware: bool = False)
     because scoring a duty cycle as normal is the direction that could mask a fault -- so it is
     opted into per role by :func:`camber.sensorhealth.sensor_trust`, where the role is known. The
     pooled ``n_outliers`` / ``outlier_frac`` are never masked either way.
+
+    The shape-aware read (``shape_outlier_frac``) is likewise always computed; ``scale_floor`` (the
+    sensor's plausible measurement precision, std-equivalent, in series units) feeds it, and
+    ``shape_aware`` decides whether the score uses it. When both reads are opted into and a
+    two-regime split was found, the regime read wins (it is the more specific model).
     """
     total = len(series)
     n_missing = int(series.isna().sum())
@@ -332,7 +421,20 @@ def assess(series: pd.Series, expected_freq=None, *, regime_aware: bool = False)
             n_reg_out = int(flags.sum())
             reg_frac = (n_reg_out / n) if n else 0.0
 
-    out_used = reg_frac if (regime_aware and reg_frac is not None) else out_frac
+    n_shape: int | None = None
+    shape_frac: float | None = None
+    if len(values) >= 3:
+        n_shape = int(_shape_outlier_flags(values, scale_floor, _MAD_Z_CUTOFF).sum())
+        shape_frac = (n_shape / n) if n else 0.0
+
+    if regime_aware and n_regimes == 2 and reg_frac is not None:
+        out_used = reg_frac
+    elif shape_aware and shape_frac is not None:
+        out_used = shape_frac
+    elif regime_aware and reg_frac is not None:
+        out_used = reg_frac
+    else:
+        out_used = out_frac
 
     # Composite: coverage dominates; outliers penalize moderately; an extreme
     # flatline (whole series stuck) contributes lightly since some points are
@@ -355,6 +457,8 @@ def assess(series: pd.Series, expected_freq=None, *, regime_aware: bool = False)
         regime_threshold=threshold,
         n_regime_outliers=n_reg_out,
         regime_outlier_frac=None if reg_frac is None else round(reg_frac, 4),
+        n_shape_outliers=n_shape,
+        shape_outlier_frac=None if shape_frac is None else round(shape_frac, 4),
     )
 
 

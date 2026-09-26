@@ -216,3 +216,43 @@ def test_continuous_sensor_trust_is_unchanged():
     assert t.trust > 0.99 and t.verdict == "trusted"
     assert t.flags == []  # in particular: no "bimodal" -- a sine is one population
     assert assess(pd.Series(oat, index=idx)).n_regimes == 1
+
+
+# --- healthy hydronic plant: skewed / tightly-controlled points ------------ #
+
+
+def _healthy_hw_plant(n=24 * 90, seed=0):
+    """A fault-free HW loop shaped like a simulated boiler plant's year: DP held at setpoint,
+    the pump idling dead-headed at ~29 % (zero flow) ~45 % of the time, then ramping with load."""
+    rng = np.random.default_rng(seed)
+    h = np.arange(n) % 24
+    load = np.clip(np.sin((h - 6) / 16 * np.pi), 0.0, None) * (1 + 0.3 * rng.random(n))
+    idx = pd.date_range("2018-01-01", periods=n, freq="1h")
+    return pd.DataFrame(
+        {
+            Role.HW_PUMP_SPEED: np.clip(28.9 + 55.0 * load**2 + rng.normal(0, 0.1, n), 0, 100),
+            Role.HW_FLOW: np.where(load > 0.05, 200.0 * load**2, 0.0)
+            + np.abs(rng.normal(0, 0.5, n)),
+            Role.HW_DIFF_PRESS: 480.52 + rng.choice([0.0, 0.0, 0.01, -0.01], n),
+            Role.HW_SUPPLY_TEMP: 176.0 + rng.normal(0, 0.02, n) - 0.8 * (load > 1.2),
+            Role.HW_RETURN_TEMP: 140.0 + np.abs(rng.normal(0, 1.2, n)),  # one-sided tail
+        },
+        index=idx,
+    )
+
+
+def test_healthy_hw_plant_is_trusted():
+    """Regression: a fault-free plant scored 0.2-0.3 on flow/DP/speed and gated detectors off."""
+    f = _healthy_hw_plant()
+    health = frame_sensor_health(f)
+    for role, t in health.items():
+        assert t.verdict == "trusted", (role, t.trust, t.outlier_frac)
+    assert not untrusted_roles(f, list(f.columns), min_trust=0.5)
+
+
+def test_spiking_sensor_on_a_healthy_plant_is_still_untrusted():
+    f = _healthy_hw_plant()
+    bad = f[Role.HW_DIFF_PRESS].copy()
+    bad.iloc[::4] = 0.0  # 25 % scattered dropouts to zero
+    t = sensor_trust(bad, Role.HW_DIFF_PRESS)
+    assert t.verdict == "untrusted" and "outliers" in t.flags

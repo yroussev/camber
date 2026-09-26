@@ -30,6 +30,7 @@ import pandas as pd
 
 from .ingest.quality import assess
 from .model.roles import STATUS_ROLES, Role
+from .units import PERCENT_ROLES
 
 __all__ = [
     "PHYSICAL_BOUNDS",
@@ -164,6 +165,42 @@ _INTERMITTENT_ROLES: frozenset = (
 )
 
 
+# Temperature roles, canonical degF (PHYSICAL_BOUNDS is in degF).
+_TEMP_ROLES: frozenset = frozenset(r for r in PHYSICAL_BOUNDS if r.value.endswith(("_temp", "oat")))
+
+# Measurement-precision floor for the robust outlier scale (std-equivalent, canonical units): the
+# smallest deviation that can mean anything about a sensor. Below it the MAD of a tightly controlled
+# point (a supply temp held to 0.1 F, a loop DP at setpoint) turns control noise and float rounding
+# into "outliers". Deliberately at the *small* end of real instrument accuracy -- a floor that is
+# too small only leaves today's behaviour in place; one that is too large would hide real spikes:
+#   * temperatures 0.5 degF -- a typical BAS thermistor/RTD is quoted +/-0.2..0.5 degC;
+#   * percent points 1 %-pt -- actuator position feedback / VFD speed / RH resolution;
+#   * CO2 30 ppm -- the fixed part of a typical NDIR spec (+/-30 ppm + 3 % of reading).
+# Everything else (flows, pressures, power: units not canonical) gets a relative floor of 0.5 % of
+# the series' own 99th-percentile magnitude -- transmitter accuracy is quoted as 0.25-1 % of span,
+# and the observed P99 is a lower bound on the span.
+_ABS_SCALE_FLOOR: dict = {
+    **{r: 0.5 for r in _TEMP_ROLES},
+    **{r: 1.0 for r in PERCENT_ROLES},
+    Role.CO2: 30.0,
+    Role.OUTDOOR_CO2: 30.0,
+}
+_REL_SCALE_FLOOR = 0.005
+
+
+def _scale_floor(series: pd.Series, role) -> float | None:
+    """The role's measurement-precision floor for the robust outlier scale (see above)."""
+    if role in STATUS_ROLES:
+        return None  # 0/1 by definition; there is no precision to speak of
+    if role in _ABS_SCALE_FLOOR:
+        return float(_ABS_SCALE_FLOOR[role])
+    v = pd.to_numeric(series, errors="coerce").dropna().to_numpy(dtype="float64")
+    if len(v) == 0:
+        return None
+    mag = float(np.percentile(np.abs(v), 99))
+    return _REL_SCALE_FLOOR * mag if mag > 0 else None
+
+
 def range_violation_frac(series: pd.Series, role) -> float:
     """Fraction of non-null samples physically outside the role's plausible bounds.
 
@@ -202,7 +239,13 @@ class SensorTrust:
 def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
     """Score one point's trustworthiness from quality stats + physical-range checks."""
     intermittent = role in _INTERMITTENT_ROLES
-    q = assess(series, expected_freq, regime_aware=intermittent)
+    q = assess(
+        series,
+        expected_freq,
+        regime_aware=intermittent,
+        shape_aware=True,
+        scale_floor=_scale_floor(series, role),
+    )
     rng = range_violation_frac(series, role)
     rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)  # out-of-range is serious
     trust = q.score * (1.0 - rng_pen)
@@ -213,8 +256,12 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None) -> SensorTrust:
     if q.n_gaps > 0:
         flags.append("gaps")
     out_frac = q.outlier_frac
-    if intermittent and q.regime_outlier_frac is not None:
+    if intermittent and q.n_regimes == 2 and q.regime_outlier_frac is not None:
         out_frac = q.regime_outlier_frac  # judged within each regime, so a duty cycle isn't a fault
+    elif q.shape_outlier_frac is not None:
+        # floored at the sensor's precision and two-sided for a skewed operating tail, so a
+        # tightly-controlled point or a pump idling then ramping with load isn't a fault
+        out_frac = q.shape_outlier_frac
     if out_frac > 0.05:
         flags.append("outliers")
     if rng == rng and rng > 0.01:
