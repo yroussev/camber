@@ -492,3 +492,47 @@ def test_fleet_total_is_not_zero_when_nothing_is_costed():
     assert fr.total_annual_cost_usd is None and fr.cost_estimated
     assert "no costed findings" in fr.to_text() and "no costed findings" in fr.to_html()
     assert "$0" not in fr.to_text()
+
+
+def test_provenance_prints_a_doi_once():
+    from camber.report.audit import data_sources_html, data_sources_text
+
+    src = {"title": "Demo", "citation": "Demo Lab (2026). Data. doi:10.0000/demo", "dois":
+           ["10.0000/demo", "10.0000/other"]}  # fmt: skip
+    for out in (data_sources_html([src]), data_sources_text([src])):
+        assert out.count("10.0000/demo") == 1 and out.count("10.0000/other") == 1
+    only = {"title": "Demo", "citation": "Demo Lab. DOI:10.0000/DEMO", "dois": ["10.0000/demo"]}
+    assert "doi: " not in data_sources_html([only])
+
+
+def test_lead_in_paragraphs_stay_with_what_they_introduce():
+    from camber.report.rcx import _blocks_html
+
+    short = {"kind": "table", "header": ["a"], "rows": [["1"]] * 3}
+    long = {"kind": "table", "header": ["a"], "rows": [["1"]] * 12}
+    html = "".join(_blocks_html([{"kind": "p", "text": "Mixing:"}, short]))
+    assert html.startswith("<div class='keep'><p class='lead'>Mixing:</p><table")
+    html = "".join(_blocks_html([{"kind": "p", "text": "Scores:"}, long]))
+    assert html.startswith("<p class='lead'>Scores:</p><table") and "keep" not in html
+    lst = {"kind": "list", "items": ["x", "y"]}
+    html = "".join(_blocks_html([{"kind": "p", "text": "Why:"}, lst]))
+    assert html.startswith("<p class='lead'>Why:</p><ul>")
+    html = "".join(_blocks_html([{"kind": "p", "text": "A sentence."}, short]))
+    assert html.startswith("<p>A sentence.</p>")
+
+
+def test_free_cooling_table_does_not_count_an_integrated_economizer(tmp_path, captured):
+    st = fx.make_store(tmp_path)
+    fr = fx.ahu_frame()
+    cooling = fr[Role.COOL_VALVE] > 0
+    fr.loc[cooling, Role.MIXED_AIR_TEMP] = fr.loc[cooling, Role.OAT]  # 100 % OA + mechanical
+    fr.loc[cooling, Role.OA_DAMPER] = 20.0  # a damper *command* that says otherwise
+    st.write_role_frame(fr, facility_id=fx.FID, equip="DemoAHU", equip_class="AHU")
+    run = run_config(fx.config(), base_dir=str(tmp_path))
+    rep = build_rcx_report(run, options=RcxOptions(sections=("economizer",)))
+    tbl = next(b for b in rep.sections[0]["blocks"] if b["kind"] == "table"
+               and b["header"][1] == "Hours available")  # fmt: skip
+    row = next(r for r in tbl["rows"] if r[0] == "DemoAHU")
+    stable = (fr[Role.RETURN_AIR_TEMP] - fr[Role.OAT]).abs() >= 5
+    # only the hours where the balance cannot be judged fall back to the damper signal
+    assert int(row[2].replace(",", "")) <= int((cooling & ~stable).sum())

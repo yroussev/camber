@@ -1284,6 +1284,20 @@ def _sec_data(S) -> dict:
                 "weather."
             )
         )
+    mrows = [
+        [
+            e,
+            m.severity,
+            m.n_checked,
+            "—" if m.violation_frac != m.violation_frac else f"{m.violation_frac:.1%}",
+            m.summary,
+        ]
+        for e, m in sorted(S["mixing"].items())
+        if e in S["air"]
+    ]
+    if mrows:
+        blocks.append(_p("Mixing consistency (mixed air between outdoor and return air, fan-on):"))
+        blocks.append(_table(["Equipment", "Result", "Samples", "Outside", "Detail"], mrows))
     rows = []
     for e in sorted(S["trust_raw"]):
         for r, t in S["trust_raw"][e].items():
@@ -1303,20 +1317,6 @@ def _sec_data(S) -> dict:
     if rows:
         blocks.append(_p("Sensor trust, scored on fan-on samples (gated) and on all samples:"))
         blocks.append(_table(["Equipment", "Point", "Gated", "Ungated", "Gate used"], rows))
-    mrows = [
-        [
-            e,
-            m.severity,
-            m.n_checked,
-            "—" if m.violation_frac != m.violation_frac else f"{m.violation_frac:.1%}",
-            m.summary,
-        ]
-        for e, m in sorted(S["mixing"].items())
-        if e in S["air"]
-    ]
-    if mrows:
-        blocks.append(_p("Mixing consistency (mixed air between outdoor and return air, fan-on):"))
-        blocks.append(_table(["Equipment", "Result", "Samples", "Outside", "Detail"], mrows))
     return _section("data", "Data coverage and sensor health", blocks)
 
 
@@ -1470,6 +1470,22 @@ def _sec_economizer(S) -> dict | None:
             on = _on(gate, fr.index) if gate is not None else pd.Series(True, index=fr.index)
             oat = _col(fr, Role.OAT)[on]
             sig = (normalize_percent(cool) / 100.0)[on]
+            # Mechanical cooling while the unit is already on (nearly) 100 % outside air is an
+            # integrated economizer doing its job, not missed free cooling. Judge that on the
+            # measured OA fraction where the temperature balance is stable (a damper *command*
+            # can read open while the damper is stuck), else on the damper signal.
+            econ = pd.Series(False, index=fr.index)
+            damper = _col(fr, Role.OA_DAMPER)
+            if damper is not None:
+                econ = normalize_percent(damper).fillna(0) >= 90.0
+            mat, rat = _col(fr, Role.MIXED_AIR_TEMP), _col(fr, Role.RETURN_AIR_TEMP)
+            if mat is not None and rat is not None:
+                oat_all = _col(fr, Role.OAT)
+                dt = rat - oat_all
+                stable = dt.abs() >= 5.0
+                oaf = 100.0 * (rat - mat) / dt.where(stable)
+                econ = econ.where(~stable, oaf >= 80.0)
+            sig = sig.where(~econ[on].fillna(False).astype(bool), 0.0)
             fc = free_cooling_opportunity(oat, sig, high_limit_f=float(rule.high_limit_f))
             rows_fc.append(
                 [
@@ -1493,7 +1509,9 @@ def _sec_economizer(S) -> dict | None:
             _p(
                 f"Free cooling (fan-on hours with OAT below the "
                 f"{float(rule.high_limit_f):g}°F high "
-                "limit while the cooling valve was open):"
+                "limit while the cooling valve was open and the unit was not already near 100 % "
+                "outside air -- an integrated economizer is not counted; OA fraction from the "
+                "temperature balance where |OAT − RAT| ≥ 5 °F, else the damper signal ≥ 90 %):"
             )
         )
         blocks.append(_table(["Equipment", "Hours available", "Hours missed", "Missed"], rows_fc))
@@ -2013,7 +2031,10 @@ table.nc-wrap>thead{display:none}
   nav.toc{display:none}
   section{break-before:page;margin:0}
   section#cover,section.appendix-cont{break-before:auto;margin-top:18px}
-  figure,tr,.kpi,aside.note,.banner{break-inside:avoid}
+  figure,tr,li,.kpi,aside.note,.banner,div.keep{break-inside:avoid}
+  figure img{max-height:3.9in;width:auto;max-width:100%}
+  section.issue figure img{max-height:2.8in}
+  h2,p.lead{break-after:avoid}
   thead{display:table-header-group}
   *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .camber-nc-banner{position:fixed;top:0;left:0;right:0;background:#fff;z-index:10;
@@ -2094,6 +2115,37 @@ def _block_html(b: dict) -> str:
     return ""
 
 
+# a lead-in paragraph and the table it introduces stay on one page when the table is this short
+_KEEP_ROWS = 6
+
+
+def _blocks_html(blocks: list) -> list:
+    """Render a section's blocks, keeping each lead-in ("...:") paragraph with what it introduces.
+
+    A lead-in and a figure or a short table go in one ``div.keep`` (``break-inside: avoid``);
+    before a list or a longer table the lead-in only gets ``break-after: avoid``, so the list or
+    table can still flow across pages (a table with its header repeated).
+    """
+    out, i = [], 0
+    while i < len(blocks):
+        b = blocks[i]
+        nxt = blocks[i + 1] if i + 1 < len(blocks) else None
+        lead = b.get("kind") == "p" and str(b.get("text", "")).rstrip().endswith(":")
+        if lead and nxt is not None and nxt.get("kind") in ("table", "figure", "list"):
+            kind = nxt.get("kind")
+            short = kind == "figure" or (kind == "table" and len(nxt.get("rows", [])) <= _KEEP_ROWS)
+            para = f"<p class='lead'>{_esc(b['text'])}</p>"
+            if short:
+                out.append(f"<div class='keep'>{para}{_block_html(nxt)}</div>")
+            else:
+                out.append(para + _block_html(nxt))
+            i += 2
+            continue
+        out.append(_block_html(b))
+        i += 1
+    return out
+
+
 def _render_html(rep: RcxReport) -> str:
     from .audit import data_sources_html
 
@@ -2130,9 +2182,13 @@ def _render_html(rep: RcxReport) -> str:
     )
     out.append(f"<nav class='toc'><b>Contents</b><ol>{toc}</ol></nav>")
     for s in rep.sections:
-        cls = " class='appendix-cont'" if s["id"] in _CONTINUED else ""
+        cls = (
+            " class='appendix-cont'"
+            if s["id"] in _CONTINUED
+            else (" class='issue'" if s.get("kind") == "issue" else "")
+        )
         out.append(f"<section id='{_esc(s['id'])}'{cls}><h2>{_esc(s['title'])}</h2>")
-        out.extend(_block_html(b) for b in s["blocks"])
+        out.extend(_blocks_html(s["blocks"]))
         slot = s.get("slot")
         if slot and slot in rep.notes:
             out.append(_note_html(rep.notes[slot]))

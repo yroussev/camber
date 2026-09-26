@@ -34,6 +34,12 @@ def _is_share_alike(licence: str) -> bool:
     return "-SA" in str(licence or "").upper()
 
 
+def _extra_dois(s: dict) -> list:
+    """The source's DOIs that its citation does not already print (no "doi: X" twice)."""
+    cite = str(s.get("citation") or "").lower()
+    return [str(d) for d in (s.get("dois") or []) if str(d).lower() not in cite]
+
+
 def _sources(sources) -> list:
     return [s for s in (sources or []) if isinstance(s, dict) and s]
 
@@ -62,8 +68,8 @@ def data_sources_text(sources) -> str:
             L.append(f"    licence: {s['licence']} ({s.get('access', 'open')})")
         if s.get("citation"):
             L.append(f"    cite: {s['citation']}")
-        if s.get("dois"):
-            L.append("    doi: " + ", ".join(str(d) for d in s["dois"]))
+        if _extra_dois(s):
+            L.append("    doi: " + ", ".join(_extra_dois(s)))
         if s.get("landing_url"):
             L.append(f"    source: {s['landing_url']}")
         if _is_share_alike(s.get("licence", "")):
@@ -100,8 +106,8 @@ def data_sources_html(sources) -> str:
             rows.append(f"licence: {e(str(s['licence']))} ({e(str(s.get('access', 'open')))})")
         if s.get("citation"):
             rows.append(f"cite: {e(str(s['citation']))}")
-        if s.get("dois"):
-            rows.append("doi: " + ", ".join(e(str(d)) for d in s["dois"]))
+        if _extra_dois(s):
+            rows.append("doi: " + ", ".join(e(d) for d in _extra_dois(s)))
         if s.get("landing_url"):
             url = e(str(s["landing_url"]))
             rows.append(f"source: <a href='{url}'>{url}</a>")
