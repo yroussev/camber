@@ -4,6 +4,67 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.84.0] — 2026-09-25
+
+**Plant and refrigerant drift, checked against real machines.** Run on open data from a lab
+heat pump with labelled refrigerant faults, two real 5-ton water-cooled chillers, a CO₂
+transcritical refrigeration rack, a pilot wet cooling tower and a simulated boiler plant, the
+refrigerant-side drift detectors declined almost everything they were given — and where they did
+score, they discarded the fault.
+
+### Fixed
+- **Superheat and subcooling drift threw away the fault.** A 0–50 °F plausibility band dropped
+  liquid floodback (superheat below 0 °F — the direction the rule itself calls most urgent), flash
+  gas, and superheat above 50 °F. A half-flooded period read "ok, −0.1 °F". Ranges are now
+  −20…150 °F (superheat) and −20…80 °F (subcooling), shared with `sensorhealth`; sentinels are
+  still rejected.
+- **Small machines always declined.** The baseline fit demanded a 10-ton load spread and samples
+  at ≥ 5 tons, so a 5-ton chiller and 2–4 ton heat pumps declined 100 %. Gates now scale to the
+  machine — 10 % / 20 % of observed capacity, capped at the old 5 t / 10 t, so ≥ 50-ton chillers
+  are unchanged (a test pins that) — via `size_relative_load_gates`, with `min_tons` /
+  `min_tons_span` on all eight tons-based rules. A machine whose load never moves gets a
+  flat-level baseline, scored only near the load it saw, with a caveat. Heat pump: 151 of 151
+  labelled cases declined → none; real chillers: 22 normal days scored with no false alarms.
+- **Pressure ceilings excluded CO₂.** Head 700 psig / suction 400 psig (with comments calling them
+  refrigerant-neutral) dropped every sample of a transcritical rack. Now 2000 / 1000 psig.
+- **Head and suction pressure were normalized on load alone**, although pressure follows the heat
+  sink. Head pressure now regresses on entering condenser water (`CW_SUPPLY_TEMP`, else `OAT`),
+  suction on leaving chilled water (`CHW_SUPPLY_TEMP`), falling back to load only with a caveat.
+  Heat pump head-pressure scatter 61 → 5 psi (recall 0.01 → 0.32); a real chiller's suction false
+  alarms on chilled-water reset days 33 % → 0 %.
+- **The sustained-shift CUSUM assumed independent samples.** At 1–5 minute cadence residuals are
+  autocorrelated (lag-1 0.8–0.9), so normal days alarmed: approach CUSUM 59 % → 5 % (5-min) and
+  75 % → 15 % (1-min) on a real chiller; subcooling 90 % → 5 % at 1-min. Limits now scale by the
+  long-run sigma; hourly data with independent residuals is unchanged. Injected steps are still
+  caught.
+- **Loop DP drift declined any non-psi loop** — the plausible band was (0, 100), so a plant in
+  inH₂O declined every case and blamed the wrong cause. The band now scales to the loop's own
+  median (unit-free); `dp_range=` sets it.
+- **Declines named the wrong cause.** "No loaded samples" when the metric column was all-NaN; new
+  `unscoreable_reason` names the check that failed, across chiller, pump and loop rules.
+- **`hw_pump_dp_reset` never evaluated the DP-setpoint reset it claimed**, and failed on a 0–1
+  speed when called directly. It now reads `HW_DIFF_PRESS_SP` and says "not evaluated" when absent.
+- **Cooling tower:** the decline says what happened ("only 5 samples at ≥ 90 % fan… fewer than
+  the 10 needed" rather than "never reached 90 %"); derived wet-bulb takes `elevation_ft` /
+  `pressure_psia` and is solved psychrometrically (within 0.06 °F of a reference). Sea-level
+  Stull reads ~1.4 °F high at 500 m and ~2.6 °F at 1600 m hot/dry; the default is unchanged and
+  now caveated.
+
+### Notes
+- **What still misses, honestly:** refrigerant-side recall on the heat pump is 0.22–0.52 per
+  detector (subcooling catches every overcharge, 15/15, and half the undercharges); suction
+  pressure catches nothing there; the rack's condenser-air blockage is not detected (the fault
+  day was hotter than every baseline day, and the only load proxy rises with the fault). One real
+  chiller still alarms on 33–62 % of summer days because it ran outside its spring baseline — a
+  tuning question, documented, not tuned.
+- The condenser simulator's tower-fouling case no longer corroborates through head pressure: at
+  matched entering-water temperature the chiller's high side really is healthy.
+- New public names in `chillerbaseline` (`size_relative_load_gates`, `unscoreable_reason`,
+  `residual_lag1`, `FULL_SIZE_MIN_LOAD`, `FULL_SIZE_MIN_LOAD_SPAN`), `coolingtower`
+  (`psychrometric_wetbulb_f`, `pressure_psia_at_elevation`, `SEA_LEVEL_PSIA`), `loop_dp_rule`
+  and the superheat / subcooling rules, plus defaulted fields — baselines frozen by earlier
+  versions still load. Snapshot regenerated. No new dependency. Benchmark baselines unchanged.
+
 ## [0.83.0] — 2026-09-25
 
 **Air-side rules, checked against real buildings.** Every fix below came from running the rules on
