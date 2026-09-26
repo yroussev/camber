@@ -45,6 +45,7 @@ class ChillerEfficiency:
                 rule=self.name,
                 equip=equip,
                 severity="info",
+                metrics={"declined": True},
                 summary="insufficient data (need power, CHW flow, supply/return temp)",
             )
         ratio = res.kw_per_ton_median / res.design_kw_per_ton

@@ -76,6 +76,12 @@ back what the exporter wrote, and point-name matching got 3 of 16 real names rig
   parameters. Snapshot regenerated. No new dependency. Benchmark baselines unchanged.
 - `docs/ONTOLOGY.md` coverage corrected: Brick import 45/64, export 39/64, Haystack 64/64, 223P
   51/64 (its previous count was stale).
+- The "insufficient data" results of `chiller_efficiency` and `overcooling_min_flow` now carry
+  `metrics["declined"]`, so a scorer excludes them instead of counting a correct negative (the
+  convention `driftvalidation` and the LBNL benchmark rely on). Found re-checking 0.82–0.85 on the
+  complete open datasets, which otherwise reproduced every recorded result.
+- The LBNL chiller-plant mapping notes a second label swap in that dataset: the secondary loop's
+  supply / return temperatures (return reads colder than supply in 98 % of flowing hours).
 - **BDG2's licence was misstated as CC-BY.** The data repository is **CC-BY-SA 4.0**
   (Attribution-ShareAlike); the *paper* describing it is CC-BY, which is where "CC-BY" came from.
   Commercial use and analysis are unaffected; a redistributed *adapted* version of the data must stay

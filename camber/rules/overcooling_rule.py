@@ -68,7 +68,11 @@ class OvercoolingMinFlow:
         )
         if res is None:
             return Finding(
-                rule=self.name, equip=equip, severity="info", summary="insufficient data"
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={"declined": True},
+                summary="insufficient data",
             )
         if not res.minflow_evaluable or res.overcool_at_minflow_pct is None:
             missing = [
@@ -79,6 +83,7 @@ class OvercoolingMinFlow:
                 equip=equip,
                 severity="info",
                 metrics={
+                    "declined": True,
                     "satisfied_pct": res.satisfied_pct,
                     "overcool_at_minflow_pct": None,
                     "overcool_with_reheat_pct": None,

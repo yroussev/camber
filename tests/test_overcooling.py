@@ -242,3 +242,23 @@ def test_trended_occupancy_replaces_the_weekday_schedule():
     assert f.metrics["overcool_at_minflow_pct"] > 5
     cfg = OvercoolingMinFlow(start_hour=7, end_hour=22, occupied_days=range(7))
     assert cfg.analyze("VAV", frame).metrics["overcool_at_minflow_pct"] > 5
+
+
+def test_declines_carry_the_declined_flag():
+    """A scorer (driftvalidation, the LBNL benchmark) excludes a decline only if the finding says
+    so; without the flag a decline was booked as a correct negative."""
+    import pandas as pd
+
+    from camber.model.roles import Role
+    from camber.rules.chiller_rule import ChillerEfficiency
+    from camber.rules.overcooling_rule import OvercoolingMinFlow
+
+    idx = pd.date_range("2025-07-07", periods=48, freq="1h")
+    no_minflow = pd.DataFrame(
+        {Role.SPACE_TEMP: 69.0, Role.COOL_SP: 75.0, Role.AIRFLOW: 300.0, Role.HEAT_VALVE: 60.0},
+        index=idx,
+    )
+    assert OvercoolingMinFlow().analyze("VAV-1", no_minflow).metrics["declined"] is True
+    assert OvercoolingMinFlow().analyze("VAV-1", no_minflow.iloc[:0]).metrics["declined"] is True
+    empty = pd.DataFrame({Role.POWER: [float("nan")] * 3}, index=idx[:3])
+    assert ChillerEfficiency().analyze("CH-1", empty).metrics["declined"] is True
