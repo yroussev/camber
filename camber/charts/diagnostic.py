@@ -51,6 +51,29 @@ def _col(frame: pd.DataFrame, key):
     raise KeyError(f"template column {key!r} not in frame")
 
 
+def _evaluate(frame: pd.DataFrame, template: DiagnosticTemplate, tolerance: float = 0.0):
+    """``(x, y, low, high, mask)`` of ``template`` over ``frame`` (NaN rows dropped)."""
+    df = pd.DataFrame({"x": _col(frame, template.x), "y": _col(frame, template.y)}).dropna()
+    xv, yv = df["x"].to_numpy(float), df["y"].to_numpy(float)
+    lo, hi = template.expected(xv)
+    lo = np.asarray(lo, float) - tolerance
+    hi = np.asarray(hi, float) + tolerance
+    violating = (yv < lo) | (yv > hi)
+    return xv, yv, lo, hi, pd.Series(violating, index=df.index)
+
+
+def template_violations(
+    frame: pd.DataFrame, template: DiagnosticTemplate, *, tolerance: float = 0.0
+) -> pd.Series:
+    """The samples of ``frame`` outside ``template``'s expected band ± ``tolerance`` (no plotting).
+
+    A boolean Series over the rows where both template columns are present -- the same mask
+    :func:`diagnostic_scatter` returns, computed without matplotlib, so a report or test can count
+    or re-derive a verdict from the chart's own envelope. A ``NaN`` bound never flags a sample.
+    """
+    return _evaluate(frame, template, tolerance)[4]
+
+
 def diagnostic_scatter(
     frame: pd.DataFrame,
     template: DiagnosticTemplate,
@@ -66,13 +89,8 @@ def diagnostic_scatter(
     """
     import matplotlib.pyplot as plt
 
-    df = pd.DataFrame({"x": _col(frame, template.x), "y": _col(frame, template.y)}).dropna()
-    xv, yv = df["x"].to_numpy(float), df["y"].to_numpy(float)
-    lo, hi = template.expected(xv)
-    lo = np.asarray(lo, float) - tolerance
-    hi = np.asarray(hi, float) + tolerance
-    violating = (yv < lo) | (yv > hi)
-    mask = pd.Series(violating, index=df.index)
+    xv, yv, lo, hi, mask = _evaluate(frame, template, tolerance)
+    violating = mask.to_numpy(dtype=bool)
 
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5))

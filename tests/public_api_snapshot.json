@@ -177,6 +177,7 @@
     "render_evidence",
     "reset_line",
     "savings_chart",
+    "template_violations",
     "zones_timeofweek_figure",
     "zones_vs_oat_figure"
   ],
@@ -204,7 +205,8 @@
     "economizer_template",
     "fitted_band",
     "no_simultaneous_template",
-    "reset_line"
+    "reset_line",
+    "template_violations"
   ],
   "camber.charts.energy_signature": [
     "energy_signature"

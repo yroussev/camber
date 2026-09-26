@@ -127,17 +127,46 @@ class FaultRegister:
 # terminal reheat, which shows up as simultaneous heating and cooling at the AHU.
 # Findings on one equipment that fall in the same chain are grouped, with the most
 # upstream as the presumed root cause.
+#
+# Every member must be a rule name some registry actually emits (a test holds this): until
+# 0.87 the SAT chain listed "reheat_minimization", but the rule is "reheat_minimization_g36",
+# so that link silently never grouped.
 # --------------------------------------------------------------------------- #
 
 CAUSE_CHAINS = [
     (
-        "overcool_reheat",
+        # SAT held too cold -> zones overcool at minimum flow -> terminal reheat fights it ->
+        # the AHU sees simultaneous heating and cooling.
+        "sat",
         [
             "supply_air_reset",
+            "supply_air_reset_compliance",
+            "overcooling_severity",
             "overcooling_min_flow",
-            "reheat_minimization",
             "reheat_penalty",
+            "reheat_minimization_g36",
             "simultaneous_heat_cool",
+        ],
+    ),
+    (
+        # A drifting / stuck OA damper -> no high-limit lockout -> excess OA -> the free cooling
+        # the unit should have taken is missed.
+        "econ",
+        [
+            "economizer_damper_drift",
+            "economizer_high_limit",
+            "outdoor_air_fraction",
+            "free_cooling_missed",
+        ],
+    ),
+    (
+        # A static reset that does not trim -> rogue zones pin it -> the damper census shows
+        # boxes throttled against excess static.
+        "static",
+        [
+            "static_reset_effectiveness",
+            "static_rogue_zone_census",
+            "damper_census",
         ],
     ),
 ]

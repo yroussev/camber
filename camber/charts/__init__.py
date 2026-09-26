@@ -23,6 +23,7 @@ from .diagnostic import (
     fitted_band,
     no_simultaneous_template,
     reset_line,
+    template_violations,
 )
 from .energy_signature import energy_signature
 from .evidence import (
@@ -55,6 +56,7 @@ __all__ = [
     "DiagnosticTemplate",
     "band",
     "reset_line",
+    "template_violations",
     "economizer_template",
     "no_simultaneous_template",
     "energy_signature",

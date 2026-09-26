@@ -83,12 +83,19 @@ class SupplyAirReset:
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: SAT-vs-OAT against the reset schedule (off-schedule points shaded)."""
-        from ..charts.diagnostic import TEMPLATES
+        """Pattern J: the SAT-vs-OAT cloud this rule's slope and spread are fitted on.
+
+        The rule judges the *shape* of the reset (a slope, a spread), not a band, so its evidence is
+        the cloud itself -- not a packaged reset line. Drawing a generic G36-style band here would
+        shade "violations" against a sequence the site never declared (a site sequence, when known,
+        is drawn by the RCx report's SAT reset census instead).
+        """
         from ..charts.evidence import Evidence
 
         if Role.SUPPLY_AIR_TEMP in frame.columns and Role.OAT in frame.columns:
             return Evidence(
-                renderer="diagnostic", template=TEMPLATES["sat_reset"], title=f"{equip}: SAT reset"
+                renderer="oat_scatter",
+                roles=[Role.SUPPLY_AIR_TEMP],
+                title=f"{equip}: SAT vs OAT (reset shape)",
             )
         return None

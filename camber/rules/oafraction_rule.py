@@ -67,6 +67,9 @@ class OutdoorAirFraction:
         if any(not 1 <= k <= 12 for k in by_month):
             raise ValueError("min_oa_pct_by_month keys must be months 1-12")
         self.min_oa_pct_by_month = by_month or None
+        # the analyzer's margins (camber.oafraction defaults); the evidence envelope uses them too
+        self.excess_margin_pct = 5.0
+        self.under_margin_pct = 5.0
 
     def _gate(self, frame: pd.DataFrame):
         """``(fan-on mask | None, label)``; ``(None, "off")`` when gating is disabled."""
@@ -85,6 +88,8 @@ class OutdoorAirFraction:
             equip,
             min_oa_pct=self.min_oa_pct,
             cooling_cutoff_f=self.cooling_cutoff_f,
+            excess_margin_pct=self.excess_margin_pct,
+            under_margin_pct=self.under_margin_pct,
             gate=gate,
             occ=occ,
             min_oa_by_month=self.min_oa_pct_by_month,
@@ -155,15 +160,62 @@ class OutdoorAirFraction:
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: OA damper vs OAT against the economizer expectation (missed free
-        cooling / no lockout shaded)."""
-        from ..charts.diagnostic import TEMPLATES
-        from ..charts.evidence import Evidence
+        """Pattern J: OA fraction vs OAT against *this rule's* envelope.
 
-        if Role.OAT in frame.columns and Role.OA_DAMPER in frame.columns:
-            return Evidence(
-                renderer="diagnostic",
-                template=TEMPLATES["economizer"],
-                title=f"{equip}: economizer",
+        Drawn from the samples the verdict is computed on (occupied, fan-on when gated, plausible,
+        stable temperature balance) with the configured ``min_oa_pct`` and ``cooling_cutoff_f``:
+        every sample must sit at or above ``min - 5`` % (under-ventilation), and in cooling weather
+        (OAT above the cutoff) at or below ``min + 5`` % (excess OA). The red points are exactly
+        the samples the two percentages in the finding count.
+
+        With a seasonal minimum (``min_oa_pct_by_month``) one flat line would misjudge every month
+        on the other minimum, so the chart plots each sample's OA fraction *relative to its own
+        month's minimum* (percentage points) against the same margins.
+        """
+        import numpy as np
+
+        from ..charts.diagnostic import DiagnosticTemplate
+        from ..charts.evidence import Evidence
+        from ..oafraction import _oaf_samples, _sample_minima
+
+        if Role.OAT not in frame.columns:
+            return None
+        cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
+        occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+        w = _oaf_samples(frame.rename(columns=cols), gate=self._gate(frame)[0], occ=occ)
+        if w is None or w.empty:
+            return None
+        cut = float(self.cooling_cutoff_f)
+        if self.min_oa_pct_by_month:
+            mins = _sample_minima(w.index, self.min_oa_pct, self.min_oa_pct_by_month)
+            y = w["oaf"] - mins
+            ycol, floor = "oa_fraction_vs_min_pts", 0.0
+            groups: dict = {}
+            for month, pct in sorted(self.min_oa_pct_by_month.items()):
+                groups.setdefault(pct, []).append(str(month))
+            seasonal = "; ".join(f"{p:g}% in months {', '.join(ms)}" for p, ms in groups.items())
+            name = (
+                f"OA fraction vs the month's minimum ({self.min_oa_pct:g}%; {seasonal}), "
+                f"cooling above {cut:g}°F"
             )
-        return None
+            ylabel = "OA fraction − month's minimum (%-points)"
+        else:
+            y = w["oaf"]
+            ycol, floor = "oa_fraction_pct", float(self.min_oa_pct)
+            name = f"OA fraction (min {self.min_oa_pct:g}%, cooling above {cut:g}°F)"
+            ylabel = "OA fraction (%)"
+        derived = pd.DataFrame({Role.OAT: w["OAT"], ycol: y})
+        lo_ok = floor - self.under_margin_pct
+        hi_ok = floor + self.excess_margin_pct
+        top = max(float(y.max()), hi_ok) + 5.0
+
+        def expected(xv):
+            xv = np.asarray(xv, dtype=float)
+            return np.full(len(xv), lo_ok), np.where(xv > cut, hi_ok, top)
+
+        tmpl = DiagnosticTemplate(
+            name, Role.OAT, ycol, expected, "OAT (°F)", ylabel, "configured rule parameters"
+        )
+        return Evidence(
+            renderer="diagnostic", template=tmpl, frame=derived, title=f"{equip}: OA fraction"
+        )

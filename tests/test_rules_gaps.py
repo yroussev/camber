@@ -220,6 +220,8 @@ def test_satreset_evidence_with_and_without_oat():
         index=idx,
     )
     ev = SupplyAirReset().evidence("AHU-1", with_oat)
-    assert ev.renderer == "diagnostic"
+    # the rule judges the reset's shape, so its evidence is the SAT-vs-OAT cloud -- never a packaged
+    # reset band the site did not declare
+    assert ev.renderer == "oat_scatter" and ev.template is None
     no_oat = with_oat.drop(columns=[Role.OAT])
     assert SupplyAirReset().evidence("AHU-1", no_oat) is None

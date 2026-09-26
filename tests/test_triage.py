@@ -107,3 +107,54 @@ def test_grouping_drops_non_actionable():
     # only the fault remains, as a one-member group
     assert len(groups) == 1 and len(groups[0].members) == 1
     assert groups[0].primary_rule == "reheat_penalty"
+
+
+# --- causal-chain membership ------------------------------------------------ #
+
+
+def _every_rule_name() -> set:
+    """Every rule name a shipped registry can emit: built-ins plus each drift family's detectors."""
+    from camber.driftrun import DRIFT_FAMILIES, build_drift_suite
+    from camber.rules.builtin import rule_names
+    from camber.store.modelstore import BaselineStore
+
+    names = set(rule_names())
+    for fam in DRIFT_FAMILIES:
+        names |= {r.name for r in build_drift_suite(fam, BaselineStore(), freeze_if_missing=False)}
+    return names
+
+
+def test_every_chain_member_is_a_registered_rule():
+    from camber.rules.triage import CAUSE_CHAINS
+
+    known = _every_rule_name()
+    for cid, rules in CAUSE_CHAINS:
+        missing = [r for r in rules if r not in known]
+        assert not missing, f"chain {cid!r} names unregistered rule(s) {missing}"
+
+
+def test_reheat_minimization_g36_groups_with_its_chain():
+    # Regression: the chain listed "reheat_minimization" but the rule is "reheat_minimization_g36",
+    # so a G36 reheat-minimization finding never joined its SAT-reset root.
+    findings = [
+        _F("supply_air_reset", "DemoAHU", "warn"),
+        _F("reheat_minimization_g36", "DemoAHU", "fault"),
+    ]
+    groups = group_findings(findings)
+    assert len(groups) == 1
+    assert [m.rule for m in groups[0].members] == ["supply_air_reset", "reheat_minimization_g36"]
+
+
+def test_economizer_and_static_chains_group_root_first():
+    findings = [
+        _F("free_cooling_missed", "DemoAHU", "warn"),
+        _F("economizer_high_limit", "DemoAHU", "fault"),
+        _F("damper_census", "DemoAHU", "warn"),
+        _F("static_reset_effectiveness", "DemoAHU", "warn"),
+    ]
+    by_root = {g.primary_rule: g for g in group_findings(findings)}
+    assert set(by_root) == {"economizer_high_limit", "static_reset_effectiveness"}
+    assert [m.rule for m in by_root["economizer_high_limit"].members] == [
+        "economizer_high_limit",
+        "free_cooling_missed",
+    ]

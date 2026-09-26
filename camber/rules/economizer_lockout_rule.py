@@ -94,7 +94,16 @@ class EconomizerHighLimit:
         oaf = oaf.where(oaf.between(0, 120))
         return oaf if int(oaf.notna().sum()) >= 10 else None
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+    def _judged(self, frame: pd.DataFrame) -> dict:
+        """The samples this rule judges and the quantity it judges them on.
+
+        Shared by :meth:`analyze` and :meth:`evidence`, so the evidence chart is drawn from exactly
+        the samples, basis and threshold behind the verdict (a chart built from generic defaults
+        would shade points the rule never counted). Returns ``oat``; ``hot`` (above the high limit,
+        after the differential exclusion); ``y`` (measured or temperature-balance OA fraction in %,
+        or the damper as a 0-1 fraction); ``plausible`` (samples where ``y`` is usable);
+        ``valid = hot & plausible``; ``basis``; ``caveats``.
+        """
         oat = frame[Role.OAT]
         hot = (oat > self.high_limit_f) & oat.notna()
         caveats: list = []
@@ -111,38 +120,65 @@ class EconomizerHighLimit:
                 )
         have_temps = Role.MIXED_AIR_TEMP in frame.columns and Role.RETURN_AIR_TEMP in frame.columns
         measured = self._measured_oaf(frame)
-        oaf = None
 
         if measured is not None:
-            oaf = measured
-            valid = hot & oaf.notna()
+            y = measured
+            plausible = y.notna()
             basis = "measured OA fraction"
         elif have_temps:
             # Temperature-balance OA-fraction (percent), same method + guards as camber.oafraction.
             mat, rat = frame[Role.MIXED_AIR_TEMP], frame[Role.RETURN_AIR_TEMP]
             denom = rat - oat
-            oaf = 100.0 * (rat - mat) / denom
+            y = 100.0 * (rat - mat) / denom
             plausible = (
                 oat.between(20, 130)
                 & mat.between(30, 120)
                 & rat.between(40, 110)
                 & (denom.abs() >= self.denom_min_f)
-                & oaf.between(-20, 120)
+                & y.between(-20, 120)
             )
-            valid = hot & plausible
             basis = "OA-fraction"
         else:
             # OA_DAMPER arrives 0-1 or 0-100 depending on the BAS; canonicalize to a fraction
             # so the fraction threshold is correct either way. (The role pipeline scales percent
             # roles to 0-100 -- comparing that against a 0-1 threshold makes every open damper
             # read "not locked out", the original mis-scaling behind this rule's false faults.)
-            damper = normalize_percent(frame[Role.OA_DAMPER]) / 100.0
-            valid = hot & damper.notna()
+            y = normalize_percent(frame[Role.OA_DAMPER]) / 100.0
+            plausible = y.notna()
             basis = "damper position"
             caveats.append(
                 "no mixed/return-air temps: judged on damper position "
                 "(a weak proxy for outside-air fraction)"
             )
+        return {
+            "oat": oat,
+            "hot": hot,
+            "y": y,
+            "plausible": plausible,
+            "valid": hot & plausible,
+            "basis": basis,
+            "caveats": caveats,
+        }
+
+    def excess_threshold(self, basis: str) -> float:
+        """The value of the judged quantity above which a sample counts as *not locked out*.
+
+        Damper basis: ``min_damper + 0.05`` (a 0-1 fraction). OA-fraction bases: the configured
+        ``min_oa_pct + oa_margin_pct``, or -- design minimum unknown -- the severity-setting
+        ``conservative_min_oa_pct + oa_margin_pct`` (percent).
+        """
+        if basis == "damper position":
+            return self.min_damper + 0.05
+        if self.min_oa_pct is not None:
+            return self.min_oa_pct + self.oa_margin_pct
+        return self.conservative_min_oa_pct + self.oa_margin_pct
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        j = self._judged(frame)
+        caveats: list = j["caveats"]
+        valid, basis = j["valid"], j["basis"]
+        oaf = None if basis == "damper position" else j["y"]
+        damper = j["y"]
         n = int(valid.sum())
 
         if n == 0:
@@ -225,12 +261,54 @@ class EconomizerHighLimit:
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: OA damper vs OAT against the economizer expectation."""
-        from ..charts.diagnostic import TEMPLATES
+        """Pattern J: the judged quantity vs OAT against *this rule's* configured envelope.
+
+        The chart is built from the same samples, basis and threshold as the verdict: the configured
+        ``high_limit_f``, the differential changeover (excluded samples are not drawn), and the
+        OA-fraction / damper threshold of :meth:`excess_threshold`. Below the high limit the rule
+        makes no claim, so the band spans every value there; above it the band tops out at the
+        threshold -- the red points are exactly the samples counted as *not locked out*.
+        """
+        import numpy as np
+
+        from ..charts.diagnostic import DiagnosticTemplate
         from ..charts.evidence import Evidence
 
+        if Role.OAT not in frame.columns:
+            return None
+        j = self._judged(frame)
+        y = j["y"]
+        # draw the judged (hot) samples plus the at/below-limit side the rule makes no claim about;
+        # differential-excluded and implausible samples are left out
+        keep = j["valid"] | (~(j["oat"] > self.high_limit_f) & j["plausible"] & j["oat"].notna())
+        col = "oa_damper_frac" if j["basis"] == "damper position" else "oa_fraction_pct"
+        derived = pd.DataFrame({Role.OAT: j["oat"], col: y.where(keep)})
+        vals = derived[col].dropna()
+        if vals.empty:
+            return None
+        thr = self.excess_threshold(j["basis"])
+        floor = min(float(vals.min()), 0.0) - (0.05 if col == "oa_damper_frac" else 5.0)
+        top = max(float(vals.max()), thr) + (0.05 if col == "oa_damper_frac" else 5.0)
+        hl = float(self.high_limit_f)
+
+        def expected(xv):
+            xv = np.asarray(xv, dtype=float)
+            return np.full(len(xv), floor), np.where(xv > hl, thr, top)
+
+        unit = "0–1" if col == "oa_damper_frac" else "%"
+        pct = "" if unit == "0–1" else "%"
+        tmpl = DiagnosticTemplate(
+            f"economizer lockout (high limit {hl:g}°F, excess > {thr:g}{pct})",
+            Role.OAT,
+            col,
+            expected,
+            "OAT (°F)",
+            f"{j['basis']} ({unit})",
+            "configured rule parameters",
+        )
         return Evidence(
             renderer="diagnostic",
-            template=TEMPLATES["economizer"],
+            template=tmpl,
+            frame=derived,
             title=f"{equip}: economizer high-limit",
         )
