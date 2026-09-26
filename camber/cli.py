@@ -12,7 +12,7 @@ Subcommands:
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
-    camber portfolio init|adopt|status|audit                          # portfolio workspace
+    camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
     camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
@@ -713,6 +713,65 @@ def _cmd_portfolio_audit(args) -> int:
     return 0
 
 
+def _print_migration(r: dict) -> None:
+    head = "dry run -- nothing written" if r.get("dry_run") else "apply"
+    print(f"portfolio migrate ({head}): {r['workspace']}")
+    if not r["sources"] and not r["configs"]:
+        print("  no legacy files given: pass fault/baseline store paths or --config CFG")
+    for s in r["sources"]:
+        fac = f" -> {', '.join(s['facilities'])}" if s["facilities"] else ""
+        print(f"  [{s['status']:12s}] {s['kind'] or '?':9s} {s['path']} ({s['records']} rec){fac}")
+    for c in r["configs"]:
+        who = c["facility_id"] or f"UNRESOLVED ({c['problem']})"
+        print(f"  config {c['config']} -> {who}")
+    if r["labels"]:
+        print("site labels:")
+        for label, row in sorted(r["labels"].items()):
+            if row["problem"]:
+                cands = f": {', '.join(row['candidates'])}" if row["candidates"] else ""
+                to = f"CANNOT MAP ({row['problem']}{cands})"
+            else:
+                to = f"{row['facility_id']}  (via {row['via']})"
+            print(f"  {label!r:36s} {row['records']:4d} record(s) -> {to}")
+    for fid, c in r["facilities"].items():
+        parts = [f"{c.get(k, 0)} {k}" for k in ("faults", "baselines", "reports") if c.get(k)]
+        extra = f", {c['merged']} merged" if c.get("merged") else ""
+        extra += f", {c['skipped']} already migrated" if c.get("skipped") else ""
+        print(f"  {fid}: {', '.join(parts) or 'nothing new'}{extra}")
+    for m in r["merged"]:
+        print(f"  merged {m['facility_id']} {m['equip']} ({m['kind']}): kept {m['kept']}")
+    if r["problems"]:
+        print("\ncannot migrate -- nothing will be written until these are resolved:")
+        for p in r["problems"]:
+            cands = f" (candidates: {', '.join(p['candidates'])})" if p.get("candidates") else ""
+            print(f"  {p['what']}: {p['problem']}{cands}")
+        print('resolve a label explicitly with --map "SITE=FACILITY_ID"; ambiguous labels are')
+        print("never guessed, and ids of removed (tombstoned) facilities are never reused.")
+
+
+@_pf_errors
+def _cmd_portfolio_migrate(args) -> int:
+    pf = _portfolio(args)
+    if args.apply and not (args.reason or "").strip():
+        raise ValueError("--apply needs --reason (every portfolio change is audited)")
+    r = pf.migrate(
+        args.paths, configs=args.config, mapping=args.map, apply=args.apply, reason=args.reason
+    )
+    if args.json:
+        print(json.dumps(r, indent=2, default=str))
+    else:
+        _print_migration(r)
+        if r["blocked"]:
+            print("\nexit 1: plan blocked")
+        elif r.get("dry_run"):
+            print("\nplan is clean; re-run with --apply --reason ... to carry it out")
+        elif r.get("changed"):
+            print(f"\nmigrated; {len(r['stubs'])} legacy file(s) now redirect to state/<id>/")
+        else:
+            print("\nnothing to do: already migrated")
+    return 1 if r["blocked"] else 0
+
+
 @_pf_errors
 def _cmd_facility_add(args) -> int:
     pf = _portfolio(args)
@@ -758,6 +817,8 @@ def _cmd_facility_show(args) -> int:
         "allowed_actions": allowed_actions(e["state"]),
         "legal_hold": args.id in pf.legal_holds(),
         "retention": pf.effective_retention(args.id),
+        "state_dir": pf.state_dir(args.id),
+        "manifest": pf.manifest(args.id),
         "audit": pf.audit_log(facility_id=args.id),
     }
     if args.json:
@@ -774,6 +835,15 @@ def _cmd_facility_show(args) -> int:
     for cls, r in info["retention"].items():
         rule = ", ".join(f"{k}={v}" for k, v in r["rule"].items())
         print(f"  {cls:16s} {rule}  ({r['source']})")
+    man = info["manifest"]
+    print(f"state ({info['state_dir']}):")
+    rows = [(k, v) for k, v in (man.get("files") or {}).items()]
+    rows += [(k, v) for k, v in (man.get("external") or {}).items()]
+    for rel, e in rows:
+        size = "missing" if e.get("missing") else f"{e.get('bytes')} B"
+        print(f"  {e.get('kind', '?'):10s} {rel}  ({size}, sha256 {str(e.get('sha256'))[:12]})")
+    if not rows:
+        print("  none")
     print("audit:")
     for r in info["audit"]:
         print(f"  {_audit_line(r)}")
@@ -1277,7 +1347,8 @@ def _build_parser() -> argparse.ArgumentParser:
         )
 
     ppf = sub.add_parser(
-        "portfolio", help="portfolio workspace: init, adopt, status, audit (docs/PORTFOLIO.md)"
+        "portfolio",
+        help="portfolio workspace: init, adopt, status, audit, migrate (docs/PORTFOLIO.md)",
     )
     pfsub = ppf.add_subparsers(dest="portfolio_cmd", required=True)
     pfi = pfsub.add_parser("init", help="create a workspace (store/, policy, audit log, lock)")
@@ -1297,6 +1368,32 @@ def _build_parser() -> argparse.ArgumentParser:
     pfl.add_argument("--facility", help="only this facility_id")
     pfl.add_argument("--json", action="store_true")
     pfl.set_defaults(func=_cmd_portfolio_audit)
+    pfm = pfsub.add_parser(
+        "migrate",
+        help="re-key site-keyed fault/baseline files to facility_id (dry run unless --apply)",
+    )
+    _ws(pfm)
+    pfm.add_argument("paths", nargs="*", help="legacy fault / baseline store files (JSON)")
+    pfm.add_argument(
+        "--config",
+        action="append",
+        default=[],
+        help="a config whose drift.store / faults.store / reports belong to its facility "
+        "(repeatable)",
+    )
+    pfm.add_argument(
+        "--map",
+        action="append",
+        default=[],
+        metavar="SITE=FACILITY_ID",
+        help="map a site label the registry cannot map on its own (repeatable)",
+    )
+    mode = pfm.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="plan only (the default)")
+    mode.add_argument("--apply", action="store_true", help="carry the plan out (needs --reason)")
+    pfm.add_argument("--reason", help="why (audited; required with --apply)")
+    pfm.add_argument("--json", action="store_true", help="print the plan/result as JSON")
+    pfm.set_defaults(func=_cmd_portfolio_migrate)
 
     pfc = sub.add_parser(
         "facility", help="facility lifecycle: add, list, show, rename, suspend, resume, activate"

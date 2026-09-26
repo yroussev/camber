@@ -8,7 +8,7 @@
       _lock             single-writer advisory lock (see ._lock)
       store/            the ParquetStore root (+ registry v2, tombstones, _workspace.json marker)
       rollups/          reserved: downsampled stores (created by a later release)
-      state/<fid>/      reserved: faults, drift baselines, reports per facility
+      state/<fid>/      faults, drift baselines, migrated originals, sha256 manifest (._state)
       archive/<fid>/    reserved: export bundles
 
 The reserved directories are created lazily by the releases that use them.
@@ -25,6 +25,7 @@ from ..store import FacilityRegistry, ParquetStore, make_facility_id, require_fa
 from ..store.facilities import _WORKSPACE_MARKER, _workspace_of_store
 from ._audit import AUDIT_FILE, append_audit, audit_record, read_audit
 from ._lock import LOCK_FILE, describe_holder, portfolio_lock, probe, read_holder
+from ._state import SiteResolver, read_manifest, state_dir
 from ._states import IMPLEMENTED, STATES, LifecycleError, transition
 
 PORTFOLIO_FILE = "_portfolio.json"
@@ -381,6 +382,46 @@ class Portfolio:
                 details={"from": old.get("display_name"), "to": display_name},
             )
         return self.facility(facility_id)
+
+    # ------------------------------------------------------------------ per-facility state
+
+    def state_dir(self, facility_id: str) -> str:
+        """``<root>/state/<facility_id>``: where the facility's faults and baselines live."""
+        return state_dir(self.root, facility_id)
+
+    def manifest(self, facility_id: str) -> dict:
+        """The facility's state manifest (files with sha256, external artifacts, migrations)."""
+        return read_manifest(self.root, facility_id)
+
+    def migrate(self, paths=(), *, configs=(), mapping=None, apply=False, reason=None) -> dict:
+        """Re-key site-keyed fault / baseline files to ``facility_id`` (see docs/PORTFOLIO.md).
+
+        ``paths`` are legacy state files; ``configs`` are config files whose ``drift.store``,
+        ``faults.store`` and report outputs belong to the config's facility; ``mapping`` is
+        ``{site label: facility_id}`` (or ``["SITE=ID", ...]``) for labels the registry cannot
+        map on its own. Returns a JSON-ready report.
+
+        A dry run (the default) only plans. ``apply=True`` needs a ``reason``, takes the lock and
+        carries the plan out -- unless it is ``blocked`` (a label that is ambiguous, unmapped or
+        belongs to a tombstoned facility, a missing file): then nothing is written and the
+        report says ``"applied": False``. Idempotent: re-applying changes nothing.
+        """
+        from ._migrate import apply as _apply
+        from ._migrate import plan as _plan
+
+        if not apply:
+            report, _internal = _plan(self, paths, configs=configs, mapping=mapping)
+            return {**report, "applied": False, "dry_run": True}
+        _need_reason(reason)
+        with self.lock():
+            report, internal = _plan(self, paths, configs=configs, mapping=mapping)
+            if report["blocked"]:
+                return {**report, "applied": False, "dry_run": False}
+            return {**_apply(self, internal, report, reason=str(reason)), "dry_run": False}
+
+    def legacy_sites(self, facility_id: str) -> list:
+        """The site labels that map to ``facility_id`` unambiguously (see :meth:`migrate`)."""
+        return SiteResolver(self).legacy_sites(facility_id)
 
     # ------------------------------------------------------------------ status
 
