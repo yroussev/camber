@@ -12,6 +12,8 @@ Subcommands:
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+    camber portfolio init|adopt|status|audit                          # portfolio workspace
+    camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -589,6 +591,216 @@ def _cmd_datasets_score(args) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- portfolio + facility
+#
+# Mutating commands take the workspace's single-writer lock *without waiting* (a second concurrent
+# admin command is refused with the holder's pid@host) and require --reason, which is audited with
+# the OS user. Until CAMBER has authentication, write access to the workspace is admin.
+
+_LATER = {"offboard", "restore", "archive", "purge"}
+
+
+def _pf_errors(fn):
+    """Print lifecycle / lock / lookup errors as ``error: ...`` with exit code 1 (2 = later)."""
+
+    def wrapped(args) -> int:
+        from .portfolio import LifecycleError, PortfolioLocked
+
+        try:
+            return fn(args)
+        except NotImplementedError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        except (PortfolioLocked, LifecycleError, FileNotFoundError, ValueError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        except KeyError as e:
+            print(f"error: {e.args[0] if e.args else e}", file=sys.stderr)
+            return 1
+
+    wrapped.__name__ = fn.__name__
+    return wrapped
+
+
+def _portfolio(args):
+    from .portfolio import Portfolio, find_workspace
+
+    ws = find_workspace(getattr(args, "workspace", None))
+    if ws is None:
+        where = getattr(args, "workspace", None) or os.environ.get("CAMBER_PORTFOLIO")
+        hint = f"{where} is not a portfolio workspace" if where else "no portfolio workspace"
+        raise FileNotFoundError(
+            f"{hint}: pass --workspace PATH or set CAMBER_PORTFOLIO "
+            "(create one with `camber portfolio init <root>`)"
+        )
+    return Portfolio(ws)
+
+
+@_pf_errors
+def _cmd_portfolio_init(args) -> int:
+    from .portfolio import Portfolio, is_workspace
+
+    existed = is_workspace(args.root)
+    pf = Portfolio.init(args.root)
+    verb = "already a workspace" if existed else "created workspace"
+    print(f"{verb}: {pf.root}\n  store: {pf.store_root}")
+    if not existed:
+        print(f"next: export CAMBER_PORTFOLIO={pf.root}; camber facility add <name> --reason ...")
+    return 0
+
+
+@_pf_errors
+def _cmd_portfolio_adopt(args) -> int:
+    from .portfolio import Portfolio
+
+    pf = Portfolio.adopt(args.store, args.root, reason=args.reason)
+    n = len(pf.facilities())
+    print(f"adopted {pf.store_root} into workspace {pf.root} ({n} facilities, nothing moved)")
+    return 0
+
+
+@_pf_errors
+def _cmd_portfolio_status(args) -> int:
+    st = _portfolio(args).status()
+    if args.json:
+        print(json.dumps(st, indent=2, default=str))
+        return 0
+    print(f"workspace : {st['root']}  (schema {st['schema_version']})")
+    print(f"store     : {st['store']}")
+    counts = ", ".join(f"{k} {v}" for k, v in st["by_state"].items() if v) or "none"
+    print(f"facilities: {st['facilities']} ({counts})")
+    if st["unregistered"]:
+        print(f"  unregistered store partitions (read as active): {', '.join(st['unregistered'])}")
+    if st["tombstoned"]:
+        print(f"tombstoned: {', '.join(st['tombstoned'])}")
+    if st["tombstoned_with_data"]:
+        print(
+            "  data still stored under tombstoned ids (dropped from the registry only): "
+            + ", ".join(st["tombstoned_with_data"])
+        )
+    print(f"legal holds: {', '.join(st['legal_holds']) or 'none'}")
+    print(f"lock      : {'held by ' + st['locked_by'] if st['locked_by'] else 'free'}")
+    print(f"audit     : {st['audit_records']} record(s)")
+    print("retention defaults (enforced by a later release):")
+    for cls, rule in st["retention_defaults"].items():
+        print(f"  {cls:16s} {', '.join(f'{k}={v}' for k, v in rule.items())}")
+    return 0
+
+
+def _audit_line(r: dict) -> str:
+    move = ""
+    if (r.get("from_state") or r.get("to_state")) and r.get("from_state") != r.get("to_state"):
+        move = f" [{r.get('from_state') or '-'} -> {r.get('to_state') or '-'}]"
+    d = r.get("details") or {}
+    if "from" in d and "to" in d:
+        move += f" [{d['from']!r} -> {d['to']!r}]"
+    fid = f" {r['facility_id']}" if r.get("facility_id") else ""
+    return (
+        f"{r.get('ts', '?')}  {r.get('actor', '?')}@{r.get('host', '?')}  "
+        f"{r.get('action', '?')}{fid}{move}  reason: {r.get('reason') or '-'}"
+    )
+
+
+@_pf_errors
+def _cmd_portfolio_audit(args) -> int:
+    rows = _portfolio(args).audit_log(facility_id=args.facility)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    for r in rows:
+        print(_audit_line(r))
+    print(f"\n{len(rows)} record(s).")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_add(args) -> int:
+    pf = _portfolio(args)
+    e = pf.add_facility(
+        args.name,
+        reason=args.reason,
+        facility_id=args.id,
+        owner=args.owner,
+        tags=args.tag or (),
+        activate=args.activate,
+    )
+    fid = e["facility_id"]
+    print(f"added {fid} ({e['display_name']}) -- {e['state']}")
+    if e["state"] == "provisioning":
+        print(f"next: camber facility activate {fid} --reason ...")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_list(args) -> int:
+    rows = _portfolio(args).facilities(state=args.state)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    print(f"{'facility_id':28s} {'state':13s} {'owner':16s} display name")
+    for fid, e in rows.items():
+        flag = "" if e.get("registered", True) else "  (unregistered)"
+        print(f"{fid:28s} {e['state']:13s} {(e.get('owner') or '-'):16s} {e['display_name']}{flag}")
+    print(f"\n{len(rows)} facilit{'y' if len(rows) == 1 else 'ies'}.")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_show(args) -> int:
+    from .portfolio import allowed_actions
+
+    pf = _portfolio(args)
+    e = pf.facility(args.id)
+    info = {
+        "facility_id": args.id,
+        **e,
+        "has_data": args.id in pf.store.facilities(),
+        "allowed_actions": allowed_actions(e["state"]),
+        "legal_hold": args.id in pf.legal_holds(),
+        "retention": pf.effective_retention(args.id),
+        "audit": pf.audit_log(facility_id=args.id),
+    }
+    if args.json:
+        print(json.dumps(info, indent=2, default=str))
+        return 0
+    for k in ("facility_id", "display_name", "name", "state", "created_at", "state_changed_at"):
+        print(f"{k:17s}: {info.get(k) if info.get(k) is not None else '-'}")
+    print(f"{'owner':17s}: {info.get('owner') or '-'}")
+    print(f"{'tags':17s}: {', '.join(info.get('portfolio') or []) or '-'}")
+    print(f"{'has data':17s}: {'yes' if info['has_data'] else 'no'}")
+    print(f"{'legal hold':17s}: {'yes' if info['legal_hold'] else 'no'}")
+    print(f"{'allowed actions':17s}: {', '.join(info['allowed_actions']) or 'none'}")
+    print("retention:")
+    for cls, r in info["retention"].items():
+        rule = ", ".join(f"{k}={v}" for k, v in r["rule"].items())
+        print(f"  {cls:16s} {rule}  ({r['source']})")
+    print("audit:")
+    for r in info["audit"]:
+        print(f"  {_audit_line(r)}")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_rename(args) -> int:
+    e = _portfolio(args).rename(args.id, args.display_name, reason=args.reason)
+    print(f"{args.id}: display name is now {e['display_name']!r}")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_transition(args) -> int:
+    if args.facility_cmd in _LATER:
+        print(
+            f"error: `camber facility {args.facility_cmd}` is available in a later release "
+            "(it needs export bundles and the deletion cascade); see docs/PORTFOLIO.md",
+            file=sys.stderr,
+        )
+        return 2
+    r = _portfolio(args).transition(args.id, args.facility_cmd, reason=args.reason)
+    print(f"{r['facility_id']}: {r['from_state']} -> {r['to_state']}")
+    return 0
+
+
 # --------------------------------------------------------------------------- drift subcommands
 #
 # The baseline store is written by exactly two verbs -- `freeze` (create a missing reference) and
@@ -1057,6 +1269,78 @@ def _build_parser() -> argparse.ArgumentParser:
     dsk.add_argument("--facility")
     dsk.add_argument("--json", action="store_true")
     dsk.set_defaults(func=_cmd_datasets_score)
+
+    def _ws(p):
+        p.add_argument(
+            "--workspace",
+            help="portfolio workspace root (default: $CAMBER_PORTFOLIO, else the current dir)",
+        )
+
+    ppf = sub.add_parser(
+        "portfolio", help="portfolio workspace: init, adopt, status, audit (docs/PORTFOLIO.md)"
+    )
+    pfsub = ppf.add_subparsers(dest="portfolio_cmd", required=True)
+    pfi = pfsub.add_parser("init", help="create a workspace (store/, policy, audit log, lock)")
+    pfi.add_argument("root")
+    pfi.set_defaults(func=_cmd_portfolio_init)
+    pfa = pfsub.add_parser("adopt", help="wrap an existing store directory as a workspace")
+    pfa.add_argument("store", help="existing ParquetStore directory (nothing is moved)")
+    pfa.add_argument("root", nargs="?", help="workspace root (default: the store's parent)")
+    pfa.add_argument("--reason", required=True, help="why (audited)")
+    pfa.set_defaults(func=_cmd_portfolio_adopt)
+    pfs = pfsub.add_parser("status", help="facility counts by state, holds, lock, policy")
+    _ws(pfs)
+    pfs.add_argument("--json", action="store_true")
+    pfs.set_defaults(func=_cmd_portfolio_status)
+    pfl = pfsub.add_parser("audit", help="the append-only audit log (who, when, what, why)")
+    _ws(pfl)
+    pfl.add_argument("--facility", help="only this facility_id")
+    pfl.add_argument("--json", action="store_true")
+    pfl.set_defaults(func=_cmd_portfolio_audit)
+
+    pfc = sub.add_parser(
+        "facility", help="facility lifecycle: add, list, show, rename, suspend, resume, activate"
+    )
+    fcsub = pfc.add_subparsers(dest="facility_cmd", required=True)
+    fca = fcsub.add_parser("add", help="register a new facility (provisioning unless --activate)")
+    _ws(fca)
+    fca.add_argument("name", help="the facility's name (becomes its display name)")
+    fca.add_argument("--id", help="facility_id (default: derived from the name)")
+    fca.add_argument("--owner", help="owner (free text)")
+    fca.add_argument("--tag", action="append", help="portfolio tag (repeatable)")
+    fca.add_argument("--activate", action="store_true", help="start active, not provisioning")
+    fca.add_argument("--reason", required=True, help="why (audited)")
+    fca.set_defaults(func=_cmd_facility_add)
+    fcl = fcsub.add_parser("list", help="facilities with their lifecycle state")
+    _ws(fcl)
+    fcl.add_argument("--state", help="only facilities in this state")
+    fcl.add_argument("--json", action="store_true")
+    fcl.set_defaults(func=_cmd_facility_list)
+    fcs = fcsub.add_parser("show", help="one facility: record, retention, audit trail")
+    _ws(fcs)
+    fcs.add_argument("id")
+    fcs.add_argument("--json", action="store_true")
+    fcs.set_defaults(func=_cmd_facility_show)
+    fcr = fcsub.add_parser("rename", help="change a facility's display name (the id never changes)")
+    _ws(fcr)
+    fcr.add_argument("id")
+    fcr.add_argument("display_name")
+    fcr.add_argument("--reason", required=True, help="why (audited)")
+    fcr.set_defaults(func=_cmd_facility_rename)
+    for verb, text in (
+        ("activate", "provisioning -> active"),
+        ("suspend", "active -> suspended (analyses skip it)"),
+        ("resume", "suspended -> active"),
+        ("offboard", "(later release) start the reversible offboarding grace period"),
+        ("restore", "(later release) offboarding/archived -> active"),
+        ("archive", "(later release) delete hot data, keep the export bundle"),
+        ("purge", "(later release) delete everything but the tombstone and audit"),
+    ):
+        fct = fcsub.add_parser(verb, help=text)
+        _ws(fct)
+        fct.add_argument("id")
+        fct.add_argument("--reason", required=verb not in _LATER, help="why (audited)")
+        fct.set_defaults(func=_cmd_facility_transition)
     return ap
 
 
