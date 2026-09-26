@@ -15,6 +15,11 @@ not explained by it** -- if the DP move is fully accounted for by the reset, the
 the floor and the rule does not fault (reporting the setpoint-driven move as a caveat instead).
 Without a setpoint point it scores the raw DP drift and says so.
 
+**Unit-free.** DP arrives in psi, inH2O, kPa or ftH2O depending on the site; the plausibility band
+is scaled to the baseline's own median (:func:`dp_plausible_range`) rather than assuming psi, and
+drift is judged in the loop's own baseline sigma. The DP-unit floors (``warn``/``fault``) are a
+coarse backstop only -- the sigma floors carry the verdict in any unit.
+
 Loop-parameterized (chilled-water by default; pass the hot-water DP / flow / setpoint roles for that
 loop). Declines loudly when DP or the flow normalizer is unmapped. **Not** auto-registered (needs an
 injected :class:`~camber.store.modelstore.BaselineStore`); run via
@@ -25,7 +30,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats
+from ..chillerbaseline import fit_load_baseline, load_drift_stats, unscoreable_reason
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -40,8 +45,36 @@ from .base import Finding
 _KIND = "loop_dp"
 _RANK = {"ok": 0, "info": 0, "warn": 1, "fault": 2}
 
-# Plausibility bounds for the DP metric (psi / ft / inH2O) -- wide, only rejecting dropouts.
+# Plausibility bounds for the DP metric **in psi** -- used only when a caller passes ``dp_range``
+# explicitly with psi data in mind. The default is now scale-free (see ``dp_plausible_range``): the
+# former fixed (0, 100) assumed psi, so a loop trended in inH2O (a 480 inH2O setpoint is ordinary)
+# or kPa had every sample rejected as implausible and the rule declined blaming "too few loaded
+# samples". Drift here is judged against the loop's *own* baseline scatter, so the only thing a
+# range must do is drop dropouts and sentinel codes -- which a band scaled to the loop's own median
+# does in any unit.
 DP_PLAUSIBLE = (0.0, 100.0)
+
+# The scale-free band, as multiples of the baseline's median |DP|. A variable-speed loop's DP cannot
+# exceed the pump's shutoff head, typically 1.5-2x the design setpoint, so 5x is generous; a small
+# negative excursion is transducer offset at no-flow. Sentinel codes (9999, -9999, 32767) fall out.
+DP_RANGE_LOW_FRAC = -0.25
+DP_RANGE_HIGH_FRAC = 5.0
+
+
+def dp_plausible_range(dp) -> tuple[float, float]:
+    """A unit-free plausibility band for a loop DP series: scaled to its own median magnitude.
+
+    ``(-0.25 * m, 5 * m)`` with ``m`` the median |DP| of the finite samples -- the same band in
+    psi, inH2O, kPa or ftH2O. With no usable samples (or an all-zero series) the band is unbounded
+    and the fit declines on its own, naming the actual cause.
+    """
+    vals = pd.to_numeric(pd.Series(dp), errors="coerce").abs()
+    vals = vals[vals.notna() & (vals < float("inf"))]
+    m = float(vals.median()) if len(vals) else float("nan")
+    if not m > 0:
+        return (float("-inf"), float("inf"))
+    return (DP_RANGE_LOW_FRAC * m, DP_RANGE_HIGH_FRAC * m)
+
 
 # ---------------------------------------------------------------------------------------------
 # MAGNITUDE FLOORS -- SCREENING-GRADE (see camber.driftthresholds). Two-sided, applied to |drift|;
@@ -91,6 +124,7 @@ class LoopDPDrift:
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
         min_load: float = MIN_LOAD,
+        dp_range: tuple[float, float] | None = None,  # None = scale-free (dp_plausible_range)
     ):
         self.store = store
         self.site = site
@@ -112,6 +146,7 @@ class LoopDPDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_load = min_load
+        self.dp_range = dp_range
 
     # ------------------------------------------------------------------ frame prep
     def _running(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -120,7 +155,15 @@ class LoopDPDrift:
             return frame[status >= 0.5]
         return frame
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _range(self, base_frame: pd.DataFrame) -> tuple[float, float]:
+        """The DP plausibility band: the caller's, or one scaled to the baseline's own DP."""
+        if self.dp_range is not None:
+            return self.dp_range
+        if self.dp_role not in base_frame.columns:
+            return (float("-inf"), float("inf"))
+        return dp_plausible_range(base_frame[self.dp_role])
+
+    def _frozen_baseline(self, equip, base_frame, caveats, rng=DP_PLAUSIBLE):
         frozen = self.store.model_for(self.site, equip, _KIND)
         if frozen is not None:
             return frozen
@@ -134,12 +177,20 @@ class LoopDPDrift:
             metric_col=self.dp_role,
             load_col=self.flow_role,
             min_load=self.min_load,
-            metric_range=DP_PLAUSIBLE,
+            metric_range=rng,
         )
         if fit is None:
+            why = unscoreable_reason(
+                base_frame,
+                metric_col=self.dp_role,
+                load_col=self.flow_role,
+                min_load=self.min_load,
+                metric_range=rng,
+                min_samples=30,
+                min_load_span=10.0,
+            )
             caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit "
-                "(too few loaded samples, or too narrow a flow range)"
+                f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
             )
             return None
         idx = base_frame.index
@@ -197,7 +248,8 @@ class LoopDPDrift:
             )
 
         base_r, cur_r = self._running(baseline), self._running(current)
-        frozen = self._frozen_baseline(equip, base_r, caveats)
+        rng = self._range(base_r)
+        frozen = self._frozen_baseline(equip, base_r, caveats, rng)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -214,10 +266,21 @@ class LoopDPDrift:
             metric_col=self.dp_role,
             load_col=self.flow_role,
             min_load=self.min_load,
-            metric_range=DP_PLAUSIBLE,
+            metric_range=rng,
         )
         if drift is None:
-            caveats.append(f"could not evaluate {_KIND}: no loaded samples in the current period")
+            why = unscoreable_reason(
+                cur_r,
+                metric_col=self.dp_role,
+                load_col=self.flow_role,
+                min_load=self.min_load,
+                metric_range=rng,
+                min_samples=10,
+                baseline=frozen,
+            )
+            caveats.append(
+                f"could not evaluate {_KIND}: nothing scoreable in the current period -- {why}"
+            )
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -295,7 +358,7 @@ class LoopDPDrift:
                 approach_col=self.dp_role,
                 tons_col=self.flow_role,
                 min_tons=self.min_load,
-                approach_range=DP_PLAUSIBLE,
+                approach_range=rng,
             )
         except ValueError as exc:
             run = None

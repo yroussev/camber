@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats
+from ..chillerbaseline import fit_load_baseline, load_drift_stats, unscoreable_reason
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -155,9 +155,17 @@ class PumpFlowDrift:
             metric_range=FLOW_PLAUSIBLE,
         )
         if fit is None:
+            why = unscoreable_reason(
+                base_frame,
+                metric_col=self.flow_role,
+                load_col=self.speed_role,
+                min_load=self.min_speed,
+                metric_range=FLOW_PLAUSIBLE,
+                min_samples=30,
+                min_load_span=10.0,
+            )
             caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit "
-                "(too few running samples, or too narrow a speed range)"
+                f"could not evaluate {_KIND}: the baseline period would not support a fit -- {why}"
             )
             return None
         idx = base_frame.index
@@ -252,7 +260,18 @@ class PumpFlowDrift:
             metric_range=FLOW_PLAUSIBLE,
         )
         if drift is None:
-            caveats.append(f"could not evaluate {_KIND}: no running samples in the current period")
+            why = unscoreable_reason(
+                cur_r,
+                metric_col=self.flow_role,
+                load_col=self.speed_role,
+                min_load=self.min_speed,
+                metric_range=FLOW_PLAUSIBLE,
+                min_samples=10,
+                baseline=frozen,
+            )
+            caveats.append(
+                f"could not evaluate {_KIND}: nothing scoreable in the current period -- {why}"
+            )
             return Finding(
                 rule=self.name,
                 equip=equip,

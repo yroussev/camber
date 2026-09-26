@@ -1496,11 +1496,14 @@
     "DP_FAULT",
     "DP_FAULT_SIGMA",
     "DP_PLAUSIBLE",
+    "DP_RANGE_HIGH_FRAC",
+    "DP_RANGE_LOW_FRAC",
     "DP_SP_CONFOUND",
     "DP_WARN",
     "DP_WARN_SIGMA",
     "LoopDPDrift",
-    "MIN_LOAD"
+    "MIN_LOAD",
+    "dp_plausible_range"
   ],
   "camber.rules.oafraction_rule": [
     "OutdoorAirFraction"
