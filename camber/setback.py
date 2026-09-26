@@ -4,9 +4,18 @@ The cheapest large saver: an air handler that runs 24/7 with no night or weekend
 setback wastes fan energy (and the heating/cooling to condition air nobody needs).
 This flags the supply fan running during *unoccupied* hours.
 
-Unoccupied = the complement of the occupied window (weekday daytime), i.e. nights
-and weekends. "Running" can be read from a fan status point (preferred) or, if
-only speed is trended, from speed above a small threshold.
+Unoccupied = the complement of the occupied window: a trended ``Occupancy`` point
+when present (it *replaces* the schedule), otherwise the configured schedule
+(default weekday 07:00-18:00 -- a generic office assumption; pass ``start_hour`` /
+``end_hour`` / ``occupied_days`` for the real one). "Running" can be read from a fan
+status point (preferred) or, if only speed is trended, from speed above a small
+threshold.
+
+**Duty, not "any-on".** A resampled status point is a *fraction* of the bin the fan ran
+(:func:`camber.realio.load_status` averages the step series), so the run percentages
+here average that fraction instead of thresholding it at 0.5 -- a fan cycling a third of
+every unoccupied hour runs ~33 % of unoccupied time at 1-minute, 15-minute or hourly
+resolution alike.
 
 Headline metric: fraction of unoccupied hours the fan is running. A well-scheduled
 AHU is near 0%; continuous operation is ~100%. We also report the occupied-vs-
@@ -19,7 +28,7 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
-from .schedules import occupied_mask
+from .schedules import effective_occupied_mask
 
 __all__ = [
     "SETBACK_MEASURES",
@@ -27,7 +36,7 @@ __all__ = [
     "analyze_setback",
 ]
 
-SETBACK_MEASURES = ["SupplyFanStatus", "SupplyFanSpeed"]
+SETBACK_MEASURES = ["SupplyFanStatus", "SupplyFanSpeed", "Occupancy"]
 
 
 @dataclass
@@ -49,11 +58,17 @@ class SetbackResult:
 
 
 def _running(work: pd.DataFrame, speed_thr: float):
-    """Boolean 'fan running' from status (preferred) or speed."""
+    """Fan-running *fraction* per sample (0..1): status duty (preferred) or speed > threshold.
+
+    A status column may hold a resampled duty fraction (e.g. 0.33 = on a third of the bin), so it
+    is clipped to [0, 1] and averaged, never re-thresholded at 0.5 (which would make the verdict
+    depend on the resample interval). NaN samples are dropped from the average, not read as off.
+    """
     if "SupplyFanStatus" in work.columns and work["SupplyFanStatus"].notna().any():
-        return work["SupplyFanStatus"].fillna(0) > 0.5
+        return work["SupplyFanStatus"].astype(float).clip(0.0, 1.0)
     if "SupplyFanSpeed" in work.columns:
-        return work["SupplyFanSpeed"].fillna(0) > speed_thr
+        spd = work["SupplyFanSpeed"]
+        return (spd > speed_thr).astype(float).where(spd.notna())
     return None
 
 
@@ -63,20 +78,30 @@ def analyze_setback(
     *,
     speed_thr: float = 5.0,  # fan speed above this counts as running
     setback_ratio: float = 0.5,  # unoccupied run < this * occupied run == effective
-    start_hour: int = 7,
-    end_hour: int = 18,
+    start_hour: float = 7,
+    end_hour: float = 18,
+    occupied_days=(0, 1, 2, 3, 4),
 ) -> SetbackResult | None:
     """Detect missing night/weekend setback for one AHU.
 
     ``setback_ratio`` is OUR judgment threshold: a setback is "effective" only if
     unoccupied run fraction is below half the occupied run fraction. ``speed_thr``
-    is the run deadband when only fan speed is available.
+    is the run deadband when only fan speed is available. A populated ``Occupancy`` column
+    replaces the ``start_hour``/``end_hour``/``occupied_days`` schedule.
     """
     run = _running(df, speed_thr)
     if run is None:
         return None
-    occ = occupied_mask(df.index, start_hour=start_hour, end_hour=end_hour)
-    unocc = ~occ
+    occ = effective_occupied_mask(
+        df.index,
+        occ=df["Occupancy"] if "Occupancy" in df.columns else None,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        days=occupied_days,
+    )
+    have = run.notna()
+    occ = occ & have
+    unocc = ~occ & have
     n_occ = int(occ.sum())
     n_un = int(unocc.sum())
     if n_un == 0:

@@ -1628,6 +1628,7 @@
   ],
   "camber.schedules": [
     "day_type",
+    "effective_occupied_mask",
     "occupied_mask",
     "time_of_week_bin"
   ],

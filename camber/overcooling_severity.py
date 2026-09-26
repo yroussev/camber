@@ -44,6 +44,24 @@ Reference setpoint (configurable via ``relative_to_deadband``):
   - **absolute** (fallback when only the cooling setpoint is available, or when
     ``relative_to_deadband=False``): depth is measured below the cooling setpoint
     (``depth = cool_sp - space_temp``).
+
+What is *not* overcooling (both found labelled as overcooling on real buildings):
+  - **Morning recovery.** A space still climbing back from its night setback in the
+    first hours of occupancy is recovering, not being overcooled. Warm-up samples are
+    excluded -- by the ``WarmUp`` flag when it is trended, otherwise the first
+    ``recovery_hours`` (default 2 h) of every occupied block that follows an
+    unoccupied one.
+  - **A heating shortfall.** A space below its heating setpoint while its reheat valve
+    (``HWValve``) is at/above ``reheat_saturated_pct`` (default 90 %) is being heated
+    as hard as the box can -- it is *under-heated*, not overcooled. Those samples are
+    scored separately (``shortfall_*``) and never count toward the overcooling tiers.
+    Without a reheat valve the two cannot be told apart (``reheat_evaluated=False``).
+  - **HVAC off.** A space drifting cold while its terminal/air-handler fan is off
+    (``FanStatus`` <= 0.5 or ``FanSpeed`` <= 5 %, when trended) is free-floating, not
+    being overcooled; those samples are excluded (``n_fan_off_excluded``).
+
+Occupied = a trended ``Occupancy`` column when present (it replaces the schedule),
+else the ``start_hour``/``end_hour``/``occupied_days`` schedule (default weekday 07-18).
 """
 
 from __future__ import annotations
@@ -53,7 +71,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 
-from .schedules import occupied_mask
+from .schedules import effective_occupied_mask
 
 __all__ = [
     "DEFAULT_TIERS",
@@ -85,6 +103,11 @@ class OvercoolSeverityResult:
     severity: str  # worst SUSTAINED tier: "ok" | "info" | "warn" | "fault"
     coverage_start: str
     coverage_end: str
+    n_recovery_excluded: int = 0  # morning-recovery samples dropped (heuristic window only)
+    reheat_evaluated: bool = False  # a reheat valve was present to tell shortfall from overcool
+    shortfall_tier_pct: dict | None = None  # tier -> % considered samples, sustained, reheat maxed
+    shortfall_severity: str = "ok"  # worst sustained heating-shortfall tier
+    n_fan_off_excluded: int = 0  # samples dropped because the fan was trended off
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -144,6 +167,22 @@ def _sustained_mask(
     return out
 
 
+def _recovery_window(occ: pd.Series, recovery: pd.Timedelta) -> pd.Series:
+    """Occupied samples within ``recovery`` of the start of an occupied block that follows an
+    unoccupied sample (morning recovery from setback). The first block of the series counts only
+    if it is preceded by an unoccupied sample, so data that begins mid-day is not trimmed."""
+    occ = occ.astype(bool)
+    prev = occ.shift(1)
+    starts = occ & (prev == False)  # noqa: E712 -- NaN (series start) is not a transition
+    start_at = pd.Series(occ.index.where(starts), index=occ.index)
+    start_at = start_at.where(starts).ffill()
+    # a block's start only applies while the block continues
+    block = (~occ).cumsum()
+    start_at = start_at.where(occ).groupby(block).transform("first")
+    since = pd.Series(occ.index, index=occ.index) - start_at
+    return occ & since.notna() & (since < recovery)
+
+
 def analyze_overcooling_severity(
     df: pd.DataFrame,
     equip: str,
@@ -154,28 +193,52 @@ def analyze_overcooling_severity(
     relative_to_deadband: bool = True,
     gap_factor: float = 1.5,
     occupied_only: bool = True,
+    start_hour: float = 7,
+    end_hour: float = 18,
+    occupied_days=(0, 1, 2, 3, 4),
+    recovery_hours: float = 2.0,
+    reheat_saturated_pct: float = 90.0,
 ) -> OvercoolSeverityResult | None:
     """Score overcooling severity (depth x duration) for one zone.
 
     ``df`` columns (legacy token names): ``SpaceTemp``, ``ActCoolSP`` (required),
     ``ActHeatSP`` (enables relative-to-deadband mode), and optionally ``WarmUp`` /
-    ``CoolDown`` for occupancy. Returns ``None`` if the required columns or any
-    usable samples are missing. See the module docstring for tier, persistence, and
-    reference-setpoint semantics.
+    ``CoolDown`` / ``Occupancy`` for occupancy and ``HWValve`` (reheat valve, %) to
+    separate a heating shortfall from overcooling. Returns ``None`` if the required
+    columns or any usable samples are missing. See the module docstring for tier,
+    persistence, recovery/shortfall, and reference-setpoint semantics.
     """
     tiers = dict(tiers) if tiers else dict(DEFAULT_TIERS)
     if "SpaceTemp" not in df.columns or "ActCoolSP" not in df.columns:
         return None
 
     work = df.copy()
+    n_recovery = 0
     if occupied_only:
-        work = work[
-            occupied_mask(
-                work.index,
-                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-            )
-        ]
+        has_warmup = "WarmUp" in work.columns and work["WarmUp"].notna().any()
+        occ = effective_occupied_mask(
+            work.index,
+            occ=work["Occupancy"] if "Occupancy" in work.columns else None,
+            start_hour=start_hour,
+            end_hour=end_hour,
+            days=occupied_days,
+            warmup=work["WarmUp"] if has_warmup else None,
+            cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+        )
+        if not has_warmup and recovery_hours > 0:
+            recovering = _recovery_window(occ, pd.Timedelta(hours=recovery_hours))
+            n_recovery = int(recovering.sum())
+            occ = occ & ~recovering
+        work = work[occ]
+
+    # HVAC off -> the space free-floats; that is not overcooling
+    fan_off = pd.Series(False, index=work.index)
+    if "FanStatus" in work.columns and work["FanStatus"].notna().any():
+        fan_off = work["FanStatus"] <= 0.5
+    elif "FanSpeed" in work.columns and work["FanSpeed"].notna().any():
+        fan_off = work["FanSpeed"] <= 5.0
+    n_fan_off = int(fan_off.sum())
+    work = work[~fan_off]
 
     have_heat = "ActHeatSP" in work.columns
     use_relative = relative_to_deadband and have_heat
@@ -201,16 +264,26 @@ def analyze_overcooling_severity(
     window = pd.Timedelta(minutes=window_min)
     times = work.index.to_numpy()
 
-    overcooled = depth > 0
+    # reheat at/near full open: the space is being heated as hard as the box can -> a heating
+    # shortfall, not overcooling (scored separately, never in the overcooling tiers)
+    reheat_evaluated = "HWValve" in work.columns and work["HWValve"].notna().any()
+    if reheat_evaluated:
+        saturated = (work["HWValve"] >= reheat_saturated_pct).to_numpy(dtype=bool)
+    else:
+        saturated = np.zeros(n, dtype=bool)
+
+    overcooled = (depth > 0) & ~saturated
     median_depth = float(np.median(depth[overcooled])) if overcooled.any() else 0.0
-    max_depth = float(depth.max()) if n else 0.0
+    max_depth = float(depth[~saturated].max()) if (~saturated).any() else 0.0
 
     tier_pct, tier_minutes, tier_sustained = {}, {}, {}
+    shortfall_pct: dict = {}
     severity = "ok"
+    shortfall_severity = "ok"
     iv_min = iv.total_seconds() / 60.0
     for tier in _TIER_ORDER:
         thr = tiers[tier]
-        qualifies = depth >= thr
+        qualifies = (depth >= thr) & ~saturated
         sustained = _sustained_mask(qualifies, times, window, iv, gap_factor)
         cnt = int(sustained.sum())
         tier_sustained[tier] = bool(cnt)
@@ -218,6 +291,11 @@ def analyze_overcooling_severity(
         tier_minutes[tier] = round(cnt * iv_min, 1)
         if cnt:
             severity = tier  # tiers iterate mild -> worst; worst sustained wins
+        short = _sustained_mask((depth >= thr) & saturated, times, window, iv, gap_factor)
+        s_cnt = int(short.sum())
+        shortfall_pct[tier] = round(100.0 * s_cnt / n, 2) if n else 0.0
+        if s_cnt:
+            shortfall_severity = tier
 
     return OvercoolSeverityResult(
         equip=equip,
@@ -233,4 +311,9 @@ def analyze_overcooling_severity(
         severity=severity,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        n_recovery_excluded=n_recovery,
+        n_fan_off_excluded=n_fan_off,
+        reheat_evaluated=bool(reheat_evaluated),
+        shortfall_tier_pct=shortfall_pct if reheat_evaluated else None,
+        shortfall_severity=shortfall_severity,
     )

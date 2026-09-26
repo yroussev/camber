@@ -9,6 +9,13 @@ excursion is *sustained* (see :func:`camber.overcooling_severity`).
 The ``info`` tier is informational only: it is emitted at Finding severity
 ``"info"``, which the triage layer treats as non-actionable, so it never enters the
 ranked/headline fault totals.
+
+Morning recovery from setback is excluded (``WARMUP`` when mapped, else the first
+``recovery_hours`` of each occupied block), and a space below setpoint with its reheat
+valve (``HEAT_VALVE``) saturated is reported as a **heating shortfall**, not overcooling.
+Occupancy: a trended ``OCCUPANCY`` point replaces the ``start_hour``/``end_hour``/
+``occupied_days`` schedule. Samples with the fan trended off (``SUPPLY_FAN_STATUS`` /
+``SUPPLY_FAN_SPEED``) are free-floating, not overcooled, and are excluded.
 """
 
 from __future__ import annotations
@@ -16,7 +23,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
-from ..overcooling_severity import analyze_overcooling_severity
+from ..overcooling_severity import DEFAULT_TIERS, analyze_overcooling_severity
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -25,6 +32,10 @@ _ROLE_TO_COL = {
     Role.HEAT_SP: "ActHeatSP",
     Role.WARMUP: "WarmUp",
     Role.COOLDOWN: "CoolDown",
+    Role.OCCUPANCY: "Occupancy",
+    Role.HEAT_VALVE: "HWValve",
+    Role.SUPPLY_FAN_STATUS: "FanStatus",
+    Role.SUPPLY_FAN_SPEED: "FanSpeed",
 }
 
 
@@ -33,7 +44,15 @@ class OvercoolingSeverity:
 
     name = "overcooling_severity"
     roles_required = (Role.SPACE_TEMP, Role.COOL_SP)
-    roles_optional = (Role.HEAT_SP, Role.WARMUP, Role.COOLDOWN)
+    roles_optional = (
+        Role.HEAT_SP,
+        Role.WARMUP,
+        Role.COOLDOWN,
+        Role.OCCUPANCY,
+        Role.HEAT_VALVE,
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
+    )
 
     def __init__(
         self,
@@ -41,10 +60,20 @@ class OvercoolingSeverity:
         tiers: dict | None = None,
         window_min: float = 60.0,
         relative_to_deadband: bool = True,
+        start_hour: float = 7,
+        end_hour: float = 18,
+        occupied_days=(0, 1, 2, 3, 4),
+        recovery_hours: float = 2.0,
+        reheat_saturated_pct: float = 90.0,
     ):
         self.tiers = tiers
         self.window_min = window_min
         self.relative_to_deadband = relative_to_deadband
+        self.start_hour = start_hour
+        self.end_hour = end_hour
+        self.occupied_days = tuple(occupied_days)
+        self.recovery_hours = recovery_hours
+        self.reheat_saturated_pct = reheat_saturated_pct
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the severity diagnostic on an equipment role-frame; return a Finding."""
@@ -56,6 +85,11 @@ class OvercoolingSeverity:
             tiers=self.tiers,
             window_min=self.window_min,
             relative_to_deadband=self.relative_to_deadband,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            occupied_days=self.occupied_days,
+            recovery_hours=self.recovery_hours,
+            reheat_saturated_pct=self.reheat_saturated_pct,
         )
         if res is None:
             return Finding(
@@ -75,6 +109,27 @@ class OvercoolingSeverity:
             )
             if severity == "fault":
                 severity = "warn"
+        shortfall = res.shortfall_severity
+        short_pct = (res.shortfall_tier_pct or {}).get("warn")
+        if res.reheat_evaluated and shortfall in ("warn", "fault"):
+            caveats.append(
+                f"heating shortfall, not overcooling: {short_pct:.0f}% of occupied samples sat "
+                f">= {(self.tiers or DEFAULT_TIERS)['warn']:g} degF below the reference with "
+                f"the reheat valve >= {self.reheat_saturated_pct:g}% open -- excluded from the "
+                "overcooling tiers (check reheat capacity / hot-water supply)"
+            )
+            if severity == "ok":
+                severity = "info"
+        elif not res.reheat_evaluated and severity in ("warn", "fault"):
+            caveats.append(
+                "no reheat valve: a sub-setpoint space with its reheat at full output (a heating "
+                "shortfall) cannot be told apart from overcooling"
+            )
+        if res.n_recovery_excluded:
+            caveats.append(
+                f"{res.n_recovery_excluded} morning-recovery sample(s) excluded (first "
+                f"{self.recovery_hours:g} h after unoccupied; no WARMUP point mapped)"
+            )
         return Finding(
             rule=self.name,
             equip=equip,
@@ -90,6 +145,10 @@ class OvercoolingSeverity:
                 "info_pct": res.tier_pct.get("info"),
                 "fault_minutes": res.tier_minutes.get("fault"),
                 "n_considered": res.n_considered,
+                "shortfall_severity": shortfall if res.reheat_evaluated else None,
+                "shortfall_warn_pct": short_pct if res.reheat_evaluated else None,
+                "n_recovery_excluded": res.n_recovery_excluded,
+                "n_fan_off_excluded": res.n_fan_off_excluded,
             },
             summary=(
                 f"{equip}: overcooled below {ref} -- max {res.max_depth_f:.1f} degF, "
@@ -97,6 +156,11 @@ class OvercoolingSeverity:
                 f"{res.tier_pct.get('info'):.0f}/{res.tier_pct.get('warn'):.0f}/"
                 f"{res.tier_pct.get('fault'):.0f}% of occupied samples "
                 f"({res.window_min:.0f}-min persistence @ {res.interval_min:.0f}-min data)"
+                + (
+                    f"; heating shortfall (reheat saturated) {short_pct:.0f}% -- not overcooling"
+                    if res.reheat_evaluated and shortfall in ("warn", "fault")
+                    else ""
+                )
             ),
             caveats=caveats,
         )

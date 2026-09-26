@@ -79,11 +79,16 @@ def zone_states(box_frames, *, valve_thr=5.0, flow_margin=1.10):
     return out
 
 
-def time_of_week_profile(states, *, occupied_only=True):
-    """Average heating/cooling/both counts by time-of-week bin (0..167)."""
+def time_of_week_profile(states, *, occupied_only=True, occupied=None):
+    """Average heating/cooling/both counts by time-of-week bin (0..167).
+
+    ``occupied`` (a boolean Series on ``states.index``) overrides the default weekday
+    07-18 window used when ``occupied_only``.
+    """
     s = states
     if occupied_only:
-        s = s[occupied_mask(s.index)]
+        mask = occupied_mask(s.index) if occupied is None else occupied.reindex(s.index)
+        s = s[mask.fillna(False).astype(bool)]
     if s.empty:
         return pd.DataFrame()
     tow = s.index.dayofweek * 24 + s.index.hour

@@ -23,6 +23,7 @@ _ROLE_TO_COL = {
     Role.HEAT_VALVE: "HWValve",
     Role.WARMUP: "WarmUp",
     Role.COOLDOWN: "CoolDown",
+    Role.OCCUPANCY: "Occupancy",
 }
 
 
@@ -39,16 +40,56 @@ class OvercoolingMinFlow:
         Role.HEAT_VALVE,
         Role.WARMUP,
         Role.COOLDOWN,
+        Role.OCCUPANCY,
     )
+
+    def __init__(
+        self,
+        *,
+        start_hour: float = 7,
+        end_hour: float = 18,
+        occupied_days=(0, 1, 2, 3, 4),
+    ):
+        # The schedule is only an assumption: a trended OCCUPANCY point replaces it.
+        self.start_hour = start_hour
+        self.end_hour = end_hour
+        self.occupied_days = tuple(occupied_days)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
-        res = analyze_overcooling(legacy, equip)
+        res = analyze_overcooling(
+            legacy,
+            equip,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            occupied_days=self.occupied_days,
+        )
         if res is None:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
+            )
+        if not res.minflow_evaluable or res.overcool_at_minflow_pct is None:
+            missing = [
+                r.value for r in (Role.AIRFLOW, Role.AIRFLOW_SP) if r not in frame.columns
+            ] or ["airflow/airflow-setpoint overlap"]
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics={
+                    "satisfied_pct": res.satisfied_pct,
+                    "overcool_at_minflow_pct": None,
+                    "overcool_with_reheat_pct": None,
+                    "median_minflow_fraction": None,
+                    "n_considered": res.n_considered,
+                },
+                summary=f"{equip}: overcooling at minimum flow not evaluated",
+                caveats=[
+                    "at-minimum-flow not evaluated: needs measured airflow and its setpoint "
+                    f"(missing: {', '.join(missing)}) -- the box may still overcool at its minimum"
+                ],
             )
         # Severity from overcooling-at-min-flow that co-occurs with reheat (the
         # actionable, wasteful case). Fall back to overcool-at-min-flow ONLY when
@@ -57,6 +98,7 @@ class OvercoolingMinFlow:
         # old ``a or b`` collapsed those two cases, scoring on the broader metric
         # whenever the valve existed but never co-occurred.
         oc = res.overcool_with_reheat_pct if res.has_heat_valve else res.overcool_at_minflow_pct
+        oc = 0.0 if oc is None else oc  # both are set whenever minflow_evaluable
         severity = "fault" if oc >= 15.0 else ("warn" if oc >= 5.0 else "ok")
         # Without a damper column the "at minimum flow" condition can't be CONFIRMED --
         # at_min rests on flow alone, which over-counts. Don't let that broadened,

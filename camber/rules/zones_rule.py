@@ -4,12 +4,18 @@ How many terminal zones heat while others cool, building-wide. A fleet that is
 never free of simultaneous heat/cool during occupancy points at central
 overcooling re-warmed locally. Adapts :func:`camber.zones.zone_states` /
 :func:`camber.zones.time_of_week_profile` to the fleet role-frame interface.
+
+Occupied intervals: when any zone trends ``OCCUPANCY`` the building is occupied whenever
+at least one trended zone is (the points replace the schedule); otherwise the
+``start_hour``/``end_hour``/``occupied_days`` schedule (default weekday 07-18).
 """
 
 from __future__ import annotations
 
+import pandas as pd
+
 from ..model.roles import Role
-from ..schedules import occupied_mask
+from ..schedules import effective_occupied_mask
 from ..zones import time_of_week_profile, zone_states
 from .base import Finding
 
@@ -36,7 +42,35 @@ class ZonesHeatCoolCensus:
         Role.COOL_SP,
         Role.WARMUP,
         Role.COOLDOWN,
+        Role.OCCUPANCY,
     )
+
+    def __init__(
+        self,
+        *,
+        start_hour: float = 7,
+        end_hour: float = 18,
+        occupied_days=(0, 1, 2, 3, 4),
+    ):
+        # The schedule is only an assumption: trended OCCUPANCY points replace it.
+        self.start_hour = start_hour
+        self.end_hour = end_hour
+        self.occupied_days = tuple(occupied_days)
+
+    def _occupied(self, frames: dict, index) -> pd.Series:
+        occ_pts = [
+            f[Role.OCCUPANCY].reindex(index)
+            for f in frames.values()
+            if Role.OCCUPANCY in f.columns and f[Role.OCCUPANCY].notna().any()
+        ]
+        occ = pd.concat(occ_pts, axis=1).max(axis=1) if occ_pts else None
+        return effective_occupied_mask(
+            index,
+            occ=occ,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            days=self.occupied_days,
+        )
 
     def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run the diagnostic across the fleet's role-frames; return one aggregate Finding."""
@@ -56,7 +90,8 @@ class ZonesHeatCoolCensus:
             return Finding(
                 rule=self.name, equip="<fleet>", severity="info", summary="no zone states computed"
             )
-        occ = states[occupied_mask(states.index)]
+        occupied = self._occupied(frames, states.index)
+        occ = states[occupied]
         if occ.empty:
             return Finding(
                 rule=self.name, equip="<fleet>", severity="info", summary="no occupied intervals"
@@ -82,7 +117,7 @@ class ZonesHeatCoolCensus:
             if severity == "ok":
                 severity = "info"
         # keep the time-of-week profile available for charting downstream
-        profile = time_of_week_profile(states, occupied_only=True)
+        profile = time_of_week_profile(states, occupied_only=True, occupied=occupied)
         return Finding(
             rule=self.name,
             equip="<fleet>",

@@ -213,3 +213,83 @@ def test_rule_protocol():
 def test_missing_columns_returns_none():
     df = pd.DataFrame({"SpaceTemp": [70.0]}, index=_idx(1))
     assert analyze_overcooling_severity(df, "VAV") is None
+
+
+# --------------------------------------------------------------------------- #
+# Real-data regressions (0.82.0): recovery and heating shortfall aren't overcooling
+# --------------------------------------------------------------------------- #
+
+
+def _zone(n_days=14, freq="15min"):
+    idx = pd.date_range("2025-01-06", periods=n_days * 24 * (60 // 15), freq=freq)  # Monday
+    return idx, pd.DataFrame(
+        {
+            Role.SPACE_TEMP: np.full(len(idx), 72.0),
+            Role.COOL_SP: np.full(len(idx), 75.0),
+            Role.HEAT_SP: np.full(len(idx), 70.0),
+        },
+        index=idx,
+    )
+
+
+def test_morning_recovery_from_setback_is_not_overcooling():
+    # the space recovers from a 64 F night setback during the first 90 min of occupancy
+    idx, f = _zone()
+    h = idx.hour + idx.minute / 60.0
+    f.loc[(h >= 7) & (h < 8.5), Role.SPACE_TEMP] = 64.0
+    got = OvercoolingSeverity().analyze("VAV", f)
+    assert got.severity == "ok", got.summary
+    assert got.metrics["n_recovery_excluded"] > 0
+    assert any("morning-recovery" in c for c in got.caveats)
+    # a mapped WARMUP flag is used instead of the heuristic window
+    warm = pd.Series(((h >= 6) & (h < 8.5)).astype(float), index=idx)
+    got_w = OvercoolingSeverity().analyze("VAV", f.assign(**{Role.WARMUP: warm}))
+    assert got_w.severity == "ok" and got_w.metrics["n_recovery_excluded"] == 0
+    # without the exclusion (recovery_hours=0) the old verdict -- "fault" -- comes back
+    assert OvercoolingSeverity(recovery_hours=0).analyze("VAV", f).severity == "fault"
+
+
+def test_saturated_reheat_is_a_heating_shortfall_not_overcooling():
+    # real case: zones 5 degF below the heating setpoint all afternoon with the reheat valve at
+    # 95-100 % were labelled "overcooling" -- the box is heating flat out, i.e. under-heated
+    idx, f = _zone()
+    h = idx.hour + idx.minute / 60.0
+    cold = (idx.dayofweek < 5) & (h >= 12) & (h < 17)
+    f.loc[cold, Role.SPACE_TEMP] = 65.0
+    f[Role.HEAT_VALVE] = np.where(cold, 97.0, 20.0)
+    got = OvercoolingSeverity().analyze("VAV", f)
+    assert got.severity == "info", got.summary
+    assert got.metrics["fault_pct"] == 0.0
+    assert got.metrics["shortfall_severity"] == "fault"
+    assert "heating shortfall" in got.summary
+    assert any("heating shortfall, not overcooling" in c for c in got.caveats)
+    # the same excursion with the reheat valve barely open *is* overcooling
+    f[Role.HEAT_VALVE] = 10.0
+    assert OvercoolingSeverity().analyze("VAV", f).severity == "fault"
+    # and with no reheat valve at all it is still scored, but caveated
+    nov = OvercoolingSeverity().analyze("VAV", f.drop(columns=[Role.HEAT_VALVE]))
+    assert nov.severity == "fault" and any("no reheat valve" in c for c in nov.caveats)
+
+
+def test_trended_occupancy_replaces_schedule_for_severity():
+    idx, f = _zone()
+    h = idx.hour + idx.minute / 60.0
+    eve = (h >= 18) & (h < 22)
+    f.loc[eve, Role.SPACE_TEMP] = 65.0
+    assert OvercoolingSeverity().analyze("VAV", f).severity == "ok"
+    occ = pd.Series(((h >= 7) & (h < 22)).astype(float), index=idx)
+    assert OvercoolingSeverity().analyze("VAV", f.assign(**{Role.OCCUPANCY: occ})).severity == (
+        "fault"
+    )
+
+
+def test_space_free_floating_with_the_fan_off_is_not_overcooling():
+    # real case: a holiday shutdown (terminal fan speed 0) let zones drift 6 degF below setpoint
+    idx, f = _zone()
+    off = (idx.day == 8) | (idx.day == 9)
+    f.loc[off, Role.SPACE_TEMP] = 64.0
+    f[Role.SUPPLY_FAN_SPEED] = np.where(off, 0.0, 40.0)
+    got = OvercoolingSeverity().analyze("VAV", f)
+    assert got.severity == "ok" and got.metrics["n_fan_off_excluded"] > 0
+    f[Role.SUPPLY_FAN_SPEED] = 40.0
+    assert OvercoolingSeverity().analyze("VAV", f).severity == "fault"

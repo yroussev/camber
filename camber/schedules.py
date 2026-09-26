@@ -19,6 +19,7 @@ import pandas as pd
 
 __all__ = [
     "occupied_mask",
+    "effective_occupied_mask",
     "day_type",
     "time_of_week_bin",
 ]
@@ -56,6 +57,44 @@ def occupied_mask(
         if flag is not None:
             m = m & ~(flag.reindex(index).fillna(0) > 0.5)
     return m
+
+
+def effective_occupied_mask(
+    index,
+    *,
+    occ=None,
+    start_hour=7,
+    end_hour=18,
+    days=(0, 1, 2, 3, 4),
+    warmup=None,
+    cooldown=None,
+):
+    """Occupied samples, preferring a **trended** occupancy point over the assumed schedule.
+
+    When ``occ`` (a BAS occupied/unoccupied Series with at least one non-null value) is given it
+    *replaces* the ``start_hour``/``end_hour``/``days`` schedule -- it is the building's truth, so a
+    07-22 every-day building is not cut to the default weekday office window. Otherwise the
+    schedule applies (defaults: Mon-Fri 07:00-18:00, a generic assumption). WarmUp/CoolDown flags
+    exclude prep intervals either way.
+    """
+    if occ is not None and pd.Series(occ).notna().any():
+        return occupied_mask(
+            index,
+            start_hour=0,
+            end_hour=24,
+            days=range(7),
+            occ=occ,
+            warmup=warmup,
+            cooldown=cooldown,
+        )
+    return occupied_mask(
+        index,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        days=days,
+        warmup=warmup,
+        cooldown=cooldown,
+    )
 
 
 def day_type(index):

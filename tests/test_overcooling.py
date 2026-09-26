@@ -190,3 +190,55 @@ def test_rule_protocol_and_severity():
     f = rule.analyze("VAV_1", frame)
     assert f.severity == "fault"
     assert f.metrics["overcool_with_reheat_pct"] > 95
+
+
+# ---------------------------------------------------------------- real-data regressions (0.82.0)
+
+
+def test_rule_declines_without_airflow_setpoint():
+    # repro: SPACE_TEMP 69 under a 75 cooling SP, AIRFLOW 300, reheat 60 %, no AIRFLOW_SP -- "at
+    # minimum flow" was all-False, so the rule reported ok at 0 % with a misleading caveat
+    n = 24 * 14
+    idx = _idx(n)
+    frame = pd.DataFrame(
+        {
+            Role.SPACE_TEMP: np.full(n, 69.0),
+            Role.COOL_SP: np.full(n, 75.0),
+            Role.AIRFLOW: np.full(n, 300.0),
+            Role.HEAT_VALVE: np.full(n, 60.0),
+        },
+        index=idx,
+    )
+    f = OvercoolingMinFlow().analyze("VAV", frame)
+    assert f.severity == "info"
+    assert f.metrics["overcool_at_minflow_pct"] is None
+    assert f.metrics["overcool_with_reheat_pct"] is None
+    assert any("airflow_sp" in c for c in f.caveats)
+    r = analyze_overcooling(
+        frame.rename(columns={Role.SPACE_TEMP: "SpaceTemp", Role.COOL_SP: "ActCoolSP"}), "VAV"
+    )
+    assert r.minflow_evaluable is False and r.overcool_at_minflow_pct is None
+
+
+def test_trended_occupancy_replaces_the_weekday_schedule():
+    # overcooling only on weekend evenings, when a 07-22 every-day building is occupied
+    n = 24 * 14
+    idx = _idx(n)
+    occ = ((idx.hour >= 7) & (idx.hour < 22)).astype(float)
+    weekend_eve = (idx.dayofweek >= 5) & (idx.hour >= 18) & (idx.hour < 22)
+    frame = pd.DataFrame(
+        {
+            Role.SPACE_TEMP: np.where(weekend_eve, 69.0, 76.0),
+            Role.COOL_SP: np.full(n, 75.0),
+            Role.AIRFLOW: np.full(n, 300.0),
+            Role.AIRFLOW_SP: np.full(n, 300.0),
+            Role.DAMPER: np.full(n, 20.0),
+            Role.HEAT_VALVE: np.full(n, 60.0),
+        },
+        index=idx,
+    )
+    assert OvercoolingMinFlow().analyze("VAV", frame).metrics["overcool_at_minflow_pct"] == 0.0
+    f = OvercoolingMinFlow().analyze("VAV", frame.assign(**{Role.OCCUPANCY: occ}))
+    assert f.metrics["overcool_at_minflow_pct"] > 5
+    cfg = OvercoolingMinFlow(start_hour=7, end_hour=22, occupied_days=range(7))
+    assert cfg.analyze("VAV", frame).metrics["overcool_at_minflow_pct"] > 5

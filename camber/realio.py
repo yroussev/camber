@@ -48,16 +48,53 @@ def load_point(path: str, name: str | None = None) -> pd.Series:
     return s[~s.index.duplicated(keep="first")].sort_index()
 
 
-def load_status(path: str, name: str | None = None, resample: str | None = None) -> pd.Series:
+def _duty_resample(s: pd.Series, rule: str) -> pd.Series:
+    """Time-weighted mean of a 0/1 *step* series per ``rule`` bin: the fraction of each bin "on".
+
+    Each event value holds until the next event, so the bin value is the on-time inside the bin
+    divided by the bin length -- the duty. It is independent of the bin size in aggregate (the
+    mean of hourly duties equals the mean of 1-minute duties), unlike a per-bin ``max`` ("on if on
+    at all"), which inflates a cycling fan toward 100 % as bins grow. Time after the last event is
+    not extrapolated beyond the end of the bin that holds it.
+    """
+    s = s.dropna()
+    if s.empty:
+        return s
+    bins = pd.date_range(s.index[0].floor(rule), s.index[-1].floor(rule), freq=rule)
+    edges = bins.append(pd.DatetimeIndex([bins[-1] + pd.tseries.frequencies.to_offset(rule)]))
+    # the step value at every bin edge and every event, in time order
+    grid = s.index.union(edges)
+    val = s.reindex(grid).ffill()
+    dur = pd.Series(grid[1:] - grid[:-1], index=grid[:-1]).dt.total_seconds()
+    on = (val.iloc[:-1] * dur).groupby(grid[:-1].floor(rule)).sum(min_count=1)
+    tot = dur.where(val.iloc[:-1].notna()).groupby(grid[:-1].floor(rule)).sum(min_count=1)
+    out = (on / tot).reindex(bins)
+    out.name = s.name
+    return out
+
+
+def load_status(
+    path: str, name: str | None = None, resample: str | None = None, *, how: str = "duty"
+) -> pd.Series:
     """Load a text/event-based status or command point as a 0/1 step series.
 
     BAS status (``Off``/``Running``) and command (``STOP``/``START``) points are
     logged only at state *changes* on an irregular clock, and carry text values, so
     :func:`load_point` (numeric coerce) yields all-NaN. This maps the on/off vocab
     to 1.0/0.0 and forward-fills the last state, so the series can be sampled on any
-    grid. ``resample`` (offset alias) downsamples with the max (on if on at all in
-    the interval); None keeps the raw step series.
+    grid. None ``resample`` keeps the raw step series.
+
+    ``resample`` (offset alias) downsamples to the grid:
+
+    * ``how="duty"`` (default) -- the time-weighted fraction of each bin the point was on
+      (0..1). Duty-preserving: a fan cycling 20 minutes of every hour reads 0.33 at any bin
+      size, so a runtime rule's verdict does not depend on the resample interval.
+    * ``how="any"`` -- the per-bin max, 1.0 if on at *any* moment of the bin. Only for a
+      rule that genuinely needs "did it run at all in this interval"; it inflates duty as
+      bins grow (hourly bins read a fan cycling 20 min/h as on 100 %).
     """
+    if how not in ("duty", "any"):
+        raise ValueError(f"how must be 'duty' or 'any', got {how!r}")
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
     idx = _parse_ts(df[ts_col])
@@ -66,10 +103,12 @@ def load_status(path: str, name: str | None = None, resample: str | None = None)
     s = s[~s.index.duplicated(keep="last")].sort_index().ffill()
     s.name = name or os.path.basename(path)[:-4]
     if resample:
-        # max(): on if on at any point in the interval. ffill(): carry the last
-        # known state across bins that contain no state-change event (the series is
-        # event-logged, so most bins are empty).
-        s = s.resample(resample).max().ffill()
+        if how == "any":
+            # max(): on if on at any point in the interval. ffill(): carry the last known state
+            # across bins that contain no state-change event (the series is event-logged).
+            s = s.resample(resample).max().ffill()
+        else:
+            s = _duty_resample(s, resample)
     return s
 
 

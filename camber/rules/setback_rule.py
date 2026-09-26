@@ -16,6 +16,7 @@ from .base import Finding
 _ROLE_TO_COL = {
     Role.SUPPLY_FAN_STATUS: "SupplyFanStatus",
     Role.SUPPLY_FAN_SPEED: "SupplyFanSpeed",
+    Role.OCCUPANCY: "Occupancy",
 }
 
 
@@ -27,7 +28,19 @@ class NightWeekendSetback:
     # status preferred; speed is an acceptable substitute, so require neither
     # specifically -- gate on the pair via a custom check below.
     roles_required = ()
-    roles_optional = (Role.SUPPLY_FAN_STATUS, Role.SUPPLY_FAN_SPEED)
+    roles_optional = (Role.SUPPLY_FAN_STATUS, Role.SUPPLY_FAN_SPEED, Role.OCCUPANCY)
+
+    def __init__(
+        self,
+        *,
+        start_hour: float = 7,
+        end_hour: float = 18,
+        occupied_days=(0, 1, 2, 3, 4),
+    ):
+        # The schedule is only an assumption: a trended OCCUPANCY point replaces it.
+        self.start_hour = start_hour
+        self.end_hour = end_hour
+        self.occupied_days = tuple(occupied_days)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -40,7 +53,13 @@ class NightWeekendSetback:
             )
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
-        res = analyze_setback(legacy, equip)
+        res = analyze_setback(
+            legacy,
+            equip,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            occupied_days=self.occupied_days,
+        )
         if res is None:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
@@ -63,6 +82,12 @@ class NightWeekendSetback:
                 "setback_effective": res.setback_effective,
                 "n_unoccupied": res.n_unoccupied,
             },
+            caveats=[]
+            if Role.OCCUPANCY in frame.columns
+            else [
+                f"no trended occupancy: unoccupied = outside the assumed schedule "
+                f"({self.start_hour:g}-{self.end_hour:g}h, days {list(self.occupied_days)})"
+            ],
             summary=(
                 f"{equip}: supply fan runs {res.fan_run_unoccupied_pct:.0f}% of "
                 f"unoccupied hours (vs {res.fan_run_occupied_pct:.0f}% occupied); "

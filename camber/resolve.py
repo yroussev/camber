@@ -67,6 +67,11 @@ class EquipRef:
 TERMINAL_CLASSES: tuple = ("VAV", "CAV", "FCAV")
 
 
+# Status roles resampled "on if on at any moment of the bin" rather than by duty: prep-mode flags
+# that *exclude* samples, where a bin partly in warm-up/cool-down should be excluded whole.
+_ANY_ON_ROLES = frozenset({Role.WARMUP, Role.COOLDOWN})
+
+
 def _as_folders(folder) -> list:
     """Normalize a folder argument (str or iterable of str) to a list of folders."""
     if isinstance(folder, (str, os.PathLike)):
@@ -143,7 +148,9 @@ def resolve(
     Only roles whose tokens exist for this equipment appear as columns (callers
     request a superset freely). Columns are :class:`Role` enum members. Roles in
     :data:`STATUS_ROLES` (text/event status & command points) are loaded via
-    ``load_status`` (text -> 0/1 step series); the rest via the numeric loader.
+    ``load_status`` (text -> 0/1 step series, resampled to the time-weighted *duty* of each bin
+    so runtime verdicts don't depend on the resample interval; the WARMUP/COOLDOWN exclusion
+    flags keep "on at any moment of the bin"); the rest via the numeric loader.
 
     ``equip_ref`` may carry ``extra_tokens`` (see :class:`EquipRef`) to pull in
     points that live under a *different* equipment token in the same folder -- e.g.
@@ -162,7 +169,10 @@ def resolve(
                 if not path:
                     continue
                 if role in STATUS_ROLES:
-                    cols[role] = realio.load_status(path, name=role, resample=resample)
+                    # duty-preserving (time-weighted) bins, except the prep-mode *exclusion*
+                    # flags, where a bin touched by warm-up/cool-down at all is excluded
+                    how = "any" if role in _ANY_ON_ROLES else "duty"
+                    cols[role] = realio.load_status(path, name=role, resample=resample, how=how)
                 else:
                     s = realio.load_point(path, name=role)
                     cols[role] = s.resample(resample).mean() if resample else s

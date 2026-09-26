@@ -16,6 +16,19 @@ compute several complementary indicators (per the user's "all of them" choice):
 
 Each indicator returns the % of (optionally occupied) intervals that trip it,
 plus magnitude stats, so findings are quantitative and rankable across boxes.
+
+**Which air temperature is "cold supply"?** Indicator 1 needs the box's *entering*
+primary air -- the cold AHU supply feeding the box, upstream of its reheat coil. Pass it
+as ``PrimaryAir`` (the role layer maps a terminal's ``MIXED_AIR_TEMP`` here -- the same
+convention :mod:`camber.rules.vav_reheat_valve_rule` uses). ``SupplyAir`` is the legacy
+column: whatever the caller trended at the box, and at a terminal that is usually the
+box's own *discharge* air, downstream of the reheat coil. Reheat warms discharge air, so
+"discharge < 60 F with the valve open" is only a **lower bound** on simultaneous
+heat/cool (it implies cold primary air, but warm discharge does not rule it out);
+``coldsupply_basis`` records which column was used so the caller can caveat it.
+
+Occupied = a trended ``Occupancy`` column when present (it replaces the schedule), else
+the ``start_hour``/``end_hour``/``occupied_days`` schedule (default weekday 07-18).
 """
 
 from __future__ import annotations
@@ -24,7 +37,7 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
-from .schedules import occupied_mask
+from .schedules import effective_occupied_mask
 
 __all__ = [
     "BOX_MEASURES",
@@ -37,6 +50,7 @@ BOX_MEASURES = [
     "HWValve",
     "SpaceTemp",
     "SupplyAir",
+    "PrimaryAir",
     "ActHeatSP",
     "ActCoolSP",
     "ActFlow",
@@ -44,6 +58,7 @@ BOX_MEASURES = [
     "Damper",
     "WarmUp",
     "CoolDown",
+    "Occupancy",
 ]
 
 
@@ -62,6 +77,9 @@ class ReheatResult:
     mean_valve_when_open: float
     coverage_start: str
     coverage_end: str
+    # which column indicator 1 used: "primary" (entering primary air), "supply" (the legacy
+    # SupplyAir column -- at a terminal usually the discharge, a lower bound), or None (neither)
+    coldsupply_basis: str | None = None
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -90,6 +108,9 @@ def analyze_box(
     cold_supply_f: float = 60.0,
     cooling_cutoff_f: float = 65.0,
     occupied_only: bool = True,
+    start_hour: float = 7,
+    end_hour: float = 18,
+    occupied_days=(0, 1, 2, 3, 4),
 ) -> ReheatResult | None:
     """Compute reheat indicators for one terminal box.
 
@@ -103,12 +124,16 @@ def analyze_box(
     if n_all == 0:
         return None
 
-    # Occupied = weekday daytime window minus WarmUp/CoolDown prep modes, via the
-    # single shared occupancy filter (schedules.occupied_mask).
+    # Occupied = a trended Occupancy point (replaces the schedule) else the configured schedule,
+    # minus WarmUp/CoolDown prep modes (schedules.effective_occupied_mask).
     if occupied_only:
         work = work[
-            occupied_mask(
+            effective_occupied_mask(
                 work.index,
+                occ=work["Occupancy"] if "Occupancy" in work.columns else None,
+                start_hour=start_hour,
+                end_hour=end_hour,
+                days=occupied_days,
                 warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
                 cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
             )
@@ -120,10 +145,14 @@ def analyze_box(
     v = work["HWValve"]
     valve_open = v > valve_thr
 
-    # 1. reheat + cold supply air
-    if "SupplyAir" in work.columns:
-        cold = work["SupplyAir"] < cold_supply_f
-        rc = valve_open & cold
+    # 1. reheat + cold supply air -- the entering primary air when known, else the legacy
+    #    SupplyAir column (at a terminal usually the discharge: a lower bound, see module doc)
+    basis = None
+    for col, name in (("PrimaryAir", "primary"), ("SupplyAir", "supply")):
+        if col in work.columns and work[col].notna().any():
+            rc = valve_open & (work[col] < cold_supply_f)
+            basis = name
+            break
     else:
         rc = pd.Series(False, index=work.index)
 
@@ -175,4 +204,5 @@ def analyze_box(
         mean_valve_when_open=round(float(v[valve_open].mean()), 1) if valve_open.any() else 0.0,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        coldsupply_basis=basis,
     )

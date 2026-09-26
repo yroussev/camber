@@ -15,6 +15,13 @@ optionally co-occurring with reheat (HWValve open), which is the wasteful respon
 Headline metric: fraction of occupied hours the box overcools at min flow. When
 that is high AND it overlaps with reheat, the box's minimum airflow is a primary
 re-tuning target (lower the min flow / fix the flow station).
+
+The "at minimum flow" test needs both the measured airflow (``ActFlow``) and its
+setpoint (``ActFlowSP``). Without them it cannot be evaluated, so the overcooling
+percentages come back ``None`` (``minflow_evaluable=False``) -- never a 0 % that
+would read as "no overcooling". Occupied = a trended ``Occupancy`` column when
+present (it replaces the schedule), else the ``start_hour``/``end_hour``/
+``occupied_days`` schedule (default weekday 07-18).
 """
 
 from __future__ import annotations
@@ -23,7 +30,7 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
-from .schedules import occupied_mask
+from .schedules import effective_occupied_mask
 
 __all__ = [
     "OVERCOOL_MEASURES",
@@ -41,6 +48,7 @@ OVERCOOL_MEASURES = [
     "HWValve",
     "WarmUp",
     "CoolDown",
+    "Occupancy",
 ]
 
 
@@ -51,13 +59,15 @@ class OvercoolResult:
     equip: str
     n_considered: int
     satisfied_pct: float  # % occupied hrs zone at/below cooling setpoint
-    overcool_at_minflow_pct: float  # satisfied AND airflow near min
-    overcool_with_reheat_pct: float  # the above AND reheat valve open
+    overcool_at_minflow_pct: float | None  # satisfied AND airflow near min (None: not evaluable)
+    overcool_with_reheat_pct: float | None  # the above AND reheat valve open (None: not evaluable)
     median_minflow_fraction: float  # median ActFlowSP / max ActFlow (how high is "min"?)
     has_heat_valve: bool  # whether a HEAT_VALVE (HWValve) column was present
     damper_present: bool  # whether a DAMPER column confirmed the at-min test (else flow-only)
     coverage_start: str
     coverage_end: str
+    # False when airflow and/or its setpoint are missing: "at minimum flow" was not tested
+    minflow_evaluable: bool = True
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -77,6 +87,9 @@ def analyze_overcooling(
     damper_low: float = 30.0,  # damper at/below this can't reduce flow further
     satisfied_deadband_f: float = 0.0,  # require SpaceTemp <= ActCoolSP - deadband
     occupied_only: bool = True,
+    start_hour: float = 7,
+    end_hour: float = 18,
+    occupied_days=(0, 1, 2, 3, 4),
 ) -> OvercoolResult | None:
     """Detect overcooling-at-minimum-flow for one terminal box.
 
@@ -103,8 +116,12 @@ def analyze_overcooling(
     work = df.copy()
     if occupied_only:
         work = work[
-            occupied_mask(
+            effective_occupied_mask(
                 work.index,
+                occ=work["Occupancy"] if "Occupancy" in work.columns else None,
+                start_hour=start_hour,
+                end_hour=end_hour,
+                days=occupied_days,
                 warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
                 cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
             )
@@ -116,8 +133,14 @@ def analyze_overcooling(
 
     satisfied = work["SpaceTemp"] <= work["ActCoolSP"] - satisfied_deadband_f
 
-    # airflow pinned near its minimum setpoint
-    if "ActFlow" in work.columns and "ActFlowSP" in work.columns:
+    # airflow pinned near its minimum setpoint -- untestable without both columns (an all-False
+    # at_min would read as a confident "never overcools at min flow")
+    minflow_evaluable = (
+        "ActFlow" in work.columns
+        and "ActFlowSP" in work.columns
+        and bool((work["ActFlow"].notna() & work["ActFlowSP"].notna()).any())
+    )
+    if minflow_evaluable:
         at_min = work["ActFlow"] <= work["ActFlowSP"] * (1.0 + flow_tol)
     else:
         at_min = pd.Series(False, index=work.index)
@@ -148,8 +171,8 @@ def analyze_overcooling(
         equip=equip,
         n_considered=n,
         satisfied_pct=_pct(satisfied, n),
-        overcool_at_minflow_pct=_pct(overcool, n),
-        overcool_with_reheat_pct=_pct(with_reheat, n),
+        overcool_at_minflow_pct=_pct(overcool, n) if minflow_evaluable else None,
+        overcool_with_reheat_pct=_pct(with_reheat, n) if minflow_evaluable else None,
         median_minflow_fraction=round(minflow_frac, 3)
         if minflow_frac == minflow_frac
         else float("nan"),
@@ -157,4 +180,5 @@ def analyze_overcooling(
         damper_present=damper_present,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        minflow_evaluable=minflow_evaluable,
     )

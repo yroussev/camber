@@ -89,6 +89,23 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   night/weekend setback, duct-static, zone census, and **unmet-setpoint hours** (`unmet_setpoint_hours`
   — occupied space temp outside the heating/cooling band, the operator-facing comfort/capacity
   metric). Per-rule flags (e.g. `threshold`, `min_oa_pct`, `occupied_only`, `tol_F`).
+  - *Occupancy.* The schedule-based rules (`night_weekend_setback`, `overcooling_min_flow`,
+    `overcooling_severity`, `reheat_penalty`, `zones_heat_cool_census`, the DCV rules) take a
+    trended `OCCUPANCY` point as the truth — it *replaces* the schedule — and otherwise use
+    `start_hour` / `end_hour` / `occupied_days` (default Mon–Fri 07–18, a generic office
+    assumption; `camber.schedules.effective_occupied_mask`).
+  - *Terminal air temperatures.* At a VAV/CAV box `SUPPLY_AIR_TEMP` is the box **discharge**
+    (downstream of its reheat coil) and the **entering primary air** is mapped to
+    `MIXED_AIR_TEMP`. `reheat_penalty` judges "reheat into cold supply" on the entering air; with
+    only the discharge mapped the count is a lower bound (reheat warms it), so it is caveated and
+    never reported as a confident ok.
+  - *Not overcooling.* `overcooling_severity` excludes morning recovery (`WARMUP`, else the first
+    `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
+    setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**.
+    `overcooling_min_flow` declines without `AIRFLOW` + `AIRFLOW_SP` (it can't test "at minimum").
+  - *Status duty.* Event-logged status points are resampled to their time-weighted duty
+    (`camber.realio.load_status(how="duty")`), so a runtime verdict such as setback does not change
+    with the resample interval; `how="any"` keeps the old "on at any moment" bins.
 - **Central plant & hydronic** — chiller kW/ton efficiency, chiller staging + multi-chiller fleet
   over-staging, cooling-tower approach, condenser-water reset, CHW/HW pump (riding-curve + VFD-min),
   CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets
