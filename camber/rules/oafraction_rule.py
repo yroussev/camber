@@ -149,6 +149,12 @@ class OutdoorAirFraction:
                 "min_oa_pct": res.min_oa_pct,
                 "n_cooling": res.n_cooling,
                 "n_valid": res.n_valid,
+                # which way it failed, for the recommendation: the worse of the two reads
+                "failure_mode": (
+                    "under_ventilation"
+                    if order[sev_under] > order[sev_excess]
+                    else ("excess_oa" if sev_excess != "ok" else None)
+                ),
                 "min_oa_pct_by_month": res.min_oa_by_month,
                 "fan_gate": fan_src,
                 "occupancy": "trended" if occ is not None and occ.notna().any() else "assumed",

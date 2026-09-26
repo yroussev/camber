@@ -111,21 +111,98 @@ def _rec_sat_reset(f, frame, P):
     )
 
 
+def _oa_failure_mode(f) -> str:
+    """Which way an outside-air finding failed: ``under_ventilation``, ``excess_oa`` or
+    ``missed_free_cooling``. Read from the finding's ``failure_mode`` metric when the rule records
+    one, else inferred from its metrics (older findings)."""
+    m = getattr(f, "metrics", None) or {}
+    mode = m.get("failure_mode")
+    if mode:
+        return str(mode)
+    rule = getattr(f, "rule", "")
+    if rule == "free_cooling_missed":
+        return "missed_free_cooling"
+    if rule == "outdoor_air_fraction":
+        med, mn = m.get("oaf_median_pct"), m.get("min_oa_pct")
+        if isinstance(med, (int, float)) and isinstance(mn, (int, float)) and med < mn - 5.0:
+            return "under_ventilation"
+    return "excess_oa"
+
+
 def _rec_economizer(f, frame, P):
+    """Economizer / outside-air advice that follows the finding's failure mode."""
+    mode = _oa_failure_mode(f)
+    m = getattr(f, "metrics", None) or {}
+    if mode == "under_ventilation":
+        mn = m.get("min_oa_pct")
+        med = m.get("oaf_median_pct")
+        seen = (
+            f" (median OA fraction {med:.0f}% vs a {mn:.0f}% minimum)"
+            if isinstance(med, (int, float)) and isinstance(mn, (int, float))
+            else ""
+        )
+        return _rec(
+            f,
+            title="Restore minimum outside air",
+            action=(
+                "Outside air is below the ventilation minimum"
+                + seen
+                + ". Check the minimum-OA damper position and its actuator and linkage (does it "
+                "travel to the commanded minimum?), verify the minimum-OA setpoint against the "
+                "design ventilation rate, and confirm the outdoor airflow (measure it, or check "
+                "the OA flow station) before changing any logic."
+            ),
+            parameter="Minimum OA damper position / min-OA setpoint",
+            suggested=(
+                f"OA fraction at or above the design minimum (~{mn:.0f}%)"
+                if isinstance(mn, (int, float))
+                else "OA fraction at or above the design minimum"
+            ),
+            expected_effect="Restores code ventilation and IAQ; may raise conditioning load.",
+            confidence="medium",
+            standard="ASHRAE 62.1 (minimum outdoor air) / G36 §5.16.4 (minimum OA control)",
+            caveats=[
+                "A stuck or disconnected damper is a mechanical repair, not a setpoint change.",
+                "The temperature-balance OA fraction is noisy when outdoor and return air are "
+                "within a few °F; confirm with a flow measurement.",
+            ],
+        )
+    hl = m.get("high_limit_f")
+    hl = float(hl) if isinstance(hl, (int, float)) else float(P["econ_high_limit_F"])
+    if mode == "missed_free_cooling":
+        return _rec(
+            f,
+            title="Enable economizer free cooling",
+            action=(
+                f"Mechanical cooling ran while outdoor air was below the ~{hl:g}°F high limit. "
+                "Check the economizer enable logic and high-limit setting, then verify the OA "
+                "damper modulates open when free cooling is available."
+            ),
+            parameter="Economizer enable / high limit",
+            suggested=f"economize below ~{hl:g}°F OAT",
+            expected_effect="Recovers free cooling in mild weather.",
+            confidence="medium",
+            standard="ASHRAE G36 §5.16.2 (economizer)",
+            caveats=["Confirm damper/actuator mechanically travels before changing logic."],
+        )
     return _rec(
         f,
-        title="Repair / enable the economizer",
+        title="Lock out the economizer above the high limit",
         action=(
-            f"Verify the OA dry-bulb high limit (~{P['econ_high_limit_F']:g}°F), free-"
-            f"cooling enable, and damper travel; hold minimum OA ≈{P['min_oa_frac']:.0%} "
-            "when the economizer is locked out."
+            f"Excess outside air is admitted when it is hot. Verify the OA dry-bulb high limit "
+            f"(~{hl:g}°F, or differential against return air) actually locks the economizer out, "
+            f"and that the damper returns to minimum OA (≈{P['min_oa_frac']:.0%} unless the "
+            "design minimum is known) when it does."
         ),
         parameter="Economizer high limit + min OA damper",
-        suggested=f"high limit ~{P['econ_high_limit_F']:g}°F, min OA ~{P['min_oa_frac']:.0%}",
-        expected_effect="Recovers free cooling in mild weather; stops over-ventilation when hot.",
+        suggested=f"lockout above ~{hl:g}°F, damper to design minimum",
+        expected_effect="Stops cooling hot outdoor air that did not need to be brought in.",
         confidence="medium",
-        standard="ASHRAE G36 §5.1.7 (economizer) / 62.1 (min OA)",
-        caveats=["Confirm damper/actuator mechanically travels before changing logic."],
+        standard="ASHRAE G36 §5.16.2.3 (high-limit lockout) / 90.1 §6.5.1.1.3",
+        caveats=[
+            "Confirm damper/actuator mechanically travels before changing logic.",
+            "A high-outside-air design can legitimately sit well open at its minimum.",
+        ],
     )
 
 
