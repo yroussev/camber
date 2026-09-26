@@ -466,14 +466,14 @@ def _widen(frac_unc: float, k: float | None, pol: ExtrapolationPolicy, *, towt=F
             "design to measure it against"
         )
     if not pol.widen_fsu:
-        return frac_unc, f"FSU not widened (policy widen_fsu=False); the factor would be x{k:.2f}"
+        return frac_unc, f"FSU not widened (policy widen_fsu=False); the factor would be x{k:.3f}"
     if k <= 1.0:
         return frac_unc, (
-            f"FSU not widened (factor x{k:.2f}): the extrapolated points sit where clamping them "
+            f"FSU not widened (factor x{k:.3f}): the extrapolated points sit where clamping them "
             "into the support leaves the projection's parameter variance unchanged (a flat segment)"
         )
     return frac_unc * k, (
-        f"FSU widened x{k:.2f} for extrapolation: the parameter variance of the projected total at "
+        f"FSU widened x{k:.3f} for extrapolation: the parameter variance of the projected total at "
         "the reporting drivers vs at the drivers clamped into the baseline support (conditional on "
         "the fitted change points)"
     )

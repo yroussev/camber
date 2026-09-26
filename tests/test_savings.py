@@ -23,6 +23,7 @@ def _close_figs():
 
 
 from camber.charts.savings import cumulative_savings, savings_chart  # noqa: E402
+from camber.mandv.coverage import ExtrapolationPolicy  # noqa: E402
 from camber.mandv.models import best_model  # noqa: E402
 from camber.mandv.stats import SavingsResult, fit_stats  # noqa: E402
 
@@ -86,3 +87,53 @@ def test_savings_chart_accepts_plain_array_report():
     yr = model.predict(Tr) * 0.9  # a numpy array, no index
     ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
     assert res.avoided_energy > 0 and ax.get_lines()
+
+
+# --- coverage states (issue #20) ------------------------------------------------------------------
+
+
+def test_in_range_chart_has_no_rug_and_no_suffix():
+    model, cv, rng = _baseline()
+    Tr, yr = _report(model, rng, 0.85)
+    ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
+    assert res.coverage["tier"] == "in_range"
+    assert "extrapolated" not in ax.get_title()
+    assert not [ln for ln in ax.get_lines() if ln.get_label() == "outside baseline range"]
+
+
+def test_moderate_chart_suffixes_the_title_and_rugs_the_outside_points():
+    model, cv, rng = _baseline()
+    n = 120
+    idx = pd.date_range("2025-01-01", periods=n, freq="D")
+    Tr = np.r_[rng.uniform(25, 85, n - 10), np.linspace(96, 99, 10)]
+    yr = pd.Series(model.predict(Tr) * 0.85, index=idx)
+    ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
+    assert res.coverage["tier"] == "moderate" and not res.declined
+    assert "extrapolated" in ax.get_title()
+    rug = [ln for ln in ax.get_lines() if ln.get_label() == "outside baseline range"]
+    assert len(rug) == 1 and len(rug[0].get_xdata()) == res.coverage["n_outside"]
+
+
+def test_declined_chart_draws_no_saving_and_no_band():
+    model, cv, rng = _baseline()
+    idx = pd.date_range("2025-06-01", periods=90, freq="D")
+    Tr = rng.uniform(95, 130, 90)  # far beyond a 20-90 F baseline
+    yr = pd.Series(model.predict(Tr) * 0.9, index=idx)
+    ax, res = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
+    assert res.declined and res.avoided_energy is None
+    assert "declined" in ax.get_title()
+    labels = [ln.get_label() for ln in ax.get_lines()]
+    assert "extrapolated — not a saving" in labels and "actual" in labels
+    assert not ax.collections  # no avoided/excess shading, no uncertainty band
+    # opting out draws the ordinary chart (with the moderate/severe suffix)
+    ax2, res2 = savings_chart(
+        model,
+        Tr,
+        yr,
+        n_baseline=200,
+        p_baseline=2,
+        cv_rmse=cv,
+        extrapolation=ExtrapolationPolicy(decline=False),
+        ax=plt.subplots()[1],
+    )
+    assert res2.avoided_energy is not None and "extrapolated" in ax2.get_title()
