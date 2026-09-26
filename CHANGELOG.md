@@ -61,6 +61,18 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   model's support graded against the baseline drivers; the uncertainty is the reporting model's
   (G14 kernel by default, exact optional). Returns a `MethodResult` labelled
   `method="backcast"`, `basis="baseline-period conditions"`.
+- **Multi-step non-routine event detection** (provisional), `nonroutine.detect_step_changes`
+  (also exported from `camber.mandv`): PELT (Killick, Fearnhead & Eckley 2012) with a Gaussian
+  mean-change cost on the weather-model residuals, the variance inflated for serial correlation
+  (`sigma^2 * kappa`), an mBIC-style penalty of `3 ln n` per step, `min_segment_days=28` and
+  `max_steps`, after Touzani et al. (*Energy & Buildings* 185, 2019). The weather model is refitted
+  with one level indicator per segment so a step is not absorbed into the slope, and detection
+  repeats until the step set is stable (at most three refinement rounds). Each step reports its
+  size and a rho-inflated standard error. On synthetic AR(1) sites it places two planted steps to
+  the day and flagged none of 50 step-free runs at rho = 0, 0.4 or 0.8.
+- `detect_step_change` takes a keyword-only `autocorrelation=True` that divides its statistic by
+  `sqrt(kappa)` (recommended: at rho = 0.8 the uncorrected statistic fired on most step-free
+  runs). The default is unchanged, so existing results do not move.
 - **An exact uncertainty kernel**, `kernel="exact"` on `avoided_energy_savings`,
   `normalized_savings`, `isolation_savings` and `isolation_normalized_savings` (default `"g14"`,
   unchanged): the OLS projection variance `kappa*s2*(g'Ag + m)` of the fitted model at the

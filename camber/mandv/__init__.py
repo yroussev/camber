@@ -1,7 +1,14 @@
 """Measurement & verification: change-point models, TOWT, statistics, weather, resampling."""
 
 from .caltrack import NMECResult, caltrack_savings
-from .nonroutine import NonRoutineResult, StepChangeResult, detect_non_routine, detect_step_change
+from .nonroutine import (
+    NonRoutineResult,
+    StepChangeResult,
+    StepChangesResult,
+    detect_non_routine,
+    detect_step_change,
+    detect_step_changes,
+)
 from .normalized import NormalizedSavings, normalized_annual_consumption, normalized_savings
 from .rc_model import (
     Calibration,
@@ -26,6 +33,8 @@ __all__ = [
     "NonRoutineResult",
     "detect_step_change",
     "StepChangeResult",
+    "detect_step_changes",
+    "StepChangesResult",
     "normalized_annual_consumption",
     "normalized_savings",
     "NormalizedSavings",

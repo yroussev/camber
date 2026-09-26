@@ -24,7 +24,7 @@ This module provides two complementary detectors:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -106,10 +106,11 @@ class StepChangeResult:
     n_days: int
     model_kind: str
     mask: pd.Series  # True on/after the step (the non-routine segment)
+    rho: float | None = None  # residual lag-1 autocorrelation, when autocorrelation=True
 
     def as_dict(self) -> dict:
-        """Return the summary (excluding the mask) as a plain dict."""
-        return {
+        """Return the summary (excluding the mask) as a plain dict; ``rho`` only when set."""
+        d = {
             "detected": self.detected,
             "date": None if self.date is None else str(self.date.date()),
             "delta": self.delta,
@@ -121,6 +122,9 @@ class StepChangeResult:
             "n_days": self.n_days,
             "model_kind": self.model_kind,
         }
+        if self.rho is not None:
+            d["rho"] = self.rho
+        return d
 
 
 def detect_step_change(
@@ -130,6 +134,7 @@ def detect_step_change(
     rate_is_energy_rate: bool = False,
     z: float = 3.5,
     min_segment_days: int = 14,
+    autocorrelation: bool = False,
 ) -> StepChangeResult:
     """Detect a sustained level shift in the daily weather-baseline residuals.
 
@@ -149,8 +154,14 @@ def detect_step_change(
     not register here. ``mask`` flags the post-step segment, ready to exclude or
     re-baseline like a point-wise non-routine flag.
 
-    This is single-step binary segmentation; repeated steps can be found by
-    re-running on each segment (a documented future refinement).
+    This is single-step; :func:`detect_step_changes` finds several steps at once.
+
+    ``autocorrelation=True`` (recommended; off by default so existing results do not move)
+    divides the statistic by ``sqrt(kappa)``, ``kappa = (1+rho)/(1-rho)`` with ``rho`` the lag-1
+    autocorrelation of the residuals: serially correlated residuals make a segment mean far less
+    certain than independent ones, and daily whole-building residuals routinely have rho around
+    0.6 (the BDG2 median), which inflates the uncorrected statistic about 2x. The result then
+    carries ``rho``.
     """
     df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
     n = len(df)
@@ -177,6 +188,13 @@ def detect_step_change(
         if stat > best_stat:
             best_i, best_stat, best_delta = i, stat, delta
 
+    rho = None
+    if autocorrelation:
+        from .stats import lag1_autocorrelation
+
+        rho = lag1_autocorrelation(resid, index=df.index)
+        if rho is not None:
+            best_stat = best_stat / float(np.sqrt((1.0 + rho) / (1.0 - rho)))
     # the loop always runs (range is non-empty given n >= 2*min_segment_days) and the first
     # iteration sets best_i, since any stat > the -1.0 seed; so best_i is never None here.
     assert best_i is not None
@@ -197,4 +215,287 @@ def detect_step_change(
         n_days=n,
         model_kind=model.kind,
         mask=mask,
+        rho=None if rho is None else round(rho, 4),
+    )
+
+
+# --------------------------------------------------------------------------- multi-step (PELT)
+
+
+@dataclass
+class StepChange:
+    """One detected step: the first day of the new level and its size (post minus pre)."""
+
+    date: pd.Timestamp
+    delta: float  # post-step minus pre-step level, energy units per day
+    se: float | None  # standard error of delta (rho-inflated), None if not estimable
+    z: float | None  # delta / se
+
+    def as_dict(self) -> dict:
+        """Return as a plain dict."""
+        return {"date": str(self.date.date()), "delta": self.delta, "se": self.se, "z": self.z}
+
+
+@dataclass
+class StepChangesResult:
+    """Sustained level shifts found by PELT on the weather-model residuals, refitted jointly.
+
+    ``steps`` are in date order. ``levels`` are the fitted segment levels relative to the first
+    segment (the indicator coefficients), ``segment`` numbers every day's segment (0 = before the
+    first step). ``rho`` / ``sigma`` are the residual lag-1 autocorrelation and standard deviation
+    of the final segmented fit; ``penalty`` the per-step penalty in units of the rho-inflated
+    variance. ``converged`` is false when the step set was still changing after ``max_iter``
+    rounds.
+    """
+
+    steps: list
+    levels: list
+    n_days: int
+    model_kind: str
+    change_points: tuple  # of the weather model refitted with the segment indicators
+    rho: float | None
+    sigma: float
+    penalty: float
+    iterations: int
+    converged: bool
+    segment: pd.Series  # segment number per day
+    caveats: list = field(default_factory=list)
+
+    @property
+    def detected(self) -> bool:
+        """Whether any step was found."""
+        return bool(self.steps)
+
+    def as_dict(self) -> dict:
+        """Return the summary (excluding the per-day segment series) as a plain dict."""
+        return {
+            "detected": self.detected,
+            "steps": [s.as_dict() for s in self.steps],
+            "levels": self.levels,
+            "n_days": self.n_days,
+            "model_kind": self.model_kind,
+            "change_points": list(self.change_points),
+            "rho": self.rho,
+            "sigma": self.sigma,
+            "penalty": self.penalty,
+            "iterations": self.iterations,
+            "converged": self.converged,
+            "caveats": list(self.caveats),
+        }
+
+
+def _pelt(x: np.ndarray, *, scale: float, penalty: float, min_seg: int) -> list:
+    """Optimal mean-change segmentation of ``x`` by PELT (Killick, Fearnhead & Eckley 2012).
+
+    Gaussian cost with known variance ``scale``: a segment costs its within-segment sum of squares
+    divided by ``scale``; each change costs ``penalty``. Segments are at least ``min_seg`` long.
+    Returns the change positions (first index of each new segment), ascending.
+    """
+    n = len(x)
+    s1 = np.concatenate([[0.0], np.cumsum(x)])
+    s2 = np.concatenate([[0.0], np.cumsum(x * x)])
+
+    def cost(s: np.ndarray, t: int) -> np.ndarray:
+        L = t - s
+        return ((s2[t] - s2[s]) - (s1[t] - s1[s]) ** 2 / L) / scale
+
+    F = np.full(n + 1, np.inf)
+    F[0] = -penalty
+    last = np.zeros(n + 1, dtype=int)
+    cand = np.array([0])
+    for t in range(min_seg, n + 1):
+        ok = cand[t - cand >= min_seg]
+        if len(ok):
+            vals = F[ok] + cost(ok, t) + penalty
+            j = int(np.argmin(vals))
+            F[t], last[t] = float(vals[j]), int(ok[j])
+            # prune (the K = 0 PELT rule): a start that cannot beat F[t] now never will
+            waiting = cand[t - cand < min_seg]
+            keep = ok[F[ok] + cost(ok, t) <= F[t]]
+            cand = np.concatenate([keep, waiting])
+        if t <= n - min_seg:
+            cand = np.append(cand, t)
+    cps = []
+    t = n
+    while t > 0:
+        s = int(last[t])
+        if s > 0:
+            cps.append(s)
+        t = s
+    return sorted(cps)
+
+
+def _segment_ids(n: int, cps: list) -> np.ndarray:
+    seg = np.zeros(n, dtype=int)
+    for c in cps:
+        seg[c:] += 1
+    return seg
+
+
+def _cp_candidates(kind: str, T: np.ndarray, cps0: tuple) -> list:
+    """Change-point sets to search when refitting ``kind`` with segment indicators."""
+    from .models import _grid
+
+    if not cps0:  # 2P, or a 5P / 5PZ that fell back to a line
+        return [()]
+    grid = _grid(T)
+    if len(cps0) == 1:
+        return [(float(tc),) for tc in grid]
+    step = grid[1] - grid[0]
+    return [
+        (float(lo), float(hi)) for i, lo in enumerate(grid) for hi in grid[i:] if hi - lo >= step
+    ]
+
+
+def _segmented_fit(T, y, kind, cps0, seg):
+    """Refit ``kind`` with one level indicator per segment after the first (change points
+    re-searched on the same grid). Returns (weather-part prediction, indicator coefs, cps, A, s2,
+    resid)."""
+    from .models import N_PARAMS, _design_for
+
+    k = int(seg.max())
+    ind = (seg[:, None] == np.arange(1, k + 1)[None, :]).astype(float)
+    best = None
+    for cps in _cp_candidates(kind, T, cps0):
+        W = _design_for(kind, cps)(T)
+        X = np.hstack([W, ind])
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        r = y - X @ beta
+        sse = float(r @ r)
+        if best is None or sse < best[0]:
+            best = (sse, cps, W, X, beta, r)
+    assert best is not None
+    sse, cps, W, X, beta, r = best
+    nw = W.shape[1]
+    dof = len(y) - (N_PARAMS[kind] + k)
+    s2 = sse / dof if dof > 0 else float("nan")
+    A = np.linalg.pinv(X.T @ X)
+    return W @ beta[:nw], beta[nw:], cps, A[nw:, nw:], s2, r
+
+
+def _refit(T, y, model, kind, cps0, cps, n):
+    """The weather fit given step positions ``cps`` (the plain fit when there are none)."""
+    if cps:
+        weather, levels, wcps, A_lvl, s2, resid = _segmented_fit(
+            T, y, kind, cps0, _segment_ids(n, cps)
+        )
+        return weather, levels, A_lvl, wcps, s2, resid
+    weather = np.asarray(model.predict(T), dtype=float)
+    resid = y - weather
+    return weather, np.zeros(0), np.zeros((0, 0)), cps0, float(np.var(resid, ddof=1)), resid
+
+
+def detect_step_changes(
+    energy: pd.Series,
+    temp: pd.Series,
+    *,
+    rate_is_energy_rate: bool = False,
+    min_segment_days: int = 28,
+    max_steps: int = 5,
+    penalty: float | None = None,
+    max_iter: int = 3,
+) -> StepChangesResult:
+    """Detect several sustained level shifts in daily energy against its weather baseline.
+
+    1. Aggregate to daily energy and fit a change-point weather baseline (:func:`best_model`).
+    2. Segment the residual series with **PELT** (Killick, Fearnhead & Eckley 2012), a Gaussian
+       mean-change cost whose variance is the residual variance inflated for serial correlation,
+       ``sigma^2 * kappa`` with ``kappa = (1+rho)/(1-rho)`` -- the variance of a segment mean
+       under AR(1) residuals -- and an mBIC-style penalty of ``3 ln n`` per step (the penalty the
+       R ``changepoint`` package uses for MBIC); segments are at least ``min_segment_days`` long.
+       This is the method of Touzani, Ravache, Crowe & Granderson (*Energy & Buildings* 185, 2019),
+       applied here to the model residuals.
+    3. Refit the weather model with **one level indicator per segment** (change points re-searched)
+       so a step is not absorbed into the temperature slope, recompute ``sigma``, ``rho`` and the
+       residuals-plus-levels series, and segment again -- until the step set is stable, at most
+       ``max_iter`` rounds.
+
+    More than ``max_steps`` steps raise the penalty (x1.5 at a time) until at most that many
+    remain. Each step reports its size (post minus pre level) with a rho-inflated standard error.
+    Unlike :func:`detect_step_change` (one split, independent residuals) and
+    :func:`camber.changedetect.detect_level_shifts` (greedy binary segmentation), the segmentation
+    is jointly optimal for the penalty and accounts for autocorrelation.
+    """
+    from .stats import lag1_autocorrelation
+
+    df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
+    n = len(df)
+    if n < 2 * min_segment_days:
+        raise ValueError(f"need >= {2 * min_segment_days} days, got {n}")
+    if max_steps < 1 or max_iter < 1:
+        raise ValueError("max_steps and max_iter must be >= 1")
+    T = df["oat"].to_numpy(dtype=float)
+    y = df["energy"].to_numpy(dtype=float)
+    model = best_model(T, y)
+    kind, cps0 = model.kind, tuple(model.change_points)
+    pen = float(penalty) if penalty is not None else 3.0 * float(np.log(n))
+    caveats: list = []
+
+    # Round 1 cannot trust the weather fit's residual variance or rho: a step inflates both (and
+    # makes rho look near 1). It segments liberally on the first-difference noise scale, which a
+    # level shift barely touches; every later round uses sigma^2 * kappa from the segmented refit,
+    # which prunes what round 1 over-found. The reported steps always come from a later round.
+    x = y - np.asarray(model.predict(T), dtype=float)
+    d = np.diff(x)
+    scale = (1.4826 * float(np.median(np.abs(d - np.median(d))))) ** 2 / 2.0
+    if not scale > 0:
+        scale = float(np.var(x, ddof=1)) or 1.0
+    cps_found = _pelt(x, scale=scale, penalty=pen, min_seg=min_segment_days)
+    weather, levels, A_lvl, wcps, s2, resid = _refit(T, y, model, kind, cps0, cps_found, n)
+    converged = False
+    it = 1
+    while it < max_iter + 1:
+        it += 1
+        rho = lag1_autocorrelation(resid, index=df.index)
+        kappa = 1.0 if rho is None else (1.0 + rho) / (1.0 - rho)
+        x = y - weather  # residual plus the segment levels
+        p_used = pen
+        new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=min_segment_days)
+        while len(new) > max_steps:
+            p_used *= 1.5
+            new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=min_segment_days)
+        if p_used != pen:
+            note = f"penalty raised to {p_used:.1f} to keep at most max_steps={max_steps} steps"
+            caveats = [c for c in caveats if not c.startswith("penalty raised")] + [note]
+        stable = new == cps_found
+        cps_found = new
+        weather, levels, A_lvl, wcps, s2, resid = _refit(T, y, model, kind, cps0, cps_found, n)
+        if stable:
+            converged = True
+            break
+    if not converged:
+        caveats.append(f"the step set was still changing after max_iter={max_iter} rounds")
+    rho = lag1_autocorrelation(resid, index=df.index)
+    kappa = 1.0 if rho is None else (1.0 + rho) / (1.0 - rho)
+    full = np.concatenate([[0.0], levels])
+    steps = []
+    for i, c in enumerate(cps_found):
+        delta = float(full[i + 1] - full[i])
+        # Var(c_i+1 - c_i) from the joint (X'X)^-1 of the indicator block, rho-inflated
+        v = A_lvl[i, i] if i < len(A_lvl) else float("nan")
+        if i > 0:
+            v = v + A_lvl[i - 1, i - 1] - 2 * A_lvl[i, i - 1]
+        var = kappa * s2 * v
+        se = float(np.sqrt(var)) if np.isfinite(var) and var > 0 else None
+        steps.append(
+            StepChange(
+                date=df.index[c],
+                delta=round(delta, 4),
+                se=None if se is None else round(se, 4),
+                z=None if se is None else round(delta / se, 3),
+            )
+        )
+    return StepChangesResult(
+        steps=steps,
+        levels=[round(float(v), 4) for v in full],
+        n_days=n,
+        model_kind=kind,
+        change_points=tuple(round(float(c), 3) for c in wcps),
+        rho=None if rho is None else round(rho, 4),
+        sigma=round(float(np.sqrt(s2)), 4),
+        penalty=round(pen, 3),
+        iterations=it,
+        converged=converged,
+        segment=pd.Series(_segment_ids(n, cps_found), index=df.index, name="segment"),
+        caveats=caveats,
     )

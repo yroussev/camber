@@ -942,11 +942,13 @@
     "OptionDSavings",
     "RCModel",
     "StepChangeResult",
+    "StepChangesResult",
     "calibrate",
     "caltrack_savings",
     "daily_schedule",
     "detect_non_routine",
     "detect_step_change",
+    "detect_step_changes",
     "fit_driver_model",
     "isolation_normalized_savings",
     "isolation_savings",
@@ -1011,9 +1013,12 @@
   ],
   "camber.mandv.nonroutine": [
     "NonRoutineResult",
+    "StepChange",
     "StepChangeResult",
+    "StepChangesResult",
     "detect_non_routine",
     "detect_step_change",
+    "detect_step_changes",
     "residual_outliers"
   ],
   "camber.mandv.normalized": [
