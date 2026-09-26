@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
+from ..chillerbaseline import tons_from_flow
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -42,6 +42,7 @@ from ..chillerdrift import (
 from ..coolingtower import tower_approach_f
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _chillerfit
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -111,7 +112,11 @@ class CoolingTowerApproachDrift:
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_tons: float = 5.0,
+        min_tons: float | None = None,  # None = size-relative (camber.chillerbaseline)
+        min_tons_span: float | None = None,  # None = size-relative
+        elevation_ft: float
+        | None = None,  # site elevation for a derived wet-bulb (None = sea level)
+        pressure_psia: float | None = None,  # or a measured barometric pressure
     ):
         self.store = store
         self.site = site
@@ -126,6 +131,9 @@ class CoolingTowerApproachDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_tons = min_tons
+        self.min_tons_span = min_tons_span
+        self.elevation_ft = elevation_ft
+        self.pressure_psia = pressure_psia
 
     # ------------------------------------------------------------------ inputs
     @staticmethod
@@ -142,43 +150,24 @@ class CoolingTowerApproachDrift:
         legacy = frame.rename(columns={r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns})
         out = pd.DataFrame({"tons": tons_from_flow(legacy)}, index=frame.index)
         if self._has_approach(frame):
-            out[_METRIC] = tower_approach_f(legacy)
+            out[_METRIC] = tower_approach_f(
+                legacy, elevation_ft=self.elevation_ft, pressure_psia=self.pressure_psia
+            )
         return out
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None):
         """The frozen approach baseline, freezing an initial one from ``base_frame`` if none."""
-        frozen = self.store.model_for(self.site, equip, _KIND)
-        if frozen is not None:
-            return frozen
-        if not self.freeze_if_missing:
-            caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
-            )
-            return None
-        fit = fit_load_baseline(
+        return _chillerfit.freeze_baseline(
+            self,
+            equip,
             base_frame,
-            metric_col=_METRIC,
-            load_col="tons",
-            min_load=self.min_tons,
-            metric_range=TOWER_APPROACH_PLAUSIBLE_F,
-        )
-        if fit is None:
-            caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit "
-                "(too few loaded samples, or too narrow a load range)"
-            )
-            return None
-        idx = base_frame.index
-        self.store.freeze(
-            fit,
-            site=self.site,
-            equip=equip,
+            caveats,
             kind=_KIND,
-            frozen_at=self.run_id,
-            period=(str(idx.min()), str(idx.max())),
-            reason="initial baseline frozen from the supplied baseline period",
+            metric_col=_METRIC,
+            metric_range=TOWER_APPROACH_PLAUSIBLE_F,
+            gate=gate or _chillerfit.gates(base_frame, self.min_tons, self.min_tons_span),
+            metric_name="tower approach",
         )
-        return fit
 
     # ------------------------------------------------------------------ severity
     def _severity(self, drift, caveats) -> str:
@@ -222,7 +211,8 @@ class CoolingTowerApproachDrift:
             )
 
         base_t, cur_t = self._prepared(baseline), self._prepared(current)
-        frozen = self._frozen_baseline(equip, base_t, caveats)
+        gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
+        frozen = self._frozen_baseline(equip, base_t, caveats, gate)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -233,16 +223,17 @@ class CoolingTowerApproachDrift:
                 caveats=caveats,
             )
 
-        drift = load_drift_stats(
+        drift = _chillerfit.score(
             frozen,
             cur_t,
+            caveats,
+            kind=_KIND,
             metric_col=_METRIC,
-            load_col="tons",
-            min_load=self.min_tons,
             metric_range=TOWER_APPROACH_PLAUSIBLE_F,
+            gate=gate,
+            metric_name="tower approach",
         )
         if drift is None:
-            caveats.append(f"could not evaluate {_KIND}: no loaded samples in the current period")
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -265,11 +256,9 @@ class CoolingTowerApproachDrift:
             "tower_approach_baseline_sigma_f": frozen.sigma_f,
             "tower_approach_baseline_frozen_at": rec.frozen_at if rec else "",
         }
-        if drift.extrapolated:
-            caveats.append(
-                "over 10% of the current period ran outside the baseline's fitted load envelope, "
-                "so part of this drift is extrapolated"
-            )
+        metrics["tower_approach_min_tons"] = gate[0]
+        _chillerfit.fit_notes(frozen, caveats, metrics, "tower_approach")
+        _chillerfit.envelope_caveats(drift, caveats, frozen)
 
         # the same frozen baseline, folded sample-by-sample: has it widened and *stayed* widened?
         try:
@@ -285,8 +274,9 @@ class CoolingTowerApproachDrift:
                 cur_t,
                 approach_col=_METRIC,
                 tons_col="tons",
-                min_tons=self.min_tons,
+                min_tons=gate[0],
                 approach_range=TOWER_APPROACH_PLAUSIBLE_F,
+                covariate_col=_chillerfit.covariate_key(frozen),
             )
         except ValueError as exc:
             run = None

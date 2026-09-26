@@ -352,8 +352,11 @@
   ],
   "camber.coolingtower": [
     "CoolingTowerResult",
+    "SEA_LEVEL_PSIA",
     "analyze_cooling_tower_approach",
     "cw_range_f",
+    "pressure_psia_at_elevation",
+    "psychrometric_wetbulb_f",
     "stull_wetbulb_f",
     "tower_approach_f"
   ],

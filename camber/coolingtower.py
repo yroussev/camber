@@ -16,6 +16,16 @@ Wet-bulb is rarely a BAS point, so if it isn't mapped we derive it from outdoor
 dry-bulb + relative humidity using Stull's closed-form approximation (Stull 2011,
 *J. Appl. Meteor. Climatol.*) -- no psychrometric dependency. The design approach is
 tower/climate-specific, so ``design_approach_f`` is an injected parameter.
+
+**Stull's fit is for sea-level pressure.** At lower barometric pressure the same dry-bulb and RH
+give a *lower* wet-bulb, so a sea-level wet-bulb reads high and the tower approach reads low.
+Against the full psychrometric solution, the pressure effect alone is ~0.3-0.8 °F at 500 m and
+~1.8-2.5 °F at 1600 m in hot, dry air, on top of Stull's own ~±1 °F fit error (total ≈ +1.4 °F and
++2.6 °F in those conditions). Every function that derives wet-bulb therefore takes an optional
+``elevation_ft`` (standard atmosphere) or a measured ``pressure_psia``; given either, wet-bulb is
+solved from the ASHRAE psychrometric equations at that pressure (:func:`psychrometric_wetbulb_f`,
+within ~0.1 °F of a reference psychrometric library). Omitting both keeps the sea-level Stull
+default -- unchanged from before, including its bias at altitude.
 """
 
 from __future__ import annotations
@@ -27,6 +37,9 @@ import pandas as pd
 
 __all__ = [
     "stull_wetbulb_f",
+    "psychrometric_wetbulb_f",
+    "pressure_psia_at_elevation",
+    "SEA_LEVEL_PSIA",
     "cw_range_f",
     "tower_approach_f",
     "CoolingTowerResult",
@@ -41,6 +54,8 @@ def tower_approach_f(
     wetbulb_col: str = "WetBulb",
     oat_col: str = "OAT",
     rh_col: str = "RH",
+    elevation_ft: float | None = None,
+    pressure_psia: float | None = None,
 ) -> pd.Series:
     """Cooling-tower **approach** (°F): ``CW_supply - wet_bulb`` (CW leaving the tower).
 
@@ -50,7 +65,8 @@ def tower_approach_f(
     **drift** (a widening approach at matched load is the fouling/scale/reduced-airflow signal).
 
     Wet-bulb is taken from ``wetbulb_col`` when present, else derived from ``oat_col`` + ``rh_col``
-    via :func:`stull_wetbulb_f` (no psychrometric dependency). Raises :class:`KeyError` if it has
+    via :func:`stull_wetbulb_f` (no psychrometric dependency; sea level unless ``elevation_ft`` or
+    ``pressure_psia`` is given). Raises :class:`KeyError` if it has
     neither a supply temperature nor any wet-bulb source — an approach needs both ends.
     """
     if supply_col not in frame.columns:
@@ -58,7 +74,15 @@ def tower_approach_f(
     if wetbulb_col in frame.columns:
         wb = frame[wetbulb_col]
     elif oat_col in frame.columns and rh_col in frame.columns:
-        wb = pd.Series(stull_wetbulb_f(frame[oat_col], frame[rh_col]), index=frame.index)
+        wb = pd.Series(
+            stull_wetbulb_f(
+                frame[oat_col],
+                frame[rh_col],
+                elevation_ft=elevation_ft,
+                pressure_psia=pressure_psia,
+            ),
+            index=frame.index,
+        )
     else:
         raise KeyError(
             f"tower_approach_f needs {wetbulb_col!r}, or both {oat_col!r} and {rh_col!r} "
@@ -89,12 +113,81 @@ def cw_range_f(
     return frame[return_col] - frame[supply_col]
 
 
-def stull_wetbulb_f(oat_f, rh_pct):
+SEA_LEVEL_PSIA = 14.696  # standard atmosphere, 101.325 kPa
+_KPA_PER_PSI = 6.894757
+
+
+def pressure_psia_at_elevation(elevation_ft) -> float:
+    """Standard-atmosphere barometric pressure (psia) at ``elevation_ft`` (ASHRAE Fundamentals)."""
+    z_m = float(elevation_ft) * 0.3048
+    return SEA_LEVEL_PSIA * (1.0 - 2.25577e-5 * z_m) ** 5.2559
+
+
+def _pws_kpa(t_c):
+    """Saturation vapour pressure over liquid water, kPa (Alduchov-Eskridge Magnus form)."""
+    return 0.61094 * np.exp(17.625 * t_c / (t_c + 243.04))
+
+
+def psychrometric_wetbulb_f(oat_f, rh_pct, pressure_psia=SEA_LEVEL_PSIA):
+    """Thermodynamic wet-bulb (°F) at a given barometric pressure (ASHRAE Fundamentals ch. 1).
+
+    Solves the psychrometric wet-bulb equation for the humidity ratio implied by dry-bulb, RH and
+    pressure, by vectorized bisection -- no external dependency. Used here to carry Stull's
+    sea-level approximation to altitude; it is also a usable wet-bulb in its own right.
+    """
+    t = (np.asarray(oat_f, dtype=float) - 32.0) / 1.8
+    rh = np.clip(np.asarray(rh_pct, dtype=float), 0.0, 100.0) / 100.0
+    p = float(pressure_psia) * _KPA_PER_PSI
+    t, rh = np.broadcast_arrays(t, rh)
+    pw = rh * _pws_kpa(t)
+    w = 0.621945 * pw / (p - pw)
+
+    def w_from_tw(tw):
+        pws = _pws_kpa(tw)
+        ws = 0.621945 * pws / (p - pws)
+        return ((2501.0 - 2.326 * tw) * ws - 1.006 * (t - tw)) / (2501.0 + 1.86 * t - 4.186 * tw)
+
+    lo = t - 60.0
+    hi = t.copy()
+    for _ in range(50):  # bisection to well under 0.001 °C
+        mid = 0.5 * (lo + hi)
+        above = w_from_tw(mid) > w
+        hi = np.where(above, mid, hi)
+        lo = np.where(above, lo, mid)
+    tw = 0.5 * (lo + hi)
+    out = tw * 1.8 + 32.0
+    return out.item() if out.ndim == 0 else out
+
+
+def _pressure_psia(elevation_ft, pressure_psia):
+    if pressure_psia is not None:
+        return float(pressure_psia)
+    if elevation_ft is not None:
+        return pressure_psia_at_elevation(elevation_ft)
+    return None
+
+
+def stull_wetbulb_f(oat_f, rh_pct, *, elevation_ft=None, pressure_psia=None):
     """Wet-bulb (°F) from dry-bulb (°F) and RH (%) via Stull's 2011 approximation.
 
-    Valid for roughly 5-99% RH at sea level; accurate to ~±1 °F across typical HVAC
-    conditions. Vectorized over pandas Series / numpy arrays.
+    Valid for roughly 5-99% RH **at sea level**; accurate to ~±1 °F across typical HVAC
+    conditions there. Vectorized over pandas Series / numpy arrays.
+
+    At altitude a sea-level wet-bulb reads high (in hot, dry air ≈+1.4 °F at 500 m and +2.6 °F at
+    1600 m in total, of which ~0.3-0.8 / ~1.8-2.5 °F is the pressure effect). Pass the site
+    ``elevation_ft`` (standard atmosphere) or a measured barometric ``pressure_psia`` and the
+    wet-bulb is instead solved psychrometrically at that pressure (:func:`psychrometric_wetbulb_f`),
+    which removes both the pressure bias and Stull's fit error. Neither given = the sea-level
+    Stull default, exactly as before.
     """
+    p = _pressure_psia(elevation_ft, pressure_psia)
+    if p is None:
+        return _stull_sea_level_f(oat_f, rh_pct)
+    out = psychrometric_wetbulb_f(oat_f, rh_pct, p)
+    return out
+
+
+def _stull_sea_level_f(oat_f, rh_pct):
     t = (np.asarray(oat_f, dtype=float) - 32.0) / 1.8  # -> °C
     rh = np.asarray(rh_pct, dtype=float)
     tw_c = (
@@ -137,6 +230,8 @@ def analyze_cooling_tower_approach(
     min_range_f: float = 2.0,  # CW range below this == not really rejecting heat
     min_fan_pct: float = 5.0,  # tower fan above this == operating (if available)
     min_effort_pct: float | None = 90.0,  # judge approach only at/above this fan speed
+    elevation_ft: float | None = None,  # site elevation for a derived wet-bulb (None = sea level)
+    pressure_psia: float | None = None,  # or a measured barometric pressure
 ) -> CoolingTowerResult | None:
     """Compute tower approach from CW supply temp and wet-bulb (measured or derived).
 
@@ -153,6 +248,9 @@ def analyze_cooling_tower_approach(
     control, not a defect. Judging those hours fired the rule on healthy towers. Returns ``None``
     when the tower never reached the effort gate (nothing to judge). ``min_effort_pct=None``
     restores the old "fan running" gate.
+
+    A derived wet-bulb assumes sea level unless ``elevation_ft`` / ``pressure_psia`` is given (see
+    :func:`stull_wetbulb_f`); at altitude the uncorrected approach reads low.
     """
     if "CWS_Temp" not in df.columns:
         return None
@@ -163,7 +261,12 @@ def analyze_cooling_tower_approach(
         wb = work["WetBulb"]
         wb_source = "measured"
     elif "OAT" in work.columns and "RH" in work.columns:
-        wb = pd.Series(stull_wetbulb_f(work["OAT"], work["RH"]), index=work.index)
+        wb = pd.Series(
+            stull_wetbulb_f(
+                work["OAT"], work["RH"], elevation_ft=elevation_ft, pressure_psia=pressure_psia
+            ),
+            index=work.index,
+        )
         wb_source = "derived"
     else:
         return None
