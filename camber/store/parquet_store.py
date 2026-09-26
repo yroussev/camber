@@ -175,26 +175,44 @@ class ParquetStore:
     def _catalog_path(self) -> str:
         return os.path.join(self.root, _CATALOG)
 
-    def _read_catalog(self):
-        """Return cached :class:`PointKey` list, or None if there is no (valid) catalog."""
+    def _read_catalog_payload(self):
+        """The parsed ``_catalog.json`` dict, or None when absent/corrupt."""
         p = self._catalog_path()
         if not os.path.isfile(p):
             return None
         try:
             with open(p, encoding="utf-8") as fh:
                 data = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _read_catalog(self):
+        """Return cached :class:`PointKey` list, or None if there is no (valid) catalog."""
+        data = self._read_catalog_payload()
+        if data is None:
+            return None
+        try:
             return [
                 PointKey(facility_id=k["facility_id"], equip=k["equip"], role=k["role"])
                 for k in data["points"]
             ]
-        except (json.JSONDecodeError, KeyError, TypeError, OSError):
+        except (KeyError, TypeError):
             return None  # treat a corrupt/old catalog as absent -> fall back to a scan
 
-    def _write_catalog(self, keys) -> None:
-        """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``."""
+    def _write_catalog(self, keys, equipment=None) -> None:
+        """Atomically write the catalog (sorted, de-duped) as ``_catalog.json``.
+
+        ``equipment`` (``{facility_id: {equip: equip_class}}``) is cached alongside the point keys
+        when known, so :meth:`equipment` needs no scan either.
+        """
         os.makedirs(self.root, exist_ok=True)
         rows = sorted({(k.facility_id, k.equip, k.role) for k in keys})
-        payload = {"points": [{"facility_id": s, "equip": e, "role": r} for s, e, r in rows]}
+        payload: dict = {"points": [{"facility_id": s, "equip": e, "role": r} for s, e, r in rows]}
+        if equipment is not None:
+            payload["equipment"] = {
+                fid: dict(sorted(eqs.items())) for fid, eqs in sorted(equipment.items())
+            }
         tmp = self._catalog_path() + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(payload, fh)
@@ -209,21 +227,32 @@ class ParquetStore:
             except OSError:
                 pass
 
+    def _scan(self):
+        """One projected scan (no ts/value payload) -> (point keys, equipment classes)."""
+        long = self.read_long(columns=[_FACILITY, _EQUIP, _CLASS, _ROLE])
+        if long.empty:
+            return [], {}
+        uniq = long.drop_duplicates([_FACILITY, _EQUIP, _ROLE])
+        keys = [
+            PointKey(facility_id=f, equip=e, role=r)
+            for f, e, r in zip(uniq[_FACILITY], uniq[_EQUIP], uniq[_ROLE])
+        ]
+        equipment: dict = {}
+        for f, e, c in zip(uniq[_FACILITY], uniq[_EQUIP], uniq[_CLASS]):
+            eqs = equipment.setdefault(str(f), {})
+            if not eqs.get(e):  # first non-empty class recorded for this equip wins
+                eqs[e] = "" if c is None or c != c else str(c)
+        return keys, equipment
+
     def _scan_keys(self) -> list:
         """Distinct (facility_id, equip, role) keys via a projected scan (no ts/value payload)."""
-        long = self.read_long(columns=[_FACILITY, _EQUIP, _ROLE])
-        if long.empty:
-            return []
-        return [
-            PointKey(facility_id=r[_FACILITY], equip=r[_EQUIP], role=r[_ROLE])
-            for _, r in long.drop_duplicates([_FACILITY, _EQUIP, _ROLE]).iterrows()
-        ]
+        return self._scan()[0]
 
     def rebuild_catalog(self) -> int:
         """Rebuild the catalog from a projected scan (for stores predating it, or to resync
         after manual edits). Returns the number of distinct keys."""
-        keys = self._scan_keys()
-        self._write_catalog(keys)
+        keys, equipment = self._scan()
+        self._write_catalog(keys, equipment)
         return len(keys)
 
     # ------------------------------------------------------------------- read
@@ -339,9 +368,30 @@ class ParquetStore:
         if cached is None:
             if not os.path.isdir(self.root):
                 return []
-            cached = self._scan_keys()
-            self._write_catalog(cached)  # memoize until the next write invalidates it
+            cached, equipment = self._scan()
+            self._write_catalog(cached, equipment)  # memoize until the next write invalidates it
         return [k for k in cached if facility_id is None or k.facility_id == facility_id]
+
+    def equipment(self, *, facility_id=None) -> dict:
+        """Stored equipment and its class: ``{facility_id: {equip: equip_class}}``.
+
+        The class is the ``equip_class`` recorded at write time (what store-backed discovery,
+        :func:`camber.resolve.discover_store`, filters on -- no filename-prefix inference). Served
+        from the cached catalog like :meth:`points`; a catalog written before the equipment cache
+        existed is rebuilt once. ``facility_id`` narrows the result to that one facility (an empty
+        dict when it holds no data).
+        """
+        data = self._read_catalog_payload()
+        equipment = data.get("equipment") if data is not None else None
+        if not isinstance(equipment, dict):
+            if not os.path.isdir(self.root):
+                return {}
+            keys, equipment = self._scan()
+            self._write_catalog(keys, equipment)
+        if facility_id is not None:
+            eqs = equipment.get(facility_id)
+            return {facility_id: dict(eqs)} if eqs else {}
+        return {fid: dict(eqs) for fid, eqs in equipment.items()}
 
     def facilities(self) -> list:
         """Distinct facility ids present in the store (the partition directories)."""
@@ -423,3 +473,34 @@ class ParquetStore:
         if removed:
             self._invalidate_catalog()  # next points() rebuilds from the remaining data
         return removed
+
+    def drop_facility(self, facility_id: str, *, forget: bool = False) -> int:
+        """Hard-delete every stored row of ``facility_id``; returns the number of rows removed.
+
+        **Irreversible.** This is a narrow, low-level primitive: it removes the facility's
+        ``facility_id=<id>`` partition directory from disk, invalidates the point catalog and clears
+        :mod:`camber.resolve`'s per-equipment frame cache -- nothing else. It carries no policy (no
+        archiving, no soft delete, no retention rules); it is the building block a higher-level
+        facility-lifecycle layer calls once that layer has decided a hard delete is wanted.
+
+        The store is otherwise append-only, so this is also how a facility's history is *replaced*
+        (re-ingesting without it would silently duplicate rows, which the role-frame read then
+        mean-aggregates). The facility's registry entry (display name + metadata) is kept unless
+        ``forget=True``. An unknown facility is a no-op returning 0.
+        """
+        require_facility_id(facility_id)
+        fdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
+        rows = 0
+        if os.path.isdir(fdir):
+            try:
+                rows = int(ds.dataset(fdir, format="parquet").count_rows())
+            except (pa.ArrowInvalid, OSError):  # pragma: no cover - unreadable partition
+                rows = 0
+            shutil.rmtree(fdir)
+            self._invalidate_catalog()
+        if forget:
+            self._registry().remove(facility_id)
+        from ..resolve import clear_store_cache  # lazy: resolve imports the store, not vice versa
+
+        clear_store_cache(self.root, facility_id)
+        return rows

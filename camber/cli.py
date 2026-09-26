@@ -93,13 +93,18 @@ def _cmd_run(args) -> int:
 
 
 def _cmd_report(args) -> int:
-    from .config import run_config_file
+    from .config import data_sources, load_config, run_config_file
     from .report.audit import AuditReport
 
     res = run_config_file(args.config)
     report = res.report
     if report is None:
-        report = AuditReport(building=res.site, level=2)
+        base = os.path.dirname(os.path.abspath(args.config))
+        report = AuditReport(
+            building=res.site,
+            level=2,
+            data_sources=data_sources(load_config(args.config), base_dir=base),
+        )
         report.add_findings(res.findings)
     html = report.to_html(recommend=True)
     open(args.out, "w").write(html)
@@ -390,7 +395,7 @@ def _cmd_drift_run(args) -> int:
 
 
 def _cmd_drift_report(args) -> int:
-    from .config import run_drift_config
+    from .config import data_sources, run_drift_config
     from .report.drift import drift_report_html
 
     cfg, base = _drift_load(args)
@@ -400,7 +405,10 @@ def _cmd_drift_report(args) -> int:
     if res is None:
         print("config has no 'drift' section (or it names no families) — nothing to do")
         return 0
-    open(args.out, "w").write(drift_report_html(res, charts=bool(args.charts)))
+    html = drift_report_html(
+        res, charts=bool(args.charts), data_sources=data_sources(cfg, base_dir=base)
+    )
+    open(args.out, "w").write(html)
     n = sum(len(f.diagnoses) for f in res.families)
     print(f"wrote {args.out}  ({n} verdict(s) across {len(res.families)} family/families)")
     return 0

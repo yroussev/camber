@@ -33,11 +33,30 @@ equipment class -- either a packaged library sequence (``library``: ``g36_ahu`` 
 ``g36_plant``) or a JSON clause spec (``spec``) -- merging the per-clause Findings into
 the run.
 
+The optional ``mv`` section fits a daily change-point M&V baseline (ASHRAE Guideline 14 / IPMVP,
+:mod:`camber.mandv`) to every equipment of a class: ``[{"class": "CHILLEDWATER_METER", "role":
+"energy_rate", "period": ["2016-01-01", "2016-12-31"]}]``. The energy role is read as an hourly rate
+and integrated to daily energy against the daily-mean OAT (the equipment's own ``oat`` role, else
+``shared_oat``); each meter yields one ``mv_baseline`` Finding carrying the chosen model and its
+R², CV(RMSE) and NMBE -- ``ok`` when the fit meets the daily G14 acceptance, ``info`` when it does
+not (a weak weather dependence is a property of the meter, not an equipment fault).
+
 The optional ``drift`` section scores a **current** window against a frozen **baseline** one for
 each configured detector family (:mod:`camber.driftrun`), merging its Findings into the run. It is
 strictly read-only toward the baseline store: a config-driven run never creates or moves a frozen
 reference, because a run that mints the baseline it scores against is circular. Creating one is
 ``camber drift freeze``; moving one is ``camber drift accept`` (see :mod:`camber.cli`).
+
+**Store-backed source.** ``"source": {"kind": "store", "store": "lab_store", "facility_id":
+"ds-lbnl-sdahu"}`` reads equipment from a :class:`~camber.store.ParquetStore` (e.g. one filled by
+``camber datasets ingest``) instead of per-point CSV folders. The store already holds role-named
+series, so ``mapping`` may be omitted (an identity mapping is used). Equipment is discovered by
+the class recorded at ingest (``{"class": "AHU", "marker_role": "mixed_air_temp"}``; ``marker`` is
+the folder-source file marker and is ignored here); ``shared_oat`` may name a store equipment and
+role (``{"equip": "weather", "role": "oat"}``) or a CSV ``file`` as before; optional ``start`` /
+``end`` bound every read. The facility's provenance (dataset, licence, citation) recorded at ingest
+is attached to the report as ``AuditReport.data_sources``. Any other ``kind`` (or none) reads
+folders as before; an unrecognised kind warns rather than fails, for back-compat.
 
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
@@ -48,6 +67,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from dataclasses import dataclass, field
 from glob import glob
 
@@ -57,7 +77,7 @@ from .model.roles import Role
 from .realio import load_point
 from .report.audit import AuditReport, Benchmark
 from .report.drift import drift_report_html
-from .resolve import discover, discover_terminals, resolve
+from .resolve import StoreEquipRef, discover, discover_store, discover_terminals, resolve
 from .rules.base import _merge_shared
 from .rules.builtin import builtin_registry, is_fleet, make_rule
 from .soo import soo_findings, spec_from_dicts
@@ -69,6 +89,7 @@ __all__ = [
     "run_config",
     "run_drift_config",
     "drift_store_path",
+    "data_sources",
     "drift_refit",
     "load_config",
     "run_config_file",
@@ -133,6 +154,120 @@ class _Prepared:
     refs: list
     refs_by_class: dict
     min_trust: float | None
+    data_sources: list = field(default_factory=list)
+
+
+# Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
+# not "store" warns and falls back to folders, so an old config with a free-form kind still runs.
+_FOLDER_KINDS = frozenset({"", "perpoint_csv", "perpoint", "folder", "folders", "csv"})
+
+
+def _identity_mapping() -> MappingProvider:
+    """Every role slug maps to itself -- the mapping for data already stored by role."""
+    return MappingProvider(aliases={r.value: r for r in Role})
+
+
+def _load_mapping(config: dict, base_dir: str, *, default=None) -> MappingProvider:
+    mp_spec = config.get("mapping")
+    if mp_spec is None:
+        if default is None:
+            raise KeyError("mapping")
+        return default
+    if "path" in mp_spec:
+        with open(_path(base_dir, mp_spec["path"])) as fh:
+            mp_spec = json.load(fh)
+    return MappingProvider.from_dict(mp_spec)
+
+
+def _source_kind(source: dict) -> str:
+    kind = str(source.get("kind") or "")
+    if kind != "store" and kind not in _FOLDER_KINDS:
+        warnings.warn(
+            f"unknown source.kind {kind!r}; reading per-point CSV folders (known kinds: "
+            "'store', 'perpoint_csv')",
+            UserWarning,
+            stacklevel=3,
+        )
+    return kind
+
+
+def _provenance(meta: dict, facility_id: str) -> dict:
+    """The report-facing provenance of a store facility (empty when it has none recorded).
+
+    Provenance lives under the registry entry's namespaced ``"dataset"`` key (written by
+    ``camber datasets ingest``), so other facility metadata can sit beside it without collisions.
+    """
+    meta = meta.get("dataset") or {}
+    if not isinstance(meta, dict):
+        return {}
+    keys = (
+        "dataset_id",
+        "title",
+        "publisher",
+        "licence",
+        "access",
+        "citation",
+        "dois",
+        "landing_url",
+        "attribution_required",
+        "redistribution",
+        "fetched_at",
+        "content_hash",
+        "known_issues",
+    )
+    src = {k: meta[k] for k in keys if k in meta}
+    if not src:
+        return {}
+    src.setdefault("facility_id", facility_id)
+    return src
+
+
+def _prepare_store(config: dict, base_dir: str) -> _Prepared:
+    """The ``source.kind == "store"`` half of :func:`_prepare`."""
+    from .store import ParquetStore
+
+    source = config["source"]
+    if not source.get("store") or not source.get("facility_id"):
+        raise ValueError("a store source needs 'store' (path) and 'facility_id'")
+    store = ParquetStore(_path(base_dir, source["store"]))
+    fid = source["facility_id"]
+    if fid not in store.facilities():
+        raise ValueError(f"facility {fid!r} has no data in store {store.root!r}")
+    start, end = source.get("start"), source.get("end")
+    site = config.get("site") or store.facility_name(fid)
+    resample = config.get("resample", "1h")
+    mapping = _load_mapping(config, base_dir, default=_identity_mapping())
+
+    refs: list = []
+    refs_by_class: dict = {}
+    for eq in config.get("equipment", []):
+        found = discover_store(
+            store, fid, eq["class"], marker_role=eq.get("marker_role"), start=start, end=end
+        )
+        refs += found
+        refs_by_class.setdefault(eq["class"], []).extend(found)
+
+    shared = None
+    so = config.get("shared_oat") or {}
+    if so.get("file"):
+        oat = load_point(_path(base_dir, so["file"]), "oat").resample(resample).mean()
+        shared = {Role.OAT: oat}
+    elif so.get("equip"):
+        role = Role(so.get("role", Role.OAT.value))
+        eqs = store.equipment(facility_id=fid).get(fid, {})
+        if so["equip"] not in eqs:
+            raise ValueError(f"shared_oat equip {so['equip']!r} is not stored in facility {fid!r}")
+        ref = StoreEquipRef(so["equip"], eqs[so["equip"]], fid, store.root, start, end)
+        frame = resolve(ref, None, (role,), resample=resample)
+        if role in frame.columns:
+            shared = {Role.OAT: frame[role]}
+
+    min_trust = (config.get("trust_gate") or {}).get("min_trust")
+    meta = store.facilities_meta().get(fid, {})
+    prov = _provenance(meta, fid)
+    return _Prepared(
+        site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else []
+    )
 
 
 def _prepare(config: dict, base_dir: str) -> _Prepared:
@@ -141,15 +276,13 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     Shared by :func:`run_config` and :func:`run_drift_config` so the two entry points discover
     equipment identically -- a drift run must see exactly the equipment the ordinary run does.
     """
+    if _source_kind(config["source"]) == "store":
+        return _prepare_store(config, base_dir)
     site = config.get("site", "")
     resample = config.get("resample", "1h")
     folders = _source_folders(config["source"], base_dir)
 
-    mp_spec = config["mapping"]
-    if "path" in mp_spec:
-        with open(_path(base_dir, mp_spec["path"])) as fh:
-            mp_spec = json.load(fh)
-    mapping = MappingProvider.from_dict(mp_spec)
+    mapping = _load_mapping(config, base_dir)
 
     shared = None
     so = config.get("shared_oat")
@@ -172,6 +305,79 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
     return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust)
+
+
+def _mv_declined(equip: str, why: str):
+    from .rules.base import Finding
+
+    return Finding(
+        rule="mv_baseline",
+        equip=equip,
+        severity="info",
+        metrics={"declined": True},
+        summary=f"{equip}: M&V baseline declined -- {why}",
+        caveats=[f"M&V baseline not fitted: {why}"],
+    )
+
+
+def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
+    """One ``mv_baseline`` Finding per equipment: a daily change-point fit vs outdoor temp."""
+    from .mandv.intervalfit import daily_energy_vs_temp
+    from .mandv.models import N_PARAMS, best_model
+    from .mandv.stats import cv_rmse_max_for, fit_stats
+    from .rules.base import Finding
+
+    if entry.get("interval", "daily") != "daily":
+        raise ValueError("mv.interval: only 'daily' change-point baselines are supported")
+    role = Role(entry.get("role", Role.ENERGY_RATE.value))
+    period = entry.get("period")
+    min_days = int(entry.get("min_days", 60))
+    cv_max = cv_rmse_max_for("daily")
+    out = []
+    for ref in refs:
+        frame = resolve(ref, prep.mapping, (role, Role.OAT), resample="1h")
+        frame = _merge_shared(frame, prep.shared)
+        if frame is None or frame.empty or role not in frame.columns:
+            out.append(_mv_declined(ref.equip, f"no {role.value} data"))
+            continue
+        if Role.OAT not in frame.columns:
+            out.append(_mv_declined(ref.equip, "no outdoor temperature (oat or shared_oat)"))
+            continue
+        if period:
+            frame = frame.loc[period[0] : period[1]]
+        daily = daily_energy_vs_temp(frame[role].dropna(), frame[Role.OAT].dropna())
+        if len(daily) < min_days:
+            out.append(_mv_declined(ref.equip, f"only {len(daily)} usable days (< {min_days})"))
+            continue
+        model = best_model(daily["oat"].values, daily["energy"].values)
+        st = fit_stats(
+            daily["energy"].values,
+            model.predict(daily["oat"].values),
+            N_PARAMS[model.kind],
+            cv_rmse_max=cv_max,
+        )
+        verdict = "meets" if st.accept else "does not meet"
+        out.append(
+            Finding(
+                rule="mv_baseline",
+                equip=ref.equip,
+                severity="ok" if st.accept else "info",
+                metrics={
+                    "model": model.kind,
+                    "n_days": st.n,
+                    "r2": st.r2,
+                    "cv_rmse": st.cv_rmse,
+                    "nmbe": st.nmbe,
+                    "accept": bool(st.accept),
+                    "change_points": [round(float(t), 2) for t in model.change_points],
+                },
+                summary=(
+                    f"{ref.equip}: {model.kind} baseline, R2 {st.r2:.2f}, CV(RMSE) "
+                    f"{st.cv_rmse:.1%} over {st.n} days -- {verdict} daily G14 acceptance"
+                ),
+            )
+        )
+    return out
 
 
 def _drift_window(spec: dict, key: str, *, required: bool = True):
@@ -267,6 +473,10 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             findings += soo_findings(frame, spec, ref.equip)
         ran.append(f"soo:{cls}:{entry.get('library') or entry.get('spec')}")
 
+    for entry in config.get("mv", []):
+        findings += _mv_findings(entry, refs_by_class.get(entry["class"], []), prep)
+        ran.append(f"mv:{entry['class']}")
+
     # Optional drift comparison: score a current window against the frozen baseline store for
     # each configured family. Read-only toward the store by construction -- freeze_if_missing is
     # False and the store is never saved here (see the module docstring).
@@ -284,7 +494,10 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     rep = config.get("report")
     if rep is not None:
         report = AuditReport(
-            building=site, level=rep.get("level", 2), climate_zone=rep.get("climate_zone", "")
+            building=site,
+            level=rep.get("level", 2),
+            climate_zone=rep.get("climate_zone", ""),
+            data_sources=list(prep.data_sources),
         )
         if "benchmark" in rep:
             b = rep["benchmark"]
@@ -303,6 +516,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 price = EnergyPrice(**{k: v for k, v in rep["price"].items() if k in known})
             body = report.to_html(recommend=bool(rep.get("recommend")), price=price)
             if drift is not None:
+                # the audit body already carries the data-source block; don't repeat it
                 body += "\n" + drift_report_html(drift, standalone=False)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
                 fh.write("<html><body>\n" + body + "\n</body></html>\n")
@@ -315,6 +529,24 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         rules_run=ran,
         drift=drift,
     )
+
+
+def data_sources(config: dict, *, base_dir: str = ".") -> list:
+    """Provenance dicts for a config's data (dataset, licence, citation) -- ``[]`` for folders.
+
+    A store-backed config (``source.kind == "store"``) returns the facility's ingest provenance, the
+    same list :func:`run_config` attaches to ``AuditReport.data_sources``; per-point CSV sources
+    carry no recorded provenance.
+    """
+    source = config.get("source") or {}
+    if source.get("kind") != "store" or not source.get("store"):
+        return []
+    from .store import ParquetStore
+
+    fid = source.get("facility_id", "")
+    meta = ParquetStore(_path(base_dir, source["store"])).facilities_meta().get(fid, {})
+    prov = _provenance(meta, fid)
+    return [prov] if prov else []
 
 
 def drift_store_path(config: dict, *, base_dir: str = ".") -> str:

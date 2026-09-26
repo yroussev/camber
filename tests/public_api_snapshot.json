@@ -343,6 +343,7 @@
   ],
   "camber.config": [
     "RunResult",
+    "data_sources",
     "drift_refit",
     "drift_store_path",
     "load_config",
@@ -1226,7 +1227,11 @@
   "camber.report.audit": [
     "AuditReport",
     "Benchmark",
-    "ECM"
+    "ECM",
+    "RESEARCH_ONLY_BANNER",
+    "SHARE_ALIKE_NOTE",
+    "data_sources_html",
+    "data_sources_text"
   ],
   "camber.report.chiller": [
     "chiller_diagnosis_table"
@@ -1269,8 +1274,11 @@
   ],
   "camber.resolve": [
     "EquipRef",
+    "StoreEquipRef",
     "TERMINAL_CLASSES",
+    "clear_store_cache",
     "discover",
+    "discover_store",
     "discover_terminals",
     "occupied",
     "resolve"

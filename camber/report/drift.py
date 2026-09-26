@@ -117,7 +117,12 @@ def _evidence_figures(fam) -> str:
 
 
 def drift_report_html(
-    result, *, title: str = "CAMBER drift report", standalone: bool = True, charts: bool = False
+    result,
+    *,
+    title: str = "CAMBER drift report",
+    standalone: bool = True,
+    charts: bool = False,
+    data_sources=None,
 ) -> str:
     """Render a whole :class:`camber.driftrun.DriftResult` as HTML.
 
@@ -128,6 +133,9 @@ def drift_report_html(
 
     ``charts`` embeds each finding's evidence chart (needs ``run_drift(..., evidence=True)``, whose
     Evidence objects the result carries); without it the page stays dependency-free text and tables.
+
+    ``data_sources`` (provenance dicts, see :func:`camber.config.data_sources`) adds the "Data
+    source & licence" block -- and the non-commercial banner for research-only data.
     """
     fams = list(getattr(result, "families", []) or [])
     site = str(getattr(result, "site", "") or "")
@@ -137,6 +145,10 @@ def drift_report_html(
     meta = " · ".join(x for x in (site, f"run {run_id}" if run_id else "") if x)
     if meta:
         head.append(f"<p>{_html.escape(meta)}</p>")
+    if data_sources:
+        from .audit import data_sources_html
+
+        head.append(data_sources_html(data_sources))
     head.append(threshold_confidence_html())
 
     body: list = []

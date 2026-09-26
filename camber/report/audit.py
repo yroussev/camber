@@ -16,6 +16,105 @@ from __future__ import annotations
 import html as _html
 from dataclasses import asdict, dataclass, field
 
+# Banner carried by every report built from research-only (NC / ND licensed) data. The catalog lets
+# a learner analyse such data after an explicit acknowledgement; the licence still forbids
+# commercial use and redistribution, so the report says so where nobody can miss it.
+RESEARCH_ONLY_BANNER = (
+    "NON-COMMERCIAL / RESEARCH USE ONLY: this report is built from data whose licence forbids "
+    "commercial use and redistribution. Do not sell it, and do not redistribute it or the "
+    "underlying data."
+)
+SHARE_ALIKE_NOTE = (
+    "Share-alike licence: analysing the data is fine (including commercially), but a "
+    "redistributed adaptation of the dataset must carry the same licence."
+)
+
+
+def _is_share_alike(licence: str) -> bool:
+    return "-SA" in str(licence or "").upper()
+
+
+def _sources(sources) -> list:
+    return [s for s in (sources or []) if isinstance(s, dict) and s]
+
+
+def data_sources_text(sources) -> str:
+    """Plain-text "Data source & licence" block for ``sources`` (empty string when none).
+
+    Each source is a provenance dict as recorded at ingest (``title``, ``publisher``, ``licence``,
+    ``access``, ``citation``, ``dois``, ``landing_url``, ...). A research-only source adds the
+    :data:`RESEARCH_ONLY_BANNER`; a share-alike licence adds :data:`SHARE_ALIKE_NOTE`.
+    """
+    srcs = _sources(sources)
+    if not srcs:
+        return ""
+    L = []
+    if any(s.get("access") == "research_only" for s in srcs):
+        L.append(f"*** {RESEARCH_ONLY_BANNER} ***")
+    L.append("Data source & licence:")
+    for s in srcs:
+        name = s.get("title") or s.get("dataset_id") or s.get("facility_id", "")
+        ident = f" [{s['dataset_id']}]" if s.get("dataset_id") and s.get("title") else ""
+        L.append(f"  - {name}{ident}")
+        if s.get("publisher"):
+            L.append(f"    publisher: {s['publisher']}")
+        if s.get("licence"):
+            L.append(f"    licence: {s['licence']} ({s.get('access', 'open')})")
+        if s.get("citation"):
+            L.append(f"    cite: {s['citation']}")
+        if s.get("dois"):
+            L.append("    doi: " + ", ".join(str(d) for d in s["dois"]))
+        if s.get("landing_url"):
+            L.append(f"    source: {s['landing_url']}")
+        if _is_share_alike(s.get("licence", "")):
+            L.append(f"    note: {SHARE_ALIKE_NOTE}")
+    return "\n".join(L)
+
+
+def data_sources_html(sources) -> str:
+    """HTML "Data source & licence" block for ``sources`` (empty string when none).
+
+    Same content as :func:`data_sources_text`; the research-only banner renders as a prominent
+    ``role="alert"`` box ahead of the block.
+    """
+    srcs = _sources(sources)
+    if not srcs:
+        return ""
+    e = _html.escape
+    parts = []
+    if any(s.get("access") == "research_only" for s in srcs):
+        parts.append(
+            "<div class='camber-nc-banner' role='alert' style='border:3px solid #b00020;"
+            "padding:8px;margin:8px 0;font-weight:bold'>" + e(RESEARCH_ONLY_BANNER) + "</div>"
+        )
+    parts.append("<h2>Data source &amp; licence</h2><ul class='camber-data-sources'>")
+    for s in srcs:
+        name = s.get("title") or s.get("dataset_id") or s.get("facility_id", "")
+        bits = [f"<b>{e(str(name))}</b>"]
+        if s.get("dataset_id") and s.get("title"):
+            bits.append(f" <code>{e(str(s['dataset_id']))}</code>")
+        rows = []
+        if s.get("publisher"):
+            rows.append(f"publisher: {e(str(s['publisher']))}")
+        if s.get("licence"):
+            rows.append(f"licence: {e(str(s['licence']))} ({e(str(s.get('access', 'open')))})")
+        if s.get("citation"):
+            rows.append(f"cite: {e(str(s['citation']))}")
+        if s.get("dois"):
+            rows.append("doi: " + ", ".join(e(str(d)) for d in s["dois"]))
+        if s.get("landing_url"):
+            url = e(str(s["landing_url"]))
+            rows.append(f"source: <a href='{url}'>{url}</a>")
+        if _is_share_alike(s.get("licence", "")):
+            rows.append(e(SHARE_ALIKE_NOTE))
+        parts.append(
+            "<li>" + "".join(bits) + "<br>" + "<br>".join(rows) + "</li>"
+            if rows
+            else "<li>" + "".join(bits) + "</li>"
+        )
+    parts.append("</ul>")
+    return "\n".join(parts)
+
 
 @dataclass
 class Benchmark:
@@ -64,6 +163,9 @@ class AuditReport:
     caveats: list = field(default_factory=list)
     findings: list = field(default_factory=list)  # raw FDD Finding objects
     finding_magnitude_key: str | None = None  # metric to rank ties by
+    # provenance of the data the report was built from (dataset, licence, citation); rendered as a
+    # "Data source & licence" block, with a do-not-redistribute banner for research-only data
+    data_sources: list = field(default_factory=list)
 
     def add_ecm(self, ecm: ECM):
         """Append an ECM row to the report; return self for chaining."""
@@ -111,6 +213,9 @@ class AuditReport:
         L = [f"ASHRAE Std-211 Level {self.level} Audit -- {self.building}"]
         if self.climate_zone:
             L.append(f"Climate zone: {self.climate_zone}")
+        src = data_sources_text(self.data_sources)
+        if src:
+            L.append("\n" + src)
         if self.benchmark:
             b = self.benchmark
             L.append(
@@ -191,6 +296,9 @@ class AuditReport:
         parts = [f"<h1>ASHRAE Std-211 Level {self.level} Audit &mdash; {e(self.building)}</h1>"]
         if self.climate_zone:
             parts.append(f"<p><b>Climate zone:</b> {e(self.climate_zone)}</p>")
+        src = data_sources_html(self.data_sources)
+        if src:
+            parts.append(src)
         if self.benchmark:
             b = self.benchmark
             parts.append(
