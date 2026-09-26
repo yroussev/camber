@@ -23,11 +23,15 @@ Two properties shape the rule:
    with a caveat* when it is absent -- a chiller missing from a low-side report must not read as a
    chiller with a healthy evaporator.
 
-**The confound is stated, not hidden.** Suction pressure also tracks the *chilled-water supply
-temperature*: a chilled-water reset that lifts CHW supply raises the evaporating pressure with no
-fault at all, and load normalization does not remove it. So the rule reports the concurrent
-CHW-supply shift and **caveats** a co-moving move -- some of the change may be setpoint-driven.
-The verdict stays screening-grade.
+**The chilled-water-reset confound is regressed out, not just flagged.** Evaporating pressure is
+set first by the *leaving chilled-water temperature* the machine is controlled to, and only second
+by load: a chilled-water reset that lifts CHW supply 8 degF raises suction pressure tens of psi with
+no fault at all (on real plant data, +42 psi at 52.7 degF leaving water). Load normalization alone
+cannot remove that. So when CHW supply varied enough in the baseline to identify its effect, the
+baseline is ``pressure ~ load + CHW supply`` and every score is made at matched load *and* matched
+leaving-water temperature. When it did not vary (a fixed setpoint) the fit falls back to load only
+with a caveat, and a concurrent CHW-supply shift is reported and caveated as before. The verdict
+stays screening-grade.
 
 Everything else is the machinery the approach and subcooling detectors already use: the same
 load-normalized fit (:mod:`camber.chillerbaseline`), the same frozen-with-provenance coefficient
@@ -39,7 +43,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
+from ..chillerbaseline import tons_from_flow
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -49,6 +53,8 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from ..sensorhealth import PHYSICAL_BOUNDS
+from . import _chillerfit
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -59,10 +65,11 @@ _ROLE_TO_COL = {
 
 _KIND = "chiller_suction_pressure"
 
-# Plausibility bounds for the low-side pressure metric, psig -- wide and refrigerant-neutral (see
-# camber.sensorhealth.PHYSICAL_BOUNDS). Passed to every fit/score/monitor call so valid suction
-# pressures are not filtered out as impossible by the degF-scaled default range.
-PRESSURE_PLAUSIBLE = (-15.0, 400.0)
+# Plausibility bounds for the low-side pressure metric, psig -- camber.sensorhealth.PHYSICAL_BOUNDS,
+# one source. Wide enough to be genuinely refrigerant-neutral: CO2 (R744) medium-temperature suction
+# runs ~350-500 psig (higher at standstill), which the former 400 psig ceiling cut into. Only
+# dropouts and sentinel codes fall outside. Passed to every fit/score/monitor call.
+PRESSURE_PLAUSIBLE = PHYSICAL_BOUNDS[Role.SUCTION_PRESSURE]
 
 # ---------------------------------------------------------------------------------------------
 # MAGNITUDE FLOORS -- SCREENING-GRADE (see camber.driftthresholds).
@@ -124,11 +131,14 @@ class ChillerSuctionPressureDrift:
         warn_sigma: float = SUCTION_PRESSURE_WARN_SIGMA,  # screening-grade
         fault_sigma: float = SUCTION_PRESSURE_FAULT_SIGMA,  # screening-grade
         chw_confound_f: float = CHW_CONFOUND_WARN_F,
+        normalize_on_condition: bool = True,
+        min_covariate_span_f: float = _chillerfit.COVARIATE_MIN_SPAN_F,
         slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see camber.chillerdrift
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_tons: float = 5.0,
+        min_tons: float | None = None,  # None = size-relative (camber.chillerbaseline)
+        min_tons_span: float | None = None,  # None = size-relative
     ):
         self.store = store
         self.site = site
@@ -139,11 +149,14 @@ class ChillerSuctionPressureDrift:
         self.warn_sigma = warn_sigma
         self.fault_sigma = fault_sigma
         self.chw_confound_f = chw_confound_f
+        self.normalize_on_condition = normalize_on_condition
+        self.min_covariate_span_f = min_covariate_span_f
         self.slack_sigma = slack_sigma
         self.limit_sigma = limit_sigma
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_tons = min_tons
+        self.min_tons_span = min_tons_span
 
     # ------------------------------------------------------------------ frame prep
     def _prepared(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -155,40 +168,21 @@ class ChillerSuctionPressureDrift:
                 out[role] = frame[role]
         return out
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None):
         """The frozen suction-pressure baseline; freeze one from ``base_frame`` if none exists."""
-        frozen = self.store.model_for(self.site, equip, _KIND)
-        if frozen is not None:
-            return frozen
-        if not self.freeze_if_missing:
-            caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
-            )
-            return None
-        fit = fit_load_baseline(
+        return _chillerfit.freeze_baseline(
+            self,
+            equip,
             base_frame,
-            metric_col=Role.SUCTION_PRESSURE,
-            load_col="tons",
-            min_load=self.min_tons,
-            metric_range=PRESSURE_PLAUSIBLE,
-        )
-        if fit is None:
-            caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit "
-                "(too few loaded samples, or too narrow a load range)"
-            )
-            return None
-        idx = base_frame.index
-        self.store.freeze(
-            fit,
-            site=self.site,
-            equip=equip,
+            caveats,
             kind=_KIND,
-            frozen_at=self.run_id,
-            period=(str(idx.min()), str(idx.max())),
-            reason="initial baseline frozen from the supplied baseline period",
+            metric_col=Role.SUCTION_PRESSURE,
+            metric_range=PRESSURE_PLAUSIBLE,
+            gate=gate or _chillerfit.gates(base_frame, self.min_tons, self.min_tons_span),
+            metric_name="suction pressure",
+            covariates=self._covariates(),
+            min_covariate_span=self.min_covariate_span_f,
         )
-        return fit
 
     # ------------------------------------------------------------------ severity
     def _severity(self, drift, caveats) -> str:
@@ -211,8 +205,18 @@ class ChillerSuctionPressureDrift:
         return "ok"
 
     # ------------------------------------------------------------------ confound
-    def _chw_confound(self, base_t, cur_t, degrading: bool, metrics: dict, caveats: list) -> None:
-        """Report the CHW-supply shift; caveat a co-moving move (the CHW-reset confound)."""
+    def _covariates(self) -> tuple:
+        """Evaporating pressure follows the leaving chilled-water temperature it's controlled to."""
+        return (Role.CHW_SUPPLY_TEMP,) if self.normalize_on_condition else ()
+
+    def _chw_confound(
+        self, base_t, cur_t, degrading: bool, metrics: dict, caveats: list, frozen=None
+    ) -> None:
+        """Report the CHW-supply shift; caveat a co-moving move (the CHW-reset confound).
+
+        When the baseline is regressed on CHW supply the reset is already accounted for, so the
+        shift is reported but not caveated.
+        """
         if Role.CHW_SUPPLY_TEMP not in cur_t.columns or Role.CHW_SUPPLY_TEMP not in base_t.columns:
             return
         base_chw = pd.to_numeric(base_t[Role.CHW_SUPPLY_TEMP], errors="coerce").median()
@@ -221,7 +225,8 @@ class ChillerSuctionPressureDrift:
             return
         shift = round(float(cur_chw - base_chw), 3)
         metrics["chw_supply_shift_f"] = shift
-        if degrading and abs(shift) >= self.chw_confound_f:
+        regressed = getattr(frozen, "covariate", "") == Role.CHW_SUPPLY_TEMP.value
+        if degrading and abs(shift) >= self.chw_confound_f and not regressed:
             caveats.append(
                 f"chilled-water supply also shifted {shift:+.1f}°F over the same window; some or "
                 "all of this suction-pressure move may be a chilled-water-reset effect rather than "
@@ -256,7 +261,8 @@ class ChillerSuctionPressureDrift:
             )
 
         base_t, cur_t = self._prepared(baseline), self._prepared(current)
-        frozen = self._frozen_baseline(equip, base_t, caveats)
+        gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
+        frozen = self._frozen_baseline(equip, base_t, caveats, gate)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -267,16 +273,17 @@ class ChillerSuctionPressureDrift:
                 caveats=caveats,
             )
 
-        drift = load_drift_stats(
+        drift = _chillerfit.score(
             frozen,
             cur_t,
+            caveats,
+            kind=_KIND,
             metric_col=Role.SUCTION_PRESSURE,
-            load_col="tons",
-            min_load=self.min_tons,
             metric_range=PRESSURE_PLAUSIBLE,
+            gate=gate,
+            metric_name="suction pressure",
         )
         if drift is None:
-            caveats.append(f"could not evaluate {_KIND}: no loaded samples in the current period")
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -299,12 +306,17 @@ class ChillerSuctionPressureDrift:
             "suction_pressure_baseline_sigma_psi": frozen.sigma_f,
             "suction_pressure_baseline_frozen_at": rec.frozen_at if rec else "",
         }
-        self._chw_confound(base_t, cur_t, severity in ("warn", "fault"), metrics, caveats)
-        if drift.extrapolated:
-            caveats.append(
-                "over 10% of the current period ran outside the baseline's fitted load envelope, "
-                "so part of this drift is extrapolated"
-            )
+        self._chw_confound(
+            base_t,
+            cur_t,
+            severity in ("warn", "fault"),
+            metrics,
+            caveats,
+            None if drift.covariate_extrapolated else frozen,
+        )
+        metrics["suction_pressure_min_tons"] = gate[0]
+        _chillerfit.fit_notes(frozen, caveats, metrics, "suction_pressure")
+        _chillerfit.envelope_caveats(drift, caveats, frozen)
 
         # the same frozen baseline, folded sample-by-sample: did it move and *stay* moved?
         try:
@@ -320,8 +332,9 @@ class ChillerSuctionPressureDrift:
                 cur_t,
                 approach_col=Role.SUCTION_PRESSURE,
                 tons_col="tons",
-                min_tons=self.min_tons,
+                min_tons=gate[0],
                 approach_range=PRESSURE_PLAUSIBLE,
+                covariate_col=_chillerfit.covariate_key(frozen),
             )
         except ValueError as exc:
             run = None
@@ -346,7 +359,8 @@ class ChillerSuctionPressureDrift:
             metrics=metrics,
             summary=(
                 f"{equip}: suction pressure {arrow} {abs(drift.drift_f):.1f} psi "
-                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at matched load"
+                f"({abs(drift.drift_sigma):.1f}σ) vs frozen baseline at "
+                f"{_chillerfit.matched(frozen)}"
             ),
             caveats=caveats,
         )

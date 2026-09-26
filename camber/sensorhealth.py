@@ -89,12 +89,19 @@ PHYSICAL_BOUNDS: dict = {
     # refrigerant-side approach / subcooling temperatures
     Role.COND_APPROACH_TEMP: (-5.0, 60.0),
     Role.EVAP_APPROACH_TEMP: (-5.0, 60.0),
-    Role.SUBCOOLING_TEMP: (-5.0, 60.0),
+    # Subcooling and superheat are a temperature minus a pressure-derived saturation temperature.
+    # A two-phase state (flash gas in the liquid line; liquid floodback at the suction) reads ~0
+    # and, with transducer/sensor error, a few degF *below* 0 -- those are the faults themselves,
+    # so the floor must admit them. A starved evaporator can run superheat well past 50 degF. The
+    # bounds only reject sentinel codes (-99, -999, 999, ...) and dead-channel arithmetic.
+    Role.SUBCOOLING_TEMP: (-20.0, 80.0),
+    Role.SUPERHEAT_TEMP: (-20.0, 150.0),
     # refrigerant-side pressures, psig. Wide and refrigerant-neutral: low-pressure refrigerants
-    # (e.g. R-123) can sit near or below atmospheric while high-pressure ones (e.g. R-410A) run
-    # several hundred psig, so these bounds only reject sensor dropouts / impossible values.
-    Role.DISCHARGE_PRESSURE: (-15.0, 700.0),
-    Role.SUCTION_PRESSURE: (-15.0, 400.0),
+    # (e.g. R-123) sit near or below atmospheric, R-410A runs several hundred psig, and a CO2
+    # (R744) transcritical gas cooler runs ~1100-1750 psig with suction up to ~500 psig (standstill
+    # higher). These bounds only reject sensor dropouts / sentinel codes (9999, 32767, 65535).
+    Role.DISCHARGE_PRESSURE: (-15.0, 2000.0),
+    Role.SUCTION_PRESSURE: (-15.0, 1000.0),
     # hydronic flow (gpm) — same wide bound as the chilled-water flow role
     Role.HW_FLOW: (-1.0, 1e6),
     # pump differential head (psi) — wide; only rejects dropouts / impossible values

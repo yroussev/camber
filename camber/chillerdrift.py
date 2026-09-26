@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+import numpy as np
 import pandas as pd
 
 # The private cleaner is shared deliberately: the streaming alarm must score exactly the
@@ -113,6 +114,8 @@ class DriftAlarmRun:
     final_residual_f: float
     alarm_direction: str | None = None  # "up" | "down" -- which side raised it first
     peak_improving: float = 0.0  # highest the falling-side accumulator reached, degF
+    autocorr_lag1: float = 0.0  # residual lag-1 autocorrelation at this period's cadence
+    sigma_inflation: float = 1.0  # long-run / per-sample sigma the parameters were scaled by
 
     def as_dict(self) -> dict:
         """Return the run summary as a plain dict."""
@@ -143,6 +146,7 @@ class ApproachDriftMonitor:
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
         direction: str = "up",  # "up" (default, one-sided) | "both" (two-sided signals)
+        autocorr: bool = True,  # scale sigma for serially-correlated residuals (see _start)
     ):
         if not baseline.sigma_f > 0:
             raise ValueError(
@@ -156,13 +160,32 @@ class ApproachDriftMonitor:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.direction = direction
+        self.autocorr = autocorr
         self.baseline = baseline
         self._start(baseline)
 
-    def _start(self, baseline) -> None:
-        """(Re)build the accumulator against ``baseline`` and clear all state."""
+    def _start(self, baseline, rho: float | None = None) -> None:
+        """(Re)build the accumulator against ``baseline`` and clear all state.
+
+        **Serial correlation.** A tabular CUSUM's slack and limit are in units of the sigma of
+        *independent* samples. Trend residuals are not independent: a chiller's residual wanders
+        slowly (lag-1 autocorrelation 0.8-0.9 at 1-5 minute cadence on real plant data), so one
+        half-hour excursion sampled every minute arrives as thirty samples that all push the same
+        way and the accumulator counts it thirty times. Measured on normal days of a real plant
+        that turned the alarm into a coin toss (19-59 % false alarms, worse at faster cadence).
+        The standard correction is to express the parameters in the residual's **long-run**
+        sigma, ``sigma * sqrt((1 + rho) / (1 - rho))`` for AR(1)-like residuals -- the scale a
+        sum of correlated samples actually grows on. ``rho`` comes from the baseline
+        (:attr:`camber.chillerbaseline.LoadBaseline.resid_lag1`, zero unless significant), so
+        independent residuals -- hourly trend data, most synthetic benches -- are untouched.
+        """
         self.baseline = baseline
-        sigma = baseline.sigma_f
+        if rho is None:
+            rho = float(getattr(baseline, "resid_lag1", 0.0) or 0.0) if self.autocorr else 0.0
+        rho = min(max(rho, 0.0), 0.99)
+        self.rho = rho
+        self.inflation = float((1.0 + rho) / (1.0 - rho)) ** 0.5
+        sigma = baseline.sigma_f * self.inflation
         self.limit_f = self.limit_sigma * sigma
         self.clip_f = self.clip_sigma * sigma
         self._cusum = OnlineCusum(
@@ -231,6 +254,7 @@ class ApproachDriftMonitor:
         tons_col: str = "tons",
         min_tons: float = 5.0,
         approach_range: tuple[float, float] = (0.0, 50.0),
+        covariate_col=None,
     ) -> DriftAlarmRun | None:
         """Fold a whole period through the monitor in order; summarize when it first alarmed.
 
@@ -239,11 +263,45 @@ class ApproachDriftMonitor:
 
         The argument spelling is the approach one this class was written against; the underlying
         cleaner is metric-neutral, so any load-dependent degF column works (subcooling, condenser-
-        water range) by passing its column key as ``approach_col``.
+        water range) by passing its column key as ``approach_col``. A baseline fitted with a
+        covariate needs ``covariate_col``: each reading is referred to the baseline's reference
+        condition (:meth:`camber.chillerbaseline.LoadBaseline.adjust`) before it is folded. A flat
+        ``level`` baseline folds only the samples inside its load band.
         """
-        w = _clean(frame, approach_col, tons_col, min_load=min_tons, metric_range=approach_range)
+        base = self.baseline
+        if getattr(base, "covariate", "") and covariate_col is None:
+            raise ValueError(
+                f"this baseline was fitted with covariate {base.covariate!r}; pass covariate_col"
+            )
+        use_cov = covariate_col if getattr(base, "covariate", "") else None
+        w = _clean(
+            frame,
+            approach_col,
+            tons_col,
+            min_load=min_tons,
+            metric_range=approach_range,
+            covariate_col=use_cov,
+        )
+        if getattr(base, "load_model", "linear") == "level" and not w.empty:
+            w = w[base.in_scope(w["tons"].to_numpy(dtype=float))]
         if w.empty:
             return None
+        if self._cusum.n == 0 and self.autocorr:
+            # Carry the baseline's serial correlation to this period's cadence: for residuals
+            # that decorrelate exponentially in time, rho(step) = rho_base ** (step / base_step).
+            rho_b = float(getattr(base, "resid_lag1", 0.0) or 0.0)
+            step_b = float(getattr(base, "sample_seconds", 0.0) or 0.0)
+            if rho_b > 0 and step_b > 0 and isinstance(w.index, pd.DatetimeIndex) and len(w) > 1:
+                dt = np.diff(np.sort(w.index.asi8)).astype(float) / 1e9
+                dt = dt[dt > 0]
+                if len(dt):
+                    rho_c = rho_b ** (float(np.median(dt)) / step_b)
+                    if abs(rho_c - self.rho) > 1e-9:
+                        self._start(base, rho=rho_c)
+        if use_cov is not None:
+            # refer each reading to the baseline's reference condition, so the load-only
+            # prediction the accumulator uses is the right expectation for it
+            w = w.assign(metric=base.adjust(w["metric"].to_numpy(dtype=float), w["cov"]))
         first_n, first_at, first_dir = -1, "", None
         peak_up, peak_down, last = 0.0, 0.0, float("nan")
         for label, tons, metric in zip(w.index, w["tons"].to_numpy(), w["metric"].to_numpy()):
@@ -263,4 +321,6 @@ class ApproachDriftMonitor:
             final_residual_f=round(float(last), 4) if last == last else float("nan"),
             alarm_direction=first_dir,
             peak_improving=round(float(peak_down), 4),
+            autocorr_lag1=round(float(self.rho), 4),
+            sigma_inflation=round(float(self.inflation), 4),
         )

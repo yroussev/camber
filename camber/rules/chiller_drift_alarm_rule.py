@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ..chillerbaseline import unscoreable_reason
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -34,6 +35,7 @@ from ..chillerdrift import (
     ApproachDriftMonitor,
 )
 from ..driftthresholds import threshold_confidence
+from . import _chillerfit
 from .base import Finding
 from .chiller_drift_rule import _LEGS, ChillerApproachDrift
 
@@ -80,6 +82,7 @@ class ChillerApproachSustainedDrift(ChillerApproachDrift):
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Fold the current period through a CUSUM against the frozen baseline; return a Finding."""
         base_t, cur_t = self._with_tons(baseline), self._with_tons(current)
+        gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
         caveats: list = []
         metrics: dict = {}
         legs, severity = [], "ok"
@@ -88,7 +91,7 @@ class ChillerApproachSustainedDrift(ChillerApproachDrift):
             if role not in cur_t.columns:
                 continue
             kind = f"chiller_approach_{slug}"
-            frozen = self._baseline_for(equip, role, kind, base_t, caveats)
+            frozen = self._baseline_for(equip, role, kind, base_t, caveats, gate)
             if frozen is None:
                 continue
             try:
@@ -96,10 +99,21 @@ class ChillerApproachSustainedDrift(ChillerApproachDrift):
             except ValueError as exc:
                 caveats.append(f"could not evaluate {kind}: {exc}")
                 continue
-            run = monitor.run(cur_t, approach_col=role, tons_col="tons", min_tons=self.min_tons)
+            run = monitor.run(cur_t, approach_col=role, tons_col="tons", min_tons=gate[0])
             if run is None:
+                why = unscoreable_reason(
+                    cur_t,
+                    metric_col=role,
+                    load_col="tons",
+                    min_load=gate[0],
+                    metric_range=(0.0, 50.0),
+                    min_samples=1,
+                    baseline=frozen,
+                    metric_name=getattr(role, "value", str(role)),
+                    load_name="tons",
+                )
                 caveats.append(
-                    f"could not evaluate {kind}: no loaded samples in the current period"
+                    f"could not evaluate {kind}: nothing scoreable in the current period -- {why}"
                 )
                 continue
             metrics.update(

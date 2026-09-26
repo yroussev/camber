@@ -116,17 +116,18 @@ _CAUSE_FLOW_LOW = "reduced condenser-water flow"
 _CAUSE_BYPASS = "condenser-water bypass or short-circuit"
 _CAUSE_HEAD = "condenser high-side pressure rising (fouling / non-condensables)"
 
-# The standard heat-rejection fault families. tube_scaling and tower_fouling co-move a 2nd channel
-# (head pressure) through the shared quantities, so the diagnosis corroborates them; the CW-flow and
-# non-condensable faults are single-signal; ambient_cw_rise is the confound negative (a CW/head rise
-# with a quiet tower, which must be demoted to likely-ambient rather than flagged).
+# The standard heat-rejection fault families. tube_scaling co-moves a 2nd channel (head pressure at
+# matched entering-CW temperature) through the condenser approach, so the diagnosis corroborates it.
+# tower_fouling lifts head pressure only *through* a warmer entering CW; the head-pressure rule
+# regresses on entering-CW temperature (0.82.0), so it correctly reads the chiller's high side as
+# healthy and the tower fault is single-signal, like the CW-flow and non-condensable faults.
+# ambient_cw_rise is the confound negative (a CW/head rise with a quiet tower): the same regression
+# removes it at source, so it must not be flagged.
 FAULTS: dict[str, CondenserFault] = {
     "tube_scaling": CondenserFault(
         "tube_scaling", _CAUSE_SCALING, expected_corroborated=True, d_cond_scaling=0.7
     ),
-    "tower_fouling": CondenserFault(
-        "tower_fouling", _CAUSE_TOWER, expected_corroborated=True, d_tower_approach=1.0
-    ),
+    "tower_fouling": CondenserFault("tower_fouling", _CAUSE_TOWER, d_tower_approach=1.0),
     "cw_flow_reduction": CondenserFault("cw_flow_reduction", _CAUSE_FLOW_LOW, d_cw_flow_frac=-0.07),
     "cw_bypass": CondenserFault("cw_bypass", _CAUSE_BYPASS, d_cw_flow_frac=0.11),
     "noncondensables": CondenserFault("noncondensables", _CAUSE_HEAD, d_noncond=2.5),

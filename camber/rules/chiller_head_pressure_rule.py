@@ -16,12 +16,16 @@ its own detector for two reasons:
    head pressure. A falling head pressure is not a high-side fault, so the detector alarms only on a
    climb (monitor default ``direction="up"``), mirroring the approach rules.
 
-**The confound is stated, not hidden.** Head pressure also rises with the *entering condenser-water
-temperature* and with ambient wet-bulb, independent of any fault: a hot afternoon lifts it without a
-speck of scale. Load normalization (:mod:`camber.chillerbaseline`) removes the *tons* confound but
-not the CW-temperature one. So when a condenser-water supply point is mapped, this rule reports the
-concurrent shift in CW supply temperature and **caveats** a co-moving rise -- some or all of the
-head-pressure climb may be heat-rejection/ambient-driven rather than a high-side fault. A mapped
+**The heat-sink confound is regressed out, not just flagged.** Condensing pressure is set first by
+the temperature of what the condenser rejects to -- the *entering condenser-water temperature* on a
+water-cooled machine, *outdoor air* on an air-cooled one -- and only second by load: a hot afternoon
+lifts it without a speck of scale. On real plant data a load-only fit left 44-63 psi of residual
+scatter that a fit on load *and* entering-water / outdoor temperature cut to 3-11 psi, turning a 44
+psi blockage from a 1-sigma blip into a 4-13 sigma finding. So when ``Role.CW_SUPPLY_TEMP``
+(water-cooled) or else ``Role.OAT`` (air-cooled) is mapped and varied enough in the baseline, the
+baseline is ``pressure ~ load + heat-sink temperature`` and every score is made at matched load
+*and* matched heat-sink temperature. Without one it falls back to load only and says so in a caveat;
+the concurrent CW-supply shift is then reported and a co-moving rise caveated as before. A mapped
 suction pressure adds the condensing-over-suction *lift* as further context. The verdict stays
 screening-grade: it ranks a machine for a gauge-and-walkdown, it does not dispatch on its own.
 
@@ -35,7 +39,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
+from ..chillerbaseline import tons_from_flow
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -45,6 +49,8 @@ from ..chillerdrift import (
 )
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from ..sensorhealth import PHYSICAL_BOUNDS
+from . import _chillerfit
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -55,10 +61,12 @@ _ROLE_TO_COL = {
 
 _KIND = "chiller_head_pressure"
 
-# Plausibility bounds for the *pressure* metric, psig -- wide and refrigerant-neutral (see
-# camber.sensorhealth.PHYSICAL_BOUNDS). Passed to every fit/score/monitor call so valid head
-# pressures (which run well above the degF-scaled default range) are not filtered out as impossible.
-PRESSURE_PLAUSIBLE = (-15.0, 700.0)
+# Plausibility bounds for the *pressure* metric, psig -- camber.sensorhealth.PHYSICAL_BOUNDS, one
+# source. Wide enough to be genuinely refrigerant-neutral: a CO2 (R744) transcritical gas cooler
+# runs ~1100-1750 psig, which the former 700 psig ceiling rejected wholesale. Only dropouts and
+# sentinel codes (9999, 32767, ...) fall outside. Passed to every fit/score/monitor call so valid
+# head pressures are not filtered out by the degF-scaled default range.
+PRESSURE_PLAUSIBLE = PHYSICAL_BOUNDS[Role.DISCHARGE_PRESSURE]
 
 # ---------------------------------------------------------------------------------------------
 # MAGNITUDE FLOORS -- SCREENING-GRADE (see camber.driftthresholds).
@@ -109,7 +117,7 @@ class ChillerHeadPressureDrift:
         Role.CHW_SUPPLY_TEMP,
         Role.CHW_RETURN_TEMP,
     )
-    roles_optional = (Role.CW_SUPPLY_TEMP, Role.SUCTION_PRESSURE)
+    roles_optional = (Role.CW_SUPPLY_TEMP, Role.OAT, Role.SUCTION_PRESSURE)
 
     def __init__(
         self,
@@ -123,11 +131,14 @@ class ChillerHeadPressureDrift:
         warn_sigma: float = HEAD_PRESSURE_WARN_SIGMA,  # screening-grade
         fault_sigma: float = HEAD_PRESSURE_FAULT_SIGMA,  # screening-grade
         cw_confound_f: float = CW_CONFOUND_WARN_F,
+        normalize_on_condition: bool = True,
+        min_covariate_span_f: float = _chillerfit.COVARIATE_MIN_SPAN_F,
         slack_sigma: float = CUSUM_SLACK_SIGMA,  # PROVISIONAL/UNTUNED -- see camber.chillerdrift
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_tons: float = 5.0,
+        min_tons: float | None = None,  # None = size-relative (camber.chillerbaseline)
+        min_tons_span: float | None = None,  # None = size-relative
     ):
         self.store = store
         self.site = site
@@ -138,56 +149,45 @@ class ChillerHeadPressureDrift:
         self.warn_sigma = warn_sigma
         self.fault_sigma = fault_sigma
         self.cw_confound_f = cw_confound_f
+        self.normalize_on_condition = normalize_on_condition
+        self.min_covariate_span_f = min_covariate_span_f
         self.slack_sigma = slack_sigma
         self.limit_sigma = limit_sigma
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_tons = min_tons
+        self.min_tons_span = min_tons_span
 
     # ------------------------------------------------------------------ frame prep
     def _prepared(self, frame: pd.DataFrame) -> pd.DataFrame:
         """A ``tons`` + pressure (+ optional CW-supply / suction) frame; tons as in chiller."""
         legacy = frame.rename(columns={r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns})
         out = pd.DataFrame({"tons": tons_from_flow(legacy)}, index=frame.index)
-        for role in (Role.DISCHARGE_PRESSURE, Role.CW_SUPPLY_TEMP, Role.SUCTION_PRESSURE):
+        for role in (
+            Role.DISCHARGE_PRESSURE,
+            Role.CW_SUPPLY_TEMP,
+            Role.OAT,
+            Role.SUCTION_PRESSURE,
+        ):
             if role in frame.columns:
                 out[role] = frame[role]
         return out
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None):
         """The frozen head-pressure baseline; freeze an initial one from ``base_frame`` if none."""
-        frozen = self.store.model_for(self.site, equip, _KIND)
-        if frozen is not None:
-            return frozen
-        if not self.freeze_if_missing:
-            caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
-            )
-            return None
-        fit = fit_load_baseline(
+        return _chillerfit.freeze_baseline(
+            self,
+            equip,
             base_frame,
-            metric_col=Role.DISCHARGE_PRESSURE,
-            load_col="tons",
-            min_load=self.min_tons,
-            metric_range=PRESSURE_PLAUSIBLE,
-        )
-        if fit is None:
-            caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit "
-                "(too few loaded samples, or too narrow a load range)"
-            )
-            return None
-        idx = base_frame.index
-        self.store.freeze(
-            fit,
-            site=self.site,
-            equip=equip,
+            caveats,
             kind=_KIND,
-            frozen_at=self.run_id,
-            period=(str(idx.min()), str(idx.max())),
-            reason="initial baseline frozen from the supplied baseline period",
+            metric_col=Role.DISCHARGE_PRESSURE,
+            metric_range=PRESSURE_PLAUSIBLE,
+            gate=gate or _chillerfit.gates(base_frame, self.min_tons, self.min_tons_span),
+            metric_name="head pressure",
+            covariates=self._covariates(),
+            min_covariate_span=self.min_covariate_span_f,
         )
-        return fit
 
     # ------------------------------------------------------------------ severity
     def _severity(self, drift, caveats) -> str:
@@ -207,7 +207,17 @@ class ChillerHeadPressureDrift:
         return "ok"
 
     # ------------------------------------------------------------------ confounds
-    def _confound_signals(self, base_t, cur_t, rising: bool, metrics: dict, caveats: list) -> None:
+    def _covariates(self) -> tuple:
+        """The heat-sink temperatures head pressure is regressed on, in preference order.
+
+        Condensing pressure is set by the temperature of the medium the condenser rejects to:
+        entering condenser water on a water-cooled machine, outdoor air on an air-cooled one.
+        """
+        return (Role.CW_SUPPLY_TEMP, Role.OAT) if self.normalize_on_condition else ()
+
+    def _confound_signals(
+        self, base_t, cur_t, rising: bool, metrics: dict, caveats: list, frozen=None
+    ) -> None:
         """Report the CW-supply and suction-pressure confound context, mutating metrics/caveats.
 
         Load normalization removes the tons confound but not the entering-CW-temperature one, so a
@@ -219,7 +229,8 @@ class ChillerHeadPressureDrift:
             if base_cw == base_cw and cur_cw == cur_cw:  # both non-NaN
                 shift = round(float(cur_cw - base_cw), 3)
                 metrics["cw_supply_shift_f"] = shift
-                if rising and shift >= self.cw_confound_f:
+                regressed = getattr(frozen, "covariate", "") == Role.CW_SUPPLY_TEMP.value
+                if rising and shift >= self.cw_confound_f and not regressed:
                     caveats.append(
                         f"entering condenser-water supply also rose {shift:+.1f}°F over the same "
                         "window; some or all of this head-pressure climb may be heat-rejection / "
@@ -264,7 +275,8 @@ class ChillerHeadPressureDrift:
             )
 
         base_t, cur_t = self._prepared(baseline), self._prepared(current)
-        frozen = self._frozen_baseline(equip, base_t, caveats)
+        gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
+        frozen = self._frozen_baseline(equip, base_t, caveats, gate)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -275,16 +287,17 @@ class ChillerHeadPressureDrift:
                 caveats=caveats,
             )
 
-        drift = load_drift_stats(
+        drift = _chillerfit.score(
             frozen,
             cur_t,
+            caveats,
+            kind=_KIND,
             metric_col=Role.DISCHARGE_PRESSURE,
-            load_col="tons",
-            min_load=self.min_tons,
             metric_range=PRESSURE_PLAUSIBLE,
+            gate=gate,
+            metric_name="head pressure",
         )
         if drift is None:
-            caveats.append(f"could not evaluate {_KIND}: no loaded samples in the current period")
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -307,12 +320,23 @@ class ChillerHeadPressureDrift:
             "head_pressure_baseline_sigma_psi": frozen.sigma_f,
             "head_pressure_baseline_frozen_at": rec.frozen_at if rec else "",
         }
-        self._confound_signals(base_t, cur_t, direction == "up", metrics, caveats)
-        if drift.extrapolated:
+        self._confound_signals(
+            base_t,
+            cur_t,
+            direction == "up",
+            metrics,
+            caveats,
+            None if drift.covariate_extrapolated else frozen,
+        )
+        if not getattr(frozen, "covariate", ""):
             caveats.append(
-                "over 10% of the current period ran outside the baseline's fitted load envelope, "
-                "so part of this drift is extrapolated"
+                "head pressure is normalized on load only -- no entering condenser-water or "
+                "outdoor-air temperature was usable as a second regressor, so a heat-sink "
+                "(ambient / tower) rise is not separated from a high-side fault"
             )
+        metrics["head_pressure_min_tons"] = gate[0]
+        _chillerfit.fit_notes(frozen, caveats, metrics, "head_pressure")
+        _chillerfit.envelope_caveats(drift, caveats, frozen)
 
         # the same frozen baseline, folded sample-by-sample: did it climb and *stay* climbed?
         try:
@@ -328,8 +352,9 @@ class ChillerHeadPressureDrift:
                 cur_t,
                 approach_col=Role.DISCHARGE_PRESSURE,
                 tons_col="tons",
-                min_tons=self.min_tons,
+                min_tons=gate[0],
                 approach_range=PRESSURE_PLAUSIBLE,
+                covariate_col=_chillerfit.covariate_key(frozen),
             )
         except ValueError as exc:
             run = None
@@ -349,12 +374,12 @@ class ChillerHeadPressureDrift:
         if direction == "up":
             headline = (
                 f"{equip}: head pressure climbed {drift.drift_f:+.1f} psi "
-                f"({drift.drift_sigma:.1f}σ) vs frozen baseline at matched load"
+                f"({drift.drift_sigma:.1f}σ) vs frozen baseline at {_chillerfit.matched(frozen)}"
             )
         else:
             headline = (
-                f"{equip}: head pressure {drift.drift_f:+.1f} psi vs frozen baseline at matched "
-                "load (a fall is not a high-side fault)"
+                f"{equip}: head pressure {drift.drift_f:+.1f} psi vs frozen baseline at "
+                f"{_chillerfit.matched(frozen)} (a fall is not a high-side fault)"
             )
         return Finding(
             rule=self.name,

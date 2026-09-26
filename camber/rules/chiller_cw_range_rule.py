@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
+from ..chillerbaseline import tons_from_flow
 from ..chillerdrift import (
     CUSUM_CLIP_SIGMA,
     CUSUM_LIMIT_SIGMA,
@@ -57,6 +57,7 @@ from ..chillerdrift import (
 from ..coolingtower import cw_range_f
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _chillerfit
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -138,7 +139,8 @@ class ChillerCwRangeDrift:
         limit_sigma: float = CUSUM_LIMIT_SIGMA,  # PROVISIONAL/UNTUNED
         clip_sigma: float = CUSUM_CLIP_SIGMA,  # PROVISIONAL/UNTUNED
         min_consecutive: int = CUSUM_MIN_CONSECUTIVE,  # PROVISIONAL/UNTUNED
-        min_tons: float = 5.0,
+        min_tons: float | None = None,  # None = size-relative (camber.chillerbaseline)
+        min_tons_span: float | None = None,  # None = size-relative
     ):
         self.store = store
         self.site = site
@@ -153,6 +155,7 @@ class ChillerCwRangeDrift:
         self.clip_sigma = clip_sigma
         self.min_consecutive = min_consecutive
         self.min_tons = min_tons
+        self.min_tons_span = min_tons_span
 
     # ------------------------------------------------------------------ frame prep
     def _prepared(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -164,40 +167,19 @@ class ChillerCwRangeDrift:
             out[_METRIC] = cw_range_f(legacy)
         return out
 
-    def _frozen_baseline(self, equip, base_frame, caveats):
+    def _frozen_baseline(self, equip, base_frame, caveats, gate=None):
         """The frozen range baseline, freezing an initial one from ``base_frame`` if none."""
-        frozen = self.store.model_for(self.site, equip, _KIND)
-        if frozen is not None:
-            return frozen
-        if not self.freeze_if_missing:
-            caveats.append(
-                f"could not evaluate {_KIND}: no frozen baseline and freezing is disabled"
-            )
-            return None
-        fit = fit_load_baseline(
+        return _chillerfit.freeze_baseline(
+            self,
+            equip,
             base_frame,
-            metric_col=_METRIC,
-            load_col="tons",
-            min_load=self.min_tons,
-            metric_range=CW_RANGE_PLAUSIBLE_F,
-        )
-        if fit is None:
-            caveats.append(
-                f"could not evaluate {_KIND}: the baseline period would not support a fit "
-                "(too few loaded samples, or too narrow a load range)"
-            )
-            return None
-        idx = base_frame.index
-        self.store.freeze(
-            fit,
-            site=self.site,
-            equip=equip,
+            caveats,
             kind=_KIND,
-            frozen_at=self.run_id,
-            period=(str(idx.min()), str(idx.max())),
-            reason="initial baseline frozen from the supplied baseline period",
+            metric_col=_METRIC,
+            metric_range=CW_RANGE_PLAUSIBLE_F,
+            gate=gate or _chillerfit.gates(base_frame, self.min_tons, self.min_tons_span),
+            metric_name="condenser-water range",
         )
-        return fit
 
     # ------------------------------------------------------------------ severity
     def _severity(self, drift, caveats) -> str:
@@ -248,7 +230,8 @@ class ChillerCwRangeDrift:
             )
 
         base_t, cur_t = self._prepared(baseline), self._prepared(current)
-        frozen = self._frozen_baseline(equip, base_t, caveats)
+        gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
+        frozen = self._frozen_baseline(equip, base_t, caveats, gate)
         if frozen is None:
             return Finding(
                 rule=self.name,
@@ -259,16 +242,17 @@ class ChillerCwRangeDrift:
                 caveats=caveats,
             )
 
-        drift = load_drift_stats(
+        drift = _chillerfit.score(
             frozen,
             cur_t,
+            caveats,
+            kind=_KIND,
             metric_col=_METRIC,
-            load_col="tons",
-            min_load=self.min_tons,
             metric_range=CW_RANGE_PLAUSIBLE_F,
+            gate=gate,
+            metric_name="condenser-water range",
         )
         if drift is None:
-            caveats.append(f"could not evaluate {_KIND}: no loaded samples in the current period")
             return Finding(
                 rule=self.name,
                 equip=equip,
@@ -291,11 +275,9 @@ class ChillerCwRangeDrift:
             "cw_range_baseline_sigma_f": frozen.sigma_f,
             "cw_range_baseline_frozen_at": rec.frozen_at if rec else "",
         }
-        if drift.extrapolated:
-            caveats.append(
-                "over 10% of the current period ran outside the baseline's fitted load envelope, "
-                "so part of this drift is extrapolated"
-            )
+        metrics["cw_range_min_tons"] = gate[0]
+        _chillerfit.fit_notes(frozen, caveats, metrics, "cw_range")
+        _chillerfit.envelope_caveats(drift, caveats, frozen)
 
         # the same frozen baseline, folded sample-by-sample: did it move and *stay* moved?
         try:
@@ -311,8 +293,9 @@ class ChillerCwRangeDrift:
                 cur_t,
                 approach_col=_METRIC,
                 tons_col="tons",
-                min_tons=self.min_tons,
+                min_tons=gate[0],
                 approach_range=CW_RANGE_PLAUSIBLE_F,
+                covariate_col=_chillerfit.covariate_key(frozen),
             )
         except ValueError as exc:
             run = None

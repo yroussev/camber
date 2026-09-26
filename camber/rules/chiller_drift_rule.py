@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chillerbaseline import fit_load_baseline, load_drift_stats, tons_from_flow
+from ..chillerbaseline import tons_from_flow
 from ..driftthresholds import threshold_confidence
 from ..model.roles import Role
+from . import _chillerfit
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -95,7 +96,8 @@ class ChillerApproachDrift:
         drift_fault_f: float = DRIFT_FAULT_F,  # screening-grade
         drift_warn_sigma: float = DRIFT_WARN_SIGMA,  # screening-grade
         drift_fault_sigma: float = DRIFT_FAULT_SIGMA,  # screening-grade
-        min_tons: float = 5.0,
+        min_tons: float | None = None,  # None = size-relative (camber.chillerbaseline)
+        min_tons_span: float | None = None,  # None = size-relative
     ):
         self.store = store
         self.site = site
@@ -109,6 +111,7 @@ class ChillerApproachDrift:
         self.drift_warn_sigma = drift_warn_sigma
         self.drift_fault_sigma = drift_fault_sigma
         self.min_tons = min_tons
+        self.min_tons_span = min_tons_span
 
     # ------------------------------------------------------------------ frame prep
     def _with_tons(self, frame: pd.DataFrame) -> pd.DataFrame:
@@ -120,36 +123,19 @@ class ChillerApproachDrift:
                 out[role] = frame[role]
         return out
 
-    def _baseline_for(self, equip, role, kind, base_frame, caveats):
+    def _baseline_for(self, equip, role, kind, base_frame, caveats, gate=None):
         """The frozen baseline for one leg, freezing an initial one from ``base_frame`` if none."""
-        frozen = self.store.model_for(self.site, equip, kind)
-        if frozen is not None:
-            return frozen
-        if not self.freeze_if_missing:
-            caveats.append(
-                f"could not evaluate {kind}: no frozen baseline and freezing is disabled"
-            )
-            return None
-        fit = fit_load_baseline(
-            base_frame, metric_col=role, load_col="tons", min_load=self.min_tons
-        )
-        if fit is None:
-            caveats.append(
-                f"could not evaluate {kind}: the baseline period would not support a fit "
-                "(too few loaded samples, or too narrow a load range)"
-            )
-            return None
-        idx = base_frame.index
-        self.store.freeze(
-            fit,
-            site=self.site,
-            equip=equip,
+        return _chillerfit.freeze_baseline(
+            self,
+            equip,
+            base_frame,
+            caveats,
             kind=kind,
-            frozen_at=self.run_id,
-            period=(str(idx.min()), str(idx.max())),
-            reason="initial baseline frozen from the supplied baseline period",
+            metric_col=role,
+            metric_range=(0.0, 50.0),
+            gate=gate or _chillerfit.gates(base_frame, self.min_tons, self.min_tons_span),
+            metric_name=getattr(role, "value", str(role)),
         )
-        return fit
 
     # ------------------------------------------------------------------ severity
     def _severity(self, drift, slug, caveats) -> str:
@@ -185,6 +171,7 @@ class ChillerApproachDrift:
     def analyze_periods(self, equip: str, baseline: pd.DataFrame, current: pd.DataFrame) -> Finding:
         """Score ``current`` against the frozen baseline for ``equip``; return a Finding."""
         base_t, cur_t = self._with_tons(baseline), self._with_tons(current)
+        gate = _chillerfit.gates(base_t, self.min_tons, self.min_tons_span)
         caveats: list = []
         metrics: dict = {}
         legs, severity = [], "ok"
@@ -193,16 +180,20 @@ class ChillerApproachDrift:
             if role not in cur_t.columns:
                 continue
             kind = f"chiller_approach_{slug}"
-            frozen = self._baseline_for(equip, role, kind, base_t, caveats)
+            frozen = self._baseline_for(equip, role, kind, base_t, caveats, gate)
             if frozen is None:
                 continue
-            drift = load_drift_stats(
-                frozen, cur_t, metric_col=role, load_col="tons", min_load=self.min_tons
+            drift = _chillerfit.score(
+                frozen,
+                cur_t,
+                caveats,
+                kind=kind,
+                metric_col=role,
+                metric_range=(0.0, 50.0),
+                gate=gate,
+                metric_name=getattr(role, "value", str(role)),
             )
             if drift is None:
-                caveats.append(
-                    f"could not evaluate {kind}: no loaded samples in the current period"
-                )
                 continue
             rec = self.store.get(self.site, equip, kind)
             leg_sev = self._severity(drift, slug, caveats)
@@ -218,11 +209,8 @@ class ChillerApproachDrift:
                     f"{slug}_baseline_frozen_at": rec.frozen_at if rec else "",
                 }
             )
-            if drift.extrapolated:
-                caveats.append(
-                    f"{slug}: over 10% of the current period ran outside the baseline's fitted "
-                    "load envelope, so part of this drift is extrapolated"
-                )
+            _chillerfit.fit_notes(frozen, caveats, metrics, slug)
+            _chillerfit.envelope_caveats(drift, caveats, frozen, prefix=f"{slug}: ")
             legs.append(f"{label} {drift.drift_f:+.1f}°F ({drift.drift_sigma:.1f}σ)")
 
         if not legs:

@@ -261,6 +261,8 @@
   "camber.chillerbaseline": [
     "ApproachBaseline",
     "ApproachDrift",
+    "FULL_SIZE_MIN_LOAD",
+    "FULL_SIZE_MIN_LOAD_SPAN",
     "LoadBaseline",
     "LoadDrift",
     "drift_stats",
@@ -268,7 +270,10 @@
     "fit_load_baseline",
     "fit_subcooling_baseline",
     "load_drift_stats",
-    "tons_from_flow"
+    "residual_lag1",
+    "size_relative_load_gates",
+    "tons_from_flow",
+    "unscoreable_reason"
   ],
   "camber.chillerdiag": [
     "ChillerDriftDiagnosis",
@@ -1337,6 +1342,7 @@
     "ChillerSubcoolingDrift",
     "SUBCOOLING_FAULT_F",
     "SUBCOOLING_FAULT_SIGMA",
+    "SUBCOOLING_PLAUSIBLE_F",
     "SUBCOOLING_WARN_F",
     "SUBCOOLING_WARN_SIGMA"
   ],
@@ -1353,6 +1359,7 @@
     "ChillerSuperheatDrift",
     "SUPERHEAT_FAULT_F",
     "SUPERHEAT_FAULT_SIGMA",
+    "SUPERHEAT_PLAUSIBLE_F",
     "SUPERHEAT_WARN_F",
     "SUPERHEAT_WARN_SIGMA"
   ],

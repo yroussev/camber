@@ -118,11 +118,15 @@ def test_tube_scaling_corroborates_system_side_scaling():
 
 
 def test_ambient_cw_rise_is_demoted_not_corroborated():
-    """A CW/head rise with a quiet tower is likely ambient — must not be a corroborated fault."""
+    """A CW/head rise with a quiet tower is ambient — must not be a corroborated fault.
+
+    Since 0.82.0 the head-pressure rule regresses on entering-CW temperature, so the ambient rise
+    is removed at source: the high side reads healthy at matched CW temperature and nothing fires.
+    """
     d = diagnose_condenser_frames(*_cur_base("ambient_cw_rise", 4, seed=12))
     assert d.corroborated is False
     assert d.signals["cooling_tower_approach_drift"]["cause"] is None  # tower stayed quiet
-    assert any("ambient / high-load" in c for c in d.caveats)
+    assert d.signals["chiller_head_pressure_drift"]["cause"] is None  # regressed out, not flagged
 
 
 # --------------------------------------------------------------------------- cause confusion

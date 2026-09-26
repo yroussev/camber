@@ -307,16 +307,28 @@ def test_the_finding_labels_its_two_threshold_classes_separately():
 # --------------------------------------------------------------------------- degenerate baselines
 
 
-def test_it_declines_when_the_baseline_period_cannot_support_a_fit():
-    """A flat-load baseline window identifies no slope, so no baseline is fabricated."""
+def test_a_flat_load_baseline_is_a_level_scored_only_at_that_load():
+    """A flat-load baseline identifies no slope: it is fitted as a flat level, never a fabricated
+    slope, and only current samples near that load are scored against it."""
     base, cur = _base_and({})
     flat = base.copy()
-    flat[Role.CHW_FLOW] = 340.0  # constant load: the slope is unidentifiable
+    flat[Role.CHW_FLOW] = 340.0  # constant load (170 t): the slope is unidentifiable
     f = _rule(BaselineStore()).analyze_periods("CH_1", flat, cur)
+
+    assert f.metrics.get("declined") is not True
+    assert f.metrics["cw_range_baseline_model"] == "level"
+    assert f.metrics["cw_range_n_current"] < len(cur)  # off-band loads not scored
+    assert any("flat level" in c for c in f.caveats)
+
+
+def test_it_declines_when_the_baseline_period_cannot_support_a_fit():
+    """Too few loaded baseline samples: no baseline is fabricated, and the caveat says why."""
+    base, cur = _base_and({})
+    f = _rule(BaselineStore()).analyze_periods("CH_1", base.iloc[:12], cur)
 
     assert f.severity == "info"
     assert f.metrics["declined"] is True
-    assert any("would not support a fit" in c for c in f.caveats)
+    assert any("would not support a fit" in c and "usable sample" in c for c in f.caveats)
 
 
 def test_a_noiseless_baseline_falls_back_to_degF_and_says_so():

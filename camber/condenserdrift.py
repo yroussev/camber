@@ -23,10 +23,11 @@ an actionable, prioritized walkdown. It stays screening-grade: corroboration rai
 the severity tier, and never becomes a dispatch-grade verdict on its own.
 
 Head pressure carries a confound the others don't — it also climbs with entering condenser-water
-temperature, which load normalization does not remove. The diagnosis uses the *tower* signal to
-disambiguate: a co-moving CW-temperature rise **backed by** a degrading tower approach corroborates
-a real heat-rejection fault reaching the high side, while the same rise with a quiet tower is
-flagged as likely ambient / high-load, not a fault.
+temperature. When that temperature is mapped and varied in the baseline, the head-pressure rule
+regresses on it (0.82.0) and the confound is removed at source; when the rule had to fall back to
+load only, the diagnosis uses the *tower* signal to disambiguate: a co-moving CW-temperature rise
+**backed by** a degrading tower approach corroborates a real heat-rejection fault reaching the high
+side, while the same rise with a quiet tower is flagged as likely ambient / high-load, not a fault.
 
 Pure over Findings — no data, no I/O — it composes after a ``Registry.run_periods``.
 """
