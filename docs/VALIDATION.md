@@ -242,6 +242,16 @@ understated. The `examples/bdg2` harness now also reports the **measured** lag-1
 autocorrelation across real meters, so the correction rests on CAMBER's own number rather than a
 literature range.
 
+**Extrapolation is checked, not assumed (issue #20).** Until this release no savings path asked
+whether the reporting period's drivers lay inside the range the baseline was fitted on, so a spring
+baseline projected onto a summer reported a saving and a band as if the model held there. Every
+savings path now grades coverage (`mandv.coverage`): in-range results are **byte-identical** to
+before (a golden test freezes them from the prior release), moderate extrapolation is disclosed and
+widens the band, and severe extrapolation is declined by default. The BDG2 benchmark above fits
+and scores each baseline **in sample**, so its numbers do not move; an out-of-sample extrapolation
+sub-benchmark is follow-up work. The tiers and thresholds are CAMBER policy choices, documented in
+[MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining).
+
 ## Tariffs & finance
 
 The native tariff engine is cross-checkable against **NREL PySAM `UtilityRate5`** (the

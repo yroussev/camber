@@ -4,6 +4,49 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+**M&V baselines no longer extrapolate silently (#20).** No savings path checked whether the
+reporting period's drivers lay inside the range the baseline was fitted on: a spring baseline
+projected onto a summer reported a saving, and a savings band, as if the model held there.
+
+### Added — M&V coverage
+- `camber.mandv.coverage`: `ExtrapolationPolicy`, `Coverage`, `TIERS`, `support_of`,
+  `assess_coverage` and `towt_coverage` grade how well a fitted model's driver support covers a
+  set of conditions — `in_range`, `moderate`, `severe` or `not_evaluated` — with the share of
+  points and of baseline-projected energy outside the support, and the furthest distance beyond
+  the fitted range. Multi-driver models add a leverage test (hidden extrapolation); TOWT is judged
+  per occupancy mode x temperature cell; a categorical model's unseen category is unsupported.
+- `coverage()` on `ChangePointModel`, `DegreeDayModel`, `DriverModel`, `TOWTModel` /
+  `TOWTAtIndex` and `CategoricalModel` (plus `CategoricalModel.at(cat)` to bind a period);
+  `ChangePointModel.fit_range`.
+- `SavingsResult` and `IsolationSavings` gain `coverage`, `declined`, `declined_reason`, `caveats`
+  and `fsu_extrapolation_factor`; `NormalizedSavings` gains the same plus `coverage_baseline` /
+  `coverage_reporting`. `NMECResult` / `HourlyNMECResult` carry them in the nested savings.
+- A keyword-only `extrapolation=ExtrapolationPolicy(...)` on `avoided_energy_savings`,
+  `caltrack_savings`, `caltrack_savings_hourly`, `isolation_savings`,
+  `isolation_normalized_savings`, `normalized_savings` and `savings_chart`.
+- A moderate extrapolation widens the FSU of linear-in-parameters baselines by the parameter
+  variance factor `k` (see docs/MANDV.md); TOWT is flagged, never widened, since it holds its
+  response flat beyond the fitted range. `caltrack_savings` caveats a baseline shorter than 365
+  days. The savings chart rug-marks out-of-support points, suffixes a moderate title and draws a
+  declined saving as "extrapolated — not a saving" with no band.
+
+### Changed
+- **Severe extrapolation declines by default**: `avoided_energy`, `baseline_projected`,
+  `savings_pct`, `fractional_uncertainty` and `abs_uncertainty` (and `IsolationSavings.savings` /
+  `adjusted_baseline`, `NormalizedSavings.normalized_savings` and the extrapolated side's NAC)
+  become `None`, with `declined_reason`. **These fields are now `float | None`.** To keep the
+  old behaviour — computed, with a widened band and a "SEVERE extrapolation — not a defensible
+  saving" caveat — pass `extrapolation=ExtrapolationPolicy(decline=False)`. In-range results are
+  byte-identical to 0.85.0, and the BDG2 benchmark (in-sample) is unchanged.
+
+### Fixed
+- `avoided_energy_savings` dropped reporting rows without a finite baseline projection silently —
+  e.g. a `CategoricalModel` category the baseline never fitted. The rows are now counted
+  (`coverage["n_used"]` vs `["n_report"]`), caveated and, for an unseen category, graded as
+  unsupported (#20).
+
 ## [0.86.0] — 2026-09-26
 
 **An open dataset catalog, analysis that runs from the store, and the first two steps of the

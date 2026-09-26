@@ -197,7 +197,19 @@ quality (CV(RMSE)) annotates the baseline's credibility. `cumulative_savings(...
 `(index, cum_baseline, cum_actual, cum_avoided)` arrays. Reuses `mandv.stats.avoided_energy_savings`
 and any `predict()`-able baseline (`mandv.models.best_model`). Flags: `confidence`, `rho`
 (lag-1 residual autocorrelation — raises the band; `None`, the default, leaves it unadjusted and
-says so on the result), `ylabel`.
+says so on the result), `ylabel`, `extrapolation` (the coverage policy).
+
+The chart follows the baseline's **coverage** of the reporting period
+([MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining)):
+
+| Coverage | Chart |
+|---|---|
+| `in_range` | as above |
+| `moderate` | as above, the title suffixed "extrapolated: N% of points outside the baseline range", and the band widened by `k` |
+| `severe`, declined (default) | actual energy plus the projection, dashed grey and labelled **"extrapolated — not a saving"**; no avoided/excess shading, no band; title "M&V savings declined — severe extrapolation of the baseline" |
+
+In every state the reporting points outside the baseline support are rug-marked in red along the
+x-axis ("outside baseline range").
 
 ### F — load profiles & load-duration curves
 ```python

@@ -17,7 +17,9 @@ flowchart LR
     gof -- "G14 acceptance tier" --> avoided
     rep["Reporting (energy, temp)"] --> proj["Adjusted baseline"]
     fit -- "project onto reporting weather" --> proj
-    proj --> avoided["avoided_energy_savings"]
+    proj --> cov["coverage: in range?"]
+    cov -- "in_range / moderate (caveat, widen FSU)" --> avoided["avoided_energy_savings"]
+    cov -- "severe" --> declined["Declined (no saving)"]
     avoided --> out["Savings + FSU band"]
     rep --> nre["detect_non_routine"]
     nre -- "exclude days and refit" --> fit
@@ -37,6 +39,9 @@ flowchart LR
 | Normalized annual savings | drive the models with a typical year (`mandv.weather` TMY/EPW) |
 | Live actual weather (any lat/lon) | `weather_source.oat_reference` — NASA POWER fetch, see [WEATHER.md](WEATHER.md) |
 | Cumulative savings tracking | `mandv.cusum` |
+| Baseline covers the reporting conditions | `mandv.coverage.assess_coverage` → `Coverage` (tier, shares outside, distance beyond) |
+| Extrapolation disclosure / refusal | `SavingsResult.coverage`, `.caveats`, `.declined`, `.declined_reason` |
+| Uncertainty widening for extrapolation | `SavingsResult.fsu_extrapolation_factor` (`k`, below) |
 
 ## Method correspondence
 
@@ -73,7 +78,11 @@ res = caltrack_savings(
 )  # hourly Series in
 print(res.model_kind, round(res.baseline_r2, 3))
 print(res.savings.savings_pct, "±", res.savings.fractional_uncertainty)  # fractions
+print(res.savings.coverage["tier"], res.savings.caveats)  # did the baseline cover it?
 ```
+
+If the reporting weather lies far outside the baseline's, `res.savings.declined` is `True` and the
+savings fields are `None` — see [Extrapolation](#extrapolation-coverage-caveats-and-declining).
 
 ### Two uncertainty kernels, and why
 
@@ -105,6 +114,90 @@ itself, so the baseline fit's ρ is the standard substitution.
   so a CAMBER fit is *not* automatically CalTRACK-compliant. Use the thresholds and
   the FSU to judge whether a result is reportable, and apply CalTRACK's data rules
   if compliance is required.
+
+## Extrapolation: coverage, caveats and declining
+
+A baseline is a regression over the conditions it was fitted on. Projected onto a reporting period
+it never saw — a spring baseline applied to a summer — its slopes run past the data, and the
+avoided energy and FSU describe a model nothing supports. IPMVP and ASHRAE Guideline 14 both expect
+the baseline to cover the reporting conditions, or the extrapolation to be disclosed and bounded;
+neither is quoted for the numbers below, and CalTRACK prescribes no extrapolation test. **Every
+threshold here is a CAMBER policy choice**, set on `mandv.coverage.ExtrapolationPolicy`.
+
+Every savings path — `avoided_energy_savings`, `caltrack_savings`, `caltrack_savings_hourly`,
+`isolation_savings`, `normalized_savings`, `isolation_normalized_savings` and the savings chart —
+grades the baseline's coverage of the reporting drivers and acts on the tier:
+
+| Tier | When (defaults) | What happens |
+|---|---|---|
+| `in_range` | ≤ 5% of points **and** ≤ 5% of baseline-projected energy outside the support, and nothing more than 10% of the fitted range beyond it | Numbers exactly as before; `coverage` attached |
+| `moderate` | anything short of severe | Caveat with the shares, the support and fitted ranges and the furthest distance; FSU widened by `k` (linear models) |
+| `severe` | ≥ 25% of points or energy outside, or > 50% of the fitted range beyond it, or a baseline driver that never varied while the reporting one does | **Declined**: `avoided_energy`, `baseline_projected`, `savings_pct`, `fractional_uncertainty`, `abs_uncertainty` → `None`; `reporting_actual` stays; `declined_reason` says why |
+| `not_evaluated` | the model carries no fit range (a duck-typed or constant model), or no finite reporting rows | Numbers unchanged; a caveat says coverage was not checked |
+
+**Support.** At fit time each model records its finite baseline drivers (one private fit record per
+model). The *support band* is the 1st–99th percentile order statistics (`support_quantile`), so one
+freak day does not stretch the range a whole season is judged against; points within 5% of the
+band's width (`edge_tolerance`) count as covered. Shares are counted against the band, distance
+beyond the hard `[min, max]` range as a fraction of its width. Both sides count, including a flat
+segment of a change-point model — outside the data is outside the data, even where the model's
+arithmetic happens to be benign.
+
+**Widening a moderate extrapolation.** For linear-in-parameters baselines (change-point, degree-day,
+Option-B driver models), with `A = pinv(X′X)` of the baseline design, `s` the sum of the reporting
+design rows and `s_c` the same with each driver clamped into the support band:
+
+- measured kernel (avoided energy): `k = √((m + s′As) / (m + s_c′As_c))`
+- projected kernel (normalized savings): `k = √(s′As / s_c′As_c)`
+
+and the reported FSU is `FSU × max(1, k)`, with `k` recorded as `fsu_extrapolation_factor`. It is
+the variance of the projected *total* at the actual drivers relative to drivers kept inside the
+support — so it is conditional on the fitted change points (treated as known), it equals 1 where
+the extrapolated points sit on a flat segment, and it tracks the mean design row: a few
+extrapolated points in an otherwise central period barely move it, and the measured-noise term `m`
+usually dominates it for avoided energy. It widens for parameter variance only; it cannot bound the
+*bias* of a wrong functional form beyond the data, which is why severe extrapolation declines
+rather than widens.
+
+**Several drivers.** Each column is checked, and so is leverage: a reporting row with
+`h = x A x′` above the largest baseline leverage lies outside the joint region the data spans even
+when every column is individually in range — hidden extrapolation (Montgomery, Peck & Vining,
+*Introduction to Linear Regression Analysis*). A row outside on either test is outside.
+
+**TOWT (hourly).** The unit is *occupancy mode × temperature cell* (below the fitted range, each of
+the model's temperature segments, above it). A reporting hour is unsupported when its cell holds
+fewer than 20 baseline hours (`min_cell_obs`) or lies beyond its mode's fitted range; distances
+are per mode. Hour-of-week × temperature sparsity is reported in `coverage["info"]` for information
+and never changes the tier. TOWT clips its temperature basis at the breakpoints, so it holds its
+response **flat** beyond the fitted range: the error there is bias, not parameter variance, so TOWT
+is flagged but its FSU is never widened. The unseen hour-of-week check still raises.
+
+**CalTRACK daily** also caveats a baseline shorter than 365 days, which cannot span a weather year.
+**Normalized savings** grade both models against the normal year (`coverage_baseline`,
+`coverage_reporting`); a TMY colder than the reporting model's fit declines. **Categorical models**
+treat a reporting category the baseline never fitted as unsupported (bind a period with
+`CategoricalModel.at(cat)`); rows without a finite projection are counted (`coverage["n_used"]` vs
+`["n_report"]`) rather than dropped silently.
+
+**Migration.** Severe extrapolation declines by default, so the savings fields are `float | None`.
+To keep computing it (with a widened band and a caveat starting "SEVERE extrapolation — not a
+defensible saving"), opt out:
+
+```python
+from camber.mandv.caltrack import caltrack_savings
+from camber.mandv.coverage import ExtrapolationPolicy
+
+res = caltrack_savings(
+    baseline_energy,
+    baseline_temp,
+    reporting_energy,
+    reporting_temp,
+    extrapolation=ExtrapolationPolicy(decline=False),
+)
+```
+
+`assess_coverage(model, drivers)` is direction-agnostic: it grades any fitted model against any
+driver set, so the same call checks a reporting model projected back onto baseline conditions.
 
 ## Non-routine events (NRE)
 
