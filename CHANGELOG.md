@@ -4,6 +4,66 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.83.0] — 2026-09-25
+
+**Air-side rules, checked against real buildings.** Every fix below came from running the rules on
+open real-building data (an office-building fleet, a messy industrial air handler, a test
+building's VAV fleet), and every regression test fails on 0.82.0.
+
+### Changed — read these if you pass the old values
+- **`ControlHunting(deadband=)` is now in percent** (default 5). It was 0.05 applied to 0–100 %
+  data, i.e. effectively no deadband. A 0–1 signal is rescaled first.
+- **`FreeCoolingMissed(active=)` is now in percent** (default 5), for the same reason: a valve
+  sitting at 1 % read as "mechanical cooling ran 100 %". `n_free_cooling_hours` is now real hours
+  — it was a sample count labelled hours (140,274 "hours" of 15-minute samples ≈ 35,000 h).
+- **`EconomizerHighLimit(min_oa_pct=)` now defaults to `None`** (unknown). The 20 % assumption
+  faulted all four units of an office building whose measured minimum is ~33 %. With measured
+  `OA_AIRFLOW` / `AIRFLOW` the rule judges real flow; differential economizing (OA cooler than
+  return) is left alone; with no configured minimum it faults only on excess above a generous
+  bound, and declines when the verdict hinges on the unknown design minimum.
+- **`realio.load_status` resamples to time-weighted duty** (`how="duty"`); `how="any"` keeps the
+  old per-bin max. A cycling fan's max-per-bin inflated its duty, so the setback verdict depended
+  on the resample interval. (A test pins 1-min / 15-min / hourly to the same verdict. The one
+  real-data case reported by the investigation did not reproduce, so this rests on synthetic
+  evidence.)
+- **`fdd_g36.classify_os` returns 0 (`OS_UNCLASSIFIED`) for missing valve data** instead of
+  "free cooling". On the industrial air handler FC8 was diluted from 25.7 % to 15.0 %.
+
+### Fixed
+- **`control_hunting` reported "stable" when it could not see.** At 15-minute sampling the 6 /h
+  warn rate is unresolvable; the rule now declines (info + caveat, `None` rate) and caps at warn
+  when only the fault rate is out of reach. Data gaps no longer count as calm time. A damper
+  limit-cycling 20 → 54 → 20 → 51 every sample had read "stable (2.3×/hr)".
+- **`overcooling_min_flow` said "ok" without testing.** With no `AIRFLOW_SP`, "at minimum" was
+  all-False, so every box read ok at 0 % — with a caveat claiming the minimum had been inferred.
+  It now declines.
+- **`overcooling_severity` called other things overcooling.** Morning recovery from setback (via
+  `WARMUP`, else the first 2 h), fan-off free-floating, and a saturated reheat valve (≥ 90 %,
+  now reported as a **heating shortfall**) are no longer overcooling. On the office building:
+  38 zone faults → 22, with 32 zones now correctly reported as short of heat.
+- **Five rules ignored a trended occupancy point** — setback, overcooling, overcooling severity,
+  zones census and reheat used a hard-coded weekday 07–18 window. New
+  `schedules.effective_occupied_mask`: a trended `OCCUPANCY` point replaces the schedule,
+  otherwise `start_hour` / `end_hour` / `occupied_days` (defaults unchanged).
+- **The reset-request census fired with the HVAC off.** The SAT rogue-zone census and cohort
+  starvation now gate request cycles on supply-fan status / occupancy (`gate_cols=`), and caveat
+  when ungated (`UNGATED_CAVEAT`). A free-floating week went from "starved cohort" to info once
+  fan status reaches the zone frames; with occupancy alone it still fires.
+- **`reheat_penalty` read the wrong air at a terminal.** At a VAV box `MIXED_AIR_TEMP` is the
+  entering primary air and `SUPPLY_AIR_TEMP` the discharge (the convention the reheat-valve drift
+  rule already used); a discharge-only judgement is caveated as a lower bound, never a confident
+  ok. On a 10-box test fleet: 9 ok / 1 warn → 10 fault with the primary air mapped.
+- **`run_g36_afdd` crashed on unsorted or duplicate timestamps** (`rolling("60min")`); input is
+  now sorted and deduplicated, and a non-time index raises a clear `TypeError`.
+- **`supply_air_reset` said "pinned low"** for a flat reset held at 68 °F; it now says "held at".
+- A served-by topology that covers no zones reports no provenance, and says 0 of N.
+
+### Notes
+- New public names: `schedules.effective_occupied_mask`,
+  `rules.hunting_rule.max_resolvable_per_hour`, `fdd_g36.OS_UNCLASSIFIED`,
+  `g36_reset.UNGATED_CAVEAT`, plus additive result fields and constructor arguments. Snapshot
+  regenerated. No new dependency. Benchmark baselines unchanged.
+
 ## [0.82.0] — 2026-09-25
 
 **DCV verification judged the economizer, not the DCV.** On a normally modelled building
