@@ -1,0 +1,229 @@
+# RCx report layout
+
+`camber report CONFIG --layout rcx` writes the printable **retro-commissioning report**: one HTML
+document a commissioning engineer can hand over, print to PDF from any browser, and annotate.
+It is a *layout* over the existing analytics — the rules, the evidence engine, the cost estimators
+and the action recommendations — and adds no new detector or cost model. The module is
+`camber.report.rcx` (provisional, see [API-STABILITY.md](API-STABILITY.md)); the unrelated
+`camber.rcx` holds the functional-test / before-after MBCx primitives.
+
+```bash
+camber report site.json --out rcx.html --layout rcx
+camber report site.json --out rcx.html --layout rcx --week oat-range --paper a4
+camber report site.json --out rcx.html --layout rcx --notes notes.json --notes-template slots.json
+```
+
+`--layout` defaults to the config's `report.layout`, and that defaults to `audit` (the
+Std-211 audit report), so existing configs behave exactly as before. Any other name is looked up in
+the `camber.reports` [plugin](PLUGINS.md) entry-point group.
+
+## Pages
+
+Every section starts a new printed page; figures and table rows never split across pages, table
+headers repeat, and the screen-only table of contents is hidden in print.
+
+| Page | Section | What it holds |
+|---|---|---|
+| P0 | Cover and provenance | The dataset's source, licence and citation first in the body. Research-only (NC/ND) data gets the non-commercial banner, repeated at the top of **every printed page**. |
+| P1 | Executive summary | One page: a KPI strip — costed, non-conditional $/yr; uncosted / conditional issue counts; data coverage; declined checks — and the top-N (default 8) issue table with each issue's $/yr (or `uncosted — needs X`), severity, confidence and a one-line action, linked to its page. |
+| P2 | Data coverage and sensor health | The readiness ribbon; the BAS OAT against a reference (when one is configured); a trust table scored **gated** (fan-on samples) and ungated, naming the gate used (`fan status`, `fan speed proxy`, `airflow proxy`, or `ungated — no fan signal`); mixing consistency. |
+| P3 | Representative week | The week [selected below](#choosing-the-representative-week), as stacked panels, one unit family each (°F / % / in.w.c.). Values are never normalized. Violation shading covers occupied, fan-on time only. |
+| P4 | Economizer | OA fraction vs OAT (temperature balance when MAT/RAT/OAT exist, else damper vs OAT) drawn with **the rule's own** high limit, minimum OA and differential changeover, next to its verdict. Also MAT-between-OAT-and-RAT and a free-cooling table. When an OAT sensor issue exists, a banner says the verdicts are conditional on OAT. |
+| P5 | SAT reset census | Three labelled tiers, [below](#sat-reset-tiers). |
+| P6 | Air distribution | Duct static by hour of day (fan-on samples only) and any static-reset findings. Omitted when there is no duct static. |
+| P7 | M&V and drift | The drift report and the `mv_baseline` results, including declines. Omitted when neither ran. |
+| P8+ | One page per issue | $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
+| A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: fact index (reserved). E: orphaned engineer notes. |
+
+## Issues: grouping, dollars and hours
+
+The report ranks **issues**, not findings. `camber.rules.triage.link_findings` groups the findings
+on one equipment that share a causal chain (`CAUSE_CHAINS`: the SAT chain from reset to overcooling
+to reheat to simultaneous heating and cooling; the economizer chain; the static-pressure chain),
+with the most upstream finding as the root. An issue's key is the root finding's fingerprint, so it
+stays the same from run to run.
+
+- **Hours are a union, never a sum.** An issue's violation hours are the union of its members'
+  violation masks, gated to fan-on. The "% runtime" figure divides by fan-on hours and says so. Only
+  masks a rule derives itself count. When no member has one, the page reads "not measured" rather
+  than guessing.
+- **A chain's cost is its largest member, never the sum.** The members' estimates price the same
+  wasted energy several ways, so the page shows the largest and notes that the estimates overlap.
+  Different issues add up.
+- **Uncosted is explicit.** An issue with no costed member shows what the estimator needs
+  (`uncosted — needs heating_capacity_kbtuh`). Sizing comes from `report.loads`.
+- **Rank**: severity tier; then non-conditional before conditional; then costed before uncosted;
+  then $/yr, largest first; ties break on the key, so the order is deterministic.
+
+**Sensor precedence.** A sensor problem is derived from the data. It is one of three things: a
+`sensor_drift:<role>` finding at warn or fault; an untrusted or stuck trust verdict on the gated
+samples; or a mixing-consistency violation. Any finding whose rule reads that role
+(`roles_required` or `roles_optional`) on the same equipment becomes **conditional**. For a shared
+role like OAT, that covers every equipment that uses it. A conditional issue is annotated and
+demoted, never deleted. Its dollars move to "at risk pending sensor fix", and it is listed as a
+dependent on the sensor issue's page.
+
+**SAT compliance and G36.** Some `supply_air_reset_compliance` findings are judged against the G36
+default map because no site sequence is known. Those findings are shown as a reference only. They
+are left out of the dollar totals, and their confidence is L. A declared sequence re-judges them
+against the site's own map.
+
+## Confidence
+
+Each issue gets H, M or L: the **minimum** over the components below. Each component writes one
+"why we believe this" line.
+
+| Component | H | M | L |
+|---|---|---|---|
+| Input trust (gated) | every input `trusted` | one `suspect` | one `untrusted`, or the issue is conditional |
+| Mapping | roles recorded at ingest (store source) | a config tag-to-role mapping | a point looks like a percent signal mapped to a flow role |
+| Assumptions | the rule's parameters come from the site config | rule defaults | a reference the site never declared (G36 default with no sequence) |
+| Sample / coverage | at least 168 samples judged and full input coverage | at least 48 samples, or coverage below 80 % | fewer samples, or coverage below 50 % |
+| Corroboration | the rule scores TPR ≥ 0.9 and FPR ≤ 0.05 on the synthetic benchmark | scored, but lower | — |
+
+A component that cannot be assessed is left out of the minimum, and its line says so.
+
+## Choosing the representative week
+
+`select_week` is deterministic, and its explanation is built only from the numbers it reports.
+
+1. The candidates are the Monday-00:00 7-day windows, in the data's local clock.
+2. A window is **eligible** when the charted roles cover at least 80 % of its gated (fan-on)
+   samples and it has at least 3 occupied days. When no window is eligible, the report declines to
+   chart a week and says why.
+3. Each window is scored by the chosen mode, plus `0.1 × coverage`:
+   - `evidence` (default, and `auto`): the sum over issues of
+     `(1/rank) × (gated violation hours in the window / the issue's total)`. Conditional issues
+     count half.
+   - `oat-range`: the share of the period's OAT deciles present in the window, plus 1 when the
+     window crosses the economizer high limit.
+   - `typical`: minus the RMS distance of the window's daily-mean OAT from the period's median
+     daily mean.
+   - `YYYY-MM-DD` (or `fixed:YYYY-MM-DD`): the window containing that date.
+4. Ties go to the earliest week. The explanation reads like "Chose the week of 2018-02-26 by
+   evidence: score 0.126 = evidence 0.026 + 0.1 x coverage 1.00; 4 occupied days; runner-up week of
+   2018-03-05 scored 0.126 (tie -> earliest); 52 of 53 candidate weeks eligible." Appendix B lists
+   every window's score.
+
+## SAT reset tiers
+
+| Tier | When | What P5 shows |
+|---|---|---|
+| 1 | A SAT setpoint is trended | Tracking error (mean \|SAT − SP\| and the share of fan-on, occupied samples off by more than 2 °F) plus the setpoint vs OAT |
+| 2 | A site sequence is declared (`report.rcx.sequence.sat_reset`, or the config's `soo` spec) | A census: the share of fan-on, occupied hours outside the declared band, drawn as a reset-line scatter |
+| 3 | Neither | SAT vs OAT and the `analyze_satreset` descriptors. The **verdict is declined** ("no site sequence known"). A G36 line appears only with `g36_reference: true`, labelled "reference, not a verdict". |
+
+## Engineer notes
+
+The notes file is JSON keyed by slot:
+
+```json
+{
+  "exec_summary": {"text": "Walked the site on 3/30.\n\nAll AHUs ran.", "author": "A. Engineer", "date": "2026-03-30"},
+  "section:week": "The chosen week matches the complaint log.",
+  "issue:5e97d850de5d": [{"text": "Damper linkage replaced.", "author": "Tech", "date": "2026-04-02"}]
+}
+```
+
+A note is a string, a `{"text", "author", "date"}` object, or a list of either. Text is escaped and
+split into paragraphs on blank lines. Each note renders as "Engineer's note — author, date". An
+`issue:<fingerprint>` key follows the issue across runs. A key that matches no slot in this report
+goes to Appendix E, so a note on a resolved issue is never silently lost. `--notes-template
+slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each issue's
+`FaultRecord.notes` from the fault store: the facility-keyed `state/<facility_id>/faults.json` in a
+[portfolio workspace](PORTFOLIO.md), or the config's `faults.store`.
+
+## Configuration
+
+```json
+"report": {
+  "layout": "rcx",
+  "loads": {"AHU-1": {"heating_capacity_kbtuh": 400, "fan_kw": 15}},
+  "rcx": {
+    "top_n": 8, "week": "evidence", "paper": "letter", "chart_format": "png",
+    "sections": ["cover", "summary", "data", "week", "economizer", "sat", "air", "mv", "issues", "appendix"],
+    "price": {"electricity_per_kwh": 0.14, "gas_per_therm": 1.10},
+    "occupancy": {"start_hour": 6, "end_hour": 20, "days": [0, 1, 2, 3, 4, 5]},
+    "oat_reference": {"csv": "weather/oat_reference.csv"},
+    "sequence": {"sat_reset": {"oat": [50, 70], "sat": [60, 55], "tol_f": 2}},
+    "notes": "notes.json"
+  }
+}
+```
+
+- `report.loads` (or `report.rcx.loads`) sizes equipment for the existing cost estimators.
+- `oat_reference` is offline by default (a CSV of time and °F). To fetch NASA POWER instead, opt in
+  with `{"fetch": "nasa_power", "latitude": …, "longitude": …, "tz": "America/Chicago"}`.
+- `chart_format: "svg"` renders the line charts as SVG; dense scatters stay PNG.
+
+In Python:
+
+```python
+from camber.config import run_config_file
+from camber.report import RcxOptions, build_rcx_report
+
+run = run_config_file("site.json")
+rep = build_rcx_report(run, options=RcxOptions(week="oat_range", paper="a4"))
+open("rcx.html", "w").write(rep.to_html())
+rep.to_dict()  # KPIs, ranked issues, the week choice, sections, notes
+rep.slots()  # every note slot id
+```
+
+## Printing
+
+Printing needs nothing beyond a browser: open the HTML and print to PDF. The inline print CSS sets
+the page size (`letter` or `A4`, from `--paper`), adds page-number margin boxes, starts every
+section on a new page and keeps figures and rows whole. It also repeats table headers, forces exact
+colours, hides the table of contents, and repeats the research-only banner on every page. The
+report uses no JavaScript and loads no external assets: the charts are inline base64 PNG at 150
+dpi, or SVG.
+
+## Worked example: the LBNL single-duct AHU
+
+The open [dataset catalog](DATASETS.md) ships the LBNL simulated single-duct AHU (CC-BY-4.0, with
+labelled faults). Every scenario is one equipment, `AHU__<scenario>`, so an `equipment` entry's
+`"equip"` list selects a single scenario:
+
+```bash
+camber datasets fetch lbnl-sdahu
+camber datasets ingest lbnl-sdahu --store lab_store
+camber datasets config lbnl-sdahu --store lab_store --out sdahu.json
+# then edit sdahu.json: "equipment": [{"class": "AHU", "marker_role": "mixed_air_temp",
+#                                      "equip": ["AHU__fault_free"]}], add rules, and
+#   "report": {"layout": "rcx"}
+camber report sdahu.json --out rcx_fault_free.html --layout rcx
+```
+
+The run below used the default subset, an hourly resample, and seven rules. The rules were
+`outdoor_air_fraction` (min OA 20 %), `leaking_valve`, `economizer_high_limit`, `supply_air_reset`,
+`supply_air_reset_compliance`, `static_pressure_reset` and `supply_air_control`. It covered one
+fault-free scenario and one faulted scenario (OA damper stuck at 25 %).
+
+- **Which scenario gets issues.** `AHU__damper_stuck_025` ranks one **fault** first, with
+  confidence H: `outdoor_air_fraction` reports under-ventilation, a median OAF of 4 % against the
+  20 % minimum. That covers 1,711 violation hours, 36.5 % of 4,682 fan-on hours. Its free-cooling
+  table shows 100 % of the 3,050 economizer-eligible fan-on hours running the cooling coil,
+  against 51 % for the fault-free run. The fault-free scenario raises no fault. Its three warn
+  issues are properties of the simulated sequence, not faults: a flat duct-static setpoint, SAT
+  warm of setpoint 16 % of running hours (consistent with a unit that has no heating coil), and no
+  SAT reset.
+- **Week choice.** Fault-free: "Chose the week of 2018-05-28 by evidence: score 0.146 = evidence
+  0.046 + 0.1 x coverage 1.00; 5 occupied days; runner-up week of 2018-09-03 scored 0.143; 52 of
+  53 candidate weeks eligible." Stuck damper: the week of 2018-02-26 (score 0.126), tied with
+  2018-03-05 and broken to the earlier week. The last "week" of 2018-12-31 is a single day, so it
+  is ineligible.
+- **No G36 verdict without a sequence.** The unit trends a fixed 55.2 °F SAT setpoint, so P5 is
+  tier 1. The tracking error is 0.1 °F mean, with 3 % of 2,221 gated samples off by more than
+  2 °F. The G36-default `supply_air_reset_compliance` warning ("below target 66 % of hours") is
+  shown on the issue page as `[G36 default target, not the unit's trended setpoint (reference
+  only)]`, marked `excluded` from the $/yr, and drawn without an evidence chart.
+- **No stuck sensors counted during fan-off.** The trust table is gated on `fan status`. No point is
+  flagged stuck, gated or ungated. At an hourly resample the fan-off stretches do not form long
+  identical runs, so on this dataset the gate did not change a trust verdict.
+- **Economizer charts match the verdicts.** Both runs judge on the temperature-balance OA fraction
+  with the rule's defaults: 65 °F, differential on, and a 55 % excess threshold because the design
+  minimum is unknown. The charts show 0 % out of band, as the `ok` verdicts say. On the issue page,
+  the stuck-damper chart is drawn with `outdoor_air_fraction`'s configured 20 % minimum and its
+  default 70 °F cooling cutoff; its red points are exactly the samples behind the two percentages in the finding.
+
+Both runs build in about 2.5 s each (8,759 hourly samples).

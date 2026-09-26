@@ -48,6 +48,7 @@ nav:
       - Prioritized action plan: ACTIONPLAN.md
       - Building health scorecard: SCORECARD.md
       - Site report: SITE-REPORT.md
+      - RCx report: RCX-REPORT.md
   - AI-assist:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md

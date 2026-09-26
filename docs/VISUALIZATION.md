@@ -98,7 +98,9 @@ ax, violating = diagnostic_scatter(role_frame, TEMPLATES["sat_reset"])  # violat
 Each subsystem has an *expected signature*; a `DiagnosticTemplate` names two roles and an
 `expected(x) -> (low, high)` band, and `diagnostic_scatter` overlays that band, shades the points
 outside it, and returns the **violating mask** — so the figure doubles as a rule's evidence (feeds
-pattern J). Packaged `TEMPLATES`: `sat_reset`, `chw_reset` (reset schedules vs OAT — clamped at the
+pattern J). `template_violations(frame, template)` returns the same mask without plotting, so a
+report or test can re-derive a verdict from the chart's own envelope. Packaged `TEMPLATES`:
+`sat_reset`, `chw_reset` (reset schedules vs OAT — clamped at the
 endpoints), `economizer` (OA damper open for free cooling, minimum when hot), `no_simultaneous_hc`
 (heating valve must be ~0 when cooling is active). Build your own with `band`, `reset_line`,
 `economizer_template`, `no_simultaneous_template`. Flags: `shade`, `tolerance`.
@@ -224,6 +226,19 @@ sorts every interval high-to-low against the % of time it's exceeded — the are
 edge the peak, the right shoulder base load — and with a `price` ($/kWh) adds an energy-cost figure.
 Both return `(ax, LoadMetrics)` and reuse `camber.loadprofile`. Flags: `split`, `annotate`, `price`.
 
+**Evidence uses the rule's own envelope.** `economizer_high_limit` and `outdoor_air_fraction` draw
+their evidence from the samples, basis and thresholds behind the verdict. That means the configured
+high limit, minimum OA and differential changeover, not the generic `TEMPLATES["economizer"]`. They
+hand the renderer a derived frame (`Evidence.frame`), so the red points are exactly the samples the
+verdict counts. `supply_air_reset` shows the SAT-vs-OAT cloud its slope is fitted on, not a packaged
+reset band.
+
+### Box by hour
+
+`charts.box_by_hour(series, mask=fan_on)` draws one box per hour of the day, using only the samples
+where `mask` is true. A duct static that is never reset down overnight or at light load shows as one
+flat band. The [RCx report](RCX-REPORT.md) uses it on the air-distribution page.
+
 ## The HTML dashboard
 
 `camber.report.build_dashboard` assembles the sections + the ranked findings into **one
@@ -259,6 +274,7 @@ open("dashboard.html", "w").write(html)
 | `evidence` | `True` | render each actionable finding's evidence chart when `rules` is supplied |
 | `interactive` | `False` | add a brush-able inline-SVG scatter (vanilla JS, no framework) |
 | `link_x` / `link_y` | auto | the scatter's axes (default: an OAT-like x, the first other column) |
+| `data_sources` | `None` | provenance dicts: the "Data source & licence" block first in the body (NC banner for research-only data) |
 
 ### Interactive linking (brush → select)
 ```python

@@ -6,6 +6,7 @@ analysis pipeline and the grounded agent as subcommands.
 ```
 camber run     <config.json> [--out DIR]        # run a config, print/write findings
 camber report  <config.json> --out site.html    # run + write an HTML audit report
+               [--layout audit|rcx|<plugin>]    # rcx: the printable retro-commissioning layout
 camber explain <config.json> [--llm-cmd CMD]    # grounded plain-language explanation of findings
 camber ask "<question>" --config <config.json>  # grounded natural-language Q&A over the run
 camber fleet   '<glob>' [--ask Q] [--out f.html] # portfolio rollup across configs + triage
@@ -34,7 +35,7 @@ flowchart TD
   camber["camber console script"]
   cfg["config.json (run_config)"]
   camber --> run["run: execute config, write findings"]
-  camber --> report["report: HTML audit report"]
+  camber --> report["report: HTML audit or RCx report"]
   camber --> explain["explain: grounded explanation"]
   camber --> ask["ask: grounded Q&A"]
   camber --> fleet["fleet: portfolio rollup + triage"]
@@ -55,6 +56,24 @@ constructor for the run — e.g. a high-outside-air building setting its design 
 "rules": ["simultaneous_heat_cool",
           {"name": "economizer_high_limit", "params": {"high_limit_f": 75, "min_damper": 0.45}}]
 ```
+
+## Report layouts
+
+`camber report` writes the Std-211 **audit** report by default. `--layout rcx` writes the printable
+[RCx report](RCX-REPORT.md) instead. Without the flag, the config's `report.layout` decides, and
+any other name is looked up in the `camber.reports` [plugin](PLUGINS.md) group.
+
+```
+camber report site.json --out rcx.html --layout rcx
+    [--week auto|evidence|oat-range|typical|YYYY-MM-DD]   # the representative week
+    [--notes notes.json] [--notes-template slots.json]    # engineer notes in, empty slots out
+    [--paper letter|a4] [--lifecycle]                     # page size; fault-store notes too
+```
+
+The rcx options also live in the config, under `"report": {"layout": "rcx", "rcx": {...}}`:
+`top_n`, `week`, `paper`, `chart_format`, `sections`, `price`, `loads`, `occupancy`,
+`oat_reference`, `sequence` and `notes`. A flag overrides the config value. `report.loads` sizes
+equipment for the cost estimators. An unknown layout exits with code `2` and lists the known ones.
 
 ## Grounded agent from the shell
 
@@ -203,6 +222,7 @@ camber datasets fetch lbnl-sdahu
 camber datasets ingest lbnl-sdahu --store lab_store
 camber datasets config lbnl-sdahu --store lab_store --out sdahu.json
 camber report sdahu.json --out sdahu.html        # carries the dataset's citation + licence
+camber report sdahu.json --out rcx.html --layout rcx   # the printable RCx layout
 camber datasets score lbnl-sdahu --store lab_store
 ```
 
@@ -210,7 +230,8 @@ The config it writes uses a **store source** -- `"source": {"kind": "store", "st
 "facility_id": "ds-lbnl-sdahu"}` -- which works for any Parquet store, not only catalog data:
 equipment is discovered by the class recorded at ingest (`{"class": "AHU", "marker_role":
 "mixed_air_temp"}`), no mapping is needed (the store already holds roles), and `shared_oat` may name
-a stored equipment (`{"equip": "weather", "role": "oat"}`). An `mv` section fits a daily
+a stored equipment (`{"equip": "weather", "role": "oat"}`). Any `equipment` entry may add
+`"equip": [names]` to keep only those equipment, for example one scenario of a dataset. An `mv` section fits a daily
 change-point M&V baseline per meter (`{"class": "CHILLEDWATER_METER", "role": "energy_rate",
 "period": [start, end]}`), reported as an `mv_baseline` finding with its fit statistics and OAT
 support (`oat_fit_min`/`oat_fit_max`, `oat_support_lo`/`oat_support_hi`). Add

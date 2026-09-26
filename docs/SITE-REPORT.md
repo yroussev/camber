@@ -36,4 +36,11 @@ open("site.html", "w").write(html)
 Composed from the existing report fragments (`scorecard`, `actionplan`, the dashboard sections and
 pattern-J evidence engine) — matplotlib inlined as base64, no web framework, read-only toward the
 BAS. Flags: `sections` (A/B/E/I), `rank_by`, `top_n`, `normalize`, `frames` (per-equipment evidence),
-`title`. With no findings it degrades to a charts-only report.
+`title`, and `data_sources` (provenance dicts from `camber.config.data_sources`). The last adds the
+"Data source & licence" block first in the body, with the non-commercial banner for research-only
+data. With no findings it degrades to a charts-only report.
+
+For a printable, paginated deliverable, use the [RCx report](RCX-REPORT.md)
+(`camber report CONFIG --layout rcx`). It adds ranked issues rather than findings, a
+representative week, economizer and SAT-reset pages, one page per issue, and appendices of every
+decline and assumption.

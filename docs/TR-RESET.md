@@ -57,6 +57,16 @@ can match its own reset schedule (`make_rule("supply_air_reset_compliance", oat_
 Thresholds are screening / opportunity-grade (provisional-untuned). OAT is building-level and arrives
 via the runner's `shared` channel; the rule declines loudly when it is unmapped.
 
+**Operating-state gates.** By default, the rule judges only samples where the supply fan runs (fan
+status, else fan speed, else airflow) and the space is occupied (a trended occupancy point, else the
+assumed weekday 07-18 schedule). A unit parked overnight with SAT drifting is therefore not scored
+against a reset it was never running. The metrics record `fan_gate`, `occupancy_gate`, `n_gated`
+and `reset_source` (`g36_default`, `configured`, or a label passed as `reset_source=`). Pass
+`fan_gate=False, occupied_only=False` for the historical, ungated read. The gates left the
+synthetic, fleet and LBNL benchmark metrics unchanged. In the [RCx report](RCX-REPORT.md), a
+finding judged against the G36 defaults with no site sequence is shown as a reference only and is
+not priced.
+
 ## Reset effectiveness — is the reset actually trimming-and-responding?
 
 `supply_air_reset_compliance` above asks whether SAT sits at the right *target*; **reset

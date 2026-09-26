@@ -60,6 +60,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   back-compatibly: `_portfolio.json` with its `schema_version`, `_audit.ndjson`, the registry-v2
   fields, `state/<fid>/manifest.json` with its `schema_version`, and the migration redirect
   stubs. See [PORTFOLIO.md](PORTFOLIO.md).
+- **The RCx report** (added in 0.88): `camber.report.rcx` -- `RcxOptions`, `RcxReport`
+  (`to_html`, `to_dict`, `slots`), `build_rcx_report`, `select_week`, `WeekChoice`, `load_notes`,
+  `notes_template`, `P3_FAMILIES`, `WEEK_MODES` -- and the issue layer in
+  `camber.rules.triage`: `Issue`, `SensorCause`, `Confidence`, `link_findings`,
+  `finding_confidence`, `sensor_causes`, `issue_totals`, `SHARED_ROLES`. The HTML layout, the
+  notes-file schema and the `report.rcx` config keys may change with the grounded-prose work. The
+  additive pieces that shipped with it are stable in shape: the `RunResult` fields `registry`,
+  `frame_for`, `refs`, `data_sources`, `config` and `base_dir`; `data_sources=` on
+  `build_site_report` / `build_dashboard`; `gate=` on `sensor_trust` / `frame_sensor_health`;
+  `gate=` on `g36_reset.sat_reset_compliance`; `schedules.fan_on_mask`; `charts.template_violations`;
+  `charts.box_by_hour`; and the `--layout` flag. See [RCX-REPORT.md](RCX-REPORT.md).
 - **Facility-keyed identity** (added in 0.86, part of the lifecycle work). These keyword
   arguments are additive and optional, and each call behaves exactly as before without them:
   `facility_id=` / `legacy_sites=` on `FaultLifecycle` and `BaselineStore` (and their `load`),

@@ -15,6 +15,16 @@ as "clean" (the honesty convention in `camber/rules/base.py`).
 `PHYSICAL_BOUNDS` into a 0-1 trust and a verdict (`trusted` >= 0.8, `suspect` >= 0.5, else
 `untrusted`). `untrusted_roles(frame, roles, min_trust=...)` is what the runner's trust gate calls.
 
+**Gated mode.** `sensor_trust(series, role, gate=fan_on)` (or `frame_sensor_health(frame,
+gate="fan")`) reads the flatline -- the `stuck` flag and its share of the score -- on the gated
+samples only. It applies to the roles whose reading depends on moving air: duct air temperatures,
+airflow, static and duct humidity (`FAN_GATED_ROLES`). A supply-air sensor that settles to one value
+while the unit is off is then not called stuck, and a run is broken wherever the fan stops. Coverage,
+range and outlier reads are unchanged, and an OAT or space temperature is never gated. The default
+(`gate=None`) is unchanged, so the runner's trust gate behaves exactly as before. The
+[RCx report](RCX-REPORT.md) shows both reads. `schedules.fan_on_mask(frame)` picks the gate: fan
+status, else fan speed, else airflow, else "ungated — no fan signal".
+
 **Outliers are read shape-aware.** The plain robust test (median / MAD modified z-score) assumes
 one tight population. On a healthy plant that assumption fails two ways:
 
