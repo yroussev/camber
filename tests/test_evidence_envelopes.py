@@ -126,3 +126,24 @@ def test_template_violations_matches_diagnostic_scatter():
     _, via = render_evidence(ev, frame, ax=ax)
     plt.close(fig)
     pd.testing.assert_series_equal(via, drawn)
+
+
+def test_sat_reset_evidence_draws_the_samples_the_slope_is_fitted_on():
+    from camber.rules.satreset_rule import SupplyAirReset
+
+    idx = pd.date_range("2026-06-01", periods=24 * 14, freq="h")
+    running = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    frame = pd.DataFrame(
+        {
+            Role.SUPPLY_AIR_TEMP: np.where(running, 55.0, 72.0) + np.linspace(0, 1, len(idx)),
+            Role.OAT: np.linspace(50, 95, len(idx)),
+            Role.COOL_VALVE: np.where(running, 40.0, 0.0),
+        },
+        index=idx,
+    )
+    rule = SupplyAirReset()
+    f = rule.analyze("DemoAHU", frame)
+    ev = rule.evidence("DemoAHU", frame)
+    assert ev.renderer == "oat_scatter" and ev.template is None
+    assert len(ev.frame.dropna()) == f.metrics["n_considered"]
+    assert (ev.frame[Role.SUPPLY_AIR_TEMP] < 60).all()  # the parked, fan-off SAT is not drawn

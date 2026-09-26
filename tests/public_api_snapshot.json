@@ -146,6 +146,7 @@
     "ahu_hec_scatter",
     "ahu_hec_timeseries",
     "band",
+    "box_by_hour",
     "box_reheat_figure",
     "brush_back",
     "carpet_matrix",
@@ -164,6 +165,7 @@
     "finding_evidence",
     "fitted_band",
     "hec_metrics",
+    "hourly_groups",
     "load_carpet",
     "load_duration_chart",
     "load_profile_chart",
@@ -183,6 +185,10 @@
   ],
   "camber.charts.box_reheat": [
     "box_reheat_figure"
+  ],
+  "camber.charts.boxhour": [
+    "box_by_hour",
+    "hourly_groups"
   ],
   "camber.charts.carpet": [
     "carpet_matrix",
@@ -1255,9 +1261,13 @@
     "BuildingSummary",
     "ECM",
     "FleetReport",
+    "RcxOptions",
+    "RcxReport",
+    "WeekChoice",
     "ahu_diagnosis_table",
     "build_dashboard",
     "build_fleet_report",
+    "build_rcx_report",
     "build_site_report",
     "carpet_svg_html",
     "chiller_diagnosis_table",
@@ -1268,6 +1278,7 @@
     "interactive_scatter_html",
     "multitrend_svg_html",
     "pump_diagnosis_table",
+    "select_week",
     "selection_bus_html",
     "threshold_confidence_html",
     "vav_diagnosis_table"
@@ -1316,6 +1327,17 @@
   ],
   "camber.report.pump": [
     "pump_diagnosis_table"
+  ],
+  "camber.report.rcx": [
+    "P3_FAMILIES",
+    "RcxOptions",
+    "RcxReport",
+    "WEEK_MODES",
+    "WeekChoice",
+    "build_rcx_report",
+    "load_notes",
+    "notes_template",
+    "select_week"
   ],
   "camber.report.site": [
     "build_site_report"

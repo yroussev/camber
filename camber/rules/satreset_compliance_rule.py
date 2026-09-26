@@ -23,7 +23,7 @@ import pandas as pd
 
 from ..g36_reset import sat_reset_compliance
 from ..model.roles import Role
-from ..schedules import effective_occupied_mask, fan_on_mask
+from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask
 from .base import Finding
 
 # Whether the rule gates on fan-on / occupied samples by default (see the class docstring).
@@ -104,12 +104,19 @@ class SupplyAirResetCompliance:
             occ_src = "trended occupancy" if trended else "assumed schedule (weekdays 07-18)"
             occ_mask = effective_occupied_mask(frame.index, occ=occ)
             mask = occ_mask if mask is None else (mask & occ_mask)
-        meta = {
+        # The three fan signals are alternatives: name one "missing" only when all are absent
+        # (pre-empts the runner's backstop, which would list the unused alternatives too).
+        missing = [r.value for r in (Role.OAT, Role.OCCUPANCY) if r not in frame.columns]
+        if self.fan_gate and fan_src == FAN_GATE_NONE:
+            missing.append(Role.SUPPLY_FAN_STATUS.value)
+        meta: dict = {
             "reset_source": self.source,
             "fan_gate": fan_src,
             "occupancy_gate": occ_src,
             "n_gated": None if mask is None else int(mask.sum()),
         }
+        if missing:
+            meta["_missing_optional"] = missing
         return mask, meta
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:

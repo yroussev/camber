@@ -7,6 +7,7 @@ directly. Importing this package pulls matplotlib, a core dependency.
 """
 
 from .box_reheat import box_reheat_figure
+from .boxhour import box_by_hour, hourly_groups
 from .carpet import carpet_matrix, load_carpet
 from .cohort import (
     CohortResult,
@@ -45,6 +46,8 @@ from .zones_chart import zones_timeofweek_figure, zones_vs_oat_figure
 
 __all__ = [
     "box_reheat_figure",
+    "box_by_hour",
+    "hourly_groups",
     "load_carpet",
     "carpet_matrix",
     "cohort_deviation",

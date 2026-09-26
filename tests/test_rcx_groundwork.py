@@ -206,3 +206,15 @@ def test_run_result_carries_the_configured_registry_and_a_lazy_frame_resolver(tm
     assert [r.equip for r in res.refs] == ["DemoAHU"]
     assert res.data_sources and res.data_sources[0]["access"] == "research_only"
     assert res.config is cfg and res.base_dir == str(tmp_path)
+
+
+def test_sat_compliance_names_a_fan_signal_missing_only_when_all_are_absent():
+    frame = _sat_frame()
+    f = SupplyAirResetCompliance().analyze("DemoAHU", frame)
+    assert f.metrics["_missing_optional"] == ["occupancy"]  # not fan speed / airflow
+    f = SupplyAirResetCompliance().analyze("DemoAHU", _sat_frame(with_fan=False, occ=True))
+    assert f.metrics["_missing_optional"] == ["supply_fan_status"]
+    assert (
+        "_missing_optional"
+        not in SupplyAirResetCompliance().analyze("DemoAHU", _sat_frame(occ=True)).metrics
+    )

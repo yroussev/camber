@@ -214,7 +214,7 @@ class OutdoorAirFraction:
             return np.full(len(xv), lo_ok), np.where(xv > cut, hi_ok, top)
 
         tmpl = DiagnosticTemplate(
-            name, Role.OAT, ycol, expected, "OAT (°F)", ylabel, "configured rule parameters"
+            name, Role.OAT, ycol, expected, "OAT (°F)", ylabel, "the rule's own parameters"
         )
         return Evidence(
             renderer="diagnostic", template=tmpl, frame=derived, title=f"{equip}: OA fraction"

@@ -15,6 +15,7 @@ from .linking import (
     selection_bus_html,
 )
 from .pump import pump_diagnosis_table
+from .rcx import RcxOptions, RcxReport, WeekChoice, build_rcx_report, select_week
 from .site import build_site_report
 from .vav import vav_diagnosis_table
 
@@ -27,6 +28,11 @@ __all__ = [
     "build_fleet_report",
     "build_dashboard",
     "build_site_report",
+    "build_rcx_report",
+    "RcxOptions",
+    "RcxReport",
+    "select_week",
+    "WeekChoice",
     "chiller_diagnosis_table",
     "condenser_diagnosis_table",
     "evaporator_diagnosis_table",

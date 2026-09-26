@@ -304,7 +304,7 @@ class EconomizerHighLimit:
             expected,
             "OAT (°F)",
             f"{j['basis']} ({unit})",
-            "configured rule parameters",
+            "the rule's own parameters",
         )
         return Evidence(
             renderer="diagnostic",

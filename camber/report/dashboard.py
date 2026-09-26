@@ -80,13 +80,14 @@ def _rules_map(rules) -> dict:
     return {getattr(r, "name", str(i)): r for i, r in enumerate(rules)}
 
 
-def render_evidence_blocks(ranked, rules_map, frame_for) -> str:
+def render_evidence_blocks(ranked, rules_map, frame_for, *, dpi: int = 90) -> str:
     """Shared pattern-J evidence rendering used by the dashboard and the audit report.
 
     ``frame_for(equip)`` resolves the role-frame for a finding's equipment (the dashboard passes a
     single ``df`` for all; the audit passes a per-equipment map). A finding renders only when its
     rule exposes an ``evidence()`` hook and a frame exists. A failed render closes only its own
-    figure (never the whole pyplot registry) and is skipped.
+    figure (never the whole pyplot registry) and is skipped. ``dpi`` is the PNG resolution
+    (the RCx report prints at 150).
     """
     from ..charts.evidence import finding_evidence, render_evidence
 
@@ -109,7 +110,7 @@ def render_evidence_blocks(ranked, rules_map, frame_for) -> str:
                 continue
             fig, ax = plt.subplots(figsize=(8, 4))
             render_evidence(ev, frame, ax=ax)
-            img = fig_to_base64(fig)  # closes fig on success
+            img = fig_to_base64(fig, dpi=dpi)  # closes fig on success
         except Exception:
             if fig is not None:
                 plt.close(fig)  # close only this figure, not plt.close("all")

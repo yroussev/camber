@@ -91,11 +91,28 @@ class SupplyAirReset:
         is drawn by the RCx report's SAT reset census instead).
         """
         from ..charts.evidence import Evidence
+        from ..schedules import occupied_mask
 
-        if Role.SUPPLY_AIR_TEMP in frame.columns and Role.OAT in frame.columns:
-            return Evidence(
-                renderer="oat_scatter",
-                roles=[Role.SUPPLY_AIR_TEMP],
-                title=f"{equip}: SAT vs OAT (reset shape)",
-            )
-        return None
+        if Role.SUPPLY_AIR_TEMP not in frame.columns or Role.OAT not in frame.columns:
+            return None
+        # the samples the fit uses: occupied, cooling (valve open) and a plausible SAT
+        occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+        keep = occupied_mask(
+            frame.index,
+            occ=occ if occ is not None and occ.notna().any() else None,
+            warmup=frame[Role.WARMUP] if Role.WARMUP in frame.columns else None,
+            cooldown=frame[Role.COOLDOWN] if Role.COOLDOWN in frame.columns else None,
+        )
+        if Role.COOL_VALVE in frame.columns:
+            keep &= frame[Role.COOL_VALVE] > 5.0
+        sat = frame[Role.SUPPLY_AIR_TEMP]
+        keep &= (sat > 40) & (sat < 90)
+        derived = frame.loc[keep.to_numpy(), [Role.SUPPLY_AIR_TEMP, Role.OAT]]
+        if derived.dropna().empty:
+            return None
+        return Evidence(
+            renderer="oat_scatter",
+            roles=[Role.SUPPLY_AIR_TEMP],
+            title=f"{equip}: SAT vs OAT, occupied cooling hours (reset shape)",
+            frame=derived,
+        )

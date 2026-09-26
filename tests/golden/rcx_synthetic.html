@@ -1,0 +1,159 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Retro-commissioning report — Demo facility</title>
+<style>@page{size:letter;margin:0.45in 0.55in 0.7in;@bottom-right{content:'Page ' counter(page) ' of ' counter(pages);font-size:9px;color:#5b6475}@bottom-left{content:'CAMBER RCx report';font-size:9px;color:#5b6475}}
+:root{--ink:#1d2330;--muted:#5b6475;--rule:#d9dde5;--fault:#b3261e;--warn:#9a5b00;--ok:#1e6b3a;
+--accent:#0b5a6b;--bg:#ffffff;--band:#f3f5f8}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:var(--ink);
+background:var(--bg);
+margin:0 auto;max-width:1040px;padding:16px 24px;line-height:1.45;font-size:14px}
+h1{font-size:24px;margin:8px 0 4px}h2{font-size:18px;margin:0 0 10px;padding-bottom:4px;
+border-bottom:2px solid var(--accent)}
+section{margin:28px 0}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin:8px 0}
+th,td{border:1px solid var(--rule);padding:4px 6px;text-align:left;vertical-align:top}
+th{background:var(--band)}
+table.kv td:first-child{width:28%;color:var(--muted)}
+table.kv thead{display:none}
+figure{margin:10px 0}figure img{max-width:100%;height:auto;border:1px solid var(--rule)}
+figcaption{font-size:12px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 12px}
+.kpi{border:1px solid var(--rule);border-radius:6px;padding:8px;background:var(--band)}
+.kpi .v{font-size:20px;font-weight:700}.kpi .l{font-size:11.5px;color:var(--muted)}
+.banner{border-left:5px solid var(--warn);background:#fff6e5;padding:8px 10px;margin:8px 0}
+aside.note{border:1px dashed var(--accent);padding:8px 10px;margin:10px 0;background:#f2f8f9}
+aside.note .who{font-size:11.5px;color:var(--muted);font-weight:600}
+nav.toc{border:1px solid var(--rule);padding:8px 14px;margin:12px 0;font-size:13px}
+nav.toc ol{margin:4px 0;padding-left:20px}
+.meta{color:var(--muted)}
+table.nc-wrap,table.nc-wrap>tbody,table.nc-wrap>tbody>tr,table.nc-wrap>tbody>tr>td{display:block;
+border:0;padding:0;margin:0;width:auto}
+table.nc-wrap>thead{display:none}
+@media print{
+  body{max-width:none;padding:0 3px;font-size:11px}
+  nav.toc{display:none}
+  section{break-before:page;margin:0}
+  section#cover,section.appendix-cont{break-before:auto;margin-top:18px}
+  figure,tr,.kpi,aside.note,.banner{break-inside:avoid}
+  thead{display:table-header-group}
+  *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .camber-nc-banner{position:fixed;top:0;left:0;right:0;background:#fff;z-index:10;
+  margin:0!important;padding:4px 6px!important;font-size:9px}
+  table.nc-wrap{display:table;width:100%;border-collapse:collapse;margin:0}
+  table.nc-wrap>thead{display:table-header-group}
+  table.nc-wrap>tbody{display:table-row-group}
+  table.nc-wrap>tbody>tr,table.nc-wrap>thead>tr{display:table-row}
+  table.nc-wrap>tbody>tr>td,table.nc-wrap>thead>tr>td{display:table-cell;border:0;padding:0}
+  .nc-space{height:0.55in}
+  section#summary{max-height:9.2in;overflow:hidden}
+}
+</style></head>
+<body class='nc'>
+<div class='camber-nc-banner' role='alert' style='border:3px solid #b00020;padding:8px;margin:8px 0;font-weight:bold'>NON-COMMERCIAL / RESEARCH USE ONLY: this report is built from data whose licence forbids commercial use and redistribution. Do not sell it, and do not redistribute it or the underlying data.</div>
+<table class='nc-wrap'><thead><tr><td><div class='nc-space'></div></td></tr></thead><tbody><tr><td>
+
+<h2>Data source &amp; licence</h2><ul class='camber-data-sources'>
+<li><b>Demo research-only data</b> <code>demo-nc</code><br>publisher: Demo Lab<br>licence: CC-BY-NC-4.0 (research_only)<br>cite: Demo Lab (2026). Demo data.</li>
+</ul>
+<h1>Retro-commissioning report — Demo facility</h1>
+<p class='meta'>Demo facility · data 2026-03-02 to 2026-03-22 · CAMBER <version>
+<nav class='toc'><b>Contents</b><ol><li><a href='#cover'>Cover and provenance</a></li><li><a href='#summary'>Executive summary</a></li><li><a href='#data'>Data coverage and sensor health</a></li><li><a href='#week'>Representative week</a></li><li><a href='#economizer'>Economizer</a></li><li><a href='#sat'>Supply-air temperature reset census</a></li><li><a href='#air'>Air distribution</a></li><li><a href='#issue-a8612f9b8b3b'>Issue 1: Enable supply-air-temperature reset</a></li><li><a href='#issue-5e97d850de5d'>Issue 2: Repair / enable the economizer</a></li><li><a href='#issue-803bdf35b066'>Issue 3: Enable supply-air-temperature reset</a></li><li><a href='#appendix-a'>Appendix A — Declines and data gaps</a></li><li><a href='#appendix-b'>Appendix B — Assumptions used</a></li><li><a href='#appendix-c'>Appendix C — Rules run</a></li><li><a href='#appendix-d'>Appendix D — Fact index</a></li><li><a href='#appendix-e'>Appendix E — Orphaned engineer notes</a></li></ol></nav>
+<section id='cover'><h2>Cover and provenance</h2>
+<table class='kv'><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>Site</td><td>Demo facility</td></tr><tr><td>Facility id</td><td>demo-fac</td></tr><tr><td>Equipment analysed</td><td>2 (2 air-side)</td></tr><tr><td>Rules run</td><td>6</td></tr><tr><td>Findings</td><td>12</td></tr><tr><td>Data source</td><td>store</td></tr></tbody></table>
+<p>Advisory report built from trend data by CAMBER, read-only toward the building automation system. Every verdict names its evidence; checks that could not be evaluated are listed in Appendix A, and every assumption used in Appendix B.</p>
+</section>
+<section id='summary'><h2>Executive summary</h2>
+<div class='kpis'><div class='kpi'><div class='v'>$7,727</div><div class='l'>Costed issues, $/yr</div></div><div class='kpi'><div class='v'>2 / 0</div><div class='l'>Uncosted / conditional issues</div></div><div class='kpi'><div class='v'>100%</div><div class='l'>Data coverage</div></div><div class='kpi'><div class='v'>0</div><div class='l'>Declined checks</div></div></div>
+<table><thead><tr><th>#</th><th>Issue</th><th>Equipment</th><th>$/yr</th><th>Severity</th><th>Conf.</th><th>Action</th></tr></thead><tbody><tr><td><a href='#issue-a8612f9b8b3b'>1</a></td><td>Enable supply-air-temperature reset</td><td>DemoAHU2</td><td>$7,727</td><td>fault</td><td>M</td><td>Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends).</td></tr><tr><td><a href='#issue-5e97d850de5d'>2</a></td><td>Repair / enable the economizer</td><td>DemoAHU</td><td>uncosted — no cost model for this rule</td><td>fault</td><td>M</td><td>Verify the OA dry-bulb high limit (~65°F), free-cooling enable, and damper travel; hold minimum OA ≈15% when…</td></tr><tr><td><a href='#issue-803bdf35b066'>3</a></td><td>Enable supply-air-temperature reset</td><td>DemoAHU</td><td>uncosted — no cost model for this rule</td><td>warn</td><td>M</td><td>Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends).</td></tr></tbody></table>
+</section>
+<section id='data'><h2>Data coverage and sensor health</h2>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU readiness'></figure>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU2 readiness'></figure>
+<p>No OAT reference configured: the building OAT sensor is not checked against weather.</p>
+<p>Sensor trust, scored on fan-on samples (gated) and on all samples:</p>
+<table><thead><tr><th>Equipment</th><th>Point</th><th>Gated</th><th>Ungated</th><th>Gate used</th></tr></thead><tbody><tr><td>DemoAHU</td><td>oat</td><td>trusted (1.00; no flags)</td><td>trusted (1.00; no flags)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>supply_air_temp</td><td>trusted (1.00; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>mixed_air_temp</td><td>trusted (0.87; outliers)</td><td>trusted (0.85; outliers)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>return_air_temp</td><td>trusted (1.00; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>heat_valve</td><td>trusted (0.80; no flags)</td><td>trusted (0.80; no flags)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>cool_valve</td><td>trusted (0.98; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>oa_damper</td><td>trusted (0.80; outliers, bimodal)</td><td>trusted (0.80; outliers, bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>duct_static</td><td>trusted (1.00; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU</td><td>supply_fan_status</td><td>trusted (0.98; intermittent)</td><td>trusted (0.98; intermittent)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>oat</td><td>trusted (1.00; no flags)</td><td>trusted (1.00; no flags)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>supply_air_temp</td><td>trusted (1.00; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>mixed_air_temp</td><td>trusted (0.91; no flags)</td><td>trusted (0.89; no flags)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>return_air_temp</td><td>trusted (1.00; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>heat_valve</td><td>suspect (0.70; outliers, bimodal)</td><td>suspect (0.70; outliers, bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>cool_valve</td><td>trusted (0.98; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>oa_damper</td><td>suspect (0.73; outliers, bimodal)</td><td>suspect (0.73; outliers, bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>duct_static</td><td>trusted (1.00; bimodal)</td><td>trusted (0.98; bimodal)</td><td>fan status</td></tr><tr><td>DemoAHU2</td><td>supply_fan_status</td><td>trusted (0.98; intermittent)</td><td>trusted (0.98; intermittent)</td><td>fan status</td></tr></tbody></table>
+<p>Mixing consistency (mixed air between outdoor and return air, fan-on):</p>
+<table><thead><tr><th>Equipment</th><th>Result</th><th>Samples</th><th>Outside</th><th>Detail</th></tr></thead><tbody><tr><td>DemoAHU</td><td>ok</td><td>195</td><td>0.0%</td><td>mixed-air temp outside [OAT,RAT]±5F for 0% of 195 samples</td></tr><tr><td>DemoAHU2</td><td>ok</td><td>195</td><td>0.0%</td><td>mixed-air temp outside [OAT,RAT]±5F for 0% of 195 samples</td></tr></tbody></table>
+</section>
+<section id='week'><h2>Representative week</h2>
+<p>Chose the week of 2026-03-09 by evidence: score 0.600 = evidence 0.500 + 0.1 x coverage 1.00; 5 occupied days; runner-up week of 2026-03-02 scored 0.100; 3 of 3 candidate weeks eligible.</p>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU representative week'><figcaption>Shaded: violations during occupied, fan-on time only.</figcaption></figure>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU2 representative week'><figcaption>No masked violations in this week.</figcaption></figure>
+</section>
+<section id='economizer'><h2>Economizer</h2>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU economizer'><figcaption>high limit 68°F, differential on (site-configured). Verdict: fault — DemoAHU: excess OA above the 68°F high limit 28% of those samples (OA-fraction: OAF &gt; 30%; economizer not locked out)</figcaption></figure>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU2 economizer'><figcaption>high limit 68°F, differential on (site-configured). Verdict: ok — DemoAHU2: excess OA above the 68°F high limit 0% of those samples (OA-fraction: OAF &gt; 30%; economizer not locked out)</figcaption></figure>
+<p>Mixed air must sit between outdoor and return air (±5 °F, fan-on samples):</p>
+<table><thead><tr><th>Equipment</th><th>Result</th><th>Samples</th><th>Outside</th></tr></thead><tbody><tr><td>DemoAHU</td><td>ok</td><td>195</td><td>0.0%</td></tr><tr><td>DemoAHU2</td><td>ok</td><td>195</td><td>0.0%</td></tr></tbody></table>
+<p>Free cooling (fan-on hours with OAT below the 68°F high limit while the cooling valve was open):</p>
+<table><thead><tr><th>Equipment</th><th>Hours available</th><th>Hours missed</th><th>Missed</th></tr></thead><tbody><tr><td>DemoAHU</td><td>68</td><td>27</td><td>40%</td></tr><tr><td>DemoAHU2</td><td>64</td><td>24</td><td>38%</td></tr></tbody></table>
+</section>
+<section id='sat'><h2>Supply-air temperature reset census</h2>
+<p>Tiers: 1 = a trended SAT setpoint (tracking error); 2 = a declared site sequence (census against it); 3 = neither (descriptors only, verdict declined).</p>
+<div class='banner' role='note'>DemoAHU — SAT reset verdict declined: no site sequence known (tier 3). Descriptors only; supply_air_reset_compliance is excluded from the $ totals.</div>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU SAT vs OAT'></figure>
+<table class='kv'><thead><tr><th>Descriptor</th><th>Value</th></tr></thead><tbody><tr><td>SAT median (p05–p95)</td><td>55.0 (54.5–55.5) °F</td></tr><tr><td>SAT spread (std)</td><td>0.3 °F</td></tr><tr><td>Slope vs OAT</td><td>+0.00 °F/°F</td></tr><tr><td>Cooling hours below 58 °F</td><td>100%</td></tr><tr><td>Samples</td><td>139</td></tr></tbody></table>
+<div class='banner' role='note'>DemoAHU2 — SAT reset verdict declined: no site sequence known (tier 3). Descriptors only; supply_air_reset_compliance is excluded from the $ totals.</div>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU2 SAT vs OAT'></figure>
+<table class='kv'><thead><tr><th>Descriptor</th><th>Value</th></tr></thead><tbody><tr><td>SAT median (p05–p95)</td><td>55.0 (54.5–55.6) °F</td></tr><tr><td>SAT spread (std)</td><td>0.3 °F</td></tr><tr><td>Slope vs OAT</td><td>-0.00 °F/°F</td></tr><tr><td>Cooling hours below 58 °F</td><td>100%</td></tr><tr><td>Samples</td><td>140</td></tr></tbody></table>
+</section>
+<section id='air'><h2>Air distribution</h2>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU duct static by hour'></figure>
+<figure><img src='data:image/png;base64,<N bytes>' alt='DemoAHU2 duct static by hour'></figure>
+</section>
+<section id='issue-a8612f9b8b3b'><h2>Issue 1: Enable supply-air-temperature reset</h2>
+<table class='kv'><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>Equipment</td><td>DemoAHU2</td></tr><tr><td>Severity</td><td>fault</td></tr><tr><td>$/yr</td><td>$7,727</td></tr><tr><td>Cost basis</td><td>reheat-gas+paired-cooling (simultaneous_heat_cool)</td></tr><tr><td>Assumptions</td><td>{&quot;boiler_efficiency&quot;: 0.8, &quot;cool_cop&quot;: 3.5, &quot;faulted_frac&quot;: 0.267, &quot;reheat_diversity&quot;: 0.3}</td></tr><tr><td>Violation hours</td><td>not measured (no member exposes a violation mask)</td></tr><tr><td>Confidence</td><td>M</td></tr></tbody></table>
+<figure><img src='data:image/png;base64,<N bytes>' alt='evidence'><figcaption>DemoAHU2 · supply_air_reset · DemoAHU2: SAT median 55.0F, slope -0.00 F/F, &lt;58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)</figcaption></figure><figure><img src='data:image/png;base64,<N bytes>' alt='evidence'><figcaption>DemoAHU2 · simultaneous_heat_cool · DemoAHU2: both coils open 26.7% of occupied hours (CHW 85%, HHW 27%)</figcaption></figure>
+<table><thead><tr><th>Role</th><th>Rule</th><th>Severity</th><th>Estimate $/yr</th><th>Finding</th></tr></thead><tbody><tr><td>root</td><td>supply_air_reset</td><td>warn</td><td>—</td><td>DemoAHU2: SAT median 55.0F, slope -0.00 F/F, &lt;58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)</td></tr><tr><td>member</td><td>simultaneous_heat_cool</td><td>fault</td><td>$7,727</td><td>DemoAHU2: both coils open 26.7% of occupied hours (CHW 85%, HHW 27%)</td></tr></tbody></table>
+<p>Recommended action: Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends).</p>
+<p>Suggested: SAT setpoint reset schedule → 65→55°F over 0–60°F OAT</p>
+<p>Confidence M — why we believe this:</p>
+<ul><li>Input trust H: supply_air_temp trusted (1.00)</li><li>Mapping H: roles recorded at ingest by the dataset adapter</li><li>Assumptions M: rule defaults; no site parameters configured</li><li>Sample M: 140 samples judged, 100% input coverage</li><li>Corroboration H: supply_air_reset scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark</li></ul>
+</section>
+<section id='issue-5e97d850de5d'><h2>Issue 2: Repair / enable the economizer</h2>
+<table class='kv'><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>Equipment</td><td>DemoAHU</td></tr><tr><td>Severity</td><td>fault</td></tr><tr><td>$/yr</td><td>—</td></tr><tr><td>Cost basis</td><td>uncosted — no cost model for this rule</td></tr><tr><td>Violation hours</td><td>32 h (union of members) = 16.4% of 195 fan-on h; gate: fan status</td></tr><tr><td>Confidence</td><td>M</td></tr></tbody></table>
+<figure><img src='data:image/png;base64,<N bytes>' alt='evidence'><figcaption>DemoAHU · economizer_high_limit · DemoAHU: excess OA above the 68°F high limit 28% of those samples (OA-fraction: OAF &gt; 30%; economizer not locked out)</figcaption></figure><figure><img src='data:image/png;base64,<N bytes>' alt='evidence'><figcaption>DemoAHU · outdoor_air_fraction · DemoAHU: OAF median 55% (20% in cooling weather); excess OA 42% of cooling hours above 20% min</figcaption></figure>
+<table><thead><tr><th>Role</th><th>Rule</th><th>Severity</th><th>Estimate $/yr</th><th>Finding</th></tr></thead><tbody><tr><td>root</td><td>economizer_high_limit</td><td>fault</td><td>—</td><td>DemoAHU: excess OA above the 68°F high limit 28% of those samples (OA-fraction: OAF &gt; 30%; economizer not locked out)</td></tr><tr><td>member</td><td>outdoor_air_fraction</td><td>warn</td><td>—</td><td>DemoAHU: OAF median 55% (20% in cooling weather); excess OA 42% of cooling hours above 20% min</td></tr></tbody></table>
+<p>Recommended action: Verify the OA dry-bulb high limit (~65°F), free-cooling enable, and damper travel; hold minimum OA ≈15% when the economizer is locked out.</p>
+<p>Suggested: Economizer high limit + min OA damper → high limit ~65°F, min OA ~15%</p>
+<p>Confidence M — why we believe this:</p>
+<ul><li>Input trust H: oa_damper trusted (0.80), oat trusted (1.00)</li><li>Mapping H: roles recorded at ingest by the dataset adapter</li><li>Assumptions H: site-configured parameters {&quot;high_limit_f&quot;: 68.0, &quot;min_oa_pct&quot;: 30.0}</li><li>Sample M: 113 samples judged, 100% input coverage</li><li>Corroboration H: economizer_high_limit scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark</li></ul>
+<p>Caveats:</p>
+<ul><li>34 sample(s) above the 68°F high limit but below return-air temperature excluded: a differential dry-bulb economizer correctly economizes there (pass differential=False for a fixed-limit unit)</li></ul>
+</section>
+<section id='issue-803bdf35b066'><h2>Issue 3: Enable supply-air-temperature reset</h2>
+<table class='kv'><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>Equipment</td><td>DemoAHU</td></tr><tr><td>Severity</td><td>warn</td></tr><tr><td>$/yr</td><td>—</td></tr><tr><td>Cost basis</td><td>uncosted — no cost model for this rule</td></tr><tr><td>Violation hours</td><td>not measured (no member exposes a violation mask)</td></tr><tr><td>Confidence</td><td>M</td></tr></tbody></table>
+<figure><img src='data:image/png;base64,<N bytes>' alt='evidence'><figcaption>DemoAHU · supply_air_reset · DemoAHU: SAT median 55.0F, slope +0.00 F/F, &lt;58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)</figcaption></figure>
+<table><thead><tr><th>Role</th><th>Rule</th><th>Severity</th><th>Estimate $/yr</th><th>Finding</th></tr></thead><tbody><tr><td>root</td><td>supply_air_reset</td><td>warn</td><td>—</td><td>DemoAHU: SAT median 55.0F, slope +0.00 F/F, &lt;58F 100% of cooling hours -- NO RESET (SAT pinned low at ~55 F regardless of OAT)</td></tr></tbody></table>
+<p>Recommended action: Reset SAT setpoint on OAT: 65°F at 0°F OAT ramping to 55°F at 60°F (clamped at the ends).</p>
+<p>Suggested: SAT setpoint reset schedule → 65→55°F over 0–60°F OAT</p>
+<p>Confidence M — why we believe this:</p>
+<ul><li>Input trust H: supply_air_temp trusted (1.00)</li><li>Mapping H: roles recorded at ingest by the dataset adapter</li><li>Assumptions M: rule defaults; no site parameters configured</li><li>Sample M: 139 samples judged, 100% input coverage</li><li>Corroboration H: supply_air_reset scores TPR 100% / FPR 0% on the synthetic injected-fault benchmark</li></ul>
+</section>
+<section id='appendix-a'><h2>Appendix A — Declines and data gaps</h2>
+<p>Optional inputs that were missing (sub-checks not evaluated):</p>
+<table><thead><tr><th>Rule</th><th>Equipment</th><th>Missing</th></tr></thead><tbody><tr><td>economizer_high_limit</td><td>DemoAHU</td><td>oa_airflow, airflow</td></tr><tr><td>economizer_high_limit</td><td>DemoAHU2</td><td>oa_airflow, airflow</td></tr><tr><td>supply_air_reset</td><td>DemoAHU</td><td>occupancy, warmup, cooldown</td></tr><tr><td>supply_air_reset</td><td>DemoAHU2</td><td>occupancy, warmup, cooldown</td></tr><tr><td>supply_air_reset_compliance</td><td>DemoAHU</td><td>occupancy</td></tr><tr><td>supply_air_reset_compliance</td><td>DemoAHU2</td><td>occupancy</td></tr><tr><td>simultaneous_heat_cool</td><td>DemoAHU</td><td>occupancy, warmup, cooldown</td></tr><tr><td>simultaneous_heat_cool</td><td>DemoAHU2</td><td>occupancy, warmup, cooldown</td></tr></tbody></table>
+<p>Caveats:</p>
+<ul><li>34 sample(s) above the 68°F high limit but below return-air temperature excluded: a differential dry-bulb economizer correctly economizes there (pass differential=False for a fixed-limit unit)</li><li>38 sample(s) above the 68°F high limit but below return-air temperature excluded: a differential dry-bulb economizer correctly economizes there (pass differential=False for a fixed-limit unit)</li></ul>
+</section>
+<section id='appendix-b'><h2>Appendix B — Assumptions used</h2>
+<table class='kv'><thead><tr><th>Cost assumption</th><th>Value</th></tr></thead><tbody><tr><td>boiler_efficiency</td><td>0.8</td></tr><tr><td>chiller_load_factor</td><td>0.6</td></tr><tr><td>chiller_target_kw_per_ton</td><td>0.65</td></tr><tr><td>cool_cop</td><td>3.5</td></tr><tr><td>ct_kw_per_approach_f</td><td>0.015</td></tr><tr><td>fan_excess_frac</td><td>0.15</td></tr><tr><td>g36_gap_ref_f</td><td>5.0</td></tr><tr><td>per_start_loss</td><td>0.005</td></tr><tr><td>pump_excess_frac</td><td>0.15</td></tr><tr><td>reheat_diversity</td><td>0.3</td></tr><tr><td>reset_fan_excess_frac</td><td>0.15</td></tr></tbody></table>
+<p>Energy price: package placeholders ($0.15/kWh, $1.20/therm) — set yours.</p>
+<p>Equipment sizing supplied for: DemoAHU2</p>
+<table><thead><tr><th>Equipment</th><th>Fan gate</th><th>Occupancy</th></tr></thead><tbody><tr><td>DemoAHU</td><td>fan status</td><td>assumed schedule (weekdays 07-18)</td></tr><tr><td>DemoAHU2</td><td>fan status</td><td>assumed schedule (weekdays 07-18)</td></tr></tbody></table>
+<p>Week-selection scores (mode evidence):</p>
+<table><thead><tr><th>Week of</th><th>Coverage</th><th>Occupied days</th><th>Eligible</th><th>Score</th></tr></thead><tbody><tr><td>2026-03-02</td><td>1.00</td><td>5</td><td>yes</td><td>0.100</td></tr><tr><td>2026-03-09</td><td>1.00</td><td>5</td><td>yes</td><td>0.600</td></tr><tr><td>2026-03-16</td><td>1.00</td><td>5</td><td>yes</td><td>0.100</td></tr></tbody></table>
+</section>
+<section id='appendix-c' class='appendix-cont'><h2>Appendix C — Rules run</h2>
+<p>Config hash (sha256, first 16): 26be42aa97b0f30f</p>
+<ul><li>economizer_high_limit</li><li>outdoor_air_fraction</li><li>supply_air_reset</li><li>supply_air_reset_compliance</li><li>simultaneous_heat_cool</li><li>leaking_valve</li></ul>
+</section>
+<section id='appendix-d' class='appendix-cont'><h2>Appendix D — Fact index</h2>
+<p>Reserved for the grounded fact index that AI prose will cite (not yet built).</p>
+</section>
+<section id='appendix-e' class='appendix-cont'><h2>Appendix E — Orphaned engineer notes</h2>
+<p>None.</p>
+</section>
+</td></tr></tbody></table>
+</body></html>
