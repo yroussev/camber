@@ -4,6 +4,79 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.85.0] — 2026-09-25
+
+**Sensor health and semantic models, checked against real buildings.** The trust layer scored a
+healthy plant as broken and missed a documented sensor fault; the Brick importer could not read
+back what the exporter wrote, and point-name matching got 3 of 16 real names right.
+
+### Fixed — sensor health
+- **Trust collapsed on a healthy plant.** Points held at a setpoint have almost no spread, so
+  rounding noise scored as outliers; a pump idling at minimum then ramping with load is one skewed
+  population, not two regimes, so all load operation counted as outliers. On a fault-free boiler
+  plant flow, pump speed and loop DP scored 0.18–0.28 trust — the trust gate would have switched
+  off the one detector that works there (loop ΔT, 8/8). `assess(shape_aware=, scale_floor=)`
+  judges each side of the median against its own spread with a precision floor per role
+  (0.5 °F, 1 %-pt, 30 ppm CO₂), and only excuses points that persist in runs; `sensor_trust` opts
+  in. The same plant now reads 0.92–0.99; spikes, scattered rails and sentinels stay untrusted.
+- **`compare_to_reference` extrapolated drift from days of data.** Three days of room-vs-duct
+  CO₂ read "fault, drifting +275 ppm/month" with a 7 ppm bias. Drift now needs ≥ 28 days and 14
+  daily baselines (else `drift_per_month` is `None` with a caveat — **a field that was always a
+  number can now be `None`**), is estimated by a robust (Theil–Sen) slope through daily offsets,
+  optionally restricted to quiet hours (`baseline_hours=`), and the verdict leads with the worst
+  issue — a 148 ppm bias fault no longer reads as "drifting +28.7/month".
+
+### Added — sensor health
+- `copied_signal_consistency`: two roles on one unit carrying identical *changing* data (a return
+  air temperature that was a copy of supply air for 2,627 consecutive hours).
+- `gapfill_signature`, `cross_unit_identity`: screening checks for imputed data — a change in
+  value granularity, repeated days, units implausibly identical (r ≈ 0.998). Warn at most; a
+  known false positive (fans on one common speed) is named in the caveat.
+- `percent_scale_suspect` and physical bounds for `OA_AIRFLOW`: a 0–100 (or 0–1) signal mapped to
+  an airflow role is flagged in sensor trust (50 of 51 fan-speed points typed as airflow in a
+  published building model).
+- `mixing_flow_consistency`: mixed-air temperature against the OA/SA flow balance
+  (f·OAT + (1−f)·RAT), widened for flow-station uncertainty, warn at most. Found two units reading
+  +3.1 / +4.7 °F warm where the dataset documents inaccurate mixed-air sensors. Not yet part of
+  the trust score.
+- `co2_outdoor_consistency` and a `below_ambient` trust flag: indoor CO₂ below outdoor (or under
+  ~380 ppm background) means one sensor is wrong.
+- New `docs/SENSOR-HEALTH.md`.
+
+### Fixed — semantic models and mapping
+- **Brick export and import were not inverses.** The exporter wrote `CO2_Sensor`,
+  `Outside_Air_Flow_Sensor`, outdoor CO₂ / RH and `Supply_Air_Flow_Setpoint`; the importer knew
+  none of them, so DCV inputs could never come from a Brick model. A test now enumerates every
+  exportable role and round-trips it. Import coverage 15 → 45 of 64 roles.
+- **Hydronic plants were invisible to Brick import** — a published boiler-plant model mapped 1 of
+  22 points; now 17. A boiler on/off status or any `Enable_*` class is reported as *ambiguous* and
+  never mapped to `boiler_status` (an enable held at 1 all year made summer lockout fault on every
+  run).
+- **Point-name matching used letter fragments** of unsplit camelCase names (`OaTemp` →
+  `oa_airflow`, `ReHeatVlvPos` → `evap_approach_temp`). Names are now split into words and
+  matched whole: a published 16-point air-handler list goes 3 → 16 correct by name alone.
+- **Range checks were always °F**, so declaring °C sent every temperature to `wetbulb_temp`.
+- **Haystack return / exhaust / relief / mixed-air dampers imported as the VAV-box damper.**
+- **A percent point typed as a flow rated "high" confidence.** `mapping_confidence` flags a flow
+  role whose data stays within 0–100 or 0–1 (`percent_scale`) or whose declared unit is `%`
+  (`unit_mismatch`); `score_token(unit=)`, `score_mapping(units=)`, `review(units=)`.
+
+### Added — semantic models
+- `brick_mapping_report(ttl)`: per point, `mapped` / `alias` (a non-standard class accepted with a
+  caveat — `Outdoor_Air_Flow_Rate`, `Outdoor_*` spellings) / `ambiguous` (and why) / `unmapped`.
+  A flow-typed point named like a speed or percent is never mapped to a cfm role. On a published
+  267-point building model: 193 mapped (17 via aliases), 57 ambiguous, 17 unmapped — where 0.84
+  mapped 134, 51 of them wrongly.
+
+### Notes
+- New public names: `sensorhealth.{mixing_flow_consistency, copied_signal_consistency,
+  gapfill_signature, cross_unit_identity, co2_outdoor_consistency, percent_scale_suspect}`,
+  `interop.brick.{brick_mapping_report, report_from_triples, BrickMappingReport,
+  BrickPointMapping, ALIAS_CLASS_TO_ROLE, AMBIGUOUS_CLASSES}`, plus additive fields and
+  parameters. Snapshot regenerated. No new dependency. Benchmark baselines unchanged.
+- `docs/ONTOLOGY.md` coverage corrected: Brick import 45/64, export 39/64, Haystack 64/64, 223P
+  51/64 (its previous count was stale).
+
 ## [0.84.0] — 2026-09-25
 
 **Plant and refrigerant drift, checked against real machines.** Run on open data from a lab
