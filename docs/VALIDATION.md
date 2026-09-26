@@ -195,8 +195,10 @@ path on a real distribution).
 ## Cross-validation vs an independent implementation
 
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the
-open-source **open-fdd** project — they agree to 0.00 pts on every shared, runnable fault
-condition (one ≤2.3-pt mixed-air-bounds edge case). Details and the operating-state vs
+open-source **open-fdd** project **as of its 0.1.5 release** — they agree to 0.00 pts on
+every shared, runnable fault condition (one ≤2.3-pt mixed-air-bounds edge case). Current
+open-fdd (4.x) is a different SQL engine with much tighter default tolerances and has
+**not** been re-compared yet. Details, the tolerance table and the operating-state vs
 single-signal gating convention are in [ECOSYSTEM.md](ECOSYSTEM.md).
 
 ## M&V

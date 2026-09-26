@@ -142,9 +142,10 @@ example uses). Running on a public, downloadable dataset makes this corroboratio
 fully reproducible and shareable, with no client data involved.
 
 We pinned **open-fdd 0.1.5**, the last release that still exposes the classic
-**FC1–FC16** per-fault API (the current 3.x line replaced it with a generic
-configurable engine, so the named-FC comparison is no longer apples-to-apples
-there).
+**FC1–FC16** per-fault API. **Everything in this section describes that 0.1.5
+comparison only.** Current open-fdd (4.x) is a different engine (see
+[Current open-fdd](#current-open-fdd-4x-not-yet-re-compared) below), and these
+results say nothing about it.
 
 ### What was runnable
 
@@ -213,3 +214,31 @@ single-signal framing is broader but less precisely tied to the standard's inten
 > operating-state-gated %, so a reviewer can reconcile Camber's numbers with an
 > open-fdd-style denominator without changing Camber's default outputs. See
 > `camber/fdd_g36.py`.
+
+### Current open-fdd (4.x): not yet re-compared
+
+open-fdd has since become a platform. Its fault conditions now run as SQL rules in a
+DataFusion engine, and the pandas library on PyPI is a secondary reference
+implementation. The equations are still G36-shaped, but the **default tolerances are
+much tighter** than the G36 Table 5.16.14.7 values CAMBER uses (open-fdd `sql_rules/registry.yaml`,
+checked at 4.4.7):
+
+| Parameter | open-fdd 4.x default | G36 / CAMBER default |
+|---|---|---|
+| ε SAT / RAT / MAT / OAT | 1.15 / 1.15 / 1.15 / 1.15 °F | 2 / 2 / 5 / 5 °F |
+| Supply-fan heat ΔT | 0.55 °F | 2.0 °F |
+| FC8 band √(ε_SAT² + ε_MAT²) | ≈ 1.6 °F | ≈ 5.4 °F |
+
+With the defaults unchanged, expect open-fdd 4.x to report FC2, FC3, FC5, FC8, FC10 and
+FC12 far more often than CAMBER does on the same data. That is a difference in
+thresholds, not in equations. Runs compared at matched tolerances are the only fair
+test. A re-run against 4.x, on labelled open data at both open-fdd's defaults and G36
+tolerances, is tracked in the [integration issue](https://github.com/yroussev/camber/issues/19).
+Until then, **do not read the 0.1.5 result above as a statement about current
+open-fdd.**
+
+open-fdd's change-point M&V module cites CAMBER as its algorithm reference. It is an
+independent reimplementation and can give different fits on the same data: it uses a
+different breakpoint grid and a different model-selection criterion, it allows a
+zero-width 5P dead-band, and its heating-slope sign is the opposite of CAMBER's.
+Compare savings from the two tools only after checking which model each one chose.
