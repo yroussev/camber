@@ -92,7 +92,22 @@ def _cmd_run(args) -> int:
         path = os.path.join(args.out, "findings.json")
         json.dump([f.as_dict() for f in res.findings], open(path, "w"), indent=2, default=str)
         print(f"wrote {path}")
+        _record(res, {path: "report"})
+    if res.faults is not None:
+        f = res.faults
+        print(
+            f"faults: {len(f['new'])} new, {len(f['ongoing'])} ongoing, "
+            f"{len(f['reopened'])} reopened, {len(f['absent'])} absent -> {f['store']}"
+        )
     return 0
+
+
+def _record(res, paths: dict) -> None:
+    """List a command's output files in the facility's workspace manifest (no-op outside one)."""
+    from .config import _FacilityCtx, _record_outputs
+
+    if getattr(res, "workspace", None):
+        _record_outputs(_FacilityCtx(res.facility_id, res.workspace, res.site), paths)
 
 
 def _cmd_report(args) -> int:
@@ -112,6 +127,7 @@ def _cmd_report(args) -> int:
     html = report.to_html(recommend=True)
     open(args.out, "w").write(html)
     print(f"wrote {args.out}  ({len(res.findings)} findings)")
+    _record(res, {args.out: "report"})
     return 0
 
 
@@ -891,6 +907,45 @@ def _drift_load(args):
     return load_config(args.config), os.path.dirname(os.path.abspath(args.config))
 
 
+def _drift_ctx(cfg, base):
+    from .config import _facility_context
+
+    return _facility_context(cfg, base)
+
+
+def _drift_lock(ctx, *, write: bool = True):
+    """The workspace lock for a baseline-store write (fail fast); a no-op outside a workspace or
+    for a dry run."""
+    import contextlib
+
+    if not ctx.workspace or not write:
+        return contextlib.nullcontext()
+    from .portfolio._lock import portfolio_lock
+
+    return portfolio_lock(ctx.workspace, timeout=0.0)
+
+
+def _drift_audit(ctx, action: str, *, reason: str, details: dict) -> None:
+    """Audit a baseline-store change inside a workspace (with the facility's state)."""
+    if not ctx.workspace:
+        return
+    from .portfolio import Portfolio
+    from .portfolio._audit import append_audit, audit_record
+
+    state = Portfolio(ctx.workspace).facility(ctx.facility_id).get("state")
+    append_audit(
+        ctx.workspace,
+        audit_record(
+            action,
+            facility_id=ctx.facility_id,
+            from_state=state,
+            to_state=state,
+            reason=reason,
+            details=details,
+        ),
+    )
+
+
 def _print_drift(result) -> None:
     rank = {"fault": 0, "warn": 1, "info": 2, "ok": 3}
     for fam in result.families:
@@ -932,6 +987,9 @@ def _cmd_drift_run(args) -> int:
         fpath = os.path.join(args.out, "findings.json")
         json.dump([f.as_dict() for f in res.findings], open(fpath, "w"), indent=2, default=str)
         print(f"\nwrote {dpath}\nwrote {fpath}")
+        from .config import _record_outputs
+
+        _record_outputs(_drift_ctx(cfg, base), {dpath: "report", fpath: "report"})
     return 0
 
 
@@ -950,6 +1008,9 @@ def _cmd_drift_report(args) -> int:
         res, charts=bool(args.charts), data_sources=data_sources(cfg, base_dir=base)
     )
     open(args.out, "w").write(html)
+    from .config import _record_outputs
+
+    _record_outputs(_drift_ctx(cfg, base), {args.out: "report"})
     n = sum(len(f.diagnoses) for f in res.families)
     print(f"wrote {args.out}  ({n} verdict(s) across {len(res.families)} family/families)")
     return 0
@@ -957,44 +1018,60 @@ def _cmd_drift_report(args) -> int:
 
 def _cmd_drift_freeze(args) -> int:
     """Create the missing baselines a drift comparison measures against — the only create path."""
-    from .config import drift_store_path, run_drift_config
-    from .store.modelstore import BaselineStore
+    from .config import _baseline_store, _record_outputs, run_drift_config
+    from .portfolio import PortfolioLocked
 
     cfg, base = _drift_load(args)
-    path = drift_store_path(cfg, base_dir=base)
-    store = BaselineStore.load(path)
-    before = {r.fingerprint for r in store.records()}
-    res = run_drift_config(
-        cfg, base_dir=base, freeze_if_missing=True, run_id=args.run_id or None, store=store
-    )
-    if res is None:
-        print("config has no 'drift' section (or it names no families) — nothing to do")
-        return 0
-    after = {r.fingerprint for r in store.records()}
-    new = len(after - before)
-    if args.dry_run:
-        print(
-            f"dry run: would freeze {new} new baseline(s); {len(before)} already frozen "
-            f"(left untouched). {path} not written."
-        )
-        return 0
-    print(f"froze {new} new baseline(s); {len(before)} already frozen (left untouched)")
-    if new:
-        store.save(path)
-        print(f"wrote {path}")
-    else:
-        print(f"{path} left unchanged (nothing new to freeze)")
+    ctx = _drift_ctx(cfg, base)
+    reason = (args.reason or "").strip()
+    if ctx.workspace and not args.dry_run and not reason:
+        print("error: inside a portfolio workspace `drift freeze` needs --reason (audited)",
+              file=sys.stderr)  # fmt: skip
+        return 1
+    try:
+        with _drift_lock(ctx, write=not args.dry_run):
+            store, path, ctx = _baseline_store(cfg, base_dir=base, ctx=ctx)
+            before = {r.fingerprint for r in store.records()}
+            res = run_drift_config(
+                cfg, base_dir=base, freeze_if_missing=True, run_id=args.run_id or None, store=store
+            )
+            if res is None:
+                print("config has no 'drift' section (or it names no families) — nothing to do")
+                return 0
+            fresh = [r for r in store.records() if r.fingerprint not in before]
+            new = len(fresh)
+            if args.dry_run:
+                print(
+                    f"dry run: would freeze {new} new baseline(s); {len(before)} already frozen "
+                    f"(left untouched). {path} not written."
+                )
+                return 0
+            print(f"froze {new} new baseline(s); {len(before)} already frozen (left untouched)")
+            if new:
+                store.save(path)
+                print(f"wrote {path}")
+                _record_outputs(ctx, {path: "baselines"})
+                _drift_audit(
+                    ctx,
+                    "drift.freeze",
+                    reason=reason,
+                    details={"store": path, "frozen": sorted(f"{r.equip}/{r.kind}" for r in fresh)},
+                )
+            else:
+                print(f"{path} left unchanged (nothing new to freeze)")
+    except PortfolioLocked as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     print(_drift_banner())
     return 0
 
 
 def _cmd_drift_list(args) -> int:
-    from .config import drift_store_path
-    from .store.modelstore import BaselineStore
+    from .config import _baseline_store
 
     cfg, base = _drift_load(args)
-    path = drift_store_path(cfg, base_dir=base)
-    recs = BaselineStore.load(path).records()
+    store, path, _ctx = _baseline_store(cfg, base_dir=base)
+    recs = store.records()
     if args.equip:
         recs = [r for r in recs if r.equip in set(args.equip)]
     if args.kind:
@@ -1018,15 +1095,25 @@ def _cmd_drift_list(args) -> int:
 
 def _cmd_drift_accept(args) -> int:
     """Move frozen references to a newly fitted normal — an attributed operator decision."""
-    from datetime import datetime, timezone
-
-    from .config import drift_refit, drift_store_path, load_config
-    from .driftrun import accept_new_normal_from_periods
-    from .store.modelstore import BaselineStore
+    from .portfolio import PortfolioLocked
 
     cfg, base = _drift_load(args)
-    path = drift_store_path(cfg, base_dir=base)
-    store = BaselineStore.load(path)
+    ctx = _drift_ctx(cfg, base)
+    try:
+        with _drift_lock(ctx, write=not args.dry_run):
+            return _drift_accept(args, cfg, base, ctx)
+    except PortfolioLocked as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+
+def _drift_accept(args, cfg, base, ctx) -> int:
+    from datetime import datetime, timezone
+
+    from .config import _baseline_store, _record_outputs, drift_refit, load_config
+    from .driftrun import accept_new_normal_from_periods
+
+    store, path, ctx = _baseline_store(cfg, base_dir=base, ctx=ctx)
     at = args.run_id or datetime.now(timezone.utc).isoformat(timespec="seconds")
     period = tuple(args.period) if args.period else None
 
@@ -1050,7 +1137,7 @@ def _cmd_drift_accept(args) -> int:
     recs = accept_new_normal_from_periods(
         store,
         refits,
-        site=cfg.get("site", ""),
+        site=ctx.site,  # the label the runs key by (a store config's display name when unset)
         accepted_by=args.by,
         reason=args.reason,
         at=at,
@@ -1071,6 +1158,18 @@ def _cmd_drift_accept(args) -> int:
         store.save(path)
         print(f"moved {len(recs)} baseline(s) — accepted by {args.by}: {args.reason}")
         print(f"wrote {path}")
+        _record_outputs(ctx, {path: "baselines"})
+        _drift_audit(
+            ctx,
+            "drift.accept",
+            reason=args.reason,
+            details={
+                "store": path,
+                "accepted_by": args.by,
+                "moved": [f"{r.equip}/{r.kind}" for r in recs],
+                "at": at,
+            },
+        )
     else:
         print(f"nothing to accept; {path} left unchanged")
     return 0
@@ -1208,6 +1307,7 @@ def _build_parser() -> argparse.ArgumentParser:
     drf.add_argument(
         "--dry-run", action="store_true", help="report what would be frozen without writing"
     )
+    drf.add_argument("--reason", help="why (audited; required inside a portfolio workspace)")
     drf.set_defaults(func=_cmd_drift_freeze)
 
     drl = drsub.add_parser("list", help="show the frozen baselines and their provenance")

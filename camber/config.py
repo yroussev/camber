@@ -61,6 +61,22 @@ the run finds no equipment -- unless the source sets ``"include_inactive": true`
 ``kind`` (or none) reads folders as before; an unrecognised kind warns rather than fails, for
 back-compat.
 
+**Facility identity and the portfolio workspace.** Every run has a ``facility_id``: a store
+source's ``source.facility_id``; for a folder source the optional top-level ``"facility_id"``,
+else :func:`~camber.store.make_facility_id` of ``site``. Per-facility state is keyed by it inside a
+portfolio workspace (:mod:`camber.portfolio`) -- a store source whose store belongs to one, or a
+folder source that names one with ``"workspace": "<root>"``. There the drift baseline store and
+the optional fault history are opened *for that facility* (renaming it orphans nothing), default
+to ``state/<facility_id>/baselines.json`` / ``faults.json`` when the config names no path, and
+every file a run writes for the facility is listed in its ``state/<facility_id>/manifest.json``.
+A folder config in a workspace without ``facility_id`` warns (its id would change with
+``site``). Outside a workspace, stores stay keyed by ``site`` exactly as before.
+
+The optional ``faults`` section folds each run's actionable findings into a persistent fault
+lifecycle (:class:`~camber.faultlifecycle.FaultLifecycle`): ``{"store": "faults.json",
+"run_id": "...", "auto_resolve_absent": false}`` -- ``store`` may be omitted in a workspace and
+``run_id`` defaults to the current UTC time. Inside a workspace the fold holds the workspace lock.
+
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
 relative to the config file's directory.
@@ -68,6 +84,7 @@ relative to the config file's directory.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import warnings
@@ -119,6 +136,9 @@ class RunResult:
     report: AuditReport | None = None
     rules_run: list = field(default_factory=list)
     drift: object | None = None  # DriftResult when the config has a "drift" section
+    facility_id: str | None = None  # the identity per-facility state is keyed by
+    workspace: str | None = None  # the portfolio workspace root, when the run is inside one
+    faults: dict | None = None  # the fault-lifecycle fold (new/ongoing/...) with a "faults" section
 
 
 def _path(base: str, p: str) -> str:
@@ -154,6 +174,93 @@ def _source_folders(source: dict, base_dir: str) -> list:
 
 
 @dataclass
+class _FacilityCtx:
+    """Which facility a config is about, and whether its state lives in a portfolio workspace."""
+
+    facility_id: str | None
+    workspace: str | None
+    site: str
+    legacy_sites: tuple = ()
+
+    @property
+    def bound(self):
+        """The facility id per-facility stores are keyed by (``None`` outside a workspace)."""
+        return self.facility_id if self.workspace else None
+
+
+def _facility_context(config: dict, base_dir: str) -> _FacilityCtx:
+    """Resolve a config's facility id, portfolio workspace and display label (no data read)."""
+    from .store import ParquetStore, make_facility_id, require_facility_id
+    from .store.facilities import _workspace_of_store
+
+    source = config.get("source") or {}
+    if str(source.get("kind") or "") == "store":
+        if not source.get("store") or not source.get("facility_id"):
+            raise ValueError("a store source needs 'store' (path) and 'facility_id'")
+        store = ParquetStore(_path(base_dir, source["store"]))
+        fid = source["facility_id"]
+        ws = _workspace_of_store(store.root)
+        site = config.get("site") or store.facility_name(fid)
+    else:
+        site = config.get("site", "")
+        fid = config.get("facility_id")
+        ws = None
+        if config.get("workspace"):
+            from .portfolio import is_workspace
+
+            ws = os.path.abspath(_path(base_dir, config["workspace"]))
+            if not is_workspace(ws):
+                raise ValueError(f"config workspace {ws} is not a portfolio workspace")
+        if fid:
+            require_facility_id(fid)
+        elif site:
+            fid = make_facility_id(site)
+            if ws:
+                warnings.warn(
+                    f"config has no facility_id; using {fid!r} derived from site {site!r}. Add "
+                    f'"facility_id": "{fid}" to the config -- a derived id changes if the site '
+                    "label does, which would split the facility's history",
+                    UserWarning,
+                    stacklevel=3,
+                )
+        elif ws:
+            raise ValueError("a config inside a portfolio workspace needs facility_id (or site)")
+    legacy: tuple = ()
+    if ws and fid:
+        from .portfolio import Portfolio
+
+        pf = Portfolio(ws)
+        try:
+            pf.facility(fid)
+        except KeyError as e:
+            raise ValueError(
+                f"{e.args[0]} in the workspace {ws}; register it first "
+                f"(camber facility add NAME --id {fid} --reason ...)"
+            ) from None
+        names = [*pf.legacy_sites(fid), config.get("site") or ""]
+        legacy = tuple(dict.fromkeys(n for n in names if n))
+    return _FacilityCtx(fid, ws, site, legacy)
+
+
+def _state_path(ctx: _FacilityCtx, fname: str):
+    """``state/<facility_id>/<fname>`` inside the config's workspace, else ``None``."""
+    if not (ctx.workspace and ctx.facility_id):
+        return None
+    from .portfolio._state import state_dir
+
+    return os.path.join(state_dir(ctx.workspace, ctx.facility_id), fname)
+
+
+def _record_outputs(ctx, paths: dict) -> None:
+    """List files a run wrote for its facility in the workspace manifest (no-op outside one)."""
+    if ctx is None or not (ctx.workspace and ctx.facility_id):
+        return
+    from .portfolio._state import record_outputs
+
+    record_outputs(ctx.workspace, ctx.facility_id, paths)
+
+
+@dataclass
 class _Prepared:
     """The source/mapping/equipment context every config-driven entry point needs."""
 
@@ -165,6 +272,7 @@ class _Prepared:
     refs_by_class: dict
     min_trust: float | None
     data_sources: list = field(default_factory=list)
+    ctx: _FacilityCtx | None = None
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -237,14 +345,13 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
     from .store import ParquetStore
 
     source = config["source"]
-    if not source.get("store") or not source.get("facility_id"):
-        raise ValueError("a store source needs 'store' (path) and 'facility_id'")
+    ctx = _facility_context(config, base_dir)
     store = ParquetStore(_path(base_dir, source["store"]))
     fid = source["facility_id"]
     if fid not in store.facilities():
         raise ValueError(f"facility {fid!r} has no data in store {store.root!r}")
     start, end = source.get("start"), source.get("end")
-    site = config.get("site") or store.facility_name(fid)
+    site = ctx.site
     # A suspended (or otherwise non-active) facility is skipped with one warning -- the run
     # produces no equipment -- unless the config opts in with "include_inactive": true.
     include_inactive = bool(source.get("include_inactive", config.get("include_inactive", False)))
@@ -254,6 +361,9 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
 
     refs: list = []
     refs_by_class: dict = {}
+    # A skipped (non-active) facility still declares its classes, so a drift section validates.
+    for eq in config.get("equipment", []):
+        refs_by_class.setdefault(eq["class"], [])
     for eq in config.get("equipment", []) if active else []:
         found = discover_store(
             store,
@@ -286,7 +396,7 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
     meta = store.facilities_meta().get(fid, {})
     prov = _provenance(meta, fid)
     return _Prepared(
-        site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else []
+        site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else [], ctx
     )
 
 
@@ -298,9 +408,20 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     """
     if _source_kind(config["source"]) == "store":
         return _prepare_store(config, base_dir)
-    site = config.get("site", "")
+    ctx = _facility_context(config, base_dir)
+    site = ctx.site
     resample = config.get("resample", "1h")
     folders = _source_folders(config["source"], base_dir)
+    # Inside a workspace a folder config follows the facility's lifecycle state like a store one.
+    active = True
+    if ctx.workspace and ctx.facility_id:
+        include_inactive = bool(
+            config["source"].get("include_inactive", config.get("include_inactive", False))
+        )
+        if not include_inactive:
+            from .portfolio import Portfolio
+
+            active = _facility_is_active(Portfolio(ctx.workspace).store, ctx.facility_id)
 
     mapping = _load_mapping(config, base_dir)
 
@@ -312,7 +433,10 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
 
     refs: list = []
     refs_by_class: dict = {}  # class -> [EquipRef], for class-targeted SOO / drift specs
+    # A skipped (non-active) facility still declares its classes, so a drift section validates.
     for eq in config.get("equipment", []):
+        refs_by_class.setdefault(eq["class"], [])
+    for eq in config.get("equipment", []) if active else []:
         marker = eq.get("marker", "SpaceTemp")
         if eq["class"] == "TERMINAL":  # union of all terminal-unit types
             found = discover_terminals(folders, marker_measure=marker)
@@ -324,7 +448,7 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     # Optional sensor-health gate: a rule whose required inputs aren't trusted declines
     # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
-    return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust)
+    return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
 
 
 def _mv_declined(equip: str, why: str):
@@ -510,7 +634,12 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 for e in _drift_families(config["drift"], refs_by_class)
             ]
 
+    faults = None
+    if config.get("faults") is not None:
+        faults = _fold_faults(config, base_dir, prep, findings)
+
     report = None
+    outputs: dict = {}
     rep = config.get("report")
     if rep is not None:
         report = AuditReport(
@@ -526,6 +655,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         if rep.get("out_text"):
             with open(_path(base_dir, rep["out_text"]), "w") as fh:
                 fh.write(report.to_text())
+            outputs[_path(base_dir, rep["out_text"])] = "report"
         if rep.get("out_html"):
             # optional advisory action plan (findings + $ + recommendation) in the HTML report
             price = None
@@ -540,7 +670,11 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 body += "\n" + drift_report_html(drift, standalone=False)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
                 fh.write("<html><body>\n" + body + "\n</body></html>\n")
+            outputs[_path(base_dir, rep["out_html"])] = "report"
+    if outputs:
+        _record_outputs(prep.ctx, outputs)
 
+    ctx = prep.ctx
     return RunResult(
         site=site,
         equipment=len(refs),
@@ -548,7 +682,47 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         report=report,
         rules_run=ran,
         drift=drift,
+        facility_id=ctx.facility_id if ctx else None,
+        workspace=ctx.workspace if ctx else None,
+        faults=faults,
     )
+
+
+def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -> dict:
+    """Fold a run's findings into the config's fault lifecycle store and save it."""
+    import contextlib
+
+    from .faultlifecycle import FaultLifecycle
+
+    spec = config.get("faults") or {}
+    if not isinstance(spec, dict):
+        raise ValueError('"faults" must be an object, e.g. {"store": "faults.json"}')
+    ctx = prep.ctx or _FacilityCtx(None, None, prep.site)
+    path = _path(base_dir, spec["store"]) if spec.get("store") else _state_path(ctx, "faults.json")
+    if not path:
+        raise ValueError(
+            "faults.store is required outside a portfolio workspace (inside one it defaults to "
+            "state/<facility_id>/faults.json)"
+        )
+    run_id = str(spec.get("run_id") or _dt.datetime.now(_dt.timezone.utc).isoformat("seconds"))
+    lock: contextlib.AbstractContextManager = contextlib.nullcontext()
+    if ctx.workspace:
+        from .portfolio._lock import portfolio_lock
+
+        lock = portfolio_lock(ctx.workspace, timeout=30.0)
+    with lock:
+        lc = FaultLifecycle.load(
+            path, facility_id=ctx.bound, legacy_sites=ctx.legacy_sites if ctx.bound else None
+        )
+        out = lc.update(
+            findings,
+            run_id=run_id,
+            site=prep.site,
+            auto_resolve_absent=bool(spec.get("auto_resolve_absent", False)),
+        )
+        lc.save()
+        _record_outputs(ctx, {path: "faults"})
+    return {**out, "store": path, "run_id": run_id, "legacy_adopted": lc.legacy_adopted}
 
 
 def data_sources(config: dict, *, base_dir: str = ".") -> list:
@@ -572,15 +746,30 @@ def data_sources(config: dict, *, base_dir: str = ".") -> list:
 def drift_store_path(config: dict, *, base_dir: str = ".") -> str:
     """The baseline-store path a config's ``drift`` section names, resolved against ``base_dir``.
 
-    Raises ``ValueError`` when the config has no ``drift.store`` -- every drift command needs one.
+    Inside a portfolio workspace an omitted ``drift.store`` defaults to
+    ``state/<facility_id>/baselines.json``; outside one it is required (``ValueError``).
     """
     dspec = config.get("drift") or {}
-    if not dspec.get("store"):
-        raise ValueError(
-            "drift.store is required: a drift comparison needs a frozen baseline store "
-            "(create one with `camber drift freeze`)"
-        )
-    return _path(base_dir, dspec["store"])
+    if dspec.get("store"):
+        return _path(base_dir, dspec["store"])
+    default = _state_path(_facility_context(config, base_dir), "baselines.json")
+    if default:
+        return default
+    raise ValueError(
+        "drift.store is required: a drift comparison needs a frozen baseline store "
+        "(create one with `camber drift freeze`; inside a portfolio workspace it defaults to "
+        "state/<facility_id>/baselines.json)"
+    )
+
+
+def _baseline_store(config: dict, *, base_dir: str = ".", ctx=None):
+    """``(store, path, ctx)``: the config's baseline store, facility-bound in a workspace."""
+    ctx = ctx or _facility_context(config, base_dir)
+    path = drift_store_path(config, base_dir=base_dir)
+    store = BaselineStore.load(
+        path, facility_id=ctx.bound, legacy_sites=ctx.legacy_sites if ctx.bound else None
+    )
+    return store, path, ctx
 
 
 def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str = "") -> dict:
@@ -643,17 +832,13 @@ def run_drift_config(
     dspec = config.get("drift")
     if dspec is None:
         return None
-    if not dspec.get("store"):
-        raise ValueError(
-            "drift.store is required: a drift comparison needs a frozen baseline store "
-            "(create one with `camber drift freeze`)"
-        )
+    drift_store_path(config, base_dir=base_dir)  # fail fast when no store can be named
     prep = prepared if prepared is not None else _prepare(config, base_dir)
     fams = _drift_families(dspec, prep.refs_by_class)
     if not fams:
         return None
     if store is None:
-        store = BaselineStore.load(drift_store_path(config, base_dir=base_dir))
+        store, _p, _c = _baseline_store(config, base_dir=base_dir, ctx=prep.ctx)
     return run_drift(
         prep.refs_by_class,
         prep.mapping,
