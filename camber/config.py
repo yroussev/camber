@@ -64,8 +64,10 @@ series, so ``mapping`` may be omitted (an identity mapping is used). Equipment i
 the class recorded at ingest (``{"class": "AHU", "marker_role": "mixed_air_temp"}``; ``marker`` is
 the folder-source file marker and is ignored here); ``shared_oat`` may name a store equipment and
 role (``{"equip": "weather", "role": "oat"}``) or a CSV ``file`` as before; optional ``start`` /
-``end`` bound every read. The facility's provenance (dataset, licence, citation) recorded at ingest
-is attached to the report as ``AuditReport.data_sources``. A facility whose lifecycle state is not
+``end`` bound every read. Any ``equipment`` entry (store or folder source) may add ``"equip":
+[names]`` to keep only the named equipment -- e.g. one scenario of a multi-scenario dataset.
+The facility's provenance (dataset, licence, citation) recorded at ingest is attached to the
+report as ``AuditReport.data_sources``. A facility whose lifecycle state is not
 ``active`` (suspended, provisioning, ...; see :mod:`camber.portfolio`) is skipped with a warning --
 the run finds no equipment -- unless the source sets ``"include_inactive": true``. Any other
 ``kind`` (or none) reads folders as before; an unrecognised kind warns rather than fails, for
@@ -86,6 +88,12 @@ The optional ``faults`` section folds each run's actionable findings into a pers
 lifecycle (:class:`~camber.faultlifecycle.FaultLifecycle`): ``{"store": "faults.json",
 "run_id": "...", "auto_resolve_absent": false}`` -- ``store`` may be omitted in a workspace and
 ``run_id`` defaults to the current UTC time. Inside a workspace the fold holds the workspace lock.
+
+The ``report`` section selects the report: ``"layout": "audit"`` (the default Std-211 audit) or
+``"rcx"`` -- the printable retro-commissioning layout of :mod:`camber.report.rcx`, tuned by
+``"rcx": {"top_n", "week", "paper", "chart_format", "sections", "price", "loads", "occupancy",
+"oat_reference", "sequence", "notes"}`` (``camber report CONFIG --layout rcx``). ``report.loads``
+(``{equip: {"heating_capacity_kbtuh": ...}}``) sizes equipment for the existing cost estimators.
 
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
@@ -398,6 +406,7 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
             end=end,
             include_inactive=True,  # the lifecycle check was made once, above
         )
+        found = _only_named(found, eq)
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 
@@ -466,6 +475,7 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
             found = discover_terminals(folders, marker_measure=marker)
         else:
             found = discover(folders, eq["class"], marker_measure=marker)
+        found = _only_named(found, eq)
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 
@@ -473,6 +483,15 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
     return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
+
+
+def _only_named(found: list, entry: dict) -> list:
+    """Keep only the equipment an ``equipment`` entry names in ``"equip"`` (all when absent)."""
+    names = entry.get("equip")
+    if not names:
+        return found
+    names = {names} if isinstance(names, str) else set(names)
+    return [r for r in found if r.equip in names]
 
 
 def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline"):

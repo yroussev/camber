@@ -4,6 +4,7 @@ Subcommands:
 
     camber run     <config.json> [--out DIR]        # run a config, print/write findings
     camber report  <config.json> --out site.html    # run + write an HTML audit report
+                   [--layout audit|rcx|<plugin>]    # rcx: the printable RCx layout
     camber explain <config.json> [--no-strict]      # grounded plain-language explanation of
                                                      # findings
     camber ask "<question>" --config <config.json> [--llm-cmd CMD]   # grounded Q&A over the run
@@ -111,23 +112,96 @@ def _record(res, paths: dict) -> None:
 
 
 def _cmd_report(args) -> int:
-    from .config import data_sources, load_config, run_config_file
+    from .config import load_config, run_config
+
+    cfg = load_config(args.config)
+    base = os.path.dirname(os.path.abspath(args.config))
+    layout = args.layout or str((cfg.get("report") or {}).get("layout") or "audit")
+    if layout == "rcx":
+        return _report_rcx(args, cfg, base)
+    res = run_config(cfg, base_dir=base)
+    if layout == "audit":
+        html = _audit_html(res, cfg, base)
+    else:
+        html = _plugin_report(layout, res)
+        if html is None:
+            return 2
+    with open(args.out, "w") as fh:
+        fh.write(html)
+    print(f"wrote {args.out}  ({len(res.findings)} findings, layout {layout})")
+    _record(res, {args.out: "report"})
+    return 0
+
+
+def _audit_html(res, cfg, base) -> str:
+    from .config import data_sources
     from .report.audit import AuditReport
 
-    res = run_config_file(args.config)
     report = res.report
     if report is None:
-        base = os.path.dirname(os.path.abspath(args.config))
         report = AuditReport(
-            building=res.site,
-            level=2,
-            data_sources=data_sources(load_config(args.config), base_dir=base),
+            building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
         )
         report.add_findings(res.findings)
-    html = report.to_html(recommend=True)
-    open(args.out, "w").write(html)
-    print(f"wrote {args.out}  ({len(res.findings)} findings)")
-    _record(res, {args.out: "report"})
+    return report.to_html(recommend=True)
+
+
+def _plugin_report(layout: str, res):
+    """Render a report layout named by a ``camber.reports`` plugin; ``None`` when unknown."""
+    from .plugins import PluginRegistry
+
+    reg = PluginRegistry().load_entrypoints(kinds=["reports"])
+    try:
+        obj = reg.get("reports", layout)
+    except KeyError:
+        known = ", ".join(["audit", "rcx", *sorted(reg.reports())])
+        print(f"unknown report layout {layout!r} (known: {known})", file=sys.stderr)
+        return None
+    for meth in ("to_html", "render"):
+        fn = getattr(obj, meth, None)
+        if callable(fn):
+            return str(fn(res))
+    return str(obj(res))
+
+
+def _report_rcx(args, cfg, base) -> int:
+    from .config import run_config
+    from .report.rcx import RcxOptions, build_rcx_report, load_notes, notes_template
+
+    rep_cfg = dict(cfg.get("report") or {})
+    rcx_cfg = dict(rep_cfg.get("rcx") or {})
+    if args.week:
+        rcx_cfg["week"] = args.week
+    if args.paper:
+        rcx_cfg["paper"] = args.paper
+    if args.lifecycle:
+        rcx_cfg["lifecycle"] = True
+    rep_cfg["rcx"] = rcx_cfg
+    options = RcxOptions.from_config(rep_cfg, base_dir=base)
+    notes_path = args.notes or rcx_cfg.get("notes")
+    if notes_path and not os.path.isabs(notes_path) and not args.notes:
+        notes_path = os.path.join(base, notes_path)
+    res = run_config(cfg, base_dir=base)
+    rep = build_rcx_report(res, options=options, notes=load_notes(notes_path))
+    with open(args.out, "w") as fh:
+        fh.write(rep.to_html())
+    k = rep.kpis
+    print(
+        f"wrote {args.out}  (rcx: {k['n_issues']} issues, ${k['annual_cost_usd']:,.0f}/yr costed, "
+        f"{k['n_conditional']} conditional, {k['n_declined']} declined checks)"
+    )
+    w = rep.week
+    if w is not None:
+        print("week: " + (w.explanation if not w.declined else f"declined -- {w.reason}"))
+    if rep.orphans:
+        print(f"{len(rep.orphans)} engineer note(s) matched no slot -> Appendix E")
+    written = {args.out: "report"}
+    if args.notes_template:
+        with open(args.notes_template, "w") as fh:
+            json.dump(notes_template(rep), fh, indent=2)
+        print(f"wrote {args.notes_template}  ({len(rep.slots())} note slots)")
+        written[args.notes_template] = "report"
+    _record(res, written)
     return 0
 
 
@@ -1230,9 +1304,28 @@ def _build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--out", help="output dir for findings.json")
     pr.set_defaults(func=_cmd_run)
 
-    prep = sub.add_parser("report", help="run a config and write an HTML audit report")
+    prep = sub.add_parser("report", help="run a config and write an HTML report")
     prep.add_argument("config")
     prep.add_argument("--out", required=True, help="output .html path")
+    prep.add_argument(
+        "--layout",
+        help="audit (default), rcx (printable RCx layout), or a camber.reports plugin name; "
+        "defaults to the config's report.layout",
+    )
+    prep.add_argument(
+        "--week",
+        help="rcx: representative week -- auto|evidence|oat-range|typical|YYYY-MM-DD",
+    )
+    prep.add_argument("--notes", help="rcx: engineer-notes JSON (slot -> note)")
+    prep.add_argument(
+        "--notes-template", dest="notes_template", help="rcx: write an empty notes file here"
+    )
+    prep.add_argument("--paper", choices=("letter", "a4"), help="rcx: printed page size")
+    prep.add_argument(
+        "--lifecycle",
+        action="store_true",
+        help="rcx: also show the fault store's notes on each issue page",
+    )
     prep.set_defaults(func=_cmd_report)
 
     pe = sub.add_parser("explain", help="grounded plain-language explanation of the findings")
