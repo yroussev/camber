@@ -196,34 +196,48 @@ camber report sdahu.json --out rcx_fault_free.html --layout rcx
 
 The run below used the default subset, an hourly resample, and seven rules. The rules were
 `outdoor_air_fraction` (min OA 20 %), `leaking_valve`, `economizer_high_limit`, `supply_air_reset`,
-`supply_air_reset_compliance`, `static_pressure_reset` and `supply_air_control`. It covered one
-fault-free scenario and one faulted scenario (OA damper stuck at 25 %).
+`supply_air_reset_compliance`, `static_pressure_reset` and `supply_air_control`. It covered the
+fault-free scenario and two faulted ones: the OA damper stuck at 25 %, and the cooling-coil valve
+leak.
 
 - **Which scenario gets issues.** `AHU__damper_stuck_025` ranks one **fault** first, with
   confidence H: `outdoor_air_fraction` reports under-ventilation, a median OAF of 4 % against the
-  20 % minimum. That covers 1,711 violation hours, 36.5 % of 4,682 fan-on hours. Its free-cooling
-  table shows 100 % of the 3,050 economizer-eligible fan-on hours running the cooling coil,
-  against 51 % for the fault-free run. The fault-free scenario raises no fault. Its three warn
-  issues are properties of the simulated sequence, not faults: a flat duct-static setpoint, SAT
-  warm of setpoint 16 % of running hours (consistent with a unit that has no heating coil), and no
-  SAT reset.
+  20 % minimum, over 1,711 violation hours (36.5 % of 4,682 fan-on hours). The action says to
+  restore minimum outside air, not to check the high limit. Its free-cooling table shows 100 % of
+  the 3,050 eligible fan-on hours running the cooling coil at ~4 % OA, against 41 % for the
+  fault-free run (the fault-free unit keeps its economizer closed with the coil on through much
+  of the 40–65 °F band). The fault-free scenario raises no fault. Its three warn issues are
+  properties of the simulated sequence: a flat duct-static setpoint, SAT warm of setpoint 12 % of
+  running hours, and no SAT reset. The **leak** scenario gets no leak issue: `leaking_valve` sees
+  a CHW leak in only 1 % of closed hours, because the dataset maps valves to the controller
+  *demand* columns, which hide a leak (a known dataset issue). Its only issue is the SAT reset.
 - **Week choice.** Fault-free: "Chose the week of 2018-05-28 by evidence: score 0.146 = evidence
   0.046 + 0.1 x coverage 1.00; 5 occupied days; runner-up week of 2018-09-03 scored 0.143; 52 of
   53 candidate weeks eligible." Stuck damper: the week of 2018-02-26 (score 0.126), tied with
-  2018-03-05 and broken to the earlier week. The last "week" of 2018-12-31 is a single day, so it
-  is ineligible.
+  2018-03-05 and broken to the earlier week. Leak: no issue carries a violation mask, so every
+  week scores 0.100 and the earliest (2018-01-01) wins -- `--week oat-range` is the better
+  choice there. The last "week" of 2018-12-31 is a single day, so it is ineligible.
 - **No G36 verdict without a sequence.** The unit trends a fixed 55.2 °F SAT setpoint, so P5 is
-  tier 1. The tracking error is 0.1 °F mean, with 3 % of 2,221 gated samples off by more than
-  2 °F. The G36-default `supply_air_reset_compliance` warning ("below target 66 % of hours") is
+  tier 1 (stuck damper: 0.1 °F mean tracking error, 3 % of 2,221 gated samples off by more than
+  2 °F). The G36-default `supply_air_reset_compliance` warning ("below target 66 % of hours") is
   shown on the issue page as `[G36 default target, not the unit's trended setpoint (reference
   only)]`, marked `excluded` from the $/yr, and drawn without an evidence chart.
+- **The SAT reset shape is fan-gated.** With the fan off, the "supply" sensor reads unconditioned
+  air; before the gate those samples added a 65–78 °F band to the SAT-vs-OAT cloud. Gated, the
+  stuck-damper fit is slope +0.000 °F/°F, SAT std 0.76 °F over 2,221 samples (ungated: +0.015,
+  2.25 °F over 2,274); the verdict is unchanged ("NO RESET, SAT pinned low at ~55 F").
 - **No stuck sensors counted during fan-off.** The trust table is gated on `fan status`. No point is
   flagged stuck, gated or ungated. At an hourly resample the fan-off stretches do not form long
   identical runs, so on this dataset the gate did not change a trust verdict.
-- **Economizer charts match the verdicts.** Both runs judge on the temperature-balance OA fraction
-  with the rule's defaults: 65 °F, differential on, and a 55 % excess threshold because the design
-  minimum is unknown. The charts show 0 % out of band, as the `ok` verdicts say. On the issue page,
-  the stuck-damper chart is drawn with `outdoor_air_fraction`'s configured 20 % minimum and its
-  default 70 °F cooling cutoff; its red points are exactly the samples behind the two percentages in the finding.
+- **Economizer charts match the verdicts.** `economizer_high_limit` judges fan-on samples with the
+  rule's defaults (65 °F, differential on, a 55 % excess threshold because the design minimum is
+  unknown); the caption lists what it could not judge (stuck damper: 884 hot fan-off samples,
+  480 with |OAT − RAT| < 5 °F, 4 outside −20…120 %). The charts show 0 % out of band, as the `ok`
+  verdicts say. `outdoor_air_fraction`'s fan gate is off by default (turning it on moves the
+  LBNL benchmark), so its issue-page chart still includes a few samples below 0 % and above
+  100 %; they are the samples behind the two percentages in the finding.
+- **Night duct static.** The box-by-hour shows 4–5 in.w.c. at hours 0–5 and 23, each box labelled
+  with 1–4 samples: the simulated unit night-cycling in cold weather (-6 to 16 °F OAT) against
+  closed boxes, not a gating or timezone error.
 
-Both runs build in about 2.5 s each (8,759 hourly samples).
+Each run builds in about 2.5 s (8,759 hourly samples).

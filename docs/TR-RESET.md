@@ -67,6 +67,11 @@ synthetic, fleet and LBNL benchmark metrics unchanged. In the [RCx report](RCX-R
 finding judged against the G36 defaults with no site sequence is shown as a reference only and is
 not priced.
 
+**The shape rule is fan-gated too.** `supply_air_reset` fits its SAT-vs-OAT slope on occupied,
+cooling, **fan-on** samples (the same fan-signal precedence) and records `fan_gate`; its evidence
+draws exactly those samples. With the fan off the "supply" sensor reads unconditioned plenum air,
+which bends the slope and widens the spread. `fan_gate=False` restores the ungated read.
+
 ## Reset effectiveness — is the reset actually trimming-and-responding?
 
 `supply_air_reset_compliance` above asks whether SAT sits at the right *target*; **reset

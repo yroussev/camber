@@ -70,7 +70,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `frame_for`, `refs`, `data_sources`, `config` and `base_dir`; `data_sources=` on
   `build_site_report` / `build_dashboard`; `gate=` on `sensor_trust` / `frame_sensor_health`;
   `gate=` on `g36_reset.sat_reset_compliance`; `schedules.fan_on_mask`; `charts.template_violations`;
-  `charts.box_by_hour`; and the `--layout` flag. See [RCX-REPORT.md](RCX-REPORT.md).
+  `charts.box_by_hour`; the `fan_gate` / `denom_min_f` parameters and `n_masked_*` / `fan_gate`
+  / `failure_mode` metrics on the OA and SAT-reset rules; `OAFractionResult.masked`;
+  `FleetReport.cost_estimated`; and the `--layout` flag. See [RCX-REPORT.md](RCX-REPORT.md).
 - **Facility-keyed identity** (added in 0.86, part of the lifecycle work). These keyword
   arguments are additive and optional, and each call behaves exactly as before without them:
   `facility_id=` / `legacy_sites=` on `FaultLifecycle` and `BaselineStore` (and their `load`),

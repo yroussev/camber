@@ -52,5 +52,12 @@ reset + staging), loop resets (CHW/HW/pump-ΔP, trim-and-respond), cooling-tower
 short-cycle, leaking valve (maintenance), and DCV. Rules without a recommender yield **no**
 recommendation rather than a fabricated one.
 
+Outside-air advice follows the finding's **failure mode**, not just its rule name. An
+`outdoor_air_fraction` under-ventilation finding (it records `failure_mode`; older findings are
+inferred from their metrics) gets "restore minimum outside air": check the minimum-OA damper
+position, actuator and linkage, the min-OA setpoint against design, and the outdoor airflow.
+Excess OA and `economizer_high_limit` get lockout advice at the rule's configured high limit, and
+`free_cooling_missed` gets "enable economizer free cooling".
+
 Pairs with `camber.fault_economics` (what a fault is worth) and `camber.soo` (conformance to the
 intended sequence).

@@ -230,14 +230,18 @@ Both return `(ax, LoadMetrics)` and reuse `camber.loadprofile`. Flags: `split`, 
 their evidence from the samples, basis and thresholds behind the verdict. That means the configured
 high limit, minimum OA and differential changeover, not the generic `TEMPLATES["economizer"]`. They
 hand the renderer a derived frame (`Evidence.frame`), so the red points are exactly the samples the
-verdict counts. `supply_air_reset` shows the SAT-vs-OAT cloud its slope is fitted on, not a packaged
-reset band.
+verdict counts. `economizer_high_limit` judges (and draws) fan-on samples only and reports the
+samples each guard left out (`n_masked_fan_off`, `n_masked_small_delta_t` for |OAT − RAT| below
+`denom_min_f`, `n_masked_out_of_range`). `supply_air_reset` shows the occupied, fan-on,
+cooling-hour SAT-vs-OAT cloud its slope is fitted on, not a packaged reset band.
 
 ### Box by hour
 
 `charts.box_by_hour(series, mask=fan_on)` draws one box per hour of the day, using only the samples
 where `mask` is true. A duct static that is never reset down overnight or at light load shows as one
-flat band. The [RCx report](RCX-REPORT.md) uses it on the air-distribution page.
+flat band. Each hour is labelled with its sample count (red under 10), so a handful of
+night-cycle samples is not read as a daily pattern. The [RCx report](RCX-REPORT.md) uses it on the
+air-distribution page.
 
 ## The HTML dashboard
 
