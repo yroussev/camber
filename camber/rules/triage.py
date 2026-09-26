@@ -233,3 +233,503 @@ def group_findings(findings, *, actionable_only: bool = True) -> list:
         )
     groups.sort(key=lambda g: (-SEVERITY_ORDER.get(g.severity, 1), -len(g.members)))
     return groups
+
+
+# --------------------------------------------------------------------------- #
+# Issue linking (provisional)
+#
+# ``group_findings`` clusters by causal chain; ``link_findings`` turns those clusters into the
+# *issues* a retro-commissioning report ranks: one per root cause, with honest arithmetic over its
+# members (hours are a union, a chain's cost is its largest member, never a sum), sensor precedence
+# (a finding that leans on a sensor we have reason to distrust is conditional on it -- annotated and
+# demoted, never deleted), and a confidence grade with the reasons behind it.
+# --------------------------------------------------------------------------- #
+
+#: Roles that measure what every unit on a site shares, so a problem with one is a problem for
+#: every equipment that uses it (the building OAT sensor, typically merged into every frame).
+SHARED_ROLES = frozenset({"oat", "wetbulb_temp", "outdoor_rh", "outdoor_co2"})
+
+_LEVELS = ("L", "M", "H")  # ordered worst -> best; a confidence grade is the minimum component
+
+
+@dataclass(frozen=True)
+class SensorCause:
+    """A reason to distrust one sensor: what was seen, on which equipment and role."""
+
+    kind: str  # "sensor_drift" | "trust" | "mixing"
+    equip: str
+    roles: tuple  # role slugs this cause taints
+    detail: str  # one line, e.g. "sensor_drift:oat fault (bias +6.2)"
+    shared: bool = False  # True -> taints every equipment using the role (e.g. the building OAT)
+    source: object = field(default=None, compare=False, repr=False)  # the finding, if one
+
+    def label(self) -> str:
+        return f"{self.detail} on {self.equip}" if self.equip else self.detail
+
+
+@dataclass
+class Confidence:
+    """A finding's confidence grade (H/M/L) with one level + one "why" line per component."""
+
+    level: str
+    components: dict = field(default_factory=dict)  # component -> "H" | "M" | "L"
+    why: list = field(default_factory=list)  # one "why we believe this" line per component
+
+
+@dataclass
+class Issue:
+    """One root cause as a report ranks it: a chain of findings on one equipment.
+
+    ``key`` is the root finding's fingerprint (facility-keyed when a facility id is known), so an
+    issue -- and any engineer note written against it -- follows the fault across runs.
+    ``members`` are ordered root first. ``dependents`` lists the findings (on any equipment) that
+    are conditional on *this* issue when it is a sensor problem; ``conditional_on`` lists the
+    sensor causes *this* issue leans on. ``hours_union`` is the union of the members' violation
+    masks (never a sum; ``None`` when no member exposes a mask) and ``cost`` the largest costed
+    member estimate (``None`` when none is costed). Fields after ``why`` are additive detail.
+    """
+
+    key: str
+    root: object
+    members: list
+    dependents: list = field(default_factory=list)
+    conditional_on: list = field(default_factory=list)
+    hours_union: float | None = None
+    cost: float | None = None
+    cost_basis_note: str = ""
+    confidence: str = "M"
+    why: list = field(default_factory=list)
+    severity: str = "info"
+    equip: str = ""
+    chain: str | None = None
+    rank: int = 0
+    fan_on_hours: float | None = None  # the % runtime denominator
+    fan_gate: str = ""  # which signal the runtime / hours were gated on
+    mask: object = None  # the union violation mask (bool Series) when one exists
+    member_costs: list = field(default_factory=list)  # FaultCost per member, members' order
+    confidence_components: dict = field(default_factory=dict)
+
+    @property
+    def conditional(self) -> bool:
+        """True when the issue leans on a sensor we have reason to distrust."""
+        return bool(self.conditional_on)
+
+    @property
+    def costed(self) -> bool:
+        return self.cost is not None
+
+    @property
+    def pct_runtime(self) -> float | None:
+        """Union violation hours as a share of fan-on hours (``None`` when either is unknown)."""
+        if self.hours_union is None or not self.fan_on_hours:
+            return None
+        return round(100.0 * self.hours_union / self.fan_on_hours, 1)
+
+    @property
+    def rules(self) -> list:
+        return [_attr(f, "rule", "") for f in self.members]
+
+
+def _level(x) -> str:
+    return x if x in _LEVELS else "M"
+
+
+def finding_confidence(
+    finding,
+    *,
+    trust=None,
+    mapping=None,
+    assumptions=None,
+    sample_n=None,
+    coverage=None,
+    corroboration=None,
+    conditional_on=(),
+) -> Confidence:
+    """Grade how far a finding can be believed: the **minimum** over five components.
+
+    Each component is ``(level, why)`` or omitted (``None`` = not assessed; it then neither raises
+    nor lowers the grade, but still says so in ``why``):
+
+    * **input trust** -- ``trust`` is ``{role slug: SensorTrust-like}`` for the rule's inputs
+      (gated where a fan gate exists); the worst verdict sets it (trusted H, suspect M, untrusted
+      L). Any ``conditional_on`` sensor cause forces it to L.
+    * **mapping** -- ``mapping`` is ``(level, why)`` for how the points were mapped to roles.
+    * **assumptions** -- ``assumptions`` is ``(level, why)``: site-configured parameters (H) vs
+      defaults (M) vs a reference the site never declared (L).
+    * **sample size / coverage** -- ``sample_n`` samples judged (>= 168 H, >= 48 M, else L; read
+      from the finding's metrics when not given) and ``coverage`` (0-1) of those inputs.
+    * **corroboration** -- ``corroboration`` is ``{"tpr", "fpr", "track"}`` for the rule from a
+      benchmark track (TPR >= 0.9 and FPR <= 0.05 H, else M); absent = not assessed.
+    """
+    comps: dict = {}
+    why: list = []
+    rule = _attr(finding, "rule", "")
+
+    # input trust
+    if conditional_on:
+        comps["input_trust"] = "L"
+        why.append(
+            "Input trust L: conditional on "
+            + "; ".join(c.label() if hasattr(c, "label") else str(c) for c in conditional_on)
+        )
+    elif trust:
+        order = {"trusted": "H", "suspect": "M", "untrusted": "L"}
+        worst = min(
+            ((order.get(getattr(t, "verdict", ""), "M"), r) for r, t in trust.items()),
+            key=lambda t: _LEVELS.index(t[0]),
+        )
+        comps["input_trust"] = worst[0]
+        detail = ", ".join(
+            f"{r} {getattr(t, 'verdict', '?')} ({getattr(t, 'trust', float('nan')):.2f})"
+            for r, t in sorted(trust.items())
+        )
+        why.append(f"Input trust {worst[0]}: {detail}")
+    else:
+        why.append("Input trust not assessed (no sensor-trust scores for this finding's inputs)")
+
+    # mapping
+    if mapping is not None:
+        lvl, text = mapping
+        comps["mapping"] = _level(lvl)
+        why.append(f"Mapping {comps['mapping']}: {text}")
+    else:
+        why.append("Mapping confidence not assessed")
+
+    # site-vs-default assumptions
+    if assumptions is not None:
+        lvl, text = assumptions
+        comps["assumptions"] = _level(lvl)
+        why.append(f"Assumptions {comps['assumptions']}: {text}")
+
+    # sample size / coverage
+    n = sample_n
+    if n is None:
+        m = _attr(finding, "metrics", {}) or {}
+        for k in ("n", "n_valid", "n_considered", "n_above_limit", "n_cooling", "n_checked"):
+            v = m.get(k)
+            if isinstance(v, (int, float)) and not isinstance(v, bool):
+                n = int(v)
+                break
+    if n is not None:
+        lvl = "H" if n >= 168 else "M" if n >= 48 else "L"
+        text = f"{n} samples judged"
+        if coverage is not None:
+            text += f", {coverage:.0%} input coverage"
+            if coverage < 0.5:
+                lvl = "L"
+            elif coverage < 0.8 and lvl == "H":
+                lvl = "M"
+        comps["sample"] = lvl
+        why.append(f"Sample {lvl}: {text}")
+    else:
+        why.append("Sample size not reported by the rule")
+
+    # corroboration
+    if corroboration:
+        tpr, fpr = corroboration.get("tpr"), corroboration.get("fpr")
+        track = corroboration.get("track", "benchmark")
+        if isinstance(tpr, (int, float)) and isinstance(fpr, (int, float)):
+            lvl = "H" if tpr >= 0.9 and fpr <= 0.05 else "M"
+            comps["corroboration"] = lvl
+            why.append(
+                f"Corroboration {lvl}: {rule} scores TPR {tpr:.0%} / FPR {fpr:.0%} on {track}"
+            )
+    else:
+        why.append(f"Corroboration not assessed: no benchmark track scores {rule!r}")
+
+    level = min(comps.values(), key=_LEVELS.index) if comps else "M"
+    return Confidence(level=level, components=comps, why=why)
+
+
+def _slug(role) -> str:
+    return getattr(role, "value", str(role))
+
+
+def _rule_roles(rules_map: dict, rule_name: str) -> set:
+    rule = rules_map.get(rule_name)
+    if rule is None:
+        return set()
+    return {
+        _slug(r)
+        for r in tuple(getattr(rule, "roles_required", ()))
+        + tuple(getattr(rule, "roles_optional", ()))
+    }
+
+
+def sensor_causes(findings, *, trust=None, mixing=None) -> list:
+    """The sensor problems that make other findings conditional, derived from the data.
+
+    * a ``sensor_drift:<role>`` finding at ``warn``/``fault``;
+    * an ``untrusted`` verdict or a ``stuck`` flag in ``trust`` (``{equip: {role: SensorTrust}}``,
+      scored on gated samples where a fan gate exists);
+    * a ``warn``/``fault`` mixing-consistency result in ``mixing`` (``{equip: ConsistencyResult}``)
+      -- one of MAT / OAT / RAT on that unit is wrong, so all three are tainted *on that unit*.
+
+    A cause on a role in :data:`SHARED_ROLES` (other than a unit-local mixing check) taints every
+    equipment that uses the role.
+    """
+    out: list = []
+    for f in findings:
+        rule = _attr(f, "rule", "")
+        if rule.startswith("sensor_drift:") and _attr(f, "severity", "") in _ACTIONABLE:
+            slug = rule.split(":", 1)[1]
+            summ = str(_attr(f, "summary", "") or "")
+            out.append(
+                SensorCause(
+                    "sensor_drift",
+                    _attr(f, "equip", ""),
+                    (slug,),
+                    f"{rule} {_attr(f, 'severity', '')}" + (f" ({summ})" if summ else ""),
+                    shared=slug in SHARED_ROLES,
+                    source=f,
+                )
+            )
+    for equip, per_role in sorted((trust or {}).items()):
+        for role, t in per_role.items():
+            slug = _slug(role)
+            flags = list(getattr(t, "flags", []) or [])
+            if getattr(t, "verdict", "") == "untrusted" or "stuck" in flags:
+                why = "stuck" if "stuck" in flags else "untrusted"
+                out.append(
+                    SensorCause(
+                        "trust",
+                        equip,
+                        (slug,),
+                        f"{slug} {why} (trust {getattr(t, 'trust', float('nan')):.2f})",
+                        shared=slug in SHARED_ROLES,
+                    )
+                )
+    for equip, res in sorted((mixing or {}).items()):
+        if getattr(res, "severity", "") in _ACTIONABLE:
+            out.append(
+                SensorCause(
+                    "mixing",
+                    equip,
+                    ("mixed_air_temp", "oat", "return_air_temp"),
+                    "mixed-air temperature outside [OAT, RAT] "
+                    f"{100 * float(getattr(res, 'violation_frac', 0.0) or 0.0):.0f}% of samples",
+                )
+            )
+    return out
+
+
+def _taints(cause: SensorCause, equip: str, roles: set) -> bool:
+    if not roles.intersection(cause.roles):
+        return False
+    return cause.shared or cause.equip == equip
+
+
+def _uncosted_note(basis: str) -> str:
+    b = (basis or "").strip()
+    if b.startswith("needs "):
+        return "uncosted — needs " + b[len("needs ") :].replace("EquipmentLoad.", "")
+    if b.startswith("no cost model"):
+        return "uncosted — no cost model for this rule"
+    return f"uncosted — {b}" if b else "uncosted"
+
+
+def link_findings(
+    findings,
+    *,
+    rules=None,
+    costs=None,
+    loads=None,
+    price=None,
+    cost_params=None,
+    exclude_cost=None,
+    mask_for=None,
+    runtime=None,
+    trust=None,
+    mixing=None,
+    confidence_for=None,
+    facility_id: str = "",
+    site: str = "",
+    actionable_only: bool = True,
+) -> list:
+    """Link findings into ranked :class:`Issue` objects (provisional API).
+
+    Grouping follows :data:`CAUSE_CHAINS` per equipment (cross-equipment AHU->VAV chains are not
+    linked). Then:
+
+    * **Sensor precedence** (:func:`sensor_causes`): a finding whose rule lists a tainted role in
+      ``roles_required``/``roles_optional`` (``rules`` is a Registry / ``{name: rule}``) on the
+      same equipment -- or on any equipment for a shared role like OAT -- makes its issue
+      *conditional*: annotated in ``conditional_on`` and listed in the ``sensor_drift`` issue's
+      ``dependents``, never deleted. Its cost counts as "at risk pending sensor fix".
+    * **Hours** are the union of the members' violation masks (``mask_for(finding) -> bool Series |
+      None``), gated to fan-on by ``runtime(equip) -> (fan_on_mask | None, gate_label)`` when given;
+      ``fan_on_hours`` is the % runtime denominator.
+    * **Cost** of an issue is the **max** of its costed members ("member estimates overlap; largest
+      shown"); ``costs`` are :class:`camber.fault_economics.FaultCost` aligned with ``findings``
+      (computed from ``loads``/``price``/``cost_params`` when omitted). ``exclude_cost(finding) ->
+      str | None`` names a reason to leave a member out of the dollars (e.g. a reference target the
+      site never declared).
+    * **Rank**: severity tier, then non-conditional before conditional, costed before uncosted, $
+      descending; ties break on the key, so the order is deterministic.
+    * **Confidence**: ``confidence_for(issue) -> Confidence`` (default: :func:`finding_confidence`
+      of the root with the trust scores of its inputs and the conditional causes).
+    """
+    from ..fault_economics import cost_findings
+
+    findings = list(findings)
+    rmap: dict = {}
+    if rules is not None:
+        if hasattr(rules, "names") and hasattr(rules, "get"):
+            rmap = {n: rules.get(n) for n in rules.names()}
+        elif isinstance(rules, dict):
+            rmap = dict(rules)
+        else:
+            rmap = {getattr(r, "name", str(i)): r for i, r in enumerate(rules)}
+    if costs is None:
+        costs = cost_findings(findings, loads, price, params=cost_params)
+    cost_of = {id(f): c for f, c in zip(findings, costs)}
+
+    causes = sensor_causes(findings, trust=trust, mixing=mixing)
+    items = [
+        f for f in findings if (not actionable_only) or _attr(f, "severity", "") in _ACTIONABLE
+    ]
+
+    buckets: dict = {}
+    for f in items:
+        equip, rule = _attr(f, "equip", ""), _attr(f, "rule", "")
+        cid = _CHAIN_POS.get(rule, (None, None))[0]
+        buckets.setdefault((equip, cid or f"solo:{rule}"), []).append(f)
+
+    def _pos(f):
+        return _CHAIN_POS.get(_attr(f, "rule", ""), (None, 99))[1] or 0
+
+    issues: list = []
+    by_rule_equip: dict = {}
+    for (equip, bkey), fs in buckets.items():
+        members = sorted(fs, key=_pos)
+        root = members[0]
+        sev = max(
+            (_attr(f, "severity", "info") for f in fs), key=lambda s: SEVERITY_ORDER.get(s, 1)
+        )
+        key = fingerprint(facility_id or site, equip, _attr(root, "rule", ""))
+        member_roles = set().union(*(_rule_roles(rmap, _attr(f, "rule", "")) for f in members))
+        ids = {id(f) for f in members}
+        # an issue is never conditional on a cause it is itself the evidence for
+        cond = [c for c in causes if id(c.source) not in ids and _taints(c, equip, member_roles)]
+
+        # hours: union of member masks, gated to fan-on when a gate is known
+        gate, gate_label, fan_hours = None, "", None
+        if runtime is not None:
+            gate, gate_label = runtime(equip) or (None, "")
+        union = None
+        for f in members:
+            m = mask_for(f) if mask_for is not None else None
+            if m is None:
+                continue
+            m = m.fillna(False).astype(bool)
+            union = m if union is None else _or(union, m)
+        hours = None
+        if union is not None:
+            if gate is not None:
+                union = union & gate.reindex(union.index).fillna(False).astype(bool)
+            hours = round(float(union.sum()) * _interval_hours(union.index), 2)
+        if gate is not None:
+            on = gate.fillna(False).astype(bool)
+            fan_hours = round(float(on.sum()) * _interval_hours(gate.index), 2)
+
+        # cost: max of costed members, never the sum
+        mcosts = [cost_of.get(id(f)) for f in members]
+        costed = []
+        excluded = []
+        for f, c in zip(members, mcosts):
+            if c is None or not getattr(c, "costed", False):
+                continue
+            reason = exclude_cost(f) if exclude_cost is not None else None
+            if reason:
+                excluded.append(f"{_attr(f, 'rule', '')}: {reason}")
+                continue
+            costed.append((float(c.annual_cost_usd), f, c))
+        if costed:
+            best = max(costed, key=lambda t: t[0])
+            cost = round(best[0], 2)
+            note = f"{best[2].basis} ({_attr(best[1], 'rule', '')})"
+            if len(costed) > 1:
+                note = "member estimates overlap; largest shown — " + note
+        else:
+            cost = None
+            rc = cost_of.get(id(root))
+            note = _uncosted_note(getattr(rc, "basis", "") if rc is not None else "")
+        if excluded:
+            note += " · excluded from $: " + "; ".join(excluded)
+
+        issue = Issue(
+            key=key,
+            root=root,
+            members=members,
+            conditional_on=cond,
+            hours_union=hours,
+            cost=cost,
+            cost_basis_note=note,
+            severity=sev,
+            equip=equip,
+            chain=None if bkey.startswith("solo:") else bkey,
+            fan_on_hours=fan_hours,
+            fan_gate=gate_label,
+            mask=union,
+            member_costs=mcosts,
+        )
+        issues.append(issue)
+        for f in members:
+            by_rule_equip.setdefault((_attr(f, "rule", ""), _attr(f, "equip", "")), issue)
+
+    # a sensor-drift issue lists every finding that became conditional on it
+    for iss in issues:
+        ids = {id(f) for f in iss.members}
+        for other in issues:
+            if other is not iss and any(id(c.source) in ids for c in other.conditional_on):
+                iss.dependents.extend(other.members)
+
+    # confidence
+    for iss in issues:
+        if confidence_for is not None:
+            conf = confidence_for(iss)
+        else:
+            conf = finding_confidence(iss.root, conditional_on=iss.conditional_on)
+        iss.confidence = conf.level
+        iss.why = list(conf.why)
+        iss.confidence_components = dict(conf.components)
+
+    issues.sort(
+        key=lambda i: (
+            -SEVERITY_ORDER.get(i.severity, 1),
+            i.conditional,
+            i.cost is None,
+            -(i.cost or 0.0),
+            i.key,
+        )
+    )
+    for n, iss in enumerate(issues, 1):
+        iss.rank = n
+    return issues
+
+
+def _interval_hours(index) -> float:
+    from ..timegrid import interval_hours
+
+    return float(interval_hours(index))
+
+
+def _or(a, b):
+    """Element-wise OR of two boolean Series over the union of their indexes."""
+    idx = a.index.union(b.index)
+    return a.reindex(idx, fill_value=False) | b.reindex(idx, fill_value=False)
+
+
+def issue_totals(issues) -> dict:
+    """Roll issues up: the costed, non-conditional $/yr (issues add; a chain counts once), the
+    conditional "at risk pending sensor fix" $/yr, and the uncosted / conditional counts."""
+    firm = sum(i.cost for i in issues if i.cost is not None and not i.conditional)
+    at_risk = sum(i.cost for i in issues if i.cost is not None and i.conditional)
+    return {
+        "annual_cost_usd": round(firm, 2),
+        "at_risk_usd": round(at_risk, 2),
+        "n_issues": len(issues),
+        "n_costed": sum(1 for i in issues if i.cost is not None and not i.conditional),
+        "n_uncosted": sum(1 for i in issues if i.cost is None),
+        "n_conditional": sum(1 for i in issues if i.conditional),
+    }

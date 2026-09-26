@@ -1652,13 +1652,21 @@
   ],
   "camber.rules.triage": [
     "CAUSE_CHAINS",
+    "Confidence",
     "FaultRegister",
+    "Issue",
     "Ranked",
     "RootCauseGroup",
     "SEVERITY_ORDER",
+    "SHARED_ROLES",
+    "SensorCause",
+    "finding_confidence",
     "group_findings",
     "impact_score",
-    "rank_findings"
+    "issue_totals",
+    "link_findings",
+    "rank_findings",
+    "sensor_causes"
   ],
   "camber.rules.unmet_rule": [
     "UnmetHours"
