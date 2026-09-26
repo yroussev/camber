@@ -14,7 +14,7 @@ camber validate [--html d.html] [--json d.json] [--full]         # validation cr
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
-camber portfolio init|adopt|status|audit                          # portfolio workspace
+camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
 ```
 
@@ -108,7 +108,8 @@ With that section present, `camber run` scores drift alongside the ordinary rule
 verdicts into the audit report. The `drift` subcommands drive it directly:
 
 ```sh
-camber drift freeze config.json          # establish the references (the only create path)
+camber drift freeze config.json          # establish the references (the only create path;
+                                         #   add --reason R inside a portfolio workspace)
 camber drift list   config.json          # what is frozen, and on whose say-so
 camber drift run    config.json --out d/ # score current vs baseline; writes drift.json + findings.json
 camber drift report config.json --out drift.html
@@ -221,10 +222,12 @@ camber portfolio init <root>                           # create a workspace (ide
 camber portfolio adopt <store> [root] --reason R       # wrap an existing store; moves nothing
 camber portfolio status [--json]                       # counts by state, holds, lock, policy
 camber portfolio audit [--facility ID] [--json]        # who did what, when, and why
+camber portfolio migrate [FILE...] [--config CFG]... [--map "SITE=ID"]... [--json]   # dry run
+camber portfolio migrate ... --apply --reason R        # re-key site-keyed state to facility_id
 
 camber facility add <name> [--id ID] [--owner O] [--tag T]... [--activate] --reason R
 camber facility list [--state S] [--json]
-camber facility show <id> [--json]                     # record, effective retention, audit trail
+camber facility show <id> [--json]                     # record, retention, state manifest, audit
 camber facility rename <id> "<new display name>" --reason R
 camber facility activate|suspend|resume <id> --reason R
 ```
@@ -240,6 +243,22 @@ derived from the name. Ids are never reused: a removed id is tombstoned. `offboa
 
 Analyses skip facilities that are not active. A store-backed `camber run` on a suspended facility
 warns and finds no equipment unless the config source sets `"include_inactive": true`.
+
+`migrate` moves fault and baseline files written before 0.87, which were keyed by the free-text
+site name, into `state/<facility_id>/`. It is a dry run unless `--apply` is given. It maps each
+site label to a facility through the registry (name, display name, earlier display names). It
+refuses ambiguous labels, unknown labels and labels of tombstoned facilities, with exit code 1 and
+nothing written, until you resolve them with `--map`. Each legacy file is replaced with a redirect
+stub, so configs that name it keep working. Re-running is a no-op. See
+[PORTFOLIO.md](PORTFOLIO.md#migrating-site-keyed-state).
+
+**Runs inside a workspace.** A config whose store source belongs to a workspace, or a folder
+config with `"workspace": "<root>"` (and ideally a `"facility_id"`), keys its drift baselines and
+its optional `faults` history by the facility id. Both default to `state/<facility_id>/` when the
+config names no path, and every file the run writes is listed in the facility's manifest. `camber
+drift freeze` then needs `--reason`, and `freeze` / `accept` take the lock and are audited.
+Renaming the facility changes none of it. See
+[PORTFOLIO.md](PORTFOLIO.md#per-facility-state).
 
 ## Backward compatibility
 

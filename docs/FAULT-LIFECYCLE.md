@@ -6,8 +6,14 @@ ranks and groups a single run's findings and `FaultRegister` is a lightweight in
 new/ongoing/resolved classifier; `camber.faultlifecycle.FaultLifecycle` is the durable,
 operational store on top.
 
-A fault is keyed by the stable **(site, equip, rule) fingerprint**, so the same issue is one
-record across runs rather than a new alert each time.
+A fault is keyed by a stable **(key, equip, rule) fingerprint**, so the same issue is one
+record across runs rather than a new alert each time. Pass `facility_id=` (to `load` or `update`)
+and the key is the facility's never-reused id, so renaming the facility keeps its history.
+Without one, the key is the `site` string, as before 0.87. Inside a portfolio workspace, config
+runs do this for you. The optional `faults` config section folds every run into
+`state/<facility_id>/faults.json`. Older site-keyed files are read through a deprecated
+compatibility path and moved with `camber portfolio migrate` (see
+[PORTFOLIO.md](PORTFOLIO.md#per-facility-state)).
 
 *The durable state machine `FaultLifecycle` tracks: open, acknowledged, in_progress, resolved, plus suppressed.*
 

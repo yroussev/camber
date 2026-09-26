@@ -136,6 +136,14 @@ attribution record, not tamper-proofing: the user name is whatever the process r
 someone with write access can alter the file. Ship the log to a write-once store if you need
 stronger guarantees.
 
+The same applies to per-facility state under `state/<fid>/` (fault history, frozen drift
+baselines, the manifest). Inside a workspace, `camber portfolio migrate --apply`, `camber drift
+freeze` and `camber drift accept` are audited admin actions with a mandatory reason. The
+manifest's sha256 values record what CAMBER last wrote. They let you detect an edit or a missing
+file, but they do not prevent one: anyone with write access can rewrite the manifest too.
+Migration never deletes a legacy file's records. It keeps the originals under
+`state/<fid>/migrated/` and leaves a redirect stub with the original file's sha256.
+
 A single-writer lock (`_lock`) serializes admin changes. `camber serve` stays GET-only: it
 *shows* each facility's lifecycle state but cannot change it. Real roles arrive with the
 multi-tenant roadmap item. See [PORTFOLIO.md](PORTFOLIO.md).

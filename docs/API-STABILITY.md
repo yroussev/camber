@@ -53,11 +53,39 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `score`. The catalog's *content* (`catalog.json`: entries, subsets, pinned checksums) is data, not
   API, and changes whenever a publisher reissues a file or an entry is added.
 - **`camber.portfolio`** (added in 0.87) -- the portfolio workspace and facility lifecycle:
-  `Portfolio`, `PortfolioLocked`, `LifecycleError`, `STATES`, `TRANSITIONS`, `DELETING`,
-  `DEFAULT_POLICY`, `allowed_actions`, `transition`, `find_workspace`, `is_workspace`, and the
-  `camber portfolio` / `camber facility` commands. The on-disk formats (`_portfolio.json` with
-  its `schema_version`, `_audit.ndjson`, the registry-v2 fields) are versioned and read
-  back-compatibly. See [PORTFOLIO.md](PORTFOLIO.md).
+  `Portfolio` (including `state_dir`, `manifest`, `migrate` and `legacy_sites`),
+  `PortfolioLocked`, `LifecycleError`, `STATES`, `TRANSITIONS`, `DELETING`, `DEFAULT_POLICY`,
+  `allowed_actions`, `transition`, `find_workspace`, `is_workspace`, and the
+  `camber portfolio` / `camber facility` commands. The on-disk formats are versioned and read
+  back-compatibly: `_portfolio.json` with its `schema_version`, `_audit.ndjson`, the registry-v2
+  fields, `state/<fid>/manifest.json` with its `schema_version`, and the migration redirect
+  stubs. See [PORTFOLIO.md](PORTFOLIO.md).
+- **Facility-keyed identity** (added in 0.87, part of the lifecycle work). These keyword
+  arguments are additive and optional, and each call behaves exactly as before without them:
+  `facility_id=` / `legacy_sites=` on `FaultLifecycle` and `BaselineStore` (and their `load`),
+  `facility_id=` on `FaultLifecycle.update`, the `camber.integrate.tickets` and
+  `camber.integrate.export` functions, and `FaultRegister.update`. The same holds for the new
+  record fields `FaultRecord.facility_id` / `aliases` and `BaselineRecord.facility_id` /
+  `aliases`, and for the ticket fields `facility_id` / `legacy_fingerprint`. The new config keys
+  `facility_id`, `workspace` and `faults`, and the `RunResult` fields `facility_id`, `workspace`
+  and `faults`, are also additive. Their semantics may still be refined with the lifecycle work.
+  Records now ignore unknown keys when they are read back, so a newer file loads in this
+  version.
+
+## Deprecated
+
+Currently deprecated names and code paths, each with its replacement. Each emits a
+`DeprecationWarning` when it is used.
+
+| Deprecated | Since | Removed in | Use instead |
+|---|---|---|---|
+| Site-keyed fault and baseline records (fingerprint `sha1(site, equip, rule/kind)`), read through the compatibility path of a `FaultLifecycle` / `BaselineStore` opened with `facility_id=` | 0.87 | 2.0 | `camber portfolio migrate` (re-keys them to `facility_id` once, on disk) |
+| The ticket field `legacy_fingerprint` (present only when `facility_id=` is passed) | 0.87 | 2.0 | the facility-keyed `fingerprint` |
+
+Stores opened **without** a facility (plain stores outside a portfolio workspace) are not
+deprecated in this release and do not warn: nothing there can be migrated to a facility id yet.
+Keying by the site string will be deprecated for them too once facility ids are the default
+outside workspaces. That change will be announced here with its own window.
 
 ## What the version number means
 

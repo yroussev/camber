@@ -2,8 +2,8 @@
 
 Facilities join and leave a portfolio. CAMBER's **portfolio workspace** keeps each facility's whole
 footprint in one place, gives every facility a lifecycle state, and records every change with who
-made it and why. This page describes what ships now (step 1 of the lifecycle work) and what the
-later steps add.
+made it and why. This page describes what ships now (steps 1 and 2 of the lifecycle work) and what
+the later steps add.
 
 > **Provisional.** `camber.portfolio` and the `camber portfolio` / `camber facility` commands are
 > provisional (see [API-STABILITY.md](API-STABILITY.md)): names may still change in a minor release.
@@ -17,11 +17,12 @@ later steps add.
   _lock             single-writer advisory lock
   store/            the ParquetStore root (registry v2, tombstones, a _workspace.json back-pointer)
   rollups/          reserved: downsampled stores (created by a later release)
-  state/<fid>/      reserved: faults, drift baselines, reports per facility (later release)
+  state/<fid>/      per facility: faults, drift baselines, migrated originals, manifest.json
   archive/<fid>/    reserved: export bundles (later release)
 ```
 
-The reserved directories are created by the releases that use them.
+The reserved directories are created by the releases that use them. `state/<fid>/` is created the
+first time a run, a `drift freeze` or a migration writes something for that facility.
 
 ```
 camber portfolio init ws                     # create it (idempotent)
@@ -81,6 +82,11 @@ relative, so moving the workspace and its store together needs no edit.
   `camber facility rename` changes it, and `ParquetStore.facility_name()`, reports and the read
   API's `display_name` show it.
 
+- **State.** Fault history, drift baselines, CMMS ticket fingerprints and findings exports are
+  keyed by `facility_id` inside a workspace (see [Per-facility state](#per-facility-state)), so a
+  rename never orphans them. State written before 0.87 is keyed by the free-text site name; move
+  it with [`camber portfolio migrate`](#migrating-site-keyed-state).
+
 Registry v2 entries add `state`, `created_at`, `state_changed_at`, `display_name`, `owner`,
 `portfolio` (tags) and `notes`. `register()` keeps its old meaning for existing callers. A
 facility it creates (a store write with `name=`, a dataset ingest) starts `active`, and
@@ -130,6 +136,98 @@ The read-only API (`camber serve`) shows each facility's `state` and `display_na
 `/facilities`, and the `/ui` selector marks non-active facilities. The API stays GET-only.
 Lifecycle changes are CLI or library only.
 
+## Per-facility state
+
+Inside a workspace, everything CAMBER keeps *about* a facility, other than its trend data, lives
+under a path derived from its id, or is listed in its manifest:
+
+```
+state/<fid>/
+  faults.json        fault lifecycle (FaultLifecycle), fingerprint = sha1(facility_id, equip, rule)
+  baselines.json     frozen drift baselines (BaselineStore), sha1(facility_id, equip, kind)
+  migrated/          the original records each migrated legacy file held for this facility
+  manifest.json      every file above with sha256 and size, plus external artifacts
+```
+
+A config run is **inside a workspace** when its store source's store belongs to one, or when a
+folder config names one with `"workspace": "<root>"`. Then:
+
+- The config's facility is its `source.facility_id` (store source) or its top-level
+  `"facility_id"` (folder source). A folder config without one falls back to
+  `make_facility_id(site)` and warns, because a derived id changes whenever the site label does.
+  The facility must be registered (`camber facility add NAME --id ID`), and a tombstoned id is
+  refused. As with store sources, a non-active facility is skipped unless `include_inactive` is set.
+- The drift baseline store and the fault history are opened **for that facility**. `site` is only
+  a label on new records. `drift.store` and `faults.store` default to `state/<fid>/baselines.json`
+  and `state/<fid>/faults.json` when the config names no path. An explicit path still works; the
+  file is then listed in the manifest as external.
+- The optional `faults` section (`{"store": ..., "run_id": ..., "auto_resolve_absent": false}`)
+  folds each run's actionable findings into the fault history. `run_id` defaults to the current UTC
+  time.
+- Reports and outputs a run writes (`report.out_html` / `out_text`, `camber run --out`,
+  `camber report --out`, `camber drift run|report --out`) stay where the config or command put
+  them, and are listed in the manifest as external artifacts (they are regenerable).
+- `camber drift freeze` and `camber drift accept` take the lock without waiting and are audited
+  (`drift.freeze`, `drift.accept`); `freeze` needs `--reason` inside a workspace.
+
+`camber facility show <id>` prints the manifest. Outside a workspace nothing changes: stores stay
+keyed by the site string, and folder configs do not warn about a missing `facility_id`.
+
+Tickets and exports take `facility_id=` too (`finding_to_ticket(f, site=..., facility_id=...)`,
+`findings_to_frame(..., facility_id=...)`). The ticket's `fingerprint` is then keyed by the
+facility, and a `legacy_fingerprint` field carries the old site-keyed value. A CMMS adapter can
+use it to match a ticket opened before the migration: an outbound ticket cannot be re-keyed after
+it is sent.
+
+## Migrating site-keyed state
+
+```
+camber portfolio migrate [FILE ...] [--config CFG ...] [--map "SITE=ID" ...]    # dry run (default)
+camber portfolio migrate ... --apply --reason "0.87 identity migration"
+```
+
+- **Inputs.** `FILE`s are legacy fault or baseline stores (the JSON files `FaultLifecycle` and
+  `BaselineStore` write). `--config` adds the files a config names (`drift.store`,
+  `faults.store`). Records in them with a blank site, or with the config's own `site`, belong to
+  the config's facility. The config's report outputs are listed in that facility's manifest.
+- **Mapping.** Each record's `site` is mapped to a facility id through the registry: the id, the
+  registered `name`, the current `display_name`, and every earlier display name (from the audit
+  log's `facility.rename` records). Labels are compared exactly first, then loosely: Unicode NFC,
+  case-folded, whitespace collapsed. A label whose `make_facility_id()` is a known facility also
+  maps, since that is how an unpinned folder config derives its id. Records that already carry a
+  `facility_id` keep it.
+- **Refusals.** A label that matches **more than one facility** is ambiguous and is never guessed.
+  The same goes for a label that matches only a **tombstoned** facility, or a live facility and a
+  tombstoned one. So does an unknown label, a blank label with no config to attribute it, or a
+  missing or unrecognised file. The plan lists every such label with its candidates, and
+  `--apply` then writes nothing (exit code 1). Resolve a label explicitly with
+  `--map "SITE=FACILITY_ID"`. A mapping to a tombstoned id is refused too.
+- **Apply** (under the lock, audited). For each facility, the migration does four things. It
+  keeps the original records under `state/<fid>/migrated/<kind>-<sha12>.json`. It merges the
+  re-keyed records into `state/<fid>/faults.json` / `baselines.json`, keeping each old fingerprint
+  in the record's `aliases`. It rewrites the manifest with a sha256 per file and the source file's
+  hash. And it replaces the legacy file with a **redirect stub**. A config or script that still
+  names the old path keeps working: a store opened for a facility reads and writes that facility's
+  `state/<fid>/` file. A store opened without a facility gets a read-only merged view, and saving
+  it is refused. The audit log gets one `portfolio.migrate` record, plus one `facility.migrate`
+  record per facility with its counts.
+- **Merges.** When one facility's history was split across two labels (a rename before 0.87
+  orphaned it), the records are combined deterministically. For faults: the earliest
+  `first_seen`, the latest `last_seen`, summed occurrences, the later record's workflow state, and
+  both notes. For baselines: the reference keyed under the current display name stays live (it is
+  what runs were reading), else the later `frozen_at`. The other baseline is filed under
+  `history`, never discarded. The plan lists every merge.
+- **Idempotent.** A stub is recognised as already migrated. A record whose old fingerprint a
+  target already carries is skipped, so an apply interrupted halfway can simply be re-run.
+  Re-applying a finished migration changes nothing and writes no audit line.
+
+**Compatibility read path (deprecated).** You don't have to migrate before upgrading. A store
+opened for a facility (every config run inside a workspace) also reads site-keyed records whose
+`site` is one of the facility's unambiguous labels. It re-keys them in memory, keeps the old
+fingerprint as an alias (`FaultLifecycle.get(old_fp)` still resolves), and emits a
+`DeprecationWarning`. The path is deprecated since 0.87 and will be removed in 2.0; see
+[API-STABILITY.md](API-STABILITY.md#deprecated).
+
 ## The audit log
 
 `_audit.ndjson` gets one JSON object per action:
@@ -146,9 +244,12 @@ Lifecycle changes are CLI or library only.
 - Each line is written with a single `O_APPEND` write and `fsync`ed before the command returns.
   CAMBER never rewrites or truncates the file. A torn trailing line (a crash mid-write) is
   skipped when reading.
-- Actions: `portfolio.init`, `portfolio.adopt`, `facility.add`, `facility.register` (created by a
-  store write or ingest), `facility.activate|suspend|resume`, `facility.rename`,
-  `facility.remove` (tombstoned), `facility.reclaim`.
+- Actions: `portfolio.init`, `portfolio.adopt`, `portfolio.migrate`, `facility.add`,
+  `facility.register` (created by a store write or ingest), `facility.activate|suspend|resume`,
+  `facility.rename`, `facility.migrate`, `facility.remove` (tombstoned), `facility.reclaim`,
+  `drift.freeze`, `drift.accept`.
+- Routine analysis runs are not audited. A run that folds faults or writes reports updates the
+  facility's manifest, not the audit log.
 
 `camber portfolio audit [--facility ID] [--json]` prints it.
 
@@ -159,9 +260,11 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
 
 - Admin commands (`camber facility ...`, `adopt`) do not wait. A second concurrent command fails
   at once with `portfolio is locked by <pid>@<host> since <ts>`.
-- Automated registry writes inside a workspace (a store write that registers a facility, a
-  dataset ingest) wait up to `FacilityRegistry.lock_timeout` seconds (30 by default) before
-  giving the same error.
+- `camber portfolio migrate --apply`, `camber drift freeze` and `camber drift accept` inside a
+  workspace behave like admin commands: they fail at once. A dry run takes no lock.
+- Automated writes inside a workspace wait up to 30 seconds before giving the same error. These
+  are: a store write that registers a facility, a dataset ingest, and a config run's fault fold
+  and manifest update.
 - The lock is re-entrant within one process.
 - **Stale locks.** The operating system drops the lock when the holding process exits, including
   after a crash or `kill -9`. A leftover `_lock` file therefore never blocks anyone. Its holder
@@ -170,7 +273,8 @@ Only one writer changes the workspace at a time. The lock is `fcntl.flock` on PO
 - **Filesystems.** Advisory locks are unreliable on some network filesystems (older NFS, some SMB
   configurations). Keep the workspace on a local disk, or on a filesystem with working `flock`.
 
-Read paths (`camber run`, `camber serve`, `ReadAPI`) never take the lock.
+Read paths (`camber serve`, `ReadAPI`, a `camber run` that writes no per-facility state) never
+take the lock.
 
 ## Retention policy (stored now, enforced later)
 
@@ -201,6 +305,16 @@ pf.transition(fid, "activate", reason="data flowing")
 pf.transition(fid, "suspend", reason="contract paused")
 pf.store.active_facilities()  # -> [] while suspended
 pf.audit_log(facility_id=fid)
+
+pf.state_dir(fid)  # <root>/state/<fid>
+pf.manifest(fid)  # files with sha256, external artifacts, migrations
+plan = pf.migrate(["old/faults.json"], configs=["site.json"])  # dry run
+pf.migrate(["old/faults.json"], mapping={"Annex": fid}, apply=True, reason="0.87 migration")
+
+from camber.faultlifecycle import FaultLifecycle
+
+lc = FaultLifecycle.load(pf.state_dir(fid) + "/faults.json", facility_id=fid)
+lc.update(findings, run_id="2026-09-26T06:00", site="any label")  # keyed by fid
 ```
 
 `camber.portfolio.transition(state, action, legal_hold=False)` is the pure state machine, with no
@@ -208,9 +322,8 @@ I/O. `allowed_actions(state)` lists what may follow.
 
 ## What the later steps add
 
-2. **Identity migration.** Fault-lifecycle fingerprints and drift baselines move from the
-   free-text `site` to `facility_id`, with a migration command. After that, renaming a facility
-   can no longer orphan its history.
+2. ~~**Identity migration.**~~ Shipped: see [Per-facility state](#per-facility-state) and
+   [Migrating site-keyed state](#migrating-site-keyed-state).
 3. **Offboard, archive, restore and purge**, with export bundles (`archive/<fid>/`: parquet,
    registry entry, state and a sha256 manifest), the 30-day grace period, and typed-id
    confirmation for purges.
