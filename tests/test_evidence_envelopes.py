@@ -187,3 +187,49 @@ def test_sat_reset_fit_and_evidence_are_fan_gated():
     assert "supply_fan_speed" not in gated.metrics["_missing_optional"]
     no_fan = SupplyAirReset().analyze("DemoAHU", frame.drop(columns=[Role.SUPPLY_FAN_STATUS]))
     assert "supply_fan_status" in no_fan.metrics["_missing_optional"]
+
+
+def test_oa_fraction_masks_are_counted_and_fan_gating_is_opt_in():
+    frame = _mixing_frame()
+    frame[Role.SUPPLY_FAN_STATUS] = (frame.index.hour % 6 != 0).astype(float)
+    # fan-off hours read still air: mixed air at return temperature ("0 % OA")
+    off = frame[Role.SUPPLY_FAN_STATUS] == 0
+    frame.loc[off, Role.MIXED_AIR_TEMP] = frame.loc[off, Role.RETURN_AIR_TEMP]
+    frame.iloc[:40, frame.columns.get_loc(Role.RETURN_AIR_TEMP)] = frame[Role.OAT].iloc[:40] + 1
+    default = OutdoorAirFraction().analyze("DemoAHU", frame)
+    gated = OutdoorAirFraction(fan_gate=True).analyze("DemoAHU", frame)
+    assert default.metrics["fan_gate"] == "off" and default.metrics["n_masked_fan_off"] == 0
+    assert gated.metrics["fan_gate"] == "fan status" and gated.metrics["n_masked_fan_off"] > 0
+    assert default.metrics["n_masked_small_delta_t"] > 0  # |RAT-OAT| < 5 °F
+    assert gated.metrics["n_valid"] < default.metrics["n_valid"]
+    assert (
+        OutdoorAirFraction(denom_min_f=0.5)
+        .analyze("DemoAHU", frame)
+        .metrics["n_masked_small_delta_t"]
+        < default.metrics["n_masked_small_delta_t"]
+    )
+    # the gated chart draws exactly the gated verdict's samples
+    ev = OutdoorAirFraction(fan_gate=True).evidence("DemoAHU", frame)
+    assert len(ev.frame) == gated.metrics["n_valid"]
+
+
+def test_high_limit_judges_fan_on_samples_and_counts_what_it_masked():
+    frame = _mixing_frame()
+    frame[Role.SUPPLY_FAN_STATUS] = (frame.index.hour % 4 != 0).astype(float)
+    off = frame[Role.SUPPLY_FAN_STATUS] == 0
+    rat, oat = frame[Role.RETURN_AIR_TEMP], frame[Role.OAT]
+    frame[Role.MIXED_AIR_TEMP] = rat - 0.2 * (rat - oat)  # locked out at 20 % while running
+    frame.loc[off, Role.MIXED_AIR_TEMP] = oat[off]  # still air reads as "100 % OA" when off
+    rule = EconomizerHighLimit(high_limit_f=72.0, min_oa_pct=30.0)
+    f = rule.analyze("DemoAHU", frame)
+    ungated = EconomizerHighLimit(high_limit_f=72.0, min_oa_pct=30.0, fan_gate=False)
+    u = ungated.analyze("DemoAHU", frame)
+    assert f.metrics["fan_gate"] == "fan status" and f.metrics["n_masked_fan_off"] > 0
+    assert f.metrics["n_above_limit"] < u.metrics["n_above_limit"]
+    assert f.metrics["not_locked_out_pct"] < u.metrics["not_locked_out_pct"]
+    ev = rule.evidence("DemoAHU", frame)
+    drawn = ev.frame.dropna()
+    assert not off.reindex(drawn.index).any()  # no fan-off sample is drawn
+    mask = template_violations(ev.frame, ev.template)
+    judged = ev.frame[Role.OAT].reindex(mask.index) > 72.0
+    assert round(100.0 * mask[judged].sum() / judged.sum(), 2) == f.metrics["not_locked_out_pct"]

@@ -52,12 +52,15 @@ class OutdoorAirFraction:
         min_oa_pct: float = 20.0,
         cooling_cutoff_f: float = 70.0,
         *,
+        denom_min_f: float = 5.0,
         fan_gate: bool = True,
         min_oa_pct_by_month: dict | None = None,
     ):
         # min OA is building-specific (sequence); cooling cutoff is climate-ish
         self.min_oa_pct = min_oa_pct
         self.cooling_cutoff_f = cooling_cutoff_f
+        # |RAT-OAT| below this makes the temperature balance divide by ~0 (PNNL Ch.5 guard)
+        self.denom_min_f = denom_min_f
         # judge fan-on samples only (when the unit trends a fan signal); fan-off samples read
         # still air, and on the LBNL single-duct AHU they alone made a unit at 1.6 % OA read "ok"
         # against a 20 % assumption (#23)
@@ -77,6 +80,12 @@ class OutdoorAirFraction:
             return None, "off"
         return fan_on_mask(frame)
 
+    def _missing(self, frame: pd.DataFrame, fan_src: str) -> list:
+        out = [r.value for r in (Role.OAT, Role.OA_DAMPER) if r not in frame.columns]
+        if fan_src == FAN_GATE_NONE:
+            out.append(Role.SUPPLY_FAN_STATUS.value)
+        return out
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
@@ -90,6 +99,7 @@ class OutdoorAirFraction:
             cooling_cutoff_f=self.cooling_cutoff_f,
             excess_margin_pct=self.excess_margin_pct,
             under_margin_pct=self.under_margin_pct,
+            denom_min_f=self.denom_min_f,
             gate=gate,
             occ=occ,
             min_oa_by_month=self.min_oa_pct_by_month,
@@ -99,7 +109,7 @@ class OutdoorAirFraction:
                 rule=self.name,
                 equip=equip,
                 severity="info",
-                metrics={"fan_gate": fan_src},
+                metrics={"fan_gate": fan_src, "_missing_optional": self._missing(frame, fan_src)},
                 summary="insufficient data (need OAT/MAT/RAT)",
             )
         ex, mn = res.excess_oa_pct, res.min_oa_pct
@@ -156,8 +166,14 @@ class OutdoorAirFraction:
                     else ("excess_oa" if sev_excess != "ok" else None)
                 ),
                 "min_oa_pct_by_month": res.min_oa_by_month,
-                "fan_gate": fan_src,
                 "occupancy": "trended" if occ is not None and occ.notna().any() else "assumed",
+                "fan_gate": fan_src,
+                "denom_min_f": self.denom_min_f,
+                # samples the balance could not honestly judge, by reason
+                "n_masked_fan_off": res.masked.get("fan_off", 0),
+                "n_masked_small_delta_t": res.masked.get("small_delta_t", 0),
+                "n_masked_out_of_range": res.masked.get("out_of_range", 0),
+                "_missing_optional": self._missing(frame, fan_src),
             },
             summary=(
                 f"{equip}: OAF median {res.oaf_median_pct:.0f}% "
@@ -188,7 +204,12 @@ class OutdoorAirFraction:
             return None
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
-        w = _oaf_samples(frame.rename(columns=cols), gate=self._gate(frame)[0], occ=occ)
+        w = _oaf_samples(
+            frame.rename(columns=cols),
+            denom_min_f=self.denom_min_f,
+            gate=self._gate(frame)[0],
+            occ=occ,
+        )
         if w is None or w.empty:
             return None
         cut = float(self.cooling_cutoff_f)

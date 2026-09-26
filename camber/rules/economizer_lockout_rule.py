@@ -38,6 +38,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
+from ..schedules import FAN_GATE_NONE, fan_on_mask
 from ..units import normalize_percent
 from .base import Finding
 
@@ -54,6 +55,9 @@ class EconomizerHighLimit:
         Role.RETURN_AIR_TEMP,
         Role.OA_AIRFLOW,
         Role.AIRFLOW,
+        # fan-on gate: status, else speed (airflow, above, is the last resort)
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
     )
 
     def __init__(
@@ -69,6 +73,7 @@ class EconomizerHighLimit:
         assumed_min_oa_pct: float = 20.0,  # generic design minimum when none is configured
         conservative_min_oa_pct: float = 50.0,  # generous upper bound on a design minimum
         differential: bool = True,  # exclude OAT < RAT (differential changeover still economizes)
+        fan_gate: bool = True,  # judge fan-on samples only (fan off: no mixing to judge)
     ):
         self.high_limit_f = high_limit_f
         self.min_damper = min_damper
@@ -80,6 +85,7 @@ class EconomizerHighLimit:
         self.assumed_min_oa_pct = assumed_min_oa_pct
         self.conservative_min_oa_pct = conservative_min_oa_pct
         self.differential = differential
+        self.fan_gate = fan_gate
 
     @staticmethod
     def _measured_oaf(frame: pd.DataFrame):
@@ -105,8 +111,17 @@ class EconomizerHighLimit:
         ``valid = hot & plausible``; ``basis``; ``caveats``.
         """
         oat = frame[Role.OAT]
-        hot = (oat > self.high_limit_f) & oat.notna()
         caveats: list = []
+        fan, fan_src = (None, "off")
+        if self.fan_gate:
+            fan, fan_src = fan_on_mask(frame)
+        on = (
+            pd.Series(True, index=frame.index)
+            if fan is None
+            else pd.Series(fan.to_numpy(dtype=bool), index=frame.index)
+        )
+        masked = {"fan_off": int((~on & oat.notna() & (oat > self.high_limit_f)).sum())}
+        hot = (oat > self.high_limit_f) & oat.notna() & on
         if self.differential and Role.RETURN_AIR_TEMP in frame.columns:
             rat = frame[Role.RETURN_AIR_TEMP]
             econ_ok = hot & rat.notna() & (oat <= rat)
@@ -123,20 +138,19 @@ class EconomizerHighLimit:
 
         if measured is not None:
             y = measured
-            plausible = y.notna()
+            plausible = y.notna() & on
             basis = "measured OA fraction"
         elif have_temps:
             # Temperature-balance OA-fraction (percent), same method + guards as camber.oafraction.
             mat, rat = frame[Role.MIXED_AIR_TEMP], frame[Role.RETURN_AIR_TEMP]
             denom = rat - oat
             y = 100.0 * (rat - mat) / denom
-            plausible = (
-                oat.between(20, 130)
-                & mat.between(30, 120)
-                & rat.between(40, 110)
-                & (denom.abs() >= self.denom_min_f)
-                & y.between(-20, 120)
-            )
+            sensors_ok = oat.between(20, 130) & mat.between(30, 120) & rat.between(40, 110)
+            stable = denom.abs() >= self.denom_min_f
+            in_range = y.between(-20, 120)
+            plausible = sensors_ok & stable & in_range & on
+            masked["small_delta_t"] = int((hot & sensors_ok & ~stable).sum())
+            masked["out_of_range"] = int((hot & sensors_ok & stable & ~in_range).sum())
             basis = "OA-fraction"
         else:
             # OA_DAMPER arrives 0-1 or 0-100 depending on the BAS; canonicalize to a fraction
@@ -144,7 +158,7 @@ class EconomizerHighLimit:
             # roles to 0-100 -- comparing that against a 0-1 threshold makes every open damper
             # read "not locked out", the original mis-scaling behind this rule's false faults.)
             y = normalize_percent(frame[Role.OA_DAMPER]) / 100.0
-            plausible = y.notna()
+            plausible = y.notna() & on
             basis = "damper position"
             caveats.append(
                 "no mixed/return-air temps: judged on damper position "
@@ -158,6 +172,8 @@ class EconomizerHighLimit:
             "valid": hot & plausible,
             "basis": basis,
             "caveats": caveats,
+            "fan_gate": fan_src,
+            "masked": masked,
         }
 
     def excess_threshold(self, basis: str) -> float:
@@ -177,6 +193,20 @@ class EconomizerHighLimit:
         j = self._judged(frame)
         caveats: list = j["caveats"]
         valid, basis = j["valid"], j["basis"]
+        gate_metrics = {
+            "fan_gate": j["fan_gate"],
+            "denom_min_f": self.denom_min_f,
+            "n_masked_fan_off": j["masked"].get("fan_off", 0),
+            "n_masked_small_delta_t": j["masked"].get("small_delta_t", 0),
+            "n_masked_out_of_range": j["masked"].get("out_of_range", 0),
+        }
+        missing = [
+            r.value for r in self.roles_optional[:4] if r not in frame.columns
+        ]  # MAT/RAT/OA flow/airflow
+        if j["fan_gate"] == FAN_GATE_NONE:
+            missing.append(Role.SUPPLY_FAN_STATUS.value)
+        if missing:
+            gate_metrics["_missing_optional"] = missing
         oaf = None if basis == "damper position" else j["y"]
         damper = j["y"]
         n = int(valid.sum())
@@ -186,7 +216,12 @@ class EconomizerHighLimit:
             if basis != "damper position":
                 msg += " with a usable OA-fraction"
             return Finding(
-                rule=self.name, equip=equip, severity="info", summary=msg, caveats=caveats
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                metrics=gate_metrics,
+                summary=msg,
+                caveats=caveats,
             )
 
         def _sev(pct: float) -> str:
@@ -199,6 +234,7 @@ class EconomizerHighLimit:
             "min_oa_source": "configured" if self.min_oa_pct is not None else "unknown",
             "min_damper": self.min_damper,
             "n_above_limit": n,
+            **gate_metrics,
         }
         if oaf is None:  # damper fallback
             not_locked = valid & (damper > self.min_damper + 0.05)

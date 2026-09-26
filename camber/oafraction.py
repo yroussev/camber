@@ -26,7 +26,7 @@ lower minimum damper position in summer is judged against that month's minimum.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import pandas as pd
 
@@ -52,6 +52,7 @@ class OAFractionResult:
     min_oa_pct: float  # the design-minimum assumption used
     coverage_start: str
     coverage_end: str
+    masked: dict = field(default_factory=dict)  # samples left out, by guard (see _oaf_samples)
     # per-month design minimum overriding ``min_oa_pct`` for those months (None = one minimum)
     min_oa_by_month: dict | None = None
     median_vs_min_pct: float = float("nan")  # median of (OAF - that sample's minimum), %-points
@@ -60,22 +61,6 @@ class OAFractionResult:
     def as_dict(self):
         """Return the result as a plain dict."""
         return asdict(self)
-
-
-def _occupied_gated(df: pd.DataFrame, *, occupied_only: bool = True, gate=None, occ=None):
-    """``df`` restricted to occupied (trended ``occ``, else assumed) and gated samples."""
-    work = df.copy()
-    if occupied_only:
-        if occ is not None and pd.Series(occ).notna().any():
-            work = work[effective_occupied_mask(work.index, occ=pd.Series(occ))]
-        else:
-            work = work[occupied_mask(work.index)]
-    if gate is not None:
-        g = pd.Series(gate)
-        if not g.index.equals(work.index):
-            g = g[~g.index.duplicated()].reindex(work.index)
-        work = work[g.fillna(False).astype(bool).to_numpy()]
-    return work
 
 
 def _oaf_samples(
@@ -88,26 +73,50 @@ def _oaf_samples(
 ) -> pd.DataFrame | None:
     """The per-sample OA fraction the diagnostic judges: ``OAT`` and ``oaf`` (%) columns.
 
-    Occupied (optional; the trended ``occ`` when given, else an assumed schedule), gated (optional
-    ``gate``, e.g. fan-on), plausible, numerically stable (``|RAT-OAT| >= denom_min_f``) samples
-    with an OAF in the physical-ish range. ``None`` when a needed column is missing or fewer than 10
+    ``gate`` (optional boolean Series, e.g. fan-on) keeps only the samples where it is True; ``occ``
+    (a trended occupied/unoccupied Series) replaces the assumed weekday schedule. The frame's
+    ``attrs["masked"]`` counts what was left out: ``fan_off``, ``small_delta_t``
+    (``|RAT-OAT| < denom_min_f``, where the balance divides by a near-zero difference) and
+    ``out_of_range`` (an OAF outside -20..120 %).
+
+    Occupied (optional), plausible, numerically stable (``|RAT-OAT| >= denom_min_f``) samples with
+    an OAF in the physical-ish range. ``None`` when a needed column is missing or fewer than 10
     samples survive the guards. Shared with the rule's evidence chart so the chart draws exactly the
     samples behind the verdict.
     """
     need = ("OAT", "MixedAir", "ReturnAir")
     if any(c not in df.columns for c in need):
         return None
-    work = _occupied_gated(df, occupied_only=occupied_only, gate=gate, occ=occ)
+    work = df.copy()
+    masked = {"fan_off": 0, "small_delta_t": 0, "out_of_range": 0}
+    if occupied_only:
+        if occ is not None and pd.Series(occ).notna().any():
+            work = work[effective_occupied_mask(work.index, occ=pd.Series(occ))]
+        else:
+            work = work[occupied_mask(work.index)]
+    if gate is not None:
+        # with the fan off the three sensors read still air, not a mixing balance
+        g = pd.Series(gate)
+        if not g.index.equals(work.index):
+            g = g[~g.index.duplicated()].reindex(work.index)
+        on = g.fillna(False).astype(bool).to_numpy()
+        masked["fan_off"] = int((~on & work[list(need)].notna().all(axis=1).to_numpy()).sum())
+        work = work[on]
     w = work[list(need)].dropna()
     # plausibility guards (drop sensor dropouts)
     w = w[(w.OAT.between(20, 130)) & (w.MixedAir.between(30, 120)) & (w.ReturnAir.between(40, 110))]
     denom = w.ReturnAir - w.OAT
-    w = w[denom.abs() >= denom_min_f]
+    stable = denom.abs() >= denom_min_f
+    masked["small_delta_t"] = int((~stable).sum())
+    w = w[stable]
     if len(w) < 10:
         return None
     oaf = 100.0 * (w.ReturnAir - w.MixedAir) / (w.ReturnAir - w.OAT)
     keep = (oaf > -20) & (oaf < 120)  # physical-ish range
-    return pd.DataFrame({"OAT": w.OAT[keep], "oaf": oaf[keep]})
+    masked["out_of_range"] = int((~keep).sum())
+    out = pd.DataFrame({"OAT": w.OAT[keep], "oaf": oaf[keep]})
+    out.attrs["masked"] = masked
+    return out
 
 
 def _sample_minima(index: pd.DatetimeIndex, min_oa_pct: float, by_month: dict | None) -> pd.Series:
@@ -142,6 +151,7 @@ def analyze_oa_fraction(
     ``gate`` (optional boolean Series, e.g. fan-on) keeps only the samples where it is True;
     ``occ`` (a trended occupied/unoccupied Series) replaces the assumed weekday schedule;
     ``min_oa_by_month`` (``{month: pct}``) overrides ``min_oa_pct`` for those months.
+    ``OAFractionResult.masked`` counts the samples each guard left out.
     """
     w = _oaf_samples(df, denom_min_f=denom_min_f, occupied_only=occupied_only, gate=gate, occ=occ)
     if w is None:
@@ -173,6 +183,7 @@ def analyze_oa_fraction(
         min_oa_pct=float(min_oa_pct),
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        masked=dict(w.attrs.get("masked", {})),
         min_oa_by_month=by_month or None,
         median_vs_min_pct=round(float((oaf - mins).median()), 1),
         median_ratio_to_min=round(float((oaf / mins).median()), 3)

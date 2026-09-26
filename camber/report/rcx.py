@@ -1438,6 +1438,13 @@ def _sec_economizer(S) -> dict | None:
                 f"{'on' if rule.differential else 'off'} "
                 f"({'site-configured' if configured else 'rule defaults'})"
             )
+            m = (f.metrics or {}) if f is not None else {}
+            if "n_masked_fan_off" in m:
+                params += (
+                    f"; not judged: {m['n_masked_fan_off']} hot fan-off samples, "
+                    f"{m['n_masked_small_delta_t']} with |OAT − RAT| < {m['denom_min_f']:g} °F, "
+                    f"{m['n_masked_out_of_range']} with OA fraction outside −20…120 %"
+                )
             blocks.append(
                 _figure(
                     fig,
