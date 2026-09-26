@@ -20,11 +20,12 @@ temperatures, so it cannot be passed here bare).
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
-from .stats import _rel_unc_projected, _t_value
+from .coverage import ExtrapolationPolicy, _fsu_factor, _worst, assess_coverage
+from .stats import _rel_unc_projected, _t_value, _widen
 
 
 def normalized_annual_consumption(model, temps) -> float:
@@ -33,22 +34,38 @@ def normalized_annual_consumption(model, temps) -> float:
     ``temps`` is a normal-year temperature set at the model's period granularity (e.g. 12
     monthly means for a monthly model, or 8760 hourly values for an hourly one); the sum of
     the per-period predictions is the weather-normalized annual energy.
+
+    This returns a bare number and does not check that ``temps`` lie inside the range the model
+    was fitted on; use :func:`camber.mandv.coverage.assess_coverage` for that, or
+    :func:`normalized_savings`, which does.
     """
     return float(np.asarray(model.predict(np.asarray(temps, dtype=float)), dtype=float).sum())
 
 
 @dataclass
 class NormalizedSavings:
-    """Weather-normalized annual savings with a G14 uncertainty band."""
+    """Weather-normalized annual savings with a G14 uncertainty band.
 
-    nac_baseline: float
-    nac_reporting: float
-    normalized_savings: float  # nac_baseline - nac_reporting
-    savings_pct: float  # of normalized baseline
-    fractional_uncertainty: float  # of the savings, at ``confidence``
-    abs_uncertainty: float  # +/- energy at ``confidence``
+    Both models are projected onto the normal year, so each carries its own coverage
+    (``coverage_baseline`` / ``coverage_reporting``). A severe extrapolation of either declines
+    the result under the default policy: the savings fields and the extrapolated side's NAC become
+    ``None``, with ``declined_reason`` saying why.
+    """
+
+    nac_baseline: float | None
+    nac_reporting: float | None
+    normalized_savings: float | None  # nac_baseline - nac_reporting
+    savings_pct: float | None  # of normalized baseline
+    fractional_uncertainty: float | None  # of the savings, at ``confidence``
+    abs_uncertainty: float | None  # +/- energy at ``confidence``
     confidence: float
     n_normal_periods: int
+    coverage_baseline: dict | None = None
+    coverage_reporting: dict | None = None
+    declined: bool = False
+    declined_reason: str | None = None
+    caveats: list = field(default_factory=list)
+    fsu_extrapolation_factor: float | None = None
 
     def as_dict(self) -> dict:
         """Return the result as a plain dict."""
@@ -68,6 +85,7 @@ def normalized_savings(
     p_baseline: int = 2,
     p_reporting: int | None = None,
     rho: float | None = None,
+    extrapolation: ExtrapolationPolicy | None = None,
 ) -> NormalizedSavings:
     """Weather-normalized annual savings between two fitted models over a normal year.
 
@@ -85,7 +103,14 @@ def normalized_savings(
     narrow at hourly resolution. ``p_baseline`` / ``p_reporting`` are the models' parameter counts;
     ``rho`` is the residual lag-1 autocorrelation (see
     :func:`camber.mandv.stats.lag1_autocorrelation`), widening the band when supplied.
+
+    **Extrapolation.** A normal year is often wider than the period a model was fitted on (a TMY
+    cold snap, a reporting model fitted on one season). Each model's coverage of ``normal_temps``
+    is graded (``extrapolation``, :class:`~camber.mandv.coverage.ExtrapolationPolicy`); a moderate
+    one widens that side's term by the projected-kernel factor ``k = sqrt(s'As / s_c'As_c)``, and a
+    severe one declines by default.
     """
+    pol = extrapolation or ExtrapolationPolicy()
     temps = np.asarray(normal_temps, dtype=float)
     m = int(len(temps))
     nac_b = normalized_annual_consumption(baseline_model, temps)
@@ -104,9 +129,37 @@ def normalized_savings(
         abs_unc = t * float(np.sqrt((rel_b * nac_b) ** 2 + (rel_r * nac_r) ** 2))
     else:
         abs_unc = float("nan")
+
+    cov_b = assess_coverage(baseline_model, temps, policy=pol)
+    cov_r = assess_coverage(reporting_model, temps, policy=pol)
+    caveats = [f"baseline model: {c}" for c in cov_b.caveats]
+    caveats += [f"reporting model: {c}" for c in cov_r.caveats]
+    tier = _worst(cov_b.tier, cov_r.tier)
+    factor = None
+    if tier in ("moderate", "severe"):
+        kb = kr = 1.0
+        for side, cov, model in (
+            ("baseline", cov_b, baseline_model),
+            ("reporting", cov_r, reporting_model),
+        ):
+            if cov.tier not in ("moderate", "severe"):
+                continue
+            k = _fsu_factor(model, temps, m=m, projected_kernel=True, policy=pol)
+            widened, note = _widen(1.0, k, pol, towt="unit" in cov.info)
+            caveats.append(f"{side} model: {note}")
+            if side == "baseline":
+                kb = widened
+            else:
+                kr = widened
+        if (kb > 1.0 or kr > 1.0) and abs_unc == abs_unc:
+            new = t * float(np.sqrt((rel_b * nac_b * kb) ** 2 + (rel_r * nac_r * kr) ** 2))
+            factor = new / abs_unc if abs_unc > 0 else None
+            abs_unc = new
+        elif abs_unc == abs_unc:
+            factor = 1.0
     frac = abs_unc / abs(savings) if (savings and abs_unc == abs_unc) else float("nan")
 
-    return NormalizedSavings(
+    res = NormalizedSavings(
         nac_baseline=round(nac_b, 2),
         nac_reporting=round(nac_r, 2),
         normalized_savings=round(savings, 2),
@@ -115,4 +168,23 @@ def normalized_savings(
         abs_uncertainty=round(abs_unc, 2) if abs_unc == abs_unc else float("nan"),
         confidence=confidence,
         n_normal_periods=m,
+        coverage_baseline=cov_b.as_dict(),
+        coverage_reporting=cov_r.as_dict(),
+        caveats=caveats,
+        fsu_extrapolation_factor=None if factor is None else round(factor, 4),
     )
+    if tier == "severe" and pol.decline:
+        reasons = [
+            f"{side} model: {c.reason}"
+            for side, c in (("baseline", cov_b), ("reporting", cov_r))
+            if c.tier == "severe"
+        ]
+        res.declined = True
+        res.declined_reason = " ".join(reasons)
+        res.normalized_savings = res.savings_pct = None
+        res.fractional_uncertainty = res.abs_uncertainty = None
+        if cov_b.tier == "severe":
+            res.nac_baseline = None
+        if cov_r.tier == "severe":
+            res.nac_reporting = None
+    return res

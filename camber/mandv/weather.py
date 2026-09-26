@@ -75,6 +75,10 @@ def normalized_annual_energy(model, epw_temp_f: pd.Series, *, basis: str = "mont
     and sum, which is basis-independent). We therefore always predict hourly and
     sum, which is the correct weather-normalized annual figure regardless of the
     model's fitting basis.
+
+    Returns a bare float; it does not check that the typical year lies inside the range the model
+    was fitted on (use :func:`camber.mandv.coverage.assess_coverage` for that, or
+    :func:`camber.mandv.normalized.normalized_savings`, which does).
     """
     # predict per typical hour and sum -> annual energy at typical weather
     # (works whether the model was fit on hourly, daily, or monthly data, as long
@@ -88,6 +92,9 @@ def normalized_annual_from_monthly(model, epw_temp_f: pd.Series) -> float:
 
     Predicts each typical month from its mean temperature (the model's native
     interval is one month) and sums the 12 monthly predictions.
+
+    Returns a bare float; it does not check that the typical months lie inside the range the model
+    was fitted on (use :func:`camber.mandv.coverage.assess_coverage` for that).
     """
     mm = monthly_normals(epw_temp_f)
     return float(np.nansum(model.predict(mm.values)))

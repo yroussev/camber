@@ -32,9 +32,16 @@ IPMVP. Metrics: R2, RMSE, CV(RMSE), NMBE / net determination bias, F-stat, and F
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
+
+from .coverage import (
+    ExtrapolationPolicy,
+    _fsu_factor,
+    _with_used,
+    assess_coverage,
+)
 
 
 @dataclass
@@ -148,19 +155,31 @@ def fit_stats(
 
 @dataclass
 class SavingsResult:
-    """Avoided energy with G14 Annex-B fractional savings uncertainty."""
+    """Avoided energy with G14 Annex-B fractional savings uncertainty.
 
-    avoided_energy: float  # baseline-projected minus actual, summed
-    baseline_projected: float
+    ``coverage`` grades how well the baseline covers the reporting drivers
+    (:mod:`camber.mandv.coverage`). When it is ``severe`` and the policy declines, ``declined`` is
+    true, ``declined_reason`` says why, and the savings fields are ``None`` -- only
+    ``reporting_actual`` (a measurement, not a projection) stays. ``fsu_extrapolation_factor`` is
+    the parameter-variance factor ``k`` the band was widened by for a moderate extrapolation.
+    """
+
+    avoided_energy: float | None  # baseline-projected minus actual, summed; None when declined
+    baseline_projected: float | None
     reporting_actual: float
-    savings_pct: float  # of projected baseline
-    fractional_uncertainty: float  # ASHRAE G14 Annex-B, fraction of savings (at conf)
+    savings_pct: float | None  # of projected baseline
+    fractional_uncertainty: float | None  # ASHRAE G14 Annex-B, fraction of savings (at conf)
     confidence: float
-    abs_uncertainty: float  # +/- energy at the confidence level
+    abs_uncertainty: float | None  # +/- energy at the confidence level
     # None = autocorrelation could not be estimated (never 0.0, which would assert independence)
     rho: float | None = None
     fsu_autocorrelation_adjusted: bool = False
     n_effective: float | None = None  # effective independent baseline points after the rho
+    coverage: dict | None = None  # camber.mandv.coverage.Coverage.as_dict()
+    declined: bool = False
+    declined_reason: str | None = None
+    caveats: list = field(default_factory=list)
+    fsu_extrapolation_factor: float | None = None
 
     def as_dict(self):
         """Return as a plain dict."""
@@ -323,6 +342,7 @@ def avoided_energy_savings(
     p_baseline: int,
     confidence: float = 0.90,
     rho: float | None = None,
+    extrapolation: ExtrapolationPolicy | None = None,
 ) -> SavingsResult:
     """IPMVP Option-C avoided energy use with G14 Annex-B fractional uncertainty.
 
@@ -341,12 +361,23 @@ def avoided_energy_savings(
     *reporting*-period residuals are wanted, but those are contaminated by the saving itself, so the
     baseline fit's rho is used -- the standard substitution, stated here rather than left implicit.
     Passing ``None`` leaves the band unadjusted and records that on the result.
+
+    **Extrapolation.** The reporting drivers are checked against the baseline's fitted support
+    (:func:`camber.mandv.coverage.assess_coverage`, policy ``extrapolation``, default
+    :class:`~camber.mandv.coverage.ExtrapolationPolicy`). ``in_range`` leaves every number as it
+    was; ``moderate`` adds a caveat and, for linear-in-parameters baselines, widens the FSU by the
+    parameter-variance factor ``k``; ``severe`` **declines** the saving (numbers ``None``) unless
+    the policy says ``decline=False``. Reporting rows without a finite projection or actual energy
+    are excluded from the sums and counted (``coverage["n_used"]`` vs ``["n_report"]``), not
+    dropped silently.
     """
+    pol = extrapolation or ExtrapolationPolicy()
     T_report = np.asarray(T_report, dtype=float)
     y_report = np.asarray(y_report, dtype=float)
-    proj = baseline_model.predict(T_report)
-    mask = np.isfinite(proj) & np.isfinite(y_report)
-    proj, y_report = proj[mask], y_report[mask]
+    n_report = int(len(y_report))
+    proj_all = np.asarray(baseline_model.predict(T_report), dtype=float)
+    mask = np.isfinite(proj_all) & np.isfinite(y_report)
+    proj, y_report = proj_all[mask], y_report[mask]
     m = len(y_report)
     base_sum = float(proj.sum())
     rep_sum = float(y_report.sum())
@@ -366,7 +397,25 @@ def avoided_energy_savings(
     abs_unc = abs(avoided) * frac_unc if np.isfinite(frac_unc) else float("nan")
     n_eff = _n_effective(n_baseline, rho_used)
 
-    return SavingsResult(
+    cov = _with_used(
+        assess_coverage(baseline_model, T_report, projected=proj_all, policy=pol), n_report, m
+    )
+    caveats = list(cov.caveats)
+    if m < n_report:
+        caveats.append(
+            f"{n_report - m} of {n_report} reporting rows were excluded from the savings sums "
+            "(no finite baseline projection or actual energy)"
+        )
+    k = None
+    if cov.tier in ("moderate", "severe"):
+        k = _fsu_factor(baseline_model, T_report[mask], m=m, projected_kernel=False, policy=pol)
+        frac_unc, note = _widen(frac_unc, k, pol, towt="unit" in cov.info)
+        if note:
+            caveats.append(note)
+        abs_unc = abs(avoided) * frac_unc if np.isfinite(frac_unc) else float("nan")
+    declined = cov.tier == "severe" and pol.decline
+
+    res = SavingsResult(
         avoided_energy=round(avoided, 2),
         baseline_projected=round(base_sum, 2),
         reporting_actual=round(rep_sum, 2),
@@ -377,4 +426,54 @@ def avoided_energy_savings(
         rho=None if rho is None else round(rho_used, 4),
         fsu_autocorrelation_adjusted=bool(rho is not None and rho_used > 0.0),
         n_effective=round(n_eff, 2) if np.isfinite(n_eff) else None,
+        coverage=cov.as_dict(),
+        caveats=caveats,
+        fsu_extrapolation_factor=None if k is None else round(k, 4),
+    )
+    if declined:
+        _decline(res, cov.reason)
+    return res
+
+
+_DECLINED_FIELDS = (
+    "avoided_energy",
+    "baseline_projected",
+    "savings_pct",
+    "fractional_uncertainty",
+    "abs_uncertainty",
+)
+
+
+def _decline(res, reason: str | None) -> None:
+    """Blank a result's projected numbers under the honesty convention (measurements stay)."""
+    res.declined = True
+    res.declined_reason = reason
+    for name in _DECLINED_FIELDS:
+        if hasattr(res, name):
+            setattr(res, name, None)
+
+
+def _widen(frac_unc: float, k: float | None, pol: ExtrapolationPolicy, *, towt=False) -> tuple:
+    """Apply the extrapolation factor ``k`` to a fractional uncertainty; return (frac, caveat)."""
+    if k is None and towt:
+        return frac_unc, (
+            "TOWT coverage is flagged, never widened: the model is not linear in a driver it "
+            "could extrapolate, so the band is left as fitted"
+        )
+    if k is None:
+        return frac_unc, (
+            "the uncertainty band is not widened for extrapolation: this baseline has no linear "
+            "design to measure it against"
+        )
+    if not pol.widen_fsu:
+        return frac_unc, f"FSU not widened (policy widen_fsu=False); the factor would be x{k:.2f}"
+    if k <= 1.0:
+        return frac_unc, (
+            f"FSU not widened (factor x{k:.2f}): the extrapolated points sit where clamping them "
+            "into the support leaves the projection's parameter variance unchanged (a flat segment)"
+        )
+    return frac_unc * k, (
+        f"FSU widened x{k:.2f} for extrapolation: the parameter variance of the projected total at "
+        "the reporting drivers vs at the drivers clamped into the baseline support (conditional on "
+        "the fitted change points)"
     )

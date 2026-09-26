@@ -97,9 +97,10 @@ def savings_chart(
         label="excess",
     )
     # G14 uncertainty as a ± band on the running total (scaled to the cumulative avoided fraction)
-    if len(cum_avoided) and np.isfinite(res.abs_uncertainty) and cum_avoided[-1] != 0:
+    abs_unc = res.abs_uncertainty if res.abs_uncertainty is not None else float("nan")
+    if len(cum_avoided) and np.isfinite(abs_unc) and cum_avoided[-1] != 0:
         frac = cum_avoided / cum_avoided[-1]
-        band = np.abs(frac) * res.abs_uncertainty
+        band = np.abs(frac) * abs_unc
         ax.fill_between(
             x,
             cum_avoided - band + cum_act,
@@ -109,9 +110,11 @@ def savings_chart(
             label=f"±{int(confidence * 100)}% band",
         )
 
-    tot = f"{res.avoided_energy:,.0f}"
-    unc = f" ± {res.abs_uncertainty:,.0f}" if np.isfinite(res.abs_uncertainty) else ""
-    pct = f"{res.savings_pct:.1%}" if np.isfinite(res.savings_pct) else "n/a"
+    avoided = res.avoided_energy if res.avoided_energy is not None else float("nan")
+    spct = res.savings_pct if res.savings_pct is not None else float("nan")
+    tot = f"{avoided:,.0f}"
+    unc = f" ± {abs_unc:,.0f}" if np.isfinite(abs_unc) else ""
+    pct = f"{spct:.1%}" if np.isfinite(spct) else "n/a"
     fit = f", CV(RMSE) {cv_rmse:.1%}" if np.isfinite(cv_rmse) else ""
     ax.set_ylabel(f"Cumulative {ylabel.lower()}")
     ax.set_title(title or f"M&V savings — {tot}{unc} ({pct} of baseline{fit})")

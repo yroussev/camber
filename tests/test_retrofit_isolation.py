@@ -7,6 +7,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from camber.mandv.coverage import ExtrapolationPolicy  # noqa: E402
 from camber.mandv.retrofit_isolation import (  # noqa: E402
     IsolationSavings,
     fit_driver_model,
@@ -78,7 +79,16 @@ def test_load_adjustment_beats_naive_difference():
     tons_r = np.linspace(150, 400, 40)  # heavier reporting load
     yb = 0.8 * tons_b
     yr = 0.6 * tons_r  # more efficient, but more load
-    r = isolation_savings(yb, yr, baseline_driver=tons_b, reporting_driver=tons_r)
+    # the reporting load runs 100 tons (40% of the fitted range) past the baseline's: the coverage
+    # guard (issue #20) declines that by default, so opt in to compute it
+    assert isolation_savings(yb, yr, baseline_driver=tons_b, reporting_driver=tons_r).declined
+    r = isolation_savings(
+        yb,
+        yr,
+        baseline_driver=tons_b,
+        reporting_driver=tons_r,
+        extrapolation=ExtrapolationPolicy(decline=False),
+    )
     naive = float(yb.sum() - yr.sum())
     assert r.savings > naive  # adjustment credits the extra load
     assert r.savings > 0
@@ -91,8 +101,18 @@ def test_isolation_normalized_savings_removes_driver_shift():
     tons_r = np.linspace(40, 300, 40)  # lighter reporting load
     yb = 5 + 0.7 * tons_b
     yr = 5 + 0.7 * tons_r  # identical model
-    ns = isolation_normalized_savings(
+    # the normal load profile runs 100 tons past the reporting fit: declined by default (#20)
+    flagged = isolation_normalized_savings(
         yb, yr, normal, baseline_driver=tons_b, reporting_driver=tons_r
+    )
+    assert flagged.declined and flagged.coverage_reporting["tier"] == "severe"
+    ns = isolation_normalized_savings(
+        yb,
+        yr,
+        normal,
+        baseline_driver=tons_b,
+        reporting_driver=tons_r,
+        extrapolation=ExtrapolationPolicy(decline=False),
     )
     assert abs(ns.savings_pct) < 0.02  # no real change once normalized
 

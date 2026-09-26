@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
+from .coverage import ExtrapolationPolicy
 from .normalized import normalized_savings
 from .stats import avoided_energy_savings, fit_stats
 
@@ -132,16 +133,21 @@ class IsolationSavings:
     boundary: str  # the isolated system / sub-meter description
     cv_rmse: float  # baseline fit CV(RMSE)
     accept: bool  # baseline model meets the G14 acceptance gate
-    adjusted_baseline: float  # baseline model projected onto reporting drivers
+    adjusted_baseline: float | None  # baseline model projected onto reporting drivers
     reporting_actual: float
-    savings: float  # adjusted_baseline - reporting_actual
-    savings_pct: float
-    fractional_uncertainty: float
-    abs_uncertainty: float
+    savings: float | None  # adjusted_baseline - reporting_actual; None when declined
+    savings_pct: float | None
+    fractional_uncertainty: float | None
+    abs_uncertainty: float | None
     confidence: float
     n_baseline: int
     n_reporting: int
     model: DriverModel | None = None
+    coverage: dict | None = None  # how well the baseline drivers cover the reporting drivers
+    declined: bool = False
+    declined_reason: str | None = None
+    caveats: list = field(default_factory=list)
+    fsu_extrapolation_factor: float | None = None
 
     def as_dict(self):
         d = asdict(self)
@@ -159,6 +165,7 @@ def isolation_savings(
     confidence: float = 0.90,
     model: DriverModel | None = None,
     cv_rmse_max: float = 0.20,
+    extrapolation: ExtrapolationPolicy | None = None,
 ) -> IsolationSavings:
     """Option-B avoided energy for an isolated, sub-metered system.
 
@@ -167,6 +174,10 @@ def isolation_savings(
     and subtract measured ``reporting_energy``. Drivers may be None (constant model) when the
     operating conditions don't change. Returns the savings with the ASHRAE G14 Annex-B
     fractional uncertainty and the baseline model-acceptance verdict.
+
+    The reporting drivers are checked against the baseline's (per-column and, for several drivers,
+    leverage) support; a severe extrapolation declines by default (``extrapolation``, see
+    :func:`camber.mandv.stats.avoided_energy_savings`).
     """
     yb = np.asarray(baseline_energy, dtype=float)
     yr = np.asarray(reporting_energy, dtype=float)
@@ -189,6 +200,7 @@ def isolation_savings(
         n_baseline=model.n,
         p_baseline=model.p,
         confidence=confidence,
+        extrapolation=extrapolation,
     )
     return IsolationSavings(
         option="B",
@@ -205,6 +217,11 @@ def isolation_savings(
         n_baseline=model.n,
         n_reporting=int(len(yr)),
         model=model,
+        coverage=sav.coverage,
+        declined=sav.declined,
+        declined_reason=sav.declined_reason,
+        caveats=list(sav.caveats),
+        fsu_extrapolation_factor=sav.fsu_extrapolation_factor,
     )
 
 
@@ -217,13 +234,15 @@ def isolation_normalized_savings(
     reporting_driver,
     confidence: float = 0.90,
     cv_rmse_max: float = 0.20,
+    extrapolation: ExtrapolationPolicy | None = None,
 ):
     """Option-B savings normalized to a fixed reference driver set (e.g. a normal year/load).
 
     Fits a driver model to each period and projects both onto ``normal_driver`` (the common
     reference), differencing the normalized consumption — so a change in operating conditions
     between periods doesn't masquerade as savings. Returns a
-    :class:`~camber.mandv.normalized.NormalizedSavings`.
+    :class:`~camber.mandv.normalized.NormalizedSavings`; a ``normal_driver`` far outside either
+    period's drivers declines by default (``extrapolation``).
     """
     mb = fit_driver_model(baseline_driver, baseline_energy)
     mr = fit_driver_model(reporting_driver, reporting_energy)
@@ -250,4 +269,5 @@ def isolation_normalized_savings(
         reporting_cv_rmse=cvr,
         n_reporting=mr.n,
         confidence=confidence,
+        extrapolation=extrapolation,
     )

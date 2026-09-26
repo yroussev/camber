@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from ..ingest.quality import outlier_mask
+from .coverage import ExtrapolationPolicy
 from .intervalfit import daily_energy_vs_temp, hourly_energy_vs_temp
 from .models import N_PARAMS, best_model
 from .nonroutine import residual_outliers
@@ -66,6 +67,7 @@ def caltrack_savings(
     rate_is_energy_rate: bool = False,
     exclude_non_routine: bool = False,
     nre_z: float = 3.5,
+    extrapolation: ExtrapolationPolicy | None = None,
 ) -> NMECResult:
     """CalTRACK Daily / IPMVP Option-C avoided energy use from baseline + reporting.
 
@@ -79,6 +81,12 @@ def caltrack_savings(
     With ``exclude_non_routine`` the baseline is screened for non-routine events
     (days whose residual is a robust outlier at modified-z > ``nre_z``); those days
     are dropped and the baseline refit, so a shutdown or anomaly doesn't skew it.
+
+    The reporting period's temperatures are checked against the baseline's fitted range
+    (``extrapolation``, see :func:`camber.mandv.stats.avoided_energy_savings`): a severe
+    extrapolation declines the saving by default. A baseline shorter than 365 days carries a
+    caveat, since it cannot span a full weather year. (CalTRACK itself prescribes no extrapolation
+    test; this is a CAMBER policy.)
     """
     base = daily_energy_vs_temp(
         baseline_energy, baseline_temp, rate_is_energy_rate=rate_is_energy_rate
@@ -120,7 +128,14 @@ def caltrack_savings(
         p_baseline=p,
         confidence=confidence,
         rho=st.rho_lag1,
+        extrapolation=extrapolation,
     )
+    span = (base.index.max() - base.index.min()).days + 1 if len(base) else 0
+    if span < 365:
+        savings.caveats.append(
+            f"the baseline spans {span} days (< 365): it cannot cover a full weather year, so "
+            "reporting conditions outside it are more likely"
+        )
 
     return NMECResult(
         model_kind=model.kind,
@@ -175,6 +190,7 @@ def caltrack_savings_hourly(
     nre_z: float = 3.5,
     n_temp_segments: int = 6,
     occ_split: bool = True,
+    extrapolation: ExtrapolationPolicy | None = None,
 ) -> HourlyNMECResult:
     """Hourly NMEC / IPMVP Option-C avoided energy on a **TOWT** baseline.
 
@@ -204,6 +220,11 @@ def caltrack_savings_hourly(
     ``exclude_non_routine`` screens at **day** level, not hour level: hourly residuals are
     heavier-tailed, and trimming individual hours on residual magnitude would bias CV(RMSE) down
     and so narrow the band -- the dishonest direction. Whole days are excluded or none.
+
+    Reporting hours are checked against the baseline's (occupancy mode x temperature cell) support
+    (:func:`camber.mandv.coverage.towt_coverage`); a severe extrapolation declines by default. TOWT
+    holds its temperature response flat beyond the fitted range, so it is flagged but never
+    widened. The unseen hour-of-week check below still raises, as before.
     """
     base = hourly_energy_vs_temp(
         baseline_energy, baseline_temp, rate_is_energy_rate=rate_is_energy_rate
@@ -259,6 +280,7 @@ def caltrack_savings_hourly(
         p_baseline=model.n_params,
         confidence=confidence,
         rho=st.rho_lag1,
+        extrapolation=extrapolation,
     )
 
     return HourlyNMECResult(

@@ -692,3 +692,206 @@ def test_in_range_numbers_are_byte_identical_to_main():
         d = res.as_dict()
         for key, want in GOLDEN[name].items():
             assert d[key] == want, (name, key, d[key], want)
+
+
+# ------------------------------------------------------------------------------ savings wiring
+
+
+def _sav(m, Tr, yr, **kw):
+    from camber.mandv.stats import avoided_energy_savings
+
+    return avoided_energy_savings(
+        m, Tr, yr, cv_rmse=0.05, n_baseline=365, p_baseline=N_PARAMS[m.kind], **kw
+    )
+
+
+_LOOSE = ExtrapolationPolicy(
+    caveat_share=1.0, caveat_distance=100.0, decline_share=2.0, decline_distance=100.0
+)
+
+
+def test_moderate_widens_on_a_sloped_arm_only():
+    m, _, _ = _baseline("3PC", 30, 90)
+    rng = np.random.default_rng(5)
+    # a warm reporting period running up to +8 F past the fit on the cooling arm. (k is the variance
+    # ratio of the projected *total*, so it tracks the mean design row: a few hot points in an
+    # otherwise central period can leave it at ~1.)
+    hot = np.r_[rng.uniform(60, 88, 170), np.linspace(94, 98, 20)]
+    r = _sav(m, hot, 0.9 * m.predict(hot))
+    ref = _sav(m, hot, 0.9 * m.predict(hot), extrapolation=_LOOSE)
+    assert r.coverage["tier"] == "moderate" and ref.coverage["tier"] == "in_range"
+    assert r.fsu_extrapolation_factor > 1.0
+    assert r.fractional_uncertainty == pytest.approx(
+        ref.fractional_uncertainty * r.fsu_extrapolation_factor, abs=2e-4
+    )
+    assert r.avoided_energy == ref.avoided_energy and not r.declined
+    assert any(c.startswith("Moderate extrapolation:") for c in r.caveats)
+    assert any("FSU widened x" in c for c in r.caveats)
+    # cold side of a 3PC is flat: clamping changes nothing, so k == 1 and no widening
+    cold = np.r_[rng.uniform(35, 85, 180), np.linspace(22, 26, 12)]
+    c = _sav(m, cold, 0.9 * m.predict(cold))
+    cref = _sav(m, cold, 0.9 * m.predict(cold), extrapolation=_LOOSE)
+    assert c.coverage["tier"] == "moderate"
+    assert c.fsu_extrapolation_factor == pytest.approx(1.0, abs=1e-9)
+    assert c.fractional_uncertainty == cref.fractional_uncertainty
+    assert any("flat segment" in x for x in c.caveats)
+
+
+def test_severe_spring_to_summer_declines():
+    rng = np.random.default_rng(6)
+    Tb = rng.uniform(45, 72, 90)  # a spring baseline
+    m = fit_model(Tb, _truth(Tb) + rng.normal(0, 1, 90), "3PC")
+    Tr = rng.uniform(75, 98, 90)  # applied to summer
+    yr = 0.8 * _truth(Tr)
+    r = _sav(m, Tr, yr)
+    assert r.declined and r.declined_reason.startswith("SEVERE extrapolation")
+    for name in (
+        "avoided_energy",
+        "baseline_projected",
+        "savings_pct",
+        "fractional_uncertainty",
+        "abs_uncertainty",
+    ):
+        assert getattr(r, name) is None
+    assert r.reporting_actual == round(float(yr.sum()), 2)
+    assert r.coverage["tier"] == "severe"
+    _json_ok(r.as_dict())
+    # opting out computes it, widened, under an unmistakable caveat
+    r2 = _sav(m, Tr, yr, extrapolation=ExtrapolationPolicy(decline=False))
+    assert not r2.declined and r2.avoided_energy is not None
+    assert r2.caveats[0].startswith("SEVERE extrapolation — not a defensible saving")
+    assert r2.fsu_extrapolation_factor > 1
+    r3 = _sav(m, Tr, yr, extrapolation=ExtrapolationPolicy(decline=False, widen_fsu=False))
+    ref = _sav(m, Tr, yr, extrapolation=_LOOSE)
+    assert r3.fractional_uncertainty == ref.fractional_uncertainty
+    assert any("widen_fsu=False" in c for c in r3.caveats)
+
+
+def test_dropped_rows_are_reported_not_silent():
+    m, _, _ = _baseline()
+    Tr = np.linspace(35, 85, 100)
+    yr = m.predict(Tr)
+    yr[:7] = np.nan
+    Tr2 = Tr.copy()
+    Tr2[10:13] = np.nan
+    r = _sav(m, Tr2, yr)
+    assert r.coverage["n_report"] == 100 and r.coverage["n_used"] == 90
+    assert any("10 of 100 reporting rows were excluded" in c for c in r.caveats)
+
+
+def test_unseen_category_flows_through_savings():
+    rng = np.random.default_rng(4)
+    T = rng.uniform(40, 90, 300)
+    cat = np.where(rng.random(300) < 0.5, "weekday", "weekend")
+    y = np.where(cat == "weekday", 50, 20) + 1.5 * np.maximum(0, T - 65)
+    cm = fit_categorical(T, y, cat, kind="3PC")
+    from camber.mandv.stats import avoided_energy_savings
+
+    rcat = np.r_[np.full(10, "holiday"), np.full(90, "weekday")]
+    Tr = rng.uniform(45, 85, 100)
+    r = avoided_energy_savings(
+        cm.at(rcat), Tr, np.full(100, 40.0), cv_rmse=0.1, n_baseline=300, p_baseline=6
+    )
+    assert r.coverage["info"]["n_unseen_category"] == 10 and r.coverage["n_used"] == 90
+    assert r.coverage["tier"] == "moderate" and r.fsu_extrapolation_factor is None
+    assert any("no linear design" in c for c in r.caveats)
+
+
+def test_towt_is_flagged_never_widened():
+    from camber.mandv.stats import avoided_energy_savings
+
+    e, t, _ = _towt_site("2024-01-01", 12)
+    m = fit_towt(e, t)
+    er, tr, _ = _towt_site("2024-06-01", 4, seed=3)
+    tr = tr + 12.0  # a hotter reporting month: partly beyond the fitted range
+    kw = dict(cv_rmse=0.05, n_baseline=len(e), p_baseline=m.n_params)
+    a = TOWTAtIndex(m, er.index)
+    r = avoided_energy_savings(a, tr.to_numpy(), er.to_numpy(), **kw)
+    ref = avoided_energy_savings(a, tr.to_numpy(), er.to_numpy(), extrapolation=_LOOSE, **kw)
+    assert r.coverage["tier"] in ("moderate", "severe")
+    pol = ExtrapolationPolicy(decline=False)
+    r = avoided_energy_savings(a, tr.to_numpy(), er.to_numpy(), extrapolation=pol, **kw)
+    assert r.fsu_extrapolation_factor is None
+    assert r.fractional_uncertainty == ref.fractional_uncertainty
+    assert any("flat beyond the fitted range" in c for c in r.caveats)
+    assert any("never widened" in c for c in r.caveats)
+
+
+def test_caltrack_365_day_caveat_and_policy_passthrough():
+    from camber.mandv.caltrack import caltrack_savings
+
+    idx = pd.date_range("2023-01-01", periods=120 * 24, freq="1h")
+    temp = 60 + 18 * np.sin((idx.hour - 9) / 24 * 2 * np.pi)
+    e = pd.Series(20.0 + np.clip(temp - 65, 0, None) * 1.5, index=idx)
+    t = pd.Series(temp, index=idx)
+    ridx = pd.date_range("2024-06-01", periods=60 * 24, freq="1h")
+    rt = pd.Series(np.asarray(temp[: len(ridx)]) + 25, index=ridx)  # a much hotter season
+    re_ = pd.Series(20.0 + np.clip(rt.to_numpy() - 65, 0, None), index=ridx)
+    r = caltrack_savings(e, t, re_, rt)
+    assert r.savings.declined and r.as_dict()["savings"]["declined"] is True
+    assert any("< 365" in c for c in r.savings.caveats)
+    r2 = caltrack_savings(e, t, re_, rt, extrapolation=ExtrapolationPolicy(decline=False))
+    assert r2.savings.avoided_energy is not None
+
+
+def test_normalized_tmy_outside_reporting_range_declines():
+    from camber.mandv.normalized import normalized_savings
+
+    rng = np.random.default_rng(8)
+    Tb = rng.uniform(20, 100, 300)
+    Tr = rng.uniform(60, 80, 300)  # a reporting model fitted on one mild season
+    mb = fit_model(Tb, _truth(Tb), "5P")
+    mr = fit_model(Tr, 0.8 * _truth(Tr), "3PC")
+    tmy = np.linspace(15, 100, 120)
+    kw = dict(baseline_cv_rmse=0.05, n_baseline=300, p_baseline=5, p_reporting=3)
+    r = normalized_savings(mb, mr, tmy, **kw)
+    assert r.declined and r.coverage_reporting["tier"] == "severe"
+    assert r.coverage_baseline["tier"] == "in_range"
+    assert r.nac_reporting is None and r.nac_baseline is not None
+    assert r.normalized_savings is None and r.declined_reason.startswith("reporting model:")
+    _json_ok(r.as_dict())
+    r2 = normalized_savings(mb, mr, tmy, extrapolation=ExtrapolationPolicy(decline=False), **kw)
+    assert r2.normalized_savings is not None and r2.fsu_extrapolation_factor >= 1.0
+    # a moderately wider normal year widens by the projected kernel
+    mr2 = fit_model(Tb, 0.8 * _truth(Tb), "5P")
+    tmy2 = np.linspace(20, 108, 200)
+    r3 = normalized_savings(mb, mr2, tmy2, **kw)
+    ref = normalized_savings(mb, mr2, tmy2, extrapolation=_LOOSE, **kw)
+    assert r3.coverage_baseline["tier"] == "moderate" and not r3.declined
+    assert r3.fsu_extrapolation_factor > 1
+    assert r3.abs_uncertainty > ref.abs_uncertainty
+    assert r3.normalized_savings == ref.normalized_savings
+
+
+def test_isolation_severe_declines_and_opt_out():
+    from camber.mandv.retrofit_isolation import isolation_savings
+
+    tons_b = np.linspace(50, 300, 40)
+    tons_r = np.linspace(150, 450, 40)
+    r = isolation_savings(
+        0.8 * tons_b, 0.6 * tons_r, baseline_driver=tons_b, reporting_driver=tons_r
+    )
+    assert r.declined and r.savings is None and r.reporting_actual > 0
+    assert r.coverage["tier"] == "severe" and r.as_dict()["declined"] is True
+    r2 = isolation_savings(
+        0.8 * tons_b,
+        0.6 * tons_r,
+        baseline_driver=tons_b,
+        reporting_driver=tons_r,
+        extrapolation=ExtrapolationPolicy(decline=False),
+    )
+    assert r2.savings > 0 and r2.fsu_extrapolation_factor > 1
+
+
+def test_duck_model_savings_are_unchanged_but_disclosed():
+    from camber.mandv.stats import avoided_energy_savings
+
+    class Duck:
+        def predict(self, T):
+            return np.asarray(T, dtype=float) * 2
+
+    r = avoided_energy_savings(
+        Duck(), np.arange(1.0, 50), np.arange(1.0, 50), cv_rmse=0.1, n_baseline=50, p_baseline=2
+    )
+    assert r.coverage["tier"] == "not_evaluated" and r.avoided_energy is not None
+    assert r.caveats and "not evaluated" in r.caveats[0]

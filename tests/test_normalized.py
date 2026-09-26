@@ -7,6 +7,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from camber.mandv.coverage import ExtrapolationPolicy  # noqa: E402
 from camber.mandv.models import best_model  # noqa: E402
 from camber.mandv.normalized import (  # noqa: E402
     NormalizedSavings,
@@ -66,5 +67,16 @@ def test_normalizes_out_weather():
     mild = _TEMPS - 6.0
     mb = best_model(hot, _cooling(hot))
     mr = best_model(mild, _cooling(mild))
-    r = normalized_savings(mb, mr, _TEMPS, baseline_cv_rmse=0.03, n_baseline=12)
+    # each model is 6F off the normal year at one end: 3 of 12 normal months lie outside the
+    # hot-year fit, which the coverage guard (issue #20) grades severe and declines by default
+    flagged = normalized_savings(mb, mr, _TEMPS, baseline_cv_rmse=0.03, n_baseline=12)
+    assert flagged.declined and flagged.coverage_baseline["tier"] == "severe"
+    r = normalized_savings(
+        mb,
+        mr,
+        _TEMPS,
+        baseline_cv_rmse=0.03,
+        n_baseline=12,
+        extrapolation=ExtrapolationPolicy(decline=False),
+    )
     assert abs(r.savings_pct) < 0.05  # no real change once weather-normalized
