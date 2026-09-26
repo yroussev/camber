@@ -31,6 +31,7 @@ nav:
       - M&V: MANDV.md
       - "M&V: Option D (calibrated sim)": OPTION-D.md
       - Weather fetch (NASA POWER + NOAA/ISD): WEATHER.md
+      - Sensor health & data trust: SENSOR-HEALTH.md
       - Streaming / online: STREAMING.md
       - Forecasting: FORECAST.md
       - Grid-interactive (GEB): GEB.md

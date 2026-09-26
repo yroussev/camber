@@ -33,7 +33,7 @@ flowchart LR
 
 - **Analytics** — [M&V](MANDV.md) · [Streaming / online](STREAMING.md) · [Forecasting](FORECAST.md)
   · [Grid-interactive (GEB)](GEB.md) · [Carbon](CARBON.md) · [Ventilation](VENTILATION.md) ·
-  [Visualization](VISUALIZATION.md)
+  [Sensor health](SENSOR-HEALTH.md) · [Visualization](VISUALIZATION.md)
 - **Platform** — [Ingest protocols](INGEST-PROTOCOLS.md) · [Ontology / interop](ONTOLOGY.md) ·
   [Integrations](INTEGRATIONS.md) · [Plugins](PLUGINS.md) · [Fault lifecycle](FAULT-LIFECYCLE.md) ·
   [Scale](SCALE.md) · [Deployment](DEPLOY.md) · [Security](SECURITY.md) · [Validation](VALIDATION.md)

@@ -174,7 +174,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   (by address, via a keyless geocoder), or `oat_reference_isd` (station-precise, NOAA/ISD); see
   **[WEATHER.md](WEATHER.md)**),
   `mapping_confidence`. The runner's `min_trust` flag makes a rule decline when its inputs aren't
-  trusted.
+  trusted. Cross-sensor and provenance checks: flow-based mixing balance, copied points, gap-fill
+  signatures, cross-unit identity, zone-vs-outdoor CO2, percent-mapped-as-airflow; see
+  **[SENSOR-HEALTH.md](SENSOR-HEALTH.md)**.
 - **Prioritization & lifecycle** — `rules.triage`: `rank_findings` (severity, or a magnitude/cost
   key), `group_findings` (root-cause grouping), `FaultRegister` (new/ongoing/resolved across runs).
   Persistent, cross-process: `faultlifecycle.FaultLifecycle` — a fingerprint-keyed fault store with
