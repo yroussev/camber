@@ -141,7 +141,13 @@ def analyze_satreset(
     if np.isnan(slope):
         verdict = "RESET NOT EVALUATED (no OAT)"
     elif flat and tight:
-        verdict = "NO RESET (SAT pinned low regardless of OAT)"
+        # "pinned low" only when the held level really is cold; a flat, tight SAT held at 68 F is
+        # "no reset" at a *warm* level -- a different fault story (no overcooling/reheat driver)
+        level = float(sat.median())
+        if pct_low >= 50.0:
+            verdict = f"NO RESET (SAT pinned low at ~{level:.0f} F regardless of OAT)"
+        else:
+            verdict = f"NO RESET (SAT held at ~{level:.0f} F regardless of OAT)"
     elif flat:
         verdict = "WEAK/NO RESET (flat SAT vs OAT)"
     elif slope > 0:

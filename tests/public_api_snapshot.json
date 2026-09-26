@@ -1459,6 +1459,7 @@
   ],
   "camber.rules.hunting_rule": [
     "ControlHunting",
+    "max_resolvable_per_hour",
     "reversals_per_hour"
   ],
   "camber.rules.hwplant_deltat_rule": [

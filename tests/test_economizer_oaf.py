@@ -37,13 +37,23 @@ def test_oaf_path_flags_stuck_open_not_at_minimum():
     at_min = EconomizerHighLimit().analyze("AHU", _frame(mat=77.2))  # OAF ~20% (locked out)
     assert stuck.severity == "fault" and stuck.metrics["basis"] == "OA-fraction"
     assert at_min.severity == "ok"
-    assert not stuck.caveats  # OAF is the strong signal -> no weak-proxy caveat
+    assert not any("weak proxy" in c for c in stuck.caveats)  # OAF is the strong signal
+    # 80 % OA is excess whatever the design minimum is: it clears the generous 50 % bound too
+    assert stuck.metrics["min_oa_source"] == "unknown"
+    configured = EconomizerHighLimit(min_oa_pct=20.0).analyze("AHU", _frame(mat=86.8))
+    assert configured.metrics["min_oa_source"] == "configured" and not configured.caveats
 
 
 def test_high_oa_design_not_faulted_when_minimum_configured():
     # A 50%-OA design sitting at ~50% OA in hot weather is correct behaviour.
     f = _frame(mat=82.0)  # OAF ~50%
-    assert EconomizerHighLimit().analyze("AHU", f).severity == "fault"  # default 20% min: false
+    # with no configured minimum this used to fault against an assumed 20 % -- a false fault on a
+    # high-OA design. Now it declines: whether 50 % is excess depends on the unknown minimum.
+    unknown = EconomizerHighLimit().analyze("AHU", f)
+    assert unknown.severity == "info" and unknown.metrics["not_locked_out_pct"] is None
+    assert unknown.metrics["excess_over_assumed_min_pct"] == 100.0
+    assert any("design minimum OA unknown" in c for c in unknown.caveats)
+    assert EconomizerHighLimit(min_oa_pct=20.0).analyze("AHU", f).severity == "fault"
     tuned = EconomizerHighLimit(min_oa_pct=55.0).analyze("AHU", f)  # its real design minimum
     assert tuned.severity == "ok"
 
@@ -104,3 +114,55 @@ def test_make_rule_applies_and_validates_params():
             pass
         else:
             raise AssertionError(f"expected {exc.__name__}")
+
+
+def _measured(oa_hot_pct, n=400, rat=74.0, with_temps=True):
+    """Measured OA/supply airflow on a hot-weather frame (OAT 90 F, above RAT)."""
+    idx = pd.date_range("2024-07-01", periods=n, freq="1h")
+    oat = pd.Series(90.0, index=idx)
+    sa = pd.Series(4000.0, index=idx)
+    cols = {
+        Role.OAT: oat,
+        Role.OA_DAMPER: pd.Series(40.0, index=idx),
+        Role.OA_AIRFLOW: sa * oa_hot_pct / 100.0,
+        Role.AIRFLOW: sa,
+    }
+    if with_temps:
+        # a temperature balance that *over*-reads the OA fraction (sensor bias near the coil)
+        cols[Role.RETURN_AIR_TEMP] = pd.Series(rat, index=idx)
+        cols[Role.MIXED_AIR_TEMP] = pd.Series(rat + 0.9 * (90.0 - rat), index=idx)
+    return pd.DataFrame(cols)
+
+
+def test_measured_oa_airflow_is_used_and_an_unknown_minimum_is_not_faulted():
+    # real case: four RTUs holding ~25-33 % OA above the high limit (a plausible design minimum,
+    # measured by an OA flow station) all faulted against an assumed 20 % minimum, and the mapped
+    # OA_AIRFLOW was ignored in favour of the temperature balance
+    f = EconomizerHighLimit().analyze("RTU", _measured(oa_hot_pct=33.0))
+    assert f.metrics["basis"] == "measured OA fraction"
+    assert f.severity == "info", f.summary
+    assert f.metrics["not_locked_out_pct"] is None
+    assert any("design minimum OA unknown" in c for c in f.caveats)
+    # configured at its real 33 % design minimum it is locked out; at 20 % it is excess
+    assert EconomizerHighLimit(min_oa_pct=33.0).analyze("RTU", _measured(33.0)).severity == "ok"
+    assert EconomizerHighLimit(min_oa_pct=20.0).analyze("RTU", _measured(33.0)).severity == "fault"
+    # a genuinely stuck-open economizer (85 % OA) faults with no minimum configured at all
+    assert EconomizerHighLimit().analyze("RTU", _measured(oa_hot_pct=85.0)).severity == "fault"
+
+
+def test_differential_changeover_is_not_a_missing_lockout():
+    # OAT 68 F against a 74 F return: a differential dry-bulb economizer correctly economizes
+    idx = pd.date_range("2024-07-01", periods=200, freq="1h")
+    f = pd.DataFrame(
+        {
+            Role.OAT: pd.Series(68.0, index=idx),
+            Role.OA_DAMPER: pd.Series(100.0, index=idx),
+            Role.RETURN_AIR_TEMP: pd.Series(74.0, index=idx),
+            Role.MIXED_AIR_TEMP: pd.Series(68.3, index=idx),  # ~95 % OA
+        }
+    )
+    got = EconomizerHighLimit().analyze("AHU", f)
+    assert got.severity == "info" and "no hours above" in got.summary
+    assert any("differential dry-bulb" in c for c in got.caveats)
+    fixed = EconomizerHighLimit(differential=False, min_oa_pct=20.0).analyze("AHU", f)
+    assert fixed.severity == "fault"

@@ -94,8 +94,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   CHW reset + low-ΔT, boiler summer-lockout + short-cycle. Flags include design targets
   (`design_kw_per_ton`, `max_starts_per_day`, …).
 - **Control stability** — `control_hunting`: flags a modulating output (valve/damper) that reverses
-  direction excessively (unstable loop) by counting reversals/hour beyond a deadband. Flags:
-  `warn_per_hr`, `fault_per_hr`, `deadband`. `supply_air_control`: flags supply-air temperature
+  direction excessively (unstable loop) by counting reversals per *observed* hour beyond a deadband
+  (percent of stroke; data gaps are not counted as calm time). A trend too coarse to show the warn
+  rate (15-min data can show at most 4 reversals/hr) is declined with a caveat, never called
+  stable. Flags: `warn_per_hr`, `fault_per_hr`, `deadband`, `gap_factor`. `supply_air_control`: flags supply-air temperature
   that fails to *track its setpoint* (control/capacity fault; running hours only). Flags: `tol_F`,
   `warn_pct`, `fault_pct`. `airflow_tracking`: flags measured VAV airflow that fails to track its
   setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
@@ -103,10 +105,15 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
   a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
   `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.
-- **Economizer / free cooling** — `economizer_high_limit` (OA damper open above the high limit — not
-  locked out), `free_cooling_missed` (mechanical cooling ran while OAT was cool enough for free),
-  `static_pressure_reset` (duct-static setpoint that doesn't trim with demand). Flags: `high_limit_f`,
-  `min_damper`, `min_range_inwc`.
+- **Economizer / free cooling** — `economizer_high_limit` (excess OA above the high limit — not
+  locked out; judged on measured OA/supply airflow when trended, else the MAT/RAT balance, else the
+  damper; samples still below return air are left to a differential changeover; with no configured
+  `min_oa_pct` only excess above a generous 50 % bound is scored and OA that is excess only against
+  a generic 20 % minimum is declined, since it depends on the unknown design minimum),
+  `free_cooling_missed` (mechanical cooling — cooling valve above `active` %, default 5 % — ran while
+  OAT was cool enough for free; durations in hours), `static_pressure_reset` (duct-static setpoint
+  that doesn't trim with demand). Flags: `high_limit_f`, `min_oa_pct`, `min_damper`, `differential`,
+  `active`, `min_range_inwc`.
 - **Packaged / DX & refrigerant-side** (`docs/FDD-DX.md`) — `compressor_short_cycle` and
   `compressor_staging` (RTU/DX cycling + staging), `heatpump_defrost` (excess reversing-valve
   cycling), `filter_fouling` (filter ΔP at/above change-out), and `chiller_approach_fouling`

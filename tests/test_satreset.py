@@ -68,3 +68,14 @@ def test_returns_none_without_sat():
         {"CHW_Valve": [50, 60]}, index=pd.date_range("2025-07-01", periods=2, freq="1h")
     )
     assert analyze_satreset(df, "AHU_T", occupied_only=False) is None
+
+
+def test_flat_tight_warm_sat_is_not_called_pinned_low():
+    # real case: two RTUs holding SAT flat at ~68 F were reported "SAT pinned low"
+    df = _frame(reset=False)
+    df["SupplyAir"] = df["SupplyAir"] + 13.0  # ~68 F, still flat and tight
+    r = analyze_satreset(df, "RTU", occupied_only=False)
+    assert "NO RESET" in r.verdict and "pinned low" not in r.verdict
+    assert "68 F" in r.verdict
+    cold = analyze_satreset(_frame(reset=False), "AHU", occupied_only=False)
+    assert "pinned low at ~55 F" in cold.verdict

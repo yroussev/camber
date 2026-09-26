@@ -87,3 +87,19 @@ def test_evidence_recommendations_and_registration():
     assert {"economizer_high_limit", "static_pressure_reset", "free_cooling_missed"} <= names
     reg = builtin_registry()
     assert reg.get("economizer_high_limit").name == "economizer_high_limit"
+
+
+def test_free_cooling_missed_threshold_is_percent_and_reports_hours():
+    # real case: a percent-scaled chilled-water valve parked at 1 % in cool weather (leak-by /
+    # zero offset) read "mechanical cooling ran 100 %" against the old 0.05 fraction threshold
+    idx = pd.date_range("2024-03-01", periods=4 * 24 * 20, freq="15min")
+    oat = pd.Series(np.where(np.arange(len(idx)) < len(idx) // 2, 50.0, 75.0), index=idx)
+    valve = pd.Series(np.where(oat < 60, 1.0, 60.0), index=idx)
+    f = FreeCoolingMissed().analyze("AHU-1", pd.DataFrame({Role.OAT: oat, Role.COOL_VALVE: valve}))
+    assert f.severity == "ok" and f.metrics["missed_pct"] == 0.0
+    # the duration is hours (960 15-min samples = 240 h), not the sample count
+    assert f.metrics["n_free_cooling_hours"] == 240.0
+    assert f.metrics["n_free_cooling_samples"] == 960
+    assert "240 free-cooling hours" in f.summary
+    running = pd.DataFrame({Role.OAT: oat, Role.COOL_VALVE: pd.Series(40.0, index=idx)})
+    assert FreeCoolingMissed().analyze("AHU-1", running).severity == "fault"
