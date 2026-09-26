@@ -24,6 +24,7 @@ import difflib
 import re
 from dataclasses import asdict, dataclass
 
+from .mapping_confidence import _in_bound_units
 from .model.mapping import MappingProvider
 from .model.roles import Role
 from .sensorhealth import PHYSICAL_BOUNDS, range_violation_frac
@@ -90,9 +91,184 @@ class RoleSuggestion:
         return asdict(self)
 
 
+# ------------------------------------------------------------------------- tokenizing a tag name
+
+# A camelCase / PascalCase / snake / kebab / dotted tag is split into whole words before matching:
+# ``OaTemp`` -> oa temp, ``ReHeatVlvPos_1`` -> re heat vlv pos, ``HWVlvPos`` -> hw vlv pos. Matching
+# whole tokens (never substrings of an unsplit name) is what keeps ``OaTemp`` off ``oa_airflow``.
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
 def _norm(s: str) -> list[str]:
-    """Lowercase a tag and split into word tokens (on non-alphanumerics and digit runs)."""
-    return [w for w in re.split(r"[^a-z0-9]+", s.lower()) if w and not w.isdigit()]
+    """Lowercase a tag and split it into word tokens.
+
+    Splits on non-alphanumerics, camelCase humps and acronym boundaries (``HWVlv`` -> hw, vlv);
+    drops pure digit runs and trailing instance numbers (``AHU1`` -> ahu); keeps ``co2`` whole.
+    """
+    s = re.sub(r"(?i)co2", " co2 ", str(s))
+    words = []
+    for chunk in re.split(r"[^A-Za-z0-9]+", _CAMEL.sub(" ", s)):
+        w = chunk.lower()
+        if w != "co2":
+            w = w.rstrip("0123456789")
+        if w:
+            words.append(w)
+    return words
+
+
+# Canonical concepts. Each BAS abbreviation (and each role-slug word) is rewritten to the concepts
+# it names, so a tag and a role are compared in one vocabulary. Words that carry no meaning for
+# role choice (``pos``, ``cmd``, ``air``, equipment prefixes) are noise on both sides.
+_SYNONYMS: dict[str, tuple] = {}
+
+
+def _syn(concepts, *words):
+    for w in words:
+        _SYNONYMS[w] = tuple(concepts.split())
+
+
+_syn("outdoor", "oa", "outside", "outdoor", "osa", "out", "outdr", "oda")
+_syn("supply", "sa", "supply", "sup", "supp", "da", "discharge", "dis", "disch", "dischg")
+_syn("return", "ra", "return", "ret", "rtn")
+_syn("mixed", "ma", "mixed", "mix", "mxd")
+_syn("exhaust", "ea", "exhaust", "exh")
+_syn("relief", "relief", "rlf")
+_syn("space", "space", "spc", "zone", "zn", "room", "rm")
+_syn("temp", "temp", "tmp", "temperature", "tempr")
+_syn("valve", "valve", "vlv", "vv")
+_syn("damper", "damper", "dmpr", "dmp", "dpr", "dampr")
+_syn("heat", "heat", "heating", "htg", "reheat", "rht")
+_syn("cool", "cool", "cooling", "clg")
+_syn("hw heat", "hw", "hhw", "hot")
+_syn("chw cool", "chw", "chilled", "chill")
+_syn("cw", "cw", "cdw")
+_syn("condenser", "condenser", "cond", "cnd")
+_syn("evaporator", "evaporator", "evap")
+_syn("flow", "flow", "flw", "cfm", "gpm", "fr", "airflow")
+_syn("press", "press", "pressure", "pres", "prs")
+_syn("static", "static", "stat")
+_syn("diff", "diff", "differential", "delta")
+_syn("diff press", "dp", "dpress")
+_syn("sp", "sp", "setpoint", "setpt", "stpt", "spt")
+_syn("speed", "speed", "spd", "vfd")
+_syn("status", "status", "sts", "run", "proof")
+_syn("power", "power", "pwr", "kw", "watt", "wat", "elec", "demand")
+_syn("humidity", "humidity", "hum", "humid", "rh")
+_syn("co2", "co2")
+_syn("occupancy", "occ", "occupancy", "occupied")
+_syn("wetbulb", "wetbulb", "wb")
+_syn("filter", "filter", "filt", "fltr")
+_syn("compressor", "compressor", "comp", "cmp", "compr")
+_syn("stage", "stage", "stg")
+_syn("reversing", "reversing", "rev")
+_syn("boiler", "boiler", "blr")
+_syn("tower", "tower", "twr")
+_syn("econ", "econ", "economizer", "econo")
+_syn("requests", "requests", "request", "req", "reqs")
+_syn("warmup", "warmup")
+_syn("cooldown", "cooldown")
+# single-token compounds (point-name initialisms)
+_syn("supply temp", "sat", "dat", "sast", "dast")
+_syn("mixed temp", "mat")
+_syn("return temp", "rat")
+_syn("outdoor temp", "oat", "osat")
+_syn("space temp", "zat", "znt", "zntmp", "spt", "rmt")
+_syn("exhaust temp", "eat")
+_syn("outdoor damper", "oad")
+_syn("hw supply", "hws", "hwst")
+_syn("hw return", "hwr", "hwrt")
+_syn("chw supply", "chws", "chwst")
+_syn("chw return", "chwr", "chwrt")
+_syn("cw supply", "cws", "cwst")
+_syn("cw return", "cwr", "cwrt")
+_syn("duct static press", "dsp")
+
+#: tokens that name a compound (several concepts in one initialism) -- reported as "initials"
+_COMPOUND = frozenset(
+    w
+    for w, c in _SYNONYMS.items()
+    if len(c) > 1 and w not in ("hw", "hot", "chw", "chilled", "chill", "hhw", "dp", "dpress")
+)
+_NOISE = frozenset(
+    (
+        "air water loop pos position cmd command value val pv sensor sen sns input output ai ao bi "
+        "bo av bv mv point pt signal fbk feedback tn present level lvl rate "
+        "ahu ah rtu vav fcu mau doas unit sys system aru hp chiller plant equip bldg "
+        "act actual"
+    ).split()
+)
+#: location qualifiers weigh half in precision: ``ZoneDaTemp`` is a supply temp *at* a zone
+_LOW_WEIGHT = frozenset({"zone", "zn", "room", "rm"})
+#: air-stream qualifiers; the terminal (VAV) DAMPER role conflicts with a tag that names one
+#: (``EaDmprPos`` is an exhaust damper, not a VAV damper)
+_STREAMS = frozenset({"outdoor", "return", "exhaust", "relief", "mixed"})
+# role slug words that differ from the tag vocabulary
+_ROLE_WORD = {
+    "oat": ("outdoor", "temp"),
+    "rh": ("humidity",),
+    "hw": ("hw",),
+    "chw": ("chw",),
+    "cmd": (),
+}
+
+
+def _concepts_of_word(w: str) -> tuple:
+    if w in _NOISE:
+        return ()
+    return _SYNONYMS.get(w, (w,))
+
+
+def _role_concepts(role: Role) -> frozenset:
+    out: set = set()
+    for w in role.value.split("_"):
+        out.update(_ROLE_WORD[w] if w in _ROLE_WORD else _concepts_of_word(w))
+    return frozenset(out)
+
+
+_ROLE_CONCEPTS = {r: _role_concepts(r) for r in Role}
+_KNOWN = frozenset(c for cs in _SYNONYMS.values() for c in cs) | frozenset(
+    c for cs in _ROLE_CONCEPTS.values() for c in cs
+)
+
+
+def _merge_split_abbrevs(words: list) -> list:
+    """Re-join adjacent tokens a camelCase split tore apart (``Ch`` ``W`` -> chw, ``Re`` ``Heat``
+    -> reheat) when the join is a known abbreviation and the parts are not both known words."""
+    out: list = []
+    i = 0
+    while i < len(words):
+        if i + 1 < len(words):
+            joined = words[i] + words[i + 1]
+            parts_known = words[i] in _SYNONYMS and words[i + 1] in _SYNONYMS
+            if joined in _SYNONYMS and not parts_known:
+                out.append(joined)
+                i += 2
+                continue
+        out.append(words[i])
+        i += 1
+    return out
+
+
+def _tag_tokens(token: str) -> list:
+    """``[(word, concepts, weight, how)]`` per tag word; how = exact/initials/fuzzy/unknown."""
+    out = []
+    for w in _merge_split_abbrevs(_norm(token)):
+        if w in _NOISE:
+            continue
+        weight = 0.5 if w in _LOW_WEIGHT else 1.0
+        if w in _SYNONYMS or w in _KNOWN:
+            how = "initials" if w in _COMPOUND else "exact"
+            out.append((w, _concepts_of_word(w), weight, how))
+            continue
+        # tolerate a misspelling of a known word (``Temprature``), never of a short abbreviation
+        close = (
+            difflib.get_close_matches(w, list(_SYNONYMS), n=1, cutoff=0.84) if len(w) >= 5 else []
+        )
+        if close:
+            out.append((w, _SYNONYMS[close[0]], weight, "fuzzy"))
+        else:
+            out.append((w, (), 0.5, "unknown"))  # unexplained word: dilutes precision, half weight
+    return out
 
 
 def _initials(role: Role) -> str:
@@ -103,22 +279,44 @@ def _norm_unit(unit) -> str:
     return re.sub(r"[^a-z%]+", "", str(unit).lower()) if unit else ""
 
 
-def _string_score(words: list[str], role: Role) -> tuple[float, str]:
-    """Best string-similarity of a tag's words to a role's slug: initials or per-word edit
-    distance."""
-    slug = role.value
-    joined = "".join(words)
+def _string_score(words, role: Role) -> tuple[float, str]:
+    """Whole-token concept match of a tag to a role: ``(score 0..0.9, basis)``.
+
+    ``words`` is the output of :func:`_tag_tokens` (or a plain word list). Score is
+    ``0.9 x recall x (0.5 + 0.5 x precision)``: *recall* is the share of the role's concepts the tag
+    names, *precision* the (weighted) share of the tag's words the role explains -- so ``OaTemp``
+    fully explains ``oat`` but only half of ``oa_airflow``. A tag word that equals the role's
+    initials (``DSS`` -> duct_static_sp) counts as naming all of it.
+    """
+    toks = words if (words and isinstance(words[0], tuple)) else _tag_tokens(" ".join(words or []))
+    rc = _ROLE_CONCEPTS[role]
+    if not toks or not rc:
+        return 0.0, "edit_distance"
     initials = _initials(role)
-    # initials hit (SAT -> supply_air_temp) is the strongest lexical signal
-    if len(initials) >= 2 and (initials in joined or initials in words):
-        return 0.85, "initials"
-    slug_words = slug.split("_")
-    best = 0.0
-    for w in words:
-        for sw in slug_words:
-            best = max(best, difflib.SequenceMatcher(None, w, sw).ratio())
-        best = max(best, difflib.SequenceMatcher(None, w, slug).ratio())
-    return round(best, 4), "ngram" if best >= 0.6 else "edit_distance"
+    covered: set = set()
+    explained = total = 0.0
+    hows = set()
+    for w, cs, weight, how in toks:
+        total += weight
+        if len(initials) >= 3 and w == initials:
+            covered |= rc
+            explained += weight
+            hows.add("initials")
+            continue
+        hit = set(cs) & rc
+        if hit:
+            covered |= hit
+            explained += weight
+            hows.add(how)
+    if not covered:
+        return 0.0, "edit_distance"
+    recall = len(covered) / len(rc)
+    precision = explained / total if total else 0.0
+    score = 0.9 * recall * (0.5 + 0.5 * precision)
+    if role is Role.DAMPER and any(set(cs) & _STREAMS for _, cs, _, _ in toks):
+        score *= 0.5  # an outdoor/return/exhaust/relief damper is an AHU damper, not a VAV damper
+    basis = "initials" if "initials" in hows else "edit_distance" if "fuzzy" in hows else "ngram"
+    return round(score, 4), basis
 
 
 class FeatureSuggester:
@@ -129,22 +327,23 @@ class FeatureSuggester:
         self.vocab = tuple(vocab)
 
     def suggest(self, token: str, *, series=None, unit=None, k: int = 3) -> list:
-        words = _norm(token)
+        words = _tag_tokens(token)
         u = _norm_unit(unit)
         unit_roles = ROLE_UNIT.get(u, frozenset())
         scored = []
         for role in self.vocab:
-            s, basis = _string_score(words, role)  # the dominant lexical signal (0..0.85)
-            bases = [basis]
+            s, basis = _string_score(words, role)  # the dominant lexical signal (0..0.9)
+            lex = s
+            bases = [basis] if s > 0 else []
             # unit + range are GATES + small tie-breakers -- they must not erase the lexical order
             if unit_roles:
                 if role in unit_roles:
-                    s += 0.05
+                    s = max(s, 0.25) + 0.05  # a fitting unit alone is a weak suggestion
                     bases.append("unit")
                 else:
                     s *= 0.4  # a known-incompatible unit strongly demotes
-            if series is not None and role in PHYSICAL_BOUNDS:
-                rv = range_violation_frac(series, role)
+            if s > 0.0 and series is not None and role in PHYSICAL_BOUNDS:
+                rv = range_violation_frac(_in_bound_units(series, role, u), role)
                 if rv == rv:  # role has bounds AND data present
                     if rv > 0.1:
                         s *= 1.0 - min(rv, 1.0)  # data doesn't fit -> demote
@@ -154,7 +353,7 @@ class FeatureSuggester:
             s = min(1.0, s)
             if s <= 0.0:
                 continue
-            rationale = self._rationale(token, role, u, bases)
+            rationale = self._rationale(token, role, u, bases, lex)
             scored.append(
                 RoleSuggestion(
                     token=token,
@@ -168,11 +367,14 @@ class FeatureSuggester:
         return scored[:k]
 
     @staticmethod
-    def _rationale(token, role, unit, bases) -> str:
+    def _rationale(token, role, unit, bases, lex=1.0) -> str:
         bits = []
+        partly = "" if lex >= 0.8 else "partly "
         if "initials" in bases:
-            bits.append(f"'{token}' matches the initials of {role.value}")
-        elif "ngram" in bases or "edit_distance" in bases:
+            bits.append(f"'{token}' {partly}matches the initials of {role.value}")
+        elif "ngram" in bases:
+            bits.append(f"'{token}' {partly}names the words of {role.value}")
+        elif "edit_distance" in bases:
             bits.append(f"'{token}' is string-similar to {role.value}")
         if "unit" in bases:
             bits.append(f"unit '{unit}' fits {role.value}")
@@ -181,7 +383,7 @@ class FeatureSuggester:
         return "; ".join(bits) or f"weak match to {role.value}"
 
 
-def _range_fit(role: Role, series) -> tuple:
+def _range_fit(role: Role, series, unit=None) -> tuple:
     """Physical-range consistency of ``series`` with ``role``: ``(multiplier, fit)``.
 
     ``fit`` is ``True`` (data inside bounds), ``False`` (data violates bounds ->
@@ -190,7 +392,7 @@ def _range_fit(role: Role, series) -> tuple:
     """
     if series is None or role not in PHYSICAL_BOUNDS:
         return 1.0, None
-    rv = range_violation_frac(series, role)
+    rv = range_violation_frac(_in_bound_units(series, role, unit), role)
     if rv != rv:  # NaN -> no bounds / no data
         return 1.0, None
     if rv > 0.1:
@@ -265,7 +467,7 @@ class MLSuggester:
         out = []
         for role_val, p in zip(self._classes, proba):
             role = Role(role_val)
-            mult, fit = _range_fit(role, series)
+            mult, fit = _range_fit(role, series, unit)
             s = min(1.0, float(p) * mult + (0.02 if fit else 0.0))
             if s <= 0.0:
                 continue
@@ -300,7 +502,7 @@ class LLMSuggester:
             if role.value in seen:
                 continue
             seen.add(role.value)
-            conf = _rescore(token, role, series)
+            conf = _rescore(token, role, series, unit)
             out.append(
                 RoleSuggestion(
                     token,
@@ -346,12 +548,12 @@ def _parse_roles(raw: str) -> list:
     return [r for _, r in sorted(hits)]
 
 
-def _rescore(token, role: Role, series) -> float:
+def _rescore(token, role: Role, series, unit=None) -> float:
     """Physical-consistency confidence for proposing ``role`` for ``token`` (via score_token)."""
     from .mapping_confidence import score_token
 
     mp = MappingProvider.from_dict({"aliases": {token: role.value}, "patterns": []})
-    return float(score_token(token, mp, series).confidence)
+    return float(score_token(token, mp, series, unit=unit).confidence)
 
 
 def suggest_roles(
@@ -391,9 +593,9 @@ def review_unmapped(
     un = units or {}
     unmapped = [
         s.token
-        for s in _review(tokens, mapping, series_by_token, min_confidence=min_confidence)[
-            "unmapped"
-        ]
+        for s in _review(
+            tokens, mapping, series_by_token, min_confidence=min_confidence, units=units
+        )["unmapped"]
     ]
     suggestions = {
         t: suggest_roles(t, mapping, series=sbt.get(t), unit=un.get(t), suggester=suggester, k=k)

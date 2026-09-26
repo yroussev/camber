@@ -207,7 +207,7 @@ def test_mapping_confidence_catches_percent_typed_as_airflow():
     rng = np.random.default_rng(0)
     pct = pd.Series(rng.choice([0.0, 20.0, 35.0, 52.0], 300), index=_idx(300))
     c = score_token("zone_016_fan_spd", m, pct)
-    assert "scale_suspect" in c.flags and c.verdict != "high"
+    assert "percent_scale" in c.flags and c.verdict != "high"
     out = review(["zone_016_fan_spd"], m, {"zone_016_fan_spd": pct})
     assert [x.token for x in out["needs_review"]] == ["zone_016_fan_spd"]
     real = score_token("zone_016_fan_spd", m, _rtu()[Role.AIRFLOW])

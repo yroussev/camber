@@ -215,3 +215,100 @@ def test_ml_suggester_raises_before_fit():
     pytest.importorskip("sklearn")
     with pytest.raises(RuntimeError):
         MLSuggester().suggest("AH1_SAT")
+
+
+# ------------------------------------------------ whole-token matching on real-world point names
+
+# The point list of a published single-duct AHU dataset (names only, no data) with the role an
+# engineer would assign. Before whole-token matching, role initials matched as *substrings* of the
+# unsplit name (OaTemp -> oa_airflow, ReHeatVlvPos -> evap_approach_temp) and 3 of 16 mapped.
+_REAL_AHU_POINTS = {
+    "RaTemp": Role.RETURN_AIR_TEMP,
+    "RaFanPower": Role.POWER,
+    "OaTemp": Role.OAT,
+    "OaDmprPos": Role.OA_DAMPER,
+    "MaTemp": Role.MIXED_AIR_TEMP,
+    "HWVlvPos": Role.HEAT_VALVE,
+    "ChWVlvPos": Role.COOL_VALVE,
+    "DaFanPower": Role.POWER,
+    "DaTemp": Role.SUPPLY_AIR_TEMP,
+    "OaTemp_WS": Role.OAT,
+    "ReHeatVlvPos_1": Role.HEAT_VALVE,
+    "ReHeatVlvPos_2": Role.HEAT_VALVE,
+    "ZoneDaTemp_1": Role.SUPPLY_AIR_TEMP,
+    "ZoneDaTemp_2": Role.SUPPLY_AIR_TEMP,
+    "ZoneTemp_1": Role.SPACE_TEMP,
+    "ZoneTemp_2": Role.SPACE_TEMP,
+}
+
+
+@pytest.mark.parametrize("name,role", sorted(_REAL_AHU_POINTS.items()))
+def test_real_point_names_rank_the_right_role_first(name, role):
+    assert suggest_roles(name)[0].role == role.value
+
+
+@pytest.mark.parametrize("name", ["EaDmprPos", "RaDmprPos"])
+def test_air_handler_dampers_do_not_confidently_become_the_vav_damper(name):
+    # exhaust / return dampers have no CAMBER role; nothing may clear a mapping threshold
+    assert all(s.confidence < 0.5 for s in suggest_roles(name, k=5))
+
+
+@pytest.mark.parametrize(
+    "name,expect",
+    [
+        ("OaTemp", ["oa", "temp"]),
+        ("ReHeatVlvPos_1", ["re", "heat", "vlv", "pos"]),
+        ("HWVlvPos", ["hw", "vlv", "pos"]),
+        ("AHU1_SAT", ["ahu", "sat"]),
+        ("zone-022-co2", ["zone", "co2"]),
+        ("ZoneCO2", ["zone", "co2"]),
+        ("supplyAirTemp", ["supply", "air", "temp"]),
+    ],
+)
+def test_tokenizer_splits_camel_snake_kebab(name, expect):
+    from camber.mapping_assist import _norm
+
+    assert _norm(name) == expect
+
+
+def test_initials_never_match_inside_a_word():
+    # 'sat' is the initials of supply_air_temp, not a reason to suggest sat_reset_requests first
+    assert suggest_roles("SAT")[0].role == Role.SUPPLY_AIR_TEMP.value
+    assert suggest_roles("OaTemp")[0].role != Role.OA_AIRFLOW.value
+
+
+def test_whole_token_initials_of_a_role():
+    top = suggest_roles("AHU2_DSS")[0]
+    assert top.role == Role.DUCT_STATIC_SP.value and top.basis == "initials"
+
+
+def test_misspelled_word_still_matches():
+    top = suggest_roles("Suply_Air_Temprature")[0]
+    assert top.role == Role.SUPPLY_AIR_TEMP.value and top.basis == "edit_distance"
+
+
+def test_unit_alone_gives_a_weak_suggestion():
+    top = suggest_roles("Meter42", unit="kW")[0]
+    assert top.role == Role.POWER.value and top.confidence < 0.5 and top.basis == "unit"
+
+
+def test_celsius_declared_unit_keeps_temperature_roles():
+    # 13-24 degC data: read as degF this is "below freezing" and only the widest-bounded roles
+    # (wet-bulb, approach temps) survived the range gate -- every correctly named temp went to
+    # wetbulb_temp. The declared unit converts before the range check.
+    for name, lo, hi, role in [
+        ("DaTemp", 13, 16, Role.SUPPLY_AIR_TEMP),
+        ("RaTemp", 20, 24, Role.RETURN_AIR_TEMP),
+        ("ZoneTemp_1", 19, 23, Role.SPACE_TEMP),
+        ("OaTemp", -5, 25, Role.OAT),
+    ]:
+        for unit in ("degC", "°C", "C"):
+            top = suggest_roles(name, series=_series(lo, hi), unit=unit)[0]
+            assert top.role == role.value, (name, unit, top)
+
+
+def test_celsius_unit_on_the_ml_and_llm_range_gates():
+    stub = stub_client("supply_air_temp")
+    ok = suggest_roles("DaTemp", suggester=LLMSuggester(stub), series=_series(13, 16), unit="degC")
+    bad = suggest_roles("DaTemp", suggester=LLMSuggester(stub), series=_series(13, 16))
+    assert ok[0].confidence > bad[0].confidence

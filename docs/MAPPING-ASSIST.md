@@ -49,20 +49,37 @@ A `RoleSuggestion` is `token, role` (always a valid `Role` value), `confidence` 
 
 Dependency-light and always on. It scores every `Role` from three signals:
 
-- **String match** — tag initials (`SAT` → `supply_air_temp`) and per-word edit distance
-  (`difflib.SequenceMatcher`) against each role slug. This is the dominant term.
+- **Whole-token match** — the tag is split into words on `_`/`-`/`.`, camelCase humps and acronym
+  boundaries (`ReHeatVlvPos_1` → re heat vlv pos, `HWVlvPos` → hw vlv pos; a split that tore an
+  abbreviation apart, like `Ch`+`W`, is re-joined). Each word is rewritten to the concept it names
+  through a BAS-abbreviation table (`oa`/`outside` → outdoor, `da`/`sa`/`discharge` → supply,
+  `vlv` → valve, `dmpr` → damper, `hw` → hot water + heat, `chw` → chilled water + cool,
+  `zone`/`room` → space, `sat`/`mat`/`oat` → the compound, …), and so is each role slug. The score
+  is `0.9 × recall × (0.5 + 0.5 × precision)`: *recall* is the share of the role's concepts the tag
+  names, *precision* the share of the tag's words the role explains (location words like `zone`
+  weigh half, unknown words dilute it, `pos`/`cmd`/`air`/equipment prefixes are noise). A word that
+  equals a role's initials (`DSS` → `duct_static_sp`) names all of it; a misspelled long word
+  (`Temprature`) still matches (basis `edit_distance`). **Initials only ever match a whole word**
+  — earlier releases matched them as substrings of the unsplit name, so `OaTemp` became
+  `oa_airflow`, `ReHeatVlvPos` `evap_approach_temp` and `SAT` `sat_reset_requests`; on a published
+  16-point AHU list the name-only top suggestion was right for 3 points and is now right for 16.
+  An outdoor/return/exhaust/relief/mixed damper is not suggested as the terminal `damper` role.
 - **Unit compatibility** — a `ROLE_UNIT` table (degF/degC → temp, `%` → valve/damper/speed, cfm →
   airflow, kW → power, gpm → flow, inH2O → duct static, ppm → CO₂). A compatible unit gives a small
-  bump; a **known-incompatible** unit strongly demotes the role.
+  bump (and on its own a weak ≤ 0.3 suggestion); a **known-incompatible** unit strongly demotes the
+  role.
 - **Physical-range fit** — if a `series` is given, `sensorhealth.range_violation_frac(series, role)`
   demotes any role whose physical bounds the data violates (a 500 °F "supply air temp" falls away).
+  The bounds are in °F; a series declared in **°C (or K) is converted first** — previously every
+  correctly named °C temperature failed its bounds and landed on `wetbulb_temp`. The same unit-aware
+  check gates `MLSuggester` and `LLMSuggester`.
 
 ```python
 from camber.mapping_assist import suggest_roles
 
 for s in suggest_roles("AH1_SAT", unit="degF", series=sat_series, k=3):
     print(s.role, round(s.confidence, 2), s.rationale)
-# supply_air_temp 0.93  'AH1_SAT' matches the initials of supply_air_temp; unit 'degf' fits ...
+# supply_air_temp 0.98  'AH1_SAT' matches the initials of supply_air_temp; unit 'degf' fits ...
 ```
 
 ## Review the unmapped tags — `review_unmapped`
@@ -82,6 +99,21 @@ rev["review_list"]  # [{"token", "suggestions": [RoleSuggestion.as_dict(), ...]}
 
 The mapping is **never modified** — you review `rev["review_list"]`, then apply the confirmed roles by
 editing your mapping JSON.
+
+## Scale and unit evidence in `mapping_confidence`
+
+`score_token(token, mapping, series, unit=None)` (and `score_mapping` / `review` with
+`units={token: unit}`) cross-check a resolved mapping against the data:
+
+- a declared °C / K temperature is converted before the physical-range check;
+- a declared `%` under a volumetric-flow role (`airflow`, `oa_airflow`, `airflow_sp`, `chw_flow`,
+  `hw_flow`) is flagged `unit_mismatch` (confidence × 0.3);
+- with **no unit**, a flow-role series that stays within 0–100 (≥ 99 % of samples in −2…102) is
+  flagged `percent_scale` (confidence × 0.5, so an alias drops from "high" 0.95 to "low" 0.475) —
+  the signature of a fan-speed or damper % point typed as a cfm/gpm flow, which the airflow bounds
+  (−1…1e6) alone accept. A declared `cfm`/`gpm` unit is trusted.
+
+`review()` routes `data_mismatch`, `unit_mismatch` and `percent_scale` to `needs_review`.
 
 ## Optional learned backend — `MLSuggester`
 

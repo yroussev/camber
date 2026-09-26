@@ -97,3 +97,44 @@ def test_review_partitions_tokens():
     assert "SAT_Temp" in needs  # ambiguous
     assert "OSA" in needs  # data mismatch
     assert "HHW_Valve" not in needs  # solid alias
+
+
+# --- unit / scale evidence ------------------------------------------------------------------- #
+
+
+def _alias(token, role):
+    return MappingProvider.from_dict({"aliases": {token: role}, "patterns": []})
+
+
+def test_percent_scaled_series_under_a_cfm_role_is_not_high_confidence():
+    # a fan-speed % point typed as a supply-airflow sensor: 0-100 data sits inside the airflow
+    # bounds (-1..1e6), so the range check alone rated it "high" 0.95
+    idx = pd.date_range("2024-01-01", periods=200, freq="h")
+    pct = pd.Series(np.clip(np.random.default_rng(0).normal(45, 25, 200), 0, 100), index=idx)
+    s = score_token("zone_1_fan_spd", _alias("zone_1_fan_spd", "airflow"), pct)
+    assert "percent_scale" in s.flags and s.verdict != "high" and s.confidence < 0.5
+    cfm = pct * 12 + 150  # a real VAV airflow, hundreds of cfm
+    assert score_token("vav_1_flow", _alias("vav_1_flow", "airflow"), cfm).verdict == "high"
+
+
+def test_declared_units_drive_the_scale_and_range_checks():
+    idx = pd.date_range("2024-01-01", periods=48, freq="h")
+    pct = pd.Series(np.linspace(0, 100, 48), index=idx)
+    mp = _alias("sf_spd", "airflow")
+    assert "unit_mismatch" in score_token("sf_spd", mp, pct, unit="%").flags
+    # a declared cfm unit is trusted: a small box can legitimately read 0-100 cfm
+    assert score_token("sf_spd", mp, pct, unit="cfm").flags == []
+    # a 13-15 degC supply air is fine once the unit is known (it is below freezing read as degF)
+    sat_c = pd.Series(np.linspace(13, 15, 48), index=idx)
+    mp2 = _alias("sat", "supply_air_temp")
+    assert "data_mismatch" in score_token("sat", mp2, sat_c).flags
+    assert score_token("sat", mp2, sat_c, unit="degC").verdict == "high"
+    assert score_token("sat", mp2, sat_c + 273.15, unit="K").verdict == "high"
+
+
+def test_review_routes_scale_and_unit_flags_to_needs_review():
+    idx = pd.date_range("2024-01-01", periods=48, freq="h")
+    pct = pd.Series(np.linspace(0, 100, 48), index=idx)
+    mp = MappingProvider.from_dict({"aliases": {"a": "airflow", "b": "airflow"}, "patterns": []})
+    rev = review(["a", "b"], mp, {"a": pct, "b": pct}, units={"b": "%"})
+    assert {s.token for s in rev["needs_review"]} == {"a", "b"}
