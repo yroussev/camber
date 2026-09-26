@@ -22,8 +22,8 @@ PARTIAL_CAVEAT = (
     "their attribution is confounded"
 )
 ZERO_COVERAGE_CAVEAT = (
-    "served-by topology supplied but covered no evaluated zone; zones pooled building-wide -- "
-    "screening signal only"
+    "{provenance} served-by topology supplied but covered no evaluated zone (0 of {n}); no "
+    "grouping applied, zones pooled building-wide -- screening signal only"
 )
 
 
@@ -33,12 +33,16 @@ def resolve_grouping(groups, frame_keys, topology):
     Precedence: a supplied ``topology`` (its ``group_map`` over the actual zones, caveated by its
     ``provenance`` and coverage) beats an explicit ``groups`` beats no grouping (building-wide pool
     + full confound caveat). Returns ``(effective_groups, caveats, provenance, n_ungrouped)``.
+    A topology that covers **none** of the zones applies no grouping, so its provenance is not
+    reported (``None``) -- a "heuristic" label on an ungrouped census would claim a grouping that
+    never happened -- and the caveat says the coverage was zero.
     """
     keys = list(frame_keys)
     if topology is not None:
         gm = topology.group_map(keys)  # pred=None -> a zone's direct parent (its AHU)
         if not gm:  # topology covered no evaluated zone -> honest building-wide fallback
-            return None, [ZERO_COVERAGE_CAVEAT], topology.provenance, len(keys)
+            caveat = ZERO_COVERAGE_CAVEAT.format(provenance=topology.provenance, n=len(keys))
+            return None, [caveat], None, len(keys)
         uncovered = [z for z in keys if z not in gm]
         caveats = []
         if topology.provenance == "heuristic":

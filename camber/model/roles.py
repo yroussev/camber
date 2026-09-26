@@ -23,8 +23,10 @@ class Role(str, Enum):
 
     # --- air-side temperatures ---
     OAT = "oat"  # outdoor-air temperature
+    # At an AHU: supply/discharge air. At a terminal box: the box's own *discharge* air (downstream
+    # of its reheat coil); the box's *entering* primary air is mapped to MIXED_AIR_TEMP.
     SUPPLY_AIR_TEMP = "supply_air_temp"
-    MIXED_AIR_TEMP = "mixed_air_temp"
+    MIXED_AIR_TEMP = "mixed_air_temp"  # at a terminal box: the entering primary (AHU supply) air
     RETURN_AIR_TEMP = "return_air_temp"
     SPACE_TEMP = "space_temp"
 

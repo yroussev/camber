@@ -516,6 +516,7 @@
     "OS_HEATING",
     "OS_MECH_ECON",
     "OS_MECH_MINOA",
+    "OS_UNCLASSIFIED",
     "OS_UNKNOWN",
     "classify_os",
     "run_g36_afdd"
@@ -556,6 +557,7 @@
     "SAT_TR",
     "STATIC_TR",
     "TRParams",
+    "UNGATED_CAVEAT",
     "cohort_starvation",
     "cooling_sat_requests",
     "oat_sat_setpoint",

@@ -48,6 +48,7 @@ __all__ = [
     "OS_MECH_ECON",
     "OS_MECH_MINOA",
     "OS_UNKNOWN",
+    "OS_UNCLASSIFIED",
     "classify_os",
     "OS_FAULTS",
     "FC_DESC",
@@ -87,15 +88,22 @@ OS_FREECOOL = 2  # modulating economizer, no mechanical cooling
 OS_MECH_ECON = 3  # mechanical + 100% economizer
 OS_MECH_MINOA = 4  # mechanical cooling, minimum OA
 OS_UNKNOWN = 5  # simultaneous heat/cool, dehumidification, or fault
+# Not a G36 state: a valve command is missing (NaN) so the interval cannot be classified. No FC is
+# evaluated there -- reading a NaN valve as "closed" would call the interval free cooling (OS#2)
+# and dilute every OS#2 fault rate with intervals nobody observed.
+OS_UNCLASSIFIED = 0
 
 
 def classify_os(hc, cc, oa_damper=None, valve_thr=5.0, econ_damper_open=80.0):
     """Operating state for one interval from valve commands (+ OA damper).
 
-    hc, cc, oa_damper are % (0-100). Returns an int OS code 1-5.
+    hc, cc, oa_damper are % (0-100). Returns an int OS code 1-5, or :data:`OS_UNCLASSIFIED` (0)
+    when either valve command is missing (``None``/NaN).
     """
-    heating = hc is not None and hc > valve_thr
-    cooling = cc is not None and cc > valve_thr
+    if hc is None or cc is None or hc != hc or cc != cc:  # x != x -> NaN
+        return OS_UNCLASSIFIED
+    heating = hc > valve_thr
+    cooling = cc > valve_thr
     if heating and cooling:
         return OS_UNKNOWN
     if heating:
@@ -244,13 +252,18 @@ _FCS = {
 # classify_os / _fc* remain the readable reference (and public API).
 # --------------------------------------------------------------------------- #
 def _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open):
-    """Operating state per interval over arrays (NaN -> not heating/cooling/open)."""
+    """Operating state per interval over arrays.
+
+    A NaN valve command -> :data:`OS_UNCLASSIFIED` (no FC applies); a NaN OA damper with cooling
+    on -> OS#4 (minimum OA), as in the scalar.
+    """
+    missing = np.isnan(hc) | np.isnan(cc)
     heating = hc > valve_thr
     cooling = cc > valve_thr
     oa_open = oa >= econ_damper_open
     return np.select(
-        [heating & cooling, heating, ~cooling, oa_open],
-        [OS_UNKNOWN, OS_HEATING, OS_FREECOOL, OS_MECH_ECON],
+        [missing, heating & cooling, heating, ~cooling, oa_open],
+        [OS_UNCLASSIFIED, OS_UNKNOWN, OS_HEATING, OS_FREECOOL, OS_MECH_ECON],
         default=OS_MECH_MINOA,
     ).astype(int)
 
@@ -452,6 +465,8 @@ class G36Result:
     # cross-tool reconciliation (e.g. open-fdd). Same fault equation/fires as
     # fault_pct, different denominator. See docs/ECOSYSTEM.md.
     fault_pct_singlesignal: dict | None = None
+    # intervals with a missing valve command: no operating state, so no FC was evaluated there
+    n_unclassified: int = 0
 
     def as_dict(self):
         """Return the result as a plain dict (faults flattened to FC<n>_pct keys).
@@ -463,6 +478,7 @@ class G36Result:
             "equip": self.equip,
             "n_intervals": self.n_intervals,
             "os_distribution": self.os_distribution,
+            "n_unclassified": self.n_unclassified,
             "coverage_start": self.coverage_start,
             "coverage_end": self.coverage_end,
         }
@@ -497,6 +513,18 @@ def run_g36_afdd(
     """
     if df.empty or "HC" not in df.columns or "CC" not in df.columns:
         return None
+    # The trailing-60-min dOS window needs a sorted, unique time index (rolling on an unsorted one
+    # raises); a DST fall-back / re-export duplicate keeps its last row. Timestamp strings are
+    # parsed; any other index is rejected with a clear message (not pandas' "window must be an
+    # integer").
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if df.index.dtype != object:
+            raise TypeError(
+                f"run_g36_afdd needs a time (DatetimeIndex) index, got {type(df.index).__name__}"
+            )
+        df = df.set_axis(pd.to_datetime(df.index))
+    if not (df.index.is_monotonic_increasing and df.index.is_unique):
+        df = df[~df.index.duplicated(keep="last")].sort_index()
     k = thr or G36Thresholds()
     n = len(df)
 
@@ -564,4 +592,5 @@ def run_g36_afdd(
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
         fault_pct_singlesignal=fault_pct_ss,
+        n_unclassified=int((os_codes == OS_UNCLASSIFIED).sum()),
     )

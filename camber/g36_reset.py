@@ -42,6 +42,7 @@ __all__ = [
     "rogue_zone_census",
     "CohortStarvationResult",
     "cohort_starvation",
+    "UNGATED_CAVEAT",
 ]
 
 
@@ -420,6 +421,21 @@ def _static_requests_series(frame, flow_col, flow_sp_col, damper_col, *, fan_thr
     return pd.Series(req, index=w.index)
 
 
+UNGATED_CAVEAT = (
+    "reset requests not gated on supply-fan status or occupancy (neither trended on the zones): "
+    "cycles with the HVAC off -- a free-floating building -- count as requests"
+)
+
+
+def _note_gated_out(caveats: list, gated_out: list) -> None:
+    """Caveat zones left with too few rows once off/unoccupied cycles were gated out."""
+    if gated_out:
+        caveats.append(
+            f"{len(gated_out)} zone(s) had too few cycles with the system on (supply fan / "
+            "occupancy) to evaluate -- an HVAC that is off is not demanding a reset"
+        )
+
+
 def _build_request_series(
     frames,
     *,
@@ -433,12 +449,22 @@ def _build_request_series(
     mid_f,
     fan_thr,
     min_active_cycles,
+    gate_cols=(),
+    gated_zones=None,
+    gated_out=None,
 ):
     """Per-zone reset-request series for a fleet -> ``(series, unevaluable, starts, ends)``.
 
     Shared by :func:`rogue_zone_census` and :func:`cohort_starvation`. A zone with no frame, missing
     role columns, or fewer than ``min_active_cycles`` usable rows is added to ``unevaluable`` and
     skipped; duplicate timestamps are deduped (keep last).
+
+    ``gate_cols`` (e.g. supply-fan status, occupancy): a zone's request cycles count only where
+    every gate column it carries reads on (> 0.5); a gate reading off *or unknown* drops the cycle.
+    A system that is off is not demanding a reset -- without the gate a free-floating building
+    reads as every zone requesting at once. Zones that carried at least one gate column are
+    appended to ``gated_zones`` (a list) when given, and zones the gate left with too few rows to
+    ``gated_out``.
     """
     series: dict = {}
     unevaluable: list = []
@@ -465,6 +491,16 @@ def _build_request_series(
             unevaluable.append(zone)
             continue
         s = s[~s.index.duplicated(keep="last")]
+        gates = [c for c in gate_cols if c in frame.columns]
+        if gates:
+            g = frame[gates]
+            g = g[~g.index.duplicated(keep="last")].reindex(s.index)
+            before = len(s)
+            s = s[(g > 0.5).all(axis=1)]
+            if gated_zones is not None:
+                gated_zones.append(zone)
+            if gated_out is not None and before >= min_active_cycles > len(s):
+                gated_out.append(zone)
         if len(s) < min_active_cycles:
             unevaluable.append(zone)
             continue
@@ -492,6 +528,7 @@ def rogue_zone_census(
     hi_f: float = 5.0,
     mid_f: float = 3.0,
     fan_thr: float = 95.0,
+    gate_cols=(),
 ) -> RogueZoneCensusResult | None:
     """Find the zone(s) monopolizing a G36 reset across a fleet of terminal zones.
 
@@ -503,6 +540,8 @@ def rogue_zone_census(
     (maximum) request. A zone is a **rogue** when ``zone_binding_frac >= dominance_frac`` and
     ``zone_request_share >= max(min_share, share_mult / n_zones)``. Returns ``None`` only for an
     empty fleet; otherwise a :class:`RogueZoneCensusResult` (possibly with no rogues, only caveats).
+    ``gate_cols`` (e.g. supply-fan status / occupancy columns) restrict each zone's request cycles
+    to those where the system is on; with no zone carrying one, a caveat says so.
     Screening / opportunity-grade thresholds (provisional-untuned).
     """
     if reset not in ("sat", "static"):
@@ -510,6 +549,8 @@ def rogue_zone_census(
     if not frames:
         return None
 
+    gated: list = []
+    gated_out: list = []
     series, unevaluable, starts, ends = _build_request_series(
         frames,
         reset=reset,
@@ -522,6 +563,9 @@ def rogue_zone_census(
         mid_f=mid_f,
         fan_thr=fan_thr,
         min_active_cycles=min_active_cycles,
+        gate_cols=gate_cols,
+        gated_zones=gated,
+        gated_out=gated_out,
     )
 
     zone_rate: dict = {}
@@ -576,6 +620,9 @@ def rogue_zone_census(
     worst = max(rogues, key=lambda z: (zone_binding[z], zone_share[z])) if rogues else None
 
     caveats: list = []
+    if series and not gated:
+        caveats.append(UNGATED_CAVEAT)
+    _note_gated_out(caveats, gated_out)
     if reset == "sat":
         caveats.append(
             "SAT request tier-1 (zone cooling-loop > 95%) not evaluated -- no per-zone "
@@ -670,6 +717,7 @@ def cohort_starvation(
     hi_f: float = 5.0,
     mid_f: float = 3.0,
     fan_thr: float = 95.0,
+    gate_cols=(),
 ) -> CohortStarvationResult | None:
     """Find air handlers whose whole zone cohort is demand-starved at once (an upstream fault).
 
@@ -681,14 +729,17 @@ def cohort_starvation(
     **starved** when it has >= ``min_zones_per_group`` zones, >= ``min_active_cycles`` active rows,
     and ``group_sustained_frac >= sustained_frac``. This is the opposite shape to
     :func:`rogue_zone_census` (a lone dominant zone never reaches ``cohort_frac``; a starved cohort
-    shares requests too evenly to be a rogue). Returns ``None`` only for an empty fleet. Screening /
-    opportunity-grade thresholds (provisional-untuned).
+    shares requests too evenly to be a rogue). Returns ``None`` only for an empty fleet.
+    ``gate_cols`` gate request cycles on the system being on, as in :func:`rogue_zone_census`.
+    Screening / opportunity-grade thresholds (provisional-untuned).
     """
     if reset not in ("sat", "static"):
         raise ValueError(f"reset must be 'sat' or 'static', got {reset!r}")
     if not frames:
         return None
 
+    gated: list = []
+    gated_out: list = []
     series, unevaluable, starts, ends = _build_request_series(
         frames,
         reset=reset,
@@ -701,6 +752,9 @@ def cohort_starvation(
         mid_f=mid_f,
         fan_thr=fan_thr,
         min_active_cycles=min_active_cycles,
+        gate_cols=gate_cols,
+        gated_zones=gated,
+        gated_out=gated_out,
     )
 
     groups_map: dict = {}
@@ -759,6 +813,9 @@ def cohort_starvation(
     worst = max(starved, key=lambda g: group_sustained[g]) if starved else None
 
     caveats: list = []
+    if series and not gated:
+        caveats.append(UNGATED_CAVEAT)
+    _note_gated_out(caveats, gated_out)
     if reset == "sat":
         caveats.append(
             "SAT-side cohort demand can reflect a genuinely hot outdoor condition (design-day) "

@@ -26,6 +26,10 @@ from ..model.roles import Role
 from ._topology_grouping import resolve_grouping
 from .base import Finding
 
+# request cycles count only while the system is on: supply-fan status and/or occupancy, when the
+# zone frames carry them (per zone, or merged in as a building-level ``shared`` series)
+_GATES: tuple[Role, ...] = (Role.SUPPLY_FAN_STATUS, Role.OCCUPANCY)
+
 # reset key -> (roles_required, human label)
 _RESETS: dict[str, tuple[tuple[Role, ...], str]] = {
     "sat": ((Role.SPACE_TEMP, Role.COOL_SP), "supply-air-temp"),
@@ -66,7 +70,8 @@ class CohortStarvation:
         roles, label = _RESETS[reset]
         self.name = f"{reset}_cohort_starvation"
         self.roles_required = roles
-        self.roles_optional: tuple[Role, ...] = ()
+        # gate request cycles on the system being on (a free-floating building isn't demanding)
+        self.roles_optional: tuple[Role, ...] = _GATES
         self._label = label
         self.groups = groups
         self.wants_topology = True
@@ -110,6 +115,7 @@ class CohortStarvation:
             groups=groups,
             **self._cols(),
             **self._kwargs,
+            gate_cols=_GATES,
         )
         if res is None:
             return Finding(

@@ -117,6 +117,16 @@ that grouping is:
   fallback) and that remainder is caveated; the covered zones are still scoped.
 - **No topology** — the original **building-wide** pool with the full confound caveat (a zone flagged
   in the single pool may simply serve a hotter air handler, so it is a **screening signal only**).
+- **Zero coverage** — a topology (e.g. the auto-built naming one) that matches **none** of the zones
+  applies no grouping: `grouping_provenance` is `None` and the caveat names the topology's
+  provenance and the 0-of-N coverage, rather than labelling an ungrouped census "heuristic".
+
+**System-on gating.** A zone's request cycles count only while its system is on: when the zone frames
+carry `SUPPLY_FAN_STATUS` and/or `OCCUPANCY` (per zone, or merged in as a building-level `shared`
+series), cycles with the fan off or the space unoccupied are dropped — a free-floating building has
+every zone warm at once, which otherwise reads as a starved cohort or a rogue zone. With neither
+trended the census runs ungated and says so in a caveat. Both census families
+(`*_rogue_zone_census`, `*_cohort_starvation`) share the gate.
 
 The grouping and its provenance are recorded in the finding's metrics (`grouped`,
 `grouping_provenance`, `n_zones_ungrouped`). The census also declines loudly — demoting a clean "ok"

@@ -232,6 +232,10 @@ def test_topology_zero_coverage_falls_back_building_wide():
     f = RogueZoneCensus(reset="sat").analyze_fleet(_rogue_fleet(), topology=topo)
     assert f.metrics["grouped"] is False
     assert any("covered no evaluated zone" in c for c in f.caveats)
+    # regression: an auto-built naming topology that covered nothing still reported
+    # provenance "heuristic", claiming a grouping that never happened
+    assert f.metrics["grouping_provenance"] is None
+    assert any("heuristic served-by topology" in c and "0 of 5" in c for c in f.caveats)
 
 
 def test_no_topology_preserves_building_wide_behavior():

@@ -408,6 +408,11 @@ class DcvSystemVerification:
             # nearest *OA-source* ancestor: a Brick model chains AHU -> VAV -> zone, so a zone's
             # direct parent is usually a terminal box, not the unit that brings in outdoor air
             assign = topology.group_map(list(zones), pred=lambda e: e in sources)
+            if not assign:  # covered none of the zones: no grouping happened, so no provenance
+                caveats.append(
+                    f"{provenance} served-by topology covered none of the {len(zones)} CO₂ zone(s)"
+                )
+                provenance = None
         if not assign and len(sources) == 1:
             only = next(iter(sources))
             assign = {z: only for z in zones}

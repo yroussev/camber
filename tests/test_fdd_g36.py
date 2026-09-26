@@ -161,3 +161,38 @@ def test_comparability_does_not_change_default_fault_pct():
     comp = run_g36_afdd(df, "AHU", comparability=True)
     assert comp.fault_pct == base.fault_pct  # default output identical
     assert comp.fault_n_applicable == base.fault_n_applicable
+
+
+# ---- real-data regressions (0.82.0) ----
+
+
+def test_nan_valves_are_unclassified_not_free_cooling():
+    # real case: logger-dropout rows (valves NaN) were classified OS#2 free cooling, diluting FC8
+    # from 25.7 % to 15.0 % on a real AHU. A NaN valve is an interval nobody observed.
+    from camber.fdd_g36 import OS_UNCLASSIFIED
+
+    good = _frame(n=100, HC=0, CC=0, SAT=66, MAT=55, RAT=72, OAT=50)  # SAT >> MAT: FC8 trips
+    blind = _frame(n=100, HC=np.nan, CC=np.nan, SAT=np.nan, MAT=np.nan, RAT=np.nan, OAT=np.nan)
+    blind.index = blind.index + pd.Timedelta(days=30)
+    r = run_g36_afdd(pd.concat([good, blind]), "AHU")
+    assert r.os_distribution[OS_FREECOOL] == 100
+    assert r.n_unclassified == 100 and r.as_dict()["n_unclassified"] == 100
+    assert r.fault_n_applicable[8] == 100
+    assert r.fault_pct[8] == run_g36_afdd(good, "AHU").fault_pct[8] > 95
+    assert classify_os(hc=float("nan"), cc=0) == OS_UNCLASSIFIED
+    assert classify_os(hc=None, cc=None) == OS_UNCLASSIFIED
+
+
+def test_unsorted_and_duplicate_timestamps_do_not_crash():
+    # rolling("60min") raised "index must be monotonic" on an unsorted export
+    df = _frame(n=48, HC=100, CC=0, SAT=80, SATSP=95, MAT=78, RAT=72, OAT=60)
+    messy = pd.concat([df.iloc[::-1], df.iloc[:3]])  # reversed + duplicated rows
+    r = run_g36_afdd(messy, "AHU")
+    assert r.n_intervals == 48
+    assert r.fault_pct == run_g36_afdd(df, "AHU").fault_pct
+    import pytest
+
+    as_text = run_g36_afdd(messy.set_axis(messy.index.astype(str)), "AHU")
+    assert as_text.fault_pct == r.fault_pct
+    with pytest.raises(TypeError, match="DatetimeIndex"):
+        run_g36_afdd(df.reset_index(drop=True), "AHU")

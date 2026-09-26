@@ -504,3 +504,13 @@ def test_fleet_tolerates_duplicate_zone_timestamps():
     frames["AHU_1_VAV_4"] = pd.concat([z, z.iloc[:50]]).sort_index()
     got = DcvSystemVerification().analyze_fleet(frames, topology=Topology.from_parent_map(parents))
     assert got.metrics["n_zones_joined"] == 4
+
+
+def test_fleet_topology_covering_no_zone_reports_no_provenance():
+    # an auto-built naming topology that matched none of the zones used to still report
+    # grouping_provenance "heuristic"
+    frames, _ = _fleet({"AHU_1": "proportional", "AHU_2": "static"})
+    topo = Topology.from_parent_map({"OTHER_1": "AHU_X"}, provenance="heuristic")
+    got = DcvSystemVerification().analyze_fleet(frames, topology=topo)
+    assert got.metrics["grouping_provenance"] is None
+    assert any("covered none of the 8" in c for c in got.caveats)

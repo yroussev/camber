@@ -203,3 +203,50 @@ def test_lone_rogue_warns_only_rogue_rule():
     fleet = {"Z1": _sz(True), **{f"Z{i}": _sz(False) for i in range(2, 5)}}  # one dominant zone
     assert RogueZoneCensus("static").analyze_fleet(fleet).severity == "warn"
     assert CohortStarvation("static").analyze_fleet(fleet).severity != "warn"  # not a cohort
+
+
+# ---- real-data regression (0.82.0): HVAC off is not reset demand ----
+
+
+def _free_float_fleet(with_fan: bool, with_occ: bool = False, overs=(9.0, 6.0, 6.0, 6.0)):
+    """Four zones at setpoint for three weeks, except a week with the HVAC off when every zone
+    floats hot -- the free-float week that fired the SAT census and starvation on a real site."""
+    idx = pd.date_range("2025-07-07", periods=21 * 24, freq="1h")
+    off = (idx >= "2025-07-14") & (idx < "2025-07-21")
+    hot = off & (idx.hour >= 10) & (idx.hour < 19)
+    frames = {}
+    for i, over in enumerate(overs):
+        cool = np.full(len(idx), 74.0)
+        f = pd.DataFrame(
+            {Role.SPACE_TEMP: cool + np.where(hot, over, -1.0), Role.COOL_SP: cool}, index=idx
+        )
+        if with_fan:
+            f[Role.SUPPLY_FAN_STATUS] = np.where(off, 0.0, 1.0)
+        if with_occ:
+            f[Role.OCCUPANCY] = np.where(off, 0.0, 1.0)
+        frames[f"Z{i}"] = f
+    return frames
+
+
+def test_free_floating_building_is_not_a_starved_cohort():
+    from camber.g36_reset import UNGATED_CAVEAT
+    from camber.rules.rogue_zone_census_rule import RogueZoneCensus
+
+    ungated = CohortStarvation("sat").analyze_fleet(_free_float_fleet(with_fan=False))
+    assert ungated.severity == "warn"  # the old false alarm ...
+    assert UNGATED_CAVEAT in ungated.caveats  # ... now at least says why it may be one
+    for kw in ({"with_fan": True}, {"with_fan": False, "with_occ": True}):
+        f = CohortStarvation("sat").analyze_fleet(_free_float_fleet(**kw))
+        assert f.severity != "warn", f.summary
+        assert f.metrics["total_requests"] == 0
+        assert UNGATED_CAVEAT not in f.caveats
+    # a window with the HVAC off throughout is declined, and says why
+    week = {z: f.loc["2025-07-14":"2025-07-20"] for z, f in _free_float_fleet(True).items()}
+    f = CohortStarvation("sat").analyze_fleet(week)
+    assert f.severity == "info" and any("system on" in c for c in f.caveats)
+    # one zone floats hotter than the rest: a "rogue" only because the HVAC was off
+    one = (8.0, -1.0, -1.0, -1.0)
+    rogue_ungated = RogueZoneCensus("sat").analyze_fleet(_free_float_fleet(False, overs=one))
+    assert rogue_ungated.severity == "warn" and UNGATED_CAVEAT in rogue_ungated.caveats
+    rogue = RogueZoneCensus("sat").analyze_fleet(_free_float_fleet(True, overs=one))
+    assert rogue.severity != "warn" and not rogue.metrics["rogues"]
