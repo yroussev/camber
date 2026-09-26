@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import threading
+import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from glob import glob
@@ -187,6 +188,7 @@ def discover_store(
     classes=None,
     start=None,
     end=None,
+    include_inactive: bool = False,
 ) -> list:
     """Find stored equipment of a class in one facility of a Parquet store.
 
@@ -197,8 +199,14 @@ def discover_store(
     :class:`Role` or slug) keeps only equipment that has that role stored -- the store analogue of
     :func:`discover`'s marker file. ``start``/``end`` bound every returned ref's reads. Returns
     :class:`StoreEquipRef` s sorted by equip.
+
+    A facility whose lifecycle state is not ``active`` (suspended, provisioning, offboarding,
+    archived -- see :mod:`camber.portfolio`) is skipped with a ``UserWarning`` and yields ``[]``;
+    pass ``include_inactive=True`` to analyse it anyway.
     """
     st = _store_of(store)
+    if not include_inactive and not _facility_is_active(st, facility_id):
+        return []
     if classes is None and equip_class is not None:
         classes = TERMINAL_CLASSES if equip_class == "TERMINAL" else (equip_class,)
     wanted = None if classes is None else set(classes)
@@ -226,6 +234,26 @@ def discover_store(
             )
         )
     return out
+
+
+def _facility_is_active(store, facility_id: str, *, warn: bool = True) -> bool:
+    """True if ``facility_id``'s lifecycle state is ``active`` (unregistered counts as active).
+
+    Otherwise emits a ``UserWarning`` naming the state (unless ``warn=False``) and returns False --
+    the check store-backed discovery and config runs use to skip suspended facilities.
+    """
+    state = _store_of(store).facility_state(facility_id)
+    if state == "active":
+        return True
+    if warn:
+        warnings.warn(
+            f"facility {facility_id!r} is {state}; skipping it (analyses run on active facilities "
+            'only -- pass include_inactive=True, or set "include_inactive": true in the config '
+            "source, to analyse it anyway)",
+            UserWarning,
+            stacklevel=3,
+        )
+    return False
 
 
 # Per-equipment cache of the full stored role frame (stored grid, every role). Keyed on the ref's

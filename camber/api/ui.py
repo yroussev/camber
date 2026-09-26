@@ -62,7 +62,9 @@ _APP_JS = r"""
 
   function loadFacilities(){
     return j('/facilities').then(function(d){
-      clear(facSel);(d.facilities||[]).forEach(function(f){opt(facSel,f.facility_id,f.name||f.facility_id);});
+      clear(facSel);(d.facilities||[]).forEach(function(f){
+        var nm=f.display_name||f.name||f.facility_id;
+        opt(facSel,f.facility_id,nm+(f.state&&f.state!=='active'?' ['+f.state+']':''));});
       if(facSel.options.length)return loadPoints();
     });
   }

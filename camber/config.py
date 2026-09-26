@@ -55,8 +55,11 @@ the class recorded at ingest (``{"class": "AHU", "marker_role": "mixed_air_temp"
 the folder-source file marker and is ignored here); ``shared_oat`` may name a store equipment and
 role (``{"equip": "weather", "role": "oat"}``) or a CSV ``file`` as before; optional ``start`` /
 ``end`` bound every read. The facility's provenance (dataset, licence, citation) recorded at ingest
-is attached to the report as ``AuditReport.data_sources``. Any other ``kind`` (or none) reads
-folders as before; an unrecognised kind warns rather than fails, for back-compat.
+is attached to the report as ``AuditReport.data_sources``. A facility whose lifecycle state is not
+``active`` (suspended, provisioning, ...; see :mod:`camber.portfolio`) is skipped with a warning --
+the run finds no equipment -- unless the source sets ``"include_inactive": true``. Any other
+``kind`` (or none) reads folders as before; an unrecognised kind warns rather than fails, for
+back-compat.
 
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
@@ -77,7 +80,14 @@ from .model.roles import Role
 from .realio import load_point
 from .report.audit import AuditReport, Benchmark
 from .report.drift import drift_report_html
-from .resolve import StoreEquipRef, discover, discover_store, discover_terminals, resolve
+from .resolve import (
+    StoreEquipRef,
+    _facility_is_active,
+    discover,
+    discover_store,
+    discover_terminals,
+    resolve,
+)
 from .rules.base import _merge_shared
 from .rules.builtin import builtin_registry, is_fleet, make_rule
 from .soo import soo_findings, spec_from_dicts
@@ -235,20 +245,30 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
         raise ValueError(f"facility {fid!r} has no data in store {store.root!r}")
     start, end = source.get("start"), source.get("end")
     site = config.get("site") or store.facility_name(fid)
+    # A suspended (or otherwise non-active) facility is skipped with one warning -- the run
+    # produces no equipment -- unless the config opts in with "include_inactive": true.
+    include_inactive = bool(source.get("include_inactive", config.get("include_inactive", False)))
+    active = include_inactive or _facility_is_active(store, fid)
     resample = config.get("resample", "1h")
     mapping = _load_mapping(config, base_dir, default=_identity_mapping())
 
     refs: list = []
     refs_by_class: dict = {}
-    for eq in config.get("equipment", []):
+    for eq in config.get("equipment", []) if active else []:
         found = discover_store(
-            store, fid, eq["class"], marker_role=eq.get("marker_role"), start=start, end=end
+            store,
+            fid,
+            eq["class"],
+            marker_role=eq.get("marker_role"),
+            start=start,
+            end=end,
+            include_inactive=True,  # the lifecycle check was made once, above
         )
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 
     shared = None
-    so = config.get("shared_oat") or {}
+    so = (config.get("shared_oat") or {}) if active else {}
     if so.get("file"):
         oat = load_point(_path(base_dir, so["file"]), "oat").resample(resample).mean()
         shared = {Role.OAT: oat}

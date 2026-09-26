@@ -290,7 +290,10 @@ def test_ingest_namespaces_runs_labels_splice_units_quirks_and_duty(ahu):
     eq = store.equipment()["ds-test-ahu"]
     assert eq == {"AHU__fault_free": "AHU", "AHU__damper": "AHU", "AHU__onset_damper": "AHU"}
     full_meta = store.facilities_meta()["ds-test-ahu"]
-    assert set(full_meta) == {"name", "dataset"}  # provenance namespaced under one key
+    lifecycle = {"state", "created_at", "state_changed_at", "display_name", "owner", "portfolio"}
+    # provenance namespaced under one key; the rest is the registry-v2 lifecycle record
+    assert set(full_meta) == {"name", "dataset", "notes"} | lifecycle
+    assert full_meta["state"] == "active"  # automated registration starts active
     meta = full_meta["dataset"]
     assert meta["labels"] == {"AHU__fault_free": "", "AHU__damper": "damper"}
     assert meta["onsets"]["AHU__onset_damper"]["onset"] == "2018-01-02"
@@ -424,6 +427,37 @@ def test_status_and_remove(ahu):
     assert ParquetStore(store).facilities() == []
     st = _ops.dataset_status([entry])[0]
     assert st["fetched"]["default"] is False and st["bytes_on_disk"] == 0
+
+
+def test_purge_tombstones_and_reingest_of_the_same_dataset_reclaims(ahu):
+    """A purged dataset facility is tombstoned; re-ingesting the *same* dataset reclaims its id."""
+    from camber.store import FacilityRegistry
+
+    entry, opener, tmp = ahu
+    _ops.fetch_dataset(entry, opener=opener)
+    store = str(tmp / "store")
+    _ingest.ingest_dataset(entry, store)
+    _ops.remove_dataset(entry, store=store, purge_store=True)
+    reg = FacilityRegistry(store)
+    assert reg.tombstones()["ds-test-ahu"]["dataset_id"] == entry.id
+    with pytest.raises(ValueError, match="tombstoned"):
+        reg.register("ds-test-ahu", name="some other building")
+    _ops.fetch_dataset(entry, opener=opener)
+    res = _ingest.ingest_dataset(entry, store)
+    assert res.facilities == ["ds-test-ahu"] and "ds-test-ahu" not in reg.tombstones()
+    assert reg.get("ds-test-ahu")["state"] == "active"
+
+
+def test_ingest_into_a_portfolio_workspace_is_audited(ahu):
+    from camber.portfolio import Portfolio
+
+    entry, opener, tmp = ahu
+    _ops.fetch_dataset(entry, opener=opener)
+    pf = Portfolio.init(tmp / "ws")
+    _ingest.ingest_dataset(entry, pf.store_root)
+    assert pf.facility("ds-test-ahu")["state"] == "active"
+    rec = pf.audit_log(facility_id="ds-test-ahu")
+    assert [r["action"] for r in rec] == ["facility.register"] and rec[0]["to_state"] == "active"
 
 
 # --------------------------------------------------------------------------- BDG2 adapter

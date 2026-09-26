@@ -1,6 +1,7 @@
 """Tests for the edge forwarder end-to-end (camber.edge.forwarder)."""
 
 import io
+import os
 import re
 
 import numpy as np
@@ -184,3 +185,26 @@ def test_bad_wire_format_raises(tmp_path):
             spool=Spool(str(tmp_path)),
             wire_format="xml",
         )
+
+
+def test_landed_objects_in_a_portfolio_store_read_as_an_active_facility(tmp_path):
+    """Edge landing writes no registry entry (reconciliation is a later step); the landed facility
+    is still readable, listed as an unregistered active facility, and analysed by default."""
+    from camber.portfolio import Portfolio
+
+    pf = Portfolio.init(tmp_path / "ws")
+    root = pf.store_root
+
+    class _Landing:
+        def put(self, key, data, *, content_type="", metadata=None):
+            p = os.path.join(root, key)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as fh:
+                fh.write(data)
+            return {"ok": True}
+
+    _forwarder(tmp_path / "spool", _Landing()).poll_once()
+    st = ParquetStore(root)
+    assert st.active_facilities() == ["demo-fac-1"] and len(st.read_long()) > 0
+    e = pf.facility("demo-fac-1")
+    assert e["state"] == "active" and e["registered"] is False

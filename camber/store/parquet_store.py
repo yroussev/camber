@@ -109,8 +109,10 @@ class ParquetStore:
         avoids clobbering prior writes), so repeated calls accumulate. Returns rows written.
         """
         require_facility_id(facility_id)
+        reg = self._registry()
+        reg._guard_write(facility_id)  # tombstoned id / case-variant of a known id -> ValueError
         if name is not None or meta:
-            self._registry().register(facility_id, name=name, **meta)
+            reg.register(facility_id, name=name, **meta)
         if long is None or long.empty:
             return 0
         df = long.copy()
@@ -401,6 +403,21 @@ class ParquetStore:
             d.split("=", 1)[1] for d in os.listdir(self.root) if d.startswith(f"{_FACILITY}=")
         )
 
+    def facility_state(self, facility_id: str) -> str:
+        """Lifecycle state of ``facility_id`` (``"active"`` when unregistered; see
+        :mod:`camber.portfolio`)."""
+        return self._registry().state(facility_id)
+
+    def active_facilities(self) -> list:
+        """The facilities in the store that analyses should run on: those whose lifecycle state is
+        ``active`` (an unregistered facility, or one registered before lifecycle states existed,
+        counts as active). Suspended, provisioning, offboarding and archived facilities are left
+        out -- see docs/PORTFOLIO.md."""
+        meta = self._registry().all()
+        return [
+            f for f in self.facilities() if (meta.get(f) or {}).get("state", "active") == "active"
+        ]
+
     @deprecated(since="0.10", remove_in="1.0", use="ParquetStore.facilities")
     def sites(self) -> list:
         """Deprecated alias for :meth:`facilities` (the key is a facility_id, not a site name)."""
@@ -498,8 +515,10 @@ class ParquetStore:
                 rows = 0
             shutil.rmtree(fdir)
             self._invalidate_catalog()
-        if forget:
-            self._registry().remove(facility_id)
+        if forget:  # tombstones the id: a forgotten facility id is never reused
+            self._registry()._forget(
+                facility_id, had_data=rows > 0, reason="drop_facility(forget=True)"
+            )
         from ..resolve import clear_store_cache  # lazy: resolve imports the store, not vice versa
 
         clear_store_cache(self.root, facility_id)

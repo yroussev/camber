@@ -29,7 +29,9 @@ def _store(tmp_path):
 def test_facade_facilities_points_history(tmp_path):
     api = ReadAPI(_store(tmp_path))
     # /facilities exposes the id + human name from the registry
-    assert api.facilities() == {"facilities": [{"facility_id": "S", "name": "Site S"}]}
+    # (additive since 0.87: the editable display_name and the lifecycle state)
+    fac = {"facility_id": "S", "name": "Site S", "display_name": "Site S", "state": "active"}
+    assert api.facilities() == {"facilities": [fac]}
     assert api.sites() == {"sites": ["S"]}  # deprecated alias still lists ids
     pts = api.points(facility_id="S")
     assert pts["count"] == 2 and {p["role"] for p in pts["points"]} == {"heat_valve", "cool_valve"}
@@ -79,7 +81,10 @@ def test_http_server_round_trip(tmp_path):
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/facilities", timeout=5) as r:
             assert r.status == 200
-            assert json.loads(r.read())["facilities"] == [{"facility_id": "S", "name": "Site S"}]
+            got = json.loads(r.read())["facilities"]
+            assert got == [
+                {"facility_id": "S", "name": "Site S", "display_name": "Site S", "state": "active"}
+            ]
         with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/history?facility_id=S&role=heat_valve&limit=2", timeout=5
         ) as r:

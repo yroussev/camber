@@ -7,7 +7,7 @@ Routes are factored into a pure :func:`dispatch` function (method, path, query -
 
 Endpoints (facility_id addresses a facility; the legacy ``site=`` param is still accepted):
   GET /            | /about | /health   -> service info
-  GET /facilities                       -> {"facilities": [{"facility_id","name"}, ...]}
+  GET /facilities   -> {"facilities": [{"facility_id","name","display_name","state"}, ...]}
   GET /sites                            -> {"sites": [...]}   (deprecated alias)
   GET /points?facility_id=&equip=&role=                       -> {"points": [...], "count": n}
   GET /history?facility_id=&equip=&role=&start=&end=&limit=   -> {"history": [...], "count": n}

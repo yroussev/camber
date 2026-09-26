@@ -20,12 +20,25 @@ class ReadAPI:
         self.store = store
 
     def _facility_list(self) -> list:
-        """``[{"facility_id", "name"}]`` per facility; name from the registry (falls back to id)."""
+        """``[{"facility_id", "name", "display_name", "state"}]`` per facility in the store.
+
+        ``name`` is the registered name (falls back to the id), ``display_name`` the editable one,
+        ``state`` the lifecycle state (``"active"`` when unregistered). Read-only: lifecycle
+        changes happen through ``camber facility``, never over HTTP.
+        """
         meta = self.store.facilities_meta()
-        return [
-            {"facility_id": f, "name": (meta.get(f) or {}).get("name") or f}
-            for f in self.store.facilities()
-        ]
+        out = []
+        for f in self.store.facilities():
+            m = meta.get(f) or {}
+            out.append(
+                {
+                    "facility_id": f,
+                    "name": m.get("name") or f,
+                    "display_name": m.get("display_name") or m.get("name") or f,
+                    "state": m.get("state") or "active",
+                }
+            )
+        return out
 
     def about(self) -> dict:
         """Service info: name, liveness flag, and the facilities in the store."""
@@ -38,7 +51,7 @@ class ReadAPI:
         }
 
     def facilities(self) -> dict:
-        """List the facilities present in the store as ``{"facility_id", "name"}``."""
+        """The facilities in the store: ``{"facility_id", "name", "display_name", "state"}``."""
         return {"facilities": self._facility_list()}
 
     def sites(self) -> dict:

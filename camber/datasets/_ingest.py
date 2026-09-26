@@ -281,10 +281,16 @@ META_KEY = "dataset"  # the one registry-meta key the catalog owns (provenance +
 def _register(store: ParquetStore, fid: str, name: str, meta: dict) -> None:
     """Record provenance under ``meta["dataset"]``, replacing only that key.
 
-    Any other metadata on the facility (a display-name change, a future lifecycle layer's keys) is
-    left untouched; the display name is set only when the facility has none yet.
+    Any other metadata on the facility (a display-name change, its lifecycle state) is left
+    untouched; the name is set only when the facility has none yet. A facility dropped by an
+    earlier ``remove --purge-store`` is tombstoned; re-ingesting the *same* dataset reclaims it.
     """
     reg = FacilityRegistry(store.root)
+    tomb = reg.tombstones().get(fid)
+    if tomb is not None and tomb.get("dataset_id") == meta.get("dataset_id"):
+        # The id is derived from the dataset itself, so re-ingesting after a purge re-creates the
+        # very same facility -- the one case a tombstoned id may be reclaimed.
+        reg.reclaim(fid, reason=f"re-ingest of dataset {meta.get('dataset_id')}")
     has_name = bool(reg.get(fid).get("name"))
     reg.register(fid, name=None if has_name else name, **{META_KEY: meta})
 

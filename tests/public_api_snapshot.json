@@ -1161,6 +1161,19 @@
     "measure_suffix",
     "parse_point"
   ],
+  "camber.portfolio": [
+    "DEFAULT_POLICY",
+    "DELETING",
+    "LifecycleError",
+    "Portfolio",
+    "PortfolioLocked",
+    "STATES",
+    "TRANSITIONS",
+    "allowed_actions",
+    "find_workspace",
+    "is_workspace",
+    "transition"
+  ],
   "camber.pumpdrift": [
     "PumpDriftDiagnosis",
     "diagnose_pump_drift"
