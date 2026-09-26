@@ -83,6 +83,19 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   byte-identical to 0.85.0, and the BDG2 benchmark (in-sample) is unchanged.
 
 ### Fixed
+- **`normalized_savings` used the large-sample t** (1.645 at 90%) whatever the fits' sizes; it
+  now uses Student's t on `min(n - p)` of the two models — a 12-point monthly fit gets 1.812. It
+  also applied one `rho` to both models: `rho` is now the baseline's and a new keyword-only
+  `rho_reporting` the reporting model's, each falling back to the rho its fit recorded, with the
+  baseline's substituted (and caveated) only when the reporting one is unknown. The module
+  docstring claimed a G14 `1.26` form the code does not use; corrected. Bands change only where
+  `n - p <= 120` or the two rhos differ (#21).
+- **Option B dropped autocorrelation and parameter counts.** `isolation_savings` never
+  estimated rho (no time index reached the fit statistics) — pass the new `baseline_index`;
+  `isolation_normalized_savings` never passed `p_baseline` / `p_reporting`, so a multi-driver
+  model was banded as `p = 2` — it now passes each model's `p`, and takes `baseline_index` /
+  `reporting_index` for a rho per model. The in-range golden for `isolation_normalized_savings`
+  moves from ±23.79 to ±24.17 (the df-aware t on 58 degrees of freedom); savings are unchanged (#21).
 - `avoided_energy_savings` dropped reporting rows without a finite baseline projection silently —
   e.g. a `CategoricalModel` category the baseline never fitted. The rows are now counted
   (`coverage["n_used"]` vs `["n_report"]`), caveated and, for an unseen category, graded as

@@ -202,6 +202,7 @@ def isolation_savings(
     cv_rmse_max: float = 0.20,
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "g14",
+    baseline_index=None,
 ) -> IsolationSavings:
     """Option-B avoided energy for an isolated, sub-metered system.
 
@@ -214,14 +215,17 @@ def isolation_savings(
     The reporting drivers are checked against the baseline's (per-column and, for several drivers,
     leverage) support; a severe extrapolation declines by default (``extrapolation``, see
     :func:`camber.mandv.stats.avoided_energy_savings`, which also documents ``kernel``).
+
+    Pass ``baseline_index`` (timestamps aligned to ``baseline_energy``) so the baseline residuals'
+    lag-1 autocorrelation is estimated and widens the band; without it the band is unadjusted.
     """
     yb = np.asarray(baseline_energy, dtype=float)
     yr = np.asarray(reporting_energy, dtype=float)
     if model is None:
-        model = fit_driver_model(baseline_driver, yb)
+        model = fit_driver_model(baseline_driver, yb, time_index=baseline_index)
 
     yhat_b = model.predict(_baseline_predict_input(model, baseline_driver, len(yb)))
-    fs = fit_stats(yb, yhat_b, model.p, cv_rmse_max=cv_rmse_max)
+    fs = fit_stats(yb, yhat_b, model.p, cv_rmse_max=cv_rmse_max, time_index=baseline_index)
 
     rep_input = (
         np.zeros(len(yr))
@@ -236,6 +240,7 @@ def isolation_savings(
         n_baseline=model.n,
         p_baseline=model.p,
         confidence=confidence,
+        rho=fs.rho_lag1,
         extrapolation=extrapolation,
         kernel=kernel,
     )
@@ -274,6 +279,8 @@ def isolation_normalized_savings(
     cv_rmse_max: float = 0.20,
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "g14",
+    baseline_index=None,
+    reporting_index=None,
 ):
     """Option-B savings normalized to a fixed reference driver set (e.g. a normal year/load).
 
@@ -282,31 +289,41 @@ def isolation_normalized_savings(
     between periods doesn't masquerade as savings. Returns a
     :class:`~camber.mandv.normalized.NormalizedSavings`; a ``normal_driver`` far outside either
     period's drivers declines by default (``extrapolation``).
+
+    Each model's own parameter count reaches the band (multi-driver models were previously
+    treated as ``p = 2``), and ``baseline_index`` / ``reporting_index`` (timestamps aligned to each
+    period's energy) estimate each model's residual autocorrelation separately.
     """
-    mb = fit_driver_model(baseline_driver, baseline_energy)
-    mr = fit_driver_model(reporting_driver, reporting_energy)
+    mb = fit_driver_model(baseline_driver, baseline_energy, time_index=baseline_index)
+    mr = fit_driver_model(reporting_driver, reporting_energy, time_index=reporting_index)
     yb = np.asarray(baseline_energy, dtype=float)
     yr = np.asarray(reporting_energy, dtype=float)
-    cvb = fit_stats(
+    fb = fit_stats(
         yb,
         mb.predict(_baseline_predict_input(mb, baseline_driver, len(yb))),
         mb.p,
         cv_rmse_max=cv_rmse_max,
-    ).cv_rmse
-    cvr = fit_stats(
+        time_index=baseline_index,
+    )
+    fr = fit_stats(
         yr,
         mr.predict(_baseline_predict_input(mr, reporting_driver, len(yr))),
         mr.p,
         cv_rmse_max=cv_rmse_max,
-    ).cv_rmse
+        time_index=reporting_index,
+    )
     return normalized_savings(
         mb,
         mr,
         normal_driver,
-        baseline_cv_rmse=cvb,
+        baseline_cv_rmse=fb.cv_rmse,
         n_baseline=mb.n,
-        reporting_cv_rmse=cvr,
+        reporting_cv_rmse=fr.cv_rmse,
         n_reporting=mr.n,
+        p_baseline=mb.p,
+        p_reporting=mr.p,
+        rho=fb.rho_lag1,
+        rho_reporting=fr.rho_lag1,
         confidence=confidence,
         extrapolation=extrapolation,
         kernel=kernel,

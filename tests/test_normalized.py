@@ -4,6 +4,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -80,3 +81,77 @@ def test_normalizes_out_weather():
         extrapolation=ExtrapolationPolicy(decline=False),
     )
     assert abs(r.savings_pct) < 0.05  # no real change once weather-normalized
+
+
+# --------------------------------------------------------------------------- #21 (21a) fixes
+
+
+def _two_models(n=200, seed=3):
+    from camber.mandv.models import fit_model
+
+    rng = np.random.default_rng(seed)
+    Tb, Tr = rng.uniform(50, 100, n), rng.uniform(50, 100, n)
+    mb = fit_model(Tb, 50 + 2 * np.maximum(0, Tb - 65) + rng.normal(0, 2, n), "3PC")
+    mr = fit_model(Tr, 45 + 1.6 * np.maximum(0, Tr - 65) + rng.normal(0, 2, n), "3PC")
+    return mb, mr
+
+
+_TEMPS = np.array([55, 58, 63, 70, 78, 88, 95, 93, 86, 75, 63, 56], dtype=float)
+
+
+def test_the_band_uses_t_on_the_smaller_fit_dof():
+    """A 12-point monthly fit (df = 9) needs t = 1.812 at 90%, not the large-sample 1.645."""
+    from camber.mandv.stats import _rel_unc_projected
+
+    mb, mr = _two_models()
+    kw = dict(baseline_cv_rmse=0.05, reporting_cv_rmse=0.06, p_baseline=3, p_reporting=3)
+    big = normalized_savings(mb, mr, _TEMPS, n_baseline=1000, n_reporting=1000, **kw)
+    small = normalized_savings(mb, mr, _TEMPS, n_baseline=1000, n_reporting=12, **kw)
+    rb = _rel_unc_projected(0.05, n_fit=1000, p_fit=3) * big.nac_baseline
+    rr = _rel_unc_projected(0.06, n_fit=12, p_fit=3) * big.nac_reporting
+    assert small.abs_uncertainty == pytest.approx(1.812 * np.hypot(rb, rr), abs=0.01)
+    rr_big = _rel_unc_projected(0.06, n_fit=1000, p_fit=3) * big.nac_reporting
+    assert big.abs_uncertainty == pytest.approx(1.645 * np.hypot(rb, rr_big), abs=0.01)
+
+
+def test_rho_is_per_model():
+    from camber.mandv.stats import _rel_unc_projected
+
+    mb, mr = _two_models()
+    kw = dict(baseline_cv_rmse=0.05, n_baseline=200, reporting_cv_rmse=0.06, n_reporting=200,
+              p_baseline=3, p_reporting=3)  # fmt: skip
+    both = normalized_savings(mb, mr, _TEMPS, rho=0.2, rho_reporting=0.6, **kw)
+    rb = _rel_unc_projected(0.05, n_fit=200, p_fit=3, rho=0.2) * both.nac_baseline
+    rr = _rel_unc_projected(0.06, n_fit=200, p_fit=3, rho=0.6) * both.nac_reporting
+    assert both.abs_uncertainty == pytest.approx(1.645 * np.hypot(rb, rr), abs=0.01)
+    assert not any("substituted" in c for c in both.caveats)
+    # only the baseline's rho known: it is substituted, and the substitution is disclosed
+    sub = normalized_savings(mb, mr, _TEMPS, rho=0.2, **kw)
+    assert any("baseline's (rho=0.20) is substituted" in c for c in sub.caveats)
+    assert sub.abs_uncertainty < both.abs_uncertainty
+    # none known: unadjusted, as before
+    none = normalized_savings(mb, mr, _TEMPS, **kw)
+    assert none.abs_uncertainty < sub.abs_uncertainty and not none.caveats
+
+
+def test_rho_falls_back_to_each_fit_record():
+    import pandas as pd
+
+    from camber.mandv.models import fit_model
+
+    rng = np.random.default_rng(5)
+    n = 365
+    idx = pd.date_range("2024-01-01", periods=n, freq="D")
+    e = np.zeros(n)
+    for i in range(1, n):
+        e[i] = 0.7 * e[i - 1] + rng.normal(0, 2)
+    T = 75 + 15 * np.sin(np.arange(n) / 58.0)
+    mb = fit_model(T, 50 + 2 * np.maximum(0, T - 65) + e, "3PC", time_index=idx)
+    mr = fit_model(T, 45 + 1.6 * np.maximum(0, T - 65) + rng.normal(0, 2, n), "3PC",
+                   time_index=idx)  # fmt: skip
+    assert mb._fit_record.rho > 0.5 > (mr._fit_record.rho or 0.0)
+    kw = dict(baseline_cv_rmse=0.05, n_baseline=n, p_baseline=3, p_reporting=3)
+    rec = normalized_savings(mb, mr, _TEMPS, **kw)
+    exp = normalized_savings(mb, mr, _TEMPS, rho=mb._fit_record.rho,
+                             rho_reporting=mr._fit_record.rho or 0.0, **kw)  # fmt: skip
+    assert rec.abs_uncertainty == exp.abs_uncertainty

@@ -122,3 +122,54 @@ def test_as_dict_includes_model():
     d = r.as_dict()
     assert d["option"] == "B" and d["boundary"] == "b"
     assert d["model"]["p"] == 1
+
+
+# --------------------------------------------------------------------------- #21 (21a) fixes
+
+
+def test_isolation_normalized_passes_each_models_p():
+    """Two drivers are p = 3; the band used to be computed as if p = 2."""
+    from camber.mandv.normalized import normalized_savings
+    from camber.mandv.stats import fit_stats
+
+    rng = np.random.default_rng(7)
+    Xb, Xr = rng.uniform(50, 400, (60, 2)), rng.uniform(60, 390, (60, 2))
+    yb = 10 + Xb @ [0.8, 0.2] + rng.normal(0, 5, 60)
+    yr = 10 + Xr @ [0.6, 0.2] + rng.normal(0, 5, 60)
+    normal = np.column_stack([np.linspace(60, 390, 12), np.linspace(390, 60, 12)])
+    got = isolation_normalized_savings(yb, yr, normal, baseline_driver=Xb, reporting_driver=Xr)
+    mb, mr = fit_driver_model(Xb, yb), fit_driver_model(Xr, yr)
+    assert mb.p == mr.p == 3
+    cv = [fit_stats(y, m.predict(X), 3).cv_rmse for y, m, X in ((yb, mb, Xb), (yr, mr, Xr))]
+    kw = dict(baseline_cv_rmse=cv[0], n_baseline=60, reporting_cv_rmse=cv[1], n_reporting=60)
+    right = normalized_savings(mb, mr, normal, p_baseline=3, p_reporting=3, **kw)
+    wrong = normalized_savings(mb, mr, normal, **kw)  # the old p = 2 default
+    assert got.abs_uncertainty == right.abs_uncertainty > wrong.abs_uncertainty
+
+
+def test_isolation_time_index_keeps_rho():
+    import pandas as pd
+
+    rng = np.random.default_rng(3)
+    n = 120
+    idx = pd.date_range("2024-01-01", periods=n, freq="D")
+    tons = 200 + 100 * np.sin(np.arange(n) / 20.0)
+    e = np.zeros(n)
+    for i in range(1, n):
+        e[i] = 0.7 * e[i - 1] + rng.normal(0, 5)
+    yb = 10 + 0.8 * tons + e
+    yr = 10 + 0.6 * tons + rng.normal(0, 5, n)
+    plain = isolation_savings(yb, yr, baseline_driver=tons, reporting_driver=tons)
+    rho = isolation_savings(yb, yr, baseline_driver=tons, reporting_driver=tons,
+                            baseline_index=idx)  # fmt: skip
+    assert rho.savings == plain.savings
+    assert rho.abs_uncertainty > 1.5 * plain.abs_uncertainty  # rho ~0.7 widens the band
+    assert rho.model._fit_record.rho is not None
+    nrm = isolation_normalized_savings(
+        yb, yr, np.linspace(120, 280, 12), baseline_driver=tons, reporting_driver=tons,
+        baseline_index=idx, reporting_index=idx,
+    )  # fmt: skip
+    nrm0 = isolation_normalized_savings(
+        yb, yr, np.linspace(120, 280, 12), baseline_driver=tons, reporting_driver=tons
+    )
+    assert nrm.abs_uncertainty > nrm0.abs_uncertainty

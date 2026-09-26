@@ -575,10 +575,12 @@ GOLDEN = {
         "savings": 2685.51,
         "savings_pct": 0.2335,
     },
+    # #21 (21a) deliberately changed this band: the t is now df-aware (min(n - p) = 58 -> 1.671)
+    # where it used the large-sample 1.645, so 23.79 -> 24.17 (x 1.671/1.645). The saving is as was.
     "isolation_normalized": {
-        "abs_uncertainty": 23.79,
+        "abs_uncertainty": 24.17,
         "confidence": 0.9,
-        "fractional_uncertainty": 0.045,
+        "fractional_uncertainty": 0.0457,
         "n_normal_periods": 12,
         "nac_baseline": 2266.02,
         "nac_reporting": 1737.42,

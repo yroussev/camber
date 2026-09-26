@@ -10,9 +10,14 @@ hot reporting year doesn't flatter or penalize the result.
 
     normalized savings = NAC(baseline model) - NAC(reporting model)   over the normal year
 
-Uncertainty follows ASHRAE Guideline 14 Annex B: each projected NAC carries a fractional
-uncertainty 1.26 * CV(RMSE) * sqrt((n/M) * (1 + 2/n)) (M normal-year periods, n model-fit
-points), and the two are combined in quadrature at the chosen confidence. numpy only;
+Uncertainty: each projected NAC carries parameter error only -- no measured energy enters either
+side -- estimated as the OLS average-leverage form ``CV(RMSE) * sqrt((n/n') * (p/n))`` for its own
+model (:func:`camber.mandv.stats._rel_unc_projected`; ``n'`` the effective sample size from that
+model's own residual autocorrelation), or exactly with ``kernel="exact"``. The two are combined in
+quadrature (IPMVP 2012 Appendix B-5, B-19; BPA *Meter-Based Energy Modeling Protocol* 2024 §5.9)
+at Student's t on the smaller of the two fits' degrees of freedom. (An earlier docstring cited a
+G14 ``1.26`` form here that the code does not use; the G14 formula for normalized savings is
+**unverified** -- the ASHRAE text was not consulted.) numpy only;
 operates on any model with a ``predict(temps)`` method -- a change-point model directly, or a TOWT
 model wrapped in :class:`camber.mandv.towt.TOWTAtIndex` (its own ``predict`` takes an index *and*
 temperatures, so it cannot be passed here bare).
@@ -88,6 +93,7 @@ def normalized_savings(
     rho: float | None = None,
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "g14",
+    rho_reporting: float | None = None,
 ) -> NormalizedSavings:
     """Weather-normalized annual savings between two fitted models over a normal year.
 
@@ -103,8 +109,16 @@ def normalized_savings(
     That is why this uses :func:`camber.mandv.stats._rel_unc_projected` (OLS average leverage) and
     not the G14 measured-savings kernel, which carries a ``1/m`` term and would be several times too
     narrow at hourly resolution. ``p_baseline`` / ``p_reporting`` are the models' parameter counts;
-    ``rho`` is the residual lag-1 autocorrelation (see
-    :func:`camber.mandv.stats.lag1_autocorrelation`), widening the band when supplied.
+    the band uses Student's t on ``min(n_baseline - p_baseline, n_reporting - p_reporting)``
+    degrees of freedom -- conservative, and df-aware where it once used the large-sample value.
+
+    **Autocorrelation, per model.** ``rho`` is the *baseline* fit's residual lag-1
+    autocorrelation and ``rho_reporting`` the reporting fit's (see
+    :func:`camber.mandv.stats.lag1_autocorrelation`); each widens its own model's term. Omitted,
+    each falls back to the rho its model recorded when fitted with a ``time_index``. If the
+    reporting model's rho is still unknown while the baseline's is, the baseline's is substituted,
+    with a caveat -- the two periods' residuals need not share it (previously one ``rho`` was
+    applied to both, silently).
 
     **Extrapolation.** A normal year is often wider than the period a model was fitted on (a TMY
     cold snap, a reporting model fitted on one season). Each model's coverage of ``normal_temps``
@@ -117,7 +131,7 @@ def normalized_savings(
     is measured), combined in quadrature (IPMVP 2012 B-19; BPA 2024 §5.9) at ``t`` on the smaller
     of the two fits' degrees of freedom. It carries the leverage of the normal year itself, so
     ``fsu_extrapolation_factor`` is 1.0. It needs CAMBER-fitted models; the fit statistics
-    arguments are then unused, and ``rho=None`` falls back to each fit's recorded rho.
+    arguments are then unused.
     """
     _check_kernel(kernel)
     pol = extrapolation or ExtrapolationPolicy()
@@ -131,22 +145,35 @@ def normalized_savings(
     r_cv = reporting_cv_rmse if reporting_cv_rmse is not None else baseline_cv_rmse
     r_n = n_reporting if n_reporting is not None else n_baseline
     r_p = p_reporting if p_reporting is not None else p_baseline
-    rho_used = 0.0 if rho is None or not np.isfinite(rho) else float(rho)
-    rel_b = _rel_unc_projected(baseline_cv_rmse, n_fit=n_baseline, p_fit=p_baseline, rho=rho_used)
-    rel_r = _rel_unc_projected(r_cv, n_fit=r_n, p_fit=r_p, rho=rho_used)
-    t = _t_value(confidence)
+    rho_b = _finite(rho) if rho is not None else _recorded_rho(baseline_model)
+    rho_r = _finite(rho_reporting) if rho_reporting is not None else _recorded_rho(reporting_model)
+    rho_notes = []
+    if rho_r is None and rho_b is not None:
+        rho_r = rho_b
+        rho_notes.append(
+            f"the reporting model's residual autocorrelation is unknown; the baseline's "
+            f"(rho={rho_b:.2f}) is substituted for it"
+        )
+    rel_b = _rel_unc_projected(
+        baseline_cv_rmse, n_fit=n_baseline, p_fit=p_baseline, rho=rho_b or 0.0
+    )
+    rel_r = _rel_unc_projected(r_cv, n_fit=r_n, p_fit=r_p, rho=rho_r or 0.0)
+    t = _t_value(confidence, min(int(n_baseline) - int(p_baseline), int(r_n) - int(r_p)))
     if rel_b == rel_b and rel_r == rel_r:
         abs_unc = t * float(np.sqrt((rel_b * nac_b) ** 2 + (rel_r * nac_r) ** 2))
     else:
         abs_unc = float("nan")
 
     if kernel == "exact":
-        abs_unc = _exact_projected_band(baseline_model, reporting_model, temps, rho, confidence)
+        abs_unc = _exact_projected_band(
+            baseline_model, reporting_model, temps, rho_b, rho_r, confidence
+        )
 
     cov_b = assess_coverage(baseline_model, temps, policy=pol)
     cov_r = assess_coverage(reporting_model, temps, policy=pol)
     caveats = [f"baseline model: {c}" for c in cov_b.caveats]
     caveats += [f"reporting model: {c}" for c in cov_r.caveats]
+    caveats += rho_notes
     tier = _worst(cov_b.tier, cov_r.tier)
     factor = None
     if kernel == "exact":
@@ -206,12 +233,26 @@ def normalized_savings(
     return res
 
 
-def _exact_projected_band(baseline_model, reporting_model, temps, rho, confidence) -> float:
+def _finite(x) -> float | None:
+    return float(x) if x is not None and np.isfinite(x) else None
+
+
+def _recorded_rho(model) -> float | None:
+    """The rho a CAMBER fit recorded from its ``time_index`` (``None`` if none)."""
+    from ._design import fit_record
+
+    rec = fit_record(model)
+    return None if rec is None else _finite(rec.rho)
+
+
+def _exact_projected_band(
+    baseline_model, reporting_model, temps, rho_b, rho_r, confidence
+) -> float:
     """``t(df_min) * sqrt(V_param,b + V_param,r)`` of two projected totals (exact kernel)."""
     from ._design import projection_variance
 
-    pb = projection_variance(baseline_model, temps, rho=rho)
-    pr = projection_variance(reporting_model, temps, rho=rho)
+    pb = projection_variance(baseline_model, temps, rho=rho_b)
+    pr = projection_variance(reporting_model, temps, rho=rho_r)
     dfs = [d for d in (pb.df, pr.df) if d is not None]
     t = _t_value(confidence, min(dfs) if dfs else None)
     var = pb.v_param + pr.v_param
