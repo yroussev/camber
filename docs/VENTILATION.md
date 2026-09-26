@@ -83,8 +83,18 @@ res.reason  # why "insufficient" (see the table below)
 res.demand_lift  # CO₂ when OA was raised minus CO₂ when OA sat at its floor
 ```
 
-`oa_signal` can be OA flow, OA fraction, or OA-damper position; `demand_signal` is CO₂ (ppm) or a
-binary occupancy signal (detected automatically).
+`oa_signal` can be OA flow, OA fraction, or OA-damper position. `demand_signal` is one of three
+kinds, detected automatically (`demand_kind="auto"`) or stated:
+
+| kind | what it is | lift threshold |
+|---|---|---|
+| `co2` | zone CO₂, ppm | `min_lift_ppm` (50 ppm) |
+| `presence` | anything within 0..1 — an occupancy point, or its hourly mean | `min_lift_occupancy` (0.2) |
+| `count` | occupant count: non-negative, below any plausible CO₂ | `min_lift_people` (1 person) |
+
+Until 0.82.0 anything not strictly 0/1 was read as CO₂, so an occupant count, or a presence point
+averaged to 10-minute means, was filtered out as implausible CO₂ and the verdict came back
+`too_few_samples` with no hint why.
 
 ### Which samples are judged
 
@@ -128,14 +138,27 @@ economizer, closed-damper samples and outliers, described above.
 | **functioning** | `demand_lift` ≥ `min_lift_ppm` (occupancy: ≥ `min_lift_occupancy`) |
 | **uncorrelated** | OA modulates, but not upward with demand |
 
+**Occupancy demand is judged within each hour of day** (weekdays and weekends apart). Occupancy
+follows the clock, and so does a valve on a time clock or a damper doing thermal duty, so a plain
+comparison credits a schedule with "responding to occupancy". Only outdoor air that is higher on
+busier days *at the same hour* counts. Outdoor air that is never both raised and at its floor
+within one hour reads `insufficient` with `reason="schedule_confounded"`. `raised_when_vacant_pct`
+reports how often OA was raised with the space empty. An occupancy-based verdict is still weaker
+than a CO₂ one: a supply that rises with occupants' heat gain in a 100% outdoor-air system
+genuinely ventilates more per person, and occupancy data alone cannot say whether a thermostat
+or a DCV loop did it.
+
 Sub-checks, each `None` when it cannot be evaluated:
 
 - `co2_breach_at_min_pct` (needs `co2_setpoint`) — share of judged samples with CO₂ above setpoint
   while OA is at its floor: under-ventilation the DCV is not answering.
-- `below_floor_pct` (needs `oa_floor`, same units as the OA signal) — OA below the floor. For 62.1
-  dynamic reset the floor is the area component `Ra·Az` (§6.2.7; numbering varies by edition). For
-  a multiple-zone system the true intake floor is higher than `ΣRa·Az`, so this under-flags — the
-  safe direction.
+- `below_floor_pct` (needs `oa_floor`, same units as the OA signal) — OA below the floor, over
+  **every** occupied sample: it is measured before the economizer and closed-damper exclusions,
+  because an economizer only raises OA and a damper shut while occupied is the deepest
+  below-floor case there is. (Until 0.82.0's real-data pass it ran after them, and a wildfire
+  damper closure vanished into "not judged".) For 62.1 dynamic reset the floor is the area
+  component `Ra·Az` (§6.2.7; numbering varies by edition). For a multiple-zone system the true
+  intake floor is higher than `ΣRa·Az`, so this under-flags — the safe direction.
 - `excess_at_low_demand_pct` (needs `oa_floor`) — share of low-CO₂ samples with OA held above the
   floor: DCV installed but not saving energy, the reason it exists (ASHRAE 90.1 §6.4.3.8).
 
@@ -149,7 +172,9 @@ Sub-checks, each `None` when it cannot be evaluated:
 | `dcv_engage_ppm` | setpoint − 200, else 800 | CO₂ by which DCV should already be raising OA |
 | `min_modulation` | `0.1` | min robust OA range `(p95−p5)/p95`; below ⇒ "static" |
 | `min_lift_ppm` | `50` | min `demand_lift` (CO₂) for "functioning" |
-| `min_lift_occupancy` | `0.2` | min `demand_lift` (binary occupancy) for "functioning" |
+| `min_lift_occupancy` | `0.2` | min `demand_lift` (presence fraction) for "functioning" |
+| `min_lift_people` | `1.0` | min `demand_lift` (occupant count) for "functioning" |
+| `demand_kind` | `"auto"` | `co2` / `presence` / `count`, or detect |
 | `min_demand_span` | `150` | min CO₂ p90−p10 to judge at all |
 | `oa_floor`, `floor_tol` | `None`, `0.10` | floor for the floor sub-checks |
 | `min_samples`, `min_bin` | `24`, `6` | sample gates for the verdict and each bin |
@@ -168,10 +193,21 @@ Sub-checks, each `None` when it cannot be evaluated:
   `breach_fault_pct` / `below_floor_fault_pct`. Flags: `co2_setpoint`, `dcv_engage_ppm`,
   `min_modulation`, `min_lift_ppm`, `econ_high_limit_f`, `oa_floor_cfm` (a number, or
   `{equip: cfm}`), the three thresholds, `occupied_only`.
+
+  **Occupied hours:** a trended `OCCUPANCY` point *replaces* the schedule (so a 24/7 space isn't
+  cut to a weekday window); otherwise `start_hour` / `end_hour` / `occupied_days` (default
+  Mon–Fri 07–18). **Unventilated while occupied:** samples inside the occupied hours with CO₂ ≥
+  `unventilated_co2_ppm` (default `co2_setpoint`, else 1100 ppm) and the fan off or the OA shut
+  are reported as `unventilated_high_co2_hours` / `_pct`, and are a `fault` once they add up to
+  `unventilated_fault_hours` (4 h). The verdict itself judges modulation, not outages, so without
+  this a lecture theatre at its CO₂ sensor's full scale with the fan off read "not judged".
+  CAMBER temperatures are °F: when the economizer is inferred from OAT and nearly every sample is
+  excluded, the finding says an OAT in °C would do that.
 - **`dcv_system_verification`** (`DcvSystemVerification`) — the fleet twin, **auto-registered**.
   Most buildings put CO₂ on the zones and OA on the air handler, so no single frame has both. This
-  groups zones to their serving air handler through the served-by topology (semantic, or the naming
-  heuristic `run_fleet` builds — which caps severity at `warn`), drops zone CO₂ that is implausible,
+  groups zones to their serving air handler through the served-by topology — each zone's
+  *nearest ancestor that carries an OA signal*, so a Brick chain air handler → VAV → zone works
+  (semantic, or the naming heuristic `run_fleet` builds — which caps severity at `warn`), drops zone CO₂ that is implausible,
   stuck flat, or stays more than 300 ppm above outdoor when unoccupied, takes the per-timestamp
   **maximum** (the critical zone should drive the reset; `agg="mean"` is available) and judges each
   air handler as above. With no usable grouping and exactly one OA source, all zones join it, with
@@ -189,11 +225,18 @@ Sub-checks, each `None` when it cannot be evaluated:
 
 ## Validation and limits
 
-DCV is **validated on simulation only**. No licence-clean public dataset carries both CO₂ and OA
-trends — the CC-BY LBNL AHU and fan-coil exports have OA flow and damper position but no CO₂. The
-verdicts are tested against `camber.faultlab.dcv_sim`, a well-mixed zone CO₂ mass balance
+The verdict logic is tested against `camber.faultlab.dcv_sim`, a well-mixed zone CO₂ mass balance
 (`V·dC/dt = N·G − Q·(C − C_out)`) under proportional, integral and static DCV with an economizer,
-warm-up closures and a fan schedule.
+warm-up closures and a fan schedule — and, since 0.82.0, against open real-building data
+(licence-clean, not vendored; datasets cited by DOI):
+
+| Data | What it establishes |
+|---|---|
+| Lab room running a known DCV law, 3 + 6 L/s per person (Zenodo 10.5281/zenodo.18299691, CC BY) | `functioning` on CO₂ (lift 392 ppm), on the occupant count and on the controller's own occupancy estimate. The CO₂ mass balance closes at 5.3–5.8 mL/s per person, close to the 5.0 mL/s (0.0105 cfm) the simulator assumes for a sedentary adult |
+| Three office rooms, camera counts + VAV damper (data descriptor doi:10.1038/s41597-019-0274-4, CC0) | `functioning` on counts in all three (lift 2–20 people within the hour); on CO₂ one room, the other two never reached the engage level |
+| Office building with no DCV, 4 rooftop units, 11 CO₂ zones, Brick model (Dryad 10.7941/D1N33Q) | `insufficient` on every unit — never a false `functioning` (specificity); all 11 zones attributed through the Brick air handler → VAV → zone chain; the 2020 wildfire damper closure is a below-floor `fault` on the two units that fell under the 62.1 requirement and not on the two that stayed above it |
+| Lecture theatre, fan speed + two CO₂ sensors (Zenodo 10.5281/zenodo.3406555, CDLA-Permissive) | `fault`: 110 occupied hours with the fan off and CO₂ at the sensor's 2000 ppm full scale |
+| Rooms with a schedule-driven ventilation valve (github energietransitie/b4b-windesheim, CC BY) | not `functioning` on presence once the lift is taken within the hour — a time clock is not DCV |
 
 - Without `ECON_CMD` the economizer state is inferred, and the OAT-only fallback discards all mild
   weather — expect `insufficient` more often. That is the honest answer, not a defect.

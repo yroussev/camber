@@ -67,6 +67,43 @@ Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old 
 - `CO2` / `OUTDOOR_CO2` physical bounds in the sensor-health gate, and stuck-flat detection for
   zone CO₂.
 
+### Fixed — DCV, from a real-data pass
+The new DCV code was run against five open real-building datasets (licence-clean, cited by DOI in
+`docs/VENTILATION.md`, not vendored) before release. It held up where it should — a lab room with
+a known DCV law reads `functioning`, an office building with no DCV reads `insufficient` on every
+unit, never a false `functioning` — and turned up nine defects:
+- **An occupant count was discarded.** Anything not strictly 0/1 was read as CO₂ and filtered as
+  implausible, so a people count — or a presence point averaged to 10-minute means — returned
+  `too_few_samples, n=0` on every dataset. `assess_dcv` now detects `co2` / `presence` / `count`
+  (`demand_kind`), with `min_lift_people`.
+- **A time clock was credited as DCV.** Occupancy follows the clock, so a valve opened on a
+  schedule "responded" to presence (lift 0.245). Occupancy demand is now judged within each hour
+  of day, weekdays and weekends apart; the scheduled valve drops to 0.087, the real responders
+  keep 2–20 people of lift. OA never both raised and at its floor within an hour is
+  `insufficient`, `reason="schedule_confounded"`.
+- **The wildfire damper closure was invisible.** The below-floor check ran after the economizer
+  and closed-damper exclusions, then vanished into `too_few_samples`. It now runs on every
+  occupied sample first: the 2020 closure is a fault on the two units that fell below the 62.1
+  requirement, and not on the two that stayed above it.
+- **The worst outage read "not judged".** Fan off, CO₂ at the sensor's 2000 ppm full scale, 110
+  occupied hours — excluded as closed-OA samples. New `unventilated_high_co2_hours`: a fault at
+  ≥ 4 h (`unventilated_fault_hours`), judged by duration because an outage's share of a long
+  dataset says nothing about its severity.
+- **Brick chains attributed nothing.** The fleet rule took a zone's direct parent — in a Brick
+  model the VAV, not the unit bringing in outdoor air — and joined 0 of 11 zones. It now takes the
+  nearest ancestor with an OA signal: 11 of 11.
+- **Duplicate zone timestamps crashed the fleet rule** (`cannot reindex on an axis with duplicate
+  labels`, on raw 1-minute BMS data).
+- **A trended occupancy point could only narrow the weekday 07–18 window**, so a 24/7 space lost
+  two-thirds of its samples and the fleet rule dropped its working zones as "offset". The point now
+  replaces the schedule; `start_hour` / `end_hour` / `occupied_days` set it otherwise
+  (`schedules.occupied_mask` gains `days`).
+- **A Celsius OAT excluded every sample** as possibly economizing, with no hint why. CAMBER
+  temperatures are °F; the finding now says so when nearly everything is excluded.
+- **Microsecond timestamps silently dropped rows.** Two regular indexes at `us` resolution (as
+  parquet loads them) aligned to 10 rows instead of 3,013 under pandas ≥ 2; inputs are normalized
+  to nanoseconds.
+
 ### Hardening — benchmarks and validation claims
 - **The benchmark gates never saw a newly scored detector.** `check_against_baseline` only walked
   keys already in the baseline, so a metric the baseline had never seen was silently ungated — six
@@ -133,8 +170,9 @@ Measured on `faultlab.dcv_sim` (a zone CO₂ mass balance, 21 days hourly), old 
   the feedstock's recipe and synced to 0.81.0.
 
 ### Notes
-- **Validated on simulation only.** No licence-clean public dataset carries both CO₂ and OA trends:
-  the CC-BY LBNL AHU and fan-coil exports have OA flow and damper position but no CO₂ column.
+- **Validated on simulation and on open real-building data** — see the real-data pass below and
+  `docs/VENTILATION.md#validation-and-limits`. No labeled DCV-fault dataset exists, so detection is
+  established on one lab room with a known DCV law, not a sample.
 - **Pearson correlation was not the main defect.** In simulation an integral loop still correlates
   at 0.48–0.66 once the economizer and closures are excluded. The economizer, closed-damper samples
   and outliers were what broke the old check.

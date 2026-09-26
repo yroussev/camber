@@ -261,6 +261,8 @@ class DcvResult:
     n_econ_excluded: int | None = None  # samples dropped as (possibly) economizing
     econ_excluded: bool | None = None  # None = no economizer evidence was supplied
     closed_pct: float | None = None  # % judged samples with OA closed (excluded from the verdict)
+    demand_kind: str | None = None  # "co2" | "presence" | "count"
+    raised_when_vacant_pct: float | None = None  # presence/count: % vacant samples with OA raised
     below_floor_pct: float | None = None  # % samples OA below the floor (needs oa_floor)
     excess_at_low_demand_pct: float | None = None  # % low-demand samples OA above the floor
 
@@ -269,8 +271,26 @@ class DcvResult:
 
 
 def _dedup(s: pd.Series) -> pd.Series:
-    """Keep the last sample per timestamp -- a duplicated index cannot be reindexed."""
-    return s[~s.index.duplicated(keep="last")] if not s.index.is_unique else s
+    """Keep the last sample per timestamp -- a duplicated index cannot be reindexed -- on a
+    nanosecond index. Two regular indexes held at different resolutions (e.g. microseconds from a
+    parquet file) can fail to align in pandas >= 2 and silently drop nearly every row."""
+    if not s.index.is_unique:
+        s = s[~s.index.duplicated(keep="last")]
+    if isinstance(s.index, pd.DatetimeIndex) and s.index.unit != "ns":
+        s = s.copy()
+        s.index = s.index.as_unit("ns")
+    return s
+
+
+def _demand_kind(d: pd.Series) -> str:
+    """Classify a demand signal: presence (all within 0..1, incl. an hourly mean of a binary
+    point), an occupant count (non-negative, below any plausible CO₂), or CO₂ (ppm)."""
+    v = d.dropna()
+    if v.empty or (v.between(0.0, 1.0)).all():
+        return "presence"
+    if (v >= 0).all() and float(v.max()) < _CO2_PLAUSIBLE[0]:
+        return "count"
+    return "co2"
 
 
 def _pct(mask) -> float:
@@ -297,13 +317,17 @@ def assess_dcv(
     min_samples: int = 24,
     min_bin: int = 6,
     closed_frac: float = 0.02,
+    demand_kind: str = "auto",
+    min_lift_people: float = 1.0,
 ) -> DcvResult:
     """Verify DCV: is outdoor air raised when -- and only when -- ventilation demand is high?
 
-    ``oa_signal`` is OA flow, OA fraction or OA-damper position; ``demand_signal`` is zone CO₂
-    (ppm) or a binary occupancy signal (detected automatically). Only samples inside
-    ``occupied_mask`` and outside ``economizer_mask`` are judged -- see
-    :func:`economizer_active_mask` for why the economizer must be excluded.
+    ``oa_signal`` is OA flow, OA fraction or OA-damper position. ``demand_signal`` is one of
+    (``demand_kind="auto"`` detects which): zone **CO₂** in ppm; **presence**, any signal within
+    0..1 -- a binary occupancy point, or its hourly mean; or an occupant **count**, non-negative
+    and below any plausible CO₂. Only samples inside ``occupied_mask`` and outside
+    ``economizer_mask`` are judged -- see :func:`economizer_active_mask` for why the economizer
+    must be excluded.
 
     **The test.** A DCV controller maps demand to OA: a proportional reset raises OA as CO₂ climbs
     past its engage level; an integral loop raises OA only once CO₂ reaches its setpoint and holds
@@ -322,15 +346,25 @@ def assess_dcv(
       to compare. ``reason`` says which. Not evidence either way.
     - **static** -- demand reached the DCV range and OA did not move
       (robust modulation < ``min_modulation``).
-    - **functioning** -- ``demand_lift`` ≥ ``min_lift_ppm`` (CO₂) or ``min_lift_occupancy``
-      (occupancy fraction).
+    - **functioning** -- ``demand_lift`` ≥ ``min_lift_ppm`` (CO₂), ``min_lift_occupancy``
+      (presence fraction) or ``min_lift_people`` (count). For presence / count the lift is taken
+      **within each hour of day** (weekdays and weekends apart) and averaged: occupancy follows
+      the clock, and so does a time-clock valve or a thermal load, so only OA that is higher on
+      busier days *at the same hour* is responding to occupancy. OA that is never both raised
+      and at its floor within one hour of day reads **insufficient**
+      (``reason="schedule_confounded"``).
+      ``raised_when_vacant_pct`` reports how often OA was raised with the space empty -- a DCV
+      that is not holding its floor when vacant (it may also be doing thermal duty).
     - **uncorrelated** -- OA modulates, but not with demand.
 
     ``oa_floor`` (same units as ``oa_signal``; scalar or Series) is the lowest OA the DCV may
     reach -- for 62.1 dynamic reset, the area component ``Ra·Az`` (§6.2.7; section numbering
     varies by edition). With it, ``below_floor_pct`` and ``excess_at_low_demand_pct`` are
-    reported; without it they are ``None``. ``co2_breach_at_min_pct`` is the share of **all**
-    judged samples with CO₂ above ``co2_setpoint`` while OA is at its floor.
+    reported; without it they are ``None``. ``below_floor_pct`` is measured over **all**
+    occupied samples, before the economizer and closed-damper exclusions -- an economizer only
+    raises OA, and a damper shut while occupied is the deepest below-floor case there is.
+    ``co2_breach_at_min_pct`` is the share of **all** judged samples with CO₂ above
+    ``co2_setpoint`` while OA is at its floor.
 
     Samples with OA effectively **closed** (at or below ``closed_frac`` of its 95th percentile)
     are excluded from the verdict and reported as ``closed_pct``: DCV never shuts OA fully while
@@ -350,10 +384,30 @@ def assess_dcv(
             use="`min_lift_ppm` (the verdict no longer uses Pearson correlation)",
             stacklevel=3,
         )
+    if demand_kind not in ("auto", "co2", "presence", "count"):
+        raise ValueError(f"demand_kind must be auto/co2/presence/count, got {demand_kind!r}")
     df = pd.DataFrame({"oa": _dedup(oa_signal), "d": _dedup(demand_signal)}).dropna()
     if occupied_mask is not None:
         occ = _dedup(occupied_mask)
         df = df[occ.reindex(df.index, fill_value=False).astype(bool)]
+
+    kind = demand_kind if demand_kind != "auto" else _demand_kind(df["d"])
+    if kind == "co2":
+        lo_ok, hi_ok = _CO2_PLAUSIBLE
+        df = df[(df["d"] >= lo_ok) & (df["d"] <= hi_ok)]
+
+    # The floor sub-checks run on EVERY occupied sample, before the economizer and closed-damper
+    # exclusions: an economizer only ever raises OA, and a closed damper while occupied is the most
+    # below-floor OA can be -- excluding either would hide exactly the under-ventilation the floor
+    # exists to catch (a wildfire damper closure read as "not judged").
+    below_floor = None
+    if oa_floor is not None and len(df):
+        fl_all = (
+            _dedup(oa_floor).reindex(df.index).to_numpy(dtype=float)
+            if isinstance(oa_floor, pd.Series)
+            else np.full(len(df), float(oa_floor))
+        )
+        below_floor = _pct(df["oa"].to_numpy(dtype=float) < fl_all * (1.0 - floor_tol))
 
     n_econ = None
     econ_excluded = None
@@ -363,10 +417,6 @@ def assess_dcv(
         econ_excluded = True
         df = df[~active]
 
-    binary = bool(len(df)) and bool(df["d"].isin((0.0, 1.0)).all())
-    if not binary:
-        lo_ok, hi_ok = _CO2_PLAUSIBLE
-        df = df[(df["d"] >= lo_ok) & (df["d"] <= hi_ok)]
     closed_pct = None
     if len(df):
         ref = float(np.percentile(df["oa"].to_numpy(dtype=float), 95))
@@ -386,6 +436,8 @@ def assess_dcv(
             n_econ_excluded=n_econ,
             econ_excluded=econ_excluded,
             closed_pct=closed_pct,
+            below_floor_pct=below_floor,
+            demand_kind=kind,
         )
         base.update(kw)
         return DcvResult(**base)
@@ -405,10 +457,17 @@ def assess_dcv(
     corr = float(np.corrcoef(oa, d)[0, 1]) if np.std(oa) > 0 and np.std(d) > 0 else float("nan")
 
     # demand bins (by demand) -- decide whether DCV was ever asked to respond
-    if binary:
+    if kind == "presence":
         high = d >= 0.5
         low = ~high
         span = float(high.any() and low.any())
+        span_ok = span > 0
+    elif kind == "count":
+        hi_n = max(1.0, float(np.percentile(d, 75)))
+        high = d >= hi_n
+        low = (d <= float(np.percentile(d, 25))) & (d < hi_n)
+        span = float(np.percentile(d, 90) - np.percentile(d, 10))
+        span_ok = span >= min_lift_people
     else:
         if dcv_engage_ppm is not None:
             engage = float(dcv_engage_ppm)
@@ -419,6 +478,7 @@ def assess_dcv(
         high = d >= engage
         low = (d <= float(np.percentile(d, 25))) & (d < engage)
         span = float(np.percentile(d, 90) - np.percentile(d, 10))
+        span_ok = span >= min_demand_span
 
     # OA bins (by OA) -- the verdict's conditioning variable
     at_floor = oa <= p_lo + 0.05 * rng_oa
@@ -431,27 +491,30 @@ def assess_dcv(
         else:
             floor = np.full(n, float(oa_floor))
     breach = None
-    if co2_setpoint is not None and not binary:
+    if co2_setpoint is not None and kind == "co2":
         at_min = oa <= floor * (1.0 + floor_tol) if floor is not None else at_floor
         breach = _pct((d > co2_setpoint) & at_min)
-    below_floor = _pct(oa < floor * (1.0 - floor_tol)) if floor is not None else None
     excess = (
         _pct(oa[low] > floor[low] * (1.0 + floor_tol))
         if floor is not None and _enough(low)
         else None
     )
+    # occupancy-driven DCV should hold OA at its floor when the space is empty (reported, not a
+    # verdict: a supply damper can also be doing thermal duty)
+    vacant = d <= 0.0 if kind in ("presence", "count") else np.zeros(n, dtype=bool)
+    raised_vacant = _pct(raised[vacant]) if _enough(vacant) else None
     common = dict(
         correlation=round(corr, 3) if np.isfinite(corr) else float("nan"),
         modulation=round(modulation, 3),
         co2_breach_at_min_pct=breach,
         demand_span=round(span, 1),
-        below_floor_pct=below_floor,
         excess_at_low_demand_pct=excess,
+        raised_when_vacant_pct=raised_vacant,
         oa_high_demand=round(float(np.median(oa[high])), 1) if high.any() else None,
         oa_low_demand=round(float(np.median(oa[low])), 1) if low.any() else None,
     )
 
-    if not binary and span < min_demand_span:
+    if not span_ok:
         return _result("insufficient", reason="no_demand_variation", **common)
     if not _enough(high):
         return _result("insufficient", reason="demand_below_engage", **common)
@@ -460,11 +523,27 @@ def assess_dcv(
     if not (_enough(raised) and _enough(at_floor)):
         return _result("insufficient", reason="oa_rarely_raised", **common)
 
-    if binary:
-        lift = float(np.mean(d[raised]) - np.mean(d[at_floor]))
-        ok = lift >= min_lift_occupancy
+    if kind in ("presence", "count"):
+        # Occupancy follows the clock, and so do schedules and thermal loads -- a valve opened by
+        # a time clock correlates with occupancy without responding to it. So the lift is taken
+        # WITHIN each hour of day (weekdays and weekends apart) and averaged: only OA that is
+        # higher on busier days at the same hour is responding to occupancy.
+        agg = np.mean if kind == "presence" else np.median
+        # stratum = (weekend?, hour): a weekday-only time clock is also a schedule
+        slot = (df.index.dayofweek.to_numpy() >= 5) * 24 + df.index.hour.to_numpy()
+        num = wt = 0.0
+        for h in np.unique(slot):
+            r, f = raised & (slot == h), at_floor & (slot == h)
+            k = min(int(r.sum()), int(f.sum()))
+            if k >= 3:
+                num += float(agg(d[r]) - agg(d[f])) * k
+                wt += k
+        if wt < min_bin:
+            return _result("insufficient", reason="schedule_confounded", **common)
+        lift = num / wt
+        ok = lift >= (min_lift_occupancy if kind == "presence" else min_lift_people)
     else:
         lift = float(np.median(d[raised]) - np.median(d[at_floor]))
         ok = lift >= min_lift_ppm
-    common["demand_lift"] = round(lift, 3 if binary else 1)
+    common["demand_lift"] = round(lift, 3 if kind == "presence" else 1)
     return _result("functioning" if ok else "uncorrelated", **common)

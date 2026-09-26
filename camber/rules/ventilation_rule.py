@@ -67,6 +67,7 @@ _REASON = {
     "no_demand_variation": "demand never varied enough to test DCV",
     "demand_below_engage": "CO₂ never reached the level where DCV should respond",
     "oa_rarely_raised": "OA was raised above its floor too rarely to compare",
+    "schedule_confounded": "OA follows the time of day, so occupancy response can't be separated",
 }
 
 
@@ -110,6 +111,11 @@ class DemandControlledVentilation:
         below_floor_fault_pct: float = 10.0,
         excess_warn_pct: float = 50.0,
         min_samples: int = 24,
+        start_hour: float = 7,
+        end_hour: float = 18,
+        occupied_days=(0, 1, 2, 3, 4),
+        unventilated_co2_ppm: float | None = None,
+        unventilated_fault_hours: float = 4.0,
     ):
         self.min_corr = min_corr
         self.min_modulation = min_modulation
@@ -124,6 +130,35 @@ class DemandControlledVentilation:
         self.below_floor_fault_pct = below_floor_fault_pct
         self.excess_warn_pct = excess_warn_pct
         self.min_samples = min_samples
+        self.start_hour = start_hour
+        self.end_hour = end_hour
+        self.occupied_days = tuple(occupied_days)
+        self.unventilated_co2_ppm = unventilated_co2_ppm
+        self.unventilated_fault_hours = unventilated_fault_hours
+
+    def _occupied(self, frame: pd.DataFrame) -> pd.Series:
+        """Occupied samples: a trended ``OCCUPANCY`` point is the truth when present (it
+        *replaces* the schedule, so a 24/7 space isn't cut to the default weekday window);
+        otherwise the configured schedule. ``WARMUP`` / ``COOLDOWN`` are excluded either way."""
+        idx = frame.index
+        if Role.OCCUPANCY in frame.columns:
+            return occupied_mask(
+                idx,
+                start_hour=0,
+                end_hour=24,
+                days=range(7),
+                occ=frame[Role.OCCUPANCY],
+                warmup=frame.get(Role.WARMUP),
+                cooldown=frame.get(Role.COOLDOWN),
+            )
+        return occupied_mask(
+            idx,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            days=self.occupied_days,
+            warmup=frame.get(Role.WARMUP),
+            cooldown=frame.get(Role.COOLDOWN),
+        )
 
     def _floor_for(self, equip: str):
         if isinstance(self.oa_floor_cfm, Mapping):
@@ -138,17 +173,14 @@ class DemandControlledVentilation:
         oa_role = _oa_role(frame)
         caveats: list = []
         idx = frame.index
-        mask = pd.Series(True, index=idx)
-        if self.occupied_only:
-            mask = occupied_mask(
-                idx,
-                occ=frame.get(Role.OCCUPANCY),
-                warmup=frame.get(Role.WARMUP),
-                cooldown=frame.get(Role.COOLDOWN),
-            )
+        demand = demand[~demand.index.duplicated(keep="last")].reindex(idx)
+        occupied = self._occupied(frame) if self.occupied_only else pd.Series(True, index=idx)
+        mask = occupied
+        fan_on = None
         if Role.SUPPLY_FAN_STATUS in frame.columns:
             # an hourly mean below 1 is a partial-hour fan transition -- its OA mean is diluted
-            mask = mask & (frame[Role.SUPPLY_FAN_STATUS].reindex(idx).fillna(0) > 0.95)
+            fan_on = frame[Role.SUPPLY_FAN_STATUS].reindex(idx).fillna(0) > 0.95
+            mask = mask & fan_on
         econ, econ_basis = economizer_active_mask(
             idx,
             econ_cmd=frame.get(Role.ECON_CMD),
@@ -183,6 +215,24 @@ class DemandControlledVentilation:
             oa_floor=floor,
             min_samples=self.min_samples,
         )
+
+        # Occupied, CO₂ high, and nothing ventilating: the fan off or the OA damper shut. The
+        # verdict above excludes those samples (it judges modulation, not outages), so without this
+        # check the worst failure -- a lecture theatre at the CO₂ sensor's full scale with the fan
+        # off -- reads "not judged".
+        limit = self.unventilated_co2_ppm or self.co2_setpoint or 1100.0
+        oa_vals = frame[oa_role].reindex(idx)
+        ref = float(oa_vals[occupied].quantile(0.95)) if occupied.any() else float("nan")
+        off = oa_vals <= 0.02 * ref if ref == ref and ref > 0 else oa_vals <= 0
+        if fan_on is not None:
+            off = off | ~fan_on
+        judged = occupied & demand.notna()
+        unvent = unvent_h = None
+        if judged.sum() >= self.min_samples:
+            hit = (off & (demand >= limit))[judged]
+            unvent = round(100.0 * float(hit.mean()), 1)
+            step_h = float(pd.Series(idx).diff().median() / pd.Timedelta(hours=1))
+            unvent_h = round(float(hit.sum()) * step_h, 1) if step_h == step_h else None
 
         not_evaluated = []
         if res.co2_breach_at_min_pct is None:
@@ -219,6 +269,25 @@ class DemandControlledVentilation:
         if (res.below_floor_pct or 0.0) >= self.below_floor_fault_pct:
             severity = "fault"
             msg += f"; OA below the floor {res.below_floor_pct:.0f}% of samples"
+        # an outage is judged by its duration, not its share: 110 hours at the CO₂ sensor's full
+        # scale is a fault whether the dataset holds one month or fourteen
+        if (unvent_h or 0.0) >= self.unventilated_fault_hours:
+            severity = "fault"
+            msg += (
+                f"; occupied with CO₂ ≥ {limit:.0f} ppm and no ventilation (fan off or OA shut) "
+                f"for {unvent_h:.0f} h ({unvent:.1f}% of occupied samples)"
+            )
+        if (
+            econ_basis in ("oat", "oat_heat_valve")
+            and res.n_econ_excluded is not None
+            and res.n_econ_excluded >= 0.95 * max(1, res.n_econ_excluded + res.n)
+        ):
+            caveats.append(
+                f"{res.n_econ_excluded} of the samples were excluded as possibly economizing "
+                f"(OAT below the {self.econ_high_limit_f:.0f} °F high limit). CAMBER temperatures "
+                "are °F -- an OAT trended in °C reads as always cold; in a cool climate, map "
+                "ECON_CMD so the economizer need not be inferred"
+            )
 
         metrics = {
             "status": res.status,
@@ -234,6 +303,9 @@ class DemandControlledVentilation:
             "economizer_basis": econ_basis,
             "n_econ_excluded": res.n_econ_excluded,
             "oa_signal": oa_role.value if oa_role is not None else None,
+            "demand_kind": res.demand_kind,
+            "unventilated_high_co2_pct": unvent,
+            "unventilated_high_co2_hours": unvent_h,
             "n": res.n,
         }
         return Finding(
@@ -295,6 +367,8 @@ class DcvSystemVerification:
         self._judge_rule.name = self.name
 
     def _usable_zone_co2(self, frame: pd.DataFrame) -> tuple[pd.Series | None, str | None]:
+        if not frame.index.is_unique:
+            frame = frame[~frame.index.duplicated(keep="last")]
         co2 = frame[Role.CO2].where(frame[Role.CO2].between(250.0, 5000.0))
         if co2.count() < 24:
             return None, "too few plausible CO₂ samples"
@@ -303,7 +377,8 @@ class DcvSystemVerification:
         outdoor = self.assumed_outdoor_ppm
         if Role.OUTDOOR_CO2 in frame.columns and frame[Role.OUTDOOR_CO2].notna().any():
             outdoor = float(frame[Role.OUTDOOR_CO2].median())
-        unocc = co2[~occupied_mask(co2.index)].dropna()
+        unocc = co2[~self._judge_rule._occupied(frame).reindex(co2.index, fill_value=False)]
+        unocc = unocc.dropna()
         if len(unocc) >= 24 and float(unocc.median()) > outdoor + self.unoccupied_excess_ppm:
             return None, "CO₂ stays high when unoccupied (offset / miscalibrated)"
         return co2, None
@@ -330,8 +405,9 @@ class DcvSystemVerification:
         assign: dict = {}
         if topology is not None:
             provenance = topology.provenance
-            gm = topology.group_map(list(zones))
-            assign = {z: g for z, g in gm.items() if g in sources}
+            # nearest *OA-source* ancestor: a Brick model chains AHU -> VAV -> zone, so a zone's
+            # direct parent is usually a terminal box, not the unit that brings in outdoor air
+            assign = topology.group_map(list(zones), pred=lambda e: e in sources)
         if not assign and len(sources) == 1:
             only = next(iter(sources))
             assign = {z: only for z in zones}

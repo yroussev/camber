@@ -174,10 +174,15 @@ def test_static_at_design_is_excess_at_low_demand():
 
 
 def test_binary_occupancy_demand():
-    idx = pd.date_range("2025-07-07", periods=96, freq="1h")
-    occ = pd.Series(((idx.hour >= 8) & (idx.hour < 17)).astype(float), index=idx)
+    idx = pd.date_range("2025-07-07", periods=24 * 21, freq="1h")
+    busy = np.random.default_rng(5).random(len(idx)) < 0.6  # occupied some days/hours, not others
+    occ = pd.Series(((idx.hour >= 8) & (idx.hour < 17) & busy).astype(float), index=idx)
     working = assess_dcv(700.0 + 300.0 * occ, occ)
     assert working.status == "functioning" and working.demand_lift == 1.0
+    # a pure schedule (the same hours every day) cannot show occupancy response
+    sched = pd.Series(((idx.hour >= 8) & (idx.hour < 17)).astype(float), index=idx)
+    confounded = assess_dcv(700.0 + 300.0 * sched, sched)
+    assert confounded.reason == "schedule_confounded"
     static = assess_dcv(pd.Series(1000.0, index=idx), occ)
     assert static.status == "static" and static.co2_breach_at_min_pct is None
 
@@ -375,3 +380,127 @@ def test_fleet_through_registry(monkeypatch):
     assert got.metrics["grouping_provenance"] == "heuristic"
     assert got.metrics["per_ahu"]["AHU_2"]["status"] == "static"
     assert got.metrics["per_ahu"]["AHU_1"]["status"] == "functioning"
+
+
+# --------------------------------------------------------------------------- real-data regressions
+# Each test reproduces a defect found running 0.82.0-dev against open datasets (see CHANGELOG).
+
+
+def _hourly(n=24 * 21, start="2025-07-07"):
+    return pd.date_range(start, periods=n, freq="1h")
+
+
+def test_occupant_count_demand_is_judged_not_discarded():
+    """A 0..30 people count used to be read as CO2 and filtered out (n=0, too_few_samples)."""
+    idx = _hourly()
+    rng = np.random.default_rng(3)
+    count = np.where(rng.random(len(idx)) < 0.3, 0, rng.integers(1, 30, len(idx)))  # some empty
+    people = pd.Series(np.where(idx.hour.isin(range(9, 17)), count, 0), idx)
+    oa = 700.0 + 25.0 * people  # OA follows the count
+    r = assess_dcv(oa, people.astype(float), occupied_mask=occupied_mask(idx))
+    assert r.demand_kind == "count" and r.n > 100
+    assert r.status == "functioning" and r.demand_lift >= 1.0
+
+
+def test_fractional_presence_is_presence_not_co2():
+    """A PIR point averaged to 10-min / hourly means is fractional; it was dropped as CO2."""
+    idx = _hourly()
+    frac = pd.Series(np.where(idx.hour.isin(range(9, 17)), 0.7, 0.0), idx)
+    frac[idx.hour == 12] = 0.4
+    r = assess_dcv(700.0 + 400.0 * frac, frac, occupied_mask=occupied_mask(idx))
+    assert r.demand_kind == "presence" and r.n > 100
+
+
+def test_schedule_driven_oa_is_not_occupancy_dcv():
+    """OA opened by a clock that happens to overlap occupancy must not read "functioning": the
+    lift is taken within each hour of day, where a time clock shows none."""
+    idx = _hourly()
+    occ = pd.Series(idx.hour.isin(range(12, 17)).astype(float), idx)  # occupied 12-17
+    oa = pd.Series(np.where(idx.hour.isin(range(7, 17)), 1000.0, 300.0), idx)  # open 07-17
+    r = assess_dcv(oa, occ, occupied_mask=occupied_mask(idx))
+    assert r.status == "insufficient" and r.reason == "schedule_confounded"
+    assert r.raised_when_vacant_pct > 50
+
+
+def test_microsecond_indexes_align():
+    """Two regular us-unit indexes with different starts used to intersect to ~0 rows."""
+    a = pd.date_range("2022-10-10", periods=3456, freq="10min", unit="us")
+    b = pd.date_range("2022-10-12 16:10", periods=3013, freq="10min", unit="us")
+    rng = np.random.default_rng(0)
+    r = assess_dcv(
+        pd.Series(rng.uniform(300, 900, len(a)), a), pd.Series(rng.uniform(450, 1200, len(b)), b)
+    )
+    assert r.n > 2500
+
+
+def test_below_floor_survives_economizer_exclusion():
+    """A damper held below the floor all day is under-ventilation even when every sample might
+    be economizing -- it used to vanish into too_few_samples (the wildfire closure)."""
+    idx = _hourly()
+    oa = pd.Series(800.0, idx)
+    co2 = pd.Series(700.0, idx)
+    r = assess_dcv(oa, co2, oa_floor=2000.0, economizer_mask=pd.Series(True, idx))
+    assert r.below_floor_pct == 100.0 and r.status == "insufficient"
+
+
+def test_fan_off_while_occupied_with_high_co2_is_a_fault():
+    """A lecture theatre at the CO2 sensor's 2000 ppm full scale with the fan off read
+    "not judged" because the verdict excludes fan-off samples."""
+    f = _sim(control="static", economizer=False)
+    occ_rows = occupied_mask(f.index) & (f.index.dayofweek < 2)
+    f.loc[occ_rows, Role.SUPPLY_FAN_STATUS] = 0.0
+    f.loc[occ_rows, Role.OA_AIRFLOW] = 0.0
+    f.loc[occ_rows, Role.CO2] = 2000.0
+    got = DemandControlledVentilation().analyze("AHU-1", f)
+    assert got.severity == "fault" and got.metrics["unventilated_high_co2_hours"] >= 4
+
+
+def test_short_unventilated_blip_is_not_a_fault():
+    f = _sim(control="proportional", economizer=False)
+    blip = (
+        occupied_mask(f.index) & (f.index.dayofyear == f.index[0].dayofyear) & (f.index.hour == 10)
+    )
+    f.loc[blip, [Role.SUPPLY_FAN_STATUS, Role.OA_AIRFLOW]] = 0.0
+    f.loc[blip, Role.CO2] = 1500.0
+    got = DemandControlledVentilation().analyze("AHU-1", f)
+    assert got.metrics["unventilated_high_co2_hours"] == 1.0 and got.severity != "fault"
+
+
+def test_celsius_oat_is_caveated():
+    f = _sim(control="proportional").drop(columns=[Role.ECON_CMD, Role.HEAT_VALVE])
+    f[Role.OAT] = (f[Role.OAT] - 32.0) / 1.8  # a BAS trending OAT in C
+    got = DemandControlledVentilation().analyze("AHU-1", f)
+    assert any("°C" in c for c in got.caveats)
+
+
+def test_occupancy_point_replaces_weekday_schedule():
+    """A 24/7 space with a trended occupancy point lost two-thirds of its samples to the default
+    weekday 07-18 window."""
+    idx = _hourly()
+    co2 = pd.Series(600.0 + 400.0 * np.abs(np.sin(np.arange(len(idx)) / 5.0)), idx)
+    f = pd.DataFrame({Role.CO2: co2, Role.OA_AIRFLOW: 700.0 + 0.8 * (co2 - 600.0)}, index=idx)
+    base = DemandControlledVentilation().analyze("SZ-1", f).metrics["n"]
+    f[Role.OCCUPANCY] = 1.0
+    assert DemandControlledVentilation().analyze("SZ-1", f).metrics["n"] > 2 * base
+    custom = DemandControlledVentilation(start_hour=0, end_hour=24, occupied_days=range(7))
+    assert custom.analyze("SZ-1", f.drop(columns=[Role.OCCUPANCY])).metrics["n"] > 2 * base
+
+
+def test_fleet_follows_brick_ahu_vav_zone_chain():
+    """Brick chains AHU -> VAV -> zone; the fleet rule took the zone's direct parent (the VAV, not
+    an OA source) and attributed 0 zones."""
+    frames, parents = _fleet({"AHU_1": "proportional"})
+    edges = []
+    for z, ahu in parents.items():
+        box = z.replace("_VAV_", "_BOX_")
+        edges += [(ahu, box), (box, z)]
+    got = DcvSystemVerification().analyze_fleet(frames, topology=Topology.from_edges(edges))
+    assert got.metrics["n_zones_joined"] == 4 and got.severity == "ok"
+
+
+def test_fleet_tolerates_duplicate_zone_timestamps():
+    frames, parents = _fleet({"AHU_1": "proportional"})
+    z = frames["AHU_1_VAV_4"]
+    frames["AHU_1_VAV_4"] = pd.concat([z, z.iloc[:50]]).sort_index()
+    got = DcvSystemVerification().analyze_fleet(frames, topology=Topology.from_parent_map(parents))
+    assert got.metrics["n_zones_joined"] == 4

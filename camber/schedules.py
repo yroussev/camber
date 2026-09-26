@@ -24,12 +24,22 @@ __all__ = [
 ]
 
 
-def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None, warmup=None, cooldown=None):
+def occupied_mask(
+    index,
+    *,
+    start_hour=7,
+    end_hour=18,
+    occ=None,
+    warmup=None,
+    cooldown=None,
+    days=(0, 1, 2, 3, 4),
+):
     """Boolean Series: is each interval occupied?
 
-    Weekday (Mon-Fri) within [start_hour, end_hour). If ``occ`` (a BAS occupancy
-    Series) is given it is AND-ed in. WarmUp/CoolDown Series, if given, exclude
-    unoccupied-prep intervals.
+    ``days`` (0 = Monday … 6 = Sunday; default Mon-Fri) within [start_hour, end_hour). If
+    ``occ`` (a BAS occupancy Series) is given it is AND-ed in. WarmUp/CoolDown Series, if given,
+    exclude unoccupied-prep intervals. For a 24/7 space pass ``start_hour=0, end_hour=24,
+    days=range(7)``.
 
     The default 07:00-18:00 weekday window is a generic office occupancy
     assumption, NOT site-specific -- pass start_hour/end_hour (or a real ``occ``
@@ -37,7 +47,9 @@ def occupied_mask(index, *, start_hour=7, end_hour=18, occ=None, warmup=None, co
     tool generalizes beyond one building.
     """
     hour = index.hour + index.minute / 60.0
-    m = pd.Series((index.dayofweek < 5) & (hour >= start_hour) & (hour < end_hour), index=index)
+    m = pd.Series(
+        index.dayofweek.isin(list(days)) & (hour >= start_hour) & (hour < end_hour), index=index
+    )
     if occ is not None:
         m = m & (occ.reindex(index).fillna(0) > 0.5)
     for flag in (warmup, cooldown):
