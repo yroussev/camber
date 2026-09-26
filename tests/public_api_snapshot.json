@@ -1056,11 +1056,17 @@
   ],
   "camber.mandv.stats": [
     "FitStats",
+    "RegressionTests",
     "SavingsResult",
+    "Validity",
     "avoided_energy_savings",
     "cv_rmse_max_for",
     "fit_stats",
-    "lag1_autocorrelation"
+    "lag1_autocorrelation",
+    "logical_signs",
+    "model_regression_tests",
+    "regression_tests",
+    "sep_validity"
   ],
   "camber.mandv.towt": [
     "TOWTAtIndex",

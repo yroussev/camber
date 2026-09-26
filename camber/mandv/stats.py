@@ -32,6 +32,7 @@ IPMVP. Metrics: R2, RMSE, CV(RMSE), NMBE / net determination bias, F-stat, and F
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 
 import numpy as np
@@ -60,6 +61,10 @@ class FitStats:
     # Lag-1 autocorrelation of the residuals; None when it could not be estimated (too few adjacent
     # pairs, or no time_index was supplied). Feeds the FSU effective-sample-size correction.
     rho_lag1: float | None = None
+    # p-value of the overall F-test F(p-1, n-p) (None when p = 1 or it cannot be computed), and
+    # the adjusted R^2 1 - (1-R^2)(n-1)/(n-p)
+    f_pvalue: float | None = None
+    adj_r2: float | None = None
 
     def as_dict(self):
         """Return as a plain dict."""
@@ -139,6 +144,8 @@ def fit_stats(
         notes.append(f"R2 {r2:.2f} < {r2_min}")
     if not (np.isfinite(nmbe) and abs(nmbe) <= nmbe_max):
         notes.append(f"|NMBE| {abs(nmbe):.2%} > {nmbe_max:.1%}")
+    f_p = _f_sf(f_stat, p - 1, n - p) if (p > 1 and np.isfinite(f_stat)) else float("nan")
+    adj = 1.0 - (1.0 - r2) * (n - 1) / (n - p) if np.isfinite(r2) else float("nan")
     return FitStats(
         n=n,
         p=p,
@@ -150,6 +157,8 @@ def fit_stats(
         accept=bool(ok),
         notes="; ".join(notes) or "meets G14 thresholds",
         rho_lag1=(None if idx is None else lag1_autocorrelation(resid, index=idx)),
+        f_pvalue=float(f"{f_p:.4g}") if np.isfinite(f_p) else None,
+        adj_r2=round(adj, 4) if np.isfinite(adj) else None,
     )
 
 
@@ -476,4 +485,404 @@ def _widen(frac_unc: float, k: float | None, pol: ExtrapolationPolicy, *, towt=F
         f"FSU widened x{k:.3f} for extrapolation: the parameter variance of the projected total at "
         "the reporting drivers vs at the drivers clamped into the baseline support (conditional on "
         "the fitted change points)"
+    )
+
+
+# --------------------------------------------------------------------------- t / F distributions
+
+
+def _betacf(a: float, b: float, x: float) -> float:
+    """Continued fraction for the regularized incomplete beta, by the modified Lentz method.
+
+    The even/odd coefficients of DLMF 8.17.22; converges quickly for ``x < (a+1)/(a+b+2)``.
+    """
+    tiny = 1e-300
+    qab, qap, qam = a + b, a + 1.0, a - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    d = 1.0 / (d if abs(d) > tiny else tiny)
+    h = d
+    for m in range(1, 1000):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1.0 + aa * d
+        d = 1.0 / (d if abs(d) > tiny else tiny)
+        c = 1.0 + aa / c
+        c = c if abs(c) > tiny else tiny
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        d = 1.0 / (d if abs(d) > tiny else tiny)
+        c = 1.0 + aa / c
+        c = c if abs(c) > tiny else tiny
+        de = d * c
+        h *= de
+        if abs(de - 1.0) < 1e-15:
+            break
+    return h
+
+
+def _betainc(a: float, b: float, x: float) -> float:
+    """Regularized incomplete beta ``I_x(a, b)`` (stdlib only; DLMF 8.17.22 continued fraction).
+
+    Evaluated directly for ``x < (a+1)/(a+b+2)`` and through the symmetry
+    ``I_x(a, b) = 1 - I_{1-x}(b, a)`` otherwise, so each branch converges fast and a small tail
+    probability keeps its relative precision.
+    """
+    if not (a > 0 and b > 0) or math.isnan(x):
+        return float("nan")
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    ln_front = (
+        math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log1p(-x)
+    )
+    front = math.exp(ln_front)
+    if x < (a + 1.0) / (a + b + 2.0):
+        return front * _betacf(a, b, x) / a
+    return 1.0 - front * _betacf(b, a, 1.0 - x) / b
+
+
+def _t_sf(t: float, df: float) -> float:
+    """Upper-tail probability ``P(T > t)`` of Student's t with ``df`` (> 0, may be fractional)."""
+    if not (df > 0) or math.isnan(t):
+        return float("nan")
+    if math.isinf(t):
+        return 0.0 if t > 0 else 1.0
+    tail = 0.5 * _betainc(df / 2.0, 0.5, df / (df + t * t))
+    return tail if t >= 0 else 1.0 - tail
+
+
+def _t_two_sided_p(t: float, df: float) -> float:
+    """Two-sided p-value ``P(|T| > |t|)``."""
+    return min(1.0, 2.0 * _t_sf(abs(t), df))
+
+
+def _f_sf(f: float, d1: float, d2: float) -> float:
+    """Upper-tail probability ``P(F > f)`` of the F distribution with ``(d1, d2)`` df."""
+    if not (d1 > 0 and d2 > 0) or math.isnan(f):
+        return float("nan")
+    if f <= 0.0:
+        return 1.0
+    if math.isinf(f):
+        return 0.0
+    return _betainc(d2 / 2.0, d1 / 2.0, d2 / (d2 + d1 * f))
+
+
+# --------------------------------------------------------------------------- regression tests
+
+_CP_CAVEAT = (
+    "slope p-values are conditional on the grid-searched change point(s), which are treated as "
+    "fixed (the ASHRAE G14 convention, per BPA/SBW 2017 §2.3.1); the search makes them optimistic"
+)
+
+
+@dataclass
+class RegressionTests:
+    """Coefficient and overall significance tests of an OLS fit (the SEP validity inputs).
+
+    ``coef`` / ``se`` / ``t`` / ``p`` are per design column (``names``), with two-sided p-values
+    from Student's t on ``df = n - n_params`` degrees of freedom; ``n_params`` counts the design
+    columns **plus** any grid-searched change points, consistent with :func:`fit_stats`. ``f_stat``
+    / ``f_p`` are the overall F-test ``F(n_params - 1, df)``. ``relevant`` names the relevant
+    variables -- the non-constant columns (slopes), not the intercept or a change point.
+
+    ``rho`` is the residuals' lag-1 autocorrelation (``None`` without a ``time_index``).
+    ``p_rho_adjusted`` / ``f_p_rho_adjusted`` repeat the tests with the variance inflated by
+    ``kappa = (1+rho)/(1-rho)`` and the degrees of freedom reduced to ``n' - n_params``, with
+    ``n' = n(1-rho)/(1+rho)``; ``None`` when ``rho`` is unknown or ``n' <= n_params``. SEP's own
+    tests assume independent residuals, so both are reported. ``conditional_on_change_points`` is
+    true when change points were searched: the slope p-values are then conditional on them, and
+    optimistic.
+    """
+
+    names: tuple
+    coef: tuple
+    se: tuple
+    t: tuple
+    p: tuple
+    f_stat: float | None
+    f_p: float | None
+    r2: float
+    adj_r2: float | None
+    n: int
+    n_params: int
+    df: int
+    relevant: tuple
+    rho: float | None = None
+    p_rho_adjusted: tuple | None = None
+    f_p_rho_adjusted: float | None = None
+    conditional_on_change_points: bool = False
+    caveats: list = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        """Return as a plain, JSON-safe dict (non-finite numbers become ``None``)."""
+        return _json_safe(asdict(self))
+
+
+def _json_safe(x):
+    if isinstance(x, dict):
+        return {k: _json_safe(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_json_safe(v) for v in x]
+    if isinstance(x, (float, np.floating)):
+        return float(x) if np.isfinite(x) else None
+    if isinstance(x, np.integer):
+        return int(x)
+    return x
+
+
+def _fin(x) -> float | None:
+    return float(x) if x is not None and np.isfinite(x) else None
+
+
+def regression_tests(
+    X,
+    y,
+    *,
+    names,
+    time_index=None,
+    n_change_points: int = 0,
+    conditional: bool | None = None,
+) -> RegressionTests:
+    """t-tests per coefficient and the overall F-test of an OLS fit of ``y`` on design ``X``.
+
+    ``X`` is the full design (``n x k``; include the constant column for a model with an
+    intercept), ``names`` one name per column. ``n_change_points`` counts parameters that were
+    grid-searched rather than solved by least squares (a change point, a balance point): they cost
+    a degree of freedom each and count in the F-test's ``p`` -- ``F(p - 1, n - p)`` with the change
+    point counted in ``p``, as :func:`fit_stats` does -- and make the slope p-values conditional on
+    them (``conditional`` overrides that flag, e.g. for a searched degree-day balance point that is
+    not counted). Non-finite rows are dropped. Pass ``time_index`` (aligned to ``y``) to also get
+    ``rho`` and the rho-adjusted p-values.
+
+    Distribution tails are computed in the standard library: a regularized incomplete beta
+    evaluated by its continued fraction (modified Lentz; DLMF 8.17.22), so t and F p-values need
+    no SciPy.
+    """
+    X = np.asarray(X, dtype=float)
+    if X.ndim == 1:
+        X = X[:, None]
+    y = np.asarray(y, dtype=float).ravel()
+    names = tuple(str(nm) for nm in names)
+    if X.shape[0] != len(y):
+        raise ValueError(f"X has {X.shape[0]} rows but y has {len(y)}")
+    if len(names) != X.shape[1]:
+        raise ValueError(f"{len(names)} names for {X.shape[1]} design columns")
+    ok = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
+    idx = None if time_index is None else np.asarray(time_index)[ok]
+    X, y = X[ok], y[ok]
+    n, k = X.shape
+    n_params = k + int(n_change_points)
+    df = n - n_params
+    if df < 1:
+        raise ValueError(f"need n > parameters for tests (n={n}, parameters={n_params})")
+    A = np.linalg.pinv(X.T @ X)
+    beta = A @ (X.T @ y)
+    resid = y - X @ beta
+    sse = float(resid @ resid)
+    s2 = sse / df
+    se = np.sqrt(np.clip(np.diag(A) * s2, 0.0, None))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        tt = np.where(se > 0, beta / se, np.where(beta == 0, 0.0, np.inf * np.sign(beta)))
+    p = tuple(_t_two_sided_p(float(v), df) for v in tt)
+    sst = float(((y - y.mean()) ** 2).sum())
+    r2 = 1.0 - sse / sst if sst > 0 else float("nan")
+    adj = 1.0 - (1.0 - r2) * (n - 1) / df if np.isfinite(r2) else float("nan")
+    constant = np.all(np.isclose(X, X[:1], rtol=0.0, atol=0.0), axis=0) & np.any(X != 0, axis=0)
+    relevant = tuple(nm for nm, c in zip(names, constant) if not c)
+    f_stat = f_p = None
+    if n_params > 1 and sse > 0 and np.isfinite(sst):
+        f_stat = max(0.0, ((sst - sse) / (n_params - 1)) / s2)
+        f_p = _f_sf(f_stat, n_params - 1, df)
+    elif n_params > 1 and sse == 0:
+        f_stat, f_p = float("inf"), 0.0
+    rho = None if idx is None else lag1_autocorrelation(resid, index=idx)
+    p_adj = f_adj = None
+    caveats = []
+    if rho is not None:
+        n_eff = _n_effective(n, rho)
+        df_adj = n_eff - n_params
+        if df_adj > 0:
+            kappa = (1.0 + rho) / (1.0 - rho)
+            p_adj = tuple(_t_two_sided_p(float(v) / math.sqrt(kappa), df_adj) for v in tt)
+            if f_stat is not None:
+                f_adj = _f_sf(f_stat / kappa, n_params - 1, df_adj)
+        else:
+            caveats.append(
+                f"rho-adjusted tests not computed: the effective sample size n'={n_eff:.1f} "
+                f"leaves no degrees of freedom for {n_params} parameters"
+            )
+    cond = bool(n_change_points > 0) if conditional is None else bool(conditional)
+    if cond:
+        caveats.append(_CP_CAVEAT)
+    return RegressionTests(
+        names=names,
+        coef=tuple(float(b) for b in beta),
+        se=tuple(float(v) for v in se),
+        t=tuple(float(v) for v in tt),
+        p=p,
+        f_stat=_fin(f_stat),
+        f_p=_fin(f_p),
+        r2=float(r2),
+        adj_r2=_fin(adj),
+        n=int(n),
+        n_params=int(n_params),
+        df=int(df),
+        relevant=relevant,
+        rho=rho,
+        p_rho_adjusted=p_adj,
+        f_p_rho_adjusted=_fin(f_adj),
+        conditional_on_change_points=cond,
+        caveats=caveats,
+    )
+
+
+# Expected coefficient signs of the change-point kinds whose physics fixes them: a heating arm
+# (energy rising as it gets colder, design column max(0, Tc - T)) and a cooling arm (max(0, T - Tc))
+# both have positive slopes. 2P and 4P slopes can legitimately take either sign, so they have none.
+_LOGICAL_SIGNS = {
+    "3PC": {"cool_slope": 1},
+    "3PCZ": {"cool_slope": 1},
+    "3PH": {"heat_slope": 1},
+    "3PHZ": {"heat_slope": 1},
+    "5P": {"heat_slope": 1, "cool_slope": 1},
+    "5PZ": {"heat_slope": 1, "cool_slope": 1},
+}
+
+
+def model_regression_tests(model, drivers, y, *, time_index=None) -> RegressionTests:
+    """:func:`regression_tests` for a fitted change-point, degree-day or driver model.
+
+    Rebuilds the model's own design at ``drivers`` (from its fit record), so the coefficients
+    reproduce the fit. A change-point model's change points count as parameters and make the slope
+    p-values conditional on them; a degree-day model's balance point is searched too, so its tests
+    are flagged conditional (it is not counted, matching the model's own ``fit.p``). Raises
+    ``TypeError`` for a model without a linear design record (TOWT, categorical, duck-typed).
+    """
+    from ._design import design_names, design_rows
+
+    X = design_rows(model, drivers)
+    names = design_names(model)
+    spec = model._fit_record.design
+    n_cp = len(spec[2]) if spec[0] == "cp" else 0
+    return regression_tests(
+        X,
+        y,
+        names=names,
+        time_index=time_index,
+        n_change_points=n_cp,
+        conditional=True if spec[0] == "dd" else None,
+    )
+
+
+def logical_signs(model) -> dict | None:
+    """The coefficient signs physics fixes for a change-point ``model`` (``None`` if none do).
+
+    Heating and cooling arms (3P, 5P and their zero-intercept variants) must slope upward away
+    from the change point; pass the result as ``signs=`` to :func:`sep_validity`.
+    """
+    spec = getattr(getattr(model, "_fit_record", None), "design", None)
+    if not spec or spec[0] != "cp" or not spec[2]:
+        return None  # includes the 5P -> 2P fallback, whose line may slope either way
+    signs = _LOGICAL_SIGNS.get(spec[1])
+    return dict(signs) if signs else None
+
+
+@dataclass
+class Validity:
+    """The DOE SEP model-validity verdict (SEP 50001 M&V Protocol 2019 Ed. 2 §6.4.1).
+
+    ``sep_valid`` is the protocol-literal verdict (independent residuals, as SEP assumes and the
+    EnPI tool computes); ``sep_valid_rho_adjusted`` repeats it with the rho-adjusted p-values
+    (``None`` when ``rho`` is unknown). ``failures`` / ``failures_rho_adjusted`` list the tests
+    that failed. This is a separate verdict from the ASHRAE G14 ``FitStats.accept`` gate, which
+    governs savings claims.
+    """
+
+    sep_valid: bool
+    failures: list
+    sep_valid_rho_adjusted: bool | None = None
+    failures_rho_adjusted: list = field(default_factory=list)
+    caveats: list = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        """Return as a plain dict."""
+        return asdict(self)
+
+
+def _sep_checks(tests: RegressionTests, p: tuple, f_p, signs: dict | None) -> list:
+    fails = []
+    pv = {nm: pi for nm, pi in zip(tests.names, p)}
+    rel = [nm for nm in tests.relevant]
+    if f_p is None or not f_p < 0.10:
+        fails.append("F-test p >= 0.10" if f_p is not None else "F-test not available")
+    if not rel:
+        fails.append("no relevant variable")
+    else:
+        weak = [nm for nm in rel if not pv[nm] < 0.20]
+        if weak:
+            fails.append(f"relevant variable(s) with p >= 0.20: {', '.join(weak)}")
+        if not any(pv[nm] < 0.10 for nm in rel):
+            fails.append("no relevant variable with p < 0.10")
+    if not (np.isfinite(tests.r2) and tests.r2 >= 0.50):
+        fails.append(f"R2 {tests.r2:.3f} < 0.50")
+    coef = dict(zip(tests.names, tests.coef))
+    for nm, sgn in (signs or {}).items():
+        if not coef[nm] * sgn > 0:
+            fails.append(
+                f"{nm} coefficient {coef[nm]:.4g} is not {'positive' if sgn > 0 else 'negative'}"
+            )
+    return fails
+
+
+def sep_validity(tests: RegressionTests, *, signs: dict | None = None) -> Validity:
+    """DOE SEP validity of a regression (SEP 2019 Ed. 2 §6.4.1; the same in SEP 2012 §3.4.5).
+
+    A model is valid when the overall F-test has p < 0.10, every relevant variable has p < 0.20,
+    at least one relevant variable has p < 0.10, R² >= 0.50, and the coefficients are consistent
+    with a logical understanding of the process. Relevant variables are ``tests.relevant`` -- the
+    slopes, never the intercept or a change point. ``signs`` maps a column name to its expected
+    sign (+1 / -1); :func:`logical_signs` supplies them for change-point kinds whose physics fixes
+    them. Without ``signs`` the sign test is not run, and a caveat says so.
+
+    SEP's tests assume independent residuals. The verdict is computed as written (reproducible
+    against the DOE EnPI tool) and again on the rho-adjusted p-values when ``tests.rho`` is known;
+    a caveat flags any disagreement.
+    """
+    if signs:
+        unknown = sorted(set(signs) - set(tests.names))
+        if unknown:
+            raise ValueError(
+                f"signs name unknown column(s) {unknown}; columns: {list(tests.names)}"
+            )
+        bad = {nm: s for nm, s in signs.items() if s not in (1, -1)}
+        if bad:
+            raise ValueError(f"signs must be +1 or -1, got {bad}")
+    fails = _sep_checks(tests, tests.p, tests.f_p, signs)
+    caveats = list(tests.caveats)
+    if not signs:
+        caveats.append(
+            "coefficient signs not checked (SEP also requires coefficients consistent with a "
+            "logical understanding of the process); pass signs= to check them"
+        )
+    v_adj = None
+    fails_adj: list = []
+    if tests.p_rho_adjusted is not None:
+        fails_adj = _sep_checks(tests, tests.p_rho_adjusted, tests.f_p_rho_adjusted, signs)
+        v_adj = not fails_adj
+        if v_adj != (not fails):
+            caveats.append(
+                f"the SEP verdict changes once residual autocorrelation (rho={tests.rho:.2f}) is "
+                f"accounted for: valid as written {not fails}, rho-adjusted {v_adj}"
+            )
+    elif tests.rho is None:
+        caveats.append("rho-adjusted verdict not computed: no time index, so rho is unknown")
+    return Validity(
+        sep_valid=not fails,
+        failures=fails,
+        sep_valid_rho_adjusted=v_adj,
+        failures_rho_adjusted=fails_adj,
+        caveats=caveats,
     )

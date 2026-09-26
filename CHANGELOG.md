@@ -45,6 +45,16 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   (zero-intercept kinds and a 5P that fell back to a line included), and the private fit record
   travels with it, so coverage and uncertainty are unchanged. `DriverModel.as_dict()` now reports
   full-precision coefficients (it rounded to 6 decimals) plus `type` and `fit_record`.
+- **Coefficient p-values and the SEP validity verdict** (provisional). `stats.regression_tests`
+  returns `RegressionTests` (coefficients, standard errors, t, two-sided p, the overall F p-value,
+  adjusted R², `rho` and rho-adjusted p-values); change points count as parameters and flag the
+  slope p-values as conditional on them. `stats.sep_validity` applies DOE SEP 50001 M&V Protocol
+  2019 Ed. 2 §6.4.1 (F p < 0.10, every relevant variable p < 0.20, one p < 0.10, R² >= 0.50,
+  logical signs) and reports the verdict as written and rho-adjusted, caveating a disagreement —
+  a separate verdict from the G14 `accept` gate, which is unchanged. `model_regression_tests` and
+  `logical_signs` apply them to a fitted model. The t and F tails are computed in the standard
+  library (a continued-fraction incomplete beta), checked against closed forms and the NIST StRD
+  *Norris* certified values. `FitStats` gains trailing `f_pvalue` and `adj_r2`.
 - The single private fit record (#20) also carries the fit's residual variance `s2`, `n`, `p`
   and `rho`; `fit_model`, `best_model`, `fit_driver_model` and `fit_degree_day` take a
   keyword-only `time_index` so `rho` is recorded, and `fit_towt` records it from its own index.
