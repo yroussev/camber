@@ -85,6 +85,11 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   and `rho`; `fit_model`, `best_model`, `fit_driver_model` and `fit_degree_day` take a
   keyword-only `time_index` so `rho` is recorded, and `fit_towt` records it from its own index.
 
+- Docs: `docs/MANDV.md` documents the p-values and the SEP verdict, the backcast, the exact
+  kernel (with its Monte Carlo coverage) and multi-step detection; its stale "step-change
+  detection is on the roadmap" is gone. `docs/API-STABILITY.md` lists the new surfaces as
+  provisional.
+
 ### Changed
 - **Severe extrapolation declines by default**: `avoided_energy`, `baseline_projected`,
   `savings_pct`, `fractional_uncertainty` and `abs_uncertainty` (and `IsolationSavings.savings` /

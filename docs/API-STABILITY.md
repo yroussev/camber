@@ -72,6 +72,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   Records now ignore unknown keys when they are read back, so a newer file loads in this
   version.
 
+- **M&V foundations for rebaselining** (issue #21, phase 21a): `camber.mandv.methods`
+  (`MethodResult`, `backcast_savings`), `camber.mandv.nonroutine.detect_step_changes` /
+  `StepChangesResult` / `StepChange`, `camber.mandv.stats.regression_tests` /
+  `RegressionTests` / `sep_validity` / `Validity` / `model_regression_tests` / `logical_signs`,
+  the keyword-only `kernel=` on the savings functions, and the `as_dict()` / `from_dict()` model
+  serialisation format. Later phases (SEP chaining and method selection, adjustments, versioned
+  baselines) may reshape them.
+
 ## Deprecated
 
 Currently deprecated names and code paths, each with its replacement. Each emits a

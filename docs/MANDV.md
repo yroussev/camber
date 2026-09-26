@@ -216,14 +216,150 @@ an `info` finding with `metrics["declined"]` true, a `declined_reason` and a cav
 `assess_coverage(model, drivers)` is direction-agnostic: it grades any fitted model against any
 driver set, so the same call checks a reporting model projected back onto baseline conditions.
 
+## Model validity: coefficient p-values and the SEP verdict
+
+`stats.regression_tests(X, y, names=...)` returns coefficient standard errors, t statistics and
+two-sided p-values, the overall F-test p-value, adjusted R² and — given a `time_index` — the
+residuals' lag-1 ρ and ρ-adjusted p-values (variance × κ, degrees of freedom `n′ − p`).
+`model_regression_tests(model, drivers, y)` does the same for a fitted change-point, degree-day
+or driver model. The t and F tails are computed in the standard library, through a regularized
+incomplete beta evaluated by its continued fraction (DLMF 8.17.22); they are checked against
+closed forms and the NIST StRD *Norris* certified regression.
+
+**Change points.** A change point is grid-searched, not solved by least squares. It counts as a
+parameter (the F-test is `F(p − 1, n − p)` with the change point in `p`, as `FitStats` does), but
+the slope p-values are **conditional on it**: CAMBER treats change points as fixed, the G14
+convention as described by BPA/SBW, *Uncertainty Approaches and Analyses for Regression Models
+and ECAM* (2017) §2.3.1. The search makes those p-values optimistic, and every result says so
+(`conditional_on_change_points`, plus a caveat).
+
+`stats.sep_validity(tests, signs=...)` applies the DOE **SEP 50001 M&V Protocol, 2019 Edition 2,
+§6.4.1** (identical in the 2012 *SEP M&V Protocol for Industry*, §3.4.5):
+
+- the overall F-test has p < 0.10;
+- every relevant variable has p < 0.20, and at least one has p < 0.10;
+- R² ≥ 0.50;
+- the coefficients are consistent with a logical understanding of the process.
+
+Relevant variables are the slopes — never the intercept or a change point. `logical_signs(model)`
+supplies the signs physics fixes (a heating or cooling arm slopes upward away from its change
+point); without `signs` the sign test is skipped, with a caveat. SEP's tests assume independent
+residuals, so the verdict is reported as written (`sep_valid`, reproducible against the DOE EnPI
+tool) and ρ-adjusted (`sep_valid_rho_adjusted`), with a caveat when they disagree.
+
+This is a **separate verdict** from `FitStats.accept`, the G14-style gate (CV(RMSE), NMBE, R²)
+that governs savings claims — which is unchanged.
+
+```python
+from camber.mandv.models import fit_model
+from camber.mandv.stats import logical_signs, model_regression_tests, sep_validity
+
+m = fit_model(T, y, "3PC", time_index=days)
+v = sep_validity(model_regression_tests(m, T, y, time_index=days), signs=logical_signs(m))
+v.sep_valid, v.sep_valid_rho_adjusted, v.failures
+```
+
+## Backcast savings
+
+`methods.backcast_savings` is the SEP **backcast** (SEP 2019 Ed. 2 §6.2.2, Eq 9): a model fitted
+on the *reporting* period, projected back onto the *baseline* period's conditions and subtracted
+from measured baseline energy, `S = O_b − P_r|b`. SEP permits it when the baseline conditions fall
+within the range of validity of the reporting-period model (SEP 2012 §3.6.3.1) — typically when
+the baseline cannot support a valid model but the reporting period can.
+
+- **Coverage** is the reporting model's support graded against the baseline drivers — the
+  mirror image of a forecast. A mild-season baseline against a full-year reporting period is a
+  severe forecast extrapolation but an in-range backcast.
+- **Uncertainty** is the reporting model's: the G14 measured-savings kernel by default, with the
+  roles swapped (`m` baseline points, `n` reporting-fit points), or the exact kernel.
+- **Labels.** IPMVP 2012 calls a saving stated at baseline conditions *normalized* savings, and
+  the IPMVP Core Concepts review draft calls a backcast *avoided energy*; CAMBER claims neither
+  and labels the result `method="backcast"`, `basis="baseline-period conditions"`.
+
+```python
+from camber.mandv.methods import backcast_savings
+
+res = backcast_savings(
+    reporting_model, T_baseline, y_baseline, cv_rmse=st.cv_rmse, n_reporting=st.n, p_reporting=3
+)
+res.savings, res.savings_pct, res.abs_uncertainty, res.coverage["tier"]
+```
+
+## The exact uncertainty kernel
+
+Every savings function takes `kernel="g14"` (the default, as documented above) or
+`kernel="exact"`. For a model fitted on `n` points with `p` parameters, residual variance `s²`,
+lag-1 residual autocorrelation ρ (`κ = (1+ρ)/(1−ρ)`) and `A = (X′X)⁻¹`, applied to `m` rows whose
+design rows sum to `g`:
+
+```text
+V_param = κ s² g′Ag        (parameter error of the projected total)
+V_noise = κ s² m           (noise of m measured points)
+avoided energy / backcast:  band = t(n − p) · √(V_param + V_noise)
+normalized:                 band = t(min(n − p)) · √(V_param,b + V_param,r)
+```
+
+This is the textbook OLS prediction variance of a sum (BPA/SBW 2017 §3.3); κ inflates both terms,
+the conservative choice (CAMBER decision D3 on #21). It **carries the leverage of the application
+conditions itself** — a projection far from the fitted mean has a large `g′Ag` — so a band
+computed with it is never widened again for extrapolation: `fsu_extrapolation_factor` is 1.0.
+Projected onto its own baseline rows it reduces to `CV/√n` of the in-sample total (for a model
+with an intercept `g′Ag = 1′H1 = n`), which the conservative `CV·√(p/n)` projected kernel bounds
+from above. It needs a CAMBER-fitted model, whose fit record holds `(X′X)⁻¹`, `s²`, `n`, `p` and —
+when fitted with a `time_index` — ρ.
+
+**Coverage.** In a seeded Monte Carlo — daily change-point data, AR(1) residuals, ρ estimated
+from the baseline fit, 1,000 runs per ρ — the exact kernel's nominal 90% band covered the true
+saving **90.2%, 90.0% and 86.6%** of the time at ρ = 0, 0.4 and 0.8; CI gates it to 85–95%. The
+G14 kernel covered 86.3%, 85.5% and 82.5% on the same data. Both are conditional on the fitted change
+points; the published evidence is that G14 bands under-cover real buildings (Touzani, Granderson,
+Jump & Rebello, *Energy & Buildings* 193:216–225, 2019: about 71% at nominal 95% for daily
+models), which synthetic data cannot reproduce.
+
+**Unverified.** The ASHRAE text was not consulted. A BPA reproduction of the G14 kernel writes
+`(1 + 2/n′)` where CAMBER writes `(1 + 2/n)`; which is G14's is **unverified**, and CAMBER keeps
+its current form until it can be checked against Reddy & Claridge (2000). The G14 formula for
+normalized savings is likewise **unverified**; `normalized_savings` combines the two models in
+quadrature (IPMVP 2012 Appendix B-5, B-19; BPA *Meter-Based Energy Modeling Protocol* 2024 §5.9)
+at Student's t on the smaller fit's degrees of freedom, with each model's own ρ.
+
 ## Non-routine events (NRE)
 
-Shutdowns, occupancy changes, or meter outages are by definition what the weather
-model can't explain and will skew a baseline. `mandv.nonroutine.detect_non_routine`
-flags days whose residual vs the baseline is a robust (MAD) outlier, and
-`caltrack_savings(..., exclude_non_routine=True)` drops those baseline days and
-refits — so a shutdown doesn't distort the savings. Point-wise today; sustained
-step-change detection is on the roadmap.
+Shutdowns, occupancy changes or meter outages are by definition what the weather model can't
+explain, and they skew a baseline. CAMBER has three detectors, all on the residuals of a daily
+change-point weather model:
+
+- **`detect_non_routine`** — point-wise: days whose residual is a robust (MAD) outlier.
+  `caltrack_savings(..., exclude_non_routine=True)` drops those baseline days and refits, so a
+  one-off shutdown doesn't distort the savings.
+- **`detect_step_change`** — one sustained level shift, by the largest two-sample statistic over
+  all splits. Pass `autocorrelation=True` (**recommended**): it divides the statistic by
+  `√κ`, `κ = (1+ρ)/(1−ρ)`. Daily whole-building residuals routinely have ρ ≈ 0.6 (the BDG2
+  median), which inflates the uncorrected statistic about 2×; on synthetic step-free data at
+  ρ = 0.8 the uncorrected default fires on nearly every run. The default is left unchanged so
+  existing results do not move. Its residuals come from a model fitted *through* the step, so the
+  ρ it estimates is inflated — conservative.
+- **`detect_step_changes`** — several steps at once:
+    1. fit the weather baseline;
+    2. segment the residuals with **PELT** (Killick, Fearnhead & Eckley 2012) using a Gaussian
+       mean-change cost whose variance is inflated for serial correlation, `σ²κ` — the variance
+       of a segment mean under AR(1) residuals — and an mBIC-style penalty of `3 ln n` per step,
+       with segments at least `min_segment_days=28` long and at most `max_steps`;
+    3. refit the weather model with **one level indicator per segment**, so a step is not absorbed
+       into the temperature slope, and re-estimate `σ` and `ρ` from that fit;
+    4. repeat until the step set is stable (at most three refinement rounds).
+
+    The first round segments on a first-difference noise scale, because a step inflates both the
+    fit's residual variance and its ρ; the steps reported always come from a later round. Each step
+    carries its size (post − pre level) and a ρ-inflated standard error. This is the approach of
+    Touzani, Ravache, Crowe & Granderson, *Energy & Buildings* 185:123–136 (2019), applied to the
+    model residuals. On synthetic AR(1) sites it placed two planted steps to the day and flagged
+    none of 50 step-free runs at ρ = 0, 0.4 and 0.8. `changedetect.detect_level_shifts` (greedy
+    binary segmentation, independent-residual statistic) finds the same clear steps but also
+    spurious ones: it fired on most step-free runs at ρ = 0.8.
+
+Detection only reports. Adjusting for a detected event (an indicator, an engineering estimate,
+excluding the span) and rebaselining are later phases of issue #21.
 
 ## Cross-checking against eemeter
 
