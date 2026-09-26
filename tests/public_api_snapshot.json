@@ -999,6 +999,10 @@
     "hourly_energy_vs_temp",
     "rate_to_energy"
   ],
+  "camber.mandv.methods": [
+    "MethodResult",
+    "backcast_savings"
+  ],
   "camber.mandv.models": [
     "ChangePointModel",
     "N_PARAMS",

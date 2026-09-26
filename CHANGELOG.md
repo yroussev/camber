@@ -55,6 +55,12 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   `logical_signs` apply them to a fitted model. The t and F tails are computed in the standard
   library (a continued-fraction incomplete beta), checked against closed forms and the NIST StRD
   *Norris* certified values. `FitStats` gains trailing `f_pvalue` and `adj_r2`.
+- **Backcast savings** (provisional), `camber.mandv.methods.backcast_savings`: the DOE SEP
+  backcast (SEP 2019 Ed. 2 §6.2.2, Eq 9), `S = O_b - P_r|b` — a model fitted on the reporting
+  period projected back onto the baseline period's conditions. Coverage is the **reporting**
+  model's support graded against the baseline drivers; the uncertainty is the reporting model's
+  (G14 kernel by default, exact optional). Returns a `MethodResult` labelled
+  `method="backcast"`, `basis="baseline-period conditions"`.
 - **An exact uncertainty kernel**, `kernel="exact"` on `avoided_energy_savings`,
   `normalized_savings`, `isolation_savings` and `isolation_normalized_savings` (default `"g14"`,
   unchanged): the OLS projection variance `kappa*s2*(g'Ag + m)` of the fitted model at the
