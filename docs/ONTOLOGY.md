@@ -82,8 +82,11 @@ flowchart LR
 - **Import (0.6)** — `role_from_tags(tags)` / `roles_from_haystack(points)` / `mapping_from_haystack`
   recover roles from a point's marker tags, closing the round-trip to Brick-level parity. A role matches
   when its hint tag-set is a subset of the point's tags; the **most specific** hint wins ties (so
-  `…temp sp` beats `…temp sensor`). Accepts `(name, tags)` pairs or Haystack tag dicts. All 54 roles
-  round-trip export→import. `camber/interop/haystack_semantic.py`.
+  `…temp sp` beats `…temp sensor`). Accepts `(name, tags)` pairs or Haystack tag dicts. All 64 roles
+  round-trip export→import. A few roles also carry **excluding tags**: the terminal `damper` role
+  (hint `damper cmd`) does not match a point that names an air stream (`return` / `exhaust` /
+  `relief` / `mixed`), since those are air-handler dampers with no CAMBER role — previously every
+  return and exhaust damper imported as a VAV-box damper. `camber/interop/haystack_semantic.py`.
 - **Served-by topology** — `topology_from_haystack(entities)` builds a `Topology` from `ahuRef` /
   `equipRef` reference tags (see [TOPOLOGY.md](TOPOLOGY.md)).
 

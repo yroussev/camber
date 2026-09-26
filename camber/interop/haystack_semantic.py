@@ -23,6 +23,15 @@ _ROLE_TAGSETS = sorted(
     key=lambda rt: (-len(rt[1]), rt[0].value),
 )
 
+# Tags that rule a role out even when its hint is a subset. The terminal-unit DAMPER hint
+# (``damper cmd``) is a subset of every AHU damper too; in Haystack an air-handler damper carries
+# its air stream (``outside`` / ``return`` / ``exhaust`` / ``mixed`` ...), a VAV-box damper does
+# not. Only ``outside`` has its own role (OA_DAMPER, more specific, matched first); return /
+# exhaust / relief / mixed-air dampers have no CAMBER role and must stay unmapped.
+_EXCLUDES = {
+    Role.DAMPER: frozenset({"outside", "return", "exhaust", "relief", "mixed"}),
+}
+
 # markers that are structural/identity, never part of a role's semantic tag set
 _NON_SEMANTIC = frozenset(
     {
@@ -55,7 +64,7 @@ def role_from_tags(tags) -> Role | None:
         # be unhashable or meaningless), so an unresolvable set simply yields None.
         tagset = frozenset(t for t in tags if isinstance(t, str))
     for role, hint in _ROLE_TAGSETS:  # already ordered most-specific first
-        if hint <= tagset:
+        if hint <= tagset and not (_EXCLUDES.get(role, frozenset()) & tagset):
             return role
     return None
 

@@ -138,3 +138,14 @@ def test_roles_path_unaffected_by_refs():
         "sensor": True,
     }
     assert roles_from_haystack([pt]) == {"ZT": Role.SPACE_TEMP}
+
+
+def test_air_handler_dampers_are_not_the_terminal_damper():
+    # Haystack tags an AHU damper with its air stream; the VAV-box DAMPER hint ("damper cmd") is a
+    # subset of those too, so without an exclusion a return/exhaust damper became a VAV damper
+    assert role_from_tags("return air damper cmd") is None
+    assert role_from_tags("exhaust air damper cmd") is None
+    assert role_from_tags("mixed air damper cmd") is None
+    assert role_from_tags("outside air damper cmd") == Role.OA_DAMPER
+    assert role_from_tags("damper cmd") == Role.DAMPER  # the VAV-box damper still maps
+    assert role_from_tags("discharge air damper cmd") == Role.DAMPER
