@@ -233,7 +233,7 @@ With the defaults unchanged, expect open-fdd 4.x to report FC2, FC3, FC5, FC8, F
 FC12 far more often than CAMBER does on the same data. That is a difference in
 thresholds, not in equations. Runs compared at matched tolerances are the only fair
 test. A re-run against 4.x, on labelled open data at both open-fdd's defaults and G36
-tolerances, is tracked in the [integration issue](https://github.com/yroussev/camber/issues/19).
+tolerances, is tracked in the [integration issue](https://github.com/yroussev/camber/issues/22).
 Until then, **do not read the 0.1.5 result above as a statement about current
 open-fdd.**
 
