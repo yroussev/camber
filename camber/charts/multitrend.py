@@ -58,7 +58,7 @@ def fault_multitrend(
         if normalize:
             lo, hi = float(np.nanmin(s)), float(np.nanmax(s))
             s = (s - lo) / (hi - lo) if hi > lo else s * 0.0
-        ax.plot(df.index, s.to_numpy(), lw=0.9, label=str(c))
+        ax.plot(df.index, s.to_numpy(), lw=0.9, label=str(getattr(c, "value", c)))
 
     shaded_labels = set()
     for label, mask in (spans or {}).items():

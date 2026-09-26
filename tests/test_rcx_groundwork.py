@@ -218,3 +218,21 @@ def test_sat_compliance_names_a_fan_signal_missing_only_when_all_are_absent():
         "_missing_optional"
         not in SupplyAirResetCompliance().analyze("DemoAHU", _sat_frame(occ=True)).metrics
     )
+
+
+def test_supply_air_control_ignores_start_up_hours_with_partial_fan_duty():
+    from camber.rules.satcontrol_rule import SupplyAirControl
+
+    idx = _idx(7)
+    running = (idx.hour >= 7) & (idx.hour < 18)
+    startup = idx.hour == 6  # the fan ran ~10 min of this hour; SAT still at plenum temperature
+    frame = pd.DataFrame(
+        {
+            Role.SUPPLY_AIR_TEMP: np.where(startup, 75.0, 55.0),
+            Role.SUPPLY_AIR_TEMP_SP: 55.0,
+            Role.SUPPLY_FAN_STATUS: np.where(running, 1.0, np.where(startup, 0.15, 0.0)),
+        },
+        index=idx,
+    )
+    f = SupplyAirControl().analyze("DemoAHU", frame)
+    assert f.severity == "ok" and "0% of running hours" in f.summary

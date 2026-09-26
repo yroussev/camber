@@ -12,6 +12,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
+from ..schedules import fan_on_mask
 from .base import Finding
 
 
@@ -28,11 +29,15 @@ class SupplyAirControl:
         self.fault_pct = fault_pct
 
     def _running_mask(self, frame):
-        if Role.SUPPLY_FAN_STATUS in frame.columns:
-            return frame[Role.SUPPLY_FAN_STATUS].fillna(0) > 0
-        if Role.SUPPLY_FAN_SPEED in frame.columns:
-            return frame[Role.SUPPLY_FAN_SPEED].fillna(0) > 0.05
-        return pd.Series(True, index=frame.index)
+        # Running = fan on for most of the interval (camber.schedules.fan_on_mask: status duty
+        # > 0.5, else speed > 1 %). "Any duty > 0" counted start-up / shut-down hours, where SAT
+        # is still settling from plenum temperature, as off-setpoint running hours.
+        if not self._has_running_signal(frame):
+            return pd.Series(True, index=frame.index)
+        mask, _src = fan_on_mask(frame[[c for c in frame.columns if c != Role.AIRFLOW]])
+        if mask is None:
+            return pd.Series(True, index=frame.index)
+        return pd.Series(mask.to_numpy(dtype=bool), index=frame.index)
 
     def _deviation(self, frame):
         return frame[Role.SUPPLY_AIR_TEMP] - frame[Role.SUPPLY_AIR_TEMP_SP]

@@ -240,11 +240,11 @@ class EconomizerHighLimit:
             not_locked = valid & (damper > self.min_damper + 0.05)
             pct = 100.0 * float(not_locked.sum()) / n
             sev = _sev(pct)
-            thresh = f"damper > {self.min_damper:.0%}"
+            thresh = f"damper > {self.min_damper + 0.05:.0%}"
         elif self.min_oa_pct is not None:
             pct = 100.0 * float((valid & (oaf > self.min_oa_pct + self.oa_margin_pct)).sum()) / n
             sev = _sev(pct)
-            thresh = f"OAF > {self.min_oa_pct:g}%"
+            thresh = f"OAF > {self.min_oa_pct + self.oa_margin_pct:g}%"
         else:
             # Design minimum unknown: excess above a generous bound is excess whatever the minimum
             # is (it sets the severity); excess only above the generic 20 % depends on it.
@@ -256,7 +256,7 @@ class EconomizerHighLimit:
             metrics["assumed_min_oa_pct"] = lo
             metrics["conservative_min_oa_pct"] = hi
             sev = _sev(pct)
-            thresh = f"OAF > {hi:g}%"
+            thresh = f"OAF > {hi + self.oa_margin_pct:g}%"
             if sev == "ok" and _sev(pct_lo) != "ok":
                 metrics["not_locked_out_pct"] = None
                 median = float(oaf[valid].median())

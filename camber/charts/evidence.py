@@ -76,7 +76,7 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
             y,
             _col(frame, Role.OAT),
             ax=ax,
-            ylabel=getattr(evidence.roles[0], "name", str(evidence.roles[0])),
+            ylabel=str(getattr(evidence.roles[0], "value", evidence.roles[0])).replace("_", " "),
             title=evidence.title or None,
         )
         return ax, evidence.mask
