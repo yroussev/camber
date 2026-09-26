@@ -255,9 +255,12 @@ def _record_outputs(ctx, paths: dict) -> None:
     """List files a run wrote for its facility in the workspace manifest (no-op outside one)."""
     if ctx is None or not (ctx.workspace and ctx.facility_id):
         return
+    from ._statefile import save_path
     from .portfolio._state import record_outputs
 
-    record_outputs(ctx.workspace, ctx.facility_id, paths)
+    # a migrated (redirect-stub) path was written through to the facility's state file
+    real = {save_path(p, facility_id=ctx.facility_id): k for p, k in paths.items()}
+    record_outputs(ctx.workspace, ctx.facility_id, real)
 
 
 @dataclass
@@ -722,7 +725,10 @@ def _fold_faults(config: dict, base_dir: str, prep: _Prepared, findings: list) -
         )
         lc.save()
         _record_outputs(ctx, {path: "faults"})
-    return {**out, "store": path, "run_id": run_id, "legacy_adopted": lc.legacy_adopted}
+    from ._statefile import save_path
+
+    where = save_path(path, facility_id=ctx.bound)
+    return {**out, "store": where, "run_id": run_id, "legacy_adopted": lc.legacy_adopted}
 
 
 def data_sources(config: dict, *, base_dir: str = ".") -> list:

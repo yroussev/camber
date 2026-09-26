@@ -326,10 +326,12 @@ def test_config_sources_map_through_the_config_and_list_reports(tmp_path):
     assert r["configs"][0]["facility_id"] == a and r["labels"][""]["via"] == "config"
     assert r["facilities"][a]["reports"] == 1
     ext = pf.manifest(a)["external"]
-    assert (
-        list(ext) == [str(cfgdir / "report.html")]
-        and ext[str(cfgdir / "report.html")]["kind"] == "report"
-    )
+    kinds = {p: e["kind"] for p, e in ext.items()}
+    assert kinds == {
+        str(cfgdir / "report.html"): "report",
+        str(cfgdir / "baselines.json"): "redirect",  # the stubs the config still names
+        str(cfgdir / "faults.json"): "redirect",
+    }
     # a folder config names its facility by facility_id, or by site through the registry
     cfg2 = {"site": "Nowhere", "source": {"folder": "."}, "drift": {"store": "x.json"}}
     (cfgdir / "cfg2.json").write_text(json.dumps(cfg2))

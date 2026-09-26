@@ -182,6 +182,12 @@ def test_legacy_state_compat_then_migrate_then_rename(tmp_path, monkeypatch):
         warnings.simplefilter("error", DeprecationWarning)
         res = _run(cfg)
     assert res.faults["new"] == [] and _drift_findings(res) == before
+    # the run wrote through the stub: the manifest lists the real file, and the stub as a redirect
+    assert res.faults["store"] == os.path.join(pf.state_dir(fid), "faults.json")
+    man = pf.manifest(fid)
+    assert {"faults.json", "baselines.json"} <= set(man["files"])
+    assert man["external"][str(tmp_path / "faults.json")]["kind"] == "redirect"
+    assert man["external"][str(tmp_path / "baselines.json")]["kind"] == "redirect"
     rec = FaultLifecycle.load(str(tmp_path / "faults.json"), facility_id=fid).get(
         fingerprint("Old Name", "AHU_1", "filter_loading_drift")
     )

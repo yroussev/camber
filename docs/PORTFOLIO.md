@@ -209,8 +209,9 @@ camber portfolio migrate ... --apply --reason "0.87 identity migration"
   hash. And it replaces the legacy file with a **redirect stub**. A config or script that still
   names the old path keeps working: a store opened for a facility reads and writes that facility's
   `state/<fid>/` file. A store opened without a facility gets a read-only merged view, and saving
-  it is refused. The audit log gets one `portfolio.migrate` record, plus one `facility.migrate`
-  record per facility with its counts.
+  it is refused. The stub stays in the facility's manifest as a `redirect` entry, and runs
+  through it record the real `state/<fid>/` file. The audit log gets one `portfolio.migrate`
+  record, plus one `facility.migrate` record per facility with its counts.
 - **Merges.** When one facility's history was split across two labels (a rename before 0.87
   orphaned it), the records are combined deterministically. For faults: the earliest
   `first_seen`, the latest `last_seen`, summed occurrences, the later record's workflow state, and

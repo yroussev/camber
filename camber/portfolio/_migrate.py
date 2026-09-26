@@ -389,12 +389,12 @@ def apply(pf, internal: dict, report: dict, *, reason: str) -> dict:
     changed = set()
     for fid in sorted(set(report["facilities"]) | set(migrated_from)):
         before = json.dumps(_manifest_body(pf, fid), sort_keys=True)
-        refresh_manifest(
-            pf.root,
-            fid,
-            external=internal["reports"].get(fid),
-            migrated_from=migrated_from.get(fid),
+        ext = dict(internal["reports"].get(fid) or {})
+        # a stub left at a path the facility wrote to is listed as what it now is
+        ext.update(
+            {m["path"]: "redirect" for m in migrated_from.get(fid, []) if m["path"] in stubs}
         )
+        refresh_manifest(pf.root, fid, external=ext, migrated_from=migrated_from.get(fid))
         if migrated_from.get(fid) or json.dumps(_manifest_body(pf, fid), sort_keys=True) != before:
             changed.add(fid)
 
