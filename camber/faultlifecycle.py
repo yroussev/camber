@@ -9,16 +9,26 @@ response time.
 
 Dependency-light: state is a JSON document (atomic write); time math uses pandas (already a core
 dependency). Findings are duck-typed (`severity`/`equip`/`rule`), so any finding-like object works.
+
+**Identity.** A fault's fingerprint is ``sha1(key, equip, rule)``. Pass ``facility_id=`` (to
+:meth:`FaultLifecycle.load` or :meth:`FaultLifecycle.update`) and the key is the facility's
+stable, never-reused ``facility_id``: renaming the facility no longer orphans its history. Without
+one the key is the free-text ``site`` string, exactly as before (outside a portfolio workspace
+nothing changes). A store opened for a facility still reads records written under the old
+site-keyed scheme through a **deprecated compatibility path**: records whose ``site`` is one of
+the facility's known names are re-keyed to the facility id on the fly (their old fingerprint is
+kept in ``aliases``, so a ticket or a script holding it still resolves). ``camber portfolio
+migrate`` does the same once, on disk. See docs/PORTFOLIO.md.
 """
 
 from __future__ import annotations
 
-import json
-import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 import pandas as pd
 
+from ._deprecation import warn_deprecated
+from ._statefile import dedup, load_state, save_path, write_json
 from .integrate.tickets import _attr, fingerprint
 
 __all__ = [
@@ -51,43 +61,128 @@ class FaultRecord:
     acknowledged_at: str | None = None
     resolved_at: str | None = None
     notes: list = field(default_factory=list)
+    facility_id: str = ""  # the identity key; "" for a legacy, site-keyed record
+    aliases: list = field(default_factory=list)  # earlier fingerprints (site-keyed, merged)
 
     def as_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d: dict) -> FaultRecord:
-        return cls(**d)
+        """Rebuild a record; unknown keys (from a newer CAMBER) are ignored."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
+def _warn_legacy(n: int, what: str) -> None:
+    warn_deprecated(
+        f"reading {n} site-keyed {what} record(s) through the compatibility path",
+        since="0.87",
+        remove_in="2.0",
+        use="`camber portfolio migrate` to re-key them to facility_id once, on disk",
+        stacklevel=4,
+    )
+
+
+def _merge_faults(keep: FaultRecord, other: FaultRecord) -> FaultRecord:
+    """Fold ``other`` (the same fault under another key) into ``keep``, deterministically.
+
+    The later-seen record's workflow state (status, severity, assignee, acknowledgement,
+    resolution) wins; ``first_seen`` is the earlier one, ``last_seen`` the later one, occurrences
+    add up, and notes and aliases are concatenated (older record first).
+    """
+    if str(keep.last_seen) >= str(other.last_seen):
+        newer, older = keep, other
+    else:
+        newer, older = other, keep
+    out = FaultRecord.from_dict(newer.as_dict())
+    out.fingerprint = keep.fingerprint
+    out.facility_id = keep.facility_id or other.facility_id
+    firsts = [x for x in (keep.first_seen, other.first_seen) if x]
+    out.first_seen = min(firsts, key=str) if firsts else ""
+    out.last_seen = max(str(keep.last_seen), str(other.last_seen))
+    out.occurrences = int(keep.occurrences) + int(other.occurrences)
+    out.notes = list(older.notes) + list(newer.notes)
+    out.aliases = dedup([*keep.aliases, other.fingerprint, *other.aliases], drop=out.fingerprint)
+    return out
 
 
 class FaultLifecycle:
-    """A persistent fault store with assignment, status workflow, and SLA/aging."""
+    """A persistent fault store with assignment, status workflow, and SLA/aging.
 
-    def __init__(self, path: str | None = None):
+    ``facility_id`` binds the store to one facility: fingerprints are keyed by it (not by the
+    ``site`` string), and records written under the old site-keyed scheme are re-keyed to it
+    through the deprecated compatibility path when their ``site`` is one of ``legacy_sites`` --
+    or, when ``legacy_sites`` is not given, the ``site`` a later :meth:`update` passes. Pass the
+    labels explicitly (even ``()``) when a label could belong to another facility too.
+    Unbound (the default) the store behaves exactly as before.
+    """
+
+    def __init__(self, path: str | None = None, *, facility_id=None, legacy_sites=None):
         self.path = path
+        self.facility_id = facility_id or None
+        self._explicit_legacy = legacy_sites is not None
+        self.legacy_sites = tuple(s for s in (legacy_sites or ()) if s)
+        self.legacy_adopted = 0  # site-keyed records re-keyed through the compatibility path
         self._recs: dict[str, FaultRecord] = {}
+        self._aliases: dict[str, str] = {}
 
     # ----------------------------------------------------------------- persistence
     @classmethod
-    def load(cls, path: str) -> FaultLifecycle:
-        """Load a fault store from JSON (empty if the file doesn't exist yet)."""
-        lc = cls(path)
-        if path and os.path.isfile(path):
-            data = json.load(open(path, encoding="utf-8"))
-            for d in data.get("faults", []):
-                lc._recs[d["fingerprint"]] = FaultRecord.from_dict(d)
+    def load(cls, path: str, *, facility_id=None, legacy_sites=None) -> FaultLifecycle:
+        """Load a fault store from JSON (empty if the file doesn't exist yet).
+
+        A file that ``camber portfolio migrate`` replaced by a redirect stub is followed: with
+        ``facility_id`` to that facility's ``state/<facility_id>/faults.json``, without one to a
+        read-only merged view of every migrated facility.
+        """
+        lc = cls(path, facility_id=facility_id, legacy_sites=legacy_sites)
+        data, _where, _red = load_state(path, facility_id=facility_id, list_key="faults")
+        for d in data.get("faults", []):
+            rec = FaultRecord.from_dict(d)
+            lc._recs[rec.fingerprint] = rec
+        lc._index_aliases()
+        if lc.facility_id and lc.legacy_sites:
+            lc._adopt_legacy(lc.facility_id, lc.legacy_sites)
         return lc
 
     def save(self, path: str | None = None) -> int:
-        """Atomically write the store to JSON; returns the record count."""
+        """Atomically write the store to JSON; returns the record count.
+
+        Saving to a migrated (redirect-stub) path writes the bound facility's state file; an
+        unbound store cannot save there (see :meth:`load`).
+        """
         p = path or self.path
         if not p:
             raise ValueError("no path to save to (pass path= or construct with one)")
-        tmp = p + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({"faults": [r.as_dict() for r in self._recs.values()]}, fh, indent=2)
-        os.replace(tmp, p)
+        write_json(
+            save_path(p, facility_id=self.facility_id),
+            {"faults": [r.as_dict() for r in self._recs.values()]},
+        )
         return len(self._recs)
+
+    # ----------------------------------------------------------------- identity
+    def _index_aliases(self) -> None:
+        self._aliases = {a: fp for fp, r in self._recs.items() for a in r.aliases}
+
+    def _adopt_legacy(self, facility_id: str, sites) -> int:
+        """Re-key site-keyed records whose ``site`` is in ``sites`` to ``facility_id``."""
+        want = {s for s in sites if s}
+        legacy = [r for r in self._recs.values() if not r.facility_id and r.site in want]
+        for r in legacy:
+            del self._recs[r.fingerprint]
+            old = r.fingerprint
+            r.facility_id = facility_id
+            r.fingerprint = fingerprint(facility_id, r.equip, r.rule)
+            if old != r.fingerprint and old not in r.aliases:
+                r.aliases.append(old)
+            cur = self._recs.get(r.fingerprint)
+            self._recs[r.fingerprint] = _merge_faults(cur, r) if cur is not None else r
+        if legacy:
+            self.legacy_adopted += len(legacy)
+            self._index_aliases()
+            _warn_legacy(len(legacy), "fault")
+        return len(legacy)
 
     # ----------------------------------------------------------------- folding a run
     def update(
@@ -96,6 +191,7 @@ class FaultLifecycle:
         *,
         run_id,
         site: str = "",
+        facility_id=None,
         actionable=ACTIONABLE,
         reopen_on_recurrence: bool = True,
         auto_resolve_absent: bool = False,
@@ -107,14 +203,22 @@ class FaultLifecycle:
         ``occurrences`` (and, if ``reopen_on_recurrence``, reopen a previously-resolved fault).
         Open faults *absent* from this run are returned under ``absent`` (candidates to close);
         ``auto_resolve_absent`` resolves them at ``run_id`` instead.
+
+        With a ``facility_id`` (here or bound at :meth:`load`) fingerprints are keyed by it and
+        ``site`` is only the display label stored on new records; ``absent`` then covers that
+        facility's faults only. Without one, the key is ``site`` (the pre-0.87 behaviour).
         """
         rid = str(run_id)
+        fid = facility_id or self.facility_id
+        if fid:
+            self._adopt_legacy(fid, self.legacy_sites if self._explicit_legacy else (site,))
+        key = fid or site
         seen, new, ongoing, reopened = set(), [], [], []
         for f in findings:
             if _attr(f, "severity", "info") not in actionable:
                 continue
             equip, rule = _attr(f, "equip", ""), _attr(f, "rule", "")
-            fp = fingerprint(site, equip, rule)
+            fp = fingerprint(key, equip, rule)
             seen.add(fp)
             r = self._recs.get(fp)
             if r is None:
@@ -128,6 +232,7 @@ class FaultLifecycle:
                     first_seen=rid,
                     last_seen=rid,
                     occurrences=1,
+                    facility_id=fid or "",
                 )
                 new.append(fp)
             else:
@@ -141,7 +246,9 @@ class FaultLifecycle:
                 else:
                     ongoing.append(fp)
         absent = [
-            fp for fp, r in self._recs.items() if fp not in seen and r.status in OPEN_STATUSES
+            fp
+            for fp, r in self._recs.items()
+            if fp not in seen and r.status in OPEN_STATUSES and (not fid or r.facility_id == fid)
         ]
         resolved = []
         if auto_resolve_absent:
@@ -161,6 +268,8 @@ class FaultLifecycle:
 
     # ----------------------------------------------------------------- workflow ops
     def _get(self, fp: str) -> FaultRecord:
+        """A record by fingerprint -- or by an earlier (site-keyed / merged) one in ``aliases``."""
+        fp = fp if fp in self._recs else self._aliases.get(fp, fp)
         if fp not in self._recs:
             raise KeyError(f"no fault with fingerprint {fp!r}")
         return self._recs[fp]
@@ -211,8 +320,9 @@ class FaultLifecycle:
 
     def add_note(self, fp: str, note: str) -> FaultRecord:
         """Append a free-text note to a fault."""
-        self._get(fp).notes.append(note)
-        return self._recs[fp]
+        r = self._get(fp)
+        r.notes.append(note)
+        return r
 
     # ----------------------------------------------------------------- queries
     def records(self) -> list:

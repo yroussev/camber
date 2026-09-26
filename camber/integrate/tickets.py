@@ -11,6 +11,12 @@ There is no universal CMMS schema, so the ticket dict is a neutral, JSON-
 serializable shape that a thin per-vendor adapter can remap. Finding objects are
 duck-typed (``rule``/``equip``/``severity``/``metrics``/``summary``) so any
 finding-like result works without importing the rules layer.
+
+**Identity.** Pass ``facility_id=`` and a ticket's fingerprint is keyed by the facility's stable
+id, so renaming the facility keeps updating the same CMMS ticket. The ticket then also carries
+``facility_id`` and -- while the deprecated site keying is phased out -- ``legacy_fingerprint``,
+the fingerprint the same finding had under the old ``site`` key, so a CMMS adapter can match a
+ticket it opened before the migration. Without ``facility_id`` tickets are exactly as before.
 """
 
 from __future__ import annotations
@@ -32,17 +38,32 @@ def _attr(finding, name, default=""):
 
 
 def fingerprint(site: str, equip: str, rule: str) -> str:
-    """Stable short id for dedup: same (site, equip, rule) -> same fingerprint.
+    """Stable short id for dedup: same (key, equip, rule) -> same fingerprint.
 
     Deliberately excludes metrics/severity so a recurring issue updates one
-    ticket rather than spawning a new one each run.
+    ticket rather than spawning a new one each run. The first component should be the
+    facility's ``facility_id`` (stable across renames); the free-text site name it was named
+    after is the deprecated, pre-0.87 key.
     """
     raw = f"{site}\x1f{equip}\x1f{rule}".encode()
     return hashlib.sha1(raw).hexdigest()[:12]
 
 
-def finding_to_ticket(finding, *, site: str = "", source: str = "camber") -> dict:
-    """Render one finding as a neutral, JSON-serializable CMMS ticket dict."""
+def _identity(site: str, facility_id, equip: str, rule: str) -> dict:
+    """The fingerprint (and, with a facility id, the id plus the legacy fingerprint) of a ticket."""
+    if not facility_id:
+        return {"fingerprint": fingerprint(site, equip, rule)}
+    out = {"fingerprint": fingerprint(facility_id, equip, rule), "facility_id": facility_id}
+    if site:
+        out["legacy_fingerprint"] = fingerprint(site, equip, rule)
+    return out
+
+
+def finding_to_ticket(finding, *, site: str = "", source: str = "camber", facility_id=None) -> dict:
+    """Render one finding as a neutral, JSON-serializable CMMS ticket dict.
+
+    ``facility_id`` keys the fingerprint by the facility (see the module docstring).
+    """
     rule = _attr(finding, "rule")
     equip = _attr(finding, "equip")
     severity = _attr(finding, "severity", "info")
@@ -53,7 +74,7 @@ def finding_to_ticket(finding, *, site: str = "", source: str = "camber") -> dic
     title = f"[{priority.upper()}] {rule} on {equip or 'building'}".strip()
     body = summary or f"{rule} flagged {severity} on {equip}."
     return {
-        "fingerprint": fingerprint(site, equip, rule),
+        **_identity(site, facility_id, equip, rule),
         "title": title,
         "body": body,
         "priority": priority,
@@ -69,7 +90,12 @@ def finding_to_ticket(finding, *, site: str = "", source: str = "camber") -> dic
 
 
 def findings_to_tickets(
-    findings, *, site: str = "", actionable_only: bool = True, source: str = "camber"
+    findings,
+    *,
+    site: str = "",
+    actionable_only: bool = True,
+    source: str = "camber",
+    facility_id=None,
 ) -> list:
     """Map many findings to tickets, by default dropping non-actionable ones.
 
@@ -81,11 +107,13 @@ def findings_to_tickets(
         sev = _attr(f, "severity", "info")
         if actionable_only and sev not in _ACTIONABLE:
             continue
-        out.append(finding_to_ticket(f, site=site, source=source))
+        out.append(finding_to_ticket(f, site=site, source=source, facility_id=facility_id))
     return out
 
 
-def diagnosis_to_ticket(diagnosis, *, site: str = "", source: str = "camber") -> dict:
+def diagnosis_to_ticket(
+    diagnosis, *, site: str = "", source: str = "camber", facility_id=None
+) -> dict:
     """Render one chiller drift roll-up as a neutral, JSON-serializable CMMS ticket dict.
 
     A whole-machine verdict from :func:`camber.chillerdiag.diagnose_chiller_drift` is a single work
@@ -107,7 +135,7 @@ def diagnosis_to_ticket(diagnosis, *, site: str = "", source: str = "camber") ->
     if causes:
         body += " — causes: " + "; ".join(causes)
     return {
-        "fingerprint": fingerprint(site, equip, "chiller_drift"),
+        **_identity(site, facility_id, equip, "chiller_drift"),
         "title": title,
         "body": body,
         "priority": priority,
@@ -131,6 +159,7 @@ def diagnoses_to_tickets(
     actionable_only: bool = True,
     machine_wide_only: bool = False,
     source: str = "camber",
+    facility_id=None,
 ) -> list:
     """Map many chiller roll-ups to tickets.
 
@@ -145,7 +174,7 @@ def diagnoses_to_tickets(
             continue
         if machine_wide_only and not bool(_attr(d, "machine_wide", False)):
             continue
-        out.append(diagnosis_to_ticket(d, site=site, source=source))
+        out.append(diagnosis_to_ticket(d, site=site, source=source, facility_id=facility_id))
     return out
 
 
@@ -199,9 +228,13 @@ class Notifier:
         self.sent += 1
         return result
 
-    def emit_findings(self, findings, *, site: str = "", actionable_only: bool = True) -> list:
+    def emit_findings(
+        self, findings, *, site: str = "", actionable_only: bool = True, facility_id=None
+    ) -> list:
         """Convert findings to tickets and send each; returns the tickets sent."""
-        tickets = findings_to_tickets(findings, site=site, actionable_only=actionable_only)
+        tickets = findings_to_tickets(
+            findings, site=site, actionable_only=actionable_only, facility_id=facility_id
+        )
         for t in tickets:
             self.send(t)
         return tickets
@@ -213,6 +246,7 @@ class Notifier:
         site: str = "",
         actionable_only: bool = True,
         machine_wide_only: bool = False,
+        facility_id=None,
     ) -> list:
         """Convert chiller roll-ups to tickets and send each; returns the tickets sent.
 
@@ -224,6 +258,7 @@ class Notifier:
             site=site,
             actionable_only=actionable_only,
             machine_wide_only=machine_wide_only,
+            facility_id=facility_id,
         )
         for t in tickets:
             self.send(t)

@@ -16,14 +16,21 @@ the new normal"), never a scheduled or automatic refit. Superseded records are k
 State is a JSON document written atomically, mirroring :class:`camber.faultlifecycle.FaultLifecycle`
 -- coefficient sets are tens of rows, need human inspection more than columnar scans, and reusing
 that proven shape adds no dependency.
+
+**Identity.** Open the store for one facility (``BaselineStore.load(path, facility_id=...)``) and
+every record is keyed by ``sha1(facility_id, equip, kind)``: the ``site`` the detectors pass is
+kept only as a label, so renaming the facility cannot orphan its references. Unbound (the default,
+and outside a portfolio workspace) the key is the ``site`` string, as before. A bound store reads
+old site-keyed records through the same deprecated compatibility path as
+:class:`camber.faultlifecycle.FaultLifecycle`; ``camber portfolio migrate`` re-keys them on disk.
 """
 
 from __future__ import annotations
 
-import json
-import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
+from .._deprecation import warn_deprecated
+from .._statefile import dedup, load_state, save_path, write_json
 from ..chillerbaseline import LoadBaseline
 from ..integrate.tickets import fingerprint
 
@@ -74,6 +81,8 @@ class BaselineRecord:
     reason: str = ""  # why this is the reference
     supersedes: str = ""  # frozen_at of the baseline this replaced
     history: list = field(default_factory=list)  # superseded records, oldest first
+    facility_id: str = ""  # the identity key; "" for a legacy, site-keyed record
+    aliases: list = field(default_factory=list)  # earlier fingerprints (site-keyed, merged)
 
     def as_dict(self) -> dict:
         """Return the record as a plain dict."""
@@ -81,8 +90,9 @@ class BaselineRecord:
 
     @classmethod
     def from_dict(cls, d: dict) -> BaselineRecord:
-        """Rebuild a record from :meth:`as_dict` output."""
-        return cls(**d)
+        """Rebuild a record from :meth:`as_dict` output (unknown keys are ignored)."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
     def model(self):
         """Rebuild the fitted model object from the stored coefficients."""
@@ -92,28 +102,61 @@ class BaselineRecord:
         return typ.from_dict(self.coefficients)
 
 
+def _merge_baselines(live: BaselineRecord, other: BaselineRecord) -> BaselineRecord:
+    """Keep ``live`` as the reference and file ``other`` (and its history) under its history.
+
+    Used when two records turn out to be the same equipment's baseline under different keys (a
+    site-keyed record and a facility-keyed one, or two site labels of one renamed facility). The
+    reference that stays live is the caller's choice; nothing is discarded, and the history stays
+    ordered by ``frozen_at``.
+    """
+    past = [dict(h) for h in live.history] + [dict(h) for h in other.history]
+    demoted = other.as_dict()
+    demoted["history"] = []
+    past.append(demoted)
+    past.sort(key=lambda h: str(h.get("frozen_at", "")))
+    out = BaselineRecord.from_dict(live.as_dict())
+    out.history = past
+    out.facility_id = live.facility_id or other.facility_id
+    out.aliases = dedup([*live.aliases, other.fingerprint, *other.aliases], drop=out.fingerprint)
+    return out
+
+
 class BaselineStore:
     """A persistent, frozen-by-default store of fitted model coefficients.
 
-    Keyed by the stable ``(site, equip, kind)`` fingerprint, the same scheme
+    Keyed by the stable ``(key, equip, kind)`` fingerprint, the same scheme
     :mod:`camber.faultlifecycle` uses for findings, so a baseline and the faults measured against
-    it line up on the same identity.
+    it line up on the same identity. The key is the store's ``facility_id`` when it is bound to one
+    (see :meth:`load`), else the ``site`` string the caller passes.
     """
 
-    def __init__(self, path: str | None = None):
+    def __init__(self, path: str | None = None, *, facility_id=None, legacy_sites=None):
         self.path = path
+        self.facility_id = facility_id or None
+        self._explicit_legacy = legacy_sites is not None
+        self.legacy_sites = tuple(s for s in (legacy_sites or ()) if s)
+        self.legacy_adopted = 0  # site-keyed records re-keyed through the compatibility path
         self._recs: dict[str, BaselineRecord] = {}
 
     # ----------------------------------------------------------------- persistence
     @classmethod
-    def load(cls, path: str) -> BaselineStore:
-        """Load a baseline store from JSON (empty if the file doesn't exist yet)."""
-        st = cls(path)
-        if path and os.path.isfile(path):
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            for d in data.get("baselines", []):
-                st._recs[d["fingerprint"]] = BaselineRecord.from_dict(d)
+    def load(cls, path: str, *, facility_id=None, legacy_sites=None) -> BaselineStore:
+        """Load a baseline store from JSON (empty if the file doesn't exist yet).
+
+        ``facility_id`` binds the store to one facility (see the module docstring);
+        ``legacy_sites`` are the site labels whose site-keyed records belong to it (when not given,
+        a lookup's own ``site`` is used; pass them explicitly when a label could be ambiguous). A
+        migrated path (a redirect stub) is followed like
+        :meth:`camber.faultlifecycle.FaultLifecycle.load`.
+        """
+        st = cls(path, facility_id=facility_id, legacy_sites=legacy_sites)
+        data, _where, _red = load_state(path, facility_id=facility_id, list_key="baselines")
+        for d in data.get("baselines", []):
+            rec = BaselineRecord.from_dict(d)
+            st._recs[rec.fingerprint] = rec
+        if st.facility_id and st.legacy_sites:
+            st._adopt_legacy(st.legacy_sites)
         return st
 
     def save(self, path: str | None = None) -> int:
@@ -121,20 +164,53 @@ class BaselineStore:
         p = path or self.path
         if not p:
             raise ValueError("no path to save to (pass path= or construct with one)")
-        tmp = p + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({"baselines": [r.as_dict() for r in self._recs.values()]}, fh, indent=2)
-        os.replace(tmp, p)
+        write_json(
+            save_path(p, facility_id=self.facility_id),
+            {"baselines": [r.as_dict() for r in self._recs.values()]},
+        )
         return len(self._recs)
+
+    def _adopt_legacy(self, sites) -> int:
+        """Re-key this facility's site-keyed records (``site`` in ``sites``) to its id."""
+        fid = self.facility_id
+        want = {s for s in sites if s}
+        if not fid or not want:
+            return 0
+        legacy = [r for r in self._recs.values() if not r.facility_id and r.site in want]
+        for r in sorted(legacy, key=lambda x: str(x.frozen_at)):
+            del self._recs[r.fingerprint]
+            old = r.fingerprint
+            r.facility_id = fid
+            r.fingerprint = fingerprint(fid, r.equip, r.kind)
+            if old != r.fingerprint and old not in r.aliases:
+                r.aliases.append(old)
+            cur = self._recs.get(r.fingerprint)
+            # a facility-keyed record already in use stays the reference; the old one is history
+            self._recs[r.fingerprint] = _merge_baselines(cur, r) if cur is not None else r
+        if legacy:
+            self.legacy_adopted += len(legacy)
+            warn_deprecated(
+                f"reading {len(legacy)} site-keyed baseline record(s) through the compatibility "
+                "path",
+                since="0.87",
+                remove_in="2.0",
+                use="`camber portfolio migrate` to re-key them to facility_id once, on disk",
+                stacklevel=4,
+            )
+        return len(legacy)
 
     # ----------------------------------------------------------------- lookup
     def key(self, site: str, equip: str, kind: str) -> str:
-        """Stable fingerprint for one (site, equip, model-kind) baseline."""
-        return fingerprint(site, equip, kind)
+        """Stable fingerprint for one baseline: ``(facility_id, equip, kind)`` when the store is
+        bound to a facility, else ``(site, equip, kind)``."""
+        return fingerprint(self.facility_id or site, equip, kind)
 
     def get(self, site: str, equip: str, kind: str) -> BaselineRecord | None:
         """The frozen record for this equipment/model, or ``None`` if none is frozen yet."""
-        return self._recs.get(self.key(site, equip, kind))
+        fp = self.key(site, equip, kind)
+        if fp not in self._recs and self.facility_id and site and not self._explicit_legacy:
+            self._adopt_legacy((site,))
+        return self._recs.get(fp)
 
     def model_for(self, site: str, equip: str, kind: str):
         """The rebuilt frozen model for this equipment, or ``None`` if none is frozen yet."""
@@ -164,7 +240,7 @@ class BaselineStore:
         :meth:`accept_new_normal`'s job and must be an attributed decision.
         """
         fp = self.key(site, equip, kind)
-        if fp in self._recs:
+        if self.get(site, equip, kind) is not None:
             raise ValueError(
                 f"a baseline is already frozen for {equip!r}/{kind!r}; "
                 "use accept_new_normal(...) to supersede it deliberately"
@@ -180,6 +256,7 @@ class BaselineStore:
             period_start=str(start),
             period_end=str(end),
             reason=reason,
+            facility_id=self.facility_id or "",
         )
         self._recs[fp] = rec
         return rec
@@ -211,7 +288,7 @@ class BaselineStore:
         if not str(reason).strip():
             raise ValueError("accept_new_normal requires reason (why the baseline moved)")
         fp = self.key(site, equip, kind)
-        prev = self._recs.get(fp)
+        prev = self.get(site, equip, kind)
         start, end = period
         rec = BaselineRecord(
             fingerprint=fp,
@@ -225,6 +302,8 @@ class BaselineStore:
             accepted_by=str(accepted_by),
             reason=str(reason),
             supersedes=prev.frozen_at if prev is not None else "",
+            facility_id=self.facility_id or "",
+            aliases=list(prev.aliases) if prev is not None else [],
         )
         if prev is not None:
             past = list(prev.history)

@@ -90,13 +90,16 @@ class FaultRegister:
         """Snapshot of currently open faults keyed by fingerprint."""
         return dict(self._open)
 
-    def update(self, findings, *, site: str = "", run_id=None, actionable=_ACTIONABLE) -> dict:
+    def update(
+        self, findings, *, site: str = "", run_id=None, actionable=_ACTIONABLE, facility_id=None
+    ) -> dict:
         """Fold in one run; return ``{"new":[...], "ongoing":[...], "resolved":[...]}``
-        as lists of fingerprints."""
+        as lists of fingerprints. ``facility_id`` keys the fingerprints by the facility (stable
+        across renames) instead of ``site``."""
         now = {}
         for f in findings:
             if _attr(f, "severity", "info") in actionable:
-                fp = fingerprint(site, _attr(f, "equip", ""), _attr(f, "rule", ""))
+                fp = fingerprint(facility_id or site, _attr(f, "equip", ""), _attr(f, "rule", ""))
                 now[fp] = {
                     "site": site,
                     "equip": _attr(f, "equip", ""),

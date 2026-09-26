@@ -5,6 +5,10 @@ from :func:`camber.chillerdiag.diagnose_chiller_drift` — into a flat table and
 CSV, JSON, or Parquet — the shape a BI tool or warehouse loader expects. Metrics are flattened
 into ``metric_*`` columns by default so each finding is one row with scalar columns. Uses
 pandas + (for Parquet) the already-required pyarrow; no new dependency.
+
+Every function takes an optional ``facility_id``: when given, the ``fingerprint`` column is keyed
+by it (stable across facility renames, like :mod:`camber.integrate.tickets`) and a
+``facility_id`` column follows it. Without it the table is exactly as before.
 """
 
 from __future__ import annotations
@@ -13,11 +17,20 @@ import pandas as pd
 
 from .tickets import _attr, fingerprint
 
-_BASE_COLS = ["fingerprint", "site", "equip", "rule", "severity", "summary"]
+
+def _ident(site: str, facility_id, equip: str, rule: str) -> dict:
+    fp = {"fingerprint": fingerprint(facility_id or site, equip, rule)}
+    if facility_id:
+        fp["facility_id"] = facility_id
+    return fp
+
+
+_BASE_COLS = ["fingerprint", "facility_id", "site", "equip", "rule", "severity", "summary"]
 
 # One row per pump-loop verdict; the columns a screening dashboard ranks and filters on.
 _PUMP_DIAG_COLS = [
     "fingerprint",
+    "facility_id",
     "site",
     "equip",
     "locus",
@@ -32,6 +45,7 @@ _PUMP_DIAG_COLS = [
 # One row per chiller roll-up verdict; the whole-machine columns a screening dashboard wants.
 _DIAG_COLS = [
     "fingerprint",
+    "facility_id",
     "site",
     "equip",
     "locus",
@@ -47,7 +61,7 @@ _DIAG_COLS = [
 
 
 def findings_to_frame(
-    findings, *, site: str = "", flatten_metrics: bool = True, columns=None
+    findings, *, site: str = "", flatten_metrics: bool = True, columns=None, facility_id=None
 ) -> pd.DataFrame:
     """Flatten findings into a DataFrame (one row per finding).
 
@@ -60,7 +74,7 @@ def findings_to_frame(
         equip = _attr(f, "equip", "")
         rule = _attr(f, "rule", "")
         row = {
-            "fingerprint": fingerprint(site, equip, rule),
+            **_ident(site, facility_id, equip, rule),
             "site": site,
             "equip": equip,
             "rule": rule,
@@ -89,17 +103,26 @@ def export_findings(
     site: str = "",
     flatten_metrics: bool = True,
     columns=None,
+    facility_id=None,
 ) -> int:
     """Write findings to ``path`` as CSV / JSON / Parquet. Returns the row count.
 
     ``format`` is inferred from the file extension when None (``.csv`` / ``.json`` /
     ``.parquet``). JSON is written as records (a list of row objects).
     """
-    df = findings_to_frame(findings, site=site, flatten_metrics=flatten_metrics, columns=columns)
+    df = findings_to_frame(
+        findings,
+        site=site,
+        flatten_metrics=flatten_metrics,
+        columns=columns,
+        facility_id=facility_id,
+    )
     return _write_frame(df, path, format)
 
 
-def diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+def diagnoses_to_frame(
+    diagnoses, *, site: str = "", columns=None, facility_id=None
+) -> pd.DataFrame:
     """Flatten chiller drift roll-ups into a DataFrame (one row per machine).
 
     ``diagnoses`` is an iterable of :class:`camber.chillerdiag.ChillerDriftDiagnosis` (or anything
@@ -116,7 +139,7 @@ def diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFra
         charge = _attr(d, "charge", None)
         rows.append(
             {
-                "fingerprint": fingerprint(site, equip, "chiller_drift"),
+                **_ident(site, facility_id, equip, "chiller_drift"),
                 "site": site,
                 "equip": equip,
                 "locus": _attr(d, "locus", ""),
@@ -139,17 +162,25 @@ def diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFra
 
 
 def export_diagnoses(
-    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+    diagnoses,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    columns=None,
+    facility_id=None,
 ) -> int:
     """Write chiller drift roll-ups to ``path`` as CSV / JSON / Parquet. Returns the row count.
 
     ``format`` is inferred from the file extension when None. JSON is written as records.
     """
-    df = diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    df = diagnoses_to_frame(diagnoses, site=site, columns=columns, facility_id=facility_id)
     return _write_frame(df, path, format)
 
 
-def pump_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+def pump_diagnoses_to_frame(
+    diagnoses, *, site: str = "", columns=None, facility_id=None
+) -> pd.DataFrame:
     """Flatten per-loop pump drift diagnoses into a DataFrame (one row per loop).
 
     ``diagnoses`` is an iterable of :class:`camber.pumpdrift.PumpDriftDiagnosis` (or anything with
@@ -161,7 +192,7 @@ def pump_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.Da
         equip = _attr(d, "equip", "")
         rows.append(
             {
-                "fingerprint": fingerprint(site, equip, "pump_drift"),
+                **_ident(site, facility_id, equip, "pump_drift"),
                 "site": site,
                 "equip": equip,
                 "locus": _attr(d, "locus", ""),
@@ -182,16 +213,23 @@ def pump_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.Da
 
 
 def export_pump_diagnoses(
-    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+    diagnoses,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    columns=None,
+    facility_id=None,
 ) -> int:
     """Write per-loop pump drift diagnoses to ``path`` as CSV / JSON / Parquet; return the count."""
-    df = pump_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    df = pump_diagnoses_to_frame(diagnoses, site=site, columns=columns, facility_id=facility_id)
     return _write_frame(df, path, format)
 
 
 # One row per AHU verdict; the air-side columns a screening dashboard ranks and filters on.
 _AHU_DIAG_COLS = [
     "fingerprint",
+    "facility_id",
     "site",
     "equip",
     "locus",
@@ -204,7 +242,9 @@ _AHU_DIAG_COLS = [
 ]
 
 
-def ahu_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+def ahu_diagnoses_to_frame(
+    diagnoses, *, site: str = "", columns=None, facility_id=None
+) -> pd.DataFrame:
     """Flatten per-AHU air-side drift diagnoses into a DataFrame (one row per AHU).
 
     ``diagnoses`` is an iterable of :class:`camber.ahudrift.AhuDriftDiagnosis` (or anything with
@@ -216,7 +256,7 @@ def ahu_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.Dat
         equip = _attr(d, "equip", "")
         rows.append(
             {
-                "fingerprint": fingerprint(site, equip, "ahu_drift"),
+                **_ident(site, facility_id, equip, "ahu_drift"),
                 "site": site,
                 "equip": equip,
                 "locus": _attr(d, "locus", ""),
@@ -237,10 +277,16 @@ def ahu_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.Dat
 
 
 def export_ahu_diagnoses(
-    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+    diagnoses,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    columns=None,
+    facility_id=None,
 ) -> int:
     """Write per-AHU air-side drift diagnoses to ``path`` (CSV / JSON / Parquet); return count."""
-    df = ahu_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    df = ahu_diagnoses_to_frame(diagnoses, site=site, columns=columns, facility_id=facility_id)
     return _write_frame(df, path, format)
 
 
@@ -249,6 +295,7 @@ def export_ahu_diagnoses(
 # columns are absent by design.
 _CONDENSER_DIAG_COLS = [
     "fingerprint",
+    "facility_id",
     "site",
     "equip",
     "severity",
@@ -259,7 +306,9 @@ _CONDENSER_DIAG_COLS = [
 ]
 
 
-def condenser_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+def condenser_diagnoses_to_frame(
+    diagnoses, *, site: str = "", columns=None, facility_id=None
+) -> pd.DataFrame:
     """Flatten per-loop condenser heat-rejection diagnoses into a DataFrame (one row per loop).
 
     ``diagnoses`` is an iterable of :class:`camber.condenserdrift.CondenserDriftDiagnosis` (or
@@ -271,7 +320,7 @@ def condenser_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> 
         equip = _attr(d, "equip", "")
         rows.append(
             {
-                "fingerprint": fingerprint(site, equip, "condenser_drift"),
+                **_ident(site, facility_id, equip, "condenser_drift"),
                 "site": site,
                 "equip": equip,
                 "severity": _attr(d, "severity", "ok"),
@@ -290,10 +339,18 @@ def condenser_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> 
 
 
 def export_condenser_diagnoses(
-    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+    diagnoses,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    columns=None,
+    facility_id=None,
 ) -> int:
     """Write per-loop condenser drift diagnoses to ``path`` (CSV / JSON / Parquet); return count."""
-    df = condenser_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    df = condenser_diagnoses_to_frame(
+        diagnoses, site=site, columns=columns, facility_id=facility_id
+    )
     return _write_frame(df, path, format)
 
 
@@ -301,6 +358,7 @@ def export_condenser_diagnoses(
 # Like the condenser diagnosis it carries no locus / loop-wide flag (only corroborated).
 _EVAPORATOR_DIAG_COLS = [
     "fingerprint",
+    "facility_id",
     "site",
     "equip",
     "severity",
@@ -311,7 +369,9 @@ _EVAPORATOR_DIAG_COLS = [
 ]
 
 
-def evaporator_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+def evaporator_diagnoses_to_frame(
+    diagnoses, *, site: str = "", columns=None, facility_id=None
+) -> pd.DataFrame:
     """Flatten per-loop evaporator / CHW drift diagnoses into a DataFrame (one row per loop).
 
     ``diagnoses`` is an iterable of :class:`camber.evaporatordrift.EvaporatorDriftDiagnosis` (or
@@ -323,7 +383,7 @@ def evaporator_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) ->
         equip = _attr(d, "equip", "")
         rows.append(
             {
-                "fingerprint": fingerprint(site, equip, "evaporator_drift"),
+                **_ident(site, facility_id, equip, "evaporator_drift"),
                 "site": site,
                 "equip": equip,
                 "severity": _attr(d, "severity", "ok"),
@@ -342,10 +402,18 @@ def evaporator_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) ->
 
 
 def export_evaporator_diagnoses(
-    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+    diagnoses,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    columns=None,
+    facility_id=None,
 ) -> int:
     """Write per-loop evaporator diagnoses to ``path`` (CSV / JSON / Parquet); return the count."""
-    df = evaporator_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    df = evaporator_diagnoses_to_frame(
+        diagnoses, site=site, columns=columns, facility_id=facility_id
+    )
     return _write_frame(df, path, format)
 
 
@@ -353,6 +421,7 @@ def export_evaporator_diagnoses(
 # AHU diagnosis it carries a locus + a wide flag (here ``box_wide``).
 _VAV_DIAG_COLS = [
     "fingerprint",
+    "facility_id",
     "site",
     "equip",
     "locus",
@@ -365,7 +434,9 @@ _VAV_DIAG_COLS = [
 ]
 
 
-def vav_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.DataFrame:
+def vav_diagnoses_to_frame(
+    diagnoses, *, site: str = "", columns=None, facility_id=None
+) -> pd.DataFrame:
     """Flatten per-box VAV drift diagnoses into a DataFrame (one row per box).
 
     ``diagnoses`` is an iterable of :class:`camber.vavdrift.VavDriftDiagnosis` (or anything with
@@ -377,7 +448,7 @@ def vav_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.Dat
         equip = _attr(d, "equip", "")
         rows.append(
             {
-                "fingerprint": fingerprint(site, equip, "vav_drift"),
+                **_ident(site, facility_id, equip, "vav_drift"),
                 "site": site,
                 "equip": equip,
                 "locus": _attr(d, "locus", ""),
@@ -398,10 +469,16 @@ def vav_diagnoses_to_frame(diagnoses, *, site: str = "", columns=None) -> pd.Dat
 
 
 def export_vav_diagnoses(
-    diagnoses, path: str, *, format: str | None = None, site: str = "", columns=None
+    diagnoses,
+    path: str,
+    *,
+    format: str | None = None,
+    site: str = "",
+    columns=None,
+    facility_id=None,
 ) -> int:
     """Write per-box VAV drift diagnoses to ``path`` (CSV / JSON / Parquet); return the count."""
-    df = vav_diagnoses_to_frame(diagnoses, site=site, columns=columns)
+    df = vav_diagnoses_to_frame(diagnoses, site=site, columns=columns, facility_id=facility_id)
     return _write_frame(df, path, format)
 
 
