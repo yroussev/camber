@@ -86,3 +86,61 @@ def test_drift_finding_shape():
     assert f.equip == "AHU-1"
     assert f.severity == "fault"
     assert f.metrics["bias"] > 5.0
+
+
+# --- drift needs a span; verdict ordered by severity ------------------------ #
+
+
+def _co2_pair(days, *, bias=0.0, drift_per_month=0.0, occupied_excess=300.0, seed=0):
+    """Room vs exhaust CO2 at 10 min: they agree at night, the room runs higher while occupied."""
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2024-03-04", periods=days * 144, freq="10min")
+    hour = idx.hour + idx.minute / 60
+    occ = np.clip(np.sin((hour - 8) / 10 * np.pi), 0, None) * ((idx.dayofweek < 5).astype(float))
+    ref = 420 + 500 * occ + rng.normal(0, 10, len(idx))
+    months = (idx - idx[0]).total_seconds().to_numpy() / (86400 * 30.44)
+    # the room-vs-exhaust gap grows through each occupied day and varies day to day
+    daily_amp = rng.uniform(0.3, 1.0, days).repeat(144)
+    sensor = ref + bias + drift_per_month * months + occupied_excess * occ * daily_amp
+    return pd.Series(sensor, index=idx), pd.Series(ref, index=idx)
+
+
+_CO2 = dict(bias_warn=50, bias_fault=100, drift_warn=20, drift_fault=50)
+
+
+def test_short_window_does_not_extrapolate_drift():
+    """Regression: 3 days with a daytime swing was reported 'fault, drifting +275/month'."""
+    s, ref = _co2_pair(3, bias=7.0)
+    r = compare_to_reference(s, ref, name="co2", **_CO2)
+    assert r.drift_per_month is None
+    assert any("drift not evaluated" in c for c in r.caveats)
+    assert "drifting" not in r.verdict
+    assert r.severity == "ok"
+
+
+def test_drift_is_robust_to_the_diurnal_offset():
+    """Regression: a least-squares slope over a daytime swing reported +25.7/month on ~-2/month."""
+    s, ref = _co2_pair(75, drift_per_month=-2.0, seed=4)
+    r = compare_to_reference(s, ref, name="co2", baseline_hours=range(1, 5), **_CO2)
+    assert r.drift_per_month is not None
+    assert abs(r.drift_per_month - -2.0) < 1.5
+    assert r.n_drift_days >= 70
+    assert "drifting" not in r.verdict
+
+
+def test_bias_fault_leads_the_verdict():
+    """Regression: a 148 ppm bias fault was headlined as 'drifting +28.7/month'."""
+    s, ref = _co2_pair(60, bias=-148.0, drift_per_month=30.0, occupied_excess=0.0)
+    r = compare_to_reference(s, ref, name="co2", **_CO2)
+    assert r.severity == "fault"
+    assert r.verdict.startswith("biased")
+    assert "drifting" in r.verdict  # still reported, after the fault
+
+
+def test_negative_bias_warn_is_expressed():
+    """A site OAT reading ~4.7 F low against a station is a warn-level bias, stated as such."""
+    ref = _weather()
+    r = compare_to_reference(ref - 4.7, ref, name="oat")
+    assert r.severity == "warn"
+    assert r.verdict == "biased -4.7"
+    assert abs(r.drift_per_month) < 0.1
