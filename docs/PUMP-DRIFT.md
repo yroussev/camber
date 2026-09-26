@@ -41,6 +41,15 @@ equip identifies which pump.
 | `LoopDPDrift` | loop differential pressure | flow (system curve DP ∝ Q²) | both | rising system resistance / valve-authority loss vs bypass / stuck-open — with the DP-reset schedule subtracted out |
 | `PumpPowerDrift` | electrical power | flow (P ∝ Q³) | up | wire-to-water efficiency loss (bearing/seal drag, degrading motor/drive, recirculation) — a power **excess** at matched flow |
 
+**Loop DP is unit-free.** Sites trend DP in psi, inH₂O, kPa or ftH₂O. `LoopDPDrift`'s plausibility
+band is scaled to the baseline's own median DP (`dp_plausible_range`: −0.25…5× the median, which
+still rejects sentinel codes) instead of the former fixed 0–100 that assumed psi — a boiler loop
+with a 480.5 inH₂O setpoint was rejected sample-by-sample and the rule declined, blaming "too few
+loaded samples". Pass `dp_range=` to fix the band explicitly. Every pump/loop drift rule now names
+the real reason when it declines (`camber.chillerbaseline.unscoreable_reason`): a metric that is all
+missing, a load gate no sample meets (with the observed median), a band no reading falls in (check
+units), too few samples, or too narrow a load range.
+
 **Flow-at-matched-speed is the pump-wear signal.** A healthy VFD pump delivers a repeatable flow at a
 given speed; a deficit means the pump (or its suction) has degraded. It is **one-sided down** — only a
 deficit is a fault — so `ApproachDriftMonitor` gained a `direction="down"` mode for it (alongside the

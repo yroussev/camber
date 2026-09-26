@@ -39,6 +39,48 @@ off the same frozen baseline:
   (`camber.chillerdrift.ApproachDriftMonitor`) that fires only when the signal moves **and stays
   moved**, not on a single hot hour.
 
+**Machines of any size.** The load gates were absolute (a 5-ton floor and a 10-ton span to identify
+a slope) — 10 % and 20 % of a 50-ton machine — so a 5-ton chiller or a 3-ton heat pump declined
+every time. Since 0.82.0 every tons-normalized chiller rule takes `min_tons` / `min_tons_span`, and
+by default derives them from the baseline's observed capacity
+(`camber.chillerbaseline.size_relative_load_gates`: 10 % / 20 % of the 95th-percentile load, capped
+at 5 t / 10 t, so any machine of 50 t or more gets exactly the gates it always had). A machine whose
+load does not move enough to identify a slope (fixed capacity, single stage) gets a **flat level**
+baseline instead of a decline; it is only scored at the load it was observed at, and the finding
+says so.
+
+**Plausibility bands are physical, per metric.** The fit's default band (0–50 °F) suits approach,
+not superheat or subcooling: liquid floodback reads ~0 °F superheat and, with transducer error, a
+few °F below zero; flash gas does the same to subcooling; a starved evaporator runs superheat past
+50 °F. Filtering those out discarded the fault itself (floodback declined; a half-flooded period
+scored "ok −0.1 °F"). Superheat now uses −20…150 °F and subcooling −20…80 °F, shared with
+`camber.sensorhealth.PHYSICAL_BOUNDS`, which still reject sentinel codes. Refrigerant pressures use
+−15…2000 psig (discharge) and −15…1000 psig (suction) — genuinely refrigerant-neutral, covering a
+CO₂ (R744) transcritical gas cooler at 1100–1750 psig, which the former 700 / 400 psig ceilings
+rejected wholesale.
+
+**A second regressor where physics demands one.** Head pressure is set first by the heat-sink
+temperature and suction pressure by the leaving chilled-water temperature — load comes second. So
+`fit_load_baseline(..., covariate_col=...)` fits `metric ~ load + covariate` and every score is made
+at matched load *and* matched condition (`LoadBaseline.predict(tons, covariate)`; the CUSUM folds
+the reading referred to the baseline's reference condition, `LoadBaseline.adjust`). A covariate is
+used only when its 5–95 % spread in the baseline is at least 2 °F (four times a plant sensor's
+accuracy) and its fitted effect has the physically expected sign; otherwise the rule falls back to
+load only and says why.
+
+**The CUSUM accounts for serial correlation.** Its slack and limit are in sigmas of *independent*
+samples, but trend residuals wander slowly — lag-1 autocorrelation 0.8–0.9 at 1–5 minute cadence on
+real plant data — so one half-hour excursion sampled every minute was counted thirty times. On the
+normal days of a real 5-ton chiller that made the sustained alarm fire on 50–90 % of days
+(subcooling, 5-min / 1-min data). The fitted baseline now records its residual lag-1
+autocorrelation (`LoadBaseline.resid_lag1`, zero unless significant) and the monitor expresses its
+parameters in the residual's **long-run** sigma, `σ·√((1+ρ)/(1−ρ))`, carrying ρ to the current
+period's cadence as `ρ^(Δt/Δt_baseline)`. Hourly trend data with independent residuals is
+unchanged. A CUSUM also has no °F floor, so it will (correctly) flag a *sustained* shift smaller than
+the period rule's magnitude floor — e.g. a machine run at loads outside its baseline envelope for a
+season. That is a tuning question for the provisional parameters below, not a defect, and they are
+left as they are.
+
 ## The detector family
 
 | Detector | Signal | Sides | Catches |
@@ -56,7 +98,10 @@ off the same frozen baseline:
 widening tower approach raises condenser-water temperature, chiller lift, and kW/ton, so it shows up
 downstream in the chiller too. The tower approach is one-sided (fouling only widens it) and is scored
 against a load-normalized baseline just like the chiller detectors; wet-bulb is taken measured, or
-derived from outdoor dry-bulb + RH (Stull) when it isn't a BAS point.
+derived from outdoor dry-bulb + RH (Stull) when it isn't a BAS point. Stull's fit assumes sea-level
+pressure; pass `elevation_ft` (or a measured `pressure_psia`) to the tower rules and wet-bulb is
+solved psychrometrically at site pressure instead (at 1600 m in hot, dry air the sea-level value
+reads ~2.6 °F high, understating the approach).
 
 **One condenser-loop verdict.** These four condenser-side signals fail *independently* (a scaling
 tube, a throttled valve, a fouled tower, and a rising high-side pressure localize different things) but
@@ -65,9 +110,11 @@ reads the individual drift Findings and returns one localized `CondenserDriftDia
 cause of each drifting signal (tube fouling/scale · reduced CW flow vs. bypass · tower heat-rejection ·
 high-side pressure rising) and flagging **corroboration** when two or more agree. It isolates the
 chiller condenser leg from the evaporator leg (the approach rule scores both), and for head pressure it
-uses the tower signal to disambiguate the entering-CW-temperature confound — a co-moving CW-temp rise
-*backed by* a degrading tower corroborates a real heat-rejection fault, while the same rise with a
-quiet tower is flagged as likely ambient rather than a high-side fault. Stays screening-grade:
+removes the entering-CW-temperature confound at source when head pressure is regressed on it (a
+fouled tower then reads as a tower fault with a healthy chiller high side, not a corroborated pair);
+when head pressure had to fall back to load only, it uses the tower signal to disambiguate — a
+co-moving CW-temp rise *backed by* a degrading tower corroborates a real heat-rejection fault, while
+the same rise with a quiet tower is flagged as likely ambient rather than a high-side fault. Stays screening-grade:
 corroboration raises priority and specificity, not the severity tier — the thing that turns a set of
 screening alerts into a work order.
 
@@ -83,12 +130,15 @@ report, alongside the chiller, pump, and AHU verdict tables.
 condensing pressure (`Role.DISCHARGE_PRESSURE`, psig) — the same fault modes that widen the condenser
 approach (fouling/scale, non-condensables, reduced CW flow) also raise head pressure, but the pressure
 is directly instrumented, often earlier, and it is what a mechanic actually gauges. It is **one-sided**
-like approach (only a rise is a fault) and scored against the same load-normalized frozen baseline. **Its
-confound is stated, not hidden:** head pressure also climbs with entering condenser-water temperature and
-ambient wet-bulb, which load normalization does *not* remove — so when a CW-supply point is mapped the
-rule reports the concurrent CW-supply shift and **caveats a co-moving rise** (some of the climb may be
-heat-rejection/ambient-driven, not a high-side fault); a mapped `Role.SUCTION_PRESSURE` adds the
-condensing-over-suction *lift* as further context. Absolute head pressure is refrigerant-dependent, so
+like approach (only a rise is a fault). **Its confound is regressed out, not just flagged:** head
+pressure climbs with the heat-sink temperature at least as much as with load, so the baseline is
+`pressure ~ load + entering condenser-water temperature` (`Role.CW_SUPPLY_TEMP`, water-cooled) or
+`+ outdoor-air temperature` (`Role.OAT`, air-cooled) when either is mapped and varied in the
+baseline. On a residential heat pump's lab data that cut the baseline scatter from ~61 psi (load
+only) to ~5 psi, and head-pressure recall on the labeled faults from 1 % to 32 % with no false
+alarms. Without a usable heat-sink temperature the rule falls back to load only, says so in a
+caveat, and reports and caveats a co-moving CW-supply rise as before; a mapped
+`Role.SUCTION_PRESSURE` adds the condensing-over-suction *lift* as further context. Absolute head pressure is refrigerant-dependent, so
 the **sigma floor carries the weight** (self-scaling against the baseline's own scatter) and the psi
 floor is only a coarse backstop.
 
@@ -98,8 +148,12 @@ twin: it trends the suction / evaporating pressure (`Role.SUCTION_PRESSURE`, psi
 overfeed / flooding, so unlike head pressure it is **two-sided** (both directions are faults, scored on
 magnitude with the sign reported), sharing head pressure's psi/σ floors because it is the same raw-gauge
 signal class. Its confound is the mirror of head pressure's: suction pressure tracks *chilled-water*
-supply temperature, so a chilled-water reset lifts it with no fault — the rule reports the concurrent
-CHW-supply shift and **caveats a co-moving move** as possibly setpoint-driven.
+supply temperature, so a chilled-water reset lifts it with no fault. When CHW supply varied in the
+baseline the fit is `pressure ~ load + CHW supply` and the reset is accounted for (on a real 5-ton
+chiller a reset to 52.7 °F read as a +9σ suction fault under load-only normalization and −0.6σ
+with it; false alarms on normal days fell from 33 % to 0 %). With a fixed setpoint in the baseline
+the rule falls back to load only and **caveats a co-moving CHW-supply move** as possibly
+setpoint-driven.
 
 **Subcooling and superheat are complementary.** Subcooling watches the condenser/liquid side (how much
 liquid is standing in the condenser); superheat watches the evaporator/suction side (whether the
