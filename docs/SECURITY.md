@@ -111,11 +111,31 @@ building networks. Its guarantees:
   absolute paths, `..` traversal (zip-slip), symlinks, hardlinks and device files are refused, and
   file-count, total-size and compression-ratio caps stop decompression bombs. Members are written
   to a temporary name and renamed, so an interrupted extract leaves no truncated file.
-- **Licence gate**: a research-only (non-commercial / no-derivatives) dataset is refused unless
-  the user passes `--accept-noncommercial` (`accept_noncommercial=True`); there is deliberately no
-  environment-variable bypass. Each acceptance is appended to `acknowledgements.json` in the cache,
-  and every report built from such data carries a do-not-redistribute banner (exit code 3 when the
-  gate refuses).
+- **Licence gate (the research-only tier)**: a dataset whose licence is non-commercial (NC) or
+  no-derivatives (ND) is `access: "research_only"` -- the catalog validator enforces that the two
+  always agree. It is refused unless the user passes `--accept-noncommercial`
+  (`accept_noncommercial=True`) **on every fetch**; there is deliberately no environment-variable
+  bypass, and `fetch --all` covers the open tier only (research-only needs `--licence all` *and*
+  the flag; without it the command is refused before anything downloads). Each acceptance is
+  appended to the append-only `acknowledgements.json` ledger and the manifest *before* the first
+  byte is downloaded (`remove` never trims the ledger). `ingest` of research-only data needs an
+  acknowledgement of the entry's *current* licence (a changed licence must be accepted again).
+  The ingested facility records `redistribution: "prohibited"`, and every report built from the
+  data -- audit, RCx, drift, site report, dashboard -- carries the non-commercial /
+  do-not-redistribute banner; store reads stamp the provenance on the frame, so a report built
+  directly from store frames carries it too. Exit code 3 when the gate refuses. CAMBER never
+  redistributes the data; the ledger records that the *user* accepted the licence terms.
+- **Manual downloads and local files**: a `manual: true` entry (a publisher portal with terms)
+  is never fetched by CAMBER. `ingest <id> --from-dir DIR` takes files the user downloaded; every
+  pinned file is verified (size + SHA-256) before anything is placed in the cache, a mismatch is
+  refused (exit code 2) and the user's file is left untouched, and unpinned files are hashed with a
+  warning. The research-only gate applies before any file is placed.
+- **Workbooks**: `.xlsx` files are parsed only with the optional `xlsx` extra (`openpyxl`,
+  imported lazily when a workbook is read), and only after the file has passed its pin check.
+  Legacy `.xls` (`xlrd`) is not part of the extra.
+- **Link check**: `scripts/datasets_linkcheck.py` (weekly, advisory, CI only) sends `HEAD` /
+  one-byte ranged `GET` requests to the catalog's own HTTPS URLs and licence pages; it downloads
+  no data, and its workflow has a read-only token.
 - **Stdlib only**: `urllib`, `zipfile`/`tarfile`, `hashlib` -- no new dependency, a descriptive
   `User-Agent`, an explicit timeout.
 

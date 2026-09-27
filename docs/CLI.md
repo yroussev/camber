@@ -204,18 +204,30 @@ camber datasets list [--licence commercial|all] [--kind simulated|real|lab] [--l
 camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, data issues
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
 camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
+                        [--from-dir DIR] [--accept-noncommercial]
 camber datasets status [--dir D] [--store DIR] [--json]
 camber datasets remove <id> [--dir D] [--store DIR --purge-store]
 camber datasets config <id> --store DIR [--out cfg.json] [--facility ID]
 camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 ```
 
+`list` shows each entry's licence **tier** (`open` / `research-only`) and marks manual downloads.
 `fetch --all` takes the open tier only; research-only (NC/ND) datasets also need `--licence all`
-**and** `--accept-noncommercial`. `ingest --no-corrections` skips the catalog's fixes for problems in
+**and** `--accept-noncommercial` (`--all --licence all` without it is refused before anything
+downloads). A named research-only id needs `--accept-noncommercial` on every fetch; each acceptance
+is recorded in `acknowledgements.json`. There is no environment-variable bypass. `ingest` of
+research-only data needs that recorded acknowledgement (or its own `--accept-noncommercial`).
+A **manual** entry (files you download yourself, e.g. from a portal with terms) is never fetched:
+`fetch <id>` exits 1 with the instructions and `fetch --all` skips it; download the files, then
+`ingest <id> --from-dir DIR --store STORE`, which verifies every pinned file (size + SHA-256)
+before using it -- `--from-dir` works for any entry whose files you already have. An entry with
+Excel workbooks needs the `xlsx` extra (`pip install "camber-toolkit[xlsx]"`); without it `ingest`
+exits 1 and says so. `ingest --no-corrections` skips the catalog's fixes for problems in
 the published data (`info <id>` lists them) and ingests it exactly as published -- use a second
 store to compare the two; `ingest` warns when the store's disk is smaller than the subset's
-estimated size. Exit codes: `2` checksum mismatch (the file is kept as `.bad`),
-`3` licence gate, `4` not enough disk, `1` any other error. A typical session:
+estimated size. Exit codes: `2` checksum mismatch (a download is kept as `.bad`; a
+`--from-dir` file is left untouched), `3` licence gate, `4` not enough disk, `1` any other error
+(including a manual entry named to `fetch`, or a missing extra). A typical session:
 
 ```
 camber datasets fetch lbnl-sdahu

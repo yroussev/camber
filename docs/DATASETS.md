@@ -10,10 +10,10 @@ CAMBER redistributes none of the data. The catalog (`camber/datasets/catalog.jso
 records where each dataset is published, its licence and citation, and the size and SHA-256 of
 every file; `camber datasets fetch` downloads the files from the publisher onto your machine.
 
-> **Status:** 0.86 ships the first seven entries and the command-line workflow. More datasets,
-> the research-only tier, a local catalog UI (`camber lab`) and worked exercises follow in later
-> releases. The Python API (`camber.datasets`) is **provisional** -- see
-> [API-STABILITY.md](API-STABILITY.md).
+> **Status:** 0.86 shipped the first seven entries and the command-line workflow; 0.89 adds the
+> research-only tier, manual-download entries, Excel workbooks (the `xlsx` extra) and Brick-grouped
+> ingest. A local catalog UI (`camber lab`) and worked exercises follow in later releases. The
+> Python API (`camber.datasets`) is **provisional** -- see [API-STABILITY.md](API-STABILITY.md).
 
 ## Quick start
 
@@ -59,19 +59,79 @@ meters and a cap on buildings per site. Choose one with `--subset full`.
 
 ## Licences
 
-Each entry carries an SPDX licence id and an **access** tier:
+Each entry carries an SPDX licence id and a licence **tier** (`access`), shown by
+`camber datasets list`:
 
 - **open** -- the licence allows commercial use (CC0, CC-BY, CC-BY-SA, ...). Fetch it freely; cite
   the publisher. A **share-alike** licence (BDG2 is CC-BY-SA-4.0) additionally means a
   *redistributed adaptation* of the data must keep the same licence -- analysing it, including
   commercially, is fine. Reports built from share-alike data say so.
-- **research_only** -- the licence is non-commercial (NC) or no-derivatives (ND). `fetch` refuses
-  it unless you pass `--accept-noncommercial`; the acceptance is recorded in
-  `acknowledgements.json`, and every report built from the data carries a **non-commercial /
-  do-not-redistribute** banner. (0.86 ships no research-only entries yet.)
+- **research-only** (`access: "research_only"`) -- the licence is non-commercial (NC) or
+  no-derivatives (ND). You may download and analyse the data for research, but not use it
+  commercially or redistribute it (or anything built from it). CAMBER makes that an explicit act:
+  - `fetch` refuses it unless you pass `--accept-noncommercial` -- on every fetch; there is no
+    environment-variable bypass. The acceptance is appended to `acknowledgements.json` in the
+    cache (and to the manifest) before anything downloads.
+  - `fetch --all` covers the **open tier only**; research-only entries need `--licence all`
+    **and** `--accept-noncommercial`.
+  - `ingest` needs an acknowledgement of the entry's current licence (from the fetch, or its own
+    `--accept-noncommercial`), and records `redistribution: "prohibited"` on the facility.
+  - Every report built from the data -- audit, RCx, drift, site report, dashboard -- carries a
+    **non-commercial / do-not-redistribute** banner.
 
 The catalog validator enforces that `access` is `research_only` exactly when the licence is NC or
-ND, that every URL is HTTPS, and that every file is pinned.
+ND, and that every URL is HTTPS. Files are pinned (size + SHA-256) unless an entry says why not.
+
+## Manual downloads
+
+Some publishers hand files out only through a portal with terms to accept. Such an entry is
+`manual: true` with `manual_instructions`; CAMBER never downloads it (`fetch` exits 1 with the
+instructions; `fetch --all` skips it). Download the files yourself, then:
+
+```
+camber datasets ingest <id> --from-dir ~/Downloads/<publisher files> --store lab_store
+```
+
+`--from-dir` finds each catalog file under the directory by its catalog path, then by its bare
+name, **verifies every pinned file** (size + SHA-256; a mismatch is refused with exit code 2 and
+your file is left untouched), hashes unpinned ones with a warning, and hard-links (or copies) them
+into the cache, recorded in the manifest as `source: "local"` -- from then on `status`, `remove`
+and re-ingest treat them like fetched files. `--from-dir` works for any entry whose files you
+already have. A research-only manual entry also needs `--accept-noncommercial`.
+
+## Excel workbooks (the `xlsx` extra)
+
+A few publishers ship `.xlsx` workbooks. Reading them needs the optional extra:
+
+```
+pip install "camber-toolkit[xlsx]"      # openpyxl, imported only when a workbook is read
+```
+
+Such an entry lists `"requires_extras": ["xlsx"]` (the validator requires it whenever a run reads a
+workbook), and `ingest` stops with that install command when the extra is missing. A run names its
+worksheet with `"sheet"` (default: the first). Legacy `.xls` files are **not** covered by the extra:
+the only one published beside a planned entry (a heat-pump test report's appendix) is a transposed
+steady-state summary table, not time-series data, so the entry does not use it. CAMBER reads an
+`.xls` only if you install `xlrd` yourself.
+
+## Brick-grouped ingest
+
+Some datasets publish one wide table per *quantity* (every air handler's supply temperature in
+one file) and a Brick model saying which point belongs to which equipment. A run with
+`"group": "brick"` is split by the entry's `ingest.brick` model instead of becoming one equipment:
+
+- each column is a Brick point (matched by name); its role comes from the Brick class (mapped
+  and alias classes only -- ambiguous points are left out);
+- its equipment is the point's **owner** (`brick:hasPoint`, or the inverse `brick:isPointOf`), or
+  the first entity up the `hasPart` / `isPartOf` chain whose Brick class `equip_classes` maps to a
+  CAMBER class (`{"Rooftop_Unit": "AHU"}`); points with no such owner go to the run's own
+  `equip` / `class`;
+- **the dataset's mapping file wins**: its `aliases` override a column's role, its
+  `"equipment": {column: equip}` the owner and its `"equipment_classes": {equip: class}` the class;
+  each override is listed in the ingest notes.
+
+Columns of several unlabelled files merge into one equipment per owner, so every per-quantity
+file contributes to the same air handler.
 
 ## How a dataset lands in the store
 
@@ -410,5 +470,18 @@ faulted equipment and checks their licence block and that no G36 verdict appears
 sequence; and runs the BDG2 M&V baseline over every site against
 `examples/bdg2/benchmark-baseline.json`. It writes `summary.json` and `summary.md`, stops before
 free disk would drop below `--min-free-gb` (40 GB), and is resumable per dataset (`--only`,
-`--skip-done`). It is dev tooling, not part of the package and not run in CI (it needs the full
-local data, tens of GB).
+`--skip-done`). Manual entries are verified from the seeded copies the way `ingest --from-dir`
+does, and research-only entries are swept only with `--accept-noncommercial`. It is dev tooling,
+not part of the package and not run in CI (it needs the full local data, tens of GB).
+
+## Link check (maintainers)
+
+`scripts/datasets_linkcheck.py` asks every publisher whether it still serves each catalog file at
+its pinned size and ETag (`HEAD`, falling back to a one-byte ranged `GET`), and -- where an entry
+sets `licence_check` (`{"url": ..., "expect": "CC BY 4.0", "json_path": "license.name"}`) --
+whether the licence page still states the recorded licence. The `datasets-linkcheck` workflow runs
+it weekly (and on demand) and writes the report to the job summary with a warning per drift; it
+never fails the build, because `fetch` already refuses any file that differs from its pin. On
+drift, re-verify the entry (`scripts/datasets_refresh.py <id>`) and re-check its licence on the
+host's own page before re-pinning. `pytest -m network` runs the one test that downloads a real
+(small) file end to end.

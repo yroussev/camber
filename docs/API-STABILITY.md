@@ -51,7 +51,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **`camber.datasets`** (added in 0.86) -- the open dataset catalog: `DatasetEntry`, `FetchResult`,
   `IngestResult`, `catalog`, `get`, `fetch`, `ingest`, `status`, `remove`, `config_template`,
   `score`. The catalog's *content* (`catalog.json`: entries, subsets, pinned checksums) is data, not
-  API, and changes whenever a publisher reissues a file or an entry is added.
+  API, and changes whenever a publisher reissues a file or an entry is added. Added in 0.89, also
+  provisional: `ingest(..., accept_noncommercial=, from_dir=)`, the `DatasetEntry.manual` /
+  `manual_instructions` fields, the catalog fields `manual`, `manual_instructions`,
+  `requires_extras` (`"xlsx"`, `"brick"`), `licence_check.expect` / `json_path`, a run's `sheet`
+  and `group: "brick"`, `ingest.brick` (`file`, `member`, `equip_classes`) and the mapping-file
+  keys `equipment` / `equipment_classes`; the `xlsx` extra; and `BrickPointMapping.owner` /
+  `owner_class` plus `camber.interop.brick.part_parents_from_brick`. Reports built from store
+  frames pick up the dataset provenance stamped on the frame (`DataFrame.attrs`), an internal
+  mechanism, not API.
 - **`camber.portfolio`** (added in 0.86) -- the portfolio workspace and facility lifecycle:
   `Portfolio` (including `state_dir`, `manifest`, `migrate` and `legacy_sites`),
   `PortfolioLocked`, `LifecycleError`, `STATES`, `TRANSITIONS`, `DELETING`, `DEFAULT_POLICY`,

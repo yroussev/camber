@@ -4,6 +4,52 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+**Catalog release 2, the framework.** The research-only tier, manual-download entries, Excel
+workbooks and Brick-grouped ingest, so the rest of the open catalog can land; plus a weekly link
+check. The `camber.datasets` API stays **provisional**.
+
+### Added
+- **Research-only tier** (`access: "research_only"`, exactly when the licence is NC or ND): `camber
+  datasets fetch` refuses such an entry without `--accept-noncommercial` (exit 3) on every fetch,
+  with no environment-variable bypass; each acceptance goes to the `acknowledgements.json` ledger
+  and the manifest before anything downloads. `fetch --all` is the open tier only; research-only
+  entries need `--licence all` and `--accept-noncommercial`. `ingest` needs an acknowledgement of
+  the entry's current licence (or its own `--accept-noncommercial`) and records
+  `redistribution: prohibited`. `datasets list` shows the licence tier.
+- **Banners everywhere**: store reads stamp the facility's dataset provenance on the frame, so
+  `build_dashboard` and `build_site_report` show the licence block and the non-commercial /
+  do-not-redistribute banner even when no `data_sources` are passed (audit, RCx and drift already
+  did through the config).
+- **Manual-download entries** (`manual: true` + `manual_instructions`) and `camber datasets ingest
+  <id> --from-dir DIR` (API `ingest(..., from_dir=)`): files downloaded by hand are verified
+  against their pins (size + SHA-256; a mismatch exits 2 and leaves the file untouched) and
+  adopted into the cache. Works for any entry whose files you already have.
+- **`xlsx` extra** (`openpyxl>=3.1`, imported lazily): catalog runs may read `.xlsx` workbooks
+  (`"sheet"` names the worksheet); a missing extra is an actionable error. The validator requires
+  `"requires_extras": ["xlsx"]` on such entries. Legacy `.xls` is not in the extra (no entry needs
+  one).
+- **Brick owner grouping**: `BrickPointMapping.owner` / `owner_class` (from `hasPoint` or the
+  inverse `isPointOf`, now read by both parsers) and `interop.brick.part_parents_from_brick`. A
+  catalog run with `"group": "brick"` splits a per-quantity table into equipment by the entry's
+  Brick model (`ingest.brick.equip_classes`), walking up `hasPart` / `isPartOf`; the mapping file's
+  `aliases`, `equipment` and `equipment_classes` override the model.
+- **Link check**: `scripts/datasets_linkcheck.py` and the weekly `datasets-linkcheck` workflow
+  (advisory: job summary + warnings, never fails the build) check every file's served size / ETag
+  and, with `licence_check` (`expect`, `json_path`), the licence page. `pytest -m network` fetches
+  one small open file end to end.
+
+### Changed
+- The site-neutrality guard's rules may carry per-rule `exempt_paths` (a third output field).
+  Only the third-party dataset-host rule and its DOI-prefix rule use it, and only for
+  `camber/datasets/catalog.json`, which must link data as published; commit messages, the
+  CHANGELOG and release artefacts still apply every rule, and the licence-encumbered dataset rules
+  are never exempt. The CI guard, the pre-commit hook and `scripts/gates.sh` apply it.
+- CI installs the `xlsx` extra so the workbook path is tested.
+- `scripts/catalog_sweep.py` verifies manual entries from their seeded copies and sweeps
+  research-only entries only with `--accept-noncommercial`.
+
 ## [0.88.0] — 2026-09-26
 
 **A retro-commissioning report.** `camber report --layout rcx` turns one run into a printable RCx
