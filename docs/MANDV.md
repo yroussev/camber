@@ -306,7 +306,8 @@ One `validity` setting (`g14`, `sep` or `both`; decision D1 on #21) governs the 
 acceptance for the savings claim, SEP §6.4.1 model validity for the SEnPI, and, under `sep` or
 `both`, SEP §5.3.2's evidence and approval on every adjustment. The ECM dates and the settle
 window after each (`EcmSchedule`, 14 days by default) are declared once and shared by the
-confounding guard, the detection proposals and, in the next phase, rebaselining.
+confounding guard, the detection proposals and the rebaselining policy
+([below](#versioned-baselines-and-rebaselining)).
 
 ## SEP methods: forecast, backcast, standard conditions and chaining
 
@@ -515,7 +516,8 @@ change-point weather model:
 
 Detection only reports. `adjustments.propose_adjustments` turns detected steps into *proposed*
 adjustments, which must be accepted explicitly before they change a saving (next section).
-Rebaselining is a later phase of issue #21.
+A step against a *frozen* baseline is a rebaselining trigger
+([T1, below](#versioned-baselines-and-rebaselining)).
 
 ## Non-routine and static-factor adjustments
 
@@ -688,6 +690,119 @@ proposal; each sensitivity row gains the `adjusted_*` figures beside its unadjus
     "reason": "new wing", "baseline_value": 10000, "reporting_value": 12000,
     "affected_share": 0.5}]}
 ```
+
+## Versioned baselines and rebaselining
+
+A saving is only as good as the baseline it is measured against, and a baseline that moves
+silently makes every past saving unanswerable. `camber.mandv.rebaseline` (provisional; issue #21
+phase 21d) keeps each meter's M&V baselines **frozen and versioned**, and decides only what to
+*propose* when one stops holding. **CAMBER never rebaselines automatically.**
+
+### The versioned store
+
+`MVBaselineStore` wraps the drift `BaselineStore` (identity `sha1(facility_id, equip, kind)`,
+`kind = "mv_<role>"`, so a new model form stays on the same record). Version 1 is **frozen**
+(`freeze_version`, never overwriting one); a later version supersedes it only through the
+attributed `rebaseline`, whose window must start after the previous one ends. Superseded versions
+stay in the record's `history`: past reported savings depend on them. Inside a portfolio
+workspace the file is `state/<fid>/mv_baselines.json`, with a `"schema"` field on disk;
+outside one, name it with the config's top-level `"mv_store"`.
+
+Every version carries a **provenance** record (`mv_provenance`): the reason and the trigger ids
+(`T1:2018-02-01`), `accepted_by` plus the OS user and host, the data window and a **sha256 of
+the fit frame** (so a later re-ingest that changes the data under a frozen baseline is caught and
+reported), the model's `as_dict`, its `FitStats`, `RegressionTests` and SEP verdict, the
+**declared method** and kernel, the `validity` regime, the policy it was checked against, the
+adjustment ledger, the CAMBER version and a `content_sha256` (`MVBaselineStore.verify`). The
+ledger is append-only and round-trips losslessly, indicator fits included
+(`IndicatorFit.from_dict`). The declared method is frozen with the baseline: changing it later
+is a rebaseline-class action (the method-shopping guard, [above](#choosing-a-method-and-the-method-shopping-guard)).
+
+### Triggers and outcomes
+
+`assess_triggers` evaluates six triggers against a version (issue #21 §2.6):
+
+| ID | Trigger | Outcome |
+|---|---|---|
+| T1 | A material step change the declared ECMs do not explain | indicator NRA, or a rebaseline when the level shift is at least `major_step_frac` (default 20%) of the baseline projection |
+| T2 | A declared significant change (`rebaseline.events`) | by its `magnitude`: `static` → engineering NRA, `minor` → indicator NRA, `major` → rebaseline |
+| T3 | A tracked static factor changed beyond its tolerance (`rebaseline.static_factors`) | static-factor NRA |
+| T4 | The model fails the `validity` regime, or #20 grades the reporting period `severe` | rebaseline |
+| T5 | The achievement period exceeds 36 months (SEP 2019 Ed. 2 §4.2) | rebaseline |
+| T6 | A new ECM, after the reporting period began, with 12 months of post-ECM data (BPA 2024 §3.1.8) | rebaseline (advisory: savings are not declined) |
+
+Outcomes follow the BPA *Regression for M&V Reference Guide* (2024) taxonomy: static change →
+engineering or sub-meter NRA; minor process change → indicator NRA; major process change →
+**rebaseline, then chain**. The 20% line between minor and major is CAMBER's choice, not a
+standard's. T1 segments the relative deviation of every day since the baseline ended from the
+**frozen** projection, `energy / projection − 1`, by PELT with a ρ-inflated variance and a
+`3 ln n` penalty (Touzani et al. 2019): a change that scales the load is one level shift whatever
+the season. A step within `settle_days` of a declared ECM is the measure itself, and one the event
+log already carries is T2. An accepted ledger entry dated within `settle_days` resolves an
+NRA-class trigger; a later version resolves every trigger dated before its window. A trigger
+dated inside an SEP chain's intermediate period can only be answered by a rebaseline or another
+intermediate window: both links share that model.
+
+### The new-baseline window, or a decline
+
+`propose_rebaseline` anchors the new window after the latest unresolved rebaseline-class trigger
+**and** any later blocking trigger, so a new baseline never straddles a known step. The window is
+the **latest** `min_baseline_days` (365) consecutive days that start at least `settle_days` after
+it, overlap no ECM installation window (ECM date ± `settle_days`), miss at most
+`max_missing_frac` (10%) of their days, fit a model valid under the entry's `validity`, and
+cover the expected conditions (every driver value seen, at a #20 tier short of `severe`).
+Otherwise the proposal is **declined** with the days still needed:
+
+```text
+unresolved non-routine event on 2018-02-01 (T1:2018-02-01); rebaseline needs 105 more days
+(a 365-day window starting 2018-02-15 or later, 14 settle days after it)
+```
+
+### The run path is read-only
+
+When a meter has a frozen version, `camber run` and `camber mv run` measure the reporting period
+against **the version in force** (the latest whose window ended before the reporting period
+starts), never refitting and never writing. Every `MethodResult` and `AdjustedResult` records
+the `baseline_version` it used. The version's recorded ledger is applied with the config's.
+Triggers become `mv_trigger` findings (`warn` when unresolved and blocking). An unresolved
+blocking trigger cuts the saving at its date (`partial`, with a caveat), or declines it when it
+precedes the reporting period. A later version cuts the saving where it takes over.
+
+### A chain across versions
+
+`camber mv report` reports each version's segment (from the day after its window to the day
+before the next version's trigger) as a forecast against that version, restated by its own
+ledger. Between a trigger and the end of the next window nothing is reported. Two or more
+segments combine through `sequential_chain`, a **CAMBER extension** (SEP chains through exactly
+one intermediate period), with each link dated from the store (`windows=`) so a ledger entry can
+be dated against a link without row indexes. The chained CUSUM (`chained_cusum_plot`) draws one
+segment per version, continuing from the previous segment's last value (the EnPI V5 tool's
+convention for chained model years), with the rebaseline triggers marked and the unreported gaps
+shaded.
+
+### Configuration
+
+```json
+{"class": "ELEC_METER", "role": "energy_rate", "period": ["2016-01-01", "2016-12-31"],
+ "reporting_period": ["2017-01-15", "2019-12-31"], "method": "forecast", "validity": "g14",
+ "ecm_dates": ["2017-01-01"], "settle_days": 14,
+ "rebaseline": {"detect": true, "min_segment_days": 28, "materiality": 0.0,
+                "major_step_frac": 0.20, "min_baseline_days": 365, "max_missing_frac": 0.10,
+                "max_achievement_months": 36, "ecm_gap_days": 365,
+                "events": [{"date": "2018-02-01", "description": "wing closed", "magnitude": "major"}],
+                "static_factors": [{"factor": "floor_area", "baseline_value": 5000,
+                                    "value": 6000, "date": "2018-06-01", "tolerance": 0.05}]}}
+```
+
+The settle window is `mv[].settle_days`, one value shared with the confounding guard. A
+`rebaseline.settle_days` that differs from it is refused, not reconciled. Unknown keys are
+errors.
+
+The verbs are in [CLI.md](CLI.md#mv-baselines). The real limits are worth stating: the bands
+are model-error only and under-cover in practice (Touzani et al. 2019). A meter whose daily
+energy follows occupancy more than weather (weekday/weekend) may never fit a valid daily
+change-point model. CAMBER then says so (T4, declined windows) rather than rebaselining onto an
+invalid model.
 
 ## Change-point + driver models
 

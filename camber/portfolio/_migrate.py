@@ -12,8 +12,9 @@ such **legacy** state files into the workspace:
    Any such problem blocks the whole migration.
 2. **Apply** (under the workspace lock). Per facility: the original records are kept under
    ``state/<fid>/migrated/``; the re-keyed records (old fingerprint kept in ``aliases``) are
-   merged into ``state/<fid>/faults.json`` / ``baselines.json``; the legacy file is replaced by a
-   redirect stub (:mod:`camber._statefile`) so configs naming it keep working; each facility's
+   merged into ``state/<fid>/faults.json`` / ``baselines.json`` / ``mv_baselines.json`` (a
+   config's top-level ``mv_store``: every M&V version moves with it); the legacy file is replaced
+   by a redirect stub (:mod:`camber._statefile`) so configs naming it keep working; each facility's
    manifest is rewritten with sha256 per file; and the audit log gets one ``portfolio.migrate``
    record plus one ``facility.migrate`` record per facility.
 
@@ -38,6 +39,7 @@ from ._state import (
     BASELINES_FILE,
     FAULTS_FILE,
     MIGRATED_DIR,
+    MV_BASELINES_FILE,
     STATE_DIR,
     SiteResolver,
     refresh_manifest,
@@ -48,7 +50,10 @@ from ._state import (
 _KINDS: dict[str, tuple[str, Any, str]] = {
     "faults": (FAULTS_FILE, FaultRecord, "rule"),
     "baselines": (BASELINES_FILE, BaselineRecord, "kind"),
+    "mv_baselines": (MV_BASELINES_FILE, BaselineRecord, "kind"),
 }
+# a kind's file carries a schema field on disk (camber.mandv.rebaseline.MV_SCHEMA)
+_SCHEMAS = {"mv_baselines": 1}
 
 
 def _utc_now() -> str:
@@ -97,7 +102,7 @@ def _classify(src: _Source, want=None) -> None:
     if red is not None:
         src.kind, src.status = red.get("kind"), "migrated"
         return
-    for kind in ("faults", "baselines"):
+    for kind in ("faults", "baselines", "mv_baselines"):
         if isinstance(data.get(kind), list) and (want in (None, kind)):
             src.kind = kind
             src.records = [r for r in data[kind] if isinstance(r, dict)]
@@ -134,6 +139,8 @@ def _config_sources(pf, cfg_path: str, resolver) -> tuple:
     faults = cfg.get("faults") or {}
     if isinstance(faults, dict) and faults.get("store"):
         out.append((_Source(p(faults["store"]), cfg_path), "faults"))
+    if cfg.get("mv_store"):
+        out.append((_Source(p(cfg["mv_store"]), cfg_path), "mv_baselines"))
     rep = cfg.get("report") or {}
     for key in ("out_text", "out_html"):
         if rep.get(key):
@@ -251,6 +258,7 @@ def plan(pf, paths=(), *, configs=(), mapping=None) -> tuple:
             if old != new.fingerprint and old not in new.aliases:
                 new.aliases.append(old)
             c = counts.setdefault(fid, {"faults": 0, "baselines": 0, "merged": 0, "skipped": 0})
+            c.setdefault(src.kind, 0)
             cur = tgt.get(new.fingerprint)
             if cur is not None and (cur.fingerprint == old or old in cur.aliases):
                 c["skipped"] += 1
@@ -362,7 +370,9 @@ def apply(pf, internal: dict, report: dict, *, reason: str) -> dict:
         for fid in per_fid:
             tpath = os.path.join(state_dir(pf.root, fid), fname)
             tgt = targets[(fid, src.kind)]
-            write_json(tpath, {src.kind: [r.as_dict() for r in tgt.values()]})
+            doc: dict = {"schema": _SCHEMAS[src.kind]} if src.kind in _SCHEMAS else {}
+            doc[src.kind] = [r.as_dict() for r in tgt.values()]
+            write_json(tpath, doc)
             written.setdefault(fid, set()).add(tpath)
         if src.path in {os.path.abspath(p) for s in written.values() for p in s}:
             continue  # the legacy file *is* a target: rewritten in place, no stub

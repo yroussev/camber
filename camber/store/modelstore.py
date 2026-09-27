@@ -83,10 +83,18 @@ class BaselineRecord:
     history: list = field(default_factory=list)  # superseded records, oldest first
     facility_id: str = ""  # the identity key; "" for a legacy, site-keyed record
     aliases: list = field(default_factory=list)  # earlier fingerprints (site-keyed, merged)
+    # How this reference came to be, beyond the fields above: the M&V store
+    # (camber.mandv.rebaseline.MVBaselineStore) records reason, triggers, who and where, the data
+    # window and its sha256, the fit statistics, the declared method and the CAMBER version here.
+    provenance: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
-        """Return the record as a plain dict."""
-        return asdict(self)
+        """Return the record as a plain dict (an empty ``provenance`` is left out, so a drift
+        baseline file is unchanged byte for byte)."""
+        d = asdict(self)
+        if not d["provenance"]:
+            del d["provenance"]
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> BaselineRecord:
@@ -94,11 +102,16 @@ class BaselineRecord:
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in d.items() if k in known})
 
-    def model(self):
-        """Rebuild the fitted model object from the stored coefficients."""
-        typ = _MODEL_TYPES.get(self.kind)
+    def model(self, *, model_types=None):
+        """Rebuild the fitted model object from the stored coefficients.
+
+        ``model_types`` maps a ``kind`` to the class whose ``from_dict`` rebuilds it (default: the
+        drift model families); a ``"*"`` entry is the fallback for any other kind.
+        """
+        types = _MODEL_TYPES if model_types is None else model_types
+        typ = types.get(self.kind) or types.get("*")
         if typ is None:
-            raise KeyError(f"unknown model kind {self.kind!r} (known: {sorted(_MODEL_TYPES)})")
+            raise KeyError(f"unknown model kind {self.kind!r} (known: {sorted(types)})")
         return typ.from_dict(self.coefficients)
 
 
@@ -129,10 +142,21 @@ class BaselineStore:
     :mod:`camber.faultlifecycle` uses for findings, so a baseline and the faults measured against
     it line up on the same identity. The key is the store's ``facility_id`` when it is bound to one
     (see :meth:`load`), else the ``site`` string the caller passes.
+
+    ``model_types`` (keyword-only) replaces the ``kind`` -> model-class map that rebuilds stored
+    models (default: the drift families); a subclass may also set ``LIST_KEY`` (the JSON list the
+    records live under) and ``SCHEMA`` (written as ``"schema"`` on disk; ``None`` writes none, so
+    a drift baseline file keeps its historical layout).
     """
 
-    def __init__(self, path: str | None = None, *, facility_id=None, legacy_sites=None):
+    LIST_KEY = "baselines"
+    SCHEMA: int | None = None
+
+    def __init__(
+        self, path: str | None = None, *, facility_id=None, legacy_sites=None, model_types=None
+    ):
         self.path = path
+        self.model_types = dict(_MODEL_TYPES if model_types is None else model_types)
         self.facility_id = facility_id or None
         self._explicit_legacy = legacy_sites is not None
         self.legacy_sites = tuple(s for s in (legacy_sites or ()) if s)
@@ -141,18 +165,25 @@ class BaselineStore:
 
     # ----------------------------------------------------------------- persistence
     @classmethod
-    def load(cls, path: str, *, facility_id=None, legacy_sites=None) -> BaselineStore:
+    def load(cls, path: str, *, facility_id=None, legacy_sites=None, model_types=None):
         """Load a baseline store from JSON (empty if the file doesn't exist yet).
 
         ``facility_id`` binds the store to one facility (see the module docstring);
         ``legacy_sites`` are the site labels whose site-keyed records belong to it (when not given,
         a lookup's own ``site`` is used; pass them explicitly when a label could be ambiguous). A
         migrated path (a redirect stub) is followed like
-        :meth:`camber.faultlifecycle.FaultLifecycle.load`.
+        :meth:`camber.faultlifecycle.FaultLifecycle.load`. A file whose ``schema`` is newer
+        than this class's ``SCHEMA`` is refused (upgrade CAMBER).
         """
-        st = cls(path, facility_id=facility_id, legacy_sites=legacy_sites)
-        data, _where, _red = load_state(path, facility_id=facility_id, list_key="baselines")
-        for d in data.get("baselines", []):
+        kw = {} if model_types is None else {"model_types": model_types}
+        st = cls(path, facility_id=facility_id, legacy_sites=legacy_sites, **kw)
+        data, _where, _red = load_state(path, facility_id=facility_id, list_key=cls.LIST_KEY)
+        ver = data.get("schema")
+        if isinstance(ver, int) and cls.SCHEMA is not None and ver > cls.SCHEMA:
+            raise ValueError(
+                f"{path} has schema {ver}; this CAMBER reads up to {cls.SCHEMA} -- upgrade CAMBER"
+            )
+        for d in data.get(cls.LIST_KEY, []):
             rec = BaselineRecord.from_dict(d)
             st._recs[rec.fingerprint] = rec
         if st.facility_id and st.legacy_sites:
@@ -164,10 +195,9 @@ class BaselineStore:
         p = path or self.path
         if not p:
             raise ValueError("no path to save to (pass path= or construct with one)")
-        write_json(
-            save_path(p, facility_id=self.facility_id),
-            {"baselines": [r.as_dict() for r in self._recs.values()]},
-        )
+        doc: dict = {} if self.SCHEMA is None else {"schema": self.SCHEMA}
+        doc[self.LIST_KEY] = [r.as_dict() for r in self._recs.values()]
+        write_json(save_path(p, facility_id=self.facility_id), doc)
         return len(self._recs)
 
     def _adopt_legacy(self, sites) -> int:
@@ -215,7 +245,7 @@ class BaselineStore:
     def model_for(self, site: str, equip: str, kind: str):
         """The rebuilt frozen model for this equipment, or ``None`` if none is frozen yet."""
         rec = self.get(site, equip, kind)
-        return None if rec is None else rec.model()
+        return None if rec is None else rec.model(model_types=self.model_types)
 
     def records(self) -> list:
         """All records, sorted by (site, equip, kind)."""
@@ -232,12 +262,15 @@ class BaselineStore:
         frozen_at: str,
         period=("", ""),
         reason: str = "initial baseline",
+        accepted_by: str = "",
+        provenance: dict | None = None,
     ) -> BaselineRecord:
         """Freeze a first baseline for this equipment. **Refuses to overwrite an existing one.**
 
         This establishes the reference; it is not a refit. If a baseline is already frozen here,
         raises :class:`ValueError` -- moving the reference is
-        :meth:`accept_new_normal`'s job and must be an attributed decision.
+        :meth:`accept_new_normal`'s job and must be an attributed decision. ``accepted_by`` and
+        ``provenance`` (keyword-only) are recorded on the record as given.
         """
         fp = self.key(site, equip, kind)
         if self.get(site, equip, kind) is not None:
@@ -255,8 +288,10 @@ class BaselineStore:
             frozen_at=str(frozen_at),
             period_start=str(start),
             period_end=str(end),
+            accepted_by=str(accepted_by or ""),
             reason=reason,
             facility_id=self.facility_id or "",
+            provenance=dict(provenance or {}),
         )
         self._recs[fp] = rec
         return rec
@@ -272,6 +307,7 @@ class BaselineStore:
         reason: str,
         at: str,
         period=("", ""),
+        provenance: dict | None = None,
     ) -> BaselineRecord:
         """Supersede the frozen baseline with a newly fitted one -- an **operator decision**.
 
@@ -281,7 +317,7 @@ class BaselineStore:
         ``history`` so the chain of what was normal, when, and on whose say-so stays intact.
 
         Accepting where nothing is frozen yet is allowed and behaves as the initial freeze,
-        keeping the attribution.
+        keeping the attribution. ``provenance`` (keyword-only) is recorded on the new record.
         """
         if not str(accepted_by).strip():
             raise ValueError("accept_new_normal requires accepted_by (who accepted the new normal)")
@@ -304,6 +340,7 @@ class BaselineStore:
             supersedes=prev.frozen_at if prev is not None else "",
             facility_id=self.facility_id or "",
             aliases=list(prev.aliases) if prev is not None else [],
+            provenance=dict(provenance or {}),
         )
         if prev is not None:
             past = list(prev.history)

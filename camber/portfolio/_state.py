@@ -5,6 +5,7 @@
     state/<facility_id>/
       faults.json          fault lifecycle (camber.faultlifecycle), keyed by facility_id
       baselines.json       frozen drift baselines (camber.store.modelstore), keyed by facility_id
+      mv_baselines.json    versioned M&V baselines (camber.mandv.rebaseline), every version kept
       migrated/            the original records each migrated legacy file held for this facility
       manifest.json        every file above with its sha256, plus artifacts kept elsewhere
 
@@ -31,6 +32,7 @@ STATE_DIR = "state"
 MANIFEST_FILE = "manifest.json"
 FAULTS_FILE = "faults.json"
 BASELINES_FILE = "baselines.json"
+MV_BASELINES_FILE = "mv_baselines.json"
 MIGRATED_DIR = "migrated"
 MANIFEST_SCHEMA = 1
 
@@ -75,6 +77,7 @@ def _kind_of(rel: str) -> str:
     return {
         FAULTS_FILE: "faults",
         BASELINES_FILE: "baselines",
+        MV_BASELINES_FILE: "mv_baselines",
         MIGRATED_DIR: "migrated",
         "reports": "report",
     }.get(top, "other")

@@ -66,3 +66,80 @@ def cusum_plot(
     ax.set_title(title or f"CUSUM — net {verdict} {total:,.0f} {units} over {len(s)} intervals")
     ax.legend(loc="upper left", fontsize=8)
     return ax
+
+
+_VERSION_COLORS = ("#1f77b4", "#ff7f0e", "#2ca02c", "#9467bd", "#8c564b", "#17becf")
+
+
+def chained_cusum_plot(
+    frame: pd.DataFrame,
+    *,
+    markers=(),
+    gaps=(),
+    ax=None,
+    title: str | None = None,
+    units: str = "kWh",
+):
+    """A CUSUM chained across baseline versions: one segment per version, rebaseline markers.
+
+    ``frame`` is indexed by date with columns ``version`` (``"v1"``, ``"v2"``, ...), ``projected``
+    (that version's baseline projection) and ``actual`` -- only the days each version reports
+    (:func:`camber.mvrun.chained_report`). The cumulative sum runs on across versions: a segment
+    starts where the previous one ended (the "previous interval" convention of the DOE EnPI V5
+    tool, whose chained model years continue from the last point before them), so the curve is
+    the cumulative saving of the whole chain while each segment's slope is its own version's.
+    ``markers`` are ``{"date", "label"}`` rebaseline dates (a dashed vertical line each) and
+    ``gaps`` ``[start, end]`` spans nothing was reported over (the trigger to the end of the new
+    baseline window), shaded. Returns the Axes.
+    """
+    import matplotlib.pyplot as plt
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=(12, 4))
+    if frame is None or frame.empty:
+        ax.set_title(title or "Chained CUSUM -- no reported days")
+        return ax
+    f = frame.sort_index()
+    carry = 0.0
+    order = list(dict.fromkeys(f["version"]))
+    for k, ver in enumerate(order):
+        seg = f[f["version"] == ver]
+        d = (seg["projected"] - seg["actual"]).astype(float)
+        s = carry + d.cumsum()
+        color = _VERSION_COLORS[k % len(_VERSION_COLORS)]
+        ax.plot(s.index, s.to_numpy(), color=color, lw=1.4, label=f"{ver} (Σ projected − actual)")
+        if k > 0:  # the carried-forward level the segment continues from
+            ax.plot([s.index[0], s.index[0]], [carry, s.iloc[0]], color=color, lw=0.8, ls=":")
+        carry = float(s.iloc[-1])
+    for g in gaps or ():
+        ax.axvspan(
+            pd.Timestamp(g[0]),
+            pd.Timestamp(g[1]),
+            color="#999999",
+            alpha=0.15,
+            lw=0,
+            label="not reported (rebaseline window)",
+        )
+    for m in markers or ():
+        ax.axvline(pd.Timestamp(m["date"]), color="#444444", lw=1.0, ls="--")
+        ax.annotate(
+            str(m.get("label", "")),
+            (pd.Timestamp(m["date"]), 1.0),
+            xycoords=("data", "axes fraction"),
+            xytext=(3, -12),
+            textcoords="offset points",
+            fontsize=8,
+            color="#444444",
+        )
+    ax.axhline(0, color="#444444", lw=0.8)
+    ax.set_ylabel(f"Cumulative {units}")
+    ax.set_xlabel("Time")
+    verdict = "savings" if carry > 0 else "waste"
+    ax.set_title(
+        title
+        or f"Chained CUSUM -- net {verdict} {carry:,.0f} {units} across {len(order)} version(s)"
+    )
+    handles, labels = ax.get_legend_handles_labels()
+    uniq = dict(zip(labels, handles))
+    ax.legend(uniq.values(), uniq.keys(), loc="upper left", fontsize=8)
+    return ax

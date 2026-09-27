@@ -120,8 +120,24 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `adjustments`, `ecm_dates`, `settle_days` and `materiality_threshold`, the `mv_savings`
     metrics they add, and the `mv_method_proposal` finding.
 
-  Versioned baselines (21d) will record the declared method, take the same `EcmSchedule` and
-  `validity`, and may reshape the ledger's storage.
+- **M&V versioned baselines and rebaselining** (issue #21, phase 21d; #48):
+  - the whole of `camber.mandv.rebaseline` (`MVBaselineStore`, `RebaselinePolicy`, `Trigger`,
+    `DeclaredChange`, `StaticFactorChange`, `assess_triggers`, `propose_rebaseline`,
+    `new_baseline_window`, `BaselineWindow`, `RebaselineProposal`, `version_segments`,
+    `mv_provenance` and the rest of its `__all__`), `camber.mvrun` and `camber.report.mv`;
+  - the additive surfaces they needed: the keyword-only `model_types=` of `BaselineStore`, the
+    trailing `BaselineRecord.provenance` (left out of `as_dict` when empty, so drift baseline
+    files are unchanged), the class attributes `LIST_KEY` / `SCHEMA`, the keyword-only
+    `provenance=` / `accepted_by=` of `freeze` and `provenance=` of `accept_new_normal`;
+    `IndicatorFit.from_dict` (and `adjustment_from_dict` now rebuilding `fit`);
+    `AdjustedResult.baseline_version`; `MethodProposal.fitted`; the keyword-only `windows=` of
+    `sequential_chain`; `camber.config.run_mv_config`; `camber.charts.chained_cusum_plot`;
+  - the on-disk `state/<fid>/mv_baselines.json` (`{"schema": 1, "mv_baselines": [...]}`), the
+    `mv_baselines` retention class and manifest kind, the config keys `mv[].rebaseline` and the
+    top-level `mv_store`, the `mv_trigger` finding and the `baseline_version`, `partial` and
+    `triggers` metrics on `mv_savings`;
+  - the `camber mv run | freeze | list | propose | rebaseline | adjust | report` commands and
+    their `mv.freeze`, `mv.rebaseline` and `mv.adjust` audit actions.
 
 ## Deprecated
 

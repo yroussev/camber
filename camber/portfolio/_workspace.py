@@ -8,7 +8,7 @@
       _lock             single-writer advisory lock (see ._lock)
       store/            the ParquetStore root (+ registry v2, tombstones, _workspace.json marker)
       rollups/          reserved: downsampled stores (created by a later release)
-      state/<fid>/      faults, drift baselines, migrated originals, sha256 manifest (._state)
+      state/<fid>/      faults, drift and M&V baselines, migrated originals, sha256 manifest
       archive/<fid>/    reserved: export bundles
 
 The reserved directories are created lazily by the releases that use them.
@@ -40,6 +40,8 @@ DEFAULT_POLICY: dict = {
     "daily_rollups": {"keep": "indefinite"},
     "findings": {"keep_years": 7},
     "drift_baselines": {"keep": "equipment_life", "keep_versions": 10},
+    # past reported savings depend on superseded M&V baselines, so every version is kept
+    "mv_baselines": {"keep": "indefinite", "keep_versions": "all"},
     "reports": {"keep_last": 12},
     "audit": {"keep": "forever"},
 }

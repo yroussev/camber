@@ -157,8 +157,13 @@ someone with write access can alter the file. Ship the log to a write-once store
 stronger guarantees.
 
 The same applies to per-facility state under `state/<fid>/` (fault history, frozen drift
-baselines, the manifest). Inside a workspace, `camber portfolio migrate --apply`, `camber drift
-freeze` and `camber drift accept` are audited admin actions with a mandatory reason. The
+and M&V baselines, the manifest). Inside a workspace, `camber portfolio migrate --apply`, `camber
+drift freeze`, `camber drift accept`, `camber mv freeze`, `camber mv rebaseline` and `camber mv
+adjust` are audited admin actions with a mandatory reason. The three `mv` writers are dry runs
+unless `--apply` is given, and no run path writes an M&V baseline. Each M&V baseline version
+also records who accepted it, the OS user and host that wrote it, a sha256 of the data it was
+fitted on and a `content_sha256` over its provenance (`camber mv list` flags a mismatch). Like
+the audit log, these are attribution records, not tamper-proofing. The
 manifest's sha256 values record what CAMBER last wrote. They let you detect an edit or a missing
 file, but they do not prevent one: anyone with write access can rewrite the manifest too.
 Migration never deletes a legacy file's records. It keeps the originals under
