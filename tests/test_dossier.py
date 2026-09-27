@@ -136,8 +136,11 @@ def test_bdg2_savings_published_figures_match_the_baseline():
         == base[f"{c}.static.full.recovery_error_p50"]
         == 0.0
     )
-    mid = max(base[f"{m}.static.mid.recovery_error_p50"] for m in (e, c))
-    assert round(100 * mid, 1) <= 0.3 and "within 0.3 points" in para
+    mid_e = round(100 * base[f"{e}.static.mid.recovery_error_p50"], 1)
+    mid_c = round(100 * base[f"{c}.static.mid.recovery_error_p50"], 1)
+    assert f"median error of {mid_e:g} points (electricity) and {mid_c:g} points" in " ".join(
+        para.split()
+    )
     assert "B59" not in para and "lbnl-b59" not in para
 
 

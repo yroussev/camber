@@ -330,7 +330,8 @@ and 7 points (chilled water) by every method; the band tells it from zero in 82â
 meters. `detect_step_changes` finds 47% of planted 20% steps on electricity (39% on chilled water)
 with a median date error of 0 days, and 0.27 / 0.33 spurious detections per series. The
 proportional static-factor adjustment restores the placebo saving exactly for a change at the start
-of the period, and to within 0.3 points for a mid-year change.
+of the period, and to a median error of 0.2 points (electricity) and 0.3 points (chilled water)
+for a mid-year change.
 
 Every G14 figure above carries the kernel's caveat: in simulation, with a correct model, the G14
 band under-covers (about 82â€“88% at nominal 90%) while `kernel="exact"` is on target (next section;
