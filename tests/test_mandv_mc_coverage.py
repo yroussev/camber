@@ -26,11 +26,13 @@ What the new cells measured when written (400-600 runs per cell):
   chain** are *conservative*: 99-100% and 93-98%. A sequential chain adds its links' variances as
   independent (IPMVP B-19), but the shared middle year enters one link as measured energy and the
   next as the model's fit data, with opposite signs, so its noise partly cancels.
-* An **adjusted backcast** whose reporting period holds an indicator NRA covers 100%. The band
-  is the unadjusted reporting model's, fitted *through* the event, so the event inflates both
-  ``s2`` and ``rho``; the band came out about 20x the error's standard deviation. The adjusted
-  saving is unbiased. Gated as conservative (>= 0.95) and reported on #21; a reporting model
-  refitted with the indicator would give a band of the right width.
+* An **adjusted backcast** whose reporting period holds an indicator NRA refits the reporting
+  model with the indicator (joint Sigma, p + 1), as the baseline side already does, and covers
+  on target with the exact kernel; gated at [0.85, 0.95]. Before that decision (#21) the band
+  was the unadjusted reporting model's, fitted *through* the event, about 20x the error's
+  standard deviation and covering 100%. That conservative band is kept, with a caveat, only
+  when nothing can be refitted (no drivers for the summed rows, a chain link, or an indicator
+  fitted on another window), and a test pins it.
 """
 
 import os
@@ -228,7 +230,7 @@ def test_adjusted_static_factor_coverage(kernel, lo, rho, seed):
     assert lo <= rate <= 0.95, rate
 
 
-def _backcast_with_event(rng, rho):
+def _backcast_with_event(rng, rho, *, refit=True):
     Tb, yb, Tr, yr = _years(rng, rho)
     yr = yr.copy()
     yr[200:] += 30.0  # a new load in the reporting year
@@ -237,21 +239,38 @@ def _backcast_with_event(rng, rho):
                          rho=st.rho_lag1, kernel="exact")  # fmt: skip
     nra = estimate_nre_indicator(Tr, yr, IDX[2020], start=IDX[2020][200], fit_period="reporting",
                                  model=m)  # fmt: skip
-    adj = apply_adjustments(r, [nra], reporting_index=IDX[2020])
-    return adj.savings, adj.abs_uncertainty, float((_f(Tb) - _post(Tb)).sum())
+    rows = {"index": IDX[2019], "drivers": Tb, "measured": yb, "model": m} if refit else {}
+    adj = apply_adjustments(r, [nra], reporting_index=IDX[2020], **rows)
+    return adj, float((_f(Tb) - _post(Tb)).sum())
 
 
-def test_adjusted_backcast_with_a_reporting_event_is_unbiased_but_conservative():
-    """Measured, not endorsed (see the module docstring): unbiased, but the band keeps the
-    event-inflated width of the reporting model fitted through the event."""
+@pytest.mark.parametrize("rho", [0.0, 0.4])
+def test_adjusted_backcast_with_a_reporting_event_refits_the_reporting_model(rho):
+    """The reporting model is refitted with the indicator (joint Sigma, p + 1): the exact band is
+    on target, gated at [0.85, 0.95] like every exact cell."""
+    rng = np.random.default_rng(60 + int(10 * rho))
+    hits, err = [], []
+    for _ in range(300):
+        adj, true = _backcast_with_event(rng, rho)
+        assert adj.kernel == "exact" and adj.ledger[0]["reporting_model_refit"]
+        err.append(adj.savings - true)
+        hits.append(abs(adj.savings - true) <= adj.abs_uncertainty)
+    err_a = np.asarray(err)
+    assert abs(err_a.mean()) < 0.5 * err_a.std()  # unbiased
+    assert 0.85 <= np.mean(hits) <= 0.95
+
+
+def test_adjusted_backcast_without_the_rows_keeps_the_conservative_band():
+    """Without the summed rows' drivers nothing can be refitted: the band stays the unadjusted
+    reporting model's (fitted through the event, about 20x too wide), with a caveat."""
     rng = np.random.default_rng(60)
     err, band = [], []
-    for _ in range(150):
-        est, b, true = _backcast_with_event(rng, 0.0)
-        err.append(est - true)
-        band.append(b)
+    for _ in range(60):
+        adj, true = _backcast_with_event(rng, 0.0, refit=False)
+        err.append(adj.savings - true)
+        band.append(adj.abs_uncertainty)
+    assert any("not refitted" in c and "conservative" in c for c in adj.caveats)
     err_a, band_a = np.asarray(err), np.asarray(band)
-    assert abs(err_a.mean()) < 0.5 * err_a.std()  # unbiased
     assert np.mean(np.abs(err_a) <= band_a) >= 0.95
     assert np.median(band_a) > 5 * 1.645 * err_a.std()  # far wider than the error needs
 

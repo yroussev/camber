@@ -35,7 +35,12 @@ one link the entry is dated in (see :func:`apply_adjustments`).
   the rows the event covers, 0 elsewhere) and the band uses the **joint** covariance
   ``Sigma = kappa s2 (X'X)^-1`` of the weather and indicator coefficients. With
   ``fit_period="reporting"`` it is a mini pre/post fit inside the reporting period, independent of
-  the baseline model, so its variance adds in quadrature.
+  the baseline model, so on a forecast its variance adds in quadrature. On a **backcast** whose
+  reporting model was fitted on the same rows, that fit *is* the reporting model refitted with the
+  indicator, and it replaces the reporting projection the same way (joint ``Sigma``, ``p + 1``):
+  the unadjusted reporting model was fitted *through* the event, whose ``s2`` and ``rho`` made
+  its band about 20x too wide (a maintainer decision on #21; Monte Carlo in
+  ``tests/test_mandv_mc_coverage.py``).
 * ``"engineering"`` -- an estimate with its standard error; ``evidence`` is required.
 * ``"exclude"`` -- drop the event's span from both sides of the saving: SEP §6.5 treats an anomaly
   as a separate operating mode. The saving then covers fewer rows, and a caveat says so.
@@ -54,7 +59,11 @@ production, hours) is a relevant variable, not a static factor: model it with
 confidence and degrees of freedom. Engineering, submeter and reporting-period indicator terms add
 in quadrature (IPMVP 2012 App. B-5, B-19: independent components). A baseline-period indicator
 replaces the projection variance with ``g'Sigma g + kappa s2 m`` of the augmented fit (``g`` the
-sum of the design rows including the indicator column). A proportional factor scales the baseline
+sum of the design rows including the indicator column); so does a backcast's reporting-period
+indicator on the reporting side, when the summed rows' ``drivers=`` are given, it is the only
+reporting-period indicator, and it was fitted on the reporting model's rows. Otherwise (a chain
+link, say) it adds in quadrature to the unadjusted band, which is then conservative, and a caveat
+says so. A proportional factor scales the baseline
 side's standard error by its multiplier -- correlated with the projection, not in quadrature --
 and adds the terms of the user-supplied standard errors of ``r`` and ``f``. The combined band is
 at Student's t on the smallest contributing degrees of freedom.
@@ -1097,6 +1106,9 @@ def _adjust_side(side: _Side, items, *, threshold, allow_rows_ops: bool) -> dict
             )
             kernel = "exact"
 
+    # 2b. a backcast's reporting-period indicator refits the reporting model (joint Sigma, +1 p)
+    rep_refit = _reporting_refit(side, order, caveats, allow_rows_ops=allow_rows_ops, pre=pre)
+
     # 3. additive NRAs and static factors, in ledger order
     for i, a in order:
         if a.method == "exclude" or (a.method == "indicator" and a.fit_period == "baseline"):
@@ -1137,6 +1149,16 @@ def _adjust_side(side: _Side, items, *, threshold, allow_rows_ops: bool) -> dict
                     dfs.append(a.fit.df)
                 extra = {"rows_affected": d, **(extra or {})}
                 label = f"NRA indicator: {a.reason or a.start}"
+                if rep_refit is not None and rep_refit["position"] == i:
+                    # the refitted reporting model carries the event on the same d rows (plus
+                    # any measured event rows), so the saving is the event-free comparison and
+                    # its variance is the joint one of the refit, not the entry's in quadrature
+                    d_meas_rows = rep_refit["d_meas"]
+                    R = rep_refit["P_w"] + (d + d_meas_rows) * float(a.fit.beta[-1])
+                    var_r = rep_refit["var"]
+                    B += amount
+                    book(i, a, amount, se, label, {**extra, "reporting_model_refit": True})
+                    continue
             else:
                 assert a.amount is not None and a.se is not None  # checked on construction
                 amount, se, extra = float(a.amount), float(a.se), None
@@ -1194,6 +1216,8 @@ def _adjust_side(side: _Side, items, *, threshold, allow_rows_ops: bool) -> dict
             f"static factor ({a.factor}): x{c:.4g} on {f:.0%}",
             {"multiplier": c, "ratio": r, "share_of_period": w},
         )
+    if rep_refit is not None:
+        kernel = "exact"
     return {
         "B0": B0,
         "R0": R0,
@@ -1209,6 +1233,78 @@ def _adjust_side(side: _Side, items, *, threshold, allow_rows_ops: bool) -> dict
         "kernel": kernel,
         "n_rows": None if rows.n is None else int(rows.used.sum()),
     }
+
+
+def _reporting_refit(side: _Side, order, caveats: list, *, allow_rows_ops: bool, pre: str):
+    """Refit a backcast's reporting model with its reporting-period indicator (decision on #21).
+
+    A backcast's reporting side is the reporting model, fitted *through* the event, projected onto
+    the baseline rows. The event inflates that fit's ``s2`` and ``rho``, so its band is far too
+    wide (about 20x in the Monte Carlo of ``tests/test_mandv_mc_coverage.py``). When the indicator
+    was fitted on the reporting model's own rows, its fit *is* the reporting model refitted with
+    the indicator: project that (weather block, joint ``Sigma``, ``p + 1``) instead, as a
+    baseline-period indicator does on the baseline side.
+
+    Returns ``None`` (the entry is then added in quadrature to the unadjusted band, with a caveat
+    that it is conservative) unless there is exactly one such entry with its fit, the summed
+    rows' drivers are given, the side is a whole backcast (not a chain link) and the indicator's
+    fit window matches the reporting model's fit rows (``reporting_index=``, when given).
+    Otherwise returns the entry's position, the event-free projection ``P_w`` onto the summed
+    rows, the measured event rows ``d_meas`` and the variance of the event-free saving.
+    """
+    if side.kind != "backcast":
+        return None
+    cands = [
+        (i, a)
+        for i, a in order
+        if a.method == "indicator" and a.fit_period == "reporting" and a.fit is not None
+    ]
+    if not cands:
+        return None
+    rows = side.rows
+    why = None
+    if not allow_rows_ops:
+        why = "a chain link's reporting model is shared with the chain's covariance"
+    elif len(cands) > 1:
+        why = "more than one reporting-period indicator (fit them jointly in one model)"
+    elif rows.drivers is None:
+        why = "no drivers= for the summed baseline rows"
+    else:
+        f = cands[0][1].fit
+        if side.later_index is not None and f.n != len(side.later_index):
+            why = (
+                f"the indicator was fitted on {f.n} rows, not the reporting model's "
+                f"{len(side.later_index)} (reporting_index=)"
+            )
+    if why is not None:
+        caveats.append(
+            f"{pre}the reporting model was not refitted with the indicator ({why}): the band is "
+            "the unadjusted reporting model's, which the event inflates, so it is conservative"
+        )
+        return None
+    from .coverage import _as_2d, _design
+
+    i, a = cands[0]
+    f = a.fit
+    D = _as_2d(rows.drivers)
+    W = _design(f.design, D)
+    if rows.index is not None:
+        ev = _event_mask(pd.DatetimeIndex(rows.index), a.start, a.end)
+    else:
+        ev = np.zeros(len(D), bool)
+    use = (rows.used if rows.n else np.ones(len(D), bool)) & np.all(np.isfinite(W), axis=1)
+    X = np.column_stack([W, ev.astype(float)])[use]
+    g = X.sum(axis=0)
+    beta = np.asarray(f.beta)
+    Sig = np.asarray(f.sigma)
+    m = int(use.sum())
+    # S = O_b - (g_w' b_w + d_meas b_ind): the event-free comparison, measured noise included
+    var = float(g @ Sig @ g) + f.kappa * f.s2 * m
+    caveats.append(
+        f"{pre}the reporting model was refitted with the indicator (p + 1, joint covariance): "
+        "the band is the exact OLS kernel of the refit"
+    )
+    return {"position": i, "P_w": float(g[:-1] @ beta[:-1]), "d_meas": float(g[-1]), "var": var}
 
 
 # ----------------------------------------------------------------- sides of each result type

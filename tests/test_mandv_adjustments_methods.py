@@ -187,10 +187,19 @@ def test_backcast_dates_a_reporting_event_by_its_share_of_the_reporting_model():
     true = 0.2 * _truth(Tb).sum()
     assert abs(adj.savings - true) < abs(bc.savings - true)
     assert abs(adj.savings - true) <= 2 * adj.abs_uncertainty  # ~3.3 sigma, one run
-    # without reporting_index the indicator falls back on its own fit window, with a caveat
-    alt = apply_adjustments(bc, [nra], index=ib)
-    assert alt.savings == pytest.approx(adj.savings, abs=1.0)
+    # the reporting model is refitted with the indicator (decision on #21): exact kernel, p + 1
+    assert adj.ledger[0]["reporting_model_refit"] and adj.kernel == "exact"
+    assert adj.df == nra.fit.df
+    # without reporting_index the indicator falls back on its own fit window, with a caveat; the
+    # refitted saving is event-free, so the share does not move it
+    alt = apply_adjustments(bc, [nra], index=ib, drivers=Tb, measured=yb, model=mr)
+    assert alt.savings == pytest.approx(adj.savings, abs=0.02)
     assert any("its own fit window" in c for c in alt.caveats)
+    # without the baseline rows' drivers nothing is refitted: the conservative band, with a caveat
+    old = apply_adjustments(bc, [nra], index=ib)
+    assert any("not refitted" in c for c in old.caveats)
+    assert "reporting_model_refit" not in old.ledger[0]
+    assert old.abs_uncertainty > 3 * adj.abs_uncertainty
 
 
 # --------------------------------------------------------------------------- standard conditions

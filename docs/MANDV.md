@@ -564,7 +564,7 @@ terms (with the G14 kernel, by assuming equal relative uncertainty, with a cavea
 
 | Method | What it is | Uncertainty |
 |---|---|---|
-| `indicator` | The event's effect per row, as the coefficient of an indicator in the weather regression (BPA *Regression for M&V Reference Guide* 2024 §3.1.7; BPA/SBW *Potential Analytics for NRAs* 2018 §3.1), by `estimate_nre_indicator`. Each indicator adds one to `p`. | `fit_period="baseline"`: the indicator is fitted inside the baseline model, whose augmented form **replaces** the projection (indicator 1 on the rows the event covers, 0 elsewhere); the band is `g′Σg + κs²m` of the augmented fit with the **joint** `Σ = κs²(X′X)⁻¹`. `fit_period="reporting"`: a mini pre/post fit inside the reporting period, independent of the baseline, so quadrature. |
+| `indicator` | The event's effect per row, as the coefficient of an indicator in the weather regression (BPA *Regression for M&V Reference Guide* 2024 §3.1.7; BPA/SBW *Potential Analytics for NRAs* 2018 §3.1), by `estimate_nre_indicator`. Each indicator adds one to `p`. | `fit_period="baseline"`: the indicator is fitted inside the baseline model, whose augmented form **replaces** the projection (indicator 1 on the rows the event covers, 0 elsewhere); the band is `g′Σg + κs²m` of the augmented fit with the **joint** `Σ = κs²(X′X)⁻¹`. `fit_period="reporting"`: a mini pre/post fit inside the reporting period, independent of the baseline, so quadrature — except on a **backcast**, where a fit over the reporting model's own rows *is* that model refitted with the indicator: it replaces the reporting projection the same way (joint `Σ`, `p + 1`). |
 | `engineering` | An estimate and its standard error; `evidence` is required (SEP §5.3.2). | Quadrature (IPMVP 2012 App. B-5, B-19). |
 | `exclude` | Drop the event's span from both sides — SEP §6.5 treats an anomaly as its own operating mode. | The G14 band rescales as the kernel does (`∝ P²/m`); the exact kernel is recomputed on the kept rows. A caveat gives the rows dropped. |
 | `submeter` | The effect measured at a sub-meter, the Option B path IPMVP 2012 §8.2 prefers; `nra_from_isolation` builds one from an `IsolationSavings`. | Quadrature. |
@@ -582,6 +582,21 @@ change-point + driver model (below) instead.
 The combined band is at Student's t on the smallest contributing degrees of freedom. The saving's
 own band is converted back to a standard error at its confidence and degrees of freedom (the
 large-sample t when a `SavingsResult` does not record them, which slightly overstates it).
+
+**A backcast with a reporting-period indicator refits the reporting model** (a maintainer decision
+on #21). A backcast's reporting side is the reporting model, fitted *through* the event: the event
+inflates that fit's `s²` and `ρ`, and its band came out about 20× the error's standard deviation
+in Monte Carlo (100% coverage at nominal 90%). When the indicator was fitted on the reporting
+model's own rows, its fit is that model refitted with the indicator, so `apply_adjustments`
+projects it onto the baseline rows (event absent there, unless the rows hold it) with the joint
+`Σ` and `p + 1`, as a baseline-period indicator does on the other side. The result is on the exact
+kernel. In seeded Monte Carlo (a year of daily 3PC data per side, a new load from day 200 of the
+reporting year, 600 runs per cell) it covers 86% / 88% / 86% at `ρ` = 0 / 0.4 / 0.8, unbiased,
+gated at [0.85, 0.95]; like every indicator band it is conditional on the re-searched change
+points. It needs `drivers=` for the baseline rows; without them, inside a chain, with a second
+reporting-period indicator, or when the indicator was fitted on another window than
+`reporting_index=`, the entry adds in quadrature to the unadjusted band and a caveat says the
+band is conservative.
 
 **Guards.**
 
