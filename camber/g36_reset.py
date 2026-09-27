@@ -161,6 +161,13 @@ class SATResetComplianceResult:
     g36_target_median: float
     coverage_start: str
     coverage_end: str
+    # Tracking error (provisional, #57): the mean |target - actual| over every judged sample, and
+    # how often / how far actual SAT runs *above* the target when it is warm enough out that the
+    # cooling reset applies (OAT >= the reset band's low end), where heating can't explain it.
+    mean_abs_error_f: float | None = None
+    pct_above_g36_target: float | None = None  # % of warm-weather samples above target + tol
+    mean_above_gap_f: float | None = None  # mean (actual - target) over warm-weather samples
+    n_warm: int | None = None  # samples with OAT >= the reset band's low end
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -195,6 +202,13 @@ def sat_reset_compliance(
     actual = w[sat_col].values
     gap = target - actual  # positive => actual colder than target
     below = gap > tol_f
+    warm = w[oat_col].to_numpy() >= float(reset_kwargs.get("oat_min", 60.0))
+    n_warm = int(warm.sum())
+    above_pct = above_gap = None
+    if n_warm:
+        over = -gap[warm]  # positive => actual warmer than target
+        above_pct = round(100.0 * float((over > tol_f).mean()), 1)
+        above_gap = round(float(over.mean()), 2)
     return SATResetComplianceResult(
         equip=equip,
         n=int(len(w)),
@@ -204,6 +218,10 @@ def sat_reset_compliance(
         g36_target_median=round(float(np.median(target)), 1),
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        mean_abs_error_f=round(float(np.abs(gap).mean()), 2),
+        pct_above_g36_target=above_pct,
+        mean_above_gap_f=above_gap,
+        n_warm=n_warm,
     )
 
 

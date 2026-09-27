@@ -1107,7 +1107,12 @@ def _rejudge_compliance(ctx, findings, seq: dict, equips: list) -> list:
     )
     out = []
     for f in findings:
-        if getattr(f, "rule", "") == "supply_air_reset_compliance" and f.equip in equips:
+        declined_class = "applies_to_classes" in (getattr(f, "metrics", None) or {})
+        if (
+            getattr(f, "rule", "") == "supply_air_reset_compliance"
+            and f.equip in equips
+            and not declined_class  # a class decline stands whatever the sequence
+        ):
             fr = ctx.frame(f.equip)
             if fr is not None and not fr.empty:
                 f = rule.analyze(f.equip, fr)

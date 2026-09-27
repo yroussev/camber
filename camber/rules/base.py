@@ -172,6 +172,40 @@ def _merge_shared(frame: pd.DataFrame, shared) -> pd.DataFrame:
     return out
 
 
+def _class_declined(rule, ref):
+    """A declined Finding when ``rule`` names the equipment classes it applies to (the optional,
+    provisional ``equip_classes`` attribute) and ``ref`` is of another, known class; else None.
+
+    Rules are gated by roles, so a rule written for air handlers would otherwise run on any
+    equipment that happens to carry the same roles (a heat pump's discharge air read as supply
+    air). A class match is case-insensitive and a class *containing* one of the names also
+    matches (``"AHU_DOAS"``); an equipment with no recorded class is not declined.
+    """
+    classes = getattr(rule, "equip_classes", None)
+    cls = str(getattr(ref, "equip_class", "") or "")
+    if not classes or not cls:
+        return None
+    up = cls.upper()
+    if any(str(c).upper() == up or str(c).upper() in up for c in classes):
+        return None
+    names = ", ".join(str(c) for c in classes)
+    return Finding(
+        rule=rule.name,
+        equip=ref.equip,
+        severity="info",
+        metrics={
+            "declined": True,
+            "reason": f"not applicable to equipment class {cls!r}",
+            "equip_class": cls,
+            "applies_to_classes": [str(c) for c in classes],
+        },
+        summary=f"{ref.equip}: declined -- {rule.name} applies to {names}, not {cls}",
+        caveats=[
+            f"{rule.name} not evaluated: it is written for {names} equipment and this is a {cls}"
+        ],
+    )
+
+
 def _as_bound(value):
     """Coerce one period endpoint to a Timestamp; ``None`` stays open-ended."""
     return None if value is None else pd.Timestamp(value)
@@ -245,6 +279,10 @@ class Registry:
             frame = resolve(ref, mapping, load, resample=resample)
             frame = _merge_shared(frame, shared)
             if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+                continue
+            declined = _class_declined(rule, ref)
+            if declined is not None:
+                out.append(declined)
                 continue
             if min_trust is not None:
                 bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)

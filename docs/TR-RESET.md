@@ -57,6 +57,22 @@ can match its own reset schedule (`make_rule("supply_air_reset_compliance", oat_
 Thresholds are screening / opportunity-grade (provisional-untuned). OAT is building-level and arrives
 via the runner's `shared` channel; the rule declines loudly when it is unmapped.
 
+**Tracking error (0.90.1).** Running warmer is the energy-saving direction, but supply air held far
+*above* the target is not "tracking" it either -- a cooling shortfall or a fixed, high setpoint. So
+the rule also reports the mean absolute error (`mean_abs_error_f`, `tracks_target`) and, over the
+warm-weather samples where the cooling reset applies (OAT at or above `oat_min`, so a heating mode
+can't explain it), how often and how far supply air runs above the target (`pct_above_g36_target`,
+`mean_above_gap_f`, `n_warm`). When supply air runs more than `track_gap_f` (5 °F) above the target on
+average for `warn_pct` % of those samples, the rule warns "NOT tracking" instead of saying "ok";
+an `ok` finding says "tracks the G36 reset target" only when the mean absolute error is below
+`track_gap_f`.
+
+**Air handlers only (0.90.1).** Rules are gated by roles, so a heat pump's or a terminal unit's
+discharge air would otherwise be read as an air handler's reset supply air. The rule declares
+`equip_classes = ("AHU", "RTU", "DOAS", "MAU")` (provisional), and the runner declines it with an
+`info` finding and a caveat on equipment of any other recorded class. Equipment with no recorded
+class still runs.
+
 **Operating-state gates.** By default, the rule judges only samples where the supply fan runs (fan
 status, else fan speed, else airflow) and the space is occupied (a trended occupancy point, else the
 assumed weekday 07-18 schedule). A unit parked overnight with SAT drifting is therefore not scored

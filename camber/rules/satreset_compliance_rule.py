@@ -42,6 +42,9 @@ class SupplyAirResetCompliance:
     """
 
     name = "supply_air_reset_compliance"
+    #: provisional (#57): the runner declines this rule on equipment of any other known class --
+    #: a heat pump's or terminal unit's discharge air is not an air handler's reset supply air
+    equip_classes = ("AHU", "RTU", "DOAS", "MAU")
     roles_required = (Role.SUPPLY_AIR_TEMP,)
     roles_optional = (
         Role.OAT,
@@ -65,6 +68,7 @@ class SupplyAirResetCompliance:
         tol_f: float = 1.0,  # per-sample "below target" tolerance (°F)
         warn_pct: float = 40.0,  # warn when below target this % of hours ...
         warn_gap_f: float = 2.0,  # ... AND the mean gap clears this floor (°F)
+        track_gap_f: float = 5.0,  # warm-weather SAT this far ABOVE target = not tracking (°F)
         fan_gate: bool = GATE_DEFAULT,  # judge only fan-on samples (when a fan signal exists)
         occupied_only: bool = GATE_DEFAULT,  # ... and only occupied ones
         reset_source: str | None = None,  # provenance label; None = infer from the parameters
@@ -75,6 +79,7 @@ class SupplyAirResetCompliance:
         self.reset_source = reset_source
         self.warn_pct = warn_pct
         self.warn_gap_f = warn_gap_f
+        self.track_gap_f = track_gap_f
         self._reset_kwargs = {
             "min_clg_sat": min_clg_sat,
             "t_max": t_max,
@@ -158,12 +163,23 @@ class SupplyAirResetCompliance:
                 caveats=["SAT-reset compliance not evaluated: fewer than 10 usable rows"],
             )
 
-        # One-sided opportunity: only supply air *colder* than the target is avoidable reheat;
-        # running warmer than Min_ClgSAT is the energy-saving direction and stays ok.
+        # One-sided opportunity: only supply air *colder* than the target is avoidable reheat.
         opportunity = (
             res.pct_below_g36_target >= self.warn_pct and res.mean_gap_f >= self.warn_gap_f
         )
-        severity = "warn" if opportunity else "ok"
+        # Tracking error (#57): supply air held well ABOVE the target in warm weather (where the
+        # cooling reset applies and heating can't explain it) is not "tracking" -- a cooling
+        # shortfall or a fixed/high setpoint. It is a warn, never an "ok -- tracks".
+        above = res.pct_above_g36_target
+        above_gap = res.mean_above_gap_f
+        not_tracking = (
+            not opportunity
+            and above is not None
+            and above_gap is not None
+            and above >= self.warn_pct
+            and above_gap >= self.track_gap_f
+        )
+        severity = "warn" if (opportunity or not_tracking) else "ok"
         metrics = {
             "pct_below_g36_target": res.pct_below_g36_target,
             "mean_gap_f": res.mean_gap_f,
@@ -172,9 +188,30 @@ class SupplyAirResetCompliance:
             "n": res.n,
             "warn_pct_threshold": self.warn_pct,
             "warn_gap_floor_f": self.warn_gap_f,
+            "mean_abs_error_f": res.mean_abs_error_f,
+            "pct_above_g36_target": above,
+            "mean_above_gap_f": above_gap,
+            "n_warm": res.n_warm,
+            "track_gap_f": self.track_gap_f,
+            "tracks_target": bool(
+                res.mean_abs_error_f is not None and res.mean_abs_error_f < self.track_gap_f
+            ),
             **gate_meta,
         }
-        tail = "reheat/energy opportunity" if severity == "warn" else "tracks the G36 reset target"
+        if opportunity:
+            tail = "reheat/energy opportunity"
+        elif not_tracking:
+            tail = (
+                f"NOT tracking: {above:.0f}% of warm-weather hours run {above_gap:+.1f}°F above "
+                "the target (cooling shortfall or a fixed/high setpoint)"
+            )
+        elif metrics["tracks_target"]:
+            tail = "tracks the G36 reset target"
+        else:
+            tail = (
+                f"no below-target reheat opportunity, but mean tracking error "
+                f"{res.mean_abs_error_f:.1f}°F"
+            )
         summary = (
             f"{equip}: SAT median {res.actual_sat_median:.1f}°F vs G36 target "
             f"{res.g36_target_median:.1f}°F; below target {res.pct_below_g36_target:.0f}% of hours "

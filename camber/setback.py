@@ -48,9 +48,13 @@ class SetbackResult:
     n_unoccupied: int
     fan_run_occupied_pct: float  # % occupied hrs fan running (sanity: should be high)
     fan_run_unoccupied_pct: float  # % unoccupied hrs fan running (the fault metric)
-    setback_effective: bool  # unoccupied run materially below occupied run
+    setback_effective: bool  # unoccupied run immaterial, or materially below occupied run
     coverage_start: str
     coverage_end: str
+    # unoccupied / occupied run ratio (None when the fan never ran occupied); provisional
+    unoccupied_to_occupied_ratio: float | None = None
+    # the absolute unoccupied-runtime floor the verdict used (%); provisional
+    min_unoccupied_run_pct: float | None = None
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -81,11 +85,15 @@ def analyze_setback(
     start_hour: float = 7,
     end_hour: float = 18,
     occupied_days=(0, 1, 2, 3, 4),
+    min_unoccupied_run_pct: float = 5.0,
 ) -> SetbackResult | None:
     """Detect missing night/weekend setback for one AHU.
 
     ``setback_ratio`` is OUR judgment threshold: a setback is "effective" only if
-    unoccupied run fraction is below half the occupied run fraction. ``speed_thr``
+    unoccupied run fraction is below half the occupied run fraction. ``min_unoccupied_run_pct``
+    is an absolute floor: an unoccupied run below it (default 5 % of unoccupied time) is
+    immaterial, so the setback counts as effective whatever the ratio -- a nearly idle unit
+    that ran a few scattered hours is not "missing" its setback. ``speed_thr``
     is the run deadband when only fan speed is available. A populated ``Occupancy`` column
     replaces the ``start_hour``/``end_hour``/``occupied_days`` schedule.
     """
@@ -109,7 +117,10 @@ def analyze_setback(
 
     occ_run = round(100.0 * float(run[occ].mean()), 2) if n_occ else 0.0
     un_run = round(100.0 * float(run[unocc].mean()), 2)
-    effective = un_run < setback_ratio * occ_run if occ_run > 0 else un_run < 5.0
+    floor = float(min_unoccupied_run_pct)
+    ratio_ok = un_run < setback_ratio * occ_run if occ_run > 0 else False
+    effective = un_run < floor or ratio_ok
+    ratio = round(un_run / occ_run, 3) if occ_run > 0 else None
 
     return SetbackResult(
         equip=equip,
@@ -120,4 +131,6 @@ def analyze_setback(
         setback_effective=bool(effective),
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        unoccupied_to_occupied_ratio=ratio,
+        min_unoccupied_run_pct=floor,
     )

@@ -20,6 +20,11 @@ _ROLE_TO_COL = {
 }
 
 
+def _pct(v: float) -> str:
+    """A runtime percentage with enough digits that a near-idle unit doesn't read as 0%."""
+    return f"{v:.0f}%" if v >= 10 or v == 0 else f"{v:.2g}%"
+
+
 class NightWeekendSetback:
     """Detects an AHU fan running unoccupied / missing night-weekend setback
     (PNNL Re-tuning Ch.5)."""
@@ -36,8 +41,12 @@ class NightWeekendSetback:
         start_hour: float = 7,
         end_hour: float = 18,
         occupied_days=(0, 1, 2, 3, 4),
+        min_unoccupied_run_pct: float = 5.0,
     ):
         # The schedule is only an assumption: a trended OCCUPANCY point replaces it.
+        # ``min_unoccupied_run_pct``: unoccupied runtime below this share of unoccupied time is
+        # immaterial -- the rule only fires when the unit actually runs unoccupied (#57).
+        self.min_unoccupied_run_pct = float(min_unoccupied_run_pct)
         self.start_hour = start_hour
         self.end_hour = end_hour
         self.occupied_days = tuple(occupied_days)
@@ -59,12 +68,24 @@ class NightWeekendSetback:
             start_hour=self.start_hour,
             end_hour=self.end_hour,
             occupied_days=self.occupied_days,
+            min_unoccupied_run_pct=self.min_unoccupied_run_pct,
         )
         if res is None:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
         un = res.fan_run_unoccupied_pct
+        ratio = res.unoccupied_to_occupied_ratio
+        ratio_txt = f", ratio {ratio:.2f}" if ratio is not None else ""
+        if not res.setback_effective:
+            verdict = "MISSING/weak"
+        elif un < self.min_unoccupied_run_pct:
+            verdict = (
+                f"effective (unoccupied runtime below the {self.min_unoccupied_run_pct:g}% "
+                "materiality floor)"
+            )
+        else:
+            verdict = "effective"
         # High unoccupied run = no setback. ok only if setback is effective.
         if res.setback_effective:
             severity = "ok"
@@ -81,6 +102,9 @@ class NightWeekendSetback:
                 "fan_run_occupied_pct": res.fan_run_occupied_pct,
                 "setback_effective": res.setback_effective,
                 "n_unoccupied": res.n_unoccupied,
+                "n_occupied": res.n_occupied,
+                "unoccupied_to_occupied_ratio": res.unoccupied_to_occupied_ratio,
+                "min_unoccupied_run_pct": res.min_unoccupied_run_pct,
             },
             caveats=[]
             if Role.OCCUPANCY in frame.columns
@@ -89,9 +113,9 @@ class NightWeekendSetback:
                 f"({self.start_hour:g}-{self.end_hour:g}h, days {list(self.occupied_days)})"
             ],
             summary=(
-                f"{equip}: supply fan runs {res.fan_run_unoccupied_pct:.0f}% of "
-                f"unoccupied hours (vs {res.fan_run_occupied_pct:.0f}% occupied); "
-                f"setback {'effective' if res.setback_effective else 'MISSING/weak'}"
+                f"{equip}: supply fan runs {_pct(res.fan_run_unoccupied_pct)} of "
+                f"unoccupied hours (vs {_pct(res.fan_run_occupied_pct)} occupied{ratio_txt}); "
+                f"setback {verdict}"
             ),
         )
 
