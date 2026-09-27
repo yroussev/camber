@@ -4,11 +4,14 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.87.0] — 2026-09-26
 
-**M&V baselines no longer extrapolate silently (#20).** No savings path checked whether the
-reporting period's drivers lay inside the range the baseline was fitted on: a spring baseline
-projected onto a summer reported a saving, and a savings band, as if the model held there.
+**M&V baselines no longer extrapolate silently (#20), and the groundwork for rebaselining is in
+(#21, phase 21a).** No savings path checked whether the reporting period's drivers lay inside the
+range the baseline was fitted on: a spring baseline projected onto a summer reported a saving, and
+a savings band, as if the model held there. Models now serialise losslessly, report coefficient
+p-values and the DOE SEP validity verdict, and gain backcast savings, an exact uncertainty kernel
+and multi-step non-routine event detection.
 
 ### Added — M&V coverage
 - `camber.mandv.coverage`: `ExtrapolationPolicy`, `Coverage`, `TIERS`, `support_of`,
@@ -97,7 +100,7 @@ projected onto a summer reported a saving, and a savings band, as if the model h
   become `None`, with `declined_reason`. **These fields are now `float | None`.** To keep the
   old behaviour — computed, with a widened band and a "SEVERE extrapolation — not a defensible
   saving" caveat — pass `extrapolation=ExtrapolationPolicy(decline=False)`. In-range results are
-  byte-identical to 0.85.0, and the BDG2 benchmark (in-sample) is unchanged.
+  byte-identical to 0.86.0, and the BDG2 benchmark (in-sample) is unchanged.
 
 ### Fixed
 - **`normalized_savings` used the large-sample t** (1.645 at 90%) whatever the fits' sizes; it
