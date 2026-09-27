@@ -250,7 +250,9 @@ support (`oat_fit_min`/`oat_fit_max`, `oat_support_lo`/`oat_support_hi`). Add
 `"reporting_period": [start, end]` for an `mv_savings` finding per meter (avoided energy, `fsu`,
 coverage); a reporting period outside the baseline's conditions is declined rather than reported,
 and `"extrapolation": {...}` tunes that policy (see
-[MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining)).
+[MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining)). An `"adjustments": [...]`
+ledger restates the saving for non-routine events and static factors, guarded by `ecm_dates`
+(see [MANDV.md](MANDV.md#non-routine-and-static-factor-adjustments)).
 
 ## Portfolio and facility lifecycle
 

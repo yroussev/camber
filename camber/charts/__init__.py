@@ -6,6 +6,7 @@ its result types); the per-chart submodules (``camber.charts.carpet`` etc.) rema
 directly. Importing this package pulls matplotlib, a core dependency.
 """
 
+from .adjustments import adjustment_waterfall
 from .box_reheat import box_reheat_figure
 from .boxhour import box_by_hour, hourly_groups
 from .carpet import carpet_matrix, load_carpet
@@ -45,6 +46,7 @@ from .timeseries import ahu_hec_timeseries
 from .zones_chart import zones_timeofweek_figure, zones_vs_oat_figure
 
 __all__ = [
+    "adjustment_waterfall",
     "box_reheat_figure",
     "box_by_hour",
     "hourly_groups",

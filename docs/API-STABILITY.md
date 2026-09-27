@@ -100,6 +100,14 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   the keyword-only `kernel=` on the savings functions, and the `as_dict()` / `from_dict()` model
   serialisation format. Later phases (SEP chaining and method selection, adjustments, versioned
   baselines) may reshape them.
+- **M&V adjustments** (#21 phase 21c): `camber.mandv.adjustments` (`NonRoutineAdjustment`,
+  `StaticFactorAdjustment`, `IndicatorFit`, `AdjustedResult`, `WaterfallStep`,
+  `ConfoundedAdjustment`, `apply_adjustments`, `estimate_nre_indicator`, `nra_from_isolation`,
+  `propose_adjustments`, `is_material`, `adjustment_from_dict`, `NRA_METHODS`,
+  `STATIC_METHODS`), `camber.mandv.multivariable` (`ChangePointDriverModel`,
+  `fit_cp_driver_model`), `camber.charts.adjustment_waterfall`, and the config keys
+  `mv[].adjustments`, `ecm_dates`, `settle_days` and `materiality_threshold` with the
+  `mv_savings` metrics they add. Versioned baselines (21d) may reshape the ledger's storage.
 
 ## Deprecated
 

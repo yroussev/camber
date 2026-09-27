@@ -51,6 +51,17 @@ the coverage metrics (``coverage_tier``, ``share_points_outside``, ``share_energ
 ``declined_reason``, and a caveat, never a number. The optional ``"extrapolation": {...}`` keys
 tune the grading (:class:`~camber.mandv.coverage.ExtrapolationPolicy`; an unknown key is an error).
 
+An ``mv`` entry with a ``reporting_period`` may also carry an ``"adjustments": [...]`` ledger of
+non-routine and static-factor adjustments (:mod:`camber.mandv.adjustments`; #21 phase 21c): each
+item is the dict form of a ``NonRoutineAdjustment`` (``"kind": "nra"``) or
+``StaticFactorAdjustment`` (``"kind": "static"``); an ``indicator`` NRA is estimated per meter on
+the baseline or reporting days (``"fit_period"``, by default the period its ``start`` falls in).
+``"ecm_dates"``, ``"settle_days"`` (default 14), ``"validity"`` and ``"materiality_threshold"``
+drive the confounding guard, the SEP evidence rule and the materiality flag. The ``mv_savings``
+finding then adds ``adjusted_savings``, ``adjusted_savings_pct``, ``adjusted_abs_uncertainty``,
+``adjusted_baseline``, the resolved ``adjustments`` and the ``waterfall``; a refused ledger records
+``adjustments_refused`` and a caveat and leaves the unadjusted saving standing.
+
 The optional ``drift`` section scores a **current** window against a frozen **baseline** one for
 each configured detector family (:mod:`camber.driftrun`), merging its Findings into the run. It is
 strictly read-only toward the baseline store: a config-driven run never creates or moves a frozen
@@ -500,8 +511,11 @@ def _finite_or_none(x):
     return None if x is None or (isinstance(x, float) and not math.isfinite(x)) else x
 
 
-def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> object:
-    """One ``mv_savings`` Finding: the baseline projected onto the reporting period (#20)."""
+def _mv_savings_finding(equip: str, model, st, daily_r, policy, window, adjust=None) -> object:
+    """One ``mv_savings`` Finding: the baseline projected onto the reporting period (#20).
+
+    ``adjust`` (a callable ``(sav, metrics, caveats) -> summary suffix``) restates the saving for
+    the entry's ``adjustments`` ledger (#21 phase 21c)."""
     from .mandv.models import N_PARAMS
     from .mandv.stats import avoided_energy_savings
     from .rules.base import Finding
@@ -556,6 +570,8 @@ def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> objec
             + (f" ± {band:,.0f} at {sav.confidence:.0%}" if band is not None else "")
             + f" over {len(daily_r)} reporting days; baseline coverage {cov.get('tier')}"
         )
+        if adjust is not None:
+            summary += adjust(sav, metrics, caveats)
     return Finding(
         rule="mv_savings",
         equip=equip,
@@ -582,6 +598,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     reporting = _mv_window(entry, "reporting_period")
     policy = ExtrapolationPolicy.from_dict(entry.get("extrapolation"))
     min_days = int(entry.get("min_days", 60))
+    adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
     out = []
 
@@ -651,7 +668,139 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                 _mv_declined(ref.equip, "no usable reporting-period days", rule="mv_savings")
             )
             continue
-        out.append(_mv_savings_finding(ref.equip, model, st, daily_r, policy, reporting))
+        adjust = None
+        if adj_specs:
+            adjust = _mv_adjuster(entry, adj_specs, model, daily, daily_r, reporting)
+        out.append(
+            _mv_savings_finding(ref.equip, model, st, daily_r, policy, reporting, adjust=adjust)
+        )
+    return out
+
+
+# --- mv[].adjustments: non-routine and static-factor adjustments (#21 phase 21c) -------------
+
+
+def _mv_adjustment_specs(entry: dict) -> list:
+    """Validate an ``mv`` entry's ``adjustments`` ledger up front (a bad entry is a config error).
+
+    Each item is a :func:`camber.mandv.adjustments.adjustment_from_dict` dict (``"kind": "nra"``
+    or ``"static"``). An ``indicator`` NRA carries no numbers: it is estimated per meter, on the
+    baseline days (``"fit_period": "baseline"``) or the reporting days (``"reporting"``), by
+    default the period its ``start`` falls in.
+    """
+    from .mandv.adjustments import NRA_METHODS, adjustment_from_dict
+
+    specs = entry.get("adjustments") or []
+    if not isinstance(specs, list):
+        raise ValueError("mv.adjustments must be a list of adjustment objects")
+    if specs and entry.get("reporting_period") is None:
+        raise ValueError("mv.adjustments needs a reporting_period to adjust")
+    out = []
+    for k, spec in enumerate(specs):
+        if not isinstance(spec, dict):
+            raise ValueError(f"mv.adjustments[{k}] must be an object, got {spec!r}")
+        d = dict(spec)
+        fp = d.pop("fit_period", None)
+        if d.get("kind", "nra") == "nra" and d.get("method") == "indicator":
+            if fp not in (None, "baseline", "reporting"):
+                raise ValueError(f"mv.adjustments[{k}].fit_period must be baseline or reporting")
+            # validate the rest with a placeholder estimate; the real one is fitted per meter
+            adjustment_from_dict({**d, "rate": 0.0, "rate_se": 0.0})
+        else:
+            if d.get("method") not in NRA_METHODS + ("proportional", "engineering"):
+                raise ValueError(f"mv.adjustments[{k}]: unknown method {d.get('method')!r}")
+            adjustment_from_dict(d)
+        out.append((d, fp))
+    return out
+
+
+def _mv_adjuster(entry, specs, model, daily_b, daily_r, reporting):
+    """The ``adjust`` callable for :func:`_mv_savings_finding`: builds the ledger for one meter,
+    applies it and records the adjusted saving, the ledger and the waterfall in the metrics."""
+    import pandas as pd
+
+    from .mandv.adjustments import (
+        ConfoundedAdjustment,
+        adjustment_from_dict,
+        apply_adjustments,
+        estimate_nre_indicator,
+    )
+
+    def adjust(sav, metrics, caveats) -> str:
+        if sav.declined:
+            metrics["adjusted"] = None
+            return ""
+        try:
+            ledger = []
+            for d, fp in specs:
+                if d.get("kind", "nra") == "nra" and d.get("method") == "indicator":
+                    start = pd.Timestamp(d["start"])
+                    if fp is None:
+                        fp = "reporting" if start >= pd.Timestamp(reporting[0]) else "baseline"
+                    frame = daily_r if fp == "reporting" else daily_b
+                    kw = {k: d.get(k) for k in ("end", "reason", "evidence", "approved_by")}
+                    kw["reason"] = kw["reason"] or ""
+                    ledger.append(
+                        estimate_nre_indicator(
+                            frame["oat"].values,
+                            frame["energy"].values,
+                            frame.index,
+                            start=start,
+                            fit_period=fp,
+                            model=model,
+                            **kw,
+                        )
+                    )
+                else:
+                    ledger.append(adjustment_from_dict(d))
+            adj = apply_adjustments(
+                sav,
+                ledger,
+                index=daily_r.index,
+                drivers=daily_r["oat"].values,
+                measured=daily_r["energy"].values,
+                model=model,
+                ecm_dates=entry.get("ecm_dates") or (),
+                settle_days=int(entry.get("settle_days", 14)),
+                validity=entry.get("validity", "g14"),
+                materiality_threshold=float(entry.get("materiality_threshold", 0.0)),
+            )
+        except (ConfoundedAdjustment, ValueError) as e:
+            metrics["adjusted"] = None
+            metrics["adjustments_refused"] = str(e)
+            caveats.append(f"adjustments not applied: {e}")
+            return "; adjustments refused"
+        metrics["adjusted"] = True
+        metrics["adjusted_savings"] = adj.savings
+        metrics["adjusted_savings_pct"] = adj.savings_pct
+        metrics["adjusted_abs_uncertainty"] = adj.abs_uncertainty
+        metrics["adjusted_baseline"] = adj.adjusted_baseline
+        metrics["adjustments"] = [_json_ledger(e) for e in adj.ledger]
+        metrics["waterfall"] = [w.as_dict() for w in adj.waterfall]
+        caveats.extend(c for c in adj.caveats if c not in caveats)
+        band = adj.abs_uncertainty
+        n_mat = sum(1 for e in adj.ledger if e.get("material"))
+        return (
+            f"; adjusted for {len(adj.ledger)} non-routine/static entr"
+            + ("y" if len(adj.ledger) == 1 else "ies")
+            + f" ({n_mat} material): {adj.savings:,.0f}"
+            + (f" ± {band:,.0f}" if band is not None else "")
+        )
+
+    return adjust
+
+
+def _json_ledger(e: dict) -> dict:
+    """A ledger entry for Finding metrics: the fit's covariance matrix is dropped (bulky)."""
+    import math
+
+    out = {k: v for k, v in e.items() if k != "fit"}
+    fit = e.get("fit")
+    if fit:
+        out["fit"] = {k: fit[k] for k in ("fit_period", "names", "beta", "n", "p", "df", "rho")}
+    for k, v in out.items():
+        if isinstance(v, float) and not math.isfinite(v):
+            out[k] = None
     return out
 
 

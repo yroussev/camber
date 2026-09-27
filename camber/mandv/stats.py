@@ -810,7 +810,7 @@ def model_regression_tests(model, drivers, y, *, time_index=None) -> RegressionT
     X = design_rows(model, drivers)
     names = design_names(model)
     spec = model._fit_record.design
-    n_cp = len(spec[2]) if spec[0] == "cp" else 0
+    n_cp = len(spec[2]) if spec[0] in ("cp", "cpd") else 0
     return regression_tests(
         X,
         y,
@@ -828,7 +828,7 @@ def logical_signs(model) -> dict | None:
     from the change point; pass the result as ``signs=`` to :func:`sep_validity`.
     """
     spec = getattr(getattr(model, "_fit_record", None), "design", None)
-    if not spec or spec[0] != "cp" or not spec[2]:
+    if not spec or spec[0] not in ("cp", "cpd") or not spec[2]:
         return None  # includes the 5P -> 2P fallback, whose line may slope either way
     signs = _LOGICAL_SIGNS.get(spec[1])
     return dict(signs) if signs else None

@@ -4,6 +4,30 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+### Added -- M&V non-routine and static-factor adjustments (#21 phase 21c, #47)
+- **`camber.mandv.adjustments`** (provisional): `NonRoutineAdjustment` and
+  `StaticFactorAdjustment` are explicit, attributed ledger entries; `apply_adjustments` restates
+  the baseline side of a `SavingsResult` or backcast `MethodResult` and returns an
+  `AdjustedResult` with the adjusted saving, its combined band, the resolved ledger and the
+  waterfall components. NRA methods: `indicator` (`estimate_nre_indicator`; +1 to `p`; a
+  baseline-period indicator replaces the projection and uses the joint covariance, a
+  reporting-period one adds in quadrature), `engineering` (estimate + SE, evidence required),
+  `exclude` (SEP §6.5 anomaly mode) and `submeter` (Option B; `nra_from_isolation`). Static
+  factors: `proportional` with an explicit affected share (no default) or `engineering`.
+- **Guards**: a meter-derived NRA dated within `settle_days` of an ECM date raises
+  `ConfoundedAdjustment` (IPMVP 2012 §8.2); `validity="sep"` requires `evidence` and
+  `approved_by`; `propose_adjustments` turns `detect_step_changes` output into proposed entries
+  that must be accepted explicitly. Materiality: `|effect| >= max(threshold, 2 SE)`.
+- **`camber.mandv.multivariable`** (provisional): `fit_cp_driver_model` /
+  `ChangePointDriverModel`, a change-point + linear-driver baseline for continuously varying
+  drivers (occupancy, production); it works with coverage, both savings kernels, the regression
+  tests and model serialisation unchanged.
+- **`camber.charts.adjustment_waterfall`**, and the config key **`mv[].adjustments`** (with
+  `ecm_dates`, `settle_days`, `materiality_threshold`); `mv_savings` findings gain the adjusted
+  saving, ledger and waterfall. Monte Carlo coverage of the indicator band is in `docs/MANDV.md`.
+
 ## [0.89.0] — 2026-09-27
 
 **Catalog release 2.** The research-only tier, manual-download entries, Excel workbooks and
