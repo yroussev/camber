@@ -1,0 +1,53 @@
+name: text-hygiene
+
+# Issue, comment and pull-request text never reaches the pre-commit guard, so
+# check it here for the two local-environment patterns in the site-neutrality
+# list: absolute local filesystem paths and the local account name. A hit labels
+# the item `leaked-path` and fails the check, so the author edits or reposts it.
+# Matched text is never printed; the reason and the line numbers are enough.
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request_target:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Check text for local paths
+        env:
+          BODY: ${{ github.event.comment.body || github.event.issue.body || github.event.pull_request.body }}
+          TITLE: ${{ github.event.issue.title || github.event.pull_request.title }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s\n%s\n' "$TITLE" "$BODY" > text.txt
+          hit=0
+          while IFS=$'\t' read -r pat why; do
+            case $why in *"local filesystem path"*|*"local account"*) ;; *) continue ;; esac
+            lines=$(grep -niE -- "$pat" text.txt | cut -d: -f1 | tr '\n' ' ')
+            if [ -n "$lines" ]; then
+              echo "::error::$why (lines: $lines)"
+              echo "- $why, lines: $lines" >> "$GITHUB_STEP_SUMMARY"
+              hit=1
+            fi
+          done < <(python3 .github/scripts/site_neutrality_patterns.py)
+          if [ $hit -eq 1 ]; then
+            gh label create leaked-path --repo "$GITHUB_REPOSITORY" --color d93f0b \
+              --description "Text contains a local path or account name; edit or repost it" 2>/dev/null || true
+            gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label leaked-path || true
+            exit 1
+          fi
+          echo "clean" >> "$GITHUB_STEP_SUMMARY"
