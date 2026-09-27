@@ -1644,6 +1644,8 @@ def _cmd_mv_propose(args) -> int:
                 f"  SEP method proposal: {mp['proposed'] or 'declined'} "
                 f"({len(mp['sensitivity'])} valid method(s))"
             )
+        elif mp:
+            print(f"  SEP method proposal: {mp['error']}")
     print("\nnothing written: `camber mv rebaseline` / `camber mv adjust` apply a decision")
     if args.json:
         json.dump(doc, open(args.json, "w"), indent=2, default=str)

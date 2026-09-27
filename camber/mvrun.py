@@ -816,7 +816,12 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
         base = ms.entry.get("period") or (
             [rec.period_start, rec.period_end] if rec is not None else None
         )
-        if rp and base:
+        if rp and base and ms.entry.get("model") == "cp_driver":
+            row["method_proposal"] = {
+                "error": "not run: the SEP method proposal ranks temperature-only models, and "
+                'this entry declares mv.model "cp_driver"'
+            }
+        elif rp and base:
             try:
                 mp = select_method(
                     daily,

@@ -197,6 +197,8 @@ def test_the_versioned_path_freezes_and_measures_the_driver_model(tmp_path, caps
     cfg, path, ws = _write(tmp_path, {"model": "cp_driver", "drivers": ["weekday"]})
     assert main(["mv", "freeze", path, "--reason", "init", "--by", "ana", "--apply"]) == 0
     capsys.readouterr()
+    assert main(["mv", "propose", path]) == 0
+    assert "ranks temperature-only models" in capsys.readouterr().out
     fs = _by_rule(run_mv_config(cfg, base_dir=os.path.dirname(path)))
     (b,) = fs["mv_baseline"]
     assert b.metrics["baseline_version"] == "v1" and b.metrics["drivers"] == ["weekday"]
