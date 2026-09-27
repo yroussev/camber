@@ -376,6 +376,10 @@ def backcast_savings(
         from .stats import _G14_CAVEAT
 
         caveats.append(_G14_CAVEAT)
+    if rho_used is None:
+        from .stats import _RHO_UNKNOWN_CAVEAT
+
+        caveats.append(_RHO_UNKNOWN_CAVEAT)
     frac = abs_unc / abs(savings) if (savings and np.isfinite(abs_unc)) else float("nan")
     r = 0.0 if rho_used is None else rho_used
     n_eff = _n_effective(n_reporting, r)
@@ -708,6 +712,10 @@ def chained_savings(
             )
     tier = _worst(cov_b.tier, cov_r.tier)
     rho_used = pv_b.rho
+    if rho_used is None:
+        from .stats import _RHO_UNKNOWN_CAVEAT
+
+        caveats.append(_RHO_UNKNOWN_CAVEAT)
     n_eff = _n_effective(rec.n, rho_used or 0.0) if rec.n is not None else float("nan")
     win = {k: [str(_ts(v[0]).date()), str(_ts(v[1]).date())] for k, v in periods.items()}
     links = [

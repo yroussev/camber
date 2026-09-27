@@ -292,7 +292,21 @@ def _rel_unc_projected(cv_rmse: float, *, n_fit: int, p_fit: int, rho: float = 0
     return float(cv_rmse * np.sqrt((n_fit / n_eff) * (p_fit / n_fit)))
 
 
-def lag1_autocorrelation(residuals, *, index=None, min_points: int = 30):
+# Neighbouring monthly / billing periods: calendar months are 28-31 days apart and utility billing
+# cycles 25-35, so the 1% spacing test that suits hourly and daily rows admits too few monthly pairs
+# (issue #51). When the modal spacing is month-like, any spacing inside this window is adjacent.
+_MONTHLY_STEP_DAYS = (25.0, 36.0)
+_NS_PER_DAY = 86_400e9
+
+
+def lag1_autocorrelation(
+    residuals,
+    *,
+    index=None,
+    min_points: int = 30,
+    period_start=None,
+    period_end=None,
+):
     """Lag-1 autocorrelation of model residuals, or ``None`` when it cannot be estimated.
 
     ``rho`` feeds the effective-sample-size correction both FSU kernels use. Returning ``None``
@@ -307,6 +321,14 @@ def lag1_autocorrelation(residuals, *, index=None, min_points: int = 30):
 
     Without ``index`` the residuals are assumed to be in time order and evenly spaced -- true for
     the aggregated daily/hourly frames the M&V layer fits, but the caller owns that.
+
+    **Monthly and billing rows** (0.90.1, issue #51). When the modal spacing of ``index`` is
+    month-like (25-36 days), neighbouring rows are adjacent whenever their spacing is inside that
+    window -- calendar months (28-31 days) and billing cycles differ by more than 1%. With explicit
+    ``period_start`` / ``period_end`` (one per row, e.g. a bill's read dates) a pair is adjacent
+    when the periods are **contiguous**: the next period starts at most one day after the previous
+    one ends (both "ends 31 Jan, starts 31 Jan" and "ends 31 Jan, starts 1 Feb" conventions).
+    Hourly and daily spacing is judged exactly as before.
 
     A negative estimate is clamped to ``0.0``: it would *narrow* the band, and narrowing on the
     strength of a noisy negative is the overconfident direction. The estimator is also biased
@@ -330,7 +352,13 @@ def lag1_autocorrelation(residuals, *, index=None, min_points: int = 30):
             finite = deltas[np.isfinite(deltas) & (deltas > 0)]
             if len(finite):
                 step = float(np.median(finite))
-                pair &= np.abs(deltas - step) <= 0.01 * step
+                adjacent = np.abs(deltas - step) <= 0.01 * step
+                lo, hi = (d * _NS_PER_DAY for d in _MONTHLY_STEP_DAYS)
+                if lo <= step <= hi:  # calendar months / billing cycles
+                    adjacent |= (deltas >= lo) & (deltas <= hi)
+                pair &= adjacent
+    if period_start is not None or period_end is not None:
+        pair &= _contiguous_periods(period_start, period_end, len(r))
     if int(pair.sum()) < max(3, int(min_points)):
         return None
     a, b = r[:-1][pair], r[1:][pair]
@@ -340,6 +368,28 @@ def lag1_autocorrelation(residuals, *, index=None, min_points: int = 30):
     if not np.isfinite(rho):
         return None
     return max(0.0, rho)
+
+
+_RHO_UNKNOWN_CAVEAT = (
+    "residual lag-1 autocorrelation could not be estimated (too few adjacent residual pairs, "
+    "or no time index), so the band assumes independent residuals (rho = 0); if the residuals "
+    "are autocorrelated, as monthly and billing residuals often are, the band is too narrow"
+)
+
+
+def _contiguous_periods(period_start, period_end, n: int):
+    """Pair mask: row ``i+1`` starts at most one day after row ``i`` ends (and not before it)."""
+    if period_start is None or period_end is None:
+        raise ValueError("period_start and period_end must be given together")
+    import pandas as pd
+
+    st, en = pd.DatetimeIndex(period_start), pd.DatetimeIndex(period_end)
+    if len(st) != n or len(en) != n:
+        raise ValueError("period_start / period_end must be the same length as residuals")
+    gap = st[1:] - en[:-1]
+    ok = np.asarray(gap.notna())
+    days = np.where(ok, gap.to_numpy(dtype="timedelta64[ns]").astype("int64"), -1) / _NS_PER_DAY
+    return ok & (days >= 0) & (days <= 1.0)
 
 
 def avoided_energy_savings(
@@ -446,6 +496,8 @@ def avoided_energy_savings(
     declined = cov.tier == "severe" and pol.decline
     if kernel == "g14":
         caveats.append(_G14_CAVEAT)
+    if not rho_known:
+        caveats.append(_RHO_UNKNOWN_CAVEAT)
 
     res = SavingsResult(
         avoided_energy=round(avoided, 2),
