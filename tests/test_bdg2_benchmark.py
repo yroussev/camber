@@ -88,3 +88,30 @@ def test_rho_metrics_excludes_unestimable_rather_than_counting_it_as_zero():
 def test_rho_metrics_with_nothing_estimable():
     b = _bench()
     assert b.rho_metrics([{"rho_lag1": None}], "daily") == {"daily.n_with_rho": 0}
+
+
+def test_only_whole_days_are_fitted():
+    """#29: a day with fewer than 23 hourly readings is partial and must not be summed as whole."""
+    import numpy as np
+    import pandas as pd
+
+    b = _bench()
+    s = pd.Series(1.0, index=pd.date_range("2016-01-01", periods=24 * 4, freq="h"))
+    s["2016-01-02 00:00":"2016-01-02 01:00"] = np.nan  # 22 readings: partial
+    s["2016-01-03 05:00"] = np.nan  # 23 readings: whole enough
+    kept = b.complete_days(s)
+    days = sorted(set(kept.index.normalize().strftime("%m-%d")))
+    assert days == ["01-01", "01-03", "01-04"]
+    assert b.complete_days(pd.Series(dtype=float)).empty
+
+
+def test_eui_is_per_building_from_complete_days_annualized():
+    import numpy as np
+    import pandas as pd
+
+    b = _bench()
+    s = pd.Series(2.0, index=pd.date_range("2016-01-01", periods=24 * 10, freq="h"))
+    s.iloc[30:40] = np.nan  # one partial day, dropped, not counted as low use
+    assert b.annual_eui(s, 1000.0) == 48.0 * 366 / 1000.0
+    assert b.annual_eui(s, None) is None and b.annual_eui(s, float("nan")) is None
+    assert b.annual_eui(pd.Series(dtype=float), 1000.0) is None

@@ -35,6 +35,20 @@ def test_rate_to_energy_hourly():
     assert len(e) >= 24
 
 
+def test_rate_to_energy_does_not_credit_a_gap_to_the_reading_before_it():
+    """#31: the last reading before a gap must not be credited with the whole gap."""
+    s = pd.Series(1.0, index=pd.date_range("2016-01-01", periods=144, freq="h"))
+    s["2016-01-03":"2016-01-04"] = np.nan
+    e = rate_to_energy(s, "D")
+    assert e["2016-01-01"] == 24.0 and e["2016-01-02"] == 24.0  # was 72 before the fix
+    assert "2016-01-03" not in e.index or np.isnan(e.get("2016-01-03", np.nan))
+    assert e["2016-01-05"] == 24.0 and e["2016-01-06"] == 24.0
+    # a partly missing day reports only what was measured, so a coverage rule can drop it
+    t = pd.Series(1.0, index=pd.date_range("2016-01-01", periods=72, freq="h"))
+    t["2016-01-02 06:00":"2016-01-02 17:00"] = np.nan
+    assert rate_to_energy(t, "D")["2016-01-02"] == 12.0
+
+
 def test_daily_energy_vs_temp_pairs_and_aggregates():
     rate = _rate_15min(10, 1000.0)
     oat = pd.Series(np.linspace(40, 60, len(rate)), index=rate.index)

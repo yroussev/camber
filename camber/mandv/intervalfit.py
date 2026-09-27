@@ -49,17 +49,22 @@ def degree_days(
 def rate_to_energy(rate: pd.Series, freq: str) -> pd.Series:
     """Integrate an instantaneous rate (per hour) into energy per ``freq`` bin.
 
-    Each sample represents its rate over the gap to the next sample; energy in a
-    bin = sum(rate_i * hours_i). For uniformly-sampled data this equals
-    mean(rate) * hours_in_bin, but we integrate explicitly so uneven sampling is
-    handled correctly.
+    Each sample represents its rate over the interval to the next sample, **capped at the
+    series' nominal step** (the median spacing): energy in a bin = sum(rate_i * hours_i). For
+    uniformly-sampled data this equals mean(rate) * hours_in_bin. A longer interval is a gap in
+    the data, not a long reading -- the sample before it is credited one nominal step and the rest
+    of the gap is left unfilled, so a day with missing readings reports less energy (and a coverage
+    rule can drop it) instead of silently inheriting the last reading for the whole gap. (Before
+    0.86.0 the sample before a gap was credited the entire gap: two missing days after an hourly
+    reading of 1 put 49 units into that reading's day.)
     """
     rate = rate.sort_index().dropna()
     if len(rate) < 2:
         return pd.Series(dtype=float)
-    # hours each sample represents (gap to next; last repeats the prior gap)
+    # hours each sample represents: the interval to the next sample, capped at the nominal step
     secs = np.diff(rate.index.view("int64")) / 1e9
-    hours = np.append(secs, secs[-1]) / 3600.0
+    nominal = float(np.median(secs))
+    hours = np.minimum(np.append(secs, nominal), nominal) / 3600.0
     energy_per_sample = pd.Series(rate.values * hours, index=rate.index)
     return energy_per_sample.resample(freq).sum(min_count=1)
 

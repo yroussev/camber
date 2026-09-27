@@ -3351,7 +3351,7 @@
    "labeled_faults": false,
    "labels": {},
    "equipment": "whole-building meters (no HVAC points)",
-   "timezone": "naive local time per site (metadata.csv 'timezone')",
+   "timezone": "naive timestamps on one uniform hourly grid: no daylight-saving gap or repeated hour at any site. metadata.csv gives each site's IANA zone and the publisher describes the timestamps as local time, but one site's meters run about 4-5 h behind its weather (see the data issues).",
    "requires_extras": [],
    "files": [
     {
@@ -3626,9 +3626,45 @@
     "Licence is CC-BY-SA 4.0 (the repository LICENSE): analysis and commercial use are fine; a redistributed adaptation of the data must keep the same licence.",
     "Meter readings are hourly energy per interval; they are stored as an hourly-mean rate (numerically equal), electricity under 'power' and the other meters under 'energy_rate'.",
     "One facility per site (ds-bdg2-<site>); each building meter is an equipment '<building>__<meter>' of class '<METER>_METER'. Weather (airTemperature, degC) is converted to F on equipment 'weather'.",
+    "The catalog ingests the publisher's cleaned meters. The raw electricity and chilled-water files carry ~24,700 all-zero building-days each in 2016 (meter outages); the cleaned electricity has none, and the cleaned chilled water keeps ~25,000 zero days (plants that do not run).",
+    "1-5% of building-days are partial (fewer than 23 hourly readings): 2.2% of cleaned electricity days and 4.8% of cleaned chilled-water days in 2016. Summing them as whole days biases daily models; the benchmark fits whole days only.",
     "kaggle/kaggle.csv (the competition subset, numeric building ids) is downloaded by the full subset but not ingested; it is known to mix units across sites."
    ],
-   "data_issues": []
+   "data_issues": [
+    {
+     "id": "eagle-chilled-water-1000x",
+     "title": "One site's chilled water is about 1,000x too large",
+     "columns": [
+      "Eagle_* (chilledwater)"
+     ],
+     "evidence": "The 87 Eagle chilled-water meters have a median 2016 intensity of 17,417 kWh/ft2/yr (cleaned; 17,913 raw) and a median 1,389x the same building's electricity; the other sites' chilled-water meters have a per-building median of 45.8 kWh/ft2/yr and no site median above 77.5. Divided by 1,000 Eagle's median is 17.4 kWh/ft2/yr, 1.4x its electricity -- the factor a kBTU series converted as mmBTU (the unit Table 4 lists for Eagle's chilled water) would carry.",
+     "contradicts": {
+      "document": "Miller et al. 2020, Table 4 (Eagle chilled water in mmBTU) and Usage Notes (unit-conversion mistakes fixed in the raw and cleaned sets)",
+      "citation": "Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x"
+     },
+     "handling": "exclude",
+     "handling_note": "Ingested as published (no rescale: the factor is inferred, not documented). Kept out of the benchmark's EUI rollup, which is electricity-only; the change-point acceptance and residual-autocorrelation metrics are scale-free.",
+     "exclude": {
+      "analyses": [
+       "examples/bdg2/benchmark.py EUI rollup (electricity only)"
+      ]
+     }
+    },
+    {
+     "id": "eagle-meters-lag-weather",
+     "title": "One site's meter timestamps lag its weather by about 4-5 hours",
+     "columns": [
+      "timestamp (Eagle_* meters)"
+     ],
+     "evidence": "Eagle's weekday electricity profile runs ~5 h later than the pooled profile of the other sites (overnight minimum at 07-08 h vs 03 h; daytime plateau 14-19 h vs 10-15 h) while its air temperature peaks at 15 h like every site's, and its chilled water peaks at 20 h (12-17 h elsewhere). Cross-correlated with its own air temperature, Eagle's meters align best when the weather is shifted 5 h (chilled water) / 3 h (electricity) later, against -4 to +1 h at the other sites (where the correlation is meaningful) -- a UTC-like clock on a US/Eastern site.",
+     "contradicts": {
+      "document": "Miller et al. 2020, Usage Notes (the BDG2 timestamps, weather included, are in the local time zone)",
+      "citation": "Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: the offset is inferred (4 or 5 h), not documented, so it is not shifted. Daily models are barely affected; an hourly or time-of-week analysis of Eagle should shift its meters."
+    }
+   ]
   }
  ]
 }

@@ -360,7 +360,21 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 
 ### `bdg2`: Building Data Genome 2 (whole-building meters)
 
-No published-data issues are recorded for this dataset.
+#### One site's chilled water is about 1,000x too large
+
+- **Issue:** `eagle-chilled-water-1000x`
+- **Columns:** `Eagle_* (chilledwater)`
+- **Evidence:** The 87 Eagle chilled-water meters have a median 2016 intensity of 17,417 kWh/ft2/yr (cleaned; 17,913 raw) and a median 1,389x the same building's electricity; the other sites' chilled-water meters have a per-building median of 45.8 kWh/ft2/yr and no site median above 77.5. Divided by 1,000 Eagle's median is 17.4 kWh/ft2/yr, 1.4x its electricity -- the factor a kBTU series converted as mmBTU (the unit Table 4 lists for Eagle's chilled water) would carry.
+- **Contradicts:** Miller et al. 2020, Table 4 (Eagle chilled water in mmBTU) and Usage Notes (unit-conversion mistakes fixed in the raw and cleaned sets) (Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x)
+- **Handling: exclude** -- kept out of scoring / analysis. Ingested as published (no rescale: the factor is inferred, not documented). Kept out of the benchmark's EUI rollup, which is electricity-only; the change-point acceptance and residual-autocorrelation metrics are scale-free.
+
+#### One site's meter timestamps lag its weather by about 4-5 hours
+
+- **Issue:** `eagle-meters-lag-weather`
+- **Columns:** `timestamp (Eagle_* meters)`
+- **Evidence:** Eagle's weekday electricity profile runs ~5 h later than the pooled profile of the other sites (overnight minimum at 07-08 h vs 03 h; daytime plateau 14-19 h vs 10-15 h) while its air temperature peaks at 15 h like every site's, and its chilled water peaks at 20 h (12-17 h elsewhere). Cross-correlated with its own air temperature, Eagle's meters align best when the weather is shifted 5 h (chilled water) / 3 h (electricity) later, against -4 to +1 h at the other sites (where the correlation is meaningful) -- a UTC-like clock on a US/Eastern site.
+- **Contradicts:** Miller et al. 2020, Usage Notes (the BDG2 timestamps, weather included, are in the local time zone) (Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the offset is inferred (4 or 5 h), not documented, so it is not shifted. Daily models are barely affected; an hourly or time-of-week analysis of Eagle should shift its meters.
 
 <!-- END data-issues -->
 

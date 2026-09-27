@@ -9,11 +9,17 @@ Wilson confidence interval — an honest, reproducible statement of how the engi
 the wild.
 
 Weather-driven **chilled-water** energy passes the G14 gate at a **meaningfully higher** rate than
-schedule/plug-driven **electricity** (empirically ~36% vs ~8% across ~2,000 BDG2 buildings) — the
-benchmark reports both, so the number is credible rather than cherry-picked, and honest that real
-whole-building energy is messy: half the chilled-water buildings sit near the 30% daily
-CV(RMSE) line.
-Also rolls the portfolio up by EUI (`report.build_fleet_report`) at real scale.
+schedule/plug-driven **electricity** — the benchmark reports both, so the number is credible rather
+than cherry-picked, and honest that real whole-building energy is messy.
+Also rolls the portfolio up by electricity EUI (`report.build_fleet_report`) at real scale.
+
+**The meters are the publisher's cleaned set** (``meters/cleaned/*_cleaned.csv``, the files the
+dataset catalog ingests), not the raw export: the raw meters carry ~24,700 all-zero building-days
+per meter type in 2016 (meter outages), which the cleaned electricity set removes. **Only whole
+days are fitted** (at least 23 of 24 hourly readings): a day with missing hours would be summed
+as if it were whole. **EUI is per building and electricity-only** (kWh/ft2/yr from the complete
+days, annualized): chilled-water kWh are thermal, not comparable with electric kWh, and one site's
+published chilled water is ~1,000x too large (see the bdg2 catalog entry's data issues).
 
 BDG2 is a large download (run fetch.py); scoring runs in the benchmark CI job (cached). The pure
 metric functions below are unit-tested on synthetic records with no download.
@@ -37,6 +43,11 @@ from camber.validation import wilson_interval  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "bdg2")
 YEAR = ("2016-01-01", "2016-12-31")
+MIN_HOURS_PER_DAY = 23  # a day with fewer hourly readings is partial and is not fitted
+METERS = [
+    ("cleaned/chilledwater_cleaned.csv", "chilledwater"),
+    ("cleaned/electricity_cleaned.csv", "electricity"),
+]
 
 
 # --------------------------------------------------------------------- pure metrics (unit-tested)
@@ -89,6 +100,24 @@ def rho_metrics(records, label: str) -> dict:
     }
 
 
+def complete_days(hourly, min_hours: int = MIN_HOURS_PER_DAY):
+    """``hourly`` restricted to the days with at least ``min_hours`` readings (NaNs dropped)."""
+    e = hourly.dropna()
+    if e.empty:
+        return e
+    counts = e.groupby(e.index.normalize()).transform("size")
+    return e[counts >= min_hours]
+
+
+def annual_eui(hourly_kwh, area_ft2, *, days_in_year: int = 366) -> float | None:
+    """kWh/ft2/yr from the complete days: mean daily energy x days in the year / floor area."""
+    e = complete_days(hourly_kwh)
+    if e.empty or not area_ft2 or area_ft2 != area_ft2:
+        return None
+    daily = e.groupby(e.index.normalize()).sum()
+    return float(daily.mean() * days_in_year / float(area_ft2))
+
+
 def eui_metrics(euis) -> dict:
     """Portfolio EUI rollup metrics via report.build_fleet_report (real-scale percentile check)."""
     from camber.report.fleet import build_fleet_report
@@ -132,7 +161,7 @@ def score_meter(meta, weather, meter_csv, *, min_hours=24 * 150, min_days=60):
     for b in cols:
         if b not in meta.index:
             continue
-        e = df[b].loc[YEAR[0] : YEAR[1]].dropna()
+        e = complete_days(df[b].loc[YEAR[0] : YEAR[1]])  # whole days only
         if len(e) < min_hours:
             continue
         try:
@@ -160,9 +189,18 @@ def score_meter(meta, weather, meter_csv, *, min_hours=24 * 150, min_days=60):
                 "accept": bool(st.accept),
                 "rho_lag1": st.rho_lag1,  # None when not estimable; never coerced to 0.0
                 "annual_kwh": float(e.sum()),
+                "eui": annual_eui(e, _area_ft2(meta, b)),
             }
         )
     return records
+
+
+def _area_ft2(meta, b):
+    if "sqft" in meta.columns and meta.loc[b, "sqft"] == meta.loc[b, "sqft"]:
+        return float(meta.loc[b, "sqft"])
+    if "sqm" in meta.columns and meta.loc[b, "sqm"] == meta.loc[b, "sqm"]:
+        return float(meta.loc[b, "sqm"]) * 10.7639
+    return None
 
 
 def metrics_dict() -> dict:
@@ -175,27 +213,18 @@ def metrics_dict() -> dict:
     )
     m = {}
     all_recs = []
-    for meter, label in [("chilledwater.csv", "chilledwater"), ("electricity.csv", "electricity")]:
+    for meter, label in METERS:
         path = os.path.join(DATA, meter)
         if not os.path.exists(path):
             continue
         recs = score_meter(meta, weather, path)
         m.update(acceptance_metrics(recs, label))
         m.update(rho_metrics(recs, label))
-        all_recs.extend((r, meter) for r in recs)
+        all_recs.extend((r, label) for r in recs)
     m.update(acceptance_metrics([r for r, _ in all_recs], "pooled"))
     m.update(rho_metrics([r for r, _ in all_recs], "pooled"))
-    # EUI rollup from annual energy / floor area (sqft or sqm→sqft)
-    area_col = "sqft" if "sqft" in meta.columns else ("sqm" if "sqm" in meta.columns else None)
-    euis = []
-    if area_col:
-        for r, _ in all_recs:
-            a = meta.loc[r["building"], area_col]
-            if area_col == "sqm" and a == a:
-                a = a * 10.7639
-            if a and a == a:
-                euis.append(r["annual_kwh"] / float(a))
-    m.update(eui_metrics(euis))
+    # EUI rollup: one value per building, electricity only (thermal kWh are not electric kWh)
+    m.update(eui_metrics([r["eui"] for r, label in all_recs if label == "electricity"]))
     return m
 
 
@@ -207,7 +236,9 @@ def main(argv=None) -> int:
     ap.add_argument("--update-baseline", metavar="PATH")
     args = ap.parse_args(argv)
 
-    if not os.path.exists(os.path.join(DATA, "metadata.csv")):
+    if not all(os.path.exists(os.path.join(DATA, f)) for f, _ in METERS[:1]) or not (
+        os.path.exists(os.path.join(DATA, "metadata.csv"))
+    ):
         print("Data not found. Run:  python examples/bdg2/fetch.py")
         return 1
 
@@ -223,7 +254,7 @@ def main(argv=None) -> int:
                 f"(n={m[f'{label}.n_buildings']})"
             )
     print(
-        f"  EUI rollup: {m.get('eui.n_buildings', 0)} buildings, median "
+        f"  electricity EUI rollup: {m.get('eui.n_buildings', 0)} buildings, median "
         f"{m.get('eui.median', 0):.1f} kWh/ft²/yr, "
         f"percentiles monotonic={m.get('eui.percentile_monotonic')}"
     )

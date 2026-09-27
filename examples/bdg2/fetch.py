@@ -18,18 +18,22 @@ DATA = os.path.join(HERE, "..", "_data", "bdg2")
 BASE = (
     "https://media.githubusercontent.com/media/buds-lab/building-data-genome-project-2/master/data/"
 )
+# The publisher's CLEANED meters -- the files the dataset catalog ingests. The raw export carries
+# ~24,700 all-zero building-days per meter type in 2016 (meter outages) that the benchmark would
+# otherwise fit as real consumption.
 FILES = {
     "metadata.csv": "metadata/metadata.csv",
     "weather.csv": "weather/weather.csv",
-    "electricity.csv": "meters/raw/electricity.csv",
-    "chilledwater.csv": "meters/raw/chilledwater.csv",
+    "cleaned/electricity_cleaned.csv": "meters/cleaned/electricity_cleaned.csv",
+    "cleaned/chilledwater_cleaned.csv": "meters/cleaned/chilledwater_cleaned.csv",
 }
 
 
 def main() -> int:
     os.makedirs(DATA, exist_ok=True)
     for name, path in FILES.items():
-        dest = os.path.join(DATA, name)
+        dest = os.path.join(DATA, *name.split("/"))
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
         if os.path.exists(dest):
             print(f"  {name} present")
             continue

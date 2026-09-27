@@ -166,13 +166,19 @@ def main() -> int:
     mv_table(
         meta,
         weather,
-        os.path.join(DATA, "chilledwater.csv"),
+        os.path.join(DATA, "cleaned", "chilledwater_cleaned.csv"),
         CHILLED,
         "chilled-water cooling energy",
     )
-    mv_table(meta, weather, os.path.join(DATA, "electricity.csv"), ELECTRIC, "office electricity")
-    towt_demo(meta, weather, os.path.join(DATA, "electricity.csv"))
-    storage_demo(meta, os.path.join(DATA, "electricity.csv"), CHILLED + ELECTRIC)
+    mv_table(
+        meta,
+        weather,
+        os.path.join(DATA, "cleaned", "electricity_cleaned.csv"),
+        ELECTRIC,
+        "office electricity",
+    )
+    towt_demo(meta, weather, os.path.join(DATA, "cleaned", "electricity_cleaned.csv"))
+    storage_demo(meta, os.path.join(DATA, "cleaned", "electricity_cleaned.csv"), CHILLED + ELECTRIC)
     print("\nThe engine picks the cooling change-point (3PC) for weather-driven")
     print("cooling energy and fits it well; weakly-weather-driven electricity is")
     print("reported honestly. The store holds the portfolio keyed by site/equip.")
