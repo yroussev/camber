@@ -526,8 +526,8 @@
    "summary": "One simulated four-pipe fan-coil unit with an OA damper for a year at 1-minute resolution: fault-free plus OA damper stuck/leaking, coil valve leaks and sticks, coil fouling, filter restriction, sensor biases and control faults.",
    "teaches": [
     "the same rules on a second naming convention (only the mapping changes)",
-    "outdoor-air fraction on a small unit (10% design minimum OA)",
-    "simultaneous heating and cooling on a four-pipe unit"
+    "outdoor-air fraction on a small unit (a 30% minimum damper position is 10.5% OA)",
+    "a labelled fault that is indistinguishable from normal operation"
    ],
    "publisher": "Lawrence Berkeley National Laboratory (with PNNL, NREL, ORNL and Drexel University)",
    "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
@@ -541,7 +541,7 @@
    "verified_on": "2026-09-26",
    "kind": "simulated",
    "labeled_faults": true,
-   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "timezone": "naive simulation clock (no DST), 1-minute samples, calendar year 2018; month-first timestamps (MM/DD/YYYY HH:MM)",
    "requires_extras": [],
    "licence_check": {
     "url": "https://data.openei.org/submissions/5763",
@@ -550,7 +550,10 @@
    "equipment": "1 fan-coil unit (cooling + heating coils, OA damper, one zone)",
    "labels": {
     "targets": {
-     "outdoor_air_fraction": "damper"
+     "outdoor_air_fraction": [
+      "damper",
+      "oa_blockage"
+     ]
     },
     "fault_types": {
      "damper": "OA damper stuck or leaking",
@@ -664,10 +667,25 @@
     "adapter": "wide_csv",
     "facility": "ds-lbnl-fcu",
     "timestamp": "Datetime",
+    "timestamp_format": "%m/%d/%Y %H:%M",
     "resample": "15min",
     "mapping": "lbnl_fcu.json",
     "units": {},
     "quirks": [],
+    "recode": {
+     "FCU_CTRL": {
+      "2": 0
+     }
+    },
+    "derive": [
+     {
+      "column": "FCU_ON",
+      "above": [
+       "FCU_DA_CFM",
+       10
+      ]
+     }
+    ],
     "runs": [
      {
       "id": "Control_CoolingReverse",
@@ -787,7 +805,8 @@
       "member": "LBNL_FDD_Dataset_FCU/FCU_Fouling_Heating_Airside_Minor.csv",
       "equip": "FCU",
       "class": "FCU",
-      "label": "coil_fouling"
+      "label": "coil_fouling",
+      "exclude": "airside-minor-fouling-runs-identical"
      },
      {
       "id": "Fouling_Heating_Airside_Moderate",
@@ -883,7 +902,8 @@
       "member": "LBNL_FDD_Dataset_FCU/FCU_OADMPRStuck_30.csv",
       "equip": "FCU",
       "class": "FCU",
-      "label": "damper"
+      "label": "damper",
+      "exclude": "stuck-at-30-is-normal-operation"
      },
      {
       "id": "OADMPRStuck_50",
@@ -1074,10 +1094,54 @@
    },
    "known_issues": [
     "Valves and dampers map to the controller demand columns (*_DM).",
-    "Timestamps are month-first (MM/DD/YYYY HH:MM).",
-    "FCU_Fouling_Cooling_Airside_Minor and FCU_Fouling_Heating_Airside_Minor are byte-identical (same size and CRC); one of the two labels is wrong."
+    "Timestamps are month-first (MM/DD/YYYY HH:MM); the ingester pins that format.",
+    "The design minimum is a 30% damper position (inventory section 1.2), which measures as a 10.5% OA fraction on the fault-free run (occupied, fan-on minutes); the run template's min_oa_pct 10 matches it.",
+    "FCU_SPD is the 3-speed fan's speed in rev/s (0 / 9.75 / 13.08), not a percent, and is not mapped; CAMBER derives the fan status FCU_ON = (FCU_DA_CFM > 10 cfm), which matches FCU_SPD > 0 in every row. FCU_CTRL (0 shutdown / 1 operate / 2 setback) maps to occupancy with setback read as unoccupied.",
+    "The OA-damper leak runs are a narrow test of the OA-fraction threshold: 20 / 50 / 80% leakage give 12.7 / 15.4 / 17.4% OA against the rule's 15% (10% minimum + 5%) excess line, so the leak-50 detection rests on a 0.4-point margin.",
+    "outdoor_air_fraction targets both the stuck/leaking damper runs and the OA-inlet blockage run (0.7% OA), which is under-ventilation by the same physics."
    ],
-   "data_issues": []
+   "data_issues": [
+    {
+     "id": "stuck-at-30-is-normal-operation",
+     "title": "The damper 'stuck at 30%' run is the unit's normal minimum",
+     "columns": [
+      "FCU_DMPR",
+      "FCU_MAT"
+     ],
+     "evidence": "The unit's minimum OA damper position is 30%, which is also the fault-free position in 174,453 occupied, fan-on minutes. In OADMPRStuck_30 the occupied fan-on OA fraction is 10.53% (temperature balance) / 10.54% (OA_CFM / supply flow), identical to the fault-free run's 10.53% / 10.54%; the two differ only in unoccupied setback minutes with the fan cycling (10.5% vs 0.2%).",
+     "contradicts": {
+      "document": "FCU inventory Table 3 (OA damper stuck at 30%, a fault case) and section 1.2 (minimum damper position 30%)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "exclude",
+     "handling_note": "Ingested for inspection and excluded from scoring: in the occupied hours every rule judges it is fault-free operation.",
+     "exclude": {
+      "runs": [
+       "OADMPRStuck_30"
+      ]
+     }
+    },
+    {
+     "id": "airside-minor-fouling-runs-identical",
+     "title": "The cooling and heating airside-minor-fouling runs are one file",
+     "columns": [
+      "FCU_CVLV_DM",
+      "FCU_HVLV_DM"
+     ],
+     "evidence": "FCU_Fouling_Cooling_Airside_Minor.csv and FCU_Fouling_Heating_Airside_Minor.csv are byte-identical (83,997,327 bytes, same CRC-32); the moderate and severe pairs differ. The data cannot say which label is right.",
+     "contradicts": {
+      "document": "FCU inventory Table 4 (distinct cooling- and heating-coil airside fouling cases)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "exclude",
+     "handling_note": "Ingested once under the cooling label (first in the archive); the heating copy is excluded from ingest and scoring.",
+     "exclude": {
+      "runs": [
+       "Fouling_Heating_Airside_Minor"
+      ]
+     }
+    }
+   ]
   },
   {
    "id": "lbnl-ddahu",
@@ -1796,7 +1860,7 @@
    "verified_on": "2026-09-26",
    "kind": "simulated",
    "labeled_faults": true,
-   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "timezone": "naive simulation clock (no DST), 1-minute samples, calendar year 2018; month-first timestamps (MM/DD/YYYY HH:MM)",
    "requires_extras": [],
    "licence_check": {
     "url": "https://data.openei.org/submissions/5763",
@@ -1804,15 +1868,21 @@
    },
    "equipment": "4 fan-powered VAV boxes (_I/_W/_S/_E zones) per variant; the _S box is mapped",
    "labels": {
-    "targets": {},
+    "targets": {
+     "airflow_tracking": [
+      "terminal_damper",
+      "airflow_sensor_bias"
+     ]
+    },
     "fault_types": {
      "terminal_damper": "VAV damper stuck",
      "valve_leak": "reheat valve leakage",
      "valve_stuck": "reheat valve stuck",
      "coil_fouling": "reheat coil fouling",
-     "sensor_bias": "airflow or room-temperature sensor offset",
+     "sensor_bias": "room-temperature sensor offset",
      "control": "unstable damper or room-temperature control",
-     "fan_restriction": "box fan flow restriction"
+     "fan_restriction": "box fan flow restriction",
+     "airflow_sensor_bias": "primary-airflow sensor offset"
     }
    },
    "files": [
@@ -1930,6 +2000,7 @@
     "adapter": "wide_csv",
     "facility": "ds-lbnl-fpu",
     "timestamp": "Datetime",
+    "timestamp_format": "%m/%d/%Y %H:%M",
     "resample": "15min",
     "mapping": "lbnl_fpu.json",
     "units": {},
@@ -2101,7 +2172,7 @@
       "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_+200CFM.csv",
       "equip": "PFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "PFPU__SensorBias_VAVAirflow_p400CFM",
@@ -2109,7 +2180,7 @@
       "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_+400CFM.csv",
       "equip": "PFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "PFPU__SensorBias_VAVAirflow_m200CFM",
@@ -2117,7 +2188,7 @@
       "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_-200CFM.csv",
       "equip": "PFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "PFPU__SensorBias_VAVAirflow_m400CFM",
@@ -2125,7 +2196,7 @@
       "member": "LBNL_FDD_Data_Sets_PFPU/PFPU_SensorBias_VAVAirflow_-400CFM.csv",
       "equip": "PFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "PFPU__VAVDMPRStuck_0pct",
@@ -2349,7 +2420,7 @@
       "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_+200CFM.csv",
       "equip": "SFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "SFPU__SensorBias_VAVAirflow_p400CFM",
@@ -2357,7 +2428,7 @@
       "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_+400CFM.csv",
       "equip": "SFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "SFPU__SensorBias_VAVAirflow_m200CFM",
@@ -2365,7 +2436,7 @@
       "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_-200CFM.csv",
       "equip": "SFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "SFPU__SensorBias_VAVAirflow_m400CFM",
@@ -2373,7 +2444,7 @@
       "member": "LBNL_FDD_Data_Sets_SFPU/SFPU_SensorBias_VAVAirflow_-400CFM.csv",
       "equip": "SFPU",
       "class": "VAV",
-      "label": "sensor_bias"
+      "label": "airflow_sensor_bias"
      },
      {
       "id": "SFPU__VAVDMPRStuck_0pct",
@@ -2437,18 +2508,51 @@
    "suggested_analyses": {
     "rules": [
      "airflow_tracking",
-     "reheat_minimization_g36",
      "unmet_setpoint_hours"
     ],
     "config_template": "lbnl-fpu.json"
    },
    "known_issues": [
-    "Faults are imposed on the SOUTH zone box (_S columns); the other zones stay healthy.",
+    "Faults are imposed on the SOUTH zone box (_S columns); the other zones stay healthy (see the data issues).",
     "The reheat valve maps to the demand column (RH_VLV_DM_S); VAV_DMPR_S has no demand twin and is the measured position.",
-    "Scenario ids replace '%' with 'pct', '+' with 'p' and a leading '-' with 'm'.",
-    "No detector targets are declared yet: score reports overall detection only."
+    "The room setpoints RMCLGSPT_S / RMHTGSPT_S (72 / 68 F occupied, 85 / 55 F unoccupied) map to cool_sp / heat_sp, so unmet_setpoint_hours evaluates.",
+    "SA_TEMP is the AHU supply air entering the box and maps to mixed_air_temp, the role CAMBER uses for a terminal's entering primary air. In a parallel box the reheat coil sees that primary air plus the plenum air the box fan adds when it runs, so SA_TEMP is a proxy for the coil's entering air, not a measurement of it.",
+    "reheat_minimization_g36 is not run: VAV_PM_CFM_SP_S is the active airflow setpoint (the rule reads it as the design maximum and cannot fire on the fault-free run), and G36's dual-maximum reheat logic applies to single-duct VAV boxes, not fan-powered ones.",
+    "On the series (SFPU) boxes airflow_tracking also fires on six of the ten reheat-valve leak / stuck runs (an overheated room drives the primary-airflow command up); on the parallel (PFPU) boxes it fires on exactly the stuck-damper and airflow-sensor-bias runs.",
+    "Scenario ids replace '%' with 'pct', '+' with 'p' and a leading '-' with 'm'."
    ],
-   "data_issues": []
+   "data_issues": [
+    {
+     "id": "faults-on-the-south-box",
+     "title": "Faults are imposed on the South-zone box, not the West one",
+     "columns": [
+      "VAV_DMPR_S",
+      "RH_VLV_S"
+     ],
+     "evidence": "Diffing each faulted PFPU run against PFPU_FaultFree, the changed columns are the _S ones: averaged over each box's ten points, the median absolute change in VAVDMPRStuck_50pct is 46.7 for the _S box and 0.06-0.07 for the other three. VAV_DMPR_S is a constant 0.50 in VAVDMPRStuck_50pct (each stuck-damper run holds its own position) and RH_VLV_S a constant 0 in ReheatVLVStuck_0pct, while the _W box varies as in the fault-free run.",
+     "contradicts": {
+      "document": "FPU inventory section 3 (faults imposed on the west-zone box, variables suffixed _W)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "The mapping reads the _S box (until 0.82.0 it read the healthy _W box)."
+    },
+    {
+     "id": "airflow-bias-on-the-setpoint-column",
+     "title": "The airflow-bias runs log the true flow; the positive offsets appear on the setpoint",
+     "columns": [
+      "VAV_PM_CFM_S",
+      "VAV_PM_CFM_SP_S"
+     ],
+     "evidence": "Occupied-hour medians: fault-free setpoint and flow 201.3 / 201.3 cfm; SensorBias_VAVAirflow_+400CFM 537.7 / 137.7 and +200CFM 336.2 / 136.0 (the offset sits on the setpoint column); -200CFM and -400CFM keep the 201.3 setpoint while the flow reads 401.3 and 601.2 (the unbiased flow the controller drives up). The logged flow is the true flow in every direction.",
+     "contradicts": {
+      "document": "FPU inventory section 2 (for sensor faults the logged value of the faulty sensor is the faulty value)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the runs are labelled airflow_sensor_bias and scored as airflow_tracking targets (measured flow no longer tracks its setpoint either way)."
+    }
+   ]
   },
   {
    "id": "lbnl-chiller",

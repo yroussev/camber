@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for lbnl-fcu: the same OA-fraction rule as the SDAHU with this unit's 10% design-minimum OA (the LBNL benchmark's FCU setting).",
+  "_comment": "Run template for lbnl-fcu: the same OA-fraction rule as the SDAHU with this unit's own design minimum. The sequence holds a 30% minimum damper position (inventory section 1.2), which measures as a 10.5% OA fraction on the fault-free run (occupied, fan-on minutes; the temperature balance and OA_CFM / supply flow agree), so min_oa_pct is 10. The rule judges fan-on (FCU_ON, derived from the discharge airflow) samples in operate mode (FCU_CTRL). The leak runs sit close to the 15% excess line (12.7 / 15.4 / 17.4% OA): a narrow margin, see the catalog entry.",
   "source": {
     "kind": "store",
     "store": "",

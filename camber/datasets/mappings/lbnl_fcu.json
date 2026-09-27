@@ -1,5 +1,5 @@
 {
-  "_comment": "LBNL FDD fan-coil unit (FCU) point name -> CAMBER Role mapping. A third BAS naming convention: unlike the cooling-only SDAHU, the FCU has BOTH a cooling and a heating coil plus an OA damper, so the outdoor-air-fraction and simultaneous-heating/cooling detectors both apply. Adding this equipment family is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions.",
+  "_comment": "LBNL FDD fan-coil unit (FCU) point name -> CAMBER Role mapping. A third BAS naming convention: unlike the cooling-only SDAHU, the FCU has BOTH a cooling and a heating coil plus an OA damper, so the outdoor-air-fraction and simultaneous-heating/cooling detectors both apply. Adding this equipment family is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions. FAN AND OCCUPANCY (fixed in 0.86.0): FCU_SPD is the 3-speed fan's speed in rev/s (0 / 9.75 / 13.08), not a percent, so it is not mapped (until 0.86.0 it was read as supply_fan_speed); the catalog derives the fan status FCU_ON = (FCU_DA_CFM > 10 cfm) at ingest, which matches FCU_SPD > 0 in every row. FCU_CTRL (0 shutdown / 1 operate / 2 setback) maps to occupancy after the catalog's recode reads setback as unoccupied. Timestamps are month-first and the catalog pins the format.",
   "aliases": {
     "FCU_MAT": "mixed_air_temp",
     "FCU_DAT": "supply_air_temp",
@@ -9,10 +9,11 @@
     "FCU_HVLV_DM": "heat_valve",
     "FCU_DMPR_DM": "oa_damper",
     "FCU_DA_CFM": "airflow",
-    "FCU_SPD": "supply_fan_speed",
     "RM_TEMP": "space_temp",
     "RMCLGSPT": "cool_sp",
-    "RMHTGSPT": "heat_sp"
+    "RMHTGSPT": "heat_sp",
+    "FCU_ON": "supply_fan_status",
+    "FCU_CTRL": "occupancy"
   },
   "patterns": []
 }

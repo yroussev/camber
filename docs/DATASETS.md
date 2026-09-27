@@ -206,7 +206,21 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 
 ### `lbnl-fcu`: LBNL simulated fan-coil unit (labelled faults)
 
-No published-data issues are recorded for this dataset.
+#### The damper 'stuck at 30%' run is the unit's normal minimum
+
+- **Issue:** `stuck-at-30-is-normal-operation`
+- **Columns:** `FCU_DMPR`, `FCU_MAT`
+- **Evidence:** The unit's minimum OA damper position is 30%, which is also the fault-free position in 174,453 occupied, fan-on minutes. In OADMPRStuck_30 the occupied fan-on OA fraction is 10.53% (temperature balance) / 10.54% (OA_CFM / supply flow), identical to the fault-free run's 10.53% / 10.54%; the two differ only in unoccupied setback minutes with the fan cycling (10.5% vs 0.2%).
+- **Contradicts:** FCU inventory Table 3 (OA damper stuck at 30%, a fault case) and section 1.2 (minimum damper position 30%) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: exclude** -- kept out of scoring / analysis. Ingested for inspection and excluded from scoring: in the occupied hours every rule judges it is fault-free operation.
+
+#### The cooling and heating airside-minor-fouling runs are one file
+
+- **Issue:** `airside-minor-fouling-runs-identical`
+- **Columns:** `FCU_CVLV_DM`, `FCU_HVLV_DM`
+- **Evidence:** FCU_Fouling_Cooling_Airside_Minor.csv and FCU_Fouling_Heating_Airside_Minor.csv are byte-identical (83,997,327 bytes, same CRC-32); the moderate and severe pairs differ. The data cannot say which label is right.
+- **Contradicts:** FCU inventory Table 4 (distinct cooling- and heating-coil airside fouling cases) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: exclude** -- kept out of scoring / analysis. Ingested once under the cooling label (first in the archive); the heating copy is excluded from ingest and scoring.
 
 ### `lbnl-ddahu`: LBNL simulated dual-duct AHU (labelled faults)
 
@@ -244,7 +258,21 @@ No published-data issues are recorded for this dataset.
 
 ### `lbnl-fpu`: LBNL simulated fan-powered VAV terminal units (labelled faults)
 
-No published-data issues are recorded for this dataset.
+#### Faults are imposed on the South-zone box, not the West one
+
+- **Issue:** `faults-on-the-south-box`
+- **Columns:** `VAV_DMPR_S`, `RH_VLV_S`
+- **Evidence:** Diffing each faulted PFPU run against PFPU_FaultFree, the changed columns are the _S ones: averaged over each box's ten points, the median absolute change in VAVDMPRStuck_50pct is 46.7 for the _S box and 0.06-0.07 for the other three. VAV_DMPR_S is a constant 0.50 in VAVDMPRStuck_50pct (each stuck-damper run holds its own position) and RH_VLV_S a constant 0 in ReheatVLVStuck_0pct, while the _W box varies as in the fault-free run.
+- **Contradicts:** FPU inventory section 3 (faults imposed on the west-zone box, variables suffixed _W) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. The mapping reads the _S box (until 0.82.0 it read the healthy _W box).
+
+#### The airflow-bias runs log the true flow; the positive offsets appear on the setpoint
+
+- **Issue:** `airflow-bias-on-the-setpoint-column`
+- **Columns:** `VAV_PM_CFM_S`, `VAV_PM_CFM_SP_S`
+- **Evidence:** Occupied-hour medians: fault-free setpoint and flow 201.3 / 201.3 cfm; SensorBias_VAVAirflow_+400CFM 537.7 / 137.7 and +200CFM 336.2 / 136.0 (the offset sits on the setpoint column); -200CFM and -400CFM keep the 201.3 setpoint while the flow reads 401.3 and 601.2 (the unbiased flow the controller drives up). The logged flow is the true flow in every direction.
+- **Contradicts:** FPU inventory section 2 (for sensor faults the logged value of the faulty sensor is the faulty value) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the runs are labelled airflow_sensor_bias and scored as airflow_tracking targets (measured flow no longer tracks its setpoint either way).
 
 ### `lbnl-chiller`: LBNL simulated chiller plant (labelled faults)
 

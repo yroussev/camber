@@ -1,5 +1,5 @@
 {
-  "_comment": "LBNL FDD Fan-Power Unit (FPU; parallel PFPU / series SFPU) point -> CAMBER Role mapping. Faults are imposed in the SOUTH zone (column suffix _S): diffing each faulted run against PFPU_FaultFree shows the changed columns are RH_*_S / VAV_*_S, so the _S box is the device under test (the _E/_I/_W zones stay healthy; until 0.82.0 this mapping pointed at _W and scored a healthy box). The reheat valve is the controller DEMAND (RH_VLV_DM_S), not the measured position: the drift detector reads how far the controller has to open the valve, and a stuck or leaking valve's position is exactly what the controller cannot see. VAV_DMPR_S has no demand twin in this dataset, so it is the position. The reheat dT for the reheat-valve detector is VAV_DAT_S (leaving, warm) minus the AHU supply SA_TEMP (entering the box, cool). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
+  "_comment": "LBNL FDD Fan-Power Unit (FPU; parallel PFPU / series SFPU) point -> CAMBER Role mapping. Faults are imposed in the SOUTH zone (column suffix _S): diffing each faulted run against PFPU_FaultFree shows the changed columns are RH_*_S / VAV_*_S, so the _S box is the device under test (the _E/_I/_W zones stay healthy; until 0.82.0 this mapping pointed at _W and scored a healthy box). The reheat valve is the controller DEMAND (RH_VLV_DM_S), not the measured position: the drift detector reads how far the controller has to open the valve, and a stuck or leaking valve's position is exactly what the controller cannot see. VAV_DMPR_S has no demand twin in this dataset, so it is the position. The reheat dT for the reheat-valve detector is VAV_DAT_S (leaving, warm) minus the AHU supply SA_TEMP (entering the box, cool): SA_TEMP maps to mixed_air_temp, CAMBER's role for a terminal's entering primary air, and is a PROXY for the coil's entering air (in a parallel box the fan adds plenum air when it runs). The room setpoints RMCLGSPT_S / RMHTGSPT_S map to cool_sp / heat_sp (added in 0.86.0; without them unmet_setpoint_hours never evaluated). Timestamps are month-first and the catalog pins the format. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
   "aliases": {
     "VAV_DMPR_S": "damper",
     "VAV_PM_CFM_SP_S": "airflow_sp",
@@ -8,6 +8,8 @@
     "VAV_DAT_S": "supply_air_temp",
     "SA_TEMP": "mixed_air_temp",
     "SA_SP": "duct_static",
-    "RM_TEMP_S": "space_temp"
+    "RM_TEMP_S": "space_temp",
+    "RMCLGSPT_S": "cool_sp",
+    "RMHTGSPT_S": "heat_sp"
   }
 }
