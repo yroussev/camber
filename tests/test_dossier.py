@@ -100,6 +100,47 @@ def test_reference_bdg2_savings_matches_committed_baseline_exactly():
     assert f"{total:,} BDG2 meters" in ref["coverage"]
 
 
+def test_bdg2_savings_published_figures_match_the_baseline():
+    """Anti-rot: every figure of the published M&V savings paragraph in docs/VALIDATION.md is
+    recomputed from the committed savings baseline (the maintainer-approved text of #21)."""
+    base = json.load(open(_BDG2_SAVINGS_BASELINE))
+    md = " ".join(open(_VALIDATION_MD).read().split())
+    start = md.index("Representative result (2016 baseline, 2017 reporting")
+    para = md[start : md.index("### Monte Carlo coverage", start)]
+
+    def pct(x):
+        return f"{100 * x:.0f}"
+
+    e, c = "electricity", "chilledwater"
+    assert f"{base[e + '.n_eligible']:,} electricity and {base[c + '.n_eligible']:,}" in para
+    for k in ("forecast_g14", "forecast_exact", "forecast_g14_95"):
+        pe, pc = pct(base[f"{e}.placebo.{k}.uicf"]), pct(base[f"{c}.placebo.{k}.uicf"])
+        assert re.search(rf"\b{pe}% (/|of electricity and) {pc}%", para), k
+    methods = ("forecast_g14", "forecast_exact", "backcast_g14", "backcast_exact",
+               "standard_conditions_exact")  # fmt: skip
+    for meter, pts in ((e, 5), (c, 7)):
+        errs = [base[f"{meter}.inject10.{m}.abs_error_p50"] for m in methods]
+        assert all(round(100 * x) == pts for x in errs), meter
+    for meter, want in ((e, "82–84%"), (c, "68–75%")):
+        sig = [base[f"{meter}.inject10.{m}.significant_rate"] for m in methods]
+        assert f"{pct(min(sig))}–{pct(max(sig))}%" == want and want in para, meter
+    s20 = "steps.single_20"
+    assert f"finds {pct(base[f'{e}.{s20}.detect_rate'])}% of planted 20% steps" in para
+    assert f"({pct(base[f'{c}.{s20}.detect_rate'])}% on chilled water)" in para
+    assert base[f"{e}.{s20}.date_error_p50"] == base[f"{c}.{s20}.date_error_p50"] == 0.0
+    se, sc = (base[f"{m}.{s20}.spurious_per_series"] for m in (e, c))
+    sp = f"{se:.2f} / {sc:.2f}"
+    assert sp + " spurious" in para
+    assert (
+        base[f"{e}.static.full.recovery_error_p50"]
+        == base[f"{c}.static.full.recovery_error_p50"]
+        == 0.0
+    )
+    mid = max(base[f"{m}.static.mid.recovery_error_p50"] for m in (e, c))
+    assert round(100 * mid, 1) <= 0.3 and "within 0.3 points" in para
+    assert "B59" not in para and "lbnl-b59" not in para
+
+
 def test_reference_lbnl_matches_validation_doc():
     """Anti-rot: the cited LBNL pooled TPR must match the docs/VALIDATION.md table row."""
     md = open(_VALIDATION_MD).read()

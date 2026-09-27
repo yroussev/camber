@@ -319,6 +319,24 @@ neither direction is better. `camber validate` carries the placebo UICF of the f
 the cited track `bdg2_mv_savings`, and `tests/test_dossier.py` checks it exactly against the
 committed baseline.
 
+Representative result (2016 baseline, 2017 reporting; 1,023 electricity and 334 chilled-water
+meters). With nothing injected, the nominal-90% forecast band covers zero for 33% of electricity
+and 52% of chilled-water meters (G14 kernel; exact kernel 36% / 54%). At nominal 95% the G14
+figures are 38% / 57%, against the ~71% Touzani et al. found on 69 buildings screened for anomalous
+changes (Touzani, Granderson, Jump & Rebello, *Energy & Buildings* 193:216–225, 2019). BDG2 is not
+screened: a real building's year-to-year change lies outside a band that carries model error only.
+An injected 10% saving is recovered with a median absolute error of about 5 points (electricity)
+and 7 points (chilled water) by every method; the band tells it from zero in 82–84% / 68–75% of
+meters. `detect_step_changes` finds 47% of planted 20% steps on electricity (39% on chilled water)
+with a median date error of 0 days, and 0.27 / 0.33 spurious detections per series. The
+proportional static-factor adjustment restores the placebo saving exactly for a change at the start
+of the period, and to within 0.3 points for a mid-year change.
+
+Every G14 figure above carries the kernel's caveat: in simulation, with a correct model, the G14
+band under-covers (about 82–88% at nominal 90%) while `kernel="exact"` is on target (next section;
+[MANDV](MANDV.md#the-exact-uncertainty-kernel)). `tests/test_dossier.py` checks each percentage in
+this paragraph against the committed baseline.
+
 ### Monte Carlo coverage of every kernel
 
 `tests/test_mandv_mc_coverage.py` is the index. For every savings path it names the seeded Monte
@@ -343,8 +361,14 @@ The gates:
 - every exact-kernel cell at [0.85, 0.95];
 - the G14 cells at [0.78, 0.95], because the G14 kernel falls short of nominal on a year of daily
   data even when the model is right;
-- the conservative constructions (G14 standard conditions, the sequential chain's independence sum,
-  the adjusted backcast) at a floor.
+- the conservative constructions (G14 standard conditions, the sequential chain's independence sum)
+  at a floor.
+
+An adjusted backcast whose reporting period holds an indicator NRA refits the reporting model with
+the indicator (joint Σ, `p + 1`). Its exact band covers 86% / 88% / 86% at ρ = 0 / 0.4 / 0.8 (600
+runs each), unbiased, and is gated at [0.85, 0.95]. Before that change the band was the reporting
+model's fitted through the event, about 20× too wide; that band survives, with a caveat, only where
+nothing can be refitted, and a test pins it at a floor.
 
 ## Cross-validation vs an independent implementation
 

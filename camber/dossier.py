@@ -202,7 +202,9 @@ _REFERENCE: dict = {
         ),
         "boundary": (
             "a band carries model error only: a real building's year-to-year change is outside "
-            "it, so coverage is far below nominal; gated on regression, never on the nominal rate"
+            "it, so coverage is far below nominal; gated on regression, never on the nominal rate. "
+            "G14 kernel: in simulation it under-covers even with a correct model (about 82-88% at "
+            "nominal 90%), while kernel='exact' is on target"
         ),
         "provenance": "BDG2 (CC-BY-SA); reproduce via examples/bdg2/savings_benchmark.py",
     },
