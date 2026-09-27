@@ -2029,11 +2029,14 @@
     "FILL_VALUE",
     "GeoResult",
     "IsdStation",
+    "POWER_GRID_DEG",
+    "WeatherCacheMiss",
     "cached_bytes_transport",
     "cached_transport",
     "fetch_isd",
     "fetch_nasa_power",
     "geocode",
+    "isd_catalog_end",
     "isd_nearest_station",
     "isd_stations",
     "isd_transport",
@@ -2042,8 +2045,10 @@
     "nominatim_transport",
     "nominatim_url",
     "oat_reference",
+    "oat_reference_blended",
     "oat_reference_for",
-    "oat_reference_isd"
+    "oat_reference_isd",
+    "power_grid_cell"
   ],
   "camber.zones": [
     "ZONE_MEASURES",

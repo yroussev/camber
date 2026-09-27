@@ -63,11 +63,21 @@ __all__ = [
     "isd_nearest_station",
     "fetch_isd",
     "oat_reference_isd",
+    # provisional (0.90.1): ISD with a bias-corrected NASA POWER fallback
+    "POWER_GRID_DEG",
+    "WeatherCacheMiss",
+    "power_grid_cell",
+    "isd_catalog_end",
+    "oat_reference_blended",
 ]
 
 _BASE_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
 FILL_VALUE = -999.0  # NASA POWER hourly missing sentinel (values <= this are dropped to NaN)
 _PARAM_COL = {"T2M": "oat_f", "RH2M": "rh_pct"}  # NASA parameter -> output column
+# The POWER meteorology grid (MERRA-2 / GEOS-IT native): 0.5° latitude x 0.625° longitude, with
+# cell centres on multiples of the step. Provisional.
+POWER_GRID_DEG = (0.5, 0.625)
+_POWER_HOURLY_START = pd.Timestamp("2001-01-01")  # first day the hourly point API serves
 
 # OpenStreetMap Nominatim geocoding (free, keyless). Its usage policy requires a descriptive
 # User-Agent and asks for <= ~1 request/second + caching (compose with cached_transport).
@@ -96,11 +106,14 @@ def nasa_power_url(
     *,
     parameters: Sequence[str] = ("T2M",),
     community: str = "RE",
+    time_standard: str = "UTC",
 ) -> str:
     """Build the NASA POWER hourly point-query URL (pure — the testable half, no I/O).
 
     ``parameters`` are NASA POWER codes (``T2M`` = 2 m air temp °C, ``RH2M`` = 2 m rel. humidity %);
     ``start``/``end`` accept ``YYYYMMDD``/``YYYY-MM-DD`` strings or date/datetime objects.
+    ``time_standard`` is sent explicitly: the service's own default is ``LST`` (local *solar*
+    time), and this module parses the hour keys as UTC.
     """
     from urllib.parse import urlencode
 
@@ -113,9 +126,24 @@ def nasa_power_url(
             "start": _yyyymmdd(start),
             "end": _yyyymmdd(end),
             "format": "JSON",
+            "time-standard": time_standard,
         }
     )
     return f"{_BASE_URL}?{query}"
+
+
+def power_grid_cell(latitude, longitude) -> tuple[float, float]:
+    """The POWER meteorology grid-cell centre holding ``(latitude, longitude)``. Provisional.
+
+    The grid is regular (:data:`POWER_GRID_DEG`), so rounding to the nearest step multiple gives
+    a stable per-cell key: every point in one ~55 km cell maps to the same centre, and requesting
+    the centre reads the same cell the raw point would.
+    """
+    dlat, dlon = POWER_GRID_DEG
+    return (
+        round(round(float(latitude) / dlat) * dlat, 6),
+        round(round(float(longitude) / dlon) * dlon, 6),
+    )
 
 
 def nasa_power_transport(*, timeout: float = 30.0) -> Callable[[str], dict]:
@@ -139,12 +167,22 @@ def _default_clock() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
 
 
+class WeatherCacheMiss(LookupError):
+    """A cache-only (``offline=True``) read found nothing on disk. Provisional.
+
+    Raised instead of a silent live fetch, so an offline, reproducible re-run fails loudly rather
+    than reaching the network (or presenting a slow success).
+    """
+
+
 def cached_transport(
     inner: Callable[[str], dict],
     cache_dir: str,
     *,
     ttl: _dt.timedelta | None = None,
     clock: Callable[[], _dt.datetime] | None = None,
+    offline: bool = False,
+    should_cache: Callable[[dict], bool] | None = None,
 ) -> Callable[[str], dict]:
     """Wrap a transport with a dependency-light on-disk cache keyed by URL (composes with any).
 
@@ -155,6 +193,11 @@ def cached_transport(
     corrupt/torn cache file is treated as a miss (self-healing). ``clock`` (default UTC ``now``) is
     injectable so TTL expiry is deterministic in tests; it should return a tz-aware UTC datetime.
     stdlib ``json``/``hashlib``/``os`` only.
+
+    Provisional keywords: ``offline=True`` never calls ``inner`` -- a miss raises
+    :class:`WeatherCacheMiss` (cache-first, offline-reproducible reads); ``should_cache(payload)``
+    decides whether a fetched payload is written at all (the POWER fallback uses it to keep a
+    response whose trailing hours are still fill from being frozen into a cache-forever entry).
     """
     tick = clock or _default_clock
 
@@ -166,13 +209,19 @@ def cached_transport(
                 with open(path, encoding="utf-8") as f:
                     env = json.load(f)
                 fresh = (
-                    ttl is None or (tick() - _dt.datetime.fromisoformat(env["fetched_utc"])) < ttl
+                    ttl is None
+                    or offline  # an offline read serves whatever the cache holds
+                    or (tick() - _dt.datetime.fromisoformat(env["fetched_utc"])) < ttl
                 )
                 if fresh:
                     return env["payload"]
             except (json.JSONDecodeError, OSError, KeyError, ValueError):
                 pass  # corrupt / torn write / bad timestamp -> treat as a miss and re-fetch
+        if offline:
+            raise WeatherCacheMiss(f"offline: no cached response for {url}")
         payload = inner(url)
+        if should_cache is not None and not should_cache(payload):
+            return payload
         env = {"fetched_utc": tick().isoformat(), "url": url, "payload": payload}
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -222,6 +271,13 @@ def _fetch_one(latitude, longitude, start, end, *, parameters, transport, tz) ->
         param_block = payload["properties"]["parameter"]
     except (KeyError, TypeError) as e:
         raise ValueError("NASA POWER response missing properties.parameter") from e
+    header = payload.get("header") if isinstance(payload, dict) else None
+    standard = str((header or {}).get("time_standard") or "UTC").upper()
+    if standard != "UTC":  # e.g. a payload cached from a URL that let the service default to LST
+        raise ValueError(
+            f"NASA POWER response is in time standard {standard!r}, not UTC; the hour keys would "
+            "be read hours off (re-fetch with time-standard=UTC)"
+        )
 
     columns: dict = {}
     for p in parameters:
@@ -249,8 +305,16 @@ def fetch_nasa_power(
     transport: Callable[[str], dict] | None = None,
     tz: str = "UTC",
     timeout: float = 30.0,
+    snap_to_cell: bool = False,
 ) -> pd.DataFrame:
     """Fetch hourly NASA POWER weather as a DataFrame (``oat_f`` in °F; ``rh_pct`` when requested).
+
+    ``snap_to_cell=True`` (provisional) requests the POWER grid-cell centre
+    (:func:`power_grid_cell`) instead of the raw point: the service returns the same cell either
+    way, but the snapped URL -- hence a :func:`cached_transport` key -- is shared by every point
+    in the cell. The result's ``attrs`` carry ``power_cell`` (requested and cell coordinates) and
+    ``power_coverage_end`` (the last hour holding a real value: POWER lags real time by days to
+    weeks and returns its not-yet-available trailing hours as fill, which become NaN here).
 
     Multi-year windows work transparently: the request is split into calendar-year chunks (NASA
     POWER caps a single hourly request at ~1 year), one transport call per year, concatenated into a
@@ -261,13 +325,12 @@ def fetch_nasa_power(
     for a parameter across *every* chunk raises ``ValueError``. numpy/pandas + stdlib.
     """
     transport = transport or nasa_power_transport(timeout=timeout)
+    qlat, qlon = power_grid_cell(latitude, longitude) if snap_to_cell else (latitude, longitude)
     frames = []
     for cs, ce in _year_chunks(start, end):
         try:
             frames.append(
-                _fetch_one(
-                    latitude, longitude, cs, ce, parameters=parameters, transport=transport, tz=tz
-                )
+                _fetch_one(qlat, qlon, cs, ce, parameters=parameters, transport=transport, tz=tz)
             )
         except _NoData:
             continue  # a covered-but-empty year (e.g. running into an undefined range) — skip it
@@ -277,7 +340,18 @@ def fetch_nasa_power(
             f"({latitude}, {longitude}) {start}..{end}"
         )
     frame = pd.concat(frames)
-    return frame[~frame.index.duplicated(keep="first")].sort_index()
+    frame = frame[~frame.index.duplicated(keep="first")].sort_index()
+    valid = frame.dropna(how="all")
+    frame.attrs["power_coverage_end"] = str(valid.index.max()) if len(valid) else None
+    frame.attrs["power_cell"] = {
+        "requested_latitude": float(latitude),
+        "requested_longitude": float(longitude),
+        "latitude": float(qlat),
+        "longitude": float(qlon),
+        "snapped": bool(snap_to_cell),
+        "resolution_deg": list(POWER_GRID_DEG),
+    }
+    return frame
 
 
 def oat_reference(
@@ -461,6 +535,7 @@ def cached_bytes_transport(
     *,
     ttl: _dt.timedelta | None = None,
     clock: Callable[[], _dt.datetime] | None = None,
+    offline: bool = False,
 ) -> Callable[[str], bytes]:
     """On-disk cache for a **bytes** transport (the ISD analog of :func:`cached_transport`).
 
@@ -468,6 +543,7 @@ def cached_bytes_transport(
     then the payload), with an atomic ``os.replace``. Caching matters here: the station catalog is
     ~5 MB and per-year files repeat. Default cache-forever (``ttl=None``); ``clock`` (tz-aware UTC)
     is injectable so TTL expiry is deterministic in tests; a corrupt file self-heals.
+    ``offline=True`` (provisional) never calls ``inner``: a miss raises :class:`WeatherCacheMiss`.
     """
     tick = clock or _default_clock
 
@@ -475,22 +551,58 @@ def cached_bytes_transport(
         os.makedirs(cache_dir, exist_ok=True)
         path = os.path.join(cache_dir, hashlib.sha256(url.encode("utf-8")).hexdigest() + ".bin")
         if os.path.exists(path):
+            hit = None
             try:
                 with open(path, "rb") as f:
                     header, _, payload = f.read().partition(b"\n")
-                stamp = _dt.datetime.fromisoformat(header.decode("ascii"))
-                if ttl is None or (tick() - stamp) < ttl:
-                    return payload
+                when, _, status = header.decode("ascii").partition("\t")
+                stamp = _dt.datetime.fromisoformat(when)
+                if ttl is None or offline or (tick() - stamp) < ttl:
+                    hit = int(status) if status else 0
             except (OSError, ValueError):
                 pass  # corrupt / torn / bad timestamp -> treat as a miss and re-fetch
-        payload = inner(url)
-        tmp = path + ".tmp"
-        with open(tmp, "wb") as f:
-            f.write(tick().isoformat().encode("ascii") + b"\n" + payload)
-        os.replace(tmp, path)  # atomic publish (mirror cached_transport / store.facilities._write)
+            if hit:  # a remembered "not found": replay it, so an offline re-run agrees
+                raise _http_not_found(url, hit)
+            if hit == 0:
+                return payload
+        if offline:
+            raise WeatherCacheMiss(f"offline: no cached response for {url}")
+        try:
+            payload = inner(url)
+        except Exception as e:
+            code = _not_found_code(e)
+            if code is None:
+                raise
+            _write_atomic(path, f"{tick().isoformat()}\t{code}".encode("ascii") + b"\n")
+            raise
+        _write_atomic(path, tick().isoformat().encode("ascii") + b"\n" + payload)
         return payload
 
     return transport
+
+
+def _write_atomic(path: str, data: bytes) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+    os.replace(tmp, path)  # atomic publish (mirror cached_transport / store.facilities._write)
+
+
+def _not_found_code(exc: BaseException) -> int | None:
+    """404/410 when ``exc`` says "no such file" (HTTP, or a local-file transport), else None."""
+    import urllib.error
+
+    if isinstance(exc, urllib.error.HTTPError) and exc.code in (404, 410):
+        return int(exc.code)
+    if isinstance(exc, FileNotFoundError):
+        return 404
+    return None
+
+
+def _http_not_found(url: str, code: int = 404):
+    import urllib.error
+
+    return urllib.error.HTTPError(url, code, "Not Found (cached)", None, None)  # type: ignore[arg-type]
 
 
 def _haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -556,9 +668,39 @@ def isd_nearest_station(
     s, e = _yyyymmdd(start), _yyyymmdd(end)
     covering = [st for st in cat if st.begin and st.end and st.begin <= s and st.end >= e]
     if not covering:
-        raise ValueError(f"no ISD station covers ({latitude}, {longitude}) {start}..{end}")
+        last = isd_catalog_end(cat)
+        hint = ""
+        if last and e > last:
+            _warn_stale(last, e)
+            hint = (
+                f"; the station catalog ends {last}, so no station can cover a later window "
+                "(oat_reference_isd(..., fallback='nasa_power') fills it from NASA POWER)"
+            )
+        raise ValueError(f"no ISD station covers ({latitude}, {longitude}) {start}..{end}{hint}")
     return min(
         covering, key=lambda st: _haversine_km(latitude, longitude, st.latitude, st.longitude)
+    )
+
+
+def isd_catalog_end(stations) -> str | None:
+    """The latest ``end`` (``YYYYMMDD``) any station in the catalog reports. Provisional.
+
+    A live catalog ends within days of today; a much older value means the catalog (or the cached
+    copy of it) is stale, and every window after it has no "covering" station.
+    """
+    ends = [st.end for st in stations if st.end]
+    return max(ends) if ends else None
+
+
+def _warn_stale(last: str, wanted: str) -> None:
+    import warnings
+
+    warnings.warn(
+        f"the ISD station catalog looks stale: its latest station end date is {last}, before the "
+        f"requested {wanted}. Refresh a cached catalog, or fall back to another source for the "
+        "later dates",
+        UserWarning,
+        stacklevel=3,
     )
 
 
@@ -598,6 +740,7 @@ def fetch_isd(
     tz: str = "UTC",
     timeout: float = 30.0,
     dew_point: bool = False,
+    on_missing_year: str = "skip",
 ) -> pd.DataFrame:
     """Fetch hourly NOAA ISD-Lite data for a station (``oat_f`` °F; ``dewpt_f`` when requested).
 
@@ -605,12 +748,27 @@ def fetch_isd(
     sorted index and trimmed to the window. ``-9999`` becomes NaN; air temp (tenths of °C) becomes
     °F. ``tz`` is the SAME switch as the NASA path: ``"UTC"`` (tz-aware) or a site IANA zone (naive
     local). Raises ``ValueError`` if no year returned data. stdlib ``gzip``/``urllib`` + pandas.
+
+    A year whose file does not exist (HTTP 404/410 -- it happens even inside the catalog's
+    coverage) no longer aborts the fetch: it is skipped with a warning and listed in
+    ``frame.attrs["isd_missing_years"]``. ``on_missing_year="raise"`` restores the old abort.
     """
+    import warnings
+
+    if on_missing_year not in ("skip", "raise"):
+        raise ValueError("on_missing_year must be 'skip' or 'raise'")
     transport = transport or isd_transport(timeout=timeout)
     s, e = pd.Timestamp(_yyyymmdd(start)), pd.Timestamp(_yyyymmdd(end)) + pd.Timedelta(hours=23)
     frames = []
+    missing: list[int] = []
     for year in range(s.year, e.year + 1):
-        raw = transport(f"{_ISD_DATA_BASE}/{year}/{usaf}-{wban}-{year}.gz")
+        try:
+            raw = transport(f"{_ISD_DATA_BASE}/{year}/{usaf}-{wban}-{year}.gz")
+        except Exception as exc:
+            if on_missing_year == "raise" or _not_found_code(exc) is None:
+                raise
+            missing.append(year)
+            continue
         df = _parse_isd_lite(
             raw, "UTC", dew_point=dew_point
         )  # parse+filter in UTC, tz-switch after
@@ -619,12 +777,21 @@ def fetch_isd(
                 df[(df.index >= s.tz_localize("UTC")) & (df.index <= e.tz_localize("UTC"))]
             )
     frames = [f for f in frames if not f.empty]
+    gone = f" (no file for {', '.join(map(str, missing))})" if missing else ""
     if not frames:
-        raise ValueError(f"no ISD data for {usaf}-{wban} {start}..{end}")
+        raise ValueError(f"no ISD data for {usaf}-{wban} {start}..{end}{gone}")
+    if missing:
+        warnings.warn(
+            f"ISD station {usaf}-{wban} has no file for {', '.join(map(str, missing))}; those "
+            "years are missing from the series",
+            UserWarning,
+            stacklevel=2,
+        )
     frame = pd.concat(frames)
     frame = frame[~frame.index.duplicated(keep="first")].sort_index()
     if tz.upper() != "UTC":  # apply the naive-local switch after the UTC-based windowing
         frame.index = frame.index.tz_convert(tz).tz_localize(None)
+    frame.attrs["isd_missing_years"] = missing
     return frame
 
 
@@ -638,6 +805,8 @@ def oat_reference_isd(
     catalog_transport: Callable[[str], bytes] | None = None,
     tz: str = "UTC",
     timeout: float = 30.0,
+    fallback: str | None = None,
+    power_transport: Callable[[str], dict] | None = None,
 ) -> pd.Series:
     """Find the nearest covering ISD station to a lat/lon, then fetch its °F OAT reference series.
 
@@ -645,7 +814,26 @@ def oat_reference_isd(
     (NaNs dropped) with the resolved station on ``series.attrs["isd_station"]``. Two transport seams
     (``catalog_transport`` for the station list, ``transport`` for the hourly data), both
     offline-injectable. ``tz`` is explicit (the same load-bearing switch as :func:`oat_reference`).
+
+    ``fallback="nasa_power"`` (provisional) delegates to :func:`oat_reference_blended`: missing
+    station years are filled from the next-nearest station, and dates no station serves (e.g.
+    after the catalog's end) from bias-corrected NASA POWER (``power_transport``), with the source
+    of every date recorded in ``series.attrs["weather_provenance"]``.
     """
+    if fallback is not None:
+        if fallback != "nasa_power":
+            raise ValueError("fallback must be None or 'nasa_power'")
+        return oat_reference_blended(
+            latitude,
+            longitude,
+            start,
+            end,
+            transport=transport,
+            catalog_transport=catalog_transport,
+            power_transport=power_transport,
+            tz=tz,
+            timeout=timeout,
+        )
     station = isd_nearest_station(
         latitude, longitude, start, end, transport=catalog_transport, timeout=timeout
     )
@@ -655,3 +843,378 @@ def oat_reference_isd(
     series = df["oat_f"].dropna()
     series.attrs["isd_station"] = station.as_dict()
     return series
+
+
+# --------------------------------------------------------------------------- ISD + NASA POWER blend
+#
+# Provisional (0.90.1). ISD is station-precise but gappy, and its catalog can lag real time by
+# months; NASA POWER is gap-free and global but a ~55 km reanalysis cell that lags real time by days
+# to weeks. The blend takes the station where it exists and fills the rest, correcting POWER's
+# offset against the station over the dates both cover, and says which dates came from where.
+
+_SEASON = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM"}
+_SEASON.update({6: "JJA", 7: "JJA", 8: "JJA", 9: "SON", 10: "SON", 11: "SON"})
+_MIN_PAIRS_MONTH = 240  # paired hours (~10 days) for a month to get its own offset
+_MIN_PAIRS_SEASON = 240  # ... else its season's offset
+_MIN_PAIRS_GLOBAL = 168  # ... else one offset from >= 7 days of overlap; below that, no correction
+
+
+def _power_complete(payload) -> bool:
+    """False when any parameter's last hour is still fill: POWER has not published it yet."""
+    try:
+        block = payload["properties"]["parameter"]
+    except (KeyError, TypeError):
+        return False
+    for raw in block.values():
+        if raw and float(raw[max(raw)]) <= FILL_VALUE:
+            return False
+    return True
+
+
+def _bias_offsets(station: pd.Series, power: pd.Series) -> dict:
+    """Monthly mean offset (station - POWER, °F) over the hours both carry, with fallbacks.
+
+    A calendar month with at least ``_MIN_PAIRS_MONTH`` paired hours (pooled across years) gets its
+    own mean offset; otherwise its meteorological season's (``_MIN_PAIRS_SEASON``); otherwise one
+    offset over all pairs (``_MIN_PAIRS_GLOBAL``); otherwise none (0, ``basis="none"``). The mean,
+    not the median: an additive correction that preserves the station's mean is what degree-day and
+    M&V consumers integrate.
+    """
+    d = (station - power.reindex(station.index)).dropna()
+    n = len(d)
+    months = pd.Series(d.index.month, index=d.index)
+    by_month = d.groupby(months).agg(["mean", "size"])
+    by_season = d.groupby(months.map(_SEASON)).agg(["mean", "size"])
+    overall = float(d.mean()) if n >= _MIN_PAIRS_GLOBAL else None
+    offsets: dict = {}
+    basis: dict = {}
+    pairs: dict = {}
+    for m in range(1, 13):
+        cnt = int(by_month["size"].get(m, 0))
+        pairs[m] = cnt
+        sea = _SEASON[m]
+        if cnt >= _MIN_PAIRS_MONTH:
+            offsets[m], basis[m] = float(by_month["mean"][m]), "month"
+        elif int(by_season["size"].get(sea, 0)) >= _MIN_PAIRS_SEASON:
+            offsets[m], basis[m] = float(by_season["mean"][sea]), "season"
+        elif overall is not None:
+            offsets[m], basis[m] = overall, "global"
+        else:
+            offsets[m], basis[m] = 0.0, "none"
+    applied = months.map(offsets) if n else months
+    rmse_before = float((d**2).mean() ** 0.5) if n else None
+    rmse_after = float(((d - applied) ** 2).mean() ** 0.5) if n else None
+    return {
+        "method": "monthly_mean_offset",
+        "units": "degF",
+        "offsets_f": {m: round(v, 3) for m, v in offsets.items()},
+        "basis": basis,
+        "n_pairs": pairs,
+        "n_pairs_total": n,
+        "overlap": [str(d.index.min()), str(d.index.max())] if n else None,
+        "min_pairs": {
+            "month": _MIN_PAIRS_MONTH,
+            "season": _MIN_PAIRS_SEASON,
+            "global": _MIN_PAIRS_GLOBAL,
+        },
+        "rmse_before_f": None if rmse_before is None else round(rmse_before, 3),
+        "rmse_after_f": None if rmse_after is None else round(rmse_after, 3),
+    }
+
+
+def _long_gaps(values: pd.Series, gap_hours: int) -> pd.Series:
+    """Hours inside a run of at least ``gap_hours`` consecutive missing hours."""
+    miss = values.isna()
+    run = (miss != miss.shift()).cumsum()
+    return miss & (miss.groupby(run).transform("size") >= gap_hours)
+
+
+def _segments(label: pd.Series, tz: str) -> list[dict]:
+    """Runs of one source label -> ``[{source, start, end, hours}]`` in the output clock."""
+    lab = label.ffill().bfill()
+    out: list[dict] = []
+    if lab.empty:
+        return out
+    run = (lab != lab.shift()).cumsum()
+    for _, grp in lab.groupby(run):
+        a, b = grp.index[0], grp.index[-1]
+        if tz.upper() != "UTC":
+            a, b = a.tz_convert(tz).tz_localize(None), b.tz_convert(tz).tz_localize(None)
+        out.append(
+            {"source": str(grp.iloc[0]), "start": str(a), "end": str(b), "hours": int(len(grp))}
+        )
+    return out
+
+
+def oat_reference_blended(
+    latitude,
+    longitude,
+    start,
+    end,
+    *,
+    tz: str = "UTC",
+    transport: Callable[[str], bytes] | None = None,
+    catalog_transport: Callable[[str], bytes] | None = None,
+    stations: list[IsdStation] | None = None,
+    power_transport: Callable[[str], dict] | None = None,
+    max_stations: int = 3,
+    max_distance_km: float = 100.0,
+    gap_hours: int = 24,
+    overlap_days: int = 365,
+    stale_after_days: int = 60,
+    cache_dir: str | None = None,
+    offline: bool = False,
+    clock: Callable[[], _dt.datetime] | None = None,
+    timeout: float = 30.0,
+) -> pd.Series:
+    """°F OAT for a window: nearest ISD station, gaps from the next ones, the rest from POWER.
+
+    Provisional (0.90.1). Returns the same ``oat_f`` Series contract as :func:`oat_reference_isd`
+    (NaNs dropped; ``tz`` the same UTC / naive-local switch) and never fails just because the ISD
+    catalog ends before the window or one station-year file is missing:
+
+    1. **Stations.** Up to ``max_stations`` ISD stations within ``max_distance_km`` whose record
+       overlaps the window, nearest first. A station still reporting when the catalog was built
+       (its end within 30 days of the catalog's latest end) is tried past its catalog end date, in
+       case the catalog is stale and the files are not. The nearest station fills the window; each
+       later one fills only the runs of at least ``gap_hours`` missing hours its predecessors left
+       (a missing year file, a long outage). Shorter ISD gaps stay missing, as in
+       :func:`oat_reference_isd`. Station-to-station offsets are *not* corrected.
+    2. **NASA POWER.** Runs still missing are filled from POWER at the snapped grid cell
+       (:func:`power_grid_cell`), bias-corrected against the reference station (the nearest one
+       that returned data) by a **monthly mean offset** (station − POWER) estimated over the hours
+       both carry in ``[min(start, end − overlap_days), end]``: a month with >= 240 paired hours
+       gets its own offset, else its season's (>= 240), else one overall offset (>= 168 pairs),
+       else none. POWER's not-yet-published trailing hours (fill) stay missing.
+    3. **Provenance.** ``series.attrs["weather_provenance"]`` records the stations tried (distance,
+       missing years, hours filled), the per-source date ``segments``, the POWER cell and coverage
+       end, the ``bias_correction`` (offsets, basis, pair counts, RMSE before/after) and the
+       ``caveats``, which are also on ``series.attrs["caveats"]``. A UserWarning summarises any
+       fallback, and a catalog whose latest end is more than ``stale_after_days`` before today is
+       warned about as stale.
+
+    ``cache_dir`` wraps the transports in :func:`cached_bytes_transport` / :func:`cached_transport`
+    (a POWER response with a fill tail is not cached; a missing ISD file is remembered);
+    ``offline=True`` reads only that cache and raises :class:`WeatherCacheMiss` on a miss.
+    ``clock`` (tz-aware UTC ``now``) is injectable for tests.
+    """
+    import warnings
+
+    now = (clock or _default_clock)()
+    today = pd.Timestamp(now.astimezone(_dt.timezone.utc).date())
+    s = pd.Timestamp(_yyyymmdd(start))
+    e = pd.Timestamp(_yyyymmdd(end))
+    if e < s:
+        raise ValueError(f"end {end!r} is before start {start!r}")
+
+    t_isd = transport or isd_transport(timeout=timeout)
+    t_cat = catalog_transport or t_isd
+    t_pow = power_transport or nasa_power_transport(timeout=timeout)
+    if cache_dir is not None:
+        t_isd = cached_bytes_transport(t_isd, os.path.join(cache_dir, "isd"), offline=offline)
+        t_cat = cached_bytes_transport(
+            t_cat, os.path.join(cache_dir, "isd"), ttl=_dt.timedelta(days=7), offline=offline
+        )
+        t_pow = cached_transport(
+            t_pow, os.path.join(cache_dir, "power"), offline=offline, should_cache=_power_complete
+        )
+
+    cat = stations if stations is not None else isd_stations(transport=t_cat, timeout=timeout)
+    last = isd_catalog_end(cat)
+    caveats: list[str] = []
+    stale = last is not None and pd.Timestamp(last) < today - pd.Timedelta(days=stale_after_days)
+    if stale or (last is not None and pd.Timestamp(last) < e):
+        _warn_stale(str(last), e.strftime("%Y%m%d") if not stale else today.strftime("%Y%m%d"))
+        caveats.append(f"The ISD station catalog looks stale (latest station end {last}).")
+
+    current = pd.Timestamp(last) - pd.Timedelta(days=30) if last else None
+
+    def _eff_end(st: IsdStation) -> pd.Timestamp:
+        end_ts = pd.Timestamp(st.end)
+        return e if current is not None and end_ts >= current else end_ts
+
+    cands = [
+        st
+        for st in cat
+        if st.begin
+        and st.end
+        and pd.Timestamp(st.begin) <= e
+        and _eff_end(st) >= s
+        and _haversine_km(latitude, longitude, st.latitude, st.longitude) <= max_distance_km
+    ]
+    cands.sort(key=lambda st: _haversine_km(latitude, longitude, st.latitude, st.longitude))
+    cands = cands[:max_stations]
+
+    grid = pd.date_range(s, e + pd.Timedelta(hours=23), freq="h", tz="UTC")
+    values = pd.Series(float("nan"), index=grid)
+    label = pd.Series(None, index=grid, dtype=object)
+    tried: list[dict] = []
+    ref: IsdStation | None = None
+    ref_series: pd.Series | None = None
+    for st in cands:
+        need = _long_gaps(values, gap_hours)
+        if not need.any():
+            break
+        hours = need[need].index
+        rec: dict = {
+            **st.as_dict(),
+            "distance_km": round(_haversine_km(latitude, longitude, st.latitude, st.longitude), 1),
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            try:
+                df = fetch_isd(st.usaf, st.wban, hours[0], hours[-1], transport=t_isd, tz="UTC")
+            except ValueError as exc:
+                rec.update(hours_filled=0, missing_years=None, error=str(exc))
+                tried.append(rec)
+                continue
+        oat = df["oat_f"]
+        fill = need & oat.reindex(grid).notna()
+        values[fill] = oat.reindex(grid)[fill]
+        label[fill] = f"isd:{st.usaf}-{st.wban}"
+        rec.update(hours_filled=int(fill.sum()), missing_years=df.attrs.get("isd_missing_years"))
+        tried.append(rec)
+        if ref is None:
+            ref, ref_series = st, oat
+
+    for rec in tried:
+        if rec.get("missing_years"):
+            caveats.append(
+                f"ISD station {rec['usaf']}-{rec['wban']} has no data file for "
+                f"{', '.join(map(str, rec['missing_years']))}; those dates are filled from the "
+                "next source."
+            )
+    for rec in tried:
+        if rec.get("error"):
+            caveats.append(
+                f"ISD station {rec['usaf']}-{rec['wban']} ({rec['distance_km']} km) returned no "
+                "data for the dates it was asked for."
+            )
+    used = [r for r in tried if r.get("hours_filled")]
+    if len(used) > 1:
+        names = ", ".join(f"{r['usaf']}-{r['wban']} ({r['distance_km']} km)" for r in used[1:])
+        caveats.append(
+            f"Gaps of the nearest station are filled from station(s) {names}, uncorrected for any "
+            "station-to-station offset."
+        )
+
+    power_info: dict | None = None
+    bias: dict | None = None
+    need = _long_gaps(values, gap_hours)
+    if need.any():
+        ext = min(s, e - pd.Timedelta(days=overlap_days))
+        p_start = max(
+            min(ext, need[need].index[0].tz_localize(None).normalize()), _POWER_HOURLY_START
+        )
+        p_end = min(e, today)
+        power_oat = None
+        if p_end >= p_start:
+            try:
+                pw = fetch_nasa_power(
+                    latitude,
+                    longitude,
+                    p_start,
+                    p_end,
+                    transport=t_pow,
+                    tz="UTC",
+                    snap_to_cell=True,
+                )
+                power_oat = pw["oat_f"]
+                power_info = {
+                    "cell": pw.attrs.get("power_cell"),
+                    "coverage_end": pw.attrs.get("power_coverage_end"),
+                    "requested": [str(p_start.date()), str(p_end.date())],
+                }
+            except _NoData:
+                power_oat = None
+        if power_oat is not None:
+            if ref is not None and ref_series is not None:
+                calib = ref_series
+                if ext < s:  # the reference station before the window, for the overlap
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        try:
+                            pre = fetch_isd(
+                                ref.usaf,
+                                ref.wban,
+                                ext,
+                                s - pd.Timedelta(days=1),
+                                transport=t_isd,
+                                tz="UTC",
+                            )["oat_f"]
+                            calib = pd.concat([pre, ref_series]).sort_index()
+                            calib = calib[~calib.index.duplicated(keep="first")]
+                        except ValueError:
+                            pass
+                bias = _bias_offsets(calib, power_oat)
+                bias["reference_station"] = f"{ref.usaf}-{ref.wban}"
+            else:
+                bias = _bias_offsets(
+                    pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC")), power_oat
+                )
+                bias["reference_station"] = None
+            off = pd.Series(power_oat.index.month, index=power_oat.index).map(bias["offsets_f"])
+            corrected = (power_oat + off).reindex(grid)
+            fill = need & corrected.notna()
+            values[fill] = corrected[fill]
+            label[fill] = "nasa_power"
+
+    gone = _long_gaps(values, gap_hours)
+    label[gone] = "missing"
+    n_power = int((label == "nasa_power").sum())
+    n_missing = int(gone.sum())
+    segs = _segments(label, tz)
+    if n_power:
+        dates = "; ".join(
+            f"{g['start'][:10]}..{g['end'][:10]}" for g in segs if g["source"] == "nasa_power"
+        )
+        assert bias is not None
+        if bias["n_pairs_total"] == 0 or all(b == "none" for b in bias["basis"].values()):
+            how = (
+                "UNCORRECTED: too little station overlap to estimate an offset "
+                f"({bias['n_pairs_total']} paired hours; {_MIN_PAIRS_GLOBAL} needed)"
+            )
+        else:
+            offs = sorted(set(bias["offsets_f"].values()))
+            how = (
+                f"bias-corrected against station {bias['reference_station']} by a monthly mean "
+                f"offset ({min(offs):+.1f} to {max(offs):+.1f} °F; "
+                f"{bias['n_pairs_total']} paired hours)"
+            )
+        cell = (power_info or {}).get("cell") or {}
+        caveats.append(
+            f"{n_power} h ({100 * n_power / len(grid):.0f}% of the window) come from NASA POWER "
+            f"reanalysis (grid cell {cell.get('latitude')}, {cell.get('longitude')}, ~55 km), not "
+            f"a station: {dates}; {how}."
+        )
+    if n_missing:
+        cov = (power_info or {}).get("coverage_end")
+        caveats.append(
+            f"{n_missing} h of the window have no source (ISD and NASA POWER both missing"
+            + (f"; POWER is published through {cov}" if cov else "")
+            + ")."
+        )
+    if caveats:
+        warnings.warn(" ".join(caveats), UserWarning, stacklevel=2)
+
+    out = values.dropna()
+    if tz.upper() != "UTC":
+        out.index = out.index.tz_convert(tz).tz_localize(None)
+    out.name = "oat_f"
+    out.attrs["weather_provenance"] = {
+        "method": "isd_with_nasa_power_fallback",
+        "window": [str(s.date()), str(e.date())],
+        "tz": tz,
+        "catalog_end": last,
+        "catalog_stale": bool(stale),
+        "stations": tried,
+        "segments": segs,
+        "hours_by_source": {k: int(v) for k, v in label.value_counts().items()},
+        "power": power_info,
+        "bias_correction": bias,
+        "caveats": caveats,
+    }
+    out.attrs["caveats"] = list(caveats)
+    if ref is not None:
+        out.attrs["isd_station"] = ref.as_dict()
+    return out

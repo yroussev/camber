@@ -32,6 +32,8 @@ PY
 | `isd_nearest_station(lat, lon, start, end, *, transport, stations, ...)` | `IsdStation` | nearest ISD station covering the window |
 | `isd_stations(*, transport, timeout)` · `fetch_isd(usaf, wban, start, end, *, ...)` | `list[IsdStation]` · `DataFrame` | the station catalog · one station's hourly °F |
 | `isd_transport(*, timeout)` · `cached_bytes_transport(inner, cache_dir, *, ttl, clock)` | `callable(url) -> bytes` | the ISD default transport + its on-disk cache |
+| `oat_reference_blended(lat, lon, start, end, *, tz, transport, stations, power_transport, ...)` | `Series` | *provisional* — ISD, gaps from the next station, the rest from bias-corrected NASA POWER ([below](#isd-with-a-nasa-power-fallback-provisional)) |
+| `power_grid_cell(lat, lon)` · `isd_catalog_end(stations)` | `(lat, lon)` · `str` | *provisional* — the POWER cell centre · the catalog's latest station end date |
 
 `start`/`end` accept `YYYYMMDD` / `YYYY-MM-DD` strings or date/datetime objects. `parameters` are NASA
 POWER codes (`T2M` = 2 m air temperature, `RH2M` = 2 m relative humidity). `GeoResult` and `IsdStation`
@@ -76,7 +78,10 @@ inner join on shared timestamps — which pandas refuses across a tz-aware/naive
   tz is dropped, giving **naive local civil time** that inner-joins directly to a BAS trend index.
 
 NASA's LST option is *solar* time, not clock time, so it would not line up with a DST-observing BAS
-export; this adapter deliberately does not use it. Getting this wrong is the one way to silently
+export; this adapter deliberately does not use it. LST is the service's *default*, so the URL sends
+`time-standard=UTC` explicitly (before 0.90.1 it did not, and the hour keys it parsed as UTC were
+local solar time -- about six hours off at a US Central site), and a payload whose header says
+anything but UTC is refused. Getting this wrong is the one way to silently
 corrupt a drift bias or a normalization, so it is an explicit knob, tested for the exact hour mapping.
 
 ## Two things it drops into
@@ -158,3 +163,39 @@ NASA POWER for global coverage, a gap-free series, or anywhere without a station
 - **Caching.** ISD uses a **bytes** transport (gzipped/CSV, not JSON), so it has its own cache
   decorator — `cached_bytes_transport(isd_transport(), cache_dir)`. Cache the 5 MB catalog, or resolve
   the station list once with `isd_stations()` and pass it to `isd_nearest_station(..., stations=…)`.
+- **A missing year no longer aborts.** A station-year file that does not exist (HTTP 404, which
+  happens even inside the catalog's coverage) is skipped with a warning and listed in
+  `frame.attrs["isd_missing_years"]`; `fetch_isd(..., on_missing_year="raise")` restores the abort.
+  `cached_bytes_transport` remembers a 404, so an offline re-run sees the same gap.
+- **A stale catalog is named.** When no station covers a window that ends after the catalog's latest
+  station end date, `isd_nearest_station` warns that the catalog looks stale and says so in its error.
+
+## ISD with a NASA POWER fallback (provisional)
+
+`oat_reference_blended` (or `oat_reference_isd(..., fallback="nasa_power")`) returns the same `oat_f`
+Series, but does not fail when the ISD catalog ends before your window or one station-year is missing:
+
+1. **Stations.** Up to `max_stations` (3) stations within `max_distance_km` (100 km), nearest first.
+   A station still reporting when the catalog was built is tried past its catalog end date, in case
+   only the catalog is stale. The nearest station fills the window; each later one fills only runs
+   of at least `gap_hours` (24) missing hours. Station-to-station offsets are not corrected.
+2. **NASA POWER** fills what is still missing, read at the snapped grid cell (`power_grid_cell`: the
+   0.5° × 0.625° cell centre, so every point in a cell shares one URL and one cache entry). POWER lags
+   real time by days to weeks and returns not-yet-published trailing hours as fill: those stay
+   *missing*, never data, and the last real hour is reported as the coverage end.
+3. **Bias correction.** POWER is corrected against the reference station (the nearest one with data)
+   by a **monthly mean offset**, station − POWER, over the hours both carry in
+   `[min(start, end − overlap_days), end]` (`overlap_days` = 365). A calendar month with at least 240
+   paired hours (~10 days, pooled across years) gets its own offset; otherwise its meteorological
+   season's (DJF/MAM/JJA/SON, at least 240 pairs); otherwise one offset over all pairs (at least 168);
+   otherwise none, and the caveat says **UNCORRECTED**. The RMSE of the paired hours before and after
+   the correction is recorded.
+4. **Provenance.** `series.attrs["weather_provenance"]` holds the stations tried (distance, missing
+   years, hours filled), the per-source date `segments` (`isd:<usaf>-<wban>`, `nasa_power`,
+   `missing`), the POWER cell and coverage end, the `bias_correction` (offsets, basis per month, pair
+   counts, RMSE) and the `caveats`, which are also on `series.attrs["caveats"]`. Any fallback raises one
+   `UserWarning` with the same text.
+
+`cache_dir=` caches both sources (a POWER response that still ends in fill is not cached, so it is
+re-fetched once published); `offline=True` then reads only the cache and raises `WeatherCacheMiss` on a
+miss, so a re-run is reproducible without the network.
