@@ -27,6 +27,8 @@ def load_csv(
     decimal: str | None = None,
     thousands: str | None = None,
     dayfirst: bool | None = None,
+    timezone: str | None = None,
+    strict_timezone: bool = False,
 ):
     """Load a trend CSV into a DataFrame indexed by a parsed DatetimeIndex.
 
@@ -46,6 +48,12 @@ def load_csv(
         format/decimal conventions — see :mod:`camber.ingest.profiles`. Individual keyword args
         below override the profile. Defaults resolve to the ``generic`` profile (fully backward
         compatible).
+    timezone : str, optional
+        The site's IANA zone (provisional, 0.90.1). Timestamps that name an instant (``Z`` /
+        ``+hh:mm`` offsets, epoch numbers) are converted to its wall clock, then made naive; the
+        DST fall-back repeat is collapsed by ``dedupe``. Without it such stamps keep the clock as
+        written and a :class:`~camber.tsparse.TimezoneWarning` is issued (``strict_timezone=True``
+        refuses instead). See :func:`camber.tsparse.parse_timestamps`.
     """
     from .coerce import coerce_numeric
     from .ingest.profiles import get_profile
@@ -75,7 +83,16 @@ def load_csv(
     # Parse timestamps leniently via the shared multi-format parser: unparseable rows become NaT and
     # are dropped (one bad row must not sink the whole load). If the file had rows but NONE parsed,
     # that's a real error, not empty data.
-    ts = pd.Series(parse_timestamps(df[timestamp_col], formats=fmts, dayfirst=dfst), index=df.index)
+    ts = pd.Series(
+        parse_timestamps(
+            df[timestamp_col],
+            formats=fmts,
+            dayfirst=dfst,
+            timezone=timezone,
+            strict_timezone=strict_timezone,
+        ),
+        index=df.index,
+    )
     n_rows = len(ts)
     values = df.drop(columns=[timestamp_col])
     # Value columns are numeric by contract; coerce (thousands/decimal/null-token aware) so a stray

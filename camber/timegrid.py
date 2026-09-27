@@ -46,11 +46,13 @@ def regularize(obj, *, dedupe: str = "first", sort: bool = True):
 
     Sorts the index and collapses duplicate timestamps — the DST fall-back hour and concatenated
     overlapping exports. ``dedupe``: ``"first"`` / ``"last"`` keep one row; ``"mean"`` averages the
-    duplicates (numeric); ``None`` leaves duplicates in place.
+    duplicates (numeric); ``None`` leaves duplicates in place. The sort is stable, so ``"first"``
+    is the first row *in the input's order* -- for a UTC export converted to local time, the
+    fall-back hour's earlier instant (daylight time).
     """
     if dedupe not in ("first", "last", "mean", None):
         raise ValueError("dedupe must be 'first', 'last', 'mean', or None")
-    out = obj.sort_index() if sort else obj
+    out = obj.sort_index(kind="stable") if sort else obj
     idx = pd.DatetimeIndex(out.index)
     if dedupe is None or not idx.has_duplicates:
         return out

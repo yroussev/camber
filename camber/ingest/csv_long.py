@@ -28,8 +28,13 @@ class LongCsvAdapter:
         value_col: str = "value",
         unit_col: str | None = "unit",
         profile=None,
+        timezone: str | None = None,
+        strict_timezone: bool = False,
     ):
+        """``timezone``: the site's IANA zone (provisional, 0.90.1): offset-bearing / epoch
+        stamps are converted to its wall clock (see :func:`camber.tsparse.parse_timestamps`)."""
         self.path = path
+        self.timezone, self.strict_timezone = timezone, strict_timezone
         self.ts_col, self.point_col, self.value_col, self.unit_col = (
             ts_col,
             point_col,
@@ -48,7 +53,11 @@ class LongCsvAdapter:
             if col not in df.columns:
                 raise ValueError(f"column {col!r} not in {list(df.columns)}")
         idx = parse_timestamps(
-            df[self.ts_col], formats=[p.ts_format] if p.ts_format else None, dayfirst=p.dayfirst
+            df[self.ts_col],
+            formats=[p.ts_format] if p.ts_format else None,
+            dayfirst=p.dayfirst,
+            timezone=self.timezone,
+            strict_timezone=self.strict_timezone,
         )
         vals = coerce_numeric(df[self.value_col], thousands=p.thousands, decimal=p.decimal)
         frame = pd.DataFrame(

@@ -51,7 +51,9 @@ class OpcUaPoint:
     unit: str = ""
 
 
-def history_to_series(records) -> pd.Series:
+def history_to_series(
+    records, *, timezone: str | None = None, strict_timezone: bool = False
+) -> pd.Series:
     """Shape OPC-UA history into a time-indexed Series (pure; no network).
 
     Accepts ``(timestamp, value)`` pairs or asyncua ``DataValue`` objects (``.SourceTimestamp``
@@ -68,7 +70,8 @@ def history_to_series(records) -> pd.Series:
         else:
             raw_ts.append(getattr(r, "SourceTimestamp", None))
             raw_val.append(getattr(getattr(r, "Value", None), "Value", None))
-    idx = parse_timestamps(raw_ts)  # batch, multi-format
+    # batch, multi-format; OPC-UA SourceTimestamps are UTC instants -> the site's wall clock
+    idx = parse_timestamps(raw_ts, timezone=timezone, strict_timezone=strict_timezone)
     vals = pd.to_numeric(pd.Series(raw_val), errors="coerce")
     pairs = [(t, float(v)) for t, v in zip(idx, vals) if pd.notna(t) and pd.notna(v)]
     if not pairs:
@@ -123,8 +126,16 @@ class OpcUaSource:
     """
 
     def __init__(
-        self, points, *, url: str | None = None, security: OpcUaSecurity | None = None, client=None
+        self,
+        points,
+        *,
+        url: str | None = None,
+        security: OpcUaSecurity | None = None,
+        client=None,
+        timezone: str | None = None,
+        strict_timezone: bool = False,
     ):
+        self.timezone, self.strict_timezone = timezone, strict_timezone
         self._points = {p.name: p for p in points}
         self._url = url
         self._security = security
@@ -166,7 +177,7 @@ class OpcUaSource:
         recs = client.read_history(
             self._points[name].node_id, pd.Timestamp(start), pd.Timestamp(end)
         )
-        s = history_to_series(recs)
+        s = history_to_series(recs, timezone=self.timezone, strict_timezone=self.strict_timezone)
         s.name = name
         return s
 

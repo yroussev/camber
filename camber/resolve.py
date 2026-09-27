@@ -67,6 +67,10 @@ class EquipRef:
     folder: str  # primary source folder holding its per-point CSVs
     extra_equips: tuple = ()  # sibling tokens holding related points
     extra_folders: tuple = ()  # additional folders to search (multi-folder sources)
+    # The site's IANA zone (provisional, 0.90.1; config ``source.timezone``): offset-bearing / epoch
+    # stamps in its files are converted to that wall clock. None keeps the clock as written.
+    timezone: str | None = None
+    strict_timezone: bool = False  # refuse offset-bearing stamps when no timezone is set
 
     def all_equips(self) -> tuple:
         """Primary token then any extras, in search order."""
@@ -382,6 +386,7 @@ def resolve(
         return _resolve_store(equip_ref, roles, resample)
     if mapping is None:
         raise ValueError("a folder-backed EquipRef needs a MappingProvider")
+    tz, strict_tz = equip_ref.timezone, equip_ref.strict_timezone
     cols = {}
     for full_equip in equip_ref.all_equips():
         for folder in equip_ref.all_folders():
@@ -397,9 +402,16 @@ def resolve(
                     # duty-preserving (time-weighted) bins, except the prep-mode *exclusion*
                     # flags, where a bin touched by warm-up/cool-down at all is excluded
                     how = "any" if role in _ANY_ON_ROLES else "duty"
-                    cols[role] = realio.load_status(path, name=role, resample=resample, how=how)
+                    cols[role] = realio.load_status(
+                        path,
+                        name=role,
+                        resample=resample,
+                        how=how,
+                        timezone=tz,
+                        strict_timezone=strict_tz,
+                    )
                 else:
-                    s = realio.load_point(path, name=role)
+                    s = realio.load_point(path, name=role, timezone=tz, strict_timezone=strict_tz)
                     cols[role] = s.resample(resample).mean() if resample else s
     if not cols:
         return pd.DataFrame()

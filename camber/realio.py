@@ -31,17 +31,31 @@ __all__ = [
 _TZ_RE = re.compile(r"\s+[A-Z]{2,4}$")
 
 
-def _parse_ts(series: pd.Series) -> pd.DatetimeIndex:
+def _parse_ts(
+    series: pd.Series, timezone: str | None = None, strict_timezone: bool = False
+) -> pd.DatetimeIndex:
     # Delegate to the shared multi-format parser (BAS 12-h format leads its try-list, so existing
-    # exports parse identically; ISO / US / epoch / Excel-serial now also work).
-    return parse_timestamps(series)
+    # exports parse identically; ISO / US / epoch / Excel-serial now also work). ``timezone`` is
+    # the site zone offset-bearing / epoch stamps are converted to (see tsparse).
+    return parse_timestamps(series, timezone=timezone, strict_timezone=strict_timezone)
 
 
-def load_point(path: str, name: str | None = None) -> pd.Series:
-    """Load one point CSV into a time-indexed Series named ``name`` (or filename)."""
+def load_point(
+    path: str,
+    name: str | None = None,
+    *,
+    timezone: str | None = None,
+    strict_timezone: bool = False,
+) -> pd.Series:
+    """Load one point CSV into a time-indexed Series named ``name`` (or filename).
+
+    ``timezone`` (provisional, 0.90.1) is the site's IANA zone: ``Z`` / offset / epoch stamps are
+    converted to its wall clock (see :func:`camber.tsparse.parse_timestamps`); the DST fall-back
+    repeat keeps its first reading, like any duplicate stamp.
+    """
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
-    idx = _parse_ts(df[ts_col])
+    idx = _parse_ts(df[ts_col], timezone, strict_timezone)
     s = pd.Series(coerce_numeric(df[val_col]).values, index=idx)  # thousands/null-token aware
     s = s[~s.index.isna()]
     s.name = name or os.path.basename(path)[:-4]
@@ -74,7 +88,13 @@ def _duty_resample(s: pd.Series, rule: str) -> pd.Series:
 
 
 def load_status(
-    path: str, name: str | None = None, resample: str | None = None, *, how: str = "duty"
+    path: str,
+    name: str | None = None,
+    resample: str | None = None,
+    *,
+    how: str = "duty",
+    timezone: str | None = None,
+    strict_timezone: bool = False,
 ) -> pd.Series:
     """Load a text/event-based status or command point as a 0/1 step series.
 
@@ -92,12 +112,14 @@ def load_status(
     * ``how="any"`` -- the per-bin max, 1.0 if on at *any* moment of the bin. Only for a
       rule that genuinely needs "did it run at all in this interval"; it inflates duty as
       bins grow (hourly bins read a fan cycling 20 min/h as on 100 %).
+
+    ``timezone`` / ``strict_timezone``: as :func:`load_point`.
     """
     if how not in ("duty", "any"):
         raise ValueError(f"how must be 'duty' or 'any', got {how!r}")
     df = pd.read_csv(path, encoding="utf-8-sig")
     ts_col, val_col = df.columns[0], df.columns[1]
-    idx = _parse_ts(df[ts_col])
+    idx = _parse_ts(df[ts_col], timezone, strict_timezone)
     s = pd.Series(coerce_status(df[val_col]).values, index=idx)  # On/Off/Open/Closed/Fault/… -> 0/1
     s = s[~s.index.isna()]
     s = s[~s.index.duplicated(keep="last")].sort_index().ffill()
@@ -125,7 +147,15 @@ def find_point(folder: str, equip: str, measure: str) -> str | None:
     return hits[0] if hits else None
 
 
-def load_equipment(folder: str, equip: str, measures, resample: str = "15min"):
+def load_equipment(
+    folder: str,
+    equip: str,
+    measures,
+    resample: str = "15min",
+    *,
+    timezone: str | None = None,
+    strict_timezone: bool = False,
+):
     """Load several measures for one equipment into a single aligned DataFrame.
 
     Missing measures are simply omitted (with no error) so callers can request a
@@ -135,7 +165,7 @@ def load_equipment(folder: str, equip: str, measures, resample: str = "15min"):
     for m in measures:
         p = find_point(folder, equip, m)
         if p:
-            cols[m] = load_point(p, name=m)
+            cols[m] = load_point(p, name=m, timezone=timezone, strict_timezone=strict_timezone)
     if not cols:
         return pd.DataFrame()
     df = pd.concat(cols, axis=1)

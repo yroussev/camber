@@ -14,15 +14,31 @@ from .. import io as _io
 class WideCsvAdapter:
     """SourceAdapter over a single wide CSV (timestamp + many point columns)."""
 
-    def __init__(self, path: str, timestamp_col: str | None = None, *, profile=None):
+    def __init__(
+        self,
+        path: str,
+        timestamp_col: str | None = None,
+        *,
+        profile=None,
+        timezone: str | None = None,
+        strict_timezone: bool = False,
+    ):
+        """``timezone``: the site's IANA zone (provisional, 0.90.1); see
+        :func:`camber.io.load_csv`."""
         self.path = path
+        self.timezone, self.strict_timezone = timezone, strict_timezone
         self.timestamp_col = timestamp_col
         self.profile = profile  # vendor ingest profile (see camber.ingest.profiles)
         self._frame: pd.DataFrame | None = None
 
     def _load_all(self, resample: str | None) -> pd.DataFrame:
         return _io.load_csv(
-            self.path, timestamp_col=self.timestamp_col, resample=resample, profile=self.profile
+            self.path,
+            timestamp_col=self.timestamp_col,
+            resample=resample,
+            profile=self.profile,
+            timezone=self.timezone,
+            strict_timezone=self.strict_timezone,
         )
 
     def point_names(self):

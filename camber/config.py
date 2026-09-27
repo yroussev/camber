@@ -106,6 +106,16 @@ the run finds no equipment -- unless the source sets ``"include_inactive": true`
 ``kind`` (or none) reads folders as before; an unrecognised kind warns rather than fails, for
 back-compat.
 
+**Site time zone** (provisional, 0.90.1). ``"source": {..., "timezone": "America/Chicago"}`` names
+the site's IANA zone: trend files whose stamps name an instant (ISO ``Z`` / ``+hh:mm`` offsets,
+epoch numbers) are converted to that wall clock before any hour-of-day, schedule or occupancy rule
+sees them (the DST fall-back repeat keeps its first reading; the spring-forward hour is a gap, as
+in a naive local export). Without it such stamps keep the clock as written -- UTC for ``Z`` -- and
+a :class:`~camber.tsparse.TimezoneWarning` says so; ``"strict_timezone": true`` refuses them
+instead. A store source is already on the site's wall clock (``camber datasets ingest`` converts
+with the catalog entry's ``local_timezone``); there ``timezone`` defaults to that zone and applies
+only to a ``shared_oat`` CSV file, and a ``timezone`` that disagrees with the catalog warns.
+
 **Facility identity and the portfolio workspace.** Every run has a ``facility_id``: a store
 source's ``source.facility_id``; for a folder source the optional top-level ``"facility_id"``,
 else :func:`~camber.store.make_facility_id` of ``site``. Per-facility state is keyed by it inside a
@@ -135,6 +145,7 @@ relative to the config file's directory.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as _dt
 import json
 import os
@@ -365,6 +376,44 @@ def _load_mapping(config: dict, base_dir: str, *, default=None) -> MappingProvid
     return MappingProvider.from_dict(mp_spec)
 
 
+def _catalog_timezone(meta: dict) -> str | None:
+    """The site zone a catalog dataset was ingested into (``ingest.local_timezone``), if known."""
+    block = (meta or {}).get("dataset") or {}
+    did = block.get("dataset_id") if isinstance(block, dict) else None
+    if not did:
+        return None
+    try:
+        from .datasets import get as _get_dataset
+
+        entry = _get_dataset(did)
+    except Exception:  # an unknown / retired id, or a catalog that fails to load
+        return None
+    return (entry.ingest or {}).get("local_timezone") or entry.timezone or None
+
+
+def _site_timezone(source: dict, meta: dict | None = None) -> dict:
+    """``{"timezone", "strict_timezone"}`` for a config source (validated; see the module doc).
+
+    A store facility ingested from the dataset catalog already knows its zone: it is the default,
+    and a ``source.timezone`` that disagrees with it warns (the store is on the catalog's clock).
+    """
+    from .tsparse import check_timezone
+
+    tz = check_timezone(source.get("timezone") or None)
+    strict = bool(source.get("strict_timezone", False))
+    if meta is not None:
+        known = _catalog_timezone(meta)
+        if known and tz and known != tz:
+            warnings.warn(
+                f"source.timezone {tz!r} differs from the zone this dataset was ingested in "
+                f"({known!r}); the store's stamps are already {known} wall clock",
+                UserWarning,
+                stacklevel=3,
+            )
+        tz = tz or known
+    return {"timezone": tz, "strict_timezone": strict}
+
+
 def _source_kind(source: dict) -> str:
     kind = str(source.get("kind") or "")
     if kind != "store" and kind not in _FOLDER_KINDS:
@@ -424,8 +473,10 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
 
     shared = None
     so = (config.get("shared_oat") or {}) if active else {}
+    meta = store.facilities_meta().get(fid, {})
+    tzkw = _site_timezone(source, meta)
     if so.get("file"):
-        oat = load_point(_path(base_dir, so["file"]), "oat").resample(resample).mean()
+        oat = load_point(_path(base_dir, so["file"]), "oat", **tzkw).resample(resample).mean()
         shared = {Role.OAT: oat}
     elif so.get("equip"):
         role = Role(so.get("role", Role.OAT.value))
@@ -438,7 +489,6 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
             shared = {Role.OAT: frame[role]}
 
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
-    meta = store.facilities_meta().get(fid, {})
     prov = _provenance(meta, fid)
     return _Prepared(
         site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else [], ctx
@@ -469,11 +519,12 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
             active = _facility_is_active(Portfolio(ctx.workspace).store, ctx.facility_id)
 
     mapping = _load_mapping(config, base_dir)
+    tzkw = _site_timezone(config["source"])
 
     shared = None
     so = config.get("shared_oat")
     if so and so.get("file"):
-        oat = load_point(_path(base_dir, so["file"]), "oat").resample(resample).mean()
+        oat = load_point(_path(base_dir, so["file"]), "oat", **tzkw).resample(resample).mean()
         shared = {Role.OAT: oat}
 
     refs: list = []
@@ -488,6 +539,8 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
         else:
             found = discover(folders, eq["class"], marker_measure=marker)
         found = _only_named(found, eq)
+        if tzkw["timezone"] or tzkw["strict_timezone"]:
+            found = [dataclasses.replace(r, **tzkw) for r in found]
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 

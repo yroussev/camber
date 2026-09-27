@@ -76,7 +76,9 @@ class BacnetPoint:
     unit: str = ""
 
 
-def trendlog_to_series(records) -> pd.Series:
+def trendlog_to_series(
+    records, *, timezone: str | None = None, strict_timezone: bool = False
+) -> pd.Series:
     """Shape Trend Log records into a time-indexed Series (pure; no network).
 
     Accepts an iterable of ``(timestamp, value)`` pairs or objects exposing ``.timestamp`` and
@@ -93,7 +95,7 @@ def trendlog_to_series(records) -> pd.Series:
         else:
             raw_ts.append(getattr(r, "timestamp", None))
             raw_val.append(getattr(r, "value", None))
-    idx = parse_timestamps(raw_ts)  # batch, multi-format
+    idx = parse_timestamps(raw_ts, timezone=timezone, strict_timezone=strict_timezone)
     vals = pd.to_numeric(pd.Series(raw_val), errors="coerce")
     pairs = [(t, float(v)) for t, v in zip(idx, vals) if pd.notna(t) and pd.notna(v)]
     if not pairs:
@@ -111,7 +113,16 @@ class BacnetSource:
     bacpypes3 against the (validated) :class:`BacnetTarget`.
     """
 
-    def __init__(self, points, target: BacnetTarget, *, client=None):
+    def __init__(
+        self,
+        points,
+        target: BacnetTarget,
+        *,
+        client=None,
+        timezone: str | None = None,
+        strict_timezone: bool = False,
+    ):
+        self.timezone, self.strict_timezone = timezone, strict_timezone
         self._points = {p.name: p for p in points}
         self._target = target.validate()
         self._client = client
@@ -143,7 +154,11 @@ class BacnetSource:
     def read_trend_log(self, name: str) -> pd.Series:
         """Read a Trend Log point's historical records into a Series (read-only)."""
         client = self._require_client()
-        s = trendlog_to_series(client.read_trend_log(self._points[name].object_id))
+        s = trendlog_to_series(
+            client.read_trend_log(self._points[name].object_id),
+            timezone=self.timezone,
+            strict_timezone=self.strict_timezone,
+        )
         s.name = name
         return s
 

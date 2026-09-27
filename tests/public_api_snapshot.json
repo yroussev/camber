@@ -1961,6 +1961,8 @@
     "topology_from_naming"
   ],
   "camber.tsparse": [
+    "TimezoneWarning",
+    "check_timezone",
     "parse_timestamps"
   ],
   "camber.units": [

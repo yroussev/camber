@@ -34,7 +34,16 @@ def _quote_ident(name: str) -> str:
 
 
 def read_points(
-    connection, table, *, ts_col, point_col, value_col, unit_col=None, where=None
+    connection,
+    table,
+    *,
+    ts_col,
+    point_col,
+    value_col,
+    unit_col=None,
+    where=None,
+    timezone: str | None = None,
+    strict_timezone: bool = False,
 ) -> dict[str, pd.Series]:
     """Read a long/narrow point table into ``{point name -> Series}``.
 
@@ -65,7 +74,7 @@ def read_points(
     from ..tsparse import parse_timestamps
 
     df = pd.DataFrame(rows, columns=["ts", "point", "value"])
-    idx = parse_timestamps(df["ts"])
+    idx = parse_timestamps(df["ts"], timezone=timezone, strict_timezone=strict_timezone)
     vals = pd.to_numeric(df["value"], errors="coerce")
     df = pd.DataFrame({"point": df["point"].values, "value": vals.values}, index=idx)
     df = df[~df.index.isna()]
@@ -87,9 +96,20 @@ class SqlSource:
     """
 
     def __init__(
-        self, connection, table, *, ts_col, point_col, value_col, unit_col=None, where=None
+        self,
+        connection,
+        table,
+        *,
+        ts_col,
+        point_col,
+        value_col,
+        unit_col=None,
+        where=None,
+        timezone: str | None = None,
+        strict_timezone: bool = False,
     ):
         self.connection = connection
+        self.timezone, self.strict_timezone = timezone, strict_timezone
         self.table = table
         self.ts_col = ts_col
         self.point_col = point_col
@@ -108,6 +128,8 @@ class SqlSource:
                 point_col=self.point_col,
                 value_col=self.value_col,
                 where=self.where,
+                timezone=self.timezone,
+                strict_timezone=self.strict_timezone,
             )
         return self._points
 

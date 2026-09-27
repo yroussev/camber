@@ -19,8 +19,11 @@ from .. import realio
 class PerPointCsvAdapter:
     """SourceAdapter over a folder of one-CSV-per-point trend files."""
 
-    def __init__(self, folder: str):
+    def __init__(self, folder: str, *, timezone: str | None = None, strict_timezone: bool = False):
+        """``timezone``: the site's IANA zone (provisional, 0.90.1); see
+        :func:`camber.realio.load_point`."""
         self.folder = folder
+        self.timezone, self.strict_timezone = timezone, strict_timezone
 
     def point_names(self):
         """Sorted point names (one per ``<name>.csv`` file in the folder)."""
@@ -32,7 +35,9 @@ class PerPointCsvAdapter:
         for name in names:
             path = os.path.join(self.folder, f"{name}.csv")
             if os.path.exists(path):
-                cols[name] = realio.load_point(path, name=name)
+                cols[name] = realio.load_point(
+                    path, name=name, timezone=self.timezone, strict_timezone=self.strict_timezone
+                )
         if not cols:
             return pd.DataFrame()
         df = pd.concat(cols, axis=1)
