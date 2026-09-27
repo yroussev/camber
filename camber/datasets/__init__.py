@@ -66,15 +66,16 @@ def _entries() -> tuple:
 def catalog(*, licence: str = "all", kind: str | None = None, labeled: bool | None = None) -> list:
     """Catalog entries, optionally filtered.
 
-    ``licence="commercial"`` keeps only entries whose licence allows commercial use (the open
-    tier); ``"all"`` (default) includes research-only entries. ``kind`` is ``"simulated"``,
+    ``licence="commercial"`` keeps only the open tier (entries CAMBER lets you use commercially:
+    the licence allows it and no ``access_reason`` holds the entry research-only); ``"all"``
+    (default) includes research-only entries. ``kind`` is ``"simulated"``,
     ``"real"`` or ``"lab"``; ``labeled=True`` keeps entries with ground-truth fault labels.
     """
     if licence not in ("all", "commercial"):
         raise ValueError("licence must be 'all' or 'commercial'")
     out = []
     for e in _entries():
-        if licence == "commercial" and not e.commercial_ok:
+        if licence == "commercial" and (e.research_only or not e.commercial_ok):
             continue
         if kind is not None and e.kind != kind:
             continue

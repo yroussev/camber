@@ -440,16 +440,24 @@ def test_rbc_g36_ahu_spec_ingests_a_synthetic_archive(tmp_path, monkeypatch):
         k: {"files": "all", "runs": "all", "store_bytes_estimate": 1000}
         for k in ("default", "full")
     }
-    keep = {"hil-sentinel-values"}
+    keep = {"hil-sentinel-values", "bundled-1312-rp-folder"}
     d["data_issues"] = [i for i in d["data_issues"] if i["id"] in keep or not i.get("exclude")]
     for r in d["ingest"]["runs"]:
         r.pop("exclude", None)
     assert validate_catalog({"schema": 1, "datasets": [d]}) == []
     entry = DatasetEntry.from_dict(d)
-    _ops.fetch_dataset(entry, opener=_Opener({"https://example.org/rbc.zip": body}))
+    opener = _Opener({"https://example.org/rbc.zip": body})
+    # held research-only (the bundled 1312-RP folder) although the record's licence is CC BY
+    assert entry.research_only and entry.licence == "CC-BY-4.0" and entry.commercial_ok
+    with pytest.raises(PermissionError, match="held research-only by CAMBER.*01_RBC-ASHRAE1312"):
+        _ops.fetch_dataset(entry, opener=opener)
+    _ops.fetch_dataset(entry, opener=opener, accept_noncommercial=True)
     st = ParquetStore(str(tmp_path / "store"))
     _ingest.ingest_dataset(entry, st)
     meta = st.facilities_meta()["ds-test-rbc"]["dataset"]
+    assert meta["redistribution"] == "prohibited" and meta["access"] == "research_only"
+    assert "01_RBC-ASHRAE1312" in meta["access_reason"]
+    assert any("1312-RP" in n for n in meta["quirks"])
     fault = picked[1]["id"]
     assert meta["labels"][f"AHU_VAV_South__{fault}"] == picked[1]["label"]
     assert f"AHU_VAV_North__{fault}" in meta["context"]  # a neighbour of the biased zone

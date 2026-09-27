@@ -5,9 +5,11 @@ verify and ingest. It never contains the data itself (CAMBER redistributes nothi
 downloaded from its publisher). :func:`validate_catalog` is the gate a catalog change must pass:
 
 * every entry carries the provenance a report needs (publisher, citation, licence, landing page);
-* the licence is an SPDX id from :data:`LICENCES`, and ``access`` is ``"research_only"`` **iff** the
-  licence is non-commercial (NC) or no-derivatives (ND) -- so a research-only dataset can never be
-  mislabelled open, nor an open one hidden behind the acknowledgement gate;
+* the licence is an SPDX id from :data:`LICENCES`, and ``access`` is ``"research_only"`` whenever
+  the licence is non-commercial (NC) or no-derivatives (ND) -- an NC / ND dataset can never be
+  labelled open. The reverse needs a stated reason: an open-licence entry is held research-only
+  only with an ``access_reason`` (e.g. an archive that bundles third-party files whose open licence
+  CAMBER cannot vouch for), which the licence gate, the report banner and the provenance show;
 * every URL is ``https``; pinned files carry a size and a 64-hex sha256; a ``manual: true`` entry
   (files the user downloads by hand, e.g. from a portal with terms, then ``ingest --from-dir``)
   carries ``manual_instructions`` and may omit a file's URL;
@@ -172,6 +174,7 @@ class DatasetEntry:
     manual: bool = False
     manual_instructions: str = ""
     contiguous: bool = True
+    access_reason: str = ""
 
     @classmethod
     def from_dict(cls, d: dict) -> DatasetEntry:
@@ -207,11 +210,13 @@ class DatasetEntry:
             manual=bool(d.get("manual", False)),
             manual_instructions=d.get("manual_instructions", ""),
             contiguous=bool(d.get("contiguous", True)),
+            access_reason=d.get("access_reason", ""),
         )
 
     @property
     def research_only(self) -> bool:
-        """True when the licence forbids commercial use or derivatives (acknowledgement needed)."""
+        """True for the research-only tier (acknowledgement needed): the licence forbids commercial
+        use or derivatives, or the entry states an ``access_reason`` for holding it there."""
         return self.access == "research_only"
 
     @property
@@ -287,6 +292,7 @@ class DatasetEntry:
             "landing_url": self.landing_url,
             "attribution_required": self.attribution_required,
             "redistribution": "prohibited" if self.research_only else "allowed",
+            **({"access_reason": self.access_reason} if self.access_reason else {}),
             "contiguous": self.contiguous,
             "known_issues": list(self.known_issues),
             "data_issues": [
@@ -330,6 +336,8 @@ class DatasetEntry:
             out["manual_instructions"] = self.manual_instructions
         if not self.contiguous:
             out["contiguous"] = False
+        if self.access_reason:
+            out["access_reason"] = self.access_reason
         return out
 
 
@@ -843,12 +851,28 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
     if lic not in LICENCES:
         errs.append(f"{did}: licence {lic!r} is not an allowed SPDX id ({sorted(LICENCES)})")
     access = d.get("access")
+    reason = d.get("access_reason")
     if access not in ACCESS:
         errs.append(f"{did}: access must be one of {ACCESS}")
-    elif lic in LICENCES and (access == "research_only") != is_research_only_licence(lic):
+    elif lic in LICENCES and access == "open" and is_research_only_licence(lic):
         errs.append(
-            f"{did}: access {access!r} contradicts licence {lic!r} "
-            "(research_only exactly when the licence is NC or ND)"
+            f"{did}: access 'open' contradicts licence {lic!r} (an NC or ND licence is always "
+            "research_only)"
+        )
+    elif lic in LICENCES and access == "research_only" and not is_research_only_licence(lic):
+        if not (isinstance(reason, str) and reason.strip()):
+            errs.append(
+                f"{did}: access 'research_only' with the open licence {lic!r} needs an "
+                "access_reason (why CAMBER holds it research-only)"
+            )
+    if reason is not None and (
+        not isinstance(reason, str)
+        or not reason.strip()
+        or access != "research_only"
+        or is_research_only_licence(str(lic))
+    ):
+        errs.append(
+            f"{did}: access_reason only states why an open-licence entry is held research_only"
         )
     if d.get("kind") not in KINDS:
         errs.append(f"{did}: kind must be one of {KINDS}")

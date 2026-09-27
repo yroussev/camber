@@ -500,8 +500,9 @@ def _cmd_datasets_list(args) -> int:
     print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
     if any(e.research_only for e in rows):
         print(
-            "research-only: NC/ND licence -- fetch needs --accept-noncommercial (recorded), and "
-            "every report built from it carries a non-commercial / do-not-redistribute banner."
+            "research-only: NC/ND licence (or a stated access reason; see `datasets info`) -- "
+            "fetch needs --accept-noncommercial (recorded), and every report built from it "
+            "carries a non-commercial / do-not-redistribute banner."
         )
     return 0
 
@@ -530,6 +531,8 @@ def _cmd_datasets_info(args) -> int:
             "            research / non-commercial use only; no redistribution. Fetch needs "
             "--accept-noncommercial."
         )
+    if e.access_reason:
+        print(f"            held research-only although the licence is open: {e.access_reason}")
     print(f"source    : {e.landing_url}")
     if e.manual:
         print(f"download  : manual -- {e.manual_instructions}")
@@ -714,9 +717,10 @@ def _cmd_datasets_ingest(args) -> int:
             f"{', '.join(res.facilities)} ({res.store}){mode}"
         )
         if e.research_only:
+            why = f" (held research-only: {e.access_reason})" if e.access_reason else ""
             print(
-                f"  {e.licence}: research / non-commercial use only, redistribution prohibited; "
-                "every report built from it carries that banner"
+                f"  {e.licence}{why}: research / non-commercial use only, redistribution "
+                "prohibited; every report built from it carries that banner"
             )
         for n in res.notes:
             print(f"  quirk {n}")

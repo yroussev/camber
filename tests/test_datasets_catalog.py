@@ -195,12 +195,13 @@ def test_catalog_filters_and_get():
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
     assert len(datasets.catalog(labeled=False)) == 11
     assert len(datasets.catalog(labeled=True)) == 10
-    # the open tier: research-only (NC/ND) entries are out
+    # the open tier: research-only entries (an NC/ND licence, or a stated access_reason) are out
     commercial = datasets.catalog(licence="commercial")
     assert [e.id for e in datasets.catalog() if e.research_only] == [
+        "rbc-g36-ahu",  # CC BY, held research-only for its stated access_reason
         "at-30bldg-sensors",  # CC-BY-NC-SA
     ]
-    assert len(commercial) == 20 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 19 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):
@@ -229,7 +230,22 @@ def test_research_only_iff_nc_or_nd():
     assert any("contradicts" in x for x in validate_catalog(data))
     e["access"] = "research_only"
     assert validate_catalog(data) == []
-    e["licence"] = "CC-BY-4.0"  # open licence hidden behind the gate
+    e["access_reason"] = "no reason is needed"  # the NC licence already gates it
+    assert any("access_reason only" in x for x in validate_catalog(data))
+    del e["access_reason"]
+    e["licence"] = "CC-BY-4.0"  # an open licence behind the gate needs a stated reason
+    assert any("needs an access_reason" in x for x in validate_catalog(data))
+    e["access_reason"] = "bundles third-party files whose licence CAMBER cannot verify"
+    assert validate_catalog(data) == []
+    ent = DatasetEntry.from_dict(e)
+    assert ent.research_only and ent.commercial_ok  # the licence allows it; CAMBER holds it
+    assert ent.provenance()["access_reason"] == e["access_reason"]
+    assert ent.provenance()["redistribution"] == "prohibited"
+    e["access"] = "open"  # a reason never opens anything, and is meaningless on an open entry
+    assert any("access_reason only" in x for x in validate_catalog(data))
+    e["licence"] = "CC-BY-NC-4.0"  # open access with an NC/ND licence stays impossible
+    assert any("contradicts" in x for x in validate_catalog(data))
+    del e["access_reason"]
     assert any("contradicts" in x for x in validate_catalog(data))
 
 
@@ -430,3 +446,19 @@ def test_store_estimates_are_per_subset():
     raw = _entry(d, "bdg2")
     raw["subsets"]["full"]["store_bytes_estimate"] = 5
     assert DatasetEntry.from_dict(raw).store_bytes() is None
+
+
+def test_a_research_only_reason_reaches_the_banner_and_the_source_block():
+    from camber.report.audit import RESEARCH_ONLY_BANNER, data_sources_html, data_sources_text
+
+    rbc = datasets.get("rbc-g36-ahu").provenance()  # CC BY, held research-only for a reason
+    txt = data_sources_text([rbc])
+    assert "NON-COMMERCIAL / RESEARCH USE ONLY" in txt and "01_RBC-ASHRAE1312" in txt
+    assert RESEARCH_ONLY_BANNER not in txt  # its licence does not forbid commercial use
+    assert "held research-only:" in txt and "licence: CC-BY-4.0 (research_only)" in txt
+    html = data_sources_html([rbc])
+    assert html.count("camber-nc-banner") == 1 and "held research-only:" in html
+    nc = datasets.get("at-30bldg-sensors").provenance()  # NC licence: the standard banner
+    assert RESEARCH_ONLY_BANNER in data_sources_text([nc])
+    both = data_sources_text([nc, rbc])
+    assert RESEARCH_ONLY_BANNER in both and "Also held research-only by CAMBER" in both

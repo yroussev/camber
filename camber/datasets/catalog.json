@@ -10641,7 +10641,7 @@
   },
   {
    "id": "rbc-g36-ahu",
-   "title": "RBC and Guideline 36 AHU fault simulations (labelled, five-zone VAV)",
+   "title": "RBC and Guideline 36 AHU fault simulations (labelled, five-zone VAV) (research-only)",
    "summary": "Simulated single-duct VAV air handlers with five zones (Modelica): one-week runs under ASHRAE Guideline 36 control in the cooling, heating and shoulder seasons (~360 fault scenarios), five-week G36 and rule-based runs, one-year degradation runs, one-day cyber-attack runs and hardware-in-the-loop runs. AHU, zone and plant points are logged together, so each scenario is an air handler with its own zone cohort.",
    "teaches": [
     "a zone sensor fault seen by the rogue-zone census against its four neighbours",
@@ -10656,7 +10656,8 @@
    ],
    "landing_url": "https://figshare.com/articles/dataset/Labeled_Datasets_for_Air_Handling_Units_Operating_in_Faulted_and_Fault-free_States/29297999",
    "licence": "CC-BY-4.0",
-   "access": "open",
+   "access": "research_only",
+   "access_reason": "the archive bundles the 01_RBC-ASHRAE1312 folder of ASHRAE 1312-RP data, whose open licence CAMBER cannot vouch for; the record's CC BY 4.0 covers the archive as a whole",
    "attribution_required": true,
    "verified_on": "2026-09-26",
    "kind": "simulated",
@@ -11268,6 +11269,12 @@
        "hil_*"
       ],
       "note": "HIL -123456 placeholders -> missing"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "The archive's 01_RBC-ASHRAE1312 folder (ASHRAE 1312-RP data) is not ingested, and the entry is held research-only because CAMBER cannot vouch for that folder's open licence.",
+      "issue": "bundled-1312-rp-folder"
      }
     ],
     "runs": [
@@ -16326,14 +16333,34 @@
     "config_template": "rbc-g36-ahu.json"
    },
    "known_issues": [
+    "Held research-only although the record's licence is CC BY 4.0: the archive bundles the 01_RBC-ASHRAE1312 folder of ASHRAE 1312-RP data, whose open licence CAMBER cannot vouch for; the record's CC BY 4.0 covers the archive as a whole. Fetch and ingest need --accept-noncommercial, and every report carries the do-not-redistribute banner with this reason.",
     "The Sci Data article is licensed CC BY-NC-ND 4.0; the dataset itself is published CC BY 4.0 on its repository (every version), and the data licence is what applies.",
-    "The archive also holds 01_RBC-ASHRAE1312 (ASHRAE 1312-RP laboratory and simulated data) and 02_RBC-Nesbitt (a real building): neither is ingested -- the 1312-RP folder pending the maintainer's review, Nesbitt because its three AHUs share point names and its timestamp is split over two columns.",
+    "The archive also holds 01_RBC-ASHRAE1312 (ASHRAE 1312-RP laboratory and simulated data) and 02_RBC-Nesbitt (a real building): neither is ingested -- the 1312-RP folder because CAMBER cannot vouch for its open licence (see the data issue bundled-1312-rp-folder), Nesbitt because its three AHUs share point names and its timestamp is split over two columns.",
     "The G36 runs implement trim-and-respond resets but export no reset-request counts: sat_reset_effectiveness and static_reset_effectiveness decline. The static-pressure setpoint's trim-and-respond steps and Intru_TRstReq_Max's forced requests are visible only through the setpoints.",
     "The five-week and RBC-5wk runs are fault-free for their first week (faults start on day 7 at 07:00, as documented); the one-week runs are faulted throughout.",
     "Mass flows (kg/s) are not mapped: CAMBER has no mass-flow unit, and their sign differs between folders (negative supply flow in 97.5-100% of G36-1wk rows).",
     "The heating-coil stuck-valve runs expose no true valve position, so the stuck position cannot be checked in the data."
    ],
    "data_issues": [
+    {
+     "id": "bundled-1312-rp-folder",
+     "title": "The archive bundles a folder of third-party ASHRAE 1312-RP data under the record's single CC BY licence",
+     "columns": [
+      "01_RBC-ASHRAE1312/ (every file in the folder)"
+     ],
+     "evidence": "The 928.7 MB archive holds 801 entries; 324 of them (143.1 MB of the 6,188.7 MB uncompressed, 23.0 MB compressed) sit in 01_RBC-ASHRAE1312: 200 under Real/ (dated folders such as Real/Summer/20070820/), 121 under Simulation/, plus 00_explanations.pdf and FeaturesNames.xls. The folder name identifies the data as ASHRAE research project 1312-RP's. The record states one licence, CC BY 4.0, for all 801 entries and names no separate terms, source or permission for that folder.",
+     "contradicts": {
+      "document": "the dataset record's single CC BY 4.0 statement, which covers every file in the archive, and the data descriptor's description of the collection as the authors' labelled AHU datasets",
+      "citation": "Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y"
+     },
+     "handling": "exclude",
+     "exclude": {
+      "analyses": [
+       "every analysis of 01_RBC-ASHRAE1312: no run reads it, so it is never extracted or ingested"
+      ]
+     },
+     "handling_note": "No run reads the folder, so it is never extracted or ingested. Because the fetch still downloads it inside the archive, and CAMBER cannot vouch for its open licence, the maintainer holds the whole entry research-only (access_reason): fetch and ingest need --accept-noncommercial, the acknowledgement is recorded, and every report carries the do-not-redistribute banner with the reason. CAMBER does not judge the folder's licence; it declines to vouch for it."
+    },
     {
      "id": "damper-control-runs-duplicated",
      "title": "Four zone damper-loop tuning runs are copies (of each other, or of the baseline)",

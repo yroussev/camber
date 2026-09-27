@@ -25,6 +25,7 @@ _KEYS = (
     "landing_url",
     "attribution_required",
     "redistribution",
+    "access_reason",
     "fetched_at",
     "content_hash",
     "known_issues",

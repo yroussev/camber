@@ -30,6 +30,34 @@ SHARE_ALIKE_NOTE = (
 )
 
 
+def _research_only_banner(srcs: list) -> str:
+    """The banner for ``srcs`` ('' when none is research-only).
+
+    An NC / ND licence gets :data:`RESEARCH_ONLY_BANNER`. A dataset CAMBER holds research-only for
+    a stated reason although its licence is open (``access_reason``) gets the same heading with
+    that reason instead of the licence claim.
+    """
+    ro = [s for s in srcs if s.get("access") == "research_only"]
+    if not ro:
+        return ""
+    reasons = [
+        f"{s.get('dataset_id') or s.get('title') or s.get('facility_id', '')}: {s['access_reason']}"
+        for s in ro
+        if s.get("access_reason")
+    ]
+    if len(reasons) == len(ro):
+        return (
+            "NON-COMMERCIAL / RESEARCH USE ONLY: this report is built from data CAMBER holds "
+            "research-only although its licence is open (" + "; ".join(reasons) + "). Do not sell "
+            "it, and do not redistribute it or the underlying data."
+        )
+    if reasons:
+        return (
+            RESEARCH_ONLY_BANNER + " Also held research-only by CAMBER: " + "; ".join(reasons) + "."
+        )
+    return RESEARCH_ONLY_BANNER
+
+
 def _is_share_alike(licence: str) -> bool:
     return "-SA" in str(licence or "").upper()
 
@@ -55,8 +83,9 @@ def data_sources_text(sources) -> str:
     if not srcs:
         return ""
     L = []
-    if any(s.get("access") == "research_only" for s in srcs):
-        L.append(f"*** {RESEARCH_ONLY_BANNER} ***")
+    banner = _research_only_banner(srcs)
+    if banner:
+        L.append(f"*** {banner} ***")
     L.append("Data source & licence:")
     for s in srcs:
         name = s.get("title") or s.get("dataset_id") or s.get("facility_id", "")
@@ -66,6 +95,8 @@ def data_sources_text(sources) -> str:
             L.append(f"    publisher: {s['publisher']}")
         if s.get("licence"):
             L.append(f"    licence: {s['licence']} ({s.get('access', 'open')})")
+        if s.get("access_reason"):
+            L.append(f"    held research-only: {s['access_reason']}")
         if s.get("citation"):
             L.append(f"    cite: {s['citation']}")
         if _extra_dois(s):
@@ -88,10 +119,11 @@ def data_sources_html(sources) -> str:
         return ""
     e = _html.escape
     parts = []
-    if any(s.get("access") == "research_only" for s in srcs):
+    banner = _research_only_banner(srcs)
+    if banner:
         parts.append(
             "<div class='camber-nc-banner' role='alert' style='border:3px solid #b00020;"
-            "padding:8px;margin:8px 0;font-weight:bold'>" + e(RESEARCH_ONLY_BANNER) + "</div>"
+            "padding:8px;margin:8px 0;font-weight:bold'>" + e(banner) + "</div>"
         )
     parts.append("<h2>Data source &amp; licence</h2><ul class='camber-data-sources'>")
     for s in srcs:
@@ -104,6 +136,8 @@ def data_sources_html(sources) -> str:
             rows.append(f"publisher: {e(str(s['publisher']))}")
         if s.get("licence"):
             rows.append(f"licence: {e(str(s['licence']))} ({e(str(s.get('access', 'open')))})")
+        if s.get("access_reason"):
+            rows.append(f"held research-only: {e(str(s['access_reason']))}")
         if s.get("citation"):
             rows.append(f"cite: {e(str(s['citation']))}")
         if _extra_dois(s):

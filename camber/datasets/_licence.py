@@ -1,7 +1,8 @@
 """The research-only licence gate: refuse NC / ND data until the licence is acknowledged.
 
-A catalog entry is ``access == "research_only"`` exactly when its licence is non-commercial (NC) or
-no-derivatives (ND) (:func:`camber.datasets._catalog.validate_catalog` enforces it). Such data may
+A catalog entry is ``access == "research_only"`` when its licence is non-commercial (NC) or
+no-derivatives (ND), or when it states an ``access_reason`` for holding an open-licence dataset
+there (:func:`camber.datasets._catalog.validate_catalog` enforces both). Such data may
 be downloaded and analysed only after an explicit acknowledgement -- ``accept_noncommercial=True``
 in the API, ``--accept-noncommercial`` on the CLI. There is deliberately **no environment-variable
 bypass**: an acknowledgement is always an explicit act of the person running the command.
@@ -23,10 +24,16 @@ STATEMENT = "accepted: research / non-commercial use only; no redistribution"
 
 def refusal(entry, action: str = "download") -> PermissionError:
     """The ``PermissionError`` for a research-only entry used without an acknowledgement."""
+    why = (
+        f"is held research-only by CAMBER although its licence is {entry.licence} "
+        f"({entry.access_reason})"
+        if getattr(entry, "access_reason", "")
+        else f"is licensed {entry.licence}"
+    )
     return PermissionError(
-        f"{entry.id} is licensed {entry.licence}: research / non-commercial use only, and it "
-        f"may not be redistributed. Pass accept_noncommercial=True "
-        f"(CLI: --accept-noncommercial) to acknowledge the licence and {action} it."
+        f"{entry.id} {why}: research / non-commercial use only, and it may not be "
+        f"redistributed. Pass accept_noncommercial=True (CLI: --accept-noncommercial) to "
+        f"acknowledge the terms and {action} it."
     )
 
 

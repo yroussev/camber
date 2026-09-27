@@ -61,7 +61,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `ornl-frp-ops` | 1 RTU + 10 VAV boxes, 7 operating scenarios, 1-minute | real | no | CC-BY-4.0 | RTU, weather, 2 boxes x 2 scenarios |
 | `ornl-supermarket-fdd` | CO2 booster refrigeration rack, 6 faults (reference only) | lab | yes | CC-BY-4.0 | 2 fault / baseline pairs |
 | `ornl-frp-vav` | one RTU + 10 VAV boxes, 31 one-day tests | real | yes | CC-BY-4.0 | one damper test set (7 days) |
-| `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 | 8 runs |
+| `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 (**research-only**: see [Licences](#licences)) | 8 runs |
 | `at-30bldg-sensors` | 1,832 raw sensors, 30 buildings, 23 months | real | no | CC-BY-NC-SA-4.0 (research-only) | 3 buildings |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
@@ -81,7 +81,8 @@ Each entry carries an SPDX licence id and a licence **tier** (`access`), shown b
   *redistributed adaptation* of the data must keep the same licence -- analysing it, including
   commercially, is fine. Reports built from share-alike data say so.
 - **research-only** (`access: "research_only"`) -- the licence is non-commercial (NC) or
-  no-derivatives (ND). You may download and analyse the data for research, but not use it
+  no-derivatives (ND), **or** CAMBER holds an open-licence entry here for a stated
+  `access_reason`. You may download and analyse the data for research, but not use it
   commercially or redistribute it (or anything built from it). CAMBER makes that an explicit act:
   - `fetch` refuses it unless you pass `--accept-noncommercial` -- on every fetch; there is no
     environment-variable bypass. The acceptance is appended to `acknowledgements.json` in the
@@ -93,8 +94,17 @@ Each entry carries an SPDX licence id and a licence **tier** (`access`), shown b
   - Every report built from the data -- audit, RCx, drift, site report, dashboard -- carries a
     **non-commercial / do-not-redistribute** banner.
 
-The catalog validator enforces that `access` is `research_only` exactly when the licence is NC or
-ND, and that every URL is HTTPS. Files are pinned (size + SHA-256) unless an entry says why not.
+**A stated reason.** `rbc-g36-ahu`'s record is CC BY 4.0, but its archive bundles a folder of
+ASHRAE 1312-RP data (`01_RBC-ASHRAE1312`) whose open licence CAMBER cannot vouch for. The folder is
+never ingested, and the maintainer holds the whole entry research-only with an `access_reason`,
+which the licence gate's refusal, `camber datasets info`, the facility's provenance
+(`access_reason`) and every report's banner and source block show in place of the licence claim.
+The entry's data issue `bundled-1312-rp-folder` describes the folder.
+
+The catalog validator enforces that an NC or ND licence is always `research_only` (it can never be
+labelled open, with or without a reason), that an open-licence entry is `research_only` only with
+a non-empty `access_reason`, and that `access_reason` appears nowhere else; and that every URL is
+HTTPS. Files are pinned (size + SHA-256) unless an entry says why not.
 
 ## Manual downloads
 
@@ -1037,7 +1047,15 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Table 3 (minimum 10% OA damper opening when occupied) and Table 9 (mixed, return and outdoor temperatures within +-0.1 C) (Im, P., Jung, S. & Yoon, Y. 2025, Datasets of Faults in Variable Air Volume Terminal Units in a Multi-Zone Commercial Building, Sci Data 12:763, doi:10.1038/s41597-025-05063-z)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published. An OA fraction from the mixing-box temperature balance reads ~0% in these summer runs; that is a sensor-placement artefact, not missing outdoor air.
 
-### `rbc-g36-ahu`: RBC and Guideline 36 AHU fault simulations (labelled, five-zone VAV)
+### `rbc-g36-ahu`: RBC and Guideline 36 AHU fault simulations (labelled, five-zone VAV) (research-only)
+
+#### The archive bundles a folder of third-party ASHRAE 1312-RP data under the record's single CC BY licence
+
+- **Issue:** `bundled-1312-rp-folder`
+- **Columns:** `01_RBC-ASHRAE1312/ (every file in the folder)`
+- **Evidence:** The 928.7 MB archive holds 801 entries; 324 of them (143.1 MB of the 6,188.7 MB uncompressed, 23.0 MB compressed) sit in 01_RBC-ASHRAE1312: 200 under Real/ (dated folders such as Real/Summer/20070820/), 121 under Simulation/, plus 00_explanations.pdf and FeaturesNames.xls. The folder name identifies the data as ASHRAE research project 1312-RP's. The record states one licence, CC BY 4.0, for all 801 entries and names no separate terms, source or permission for that folder.
+- **Contradicts:** the dataset record's single CC BY 4.0 statement, which covers every file in the archive, and the data descriptor's description of the collection as the authors' labelled AHU datasets (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: exclude** -- kept out of scoring / analysis. No run reads the folder, so it is never extracted or ingested. Because the fetch still downloads it inside the archive, and CAMBER cannot vouch for its open licence, the maintainer holds the whole entry research-only (access_reason): fetch and ingest need --accept-noncommercial, the acknowledgement is recorded, and every report carries the do-not-redistribute banner with the reason. CAMBER does not judge the folder's licence; it declines to vouch for it.
 
 #### Four zone damper-loop tuning runs are copies (of each other, or of the baseline)
 
