@@ -31,16 +31,20 @@ patterns=(
 )
 
 # Exclude the guard's own files from the content scan (they legitimately
-# contain the patterns as data).
-added="$(git diff --cached --no-color -- . \
-  ':(exclude).githooks/commit-msg' \
-  ':(exclude).githooks/pre-commit' \
-  ':(exclude).githooks/denylist.local' \
-  ':(exclude).githooks/denylist.local.example' \
-  ':(exclude).github/workflows/attribution-guard.yml' \
-  ':(exclude).github/workflows/site-neutrality-guard.yml' \
-  ':(exclude).github/scripts/site_neutrality_patterns.py' \
-  | grep '^+' | grep -v '^+++' || true)"
+# contain the patterns as data). Extra pathspecs (e.g. a rule's exempt paths)
+# may be passed as arguments.
+added_lines() {
+  git diff --cached --no-color -- . \
+    ':(exclude).githooks/commit-msg' \
+    ':(exclude).githooks/pre-commit' \
+    ':(exclude).githooks/denylist.local' \
+    ':(exclude).githooks/denylist.local.example' \
+    ':(exclude).github/workflows/attribution-guard.yml' \
+    ':(exclude).github/workflows/site-neutrality-guard.yml' \
+    ':(exclude).github/scripts/site_neutrality_patterns.py' \
+    "$@" | grep '^+' | grep -v '^+++' || true
+}
+added="$(added_lines)"
 
 if [ -n "$added" ]; then
   for pat in "${patterns[@]}"; do
@@ -62,10 +66,21 @@ fi
 #    re-document the private site name in plaintext. They are contextual: a
 #    bare public weather-station / TMY3-EPW climate reference never matches.
 patterns_script="$(git rev-parse --show-toplevel)/.github/scripts/site_neutrality_patterns.py"
+#    A rule's third field lists paths exempt from that rule alone (the dataset
+#    catalog for the dataset-host rules); those rules scan a diff that leaves
+#    the exempt paths out. The commit-msg hook ignores exemptions.
 if [ -f "$patterns_script" ] && [ -n "$added" ] && command -v python3 >/dev/null 2>&1; then
-  while IFS=$'\t' read -r pat why; do
+  while IFS=$'\t' read -r pat why exempt; do
     [ -n "$pat" ] || continue
-    if printf '%s\n' "$added" | grep -iqE -- "$pat"; then
+    scan="$added"
+    if [ -n "${exempt:-}" ]; then
+      rule_ex=()
+      IFS=',' read -r -a _paths <<<"$exempt"
+      for p in "${_paths[@]}"; do rule_ex+=(":(exclude)$p"); done
+      scan="$(added_lines "${rule_ex[@]}")"
+    fi
+    [ -n "$scan" ] || continue
+    if printf '%s\n' "$scan" | grep -iqE -- "$pat"; then
       echo "------------------------------------------------------------------" >&2
       echo "COMMIT REJECTED: staged content is not site-neutral." >&2
       echo "Matched rule: $why" >&2

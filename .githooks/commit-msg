@@ -42,7 +42,9 @@ done
 # never trips them.
 patterns_script="$(git rev-parse --show-toplevel)/.github/scripts/site_neutrality_patterns.py"
 if [ -f "$patterns_script" ] && command -v python3 >/dev/null 2>&1; then
-  while IFS=$'\t' read -r pat why; do
+  # The third field (per-rule exempt_paths) applies to tracked files only;
+  # commit messages are checked against every rule.
+  while IFS=$'\t' read -r pat why _exempt; do
     [ -n "$pat" ] || continue
     if grep -iqE -- "$pat" "$msg_file"; then
       echo "------------------------------------------------------------------" >&2

@@ -218,7 +218,8 @@ jobs:
         run: |
           set -euo pipefail
           fail=0
-          while IFS=$'\t' read -r pat why; do
+          # Published artefacts ignore the per-rule exempt_paths (third field): every rule applies.
+          while IFS=$'\t' read -r pat why _exempt; do
             [ -n "$pat" ] || continue
             if grep -inE -- "$pat" RELEASE_NOTES.md dossier.html dossier.json; then
               echo "::error::A published artifact matches a site-neutrality rule ($why)"

@@ -21,6 +21,16 @@ licence-encumbered dataset tokens.
 Generic ASHRAE / CTI standards citations are deliberately NOT matched -- those
 are legitimate engineering references.
 
+A rule may carry ``exempt_paths``: repository paths the TRACKED-FILE scans skip
+for that one rule. Only the third-party dataset host and its DOI prefix are
+exempt, and only in ``camber/datasets/catalog.json`` -- the catalog must link
+the data as published. Commit messages, CHANGELOG.md and the release artefacts
+are scanned with every rule and ignore exemptions, and the licence-encumbered
+dataset rules are never exempt anywhere.
+
+Output: one rule per line, TAB-separated ``regex<TAB>reason<TAB>exempt_paths``
+where ``exempt_paths`` is a comma-separated list (empty when the rule has none).
+
 Usage:  python3 .github/scripts/site_neutrality_patterns.py
 """
 
@@ -28,8 +38,11 @@ from __future__ import annotations
 
 import base64
 
-# (encoded regex, human-readable reason shown when the pattern fires)
-_ENCODED: list[tuple[str, str]] = [
+# The one file the dataset-host rules exempt (see the module docstring).
+CATALOG_PATH = "camber/datasets/catalog.json"
+
+# (encoded regex, human-readable reason shown when the pattern fires[, exempt_paths])
+_ENCODED: list[tuple] = [
     (
         "ZWxbWzpzcGFjZTpdLl8tXSpjZW50cm9bWzpzcGFjZTpdXSooYnVpbGRpbmd8Y291cnRob3VzZXxiYXNcYnxzaXRlXGIp",
         "private building narrative (place name used as a building/site label)",
@@ -73,24 +86,36 @@ _ENCODED: list[tuple[str, str]] = [
     (
         "Zmlnc2hhcmU=",
         "third-party dataset host (licence status unreliable)",
+        (CATALOG_PATH,),
     ),
     (
         "MTBcLjYwODQv",
         "third-party dataset DOI prefix",
+        (CATALOG_PATH,),
     ),
 ]
 
 
+def rules() -> list[tuple[str, str, tuple[str, ...]]]:
+    """Return [(regex, reason, exempt_paths), ...] with the regexes decoded."""
+    out = []
+    for item in _ENCODED:
+        enc, why = item[0], item[1]
+        exempt = tuple(item[2]) if len(item) > 2 else ()
+        out.append((base64.b64decode(enc).decode("utf-8"), why, exempt))
+    return out
+
+
 def patterns() -> list[tuple[str, str]]:
-    """Return [(regex, reason), ...] with the regexes decoded."""
-    return [(base64.b64decode(enc).decode("utf-8"), why) for enc, why in _ENCODED]
+    """Return [(regex, reason), ...] with the regexes decoded (every rule, exemptions ignored)."""
+    return [(regex, why) for regex, why, _exempt in rules()]
 
 
 def main() -> None:
-    for regex, why in patterns():
-        # TAB-separated so the shell guard can split reliably; regexes contain
-        # no tabs.
-        print(f"{regex}\t{why}")
+    for regex, why, exempt in rules():
+        # TAB-separated so the shell guard can split reliably; regexes, reasons
+        # and paths contain no tabs, and paths contain no commas.
+        print(f"{regex}\t{why}\t{','.join(exempt)}")
 
 
 if __name__ == "__main__":

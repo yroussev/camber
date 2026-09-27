@@ -50,16 +50,25 @@ jobs:
           fail=0
 
           echo "== Scanning tracked files =="
-          while IFS=$'\t' read -r pat why; do
+          # A rule's third field lists the paths exempt from THAT rule only
+          # (the dataset catalog for the dataset-host rules); they become
+          # per-rule :(exclude) pathspecs here and nowhere else.
+          while IFS=$'\t' read -r pat why exempt; do
             [ -n "$pat" ] || continue
-            if git grep -iInE -- "$pat" -- . "${exclude[@]}"; then
+            rule_ex=()
+            if [ -n "${exempt:-}" ]; then
+              IFS=',' read -r -a _paths <<<"$exempt"
+              for p in "${_paths[@]}"; do rule_ex+=(":(exclude)$p"); done
+            fi
+            if git grep -iInE -- "$pat" -- . "${exclude[@]}" ${rule_ex[@]+"${rule_ex[@]}"}; then
               echo "::error::Tracked content matches a site-neutrality rule ($why)"
               fail=1
             fi
           done < <(python3 .github/scripts/site_neutrality_patterns.py)
 
+          # CHANGELOG.md and commit messages ignore exemptions: every rule applies.
           echo "== Scanning CHANGELOG.md =="
-          while IFS=$'\t' read -r pat why; do
+          while IFS=$'\t' read -r pat why _exempt; do
             [ -n "$pat" ] || continue
             if grep -inE -- "$pat" CHANGELOG.md; then
               echo "::error::CHANGELOG.md matches a site-neutrality rule ($why)"
@@ -80,7 +89,7 @@ jobs:
           fi
 
           msgs="$(git log --format='%H %s%n%b' $range || true)"
-          while IFS=$'\t' read -r pat why; do
+          while IFS=$'\t' read -r pat why _exempt; do
             [ -n "$pat" ] || continue
             if printf '%s\n' "$msgs" | grep -inE -- "$pat"; then
               echo "::error::A commit message in the range matches a site-neutrality rule ($why)"

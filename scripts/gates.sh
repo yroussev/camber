@@ -93,9 +93,18 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
     local msgs; msgs=$(git log --format='%H %s%n%b' "$RANGE_BASE..$ref" 2>/dev/null)
     local nfail=0
     local ex=(':(exclude).github/scripts/site_neutrality_patterns.py' ':(exclude).github/workflows/site-neutrality-guard.yml' ':(exclude).githooks/denylist.local' ':(exclude).githooks/denylist.local.example')
-    while IFS=$'\t' read -r pat _; do
+    # third field: paths exempt from that rule in the tree scan only; CHANGELOG and commit
+    # messages are checked against every rule, as in site-neutrality-guard.yml
+    while IFS=$'\t' read -r pat _ exempt; do
       [ -n "$pat" ] || continue
-      git grep -iInE -- "$pat" -- . "${ex[@]}" >>"$out/neutrality.log" && nfail=1
+      local rex=() p
+      if [ -n "${exempt:-}" ]; then
+        local _paths=()
+        IFS=',' read -r -a _paths <<<"$exempt"
+        for p in "${_paths[@]}"; do rex+=(":(exclude)$p"); done
+      fi
+      git grep -iInE -- "$pat" -- . "${ex[@]}" ${rex[@]+"${rex[@]}"} >>"$out/neutrality.log" && nfail=1
+      grep -inE -- "$pat" CHANGELOG.md >>"$out/neutrality.log" && nfail=1
       printf '%s\n' "$msgs" | grep -inE -- "$pat" >>"$out/neutrality.log" && nfail=1
     done < <("$PYTHON" .github/scripts/site_neutrality_patterns.py)
     [ $nfail -eq 0 ] && res site_neutrality PASS || res site_neutrality "FAIL (see $out/neutrality.log)"
