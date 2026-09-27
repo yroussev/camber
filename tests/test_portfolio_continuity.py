@@ -141,13 +141,13 @@ def test_rename_keeps_faults_baselines_and_tickets(tmp_path, capsys, monkeypatch
 
 
 def test_legacy_state_compat_then_migrate_then_rename(tmp_path, monkeypatch):
-    """The upgrade path: site-keyed files from before 0.87, read, migrated, then a rename."""
+    """The upgrade path: site-keyed files from before 0.86, read, migrated, then a rename."""
     pf, fid = _workspace(tmp_path)
     monkeypatch.setenv("CAMBER_PORTFOLIO", pf.root)
     cfg = _store_config(
         tmp_path, fid, drift={"store": "baselines.json"}, faults={"store": "faults.json"}
     )
-    # pre-0.87: an unbound baseline store keyed by the site label, and a site-keyed fault store
+    # pre-0.86: an unbound baseline store keyed by the site label, and a site-keyed fault store
     legacy = BaselineStore()
     from camber.config import run_drift_config
 
@@ -171,7 +171,7 @@ def test_legacy_state_compat_then_migrate_then_rename(tmp_path, monkeypatch):
     before = _drift_findings(res)
 
     assert main(["portfolio", "migrate", "--config", cfg]) == 0  # dry run
-    assert main(["portfolio", "migrate", "--config", cfg, "--apply", "--reason", "0.87"]) == 0
+    assert main(["portfolio", "migrate", "--config", cfg, "--apply", "--reason", "0.86"]) == 0
     for name in ("baselines.json", "faults.json"):
         assert "camber_redirect" in open(tmp_path / name).read()
         assert os.path.isfile(os.path.join(pf.state_dir(fid), name))

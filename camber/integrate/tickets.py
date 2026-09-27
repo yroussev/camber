@@ -43,7 +43,7 @@ def fingerprint(site: str, equip: str, rule: str) -> str:
     Deliberately excludes metrics/severity so a recurring issue updates one
     ticket rather than spawning a new one each run. The first component should be the
     facility's ``facility_id`` (stable across renames); the free-text site name it was named
-    after is the deprecated, pre-0.87 key.
+    after is the deprecated, pre-0.86 key.
     """
     raw = f"{site}\x1f{equip}\x1f{rule}".encode()
     return hashlib.sha1(raw).hexdigest()[:12]

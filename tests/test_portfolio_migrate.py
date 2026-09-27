@@ -311,7 +311,7 @@ def test_config_sources_map_through_the_config_and_list_reports(tmp_path):
     pf, (a,) = _ws(tmp_path, "North Campus")
     cfgdir = tmp_path / "cfg"
     cfgdir.mkdir()
-    # a store config without "site": the pre-0.87 `drift accept` keyed these under site ""
+    # a store config without "site": the pre-0.86 `drift accept` keyed these under site ""
     _legacy_baselines(cfgdir / "baselines.json", "")
     _legacy_faults(cfgdir / "faults.json", "North Campus")
     (cfgdir / "report.html").write_text("<html></html>")

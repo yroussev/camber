@@ -48,7 +48,7 @@ more-specific seed when display names repeat). An older `site=<name>` store conv
 `camber.store.migrate_site_to_facility(root)`. The read API addresses facilities by `facility_id`
 (the legacy `site=` argument and `/sites` endpoint remain as deprecated aliases).
 
-Since 0.87 each registry entry also carries a lifecycle `state`, dates, an editable `display_name`,
+Since 0.86 each registry entry also carries a lifecycle `state`, dates, an editable `display_name`,
 an owner and tags (registry v2; older entries read as `active`). Removed ids are tombstoned in
 `_tombstones.json` and never reused, and a new id that differs from a known one only by letter
 case is refused. See [PORTFOLIO.md](PORTFOLIO.md).

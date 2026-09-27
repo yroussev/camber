@@ -89,7 +89,7 @@ def require_facility_id(facility_id: str) -> str:
 class FacilityRegistry:
     """A JSON registry mapping ``facility_id -> {"name": str, ...metadata}`` in a store root.
 
-    **Registry v2** (0.87) adds lifecycle fields to each entry -- ``state`` (see
+    **Registry v2** (0.86) adds lifecycle fields to each entry -- ``state`` (see
     :mod:`camber.portfolio`), ``created_at``, ``state_changed_at``, an editable ``display_name``,
     ``owner``, ``portfolio`` tags and ``notes``. Entries written by older versions carry none of
     them and read as ``state: "active"`` with unknown (``None``) dates, so an existing store keeps

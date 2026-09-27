@@ -84,7 +84,7 @@ relative, so moving the workspace and its store together needs no edit.
 
 - **State.** Fault history, drift baselines, CMMS ticket fingerprints and findings exports are
   keyed by `facility_id` inside a workspace (see [Per-facility state](#per-facility-state)), so a
-  rename never orphans them. State written before 0.87 is keyed by the free-text site name; move
+  rename never orphans them. State written before 0.86 is keyed by the free-text site name; move
   it with [`camber portfolio migrate`](#migrating-site-keyed-state).
 
 Registry v2 entries add `state`, `created_at`, `state_changed_at`, `display_name`, `owner`,
@@ -183,7 +183,7 @@ it is sent.
 
 ```
 camber portfolio migrate [FILE ...] [--config CFG ...] [--map "SITE=ID" ...]    # dry run (default)
-camber portfolio migrate ... --apply --reason "0.87 identity migration"
+camber portfolio migrate ... --apply --reason "0.86 identity migration"
 ```
 
 - **Inputs.** `FILE`s are legacy fault or baseline stores (the JSON files `FaultLifecycle` and
@@ -212,7 +212,7 @@ camber portfolio migrate ... --apply --reason "0.87 identity migration"
   it is refused. The stub stays in the facility's manifest as a `redirect` entry, and runs
   through it record the real `state/<fid>/` file. The audit log gets one `portfolio.migrate`
   record, plus one `facility.migrate` record per facility with its counts.
-- **Merges.** When one facility's history was split across two labels (a rename before 0.87
+- **Merges.** When one facility's history was split across two labels (a rename before 0.86
   orphaned it), the records are combined deterministically. For faults: the earliest
   `first_seen`, the latest `last_seen`, summed occurrences, the later record's workflow state, and
   both notes. For baselines: the reference keyed under the current display name stays live (it is
@@ -226,7 +226,7 @@ camber portfolio migrate ... --apply --reason "0.87 identity migration"
 opened for a facility (every config run inside a workspace) also reads site-keyed records whose
 `site` is one of the facility's unambiguous labels. It re-keys them in memory, keeps the old
 fingerprint as an alias (`FaultLifecycle.get(old_fp)` still resolves), and emits a
-`DeprecationWarning`. The path is deprecated since 0.87 and will be removed in 2.0; see
+`DeprecationWarning`. The path is deprecated since 0.86 and will be removed in 2.0; see
 [API-STABILITY.md](API-STABILITY.md#deprecated).
 
 ## The audit log
@@ -310,7 +310,7 @@ pf.audit_log(facility_id=fid)
 pf.state_dir(fid)  # <root>/state/<fid>
 pf.manifest(fid)  # files with sha256, external artifacts, migrations
 plan = pf.migrate(["old/faults.json"], configs=["site.json"])  # dry run
-pf.migrate(["old/faults.json"], mapping={"Annex": fid}, apply=True, reason="0.87 migration")
+pf.migrate(["old/faults.json"], mapping={"Annex": fid}, apply=True, reason="0.86 migration")
 
 from camber.faultlifecycle import FaultLifecycle
 

@@ -247,7 +247,7 @@ derived from the name. Ids are never reused: a removed id is tombstoned. `offboa
 Analyses skip facilities that are not active. A store-backed `camber run` on a suspended facility
 warns and finds no equipment unless the config source sets `"include_inactive": true`.
 
-`migrate` moves fault and baseline files written before 0.87, which were keyed by the free-text
+`migrate` moves fault and baseline files written before 0.86, which were keyed by the free-text
 site name, into `state/<facility_id>/`. It is a dry run unless `--apply` is given. It maps each
 site label to a facility through the registry (name, display name, earlier display names). It
 refuses ambiguous labels, unknown labels and labels of tombstoned facilities, with exit code 1 and

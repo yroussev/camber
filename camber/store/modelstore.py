@@ -192,7 +192,7 @@ class BaselineStore:
             warn_deprecated(
                 f"reading {len(legacy)} site-keyed baseline record(s) through the compatibility "
                 "path",
-                since="0.87",
+                since="0.86",
                 remove_in="2.0",
                 use="`camber portfolio migrate` to re-key them to facility_id once, on disk",
                 stacklevel=4,

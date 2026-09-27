@@ -29,7 +29,7 @@ def _store(tmp_path):
 def test_facade_facilities_points_history(tmp_path):
     api = ReadAPI(_store(tmp_path))
     # /facilities exposes the id + human name from the registry
-    # (additive since 0.87: the editable display_name and the lifecycle state)
+    # (additive since 0.86: the editable display_name and the lifecycle state)
     fac = {"facility_id": "S", "name": "Site S", "display_name": "Site S", "state": "active"}
     assert api.facilities() == {"facilities": [fac]}
     assert api.sites() == {"sites": ["S"]}  # deprecated alias still lists ids

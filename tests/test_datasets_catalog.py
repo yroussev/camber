@@ -276,7 +276,7 @@ def test_package_does_not_import_the_repo_guard():
             src = open(os.path.join(pkg, fn), encoding="utf-8").read()
             assert ".github" not in src and "site_neutrality" not in src
     text = open(os.path.join(pkg, "catalog.json"), encoding="utf-8").read()
-    for rx in _guard_patterns():  # incl. the third-party-host rules (no exemption until 0.87)
+    for rx in _guard_patterns():  # incl. the third-party-host rules (no exemption until 0.89)
         assert re.search(rx, text, re.IGNORECASE) is None, rx
 
 

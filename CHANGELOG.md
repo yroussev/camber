@@ -6,10 +6,13 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.86.0] — 2026-09-26
 
-**An open dataset catalog, and analysis that runs from the store.** A learner — or anyone
-validating CAMBER — can list open building datasets, download them with verified checksums,
-ingest them into a `ParquetStore`, and run the ordinary `camber run` / `report` / `drift` against
-them. This is the first of four catalog releases; the API is **provisional** until 1.0.
+**An open dataset catalog, analysis that runs from the store, and the first two steps of the
+portfolio lifecycle.** A learner — or anyone validating CAMBER — can list open building datasets,
+download them with verified checksums, ingest them into a `ParquetStore`, and run the ordinary
+`camber run` / `report` / `drift` against them. A portfolio workspace now gives facilities a
+lifecycle state, an audit trail and a stable `facility_id`, so renaming a facility no longer
+orphans its fault history, drift baselines or tickets. This is the first of four catalog
+releases; both APIs are **provisional** until 1.0.
 
 ### Added
 - **`camber.datasets`** and `camber datasets list | info | fetch | ingest | status | remove |
@@ -54,6 +57,48 @@ them. This is the first of four catalog releases; the API is **provisional** unt
   share-alike note.
 - A config `mv` section: a daily change-point M&V baseline per meter.
 
+### Added — portfolio lifecycle (provisional, `camber.portfolio`)
+- **A portfolio workspace:** `camber portfolio init | adopt | status | audit`. A workspace holds
+  the store, the retention policy, an fsynced append-only audit log and a single-writer lock.
+  `adopt` wraps an existing store in place (it moves nothing, and re-adopting is a no-op). The
+  retention defaults are stored now and enforced by a later release: raw trends 25 months, hourly
+  rollups 7 years, daily rollups indefinitely, findings 7 years, drift baselines for the life of
+  the equipment plus the last 10 versions, the last 12 reports, and the audit log forever; a legal
+  hold beats a facility override, which beats the default. See the new `docs/PORTFOLIO.md`.
+- **Facility lifecycle states** with `camber facility add | list | show | rename | activate |
+  suspend | resume`. Every change needs `--reason` and is audited with the OS user and host. A
+  second change command while the lock is held is refused at once; automated writes inside a
+  workspace (store writes, dataset ingest) wait up to 30 s. `offboard`, `archive`, `restore` and
+  `purge` are defined in the state machine and exit 2 until a later release adds export bundles
+  and the deletion cascade.
+- **Registry v2:** each entry gains `state`, lifecycle dates, an editable `display_name`, owner,
+  tags and notes; entries written before 0.86 read as active and are not rewritten until changed.
+  Removed ids are tombstoned (in `store/_tombstones.json`) and never reused, and an id that differs
+  from a known one only by case is refused, on registration and on write.
+- **Suspended facilities are skipped:** `ParquetStore.active_facilities()` and
+  `facility_state()`; `discover_store` and store-backed configs skip a suspended facility with one
+  `UserWarning` (`include_inactive=True`, or `"include_inactive": true` in a config, overrides).
+  The read API's `/facilities` adds `display_name` and `state`, and the `/ui` selector marks
+  facilities that are not active.
+- **Per-facility state keyed by `facility_id`.** `FaultLifecycle`, `BaselineStore`, the ticket and
+  findings-export helpers and `FaultRegister` take `facility_id=`; with it, fingerprints are keyed
+  by the facility and `site` is only a label, so a rename keeps the history. Records gain
+  `facility_id` and `aliases`, and a lookup by an old fingerprint still resolves. Without
+  `facility_id=` nothing changes.
+- **`camber portfolio migrate [FILE...] [--config CFG] [--map SITE=ID] [--apply --reason R]`**
+  re-keys site-keyed fault and baseline files into `state/<facility_id>/`. It is a dry run by
+  default; it refuses the whole apply (exit 1, nothing written) on an ambiguous, unknown or
+  tombstoned label; it keeps the originals under `migrated/`, leaves redirect stubs so existing
+  configs keep working, merges a history split across an old and a new name, and writes a sha256
+  manifest. A second apply writes nothing; `--apply` takes the lock and is audited.
+- **Config runs inside a workspace** open facility-bound stores (by default under
+  `state/<facility_id>/`) and list every output in the facility's manifest, which
+  `camber facility show` prints. Folder configs accept `facility_id` and `workspace`; a
+  tombstoned facility's config is refused. A new optional `faults` config section keeps fault
+  history across runs, and `RunResult` gains `facility_id`, `workspace` and `faults`. Inside a
+  workspace `drift freeze` needs `--reason`, and `drift freeze` / `drift accept` take the lock and
+  are audited.
+
 ### Fixed -- the catalog's own assumptions (#23, #25-#29, #31)
 The 2026-09-26 audit compared every catalog config with its publisher's documentation and with the
 data. CAMBER's own mistakes are simply fixed:
@@ -94,6 +139,10 @@ data. CAMBER's own mistakes are simply fixed:
   LBNL benchmark was fixed on `main` before this release: it listed three copies of the leak run.)
 - The dataset-ingest test fixture's "leak" run was byte-identical to its fault-free run (its leak
   never fired); the duplicate guard caught it.
+- `camber drift accept` on a store config without `"site"` saved the new baseline under an empty
+  key that runs never read.
+- A suspended facility whose config had a `drift` section raised an error instead of being
+  skipped.
 
 ### Changed
 - **`outdoor_air_fraction` judges fan-on samples by default** (`fan_gate=True`; fan status, else
@@ -109,6 +158,18 @@ data. CAMBER's own mistakes are simply fixed:
   (quirks, timestamp format, column transforms) and its run template's rule parameters, so it
   scores exactly what `camber datasets ingest` produces.
 - An unknown `source.kind` in a config now warns and falls back to folders.
+- `FacilityRegistry.remove()`, `drop_facility(forget=True)` and `datasets remove --purge-store`
+  now tombstone the id. Re-ingesting the same dataset lifts its own tombstone
+  (`FacilityRegistry.reclaim`, audited); no other id can.
+- `FacilityRegistry.name()` and `facility_name()` return the display name, so reports show a
+  facility's new name after a rename; `name` keeps the name it was registered under.
+
+### Deprecated
+- Reading site-keyed fault and baseline records (fingerprint `sha1(site, equip, rule/kind)`)
+  through the compatibility path of a store opened with `facility_id=` — it warns with a
+  `DeprecationWarning` — and the ticket field `legacy_fingerprint`. Both are deprecated since 0.86
+  and removed in 2.0; run `camber portfolio migrate`. Outside a workspace nothing warns and
+  nothing changes. See `docs/API-STABILITY.md`.
 
 ### Notes
 - **The LBNL and BDG2 benchmark baselines are refreshed (#30), with the maintainer's sign-off.**
@@ -147,8 +208,14 @@ data. CAMBER's own mistakes are simply fixed:
   `clear_store_cache`, `config.data_sources`, the report `data_sources` helpers, `ParquetStore`
   methods, `schedules.fan_on_mask` / `FAN_GATE_NONE`. Snapshot regenerated. No new core
   dependency.
-- Portfolio lifecycle (facilities joining and leaving, retention, admin overrides) is designed and
-  lands next, before the rest of the catalog.
+- New provisional names for the lifecycle: `camber.portfolio` (`Portfolio`, `PortfolioLocked`,
+  `LifecycleError`, `STATES`, `TRANSITIONS`, `DELETING`, `DEFAULT_POLICY`, `allowed_actions`,
+  `transition`, `find_workspace`, `is_workspace`), `FacilityRegistry.state` / `tombstones` /
+  `reclaim` and its `lock_timeout=`, and the `facility_id=` keywords above.
+- Until authentication lands, "admin" means write access to the portfolio root; the lock and the
+  audit log record who acted, they do not authorise. See `docs/SECURITY.md` §8.
+- Offboarding, archive bundles, restore, purge and retention enforcement are the next lifecycle
+  steps.
 
 ## [0.85.0] — 2026-09-25
 

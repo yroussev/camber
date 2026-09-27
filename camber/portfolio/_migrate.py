@@ -1,6 +1,6 @@
 """``camber portfolio migrate``: re-key site-keyed fault and baseline state to ``facility_id``.
 
-Before 0.87 a fault's and a drift baseline's fingerprint was ``sha1(site, equip, rule/kind)``,
+Before 0.86 a fault's and a drift baseline's fingerprint was ``sha1(site, equip, rule/kind)``,
 with ``site`` a free-text label -- so renaming a facility orphaned its history. This module moves
 such **legacy** state files into the workspace:
 

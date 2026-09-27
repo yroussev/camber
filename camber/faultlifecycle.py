@@ -77,7 +77,7 @@ class FaultRecord:
 def _warn_legacy(n: int, what: str) -> None:
     warn_deprecated(
         f"reading {n} site-keyed {what} record(s) through the compatibility path",
-        since="0.87",
+        since="0.86",
         remove_in="2.0",
         use="`camber portfolio migrate` to re-key them to facility_id once, on disk",
         stacklevel=4,
@@ -206,7 +206,7 @@ class FaultLifecycle:
 
         With a ``facility_id`` (here or bound at :meth:`load`) fingerprints are keyed by it and
         ``site`` is only the display label stored on new records; ``absent`` then covers that
-        facility's faults only. Without one, the key is ``site`` (the pre-0.87 behaviour).
+        facility's faults only. Without one, the key is ``site`` (the pre-0.86 behaviour).
         """
         rid = str(run_id)
         fid = facility_id or self.facility_id
