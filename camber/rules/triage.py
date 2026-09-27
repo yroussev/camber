@@ -128,8 +128,8 @@ class FaultRegister:
 # Findings on one equipment that fall in the same chain are grouped, with the most
 # upstream as the presumed root cause.
 #
-# Every member must be a rule name some registry actually emits (a test holds this): until
-# 0.87 the SAT chain listed "reheat_minimization", but the rule is "reheat_minimization_g36",
+# Every member must be a rule name some registry actually emits (a test holds this): before
+# 0.88 the SAT chain listed "reheat_minimization", but the rule is "reheat_minimization_g36",
 # so that link silently never grouped.
 # --------------------------------------------------------------------------- #
 

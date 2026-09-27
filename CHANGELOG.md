@@ -4,6 +4,93 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.88.0] — 2026-09-26
+
+**A retro-commissioning report.** `camber report --layout rcx` turns one run into a printable RCx
+document: what the data covers and which sensors to trust, one representative week, the
+economizer and supply-air reset, and one page per issue, with related findings linked into ranked
+issues and priced once. Re-reading its output against the LBNL single-duct AHU runs also found
+several rules judging fan-off samples; those are fixed. The report and its issue layer are
+**provisional** until 1.0.
+
+### Added
+- **The RCx report layout** (provisional, `camber.report.rcx`): `camber report CONFIG --layout
+  rcx`, or `camber.report.build_rcx_report`. One printable HTML document: a cover with the data
+  source and provenance (the non-commercial banner on every printed page for research-only data),
+  a one-page executive summary, data coverage and gated sensor trust, a representative week, the
+  economizer, a three-tier SAT reset census that declines a G36 verdict when the site has no
+  declared sequence, air distribution, M&V and drift, one page per issue, and appendices of
+  declined checks and assumptions. The week is chosen deterministically (`select_week`:
+  `evidence`, `oat-range`, `typical` or a fixed date) and the report says why. Engineer notes
+  (`--notes`, `--notes-template`), the fault store's notes on each issue page (`--lifecycle`),
+  `--paper letter|a4` and `--week`; `report.layout`
+  and a `report.rcx` config section; other layouts plug in through the `camber.reports` entry
+  point. See the new `docs/RCX-REPORT.md`.
+- **Linked issues** (provisional): `camber.rules.triage.link_findings` groups findings into ranked
+  `Issue`s. A sensor fault that could explain a finding is attached as a conditional cause, never
+  used to delete it; violation hours are the union across the linked findings, and a cause chain
+  is costed at its largest member, not the sum. `finding_confidence` grades each issue H / M / L
+  with its reasons; `issue_totals` rolls them up.
+- `RunResult.registry`, `frame_for`, `refs`, `data_sources`, `config` and `base_dir`;
+  `data_sources=` on `build_site_report` / `build_dashboard` (so the site report and dashboard carry
+  the non-commercial banner too); `sensor_trust(..., gate=)`, which
+  ignores flat stretches while the fan is off (opt-in, the default is unchanged);
+  `charts.template_violations`; `charts.box_by_hour`, which labels each hour with its sample count
+  (red under 10); and an `"equip": [names]` filter on config equipment entries.
+- `outdoor_air_fraction` takes `denom_min_f` (default 5 °F, the |RAT − OAT| guard); its fan gate
+  has been on by default since 0.86. Both OA rules report how many samples each guard left out
+  (`n_masked_fan_off`, `n_masked_small_delta_t`, `n_masked_out_of_range`; `OAFractionResult.masked`)
+  and `outdoor_air_fraction` records its `failure_mode`.
+
+### Changed
+- **Rules judge fan-on samples.** `supply_air_reset` fits and draws occupied, cooling, fan-on
+  samples only (on the LBNL stuck-damper run its slope goes from +0.015 to 0.000 and the verdict
+  holds); `supply_air_reset_compliance` judges fan-on, occupied samples by default and records
+  `fan_gate`, `occupancy_gate`, `n_gated` and `reset_source`; `supply_air_control` counts the fan
+  as running only when it is on for most of the interval, so start-up hours are no longer scored
+  as off setpoint; `economizer_high_limit` is fan-gated by default. All record which fan signal
+  gated them. Benchmark metrics are unchanged.
+- **Evidence matches the verdict.** `economizer_high_limit` and `outdoor_air_fraction` charts are
+  built from the rule's configured envelope and exactly the samples the verdict counts (with a
+  seasonal `min_oa_pct_by_month`, the OA-fraction chart plots each sample against its own month's
+  minimum);
+  `supply_air_reset` evidence is the SAT-vs-OAT cloud the rule fits, not a packaged G36-like band.
+- **Advice follows the failure mode.** `aso` recommendations for an OA-fraction finding now depend
+  on what failed: under-ventilation gets "Restore minimum outside air", excess outside air or a
+  missed high limit gets lockout advice at the rule's configured limit, and missed free cooling
+  gets "enable economizing". The audit report's action plan benefits too.
+- When nothing is costed, reports show "no costed issues" (and the fleet rollup "no costed
+  findings") instead of a $0 total; `FleetReport.cost_estimated` records whether a price was given.
+- A citation's DOI is printed once, in every report that renders citations, and a lead-in line
+  stays on the page with its figure or short table.
+
+### Fixed
+- `CAUSE_CHAINS` named `reheat_minimization` instead of `reheat_minimization_g36`, so that link
+  never grouped. The chains are now `sat`, `econ` and `static`, and a test checks every member is
+  an emitted rule.
+- The high-limit summary printed "OAF > 50%" while counting > 55%; it now states the threshold it
+  uses.
+- Chart legends read `Role.SUPPLY_AIR_TEMP`; they now read `supply_air_temp`.
+- `supply_air_reset_compliance` listed unused fan-signal alternatives as missing inputs; it now
+  names a fan signal as missing only when none is present.
+
+### Known issues
+- A rule without a rule-derived violation mask (e.g. `simultaneous_heat_cool`) shows its hours as
+  "not measured" in the RCx report. Economizer and OA-fraction issues are uncosted (there is no
+  excess-outside-air cost model yet).
+- The LBNL chiller- and boiler-plant RCx reports decline the representative week although the
+  plant data is there (the week panels consider air-side roles only), and a unit with no declared
+  G36 sequence can still get G36 advice on an issue page (#32).
+
+### Notes
+- New provisional names: `camber.report.rcx` (`RcxOptions`, `RcxReport`, `build_rcx_report`,
+  `select_week`, `WeekChoice`, `load_notes`, `notes_template`, `P3_FAMILIES`, `WEEK_MODES`) and in
+  `camber.rules.triage` `Issue`, `SensorCause`, `Confidence`, `link_findings`,
+  `finding_confidence`, `sensor_causes`, `issue_totals`, `SHARED_ROLES`. The additive parameters
+  and fields above are stable in shape. Snapshot regenerated. No new dependency.
+- Next for the RCx report: grounded AI prose with a cited fact index, an excess-OA cost model,
+  cross-equipment (AHU → VAV) issues, and PDF output.
+
 ## [0.87.0] — 2026-09-26
 
 **M&V baselines no longer extrapolate silently (#20), and the groundwork for rebaselining is in

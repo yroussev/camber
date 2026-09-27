@@ -225,6 +225,55 @@ umbrella rather than as new milestones. `CHANGELOG.md` is the per-release record
   cybersecure **edge forwarder**, and fault economics extended across the newer families.
 
 
+## Released — 0.86–0.88 (2026-09-26)
+
+Three stacked releases; `CHANGELOG.md` has the detail.
+
+- **0.86 — open datasets and the portfolio lifecycle, steps 1–2.** `camber datasets`: seven pinned
+  CC-BY / CC-BY-SA entries (the LBNL FDD sets and BDG2) with verified downloads, idempotent ingest
+  into the store and label scoring; store-backed config runs. A portfolio workspace with facility
+  lifecycle states, registry v2 with tombstones, an audit log and a single-writer lock; fault
+  history, drift baselines and tickets keyed by `facility_id`, with `camber portfolio migrate`
+  (#18). The catalog's data-issues audit shipped with it (#23–#31): every known problem in the
+  published data is described with its evidence and handling, CAMBER's own mapping and assumption
+  mistakes are fixed (fan-gated `outdoor_air_fraction` against each unit's own, possibly seasonal,
+  minimum OA; the BDG2 cleaned meters; `rate_to_energy` gaps), and the LBNL / BDG2 benchmark
+  baselines were refreshed with the maintainer's sign-off (#30).
+- **0.87 — M&V that does not extrapolate silently (#20)** and the rebaselining foundations (#21,
+  phase 21a): coverage grading that widens or declines extrapolated savings, lossless model
+  serialisation, coefficient p-values and the DOE SEP validity verdict, backcast savings, an exact
+  uncertainty kernel and multi-step non-routine event detection.
+- **0.88 — the RCx report** (`camber report --layout rcx`) and its linked-issue layer, with rules
+  that judge fan-on samples and evidence charts that match their verdicts.
+
+## Next
+
+Version numbers are given only where a release is already planned.
+
+- **Dataset catalog, the remaining releases.** Each moves up past the three versions that shipped
+  first:
+  - **0.89** (was 0.87) — the rest of the catalog and the research-only (NC/ND) tier, behind
+    `--accept-noncommercial`.
+  - **0.90** (was 0.88) — `camber lab`, a loopback-only local catalog UI (`camber serve` stays
+    GET-only).
+  - **0.91** (was 0.89) — education: worked exercises and learning docs on the catalog datasets.
+- **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
+  bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
+  decommissioning.
+- **M&V rebaselining, the rest of #21:** 21b SEP methods (chained and sequential savings, method
+  selection, SEnPI); 21c non-routine and static-factor adjustments; 21d versioned M&V baselines
+  and audited rebaselining; 21e validation (a BDG2 injection benchmark and the LBNL three-year
+  dataset in the catalog).
+- **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
+  model, cross-equipment (AHU → VAV) issues, and PDF output.
+- **RCx report, 0.88 follow-up (#32):** the plant reports (LBNL chiller and boiler) decline the
+  representative week although the data is there (the week panels consider air-side roles only),
+  and a report should not give G36 advice to a unit with no declared G36 sequence.
+- **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'
+  feedback; nothing is built.
+- **On hold — an MCP server** for CAMBER.
+
+
 ## Road to 1.0
 
 The capability surface is broad and now hardened; 1.0 is a consolidation, not new features.
