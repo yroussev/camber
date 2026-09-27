@@ -123,15 +123,56 @@ practice) rather than guessed, so the informative number is the TPR on the label
 sensor-bias runs act as genuine negatives (the plant is healthy, only a sensor lies). RTU/DDAHU/FCU
 remain available too.
 
-The tempting real-BMS AHU/VAV sets are, on inspection, **not usable for a commercial toolkit's
+The other real-BMS AHU/VAV sets are, on inspection, **not usable for a commercial toolkit's
 committed benchmark**: the only publicly-downloadable version of the widely-cited Korean large-office
 AHU set is a reduced sample (all-faulted, two coarse labels, no supply-air setpoint, stacked AHUs —
-no fault-free baseline to score against), and the richer modern real-labeled AHU/VAV datasets
-(multi-building office/auditorium/hospital; the RBC/G36 collection with fault-free baselines; the ORNL
-multi-zone VAV fleet) are all **CC-BY-NC-ND** — research-only, not vendorable. So no *real* labeled
-multi-zone VAV fleet is committable — which is why the reset/fleet family is validated on a
-**generated** fleet (next section) rather than downloaded, exactly as the G36 authors intend the
-public Trim-&-Respond logic to be reused.
+no fault-free baseline to score against), and the multi-building office/auditorium/hospital set is
+not in the catalog. The simulated RBC/G36 AHU collection (`rbc-g36-ahu`) is in the catalog but
+**research-only** (its archive bundles a third-party folder whose open licence CAMBER cannot vouch
+for), so its results are not published here. One real, labelled multi-zone VAV cohort is open —
+ORNL's (below) — but it is small and scores zone symptoms, not the Trim-&-Respond resets, which is
+why the reset/fleet family is still validated on a **generated** fleet (next section), exactly as
+the G36 authors intend the public Trim-&-Respond logic to be reused.
+
+### Real labelled multi-zone VAV cohort — ORNL FRP (`ornl-frp-vav`, CC-BY-4.0)
+
+CAMBER's **first result on real, labelled, multi-zone VAV data** (0.89): the ORNL Flexible Research
+Platform, a two-storey test building with one rooftop unit and ten VAV boxes, where a box damper was
+held stuck at 0 / 20 / 40 / 60 / 80 / 100 % for one day each in three rooms (106 and 104 in August
+2023, 205 in December 2023), plus a fault-free day per set, and room 205's airflow reading was biased
+±20 / 40 % over two sets of April 2024 days (Im, Jung & Yoon 2025, *Sci Data*,
+doi:10.1038/s41597-025-05063-z). Every box is logged, so each test day is a real zone cohort: the box
+under test is scored and its nine neighbours are unscored context.
+
+The catalog template scores **`unmet_setpoint_hours`** against the stuck dampers (its comfort
+symptom); the other 13 days — five fault-free days and eight airflow-bias days, which this rule does
+not target — are its negatives. On the `full` subset (31 days, `scripts/catalog_sweep.py --only
+ornl-frp-vav`):
+
+| Detector | Positives caught (TPR, 95% Wilson CI) | False alarms (FPR, 95% Wilson CI) |
+|---|---|---|
+| `unmet_setpoint_hours` → stuck box damper | **10 of 18** — 56% [34–75%] | **1 of 13** — 8% [1–33%] |
+
+By room: 104 caught 5 of 6 (misses 60 %), 106 caught 3 of 6 (misses 40 / 60 / 80 %), 205 caught 2 of
+6 (20 % and 40 %; misses 0 / 60 / 80 / 100 %). The one false alarm is room 205's set-3 fault-free day
+(2023-12-14): the room overheated in the afternoon from solar gain through its south and west windows
+(too hot 22 % of occupied hours), which the data descriptor's technical validation reports — real
+weather, not a fault.
+
+Caveats, stated because the intervals are wide:
+
+- **A symptom rule, not a damper detector.** A damper stuck near the flow the room needs that day
+  leaves no comfort symptom, so mid-range positions are missed; whether a stuck position is caught
+  depends on the day's weather and load as much as on the fault.
+- **Small n, one building, one day per case.** 18 positives in three rooms and 13 negatives; the
+  per-room splits are anecdote, not rates.
+- **Not a CI-gated benchmark** and not in the dossier (`camber validate`): the number comes from the
+  catalog sweep on the downloaded data, and is published here so it can be reproduced and re-checked.
+- **Nothing else is scored on it yet.** The airflow-bias days are emulated by moving the box's
+  minimum airflow setpoint (the logged flow is true — data issue
+  `airflow-bias-emulated-by-setpoint`), and no CAMBER rule targets them; the rogue-zone and
+  cohort-starvation censuses run per test day as context.
+
 
 ### Multi-zone fleet + reset validation (generated — `camber.fleetlab`)
 
