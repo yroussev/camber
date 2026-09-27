@@ -104,6 +104,26 @@ def test_oa_fraction_evidence_rederives_both_percentages():
     assert f.metrics["n_valid"] == len(ev.frame)
 
 
+def test_oa_fraction_evidence_with_a_seasonal_minimum_rederives_both_percentages():
+    frame = _mixing_frame(n=24 * 42).set_axis(
+        pd.date_range("2026-05-10", periods=24 * 42, freq="h")
+    )
+    rule = OutdoorAirFraction(min_oa_pct=30.0, cooling_cutoff_f=74.0, min_oa_pct_by_month={6: 15})
+    f = rule.analyze("DemoAHU", frame)
+    ev = rule.evidence("DemoAHU", frame)
+    # one flat line would misjudge one season: the chart plots OAF minus each sample's own minimum
+    assert "oa_fraction_vs_min_pts" in ev.frame.columns and "months 6" in ev.template.name
+    mask = template_violations(ev.frame, ev.template)
+    y = ev.frame["oa_fraction_vs_min_pts"]
+    cooling = ev.frame[Role.OAT] > 74.0
+    excess = mask & cooling & (y > 0.0)
+    under = mask & (y < 0.0)
+    assert f.metrics["excess_oa_pct"] > 0 and f.metrics["under_vent_pct"] > 0
+    assert round(100.0 * excess.sum() / cooling.sum(), 1) == f.metrics["excess_oa_pct"]
+    assert round(100.0 * under.mean(), 1) == f.metrics["under_vent_pct"]
+    assert f.metrics["n_valid"] == len(ev.frame)
+
+
 def test_oa_fraction_evidence_needs_oat():
     frame = _mixing_frame().drop(columns=[Role.OAT])
     assert OutdoorAirFraction().evidence("DemoAHU", frame) is None
@@ -189,7 +209,7 @@ def test_sat_reset_fit_and_evidence_are_fan_gated():
     assert "supply_fan_status" in no_fan.metrics["_missing_optional"]
 
 
-def test_oa_fraction_masks_are_counted_and_fan_gating_is_opt_in():
+def test_oa_fraction_masks_are_counted_and_fan_gating_is_on_by_default():
     frame = _mixing_frame()
     frame[Role.SUPPLY_FAN_STATUS] = (frame.index.hour % 6 != 0).astype(float)
     # fan-off hours read still air: mixed air at return temperature ("0 % OA")
@@ -197,20 +217,20 @@ def test_oa_fraction_masks_are_counted_and_fan_gating_is_opt_in():
     frame.loc[off, Role.MIXED_AIR_TEMP] = frame.loc[off, Role.RETURN_AIR_TEMP]
     frame.iloc[:40, frame.columns.get_loc(Role.RETURN_AIR_TEMP)] = frame[Role.OAT].iloc[:40] + 1
     default = OutdoorAirFraction().analyze("DemoAHU", frame)
-    gated = OutdoorAirFraction(fan_gate=True).analyze("DemoAHU", frame)
-    assert default.metrics["fan_gate"] == "off" and default.metrics["n_masked_fan_off"] == 0
-    assert gated.metrics["fan_gate"] == "fan status" and gated.metrics["n_masked_fan_off"] > 0
-    assert default.metrics["n_masked_small_delta_t"] > 0  # |RAT-OAT| < 5 °F
-    assert gated.metrics["n_valid"] < default.metrics["n_valid"]
+    ungated = OutdoorAirFraction(fan_gate=False).analyze("DemoAHU", frame)
+    assert default.metrics["fan_gate"] == "fan status" and default.metrics["n_masked_fan_off"] > 0
+    assert ungated.metrics["fan_gate"] == "off" and ungated.metrics["n_masked_fan_off"] == 0
+    assert ungated.metrics["n_masked_small_delta_t"] > 0  # |RAT-OAT| < 5 °F
+    assert default.metrics["n_valid"] < ungated.metrics["n_valid"]
     assert (
-        OutdoorAirFraction(denom_min_f=0.5)
+        OutdoorAirFraction(denom_min_f=0.5, fan_gate=False)
         .analyze("DemoAHU", frame)
         .metrics["n_masked_small_delta_t"]
-        < default.metrics["n_masked_small_delta_t"]
+        < ungated.metrics["n_masked_small_delta_t"]
     )
-    # the gated chart draws exactly the gated verdict's samples
-    ev = OutdoorAirFraction(fan_gate=True).evidence("DemoAHU", frame)
-    assert len(ev.frame) == gated.metrics["n_valid"]
+    # the (default, gated) chart draws exactly the gated verdict's samples
+    ev = OutdoorAirFraction().evidence("DemoAHU", frame)
+    assert len(ev.frame) == default.metrics["n_valid"]
 
 
 def test_high_limit_judges_fan_on_samples_and_counts_what_it_masked():

@@ -233,9 +233,10 @@ leak.
   rule's defaults (65 °F, differential on, a 55 % excess threshold because the design minimum is
   unknown); the caption lists what it could not judge (stuck damper: 884 hot fan-off samples,
   480 with |OAT − RAT| < 5 °F, 4 outside −20…120 %). The charts show 0 % out of band, as the `ok`
-  verdicts say. `outdoor_air_fraction`'s fan gate is off by default (turning it on moves the
-  LBNL benchmark), so its issue-page chart still includes a few samples below 0 % and above
-  100 %; they are the samples behind the two percentages in the finding.
+  verdicts say. `outdoor_air_fraction` is fan-gated by default too (since 0.86, with the unit's
+  trended occupancy and its own design minimum), so its issue-page chart draws the fan-on,
+  occupied samples behind the two percentages in the finding; with a seasonal minimum
+  (`min_oa_pct_by_month`) the chart plots each sample against its own month's minimum.
 - **Night duct static.** The box-by-hour shows 4–5 in.w.c. at hours 0–5 and 23, each box labelled
   with 1–4 samples: the simulated unit night-cycling in cold weather (-6 to 16 °F OAT) against
   closed boxes, not a gating or timezone error.
