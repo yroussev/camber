@@ -27,7 +27,10 @@ on the ``full`` subset by default, it:
    reviewed classification (:data:`KNOWN_TRIPS`; anything new is "unclear (unreviewed)").
 6. **reports** -- ``camber report --layout rcx`` and the audit layout for one fault-free and one
    faulted equipment; checks exit code, provenance/licence block, and that no G36 verdict appears
-   without a declared sequence. Build time and size recorded.
+   without a declared sequence (citations are not verdicts, #36). Build time and size recorded.
+   ``--skip-rcx ID,...`` builds only the audit layout for the named entries: the RCx report's
+   representative-week search (``select_week``) is slow on long runs -- one ``at-30bldg-sensors``
+   sensor (23 months) takes many minutes -- until #35 is fixed; the skip is recorded.
 7. **BDG2** -- the M&V baseline path for every ingested site (template meters, plus every other
    cleaned meter class), acceptance rates with Wilson intervals against
    ``examples/bdg2/benchmark-baseline.json``.
@@ -115,7 +118,9 @@ KNOWN_TRIPS: dict = {
     ),
 }
 
-# G36 mentions are fine only when qualified as a reference / declined verdict.
+# A G36 verdict (a finding judged against G36) is fine only when qualified as a reference / declined
+# verdict. Citations are not verdicts: a table column headed like _CITE_HEADERS (the action plan's
+# "Cite", an ECM "Standard" / "Reference") and a section citation ("G36 §5.16") are skipped (#36).
 _G36_OK = (
     "reference",
     "declined",
@@ -227,6 +232,7 @@ class Ctx:
         self.accept_noncommercial = bool(getattr(args, "accept_noncommercial", False))
         self.min_free_gb = args.min_free_gb
         self.skip_reports = args.skip_reports
+        self.skip_rcx = {x.strip() for x in (getattr(args, "skip_rcx", "") or "").split(",") if x}
         env = dict(os.environ)
         env["PYTHONPATH"] = REPO + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         env["CAMBER_DATA_DIR"] = self.cache
@@ -791,17 +797,99 @@ def _html_text(html: str) -> str:
     return re.sub(r"\s+", " ", text)
 
 
-def check_report(entry, html: str) -> dict:
-    text = _html_text(html)
-    lic = entry.licence
-    doi = entry.dois[0] if entry.dois else None
-    g36_bad = []
+_CITE_HEADERS = {
+    "cite",
+    "citation",
+    "citations",
+    "standard",
+    "standards",
+    "reference",
+    "references",
+}
+
+
+def _without_citations(html: str) -> str:
+    """``html`` with the cells of citation columns emptied (a table whose header row names the
+    column ``Cite`` / ``Standard`` / ``Reference``): those cells cite a source for an action; they
+    are never a verdict."""
+    from html.parser import HTMLParser
+
+    out: list = []
+
+    class P(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=False)
+            self.tables: list = []  # per open table: [header texts, column index, in-header-row]
+            self.cell: list | None = None  # text of the open <th>/<td>
+            self.skip = 0
+
+        def _raw(self):
+            return self.get_starttag_text() or ""
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "table":
+                self.tables.append([[], -1, False])
+            elif self.tables and tag == "tr":
+                self.tables[-1][1] = -1
+            elif self.tables and tag in ("th", "td"):
+                t = self.tables[-1]
+                t[1] += 1
+                if tag == "th":
+                    self.cell = []
+                elif t[1] < len(t[0]) and t[0][t[1]] in _CITE_HEADERS:
+                    self.skip += 1
+            out.append(self._raw())
+
+        def handle_endtag(self, tag):
+            if self.tables and tag == "th" and self.cell is not None:
+                self.tables[-1][0].append(" ".join("".join(self.cell).split()).lower())
+                self.cell = None
+            elif self.tables and tag == "td":
+                t = self.tables[-1]
+                if self.skip and t[1] < len(t[0]) and t[0][t[1]] in _CITE_HEADERS:
+                    self.skip -= 1
+            elif tag == "table" and self.tables:
+                self.tables.pop()
+            out.append(f"</{tag}>")
+
+        def handle_data(self, data):
+            if self.cell is not None:
+                self.cell.append(data)
+            if not self.skip:
+                out.append(data)
+
+        def handle_entityref(self, name):
+            self.handle_data(f"&{name};")
+
+        def handle_charref(self, name):
+            self.handle_data(f"&#{name};")
+
+    parser = P()
+    parser.feed(html)
+    parser.close()
+    return "".join(out)
+
+
+def g36_verdicts(html: str) -> list:
+    """Unqualified G36 verdicts in a report: G36 mentions outside citations (see
+    :func:`_without_citations` and a section citation such as ``G36 §5.16``) with no reference /
+    declined qualifier within 220 characters."""
+    text = _html_text(_without_citations(html))
+    bad = []
     for m in re.finditer(r"G36", text):
         if re.match(r"\s*(§|section\b)", text[m.end() : m.end() + 12]):
             continue  # a standards citation ("G36 §5.16.4"), not a verdict
         win = text[max(0, m.start() - 220) : m.end() + 220].lower()
         if not any(q in win for q in _G36_OK):
-            g36_bad.append(text[max(0, m.start() - 120) : m.end() + 120].strip())
+            bad.append(text[max(0, m.start() - 120) : m.end() + 120].strip())
+    return bad
+
+
+def check_report(entry, html: str) -> dict:
+    text = _html_text(html)
+    lic = entry.licence
+    doi = entry.dois[0] if entry.dois else None
+    g36_bad = g36_verdicts(html)
     return {
         "has_data_source_block": "Data source" in text,
         "licence_shown": lic in text,
@@ -856,16 +944,20 @@ def _first_equipment(ctx: Ctx, run: dict) -> list:
     return sorted(eqs)[:1]
 
 
+RCX_SKIPPED = "RCx not built (--skip-rcx): select_week is slow on long or large runs (#35)"
+
+
 def step_reports(ctx: Ctx, entry, run: dict, equips: list, ddir: str, log: str) -> dict:
     base = _read_json(run["config"])
     out = {}
+    layouts = ("audit",) if entry.id in ctx.skip_rcx else ("rcx", "audit")
     for eq in equips:
         cfg = json.loads(json.dumps(base))
         for spec in cfg.get("equipment") or []:
             spec["equip"] = [eq]
         cpath = os.path.join(ddir, "reports", f"config_{eq}.json")
         _write_json(cpath, cfg)
-        for layout in ("rcx", "audit"):
+        for layout in layouts:
             html = os.path.join(ddir, "reports", f"{eq}.{layout}.html")
             r = cli(ctx, ["report", cpath, "--out", html, "--layout", layout], log)
             rec = {"rc": r["rc"], "seconds": r["seconds"], "stdout": r["stdout"].strip()[-300:]}
@@ -1060,6 +1152,8 @@ def sweep_dataset(ctx: Ctx, entry) -> dict:
                     labels.update(m.get("labels") or {})
                 pair = _report_pair(entry, labels) or _first_equipment(ctx, run)
                 step("reports", step_reports, ctx, entry, run, pair, ddir, log)
+                if entry.id in ctx.skip_rcx:
+                    rec["reports_note"] = RCX_SKIPPED
         if not ctx.keep_extracted:
             shutil.rmtree(os.path.join(ctx.cache, entry.id, "extracted"), ignore_errors=True)
         rec["status"] = "done" if not rec["failures"] else "done_with_failures"
@@ -1388,6 +1482,8 @@ def render_md(summary: dict) -> str:
                 )
             for why, n in mv["decline_reasons"].items():
                 L.append(f"  - declined x{n}: {why}")
+        if rec.get("reports_note"):
+            L.append(f"- {rec['reports_note']}")
         for k, v in (s.get("reports") or {}).items():
             c = v.get("checks") or {}
             L.append(
@@ -1491,6 +1587,13 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--min-free-gb", type=float, default=40.0, help="stop below this free disk")
     ap.add_argument("--skip-reports", action="store_true")
+    ap.add_argument(
+        "--skip-rcx",
+        metavar="IDS",
+        default="",
+        help="comma-separated dataset ids whose reports skip the RCx layout (audit only): RCx's "
+        "select_week is slow on long or large runs (#35)",
+    )
     ap.add_argument(
         "--run-benchmarks",
         action="store_true",

@@ -1240,11 +1240,15 @@ template has a drift section); scores labelled entries, including a re-score on 
 benchmark's scenario set against `examples/lbnl_fdd/benchmark-baseline.json`; lists every rule
 that trips on a fault-free scenario; builds the RCx and audit reports for one fault-free and one
 faulted equipment and checks their licence block and that no G36 verdict appears without a
-sequence; and runs the BDG2 M&V baseline over every site against
+sequence (a citation -- an action plan's `Cite` column, an ECM `Standard` -- is not a verdict);
+and runs the BDG2 M&V baseline over every site against
 `examples/bdg2/benchmark-baseline.json`. It writes `summary.json` and `summary.md`, stops before
 free disk would drop below `--min-free-gb` (40 GB), and is resumable per dataset (`--only`,
 `--skip-done`). Manual entries are verified from the seeded copies the way `ingest --from-dir`
-does, and research-only entries are swept only with `--accept-noncommercial`. It is dev tooling,
+does, and research-only entries are swept only with `--accept-noncommercial`. `--skip-rcx
+at-30bldg-sensors` builds only the audit report for the named entries: the RCx report's
+representative-week search is slow on long runs (one 23-month sensor takes many minutes; #35),
+and the skip is recorded in the summary. It is dev tooling,
 not part of the package and not run in CI (it needs the full local data, tens of GB).
 
 ## Link check (maintainers)
