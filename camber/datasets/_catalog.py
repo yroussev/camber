@@ -373,6 +373,7 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
     for q in ing.get("quirks") or []:
         errs.extend(f"{did}: {e}" for e in validate_quirk(q))
     _check_transforms(did, ing, errs)
+    _check_brick(did, ing, file_names, errs)
     run_ids: set = set()
     for r in ing.get("runs") or []:
         rid = r.get("id", "")
@@ -405,6 +406,37 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
         except ValueError:
             errs.append(f"{did}: splice onset must be an ISO date")
     return run_ids
+
+
+def _check_brick(did: str, ing: dict, file_names: dict, errs: list) -> None:
+    """``ingest.brick`` names a shipped file (or archive member) and maps Brick classes to
+    CAMBER equipment classes; ``group: "brick"`` runs need it."""
+    b = ing.get("brick")
+    grouped = [r.get("id") for r in ing.get("runs") or [] if r.get("group") is not None]
+    for r in ing.get("runs") or []:
+        if r.get("group") not in (None, "brick"):
+            errs.append(f"{did}/{r.get('id')}: group must be 'brick'")
+    if b is None:
+        if grouped:
+            errs.append(f"{did}: runs {grouped} group by Brick but ingest.brick is not set")
+        return
+    if not isinstance(b, dict) or b.get("file") not in file_names:
+        errs.append(f"{did}: ingest.brick.file must name one of the entry's files")
+        return
+    if b.get("member") and file_names[b["file"]].get("archive") is None:
+        errs.append(f"{did}: ingest.brick.member only applies to an archive file")
+    members = file_names[b["file"]].get("members")
+    if b.get("member") and members is not None and b["member"] not in members:
+        errs.append(f"{did}: ingest.brick.member {b['member']!r} is not in {b['file']}")
+    ec = b.get("equip_classes")
+    if (
+        not isinstance(ec, dict)
+        or not ec
+        or not all(isinstance(k, str) and isinstance(v, str) and k and v for k, v in ec.items())
+    ):
+        errs.append(
+            f"{did}: ingest.brick.equip_classes must map Brick classes to CAMBER equipment classes"
+        )
 
 
 def _check_transforms(did: str, ing: dict, errs: list) -> None:

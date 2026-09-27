@@ -321,10 +321,81 @@ def read_wide_run(
             cols[role] = pd.to_numeric(raw[c], errors="coerce")
     if not cols:
         return pd.DataFrame(), notes, [f"{run_id}: no mapped columns"]
+    frame = _role_frame(cols, spec)
+    return frame, notes, plausibility_warnings(frame, label=str(run_id))
+
+
+def _role_frame(cols: dict, spec: dict) -> pd.DataFrame:
+    """``{role: raw series}`` -> resampled, IP-converted, percent-normalized role frame."""
     frame = _resample(pd.DataFrame(cols), spec.get("resample", "15min"))
     frame = convert_frame(frame, spec.get("units") or {})
-    frame = normalize_percent_frame(frame)
-    return frame, notes, plausibility_warnings(frame, label=str(run_id))
+    return normalize_percent_frame(frame)
+
+
+def _brick_grouping(entry, inputs, root):
+    """The entry's Brick grouping plan source (``None`` when it declares no ``ingest.brick``)."""
+    from ._brickgroup import grouping_from_brick
+
+    bspec = entry.ingest.get("brick")
+    if not bspec:
+        return None
+    fname, member = bspec["file"], bspec.get("member")
+    if member:
+        path = _extract_members(entry, [{"file": fname, "member": member}], inputs, root)[
+            (fname, member)
+        ]
+    else:
+        path = inputs[fname][0]
+    with open(path, encoding="utf-8") as fh:
+        ttl = fh.read()
+    return grouping_from_brick(ttl, dict(bspec.get("equip_classes") or {}))
+
+
+def _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used: set):
+    """One ``group: "brick"`` run -> ``({equip: (class, role frame)}, notes, warnings)``."""
+    from ._brickgroup import mapping_overrides
+
+    mp, over = mapping_overrides(mapping_spec)
+    header = read_table(path, sheet=run.get("sheet", spec.get("sheet")), nrows=0).columns
+    ts = spec.get("timestamp", "Datetime")
+    plan = grouping.plan(
+        [c for c in header if c != ts],
+        default_equip=run["equip"],
+        default_class=run["class"],
+        mapping=mp,
+        overrides=over,
+    )
+    notes: list = []
+    if not plan:
+        return {}, notes, [f"{run['id']}: no column is a mapped Brick point"]
+    roles = MappingProvider.from_dict({"aliases": {c: g.role.value for c, g in plan.items()}})
+    raw, qn = read_raw_run(
+        path, roles, spec, run["id"], corrections=corrections, sheet=run.get("sheet")
+    )
+    notes += qn
+    suffix = f"__{_scenario(run)}" if run.get("label") else ""
+    by_equip: dict = {}
+    for col, g in plan.items():
+        if col not in raw.columns:
+            continue
+        eq = g.equip + suffix
+        if (eq, g.role) in used:
+            notes.append(f"{run['id']}: {col} skipped: {eq} already has {g.role.value}")
+            continue
+        used.add((eq, g.role))
+        by_equip.setdefault(eq, (g.equip_class, {}))[1][g.role] = pd.to_numeric(
+            raw[col], errors="coerce"
+        )
+        if g.source == "mapping":
+            notes.append(
+                f"{run['id']}: {col} -> {eq}/{g.role.value} (mapping file overrides Brick)"
+            )
+    out, warns = {}, []
+    for eq, (cls, cols) in by_equip.items():
+        frame = _role_frame(cols, spec)
+        out[eq] = (cls, frame)
+        warns += plausibility_warnings(frame, label=f"{run['id']}/{eq}")
+    return out, notes, warns
 
 
 def splice(base: pd.DataFrame, fault: pd.DataFrame, onset) -> pd.DataFrame:
@@ -433,8 +504,11 @@ def _base_meta(entry: DatasetEntry, root: str, subset: str, shas: dict, chash: s
 
 def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:
     spec = entry.ingest
-    mapping_text = package_text("mappings", spec["mapping"])
-    mapping = MappingProvider.from_dict(json.loads(mapping_text))
+    mapping_text = package_text("mappings", spec["mapping"]) if spec.get("mapping") else "{}"
+    mapping_spec = json.loads(mapping_text)
+    mapping = MappingProvider.from_dict(mapping_spec)
+    grouping = _brick_grouping(entry, inputs, root)
+    used: set = set()
     runs = entry.runs(subset)
     duplicates = _duplicate_runs(runs, inputs)
     runs = [r for r in runs if r["id"] not in duplicates]
@@ -451,6 +525,17 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
         if progress:
             progress(f"{entry.id}: run {i}/{len(runs)} {run['id']}")
         path = paths[(run["file"], run["member"])] if run.get("member") else inputs[run["file"]][0]
+        if run.get("group") == "brick":
+            groups, qn, w = _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used)
+            notes += [n for n in qn if n not in notes]
+            warns += w
+            for eq, (cls, frame) in groups.items():
+                rows += st.write_role_frame(frame, facility_id=fid, equip=eq, equip_class=cls)
+                if run.get("exclude"):
+                    excluded[eq] = {"label": run["label"], "issue": run["exclude"]}
+                else:
+                    labels[eq] = run["label"]
+            continue
         frame, qn, w = read_wide_run(
             path, mapping, spec, run_id=run["id"], corrections=corrections, sheet=run.get("sheet")
         )
@@ -484,6 +569,8 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
         "runs": len(runs),
         "duplicates": duplicates,
     }
+    if grouping is not None:
+        extra["grouping"] = "brick"
     n_eq = len(labels) + len(excluded) + len(onsets)
     return {fid: (entry.title, rows, n_eq, extra)}, mapping_text, warns
 

@@ -859,6 +859,7 @@
     "mapping_from_brick",
     "parse_triples",
     "parse_triples_rdflib",
+    "part_parents_from_brick",
     "report_from_triples",
     "roles_from_brick",
     "roles_from_triples",

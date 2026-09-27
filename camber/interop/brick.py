@@ -25,7 +25,7 @@ full RDF parser; for complex models, parse with rdflib and pass the triples to
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..model.mapping import MappingProvider
 from ..model.roles import Role
@@ -195,6 +195,7 @@ def parse_triples(ttl: str):
     text = " ".join(lines)
     types: dict = {}
     has_point: dict = {}
+    point_of: dict = {}
     for stmt in re.split(r"\s\.\s", text + " "):
         stmt = stmt.strip().rstrip(".").strip()
         if not stmt:
@@ -215,7 +216,22 @@ def parse_triples(ttl: str):
                 types[subj] = _local(objs[0])
             elif pred.endswith("hasPoint"):
                 has_point.setdefault(subj, []).extend(_local(o) for o in objs)
-    return types, has_point
+            elif pred.endswith("isPointOf") and objs:
+                point_of.setdefault(subj, _local(objs[0]))
+    return types, _merge_point_of(has_point, point_of)
+
+
+def _merge_point_of(has_point: dict, point_of: dict) -> dict:
+    """Fold ``point brick:isPointOf part`` (the inverse of ``hasPoint``) into ``has_point``.
+
+    An explicit ``hasPoint`` wins: a point some part already claims keeps that owner.
+    """
+    claimed = {p for pts in has_point.values() for p in pts}
+    for point, part in point_of.items():
+        if point not in claimed:
+            has_point.setdefault(part, []).append(point)
+            claimed.add(point)
+    return has_point
 
 
 def _context_role(point: str, pcls: str, owner_cls: str, owner_name: str):
@@ -298,6 +314,12 @@ class BrickPointMapping:
     ``status`` is ``"mapped"`` (a standard class), ``"alias"`` (a non-standard class accepted
     with a caveat in ``note``), ``"ambiguous"`` (a role is plausible but the model does not pin
     it down -- **not** mapped; ``note`` says why) or ``"unmapped"`` (no CAMBER role).
+
+    ``owner`` is the Brick entity the point belongs to (``brick:hasPoint``, or the inverse
+    ``brick:isPointOf``) and ``owner_class`` its class; both are ``""`` for a point no entity
+    claims. An importer groups points into equipment by owner (the dataset ingester walks up
+    ``hasPart`` / ``isPartOf`` from the owner to the first equipment class it maps; see
+    :func:`part_parents_from_brick`).
     """
 
     point: str
@@ -305,6 +327,8 @@ class BrickPointMapping:
     role: Role | None
     status: str
     note: str = ""
+    owner: str = ""
+    owner_class: str = ""
 
 
 @dataclass(frozen=True)
@@ -367,6 +391,8 @@ class BrickMappingReport:
                     "role": p.role.value if p.role is not None else None,
                     "status": p.status,
                     "note": p.note,
+                    "owner": p.owner,
+                    "owner_class": p.owner_class,
                 }
                 for p in self.points
             ],
@@ -446,6 +472,10 @@ def report_from_triples(types: dict, has_point: dict) -> BrickMappingReport:
             )
         else:
             results[subj] = BrickPointMapping(subj, cls, None, "unmapped", "")
+    for subj, r in results.items():
+        part = owner.get(subj)
+        if part:
+            results[subj] = replace(r, owner=part, owner_class=types.get(part, ""))
     return BrickMappingReport(tuple(results[k] for k in sorted(results)))
 
 
@@ -483,13 +513,16 @@ def parse_triples_rdflib(ttl: str):
     g.parse(data=ttl, format="turtle")
     types: dict = {}
     has_point: dict = {}
+    point_of: dict = {}
     for s, p, o in g:
         pl = _local(str(p))
         if pl == "type":  # rdf:type
             types[_local(str(s))] = _local(str(o))
         elif pl == "hasPoint":  # brick:hasPoint (any Brick version)
             has_point.setdefault(_local(str(s)), []).append(_local(str(o)))
-    return types, has_point
+        elif pl == "isPointOf":  # the inverse, as some models (e.g. Building 59) write it
+            point_of.setdefault(_local(str(s)), _local(str(o)))
+    return types, _merge_point_of(has_point, point_of)
 
 
 def _parse(ttl: str, backend: str):
@@ -607,3 +640,20 @@ def topology_from_brick(ttl: str, *, backend: str = "auto") -> Topology:
     for child, parents in _predicate_links(ttl, "isFedBy", backend).items():
         edges.extend((parent, child) for parent in parents)
     return Topology.from_edges(edges, provenance="semantic")
+
+
+def part_parents_from_brick(ttl: str, *, backend: str = "auto") -> dict:
+    """``{part -> [parent, ...]}`` from ``brick:hasPart`` (parent->part) and ``brick:isPartOf``.
+
+    Containment, not flow: the dataset ingester walks it upward from a point's owner (a coil, a
+    damper) to the equipment that contains it (the air handler).
+    """
+    out: dict = {}
+    for parent, parts in _predicate_links(ttl, "hasPart", backend).items():
+        for part in parts:
+            out.setdefault(part, []).append(parent)
+    for part, parents in _predicate_links(ttl, "isPartOf", backend).items():
+        for parent in parents:
+            if parent not in out.get(part, []):
+                out.setdefault(part, []).append(parent)
+    return out
