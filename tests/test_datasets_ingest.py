@@ -77,7 +77,10 @@ def _zip_bytes() -> bytes:
             ("AHU_damper.csv", "damper"),
             ("AHU_leak.csv", "leak"),
         ):
-            z.writestr(f"TEST/{name}", _run_csv(kind))
+            # a fixed member date: the bytes (and so the pinned sha256) must not depend on the
+            # second the fixture is built in
+            info = zipfile.ZipInfo(f"TEST/{name}", date_time=(2020, 1, 1, 0, 0, 0))
+            z.writestr(info, _run_csv(kind), compress_type=zipfile.ZIP_DEFLATED)
     return buf.getvalue()
 
 

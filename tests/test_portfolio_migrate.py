@@ -133,7 +133,12 @@ def test_apply_moves_rekeys_stubs_manifests_and_audits(tmp_path):
         assert BaselineStore.load(bp, facility_id=a).get("x", "AHU_1", "fan_efficiency")
 
 
-def test_apply_is_idempotent(tmp_path):
+def test_apply_is_idempotent(tmp_path, monkeypatch):
+    # an injected clock: the lock's holder line records when it was taken, and two applies a
+    # second apart would otherwise differ in that text alone (#34)
+    from camber.portfolio import _lock
+
+    monkeypatch.setattr(_lock, "_utc_now", lambda: "2026-01-01T00:00:00Z")
     pf, (a,) = _ws(tmp_path, "North Campus")
     fp = _legacy_faults(tmp_path / "faults.json", "North Campus")
     pf.migrate([fp], apply=True, reason="once")
