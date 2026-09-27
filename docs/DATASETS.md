@@ -387,3 +387,28 @@ Downloads and extracted members live in the cache: `$CAMBER_DATA_DIR`, else
 Dropped facility ids are tombstoned and so never reused for another building; re-ingesting the
 *same* dataset reclaims its own id (see [PORTFOLIO.md](PORTFOLIO.md#facility-identity)).
 See [SECURITY.md](SECURITY.md) section 7 for the download guarantees.
+
+## Pre-release catalog check (maintainers)
+
+Before a release that changes the catalog, run every entry end to end on local data:
+
+```sh
+python scripts/catalog_sweep.py --out /scratch/sweep --local-root examples/_data --run-benchmarks
+python scripts/catalog_sweep.py --out /scratch/sweep --skip-done           # resume after a stop
+python scripts/catalog_sweep.py --out /scratch/sweep2 ... --compare /scratch/sweep/summary.json
+```
+
+For each entry (the `full` subset by default; `--subset default` for a quick pass) it seeds the
+cache from the local copies (hard links, matched by size and name) and verifies them through the
+real `fetch` path with the network refused (`--download-missing` allows it for files with no local
+copy); ingests into one store inside a portfolio workspace and re-ingests to prove the skip on an
+unchanged content hash; runs each config template with `camber run` (and `camber drift run` when a
+template has a drift section); scores labelled entries, including a re-score on the LBNL
+benchmark's scenario set against `examples/lbnl_fdd/benchmark-baseline.json`; lists every rule
+that trips on a fault-free scenario; builds the RCx and audit reports for one fault-free and one
+faulted equipment and checks their licence block and that no G36 verdict appears without a
+sequence; and runs the BDG2 M&V baseline over every site against
+`examples/bdg2/benchmark-baseline.json`. It writes `summary.json` and `summary.md`, stops before
+free disk would drop below `--min-free-gb` (40 GB), and is resumable per dataset (`--only`,
+`--skip-done`). It is dev tooling, not part of the package and not run in CI (it needs the full
+local data, tens of GB).
