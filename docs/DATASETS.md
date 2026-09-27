@@ -38,7 +38,7 @@ datasets.config_template("lbnl-sdahu", "lab_store", out="sdahu.json")
 print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 ```
 
-## The catalog (0.86)
+## The catalog
 
 | id | what | kind | labelled | licence | default subset |
 |---|---|---|---|---|---|
@@ -49,6 +49,9 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `lbnl-chiller` | chiller plant, 24 runs | simulated | yes | CC-BY-4.0 | 4 runs |
 | `lbnl-boiler` | boiler plant, 17 runs, Brick model | simulated | yes | CC-BY-4.0 | 4 runs |
 | `bdg2` | 3,053 whole-building meters, 19 sites | real | no | CC-BY-SA-4.0 | 10 sites x up to 4 buildings |
+| `lbnl-b59` | real office: 4 rooftop units with measured OA flow, 11 zone CO2 sensors, 51 underfloor terminals, Brick model (manual download) | real | no | CC-BY-4.0 | RTUs, CO2 zones and weather, 3 years |
+| `finnish-dcv` | laboratory office room with occupancy-based DCV and ground-truth counts | lab | no | CC-BY-4.0 | all 3 files |
+| `b4b-windesheim` | 3 office rooms, two CO2 sensors each, ventilation valve, PIR | real | no | CC-BY-4.0 | all 5 runs |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -503,6 +506,132 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** Eagle's weekday electricity profile runs ~5 h later than the pooled profile of the other sites (overnight minimum at 07-08 h vs 03 h; daytime plateau 14-19 h vs 10-15 h) while its air temperature peaks at 15 h like every site's, and its chilled water peaks at 20 h (12-17 h elsewhere). Cross-correlated with its own air temperature, Eagle's meters align best when the weather is shifted 5 h (chilled water) / 3 h (electricity) later, against -4 to +1 h at the other sites (where the correlation is meaningful) -- a UTC-like clock on a US/Eastern site.
 - **Contradicts:** Miller et al. 2020, Usage Notes (the BDG2 timestamps, weather included, are in the local time zone) (Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the offset is inferred (4 or 5 h), not documented, so it is not shifted. Daily models are barely affected; an hourly or time-of-week analysis of Eagle should shift its meters.
+
+### `lbnl-b59`: LBNL Building 59: three years of a real office's rooftop units, zone CO2 and underfloor terminals
+
+#### Timestamps are UTC, which no document states
+
+- **Issue:** `timestamps-in-utc`
+- **Columns:** `date (every CSV)`
+- **Evidence:** Solar radiation at the campus station peaks at 20:00-21:00 (792-817 W/m2, 15-25 June 2019) and is zero from 04:00 to 12:00; the camera occupancy counts peak at 17:00-22:00 on weekdays (25 people at 17:00 vs 0.1 at 11:00); and the RTU files run straight through the US spring-forward hour (71 rows from 01:55 to 03:05 on 2018-03-11, 2019-03-10 and 2020-03-08) with no repeated hour in November. Solar noon in Berkeley is about 20:10 UTC in June, so the stamps are UTC (Pacific time minus 7-8 h).
+- **Contradicts:** README_Dryad_Bldg59.txt and the data description table give no time zone; the data descriptor presents the building's schedules and the Table 2 event dates as local time (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: none** -- described only. Not a correction of values: the ingest declares source_timezone UTC and local_timezone America/Los_Angeles (CAMBER's timestamp semantics, applied in every mode), so the store holds Berkeley wall-clock time and the occupied-hour schedules line up. The November fall-back hour keeps both readings (averaged); quirk timestamps below are UTC.
+
+#### RTU outdoor-air flow before 2020-04-10 is imputed, not measured
+
+- **Issue:** `oa-flow-gap-filled`
+- **Columns:** `rtu_001_oa_flow_tn`, `rtu_002_oa_flow_tn`, `rtu_003_oa_flow_tn`, `rtu_004_oa_flow_tn`
+- **Evidence:** Up to 2020-04-10 21:59 UTC the hourly OA flows of the four RTUs correlate 0.998-0.999 pairwise (one pattern scaled four ways, 1,005,495 minute rows per RTU); from 22:00 UTC on they correlate 0.72-0.83, the daily minimum drops from above 2,590 cfm to 1,305-1,730 cfm, and the readings reach the transmitter ceiling of 19,999 cfm, which the earlier values never exceed (maxima 13,093-16,148 cfm).
+- **Contradicts:** Data description table (rtu_oa_fr.csv: available Apr-Dec 2020) versus the file, which has values for all of 2018-2020; README methods (gaps filled by linear interpolation, KNN and matrix factorization) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Masked (NaN) before 2020-04-10 22:00 UTC in every RTU run, so no OA-flow rule or check judges the imputed years; the OA damper position is kept for the whole period.
+
+#### RTU04's return-air temperature is a copy of its supply-air temperature from September 2019
+
+- **Issue:** `rtu4-return-copies-supply`
+- **Columns:** `rtu_004_ra_temp`, `rtu_004_sa_temp`
+- **Evidence:** rtu_004_ra_temp equals rtu_004_sa_temp to the last digit in 0.04% of 2018 minutes, 29.8% of 2019 and 99.1% of 2020; from 2019-09-19 on 98.5% of days are at least 90% identical. The other three RTUs' return and supply agree in 0.13-0.22% of minutes (median difference 4.2-5.2 F).
+- **Contradicts:** Brick model (rtu_004_ra_temp is a Return_Air_Temperature_Sensor of RTU04) and the data description table (Roof Top Unit return air temperature) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place on purpose: it is a genuine data fault that the sensor-health layer's copied-signal check (camber.sensorhealth.copied_signal_consistency) should find. Economizer and mixing-balance results on RTU04 after 2019-09-19 judge a copy.
+
+#### Mixed-air temperatures leave the outdoor/return band, mostly in 2018-2019
+
+- **Issue:** `mixed-air-outside-oa-ra-band`
+- **Columns:** `rtu_001_ma_temp`, `rtu_002_ma_temp`, `rtu_003_ma_temp`, `rtu_004_ma_temp`
+- **Evidence:** Hourly mixed-air temperature lies more than 2 F outside [min(OAT, RAT), max(OAT, RAT)] -- which a blend of the two cannot do -- in 10.7% (Jul-Dec 2018), 23.0% (Jul-Dec 2019) and 0.6% (Jul-Dec 2020) of RTU01 hours and 4.2%, 9.2% and 13.5% of RTU04 hours (RTU04's return is a copy of supply from 2019-09, see above); RTU02 and RTU03 stay at or below 3.6%.
+- **Contradicts:** Data description table (rtu_*_ma_temp: Roof Top Unit mixed air temperature; the only outlier criterion is < 32 F or > 122 F) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place: an inaccurate mixed-air sensor is a real sensor-health test (camber.sensorhealth.mixing_consistency; issue #16 would weigh the flow balance into the trust score). Rules that read MAT on RTU01/RTU04 in 2018-2019 are judging a doubtful sensor.
+
+#### Measured OA flow sits at a 19,999 cfm ceiling and above the unit's own supply flow
+
+- **Issue:** `oa-flow-exceeds-supply`
+- **Columns:** `rtu_001_oa_flow_tn`, `rtu_002_oa_flow_tn`, `rtu_003_oa_flow_tn`, `rtu_004_oa_flow_tn`, `rtu_001_fltrd_sa_flow_tn`, `rtu_002_fltrd_sa_flow_tn`, `rtu_003_fltrd_sa_flow_tn`, `rtu_004_fltrd_sa_flow_tn`
+- **Evidence:** After 2020-04-10 the OA flow reads exactly 19,999 cfm in 5.55% of RTU04 minutes and 1.24% of RTU01 minutes, and exceeds the same unit's filtered supply airflow in 7.3% (RTU04), 4.1% (RTU01), 1.5% (RTU03) and 1.3% (RTU02) of hours. The descriptor gives each RTU a design supply airflow of 20,000 cfm and a minimum OA of 5,000 cfm.
+- **Contradicts:** Data descriptor, HVAC system description (design airflow 20,000 cfm per RTU, minimum outdoor air 5,000 cfm) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place: the ceiling is the transmitter span, and OA above supply is a flow-station error the DCV rule's floor check is not affected by (it looks at low flows). Treat OA flow above the supply flow as unmeasured.
+
+#### One zone CO2 sensor reads far below outdoor air, and every sensor carries a 72 ppm floor
+
+- **Issue:** `zone-co2-below-outdoor`
+- **Columns:** `zone_022_co2`, `zone_028_co2`, `zone_033_co2`, `zone_040_co2`, `zone_044_co2`, `zone_045_co2`, `zone_052_co2`, `zone_058_co2`, `zone_062_co2`, `zone_068_co2`, `zone_072_co2`
+- **Evidence:** zone_022_co2 is below 350 ppm in 27,120 minutes (8,420 of them in June 2020, when its monthly median is 362 ppm against 409-420 ppm for the other ten zones) and reads exactly 72 ppm in 11,661 minutes; the other ten sensors touch that same 72 ppm value 1-5 times each. Outdoor CO2 was about 410 ppm.
+- **Contradicts:** Data description table (zone_*_co2: CO2 concentration; the only outlier criterion is < 0) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place: dcv_system_verification drops CO2 outside 250-5,000 ppm and excludes a zone whose CO2 stays implausible, and sensor health's zone-vs-outdoor CO2 check flags it.
+
+#### Fan-speed feedback reads -25% while the fans are stopped
+
+- **Issue:** `fan-speed-negative-when-off`
+- **Columns:** `rtu_001_sf_vfd_spd_fbk_tn`, `rtu_002_sf_vfd_spd_fbk_tn`, `rtu_003_sf_vfd_spd_fbk_tn`, `rtu_004_sf_vfd_spd_fbk_tn`
+- **Evidence:** Each supply- and return-fan speed feedback reads -24.9% or -25.0% in 0.9% of minutes (12,419 minutes for RTU01's supply fan, in 13 episodes, e.g. 2018-01-29 and 2019-02-26); in those minutes the unit's filtered supply airflow has a median of 0 cfm.
+- **Contradicts:** Data description table (rtu_*_sf_vfd_spd_fbk_tn: supply fan speed in %) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place: it reads as fan off (supply flow 0). Sensor health's range check counts the negative values; no template rule gates on the fan speed.
+
+#### The Brick model and the descriptor's Table 1 assign the zones to different RTUs
+
+- **Issue:** `brick-and-table-1-disagree-on-rtu-zones`
+- **Columns:** `zone_*_co2`, `zone_*_temp`
+- **Evidence:** For all 11 CO2 zones the serving RTU differs between the Brick model (zone hasLocation RTU0N_Zone) and Table 1 (e.g. zone 22: RTU01 vs RTU4; zone 40: RTU04 vs RTU1; zone 52: RTU02 vs RTU4); over all 51 terminal zones Brick gives 11/10/18/12 zones to RTU01-04 and Table 1 gives 14/23/8/12. Table 4 of the same paper labels RTU 3-4 as North (consistent with Brick) while Table 1 puts RTU 1-2 in the North wing. A physical check is inconclusive: hourly zone-temperature changes correlate best with the Table 1 RTU's supply-temperature changes in 6 of 11 zones and with the Brick RTU's in 5 (all correlations 0.2 or less; the underfloor plenum mixes the units' air).
+- **Contradicts:** Data descriptor Table 1 (RTU service zones) and Table 4 (electrical panels) versus the Brick model Bldg59_w_occ Brick model.ttl (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. CAMBER follows the Brick model (the machine-readable metadata shipped with the data) and encodes it in the equipment names (RTU01_zone_022); the naming grouping is heuristic, so fleet DCV severities are capped at warn.
+
+#### Brick point names do not match the CSV column names for key RTU points
+
+- **Issue:** `brick-point-names-differ-from-csv`
+- **Columns:** `rtu_*_oa_flow_tn`, `rtu_*_oadmpr_pct`, `rtu_*_fltrd_gnd_lvl_plenum_press_tn`, `rtu_002_econ_stpt_tn`
+- **Evidence:** 15 of the Brick model's points name no CSV column (rtu_00N_oa_fr for rtu_00N_oa_flow_tn, rtu_00N_oa_damper for rtu_00N_oadmpr_pct, rtu_00N_fltrd_gnd_plenum_press_tn for rtu_00N_fltrd_gnd_lvl_plenum_press_tn, rtu_021_econ_stpt_tn for RTU02's economizer setpoint, occ_forth_south, lig_S_+), and 77 of the 336 CSV columns have no Brick point (the 44 reheat valves, the SAT setpoints, supply airflows and OA temperatures of all four RTUs, among others).
+- **Contradicts:** README_Dryad_Bldg59.txt (the Brick model represents the metadata of the equipment and sensors) and the data descriptor, Methods: metadata model (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: annotate** -- left as published and recorded in the provenance. The catalog's mappings name the CSV columns directly (b59_rtu.json, b59_zone.json, b59_uft.json) and take only the zone -> RTU chain from the Brick model; a Brick-driven mapping needs these renames as overrides.
+
+#### The data description table miscounts some files and gives the static pressure in psi
+
+- **Issue:** `description-table-counts`
+- **Columns:** `zone_*_co2`, `zone_*_fan_spd`, `zone_*_hw_valve`, `rtu_*_pa_static_stpt_tn`
+- **Evidence:** zone_co2.csv has 11 CO2 columns (the table says 13; the Brick model also has 11 CO2 sensors); uft_fan_spd.csv has 51 columns and uft_hw_valve.csv 44 (the table says 44 and 51); the plenum static setpoint reads 0.06 (RTU03 also 0.6) -- an underfloor-plenum setpoint in inH2O, not the 'psi' the table states (0.06 psi would be 1.7 inH2O).
+- **Contradicts:** data_description_table_3year_clean_data.xlsx (Number of data points, Unit) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
+- **Handling: none** -- described only. Nothing to correct in the values: the catalog maps the 11 CO2 columns that exist, and does not map the plenum static setpoint.
+
+### `finnish-dcv`: Finnish laboratory office room with occupancy-based DCV (ground-truth counts)
+
+#### The test's DCV law runs at 4 l/s + 6 l/s per person, not the documented 3 l/s base
+
+- **Issue:** `dcv-base-flow-is-4-not-3`
+- **Columns:** `Supply airflow (l/s)`, `Occupant count (ML estimate)`
+- **Evidence:** In ventilation_test.csv the median supply airflow is 4.04, 10.06, 15.93 and 22.01 l/s at 0, 1, 2 and 3 estimated occupants -- 4 + 6n -- and the median residual against 3 + 6n is +1.02 l/s over the 1,430 minutes (median absolute residual 1.09 l/s; 76% of minutes within 1.5 l/s once the 5-minute update lag is allowed for). A +1 l/s offset at 4 l/s is 25%, beyond the flow sensor's stated +/-5%.
+- **Contradicts:** Zenodo record description, 'Occupancy-based control': base ventilation 3 l/s (unoccupied), 6 l/s per detected occupant, updated every 5 minutes (Mikala, Xu, Huotari 2026, Zenodo doi:10.5281/zenodo.18299691)
+- **Handling: none** -- described only. Nothing is changed: CAMBER's DCV rule does not assume a control law, it tests whether outdoor air rises with demand. The template's area floor (Ra x Az) sits below both 3 and 4 l/s.
+
+#### Supply airflow reads negative near zero flow and spikes above 100 l/s
+
+- **Issue:** `airflow-negative-and-spikes`
+- **Columns:** `Supply airflow (l/s)`, `Extract airflow (l/s)`
+- **Evidence:** The supply airflow is negative in 52, 47 and 14 minutes of the three files (minimum -6.40 l/s in training 1), and above 100 l/s in 63 minutes of training 1 (maximum 362.4 l/s on 2024-09-06, 2024-09-19 and 2025-03-25) -- about 59 air changes per hour in the 22 m3 room, against a test-period maximum of 64.9 l/s.
+- **Contradicts:** Zenodo record description (Lindab FTCU airflow, +/-5%; supply and exhaust flows held equal) (Mikala, Xu, Huotari 2026, Zenodo doi:10.5281/zenodo.18299691)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place: the small negatives are the transmitter's zero offset with the supply stopped, which the DCV rule reads as no ventilation; the spikes are single minutes that the 5-minute resample averages down.
+
+#### One relative-humidity reading of 666%
+
+- **Issue:** `humidity-over-100`
+- **Columns:** `Relative Humidity (%)`
+- **Evidence:** training_data_1.csv reads 665.99% at 2024-09-16 09:53; every other reading of the three files is at most 52.5% except this one (training 1 median 37.9%).
+- **Contradicts:** Zenodo record description (Miran DLS relative humidity, +/-2.5%) (Mikala, Xu, Huotari 2026, Zenodo doi:10.5281/zenodo.18299691)
+- **Handling: annotate** -- left as published and recorded in the provenance. Not mapped (CAMBER has no room-humidity role), so it never reaches a rule; recorded for learners reading the raw file.
+
+### `b4b-windesheim`: Brains4Buildings Windesheim office rooms: two CO2 sensors, ventilation valve and occupancy
+
+#### Room 925038's valve fraction is an assumed constant, not a measurement
+
+- **Issue:** `valve-assumed-constant`
+- **Columns:** `bms_valve_frac__0 (room 925038)`
+- **Evidence:** bms_valve_frac__0 is exactly 1.00 in all 2,683 of room 925038's intervals (one unique value), while the other two rooms' valves sit at the 0.20 minimum in 79-81% of intervals and reach 0.99.
+- **Contradicts:** README, footnote 1 to the properties table: valve fractions of this building could not be exported and 1.00 was assumed because ventilation was intended to run at maximum; the file presents it as the BMS-measured property valve_frac__0 (Brains4Buildings2022 dataset README, https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/blob/188573d39ca9a775f8ef17a10ccac784d84b7be7/README.md)
+- **Handling: exclude** -- kept out of scoring / analysis. Room 925038 is ingested without its valve (mapping b4b_bms_novalve.json), so no DCV verdict is drawn from an assumed constant; its CO2, temperature and occupancy remain for inspection.
+
+#### CO2 values are baseline-shifted by the publisher, and one room's minimum is not the stated 416 ppm
+
+- **Issue:** `co2-baseline-shifted`
+- **Columns:** `bms_co2__ppm`, `CO2-meter-SCD4x_co2__ppm`
+- **Evidence:** The documented shift raises each sensor's minimum to 416 ppm, but the preprocessed minima are 455.0 ppm (room 917810, BMS), 416.1 and 426.7 ppm (the other BMS sensors) and 421-436 ppm (SCD41). In the same room the two sensors differ by a median of +7.8 ppm (917810) and -39 ppm (925038, 999169), correlating 0.80-0.91.
+- **Contradicts:** README, Preprocessed data: per room and source the minimum CO2 value is raised to 415 ppm plus a 1 ppm margin (Brains4Buildings2022 dataset README, https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/blob/188573d39ca9a775f8ef17a10ccac784d84b7be7/README.md)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the DCV rule reads CO2 changes (lift within the hour of day), which a constant shift does not move; absolute thresholds (co2_ventilation) read shifted values.
 
 <!-- END data-issues -->
 

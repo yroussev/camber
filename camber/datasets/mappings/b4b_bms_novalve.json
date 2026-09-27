@@ -1,0 +1,8 @@
+{
+  "_comment": "Brains4Buildings Windesheim room 925038 (see b4b_bms.json): its bms_valve_frac__0 is not mapped -- the publisher's README says the valve fraction of this building could not be exported and was set to 1.00 on the assumption that ventilation ran at maximum during the pandemic, and the column is exactly 1.00 in all 2,683 rows. A DCV verdict on an assumed constant would be invented, so this room carries no OA signal (the DCV rules decline). There is no PIR in this room: occupancy is the SCD41 device's Bluetooth count of registered phones (CO2-meter-SCD4x_occupancy__p; the README lists 3 tracked occupants for its 4 work places).",
+  "aliases": {
+    "bms_co2__ppm": "co2",
+    "CO2-meter-SCD4x_occupancy__p": "occupancy",
+    "bms_temp_in__degC": "space_temp"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "_comment": "Finnish laboratory DCV office room (Zenodo 10.5281/zenodo.18299691) -> CAMBER Role mapping. One VAV-class equipment per file (ROOM__training_1, ROOM__training_2, ROOM__ventilation_test). The room is ventilated with outdoor air only: the supply-air CO2 (training_2 / test) sits at a median 428-434 ppm, i.e. outdoor air, so the supply airflow (l/s, Lindab FTCU, +/-5%) maps to oa_airflow and the supply-air CO2 to outdoor_co2 (a proxy: the duct transmitter reads the supply air, +/-40 ppm + 3%). Room CO2 (Miran DLS, +/-30 ppm) is the demand signal; the ground-truth occupant count (camera-based in training_1, manually recorded later) is the occupancy (a count: the DCV rule treats count > 0 as occupied). Temperature is degC (converted at ingest). Not mapped: the extract airflow (held equal to the supply by the controller), pressure, relative humidity, and the ML occupant estimate the ventilation test actually controlled on (there is no role for an estimated count; the catalog's data issues quantify the law against it).",
+  "aliases": {
+    "Room CO2 (ppm)": "co2",
+    "Supply airflow (l/s)": "oa_airflow",
+    "Supply air CO2 (ppm)": "outdoor_co2",
+    "Occupant count": "occupancy",
+    "Temperature (°C)": "space_temp"
+  }
+}

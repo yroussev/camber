@@ -1,0 +1,10 @@
+{
+  "_comment": "LBNL Building 59 underfloor fan terminal (UFT) point -> CAMBER Role mapping: each run fills {z} with a zone number and becomes a VAV-class equipment <RTU>_uft_<z> (the RTU from the Brick model's zone -> RTU0N_Zone location, encoded in the name as for the CO2 zones: see b59_zone.json for why the Brick owner grouping cannot place zone points). The 50 fan-powered UFTs deliver underfloor-plenum air to the exterior zones with a hydronic reheat coil: zone_{z}_temp is the zone temperature (degF, 1-minute), zone_{z}_cooling_sp / zone_{z}_heating_sp the zone setpoints (degF, 5-minute; 41 zones), zone_{z}_hw_valve the reheat valve position (percent; 44 zones) and zone_{z}_fan_spd the terminal fan speed (percent; 51 zones). The data description table swaps the fan-speed and valve column counts (it says 44 fan speeds and 51 valves). There is no terminal airflow or damper. Dataset: Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x.",
+  "aliases": {
+    "zone_{z}_temp": "space_temp",
+    "zone_{z}_cooling_sp": "cool_sp",
+    "zone_{z}_heating_sp": "heat_sp",
+    "zone_{z}_hw_valve": "heat_valve",
+    "zone_{z}_fan_spd": "supply_fan_speed"
+  }
+}

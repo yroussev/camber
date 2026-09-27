@@ -1,0 +1,7 @@
+{
+  "_comment": "LBNL Building 59 site weather -> CAMBER Role mapping: air_temp_set_1 (outdoor air temperature from the campus station's sensor 1, degC, 15-minute; converted to degF at ingest) and relative_humidity_set_1 (percent). Stored as equipment 'weather' (class WEATHER) for shared_oat. Dataset: Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x.",
+  "aliases": {
+    "air_temp_set_1": "oat",
+    "relative_humidity_set_1": "outdoor_rh"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "_comment": "Run template for b4b-windesheim: three office rooms (ROOM_<id>) and, for two of them, the same room judged on its second, desk-mounted CO2 sensor (ROOM_<id>_scd41). dcv_verification reads the ventilation valve opening (a position, not a flow) against room CO2 over the PIR-occupied intervals. The valve opens on a weekday-morning schedule AND on CO2 (see the known issues), and the rule's median CO2 lift between raised-valve and floor-valve samples mixes the two: expect 'OA modulates, but not with demand' on the BMS sensor of both rooms and 'functioning' on room 999169's SCD41 -- a verdict that depends on which sensor you trust. Room 925038 carries no OA signal (its valve column is an assumed constant; see the data issues), so the DCV rule does not evaluate it. No oa_floor_cfm: the OA signal is a position. No outdoor temperature is mapped, so the rule does not infer economizer periods for a valve that is no economizer (it notes the missing economizer signal as a caveat). co2_ventilation reads each room's CO2 against an assumed 420 ppm outdoor level: with the rooms occupied 8-14% of the time and the valve's 20% minimum still moving about 48 m3/h, CO2 near outdoor reads as over-ventilation (an energy observation, not a fault); the publisher's baseline shift moves the absolute CO2 by a constant. 15-minute resample (the publisher's interval; 3-4 weeks of data). Not run: ventilation_rate_62_1 (no measured airflow) and drift rules (too short).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-b4b-windesheim"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "co2"
+    }
+  ],
+  "rules": [
+    "dcv_verification",
+    "co2_ventilation"
+  ],
+  "report": {
+    "level": 2
+  }
+}

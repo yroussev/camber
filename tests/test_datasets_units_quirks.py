@@ -335,7 +335,8 @@ def test_refresh_main_writes_a_valid_catalog(tmp_path):
     cat = tmp_path / "cat.json"
     cat.write_text(json.dumps(load_catalog_data()))
     assert mod.main(["bdg2", "--catalog", str(cat), "--write"]) == 0
-    assert json.loads(cat.read_text())["datasets"][-1]["id"] == "bdg2"
+    ids = [d["id"] for d in json.loads(cat.read_text())["datasets"]]
+    assert ids == [d["id"] for d in load_catalog_data()["datasets"]] and "bdg2" in ids
 
 
 # --------------------------------------------------------------------------- network (opt-in)

@@ -1,0 +1,8 @@
+{
+  "_comment": "Brains4Buildings Windesheim: the same rooms as b4b_bms.json, but with the room's second CO2 sensor -- the desk-mounted SCD41 measurement device (CO2-meter-SCD4x_co2__ppm, 10-minute, baseline-shifted by the publisher like the BMS sensor) -- as the demand signal, so the DCV verdict can be compared across the two sensors of one room (equipment ROOM_<id>_scd41). Valve and PIR occupancy are the BMS columns as in b4b_bms.json (no outdoor temperature, for the same reason); the SCD41's own temperature (about 2.2 degC below the BMS reading) is not mapped.",
+  "aliases": {
+    "CO2-meter-SCD4x_co2__ppm": "co2",
+    "bms_valve_frac__0": "oa_damper",
+    "bms_occupancy__bool": "occupancy"
+  }
+}

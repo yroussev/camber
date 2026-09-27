@@ -1,0 +1,27 @@
+{
+  "_comment": "Run template for finnish-dcv: one laboratory office room per file (equipment ROOM__training_1, ROOM__training_2, ROOM__ventilation_test). The room's supply is outdoor air, so dcv_verification reads the supply airflow as OA flow against room CO2. occupied_only is off: the files hold only the experiment's hours, and a room-level DCV must be judged with its vacant samples too -- with the ground-truth count as the occupied mask every vacant (floor) sample drops out and the test reads 'OA rarely raised'. The ventilation test ran an occupancy DCV law and reads 'functioning'; the training sets used assorted strategies and describe those. oa_floor_cfm 6.36 is the documented base flow, 3 l/s: the measured base is 4 l/s, so the rule reports OA above its floor at low demand -- the data issue dcv-base-flow-is-4-not-3 seen by the rule (the 62.1 area floor Ra*Az = 0.06 cfm/ft2 x 87.5 ft2 = 5.25 cfm sits below both). 15-minute resample: the test is only 24 hours long. Not run: co2_ventilation (its under-ventilation threshold, outdoor + 700 ppm, corresponds to about 7.5 l/s per person at steady state, above this room's designed 6 l/s per person, so it trips on the design itself: CO2 reaches 1,420 ppm in the test), ventilation_rate_62_1 (a static design-population check does not fit a room whose airflow follows occupancy; the Finnish law's 3 + 6 l/s per person exceeds 62.1's 2.5 l/s per person + 0.3 l/s per m2 at every count) and any drift or schedule rule (the files are non-contiguous days).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-finnish-dcv"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "co2"
+    }
+  ],
+  "rules": [
+    {
+      "name": "dcv_verification",
+      "params": {
+        "oa_floor_cfm": 6.36,
+        "occupied_only": false
+      }
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

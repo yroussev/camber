@@ -1,0 +1,6 @@
+{
+  "_comment": "LBNL Building 59 zone CO2 -> CAMBER Role mapping: each run fills {z} with a zone number, and the zone's CO2 (ppm, 1-minute) becomes a VAV-class equipment named <RTU>_zone_<z>. The serving RTU is taken from the dataset's Brick model (zone_<z> hasLocation RTU0N_Zone; RTU0N feeds RTU0N_Zone) and encoded in the equipment name, so CAMBER's naming-based served-by grouping joins each zone to its RTU (a heuristic grouping: fleet severities are capped at warn). The Brick model and Table 1 of the data descriptor disagree on which RTU serves every one of the 11 CO2 zones (see the data issues). The Brick owner grouping (used for the RTUs) cannot place these points: each is owned by its Zone, and the zone reaches its RTU only through hasLocation RTU0N_Zone, which is neither ownership nor containment. TODO: once a store-backed run can take a served-by topology from the dataset's Brick model, drop the name encoding and let the fleet grouping be semantic (uncapped). Dataset: Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x.",
+  "aliases": {
+    "zone_{z}_co2": "co2"
+  }
+}

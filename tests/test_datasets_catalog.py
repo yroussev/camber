@@ -69,6 +69,10 @@ def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
         "lbnl-chiller",
         "lbnl-boiler",
         "bdg2",
+        # 0.89 intake A: DCV / CO2
+        "lbnl-b59",
+        "finnish-dcv",
+        "b4b-windesheim",
     ]
 
 
@@ -89,7 +93,12 @@ def test_run_counts_and_default_subsets_are_bounded():
     assert counts["lbnl-boiler"] == 17 and counts["lbnl-sdahu"] == 21
     for e in datasets.catalog():
         if e.ingest.get("runs"):
-            assert len(e.runs()) <= 8  # a handful of runs by default
+            # a handful of scenarios by default; a real building's runs are its equipment, so its
+            # default subset is bounded by the store size instead
+            if e.kind == "real":
+                assert e.store_bytes() <= 100_000_000
+            else:
+                assert len(e.runs()) <= 8
             assert len(e.runs("full")) == counts[e.id]
 
 
@@ -144,11 +153,22 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 7
-    assert [e.id for e in datasets.catalog(kind="real")] == ["bdg2"]
+    assert len(datasets.catalog()) == 10
+    assert [e.id for e in datasets.catalog(kind="real")] == [
+        "bdg2",
+        "lbnl-b59",
+        "b4b-windesheim",
+    ]
+    assert [e.id for e in datasets.catalog(kind="lab")] == [
+        "finnish-dcv",
+    ]
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
-    assert len(datasets.catalog(labeled=False)) == 1
-    assert len(datasets.catalog(licence="commercial")) == 7
+    assert len(datasets.catalog(labeled=False)) == 4
+    assert len(datasets.catalog(labeled=True)) == 6
+    # the open tier: research-only (NC/ND) entries are out
+    commercial = datasets.catalog(licence="commercial")
+    assert [e.id for e in datasets.catalog() if e.research_only] == []
+    assert len(commercial) == 10 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):
@@ -329,7 +349,9 @@ def test_every_quirk_links_to_its_issue_and_every_fix_issue_has_a_fix():
             assert q["issue"] in ids, (e.id, q)
         for i in e.data_issues:
             assert (i["handling"] == "fix") == (i["id"] in fixes), (e.id, i["id"])
-            assert re.search(r"10\.\d{4,9}/", i["contradicts"]["citation"])
+            cite = i["contradicts"]["citation"]
+            # a publisher without DOIs (a versioned repository) is cited by a pinned URL
+            assert re.search(r"10\.\d{4,9}/", cite) or (not e.dois and "https://" in cite)
         assert e.provenance()["data_issues"] == [
             {k: i[k] for k in ("id", "title", "handling")} for i in e.data_issues
         ]

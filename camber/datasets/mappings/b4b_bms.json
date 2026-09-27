@@ -1,0 +1,9 @@
+{
+  "_comment": "Brains4Buildings Windesheim office rooms (github energietransitie/b4b-windesheim-brains4buildings2022-dataset, CC BY 4.0) -> CAMBER Role mapping, BMS sensors, from the publisher's preprocessed file (one row per room and 15-minute interval; each run keeps its room's rows with where: {id: ...}). Columns are prefixed with their source: bms_co2__ppm is the room CO2 sensor the BMS ventilates on (baseline-shifted by the publisher so its minimum reads 416 ppm); bms_valve_frac__0 is the ventilation valve opening as a fraction of the room's maximum flow (0.20 at the valve's mechanical minimum, 1.00 fully open; CAMBER rescales it to percent) -- a POSITION, not a measured flow, so the DCV rule judges OA from it with that caveat; bms_occupancy__bool is the room PIR (presence); bms_temp_in__degC the room temperature (degC, converted at ingest). The KNMI outdoor temperature (temp_out__degC) is deliberately not mapped: the rooms' ventilation valve is no economizer, and an OAT would make the DCV rule infer economizer periods (and, below its 75 F high limit, exclude every Dutch autumn sample). The alternative CO2 sensor (CO2-meter-SCD4x_co2__ppm, an SCD41 on the desk) is mapped by b4b_scd41.json in separate runs, and the Xovis people counter (40% coverage) and the Bluetooth phone counts are not mapped. Room 925038 uses b4b_bms_novalve.json: its valve column is a constant 1.00 assumption, not a measurement (see the data issues).",
+  "aliases": {
+    "bms_co2__ppm": "co2",
+    "bms_valve_frac__0": "oa_damper",
+    "bms_occupancy__bool": "occupancy",
+    "bms_temp_in__degC": "space_temp"
+  }
+}

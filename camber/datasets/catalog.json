@@ -3665,6 +3665,2046 @@
      "handling_note": "Left as published: the offset is inferred (4 or 5 h), not documented, so it is not shifted. Daily models are barely affected; an hourly or time-of-week analysis of Eagle should shift its meters."
     }
    ]
+  },
+  {
+   "id": "lbnl-b59",
+   "title": "LBNL Building 59: three years of a real office's rooftop units, zone CO2 and underfloor terminals",
+   "summary": "A real two-floor office in Berkeley, California (2018-2020, 1-minute BAS trends): four 20,000 cfm rooftop units with measured outdoor-air flow (from April 2020) and OA-damper position, 11 zone CO2 sensors, 51 underfloor fan-powered terminals with reheat, site weather and a Brick model. The building has no DCV; its record includes wildfire smoke-mode damper closures, the 2020 shelter-in-place occupancy drop and real sensor faults.",
+   "teaches": [
+    "DCV verification on a building without DCV: the honest answer is 'not judged', never a false 'functioning'",
+    "joining zone CO2 to the air handler that brings in outdoor air (served-by grouping from a Brick model)",
+    "sensor health on real faults: a return-air point that copies supply air, gap-filled OA flow, inaccurate mixed-air sensors",
+    "timestamps published in UTC: moving a dataset onto the site's wall clock"
+   ],
+   "publisher": "Lawrence Berkeley National Laboratory",
+   "citation": "Luo, N., Wang, Z., Blum, D., Weyandt, C., Bourassa, N., Piette, M.A., Hong, T. (2022). A three-year dataset supporting research on building energy management and occupancy analytics. Scientific Data 9, 156. doi:10.1038/s41597-022-01257-x. Data: Hong, T., Luo, N., Blum, D., Wang, Z. (2022). A three-year building operational performance dataset for informing energy efficiency. Dryad. doi:10.7941/D1N33Q",
+   "dois": [
+    "10.1038/s41597-022-01257-x",
+    "10.7941/D1N33Q"
+   ],
+   "landing_url": "https://datadryad.org/dataset/doi:10.7941/D1N33Q",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://datadryad.org/api/v2/datasets/doi%3A10.7941%2FD1N33Q",
+    "expect": "CC0-1.0"
+   },
+   "manual": true,
+   "manual_instructions": "Dryad serves these files only to a browser (its file API needs a bearer token and its download links sit behind a bot check). Open https://datadryad.org/dataset/doi:10.7941/D1N33Q, download Building_59.zip and README_Dryad_Bldg59.txt (the full subset also needs data_description_table_3year_clean_data.xlsx and metadata_Dryad_Bldg59.docx) into one directory, then run `camber datasets ingest lbnl-b59 --from-dir <that directory> --store <store>`; the files are checked against the sizes and SHA-256 digests Dryad itself publishes.",
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "4 rooftop units (AHU), 11 zone CO2 sensors and 51 underfloor fan terminals (VAV) grouped to their RTU by the Brick model, site weather",
+   "timezone": "published in UTC (undocumented; see the data issues) and converted at ingest to America/Los_Angeles wall-clock time; 1-minute RTU and zone data, 15-minute weather; 2018-01-01 to 2020-12-31 with a few multi-day gaps; zone CO2 from 2019-08-19 (none in February-March 2020)",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "Building_59.zip",
+     "url": "https://datadryad.org/downloads/file_stream/1305095",
+     "size": 263162077,
+     "sha256": "1e224dd7479bb196a8e0368fceb70aa6f699c1d39e1e895ceba7f3b25150b1b4",
+     "pinned": true,
+     "etag": null,
+     "archive": "zip",
+     "extracted_size": 2329555471,
+     "members": [
+      "Bldg59_clean data/rtu_sa_t.csv",
+      "Bldg59_clean data/rtu_sa_t_sp.csv",
+      "Bldg59_clean data/rtu_ra_t.csv",
+      "Bldg59_clean data/rtu_ma_t.csv",
+      "Bldg59_clean data/rtu_oa_t.csv",
+      "Bldg59_clean data/rtu_oa_fr.csv",
+      "Bldg59_clean data/rtu_oa_damper.csv",
+      "Bldg59_clean data/rtu_sa_fr.csv",
+      "Bldg59_clean data/rtu_fan_spd.csv",
+      "Bldg59_clean data/zone_co2.csv",
+      "Bldg59_clean data/site_weather.csv",
+      "Bldg59_clean data/zone_temp_exterior.csv",
+      "Bldg59_clean data/zone_temp_sp_c.csv",
+      "Bldg59_clean data/zone_temp_sp_h.csv",
+      "Bldg59_clean data/uft_hw_valve.csv",
+      "Bldg59_clean data/uft_fan_spd.csv",
+      "Bldg59_w_occ Brick model.ttl",
+      "Bldg59_w_occ metadata of dataset.json"
+     ]
+    },
+    {
+     "name": "README_Dryad_Bldg59.txt",
+     "url": "https://datadryad.org/downloads/file_stream/1305097",
+     "size": 6714,
+     "sha256": "44c1b0834e087f2d277ffe11adca5141d260e2918facc746bba2a19cec0c77b2",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "data_description_table_3year_clean_data.xlsx",
+     "url": "https://datadryad.org/downloads/file_stream/1305096",
+     "size": 75069,
+     "sha256": "6cf5be4565afe60ab17500c0d65d769df14b61e0c6447a7ff6b161b9eac0e63a",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "metadata_Dryad_Bldg59.docx",
+     "url": "https://datadryad.org/downloads/file_stream/1305094",
+     "size": 17917,
+     "sha256": "104821176a2ff75a85259d5b0377e282ff00312b31e6521581725006a3295599",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "the four RTUs, the 11 CO2 zones and site weather, all three years",
+     "files": [
+      "Building_59.zip",
+      "README_Dryad_Bldg59.txt"
+     ],
+     "runs": [
+      "rtu_sa_t",
+      "rtu_sa_t_sp",
+      "rtu_ra_t",
+      "rtu_ma_t",
+      "rtu_oa_t",
+      "rtu_oa_fr",
+      "rtu_oa_damper",
+      "rtu_sa_fr",
+      "rtu_fan_spd",
+      "zone_022",
+      "zone_028",
+      "zone_033",
+      "zone_040",
+      "zone_044",
+      "zone_045",
+      "zone_052",
+      "zone_058",
+      "zone_062",
+      "zone_068",
+      "zone_072",
+      "weather"
+     ],
+     "store_bytes_estimate": 53016315
+    },
+    "full": {
+     "description": "adds the 51 underfloor fan terminals (zone temperature, setpoints, reheat valve, fan speed) and the documentation files",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 253217570
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-lbnl-b59",
+    "brick": {
+     "file": "Building_59.zip",
+     "member": "Bldg59_w_occ Brick model.ttl",
+     "equip_classes": {
+      "Rooftop_Unit": "AHU"
+     }
+    },
+    "timestamp": "date",
+    "source_timezone": "UTC",
+    "local_timezone": "America/Los_Angeles",
+    "resample": "15min",
+    "mapping": "b59_rtu.json",
+    "units": {},
+    "quirks": [
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "rtu_001_oa_flow_tn",
+       "rtu_002_oa_flow_tn",
+       "rtu_003_oa_flow_tn",
+       "rtu_004_oa_flow_tn"
+      ],
+      "before": "2020-04-10 22:00",
+      "runs": [
+       "rtu_oa_fr"
+      ],
+      "note": "RTU outdoor-air flow before 2020-04-10 22:00 UTC is the publisher's gap fill (the four units move as one, r = 0.998-0.999), not a measurement; masked.",
+      "issue": "oa-flow-gap-filled"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "rtu_ra_t"
+      ],
+      "note": "RTU04's return-air temperature is a copy of its supply-air temperature from 2019-09-19 (99.1% identical in 2020); left in place for the sensor-health copied-signal check.",
+      "issue": "rtu4-return-copies-supply"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "rtu_ma_t"
+      ],
+      "note": "Mixed-air temperatures leave the OA/RA band in up to 23% of hours (RTU01, H2 2019); left in place.",
+      "issue": "mixed-air-outside-oa-ra-band"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "rtu_oa_fr",
+       "rtu_sa_fr"
+      ],
+      "note": "Measured OA flow saturates at 19,999 cfm and exceeds the unit's supply flow in 1-7% of hours after 2020-04-10; left in place.",
+      "issue": "oa-flow-exceeds-supply"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "zone_*"
+      ],
+      "note": "zone_022_co2 reads below outdoor air (27,120 minutes < 350 ppm, 11,661 at exactly 72 ppm); left in place.",
+      "issue": "zone-co2-below-outdoor"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "rtu_fan_spd"
+      ],
+      "note": "Fan-speed feedback reads -25% while the fan is stopped (0.9% of minutes); left in place.",
+      "issue": "fan-speed-negative-when-off"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "zone_*",
+       "uft_*"
+      ],
+      "note": "Zone -> RTU assignment follows the Brick model, which disagrees with Table 1 of the data descriptor for every CO2 zone.",
+      "issue": "brick-and-table-1-disagree-on-rtu-zones"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "rtu_*"
+      ],
+      "note": "Brick point names differ from the CSV columns for the OA flow and damper, and five RTU points are missing from the model; the mapping file overrides the Brick grouping for those 20 columns.",
+      "issue": "brick-point-names-differ-from-csv"
+     }
+    ],
+    "runs": [
+     {
+      "id": "rtu_sa_t",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_sa_t.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_sa_t_sp",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_sa_t_sp.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_ra_t",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_ra_t.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_ma_t",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_ma_t.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_oa_t",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_oa_t.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_oa_fr",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_oa_fr.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_oa_damper",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_oa_damper.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_sa_fr",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_sa_fr.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "rtu_fan_spd",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/rtu_fan_spd.csv",
+      "group": "brick",
+      "equip": "RTU_unassigned",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "zone_022",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "022"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_zone_022",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_028",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "028"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_zone_028",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_033",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "033"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_zone_033",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_040",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "040"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_zone_040",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_044",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "044"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_zone_044",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_045",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "045"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_zone_045",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_052",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "052"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_zone_052",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_058",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "058"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_zone_058",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_062",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "062"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_zone_062",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_068",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "068"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_zone_068",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "zone_072",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/zone_co2.csv",
+      "mapping": "b59_zone.json",
+      "vars": {
+       "z": "072"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_zone_072",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/site_weather.csv",
+      "mapping": "b59_weather.json",
+      "units": {
+       "oat": "degC"
+      },
+      "equip": "weather",
+      "equip_id": "weather",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "uft_016",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "016"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_016",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_017",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "017"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_017",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_018",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "018"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_018",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_019",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "019"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_019",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_021",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "021"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_021",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_022",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "022"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_022",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_023",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "023"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_023",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_024",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "024"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_024",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_025",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "025"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_025",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_026",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "026"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_026",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_027",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "027"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_027",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_028",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "028"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_028",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_030",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "030"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_030",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_032",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "032"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_032",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_033",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "033"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_033",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_035",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "035"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_035",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_036",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "036"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_036",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_037",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "037"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_037",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_038",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "038"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_038",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_039",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "039"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_039",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_040",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "040"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_040",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_041",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "041"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_041",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_042",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "042"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_042",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_043",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "043"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_043",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_044",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "044"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_044",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_045",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "045"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_045",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_046",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "046"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_046",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_047",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "047"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_047",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_048",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "048"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_048",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_049",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "049"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_049",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_051",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "051"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_051",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_052",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "052"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_052",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_053",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "053"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_053",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_054",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "054"
+      },
+      "equip": "RTU01",
+      "equip_id": "RTU01_uft_054",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_055",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "055"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_055",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_056",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "056"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_056",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_057",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "057"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_057",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_058",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "058"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_058",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_059",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "059"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_059",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_061",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "061"
+      },
+      "equip": "RTU02",
+      "equip_id": "RTU02_uft_061",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_062",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "062"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_062",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_063",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "063"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_063",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_064",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "064"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_064",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_065",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "065"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_065",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_066",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "066"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_066",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_067",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "067"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_067",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_068",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "068"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_068",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_069",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "069"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_069",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_070",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "070"
+      },
+      "equip": "RTU04",
+      "equip_id": "RTU04_uft_070",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_071",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "071"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_071",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "uft_072",
+      "file": "Building_59.zip",
+      "members": [
+       "Bldg59_clean data/zone_temp_exterior.csv",
+       "Bldg59_clean data/zone_temp_sp_c.csv",
+       "Bldg59_clean data/zone_temp_sp_h.csv",
+       "Bldg59_clean data/uft_hw_valve.csv",
+       "Bldg59_clean data/uft_fan_spd.csv"
+      ],
+      "mapping": "b59_uft.json",
+      "vars": {
+       "z": "072"
+      },
+      "equip": "RTU03",
+      "equip_id": "RTU03_uft_072",
+      "class": "VAV",
+      "label": ""
+     }
+    ]
+   },
+   "suggested_analyses": {
+    "rules": [
+     "dcv_system_verification",
+     "unmet_setpoint_hours"
+    ],
+    "config_template": "lbnl-b59.json"
+   },
+   "known_issues": [
+    "Licence: Dryad lists the data as CC0-1.0, but the metadata JSON inside the archive states CC BY 4.0 (DataGovernance/Sharing/License) and the data descriptor is CC BY 4.0. The catalog applies the stricter CC-BY-4.0 and asks for attribution.",
+    "Download is manual (see the manual instructions): the pinned sha256s equal the sha-256 digests Dryad publishes for each file.",
+    "The RTUs are grouped by the dataset's Brick model (RTU01-RTU04 own their supply, return and mixed-air temperatures and supply-fan speed); the mapping file adds the 20 RTU columns the model misnames or lacks. The 11 CO2 zones and 51 terminals are placed by name (RTU0N_zone_<z>, RTU0N_uft_<z>) from the model's zone -> RTU location, which the owner grouping does not follow.",
+    "The published CSVs are the publisher's cleaned version: gaps were filled by linear interpolation, KNN or matrix factorization depending on gap length (README; descriptor Table 3). Only the outdoor-air flow, whose raw record starts in April 2020, is masked by CAMBER; other long fills (e.g. zone CO2 gaps) remain.",
+    "Documented events (descriptor Table 2, local dates): wildfire smoke mode 2018-11-12 to 11-20 and 2020-08-24 to 09-06 (OA dampers held at their 10% minimum), shelter-in-place from 2020-03-18 (zone CO2 barely rises above outdoor for the rest of 2020), and MPC tests on 21 days in October-December 2020.",
+    "The building has no DCV and the RTU supply fans run 24/7 at one common speed; there is no economizer command point, so the DCV rules infer the economizer from OAT and mostly decline in Berkeley's mild climate.",
+    "Camera occupancy counts (occ.csv, May 2018 - Feb 2019) and Wi-Fi counts (wifi.csv) are floor-level, and neither overlaps the CO2 record in a usable way; they are not mapped.",
+    "Per-RTU floor areas and design populations are not published (two office floors of 2,325 m2 each), so the ASHRAE 62.1 VRP is not run per RTU; see issue #17 for the system-level procedure this dataset could validate.",
+    "34 duplicated timestamps in rtu_sa_t.csv (February 2020) are dropped (the first reading is kept).",
+    "Ingest cost (measured): the default subset extracts 644 MB and ingests in about 15 s; the full subset extracts 2.0 GB, ingests in about 75 s and peaks near 7 GB of memory, because the five 1-minute terminal tables (51 zones each) are held while their 51 runs are split out."
+   ],
+   "data_issues": [
+    {
+     "id": "timestamps-in-utc",
+     "title": "Timestamps are UTC, which no document states",
+     "columns": [
+      "date (every CSV)"
+     ],
+     "evidence": "Solar radiation at the campus station peaks at 20:00-21:00 (792-817 W/m2, 15-25 June 2019) and is zero from 04:00 to 12:00; the camera occupancy counts peak at 17:00-22:00 on weekdays (25 people at 17:00 vs 0.1 at 11:00); and the RTU files run straight through the US spring-forward hour (71 rows from 01:55 to 03:05 on 2018-03-11, 2019-03-10 and 2020-03-08) with no repeated hour in November. Solar noon in Berkeley is about 20:10 UTC in June, so the stamps are UTC (Pacific time minus 7-8 h).",
+     "contradicts": {
+      "document": "README_Dryad_Bldg59.txt and the data description table give no time zone; the data descriptor presents the building's schedules and the Table 2 event dates as local time",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "none",
+     "handling_note": "Not a correction of values: the ingest declares source_timezone UTC and local_timezone America/Los_Angeles (CAMBER's timestamp semantics, applied in every mode), so the store holds Berkeley wall-clock time and the occupied-hour schedules line up. The November fall-back hour keeps both readings (averaged); quirk timestamps below are UTC."
+    },
+    {
+     "id": "oa-flow-gap-filled",
+     "title": "RTU outdoor-air flow before 2020-04-10 is imputed, not measured",
+     "columns": [
+      "rtu_001_oa_flow_tn",
+      "rtu_002_oa_flow_tn",
+      "rtu_003_oa_flow_tn",
+      "rtu_004_oa_flow_tn"
+     ],
+     "evidence": "Up to 2020-04-10 21:59 UTC the hourly OA flows of the four RTUs correlate 0.998-0.999 pairwise (one pattern scaled four ways, 1,005,495 minute rows per RTU); from 22:00 UTC on they correlate 0.72-0.83, the daily minimum drops from above 2,590 cfm to 1,305-1,730 cfm, and the readings reach the transmitter ceiling of 19,999 cfm, which the earlier values never exceed (maxima 13,093-16,148 cfm).",
+     "contradicts": {
+      "document": "Data description table (rtu_oa_fr.csv: available Apr-Dec 2020) versus the file, which has values for all of 2018-2020; README methods (gaps filled by linear interpolation, KNN and matrix factorization)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "fix",
+     "handling_note": "Masked (NaN) before 2020-04-10 22:00 UTC in every RTU run, so no OA-flow rule or check judges the imputed years; the OA damper position is kept for the whole period."
+    },
+    {
+     "id": "rtu4-return-copies-supply",
+     "title": "RTU04's return-air temperature is a copy of its supply-air temperature from September 2019",
+     "columns": [
+      "rtu_004_ra_temp",
+      "rtu_004_sa_temp"
+     ],
+     "evidence": "rtu_004_ra_temp equals rtu_004_sa_temp to the last digit in 0.04% of 2018 minutes, 29.8% of 2019 and 99.1% of 2020; from 2019-09-19 on 98.5% of days are at least 90% identical. The other three RTUs' return and supply agree in 0.13-0.22% of minutes (median difference 4.2-5.2 F).",
+     "contradicts": {
+      "document": "Brick model (rtu_004_ra_temp is a Return_Air_Temperature_Sensor of RTU04) and the data description table (Roof Top Unit return air temperature)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place on purpose: it is a genuine data fault that the sensor-health layer's copied-signal check (camber.sensorhealth.copied_signal_consistency) should find. Economizer and mixing-balance results on RTU04 after 2019-09-19 judge a copy."
+    },
+    {
+     "id": "mixed-air-outside-oa-ra-band",
+     "title": "Mixed-air temperatures leave the outdoor/return band, mostly in 2018-2019",
+     "columns": [
+      "rtu_001_ma_temp",
+      "rtu_002_ma_temp",
+      "rtu_003_ma_temp",
+      "rtu_004_ma_temp"
+     ],
+     "evidence": "Hourly mixed-air temperature lies more than 2 F outside [min(OAT, RAT), max(OAT, RAT)] -- which a blend of the two cannot do -- in 10.7% (Jul-Dec 2018), 23.0% (Jul-Dec 2019) and 0.6% (Jul-Dec 2020) of RTU01 hours and 4.2%, 9.2% and 13.5% of RTU04 hours (RTU04's return is a copy of supply from 2019-09, see above); RTU02 and RTU03 stay at or below 3.6%.",
+     "contradicts": {
+      "document": "Data description table (rtu_*_ma_temp: Roof Top Unit mixed air temperature; the only outlier criterion is < 32 F or > 122 F)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place: an inaccurate mixed-air sensor is a real sensor-health test (camber.sensorhealth.mixing_consistency; issue #16 would weigh the flow balance into the trust score). Rules that read MAT on RTU01/RTU04 in 2018-2019 are judging a doubtful sensor."
+    },
+    {
+     "id": "oa-flow-exceeds-supply",
+     "title": "Measured OA flow sits at a 19,999 cfm ceiling and above the unit's own supply flow",
+     "columns": [
+      "rtu_001_oa_flow_tn",
+      "rtu_002_oa_flow_tn",
+      "rtu_003_oa_flow_tn",
+      "rtu_004_oa_flow_tn",
+      "rtu_001_fltrd_sa_flow_tn",
+      "rtu_002_fltrd_sa_flow_tn",
+      "rtu_003_fltrd_sa_flow_tn",
+      "rtu_004_fltrd_sa_flow_tn"
+     ],
+     "evidence": "After 2020-04-10 the OA flow reads exactly 19,999 cfm in 5.55% of RTU04 minutes and 1.24% of RTU01 minutes, and exceeds the same unit's filtered supply airflow in 7.3% (RTU04), 4.1% (RTU01), 1.5% (RTU03) and 1.3% (RTU02) of hours. The descriptor gives each RTU a design supply airflow of 20,000 cfm and a minimum OA of 5,000 cfm.",
+     "contradicts": {
+      "document": "Data descriptor, HVAC system description (design airflow 20,000 cfm per RTU, minimum outdoor air 5,000 cfm)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place: the ceiling is the transmitter span, and OA above supply is a flow-station error the DCV rule's floor check is not affected by (it looks at low flows). Treat OA flow above the supply flow as unmeasured."
+    },
+    {
+     "id": "zone-co2-below-outdoor",
+     "title": "One zone CO2 sensor reads far below outdoor air, and every sensor carries a 72 ppm floor",
+     "columns": [
+      "zone_022_co2",
+      "zone_028_co2",
+      "zone_033_co2",
+      "zone_040_co2",
+      "zone_044_co2",
+      "zone_045_co2",
+      "zone_052_co2",
+      "zone_058_co2",
+      "zone_062_co2",
+      "zone_068_co2",
+      "zone_072_co2"
+     ],
+     "evidence": "zone_022_co2 is below 350 ppm in 27,120 minutes (8,420 of them in June 2020, when its monthly median is 362 ppm against 409-420 ppm for the other ten zones) and reads exactly 72 ppm in 11,661 minutes; the other ten sensors touch that same 72 ppm value 1-5 times each. Outdoor CO2 was about 410 ppm.",
+     "contradicts": {
+      "document": "Data description table (zone_*_co2: CO2 concentration; the only outlier criterion is < 0)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place: dcv_system_verification drops CO2 outside 250-5,000 ppm and excludes a zone whose CO2 stays implausible, and sensor health's zone-vs-outdoor CO2 check flags it."
+    },
+    {
+     "id": "fan-speed-negative-when-off",
+     "title": "Fan-speed feedback reads -25% while the fans are stopped",
+     "columns": [
+      "rtu_001_sf_vfd_spd_fbk_tn",
+      "rtu_002_sf_vfd_spd_fbk_tn",
+      "rtu_003_sf_vfd_spd_fbk_tn",
+      "rtu_004_sf_vfd_spd_fbk_tn"
+     ],
+     "evidence": "Each supply- and return-fan speed feedback reads -24.9% or -25.0% in 0.9% of minutes (12,419 minutes for RTU01's supply fan, in 13 episodes, e.g. 2018-01-29 and 2019-02-26); in those minutes the unit's filtered supply airflow has a median of 0 cfm.",
+     "contradicts": {
+      "document": "Data description table (rtu_*_sf_vfd_spd_fbk_tn: supply fan speed in %)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place: it reads as fan off (supply flow 0). Sensor health's range check counts the negative values; no template rule gates on the fan speed."
+    },
+    {
+     "id": "brick-and-table-1-disagree-on-rtu-zones",
+     "title": "The Brick model and the descriptor's Table 1 assign the zones to different RTUs",
+     "columns": [
+      "zone_*_co2",
+      "zone_*_temp"
+     ],
+     "evidence": "For all 11 CO2 zones the serving RTU differs between the Brick model (zone hasLocation RTU0N_Zone) and Table 1 (e.g. zone 22: RTU01 vs RTU4; zone 40: RTU04 vs RTU1; zone 52: RTU02 vs RTU4); over all 51 terminal zones Brick gives 11/10/18/12 zones to RTU01-04 and Table 1 gives 14/23/8/12. Table 4 of the same paper labels RTU 3-4 as North (consistent with Brick) while Table 1 puts RTU 1-2 in the North wing. A physical check is inconclusive: hourly zone-temperature changes correlate best with the Table 1 RTU's supply-temperature changes in 6 of 11 zones and with the Brick RTU's in 5 (all correlations 0.2 or less; the underfloor plenum mixes the units' air).",
+     "contradicts": {
+      "document": "Data descriptor Table 1 (RTU service zones) and Table 4 (electrical panels) versus the Brick model Bldg59_w_occ Brick model.ttl",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "CAMBER follows the Brick model (the machine-readable metadata shipped with the data) and encodes it in the equipment names (RTU01_zone_022); the naming grouping is heuristic, so fleet DCV severities are capped at warn."
+    },
+    {
+     "id": "brick-point-names-differ-from-csv",
+     "title": "Brick point names do not match the CSV column names for key RTU points",
+     "columns": [
+      "rtu_*_oa_flow_tn",
+      "rtu_*_oadmpr_pct",
+      "rtu_*_fltrd_gnd_lvl_plenum_press_tn",
+      "rtu_002_econ_stpt_tn"
+     ],
+     "evidence": "15 of the Brick model's points name no CSV column (rtu_00N_oa_fr for rtu_00N_oa_flow_tn, rtu_00N_oa_damper for rtu_00N_oadmpr_pct, rtu_00N_fltrd_gnd_plenum_press_tn for rtu_00N_fltrd_gnd_lvl_plenum_press_tn, rtu_021_econ_stpt_tn for RTU02's economizer setpoint, occ_forth_south, lig_S_+), and 77 of the 336 CSV columns have no Brick point (the 44 reheat valves, the SAT setpoints, supply airflows and OA temperatures of all four RTUs, among others).",
+     "contradicts": {
+      "document": "README_Dryad_Bldg59.txt (the Brick model represents the metadata of the equipment and sensors) and the data descriptor, Methods: metadata model",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "annotate",
+     "handling_note": "The catalog's mappings name the CSV columns directly (b59_rtu.json, b59_zone.json, b59_uft.json) and take only the zone -> RTU chain from the Brick model; a Brick-driven mapping needs these renames as overrides."
+    },
+    {
+     "id": "description-table-counts",
+     "title": "The data description table miscounts some files and gives the static pressure in psi",
+     "columns": [
+      "zone_*_co2",
+      "zone_*_fan_spd",
+      "zone_*_hw_valve",
+      "rtu_*_pa_static_stpt_tn"
+     ],
+     "evidence": "zone_co2.csv has 11 CO2 columns (the table says 13; the Brick model also has 11 CO2 sensors); uft_fan_spd.csv has 51 columns and uft_hw_valve.csv 44 (the table says 44 and 51); the plenum static setpoint reads 0.06 (RTU03 also 0.6) -- an underfloor-plenum setpoint in inH2O, not the 'psi' the table states (0.06 psi would be 1.7 inH2O).",
+     "contradicts": {
+      "document": "data_description_table_3year_clean_data.xlsx (Number of data points, Unit)",
+      "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
+     },
+     "handling": "none",
+     "handling_note": "Nothing to correct in the values: the catalog maps the 11 CO2 columns that exist, and does not map the plenum static setpoint."
+    }
+   ]
+  },
+  {
+   "id": "finnish-dcv",
+   "title": "Finnish laboratory office room with occupancy-based DCV (ground-truth counts)",
+   "summary": "One 22 m3 laboratory office room (up to 4 people) ventilated with outdoor air by a VAV supply, at 1-minute resolution: room CO2, supply and extract airflow, supply- and exhaust-air CO2, temperature and ground-truth occupant counts. Two training sets under assorted ventilation strategies (about 5.9 and 2.8 days, non-contiguous) and a 24-hour test in which the airflow followed an occupancy-count DCV law (base flow plus 6 l/s per estimated occupant).",
+   "teaches": [
+    "what a working DCV looks like: outdoor air rising with occupancy and CO2",
+    "checking a documented control law against the trend (base 3 l/s + 6 l/s per person)",
+    "occupant counts as the occupied signal (count > 0) instead of a schedule"
+   ],
+   "publisher": "Aalto University and Metropolia University of Applied Sciences",
+   "citation": "Mikala, J., Xu, Y., Huotari, M. (2026). Indoor occupancy ground truth dataset with variable ventilation (version 1.0). Zenodo. doi:10.5281/zenodo.18299691",
+   "dois": [
+    "10.5281/zenodo.18299691"
+   ],
+   "landing_url": "https://zenodo.org/records/18299691",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://zenodo.org/api/records/18299691",
+    "expect": "cc-by-4.0"
+   },
+   "kind": "lab",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "one office room: VAV outdoor-air supply (and equal extract), room CO2, supply/exhaust CO2, ground-truth occupant count",
+   "timezone": "naive timestamps, time zone not documented (taken as local lab time); 1-minute samples; each file is a set of non-contiguous days (training 1: 38 days from 2024-02-28 to 2025-03-25; training 2: 12 days in October-November 2025; test: 2025-11-24, 25 and 27)",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "training_data_1.csv",
+     "url": "https://zenodo.org/records/18299691/files/training_data_1.csv",
+     "size": 817538,
+     "sha256": "83e269aaf9ebfcb2bc6c449a3153c81d7fd38080271f3b33d618e274e1e74558",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "training_data_2.csv",
+     "url": "https://zenodo.org/records/18299691/files/training_data_2.csv",
+     "size": 435333,
+     "sha256": "cbec60981fdb3cccbf865750d3ee1afb289f64aea9f64fb8d8a3719380810909",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "ventilation_test.csv",
+     "url": "https://zenodo.org/records/18299691/files/ventilation_test.csv",
+     "size": 152115,
+     "sha256": "bf0617f9c273e64f100f2e9303e4104d5346ebab1c3060fa8a9cc88850e596b2",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "all three files (1.4 MB)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 130009
+    },
+    "full": {
+     "description": "all three files (1.4 MB)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 130009
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-finnish-dcv",
+    "timestamp": "time",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S",
+    "resample": "5min",
+    "mapping": "finnish_dcv.json",
+    "units": {
+     "space_temp": "degC",
+     "oa_airflow": "L/s"
+    },
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "Supply airflow reads slightly negative with the supply stopped and spikes to 362 l/s in training 1; left in place.",
+      "issue": "airflow-negative-and-spikes"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "ROOM__training_1"
+      ],
+      "note": "One relative-humidity reading of 666% (not mapped).",
+      "issue": "humidity-over-100"
+     }
+    ],
+    "runs": [
+     {
+      "id": "ROOM__training_1",
+      "file": "training_data_1.csv",
+      "equip": "ROOM",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "ROOM__training_2",
+      "file": "training_data_2.csv",
+      "equip": "ROOM",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "ROOM__ventilation_test",
+      "file": "ventilation_test.csv",
+      "equip": "ROOM",
+      "class": "VAV",
+      "label": ""
+     }
+    ]
+   },
+   "suggested_analyses": {
+    "rules": [
+     "dcv_verification"
+    ],
+    "config_template": "finnish-dcv.json"
+   },
+   "known_issues": [
+    "The ventilation test controlled the airflow on the ML occupant estimate, not the ground-truth count; the two agree in 74.7% of test minutes. CAMBER maps the ground-truth count as occupancy.",
+    "The training sets used 'multiple ventilation control strategies' (not described), so a DCV verdict on them describes that mix, not a DCV law.",
+    "Every file is a set of separate days, not a continuous record: no drift, schedule or M&V analysis applies.",
+    "The room was renovated (wall insulation added) after March 2025, between training 1 and training 2.",
+    "The time zone is not documented; occupancy falls between 05:00 and 18:00 in all three files, consistent with local time."
+   ],
+   "data_issues": [
+    {
+     "id": "dcv-base-flow-is-4-not-3",
+     "title": "The test's DCV law runs at 4 l/s + 6 l/s per person, not the documented 3 l/s base",
+     "columns": [
+      "Supply airflow (l/s)",
+      "Occupant count (ML estimate)"
+     ],
+     "evidence": "In ventilation_test.csv the median supply airflow is 4.04, 10.06, 15.93 and 22.01 l/s at 0, 1, 2 and 3 estimated occupants -- 4 + 6n -- and the median residual against 3 + 6n is +1.02 l/s over the 1,430 minutes (median absolute residual 1.09 l/s; 76% of minutes within 1.5 l/s once the 5-minute update lag is allowed for). A +1 l/s offset at 4 l/s is 25%, beyond the flow sensor's stated +/-5%.",
+     "contradicts": {
+      "document": "Zenodo record description, 'Occupancy-based control': base ventilation 3 l/s (unoccupied), 6 l/s per detected occupant, updated every 5 minutes",
+      "citation": "Mikala, Xu, Huotari 2026, Zenodo doi:10.5281/zenodo.18299691"
+     },
+     "handling": "none",
+     "handling_note": "Nothing is changed: CAMBER's DCV rule does not assume a control law, it tests whether outdoor air rises with demand. The template's area floor (Ra x Az) sits below both 3 and 4 l/s."
+    },
+    {
+     "id": "airflow-negative-and-spikes",
+     "title": "Supply airflow reads negative near zero flow and spikes above 100 l/s",
+     "columns": [
+      "Supply airflow (l/s)",
+      "Extract airflow (l/s)"
+     ],
+     "evidence": "The supply airflow is negative in 52, 47 and 14 minutes of the three files (minimum -6.40 l/s in training 1), and above 100 l/s in 63 minutes of training 1 (maximum 362.4 l/s on 2024-09-06, 2024-09-19 and 2025-03-25) -- about 59 air changes per hour in the 22 m3 room, against a test-period maximum of 64.9 l/s.",
+     "contradicts": {
+      "document": "Zenodo record description (Lindab FTCU airflow, +/-5%; supply and exhaust flows held equal)",
+      "citation": "Mikala, Xu, Huotari 2026, Zenodo doi:10.5281/zenodo.18299691"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place: the small negatives are the transmitter's zero offset with the supply stopped, which the DCV rule reads as no ventilation; the spikes are single minutes that the 5-minute resample averages down."
+    },
+    {
+     "id": "humidity-over-100",
+     "title": "One relative-humidity reading of 666%",
+     "columns": [
+      "Relative Humidity (%)"
+     ],
+     "evidence": "training_data_1.csv reads 665.99% at 2024-09-16 09:53; every other reading of the three files is at most 52.5% except this one (training 1 median 37.9%).",
+     "contradicts": {
+      "document": "Zenodo record description (Miran DLS relative humidity, +/-2.5%)",
+      "citation": "Mikala, Xu, Huotari 2026, Zenodo doi:10.5281/zenodo.18299691"
+     },
+     "handling": "annotate",
+     "handling_note": "Not mapped (CAMBER has no room-humidity role), so it never reaches a rule; recorded for learners reading the raw file."
+    }
+   ]
+  },
+  {
+   "id": "b4b-windesheim",
+   "title": "Brains4Buildings Windesheim office rooms: two CO2 sensors, ventilation valve and occupancy",
+   "summary": "Three office rooms at Windesheim University of Applied Sciences (Zwolle, NL) for 3-4 weeks in October-November 2022, 15-minute preprocessed data: the BMS room CO2 sensor and a desk-mounted SCD41 CO2 sensor, the ventilation valve opening as a fraction of the room's maximum flow, PIR presence, a people counter, Bluetooth phone counts and outdoor weather, with room volumes and maximum flows.",
+   "teaches": [
+    "a valve that follows both a clock and CO2: what a DCV verdict can and cannot separate",
+    "how much a DCV verdict depends on which CO2 sensor you trust (BMS vs desk SCD41)",
+    "declining honestly when the OA signal is an assumption, not a measurement"
+   ],
+   "publisher": "Research Group Energy Transition, Windesheim University of Applied Sciences",
+   "citation": "ter Hofte, H., van Ravenzwaaij, N., Nijboer, E. (2023). Brains4Buildings2022 dataset: CO2 concentration, ventilation flow rate and occupancy of 3 office rooms at Windesheim University of Applied Sciences. https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset (commit 188573d)",
+   "dois": [],
+   "landing_url": "https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://raw.githubusercontent.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/188573d39ca9a775f8ef17a10ccac784d84b7be7/LICENSE.md",
+    "expect": "Attribution 4.0 International"
+   },
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "3 office rooms (VAV-class equipment ROOM_<id>), two of them also with the SCD41 CO2 sensor as equipment ROOM_<id>_scd41",
+   "timezone": "ISO timestamps with UTC offsets (Europe/Amsterdam, crossing the 2022-10-30 DST change), converted at ingest to Amsterdam wall-clock time; 15-minute intervals (start of interval), 2022-10-06/10 to 2022-11-02",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "preprocessed_data/b4b_preprocess_properties.zip",
+     "url": "https://raw.githubusercontent.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/188573d39ca9a775f8ef17a10ccac784d84b7be7/preprocessed_data/b4b_preprocess_properties.zip",
+     "size": 1166119,
+     "sha256": "48ab54fef90f3d2ac560c38af5f64a465f8f2aa17265c653efcec2791a4804db",
+     "pinned": true,
+     "etag": null,
+     "archive": "zip",
+     "extracted_size": 1165963,
+     "members": [
+      "b4b_preprocess_properties.csv"
+     ]
+    },
+    {
+     "name": "metadata/b4b-room-metadata.zip",
+     "url": "https://raw.githubusercontent.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/188573d39ca9a775f8ef17a10ccac784d84b7be7/metadata/b4b-room-metadata.zip",
+     "size": 207,
+     "sha256": "8366c46de65ca4dc708d22a4b0285e0b653fab8f171e86003e7784fc0e470897",
+     "pinned": true,
+     "etag": null,
+     "archive": "zip",
+     "extracted_size": 78,
+     "members": [
+      "b4b-room-metadata.csv"
+     ]
+    },
+    {
+     "name": "README.md",
+     "url": "https://raw.githubusercontent.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/188573d39ca9a775f8ef17a10ccac784d84b7be7/README.md",
+     "size": 24959,
+     "sha256": "c346bcdbcc31555f482b947b4ba73c8f9a8a24fc072b850ef68e2c16f24a3d52",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "the preprocessed file, room metadata and README (1.2 MB)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 220940
+    },
+    "full": {
+     "description": "the preprocessed file, room metadata and README (1.2 MB); the raw measurement files are not ingested",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 220940
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-b4b-windesheim",
+    "timestamp": "timestamp",
+    "source_timezone": "offset",
+    "local_timezone": "Europe/Amsterdam",
+    "resample": "15min",
+    "mapping": "b4b_bms.json",
+    "units": {
+     "space_temp": "degC"
+    },
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "CO2 values were shifted by the publisher so each sensor's minimum reads 416 ppm (baseline correction); left as published.",
+      "issue": "co2-baseline-shifted"
+     }
+    ],
+    "runs": [
+     {
+      "id": "ROOM_917810",
+      "file": "preprocessed_data/b4b_preprocess_properties.zip",
+      "member": "b4b_preprocess_properties.csv",
+      "where": {
+       "id": 917810
+      },
+      "mapping": "b4b_bms.json",
+      "equip": "ROOM_917810",
+      "equip_id": "ROOM_917810",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "ROOM_999169",
+      "file": "preprocessed_data/b4b_preprocess_properties.zip",
+      "member": "b4b_preprocess_properties.csv",
+      "where": {
+       "id": 999169
+      },
+      "mapping": "b4b_bms.json",
+      "equip": "ROOM_999169",
+      "equip_id": "ROOM_999169",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "ROOM_925038",
+      "file": "preprocessed_data/b4b_preprocess_properties.zip",
+      "member": "b4b_preprocess_properties.csv",
+      "where": {
+       "id": 925038
+      },
+      "mapping": "b4b_bms_novalve.json",
+      "equip": "ROOM_925038",
+      "equip_id": "ROOM_925038",
+      "class": "VAV",
+      "label": "",
+      "exclude": "valve-assumed-constant"
+     },
+     {
+      "id": "ROOM_917810_scd41",
+      "file": "preprocessed_data/b4b_preprocess_properties.zip",
+      "member": "b4b_preprocess_properties.csv",
+      "where": {
+       "id": 917810
+      },
+      "mapping": "b4b_scd41.json",
+      "equip": "ROOM_917810",
+      "equip_id": "ROOM_917810_scd41",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "ROOM_999169_scd41",
+      "file": "preprocessed_data/b4b_preprocess_properties.zip",
+      "member": "b4b_preprocess_properties.csv",
+      "where": {
+       "id": 999169
+      },
+      "mapping": "b4b_scd41.json",
+      "equip": "ROOM_999169",
+      "equip_id": "ROOM_999169_scd41",
+      "class": "VAV",
+      "label": ""
+     }
+    ]
+   },
+   "suggested_analyses": {
+    "rules": [
+     "dcv_verification",
+     "co2_ventilation"
+    ],
+    "config_template": "b4b-windesheim.json"
+   },
+   "known_issues": [
+    "The valve fraction is a position (0.20 at the valve's mechanical minimum, 1.00 open) of a constant-pressure system, not a measured flow; the DCV rule judges OA from it with a caveat. Rooms 917810 and 999169 have a maximum flow of 240 m3/h (room metadata), so 0.20 is about 48 m3/h.",
+    "In rooms 917810 and 999169 the valve follows the clock (mean opening 0.51-0.71 at 07:00-10:00 on weekdays, 0.20 all weekend except a 03:00-05:00 bump) and also CO2: within the same weekday hour it correlates 0.53/0.61 with the BMS CO2 and 0.47/0.73 with the desk SCD41, and it is above 0.25 in 100%/68% of weekday intervals with BMS CO2 above 800 ppm (14-15% below 500 ppm). The DCV rule's median CO2 lift mixes the scheduled openings in and reads 'OA modulates, but not with demand' on the BMS sensor, 'functioning' on room 999169's SCD41.",
+    "The catalog ingests the publisher's preprocessed file (duplicates removed, CO2 below 5 ppm removed, CO2 baseline shifted, 15-minute interpolation without bridging gaps of 90 minutes or more); the raw measurement files are downloadable from the repository but not ingested.",
+    "The Xovis people counter covers about 40% of intervals in rooms 917810 and 999169 and 3% in 925038; the Bluetooth phone counts see only registered phones. Neither is the occupancy CAMBER maps where a PIR exists.",
+    "3-4 weeks of data per room: too short for drift or seasonal analyses.",
+    "The publisher mints no DOI; the catalog pins the repository commit instead."
+   ],
+   "data_issues": [
+    {
+     "id": "valve-assumed-constant",
+     "title": "Room 925038's valve fraction is an assumed constant, not a measurement",
+     "columns": [
+      "bms_valve_frac__0 (room 925038)"
+     ],
+     "evidence": "bms_valve_frac__0 is exactly 1.00 in all 2,683 of room 925038's intervals (one unique value), while the other two rooms' valves sit at the 0.20 minimum in 79-81% of intervals and reach 0.99.",
+     "contradicts": {
+      "document": "README, footnote 1 to the properties table: valve fractions of this building could not be exported and 1.00 was assumed because ventilation was intended to run at maximum; the file presents it as the BMS-measured property valve_frac__0",
+      "citation": "Brains4Buildings2022 dataset README, https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/blob/188573d39ca9a775f8ef17a10ccac784d84b7be7/README.md"
+     },
+     "handling": "exclude",
+     "handling_note": "Room 925038 is ingested without its valve (mapping b4b_bms_novalve.json), so no DCV verdict is drawn from an assumed constant; its CO2, temperature and occupancy remain for inspection.",
+     "exclude": {
+      "runs": [
+       "ROOM_925038"
+      ],
+      "analyses": [
+       "dcv_verification on ROOM_925038 (no OA signal is mapped)"
+      ]
+     }
+    },
+    {
+     "id": "co2-baseline-shifted",
+     "title": "CO2 values are baseline-shifted by the publisher, and one room's minimum is not the stated 416 ppm",
+     "columns": [
+      "bms_co2__ppm",
+      "CO2-meter-SCD4x_co2__ppm"
+     ],
+     "evidence": "The documented shift raises each sensor's minimum to 416 ppm, but the preprocessed minima are 455.0 ppm (room 917810, BMS), 416.1 and 426.7 ppm (the other BMS sensors) and 421-436 ppm (SCD41). In the same room the two sensors differ by a median of +7.8 ppm (917810) and -39 ppm (925038, 999169), correlating 0.80-0.91.",
+     "contradicts": {
+      "document": "README, Preprocessed data: per room and source the minimum CO2 value is raised to 415 ppm plus a 1 ppm margin",
+      "citation": "Brains4Buildings2022 dataset README, https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/blob/188573d39ca9a775f8ef17a10ccac784d84b7be7/README.md"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: the DCV rule reads CO2 changes (lift within the hour of day), which a constant shift does not move; absolute thresholds (co2_ventilation) read shifted values."
+    }
+   ]
   }
  ]
 }
