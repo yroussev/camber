@@ -120,7 +120,9 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
     [ -s "$out/RELEASE_NOTES.md" ] && res changelog_notes "PASS ($(wc -l <"$out/RELEASE_NOTES.md" | tr -d ' ') lines)" || res changelog_notes "FAIL (no ## [$pv] entry)"
 
     if [ $FAST -eq 0 ]; then
-      gate dossier dossier.log "$PYTHON" -m camber validate --html "$out/dossier.html" --json "$out/dossier.json"
+      # camber has no __main__; call the CLI entry point (the checked-out tree, not an install)
+      gate dossier dossier.log "$PYTHON" -c 'import sys; from camber.cli import main; sys.exit(main(sys.argv[1:]))' \
+        validate --html "$out/dossier.html" --json "$out/dossier.json"
       # build + package data + clean install
       if "$PYTHON" -m build --outdir "$out/dist" >"$out/build.log" 2>&1 && "$PYTHON" -m twine check "$out"/dist/* >>"$out/build.log" 2>&1; then
         local whl sdist miss=0
