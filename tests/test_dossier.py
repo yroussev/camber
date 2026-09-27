@@ -71,7 +71,7 @@ def test_reference_bdg2_matches_committed_baseline_exactly():
 def test_reference_lbnl_matches_validation_doc():
     """Anti-rot: the cited LBNL pooled TPR must match the docs/VALIDATION.md table row."""
     md = open(_VALIDATION_MD).read()
-    # the pooled row: | **Pooled** | **89% [56–98%]** | 25% | 13 |
+    # the pooled row: | **Pooled** | **78% [45–94%]** | 0% | 13 |
     pat = r"Pooled\*\*\s*\|\s*\*\*(\d+)%\s*\[(\d+)[–-](\d+)%\]\*\*\s*\|\s*(\d+)%\s*\|\s*(\d+)"
     m = re.search(pat, md)
     assert m, "could not find the pooled OA-fraction row in docs/VALIDATION.md"

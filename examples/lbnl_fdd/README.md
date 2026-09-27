@@ -49,8 +49,8 @@ parameters (the run templates) all come from the dataset catalog, so the benchma
 exactly what `camber datasets ingest` produces. (Runs on whatever's downloaded;
 SDAHU-only without `--families`.)
 
-Results with the 0.86 catalog fixes (#24–#29; the committed baseline is refreshed once the
-maintainer signs off the diff, #30):
+Results with the 0.86 catalog fixes (#24–#29; the committed `benchmark-baseline.json` was
+refreshed to these in 0.86, #30):
 
 | Family | Overall TPR | FPR | Note |
 |--------|------------:|----:|------|

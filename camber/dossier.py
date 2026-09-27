@@ -138,38 +138,39 @@ class ValidationDossier:
 _REFERENCE: dict = {
     "lbnl_fdd": {
         "title": "Real-data FDD — LBNL FDD (CC-BY)",
-        # only the TPR interval is published in docs/VALIDATION.md; the pooled FPR is a bare 25%
+        # only the TPR interval is published in docs/VALIDATION.md; the pooled FPR is a bare 0%
         # (its Wilson denominator isn't reconstructable from the table), so it is stated in the
         # headline text rather than fabricated as an interval.
         "rates": {
-            "tpr": RateCI(0.89, 0.56, 0.98, 13),  # pooled OA-fraction across SDAHU+FCU+DDAHU
+            "tpr": RateCI(0.78, 0.45, 0.94, 13),  # pooled OA-fraction across SDAHU+FCU+DDAHU
         },
         "headline": (
-            "OA-fraction pooled TPR 89% [56–98%], FPR 25% across 3 equipment families "
-            "(SDAHU 100%, FCU 100%, DDAHU 50%); drift + chiller-plant detectors scored too"
+            "OA-fraction pooled TPR 78% [45–94%], FPR 0% across 3 equipment families "
+            "(SDAHU 50%, FCU 100%, DDAHU 100%); drift + chiller-plant detectors scored too"
         ),
         "coverage": (
             "3 AHU/FCU families (n=13) for OA-fraction; coil-valve/economizer/duct-static drift on "
             "SDAHU; chiller-efficiency + cooling-tower approach on the chiller-plant subset"
         ),
         "boundary": (
-            "OA-fraction degrades on dual-duct AHUs (mixing-box + mild-weather noise) and the "
-            "modulating-valve leak under-fires — measured, not hidden"
+            "on the single-duct AHU a damper stuck at or near its 1.6% design minimum reads as "
+            "normal ventilation (its symptom, the missed economizer, is a drift detector's), and "
+            "the one coil-valve leak run (a 10% leak) is missed — measured, not hidden"
         ),
         "provenance": "LBNL FDD (CC-BY); reproduce via examples/lbnl_fdd/benchmark.py",
     },
     "bdg2_mv": {
         "title": "Real-data M&V — BDG2 (CC-BY-SA)",
         "rates": {
-            "acceptance": RateCI(0.1526, 0.1377, 0.1689, 2044),  # pooled G14 baseline-model accept
-            "acceptance_chilledwater": RateCI(0.3552, 0.3152, 0.3974, 518),
-            "acceptance_electricity": RateCI(0.0839, 0.0710, 0.0989, 1526),
+            "acceptance": RateCI(0.1661, 0.1505, 0.183, 2011),  # pooled G14 baseline-model accept
+            "acceptance_chilledwater": RateCI(0.3638, 0.3234, 0.4063, 514),
+            "acceptance_electricity": RateCI(0.0982, 0.0841, 0.1143, 1497),
         },
         "headline": (
-            "G14 baseline-model acceptance 15% [14–17%] pooled across 2,044 real meters "
-            "(chilled-water 36%, electricity 8%); median CV(RMSE) 24%"
+            "G14 baseline-model acceptance 17% [15–18%] pooled across 2,011 real meters "
+            "(chilled-water 36%, electricity 10%); median CV(RMSE) 20%"
         ),
-        "coverage": "~2,044 BDG2 meters (518 chilled-water, 1,526 electricity)",
+        "coverage": "~2,011 BDG2 meters (514 chilled-water, 1,497 electricity; cleaned meters)",
         "boundary": (
             "whole-building energy is messy — half the chilled-water meters sit near the 30% "
             "CV(RMSE) acceptance line; acceptance (not TPR/FPR) is the M&V metric"

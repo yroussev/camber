@@ -111,14 +111,38 @@ data. CAMBER's own mistakes are simply fixed:
 - An unknown `source.kind` in a config now warns and falls back to folders.
 
 ### Notes
-- **The LBNL and BDG2 benchmark baselines move with the catalog fixes and are refreshed only after
-  the maintainer signs off the diff (#30).** Expected: SDAHU TPR 0.8 -> 0.4 (a damper stuck at, or
-  near, the unit's 1.6% minimum looks like normal operation outside economizer weather; its symptom
-  is the missed economizer, which `economizer_damper_drift` still catches 4/4), DDAHU FPR 1.0 -> 0
-  and TPR 0.5 -> 1.0, pooled TPR 0.8 -> 0.7 and FPR 0.33 -> 0; BDG2 building counts, the electricity
-  EUI (median 12.2 -> 11.1 kWh/ft2/yr, n 2,044 -> 1,497) and the residual-autocorrelation spread.
-  Until then the LBNL/BDG2 gates report these as regressions. The FCU result rests on a 0.4-point
-  margin (its leak runs give 12.7 / 15.4 / 17.4% OA against a 15% line).
+- **The LBNL and BDG2 benchmark baselines are refreshed (#30), with the maintainer's sign-off.**
+  Every gated metric that moved beyond the 0.05 tolerance (or changed count), old -> new:
+  - LBNL single-duct AHU: TPR 0.8 -> 0.4, correct diagnosis 0.8 -> 0.4, accuracy 0.8333 -> 0.5
+    (FPR stays 0). `outdoor_air_fraction` now judges fan-on, occupied samples against the unit's
+    own 1.6% minimum, not an assumed 20%: the dampers stuck at 10% (the minimum itself) and 25%
+    (4.4% OA) look like normal ventilation outside economizer weather and are no longer "detected"
+    as under-ventilation against 20%. Their real symptom, the missed economizer, is
+    `economizer_damper_drift`'s, which still catches 4/4 (#23, #25).
+  - LBNL dual-duct AHU: FPR 1.0 -> 0.0, TPR 0.5 -> 1.0, correct diagnosis 0.5 -> 1.0, accuracy
+    0.3333 -> 1.0. The seasonal design minimum (31.8%, 11.9% Jun-Aug) on fan-on, operate-mode
+    samples replaces a flat 20% on all hours: fault-free no longer reads as excess OA, and the
+    damper stuck shut now reads as under-ventilation (#26).
+  - LBNL pooled: TPR 0.8 -> 0.7 and correct diagnosis 0.8 -> 0.7 (7/10: two single-duct
+    detections lost, one dual-duct gained), FPR 0.3333 -> 0.0 (the dual-duct false alarm is gone);
+    accuracy stays 0.7692 (10/13). The fan-coil unit and the drift metrics are unchanged.
+  - BDG2 chilled water: buildings 518 -> 514, with a fitted rho 507 -> 501, median rho 0.6163 ->
+    0.6664, p10 rho 0.3024 -> 0.3953, share with rho > 0.3 0.9014 -> 0.9521. Electricity:
+    buildings 1,526 -> 1,497, with a fitted rho 1,515 -> 1,497. Pooled: buildings 2,044 -> 2,011,
+    with a fitted rho 2,022 -> 1,998. The benchmark now scores the publisher's cleaned meters (the
+    raw ones carry ~24,700 all-zero outage days per meter type) and fits whole days only (>= 23
+    hourly readings), so zero and partial days no longer enter the fits or the residual
+    autocorrelation (#29).
+  - BDG2 EUI: median 12.23 -> 11.07 kWh/ft2/yr, n 2,044 -> 1,497. It is now one value per
+    building, electricity only, from complete days annualized; it was one per meter record, mixing
+    chilled-water and electric kWh and including one site's ~1,000x chilled water (#29).
+  - Within tolerance, for the record: acceptance chilled water 0.3552 -> 0.3638, electricity
+    0.0839 -> 0.0982, pooled 0.1526 -> 0.1661; median CV(RMSE) pooled 0.2357 -> 0.2037. #31 moves
+    no BDG2 benchmark metric (the benchmark sums energy per interval rather than reading rates).
+  `docs/VALIDATION.md` and the validation dossier's cited figures (OA-fraction pooled TPR 78%
+  [45-94%], FPR 0%; BDG2 acceptance 17% [15-18%] over 2,011 meters) are updated to match. The FCU
+  result rests on a 0.4-point margin (its leak runs give 12.7 / 15.4 / 17.4% OA against a 15%
+  line).
 - New public names: `camber.datasets.*`, `resolve.StoreEquipRef` / `discover_store` /
   `clear_store_cache`, `config.data_sources`, the report `data_sources` helpers, `ParquetStore`
   methods, `schedules.fan_on_mask` / `FAN_GATE_NONE`. Snapshot regenerated. No new core

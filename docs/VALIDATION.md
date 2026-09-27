@@ -41,29 +41,32 @@ Representative result (OA-fraction detector vs stuck dampers):
 
 | Set | TPR (95% CI) | FPR | n |
 |---|---|---:|---:|
-| SDAHU | 100% [51–100%] | 0% | 6 |
+| SDAHU | 50% [15–85%] | 0% | 6 |
 | FCU | 100% [44–100%] | 0% | 4 |
-| DDAHU | 50% [9–91%] | 100% | 3 |
-| **Pooled** | **89% [56–98%]** | 25% | 13 |
+| DDAHU | 100% [34–100%] | 0% | 3 |
+| **Pooled** | **78% [45–94%]** | 0% | 13 |
 
-The honest read the CIs force: OA-fraction transfers cleanly to single-duct AHUs and
-FCUs but **degrades on dual-duct AHUs** (mixing-box + mild-weather OAF noise), and
-`leaking_valve` **misses the dataset's one leak run** — a 10 % leak (the valve sits at 0.10
+The honest read the CIs force: judged on fan-on, occupied samples against each unit's own design
+minimum, OA-fraction catches every stuck damper on the fan-coil and dual-duct units with no false
+alarm, but on the single-duct AHU it catches only the dampers stuck well open (75 %, 100 %). A
+damper stuck at that unit's 10 % minimum, or at 25 % (4.4 % OA against a 1.6 % minimum), looks like
+normal ventilation outside economizer weather; its real symptom is the missed economizer, which
+`economizer_damper_drift` catches (below). `leaking_valve` **misses the dataset's one leak run** — a 10 % leak (the valve sits at 0.10
 whenever it is commanded shut; the published 010/025/040/050 "severities" are one file) — gaps
 the benchmark *measures* rather than hides. The pooled interval is the defensible headline; the
 small-n per-family numbers are reported with their uncertainty.
 
-> **These are the gated 0.85 figures, and they are about to move.** The 0.86 catalog audit
-> (#24–#29) found that several of them rested on CAMBER's own wrong assumptions: a 20 % minimum
-> OA for a single-duct unit whose design minimum is a 10 % damper position (a **1.6 %** OA
-> fraction — its "ok" held only because fan-off samples were judged), a flat 20 % for a dual-duct
-> unit whose minimum is **seasonal** (11.9 % Jun–Aug, 31.8 % otherwise — the source of its
-> FPR of 1.0), and mis-mapped fan and occupancy points. With the fixes, `outdoor_air_fraction`
-> judges fan-on, occupied samples against each unit's own minimum: a damper stuck at the
-> single-duct unit's 10 % minimum (or at 25 %, 4.4 % OA) looks like normal operation outside
-> economizer weather — its real symptom is the missed economizer — so the SDAHU TPR falls, and
-> the dual-duct FPR falls to 0. The refreshed numbers await the maintainer's sign-off (#30);
-> every published-data problem is listed with its evidence in
+> **These figures moved in 0.86 (#30).** The 0.85 table read SDAHU 100 %, DDAHU 50 % with an FPR
+> of 100 %, and pooled 89 % [56–98 %] with an FPR of 25 %. The 0.86 catalog audit (#24–#29) found
+> that those figures rested on CAMBER's own wrong assumptions: a 20 % minimum OA for a single-duct
+> unit whose design minimum is a 10 % damper position (a **1.6 %** OA fraction — its "ok" held only
+> because fan-off samples were judged), a flat 20 % for a dual-duct unit whose minimum is
+> **seasonal** (11.9 % Jun–Aug, 31.8 % otherwise — the source of its FPR of 1.0), and mis-mapped
+> fan and occupancy points. With the fixes, `outdoor_air_fraction` judges fan-on, occupied samples
+> against each unit's own minimum, so the SDAHU TPR fell and the dual-duct FPR fell to 0. The
+> gated baseline (`examples/lbnl_fdd/benchmark-baseline.json`) was refreshed with the
+> maintainer's sign-off; the CHANGELOG lists every gated metric that moved. Every published-data
+> problem is listed with its evidence in
 > [DATASETS.md](DATASETS.md#data-issues-and-how-camber-handles-them).
 >
 > **The FCU result is fragile.** Its OA-damper leak runs give 12.7 / 15.4 / 17.4 % OA (20 / 50 /
@@ -92,7 +95,7 @@ CI by `examples/lbnl_fdd/benchmark-baseline.json`.
 | `duct_static_drift` | **not measured** — declines all 6 cases | no labeled duct-static fault in the fetched set, *and* the baseline period will not support a static-vs-airflow fit, so there is no specificity number either. Until 0.82.0 those declines were booked as true negatives and reported as FPR 0.0 |
 | `fan_efficiency_drift`, `filter_loading_drift` | **synthetic-only** | need `POWER` / `FILTER_DIFF_PRESS` points the SDAHU simulation does not export |
 | `vav_airflow_drift`, `vav_reheat_valve_drift` | **measured on the LBNL FPU subset** (opt-in `fetch.py --fpu`, not gated in CI): airflow **recall 3/3, 0 false positives in 7**; reheat valve **recall 1/2, 0 false positives in 7** | the faults are imposed on the **South** box (`_S`); until 0.82.0 the mapping pointed at the healthy West box and both detectors scored 0. Both are one-sided **up**: airflow catches a stuck damper and a low-reading flow sensor (26–78σ), and a high-reading sensor (the damper closes) is out of scope; reheat catches a valve stuck closed (13.7σ, read from the valve *demand* `RH_VLV_DM_S`) and misses severe waterside fouling, which leaves no trace in the box's trended points — valve demand, discharge temperature and HW flow medians are identical to the fault-free run. Leaking / stuck-open valves lower the demand and are cross-negatives |
-| `chiller_efficiency`, `cooling_tower_approach` | **measured on the LBNL chiller-plant subset** (opt-in `fetch.py --chiller`, not gated in CI): `chiller_efficiency` **TPR 5/9, FPR 1/2**; `cooling_tower_approach` **TPR 0/3, FPR 0/2, 6 declined** | kW/ton catches every condenser-bypass-valve fault and misses tower fouling / PI mistuning (≤ 7% kW/ton change); its false alarm is the chiller sensor-bias run, whose biased temperature corrupts the tonnage. The tower rule never ran before 0.82.0 (a 0–1 fan speed was never rescaled; the exported wet-bulb and dry-bulb columns are swapped — see the `lbnl-chiller` catalog entry's `fix` quirk and `camber/datasets/mappings/lbnl_chiller.json`). It now judges approach only at **high fan effort (≥ 90%)**: the plant holds a 60 °F minimum condenser-water temperature, so in cold weather a healthy tower sits far above wet-bulb + design with its fan idling — which fired the rule on all five bypass-valve runs (a leaking bypass keeps the tower running all winter). Those, and the PI run, now decline: the tower is never pushed hard, so there is nothing to judge. Fouling is visible at high fan (20% / 7% / 0% of hours above design + 3 °F at 65% / 80% / 95% capacity, vs 0% healthy; 3.3× the high-fan hours at 65%) but the rule's severity is the *median* approach, which moves only 8.1 → 9.4 °F — so it stays `ok`. The fan working harder for the same approach is the stronger fouling signature, and is not yet a detector |
+| `chiller_efficiency`, `cooling_tower_approach` | **measured on the LBNL chiller-plant subset** (opt-in `fetch.py --chiller`, not gated in CI): `chiller_efficiency` **TPR 6/11, FPR 2/13**; `cooling_tower_approach` **TPR 0/3, FPR 0/2, 6 declined** | kW/ton catches every condenser-bypass-valve fault and the severe chiller fouling (065, 2.36 kW/ton against the 1.44 calibration; the archive's undocumented chiller-fouling runs are positives since 0.86) and misses tower fouling / PI mistuning (≤ 7% kW/ton change) and the mild chiller fouling (095, 1.53); its false alarms are the two positive chiller sensor-bias runs, whose biased temperature corrupts the tonnage. The tower rule never ran before 0.82.0 (a 0–1 fan speed was never rescaled; the exported wet-bulb and dry-bulb columns are swapped — see the `lbnl-chiller` catalog entry's `fix` quirk and `camber/datasets/mappings/lbnl_chiller.json`). It now judges approach only at **high fan effort (≥ 90%)**: the plant holds a 60 °F minimum condenser-water temperature, so in cold weather a healthy tower sits far above wet-bulb + design with its fan idling — which fired the rule on all five bypass-valve runs (a leaking bypass keeps the tower running all winter). Those, and the PI run, now decline: the tower is never pushed hard, so there is nothing to judge. Fouling is visible at high fan (20% / 7% / 0% of hours above design + 3 °F at 65% / 80% / 95% capacity, vs 0% healthy; 3.3× the high-fan hours at 65%) but the rule's severity is the *median* approach, which moves only 8.1 → 9.4 °F — so it stays `ok`. The fan working harder for the same approach is the stronger fouling signature, and is not yet a detector |
 | refrigerant-side chiller drift (`*_approach_*`, subcooling, superheat), pump drift | **synthetic-only** | the LBNL chiller-plant subset is *water-side only* — it exports **no** refrigerant-side points (evaporator/condenser approach, subcooling, superheat) and no pump-head/flow trends, so those detectors can't be scored on it |
 | refrigerant-side chiller drift on **open lab / field data** (not vendored, not CI-gated; measured 0.82.0) | **NIST residential heat-pump FDD lab data** (151 labeled cases: 107 faults — under/overcharge, condenser & evaporator airflow, liquid-line restriction — and 44 held-out no-fault files; loads as-is, 0.7–4.3 t): before **all six detectors declined 151/151**; after, 0 declined — recall / FPR: subcooling 0.34 / 0.00, superheat 0.22 / 0.00, head pressure 0.32 / 0.00 (0.01 load-only), suction pressure 0.00 / 0.00, approach 0.52 / 0.02, approach CUSUM 0.64 / 0.23 (the lab files are steady-state test points on a synthetic time index, so the temporal claim is weak there). **NIST IBAL 5-ton chiller, normal operation** (22 days after a 5-day baseline): before 100% declined; after, **0 period false alarms** on every detector; sustained-alarm false alarms 5-min / 1-min: approach CUSUM 0.59→0.05 / 0.75→0.15, subcooling 0.50→0.00 / 0.90→0.05, suction 0.00 / 0.40→0.05. A mid-run injected step is caught by the period rule / CUSUM at: head +44 psi 100% / 100%, suction −15 psi 64% (5% load-only) / 100%, superheat +8 °F 45% / 100%, subcooling −3 °F 9% / 82%, condenser approach +3 °F 95%. **ORNL CO₂ (R744) supermarket rack** (5 fault / negative-control pairs): before all declined (gas-cooler pressures above the 700 psig ceiling; small loads); after all scored with 0 false alarms; the low-temp EEV failure is a superheat fault (+36.7 °F, 7.2σ); the gas-cooler air blockage is **not** detected — its day was hotter than any baseline day (caveated as extrapolated) and compressor kW, the only load proxy, rises with the blockage itself | size-relative load gates + flat-level fallback, physical per-metric ranges, refrigerant-neutral pressure ceilings, a heat-sink / leaving-CHW regressor for head / suction pressure, and a serial-correlation-corrected CUSUM (see [CHILLER-DRIFT.md](CHILLER-DRIFT.md#the-load-normalized-baseline)). IBAL's second chiller has no evaporator-entering sensor, so compressor kW stands in for load; its period statistics stay specific (0 false alarms) but its CUSUM still flags 33–62% of summer days, when kW ran outside the spring baseline's envelope — a real sustained shift below the period floor, i.e. a tuning question for the provisional CUSUM parameters, documented rather than tuned |
 | hydronic loop / pump drift on the **LBNL boiler-plant FDD set** (not vendored) | `loop_dp_drift` **now scores** (was 4/4 declined); `pump_power_drift` names the missing metric; `hw_pump_dp_reset` evaluates the DP-setpoint reset | the loop DP is trended in inH₂O (480.5 setpoint), which the former psi-only 0–100 band rejected sample by sample while the caveat blamed "too few loaded samples"; the band is now scaled to the loop's own median. Five runs export pump power as `"NAN"` strings — the decline now says the power column has no numeric values. The HW pump speed is a 0–1 fraction; the rule rescales it and reports the (flat) DP setpoint it previously claimed but never read. No detection claim is made on the boiler faults |
@@ -196,16 +199,16 @@ CC-BY-SA 4.0, ~2,000 meters). For each building it fits the daily change-point i
 outdoor temperature and asks whether the fit meets the G14 gate (CV(RMSE) ≤ 30% daily); the headline is
 the fraction that pass, with a Wilson CI. Committed baseline, gated in the benchmark CI job.
 
-Representative result (2016, ~2,044 buildings):
+Representative result (2016 cleaned meters, whole days only, ~2,011 buildings):
 
 | Meter | Acceptance (95% CI) | Median CV(RMSE) | n |
 |---|---|---:|---:|
-| Chilled water (cooling) | 36% [32–40%] | 32% | 518 |
-| Electricity | 8% [7–10%] | 21% | 1,526 |
-| **Pooled** | **15% [14–17%]** | 24% | 2,044 |
+| Chilled water (cooling) | 36% [32–41%] | 31% | 514 |
+| Electricity | 10% [8–11%] | 17% | 1,497 |
+| **Pooled** | **17% [15–18%]** | 20% | 2,011 |
 
 The honest read: weather-driven **chilled-water** energy is baseline-able at a **meaningfully higher**
-rate than schedule/plug-driven **electricity** (~4.5×) — CAMBER reproduces the expected physics — but
+rate than schedule/plug-driven **electricity** (~3.7×) — CAMBER reproduces the expected physics — but
 real whole-building energy is messy, and half the chilled-water buildings sit near the 30% daily
 CV(RMSE) line. Reporting *both* meter types (not just the flattering one) with confidence intervals is
 the point. The runner also rolls the portfolio up by EUI at real scale (validating the fleet percentile
