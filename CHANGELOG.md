@@ -4,6 +4,109 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+**0.90.1 patch: fixes from two private real-data checks (#51-#59).** Every fix has a synthetic
+reproduction in the test suite. New names are provisional (`docs/API-STABILITY.md`). The synthetic,
+fleet, LBNL, BDG2 and BDG2 savings benchmark gates did not move.
+
+### Fixed
+- **UTC `Z` timestamps were read as local time (#56).** `parse_timestamps` dropped a `Z` / `+hh:mm`
+  offset without converting it, so at a US Central site a fan that ran 07:00-16:00 appeared to run
+  12:00-21:00 and `night_weekend_setback` reported "setback MISSING". Given the site's IANA zone
+  (`timezone=` on `parse_timestamps`, `load_csv`, `load_point` / `load_status` /
+  `load_equipment`, and the wide / long / per-point CSV, SQL, OPC-UA and BACnet adapters;
+  `source.timezone` in a config), stamps that name an instant (ISO offsets, mixed offsets across
+  a DST switch, a trailing `UTC` / `GMT`, epoch numbers) are converted to the site's wall clock
+  and then made naive. The DST fall-back repeat is collapsed by the existing dedupe
+  (`timegrid.regularize`, whose sort is now stable, so `"first"` keeps the earlier instant), and
+  the spring-forward hour is a gap, as in a naive local export.
+  Without a zone the clock as written is kept for back-compat, with a `TimezoneWarning` that says
+  schedule and occupancy rules will be shifted; `strict_timezone=True` (`source.strict_timezone`)
+  refuses such data instead. A store facility ingested from the dataset catalog defaults to the
+  entry's `local_timezone`. Re-ingesting catalog entries that declare `source_timezone` gives
+  byte-identical frames. Mixed offsets no longer raise inside pandas.
+- **Lag-1 autocorrelation was never estimated for monthly or billing data (#51).**
+  `lag1_autocorrelation` admitted only pairs spaced within 1% of the median, which calendar
+  months and billing cycles never are, so every monthly fit got `rho = None` and a band left
+  silently uncorrected (too narrow). When the modal spacing is month-like (25-36 days), every
+  spacing in that window is adjacent; the optional `period_start` / `period_end` treat
+  contiguous periods as neighbours. Forecast, backcast and chaining now caveat an unknown rho
+  instead of silently using 0.
+- **`select_method` never proposed chaining on monthly rows (#52).** It compared an intermediate
+  window's row count with its length in days. The threshold is now 90% of the rows the window
+  holds at the frame's own sampling interval (unchanged for daily rows).
+- **The ISD weather source failed after its catalog end date and on one missing year (#53).**
+  `fetch_isd` skips a station-year file that does not exist (404), warns, and lists it in
+  `attrs["isd_missing_years"]` (`on_missing_year="raise"` keeps the old abort).
+  `isd_nearest_station` warns when the station catalog looks stale.
+- **NASA POWER hours were local solar time read as UTC (#53).** The request now sends
+  `time-standard=UTC` (the service's default is local solar time, about 6 h off at a US Central
+  site), and a non-UTC payload is refused. POWER's not-yet-published trailing fill stays missing,
+  and the last real hour is reported as `attrs["power_coverage_end"]`. An existing POWER cache
+  misses once and re-fetches.
+- **`_t_value` rejected `confidence=0.68` (#55).** Any confidence in (0, 1) is accepted, so the
+  G14 reporting criterion (savings uncertainty under 50% at 68%) can be evaluated. The 80 / 90 /
+  95% table stays the fast path, unchanged; other levels are the exact Student-t quantile from
+  the incomplete-beta tail.
+- **One very cold bill could make coverage severe on its own (#55).**
+  `ExtrapolationPolicy.min_points_outside` (default 2): the share test makes coverage `severe`
+  only when at least that many reporting points lie outside the baseline support; with fewer it
+  is `moderate` with a caveat, and the distance test still applies. It binds only when a single
+  row carries a quarter of the points or energy, which in practice means monthly or billing data.
+  `min_points_outside=1` restores the old grading.
+- **Short baselines on the config `mv` path (#59).** A baseline window shorter than 365 days, or
+  missing more than 10% of its days, is fitted with a caveat on `mv_baseline`
+  (`metrics.short_baseline`) and on the savings or proposal findings that rest on it. It is the
+  same rule `fit_version` (`camber mv freeze`) enforces, now `mvrun.baseline_window_check`.
+- **Degree-day models with a slope of the wrong sign (#59).** `fit_degree_day` prefers a balance
+  point whose heating and cooling slopes are >= 0; when none is, the fit is declined
+  (`fit.accept` false) with a caveat. `logical_signs` gives degree-day models their expected
+  signs, so the SEP sign test catches them too.
+- **`night_weekend_setback` flagged a nearly idle unit (#57).** Unoccupied runtime below
+  `min_unoccupied_run_pct` (default 5%) counts as an effective setback whatever the ratio, and both
+  runtimes and their ratio are reported.
+- **`supply_air_reset_compliance` said "ok" with supply air far above the target (#57).** Supply
+  air more than `track_gap_f` (5 °F) above the G36 target in warm weather is a warn ("NOT
+  tracking"), and the tracking error is reported. The rule declines on classes other than air
+  handlers (a heat pump's discharge air, for example).
+- **Sensor trust missed long stuck stretches (#58).** Stuck runs are judged by absolute duration
+  against a per-role limit, so long series no longer dilute real outages, and the stuck
+  intervals are reported. A point that starts late is judged over its own span (`late_start`,
+  `first_valid`), not marked untrusted for low coverage.
+- **The non-routine event detectors paired each bill with one day's temperature (#54).**
+  `detect_non_routine`, `detect_step_change` and `detect_step_changes` now pair billing-period
+  energy with its own period's mean temperature, per day, and `min_days` / `min_segment_days`
+  count days of service instead of bills (each billing segment also needs at least 3 bills).
+  Daily and hourly input is unchanged.
+
+### Added
+- `camber.tsparse.TimezoneWarning` and `check_timezone`; `timezone=` / `strict_timezone=` on the
+  loaders and adapters listed above; `EquipRef.timezone` / `strict_timezone`; `source.timezone` /
+  `source.strict_timezone` in a config (#56).
+- `lag1_autocorrelation(period_start=, period_end=)` (#51).
+- `oat_reference_blended` and `oat_reference_isd(..., fallback="nasa_power")` (#53): the nearest
+  ISD station, long gaps from the next-nearest stations, and the rest from NASA POWER at the
+  snapped grid cell. POWER is corrected by a monthly mean offset against the station over the
+  overlap, falling back to a seasonal or overall offset, or none, when there are too few pairs.
+  Per-date sources, the correction and caveats are recorded in `attrs["weather_provenance"]`.
+  Also added: `power_grid_cell`, `isd_catalog_end`, `WeatherCacheMiss`,
+  `fetch_nasa_power(snap_to_cell=)`, and `cached_transport(offline=, should_cache=)` /
+  `cached_bytes_transport(offline=)` for offline, cache-first reads.
+- `ExtrapolationPolicy.min_points_outside` (#55); `mvrun.baseline_window_check` and
+  `DegreeDayModel.caveats` (#59).
+- An `equip_classes` rule attribute that `Registry.run` declines other equipment classes by
+  (#57).
+- `SensorTrust` fields `longest_flat_hours`, `stuck_intervals`, `first_valid`, `window_coverage`,
+  `n_state_changes` and `frame_checks`, plus `sensorhealth.STUCK_HOURS` and `stuck_hours=`. New
+  status-point flags `never_changes` and `fractional_status`. `sensorhealth.frame_checks` adds
+  fan-off pressure plausibility, status-vs-speed consistency and all-points-freeze detection, and
+  the trust gate applies them (#58).
+- `camber.mandv.billing` (#54): `BillingSeries` carries each bill's start, end, days,
+  estimated-read flag and units. It gives each bill's mean temperature and heating / cooling
+  degree-days (from hourly temperatures when available) and a day-weighted total.
+  `daily_energy_vs_temp` accepts it, and the detector results report `billing` / `n_periods`.
+
 ## [0.90.0] — 2026-09-27
 
 **M&V rebaselining: the rest of #21.** A reported saving now declares its SEP method, restates its

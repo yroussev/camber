@@ -143,6 +143,21 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the `camber mv run | freeze | list | propose | rebaseline | adjust | report` commands and
     their `mv.freeze`, `mv.rebaseline` and `mv.adjust` audit actions.
 
+- **Site time zone** (0.90.1; #56): `camber.tsparse.TimezoneWarning` and `check_timezone`, the
+  `timezone=` / `strict_timezone=` keywords on `parse_timestamps`, `io.load_csv`,
+  `realio.load_point` / `load_status` / `load_equipment` and the wide, long, per-point CSV, SQL,
+  OPC-UA and BACnet adapters, the `EquipRef.timezone` / `strict_timezone` fields, and the config
+  keys `source.timezone` / `source.strict_timezone`.
+- **M&V fixes** (0.90.1; #51, #55, #59): `lag1_autocorrelation(period_start=, period_end=)` and its
+  monthly adjacency window, `ExtrapolationPolicy.min_points_outside`, `mvrun.baseline_window_check`,
+  `DegreeDayModel.caveats` and the `short_baseline` metric of `mv_baseline`. The thresholds may be
+  retuned.
+- **Weather fallback** (0.90.1; #53): `oat_reference_blended`, `oat_reference_isd(fallback=,
+  power_transport=)`, `power_grid_cell`, `isd_catalog_end`, `WeatherCacheMiss`, `POWER_GRID_DEG`,
+  `fetch_isd(on_missing_year=)`, `fetch_nasa_power(snap_to_cell=)`,
+  `cached_transport(offline=, should_cache=)`, `cached_bytes_transport(offline=)`,
+  `nasa_power_url(time_standard=)`, and the `weather_provenance`, `isd_missing_years`,
+  `power_coverage_end` and `power_cell` series attributes. The bias-correction method may change.
 - **False-verdict and sensor-trust fixes** (0.90.1; #57, #58), all additive:
   - `min_unoccupied_run_pct=` on `setback.analyze_setback` and `NightWeekendSetback`, and the
     trailing `SetbackResult.unoccupied_to_occupied_ratio` / `min_unoccupied_run_pct`;

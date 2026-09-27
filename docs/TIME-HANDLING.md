@@ -55,3 +55,35 @@ before `assess` on any export whose ordering you don't control.
 **Still local time:** analytics operate on naive local time (correct for occupancy/schedule logic).
 For hour-accurate energy across a DST-transition day, `localize` to a tz first, or note the ~1-hour
 difference on those two days a year.
+
+## Stamps that name an instant: the site time zone
+
+Some exports stamp **instants** instead of local wall-clock readings: ISO 8601 with a `Z` or
+`+hh:mm` offset (an open-data package's `timestamp_utc`, an OPC-UA `SourceTimestamp`), a trailing
+`UTC` / `GMT`, or epoch seconds. CAMBER's analytics run on local time, so such stamps must be
+converted to the site's zone first. Before 0.90.1 the offset was dropped without converting: at a
+US Central site a fan that ran 07:00-16:00 appeared to run 12:00-21:00.
+
+Pass the site's IANA zone to the parser, a loader or an adapter, or set it once in a config:
+
+```python
+from camber.io import load_csv
+
+df = load_csv("export.csv", timezone="America/Chicago")  # Z / offset / epoch -> Chicago wall clock
+```
+
+```json
+{"source": {"kind": "perpoint_csv", "folder": "trends/", "timezone": "America/Chicago"}}
+```
+
+- Offset-bearing and epoch stamps are converted to the site's wall clock and then made naive.
+  Mixed offsets (a `-06:00` / `-05:00` export across a DST switch) parse as the instants they are.
+- Naive stamps are taken to be local already (or in `assume_tz`, and converted from it).
+- After conversion the DST fall-back hour repeats and the spring-forward hour is absent, exactly
+  as in a naive local export: `regularize` (the loaders' `dedupe`) collapses the repeat.
+- **Without a zone** the clock is kept as written (UTC for `Z`), for back-compat, and a
+  `camber.tsparse.TimezoneWarning` says that schedule, occupancy and hour-of-day rules will be
+  shifted. `strict_timezone=True` (config `source.strict_timezone`) refuses such data instead.
+- A store facility ingested from the dataset catalog is already on the site's clock (the entry's
+  `source_timezone` / `local_timezone`). There `source.timezone` defaults to that zone and applies
+  only to a `shared_oat` CSV file, and a different zone warns.
