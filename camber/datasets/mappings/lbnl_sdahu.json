@@ -1,5 +1,5 @@
 {
-  "_comment": "LBNL FDD single-duct AHU (SDAHU) point name -> CAMBER Role mapping. A second BAS naming convention (vs the per-building examples), proving the role/mapping layer is vendor-neutral: adding a dataset is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Note this AHU has a cooling coil only (no heating valve), so heat-coil rules are correctly gated out by completeness validation. Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions.",
+  "_comment": "LBNL FDD single-duct AHU (SDAHU) point name -> CAMBER Role mapping. A second BAS naming convention (vs the per-building examples), proving the role/mapping layer is vendor-neutral: adding a dataset is a config file, not a code change. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Note this AHU has a cooling coil only (no heating valve), so heat-coil rules are correctly gated out by completeness validation. Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions. FANS (fixed in 0.86.0): SF_CS is the supply-fan speed (0 with the fan off, 0.5-1.0 in 99% of fan-on minutes, r = 0.77 with SF_WAT on fan-on minutes) and maps to supply_fan_speed; SF_SPD is a constant 0.9 (the return fan's 90%-of-supply tracking ratio, PDF section 1.2) and SF_SPD_DM equals SYS_CTL in every row -- neither is a fan role (until 0.86.0 SF_SPD was the speed and SF_CS the status). The unit exports no run status, so the catalog derives SF_ON = (SF_CS > 0) at ingest (it agrees with SF_WAT > 5 W in 99.8% of rows) and it maps to supply_fan_status. OCCUPANCY: SYS_CTL is the occupied-mode flag and maps to occupancy; the simulated schedule is not CAMBER's assumed Mon-Fri 07-18 (see the lbnl-sdahu data issues: the calendar is shifted one weekday). AIRFLOW: SA_CFM is published as cfm x 60; the catalog's fix quirk divides it by 60 before this mapping applies. OA_CFM is a constant and is deliberately unmapped.",
   "aliases": {
     "CHWC_VLV_DM": "cool_valve",
     "MA_TEMP": "mixed_air_temp",
@@ -11,8 +11,9 @@
     "SA_SPSPT": "duct_static_sp",
     "SA_TEMP": "supply_air_temp",
     "SA_TEMPSPT": "supply_air_temp_sp",
-    "SF_CS": "supply_fan_status",
-    "SF_SPD": "supply_fan_speed",
+    "SF_CS": "supply_fan_speed",
+    "SF_ON": "supply_fan_status",
+    "SYS_CTL": "occupancy",
     "ZONE_TEMP_1": "space_temp"
   },
   "patterns": []

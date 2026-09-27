@@ -4,7 +4,7 @@
   {
    "id": "lbnl-sdahu",
    "title": "LBNL simulated single-duct AHU (labelled faults)",
-   "summary": "One simulated single-duct VAV air handler (cooling coil only, OA economizer) for a year at 1-minute resolution: a fault-free run plus stuck OA dampers, cooling-coil valve leaks and stuck valves, and OA / coil sensor biases at several severities.",
+   "summary": "One simulated single-duct VAV air handler (cooling coil only, OA economizer) for a year at 1-minute resolution: a fault-free run plus stuck OA dampers, a cooling-coil valve leak and stuck valves, and supply-air temperature sensor biases at several severities (the four OA-temperature 'bias' runs carry no bias).",
    "teaches": [
     "outdoor-air fraction and a stuck outdoor-air damper",
     "leaking cooling-coil valve",
@@ -23,7 +23,7 @@
    "verified_on": "2026-09-26",
    "kind": "simulated",
    "labeled_faults": true,
-   "timezone": "naive simulation clock (no DST); 1-minute samples, calendar year 2018",
+   "timezone": "naive simulation clock in standard time, 1-minute samples, calendar year 2018; the simulated schedule follows daylight saving time and runs one weekday late (see the data issues)",
    "requires_extras": [],
    "licence_check": {
     "url": "https://data.openei.org/submissions/5763",
@@ -37,9 +37,9 @@
     },
     "fault_types": {
      "damper": "OA damper stuck at a fixed position",
-     "valve_leak": "cooling-coil valve leaks when commanded closed",
+     "valve_leak": "cooling-coil valve leaks (10% of travel) when commanded closed",
      "valve_stuck": "cooling-coil valve stuck",
-     "sensor_bias": "OA-temperature or coil-temperature sensor offset"
+     "sensor_bias": "supply-air-temperature sensor offset (the coi_bias_* runs; the published inventory calls them sa_bias_*)"
     }
    },
    "files": [
@@ -93,7 +93,7 @@
    ],
    "subsets": {
     "default": {
-     "description": "fault-free + 4 stuck-damper runs + the single valve-leak run (the LBNL benchmark's SDAHU set) and a spliced fault-onset run",
+     "description": "fault-free + 4 stuck-damper runs + the single valve-leak run (coi_leakage_010; the LBNL benchmark's SDAHU set) and a spliced fault-onset run",
      "files": "all",
      "runs": [
       "fault_free",
@@ -101,7 +101,7 @@
       "damper_stuck_025",
       "damper_stuck_075",
       "damper_stuck_100_short",
-      "coi_leakage_050"
+      "coi_leakage_010"
      ],
      "store_bytes_estimate": 45000000
     },
@@ -141,10 +141,24 @@
       "issue": "sa-sp-fault-free-in-pa"
      },
      {
-      "op": "annotate",
-      "action": "annotate",
-      "note": "SA_CFM magnitudes (~3e5) are implausible for cfm and the units are undocumented; treat the airflow role as relative, not absolute.",
+      "op": "scale",
+      "action": "fix",
+      "columns": [
+       "SA_CFM",
+       "RA_CFM"
+      ],
+      "factor": 0.016666666666666666,
+      "note": "SA_CFM and RA_CFM are published as cfm x 60 (ft3/h); divided by 60 to cfm before mapping.",
       "issue": "sa-ra-cfm-units"
+     }
+    ],
+    "derive": [
+     {
+      "column": "SF_ON",
+      "above": [
+       "SF_CS",
+       0
+      ]
      }
     ],
     "runs": [
@@ -202,7 +216,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_025_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "valve_leak"
+      "label": "valve_leak",
+      "exclude": "leak-severities-are-one-10pct-run"
      },
      {
       "id": "coi_leakage_040",
@@ -210,7 +225,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_040_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "valve_leak"
+      "label": "valve_leak",
+      "exclude": "leak-severities-are-one-10pct-run"
      },
      {
       "id": "coi_leakage_050",
@@ -218,7 +234,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "valve_leak"
+      "label": "valve_leak",
+      "exclude": "leak-severities-are-one-10pct-run"
      },
      {
       "id": "coi_stuck_010",
@@ -290,7 +307,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_-2_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "exclude": "oa-bias-runs-carry-no-bias"
      },
      {
       "id": "oa_bias_m4",
@@ -298,7 +316,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_-4_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "exclude": "oa-bias-runs-carry-no-bias"
      },
      {
       "id": "oa_bias_2",
@@ -306,7 +325,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_2_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "exclude": "oa-bias-runs-carry-no-bias"
      },
      {
       "id": "oa_bias_4",
@@ -314,7 +334,8 @@
       "member": "LBNL_FDD_Dataset_SDAHU/oa_bias_4_annual.csv",
       "equip": "AHU",
       "class": "AHU",
-      "label": "sensor_bias"
+      "label": "sensor_bias",
+      "exclude": "oa-bias-runs-carry-no-bias"
      }
     ],
     "derived": [
@@ -337,11 +358,12 @@
     "config_template": "lbnl-sdahu.json"
    },
    "known_issues": [
-    "Supply static pressure is inconsistent across runs: the fault-free run exports the setpoint in Pa under SA_SP, the faulted runs a -400.25 placeholder under SA_SPSPT. Both are masked at ingest, so static-pressure rules decline where the data is bad.",
     "Valve and damper signals are 0-1 fractions; they are rescaled to percent.",
     "Valves and dampers map to the controller demand columns (*_DM), not the measured positions: a stuck device's position hides the fault the rules look for.",
-    "damper_stuck_100 is a short run (about 7 months).",
-    "The coi_leakage_010/025/040/050 members are byte-identical (same size and CRC), as are the four oa_bias_* members: they are one run each, not a severity sweep, so they cannot measure how detection varies with severity."
+    "The unit exports no fan run-status point (SF_SPD_DM, which the inventory lists as the supply-fan status, equals SYS_CTL in every row). CAMBER derives one: SF_ON = 1 when the speed command SF_CS is above 0, which agrees with the supply-fan power being above 5 W in 99.8% of rows; it maps to supply_fan_status, SF_CS to supply_fan_speed.",
+    "The unit's minimum OA is a fixed 10% damper position (inventory section 1.2), which measures as a 1.6% OA fraction (median of 119,163 occupied, fan-on minutes at that position): the run template sets min_oa_pct 1.6. A damper stuck at 10% is therefore indistinguishable from normal operation outside economizer weather; its symptom is the missed economizer (61.8% vs 1.6% OA in 33.8-60 F weather).",
+    "The economizer runs only between 33.8 F and 60 F (inventory section 1.2): below 33.8 F it is locked out by design, so cold-weather 'missed free cooling' is not a fault on this unit. The run template sets economizer_high_limit's high_limit_f to 60.",
+    "damper_stuck_100 is a short run (2018-04-01 to 2018-11-01)."
    ],
    "data_issues": [
     {
@@ -367,7 +389,7 @@
      "runs": [
       "fault_free"
      ],
-     "evidence": "Fault-free SA_SP holds 401.9 with the fan off (median) and 403.5 with it on (range 401.8-410.6): ~1.61 inH2O expressed in Pa, and it never falls toward zero with the fan stopped. In the 20 faulted runs SA_SP is the measured static in inH2O (fan-on median 1.51-1.61, fan-off median 0.003-0.005).",
+     "evidence": "Fault-free SA_SP holds 401.9 (median) with the fan off and 403.5 with it on (range 401.8-410.6): the ~1.61 inH2O setpoint expressed in Pa, which never falls toward zero with the fan stopped. In the 20 faulted runs SA_SP is the measured static in inH2O (fan-on median 1.51-1.61, fan-off median 0.003-0.005).",
      "contradicts": {
       "document": "SDAHU inventory Table 2 (SA_SP: supply air duct static pressure, inches H2O)",
       "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
@@ -377,18 +399,124 @@
     },
     {
      "id": "sa-ra-cfm-units",
-     "title": "SA_CFM and RA_CFM are not in cfm",
+     "title": "SA_CFM and RA_CFM are cfm x 60",
      "columns": [
       "SA_CFM",
       "RA_CFM"
      ],
-     "evidence": "SA_CFM peaks at 1,266,232 and has a fan-on median of 596,187 -- implausible as cfm for one floor's air handler.",
+     "evidence": "SA_CFM peaks at 1,266,232 (RA_CFM 1,264,430) with a fan-on median of 596,187 in the fault-free run -- read as cfm, tens of times any single-floor air handler. Divided by 60 (ft3/h to cfm) they peak at 21,104 cfm (9.96 m3/s) with a 9,936 cfm fan-on median, a plausible floor-level supply. Caveat: at those flows the exported supply-fan power (SF_WAT, at most 1,622 W) is only ~0.08 W/cfm, itself implausibly low, so treat the flow scale with care.",
      "contradicts": {
-      "document": "SDAHU inventory Table 2 (SA_CFM / RA_CFM: supply / return airflow, CFM)",
+      "document": "SDAHU inventory Table 2 (SA_CFM / RA_CFM: supply / return volumetric airflow, CFM)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "fix",
+     "handling_note": "Divided by 60 before mapping (scale quirk) in every run; `--no-corrections` keeps the published magnitudes."
+    },
+    {
+     "id": "oa-cfm-constant",
+     "title": "OA_CFM is a constant",
+     "columns": [
+      "OA_CFM"
+     ],
+     "evidence": "OA_CFM is 357,730.44 in every row of all 21 runs, fan on or off, damper closed or fully open.",
+     "contradicts": {
+      "document": "SDAHU inventory Table 2 (OA_CFM: outdoor volumetric airflow, CFM)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "exclude",
+     "handling_note": "Not mapped: there is no measured outdoor airflow, so OA fraction is taken from the mixing-box temperature balance.",
+     "exclude": {
+      "columns": [
+       "OA_CFM"
+      ]
+     }
+    },
+    {
+     "id": "calendar-shifted-one-weekday",
+     "title": "The simulated calendar runs one weekday late and follows DST",
+     "columns": [
+      "SYS_CTL",
+      "Datetime"
+     ],
+     "evidence": "SYS_CTL (the occupied-mode flag) is 0 on every Monday of 2018 and occupied Tuesday to Sunday: the simulation treats 2018-01-01 (a Monday) as a Sunday, so its Mon-Fri 06-22 schedule falls on Tue-Sat and its Saturday 06-18 on Sunday. The timestamps are standard time but the schedule observes daylight saving: the first occupied minute moves from 06:01 to 05:01 from 2018-03-13 to 2018-11-04 (the first and last occupied days after and before the changes, which fall on unoccupied days). With the fan on and SYS_CTL = 1 the OA damper is never below its 10% minimum (0 of 277,392 rows); every fan-on row with the damper shut has SYS_CTL = 0 (29,364 rows), the unoccupied-mode cycling the inventory describes.",
+     "contradicts": {
+      "document": "SDAHU inventory section 1.2 (occupied Monday-Friday 6:00am-10:00pm, Saturday 6:00am-6:00pm)",
       "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
      },
      "handling": "annotate",
-     "handling_note": "Left as published; treat the airflow role as relative, not absolute."
+     "handling_note": "Left as published. SYS_CTL is mapped to the occupancy role, so occupancy-aware rules use the simulation's own schedule instead of CAMBER's assumed Mon-Fri 07-18 office hours; the OA-fraction rule also judges fan-on samples only."
+    },
+    {
+     "id": "first-hour-missing",
+     "title": "Every run starts at 01:00 on 1 January",
+     "columns": [
+      "Datetime"
+     ],
+     "evidence": "All 21 runs start at 2018-01-01 01:00 and have 525,540 one-minute rows (a full year is 525,600); damper_stuck_100 runs 2018-04-01 01:00 to 2018-11-01 00:00 (308,101 rows).",
+     "contradicts": {
+      "document": "SDAHU inventory section 3 and Table 4 (each file is one year of 1-minute data)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the first hour of the year is simply absent (the chiller-plant inventory documents the same trimming of simulation start-up)."
+    },
+    {
+     "id": "oa-bias-runs-carry-no-bias",
+     "title": "The four OA-temperature bias runs carry no bias",
+     "columns": [
+      "OA_TEMP"
+     ],
+     "evidence": "oa_bias_-4/-2/2/4 are byte-identical (same size, 143,313,007 bytes, and CRC-32) and their OA_TEMP is within 0.33 F of the fault-free run in every row (median difference 0.015 F), where a +-2 / +-4 C bias would shift it by 3.6 / 7.2 F.",
+     "contradicts": {
+      "document": "SDAHU inventory Tables 3-4 (outdoor air temperature sensor bias of -4, -2, +2 and +4 C)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "exclude",
+     "handling_note": "Ingested once (the other three are byte-identical copies) and excluded from scoring: they are fault-free replicates, not sensor faults.",
+     "exclude": {
+      "runs": [
+       "oa_bias_m2",
+       "oa_bias_m4",
+       "oa_bias_2",
+       "oa_bias_4"
+      ]
+     }
+    },
+    {
+     "id": "leak-severities-are-one-10pct-run",
+     "title": "The four valve-leak 'severities' are one 10% leak",
+     "columns": [
+      "CHWC_VLV",
+      "CHWC_VLV_DM"
+     ],
+     "evidence": "coi_leakage_010/025/040/050 are byte-identical (139,023,633 bytes, same CRC-32). In it the valve position CHWC_VLV is 0.10 (minimum and median) in all 332,140 rows where the demand CHWC_VLV_DM is 0 -- a 10% leak; in the fault-free run the valve reads 0 in 99.6% of its 335,004 zero-demand rows.",
+     "contradicts": {
+      "document": "SDAHU inventory Tables 3-4 (cooling coil valve leaking at 10%, 25%, 40% and 50%)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "exclude",
+     "handling_note": "coi_leakage_010 is the one leak run (its label matches the data); the 025/040/050 copies are excluded from ingest and scoring. There is no leak severity sweep in the published data.",
+     "exclude": {
+      "runs": [
+       "coi_leakage_025",
+       "coi_leakage_040",
+       "coi_leakage_050"
+      ]
+     }
+    },
+    {
+     "id": "coi-bias-is-supply-air-bias",
+     "title": "The coi_bias runs are the inventory's supply-air-temperature bias runs",
+     "columns": [
+      "SA_TEMP"
+     ],
+     "evidence": "The archive has coi_bias_-4/-2/2/4 and no sa_bias_* files. OA_TEMP matches the fault-free run exactly (median difference 0.0); the logged SA_TEMP stays at the 55.2 F setpoint in mechanical cooling while the cooling-valve demand moves with the bias sign (medians 0.32 / 0.46 / 0.61 fault-free / 0.77 / 1.00 for -4 / -2 / +2 / +4 C): a supply-air sensor offset the controller holds at setpoint.",
+     "contradicts": {
+      "document": "SDAHU inventory Table 4 (sa_bias_-2/-4/2/4_annual.csv: supply air temperature sensor bias)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Ingested under the published file names; labelled sensor_bias, described as a supply-air-temperature offset."
     }
    ]
   },

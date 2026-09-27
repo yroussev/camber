@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for the lbnl-sdahu catalog entry. `camber datasets config lbnl-sdahu --store DIR --out cfg.json` fills in the store path. Hourly resample and a 20% design-minimum OA reproduce the LBNL benchmark's SDAHU scoring (examples/lbnl_fdd/benchmark.py); every scenario is an equipment AHU__<scenario>, so one run scores them all.",
+  "_comment": "Run template for the lbnl-sdahu catalog entry. `camber datasets config lbnl-sdahu --store DIR --out cfg.json` fills in the store path. Hourly resample; every scenario is an equipment AHU__<scenario>, so one run scores them all. The design minimum OA is this unit's own: a fixed 10% damper position (inventory section 1.2) that measures as a 1.6% OA fraction (median of 119,163 occupied, fan-on minutes of the fault-free run) -- not a generic 20%. outdoor_air_fraction judges fan-on samples in the simulation's own occupied mode (SYS_CTL). The economizer runs between 33.8 F and 60 F with a fixed dry-bulb high limit (section 1.2), hence high_limit_f 60 without the differential changeover; the 33.8 F low-limit lockout is by design.",
   "source": {
     "kind": "store",
     "store": "",
@@ -16,10 +16,18 @@
     {
       "name": "outdoor_air_fraction",
       "params": {
-        "min_oa_pct": 20.0
+        "min_oa_pct": 1.6
       }
     },
-    "leaking_valve"
+    "leaking_valve",
+    {
+      "name": "economizer_high_limit",
+      "params": {
+        "high_limit_f": 60.0,
+        "min_oa_pct": 1.6,
+        "differential": false
+      }
+    }
   ],
   "report": {
     "level": 2

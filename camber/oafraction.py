@@ -16,6 +16,12 @@ penalty), and **under-ventilation**, where the median OAF sits below the minimum
 across occupied hours (a stuck-closed / under-driven OA damper -- an IAQ and
 ventilation-code risk). The temperature balance is numerically unstable when
 RAT ~= OAT (denominator near zero), so those intervals are excluded.
+
+Only samples that can mean something are judged: occupied ones (the unit's trended occupancy
+point when it has one, else an assumed weekday schedule) and, when the caller passes a fan-on
+``gate``, fan-on ones -- with the fan stopped the three sensors read still air, not a mixing
+balance. The design minimum may differ by season (``min_oa_by_month``): a sequence that holds a
+lower minimum damper position in summer is judged against that month's minimum.
 """
 
 from __future__ import annotations
@@ -24,7 +30,7 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
-from .schedules import occupied_mask
+from .schedules import effective_occupied_mask, occupied_mask
 
 __all__ = [
     "OAFractionResult",
@@ -46,6 +52,10 @@ class OAFractionResult:
     min_oa_pct: float  # the design-minimum assumption used
     coverage_start: str
     coverage_end: str
+    # per-month design minimum overriding ``min_oa_pct`` for those months (None = one minimum)
+    min_oa_by_month: dict | None = None
+    median_vs_min_pct: float = float("nan")  # median of (OAF - that sample's minimum), %-points
+    median_ratio_to_min: float = float("nan")  # median of OAF / that sample's minimum
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -62,19 +72,33 @@ def analyze_oa_fraction(
     cooling_cutoff_f: float = 70.0,  # OAT above this == cooling weather (not economizing)
     denom_min_f: float = 5.0,  # require |RAT-OAT| >= this for a stable OAF
     occupied_only: bool = True,
+    gate=None,
+    occ=None,
+    min_oa_by_month: dict | None = None,
 ) -> OAFractionResult | None:
     """Compute OAF and flag excess outdoor air in cooling weather.
 
     Thresholds are OUR judgment / PNNL Ch.5: min_oa_pct (design minimum, confirm
     against the sequence), denom_min_f=5 (stability guard on the temperature
     balance), cooling_cutoff_f=70 (above this, OA is a penalty not free cooling).
+    ``gate`` (optional boolean Series, e.g. fan-on) keeps only the samples where it is True;
+    ``occ`` (a trended occupied/unoccupied Series) replaces the assumed weekday schedule;
+    ``min_oa_by_month`` (``{month: pct}``) overrides ``min_oa_pct`` for those months.
     """
     need = ("OAT", "MixedAir", "ReturnAir")
     if any(c not in df.columns for c in need):
         return None
     work = df.copy()
     if occupied_only:
-        work = work[occupied_mask(work.index)]
+        if occ is not None and pd.Series(occ).notna().any():
+            work = work[effective_occupied_mask(work.index, occ=pd.Series(occ))]
+        else:
+            work = work[occupied_mask(work.index)]
+    if gate is not None:
+        g = pd.Series(gate)
+        if not g.index.equals(work.index):
+            g = g[~g.index.duplicated()].reindex(work.index)
+        work = work[g.fillna(False).astype(bool).to_numpy()]
     w = work[list(need)].dropna()
     # plausibility guards (drop sensor dropouts)
     w = w[(w.OAT.between(20, 130)) & (w.MixedAir.between(30, 120)) & (w.ReturnAir.between(40, 110))]
@@ -87,15 +111,20 @@ def analyze_oa_fraction(
     if len(oaf) < 10:
         return None
 
+    by_month = {int(k): float(v) for k, v in (min_oa_by_month or {}).items()}
+    mins = pd.Series(float(min_oa_pct), index=oaf.index)
+    if by_month:
+        month = pd.Series(oaf.index.month, index=oaf.index)
+        mins = month.map(by_month).fillna(float(min_oa_pct)).astype(float)
     cooling = w.OAT.reindex(oaf.index) > cooling_cutoff_f
     oaf_cool = oaf[cooling]
     n_cool = int(len(oaf_cool))
-    excess = float((oaf_cool > min_oa_pct + excess_margin_pct).mean()) if n_cool else 0.0
+    excess = float((oaf_cool > mins[cooling] + excess_margin_pct).mean()) if n_cool else 0.0
 
     # Under-ventilation: OAF persistently below the minimum across occupied hours
     # (a stuck-closed/under-driven OA damper -- the opposite of excess OA, and an
     # IAQ/ventilation-code risk rather than an energy penalty).
-    under = float((oaf < min_oa_pct - under_margin_pct).mean())
+    under = float((oaf < mins - under_margin_pct).mean())
 
     return OAFractionResult(
         equip=equip,
@@ -108,4 +137,9 @@ def analyze_oa_fraction(
         min_oa_pct=float(min_oa_pct),
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        min_oa_by_month=by_month or None,
+        median_vs_min_pct=round(float((oaf - mins).median()), 1),
+        median_ratio_to_min=round(float((oaf / mins).median()), 3)
+        if bool((mins > 0).all())
+        else float("nan"),
     )

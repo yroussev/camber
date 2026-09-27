@@ -12,10 +12,11 @@ cross-equipment benchmark -- the LBNL FDD performance-evaluation approach applie
 across the rule library and across equipment types, so coverage gaps are measured,
 not guessed.
 
-Run fetch.py (with --families for FCU/DDAHU) first. The point -> role mappings are the ones the
-dataset catalog ships (``camber/datasets/mappings/lbnl_*.json``, one source of truth for this
-benchmark and ``camber datasets ingest``); the chiller plant's labelling fix is the catalog entry's
-``fix`` quirk, applied here exactly as the ingester applies it.
+Run fetch.py (with --families for FCU/DDAHU) first. The point -> role mappings, the ingest spec
+(the ``fix`` quirks for published-data problems, the pinned timestamp format and CAMBER's column
+transforms) and each unit's design parameters (the run templates' rule params) are the ones the
+dataset catalog ships (``camber/datasets/``): one source of truth for this benchmark and
+``camber datasets ingest``, read here exactly as the ingester reads it.
 """
 
 from __future__ import annotations
@@ -58,6 +59,25 @@ def catalog_quirks(dataset_id):
     return get(dataset_id).ingest.get("quirks", [])
 
 
+def catalog_spec(dataset_id):
+    """The catalog's whole ingest spec for ``dataset_id`` (quirks, timestamp format, transforms)."""
+    from camber.datasets import get
+
+    return get(dataset_id).ingest
+
+
+def template_params(dataset_id, rule):
+    """The params the dataset's run template gives ``rule`` (the unit's design parameters)."""
+    from camber.datasets import get
+
+    name = get(dataset_id).suggested_analyses["config_template"]
+    cfg = json.loads(files("camber.datasets").joinpath("configs").joinpath(name).read_text("utf-8"))
+    for r in cfg.get("rules", []):
+        if isinstance(r, dict) and r.get("name") == rule:
+            return dict(r.get("params") or {})
+    return {}
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "lbnl")
 
@@ -65,16 +85,17 @@ DATA = os.path.join(HERE, "..", "_data", "lbnl")
 # across all families; the leak detector only applies to the SDAHU coil-leak case.
 TARGETS = {OutdoorAirFraction().name: "damper", LeakingValve().name: "valve_leak"}
 
-# One entry per equipment family. `min_oa_pct` is the unit's *design minimum* OA
-# (a per-equipment sequence parameter, not a fudge factor): single-duct AHUs here
-# sit at ~20%, this FCU at ~10%. `use_leak` adds the coil-leak detector where a
-# labeled leak scenario exists.
+# One entry per equipment family. The OA-fraction detector's parameters -- above all the unit's
+# *design minimum* OA, a per-equipment sequence parameter, not a fudge factor -- come from the
+# dataset's run template (camber/datasets/configs/), where each is documented against the
+# publisher's sequence and measured on the fault-free run. `use_leak` adds the coil-leak detector
+# where a labeled leak scenario exists.
 FAMILIES = [
     {
         "label": "SDAHU (single-duct AHU)",
         "dir": "sdahu",
+        "dataset": "lbnl-sdahu",
         "mapping": "lbnl_sdahu.json",
-        "min_oa_pct": 20.0,
         "use_leak": True,
         "scenarios": [
             ("AHU_annual.csv", ""),
@@ -82,18 +103,17 @@ FAMILIES = [
             ("damper_stuck_025_annual.csv", "damper"),
             ("damper_stuck_075_annual.csv", "damper"),
             ("damper_stuck_100_annual_short.csv", "damper"),
-            # cooling-coil-valve leakage severity sweep (characterizes the leak detector, which
-            # under-fires at low severity — each missing CSV is skipped via the
-            # os.path.exists guard)
-            # one leak run only: the zip's coi_leakage_010/025/040/050 are byte-identical copies
-            ("coi_leakage_050_annual.csv", "valve_leak"),
+            # the one leak run: the zip's coi_leakage_010/025/040/050 are byte-identical copies of
+            # a 10% leak (the valve sits at 0.10 whenever commanded shut), so it is scored once
+            # under the label that matches the data -- there is no severity sweep
+            ("coi_leakage_010_annual.csv", "valve_leak"),
         ],
     },
     {
         "label": "FCU (fan-coil unit)",
         "dir": "fcu",
+        "dataset": "lbnl-fcu",
         "mapping": "lbnl_fcu.json",
-        "min_oa_pct": 10.0,
         "use_leak": False,
         "scenarios": [
             ("FCU_FaultFree.csv", ""),
@@ -105,8 +125,8 @@ FAMILIES = [
     {
         "label": "DDAHU (dual-duct AHU)",
         "dir": "ddahu",
+        "dataset": "lbnl-ddahu",
         "mapping": "lbnl_ddahu.json",
-        "min_oa_pct": 20.0,
         "use_leak": False,
         "scenarios": [
             ("DualDuct_FaultFree.csv", ""),
@@ -117,42 +137,50 @@ FAMILIES = [
 ]
 
 
-def load_role_frame(csv, mapping, quirks=None):
+def load_role_frame(csv, mapping, quirks=None, *, spec=None):
     """Read one LBNL CSV into an hourly role-named frame via the family's mapping.
 
-    ``quirks`` are catalog ``fix`` quirks applied to the raw columns before mapping (the chiller
-    plant's swapped wet/dry-bulb columns); their columns are read even when unmapped.
+    ``spec`` is the catalog entry's ingest spec (:func:`catalog_spec`): its ``fix`` quirks, pinned
+    timestamp format and column transforms are applied exactly as ``camber datasets ingest``
+    applies them (:func:`camber.datasets._ingest.read_raw_run`). ``quirks`` alone (the older form)
+    applies just those quirks.
     """
-    from camber.datasets._quirks import apply_quirks, quirk_columns
+    from camber.datasets._ingest import read_raw_run
 
-    extra = quirk_columns(quirks)
-    df = pd.read_csv(
-        csv,
-        usecols=lambda c: c == "Datetime" or c in extra or mapping.role_of(c),
-        parse_dates=["Datetime"],
-    ).set_index("Datetime")
-    if quirks:
-        df, _ = apply_quirks(df, quirks)
+    spec = dict(spec) if spec is not None else {"timestamp": "Datetime", "quirks": quirks or []}
+    df, _ = read_raw_run(csv, mapping, spec)
     df = df.resample("1h").mean()
     frame = pd.DataFrame({mapping.role_of(c): df[c] for c in df.columns if mapping.role_of(c)})
     return normalize_percent_frame(frame)
 
 
+def family_detectors(fam):
+    """The family's detectors, parameterized from the dataset's run template."""
+    detectors = [OutdoorAirFraction(**template_params(fam["dataset"], OutdoorAirFraction.name))]
+    if fam["use_leak"]:
+        detectors.append(LeakingValve())
+    return detectors
+
+
 def score_family(fam):
     """Run the family's detectors over its scenarios; return the records list."""
     mapping = MappingProvider.from_dict(packaged_mapping(fam["mapping"]))
-    detectors = [OutdoorAirFraction(min_oa_pct=fam["min_oa_pct"])]
-    if fam["use_leak"]:
-        detectors.append(LeakingValve())
+    spec = catalog_spec(fam["dataset"])
+    detectors = family_detectors(fam)
     base = os.path.join(DATA, fam["dir"])
     records = []
-    print(f"\n=== {fam['label']}  (min OA {fam['min_oa_pct']:.0f}%) ===")
+    oaf = detectors[0]
+    seasonal = oaf.min_oa_pct_by_month
+    mins = f"{oaf.min_oa_pct:g}%" + (
+        f", {sorted(set(seasonal.values()))[0]:g}% in months {sorted(seasonal)}" if seasonal else ""
+    )
+    print(f"\n=== {fam['label']}  (min OA {mins}) ===")
     print(f"{'scenario':32s} {'truth':11s} fired")
     for fname, truth in fam["scenarios"]:
         path = os.path.join(base, fname)
         if not os.path.exists(path):
             continue
-        frame = load_role_frame(path, mapping)
+        frame = load_role_frame(path, mapping, spec=spec)
         fired = {
             rule.name
             for rule in detectors
@@ -460,8 +488,9 @@ def main(argv=None) -> int:
     sdahu = FAMILIES[0]
     sd_mapping = MappingProvider.from_dict(packaged_mapping(sdahu["mapping"]))
     sd_base = os.path.join(DATA, sdahu["dir"])
+    sd_spec = catalog_spec(sdahu["dataset"])
     sd_frames = {
-        fname: load_role_frame(os.path.join(sd_base, fname), sd_mapping)
+        fname: load_role_frame(os.path.join(sd_base, fname), sd_mapping, spec=sd_spec)
         for fname, _ in sdahu["scenarios"]
         if os.path.exists(os.path.join(sd_base, fname))
     }
@@ -472,8 +501,9 @@ def main(argv=None) -> int:
     fpu_base = os.path.join(DATA, "fpu")
     if os.path.exists(os.path.join(fpu_base, "PFPU_FaultFree.csv")):
         fpu_mapping = MappingProvider.from_dict(packaged_mapping("lbnl_fpu.json"))
+        fpu_spec = catalog_spec("lbnl-fpu")
         fpu_frames = {
-            f: load_role_frame(os.path.join(fpu_base, f), fpu_mapping)
+            f: load_role_frame(os.path.join(fpu_base, f), fpu_mapping, spec=fpu_spec)
             for f in os.listdir(fpu_base)
             if f.endswith(".csv")
         }
@@ -490,9 +520,9 @@ def main(argv=None) -> int:
     chiller_base = os.path.join(DATA, "chiller")
     if os.path.exists(os.path.join(chiller_base, CHILLER_FAULT_FREE)):
         chiller_mapping = MappingProvider.from_dict(packaged_mapping("lbnl_chiller.json"))
-        chiller_quirks = catalog_quirks("lbnl-chiller")
+        chiller_spec = catalog_spec("lbnl-chiller")
         chiller_frames = {
-            f: load_role_frame(os.path.join(chiller_base, f), chiller_mapping, chiller_quirks)
+            f: load_role_frame(os.path.join(chiller_base, f), chiller_mapping, spec=chiller_spec)
             for f in os.listdir(chiller_base)
             if f.endswith(".csv")
         }
@@ -508,11 +538,9 @@ def main(argv=None) -> int:
         print_scores(f"POOLED across {families_present} equipment families", pooled)
         metrics.update(metrics_dict("pooled", pooled))
         print("\nThe same role-based detectors run unchanged across single-duct AHUs,")
-        print("fan-coil units, and dual-duct AHUs -- only the point->role mapping and the")
-        print("unit's design-min OA differ. OA-fraction transfers cleanly to single-duct")
-        print("AHUs and FCUs; on dual-duct AHUs it degrades (the hot/cold-deck mixing and")
-        print("mild-weather OAF noise blur the signal) -- a transferability gap the")
-        print("cross-equipment benchmark measures rather than hides.")
+        print("fan-coil units, and dual-duct AHUs -- only the point->role mapping and each")
+        print("unit's own design minimum OA (from its sequence, measured on its fault-free")
+        print("run) differ; every family is judged on fan-on, occupied samples.")
     elif families_present == 1:
         print("\n(Only SDAHU present. Run `python examples/lbnl_fdd/fetch.py --families`")
         print(" to download FCU + DDAHU and score the full cross-equipment benchmark.)")

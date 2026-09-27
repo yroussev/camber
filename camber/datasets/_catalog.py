@@ -399,8 +399,10 @@ def _check_transforms(did: str, ing: dict, errs: list) -> None:
 
     ``timestamp_format`` pins how timestamps parse (a month-first export must never be guessed);
     ``recode`` maps a raw column's values (``{"SYS_CTL": {"2": 0}}``: a 0/1/2 mode point read as
-    occupied only in mode 1); ``derive`` adds a raw column as the sum of others (a dual-duct unit's
-    supply airflow is its cold- plus hot-deck flows).
+    occupied only in mode 1); ``derive`` adds a raw column, either the ``sum`` of others (a
+    dual-duct unit's supply airflow is its cold- plus hot-deck flows) or a 0/1 flag for another
+    column being ``above`` a threshold (``["SF_CS", 0]``: the fan runs when its speed command is
+    above zero).
     """
     for role, unit in (ing.get("units") or {}).items():
         try:
@@ -422,11 +424,23 @@ def _check_transforms(did: str, ing: dict, errs: list) -> None:
             if not isinstance(v, (int, float)) or isinstance(v, bool):
                 errs.append(f"{did}: recode {col!r} value for {k!r} must be a number")
     for dv in ing.get("derive") or []:
-        src = dv.get("sum") if isinstance(dv, dict) else None
-        if not (
-            isinstance(dv, dict) and dv.get("column") and isinstance(src, list) and len(src) >= 2
-        ):
-            errs.append(f"{did}: derive needs a 'column' and a 'sum' of at least two raw columns")
+        if not isinstance(dv, dict) or not dv.get("column"):
+            errs.append(f"{did}: derive needs a 'column'")
+            continue
+        above, src = dv.get("above"), dv.get("sum")
+        ok_above = (
+            isinstance(above, list)
+            and len(above) == 2
+            and isinstance(above[0], str)
+            and isinstance(above[1], (int, float))
+            and not isinstance(above[1], bool)
+        )
+        ok_sum = isinstance(src, list) and len(src) >= 2
+        if ok_above == ok_sum:
+            errs.append(
+                f"{did}: derive {dv['column']!r} needs either a 'sum' of at least two raw columns "
+                "or 'above': [column, threshold]"
+            )
 
 
 def _check_targets(did: str, d: dict, errs: list) -> None:

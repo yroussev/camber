@@ -37,7 +37,9 @@ MEMBERS = [
     # cooling-coil-valve leakage. The published zip's coi_leakage_010/025/040/050 files are
     # byte-identical (same CRC-32 and size) -- one simulation under four labels -- and there is no
     # _100 file, so only one leak run exists; fetching the copies would score it several times.
-    "LBNL_FDD_Dataset_SDAHU/coi_leakage_050_annual.csv",
+    # In it the valve sits at 0.10 whenever it is commanded shut: a 10% leak, so the 010 label is
+    # the one that matches the data (see the lbnl-sdahu catalog entry's data issues).
+    "LBNL_FDD_Dataset_SDAHU/coi_leakage_010_annual.csv",
     # stuck-damper severities for the FDD-accuracy benchmark (benchmark.py)
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_010_annual.csv",
     "LBNL_FDD_Dataset_SDAHU/damper_stuck_025_annual.csv",

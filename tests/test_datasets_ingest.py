@@ -42,7 +42,7 @@ def _run_csv(kind: str, periods: int = 2 * 24 * 60) -> bytes:
     oat_c = 26 + 8 * np.sin(t / 720)  # degC in the source (cooling weather)
     oat_f = oat_c * 9 / 5 + 32
     rat = np.full(periods, 72.0)
-    damper = np.full(periods, 0.2)  # held at the 20 % design minimum
+    damper = np.full(periods, 0.016)  # held at the lbnl-sdahu template's 1.6 % design minimum
     if kind == "damper":
         damper = np.full(periods, 1.0)
     mat = damper * oat_f + (1 - damper) * rat
@@ -337,7 +337,7 @@ def test_ingest_namespaces_runs_labels_splice_units_quirks_and_duty(ahu):
     assert pd.infer_freq(ff.index) == "15min"
     assert ff[Role.OAT].min() > 60  # degC -> degF (source min 18 C)
     assert ff[Role.COOL_VALVE].max() > 1.5  # fraction -> percent
-    assert ff[Role.SUPPLY_FAN_STATUS].mean() == pytest.approx(0.5, abs=0.05)  # duty
+    assert ff[Role.SUPPLY_FAN_SPEED].mean() == pytest.approx(50.0, abs=5)  # SF_CS is the speed
     assert Role.DUCT_STATIC_SP not in ff.columns  # the -400.25 placeholder was masked away
     onset = store.read_role_frame(facility_id="ds-test-ahu", equip="AHU__onset_damper")
     assert onset.loc[:"2018-01-01 23:45", Role.OA_DAMPER].max() < 100
@@ -435,7 +435,10 @@ def test_read_raw_run_pins_the_timestamp_format_and_applies_transforms(tmp_path)
         "timestamp": "Datetime",
         "timestamp_format": "%m/%d/%Y %H:%M",
         "recode": {"SYS_CTL": {"2": 0}},
-        "derive": [{"column": "SA_CFM_TOTAL", "sum": ["CSA_CFM", "HSA_CFM"]}],
+        "derive": [
+            {"column": "SA_CFM_TOTAL", "sum": ["CSA_CFM", "HSA_CFM"]},
+            {"column": "CSF_ON", "above": ["CSA_CFM", 150]},
+        ],
     }
     raw, notes = _ingest.read_raw_run(str(csv), mapping, spec)
     # month-first: Jan 2nd, never Feb 1st; "13/02" is not a month-first stamp -> dropped
@@ -445,6 +448,7 @@ def test_read_raw_run_pins_the_timestamp_format_and_applies_transforms(tmp_path)
     assert raw["SYS_CTL"].tolist() == [0, 1, 0]  # setback (2) is not occupied
     assert raw["SA_CFM_TOTAL"].tolist()[:2] == [110.0, 220.0]
     assert np.isnan(raw["SA_CFM_TOTAL"].iloc[2])  # a missing deck flow is not a zero
+    assert raw["CSF_ON"].tolist()[:2] == [0.0, 1.0] and np.isnan(raw["CSF_ON"].iloc[2])
     assert notes == []
     frame, _, _ = _ingest.read_wide_run(str(csv), mapping, {**spec, "resample": None})
     assert set(frame.columns) == {Role.OCCUPANCY, Role.AIRFLOW, Role.OAT}

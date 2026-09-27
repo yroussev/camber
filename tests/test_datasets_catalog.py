@@ -235,7 +235,12 @@ def test_research_only_iff_nc_or_nd():
         (lambda e: e["ingest"].update(recode={"SYS_CTL": {"two": 0}}), "is not a number"),
         (lambda e: e["ingest"].update(recode={"SYS_CTL": {"2": "off"}}), "must be a number"),
         (lambda e: e["ingest"].update(recode={"SYS_CTL": {}}), "must map source values"),
-        (lambda e: e["ingest"].update(derive=[{"column": "X", "sum": ["A"]}]), "derive needs"),
+        (lambda e: e["ingest"].update(derive=[{"column": "X", "sum": ["A"]}]), "derive 'X' needs"),
+        (lambda e: e["ingest"].update(derive=[{"sum": ["A", "B"]}]), "derive needs a 'column'"),
+        (
+            lambda e: e["ingest"].update(derive=[{"column": "X", "above": ["A", "0"]}]),
+            "derive 'X' needs",
+        ),
         (lambda e: e["ingest"].update(units={"oat": "furlongs"}), "unsupported source unit"),
         (lambda e: e["labels"]["targets"].update(leaking_valve="nope"), "not a declared fault"),
         (lambda e: e["labels"]["targets"].update(leaking_valve=[]), "must be a fault type"),

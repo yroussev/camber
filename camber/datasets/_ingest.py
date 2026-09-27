@@ -229,6 +229,8 @@ def transform_columns(spec: dict) -> set:
     out = set((spec.get("recode") or {}).keys())
     for dv in spec.get("derive") or []:
         out.update(dv.get("sum") or [])
+        if dv.get("above"):
+            out.add(dv["above"][0])
     return out
 
 
@@ -244,6 +246,12 @@ def apply_transforms(raw: pd.DataFrame, spec: dict) -> pd.DataFrame:
             vals = pd.to_numeric(out[col], errors="coerce")
             out[col] = vals.replace({float(k): float(v) for k, v in table.items()})
     for dv in derive:
+        if "above" in dv:  # a 0/1 flag: the source is above a threshold (NaN stays NaN)
+            col, threshold = dv["above"]
+            if col in out.columns:
+                vals = pd.to_numeric(out[col], errors="coerce")
+                out[dv["column"]] = (vals > float(threshold)).astype(float).where(vals.notna())
+            continue
         src = [c for c in dv["sum"] if c in out.columns]
         if len(src) == len(dv["sum"]):
             out[dv["column"]] = (

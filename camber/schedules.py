@@ -20,6 +20,8 @@ import pandas as pd
 __all__ = [
     "occupied_mask",
     "effective_occupied_mask",
+    "fan_on_mask",
+    "FAN_GATE_NONE",
     "day_type",
     "time_of_week_bin",
 ]
@@ -105,3 +107,47 @@ def day_type(index):
 def time_of_week_bin(index):
     """Integer time-of-week bin: dayofweek*24 + hour (0..167)."""
     return pd.Series(index.dayofweek * 24 + index.hour, index=index)
+
+
+#: The gate label reported when a unit trends no fan signal at all (samples are not fan-gated).
+FAN_GATE_NONE = "ungated — no fan signal"
+
+
+def fan_on_mask(frame: pd.DataFrame, *, speed_min_pct: float = 1.0, flow_frac: float = 0.05):
+    """``(mask, source)``: which samples the supply fan was running, and what that was read from.
+
+    Preference order, strongest evidence first:
+
+    * ``supply_fan_status`` > 0.5 -> source ``"fan status"``;
+    * ``supply_fan_speed`` above ``speed_min_pct`` % (0-1 or 0-100 accepted) -> ``"fan speed
+      proxy"``;
+    * ``airflow`` above ``flow_frac`` of its own 95th percentile -> ``"airflow proxy"`` (a small
+      floor so transmitter noise at zero flow is not read as running).
+
+    A signal that is present but never non-null is skipped. With none of the three, returns ``(None,
+    FAN_GATE_NONE)`` -- callers then run ungated and must say so. Missing samples of the chosen
+    signal count as *off* (not evidence of running). ``frame`` columns are :class:`Role` members or
+    their string values.
+    """
+    from .model.roles import Role
+    from .units import normalize_percent
+
+    def _get(role):
+        for key in (role, role.value):
+            if key in frame.columns:
+                s = pd.to_numeric(frame[key], errors="coerce")
+                return s if s.notna().any() else None
+        return None
+
+    status = _get(Role.SUPPLY_FAN_STATUS)
+    if status is not None:
+        return (status > 0.5).fillna(False), "fan status"
+    speed = _get(Role.SUPPLY_FAN_SPEED)
+    if speed is not None:
+        return (normalize_percent(speed) > speed_min_pct).fillna(False), "fan speed proxy"
+    flow = _get(Role.AIRFLOW)
+    if flow is not None:
+        p95 = float(flow.quantile(0.95))
+        if p95 > 0:
+            return (flow > flow_frac * p95).fillna(False), "airflow proxy"
+    return None, FAN_GATE_NONE

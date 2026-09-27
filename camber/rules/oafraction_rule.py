@@ -4,6 +4,15 @@ Flags an AHU pulling more outdoor air than its minimum while in cooling weather 
 a direct cooling penalty in a hot climate. Adapts
 :func:`camber.oafraction.analyze_oa_fraction` to the role-frame interface. OAT is
 building-level and comes via the runner's ``shared`` channel.
+
+**Fan-gated by default.** With the fan stopped the mixing-box temperatures describe still air,
+not a mix, so only fan-on samples are judged (fan status, else fan speed, else airflow -- see
+:func:`camber.schedules.fan_on_mask`); a unit that trends no fan signal is judged ungated and the
+finding says so (``fan_gate`` metric). **Occupancy** comes from the unit's trended ``occupancy``
+point when it has one, else an assumed weekday schedule. **The design minimum is the unit's
+own:** ``min_oa_pct`` (and, for a sequence with a seasonal minimum, ``min_oa_pct_by_month``) must
+be set from the sequence or measured at the unit's minimum damper position -- a 10 % minimum
+*damper position* can be a 1.6 % OA *fraction*.
 """
 
 from __future__ import annotations
@@ -12,6 +21,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..oafraction import analyze_oa_fraction
+from ..schedules import FAN_GATE_NONE, fan_on_mask
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -27,25 +37,64 @@ class OutdoorAirFraction:
 
     name = "outdoor_air_fraction"
     roles_required = (Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP)
-    roles_optional = (Role.OAT, Role.OA_DAMPER)
+    roles_optional = (
+        Role.OAT,
+        Role.OA_DAMPER,
+        # fan-on gate: status, else speed, else airflow (see camber.schedules.fan_on_mask)
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
+        Role.AIRFLOW,
+        Role.OCCUPANCY,
+    )
 
-    def __init__(self, min_oa_pct: float = 20.0, cooling_cutoff_f: float = 70.0):
+    def __init__(
+        self,
+        min_oa_pct: float = 20.0,
+        cooling_cutoff_f: float = 70.0,
+        *,
+        fan_gate: bool = True,
+        min_oa_pct_by_month: dict | None = None,
+    ):
         # min OA is building-specific (sequence); cooling cutoff is climate-ish
         self.min_oa_pct = min_oa_pct
         self.cooling_cutoff_f = cooling_cutoff_f
+        # judge fan-on samples only (when the unit trends a fan signal); fan-off samples read
+        # still air, and on the LBNL single-duct AHU they alone made a unit at 1.6 % OA read "ok"
+        # against a 20 % assumption (#23)
+        self.fan_gate = fan_gate
+        # a seasonal design minimum: {month (1-12): pct} overriding min_oa_pct in those months
+        by_month = {int(k): float(v) for k, v in (min_oa_pct_by_month or {}).items()}
+        if any(not 1 <= k <= 12 for k in by_month):
+            raise ValueError("min_oa_pct_by_month keys must be months 1-12")
+        self.min_oa_pct_by_month = by_month or None
+
+    def _gate(self, frame: pd.DataFrame):
+        """``(fan-on mask | None, label)``; ``(None, "off")`` when gating is disabled."""
+        if not self.fan_gate:
+            return None, "off"
+        return fan_on_mask(frame)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
+        gate, fan_src = self._gate(frame)
+        occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
         res = analyze_oa_fraction(
-            legacy, equip, min_oa_pct=self.min_oa_pct, cooling_cutoff_f=self.cooling_cutoff_f
+            legacy,
+            equip,
+            min_oa_pct=self.min_oa_pct,
+            cooling_cutoff_f=self.cooling_cutoff_f,
+            gate=gate,
+            occ=occ,
+            min_oa_by_month=self.min_oa_pct_by_month,
         )
         if res is None:
             return Finding(
                 rule=self.name,
                 equip=equip,
                 severity="info",
+                metrics={"fan_gate": fan_src},
                 summary="insufficient data (need OAT/MAT/RAT)",
             )
         ex, mn = res.excess_oa_pct, res.min_oa_pct
@@ -55,20 +104,34 @@ class OutdoorAirFraction:
         # under-ventilation severity (IAQ / code risk): from the MEDIAN OAF shortfall
         # below the minimum -- robust to noise near the floor, unlike a %-below count
         m = res.oaf_median_pct
-        if m < mn * 0.5:
+        if self.min_oa_pct_by_month:  # seasonal minimum: judge each sample against its own
+            below_half = res.median_ratio_to_min < 0.5
+            below_margin = res.median_vs_min_pct < -5.0
+        else:
+            below_half, below_margin = m < mn * 0.5, m < mn - 5.0
+        if below_half:
             sev_under = "fault"
-        elif m < mn - 5.0:
+        elif below_margin:
             sev_under = "warn"
         else:
             sev_under = "ok"
         severity = max(sev_excess, sev_under, key=lambda s: order[s])
+        mins = f"{mn:g}% min"
+        if res.min_oa_by_month:
+            groups: dict = {}
+            for month, pct in sorted(res.min_oa_by_month.items()):
+                groups.setdefault(pct, []).append(str(month))
+            seasonal = "; ".join(f"{p:g}% in months {', '.join(ms)}" for p, ms in groups.items())
+            mins = f"{mn:g}% min ({seasonal})"
         if order[sev_under] > order[sev_excess]:
             tail = (
                 f"under-ventilation: median OAF {m:.0f}% below the "
-                f"{mn:.0f}% min ({res.under_vent_pct:.0f}% of occupied hours low)"
+                f"{mins} ({res.under_vent_pct:.0f}% of occupied hours low)"
             )
         else:
-            tail = f"excess OA {ex:.0f}% of cooling hours above {mn:.0f}% min"
+            tail = f"excess OA {ex:.0f}% of cooling hours above {mins}"
+        if fan_src == FAN_GATE_NONE:
+            tail += "; not fan-gated (no fan signal trended)"
         return Finding(
             rule=self.name,
             equip=equip,
@@ -81,6 +144,9 @@ class OutdoorAirFraction:
                 "min_oa_pct": res.min_oa_pct,
                 "n_cooling": res.n_cooling,
                 "n_valid": res.n_valid,
+                "min_oa_pct_by_month": res.min_oa_by_month,
+                "fan_gate": fan_src,
+                "occupancy": "trended" if occ is not None and occ.notna().any() else "assumed",
             },
             summary=(
                 f"{equip}: OAF median {res.oaf_median_pct:.0f}% "

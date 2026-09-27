@@ -64,7 +64,7 @@ def _sdahu_frame(n=480, *, seed=0, coil_leak=0.0, damper_stuck=None):
 def _frames():
     return {
         "AHU_annual.csv": _sdahu_frame(seed=1),
-        "coi_leakage_050_annual.csv": _sdahu_frame(seed=2, coil_leak=1.0),
+        "coi_leakage_010_annual.csv": _sdahu_frame(seed=2, coil_leak=1.0),
         "damper_stuck_100_annual_short.csv": _sdahu_frame(seed=3, damper_stuck=95.0),
     }
 
@@ -104,7 +104,7 @@ def test_build_drift_cases_empty_without_fault_free():
     B = _bench()
     assert (
         B.build_drift_cases(
-            {"coi_leakage_050_annual.csv": _sdahu_frame()}, B.DRIFT_DETECTORS["coil_valve_drift"]
+            {"coi_leakage_010_annual.csv": _sdahu_frame()}, B.DRIFT_DETECTORS["coil_valve_drift"]
         )
         == []
     )

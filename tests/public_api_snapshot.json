@@ -1683,8 +1683,10 @@
     "detect_schedule"
   ],
   "camber.schedules": [
+    "FAN_GATE_NONE",
     "day_type",
     "effective_occupied_mask",
+    "fan_on_mask",
     "occupied_mask",
     "time_of_week_bin"
   ],

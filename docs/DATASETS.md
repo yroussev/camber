@@ -144,17 +144,65 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Issue:** `sa-sp-fault-free-in-pa`
 - **Columns:** `SA_SP`
 - **Runs:** `fault_free`
-- **Evidence:** Fault-free SA_SP holds 401.9 with the fan off (median) and 403.5 with it on (range 401.8-410.6): ~1.61 inH2O expressed in Pa, and it never falls toward zero with the fan stopped. In the 20 faulted runs SA_SP is the measured static in inH2O (fan-on median 1.51-1.61, fan-off median 0.003-0.005).
+- **Evidence:** Fault-free SA_SP holds 401.9 (median) with the fan off and 403.5 with it on (range 401.8-410.6): the ~1.61 inH2O setpoint expressed in Pa, which never falls toward zero with the fan stopped. In the 20 faulted runs SA_SP is the measured static in inH2O (fan-on median 1.51-1.61, fan-off median 0.003-0.005).
 - **Contradicts:** SDAHU inventory Table 2 (SA_SP: supply air duct static pressure, inches H2O) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
 - **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Masked to missing in the fault-free run (mask quirk: values above 100); the faulted runs' measured static is kept.
 
-#### SA_CFM and RA_CFM are not in cfm
+#### SA_CFM and RA_CFM are cfm x 60
 
 - **Issue:** `sa-ra-cfm-units`
 - **Columns:** `SA_CFM`, `RA_CFM`
-- **Evidence:** SA_CFM peaks at 1,266,232 and has a fan-on median of 596,187 -- implausible as cfm for one floor's air handler.
-- **Contradicts:** SDAHU inventory Table 2 (SA_CFM / RA_CFM: supply / return airflow, CFM) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
-- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; treat the airflow role as relative, not absolute.
+- **Evidence:** SA_CFM peaks at 1,266,232 (RA_CFM 1,264,430) with a fan-on median of 596,187 in the fault-free run -- read as cfm, tens of times any single-floor air handler. Divided by 60 (ft3/h to cfm) they peak at 21,104 cfm (9.96 m3/s) with a 9,936 cfm fan-on median, a plausible floor-level supply. Caveat: at those flows the exported supply-fan power (SF_WAT, at most 1,622 W) is only ~0.08 W/cfm, itself implausibly low, so treat the flow scale with care.
+- **Contradicts:** SDAHU inventory Table 2 (SA_CFM / RA_CFM: supply / return volumetric airflow, CFM) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Divided by 60 before mapping (scale quirk) in every run; `--no-corrections` keeps the published magnitudes.
+
+#### OA_CFM is a constant
+
+- **Issue:** `oa-cfm-constant`
+- **Columns:** `OA_CFM`
+- **Evidence:** OA_CFM is 357,730.44 in every row of all 21 runs, fan on or off, damper closed or fully open.
+- **Contradicts:** SDAHU inventory Table 2 (OA_CFM: outdoor volumetric airflow, CFM) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: exclude** -- kept out of scoring / analysis. Not mapped: there is no measured outdoor airflow, so OA fraction is taken from the mixing-box temperature balance.
+
+#### The simulated calendar runs one weekday late and follows DST
+
+- **Issue:** `calendar-shifted-one-weekday`
+- **Columns:** `SYS_CTL`, `Datetime`
+- **Evidence:** SYS_CTL (the occupied-mode flag) is 0 on every Monday of 2018 and occupied Tuesday to Sunday: the simulation treats 2018-01-01 (a Monday) as a Sunday, so its Mon-Fri 06-22 schedule falls on Tue-Sat and its Saturday 06-18 on Sunday. The timestamps are standard time but the schedule observes daylight saving: the first occupied minute moves from 06:01 to 05:01 from 2018-03-13 to 2018-11-04 (the first and last occupied days after and before the changes, which fall on unoccupied days). With the fan on and SYS_CTL = 1 the OA damper is never below its 10% minimum (0 of 277,392 rows); every fan-on row with the damper shut has SYS_CTL = 0 (29,364 rows), the unoccupied-mode cycling the inventory describes.
+- **Contradicts:** SDAHU inventory section 1.2 (occupied Monday-Friday 6:00am-10:00pm, Saturday 6:00am-6:00pm) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. SYS_CTL is mapped to the occupancy role, so occupancy-aware rules use the simulation's own schedule instead of CAMBER's assumed Mon-Fri 07-18 office hours; the OA-fraction rule also judges fan-on samples only.
+
+#### Every run starts at 01:00 on 1 January
+
+- **Issue:** `first-hour-missing`
+- **Columns:** `Datetime`
+- **Evidence:** All 21 runs start at 2018-01-01 01:00 and have 525,540 one-minute rows (a full year is 525,600); damper_stuck_100 runs 2018-04-01 01:00 to 2018-11-01 00:00 (308,101 rows).
+- **Contradicts:** SDAHU inventory section 3 and Table 4 (each file is one year of 1-minute data) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the first hour of the year is simply absent (the chiller-plant inventory documents the same trimming of simulation start-up).
+
+#### The four OA-temperature bias runs carry no bias
+
+- **Issue:** `oa-bias-runs-carry-no-bias`
+- **Columns:** `OA_TEMP`
+- **Evidence:** oa_bias_-4/-2/2/4 are byte-identical (same size, 143,313,007 bytes, and CRC-32) and their OA_TEMP is within 0.33 F of the fault-free run in every row (median difference 0.015 F), where a +-2 / +-4 C bias would shift it by 3.6 / 7.2 F.
+- **Contradicts:** SDAHU inventory Tables 3-4 (outdoor air temperature sensor bias of -4, -2, +2 and +4 C) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: exclude** -- kept out of scoring / analysis. Ingested once (the other three are byte-identical copies) and excluded from scoring: they are fault-free replicates, not sensor faults.
+
+#### The four valve-leak 'severities' are one 10% leak
+
+- **Issue:** `leak-severities-are-one-10pct-run`
+- **Columns:** `CHWC_VLV`, `CHWC_VLV_DM`
+- **Evidence:** coi_leakage_010/025/040/050 are byte-identical (139,023,633 bytes, same CRC-32). In it the valve position CHWC_VLV is 0.10 (minimum and median) in all 332,140 rows where the demand CHWC_VLV_DM is 0 -- a 10% leak; in the fault-free run the valve reads 0 in 99.6% of its 335,004 zero-demand rows.
+- **Contradicts:** SDAHU inventory Tables 3-4 (cooling coil valve leaking at 10%, 25%, 40% and 50%) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: exclude** -- kept out of scoring / analysis. coi_leakage_010 is the one leak run (its label matches the data); the 025/040/050 copies are excluded from ingest and scoring. There is no leak severity sweep in the published data.
+
+#### The coi_bias runs are the inventory's supply-air-temperature bias runs
+
+- **Issue:** `coi-bias-is-supply-air-bias`
+- **Columns:** `SA_TEMP`
+- **Evidence:** The archive has coi_bias_-4/-2/2/4 and no sa_bias_* files. OA_TEMP matches the fault-free run exactly (median difference 0.0); the logged SA_TEMP stays at the 55.2 F setpoint in mechanical cooling while the cooling-valve demand moves with the bias sign (medians 0.32 / 0.46 / 0.61 fault-free / 0.77 / 1.00 for -4 / -2 / +2 / +4 C): a supply-air sensor offset the controller holds at setpoint.
+- **Contradicts:** SDAHU inventory Table 4 (sa_bias_-2/-4/2/4_annual.csv: supply air temperature sensor bias) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested under the published file names; labelled sensor_bias, described as a supply-air-temperature offset.
 
 ### `lbnl-fcu`: LBNL simulated fan-coil unit (labelled faults)
 
