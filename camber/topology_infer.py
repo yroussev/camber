@@ -26,6 +26,20 @@ def _as_equips(equips):
     return list(inner) if inner is not None else list(equips)
 
 
+def _under(term_id: str, ahu_id: str) -> bool:
+    """``term_id`` sits under ``ahu_id`` by id prefix.
+
+    A dataset scenario (``<equip>__<scenario>``, see :mod:`camber.datasets`) is honoured: the
+    terminal ``RTU_VAV_106__stuck_040`` sits under ``RTU__stuck_040`` -- the same scenario, and
+    the base ids nest -- and never under another scenario's air handler.
+    """
+    if term_id.startswith(ahu_id + "_"):
+        return True
+    t_base, t_sep, t_scen = term_id.partition("__")
+    a_base, a_sep, a_scen = ahu_id.partition("__")
+    return bool(t_sep and a_sep and t_scen == a_scen and t_base.startswith(a_base + "_"))
+
+
 def topology_from_naming(
     equips,
     *,
@@ -38,9 +52,10 @@ def topology_from_naming(
     :class:`~camber.model.entities.Equip`. For each terminal (VAV/CAV/FCAV/FCU), it links to an air
     handler (AHU/RTU/DOAS) by, in order: (1) a **shared space label** — the terminal's ``space``
     equals the AHU's id or the AHU's ``space``; (2) an **id-prefix** — the terminal id begins with
-    ``"<ahu_id>_"``. An edge is emitted only when exactly one AHU matches; ambiguous or unmatched
-    terminals are skipped (a guess is never forced). ``ahu_classes`` / ``terminal_classes`` are
-    overridable for non-standard class names.
+    ``"<ahu_id>_"`` (for dataset scenario equipment ``<equip>__<scenario>``: the same scenario
+    and nested base ids). An edge is emitted only when exactly one AHU matches; ambiguous or
+    unmatched terminals are skipped (a guess is never forced). ``ahu_classes`` /
+    ``terminal_classes`` are overridable for non-standard class names.
     """
     items = _as_equips(equips)
     ahus = [e for e in items if getattr(e, "equip_class", "") in ahu_classes]
@@ -60,8 +75,8 @@ def topology_from_naming(
             continue
         if by_space:
             continue  # ambiguous space -> no guess
-        # rule 2: id-prefix containment (AHU_1_VAV_3 under AHU_1)
-        by_prefix = {ahu.id for ahu in ahus if term.id.startswith(ahu.id + "_")}
+        # rule 2: id-prefix containment (AHU_1_VAV_3 under AHU_1), scenario-aware
+        by_prefix = {ahu.id for ahu in ahus if _under(term.id, ahu.id)}
         if len(by_prefix) == 1:
             edges.append((next(iter(by_prefix)), term.id))
         # 0 or >1 matches -> skip

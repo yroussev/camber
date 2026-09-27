@@ -177,7 +177,7 @@ def test_swap_with_one_column_missing_is_an_error_and_both_missing_a_noop():
         ({"op": "mask", "action": "fix", "columns": ["A"], "note": "x"}, "needs a condition"),
         ({"op": "scale", "action": "fix", "columns": ["A"], "factor": "2", "note": "x"}, "number"),
         (
-            {"op": "convert", "action": "fix", "columns": ["A"], "from": "psi", "note": "x"},
+            {"op": "convert", "action": "fix", "columns": ["A"], "from": "bar", "note": "x"},
             "unsupported",
         ),
     ],

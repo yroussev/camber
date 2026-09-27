@@ -62,8 +62,8 @@ meters and a cap on buildings per site. Choose one with `--subset full`.
 Each entry carries an SPDX licence id and a licence **tier** (`access`), shown by
 `camber datasets list`:
 
-- **open** -- the licence allows commercial use (CC0, CC-BY, CC-BY-SA, ...). Fetch it freely; cite
-  the publisher. A **share-alike** licence (BDG2 is CC-BY-SA-4.0) additionally means a
+- **open** -- the licence allows commercial use (CC0, CC-BY, CC-BY-SA, CDLA-Permissive-1.0, US
+  federal public-domain data such as NIST's, `NIST-PD`, ...). Fetch it freely; cite the publisher. A **share-alike** licence (BDG2 is CC-BY-SA-4.0) additionally means a
   *redistributed adaptation* of the data must keep the same licence -- analysing it, including
   commercially, is fine. Reports built from share-alike data say so.
 - **research-only** (`access: "research_only"`) -- the licence is non-commercial (NC) or
@@ -132,6 +132,74 @@ one file) and a Brick model saying which point belongs to which equipment. A run
 
 Columns of several unlabelled files merge into one equipment per owner, so every per-quantity
 file contributes to the same air handler.
+
+## Source layouts
+
+Measured datasets rarely come as one wide table per scenario. Each layout has one key, validated by
+`camber.datasets` (`validate_catalog`) and read by one code path (`camber/datasets/_readers.py`):
+
+- **Several files per run** -- `"members"`: a list of per-quantity tables whose columns are joined
+  on the timestamp (`lbnl-b59`'s underfloor terminals), or `{raw column: member}` for one file per
+  point (`nuig-ahu101`, `sdu-ou44`): each member's value -- its last non-clock column, or the
+  second column of a headerless `timestamp,value` export -- becomes the named raw column. Only the
+  members a run needs are extracted, and a table several runs share is parsed once.
+- **Rows of a stacked table** -- `"where": {column: value or [values]}` keeps a run's rows (one room
+  of `b4b-windesheim`'s table, one test's points of `nist-heatpump-fdd`'s sheet), compared as text,
+  before duplicate stamps are dropped.
+- **A run's own mapping** -- `"mapping"`, with `"vars"` filling `{placeholders}` in it: one table
+  holding a rooftop unit and ten VAV boxes (`ornl-frp-ops`) becomes one run per box, each reading
+  `T_Room_{n}` with its own `n`. A run may also carry its own `timestamp_format`, `units`,
+  `encoding` and `sheet` (two `ornl-supermarket-fdd` files stamp minutes where the others stamp
+  seconds).
+- **Plain equipment names** -- `"equip_id"` stores a run's equipment verbatim instead of
+  `<equip>__<scenario>` (real, unlabelled data has no scenarios; `RTU01_zone_022` joins `RTU01`
+  through the naming topology).
+- **Several pieces of equipment in one table, no Brick model** -- `"group": "mapping"`: the
+  mapping file's `equipment` / `equipment_classes` split the table (`ornl-frp-vav`'s test sheets
+  into the RTU and its ten boxes). A grouped run's `"target"` names the equipment under test: only
+  it carries the run's fault label; the rest is recorded as unscored `context`. Name boxes under
+  their air handler (`RTU` and `RTU_VAV_104`) and the naming topology places each scenario's boxes
+  under that scenario's air handler. A `derive` of the form `{"column": ..., "copy": ...}` hands
+  one building-wide schedule column to every box.
+- **One file per sensor** -- `"adapter": "per_point"` (`at-30bldg-sensors`): an `index` table gives
+  each sensor's group (a building) and class; every group becomes a facility `ds-<id>-<group>`,
+  every sensor an equipment with one role from the entry's `class_map`, read from `series` by the
+  same one-point reader. Change-of-value logs are resampled **sample-and-hold** (`"hold":
+  "8h5min"`: an empty bin holds the last sample while it is at most that old). The subset's
+  `groups` pick the buildings.
+- **Clocks.** `timestamp_format` pins the parse (a strftime format, or `"ISO8601"` for stamps
+  that mix precisions). A source without a wall-clock column declares a `clock`: `{"kind":
+  "elapsed", "unit": "s", "origin": "2025-01-01"}` counts from a stated origin (`rbc-g36-ahu`'s
+  simulation seconds); `{"kind": "day", "day": ..., "time": ..., "start": ..., "every_days": 7}`
+  stores anonymised day `d` on `start + d * every_days` (`sdu-ou44`); `{"kind": "rows", "freq":
+  "1min", "start": ...}` numbers a steady-state sheet's rows (`nist-heatpump-fdd`). The `day` and
+  `rows` clocks are **synthetic**: the ingest notes and the provenance (`clock`) say so, and rates,
+  schedules and drift over them mean nothing.
+- **Time zones.** The store holds naive wall-clock time. A stamp carrying a UTC offset keeps its
+  wall clock as written (an export that labels local time `+00:00` is a data issue on its entry).
+  A dataset published in another clock declares `source_timezone` -- `"UTC"`, an IANA zone, or
+  `"offset"` for stamps with true per-row offsets (`nist-ibal`'s `-05:00` / `-04:00`) -- and
+  `local_timezone`; the index moves to the site's wall clock after the quirks, so quirk timestamps
+  are in the publisher's clock. A DST fall-back's repeated hour keeps both readings (the resample
+  averages them).
+- **Text encoding** -- `"encoding"` on the spec or a run (`"latin-1"`).
+- **Units** add `psia` (converted to psig, CAMBER's refrigerant-pressure unit), `psig` and `m3/min`.
+- **Days that are not consecutive** -- `"contiguous": false` (`robod` has no weekends, `sdu-ou44`
+  shuffles its days) is recorded in the provenance; such an entry's template runs no drift,
+  setback or other schedule rule.
+
+Four intake branches built these layouts in parallel before 0.89 reconciled them; the validator
+rejects their earlier spellings and names the key to use:
+
+| earlier spelling | use |
+|---|---|
+| run `"points": {column: member}` | `"members": {column: member}` |
+| run `"where": {"column": c, "in": [...]}` | `"where": {c: [...]}` |
+| `"tz_convert": zone` | `"source_timezone": "offset"` + `"local_timezone": zone` |
+| `"synthetic_index": {"start", "freq"}` | `"clock": {"kind": "rows", ...}` |
+| `"day_clock": {...}` | `"clock": {"kind": "day", ...}` |
+| `"timestamp_unit"` + `"timestamp_origin"` | `"clock": {"kind": "elapsed", "unit", "origin"}` |
+| `per_point` `"points"` (the sensor index) | `"index"` |
 
 ## How a dataset lands in the store
 

@@ -1,9 +1,9 @@
 """Source-unit -> IP conversion for ingested datasets.
 
-CAMBER's rules work in IP units (°F, cfm, inH2O, kW); :mod:`camber.units` only rescales 0-1
-fractions to percent. A catalog entry therefore declares the unit of every mapped role whose source
-unit is not already IP (``"units": {"oat": "degC", "airflow": "L/s"}``), and the ingester converts
-before writing to the store.
+CAMBER's rules work in IP units (°F, cfm, inH2O, kW; refrigerant pressures in psig);
+:mod:`camber.units` only rescales 0-1 fractions to percent. A catalog entry therefore declares the
+unit of every mapped role whose source unit is not already IP (``"units": {"oat": "degC",
+"airflow": "L/s"}``), and the ingester converts before writing to the store.
 
 Temperatures come in two flavours: an **absolute** reading (°C -> °F is ``x * 9/5 + 32``) and a
 **difference** (a ΔT, an approach, a superheat: ``x * 9/5`` with no offset). The roles that are
@@ -29,7 +29,12 @@ DELTA_ROLES = frozenset(
     }
 )
 
-_CFM_PER = {"L/s": 2.1188799727597, "m3/h": 0.58857777021102, "m3/s": 2118.8799727597}
+_CFM_PER = {
+    "L/s": 2.1188799727597,
+    "m3/h": 0.58857777021102,
+    "m3/min": 35.314666721489,
+    "m3/s": 2118.8799727597,
+}
 _INH2O_PER = {"Pa": 1.0 / 249.08891, "kPa": 1000.0 / 249.08891}
 _TEMP = {"degC", "C", "°C", "K", "degK"}
 
@@ -50,6 +55,9 @@ _ALIASES = {
     "m3/h": "m3/h",
     "m³/h": "m3/h",
     "cmh": "m3/h",
+    "m3/min": "m3/min",
+    "m³/min": "m3/min",
+    "cmm": "m3/min",
     "m3/s": "m3/s",
     "m³/s": "m3/s",
     "cfm": "cfm",
@@ -59,12 +67,16 @@ _ALIASES = {
     "in_h2o": "inH2O",
     "w": "W",
     "kw": "kW",
+    "psia": "psia",
+    "psig": "psig",
+    "psi": "psig",
     "percent": "percent",
     "%": "percent",
     "fraction": "fraction",
     "": "",
 }
-NOOP_UNITS = frozenset({"degF", "cfm", "inH2O", "kW", "percent", "fraction", ""})
+NOOP_UNITS = frozenset({"degF", "cfm", "inH2O", "kW", "psig", "percent", "fraction", ""})
+_ATM_PSI = 14.696  # standard atmosphere, psi: absolute -> gauge refrigerant pressure
 
 __all__ = [
     "DELTA_ROLES",
@@ -85,7 +97,7 @@ def canonical_unit(unit: str) -> str:
 
 
 def convert_series(s: pd.Series, unit: str, *, delta: bool = False) -> pd.Series:
-    """Convert ``s`` from ``unit`` to its IP equivalent (°F, cfm, inH2O, kW).
+    """Convert ``s`` from ``unit`` to its IP equivalent (°F, cfm, inH2O, kW, psig).
 
     ``delta=True`` treats a temperature as a difference (no +32 / -273.15 offset). IP units and
     unit-free (``percent``/``fraction``) are returned unchanged.
@@ -101,6 +113,8 @@ def convert_series(s: pd.Series, unit: str, *, delta: bool = False) -> pd.Series
         return s * _CFM_PER[u]
     if u in _INH2O_PER:
         return s * _INH2O_PER[u]
+    if u == "psia":
+        return s - _ATM_PSI
     # the only remaining canonical unit is W
     return s / 1000.0
 

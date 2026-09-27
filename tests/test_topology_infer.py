@@ -67,3 +67,23 @@ def test_empty_input():
 def test_custom_classes():
     equips = [_eq("RTU_1", "RTU"), _eq("RTU_1_ZONE_A", "FCU")]
     assert set(topology_from_naming(equips).edges) == {("RTU_1", "RTU_1_ZONE_A")}
+
+
+def test_dataset_scenarios_group_under_their_own_scenario_ahu():
+    # catalog scenario equipment is <equip>__<scenario>: a box sits under the RTU of the *same*
+    # scenario (nested base ids), never under another scenario's RTU
+    equips = [
+        _eq("RTU__d1_stuck_000", "AHU"),
+        _eq("RTU__d1_stuck_020", "AHU"),
+        _eq("RTU_VAV_106__d1_stuck_000", "VAV"),
+        _eq("RTU_VAV_104__d1_stuck_000", "VAV"),
+        _eq("RTU_VAV_106__d1_stuck_020", "VAV"),
+        _eq("RTU_VAV_106__d1_stuck_0200", "VAV"),  # a scenario id that only shares a prefix
+        _eq("VAV_9__d1_stuck_000", "VAV"),  # base ids do not nest
+    ]
+    t = topology_from_naming(equips)
+    assert set(t.edges) == {
+        ("RTU__d1_stuck_000", "RTU_VAV_106__d1_stuck_000"),
+        ("RTU__d1_stuck_000", "RTU_VAV_104__d1_stuck_000"),
+        ("RTU__d1_stuck_020", "RTU_VAV_106__d1_stuck_020"),
+    }

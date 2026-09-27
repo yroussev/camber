@@ -13,9 +13,12 @@ downloaded from its publisher). :func:`validate_catalog` is the gate a catalog c
   carries ``manual_instructions`` and may omit a file's URL;
 * subsets, runs, archive members, mappings, config templates and quirks all resolve;
 * every **data issue** -- a problem in the data *as published* -- is described with the columns it
-  affects, numeric evidence, the publisher documentation it contradicts (with a DOI) and CAMBER's
-  handling (:data:`HANDLINGS`), and the handling is wired: a ``fix`` issue has a ``fix`` quirk, an
-  ``exclude`` issue names what it excludes, and every quirk links to its issue.
+  affects, numeric evidence, the publisher documentation it contradicts (with a DOI; a publisher
+  that mints none is cited by a pinned https URL) and CAMBER's handling (:data:`HANDLINGS`), and
+  the handling is wired: a ``fix`` issue has a ``fix`` quirk, an ``exclude`` issue names what it
+  excludes, and every quirk links to its issue;
+* the ingest keys have one spelling each: the names 0.89's intake branches used before they were
+  reconciled (:data:`RENAMED_KEYS`) are rejected with the key to use instead.
 
 The catalog never corrects published data silently: what CAMBER changes, and why, is the list of
 data issues (``camber datasets info <id>``; rendered into ``docs/DATASETS.md`` by
@@ -28,6 +31,7 @@ package; tests pass its patterns in through ``deny_patterns``.
 
 from __future__ import annotations
 
+import codecs
 import datetime as _dt
 import json
 import re
@@ -35,7 +39,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files as _files
 
 from ._quirks import validate_quirk
-from ._readers import EXTRAS, needs_extra
+from ._readers import CLOCK_KINDS, ELAPSED_UNITS, EXTRAS, needs_extra
 from ._units import canonical_unit
 
 SCHEMA_VERSION = 1
@@ -49,6 +53,8 @@ LICENCES = {
     "ODC-BY-1.0": (True, False),
     "CC-BY-SA-3.0": (True, True),
     "CC-BY-SA-4.0": (True, True),
+    "CDLA-Permissive-1.0": (True, False),
+    "NIST-PD": (True, False),
     "ODbL-1.0": (True, True),
     "MIT": (True, False),
     "BSD-3-Clause": (True, False),
@@ -60,7 +66,7 @@ LICENCES = {
 }
 ACCESS = ("open", "research_only")
 KINDS = ("simulated", "real", "lab")
-ADAPTERS = ("wide_csv", "bdg2")
+ADAPTERS = ("wide_csv", "bdg2", "per_point")
 ARCHIVES = ("zip", "tar")
 #: How CAMBER handles a problem in the published data: correct it at ingest (a ``fix`` quirk, which
 #: ``--no-corrections`` skips), leave it in place and say so, keep the affected runs / columns out
@@ -72,6 +78,16 @@ _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _RUN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ISSUE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 _DOI_RE = re.compile(r"10\.\d{4,9}/\S+")
+#: Ingest keys the 0.89 intake branches spelled differently before they were reconciled:
+#: ``{(level, old key): what to use instead}``; :func:`validate_catalog` rejects the old ones.
+RENAMED_KEYS = {
+    ("ingest", "tz_convert"): "source_timezone: 'offset' plus local_timezone",
+    ("ingest", "synthetic_index"): "clock: {'kind': 'rows', 'freq': ..., 'start': ...}",
+    ("ingest", "day_clock"): "clock: {'kind': 'day', 'day': ..., 'time': ..., ...}",
+    ("ingest", "timestamp_unit"): "clock: {'kind': 'elapsed', 'unit': ..., 'origin': ...}",
+    ("ingest", "timestamp_origin"): "clock: {'kind': 'elapsed', 'unit': ..., 'origin': ...}",
+    ("run", "points"): "members: {raw column: member}",
+}
 _REQUIRED = (
     "id",
     "title",
@@ -93,6 +109,7 @@ __all__ = [
     "LICENCES",
     "HANDLINGS",
     "DatasetEntry",
+    "RENAMED_KEYS",
     "is_research_only_licence",
     "load_catalog_data",
     "load_entries",
@@ -154,6 +171,7 @@ class DatasetEntry:
     store_bytes_estimate: int | None = None
     manual: bool = False
     manual_instructions: str = ""
+    contiguous: bool = True
 
     @classmethod
     def from_dict(cls, d: dict) -> DatasetEntry:
@@ -188,6 +206,7 @@ class DatasetEntry:
             or (d.get("subsets") or {}).get("default", {}).get("store_bytes_estimate"),
             manual=bool(d.get("manual", False)),
             manual_instructions=d.get("manual_instructions", ""),
+            contiguous=bool(d.get("contiguous", True)),
         )
 
     @property
@@ -268,6 +287,7 @@ class DatasetEntry:
             "landing_url": self.landing_url,
             "attribution_required": self.attribution_required,
             "redistribution": "prohibited" if self.research_only else "allowed",
+            "contiguous": self.contiguous,
             "known_issues": list(self.known_issues),
             "data_issues": [
                 {k: i.get(k) for k in ("id", "title", "handling")} for i in self.data_issues
@@ -308,6 +328,8 @@ class DatasetEntry:
         if self.manual:
             out["manual"] = True
             out["manual_instructions"] = self.manual_instructions
+        if not self.contiguous:
+            out["contiguous"] = False
         return out
 
 
@@ -374,7 +396,11 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
         errs.extend(f"{did}: {e}" for e in validate_quirk(q))
     _check_transforms(did, ing, errs)
     _check_brick(did, ing, file_names, errs)
+    for key, use in RENAMED_KEYS.items():
+        if key[0] == "ingest" and key[1] in ing:
+            errs.append(f"{did}: ingest.{key[1]} is not a key; use {use}")
     run_ids: set = set()
+    equip_ids: set = set()
     for r in ing.get("runs") or []:
         rid = r.get("id", "")
         if not _RUN_RE.match(str(rid)):
@@ -386,9 +412,12 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
         if fname not in file_names:
             errs.append(f"{did}/{rid}: run file {fname!r} is not in files")
             continue
-        members = file_names[fname].get("members")
-        if r.get("member") and members is not None and r["member"] not in members:
-            errs.append(f"{did}/{rid}: member {r['member']!r} is not in {fname}")
+        _check_run_sources(did, str(rid), r, file_names[fname], fname, errs)
+        eid = r.get("equip_id")
+        if eid is not None:
+            if not _RUN_RE.match(str(eid)) or "__" in str(eid) or eid in equip_ids:
+                errs.append(f"{did}/{rid}: equip_id {eid!r} must be a unique plain name")
+            equip_ids.add(eid)
         if not r.get("equip") or not r.get("class"):
             errs.append(f"{did}/{rid}: run needs 'equip' and 'class'")
         if "label" not in r:
@@ -408,14 +437,102 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
     return run_ids
 
 
+def _text_or_int(v) -> bool:
+    return isinstance(v, (str, int)) and not isinstance(v, bool)
+
+
+def _check_run_sources(did: str, rid: str, r: dict, f: dict, fname: str, errs: list) -> None:
+    """A run reads one ``member`` or several ``members`` -- a list of tables joined on the
+    timestamp, or ``{raw column: member}`` one-point files -- may keep only the rows ``where``
+    columns hold a value (``{column: value or [values]}``), may name its own shipped ``mapping``
+    with ``vars`` filling its ``{placeholders}``, and may override the entry's
+    ``timestamp_format``, ``units``, ``encoding`` and ``sheet`` (see :mod:`._readers`)."""
+    for key, use in RENAMED_KEYS.items():
+        if key[0] == "run" and key[1] in r:
+            errs.append(f"{did}/{rid}: {key[1]!r} is not a run key; use {use}")
+    listed = f.get("members")
+    many = r.get("members")
+    wanted = [r["member"]] if r.get("member") else []
+    if many is not None:
+        if isinstance(many, dict):
+            ok = bool(many) and all(isinstance(k, str) and k and v for k, v in many.items())
+            vals = list(many.values())
+        else:
+            ok = isinstance(many, list) and bool(many) and all(many)
+            vals = list(many) if isinstance(many, list) else []
+        if not ok or r.get("member"):
+            errs.append(
+                f"{did}/{rid}: 'members' must be a non-empty list of tables or a "
+                "{raw column: member} mapping, used instead of 'member'"
+            )
+        wanted = [m for m in vals if isinstance(m, str)]
+    if wanted and f.get("archive") is None:
+        errs.append(f"{did}/{rid}: 'member(s)' only apply to an archive file")
+    for m in wanted:
+        if listed is not None and m not in listed:
+            errs.append(f"{did}/{rid}: member {m!r} is not in {fname}")
+    mp = r.get("mapping")
+    if mp is not None and not _package_has("mappings", mp):
+        errs.append(f"{did}/{rid}: mapping {mp!r} is not shipped in camber/datasets/mappings/")
+    vs = r.get("vars")
+    if vs is not None and not (
+        isinstance(vs, dict)
+        and vs
+        and all(isinstance(k, str) and _text_or_int(v) for k, v in vs.items())
+    ):
+        errs.append(f"{did}/{rid}: 'vars' must map placeholder names to text or integers")
+    w = r.get("where")
+    if w is not None:
+        if isinstance(w, dict) and set(w) == {"column", "in"} and isinstance(w.get("in"), list):
+            errs.append(
+                f"{did}/{rid}: 'where' is {{column: value or [values]}}; "
+                "{'column': c, 'in': [...]} is not a key"
+            )
+        elif not (
+            isinstance(w, dict)
+            and w
+            and all(
+                isinstance(k, str)
+                and (
+                    _text_or_int(v)
+                    or (isinstance(v, list) and v and all(_text_or_int(x) for x in v))
+                )
+                for k, v in w.items()
+            )
+        ):
+            errs.append(
+                f"{did}/{rid}: 'where' must map column names to a value or a list of values"
+            )
+    _check_timestamp_format(f"{did}/{rid}", r.get("timestamp_format"), errs)
+    for role, unit in (r.get("units") or {}).items():
+        try:
+            canonical_unit(unit)
+        except ValueError as e:
+            errs.append(f"{did}/{rid}: units[{role!r}]: {e}")
+
+
 def _check_brick(did: str, ing: dict, file_names: dict, errs: list) -> None:
     """``ingest.brick`` names a shipped file (or archive member) and maps Brick classes to
-    CAMBER equipment classes; ``group: "brick"`` runs need it."""
+    CAMBER equipment classes; ``group: "brick"`` runs need it. A ``group: "mapping"`` run is split
+    by the mapping file's ``equipment`` map alone (no Brick model); a grouped run's ``target``
+    lists the equipment under test, the only one(s) that carry its label."""
     b = ing.get("brick")
-    grouped = [r.get("id") for r in ing.get("runs") or [] if r.get("group") is not None]
+    grouped = [r.get("id") for r in ing.get("runs") or [] if r.get("group") == "brick"]
     for r in ing.get("runs") or []:
-        if r.get("group") not in (None, "brick"):
-            errs.append(f"{did}/{r.get('id')}: group must be 'brick'")
+        if r.get("group") not in (None, "brick", "mapping"):
+            errs.append(f"{did}/{r.get('id')}: group must be 'brick' or 'mapping'")
+        if r.get("group") == "mapping" and not ing.get("mapping"):
+            errs.append(f"{did}/{r.get('id')}: group 'mapping' needs ingest.mapping")
+        tgt = r.get("target")
+        if tgt is not None and (
+            r.get("group") is None
+            or not isinstance(tgt, list)
+            or not tgt
+            or not all(isinstance(t, str) and t for t in tgt)
+        ):
+            errs.append(
+                f"{did}/{r.get('id')}: 'target' must list the grouped run's equipment under test"
+            )
     if b is None:
         if grouped:
             errs.append(f"{did}: runs {grouped} group by Brick but ingest.brick is not set")
@@ -442,21 +559,39 @@ def _check_brick(did: str, ing: dict, file_names: dict, errs: list) -> None:
 def _check_transforms(did: str, ing: dict, errs: list) -> None:
     """CAMBER's own column semantics, applied at ingest in every mode (they are not corrections).
 
-    ``timestamp_format`` pins how timestamps parse (a month-first export must never be guessed);
-    ``recode`` maps a raw column's values (``{"SYS_CTL": {"2": 0}}``: a 0/1/2 mode point read as
-    occupied only in mode 1); ``derive`` adds a raw column, either the ``sum`` of others (a
-    dual-duct unit's supply airflow is its cold- plus hot-deck flows) or a 0/1 flag for another
-    column being ``above`` a threshold (``["SF_CS", 0]``: the fan runs when its speed command is
-    above zero).
+    ``timestamp_format`` pins how timestamps parse (a month-first export must never be guessed;
+    ``"ISO8601"`` for stamps that mix precisions); ``clock`` builds the time of a source without a
+    wall-clock column (an elapsed simulation clock, or a synthetic day / row clock);
+    ``source_timezone`` / ``local_timezone`` move a dataset published in UTC, another zone or with
+    per-row UTC offsets (``"offset"``) onto the site's wall clock; ``encoding`` (on the spec or a
+    run) is a CSV's text encoding; ``recode`` maps a raw column's values (``{"SYS_CTL": {"2":
+    0}}``: a 0/1/2 mode point read as occupied only in mode 1); ``derive`` adds a raw column: the
+    ``sum`` of others (a dual-duct unit's supply airflow is its cold- plus hot-deck flows), a 0/1
+    flag for another column being ``above`` a threshold (``["SF_CS", 0]``: the fan runs when its
+    speed command is above zero), or a ``copy`` of one column (one building-wide schedule read by
+    every zone of a grouped table).
     """
     for role, unit in (ing.get("units") or {}).items():
         try:
             canonical_unit(unit)
         except ValueError as e:
             errs.append(f"{did}: units[{role!r}]: {e}")
-    fmt = ing.get("timestamp_format")
-    if fmt is not None and (not isinstance(fmt, str) or "%" not in fmt):
-        errs.append(f"{did}: ingest.timestamp_format must be a strftime format string")
+    _check_timestamp_format(f"{did}: ingest", ing.get("timestamp_format"), errs)
+    _check_clock(did, ing, errs)
+    src, local = ing.get("source_timezone"), ing.get("local_timezone")
+    if src is not None and src != "offset" and not _valid_tz(src):
+        errs.append(f"{did}: ingest.source_timezone must be 'offset' or an IANA zone")
+    if local is not None and not _valid_tz(local):
+        errs.append(f"{did}: ingest.local_timezone must be an IANA zone")
+    if src is not None and local is None:
+        errs.append(f"{did}: ingest.source_timezone needs a local_timezone to convert to")
+    for where in [ing, *(ing.get("runs") or [])]:
+        enc = where.get("encoding") if isinstance(where, dict) else None
+        if enc is not None:
+            try:
+                codecs.lookup(str(enc))
+            except LookupError:
+                errs.append(f"{did}: unknown text encoding {enc!r}")
     for col, table in (ing.get("recode") or {}).items():
         if not isinstance(table, dict) or not table:
             errs.append(f"{did}: recode {col!r} must map source values to numbers")
@@ -481,11 +616,81 @@ def _check_transforms(did: str, ing: dict, errs: list) -> None:
             and not isinstance(above[1], bool)
         )
         ok_sum = isinstance(src, list) and len(src) >= 2
-        if ok_above == ok_sum:
+        ok_copy = isinstance(dv.get("copy"), str) and bool(dv["copy"])
+        if [ok_above, ok_sum, ok_copy].count(True) != 1:
             errs.append(
-                f"{did}: derive {dv['column']!r} needs either a 'sum' of at least two raw columns "
-                "or 'above': [column, threshold]"
+                f"{did}: derive {dv['column']!r} needs exactly one of a 'sum' of at least two raw "
+                "columns, 'above': [column, threshold] or 'copy': column"
             )
+
+
+def _check_timestamp_format(where: str, fmt, errs: list) -> None:
+    if fmt is not None and (not isinstance(fmt, str) or ("%" not in fmt and fmt != "ISO8601")):
+        errs.append(f"{where}: timestamp_format must be a strftime format string or 'ISO8601'")
+
+
+def _valid_tz(name) -> bool:
+    try:
+        import pandas as pd
+
+        pd.Timestamp("2020-01-01").tz_localize(str(name))
+    except Exception:  # noqa: BLE001 - any failure means pandas cannot use the zone
+        return False
+    return True
+
+
+def _iso_date(value) -> bool:
+    try:
+        _dt.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return False
+    return True
+
+
+def _check_clock(did: str, ing: dict, errs: list) -> None:
+    """``clock`` (see :mod:`._readers`): ``elapsed`` needs a ``unit`` and an ISO ``origin`` and
+    excludes ``timestamp_format``; ``day`` needs its ``day`` and ``time`` columns, an ISO
+    ``start`` and a positive ``every_days``; ``rows`` needs a pandas ``freq``."""
+    clk = ing.get("clock")
+    if clk is None:
+        return
+    kind = clk.get("kind") if isinstance(clk, dict) else None
+    if kind not in CLOCK_KINDS:
+        errs.append(f"{did}: ingest.clock.kind must be one of {CLOCK_KINDS}")
+        return
+    if kind == "elapsed":
+        if clk.get("unit") not in ELAPSED_UNITS or ing.get("timestamp_format") is not None:
+            errs.append(
+                f"{did}: an elapsed clock's unit must be one of {ELAPSED_UNITS} "
+                "(and it excludes timestamp_format)"
+            )
+        if not _iso_date(clk.get("origin", "")):
+            errs.append(f"{did}: an elapsed clock needs an ISO 'origin'")
+    elif kind == "day":
+        try:
+            every = int(clk.get("every_days", 1))
+        except (TypeError, ValueError):
+            every = 0
+        if not (clk.get("day") and clk.get("time")) or every < 1:
+            errs.append(
+                f"{did}: a day clock needs 'day' and 'time' columns and a positive integer "
+                "'every_days'"
+            )
+        if not _iso_date(clk.get("start", "2000-01-03")):
+            errs.append(f"{did}: a day clock's 'start' must be an ISO date")
+    else:
+        ok = isinstance(clk.get("freq"), str) and bool(clk["freq"])
+        if ok:
+            try:
+                import pandas as pd
+
+                pd.tseries.frequencies.to_offset(clk["freq"])
+            except (TypeError, ValueError):
+                ok = False
+        if not ok:
+            errs.append(f"{did}: a rows clock needs a 'freq' (e.g. '1min')")
+        if not _iso_date(clk.get("start", "2000-01-01")):
+            errs.append(f"{did}: a rows clock's 'start' must be an ISO date")
 
 
 def _check_targets(did: str, d: dict, errs: list) -> None:
@@ -501,7 +706,7 @@ def _check_targets(did: str, d: dict, errs: list) -> None:
                 errs.append(f"{did}: target {t!r} of {det!r} is not a declared fault type")
 
 
-def _check_issue_fields(did: str, iss: dict, errs: list) -> str:
+def _check_issue_fields(did: str, iss: dict, errs: list, *, has_doi: bool = True) -> str:
     iid = iss.get("id") if isinstance(iss, dict) else None
     if not isinstance(iss, dict) or not _ISSUE_RE.match(str(iid or "")):
         errs.append(f"{did}: data issue id {iid!r} must match {_ISSUE_RE.pattern}")
@@ -518,8 +723,13 @@ def _check_issue_fields(did: str, iss: dict, errs: list) -> str:
     doc = iss.get("contradicts") or {}
     if not str(doc.get("document") or "").strip():
         errs.append(f"{where}: 'contradicts.document' must name the documentation contradicted")
-    if not _DOI_RE.search(str(doc.get("citation") or "")):
-        errs.append(f"{where}: 'contradicts.citation' must cite the documentation by DOI")
+    cite = str(doc.get("citation") or "")
+    if not _DOI_RE.search(cite) and (has_doi or not re.search(r"https://\S+", cite)):
+        # a publisher that mints no DOI (a versioned repository) is cited by a pinned URL
+        errs.append(
+            f"{where}: 'contradicts.citation' must cite the documentation by DOI "
+            "(or, for an entry without DOIs, by a pinned https URL)"
+        )
     if iss.get("handling") not in HANDLINGS:
         errs.append(f"{where}: handling must be one of {HANDLINGS}")
     if iss.get("runs") is not None and not isinstance(iss.get("runs"), list):
@@ -532,7 +742,7 @@ def _check_issues(did: str, d: dict, run_ids: set, errs: list) -> None:
     ing = d.get("ingest") or {}
     issues: dict = {}
     for iss in d.get("data_issues") or []:
-        iid = _check_issue_fields(did, iss, errs)
+        iid = _check_issue_fields(did, iss, errs, has_doi=bool(d.get("dois")))
         if iid in issues:
             errs.append(f"{did}: duplicate data issue {iid!r}")
         issues[iid] = iss if isinstance(iss, dict) else {}
@@ -652,6 +862,8 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
             errs.append(f"{did}: licence_check.{k} must be a non-empty string")
     if "manual" in d and not isinstance(d["manual"], bool):
         errs.append(f"{did}: manual must be true or false")
+    if "contiguous" in d and not isinstance(d["contiguous"], bool):
+        errs.append(f"{did}: contiguous must be true or false")
     if d.get("manual") and not str(d.get("manual_instructions") or "").strip():
         errs.append(
             f"{did}: a manual entry needs manual_instructions (where and how to download the files)"
@@ -662,6 +874,10 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
         errs.append(f"{did}: verified_on must be an ISO date")
     file_names = _check_files(did, d, errs)
     run_ids = _check_ingest(did, d, file_names, errs)
+    if (d.get("ingest") or {}).get("adapter") == "per_point":
+        from ._perpoint import check_spec
+
+        check_spec(did, d.get("ingest") or {}, file_names, d.get("subsets") or {}, errs)
     _check_subsets(did, d, file_names, run_ids, errs)
     _check_targets(did, d, errs)
     _check_issues(did, d, run_ids, errs)

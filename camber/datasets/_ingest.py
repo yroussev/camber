@@ -7,13 +7,28 @@ compares the findings with the labels recorded on the facility. A ``splice`` der
 fault-free run and a faulted run at an onset date (``<equip>__onset_<scenario>``) for fault-onset /
 drift exercises.
 
-Pipeline per run (:func:`read_raw_run` is shared with the LBNL benchmark): column-pruned
-``read_csv`` (only mapped, quirk and transform columns; timestamps parsed with the entry's pinned
-``timestamp_format``) -> ``fix`` quirks (skipped with ``corrections=False``) -> CAMBER's column
-transforms (``recode`` / ``derive``) -> point -> role mapping -> resample (default 15 min: mean,
+Pipeline per run (:func:`read_raw_run` is shared with the LBNL benchmark): column-pruned read
+(only mapped, quirk and transform columns; timestamps parsed with the entry's pinned
+``timestamp_format`` or built by its ``clock``) -> ``fix`` quirks (skipped with
+``corrections=False``) -> CAMBER's column transforms (``recode`` / ``derive``) -> the site's wall
+clock -> point -> role mapping -> resample (default 15 min: mean,
 which is the duty of a regularly-sampled status point; the warm-up/cool-down exclusion flags take
 the max) -> source-unit -> IP conversion -> percent normalization -> plausibility warnings ->
 staging store.
+
+**Source layouts** (read by :mod:`._readers`). A run reads its archive ``member``, several
+``members`` (per-quantity tables joined on the timestamp, or ``{raw column: member}`` one-point
+files), or a plain download; it may keep only the rows ``where`` a column holds a value (a table
+stacking several rooms), read with its own ``mapping`` whose ``{n}``-style placeholders its ``vars``
+fill, carry its own ``timestamp_format`` / ``units`` / ``encoding`` / ``sheet``
+(:func:`run_spec`), and store its equipment under a verbatim ``equip_id`` instead of
+``<equip>__<scenario>`` (real, unlabelled data has no scenarios). A ``group`` run splits one table
+into several pieces of equipment -- by the entry's Brick model (``"brick"``) or by the mapping
+file's ``equipment`` map (``"mapping"``) -- and its ``target`` names the equipment under test, the
+only one(s) carrying its label (the rest is recorded as unscored ``context``). Tables several runs
+share are parsed once (:class:`._readers.TableReader`). The entry's ``clock`` (elapsed, or a
+synthetic day / row clock) and ``source_timezone`` / ``local_timezone`` say how rows get their
+wall-clock time. The ``per_point`` adapter (:mod:`._perpoint`) ingests one series file per sensor.
 
 **Corrections.** ``fix`` quirks correct problems in the published data (each is a described data
 issue on the catalog entry). ``corrections=False`` (``camber datasets ingest --no-corrections``)
@@ -53,7 +68,16 @@ from ._archive import archive_kind, safe_extract
 from ._catalog import DatasetEntry, package_text
 from ._fetch import check_disk, sha256_file
 from ._quirks import apply_quirks, quirk_columns
-from ._readers import read_table, require_extras
+from ._readers import (
+    TableReader,
+    clock_columns,
+    read_sources,
+    read_table,
+    require_extras,
+    synthetic_clock_note,
+    table_key,
+    to_local_clock,
+)
 from ._units import convert_frame, convert_series, plausibility_warnings
 
 INGEST_VERSION = 1
@@ -121,27 +145,63 @@ def verified_inputs(entry: DatasetEntry, subset: str | None, root: str) -> dict:
 
 def _pending_bytes(path: str, members, dest: str) -> int:
     """Uncompressed bytes still to extract (members already present at full size are free)."""
+    import tarfile
     import zipfile
 
-    if archive_kind(path) != "zip":  # pragma: no cover - every 0.86 archive is a zip
+    kind = archive_kind(path)
+    if kind == "zip":
+        with zipfile.ZipFile(path) as z:
+            sizes = {m: z.getinfo(m).file_size for m in members}
+    elif kind == "tar":
+        with tarfile.open(path) as t:
+            sizes = {m: t.getmember(m).size for m in members}
+    else:  # pragma: no cover - not an archive
         return 0
     total = 0
-    with zipfile.ZipFile(path) as z:
-        for m in members:
-            info = z.getinfo(m)
-            target = os.path.join(dest, m)
-            if not (os.path.isfile(target) and os.path.getsize(target) == info.file_size):
-                total += info.file_size
+    for m, size in sizes.items():
+        target = os.path.join(dest, m)
+        if not (os.path.isfile(target) and os.path.getsize(target) == size):
+            total += size
     return total
 
 
+def run_members(run: dict) -> list:
+    """The archive member(s) a run reads: its ``member``, or every one of its ``members``."""
+    many = run.get("members")
+    if isinstance(many, dict):
+        return list(dict.fromkeys(many.values()))
+    if many:
+        return list(many)
+    return [run["member"]] if run.get("member") else []
+
+
+def _pairs(d) -> tuple:
+    return tuple(sorted((str(k), repr(v)) for k, v in (d or {}).items()))
+
+
+def _selection(run: dict) -> tuple:
+    """What a run picks out of the bytes it reads: rows, mapping, placeholders, worksheet, and
+    the columns its one-point members are read as."""
+    many = run.get("members")
+    cols = tuple(many) if isinstance(many, dict) else ()
+    return (
+        _pairs(run.get("where")),
+        run.get("mapping"),
+        _pairs(run.get("vars")),
+        run.get("sheet"),
+        cols,
+    )
+
+
 def _duplicate_runs(runs, inputs: dict) -> dict:
-    """``{run id: canonical run id}`` for runs whose archive member is byte-identical to an earlier
-    run's (same CRC-32 and size in the same zip).
+    """``{run id: canonical run id}`` for runs whose archive members are byte-identical to an
+    earlier run's (same CRC-32 and size in the same zip) **and** that select the same rows and
+    columns from them.
 
     Publishers do ship one simulation under several labels -- LBNL's single-duct AHU "leakage
     severities" 010/025/040/050 are one file four times -- and ingesting each copy as its own
-    scenario would score one case several times.
+    scenario would score one case several times. Runs that read the same bytes but pick different
+    rows or columns (a stacked table's rooms, one mapping per unit) are different runs.
     """
     import zipfile
 
@@ -149,16 +209,16 @@ def _duplicate_runs(runs, inputs: dict) -> dict:
     dupes: dict = {}
     by_file: dict = {}
     for r in runs:
-        if r.get("member"):
+        if run_members(r):
             by_file.setdefault(r["file"], []).append(r)
     for fname, rs in by_file.items():
         path = inputs[fname][0]
-        if archive_kind(path) != "zip":  # pragma: no cover - every 0.86 archive is a zip
+        if archive_kind(path) != "zip":  # tar members carry no CRC: never deduplicated
             continue
         with zipfile.ZipFile(path) as z:
             for r in rs:
-                info = z.getinfo(r["member"])
-                key = (fname, info.CRC, info.file_size)
+                infos = [z.getinfo(m) for m in run_members(r)]
+                key = (fname, tuple((i.CRC, i.file_size) for i in infos), _selection(r))
                 if key in seen:
                     dupes[r["id"]] = seen[key]
                 else:
@@ -170,8 +230,9 @@ def _extract_members(entry, runs, inputs: dict, root: str) -> dict:
     """Extract the archive members the runs need; returns ``{(file, member): path}``."""
     by_file: dict = {}
     for r in runs:
-        if r.get("member"):
-            by_file.setdefault(r["file"], []).append(r["member"])
+        for m in run_members(r):
+            if m not in by_file.setdefault(r["file"], []):
+                by_file[r["file"]].append(m)
     out = {}
     for fname, members in by_file.items():
         path = inputs[fname][0]
@@ -182,6 +243,44 @@ def _extract_members(entry, runs, inputs: dict, root: str) -> dict:
         safe_extract(path, dest, members=members)
         for m in members:
             out[(fname, m)] = os.path.join(dest, m)
+    return out
+
+
+def mapping_texts(entry: DatasetEntry) -> str:
+    """Every mapping file the entry's ingest reads (its own, then run-level ones), concatenated in
+    a stable order -- the mapping part of the content hash."""
+    names = [entry.ingest["mapping"]] if entry.ingest.get("mapping") else []
+    names += sorted({r["mapping"] for r in entry.ingest.get("runs") or [] if r.get("mapping")})
+    return "\n".join(package_text("mappings", n) for n in dict.fromkeys(names))
+
+
+def run_mapping(spec: dict, run: dict | None = None) -> tuple:
+    """``(MappingProvider, mapping JSON)`` for a run: its own ``mapping`` file, else the entry's.
+
+    A run's ``vars`` (``{"n": "102"}``) fill ``{n}`` placeholders in the mapping text, so one
+    mapping file serves every unit of a table whose columns carry the unit number.
+    """
+    run = run or {}
+    name = run.get("mapping") or spec.get("mapping")
+    text = package_text("mappings", name) if name else "{}"
+    for k, v in (run.get("vars") or {}).items():
+        text = text.replace("{" + str(k) + "}", str(v))
+    return MappingProvider.from_dict(json.loads(text)), text
+
+
+#: Keys a run may carry to override the entry's ingest spec for its own read.
+RUN_SPEC_KEYS = ("timestamp_format", "units", "encoding", "sheet")
+
+
+def run_spec(spec: dict, run: dict) -> dict:
+    """The entry's ingest spec with a run's own ``timestamp_format`` / ``units`` / ``encoding`` /
+    ``sheet`` applied (a run's ``units`` add to the entry's)."""
+    over = {k: run[k] for k in RUN_SPEC_KEYS if k in run}
+    if not over:
+        return spec
+    out = {**spec, **over}
+    if "units" in over:
+        out["units"] = {**(spec.get("units") or {}), **over["units"]}
     return out
 
 
@@ -232,6 +331,8 @@ def transform_columns(spec: dict) -> set:
         out.update(dv.get("sum") or [])
         if dv.get("above"):
             out.add(dv["above"][0])
+        if dv.get("copy"):
+            out.add(dv["copy"])
     return out
 
 
@@ -247,6 +348,10 @@ def apply_transforms(raw: pd.DataFrame, spec: dict) -> pd.DataFrame:
             vals = pd.to_numeric(out[col], errors="coerce")
             out[col] = vals.replace({float(k): float(v) for k, v in table.items()})
     for dv in derive:
+        if "copy" in dv:  # one column read by several equipment (a shared schedule)
+            if dv["copy"] in out.columns:
+                out[dv["column"]] = out[dv["copy"]]
+            continue
         if "above" in dv:  # a 0/1 flag: the source is above a threshold (NaN stays NaN)
             col, threshold = dv["above"]
             if col in out.columns:
@@ -262,58 +367,67 @@ def apply_transforms(raw: pd.DataFrame, spec: dict) -> pd.DataFrame:
 
 
 def read_raw_run(
-    path: str,
+    path,
     mapping: MappingProvider,
     spec: dict,
     run_id: str | None = None,
     *,
     corrections: bool = True,
     sheet=None,
+    where: dict | None = None,
+    reader: TableReader | None = None,
 ):
-    """One wide table run -> ``(raw frame indexed by timestamp, quirk notes)``, before role mapping.
+    """One run -> ``(raw frame indexed by timestamp, quirk notes)``, before role mapping.
 
-    The table is read by extension through :func:`._readers.read_table`: CSV in the core, an
-    ``.xlsx`` workbook through the ``xlsx`` extra (``sheet``, else the spec's ``sheet``, names
-    the worksheet; default the first).
+    ``path`` is one table, a list of tables (their columns joined on the timestamp) or
+    ``{raw column: file}`` for one-point files (:func:`._readers.read_sources`); tables are read by
+    extension (:func:`._readers.read_table`: CSV / parquet in the core, an ``.xlsx`` workbook
+    through the ``xlsx`` extra; ``sheet``, else the spec's ``sheet``, names the worksheet).
 
-    Reads only the timestamp, the mapped columns and the columns quirks and transforms need;
-    parses timestamps with the spec's ``timestamp_format`` when it pins one; drops unparseable and
-    duplicated stamps; applies the ``fix`` quirks (unless ``corrections`` is false) and CAMBER's
-    ``recode`` / ``derive`` transforms. Shared by the ingester and ``examples/lbnl_fdd``.
+    Reads only the clock columns, the mapped columns and the columns quirks and transforms need;
+    parses timestamps with the spec's ``timestamp_format`` (or builds them with its ``clock``);
+    keeps the ``where`` rows; drops unparseable and duplicated stamps; applies the ``fix`` quirks
+    (unless ``corrections`` is false) and CAMBER's ``recode`` / ``derive`` transforms; then moves
+    the index to the site's wall clock (``local_timezone``). ``reader`` shares tables between the
+    runs of one ingest. Shared by the ingester and ``examples/lbnl_fdd``.
     """
-    ts = spec.get("timestamp", "Datetime")
     quirks = spec.get("quirks") or []
     extra = quirk_columns(quirks) | transform_columns(spec)
     derived = {dv.get("column") for dv in spec.get("derive") or []}
-    fmt = spec.get("timestamp_format")
-    raw = read_table(
-        path,
-        usecols=lambda c: c == ts or c in extra or (c not in derived and mapping.role_of(c)),
-        sheet=sheet if sheet is not None else spec.get("sheet"),
-    )
-    raw[ts] = (
-        pd.to_datetime(raw[ts], format=fmt, errors="coerce")
-        if fmt
-        else pd.to_datetime(raw[ts], errors="coerce")
-    )
-    raw = raw.set_index(ts)
-    raw = raw[~raw.index.isna()]
-    raw = raw[~raw.index.duplicated(keep="first")].sort_index()
+    if sheet is not None:
+        spec = {**spec, "sheet": sheet}
+
+    def keep(c) -> bool:
+        return c in extra or (c not in derived and mapping.role_of(c) is not None)
+
+    raw = read_sources(path, spec, keep, where=where, reader=reader)
+    raw = raw[[c for c in raw.columns if keep(c)]]
     raw, notes = apply_quirks(raw, quirks, run=run_id, corrections=corrections)
-    return apply_transforms(raw, spec), notes
+    return to_local_clock(apply_transforms(raw, spec), spec), notes
 
 
 def read_wide_run(
-    path: str,
+    path,
     mapping: MappingProvider,
     spec: dict,
     run_id: str | None = None,
     *,
     corrections: bool = True,
     sheet=None,
+    where: dict | None = None,
+    reader: TableReader | None = None,
 ):
-    """One wide table run -> (role frame at the spec's resample, quirk notes, warnings)."""
-    raw, notes = read_raw_run(path, mapping, spec, run_id, corrections=corrections, sheet=sheet)
+    """One run -> (role frame at the spec's resample, quirk notes, warnings)."""
+    raw, notes = read_raw_run(
+        path,
+        mapping,
+        spec,
+        run_id,
+        corrections=corrections,
+        sheet=sheet,
+        where=where,
+        reader=reader,
+    )
     cols: dict = {}
     for c in raw.columns:
         role = mapping.role_of(c)
@@ -352,14 +466,24 @@ def _brick_grouping(entry, inputs, root):
 
 
 def _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used: set):
-    """One ``group: "brick"`` run -> ``({equip: (class, role frame)}, notes, warnings)``."""
-    from ._brickgroup import mapping_overrides
+    """One grouped run -> ``({equip: (class, role frame)}, notes, warnings)``.
 
+    ``group: "brick"`` splits the table by the entry's Brick model (the mapping file's overrides
+    win); ``group: "mapping"`` by the mapping file's ``equipment`` map alone. ``spec`` is the run's
+    spec (:func:`run_spec`).
+    """
+    from ._brickgroup import BrickGrouping, mapping_overrides
+
+    if run.get("group") == "mapping" or grouping is None:
+        grouping = BrickGrouping()
     mp, over = mapping_overrides(mapping_spec)
-    header = read_table(path, sheet=run.get("sheet", spec.get("sheet")), nrows=0).columns
-    ts = spec.get("timestamp", "Datetime")
+    header = read_table(
+        path, sheet=spec.get("sheet"), nrows=0, encoding=spec.get("encoding")
+    ).columns
+    clock = clock_columns(spec)
+    derived = [dv["column"] for dv in spec.get("derive") or [] if dv["column"] not in header]
     plan = grouping.plan(
-        [c for c in header if c != ts],
+        [c for c in header if c not in clock] + derived,
         default_equip=run["equip"],
         default_class=run["class"],
         mapping=mp,
@@ -369,11 +493,9 @@ def _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used: set
     if not plan:
         return {}, notes, [f"{run['id']}: no column is a mapped Brick point"]
     roles = MappingProvider.from_dict({"aliases": {c: g.role.value for c, g in plan.items()}})
-    raw, qn = read_raw_run(
-        path, roles, spec, run["id"], corrections=corrections, sheet=run.get("sheet")
-    )
+    raw, qn = read_raw_run(path, roles, spec, run["id"], corrections=corrections)
     notes += qn
-    suffix = f"__{_scenario(run)}" if run.get("label") else ""
+    suffix = _group_suffix(run)
     by_equip: dict = {}
     for col, g in plan.items():
         if col not in raw.columns:
@@ -386,7 +508,7 @@ def _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used: set
         by_equip.setdefault(eq, (g.equip_class, {}))[1][g.role] = pd.to_numeric(
             raw[col], errors="coerce"
         )
-        if g.source == "mapping":
+        if g.source == "mapping" and run.get("group") == "brick":
             notes.append(
                 f"{run['id']}: {col} -> {eq}/{g.role.value} (mapping file overrides Brick)"
             )
@@ -409,7 +531,19 @@ def _scenario(run: dict) -> str:
     return str(run["id"]).split("__", 1)[-1]
 
 
+def _group_suffix(run: dict) -> str:
+    """A grouped run's equipment-id suffix: ``__<scenario>`` for a labelled run or one with a
+    ``target`` (a fault-free scenario keeps its own equipment), else none -- the columns of
+    unlabelled per-quantity files merge into one equipment per owner."""
+    return f"__{_scenario(run)}" if run.get("label") or run.get("target") else ""
+
+
 def _equip_id(run: dict) -> str:
+    """The stored equipment id: ``<equip>__<scenario>``, or the run's verbatim ``equip_id`` --
+    real, unlabelled data has no scenarios, and a naming-based served-by grouping (``RTU01`` ->
+    ``RTU01_zone_022``) needs the plain names."""
+    if run.get("equip_id"):
+        return str(run["equip_id"])
     return f"{run['equip']}__{_scenario(run)}"
 
 
@@ -502,42 +636,95 @@ def _base_meta(entry: DatasetEntry, root: str, subset: str, shas: dict, chash: s
 # --------------------------------------------------------------------------- adapters
 
 
+def _run_sources(run: dict, paths: dict, inputs: dict):
+    """A run's source(s) for :func:`read_raw_run`: its extracted member(s) or its plain download."""
+    many = run.get("members")
+    if isinstance(many, dict):
+        return {col: paths[(run["file"], m)] for col, m in many.items()}
+    if many:
+        return [paths[(run["file"], m)] for m in many]
+    if run.get("member"):
+        return paths[(run["file"], run["member"])]
+    return inputs[run["file"]][0]
+
+
+def _plan_reads(runs, spec: dict, sources: dict) -> TableReader:
+    """A :class:`._readers.TableReader` with every non-grouped run's table reads planned, so a
+    table several runs share is parsed once with the union of their columns."""
+    reader = TableReader(spec)
+    needed = quirk_columns(spec.get("quirks")) | transform_columns(spec)
+    derived = {dv.get("column") for dv in spec.get("derive") or []}
+    for run in runs:
+        src = sources[run["id"]]
+        if run.get("group") or isinstance(src, dict):
+            continue  # grouped runs and one-point files are read on their own
+        mapping, _ = run_mapping(spec, run)
+        rspec = run_spec(spec, run)
+        wcols = set(run.get("where") or {})
+
+        def wanted(c, _m=mapping, _w=wcols) -> bool:
+            return c in _w or c in needed or (c not in derived and _m.role_of(c) is not None)
+
+        for p in [src] if isinstance(src, (str, os.PathLike)) else src:
+            reader.plan(table_key(p, rspec), wanted)
+    return reader
+
+
 def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:
     spec = entry.ingest
     mapping_text = package_text("mappings", spec["mapping"]) if spec.get("mapping") else "{}"
     mapping_spec = json.loads(mapping_text)
-    mapping = MappingProvider.from_dict(mapping_spec)
     grouping = _brick_grouping(entry, inputs, root)
     used: set = set()
     runs = entry.runs(subset)
     duplicates = _duplicate_runs(runs, inputs)
     runs = [r for r in runs if r["id"] not in duplicates]
     paths = _extract_members(entry, runs, inputs, root)
+    sources = {r["id"]: _run_sources(r, paths, inputs) for r in runs}
+    reader = _plan_reads(runs, spec, sources)
     fid = spec["facility"]
     st = ParquetStore(staging)
     keep = {d[k] for d in spec.get("derived") or [] for k in ("base", "fault")}
     frames: dict = {}
-    labels, onsets, excluded, notes, warns = {}, {}, {}, [], []
+    labels, onsets, excluded, context, notes, warns = {}, {}, {}, {}, [], []
     for dup, canon in duplicates.items():
         notes.append(f"{dup} skipped: byte-identical to {canon} in the archive (one run, not two)")
+    clock = synthetic_clock_note(spec)
+    if clock:
+        notes.append(f"clock: {clock}")
     rows = 0
     for i, run in enumerate(runs, 1):
         if progress:
             progress(f"{entry.id}: run {i}/{len(runs)} {run['id']}")
-        path = paths[(run["file"], run["member"])] if run.get("member") else inputs[run["file"]][0]
-        if run.get("group") == "brick":
-            groups, qn, w = _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used)
+        rspec = run_spec(spec, run)
+        if run.get("group") in ("brick", "mapping"):
+            groups, qn, w = _grouped_run(
+                sources[run["id"]], run, rspec, grouping, mapping_spec, corrections, used
+            )
             notes += [n for n in qn if n not in notes]
             warns += w
+            suffix = _group_suffix(run)
+            targets = set(run.get("target") or [])
             for eq, (cls, frame) in groups.items():
                 rows += st.write_role_frame(frame, facility_id=fid, equip=eq, equip_class=cls)
+                base = eq[: -len(suffix)] if suffix and eq.endswith(suffix) else eq
                 if run.get("exclude"):
                     excluded[eq] = {"label": run["label"], "issue": run["exclude"]}
+                elif targets and base not in targets:
+                    # recorded alongside the equipment under test, never scored
+                    context[eq] = {"run": run["id"], "label": run["label"]}
                 else:
                     labels[eq] = run["label"]
             continue
+        mapping, _ = run_mapping(spec, run)
         frame, qn, w = read_wide_run(
-            path, mapping, spec, run_id=run["id"], corrections=corrections, sheet=run.get("sheet")
+            sources[run["id"]],
+            mapping,
+            rspec,
+            run_id=run["id"],
+            corrections=corrections,
+            where=run.get("where"),
+            reader=reader,
         )
         notes += [n for n in qn if n not in notes]
         warns += w
@@ -565,13 +752,18 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
         "labels": labels,
         "onsets": onsets,
         "excluded": excluded,
+        "context": context,
         "quirks": notes,
         "runs": len(runs),
         "duplicates": duplicates,
     }
     if grouping is not None:
         extra["grouping"] = "brick"
-    n_eq = len(labels) + len(excluded) + len(onsets)
+    elif any(r.get("group") == "mapping" for r in runs):
+        extra["grouping"] = "mapping"
+    if clock:
+        extra["clock"] = clock
+    n_eq = len(labels) + len(excluded) + len(onsets) + len(context)
     return {fid: (entry.title, rows, n_eq, extra)}, mapping_text, warns
 
 
@@ -662,7 +854,22 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
     return out, "", []
 
 
-_ADAPTERS: dict = {"wide_csv": _ingest_wide, "bdg2": _ingest_bdg2}
+def _ingest_per_point(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:
+    """One series file per sensor + a sensor index (see :mod:`._perpoint`)."""
+    from ._perpoint import ingest_per_point
+
+    def extract(items):
+        archived = [i for i in items if i.get("member")]
+        out = _extract_members(entry, archived, inputs, root) if archived else {}
+        for i in items:
+            if not i.get("member"):
+                out[(i["file"], None)] = inputs[i["file"]][0]
+        return out
+
+    return ingest_per_point(entry, subset, inputs, root, staging, progress, extract)
+
+
+_ADAPTERS: dict = {"wide_csv": _ingest_wide, "bdg2": _ingest_bdg2, "per_point": _ingest_per_point}
 
 
 # --------------------------------------------------------------------------- entry point
@@ -702,9 +909,7 @@ def ingest_dataset(
     )
     inputs = verified_inputs(entry, sname, root)
     shas = {k: v[1] for k, v in inputs.items()}
-    mapping_text = (
-        package_text("mappings", entry.ingest["mapping"]) if entry.ingest.get("mapping") else ""
-    )
+    mapping_text = mapping_texts(entry)
     chash = content_hash(entry, sname, shas, mapping_text, corrections=corrections)
     existing = _existing_hashes(st, entry.id)
     result = IngestResult(
