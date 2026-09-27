@@ -125,14 +125,23 @@ def ingest(
     data_dir=None,
     force: bool = False,
     progress=None,
+    corrections: bool = True,
 ) -> IngestResult:
     """Normalize a fetched dataset subset into ``store`` (path or ParquetStore).
 
     Idempotent: identical inputs are skipped unless ``force``; a changed subset/spec replaces the
-    dataset's facilities atomically. See :mod:`camber.datasets._ingest`.
+    dataset's facilities atomically. ``corrections=False`` skips the entry's ``fix`` quirks and
+    ingests the data exactly as published (recorded in the provenance; the entry's data issues say
+    what each fix corrects). See :mod:`camber.datasets._ingest`.
     """
     return ingest_dataset(
-        get(dataset_id), store, subset=subset, data_dir=data_dir, force=force, progress=progress
+        get(dataset_id),
+        store,
+        subset=subset,
+        data_dir=data_dir,
+        force=force,
+        progress=progress,
+        corrections=corrections,
     )
 
 

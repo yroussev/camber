@@ -213,6 +213,32 @@ def test_research_only_iff_nc_or_nd():
         (lambda e: e["subsets"]["default"].update(files=["x"]), "subset file"),
         (lambda e: e["subsets"]["default"].update(runs=["zzz"]), "subset run"),
         (lambda e: e["suggested_analyses"].update(config_template="x.json"), "config template"),
+        (lambda e: e["subsets"]["full"].pop("store_bytes_estimate"), "store_bytes_estimate"),
+        (lambda e: e["ingest"]["quirks"][0].pop("issue"), "must link to a described data issue"),
+        (lambda e: e["ingest"]["quirks"][0].update(issue="nope"), "issue='nope'"),
+        (lambda e: e["data_issues"][0].update(evidence="it is wrong"), "must be quantitative"),
+        (lambda e: e["data_issues"][0].update(columns=[]), "'columns' must list"),
+        (lambda e: e["data_issues"][0].update(handling="maybe"), "handling must be one of"),
+        (lambda e: e["data_issues"][0].pop("handling_note"), "missing 'handling_note'"),
+        (lambda e: e["data_issues"][0].update(id="Bad Id"), "data issue id"),
+        (lambda e: e["data_issues"].append(dict(e["data_issues"][0])), "duplicate data issue"),
+        (
+            lambda e: e["data_issues"][0]["contradicts"].update(citation="the PDF"),
+            "cite the documentation by DOI",
+        ),
+        (lambda e: e["data_issues"][0]["contradicts"].pop("document"), "contradicts.document"),
+        (lambda e: e["data_issues"][0].update(handling="annotate"), "whose handling is not 'fix'"),
+        (lambda e: e["ingest"].update(quirks=[]), "needs a fix quirk"),
+        (lambda e: e["ingest"]["runs"][0].update(exclude="sa-ra-cfm-units"), "not an 'exclude'"),
+        (lambda e: e["ingest"]["runs"][0].update(exclude=3), "must name the data issue"),
+        (lambda e: e["ingest"].update(timestamp_format="MM/DD"), "timestamp_format"),
+        (lambda e: e["ingest"].update(recode={"SYS_CTL": {"two": 0}}), "is not a number"),
+        (lambda e: e["ingest"].update(recode={"SYS_CTL": {"2": "off"}}), "must be a number"),
+        (lambda e: e["ingest"].update(recode={"SYS_CTL": {}}), "must map source values"),
+        (lambda e: e["ingest"].update(derive=[{"column": "X", "sum": ["A"]}]), "derive needs"),
+        (lambda e: e["ingest"].update(units={"oat": "furlongs"}), "unsupported source unit"),
+        (lambda e: e["labels"]["targets"].update(leaking_valve="nope"), "not a declared fault"),
+        (lambda e: e["labels"]["targets"].update(leaking_valve=[]), "must be a fault type"),
     ],
 )
 def test_validator_rejects(mutate, needle):
@@ -247,3 +273,96 @@ def test_package_does_not_import_the_repo_guard():
     text = open(os.path.join(pkg, "catalog.json"), encoding="utf-8").read()
     for rx in _guard_patterns():  # incl. the third-party-host rules (no exemption until 0.87)
         assert re.search(rx, text, re.IGNORECASE) is None, rx
+
+
+# --------------------------------------------------------------------------- data issues
+
+
+def _exclude_issue(runs=None, columns=None, analyses=None) -> dict:
+    ex = {k: v for k, v in (("runs", runs), ("columns", columns), ("analyses", analyses)) if v}
+    return {
+        "id": "not-a-fault",
+        "title": "a labelled fault run that carries no fault",
+        "columns": ["OA_TEMP"],
+        "evidence": "within 0.33 F of the fault-free run",
+        "contradicts": {"document": "inventory Table 3", "citation": "doi:10.25984/1881324"},
+        "handling": "exclude",
+        "handling_note": "not scored",
+        "exclude": ex,
+    }
+
+
+def test_exclude_issue_must_say_what_it_excludes_and_runs_must_point_back():
+    data = _data()
+    e = _entry(data, "lbnl-sdahu")
+    e["data_issues"].append(_exclude_issue())
+    assert any("must say what it excludes" in x for x in validate_catalog(data))
+    e["data_issues"][-1] = _exclude_issue(runs=["coi_stuck_010"])
+    assert any("must carry exclude='not-a-fault'" in x for x in validate_catalog(data))
+    run = next(r for r in e["ingest"]["runs"] if r["id"] == "coi_stuck_010")
+    run["exclude"] = "not-a-fault"
+    assert validate_catalog(data) == []
+    e["data_issues"][-1] = _exclude_issue(runs=["zzz"])
+    assert any("is not a run" in x for x in validate_catalog(data))
+    e["data_issues"][-1] = _exclude_issue(columns=["MA_TEMP"], analyses=["x"])
+    run.pop("exclude")
+    assert any("is mapped in" in x for x in validate_catalog(data))
+    e["data_issues"][-1] = _exclude_issue(analyses=["the EUI rollup"])
+    assert validate_catalog(data) == []
+
+
+def test_every_quirk_links_to_its_issue_and_every_fix_issue_has_a_fix():
+    for e in datasets.catalog():
+        ids = {i["id"] for i in e.data_issues}
+        fixes = {q["issue"] for q in e.ingest.get("quirks") or [] if q["action"] == "fix"}
+        for q in e.ingest.get("quirks") or []:
+            assert q["issue"] in ids, (e.id, q)
+        for i in e.data_issues:
+            assert (i["handling"] == "fix") == (i["id"] in fixes), (e.id, i["id"])
+            assert re.search(r"10\.\d{4,9}/", i["contradicts"]["citation"])
+        assert e.provenance()["data_issues"] == [
+            {k: i[k] for k in ("id", "title", "handling")} for i in e.data_issues
+        ]
+
+
+def test_docs_datasets_md_matches_the_catalog():
+    """docs/DATASETS.md's data-issues section is generated; it must match catalog.json."""
+    from camber.datasets._issues import BEGIN, END, render_markdown, splice_markdown
+
+    doc = open(os.path.join(_ROOT, "docs", "DATASETS.md"), encoding="utf-8").read()
+    assert BEGIN in doc and END in doc
+    assert splice_markdown(doc, render_markdown(load_entries())) == doc, (
+        "docs/DATASETS.md is out of date: run python scripts/datasets_issues_doc.py"
+    )
+    with pytest.raises(ValueError, match="markers"):
+        splice_markdown("no markers here", "x")
+
+
+def test_issues_doc_script_check_and_write(tmp_path, monkeypatch, capsys):
+    spec = importlib.util.spec_from_file_location(
+        "issues_doc", os.path.join(_ROOT, "scripts", "datasets_issues_doc.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.main(["--check"]) == 0
+    doc = tmp_path / "DATASETS.md"
+    from camber.datasets._issues import BEGIN, END
+
+    doc.write_text(f"# x\n\n{BEGIN}\nstale\n{END}\n\ntail\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "DOC", str(doc))
+    assert mod.main(["--check"]) == 1
+    assert mod.main([]) == 0
+    text = doc.read_text(encoding="utf-8")
+    assert "stale" not in text and "lbnl-sdahu" in text and text.endswith("\ntail\n")
+    assert mod.main(["--check"]) == 0
+
+
+def test_store_estimates_are_per_subset():
+    for e in datasets.catalog():
+        assert e.store_bytes("full") >= e.store_bytes() > 0
+        assert e.store_bytes_estimate == e.store_bytes()
+    d = _data()
+    _entry(d, "bdg2")["subsets"]["default"].pop("store_bytes_estimate")
+    raw = _entry(d, "bdg2")
+    raw["subsets"]["full"]["store_bytes_estimate"] = 5
+    assert DatasetEntry.from_dict(raw).store_bytes() is None

@@ -9,7 +9,16 @@ downloaded from its publisher). :func:`validate_catalog` is the gate a catalog c
   licence is non-commercial (NC) or no-derivatives (ND) -- so a research-only dataset can never be
   mislabelled open, nor an open one hidden behind the acknowledgement gate;
 * every URL is ``https``; pinned files carry a size and a 64-hex sha256;
-* subsets, runs, archive members, mappings, config templates and quirks all resolve.
+* subsets, runs, archive members, mappings, config templates and quirks all resolve;
+* every **data issue** -- a problem in the data *as published* -- is described with the columns it
+  affects, numeric evidence, the publisher documentation it contradicts (with a DOI) and CAMBER's
+  handling (:data:`HANDLINGS`), and the handling is wired: a ``fix`` issue has a ``fix`` quirk, an
+  ``exclude`` issue names what it excludes, and every quirk links to its issue.
+
+The catalog never corrects published data silently: what CAMBER changes, and why, is the list of
+data issues (``camber datasets info <id>``; rendered into ``docs/DATASETS.md`` by
+``scripts/datasets_issues_doc.py``). CAMBER's *own* mistakes -- a mapping, an assumed design
+parameter, a template rule -- are simply fixed in the mapping, config or code.
 
 The encumbered-dataset denylist lives with the repository's site-neutrality guard, not in the
 package; tests pass its patterns in through ``deny_patterns``.
@@ -24,6 +33,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files as _files
 
 from ._quirks import validate_quirk
+from ._units import canonical_unit
 
 SCHEMA_VERSION = 1
 
@@ -49,10 +59,16 @@ ACCESS = ("open", "research_only")
 KINDS = ("simulated", "real", "lab")
 ADAPTERS = ("wide_csv", "bdg2")
 ARCHIVES = ("zip", "tar")
+#: How CAMBER handles a problem in the published data: correct it at ingest (a ``fix`` quirk, which
+#: ``--no-corrections`` skips), leave it in place and say so, keep the affected runs / columns out
+#: of scoring or analysis, or nothing beyond describing it.
+HANDLINGS = ("fix", "annotate", "exclude", "none")
 
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _RUN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_ISSUE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
+_DOI_RE = re.compile(r"10\.\d{4,9}/\S+")
 _REQUIRED = (
     "id",
     "title",
@@ -72,6 +88,7 @@ _REQUIRED = (
 __all__ = [
     "SCHEMA_VERSION",
     "LICENCES",
+    "HANDLINGS",
     "DatasetEntry",
     "is_research_only_licence",
     "load_catalog_data",
@@ -129,6 +146,7 @@ class DatasetEntry:
     requires_extras: tuple = ()
     suggested_analyses: dict = field(default_factory=dict)
     known_issues: tuple = ()
+    data_issues: tuple = ()
     licence_check: dict | None = None
     store_bytes_estimate: int | None = None
 
@@ -159,8 +177,10 @@ class DatasetEntry:
             requires_extras=tuple(d.get("requires_extras", ())),
             suggested_analyses=dict(d.get("suggested_analyses", {})),
             known_issues=tuple(d.get("known_issues", ())),
+            data_issues=tuple(dict(i) for i in d.get("data_issues", ())),
             licence_check=d.get("licence_check"),
-            store_bytes_estimate=d.get("store_bytes_estimate"),
+            store_bytes_estimate=d.get("store_bytes_estimate")
+            or (d.get("subsets") or {}).get("default", {}).get("store_bytes_estimate"),
         )
 
     @property
@@ -203,6 +223,22 @@ class DatasetEntry:
         """Total declared download size of a subset (unknown sizes count as 0)."""
         return sum(int(f.get("size") or 0) for f in self.subset_files(name))
 
+    def store_bytes(self, name: str | None = None) -> int | None:
+        """Estimated size of a subset once ingested into a store (``None`` if not recorded).
+
+        Measured by ingesting the subset; the ``full`` subset of a large dataset is many times the
+        ``default`` one, so a disk check must use the subset actually being ingested.
+        """
+        est = self.subset(name).get("store_bytes_estimate")
+        return int(est) if est else None
+
+    def data_issue(self, issue_id: str) -> dict:
+        """The data issue called ``issue_id`` (``KeyError`` if absent)."""
+        for i in self.data_issues:
+            if i.get("id") == issue_id:
+                return i
+        raise KeyError(f"{self.id}: no data issue {issue_id!r}")
+
     def runs(self, name: str | None = None) -> list:
         """The ingest runs a subset selects (every run for ``"runs": "all"``)."""
         wanted = self.subset(name).get("runs", "all")
@@ -226,6 +262,9 @@ class DatasetEntry:
             "attribution_required": self.attribution_required,
             "redistribution": "prohibited" if self.research_only else "allowed",
             "known_issues": list(self.known_issues),
+            "data_issues": [
+                {k: i.get(k) for k in ("id", "title", "handling")} for i in self.data_issues
+            ],
         }
 
     def as_dict(self) -> dict:
@@ -254,6 +293,7 @@ class DatasetEntry:
             "ingest": self.ingest,
             "suggested_analyses": self.suggested_analyses,
             "known_issues": list(self.known_issues),
+            "data_issues": [dict(i) for i in self.data_issues],
             "store_bytes_estimate": self.store_bytes_estimate,
         }
         if self.licence_check is not None:
@@ -319,6 +359,7 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
         errs.append(f"{did}: mapping {mp!r} is not shipped in camber/datasets/mappings/")
     for q in ing.get("quirks") or []:
         errs.extend(f"{did}: {e}" for e in validate_quirk(q))
+    _check_transforms(did, ing, errs)
     run_ids: set = set()
     for r in ing.get("runs") or []:
         rid = r.get("id", "")
@@ -338,6 +379,8 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
             errs.append(f"{did}/{rid}: run needs 'equip' and 'class'")
         if "label" not in r:
             errs.append(f"{did}/{rid}: run needs a 'label' ('' for fault-free)")
+        if "exclude" in r and not isinstance(r["exclude"], str):
+            errs.append(f"{did}/{rid}: 'exclude' must name the data issue that excludes the run")
     for dv in ing.get("derived") or []:
         if dv.get("op") != "splice":
             errs.append(f"{did}: unknown derived op {dv.get('op')!r}")
@@ -351,12 +394,146 @@ def _check_ingest(did: str, d: dict, file_names: dict, errs: list) -> set:
     return run_ids
 
 
+def _check_transforms(did: str, ing: dict, errs: list) -> None:
+    """CAMBER's own column semantics, applied at ingest in every mode (they are not corrections).
+
+    ``timestamp_format`` pins how timestamps parse (a month-first export must never be guessed);
+    ``recode`` maps a raw column's values (``{"SYS_CTL": {"2": 0}}``: a 0/1/2 mode point read as
+    occupied only in mode 1); ``derive`` adds a raw column as the sum of others (a dual-duct unit's
+    supply airflow is its cold- plus hot-deck flows).
+    """
+    for role, unit in (ing.get("units") or {}).items():
+        try:
+            canonical_unit(unit)
+        except ValueError as e:
+            errs.append(f"{did}: units[{role!r}]: {e}")
+    fmt = ing.get("timestamp_format")
+    if fmt is not None and (not isinstance(fmt, str) or "%" not in fmt):
+        errs.append(f"{did}: ingest.timestamp_format must be a strftime format string")
+    for col, table in (ing.get("recode") or {}).items():
+        if not isinstance(table, dict) or not table:
+            errs.append(f"{did}: recode {col!r} must map source values to numbers")
+            continue
+        for k, v in table.items():
+            try:
+                float(k)
+            except (TypeError, ValueError):
+                errs.append(f"{did}: recode {col!r} key {k!r} is not a number")
+            if not isinstance(v, (int, float)) or isinstance(v, bool):
+                errs.append(f"{did}: recode {col!r} value for {k!r} must be a number")
+    for dv in ing.get("derive") or []:
+        src = dv.get("sum") if isinstance(dv, dict) else None
+        if not (
+            isinstance(dv, dict) and dv.get("column") and isinstance(src, list) and len(src) >= 2
+        ):
+            errs.append(f"{did}: derive needs a 'column' and a 'sum' of at least two raw columns")
+
+
+def _check_targets(did: str, d: dict, errs: list) -> None:
+    labels = d.get("labels") or {}
+    types = set(labels.get("fault_types") or {})
+    for det, target in (labels.get("targets") or {}).items():
+        wanted = [target] if isinstance(target, str) else target
+        if not isinstance(wanted, list) or not wanted:
+            errs.append(f"{did}: target of {det!r} must be a fault type or a list of them")
+            continue
+        for t in wanted:
+            if types and t not in types:
+                errs.append(f"{did}: target {t!r} of {det!r} is not a declared fault type")
+
+
+def _check_issue_fields(did: str, iss: dict, errs: list) -> str:
+    iid = iss.get("id") if isinstance(iss, dict) else None
+    if not isinstance(iss, dict) or not _ISSUE_RE.match(str(iid or "")):
+        errs.append(f"{did}: data issue id {iid!r} must match {_ISSUE_RE.pattern}")
+        return str(iid)
+    where = f"{did}/issue {iid}"
+    for k in ("title", "evidence", "handling_note"):
+        if not str(iss.get(k) or "").strip():
+            errs.append(f"{where}: missing {k!r}")
+    cols = iss.get("columns")
+    if not isinstance(cols, list) or not cols or not all(isinstance(c, str) and c for c in cols):
+        errs.append(f"{where}: 'columns' must list the affected column(s)")
+    if not re.search(r"\d", str(iss.get("evidence") or "")):
+        errs.append(f"{where}: evidence must be quantitative (state the numbers)")
+    doc = iss.get("contradicts") or {}
+    if not str(doc.get("document") or "").strip():
+        errs.append(f"{where}: 'contradicts.document' must name the documentation contradicted")
+    if not _DOI_RE.search(str(doc.get("citation") or "")):
+        errs.append(f"{where}: 'contradicts.citation' must cite the documentation by DOI")
+    if iss.get("handling") not in HANDLINGS:
+        errs.append(f"{where}: handling must be one of {HANDLINGS}")
+    if iss.get("runs") is not None and not isinstance(iss.get("runs"), list):
+        errs.append(f"{where}: 'runs' must be a list of run ids or globs")
+    return str(iid)
+
+
+def _check_issues(did: str, d: dict, run_ids: set, errs: list) -> None:
+    """Data issues are described, evidenced, cited, and their handling is wired up."""
+    ing = d.get("ingest") or {}
+    issues: dict = {}
+    for iss in d.get("data_issues") or []:
+        iid = _check_issue_fields(did, iss, errs)
+        if iid in issues:
+            errs.append(f"{did}: duplicate data issue {iid!r}")
+        issues[iid] = iss if isinstance(iss, dict) else {}
+    fixes: set = set()
+    for q in ing.get("quirks") or []:
+        ref = q.get("issue") if isinstance(q, dict) else None
+        if ref not in issues:
+            errs.append(
+                f"{did}: quirk {q.get('op') if isinstance(q, dict) else q!r} must link to a "
+                f"described data issue (issue={ref!r})"
+            )
+            continue
+        if q.get("action") == "fix":
+            fixes.add(ref)
+            if issues[ref].get("handling") != "fix":
+                errs.append(f"{did}: fix quirk links to issue {ref!r}, whose handling is not 'fix'")
+    excluded_runs: dict = {}
+    for r in ing.get("runs") or []:
+        if "exclude" in r:
+            excluded_runs[r.get("id")] = r["exclude"]
+            if issues.get(r["exclude"], {}).get("handling") != "exclude":
+                errs.append(
+                    f"{did}/{r.get('id')}: excluded by {r['exclude']!r}, which is not an "
+                    "'exclude' data issue"
+                )
+    for iid, iss in issues.items():
+        where = f"{did}/issue {iid}"
+        if iss.get("handling") == "fix" and iid not in fixes:
+            errs.append(f"{where}: handling 'fix' needs a fix quirk with issue={iid!r}")
+        if iss.get("handling") != "exclude":
+            continue
+        ex = iss.get("exclude") or {}
+        if not any(ex.get(k) for k in ("runs", "columns", "analyses")):
+            errs.append(
+                f"{where}: handling 'exclude' must say what it excludes (runs, columns or analyses)"
+            )
+        for rid in ex.get("runs") or []:
+            if rid not in run_ids:
+                errs.append(f"{where}: excluded run {rid!r} is not a run")
+            elif excluded_runs.get(rid) != iid:
+                errs.append(f"{where}: run {rid!r} must carry exclude={iid!r}")
+        mp = ing.get("mapping")
+        if ex.get("columns") and mp and _package_has("mappings", mp):
+            aliases = {
+                k.lower() for k in json.loads(package_text("mappings", mp)).get("aliases", {})
+            }
+            for c in ex["columns"]:
+                if c.lower() in aliases:
+                    errs.append(f"{where}: excluded column {c!r} is mapped in {mp}")
+
+
 def _check_subsets(did: str, d: dict, file_names: dict, run_ids: set, errs: list) -> None:
     subsets = d.get("subsets") or {}
     for need in ("default", "full"):
         if need not in subsets:
             errs.append(f"{did}: needs a {need!r} subset")
     for sname, sub in subsets.items():
+        est = sub.get("store_bytes_estimate")
+        if not isinstance(est, int) or isinstance(est, bool) or est <= 0:
+            errs.append(f"{did}/{sname}: store_bytes_estimate must be a positive integer (bytes)")
         fl = sub.get("files", "all")
         if fl != "all":
             for n in fl:
@@ -401,6 +578,8 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
     file_names = _check_files(did, d, errs)
     run_ids = _check_ingest(did, d, file_names, errs)
     _check_subsets(did, d, file_names, run_ids, errs)
+    _check_targets(did, d, errs)
+    _check_issues(did, d, run_ids, errs)
     tmpl = (d.get("suggested_analyses") or {}).get("config_template")
     if tmpl is not None and not _package_has("configs", tmpl):
         errs.append(f"{did}: config template {tmpl!r} is not shipped in camber/datasets/configs/")

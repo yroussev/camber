@@ -145,6 +145,16 @@ def test_fix_ops_change_the_data_and_annotations_do_not():
     assert np.isnan(out2["C"].iloc[1]) and out2["C"].iloc[3] == 7.0
 
 
+def test_no_corrections_skips_every_fix_and_says_so():
+    quirks = [
+        {"op": "swap", "action": "fix", "columns": ["A", "B"], "note": "swapped"},
+        {"op": "annotate", "action": "annotate", "note": "a copied point"},
+    ]
+    out, notes = apply_quirks(_raw(), quirks, corrections=False)
+    pd.testing.assert_frame_equal(out, _raw())  # the published data, untouched
+    assert notes == ["fix skipped: swapped", "annotate: a copied point"]
+
+
 def test_swap_with_one_column_missing_is_an_error_and_both_missing_a_noop():
     q = [{"op": "swap", "action": "fix", "columns": ["A", "Z"], "note": "x"}]
     with pytest.raises(ValueError, match="missing"):

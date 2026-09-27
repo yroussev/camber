@@ -84,3 +84,23 @@ def test_benchmark_counts_false_positive():
     rep = benchmark(records, {"oa": "damper"})
     assert rep.per_detector["oa"].fp == 1
     assert rep.overall.false_positive_rate == 1.0
+
+
+def test_benchmark_detector_may_target_several_fault_types():
+    """An OA-fraction check sees a stuck damper *and* a blocked OA inlet: both are its targets."""
+    from camber.eval import benchmark
+
+    records = [
+        {"truth": "", "fired": []},
+        {"truth": "damper", "fired": ["oaf"]},
+        {"truth": "oa_blockage", "fired": ["oaf"]},
+        {"truth": "valve_leak", "fired": ["oaf"]},
+    ]
+    one = benchmark(records, {"oaf": "damper"})
+    many = benchmark(records, {"oaf": ["damper", "oa_blockage"]})
+    assert one.per_detector["oaf"].fp == 2 and one.correct_diagnosis == 0.3333
+    assert many.per_detector["oaf"].tp == 2 and many.per_detector["oaf"].fp == 1
+    assert many.correct_diagnosis == 0.6667
+    assert benchmark(records, {"oaf": ("damper", "oa_blockage")}).correct_diagnosis == (
+        many.correct_diagnosis
+    )

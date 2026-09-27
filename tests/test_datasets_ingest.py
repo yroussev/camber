@@ -96,6 +96,20 @@ def _file(name, body, *, archive=None, members=None):
     return f
 
 
+def _issue(iid, columns, handling, **extra) -> dict:
+    d = {
+        "id": iid,
+        "title": f"test issue {iid}",
+        "columns": columns,
+        "evidence": "the column reads -400.25 in 3 of 3 runs",
+        "contradicts": {"document": "Test Lab inventory, Table 2", "citation": "doi:10.0000/test"},
+        "handling": handling,
+        "handling_note": "what the test ingester does",
+    }
+    d.update(extra)
+    return d
+
+
 def _ahu_entry_dict(zbytes, **over) -> dict:
     members = ["TEST/AHU_ff.csv", "TEST/AHU_damper.csv", "TEST/AHU_leak.csv"]
     d = {
@@ -114,8 +128,12 @@ def _ahu_entry_dict(zbytes, **over) -> dict:
         "labels": {"targets": {"outdoor_air_fraction": "damper", "leaking_valve": "valve_leak"}},
         "files": [_file("test.zip", zbytes, archive="zip", members=members)],
         "subsets": {
-            "default": {"files": "all", "runs": ["fault_free", "damper"]},
-            "full": {"files": "all", "runs": "all"},
+            "default": {
+                "files": "all",
+                "runs": ["fault_free", "damper"],
+                "store_bytes_estimate": 1_000_000,
+            },
+            "full": {"files": "all", "runs": "all", "store_bytes_estimate": 2_000_000},
         },
         "ingest": {
             "adapter": "wide_csv",
@@ -125,8 +143,20 @@ def _ahu_entry_dict(zbytes, **over) -> dict:
             "mapping": "lbnl_sdahu.json",
             "units": {"oat": "degC"},
             "quirks": [
-                {"op": "mask", "action": "fix", "columns": ["SA_SPSPT"], "lt": -100, "note": "p"},
-                {"op": "annotate", "action": "annotate", "note": "left in place"},
+                {
+                    "op": "mask",
+                    "action": "fix",
+                    "columns": ["SA_SPSPT"],
+                    "lt": -100,
+                    "note": "p",
+                    "issue": "placeholder-setpoint",
+                },
+                {
+                    "op": "annotate",
+                    "action": "annotate",
+                    "note": "left in place",
+                    "issue": "odd-units",
+                },
             ],
             "runs": [
                 {
@@ -167,6 +197,10 @@ def _ahu_entry_dict(zbytes, **over) -> dict:
         },
         "suggested_analyses": {"config_template": "lbnl-sdahu.json"},
         "known_issues": ["synthetic"],
+        "data_issues": [
+            _issue("placeholder-setpoint", ["SA_SPSPT"], "fix"),
+            _issue("odd-units", ["SA_CFM"], "annotate"),
+        ],
     }
     d.update(over)
     assert validate_catalog({"schema": 1, "datasets": [d]}) == []
@@ -325,6 +359,95 @@ def test_ingest_is_idempotent_force_reingests_and_subset_change_replaces(ahu):
     full = _ingest.ingest_dataset(entry, store, subset="full")
     assert full.equipment == 4 and full.content_hash != first.content_hash
     assert "AHU__leak" in store.equipment()["ds-test-ahu"]
+
+
+def test_no_corrections_ingests_the_published_data_and_records_the_mode(ahu):
+    entry, opener, tmp = ahu
+    _ops.fetch_dataset(entry, opener=opener)
+    store = ParquetStore(str(tmp / "store"))
+    fixed = _ingest.ingest_dataset(entry, store)
+    ff = store.read_role_frame(facility_id="ds-test-ahu", equip="AHU__fault_free")
+    assert Role.DUCT_STATIC_SP not in ff.columns  # the fix masked the placeholder
+    meta = store.facilities_meta()["ds-test-ahu"]["dataset"]
+    assert meta["corrections"] == "applied" and fixed.corrections
+    assert [i["id"] for i in meta["data_issues"]] == ["placeholder-setpoint", "odd-units"]
+    raw = _ingest.ingest_dataset(entry, store, corrections=False)
+    assert not raw.skipped and raw.content_hash != fixed.content_hash  # mode changes the hash
+    assert not raw.corrections and any(n.startswith("fix skipped:") for n in raw.notes)
+    ff = store.read_role_frame(facility_id="ds-test-ahu", equip="AHU__fault_free")
+    assert ff[Role.DUCT_STATIC_SP].median() == pytest.approx(-400.25)  # as published
+    assert store.facilities_meta()["ds-test-ahu"]["dataset"]["corrections"].startswith("skipped")
+    assert _ingest.ingest_dataset(entry, store, corrections=False).skipped
+    assert not _ingest.ingest_dataset(entry, store).skipped  # back to corrected: re-ingests
+
+
+def test_excluded_runs_are_ingested_but_never_scored(ahu):
+    entry, opener, tmp = ahu
+    d = entry.as_dict()
+    d["data_issues"].append(
+        {
+            "id": "leak-not-a-leak",
+            "title": "the leak run carries no leak",
+            "columns": ["CHWC_VLV_DM"],
+            "evidence": "identical to fault-free in 100% of rows",
+            "contradicts": {"document": "inventory Table 3", "citation": "doi:10.0000/test"},
+            "handling": "exclude",
+            "handling_note": "ingested for inspection; not scored",
+            "exclude": {"runs": ["leak"]},
+        }
+    )
+    next(r for r in d["ingest"]["runs"] if r["id"] == "leak")["exclude"] = "leak-not-a-leak"
+    assert validate_catalog({"schema": 1, "datasets": [d]}) == []
+    entry = DatasetEntry.from_dict(d)
+    _ops.fetch_dataset(entry, opener=opener)
+    store = ParquetStore(str(tmp / "store"))
+    res = _ingest.ingest_dataset(entry, store, subset="full")
+    meta = store.facilities_meta()["ds-test-ahu"]["dataset"]
+    assert "AHU__leak" in store.equipment()["ds-test-ahu"] and res.equipment == 4
+    assert "AHU__leak" not in meta["labels"]
+    assert meta["excluded"] == {"AHU__leak": {"label": "valve_leak", "issue": "leak-not-a-leak"}}
+    scored = _ops.score_dataset(entry, store)
+    assert {r["equip"] for r in scored["records"]} == {"AHU__fault_free", "AHU__damper"}
+
+
+def test_read_raw_run_pins_the_timestamp_format_and_applies_transforms(tmp_path):
+    from camber.model.mapping import MappingProvider
+
+    csv = tmp_path / "run.csv"
+    pd.DataFrame(
+        {
+            "Datetime": [
+                "01/02/2018 00:00",
+                "01/02/2018 00:01",
+                "13/02/2018 00:02",
+                "01/02/2018 00:03",
+            ],
+            "SYS_CTL": [0, 1, 2, 2],
+            "CSA_CFM": [100.0, 200.0, 300.0, None],
+            "HSA_CFM": [10.0, 20.0, 30.0, 40.0],
+            "OA_TEMP": [50.0, 51.0, 52.0, 53.0],
+        }
+    ).to_csv(csv, index=False)
+    mapping = MappingProvider.from_dict(
+        {"aliases": {"SYS_CTL": "occupancy", "SA_CFM_TOTAL": "airflow", "OA_TEMP": "oat"}}
+    )
+    spec = {
+        "timestamp": "Datetime",
+        "timestamp_format": "%m/%d/%Y %H:%M",
+        "recode": {"SYS_CTL": {"2": 0}},
+        "derive": [{"column": "SA_CFM_TOTAL", "sum": ["CSA_CFM", "HSA_CFM"]}],
+    }
+    raw, notes = _ingest.read_raw_run(str(csv), mapping, spec)
+    # month-first: Jan 2nd, never Feb 1st; "13/02" is not a month-first stamp -> dropped
+    assert list(raw.index) == list(
+        pd.to_datetime(["2018-01-02 00:00", "2018-01-02 00:01", "2018-01-02 00:03"])
+    )
+    assert raw["SYS_CTL"].tolist() == [0, 1, 0]  # setback (2) is not occupied
+    assert raw["SA_CFM_TOTAL"].tolist()[:2] == [110.0, 220.0]
+    assert np.isnan(raw["SA_CFM_TOTAL"].iloc[2])  # a missing deck flow is not a zero
+    assert notes == []
+    frame, _, _ = _ingest.read_wide_run(str(csv), mapping, {**spec, "resample": None})
+    assert set(frame.columns) == {Role.OCCUPANCY, Role.AIRFLOW, Role.OAT}
 
 
 def test_crash_between_staging_and_swap_keeps_old_data(ahu, monkeypatch):
@@ -512,12 +635,14 @@ def _bdg2_entry(files):
             "meters": ["electricity", "chilledwater"],
             "max_buildings_per_site": 1,
             "include_buildings": ["Ant_office_A"],
+            "store_bytes_estimate": 1_000_000,
         },
         "full": {
             "files": "all",
             "sites": "all",
             "meters": ["electricity", "chilledwater"],
             "max_buildings_per_site": None,
+            "store_bytes_estimate": 2_000_000,
         },
     }
     d["ingest"]["facility"] = "ds-tb"
@@ -586,7 +711,11 @@ def test_cli_full_flow(cli_catalog, capsys):
     assert main(["datasets", "list"]) == 0
     assert main(["datasets", "list", "--json", "--labeled", "--kind", "simulated"]) == 0
     assert main(["datasets", "info", "test-ahu"]) == 0
+    out = capsys.readouterr().out
+    assert "data issues in the published data" in out and "[fix] test issue" in out
+    assert "--no-corrections" in out and "/    1.0 MB" in out  # per-subset store estimate
     assert main(["datasets", "info", "test-ahu", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["data_issues"][0]["id"] == "placeholder-setpoint"
     assert main(["datasets", "fetch"]) == 1  # nothing named
     assert main(["datasets", "fetch", "test-ahu"]) == 0
     assert "Please cite: Test Lab (2025)" in capsys.readouterr().out
@@ -596,6 +725,9 @@ def test_cli_full_flow(cli_catalog, capsys):
     assert "ingested" in capsys.readouterr().out
     assert main(["datasets", "ingest", "--all", "--store", store, "--quiet"]) == 0
     assert "skipped" in capsys.readouterr().out
+    assert main(["datasets", "ingest", "test-ahu", "--store", store, "--no-corrections"]) == 0
+    assert "published data as-is" in capsys.readouterr().out
+    assert main(["datasets", "ingest", "test-ahu", "--store", store, "--quiet"]) == 0
     assert main(["datasets", "status", "--store", store]) == 0
     assert main(["datasets", "status", "--json"]) == 0
     cfg = str(tmp / "c.json")
@@ -631,6 +763,12 @@ def test_cli_exit_codes(cli_catalog, monkeypatch, capsys):
     monkeypatch.setattr(ds, "_entries", lambda: (entry,))
     assert main(["datasets", "fetch", "test-ahu", "--quiet"]) == 4
     assert "not enough disk" in capsys.readouterr().err
+    # ingest warns (but proceeds) when the store's disk is smaller than the subset's estimate
+    monkeypatch.setattr(ds, "ingest", lambda *a, **k: (_ for _ in ()).throw(KeyError("stop")))
+    store = str(_tmp / "no" / "such" / "store")
+    assert main(["datasets", "ingest", "test-ahu", "--store", store, "--subset", "full"]) == 1
+    err = capsys.readouterr().err
+    assert "needs about 2.0 MB in the store" in err and "(full)" in err
 
 
 def test_public_api_wrappers(ahu, monkeypatch):

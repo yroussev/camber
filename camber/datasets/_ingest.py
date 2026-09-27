@@ -7,10 +7,19 @@ compares the findings with the labels recorded on the facility. A ``splice`` der
 fault-free run and a faulted run at an onset date (``<equip>__onset_<scenario>``) for fault-onset /
 drift exercises.
 
-Pipeline per run: column-pruned ``read_csv`` (only mapped + quirk columns, as the LBNL benchmark
-does) -> ``fix`` quirks -> point -> role mapping -> resample (default 15 min: mean, which is the
-duty of a regularly-sampled status point; the warm-up/cool-down exclusion flags take the max) ->
-source-unit -> IP conversion -> percent normalization -> plausibility warnings -> staging store.
+Pipeline per run (:func:`read_raw_run` is shared with the LBNL benchmark): column-pruned
+``read_csv`` (only mapped, quirk and transform columns; timestamps parsed with the entry's pinned
+``timestamp_format``) -> ``fix`` quirks (skipped with ``corrections=False``) -> CAMBER's column
+transforms (``recode`` / ``derive``) -> point -> role mapping -> resample (default 15 min: mean,
+which is the duty of a regularly-sampled status point; the warm-up/cool-down exclusion flags take
+the max) -> source-unit -> IP conversion -> percent normalization -> plausibility warnings ->
+staging store.
+
+**Corrections.** ``fix`` quirks correct problems in the published data (each is a described data
+issue on the catalog entry). ``corrections=False`` (``camber datasets ingest --no-corrections``)
+ingests the data exactly as published so a learner can compare the two; the mode is part of the
+content hash and is recorded in the provenance. Runs excluded by a data issue (e.g. a "fault" run
+that contains no fault) are ingested for inspection but carry no scoring label.
 
 **Idempotent and crash-safe.** A content hash covers the verified file sha256s, the canonical
 ingest spec, the subset, the mapping bytes and :data:`INGEST_VERSION`. When every target facility
@@ -65,6 +74,7 @@ class IngestResult:
     content_hash: str = ""
     warnings: list = field(default_factory=list)
     notes: list = field(default_factory=list)
+    corrections: bool = True
 
     def as_dict(self) -> dict:
         """A JSON-friendly dict."""
@@ -174,8 +184,19 @@ def _extract_members(entry, runs, inputs: dict, root: str) -> dict:
     return out
 
 
-def content_hash(entry: DatasetEntry, subset: str, shas: dict, mapping_text: str = "") -> str:
-    """The idempotency key of an ingest (see the module docstring)."""
+def content_hash(
+    entry: DatasetEntry,
+    subset: str,
+    shas: dict,
+    mapping_text: str = "",
+    *,
+    corrections: bool = True,
+) -> str:
+    """The idempotency key of an ingest (see the module docstring).
+
+    A raw (``corrections=False``) and a corrected ingest of the same inputs hash differently, so
+    switching mode always re-ingests.
+    """
     payload = {
         "dataset": entry.id,
         "subset": subset,
@@ -184,6 +205,7 @@ def content_hash(entry: DatasetEntry, subset: str, shas: dict, mapping_text: str
         "subset_spec": entry.subset(subset),
         "mapping": hashlib.sha256(mapping_text.encode("utf-8")).hexdigest(),
         "ingest_version": INGEST_VERSION,
+        "corrections": bool(corrections),
     }
     blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()
@@ -202,19 +224,80 @@ def _resample(frame: pd.DataFrame, rule: str | None) -> pd.DataFrame:
     return pd.concat(cols, axis=1)
 
 
-def read_wide_run(path: str, mapping: MappingProvider, spec: dict, run_id: str | None = None):
-    """One wide CSV run -> (role frame at the spec's resample, quirk notes, warnings)."""
+def transform_columns(spec: dict) -> set:
+    """Raw columns CAMBER's ``recode`` / ``derive`` transforms read (a pruned read keeps them)."""
+    out = set((spec.get("recode") or {}).keys())
+    for dv in spec.get("derive") or []:
+        out.update(dv.get("sum") or [])
+    return out
+
+
+def apply_transforms(raw: pd.DataFrame, spec: dict) -> pd.DataFrame:
+    """Apply the spec's ``recode`` then ``derive`` to a raw frame (a copy; see the catalog docs)."""
+    recode = spec.get("recode") or {}
+    derive = spec.get("derive") or []
+    if not recode and not derive:
+        return raw
+    out = raw.copy()
+    for col, table in recode.items():
+        if col in out.columns:
+            vals = pd.to_numeric(out[col], errors="coerce")
+            out[col] = vals.replace({float(k): float(v) for k, v in table.items()})
+    for dv in derive:
+        src = [c for c in dv["sum"] if c in out.columns]
+        if len(src) == len(dv["sum"]):
+            out[dv["column"]] = (
+                out[src].apply(pd.to_numeric, errors="coerce").sum(axis=1, min_count=len(src))
+            )
+    return out
+
+
+def read_raw_run(
+    path: str,
+    mapping: MappingProvider,
+    spec: dict,
+    run_id: str | None = None,
+    *,
+    corrections: bool = True,
+):
+    """One wide CSV run -> ``(raw frame indexed by timestamp, quirk notes)``, before role mapping.
+
+    Reads only the timestamp, the mapped columns and the columns quirks and transforms need;
+    parses timestamps with the spec's ``timestamp_format`` when it pins one; drops unparseable and
+    duplicated stamps; applies the ``fix`` quirks (unless ``corrections`` is false) and CAMBER's
+    ``recode`` / ``derive`` transforms. Shared by the ingester and ``examples/lbnl_fdd``.
+    """
     ts = spec.get("timestamp", "Datetime")
     quirks = spec.get("quirks") or []
-    extra = quirk_columns(quirks)
+    extra = quirk_columns(quirks) | transform_columns(spec)
+    derived = {dv.get("column") for dv in spec.get("derive") or []}
+    fmt = spec.get("timestamp_format")
     raw = pd.read_csv(
         path,
-        usecols=lambda c: c == ts or c in extra or mapping.role_of(c) is not None,
-        parse_dates=[ts],
-    ).set_index(ts)
+        usecols=lambda c: c == ts or c in extra or (c not in derived and mapping.role_of(c)),
+    )
+    raw[ts] = (
+        pd.to_datetime(raw[ts], format=fmt, errors="coerce")
+        if fmt
+        else pd.to_datetime(raw[ts], errors="coerce")
+    )
+    raw = raw.set_index(ts)
     raw = raw[~raw.index.isna()]
     raw = raw[~raw.index.duplicated(keep="first")].sort_index()
-    raw, notes = apply_quirks(raw, quirks, run=run_id)
+    raw, notes = apply_quirks(raw, quirks, run=run_id, corrections=corrections)
+    return apply_transforms(raw, spec), notes
+
+
+def read_wide_run(
+    path: str,
+    mapping: MappingProvider,
+    spec: dict,
+    run_id: str | None = None,
+    *,
+    corrections: bool = True,
+):
+    """One wide CSV run -> (role frame at the spec's resample, quirk notes, warnings)."""
+    raw, notes = read_raw_run(path, mapping, spec, run_id, corrections=corrections)
     cols: dict = {}
     for c in raw.columns:
         role = mapping.role_of(c)
@@ -331,7 +414,7 @@ def _base_meta(entry: DatasetEntry, root: str, subset: str, shas: dict, chash: s
 # --------------------------------------------------------------------------- adapters
 
 
-def _ingest_wide(entry, subset, inputs, root, staging, progress) -> tuple:
+def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:
     spec = entry.ingest
     mapping_text = package_text("mappings", spec["mapping"])
     mapping = MappingProvider.from_dict(json.loads(mapping_text))
@@ -343,7 +426,7 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress) -> tuple:
     st = ParquetStore(staging)
     keep = {d[k] for d in spec.get("derived") or [] for k in ("base", "fault")}
     frames: dict = {}
-    labels, onsets, notes, warns = {}, {}, [], []
+    labels, onsets, excluded, notes, warns = {}, {}, {}, [], []
     for dup, canon in duplicates.items():
         notes.append(f"{dup} skipped: byte-identical to {canon} in the archive (one run, not two)")
     rows = 0
@@ -351,12 +434,16 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress) -> tuple:
         if progress:
             progress(f"{entry.id}: run {i}/{len(runs)} {run['id']}")
         path = paths[(run["file"], run["member"])]
-        frame, qn, w = read_wide_run(path, mapping, spec, run_id=run["id"])
+        frame, qn, w = read_wide_run(path, mapping, spec, run_id=run["id"], corrections=corrections)
         notes += [n for n in qn if n not in notes]
         warns += w
         eq = _equip_id(run)
         rows += st.write_role_frame(frame, facility_id=fid, equip=eq, equip_class=run["class"])
-        labels[eq] = run["label"]
+        if run.get("exclude"):
+            # kept for inspection, never scored: the data issue says why
+            excluded[eq] = {"label": run["label"], "issue": run["exclude"]}
+        else:
+            labels[eq] = run["label"]
         if run["id"] in keep:
             frames[run["id"]] = frame
     by_id = {r["id"]: r for r in runs}
@@ -373,11 +460,13 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress) -> tuple:
     extra = {
         "labels": labels,
         "onsets": onsets,
+        "excluded": excluded,
         "quirks": notes,
         "runs": len(runs),
         "duplicates": duplicates,
     }
-    return {fid: (entry.title, rows, len(labels) + len(onsets), extra)}, mapping_text, warns
+    n_eq = len(labels) + len(excluded) + len(onsets)
+    return {fid: (entry.title, rows, n_eq, extra)}, mapping_text, warns
 
 
 def _bdg2_buildings(meta: pd.DataFrame, sub: dict, headers: dict) -> dict:
@@ -401,7 +490,7 @@ def _bdg2_buildings(meta: pd.DataFrame, sub: dict, headers: dict) -> dict:
     return out
 
 
-def _ingest_bdg2(entry, subset, inputs, root, staging, progress) -> tuple:
+def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:
     spec = entry.ingest
     sub = entry.subset(subset)
     src = spec.get("meter_source", "cleaned")
@@ -481,8 +570,12 @@ def ingest_dataset(
     data_dir=None,
     force: bool = False,
     progress: Callable[[str], None] | None = None,
+    corrections: bool = True,
 ) -> IngestResult:
-    """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module."""
+    """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module.
+
+    ``corrections=False`` skips the entry's ``fix`` quirks and ingests the data as published.
+    """
     st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
     sname = subset or "default"
     entry.subset(sname)  # KeyError on an unknown subset, before any work
@@ -492,9 +585,11 @@ def ingest_dataset(
     mapping_text = (
         package_text("mappings", entry.ingest["mapping"]) if entry.ingest.get("mapping") else ""
     )
-    chash = content_hash(entry, sname, shas, mapping_text)
+    chash = content_hash(entry, sname, shas, mapping_text, corrections=corrections)
     existing = _existing_hashes(st, entry.id)
-    result = IngestResult(dataset_id=entry.id, store=os.path.abspath(st.root), subset=sname)
+    result = IngestResult(
+        dataset_id=entry.id, store=os.path.abspath(st.root), subset=sname, corrections=corrections
+    )
     result.content_hash = chash
     if (
         not force
@@ -509,9 +604,10 @@ def ingest_dataset(
     staging = _staging_root(st)
     try:
         facs, _, warns = _ADAPTERS[entry.ingest["adapter"]](
-            entry, sname, inputs, root, staging, progress
+            entry, sname, inputs, root, staging, progress, corrections
         )
         base = _base_meta(entry, root, sname, shas, chash)
+        base["corrections"] = "applied" if corrections else "skipped (published data as-is)"
         for fid, (name, rows, n_eq, extra) in facs.items():
             _swap_in(st, staging, fid)
             _register(st, fid, name, {**base, **extra, "rows": rows, "equipment": n_eq})

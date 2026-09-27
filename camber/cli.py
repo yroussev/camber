@@ -437,21 +437,59 @@ def _cmd_datasets_info(args) -> int:
         print(f"equipment : {e.equipment}")
     if e.teaches:
         print("teaches   : " + "; ".join(e.teaches))
-    print("\nsubsets:")
+    print("\nsubsets (download / estimated store size):")
     for name, sub in e.subsets.items():
         nruns = len(e.runs(name)) if e.ingest.get("runs") else 0
         runs = f", {nruns} run(s)" if nruns else ""
+        store = e.store_bytes(name)
         print(
-            f"  {name:8s} {_mb(e.download_bytes(name)):>9s}{runs} -- {sub.get('description', '')}"
+            f"  {name:8s} {_mb(e.download_bytes(name)):>9s} / {_mb(store) if store else '?':>9s}"
+            f"{runs} -- {sub.get('description', '')}"
         )
     rules = (e.suggested_analyses or {}).get("rules")
     if rules:
         print("\nsuggested rules: " + ", ".join(rules))
+    if e.data_issues:
+        print("\ndata issues in the published data, and how CAMBER handles them:")
+        for i in e.data_issues:
+            doc = i.get("contradicts") or {}
+            print(
+                f"  [{i['handling']}] {i['title']}  ({i['id']}; columns: {', '.join(i['columns'])})"
+            )
+            print(f"      evidence: {i['evidence']}")
+            print(f"      contradicts: {doc.get('document', '')} ({doc.get('citation', '')})")
+            print(f"      handling: {i['handling_note']}")
+        print("  (`camber datasets ingest --no-corrections` ingests the published data as-is)")
     if e.known_issues:
         print("\nknown issues:")
         for k in e.known_issues:
             print(f"  - {k}")
     return 0
+
+
+def _store_space_warning(e, subset, store) -> str | None:
+    """A warning when the store's filesystem has less free space than the subset's estimate."""
+    import shutil
+
+    est = e.store_bytes(subset)
+    if not est:
+        return None
+    probe = os.path.abspath(store)
+    while probe and not os.path.exists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    try:
+        free = shutil.disk_usage(probe).free
+    except OSError:  # pragma: no cover - unreadable mount
+        return None
+    if free < est:
+        return (
+            f"{e.id} ({subset or 'default'}) needs about {_mb(est)} in the store but only "
+            f"{_mb(free)} is free at {probe}"
+        )
+    return None
 
 
 def _progress_printer():
@@ -511,7 +549,11 @@ def _cmd_datasets_ingest(args) -> int:
     if args.all:  # only what has been fetched for this subset
         fetched = {r["id"] for r in ds.status(data_dir=args.dir) if r["fetched"].get(sname)}
         entries = [e for e in entries if e.id in fetched and sname in e.subsets]
+    corrections = not args.no_corrections
     for e in entries:
+        warn = _store_space_warning(e, args.subset, args.store)
+        if warn:
+            print(f"warning: {warn}", file=sys.stderr)
         res = ds.ingest(
             e.id,
             args.store,
@@ -519,13 +561,15 @@ def _cmd_datasets_ingest(args) -> int:
             data_dir=args.dir,
             force=args.force,
             progress=None if args.quiet else (lambda m: print(f"  {m}", file=sys.stderr)),
+            corrections=corrections,
         )
         if res.skipped:
             print(f"{e.id}: up to date in {res.store} ({', '.join(res.facilities)}) -- skipped")
             continue
+        mode = "" if corrections else " (published data as-is: fix quirks skipped)"
         print(
             f"{e.id}: ingested {res.rows:,} rows, {res.equipment} equipment into "
-            f"{', '.join(res.facilities)} ({res.store})"
+            f"{', '.join(res.facilities)} ({res.store}){mode}"
         )
         for n in res.notes:
             print(f"  quirk {n}")
@@ -1406,6 +1450,13 @@ def _build_parser() -> argparse.ArgumentParser:
     _targets(dsg, fetching=False)
     dsg.add_argument("--store", required=True, help="ParquetStore directory")
     dsg.add_argument("--force", action="store_true", help="re-ingest even if unchanged")
+    dsg.add_argument(
+        "--no-corrections",
+        dest="no_corrections",
+        action="store_true",
+        help="skip the catalog's fix quirks and ingest the data exactly as published "
+        "(`datasets info <id>` lists what each fix corrects); recorded in the provenance",
+    )
     dsg.set_defaults(func=_cmd_datasets_ingest)
 
     dss = dssub.add_parser("status", help="what is fetched, its size on disk, what is ingested")

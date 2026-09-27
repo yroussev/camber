@@ -1,14 +1,17 @@
 """Declared dataset quirks: a closed set of operations on raw source columns.
 
-Open datasets carry mistakes. The catalog records each one it knows about as a *quirk* on the
-entry's ingest spec, with an ``action``:
+Open datasets carry mistakes. The catalog links each dataset exactly as its publisher provides
+it and *describes* every problem it knows of in the published data as a **data issue** on the
+entry (the columns, the evidence, the documentation it contradicts and how CAMBER handles it --
+see :mod:`._catalog`). A quirk is the mechanical part of that handling, declared on the entry's
+ingest spec with an ``action`` and the ``issue`` it belongs to:
 
-* ``"fix"`` -- a **labelling** error the ingester corrects before mapping (e.g. the LBNL chiller
-  plant's outdoor wet-bulb and dry-bulb columns are exported swapped). Fixing it is the only way a
-  learner's analysis means what the column names say.
-* ``"annotate"`` -- a **genuine data fault** that is left in place on purpose (a copied point, a
-  sensor floor): it is what an exercise asks the learner to find. It is recorded in the facility's
-  provenance and never changes the data.
+* ``"fix"`` -- an error the ingester corrects before mapping (e.g. the LBNL chiller plant's outdoor
+  wet-bulb and dry-bulb columns are exported swapped). ``camber datasets ingest --no-corrections``
+  skips every fix, so a learner can compare the published data with the corrected one.
+* ``"annotate"`` -- a problem left in place on purpose (a copied point, a sensor floor, a unit the
+  publisher did not document): it is recorded in the facility's provenance and never changes the
+  data.
 
 Operations (``op``), all on raw source columns before the point -> role mapping:
 
@@ -121,16 +124,21 @@ def _mask(df: pd.DataFrame, q: dict) -> pd.DataFrame:
     return df
 
 
-def apply_quirks(df: pd.DataFrame, quirks, *, run: str | None = None):
+def apply_quirks(df: pd.DataFrame, quirks, *, run: str | None = None, corrections: bool = True):
     """Apply the ``fix`` quirks to a raw frame; return ``(frame, notes)``.
 
     ``notes`` lists every quirk that applies to this run -- fixes *and* annotations -- as
-    ``"<action>: <note>"`` for the provenance record. The input frame is not modified.
+    ``"<action>: <note>"`` for the provenance record. With ``corrections=False`` no fix is applied
+    (the published data is kept as-is) and each skipped fix is noted as ``"fix skipped: <note>"``.
+    The input frame is not modified.
     """
     out = df.copy()
     notes = []
     for q in quirks or []:
         if not applies_to(q, run):
+            continue
+        if q.get("action") == "fix" and not corrections:
+            notes.append(f"fix skipped: {q.get('note', '')}")
             continue
         notes.append(f"{q.get('action')}: {q.get('note', '')}")
         if q.get("action") != "fix":

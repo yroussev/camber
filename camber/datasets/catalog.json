@@ -102,12 +102,14 @@
       "damper_stuck_075",
       "damper_stuck_100_short",
       "coi_leakage_050"
-     ]
+     ],
+     "store_bytes_estimate": 45000000
     },
     "full": {
      "description": "every run in the archive",
      "files": "all",
-     "runs": "all"
+     "runs": "all",
+     "store_bytes_estimate": 95000000
     }
    },
    "ingest": {
@@ -125,7 +127,8 @@
        "SA_SPSPT"
       ],
       "lt": -100,
-      "note": "In every faulted run SA_SPSPT is a constant -400.25 (a placeholder, not a setpoint); masked to missing."
+      "note": "In every faulted run SA_SPSPT is a constant -400.25 (a placeholder, not a setpoint); masked to missing.",
+      "issue": "sa-spspt-placeholder"
      },
      {
       "op": "mask",
@@ -134,12 +137,14 @@
        "SA_SP"
       ],
       "gt": 100,
-      "note": "In the fault-free run SA_SP is a flat ~402 (the 1.61 inH2O setpoint expressed in Pa), not a measured static pressure; masked to missing. In the faulted runs SA_SP is the measured static in inH2O."
+      "note": "In the fault-free run SA_SP is not a measured static pressure: it holds ~402-403 (the ~1.61 inH2O setpoint in Pa) with the fan off as well as on; masked to missing. In the faulted runs SA_SP is the measured static in inH2O and is kept.",
+      "issue": "sa-sp-fault-free-in-pa"
      },
      {
       "op": "annotate",
       "action": "annotate",
-      "note": "SA_CFM magnitudes (~3e5) are implausible for cfm and the units are undocumented; treat the airflow role as relative, not absolute."
+      "note": "SA_CFM magnitudes (~3e5) are implausible for cfm and the units are undocumented; treat the airflow role as relative, not absolute.",
+      "issue": "sa-ra-cfm-units"
      }
     ],
     "runs": [
@@ -338,7 +343,54 @@
     "damper_stuck_100 is a short run (about 7 months).",
     "The coi_leakage_010/025/040/050 members are byte-identical (same size and CRC), as are the four oa_bias_* members: they are one run each, not a severity sweep, so they cannot measure how detection varies with severity."
    ],
-   "store_bytes_estimate": 60000000
+   "data_issues": [
+    {
+     "id": "sa-spspt-placeholder",
+     "title": "SA_SPSPT is a -400.25 placeholder in every faulted run",
+     "columns": [
+      "SA_SPSPT"
+     ],
+     "evidence": "All 20 faulted runs export SA_SPSPT as the constant -400.25; the fault-free run exports the setpoint 1.60746 inH2O.",
+     "contradicts": {
+      "document": "SDAHU inventory Table 2 (SA_SPSPT: supply air duct static pressure setpoint, inches H2O)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "fix",
+     "handling_note": "Masked to missing (mask quirk: values below -100), so static-pressure rules decline instead of reading a negative setpoint."
+    },
+    {
+     "id": "sa-sp-fault-free-in-pa",
+     "title": "Fault-free SA_SP is the static-pressure setpoint in Pa, not a measurement",
+     "columns": [
+      "SA_SP"
+     ],
+     "runs": [
+      "fault_free"
+     ],
+     "evidence": "Fault-free SA_SP holds 401.9 with the fan off (median) and 403.5 with it on (range 401.8-410.6): ~1.61 inH2O expressed in Pa, and it never falls toward zero with the fan stopped. In the 20 faulted runs SA_SP is the measured static in inH2O (fan-on median 1.51-1.61, fan-off median 0.003-0.005).",
+     "contradicts": {
+      "document": "SDAHU inventory Table 2 (SA_SP: supply air duct static pressure, inches H2O)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "fix",
+     "handling_note": "Masked to missing in the fault-free run (mask quirk: values above 100); the faulted runs' measured static is kept."
+    },
+    {
+     "id": "sa-ra-cfm-units",
+     "title": "SA_CFM and RA_CFM are not in cfm",
+     "columns": [
+      "SA_CFM",
+      "RA_CFM"
+     ],
+     "evidence": "SA_CFM peaks at 1,266,232 and has a fan-on median of 596,187 -- implausible as cfm for one floor's air handler.",
+     "contradicts": {
+      "document": "SDAHU inventory Table 2 (SA_CFM / RA_CFM: supply / return airflow, CFM)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; treat the airflow role as relative, not absolute."
+    }
+   ]
   },
   {
    "id": "lbnl-fcu",
@@ -470,12 +522,14 @@
       "OADMPRStuck_0",
       "OADMPRStuck_100",
       "OADMPRLeak_50"
-     ]
+     ],
+     "store_bytes_estimate": 25000000
     },
     "full": {
      "description": "every run in the archive",
      "files": "all",
-     "runs": "all"
+     "runs": "all",
+     "store_bytes_estimate": 250000000
     }
    },
    "ingest": {
@@ -895,7 +949,7 @@
     "Timestamps are month-first (MM/DD/YYYY HH:MM).",
     "FCU_Fouling_Cooling_Airside_Minor and FCU_Fouling_Heating_Airside_Minor are byte-identical (same size and CRC); one of the two labels is wrong."
    ],
-   "store_bytes_estimate": 20000000
+   "data_issues": []
   },
   {
    "id": "lbnl-ddahu",
@@ -1029,12 +1083,14 @@
       "fault_free",
       "DMPRStuck_OA_0",
       "DMPRStuck_OA_100"
-     ]
+     ],
+     "store_bytes_estimate": 12000000
     },
     "full": {
      "description": "every run in the archive",
      "files": "all",
-     "runs": "all"
+     "runs": "all",
+     "store_bytes_estimate": 175000000
     }
    },
    "ingest": {
@@ -1508,7 +1564,7 @@
     "Each run's CSV is ~300 MB uncompressed; the full subset extracts ~17 GB.",
     "Timestamps are month-first (MM/DD/YYYY HH:MM)."
    ],
-   "store_bytes_estimate": 15000000
+   "data_issues": []
   },
   {
    "id": "lbnl-fpu",
@@ -1650,12 +1706,14 @@
       "PFPU__VAVDMPRStuck_100pct",
       "PFPU__ReheatVLVStuck_0pct",
       "PFPU__ReheatVLVLeak_50pctMaxFlow"
-     ]
+     ],
+     "store_bytes_estimate": 20000000
     },
     "full": {
      "description": "all 62 runs (31 PFPU + 31 SFPU)",
      "files": "all",
-     "runs": "all"
+     "runs": "all",
+     "store_bytes_estimate": 215000000
     }
    },
    "ingest": {
@@ -2180,7 +2238,7 @@
     "Scenario ids replace '%' with 'pct', '+' with 'p' and a leading '-' with 'm'.",
     "No detector targets are declared yet: score reports overall detection only."
    ],
-   "store_bytes_estimate": 30000000
+   "data_issues": []
   },
   {
    "id": "lbnl-chiller",
@@ -2281,12 +2339,14 @@
       "coolingtower_fouling_095",
       "bypass_stuck_075",
       "chiller_bias_2"
-     ]
+     ],
+     "store_bytes_estimate": 25000000
     },
     "full": {
      "description": "all 24 runs",
      "files": "all",
-     "runs": "all"
+     "runs": "all",
+     "store_bytes_estimate": 125000000
     }
    },
    "ingest": {
@@ -2304,7 +2364,8 @@
        "OA_TEMP",
        "OA_TEMP_WB"
       ],
-      "note": "The exported outdoor dry-bulb (OA_TEMP) and wet-bulb (OA_TEMP_WB) columns are swapped relative to the dataset inventory: the tower leaving-water setpoint tracks OA_TEMP + 8 F (median error 0.28 F) and OA_TEMP_WB exceeds OA_TEMP in 97% of rows. Swapped back before mapping."
+      "note": "The exported outdoor dry-bulb (OA_TEMP) and wet-bulb (OA_TEMP_WB) columns are swapped relative to the dataset inventory; swapped back before mapping.",
+      "issue": "oa-dry-wet-bulb-swapped"
      },
      {
       "op": "swap",
@@ -2313,7 +2374,8 @@
        "CWL_SEC_SW_TEMP",
        "CWL_SEC_RW_TEMP"
       ],
-      "note": "The secondary chilled-water loop's supply and return temperatures are swapped: as labelled, return is colder than supply in 98% of flowing hours. Swapped back before mapping (the primary loop is correct)."
+      "note": "The secondary chilled-water loop's supply and return temperatures are swapped; swapped back before mapping (the primary loop is correct).",
+      "issue": "secondary-supply-return-swapped"
      }
     ],
     "runs": [
@@ -2524,7 +2586,38 @@
     "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
     "Water-side only: the refrigerant-side chiller drift detectors cannot run on it."
    ],
-   "store_bytes_estimate": 12000000
+   "data_issues": [
+    {
+     "id": "oa-dry-wet-bulb-swapped",
+     "title": "Outdoor dry-bulb and wet-bulb columns are swapped",
+     "columns": [
+      "OA_TEMP",
+      "OA_TEMP_WB"
+     ],
+     "evidence": "The tower leaving-water setpoint follows max(wet-bulb + 8 F, 60 F): on the 210,661 minutes above the 60 F floor CT_SW_TEMPSPT equals OA_TEMP + 8 to a median 0.28 F but OA_TEMP_WB + 8 only to 6.27 F; OA_TEMP_WB exceeds OA_TEMP in 99.3% of rows (a wet-bulb cannot exceed its dry-bulb).",
+     "contradicts": {
+      "document": "Chiller-plant inventory Table 2 (OA_TEMP: dry bulb; OA_TEMP_WB: wet bulb) and Eq. 3 / Table 1 (tower setpoint = wet-bulb + 8 F)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "fix",
+     "handling_note": "Swapped back before mapping (swap quirk), in every run."
+    },
+    {
+     "id": "secondary-supply-return-swapped",
+     "title": "Secondary-loop supply and return temperatures are swapped",
+     "columns": [
+      "CWL_SEC_SW_TEMP",
+      "CWL_SEC_RW_TEMP"
+     ],
+     "evidence": "In the 169,809 rows where the secondary loop carries load (CWL_SEC_LOAD > 10) the labelled return is colder than the labelled supply in 100% of rows, while the primary loop's return is warmer in 99.9% of them; hourly (supply - return) correlates +0.88 with CWL_SEC_LOAD.",
+     "contradicts": {
+      "document": "Chiller-plant inventory Table 2 (CWL_SEC_SW_TEMP: supply, CWL_SEC_RW_TEMP: return water temperature)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "fix",
+     "handling_note": "Swapped back before mapping (swap quirk), in every run; the primary loop is left as published."
+    }
+   ]
   },
   {
    "id": "lbnl-boiler",
@@ -2616,12 +2709,14 @@
       "boiler_foul_095",
       "boiler_PI",
       "hot_water_temp_bias_2"
-     ]
+     ],
+     "store_bytes_estimate": 18000000
     },
     "full": {
      "description": "all 17 runs",
      "files": "all",
-     "runs": "all"
+     "runs": "all",
+     "store_bytes_estimate": 68000000
     }
    },
    "ingest": {
@@ -2635,7 +2730,8 @@
      {
       "op": "annotate",
       "action": "annotate",
-      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; rules needing boiler_status decline on this plant."
+      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; rules needing boiler_status decline on this plant.",
+      "issue": "boiler-status-is-enable"
      }
     ],
     "runs": [
@@ -2788,7 +2884,23 @@
     "The boiler status points are enables (see the quirk); boiler_status is not mapped.",
     "Gas use is a cumulative counter (BOI_GAS_CSUM_*) with no CAMBER role yet, so boiler fouling (a gas-per-heat signature) has no detector."
    ],
-   "store_bytes_estimate": 8000000
+   "data_issues": [
+    {
+     "id": "boiler-status-is-enable",
+     "title": "BOI_STA is the boiler enable, not burner firing",
+     "columns": [
+      "BOI_STA_1",
+      "BOI_STA_2"
+     ],
+     "evidence": "In the fault-free run BOI_STA_1 is 1 in 100% of rows while boiler 1 burns no gas (BOI_GAS_CSUM_1 = 0) in 50.5% of them.",
+     "contradicts": {
+      "document": "Boiler-plant inventory Table 2 (BOI_STA: on-off status of a boiler, 0-Off; 1-On)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing, so rules needing boiler_status decline on this plant."
+    }
+   ]
   },
   {
    "id": "bdg2",
@@ -3046,7 +3158,8 @@
       "Panther_office_Patti",
       "Bull_office_Rob",
       "Robin_office_Antonina"
-     ]
+     ],
+     "store_bytes_estimate": 30000000
     },
     "full": {
      "description": "all 19 files (raw, cleaned and the competition subset); ingest reads every site and every cleaned meter",
@@ -3063,7 +3176,8 @@
       "solar"
      ],
      "max_buildings_per_site": null,
-     "include_buildings": []
+     "include_buildings": [],
+     "store_bytes_estimate": 655000000
     }
    },
    "ingest": {
@@ -3092,7 +3206,7 @@
     "One facility per site (ds-bdg2-<site>); each building meter is an equipment '<building>__<meter>' of class '<METER>_METER'. Weather (airTemperature, degC) is converted to F on equipment 'weather'.",
     "kaggle/kaggle.csv (the competition subset, numeric building ids) is downloaded by the full subset but not ingested; it is known to mix units across sites."
    ],
-   "store_bytes_estimate": 25000000
+   "data_issues": []
   }
  ]
 }

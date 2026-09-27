@@ -136,25 +136,30 @@ def benchmark(records, detector_targets: dict) -> BenchmarkReport:
 
     ``records``: iterable of ``{"truth": <fault-type str, "" if fault-free>,
     "fired": <iterable of detector names that flagged>}``.
-    ``detector_targets``: ``{detector_name: fault_type_it_targets}``.
+    ``detector_targets``: ``{detector_name: fault_type_it_targets}``; a detector that
+    legitimately sees several fault types (an OA-fraction check sees a stuck damper *and* a
+    blocked OA inlet) may map to a list or tuple of them.
 
     Returns the overall detection confusion (any detector vs. faulty), a per-detector
-    confusion (each detector judged against the scenarios of its target fault type),
+    confusion (each detector judged against the scenarios of its target fault types),
     and the correct-diagnosis rate (a faulty scenario is correctly diagnosed when a
-    detector whose target equals the true fault fired) -- the LBNL FDD evaluation
+    detector targeting the true fault fired) -- the LBNL FDD evaluation
     framework, generalized across rules.
     """
+
+    def _targets(d) -> tuple:
+        t = detector_targets.get(d)
+        return (t,) if isinstance(t, str) or t is None else tuple(t)
+
     recs = [{"truth": (r.get("truth") or ""), "fired": set(r.get("fired") or ())} for r in records]
     overall = confusion([bool(r["truth"]) for r in recs], [bool(r["fired"]) for r in recs])
     per = {
-        d: confusion([r["truth"] == target for r in recs], [d in r["fired"] for r in recs])
-        for d, target in detector_targets.items()
+        d: confusion([r["truth"] in _targets(d) for r in recs], [d in r["fired"] for r in recs])
+        for d in detector_targets
     }
     faulty = [r for r in recs if r["truth"]]
     if faulty:
-        correct = sum(
-            1 for r in faulty if any(detector_targets.get(d) == r["truth"] for d in r["fired"])
-        )
+        correct = sum(1 for r in faulty if any(r["truth"] in _targets(d) for d in r["fired"]))
         cd = round(correct / len(faulty), 4)
     else:
         cd = float("nan")
