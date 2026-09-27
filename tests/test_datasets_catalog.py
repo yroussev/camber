@@ -21,6 +21,7 @@ from camber import datasets  # noqa: E402
 from camber.datasets._catalog import (  # noqa: E402
     LICENCES,
     DatasetEntry,
+    is_pinned_url,
     is_research_only_licence,
     load_catalog_data,
     load_entries,
@@ -398,8 +399,13 @@ def test_every_quirk_links_to_its_issue_and_every_fix_issue_has_a_fix():
         for i in e.data_issues:
             assert (i["handling"] == "fix") == (i["id"] in fixes), (e.id, i["id"])
             cite = i["contradicts"]["citation"]
-            # a publisher without DOIs (a versioned repository) is cited by a pinned URL
-            assert re.search(r"10\.\d{4,9}/", cite) or (not e.dois and "https://" in cite)
+            # a DOI whenever the entry has one; else a URL pinned to a commit or a version
+            if e.dois:
+                assert re.search(r"10\.\d{4,9}/", cite), (e.id, i["id"])
+            else:
+                assert re.search(r"10\.\d{4,9}/", cite) or any(
+                    is_pinned_url(u) for u in re.findall(r"https://\S+", cite)
+                ), (e.id, i["id"])
         assert e.provenance()["data_issues"] == [
             {k: i[k] for k in ("id", "title", "handling")} for i in e.data_issues
         ]

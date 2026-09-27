@@ -271,6 +271,12 @@ rules in the template do not move the score.
 
 ## Data issues and how CAMBER handles them
 
+Each issue below cites the publisher documentation it contradicts **by DOI** whenever the dataset
+has one. A dataset with no DOI (a versioned repository such as `b4b-windesheim`'s) is cited by a
+**pinned** https URL -- one fixed to a commit (`.../blob/188573d.../README.md`) or a version
+(`/v1.2/`, `?version=3`, `/records/<id>`), never a moving branch or landing page. The catalog
+validator enforces exactly this rule.
+
 <!-- BEGIN data-issues: generated from camber/datasets/catalog.json by scripts/datasets_issues_doc.py; do not edit by hand -->
 
 The catalog links each dataset exactly as its publisher provides it. Every problem

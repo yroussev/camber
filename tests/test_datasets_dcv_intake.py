@@ -448,13 +448,25 @@ def test_validator_checks_the_new_run_and_clock_keys(mutate, needle):
 def test_an_entry_without_dois_may_cite_a_pinned_url_but_not_nothing():
     d = _b59_dict(_b59_zip())
     d["data_issues"][0]["contradicts"]["citation"] = (
-        "README, https://example.org/repo/blob/abc/README.md"
+        "README, https://example.org/repo/blob/188573d39ca9/README.md"
     )
     assert any("by DOI" in e for e in _one(d))  # the entry has DOIs: a DOI is required
     d["dois"] = []
-    assert _one(d) == []
-    d["data_issues"][0]["contradicts"]["citation"] = "the README"
-    assert any("pinned https URL" in e for e in _one(d))
+    assert _one(d) == []  # no DOI: a URL fixed to a commit will do
+    for moving in (
+        "README, https://example.org/repo/blob/main/README.md",  # a branch moves
+        "README, https://example.org/repo",  # a landing page moves
+        "the README",
+    ):
+        d["data_issues"][0]["contradicts"]["citation"] = moving
+        assert any("pinned https URL" in e for e in _one(d)), moving
+    for pinned in (
+        "https://example.org/repo/tree/v1.2.0/README.md",  # a version tag
+        "https://example.org/files/README.md?version=3",
+        "https://zenodo.org/records/20065842",  # a record id is one version
+    ):
+        d["data_issues"][0]["contradicts"]["citation"] = f"README, {pinned}"
+        assert _one(d) == [], pinned
 
 
 # --------------------------------------------------------------------------- shipped entries

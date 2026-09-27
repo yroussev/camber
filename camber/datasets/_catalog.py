@@ -15,10 +15,12 @@ downloaded from its publisher). :func:`validate_catalog` is the gate a catalog c
   carries ``manual_instructions`` and may omit a file's URL;
 * subsets, runs, archive members, mappings, config templates and quirks all resolve;
 * every **data issue** -- a problem in the data *as published* -- is described with the columns it
-  affects, numeric evidence, the publisher documentation it contradicts (with a DOI; a publisher
-  that mints none is cited by a pinned https URL) and CAMBER's handling (:data:`HANDLINGS`), and
-  the handling is wired: a ``fix`` issue has a ``fix`` quirk, an ``exclude`` issue names what it
-  excludes, and every quirk links to its issue;
+  affects, numeric evidence, the publisher documentation it contradicts and CAMBER's handling
+  (:data:`HANDLINGS`), and the handling is wired: a ``fix`` issue has a ``fix`` quirk, an
+  ``exclude`` issue names what it excludes, and every quirk links to its issue. The documentation
+  is cited by DOI whenever the entry has one (``dois``); an entry with no DOI cites a **pinned**
+  https URL instead -- one fixed to a commit or a version (:func:`is_pinned_url`), never a moving
+  branch or landing page;
 * the ingest keys have one spelling each: the names 0.89's intake branches used before they were
   reconciled (:data:`RENAMED_KEYS`) are rejected with the key to use instead.
 
@@ -80,6 +82,16 @@ _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _RUN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _ISSUE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
 _DOI_RE = re.compile(r"10\.\d{4,9}/\S+")
+_URL_RE = re.compile(r"https://[^\s<>()\"']+")
+# A URL pinned to a fixed commit (a 7-40 hex path segment or ``@<sha>``) or a version (``v1.2``,
+# ``/versions/3``, ``?version=3``, a record id path such as ``/records/20065842``).
+_PINNED_RE = re.compile(
+    r"(/|@)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(/|$|[?#])"
+    r"|/v\d+(\.\d+)*(/|$|[?#])"
+    r"|/versions?/\d+"
+    r"|[?&]version=\d+"
+    r"|/records?/\d+"
+)
 #: Ingest keys the 0.89 intake branches spelled differently before they were reconciled:
 #: ``{(level, old key): what to use instead}``; :func:`validate_catalog` rejects the old ones.
 RENAMED_KEYS = {
@@ -112,6 +124,7 @@ __all__ = [
     "HANDLINGS",
     "DatasetEntry",
     "RENAMED_KEYS",
+    "is_pinned_url",
     "is_research_only_licence",
     "load_catalog_data",
     "load_entries",
@@ -124,6 +137,11 @@ def is_research_only_licence(licence: str) -> bool:
     """True for a non-commercial (NC) or no-derivatives (ND) licence id."""
     parts = str(licence).upper().split("-")
     return "NC" in parts or "ND" in parts
+
+
+def is_pinned_url(url: str) -> bool:
+    """True for an https URL fixed to a commit or a version (see :data:`_PINNED_RE`)."""
+    return bool(isinstance(url, str) and url.startswith("https://") and _PINNED_RE.search(url))
 
 
 def package_text(*parts: str) -> str:
@@ -732,11 +750,16 @@ def _check_issue_fields(did: str, iss: dict, errs: list, *, has_doi: bool = True
     if not str(doc.get("document") or "").strip():
         errs.append(f"{where}: 'contradicts.document' must name the documentation contradicted")
     cite = str(doc.get("citation") or "")
-    if not _DOI_RE.search(cite) and (has_doi or not re.search(r"https://\S+", cite)):
-        # a publisher that mints no DOI (a versioned repository) is cited by a pinned URL
+    if has_doi and not _DOI_RE.search(cite):
+        errs.append(f"{where}: 'contradicts.citation' must cite the documentation by DOI")
+    elif not has_doi and not (
+        _DOI_RE.search(cite) or any(is_pinned_url(u) for u in _URL_RE.findall(cite))
+    ):
+        # a dataset without a DOI (a versioned repository) is cited by a URL fixed to a commit
+        # or a version, never a moving branch or landing page
         errs.append(
-            f"{where}: 'contradicts.citation' must cite the documentation by DOI "
-            "(or, for an entry without DOIs, by a pinned https URL)"
+            f"{where}: 'contradicts.citation' must cite the documentation by DOI, or -- the entry "
+            "has no DOI -- by a pinned https URL (fixed to a commit or a version)"
         )
     if iss.get("handling") not in HANDLINGS:
         errs.append(f"{where}: handling must be one of {HANDLINGS}")
