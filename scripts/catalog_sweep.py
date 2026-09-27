@@ -209,6 +209,8 @@ class Ctx:
         self.download_missing = args.download_missing
         self.keep_extracted = args.keep_extracted
         self.force_ingest = args.force_ingest
+        # research-only (NC/ND) entries are fetched / ingested only with an explicit acceptance
+        self.accept_noncommercial = bool(getattr(args, "accept_noncommercial", False))
         self.min_free_gb = args.min_free_gb
         self.skip_reports = args.skip_reports
         env = dict(os.environ)
@@ -312,9 +314,19 @@ def step_fetch(ctx: Ctx, entry, subset: str) -> dict:
     rec: dict = {"missing_locally": missing, "network_used": network, "files": {}}
     t0 = time.monotonic()
     try:
-        res = ds.fetch(
-            entry.id, subset=subset, data_dir=ctx.cache, opener=None if network else _NoNetwork()
-        )
+        if entry.manual:  # never downloaded: verify the seeded copies like `ingest --from-dir`
+            from camber.datasets._ops import adopt_local_files
+
+            ddir = os.path.join(ctx.cache, entry.id, "downloads")
+            res = adopt_local_files(entry, ddir, subset=subset, data_dir=ctx.cache)
+        else:
+            res = ds.fetch(
+                entry.id,
+                subset=subset,
+                data_dir=ctx.cache,
+                opener=None if network else _NoNetwork(),
+                accept_noncommercial=ctx.accept_noncommercial,
+            )
         for f in res.files:
             rec["files"][f["name"]] = {
                 "status": "pass",
@@ -414,6 +426,7 @@ def step_ingest(ctx: Ctx, entry, subset: str, log: str) -> dict:
         data_dir=ctx.cache,
         force=ctx.force_ingest,
         progress=msgs.append,
+        accept_noncommercial=ctx.accept_noncommercial,
     )
     rec["seconds"] = round(time.monotonic() - t0, 1)
     rec["first_ingest_skipped"] = res.skipped
@@ -1440,6 +1453,13 @@ def main(argv=None) -> int:
     )
     ap.add_argument("--keep-extracted", action="store_true", help="keep extracted CSVs")
     ap.add_argument("--force-ingest", action="store_true", help="re-ingest even if unchanged")
+    ap.add_argument(
+        "--accept-noncommercial",
+        action="store_true",
+        help="acknowledge research-only (NC/ND) licences so those entries are swept too "
+        "(recorded in the sweep cache's acknowledgements.json); without it they fail the fetch "
+        "step with the licence-gate error",
+    )
     ap.add_argument("--min-free-gb", type=float, default=40.0, help="stop below this free disk")
     ap.add_argument("--skip-reports", action="store_true")
     ap.add_argument(

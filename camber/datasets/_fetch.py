@@ -50,6 +50,22 @@ class ChecksumMismatch(FetchError):
         )
 
 
+class LocalFileMismatch(ChecksumMismatch):
+    """A local copy (``ingest --from-dir``) does not match the catalog's pinned size or sha256."""
+
+    def __init__(self, path: str, expected, actual, kind: str):
+        self.path, self.expected, self.actual, self.kind = path, expected, actual, kind
+        FetchError.__init__(
+            self,
+            f"{kind} mismatch for local file {path}: expected {expected}, got {actual} -- not the "
+            "file the catalog pins (a different release, or a damaged download); not accepted",
+        )
+
+
+class ManualDownload(FetchError):
+    """The entry is a manual download (``manual: true``): CAMBER never fetches its files."""
+
+
 class InsufficientSpace(FetchError):
     """Not enough free disk for the download (checked before streaming starts)."""
 

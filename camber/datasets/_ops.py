@@ -17,7 +17,14 @@ from .. import __version__
 from ..store import ParquetStore
 from . import _licence, _paths
 from ._catalog import DatasetEntry, package_text
-from ._fetch import check_disk, download, human_bytes, sha256_file
+from ._fetch import (
+    LocalFileMismatch,
+    ManualDownload,
+    check_disk,
+    download,
+    human_bytes,
+    sha256_file,
+)
 from ._ingest import dataset_meta
 
 
@@ -76,6 +83,12 @@ def fetch_dataset(
     """
     sname = subset or "default"
     files = entry.subset_files(sname)
+    if entry.manual:
+        raise ManualDownload(
+            f"{entry.id} is a manual download -- CAMBER does not fetch it. "
+            f"{entry.manual_instructions} Then run `camber datasets ingest {entry.id} "
+            "--from-dir DIR --store STORE` (API: ingest(..., from_dir=DIR))."
+        )
     if entry.research_only and not accept_noncommercial:
         # every fetch of research-only data is an explicit act, even when an earlier one was
         # acknowledged: nothing is downloaded before the gate
@@ -140,6 +153,109 @@ def fetch_dataset(
         }
     )
     res.acknowledged = entry.research_only
+    manifest[entry.id] = rec
+    _paths.write_manifest(root, manifest)
+    return res
+
+
+def _local_source(from_dir: str, name: str) -> str | None:
+    """Where a catalog file sits under ``from_dir``: its catalog path, else its bare file name."""
+    for cand in (
+        os.path.join(from_dir, *name.split("/")),
+        os.path.join(from_dir, name.split("/")[-1]),
+    ):
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _place(src: str, dest: str) -> None:
+    """Hard-link ``src`` to ``dest`` (same filesystem), else copy it; atomic via a temp name."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    tmp = dest + ".part"
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    try:
+        os.link(src, tmp)
+    except OSError:
+        shutil.copyfile(src, tmp)
+    os.replace(tmp, dest)
+
+
+def adopt_local_files(
+    entry: DatasetEntry, from_dir, *, subset: str | None = None, data_dir=None
+) -> FetchResult:
+    """Take a subset's files from ``from_dir`` instead of downloading them (``ingest --from-dir``).
+
+    The way in for ``manual: true`` entries (files the user downloads by hand, e.g. from a portal
+    with terms) and for any entry whose files are already on disk. Each file is looked up under
+    ``from_dir`` by its catalog path, then by its bare name. **Pinned files are verified** (size +
+    sha256; a mismatch raises :class:`LocalFileMismatch` and nothing is placed); unpinned files are
+    hashed and a warning is returned. Verified files are hard-linked (else copied) into the cache's
+    ``downloads/`` directory and recorded in the manifest with ``source: "local"``, so ingest,
+    status and remove treat them like fetched files. The licence gate is ingest's (research-only
+    data still needs an acknowledgement).
+    """
+    sname = subset or "default"
+    files = entry.subset_files(sname)
+    src_root = os.path.abspath(os.fspath(from_dir))
+    if not os.path.isdir(src_root):
+        raise FileNotFoundError(f"--from-dir {src_root} is not a directory")
+    root = _paths.data_dir(data_dir)
+    found: list = []
+    missing: list = []
+    for f in files:
+        src = _local_source(src_root, f["name"])
+        (found if src else missing).append((f, src))
+    if missing:
+        names = ", ".join(f["name"] for f, _ in missing)
+        raise FileNotFoundError(
+            f"{entry.id}: not in {src_root}: {names}"
+            + (f". {entry.manual_instructions}" if entry.manual_instructions else "")
+        )
+    res = FetchResult(
+        dataset_id=entry.id,
+        subset=sname,
+        data_dir=root,
+        citation=entry.citation,
+        licence=entry.licence,
+    )
+    checked = []
+    for f, src in found:  # verify everything before placing anything
+        size = os.path.getsize(src)
+        if f.get("size") is not None and size != f["size"]:
+            raise LocalFileMismatch(src, f["size"], size, "size")
+        sha = sha256_file(src)
+        if f.get("sha256") and sha != f["sha256"]:
+            raise LocalFileMismatch(src, f["sha256"], sha, "sha256")
+        if not f.get("sha256"):
+            res.warnings.append(
+                f"{f['name']} is not pinned in the catalog: its sha256 ({sha}) was recorded but "
+                "not verified against a known value"
+            )
+        checked.append((f, src, size, sha))
+    manifest = _paths.read_manifest(root)
+    rec = manifest.get(entry.id) or {}
+    recorded = dict(rec.get("files") or {})
+    for f, src, size, sha in checked:
+        dest = _dest(root, entry, f["name"])
+        _place(src, dest)
+        recorded[f["name"]] = {"sha256": sha, "bytes": size, "etag": None, "source": "local"}
+        res.files.append(
+            {"name": f["name"], "path": dest, "bytes": size, "sha256": sha, "skipped": False}
+        )
+    rec.update(
+        {
+            "licence": entry.licence,
+            "access": entry.access,
+            "fetched_at": _paths.utc_now(),
+            "source": "local",
+            "from_dir": src_root,
+            "files": recorded,
+            "subsets": sorted(set(rec.get("subsets") or []) | {sname}),
+            "camber_version": __version__,
+        }
+    )
     manifest[entry.id] = rec
     _paths.write_manifest(root, manifest)
     return res

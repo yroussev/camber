@@ -8,7 +8,9 @@ downloaded from its publisher). :func:`validate_catalog` is the gate a catalog c
 * the licence is an SPDX id from :data:`LICENCES`, and ``access`` is ``"research_only"`` **iff** the
   licence is non-commercial (NC) or no-derivatives (ND) -- so a research-only dataset can never be
   mislabelled open, nor an open one hidden behind the acknowledgement gate;
-* every URL is ``https``; pinned files carry a size and a 64-hex sha256;
+* every URL is ``https``; pinned files carry a size and a 64-hex sha256; a ``manual: true`` entry
+  (files the user downloads by hand, e.g. from a portal with terms, then ``ingest --from-dir``)
+  carries ``manual_instructions`` and may omit a file's URL;
 * subsets, runs, archive members, mappings, config templates and quirks all resolve;
 * every **data issue** -- a problem in the data *as published* -- is described with the columns it
   affects, numeric evidence, the publisher documentation it contradicts (with a DOI) and CAMBER's
@@ -150,6 +152,8 @@ class DatasetEntry:
     data_issues: tuple = ()
     licence_check: dict | None = None
     store_bytes_estimate: int | None = None
+    manual: bool = False
+    manual_instructions: str = ""
 
     @classmethod
     def from_dict(cls, d: dict) -> DatasetEntry:
@@ -182,6 +186,8 @@ class DatasetEntry:
             licence_check=d.get("licence_check"),
             store_bytes_estimate=d.get("store_bytes_estimate")
             or (d.get("subsets") or {}).get("default", {}).get("store_bytes_estimate"),
+            manual=bool(d.get("manual", False)),
+            manual_instructions=d.get("manual_instructions", ""),
         )
 
     @property
@@ -299,6 +305,9 @@ class DatasetEntry:
         }
         if self.licence_check is not None:
             out["licence_check"] = self.licence_check
+        if self.manual:
+            out["manual"] = True
+            out["manual_instructions"] = self.manual_instructions
         return out
 
 
@@ -322,6 +331,7 @@ def _https(url) -> bool:
 
 def _check_files(did: str, d: dict, errs: list) -> dict:
     names: dict = {}
+    manual = bool(d.get("manual"))
     for f in d.get("files") or []:
         name = f.get("name") if isinstance(f, dict) else None
         if not name:
@@ -330,7 +340,9 @@ def _check_files(did: str, d: dict, errs: list) -> dict:
         if name in names:
             errs.append(f"{did}: duplicate file {name!r}")
         names[name] = f
-        if not _https(f.get("url")):
+        if manual and f.get("url") is None:
+            pass  # a manual file may have no direct URL (the publisher's portal hands it out)
+        elif not _https(f.get("url")):
             errs.append(f"{did}/{name}: url must be https")
         size, sha = f.get("size"), f.get("sha256")
         if size is not None and (not isinstance(size, int) or size <= 0):
@@ -603,6 +615,15 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
     lc = d.get("licence_check")
     if lc is not None and not _https((lc or {}).get("url")):
         errs.append(f"{did}: licence_check.url must be https")
+    for k in ("expect", "json_path"):
+        if lc is not None and k in lc and not (isinstance(lc[k], str) and lc[k].strip()):
+            errs.append(f"{did}: licence_check.{k} must be a non-empty string")
+    if "manual" in d and not isinstance(d["manual"], bool):
+        errs.append(f"{did}: manual must be true or false")
+    if d.get("manual") and not str(d.get("manual_instructions") or "").strip():
+        errs.append(
+            f"{did}: a manual entry needs manual_instructions (where and how to download the files)"
+        )
     try:
         _dt.date.fromisoformat(str(d.get("verified_on", "")))
     except ValueError:

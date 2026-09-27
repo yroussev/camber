@@ -495,7 +495,7 @@ def _cmd_datasets_list(args) -> int:
         print(
             f"{e.id:14s} {_ds_tier(e):13s} {e.licence:16s} {e.kind:9s} "
             f"{'yes' if e.labeled_faults else 'no':6s} {_mb(e.download_bytes()):>9s}  "
-            f"{e.title}"
+            f"{e.title}{' [manual download]' if e.manual else ''}"
         )
     print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
     if any(e.research_only for e in rows):
@@ -531,6 +531,9 @@ def _cmd_datasets_info(args) -> int:
             "--accept-noncommercial."
         )
     print(f"source    : {e.landing_url}")
+    if e.manual:
+        print(f"download  : manual -- {e.manual_instructions}")
+        print(f"            then: camber datasets ingest {e.id} --from-dir DIR --store STORE")
     print(f"cite      : {e.citation}")
     if e.dois:
         print(f"doi       : {', '.join(e.dois)}")
@@ -637,9 +640,21 @@ def _cmd_datasets_fetch(args) -> int:
             file=sys.stderr,
         )
         return _DS_EXIT_LICENCE
+    manual = [e.id for e in entries if e.manual]
+    if manual and not args.all:
+        print(
+            f"error: {', '.join(manual)}: manual download -- CAMBER does not fetch it (see "
+            "`camber datasets info <id>`); download the files yourself, then run "
+            "`camber datasets ingest <id> --from-dir DIR --store STORE`. Nothing was downloaded.",
+            file=sys.stderr,
+        )
+        return 1
     if args.all and args.accept_noncommercial and args.licence != "all":
         print("note: --all fetches the open tier only; add --licence all for research-only data")
     for e in entries:
+        if e.manual:
+            print(f"skipping {e.id}: manual download (`camber datasets info {e.id}`)")
+            continue
         print(f"fetching {e.id} ({args.subset or 'default'}, {_mb(e.download_bytes(args.subset))})")
         res = ds.fetch(
             e.id,
@@ -666,6 +681,9 @@ def _cmd_datasets_ingest(args) -> int:
     if not args.all and not args.ids:
         print("error: name dataset id(s) or pass --all", file=sys.stderr)
         return 1
+    if args.from_dir and args.all:
+        print("error: --from-dir takes named dataset id(s), not --all", file=sys.stderr)
+        return 1
     sname = args.subset or "default"
     entries = _ds_entries(args, include_research=True)
     if args.all:  # only what has been fetched for this subset
@@ -685,6 +703,7 @@ def _cmd_datasets_ingest(args) -> int:
             progress=None if args.quiet else (lambda m: print(f"  {m}", file=sys.stderr)),
             corrections=corrections,
             accept_noncommercial=args.accept_noncommercial,
+            from_dir=args.from_dir,
         )
         if res.skipped:
             print(f"{e.id}: up to date in {res.store} ({', '.join(res.facilities)}) -- skipped")
@@ -1597,6 +1616,13 @@ def _build_parser() -> argparse.ArgumentParser:
     _targets(dsg, fetching=False)
     dsg.add_argument("--store", required=True, help="ParquetStore directory")
     dsg.add_argument("--force", action="store_true", help="re-ingest even if unchanged")
+    dsg.add_argument(
+        "--from-dir",
+        dest="from_dir",
+        metavar="DIR",
+        help="take the files from DIR instead of a fetch (manual-download entries); pinned "
+        "files are verified (size + sha256) before use",
+    )
     dsg.add_argument(
         "--accept-noncommercial",
         dest="accept_noncommercial",

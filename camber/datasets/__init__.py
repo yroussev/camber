@@ -30,10 +30,12 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from . import _licence, _paths
 from ._catalog import DatasetEntry, load_entries
 from ._ingest import IngestResult, ingest_dataset
 from ._ops import (
     FetchResult,
+    adopt_local_files,
     build_config,
     dataset_status,
     fetch_dataset,
@@ -127,6 +129,7 @@ def ingest(
     progress=None,
     corrections: bool = True,
     accept_noncommercial: bool = False,
+    from_dir=None,
 ) -> IngestResult:
     """Normalize a fetched dataset subset into ``store`` (path or ParquetStore).
 
@@ -135,10 +138,24 @@ def ingest(
     ingests the data exactly as published (recorded in the provenance; the entry's data issues say
     what each fix corrects). A research-only dataset needs its licence acknowledged -- by the
     ``fetch`` that downloaded it, or ``accept_noncommercial=True`` here -- else ``PermissionError``;
-    its facilities record ``redistribution: "prohibited"``. See :mod:`camber.datasets._ingest`.
+    its facilities record ``redistribution: "prohibited"``.
+
+    ``from_dir`` takes the files from a local directory instead of a prior :func:`fetch` -- the way
+    in for ``manual`` entries (downloaded by hand from a portal with terms): pinned files are
+    verified (size + sha256) and placed in the cache first. See :mod:`camber.datasets._ingest`.
     """
+    entry = get(dataset_id)
+    if from_dir is not None:
+        root = _paths.data_dir(data_dir)
+        if (
+            entry.research_only
+            and not accept_noncommercial
+            and not _licence.acknowledged(root, entry)
+        ):
+            raise _licence.refusal(entry, "ingest")  # before any file is placed in the cache
+        adopt_local_files(entry, from_dir, subset=subset, data_dir=data_dir)
     return ingest_dataset(
-        get(dataset_id),
+        entry,
         store,
         subset=subset,
         data_dir=data_dir,
@@ -146,6 +163,7 @@ def ingest(
         progress=progress,
         corrections=corrections,
         accept_noncommercial=accept_noncommercial,
+        via="ingest --from-dir" if from_dir is not None else "ingest",
     )
 
 

@@ -857,6 +857,118 @@ def test_missing_extra_is_an_actionable_cli_error(ahu, monkeypatch, capsys):
     assert 'pip install "camber-toolkit[xlsx]"' in capsys.readouterr().err
 
 
+# --------------------------------------------------------------------------- manual entries
+
+
+def _manual(entry, **over):
+    d = entry.as_dict()
+    d.update(manual=True, manual_instructions="Register at the portal, accept the terms.", **over)
+    d["files"] = [dict(f, url=None) for f in d["files"]]
+    assert validate_catalog({"schema": 1, "datasets": [d]}) == []
+    return DatasetEntry.from_dict(d)
+
+
+def _drop_zip(tmp, entry):
+    src = tmp / "by-hand"
+    src.mkdir(exist_ok=True)
+    (src / "test.zip").write_bytes(_zip_bytes())
+    return src
+
+
+def test_manual_entry_validation(ahu):
+    entry, _opener, _tmp = ahu
+    d = _manual(entry).as_dict()
+    d["manual_instructions"] = ""
+    errs = validate_catalog({"schema": 1, "datasets": [d]})
+    assert any("needs manual_instructions" in e for e in errs)
+    d = entry.as_dict()
+    d["files"][0]["url"] = None  # only a manual entry may omit a file URL
+    assert any("url must be https" in e for e in validate_catalog({"schema": 1, "datasets": [d]}))
+
+
+def test_manual_entry_is_never_fetched_and_ingests_from_a_dir(ahu, monkeypatch):
+    from camber.datasets._fetch import ManualDownload
+
+    entry, opener, tmp = ahu
+    m = _manual(entry)
+    with pytest.raises(ManualDownload, match="--from-dir"):
+        _ops.fetch_dataset(m, opener=opener)
+    assert opener.calls == []
+    monkeypatch.setattr(ds, "_entries", lambda: (m,))
+    store = str(tmp / "store")
+    with pytest.raises(FileNotFoundError, match="Register at the portal"):
+        ds.ingest("test-ahu", store, from_dir=str(tmp))  # the file is not there
+    res = ds.ingest("test-ahu", store, from_dir=str(_drop_zip(tmp, m)))
+    assert res.facilities == ["ds-test-ahu"] and not res.skipped
+    man = _paths.read_manifest(_paths.data_dir())["test-ahu"]
+    assert man["source"] == "local" and man["files"]["test.zip"]["source"] == "local"
+    assert ds.ingest("test-ahu", store).skipped  # the adopted files now count as fetched
+    assert ds.status()[0]["fetched"]["default"]
+
+
+def test_from_dir_verifies_pins_and_places_nothing_on_a_mismatch(ahu, monkeypatch):
+    from camber.datasets._fetch import LocalFileMismatch
+
+    entry, _opener, tmp = ahu
+    monkeypatch.setattr(ds, "_entries", lambda: (_manual(entry),))
+    src = tmp / "wrong"
+    src.mkdir()
+    (src / "test.zip").write_bytes(b"a different release")
+    with pytest.raises(LocalFileMismatch, match="size mismatch for local file"):
+        ds.ingest("test-ahu", str(tmp / "store"), from_dir=str(src))
+    assert not os.path.exists(os.path.join(_paths.downloads_dir(_paths.data_dir(), "test-ahu")))
+    assert (src / "test.zip").read_bytes() == b"a different release"  # never renamed/touched
+
+
+def test_from_dir_unpinned_file_is_hashed_and_warned(ahu):
+    entry, _opener, tmp = ahu
+    d = _manual(entry).as_dict()
+    d["files"][0].update(sha256=None, size=None, pinned=False)
+    res = _ops.adopt_local_files(DatasetEntry.from_dict(d), str(_drop_zip(tmp, entry)))
+    assert "not pinned" in res.warnings[0] and len(res.files[0]["sha256"]) == 64
+
+
+def test_research_only_manual_entry_needs_the_acknowledgement_first(ahu, monkeypatch):
+    entry, _opener, tmp = ahu
+    ro = _manual(_research_only(entry, "CC-BY-NC-ND-4.0"))
+    monkeypatch.setattr(ds, "_entries", lambda: (ro,))
+    src = str(_drop_zip(tmp, entry))
+    store = str(tmp / "store")
+    with pytest.raises(PermissionError):
+        ds.ingest("test-ahu", store, from_dir=src)
+    assert not os.path.exists(_paths.downloads_dir(_paths.data_dir(), "test-ahu"))
+    ds.ingest("test-ahu", store, from_dir=src, accept_noncommercial=True)
+    ledger = _paths.read_acknowledgements(_paths.data_dir())
+    assert [r["via"] for r in ledger] == ["ingest --from-dir"]
+    meta = ParquetStore(store).facilities_meta()["ds-test-ahu"]["dataset"]
+    assert meta["redistribution"] == "prohibited"
+
+
+def test_cli_manual_entry(cli_catalog, monkeypatch, capsys):
+    from camber.cli import main
+
+    entry, _opener, tmp = cli_catalog
+    m = _manual(entry)
+    monkeypatch.setattr(ds, "_entries", lambda: (m,))
+    assert main(["datasets", "list"]) == 0
+    assert "[manual download]" in capsys.readouterr().out
+    assert main(["datasets", "info", "test-ahu"]) == 0
+    assert "Register at the portal" in capsys.readouterr().out
+    assert main(["datasets", "fetch", "test-ahu", "--quiet"]) == 1
+    assert "--from-dir" in capsys.readouterr().err
+    assert main(["datasets", "fetch", "--all", "--quiet"]) == 0
+    assert "skipping test-ahu: manual download" in capsys.readouterr().out
+    store = str(tmp / "store")
+    argv = ["datasets", "ingest", "test-ahu", "--store", store, "--quiet"]
+    assert main([*argv, "--all", "--from-dir", "x"]) == 1
+    bad = tmp / "bad"
+    bad.mkdir()
+    (bad / "test.zip").write_bytes(b"nope")
+    assert main([*argv, "--from-dir", str(bad)]) == 2
+    assert main([*argv, "--from-dir", str(_drop_zip(tmp, m))]) == 0
+    assert "ingested" in capsys.readouterr().out
+
+
 # --------------------------------------------------------------------------- CLI
 
 

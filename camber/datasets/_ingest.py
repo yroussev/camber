@@ -591,6 +591,7 @@ def ingest_dataset(
     progress: Callable[[str], None] | None = None,
     corrections: bool = True,
     accept_noncommercial: bool = False,
+    via: str = "ingest",
 ) -> IngestResult:
     """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module.
 
@@ -609,7 +610,7 @@ def ingest_dataset(
         entry,
         accept_noncommercial=accept_noncommercial,
         subset=sname,
-        via="ingest",
+        via=via,
         action="ingest",
     )
     inputs = verified_inputs(entry, sname, root)
