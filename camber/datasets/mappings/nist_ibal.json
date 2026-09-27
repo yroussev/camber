@@ -1,0 +1,13 @@
+{
+  "_comment": "NIST Intelligent Building Agents Laboratory (IBAL), doi:10.18434/mds2-2751, NIST open licence. Chiller 1 (a nominal 5-ton R-410A water-cooled chiller: 4.65 t median load at 1.08 kW/ton on steady running hours) point -> CAMBER Role mapping, on a Measurements-page export of the IBAL portal (scaled data, 10-second samples). The refrigerant pressures are GAUGE (psig): stopped, suction and discharge equalize at a median 209.8 / 214.7 psi with the suction line at 72.7 F, which is R-410A's saturation pressure in psig at that temperature (not psia). ch1_sc_rtd and ch1_sh_rtd are the liquid-line and suction-line TEMPERATURES (RTDs, F), not subcooling / superheat: CAMBER's subcooling_temp / superheat_temp roles are differences against the saturation temperature and CAMBER models no refrigerant saturation curve, so they are NOT mapped (nor is the condenser / evaporator approach). cw_supply_temp is the condensing-loop supply leaving its pump (pump4_out_rtd, held near 85 F) and cw_return_temp the chiller's condenser leaving water (ch1_c_out_rtd): the condenser runs 5.8 F above the loop supply on steady hours. The evaporator entering / leaving water (ch1_e_in_rtd / ch1_e_out_rtd) differ by a median 5.5 F, always in that direction. ch1_on (the run command) is not mapped. Chiller 2 has no evaporator-entering sensor (no load can be computed) and is not exported.",
+  "aliases": {
+    "ch1_p_dis": "discharge_pressure",
+    "ch1_p_suc": "suction_pressure",
+    "ch1_e_out_rtd": "chw_supply_temp",
+    "ch1_e_in_rtd": "chw_return_temp",
+    "ch1_f_e": "chw_flow",
+    "ch1_power": "power",
+    "pump4_out_rtd": "cw_supply_temp",
+    "ch1_c_out_rtd": "cw_return_temp"
+  }
+}

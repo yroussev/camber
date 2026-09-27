@@ -1,0 +1,35 @@
+{
+  "_comment": "Run template for irish-ahu: one real mixing-box AHU at an industrial facility, running 24/7 (the supply fan draws power in 99.2% of the rows that trend it). Hourly resample of the 15-minute store. The minimum outdoor air is undocumented, so min_oa_pct is CALIBRATED from the unit's own minimum-position months: with the OA damper held at its 20% minimum (Aug 2019 - Jun 2020, 4,581 hours with |RAT - OAT| >= 5 F) the mixing balance gives a median 4.1% outdoor-air fraction -- not a generic 20%. No fan signal is mapped (the unit never stops), so outdoor_air_fraction is not fan-gated. Rules that fit the design: outdoor-air fraction, the economizer high limit (Ireland rarely reaches it), leaking valves, simultaneous heating and cooling, and mechanical cooling in free-cooling weather. Left out: supply-air setpoint rules (no setpoint is trended), schedule and setback rules (the unit runs continuously), zone rules (the zones are not mapped). Normal-operation notes: economizer_high_limit warns (OA above the minimum in 21% of the hours above 65 F with the outdoor air no cooler than the return; the rule's differential changeover already excuses OAT < RAT): part of it is the COVID-19 100% period, but the damper also stays open in warm weather in 2017-2019 and 2022, so it is a plausible real finding. outdoor_air_fraction warns on 'excess OA' -- mostly the documented COVID-19 period of 100% outdoor air (about 2020-08 to 2021-12-02), a deliberate operating choice, not a fault. leaking_valve warns on a heating-leak signature (SAT > MAT + fan heat + 3 F with both valves shut in about 30% of those hours) that stops after the documented 2022-05-01 valve replacement (34% of closed hours before, 0.2% after); but the heating coil's own leaving temperature shows no rise with its valve shut (HCALTemp - MaTemp median -0.8 F) except in the 2020/21 COVID winter (+8 to +11 F), so most of the signature sits downstream of the coil (fan heat or the supply sensor) -- a lead to check, not a confirmed leak.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-irish-ahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "outdoor_air_fraction",
+      "params": {
+        "min_oa_pct": 4.1
+      }
+    },
+    {
+      "name": "economizer_high_limit",
+      "params": {
+        "min_oa_pct": 4.1
+      }
+    },
+    "leaking_valve",
+    "simultaneous_heat_cool",
+    "free_cooling_missed"
+  ],
+  "report": {
+    "level": 2
+  }
+}

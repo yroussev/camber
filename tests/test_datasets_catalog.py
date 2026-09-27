@@ -73,13 +73,19 @@ def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
         "lbnl-b59",
         "finnish-dcv",
         "b4b-windesheim",
+        # 0.89 intake B: AHU and refrigerant side
+        "nuig-ahu101",
+        "irish-ahu",
+        "nist-heatpump-fdd",
+        "nist-ibal",
     ]
 
 
 def test_every_file_is_pinned_https_and_bdg2_is_share_alike():
     for e in datasets.catalog():
         for f in e.files:
-            assert f["url"].startswith("https://")
+            # a manual entry's files come from a portal export: no direct URL, but still pinned
+            assert f["url"].startswith("https://") if f["url"] or not e.manual else True
             assert f["pinned"] and len(f["sha256"]) == 64 and f["size"] > 0
     bdg2 = datasets.get("bdg2")
     assert bdg2.licence == "CC-BY-SA-4.0" and bdg2.share_alike and bdg2.commercial_ok
@@ -99,7 +105,12 @@ def test_run_counts_and_default_subsets_are_bounded():
                 assert e.store_bytes() <= 100_000_000
             else:
                 assert len(e.runs()) <= 8
-            assert len(e.runs("full")) == counts[e.id]
+            # full = every run whose file the full subset fetches (a manual entry's default and
+            # full windows are separate portal exports, each read by its own run)
+            full_files = {f["name"] for f in e.subset_files("full")}
+            reachable = [r for r in e.ingest["runs"] if r["file"] in full_files]
+            assert len(e.runs("full")) == len(reachable) <= counts[e.id]
+            assert len(reachable) == counts[e.id] or e.manual
 
 
 def test_mappings_parse_and_keep_their_quirk_notes():
@@ -153,22 +164,26 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 10
+    assert len(datasets.catalog()) == 14
     assert [e.id for e in datasets.catalog(kind="real")] == [
         "bdg2",
         "lbnl-b59",
         "b4b-windesheim",
+        "nuig-ahu101",
+        "irish-ahu",
     ]
     assert [e.id for e in datasets.catalog(kind="lab")] == [
         "finnish-dcv",
+        "nist-heatpump-fdd",
+        "nist-ibal",
     ]
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
-    assert len(datasets.catalog(labeled=False)) == 4
-    assert len(datasets.catalog(labeled=True)) == 6
+    assert len(datasets.catalog(labeled=False)) == 7
+    assert len(datasets.catalog(labeled=True)) == 7
     # the open tier: research-only (NC/ND) entries are out
     commercial = datasets.catalog(licence="commercial")
     assert [e.id for e in datasets.catalog() if e.research_only] == []
-    assert len(commercial) == 10 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 14 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):

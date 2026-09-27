@@ -1,0 +1,14 @@
+{
+  "_comment": "NIST residential split heat pump, cooling-mode FDD laboratory tests (14 SEER and 16 SEER units, long and short line sets), doi:10.18434/M32132, NIST public-domain data. One worksheet of steady-state test points, one row per averaged test point, grouped by the source file name; the fault levels are in the NF / EF / CF / LL / UC-OC columns. Maps the refrigerant-side and air-side context CAMBER has roles for. subcooling_temp is the liquid-line subcooling at the outdoor unit's liquid service valve (ODLiqSV_Tsub_F) and superheat_temp the compressor-suction superheat (CompSuct_Suph_F), both already DIFFERENCES in F computed by the publisher from its R-410A property tables (CAMBER models no saturation curve). The refrigerant pressures are ABSOLUTE (psia) and convert to psig at ingest. power is the outdoor unit's (compressor + condenser fan) electrical demand in W. The indoor unit's inlet / exit air-grid temperatures stand in for return / supply air, and 'Indoor Unit SCFM' is the measured indoor airflow at standard density. NOT mapped (no role): the compressor DISCHARGE superheat (CompDisch_Suph_F, see GitHub issue #6), capacity, COP, refrigerant mass flow and the dew points.",
+  "aliases": {
+    "ODLiqSV_Tsub_F": "subcooling_temp",
+    "CompSuct_Suph_F": "superheat_temp",
+    "CompDisch_psia": "discharge_pressure",
+    "1710_ODSuctPort_psia": "suction_pressure",
+    "OD Air AVG DB (F)": "oat",
+    "OD_Xitron_Watts": "power",
+    "Inlet TC Grid AVG Temp (F)": "return_air_temp",
+    "Exit TC Grid AVG Temp (F)": "supply_air_temp",
+    "Indoor Unit SCFM": "airflow"
+  }
+}

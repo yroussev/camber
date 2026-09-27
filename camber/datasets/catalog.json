@@ -5705,6 +5705,1909 @@
      "handling_note": "Left as published: the DCV rule reads CO2 changes (lift within the hour of day), which a constant shift does not move; absolute thresholds (co2_ventilation) read shifted values."
     }
    ]
+  },
+  {
+   "id": "nuig-ahu101",
+   "title": "NUIG lecture-theatre AHU101 (real BMS trends, unlabelled)",
+   "summary": "Fourteen months (Jan 2018 - Feb 2019) of 1-minute BMS trends from a real 100% outdoor-air handler (thermal wheel, frost, cooling and post-heat coils, fixed-step fans) serving a university lecture theatre in Galway, Ireland, with the room's temperature, humidity and CO2 and an outdoor weather station. No fault labels.",
+   "teaches": [
+    "supply-air temperature tracking against the BMS's own calculated setpoint",
+    "a CO2 sensor pinned at its 2000 ppm full scale while the fan is off",
+    "reading a 100% outdoor-air unit: why the mixed-air rules must decline",
+    "export clocks: local wall time labelled as UTC"
+   ],
+   "publisher": "HIT2GAP project (NUI Galway, Nobatek/INEF4 and partners), via Zenodo",
+   "citation": "Messervey, T., Pietrobon, M., Cowling, P., Rafiee, M., Blanes Restoy, L. M., Keane, M., Brassier, P., Bourreau, P. (2019). Thermal and electrical energy demands from energy meters and measured values from sensors in an air handling unit and in the served lecture room of a university building. Zenodo. doi:10.5281/zenodo.3406555",
+   "dois": [
+    "10.5281/zenodo.3406555"
+   ],
+   "landing_url": "https://zenodo.org/records/3406555",
+   "licence": "CDLA-Permissive-1.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "1 air handler (AHU101, 100% outdoor air) + the lecture theatre it serves + an outdoor weather station",
+   "timezone": "Europe/Dublin wall clock, although every stamp is labelled +00:00 (see the data issue); 1-minute samples, 2018-01-01 to 2019-02-28",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://zenodo.org/api/records/3406555",
+    "expect": "cdla-permissive-1.0"
+   },
+   "files": [
+    {
+     "name": "nuig-data.tar.gz",
+     "url": "https://zenodo.org/records/3406555/files/nuig-data.tar.gz?download=1",
+     "size": 121268621,
+     "sha256": "20ea2e728d8a118901c222708d15c0d3b9877dff5bd3dcf53b5ff159b2b159b7",
+     "pinned": true,
+     "etag": null,
+     "archive": "tar",
+     "extracted_size": 680658470,
+     "members": [
+      "NUIG_sensors/NUIG_EnC_EM_008_Chiller_Elec_Daily_Total_D7_215",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_CO_147_1_Lecture_Theatre_3_CO2_D10_462",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_LPHW_2_GFC4_Riser_3_IFM_D21_467",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_2_Supply_Duct_Temp_D4_472",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_2_GFC4_2_Riser_3_Return_Temp_D30_460",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TCV_101_1_Main_HValve_D23_475",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_102_2_Cooling_Off_Coil_Temp_D6_459",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TCV_101_2_Main_CValve_D25_468",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_HS_101_2_EAF_Enable_D16_479",
+      "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Wind_Speed_8839",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_Calc_Supply_Setpt_D22_470",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_HE_101_1_Return_Duct_Humidity_D13_458",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_HE_147_1_Lecture_Theatre_3_Humidity_D12_456",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_EAF_VSD_Speed_D18_461",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_HS_101_1_SAF_Enable_D15_455",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_147_1_Lecture_Theatre_3_Temp_D11_469",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_147_2_Lecture_Theatre_3_Temp_D8_465",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_HE_147_2_Lecture_Theatre_3_Humidity_D9_464",
+      "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Pressure1_8842",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_Temp_D19_477",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_Hours_Run_D31_480",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_Hours_Free_Cool_D32_484",
+      "NUIG_sensors/NUIG_EnC_West_Rads_Energy_D14_134",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_MCC02___Fire_Alarm_D29_476",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_2_GFC4_1_Riser_3_Flow_Temp_D27_457",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_SAF_VSD_Speed_D17_473",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_3_Cooling_Off_Coil_Temp_D5_478",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TCV_101_3_Frost_Coil_HValve_D14_471",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_1_Frost_Coil_Temp_D3_463",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_117_Lecture_Theatre_3_Av__Humidity_D28_482",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_4_Return_Duct_Temp_D20_474",
+      "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Humidity_8840",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_GF_East_Rads_Energy_Acc_Total_D2_483",
+      "NUIG_sensors/NUIG_AHU101_Ctrls_CO_147_2_Lecture_Theatre_3_CO2_D7_466",
+      "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Temperature_8841"
+     ]
+    },
+    {
+     "name": "NUIG_variables_MR1_MP5_AHU101 focus v1.xlsx",
+     "url": "https://zenodo.org/records/3406555/files/NUIG_variables_MR1_MP5_AHU101%20focus%20v1.xlsx?download=1",
+     "size": 606367,
+     "sha256": "fad9a27c057abab517feba3092d4a80be2b3ecc749dd00379ec9cc7ec4392eb8",
+     "pinned": true,
+     "etag": null,
+     "archive": null,
+     "role": "documentation"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "the one AHU101 run (the whole 14 months; the archive is a single download)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 5300000
+    },
+    "full": {
+     "description": "the same: the dataset has one unit",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 5300000
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-nuig-ahu101",
+    "timestamp": "Datetime",
+    "resample": "15min",
+    "mapping": "nuig_ahu101.json",
+    "units": {
+     "supply_air_temp": "degC",
+     "supply_air_temp_sp": "degC",
+     "return_air_temp": "degC",
+     "space_temp": "degC",
+     "oat": "degC"
+    },
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "Every timestamp is labelled +00:00 but reads as the Europe/Dublin wall clock (the 2018-03-25 01:00-01:59 spring-forward hour is missing); CAMBER keeps the wall clock as written and drops the label.",
+      "issue": "local-clock-labelled-utc"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "The room CO2 sensors read exactly 1999.9985 ppm (full scale) in about 2% of minutes, all with the supply fan off: a clipped reading, not a measured 2000 ppm.",
+      "issue": "co2-clipped-at-full-scale"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "Weather-station points cover only 2018-04-17 to 2019-02-05, the room CO2 / humidity averages start 2018-04-10, and every point shares four multi-day gaps; outdoor-air rules see no weather before mid-April 2018.",
+      "issue": "coverage-shorter-than-described"
+     }
+    ],
+    "runs": [
+     {
+      "id": "ahu101",
+      "file": "nuig-data.tar.gz",
+      "members": {
+       "NUIG_AHU101_Ctrls_TE_101_2_Supply_Duct_Temp_D4_472": "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_2_Supply_Duct_Temp_D4_472",
+       "NUIG_AHU101_Ctrls_AHU101_Calc_Supply_Setpt_D22_470": "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_Calc_Supply_Setpt_D22_470",
+       "NUIG_AHU101_Ctrls_TE_101_4_Return_Duct_Temp_D20_474": "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_4_Return_Duct_Temp_D20_474",
+       "NUIG_AHU101_Ctrls_TCV_101_1_Main_HValve_D23_475": "NUIG_sensors/NUIG_AHU101_Ctrls_TCV_101_1_Main_HValve_D23_475",
+       "NUIG_AHU101_Ctrls_TCV_101_2_Main_CValve_D25_468": "NUIG_sensors/NUIG_AHU101_Ctrls_TCV_101_2_Main_CValve_D25_468",
+       "NUIG_AHU101_Ctrls_AHU101_SAF_VSD_Speed_D17_473": "NUIG_sensors/NUIG_AHU101_Ctrls_AHU101_SAF_VSD_Speed_D17_473",
+       "NUIG_AHU101_Ctrls_HS_101_1_SAF_Enable_D15_455": "NUIG_sensors/NUIG_AHU101_Ctrls_HS_101_1_SAF_Enable_D15_455",
+       "NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_Temp_D19_477": "NUIG_sensors/NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_Temp_D19_477",
+       "NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481": "NUIG_sensors/NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481",
+       "NUIG_AHU101_Ctrls_HE_101_1_Return_Duct_Humidity_D13_458": "NUIG_sensors/NUIG_AHU101_Ctrls_HE_101_1_Return_Duct_Humidity_D13_458",
+       "NUIG_AspectGroup_Weather_Current_Temperature_8841": "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Temperature_8841",
+       "NUIG_AspectGroup_Weather_Current_Humidity_8840": "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Humidity_8840"
+      },
+      "equip": "AHU101",
+      "class": "AHU",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "nuig-ahu101.json"
+   },
+   "known_issues": [
+    "Real, unlabelled data: findings are hypotheses to check, not scored detections.",
+    "A 100% outdoor-air unit with a thermal wheel: there is no mixed-air temperature or damper, so the economizer and outdoor-air-fraction rules cannot run.",
+    "Timestamps are the local wall clock despite their +00:00 label; the room CO2 clips at 2000 ppm; the weather station starts mid-April 2018. See the data issues."
+   ],
+   "data_issues": [
+    {
+     "id": "local-clock-labelled-utc",
+     "title": "Timestamps are the local (Irish) wall clock, labelled +00:00",
+     "columns": [
+      "timestamp (every point file)"
+     ],
+     "evidence": "All 559,857 stamps of the supply-temperature file (and of every other point) end in +00:00. Yet the only 1-hour hole in the AHU points before the summer outages is exactly 2018-03-25 01:00-01:59, the hour Irish clocks skip at the spring change: a true-UTC log has that hour (it is 02:00-02:59 local). The autumn change's repeated hour (2018-10-28 01:00-01:59) appears once, 60 rows, as a local clock that drops the repeat records it.",
+     "contradicts": {
+      "document": "the point files' ISO-8601 stamps (offset +00:00); the record states no other time zone",
+      "citation": "Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555"
+     },
+     "handling": "annotate",
+     "handling_note": "CAMBER keeps the wall-clock values as written and drops the +00:00 label (no conversion), so schedule rules see Irish local hours. The one missing spring hour stays missing; the repeated autumn hour cannot be recovered."
+    },
+    {
+     "id": "co2-clipped-at-full-scale",
+     "title": "Room CO2 is clipped at the sensors' 2000 ppm full scale",
+     "columns": [
+      "NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481",
+      "NUIG_AHU101_Ctrls_CO_147_1_Lecture_Theatre_3_CO2_D10_462",
+      "NUIG_AHU101_Ctrls_CO_147_2_Lecture_Theatre_3_CO2_D7_466"
+     ],
+     "evidence": "The room-average CO2 reads exactly 1999.9985 ppm, its maximum, in 8,212 of 416,950 minutes (1.97%, 137 h); the next-highest value is 1998.99. Every one of those minutes has the supply fan at 0% (4 of 142,141 fan-on minutes reach it). The two room sensors clip identically (8,933 and 8,769 minutes, 99.9% fan off).",
+     "contradicts": {
+      "document": "Variables workbook (NUIG_variables_MR1_MP5_AHU101 focus v1.xlsx): CO2 in ppm with the Min / Max range columns blank, so the 2000 ppm ceiling is not documented",
+      "citation": "Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. A clipped reading is a lower bound (the true CO2 was at least 2000 ppm); CAMBER's ventilation rules treat a reading at full scale with the fan off as not judged rather than as a measured value."
+    },
+    {
+     "id": "coverage-shorter-than-described",
+     "title": "Several points cover much less than January 2018 - February 2019",
+     "columns": [
+      "NUIG_AspectGroup_Weather_Current_Temperature_8841",
+      "NUIG_AspectGroup_Weather_Current_Humidity_8840",
+      "NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481",
+      "NUIG_AHU101_Ctrls_117_Lecture_Theatre_3_Av__Humidity_D28_482",
+      "NUIG_EnC_West_Rads_Energy_D14_134",
+      "timestamp (every point file)"
+     ],
+     "evidence": "The weather-station points run 2018-04-17 to 2019-02-05 (316,736 minutes, 25% of their span missing, including a 39-day hole from 2019-01-23); the room CO2 / humidity averages start 2018-04-10; the heating meter starts 2018-05-24, not April. Every point shares four outages of 13.1, 12.2, 4.7 and 4.7 days (2018-05-29, 07-16, 08-21, 11-14): the AHU points miss 8.3% of their 610,560 minutes.",
+     "contradicts": {
+      "document": "Record description: AHU, room and outdoor data 'available for the period from January 2018 to the end of February 2019, at the measuring time interval of 1 minute'; the heating meter 'from April 2018'",
+      "citation": "Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the gaps stay gaps. Outdoor-air-dependent analyses see no weather before 2018-04-17 or after 2019-02-05."
+    },
+    {
+     "id": "second-cooling-coil-sensor-not-ahu101",
+     "title": "TE_102_2 ('air after cooling coil') does not track AHU101",
+     "columns": [
+      "NUIG_AHU101_Ctrls_TE_102_2_Cooling_Off_Coil_Temp_D6_459"
+     ],
+     "evidence": "With the supply fan running, TE_101_3 (the other 'air after cooling coil' point) correlates 0.92 with the supply-duct temperature while TE_102_2 correlates 0.31, and TE_102_2 has the same median with the fan on and off (20.63 vs 20.64 C) where TE_101_3 moves 19.0 vs 15.9 C. Its tag names unit 102.",
+     "contradicts": {
+      "document": "Variables workbook: both TE_101_3 and TE_102_2 described as 'AHU101 air temperature after cooling coil'",
+      "citation": "Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555"
+     },
+     "handling": "none",
+     "handling_note": "Not mapped. Neither cooling-coil leaving temperature is mapped (the supply-duct sensor is the supply air temperature)."
+    },
+    {
+     "id": "riser-valve-point-empty",
+     "title": "One listed point file is empty",
+     "columns": [
+      "NUIG_AHU101_Ctrls_LPHW_2_GFC4_Riser_3_IFM_D21_467"
+     ],
+     "evidence": "The archive member is 0 bytes (0 rows) while the other 35 point files hold 316,736-559,857 rows each.",
+     "contradicts": {
+      "document": "Variables workbook: 'AHU101 percentage opening of valve of GFC4 riser', sampled every 60 s",
+      "citation": "Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555"
+     },
+     "handling": "none",
+     "handling_note": "Not mapped; described only."
+    }
+   ]
+  },
+  {
+   "id": "irish-ahu",
+   "title": "Irish industrial AHU (real BMS trends, unlabelled)",
+   "summary": "Five and a half years (mid-2017 to 2022) of 15-minute BMS trends from one mixing-box air handler at a regulated industrial facility in Ireland: outdoor / return / exhaust dampers, heating and cooling coils, supply and return fans and two reheat zones, with Project-Haystack-style names. Deliberately messy (missing features and intervals, inaccurate readings); no fault labels, but two documented events: outdoor air fixed at 100% for COVID-19 until 2021-12-02, and both coil valves replaced on 2022-05-01.",
+   "teaches": [
+    "outdoor-air fraction from mixed / return / outdoor temperatures on a real unit",
+    "cleaning a real BMS export: sentinel values, outages logged as zeros, a stuck-at-zero damper signal",
+    "a documented operating change (COVID-19 100% outdoor air) seen in the trends",
+    "why an intake-mounted outdoor sensor and a weather station disagree"
+   ],
+   "publisher": "Intelligent Efficiency Research Group, University College Cork (Mendeley Data)",
+   "citation": "Ahern, M., O'Sullivan, D. T. J., Bruton, K. (2023). A dataset for fault detection and diagnosis of an air handling unit from a real industrial facility. Mendeley Data, V2, doi:10.17632/8x62ntvrg7.2. Data descriptor: Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208",
+   "dois": [
+    "10.17632/8x62ntvrg7.2",
+    "10.1016/j.dib.2023.109208"
+   ],
+   "landing_url": "https://data.mendeley.com/datasets/8x62ntvrg7/2",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "1 air handler (mixing box, heating + cooling coils, supply + return fans) serving 2 reheat zones; the AHU is mapped",
+   "timezone": "undocumented naive local clock (no DST jump or repeat is visible: 96 rows on every transition day); 15-minute rows 2017-06-23 to 2022-12-01 plus 43 rows on 2015-01-01",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://data.mendeley.com/public-api/datasets/8x62ntvrg7?version=2",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "files": [
+    {
+     "name": "Data_Article_Dataset.csv",
+     "url": "https://data.mendeley.com/public-files/datasets/8x62ntvrg7/files/5472e14b-280f-4f80-8148-924f49a5a51c/file_downloaded",
+     "size": 21499325,
+     "sha256": "1409d6b774aef1077686c6aa87f35d2865b8f65ff7e43f6b7d21d735f9079e5e",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "the one AHU run (the whole export; the dataset is a single CSV)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 14100000
+    },
+    "full": {
+     "description": "the same: the dataset has one unit",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 14100000
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-irish-ahu",
+    "timestamp": "Datetime",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S",
+    "resample": "15min",
+    "mapping": "irish_ahu.json",
+    "units": {
+     "supply_air_temp": "degC",
+     "mixed_air_temp": "degC",
+     "return_air_temp": "degC",
+     "oat": "degC"
+    },
+    "quirks": [
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "DaTemp",
+       "OaTemp"
+      ],
+      "gt": 60,
+      "note": "Sentinel readings (supply 938-1000 C on 2021-03-02 10:00-16:15, outdoor 609.98 C on 2022-10-08) are blanked.",
+      "issue": "sentinel-temperatures"
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "RaTemp",
+       "MaTemp",
+       "DaTemp",
+       "OaTemp"
+      ],
+      "eq": 0,
+      "note": "Exact 0.00 C readings are BMS outages logged as zeros (return and supply air read 0.00 together in 3,230 rows on 57 days); they are blanked.",
+      "issue": "outages-logged-as-zero"
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "OaDmprPos"
+      ],
+      "after": "2020-12-15",
+      "before": "2021-02-01",
+      "eq": 0,
+      "note": "The OA damper signal reads 0% from 2020-12-15 to 2021-01-31 while the mixed air equals the outdoor air (the documented COVID-19 100% outdoor-air period); those zeros are blanked, not replaced.",
+      "issue": "damper-signal-zero-during-100pct-oa"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "The unit's outdoor sensor (OaTemp) reads a median 1.25 C above the nearby weather station, 2.2 C at 15 h; it is kept as the OA temperature (it measures the air entering the unit).",
+      "issue": "outdoor-sensor-reads-warm"
+     }
+    ],
+    "runs": [
+     {
+      "id": "ahu",
+      "file": "Data_Article_Dataset.csv",
+      "equip": "AHU",
+      "class": "AHU",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "irish-ahu.json"
+   },
+   "known_issues": [
+    "Real, unlabelled data: findings are hypotheses to check, not scored detections.",
+    "The publisher says the data are messy on purpose; CAMBER blanks the sentinel, zero-outage and stuck-damper readings it can prove (fix quirks) and describes the rest.",
+    "Documented events: OA damper fixed 100% open for COVID-19 until 2021-12-02 (from about 2020-08 in the data); heating and cooling valves replaced 2022-05-01."
+   ],
+   "data_issues": [
+    {
+     "id": "sentinel-temperatures",
+     "title": "Sentinel readings in the supply and outdoor temperatures",
+     "columns": [
+      "DaTemp",
+      "OaTemp"
+     ],
+     "evidence": "DaTemp reads 938.5-1000 C in 26 rows (17 of them exactly 1000.0), all on 2021-03-02 10:00-16:15; OaTemp reads 609.98 C in 3 rows on 2022-10-08 08:45-09:15. The next-highest values are 46.66 C (supply, p99.9) and 36.91 C (outdoor).",
+     "contradicts": {
+      "document": "Data descriptor, data table: DaTemp 'Supply air temperature' and OaTemp 'Outside air temperature sensor', both in C",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "fix",
+     "handling_note": "Readings above 60 C are blanked in both columns (mask quirk); --no-corrections keeps them."
+    },
+    {
+     "id": "outages-logged-as-zero",
+     "title": "BMS outages are logged as 0.00 C, not as gaps",
+     "columns": [
+      "RaTemp",
+      "MaTemp",
+      "DaTemp",
+      "OaTemp",
+      "HCALTemp",
+      "CCALTemp",
+      "ZoneTemp_1"
+     ],
+     "evidence": "RaTemp and DaTemp both read exactly 0.00 in 3,230 rows on 57 days (2017-07-06 to 2022-10-31), mostly whole days of 96 rows; in 94% of them MaTemp, HCALTemp, CCALTemp and ZoneTemp_1 are 0.00 too. A further 58 MaTemp zeros coincide with an outdoor reading of 0.00 or a missing return reading. OaTemp reads 0.00 in 168 rows while the nearby weather station reads a median 12.7 C.",
+     "contradicts": {
+      "document": "Data descriptor: missing BMS data were backfilled from cloud storage, and missing intervals are left as missing time intervals",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "fix",
+     "handling_note": "Exact 0.00 readings of the mapped return, mixed, supply and outdoor temperatures are blanked (mask quirk). A genuine 0.00 C outdoor or mixed-air reading would be lost too; the evidence above says there are none worth keeping."
+    },
+    {
+     "id": "damper-signal-zero-during-100pct-oa",
+     "title": "The damper signals read 0% for six weeks of the COVID-19 100% outdoor-air period",
+     "columns": [
+      "OaDmprPos",
+      "RaDmprPos",
+      "EaDmprPos"
+     ],
+     "evidence": "All three damper signals read 0 in 4,592 rows from 2020-12-15 03:30 to 2021-01-31 23:45, bracketed by weeks at OA 100% / return 0%. In those rows MaTemp - OaTemp is a median 0.23 C and RaTemp - MaTemp 13.55 C: the mixed air is outdoor air, as in the 100%-outdoor-air months Mar-Nov 2021 (0.11 / 8.01 C) and unlike the 20% minimum-OA months Sep 2019 - May 2020 (9.30 / 1.02 C).",
+     "contradicts": {
+      "document": "Data descriptor: the outside-air damper was fixed at 100% open as a COVID-19 precaution until the control review of 2021-12-02",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "fix",
+     "handling_note": "OaDmprPos zeros between 2020-12-15 and 2021-02-01 are blanked (mask quirk), not replaced with 100%; the return and exhaust damper signals are not mapped."
+    },
+    {
+     "id": "outdoor-sensor-reads-warm",
+     "title": "The unit's outdoor sensor reads warmer than the weather station",
+     "columns": [
+      "OaTemp",
+      "OaTemp_WS"
+     ],
+     "evidence": "Over the 85,409 rows with both (2020-06 on, sentinels and zeros excluded) OaTemp - OaTemp_WS is a median +1.25 C (p10 -0.59, p90 +3.64), 0.8 C at night rising to 2.2 C at 15 h; quarterly medians are -0.40 / -0.24 C in 2020 Q2-Q3, then +0.95 to +1.65 C from 2020 Q4.",
+     "contradicts": {
+      "document": "Data descriptor, data table: OaTemp 'Outside air temperature sensor' and OaTemp_WS 'Outside air temperature from nearby weather station'",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. OaTemp stays the OA temperature: it is the air entering this unit and the only outdoor reading before 2020-06. The afternoon excess suggests solar or intake heating; the step after 2020 Q3 is not explained."
+    },
+    {
+     "id": "zone-1-temperature-offset",
+     "title": "Zone 1 temperature carries a +489 / -509 offset for 2.5 years",
+     "columns": [
+      "ZoneTemp_1",
+      "ZoneTemp_2"
+     ],
+     "evidence": "ZoneTemp_1 reads a median 510.49 in 53,869 rows (2017-11-16 to 2019-07-01) and -488.87 in 26,776 rows (2019-07-15 to 2020-06-24); elsewhere its median is 21.07. ZoneTemp_2 reads 84.65 in 397 rows.",
+     "contradicts": {
+      "document": "Data descriptor, data table: ZoneTemp_1 / ZoneTemp_2 'Average zone air temperature', C",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "none",
+     "handling_note": "The zone points are not mapped (they belong to the reheat zones, not the AHU); described only."
+    },
+    {
+     "id": "stray-2015-rows",
+     "title": "43 rows from 2015, then a 904-day gap",
+     "columns": [
+      "Datetime"
+     ],
+     "evidence": "The file starts with 43 rows on 2015-01-01 01:00-11:30 (14 of them carry return, damper, valve and supply readings, 34 a zone-1 reheat valve, no mixed or outdoor temperature); the next row is 2017-06-23 19:30.",
+     "contradicts": {
+      "document": "Data descriptor: 900-second (15-minute) time series readings",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "annotate",
+     "handling_note": "Ingested as published; analysis windows effectively start 2017-06-23."
+    },
+    {
+     "id": "off-grid-timestamps",
+     "title": "5,205 timestamps are off the 15-minute grid",
+     "columns": [
+      "Datetime"
+     ],
+     "evidence": "5,205 stamps (2020-06-23 to 2022-11-18) are not on a quarter hour, 5,063 of them one minute past, giving 5,065 pairs of 1-minute and 14-minute steps; 2020 holds 5,197 of them.",
+     "contradicts": {
+      "document": "Data descriptor: 900-second (15-minute) time series readings",
+      "citation": "Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the 15-minute mean resample at ingest puts each reading in its quarter hour."
+    }
+   ]
+  },
+  {
+   "id": "nist-heatpump-fdd",
+   "title": "NIST residential heat pump, cooling-mode FDD lab tests (labelled faults)",
+   "summary": "Laboratory steady-state test points from two residential split heat pumps (14 SEER and 16 SEER, R-410A, each on a long and a short line set) in cooling mode, fault-free and with single and double faults imposed at measured levels: refrigerant under- and overcharge, low and high indoor airflow, condenser-coil blockage and liquid-line restriction. Refrigerant pressures and temperatures with the publisher's computed subcooling, suction superheat and discharge superheat. One row per averaged test point; there is no clock.",
+   "teaches": [
+    "refrigerant charge faults in subcooling and superheat",
+    "reading a fault-labelled lab dataset: labels that contradict the file names",
+    "why steady-state test points are not a time series"
+   ],
+   "publisher": "National Institute of Standards and Technology (NIST), Engineering Laboratory, HVAC&R Equipment Performance Group",
+   "citation": "NIST HVAC&R Equipment Performance Group (2019). Fault Detection and Diagnosis Research Data: FDD data for 14 SEER and 16 SEER heat pump cooling-mode tests. National Institute of Standards and Technology. doi:10.18434/M32132. Related: Kim, M., Payne, W. V., Domanski, P. A., Hermes, C. J. L. (2006), NISTIR 7350; Domanski, P. A., Payne, W. V., Henderson, H. (2015), Applied Thermal Engineering 90:352-361, doi:10.1016/j.applthermaleng.2015.05.090",
+   "dois": [
+    "10.18434/M32132",
+    "10.1016/j.applthermaleng.2015.05.090"
+   ],
+   "landing_url": "https://www.nist.gov/el/beed/hvacr-equipment-performance-group/fault-detection-and-diagnosis-research-data",
+   "licence": "NIST-PD",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "kind": "lab",
+   "labeled_faults": true,
+   "labels": {
+    "targets": {},
+    "fault_types": {
+     "undercharge": "refrigerant undercharge (UC/OC < 100% of the nominal charge)",
+     "overcharge": "refrigerant overcharge (UC/OC > 100%)",
+     "indoor_airflow_low": "reduced indoor (evaporator) airflow (EF < 100%)",
+     "indoor_airflow_high": "increased indoor airflow (EF > 100%)",
+     "condenser_blockage": "outdoor-coil face area blocked (CF = % of the area left free)",
+     "liquid_line_restriction": "liquid-line restriction (LL = % of the normal liquid-line pressure drop)",
+     "indoor_airflow_low+undercharge": "two simultaneous faults",
+     "indoor_airflow_high+undercharge": "two simultaneous faults",
+     "indoor_airflow_low+condenser_blockage": "two simultaneous faults",
+     "indoor_airflow_high+condenser_blockage": "two simultaneous faults"
+    }
+   },
+   "equipment": "2 residential split heat pumps (14 SEER, 16 SEER; R-410A, TXV) on long (50 ft) and short (25 ft) line sets; cooling mode",
+   "timezone": "none: the sheet has no timestamps; CAMBER numbers each run's test points on a synthetic 1-minute clock from 2000-01-01",
+   "requires_extras": [
+    "xlsx"
+   ],
+   "licence_check": {
+    "url": "https://www.nist.gov/oism/copyrights",
+    "expect": "considered public information and may be distributed or copied"
+   },
+   "files": [
+    {
+     "name": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+     "url": "https://www.nist.gov/system/files/documents/2019/09/24/fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+     "size": 7269439,
+     "sha256": "db807bb9486717c275a2fc3cf45d04042aa1bae2668a592bf050be88f2bdfc2c",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "description_of_data_fdd_1416seer_hp_cooling.xlsx",
+     "url": "https://www.nist.gov/system/files/documents/2019/09/24/description_of_data_fdd_1416seer_hp_cooling.xlsx",
+     "size": 1663092,
+     "sha256": "f3f619aa6cf34015f7993f2be2072c2c4c3725671a4c4b3424ce2f49aa84818d",
+     "pinned": true,
+     "etag": null,
+     "archive": null,
+     "role": "documentation"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "the four fault-free runs (both units, both line sets) and one run each of undercharge, overcharge, condenser blockage and liquid-line restriction",
+     "files": "all",
+     "runs": [
+      "s14_long_nf",
+      "s14_short_nf",
+      "s16_long_nf",
+      "s16_short_nf",
+      "s14_long_uc80",
+      "s14_long_oc110p6",
+      "s14_long_cf72",
+      "s14_short_ll150"
+     ],
+     "store_bytes_estimate": 220000
+    },
+    "full": {
+     "description": "all 60 runs (56 label combinations; 4 excluded runs kept for inspection)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 900000
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-nist-heatpump-fdd",
+    "sheet": "FDD Heat Pump COOLING 14&16SEER",
+    "timestamp": "Datetime",
+    "clock": {
+     "kind": "rows",
+     "freq": "1min",
+     "start": "2000-01-01"
+    },
+    "resample": null,
+    "mapping": "nist_heatpump_fdd.json",
+    "units": {
+     "discharge_pressure": "psia",
+     "suction_pressure": "psia",
+     "power": "W"
+    },
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "Two files named ...-COOL-SHORT- carry the long line-set flag (Long/Short = 0); run s16_long_ef109_uc95p4 follows the published flag.",
+      "issue": "line-set-flag-contradicts-file-name",
+      "runs": [
+       "s16_long_ef109_uc95p4"
+      ]
+     }
+    ],
+    "runs": [
+     {
+      "id": "s14_short_ef80_uc79p9",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC-79p9%_EF-80%_Goodman_SHORT_COOL_161108a.txt",
+        "UC-79p9%_EF-80%_Goodman_SHORT_COOL_161109a.txt",
+        "UC-79p9%_EF-80%_Goodman_SHORT_COOL_16110a.txt",
+        "UC-79p9%_EF-80%_Goodman_SHORT_COOL_161110a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s14_short_ef85_uc79p9",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161114a.txt",
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161115a.txt",
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161116a.txt",
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161117a.txt",
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161118a.txt",
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161119a.txt",
+        "UC-79p9%_EF-85%_Goodman_SHORT_COOL_161120a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s14_long_ef65_cf72",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "CF_28_EF_65-LONG-COOL-170214a.txt",
+        "CF_28_EF_65-LONG-COOL-170216a.txt",
+        "CF_28_EF_65-LONG-COOL-170217a.txt",
+        "CF_28_EF_65-LONG-COOL-170219a.txt",
+        "CF_28_EF_65-LONG-COOL-170220a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s14_long_cf72",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "CF_28-LONG-COOL-170209a.txt",
+        "CF_28-LONG-COOL-170210a.txt",
+        "CF_28-LONG-COOL-170211a.txt",
+        "CF_28-LONG-COOL-170212a.txt",
+        "CF_28-LONG-COOL-170213a.txt",
+        "CF_28-LONG-COOL-170214a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "condenser_blockage"
+     },
+     {
+      "id": "s14_long_cf72_named_cf50",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "CF_50-LONG-COOL-170221a.txt",
+        "CF_50-LONG-COOL-170222a.txt",
+        "CF_50-LONG-COOL-170223a.txt",
+        "CF_50-LONG-COOL-170224a.txt",
+        "CF_50-LONG-COOL-170224b.txt",
+        "CF_50-LONG-COOL-170225b.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "condenser_blockage",
+      "exclude": "condenser-blockage-level-mislabelled"
+     },
+     {
+      "id": "s14_short_ef110_named_ef80_90",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "EF-10%_Goodman_SHORT_COOL_160928a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161006c.txt",
+        "EF-80%_Goodman_SHORT_COOL_161007a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161008a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161009a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161010a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161012a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161013a.txt",
+        "EF-80%_Goodman_SHORT_COOL_161014a.txt",
+        "EF-90%_Goodman_SHORT_COOL_160928a.txt",
+        "EF-90%_Goodman_SHORT_COOL_160929a.txt",
+        "EF-90%_Goodman_SHORT_COOL_161001a.txt",
+        "EF-90%_Goodman_SHORT_COOL_161002a.txt",
+        "EF-90%_Goodman_SHORT_COOL_161003a.txt",
+        "EF-90%_Goodman_SHORT_COOL_161004a.txt",
+        "EF-90%_Goodman_SHORT_COOL_161005a.txt",
+        "EF-90%_Goodman_SHORT_COOL_161006a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high",
+      "exclude": "indoor-airflow-level-mislabelled"
+     },
+     {
+      "id": "s14_short_ef110",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "EF-110%_Goodman_SHORT_COOL_161017a.txt",
+        "EF-110%_Goodman_SHORT_COOL_161018a.txt",
+        "EF-110%_Goodman_SHORT_COOL_161019a.txt",
+        "EF-110%_Goodman_SHORT_COOL_161020a.txt",
+        "EF-110%_Goodman_SHORT_COOL_161021a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high"
+     },
+     {
+      "id": "s14_short_nf",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Goodman14SEER_NFTests-160318a.txt",
+        "NF-COOL-SHORT-170620b.txt",
+        "Goodman14SEER_NFTests-160318b.txt",
+        "Goodman14SEER_NFTests-160325a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160905a.txt",
+        "Goodman14SEER_NFTests-160322a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160906a.txt",
+        "Goodman14SEER_NFTests-160319a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160904a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160911a.txt",
+        "NF-COOL-SHORT-170626a.txt",
+        "NF-COOL-SHORT-170620a.txt",
+        "Goodman14SEER_NFTests-160321a.txt",
+        "Goodman14SEER_NFTests-160324a.txt",
+        "Goodman14SEER_NFTests-160322b.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160910a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160902a.txt",
+        "Goodman14SEER_NFTests-160405a.txt",
+        "NF-COOL-SHORT-170628a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160912a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160907a.txt",
+        "NF-COOL-SHORT-170625a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-80-95-160913a.txt",
+        "Goodman14SEER_NFTests-160315b.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160901a.txt",
+        "NF-COOL-SHORT-170629a.txt",
+        "Goodman14SEER_NFTests-160329a.txt",
+        "Goodman14SEER_NFTests-160319b.txt",
+        "NF-COOL-SHORT-170627a.txt",
+        "Goodman14SEER_NFTests-160406a.txt",
+        "Goodman14SEER_NFTests-160315a.txt",
+        "Goodman14SEER_NFTests-160331a.txt",
+        "Goodman14SEER_NFTests-160330b.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160903a.txt",
+        "Goodman14SEER_NFTests-SHORT-COOL-160909a.txt",
+        "Goodman14SEER_NFTests-160316b.txt",
+        "Goodman14SEER_NFTests-160316c.txt",
+        "Goodman14SEER_NFTests-160317a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": ""
+     },
+     {
+      "id": "s14_short_ll126",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "LL-126p0-COOL-SHORT-170630a.txt",
+        "LL-126p0-COOL-SHORT-170701a.txt",
+        "LL-126p0-COOL-SHORT-170704a.txt",
+        "LL-126p0-COOL-SHORT-170706a.txt",
+        "LL-126p0-COOL-SHORT-170707a.txt",
+        "LL-126p0-COOL-SHORT-170708a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s14_short_ll150",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "LL-150p0-COOL-SHORT-170710b.txt",
+        "LL-150p0-COOL-SHORT-170711b.txt",
+        "LL-150p0-COOL-SHORT-170712a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s14_long_nf",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Goodman14SEER_NFTests-Long-160419a.txt",
+        "Goodman14SEER_NFTests-Long-160420b.txt",
+        "Goodman14SEER_NFTests-Long-160421a.txt",
+        "Goodman14SEER_NFTests-Long-160422a.txt",
+        "Goodman14SEER_NFTests-Long-160509a.txt",
+        "Goodman14SEER_NFTests-Long-160510a.txt",
+        "Goodman14SEER_NFTests-Long-160606a.txt",
+        "Goodman14SEER_NFTests-Long-160607a.txt",
+        "Goodman14SEER_NFTests-Long-160615a.txt",
+        "Goodman14SEER_NFTests-Long-160616b.txt",
+        "Goodman14SEER_NFTests-Long-160620a.txt",
+        "Goodman14SEER_NFTests-Long-160621a.txt",
+        "Goodman14SEER_NFTests-Long-160622a.txt",
+        "Goodman14SEER_NFTests-Long-160623a.txt",
+        "Goodman14SEER_NFTests-Long-160630a.txt",
+        "Goodman14SEER_NFTests-Long-COOL-160725a.txt",
+        "Goodman14SEER_NFTests-Long-COOL-160803a.txt",
+        "Goodman14SEER_NFTests-Long-COOL-160811a.txt",
+        "Goodman14SEER_NFTests-Long-COOL-160812a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161212b.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161213a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161214a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161215a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161216a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161217a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161219a.txt",
+        "Goodman14SEER_NFTests-LONG-COOL-161221a.txt",
+        "NF-LONG-COOL-170221a.txt",
+        "NF-LONG-COOL-170227a.txt",
+        "NF_80-82_14SEER-LONG-COOL-170112b.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": ""
+     },
+     {
+      "id": "s14_long_ef105_uc80",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC_80p0_EF-105-LONG-COOL-170203a.txt",
+        "UC_80p0_EF-105-LONG-COOL-170204a.txt",
+        "UC_80p0_EF-105-LONG-COOL-170205a.txt",
+        "UC_80p0_EF-105-LONG-COOL-170206a.txt",
+        "UC_80p0_EF-105-LONG-COOL-170207a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high+undercharge"
+     },
+     {
+      "id": "s14_long_ef65p3_uc80",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC_80p0_EF_65p3-LONG-COOL-170123a.txt",
+        "UC_80p0_EF_65p3-LONG-COOL-170124a.txt",
+        "UC_80p0_EF_65p3-LONG-COOL-170125a.txt",
+        "UC_80p0_EF_65p3-LONG-COOL-170126a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s14_long_ef88_uc80",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC_80p0_EF_88-LONG-COOL-170128a.txt",
+        "UC_80p0_EF_88-LONG-COOL-170129a.txt",
+        "UC_80p0_EF_88-LONG-COOL-170130a.txt",
+        "UC_80p0_EF_88-LONG-COOL-170131a.txt",
+        "UC_80p0_EF_88-LONG-COOL-170201a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s14_short_uc70p5",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC-70p5%_Goodman_SHORT_COOL_161129a.txt",
+        "UC-70p5%_Goodman_SHORT_COOL_161130a.txt",
+        "UC-70p5%_Goodman_SHORT_COOL_161201a.txt",
+        "UC-70p5%_Goodman_SHORT_COOL_161202a.txt",
+        "UC-70p5%_Goodman_SHORT_COOL_161205a.txt",
+        "UC-70p5%_Goodman_SHORT_COOL_161206a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s14_short_uc79p9",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC-79p9%_Goodman_SHORT_COOL_161101a.txt",
+        "UC-79p9%_Goodman_SHORT_COOL_161102a.txt",
+        "UC-79p9%_Goodman_SHORT_COOL_161103a.txt",
+        "UC-79p9%_Goodman_SHORT_COOL_161104a.txt",
+        "UC-79p9%_Goodman_SHORT_COOL_161105a.txt",
+        "UC-79p9%_Goodman_SHORT_COOL_161106a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s14_short_uc89p7",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC-89p7%_Goodman_SHORT_COOL_161025a.txt",
+        "UC-89p7%_Goodman_SHORT_COOL_161026a.txt",
+        "UC-89p7%_Goodman_SHORT_COOL_161027a.txt",
+        "UC-89p7%_Goodman_SHORT_COOL_161028a.txt",
+        "UC-89p7%_Goodman_SHORT_COOL_161030a.txt",
+        "UC-89p7%_Goodman_SHORT_COOL_161031a.txt",
+        "UC-89p7%_Goodman_SHORT_COOL_161101a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s14_long_oc110p6",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "OC_110p6_14SEER-LONG-COOL-161221a.txt",
+        "OC_110p6_14SEER-LONG-COOL-161222a.txt",
+        "OC_110p6_14SEER-LONG-COOL-161223a.txt",
+        "OC_110p6_14SEER-LONG-COOL-170103a.txt",
+        "OC_110p6_14SEER-LONG-COOL-170104a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "overcharge"
+     },
+     {
+      "id": "s14_long_uc80",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC_80p0_14SEER-LONG-COOL-170118a.txt",
+        "UC_80p0_14SEER-LONG-COOL-170119a.txt",
+        "UC_80p0_14SEER-LONG-COOL-170120a.txt",
+        "UC_80p0_14SEER-LONG-COOL-170121a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s14_long_uc90",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "UC_90p0_14SEER-LONG-COOL-170112a.txt",
+        "UC_90p0_14SEER-LONG-COOL-170113a.txt",
+        "UC_90p0_14SEER-LONG-COOL-170114a.txt",
+        "UC_90p0_14SEER-LONG-COOL-170115a.txt",
+        "UC_90p0_14SEER-LONG-COOL-170117a.txt"
+       ]
+      },
+      "equip": "HP_SEER14",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s16_short_oc110",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-OC_110p0-COOL-SHORT-170928a.txt",
+        "Airtemp-OC_110p0-COOL-SHORT-170929a.txt",
+        "Airtemp-OC_110p0-COOL-SHORT-171001a.txt",
+        "Airtemp-OC_110p0-COOL-SHORT-171002a.txt",
+        "Airtemp-OC_110p0-COOL-SHORT-171003a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "overcharge"
+     },
+     {
+      "id": "s16_short_ef96p6_cf67",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CA-33-EA-96p6-COOL-SHORT-171120a.txt",
+        "Airtemp-CA-33-EA-96p6-COOL-SHORT-171125a.txt",
+        "Airtemp-CA-33-EA-96p6-COOL-SHORT-171127a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef109_cf84",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-16-EA-109-COOL-SHORT-170305a.txt",
+        "Airtemp-CF-16-EA-109-COOL-SHORT-170306a.txt",
+        "Airtemp-CF-16-EA-109-COOL-SHORT-170307a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ll110",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-LL-10p0-COOL-SHORT-171106a.txt",
+        "Airtemp-LL-10p0-COOL-SHORT-171107a.txt",
+        "Airtemp-LL-10p0-COOL-SHORT-171108a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s16_short_ll126",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-LL-126-COOL-SHORT-170309a.txt",
+        "Airtemp-LL-126-COOL-SHORT-170312a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s16_long_ll144",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-LL-144-COOL-LONG-170510a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s16_short_ll151",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-LL-151-COOL-SHORT-170314a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s16_long_nf",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-NF-COOL-LONG-170912a.txt",
+        "Airtemp-NF-COOL-LONG-170913a.txt",
+        "Airtemp-NF-COOL-LONG-170921a.txt",
+        "Airtemp-NF-COOL-LONG-170922a.txt",
+        "Airtemp-NF-COOL-LONG-170923a.txt",
+        "Airtemp-NF-COOL-LONG-170925a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": ""
+     },
+     {
+      "id": "s16_long_ef107",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-EA-107-COOL-LONG-170501a.txt",
+        "Airtemp-EA-107-COOL-LONG-170502a.txt",
+        "Airtemp-EA-107-COOL-LONG-170503a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high"
+     },
+     {
+      "id": "s16_long_ef81p4",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-EA-81p4-COOL-LONG-170507a.txt",
+        "Airtemp-EA-81p4-COOL-LONG-170508a.txt",
+        "Airtemp-EA-81p4-COOL-LONG-170509a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low"
+     },
+     {
+      "id": "s16_short_ef76_cf84",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-16-EA-76-COOL-SHORT-170227a.txt",
+        "Airtemp-CF-16-EA-76-COOL-SHORT-170228a.txt",
+        "Airtemp-CF-16-EA-76-COOL-SHORT-170301a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef90_cf84",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-16-EA-90-COOL-SHORT-170223a.txt",
+        "Airtemp-CF-16-EA-90-COOL-SHORT-171205a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef116_cf70",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-30-EA-116-COOL-SHORT-171030a.txt",
+        "Airtemp-CF-30-EA-116-COOL-SHORT-171102a.txt",
+        "Airtemp-CF-30-EA-116-COOL-SHORT-171103a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef82_cf70",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-30-EA-82-COOL-SHORT-171023a.txt",
+        "Airtemp-CF-30-EA-82-COOL-SHORT-171024a.txt",
+        "Airtemp-CF-30-EA-82-COOL-SHORT-171025a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef96p4_cf70",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-30-EA-96p4-COOL-SHORT-171026a.txt",
+        "Airtemp-CF-30-EA-96p4-COOL-SHORT-171028a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef82_cf67",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CF-33-EA-82-COOL-SHORT-171128a.txt",
+        "Airtemp-CF-33-EA-82-COOL-SHORT-171129a.txt",
+        "Airtemp-CF-33-EA-82-COOL-SHORT-171130a.txt",
+        "Airtemp-CF-33-EA-82-COOL-SHORT-171201a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_long_cf84",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CA-16-COOL-LONG-170522a.txt",
+        "Airtemp-CA-16-COOL-LONG-170523a.txt",
+        "Airtemp-CA-16-COOL-LONG-170524a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "condenser_blockage"
+     },
+     {
+      "id": "s16_long_cf67",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CA-33-COOL-LONG-170607a.txt",
+        "Airtemp-CA-33-COOL-LONG-170608a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "condenser_blockage"
+     },
+     {
+      "id": "s16_long_cf67_junk",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CA-33-JUNK-COOL-LONG-170606a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "condenser_blockage",
+      "exclude": "junk-test-file"
+     },
+     {
+      "id": "s16_long_ef80_cf84",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CA-16-EF-80-COOL-LONG-170529a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_long_ef95_cf84",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-CA-16-EF-95-COOL-LONG-170524a.txt",
+        "Airtemp-CA-16-EF-95-COOL-LONG-170526a.txt",
+        "Airtemp-CA-16-EF-95-COOL-LONG-170527a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+condenser_blockage"
+     },
+     {
+      "id": "s16_short_ef116",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-EF-116-COOL-SHORT-171012a.txt",
+        "Airtemp-EF-116-COOL-SHORT-171017a.txt",
+        "Airtemp-EF-116-COOL-SHORT-171018a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high"
+     },
+     {
+      "id": "s16_short_ef82",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-EF-82-COOL-SHORT-171007a.txt",
+        "Airtemp-EF-82-COOL-SHORT-171011a.txt",
+        "Airtemp-EF-82-COOL-SHORT-171012a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low"
+     },
+     {
+      "id": "s16_short_ef96p4",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-EF-96p4-COOL-SHORT-171005a.txt",
+        "Airtemp-EF-96p4-COOL-SHORT-171007a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low"
+     },
+     {
+      "id": "s16_long_ll122",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-LL-122-COOL-LONG-170517a.txt",
+        "Airtemp-LL-122-COOL-LONG-170518a.txt",
+        "Airtemp-LL-122-COOL-LONG-170521a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s16_long_ll294",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-LL-294-COOL-LONG-170510a.txt",
+        "Airtemp-LL-294-COOL-LONG-170515a.txt",
+        "Airtemp-LL-294-COOL-LONG-170516a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "liquid_line_restriction"
+     },
+     {
+      "id": "s16_long_oc110",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-110p0-OC-COOL-LONG-170913a.txt",
+        "Airtemp-110p0-OC-COOL-LONG-170914a.txt",
+        "Airtemp-OC-110p0-COOL-LONG-170915a.txt",
+        "Airtemp-OC-110p0-COOL-LONG-170916a.txt",
+        "Airtemp-OC-110p0-COOL-LONG-170918a.txt",
+        "Airtemp-OC-110p0-COOL-LONG-170919a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "overcharge"
+     },
+     {
+      "id": "s16_long_uc80",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-80-COOL-LONG-170628a.txt",
+        "Airtemp-UC-80-COOL-LONG-170629a.txt",
+        "Airtemp-UC-80-COOL-LONG-170701a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s16_long_uc90",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-90-COOL-LONG-170612a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s16_long_uc94p5",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-94p5-COOL-LONG-170703a.txt",
+        "Airtemp-UC-94p5-COOL-LONG-170704a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s16_short_uc95p4",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-95p4-COOL-SHORT-170315a.txt",
+        "Airtemp-UC-95p4-COOL-SHORT-170316a.txt",
+        "Airtemp-UC-95p4-COOL-SHORT-170317a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "undercharge"
+     },
+     {
+      "id": "s16_short_uc95p4_junk",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-95p4-JUNK-COOL-SHORT-170327a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "undercharge",
+      "exclude": "junk-test-file"
+     },
+     {
+      "id": "s16_long_ef111p4_uc90",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-90-EA-111p4-COOL-LONG-170615a.txt",
+        "Airtemp-UC-90-EA-111p4-COOL-LONG-170616a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high+undercharge"
+     },
+     {
+      "id": "s16_long_ef80_uc90",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-90-EA-80-COOL-LONG-170620a.txt",
+        "Airtemp-UC-90-EA-80-COOL-LONG-170621a.txt",
+        "Airtemp-UC-90-EA-80-COOL-LONG-170626a.txt",
+        "Airtemp-UC-90-EA-80-COOL-LONG-170627a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s16_long_ef94_uc90",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-90-EA-94-COOL-LONG-170618a.txt",
+        "Airtemp-UC-90-EA-94-COOL-LONG-170619a.txt",
+        "Airtemp-UC-90-EA-94-COOL-LONG-170620a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s16_long_ef111_uc94p5",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-94p5-EA-111-COOL-LONG-170707a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high+undercharge"
+     },
+     {
+      "id": "s16_long_ef80_uc94p5",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-94p5-EA-80-COOL-LONG-170716a.txt",
+        "Airtemp-UC-94p5-EA-80-COOL-LONG-170718a.txt",
+        "Airtemp-UC-94p5-EA-80-COOL-LONG-170719a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s16_long_ef95_uc94p5",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-94p5-EA-95-COOL-LONG-170713a.txt",
+        "Airtemp-UC-94p5-EA-95-COOL-LONG-170715a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_low+undercharge"
+     },
+     {
+      "id": "s16_long_ef109_uc95p4",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "Airtemp-UC-95p4-EA-109-COOL-SHORT-170317a.txt",
+        "Airtemp-UC-95p4-EA-109-COOL-SHORT-170326b.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": "indoor_airflow_high+undercharge"
+     },
+     {
+      "id": "s16_short_nf",
+      "file": "fdd_heat_pump_cooling_1416seer_longshort_alldata_2019.xlsx",
+      "where": {
+       "Filename": [
+        "AirTemp-COOL-SHORT-170824a.txt",
+        "AirTemp-COOL-SHORT-170825a.txt",
+        "AirTemp-COOL-SHORT-170828a.txt",
+        "AirTemp-NF-COOL-SHORT-170829a.txt",
+        "AirTemp-NF-COOL-SHORT-170830a.txt",
+        "AirTemp-NF-COOL-SHORT-170831a.txt",
+        "AirTemp-NF-COOL-SHORT-170901a.txt",
+        "AirTemp-NF-COOL-SHORT-170902a.txt",
+        "AirTemp-NF-COOL-SHORT-170903a.txt",
+        "Airtemp-NF-COOL-SHORT-170906a.txt",
+        "Airtemp-NF-COOL-SHORT-170907a.txt",
+        "Airtemp-NF-COOL-SHORT-170908a.txt",
+        "Airtemp-NF-COOL-SHORT-170910a.txt",
+        "Airtemp-NF-COOL-SHORT-170926a.txt",
+        "Airtemp-NF-COOL-SHORT-170927a.txt",
+        "Airtemp-NF-COOL-SHORT-171020a.txt"
+       ]
+      },
+      "equip": "HP_SEER16",
+      "class": "HEAT_PUMP",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "nist-heatpump-fdd.json"
+   },
+   "known_issues": [
+    "Steady-state laboratory test points, not a time series: the store's clock is synthetic (1 minute per test point), so rate, schedule and drift-over-time readings mean nothing here.",
+    "No CAMBER rule fits a residential heat pump's refrigerant circuit yet: the refrigerant-side drift detectors are chiller rules that need a chilled-water load. The entry carries the labelled data for inspection and for future heat-pump / discharge-superheat detectors (GitHub issue #6).",
+    "Three groups of files carry fault levels that contradict their names and measurements, and two files are marked JUNK by the publisher; they are ingested but excluded from scoring (see the data issues)."
+   ],
+   "data_issues": [
+    {
+     "id": "indoor-airflow-level-mislabelled",
+     "title": "Seventeen reduced-airflow tests are labelled as 110% airflow",
+     "columns": [
+      "EF",
+      "Filename"
+     ],
+     "runs": [
+      "s14_short_ef110_named_ef80_90"
+     ],
+     "evidence": "17 files of the 14 SEER unit (short line set) named EF-80%, EF-90% and EF-10% carry EF = 110 in the label column, the same as the 5 files named EF-110%. Their measured indoor airflow says otherwise: a median 839.9 scfm (EF-80% files, 73 rows) and 1137.9 scfm (EF-90%, 142 rows) against 1288.2 scfm fault-free (346 rows) and 1366.7 scfm for the EF-110% files -- 65%, 88% and 106% of fault-free.",
+     "contradicts": {
+      "document": "Description of data, 'Label Definitions': EF is the indoor airflow fault level, 100% = no fault, 90% = 10% reduced airflow; and the test file names",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "exclude",
+     "handling_note": "The 17 files are a separate run, ingested for inspection but never scored; the 5 EF-110% files keep their label. CAMBER does not relabel them (the true levels are not published).",
+     "exclude": {
+      "runs": [
+       "s14_short_ef110_named_ef80_90"
+      ]
+     }
+    },
+    {
+     "id": "condenser-blockage-level-mislabelled",
+     "title": "The '50% blocked' condenser tests are labelled 28% blocked",
+     "columns": [
+      "CF",
+      "Filename"
+     ],
+     "runs": [
+      "s14_long_cf72_named_cf50"
+     ],
+     "evidence": "6 files named CF_50 (14 SEER, long line set) carry CF = 72 (28% of the coil blocked), the same label as the files named CF_28. They run hotter than those: discharge pressure median 494.4 psia vs 444.6 (CF_28 files) and 383.0 (fault-free), liquid subcooling 15.6 vs 9.5 and 8.2 F.",
+     "contradicts": {
+      "document": "Description of data, 'Label Definitions': CF is the outdoor-coil face area free of blockage, 70% = 30% blocked; and the test file names",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "exclude",
+     "handling_note": "The 6 files are a separate run, ingested for inspection but never scored; the CF_28 files keep their label.",
+     "exclude": {
+      "runs": [
+       "s14_long_cf72_named_cf50"
+      ]
+     }
+    },
+    {
+     "id": "junk-test-file",
+     "title": "Two files the publisher named JUNK are labelled as ordinary fault tests",
+     "columns": [
+      "Filename"
+     ],
+     "runs": [
+      "s16_long_cf67_junk",
+      "s16_short_uc95p4_junk"
+     ],
+     "evidence": "Airtemp-CA-33-JUNK-COOL-LONG-170606a (15 rows, labelled CF = 67) and Airtemp-UC-95p4-JUNK-COOL-SHORT-170327a (5 rows, labelled UC = 95.4) sit among the test data. The first disagrees with its two sibling CF = 67 files: liquid subcooling median 9.0 vs 0.6 F, discharge 324 vs 400 psia.",
+     "contradicts": {
+      "document": "Description of data: every row is test data for the fault level in its label columns",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "exclude",
+     "handling_note": "Each JUNK file is a separate run, ingested for inspection but never scored.",
+     "exclude": {
+      "runs": [
+       "s16_long_cf67_junk",
+       "s16_short_uc95p4_junk"
+      ]
+     }
+    },
+    {
+     "id": "line-set-flag-contradicts-file-name",
+     "title": "Two short-line-set tests carry the long line-set flag",
+     "columns": [
+      "Long/Short (0/1)",
+      "Filename"
+     ],
+     "runs": [
+      "s16_long_ef109_uc95p4"
+     ],
+     "evidence": "Airtemp-UC-95p4-EA-109-COOL-SHORT-170317a and -170326b (151 rows) are named SHORT but carry Long/Short = 0 (long); the three Airtemp-UC-95p4-COOL-SHORT files of the same week carry 1.",
+     "contradicts": {
+      "document": "Description of data, 'Label Definitions': Long/Short (0/1), 0 = 50 ft total line set, 1 = 25 ft",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: the run id follows the flag. The fault labels (undercharge + high indoor airflow) are unaffected."
+    },
+    {
+     "id": "embedded-header-row",
+     "title": "A repeated header row sits inside the data",
+     "columns": [
+      "Filename"
+     ],
+     "evidence": "Sheet row 6,396 (between the Airtemp-UC-94p5-COOL-LONG-170704a and Airtemp-UC-95p4-COOL-SHORT-170315a tests) repeats the 98 column names instead of values.",
+     "contradicts": {
+      "document": "Description of data: one header row, then one row per test point",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "none",
+     "handling_note": "No run selects it (its Filename cell reads 'Filename'), so it is never ingested."
+    }
+   ]
+  },
+  {
+   "id": "nist-ibal",
+   "title": "NIST IBAL lab chiller with refrigerant pressures (real, unlabelled)",
+   "summary": "Chiller 1 of the NIST Intelligent Building Agents Laboratory plant, a nominal 5-ton R-410A water-cooled chiller run by the lab's experiments, at 10-second resolution: suction and discharge pressure, liquid- and suction-line temperatures, chilled- and condenser-water temperatures and flows, and power. The only open data CAMBER knows with refrigerant-side chiller points. Downloaded by hand from the IBAL portal. No fault labels.",
+   "teaches": [
+    "refrigerant head and suction pressure against chilled-water load",
+    "why a raw line temperature is not subcooling or superheat",
+    "specificity: drift detectors on a healthy chiller",
+    "gauge vs absolute refrigerant pressure from the standing pressure"
+   ],
+   "publisher": "National Institute of Standards and Technology (NIST), Engineering Laboratory",
+   "citation": "Pertzborn, A. J. et al. (2022). Intelligent Building Agents Project Data. National Institute of Standards and Technology, doi:10.18434/mds2-2751. Laboratory description: Pertzborn, A. J., Veronica, D. A. (2022). Baseline Control Systems in the Intelligent Building Agents Laboratory. NIST TN 2178, doi:10.6028/NIST.TN.2178",
+   "dois": [
+    "10.18434/mds2-2751",
+    "10.6028/NIST.TN.2178"
+   ],
+   "landing_url": "https://data.nist.gov/od/id/mds2-2751",
+   "licence": "NIST-PD",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-27",
+   "kind": "lab",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "chiller 1 (nominal 5-ton, R-410A, water-cooled) of the IBAL plant; chiller 2, the AHUs and the zone simulators are not exported",
+   "timezone": "America/New_York: the export's stamps carry -05:00 / -04:00 offsets and are converted to the Eastern wall clock; 10-second samples, experiment hours only",
+   "requires_extras": [],
+   "manual": true,
+   "manual_instructions": "The IBAL data are served only through the interactive portal at https://ibal.nist.gov (no file URLs). For each file: open the Measurements page (https://ibal.nist.gov/measurements), set the date range (default file: 2025-06-28 to 2025-07-08; full file: 2025-01-28 to 2025-10-01), tick exactly these 13 measurements: ch1_c_out_rtd, ch1_e_in_rtd, ch1_e_out_rtd, ch1_f_c, ch1_f_e, ch1_on, ch1_p_dis, ch1_p_suc, ch1_power, ch1_sc_rtd, ch1_sh_rtd, cw_in_rtd, pump4_out_rtd, keep the Scaled tab, and press Download CSV. Unzip the downloaded scaled_data.csv.zip and rename scaled_data.csv to nist_ibal_ch1_2025-06-28_2025-07-08.csv (default) or nist_ibal_ch1_2025-01-28_2025-10-01.csv (full). The files are pinned: an export with other dates or measurements fails the check.",
+   "licence_check": {
+    "url": "https://data.nist.gov/rmm/records?@id=ark:/88434/mds2-2751",
+    "expect": "nist.gov/open/license"
+   },
+   "files": [
+    {
+     "name": "nist_ibal_ch1_2025-06-28_2025-07-08.csv",
+     "url": null,
+     "size": 7618442,
+     "sha256": "5f1b5ecc5c0402e754f24979ce8a2e0d1cede6fdfa29214069a3f1be4e8b82b5",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "nist_ibal_ch1_2025-01-28_2025-10-01.csv",
+     "url": null,
+     "size": 73389299,
+     "sha256": "6ca7e3904bf2a73b5e4680e7a07aa291b307290fd8653063a491c901b3395ed3",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "11 days of summer 2025 experiments (chiller 1 on about half the time)",
+     "files": [
+      "nist_ibal_ch1_2025-06-28_2025-07-08.csv"
+     ],
+     "runs": [
+      "ch1_2025_summer"
+     ],
+     "store_bytes_estimate": 800000
+    },
+    "full": {
+     "description": "every 2025 experiment from the first day with all refrigerant sensors (2025-01-28) to the end of September",
+     "files": [
+      "nist_ibal_ch1_2025-01-28_2025-10-01.csv"
+     ],
+     "runs": [
+      "ch1_2025"
+     ],
+     "store_bytes_estimate": 10600000
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-nist-ibal",
+    "timestamp": "time",
+    "timestamp_format": "ISO8601",
+    "source_timezone": "offset",
+    "local_timezone": "America/New_York",
+    "resample": "1min",
+    "mapping": "nist_ibal.json",
+    "units": {
+     "power": "W",
+     "discharge_pressure": "psig",
+     "suction_pressure": "psig"
+    },
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "37 samples share the stamp 2025-06-04 16:07:43.774 with different values; the ingester keeps the first.",
+      "issue": "repeated-timestamp",
+      "runs": [
+       "ch1_2025"
+      ]
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "The refrigerant pressure and line-temperature sensors carry no instrument model, calibration date or accuracy in the portal metadata; treat their absolute values as uncalibrated.",
+      "issue": "refrigerant-sensors-undocumented"
+     }
+    ],
+    "runs": [
+     {
+      "id": "ch1_2025_summer",
+      "file": "nist_ibal_ch1_2025-06-28_2025-07-08.csv",
+      "equip": "CH1",
+      "class": "CHILLER",
+      "label": ""
+     },
+     {
+      "id": "ch1_2025",
+      "file": "nist_ibal_ch1_2025-01-28_2025-10-01.csv",
+      "equip": "CH1",
+      "class": "CHILLER",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "chiller_efficiency"
+    ],
+    "config_template": "nist-ibal.json"
+   },
+   "known_issues": [
+    "A lab chiller driven by experiments: the store holds experiment hours only, and each experiment's control code stages, resets and cycles the plant.",
+    "No refrigerant-side fault is documented in these windows (the logged refrigerant leak and recharges of 2021-2023 predate the refrigerant sensors), so the data measure the false-alarm rate of the refrigerant detectors, not their detection.",
+    "The refrigerant pressures are raw psig; subcooling, superheat and approach need an R-410A saturation curve CAMBER does not model, so those detectors decline.",
+    "Pinned to two fixed portal exports (verified byte-identical across repeated downloads on 2026-09-27); the portal database is live and a later correction would fail the pin loudly."
+   ],
+   "data_issues": [
+    {
+     "id": "experiments-page-export-has-no-clock",
+     "title": "The Experiments page's CSV export has no time column",
+     "columns": [
+      "time"
+     ],
+     "evidence": "Download CSV on the Experiments page returns 'date,run' plus the measurements and no time of day: for experiment 1744 it gave 8,737 rows (24.3 h at 10 s) all stamped only 2026-01-19 / run 1. The Measurements page's export of the same measurements carries a 'time' column with UTC offsets.",
+     "contradicts": {
+      "document": "Record description: 'select that button and a csv file of the data in the plot is automatically generated' (the plot has a time axis); data 'collected every 10 s'",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "none",
+     "handling_note": "The download instructions use the Measurements page. An Experiments-page export cannot be ingested (no timestamp column)."
+    },
+    {
+     "id": "experiment-table-clock-is-standard-time",
+     "title": "Experiment start times are Eastern Standard Time all year",
+     "columns": [
+      "start_time (portal experiment table)",
+      "time"
+     ],
+     "evidence": "Experiment 1689 is listed as starting 2025-06-28 13:24:31; its first data row is 2025-06-28 14:24:34-04:00 (18:24:34 UTC = 13:24:34 EST). Winter experiments agree to the second (e.g. 2026-01-18 00:00:03-05:00).",
+     "contradicts": {
+      "document": "IBAL portal experiment table (start times given without a zone) against the data's own UTC offsets",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "annotate",
+     "handling_note": "The data are converted to the Eastern wall clock (EDT in summer); add an hour to a summer experiment's listed start time to find it in the store."
+    },
+    {
+     "id": "mixed-precision-timestamps",
+     "title": "A few timestamps lack fractional seconds",
+     "columns": [
+      "time"
+     ],
+     "evidence": "12 of 454,801 stamps in the full export (e.g. '2025-03-25 14:45:03-04:00') have no fractional seconds while the rest carry milliseconds; pandas' inferred format turns exactly those 12 into missing values.",
+     "contradicts": {
+      "document": "Record description: sensor data every 10 s, one timestamp per sample",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "annotate",
+     "handling_note": "The ingest pins timestamp_format ISO8601, which parses both forms; nothing is lost."
+    },
+    {
+     "id": "repeated-timestamp",
+     "title": "37 samples share one timestamp",
+     "columns": [
+      "time"
+     ],
+     "evidence": "37 consecutive rows of the full export are stamped 2025-06-04 16:07:43.774-04:00 with differing values (discharge pressure 295.4 then 296.9 psi); every other stamp is unique, 10 s apart.",
+     "contradicts": {
+      "document": "Record description: data collected every 10 s",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "annotate",
+     "handling_note": "The ingester keeps the first of duplicated stamps (36 samples dropped), as for every catalog entry."
+    },
+    {
+     "id": "refrigerant-sensors-undocumented",
+     "title": "The refrigerant sensors have no instrument or calibration metadata",
+     "columns": [
+      "ch1_p_dis",
+      "ch1_p_suc",
+      "ch1_sc_rtd",
+      "ch1_sh_rtd"
+     ],
+     "evidence": "In the portal's measurement metadata the two pressure transducers and the liquid- / suction-line RTDs have no instrument model, serial, calibration date or accuracy (all empty), while the plant's water RTDs list a model, a 2020-2023 calibration and +-0.18-0.21 F. All four refrigerant-line RTDs (both chillers) share one scaling (a0 3.2902, a1 0.9651) where each calibrated RTD has its own. In an export of 2023-10-01 to 2025-02-15 the pressures first report on 2024-04-10 and the liquid-line RTD on 2025-01-28 (UTC).",
+     "contradicts": {
+      "document": "Record description: 'Each of the sensors/actuators has associated metadata'",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings."
+    }
+   ]
   }
  ]
 }

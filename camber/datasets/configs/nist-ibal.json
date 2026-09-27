@@ -1,0 +1,37 @@
+{
+  "_comment": "Run template for nist-ibal: chiller 1 of the NIST IBAL lab plant, a nominal 5-ton R-410A water-cooled chiller, at a 15-minute resample (the store keeps 1-minute means of the 10-second export). The lab runs experiments, not a building: the chiller is staged, reset and cycled by each experiment's control code, and the store holds only the experiment hours (105 days of the full window; none between experiments). chiller_efficiency's design ceiling is CALIBRATED from the default window's 55 fully-on hours (median 1.12 kW/ton), not a generic value. The drift section runs the chiller family's refrigerant-side detectors on the two refrigerant quantities IBAL publishes in a form CAMBER can use -- discharge (head) and suction pressure, raw psig with the load from the chilled-water flow and temperatures; the subcooling, superheat and approach detectors decline because the export carries line temperatures, not the saturation-referenced differences CAMBER's roles need. The windows split the default export (baseline 2025-06-28 to 2025-07-01, current 2025-07-02 to 2025-07-09); freeze the baseline first with `camber drift freeze <config>` (a run never creates one), then `camber drift run <config>`. No refrigerant-side fault is documented for these windows, so every drift alarm here is a false alarm on normal operation -- the dataset measures specificity, not detection.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-nist-ibal"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "CHILLER",
+      "marker_role": "discharge_pressure"
+    }
+  ],
+  "rules": [
+    {
+      "name": "chiller_efficiency",
+      "params": {
+        "design_kw_per_ton": 1.12
+      }
+    }
+  ],
+  "drift": {
+    "store": "nist-ibal-baselines.json",
+    "baseline": ["2025-06-28", "2025-07-01"],
+    "current": ["2025-07-02", "2025-07-09"],
+    "families": [
+      {
+        "class": "CHILLER",
+        "family": "chiller"
+      }
+    ]
+  },
+  "report": {
+    "level": 2
+  }
+}

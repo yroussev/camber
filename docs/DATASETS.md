@@ -52,6 +52,10 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `lbnl-b59` | real office: 4 rooftop units with measured OA flow, 11 zone CO2 sensors, 51 underfloor terminals, Brick model (manual download) | real | no | CC-BY-4.0 | RTUs, CO2 zones and weather, 3 years |
 | `finnish-dcv` | laboratory office room with occupancy-based DCV and ground-truth counts | lab | no | CC-BY-4.0 | all 3 files |
 | `b4b-windesheim` | 3 office rooms, two CO2 sensors each, ventilation valve, PIR | real | no | CC-BY-4.0 | all 5 runs |
+| `nuig-ahu101` | lecture-theatre AHU (100% outdoor air) + room + weather, 14 months at 1 min | real | no | CDLA-Permissive-1.0 | the one unit |
+| `irish-ahu` | industrial mixing-box AHU, 5.5 years at 15 min | real | no | CC-BY-4.0 | the one unit |
+| `nist-heatpump-fdd` | residential heat pumps, cooling-mode lab test points, 60 runs (`xlsx` extra) | lab | yes | NIST-PD | 8 runs |
+| `nist-ibal` | lab chiller with refrigerant pressures, 10 s (manual download) | lab | no | NIST-PD | 11 days |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -632,6 +636,194 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** The documented shift raises each sensor's minimum to 416 ppm, but the preprocessed minima are 455.0 ppm (room 917810, BMS), 416.1 and 426.7 ppm (the other BMS sensors) and 421-436 ppm (SCD41). In the same room the two sensors differ by a median of +7.8 ppm (917810) and -39 ppm (925038, 999169), correlating 0.80-0.91.
 - **Contradicts:** README, Preprocessed data: per room and source the minimum CO2 value is raised to 415 ppm plus a 1 ppm margin (Brains4Buildings2022 dataset README, https://github.com/energietransitie/b4b-windesheim-brains4buildings2022-dataset/blob/188573d39ca9a775f8ef17a10ccac784d84b7be7/README.md)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the DCV rule reads CO2 changes (lift within the hour of day), which a constant shift does not move; absolute thresholds (co2_ventilation) read shifted values.
+
+### `nuig-ahu101`: NUIG lecture-theatre AHU101 (real BMS trends, unlabelled)
+
+#### Timestamps are the local (Irish) wall clock, labelled +00:00
+
+- **Issue:** `local-clock-labelled-utc`
+- **Columns:** `timestamp (every point file)`
+- **Evidence:** All 559,857 stamps of the supply-temperature file (and of every other point) end in +00:00. Yet the only 1-hour hole in the AHU points before the summer outages is exactly 2018-03-25 01:00-01:59, the hour Irish clocks skip at the spring change: a true-UTC log has that hour (it is 02:00-02:59 local). The autumn change's repeated hour (2018-10-28 01:00-01:59) appears once, 60 rows, as a local clock that drops the repeat records it.
+- **Contradicts:** the point files' ISO-8601 stamps (offset +00:00); the record states no other time zone (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
+- **Handling: annotate** -- left as published and recorded in the provenance. CAMBER keeps the wall-clock values as written and drops the +00:00 label (no conversion), so schedule rules see Irish local hours. The one missing spring hour stays missing; the repeated autumn hour cannot be recovered.
+
+#### Room CO2 is clipped at the sensors' 2000 ppm full scale
+
+- **Issue:** `co2-clipped-at-full-scale`
+- **Columns:** `NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481`, `NUIG_AHU101_Ctrls_CO_147_1_Lecture_Theatre_3_CO2_D10_462`, `NUIG_AHU101_Ctrls_CO_147_2_Lecture_Theatre_3_CO2_D7_466`
+- **Evidence:** The room-average CO2 reads exactly 1999.9985 ppm, its maximum, in 8,212 of 416,950 minutes (1.97%, 137 h); the next-highest value is 1998.99. Every one of those minutes has the supply fan at 0% (4 of 142,141 fan-on minutes reach it). The two room sensors clip identically (8,933 and 8,769 minutes, 99.9% fan off).
+- **Contradicts:** Variables workbook (NUIG_variables_MR1_MP5_AHU101 focus v1.xlsx): CO2 in ppm with the Min / Max range columns blank, so the 2000 ppm ceiling is not documented (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. A clipped reading is a lower bound (the true CO2 was at least 2000 ppm); CAMBER's ventilation rules treat a reading at full scale with the fan off as not judged rather than as a measured value.
+
+#### Several points cover much less than January 2018 - February 2019
+
+- **Issue:** `coverage-shorter-than-described`
+- **Columns:** `NUIG_AspectGroup_Weather_Current_Temperature_8841`, `NUIG_AspectGroup_Weather_Current_Humidity_8840`, `NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481`, `NUIG_AHU101_Ctrls_117_Lecture_Theatre_3_Av__Humidity_D28_482`, `NUIG_EnC_West_Rads_Energy_D14_134`, `timestamp (every point file)`
+- **Evidence:** The weather-station points run 2018-04-17 to 2019-02-05 (316,736 minutes, 25% of their span missing, including a 39-day hole from 2019-01-23); the room CO2 / humidity averages start 2018-04-10; the heating meter starts 2018-05-24, not April. Every point shares four outages of 13.1, 12.2, 4.7 and 4.7 days (2018-05-29, 07-16, 08-21, 11-14): the AHU points miss 8.3% of their 610,560 minutes.
+- **Contradicts:** Record description: AHU, room and outdoor data 'available for the period from January 2018 to the end of February 2019, at the measuring time interval of 1 minute'; the heating meter 'from April 2018' (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the gaps stay gaps. Outdoor-air-dependent analyses see no weather before 2018-04-17 or after 2019-02-05.
+
+#### TE_102_2 ('air after cooling coil') does not track AHU101
+
+- **Issue:** `second-cooling-coil-sensor-not-ahu101`
+- **Columns:** `NUIG_AHU101_Ctrls_TE_102_2_Cooling_Off_Coil_Temp_D6_459`
+- **Evidence:** With the supply fan running, TE_101_3 (the other 'air after cooling coil' point) correlates 0.92 with the supply-duct temperature while TE_102_2 correlates 0.31, and TE_102_2 has the same median with the fan on and off (20.63 vs 20.64 C) where TE_101_3 moves 19.0 vs 15.9 C. Its tag names unit 102.
+- **Contradicts:** Variables workbook: both TE_101_3 and TE_102_2 described as 'AHU101 air temperature after cooling coil' (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
+- **Handling: none** -- described only. Not mapped. Neither cooling-coil leaving temperature is mapped (the supply-duct sensor is the supply air temperature).
+
+#### One listed point file is empty
+
+- **Issue:** `riser-valve-point-empty`
+- **Columns:** `NUIG_AHU101_Ctrls_LPHW_2_GFC4_Riser_3_IFM_D21_467`
+- **Evidence:** The archive member is 0 bytes (0 rows) while the other 35 point files hold 316,736-559,857 rows each.
+- **Contradicts:** Variables workbook: 'AHU101 percentage opening of valve of GFC4 riser', sampled every 60 s (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
+- **Handling: none** -- described only. Not mapped; described only.
+
+### `irish-ahu`: Irish industrial AHU (real BMS trends, unlabelled)
+
+#### Sentinel readings in the supply and outdoor temperatures
+
+- **Issue:** `sentinel-temperatures`
+- **Columns:** `DaTemp`, `OaTemp`
+- **Evidence:** DaTemp reads 938.5-1000 C in 26 rows (17 of them exactly 1000.0), all on 2021-03-02 10:00-16:15; OaTemp reads 609.98 C in 3 rows on 2022-10-08 08:45-09:15. The next-highest values are 46.66 C (supply, p99.9) and 36.91 C (outdoor).
+- **Contradicts:** Data descriptor, data table: DaTemp 'Supply air temperature' and OaTemp 'Outside air temperature sensor', both in C (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Readings above 60 C are blanked in both columns (mask quirk); --no-corrections keeps them.
+
+#### BMS outages are logged as 0.00 C, not as gaps
+
+- **Issue:** `outages-logged-as-zero`
+- **Columns:** `RaTemp`, `MaTemp`, `DaTemp`, `OaTemp`, `HCALTemp`, `CCALTemp`, `ZoneTemp_1`
+- **Evidence:** RaTemp and DaTemp both read exactly 0.00 in 3,230 rows on 57 days (2017-07-06 to 2022-10-31), mostly whole days of 96 rows; in 94% of them MaTemp, HCALTemp, CCALTemp and ZoneTemp_1 are 0.00 too. A further 58 MaTemp zeros coincide with an outdoor reading of 0.00 or a missing return reading. OaTemp reads 0.00 in 168 rows while the nearby weather station reads a median 12.7 C.
+- **Contradicts:** Data descriptor: missing BMS data were backfilled from cloud storage, and missing intervals are left as missing time intervals (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Exact 0.00 readings of the mapped return, mixed, supply and outdoor temperatures are blanked (mask quirk). A genuine 0.00 C outdoor or mixed-air reading would be lost too; the evidence above says there are none worth keeping.
+
+#### The damper signals read 0% for six weeks of the COVID-19 100% outdoor-air period
+
+- **Issue:** `damper-signal-zero-during-100pct-oa`
+- **Columns:** `OaDmprPos`, `RaDmprPos`, `EaDmprPos`
+- **Evidence:** All three damper signals read 0 in 4,592 rows from 2020-12-15 03:30 to 2021-01-31 23:45, bracketed by weeks at OA 100% / return 0%. In those rows MaTemp - OaTemp is a median 0.23 C and RaTemp - MaTemp 13.55 C: the mixed air is outdoor air, as in the 100%-outdoor-air months Mar-Nov 2021 (0.11 / 8.01 C) and unlike the 20% minimum-OA months Sep 2019 - May 2020 (9.30 / 1.02 C).
+- **Contradicts:** Data descriptor: the outside-air damper was fixed at 100% open as a COVID-19 precaution until the control review of 2021-12-02 (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). OaDmprPos zeros between 2020-12-15 and 2021-02-01 are blanked (mask quirk), not replaced with 100%; the return and exhaust damper signals are not mapped.
+
+#### The unit's outdoor sensor reads warmer than the weather station
+
+- **Issue:** `outdoor-sensor-reads-warm`
+- **Columns:** `OaTemp`, `OaTemp_WS`
+- **Evidence:** Over the 85,409 rows with both (2020-06 on, sentinels and zeros excluded) OaTemp - OaTemp_WS is a median +1.25 C (p10 -0.59, p90 +3.64), 0.8 C at night rising to 2.2 C at 15 h; quarterly medians are -0.40 / -0.24 C in 2020 Q2-Q3, then +0.95 to +1.65 C from 2020 Q4.
+- **Contradicts:** Data descriptor, data table: OaTemp 'Outside air temperature sensor' and OaTemp_WS 'Outside air temperature from nearby weather station' (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. OaTemp stays the OA temperature: it is the air entering this unit and the only outdoor reading before 2020-06. The afternoon excess suggests solar or intake heating; the step after 2020 Q3 is not explained.
+
+#### Zone 1 temperature carries a +489 / -509 offset for 2.5 years
+
+- **Issue:** `zone-1-temperature-offset`
+- **Columns:** `ZoneTemp_1`, `ZoneTemp_2`
+- **Evidence:** ZoneTemp_1 reads a median 510.49 in 53,869 rows (2017-11-16 to 2019-07-01) and -488.87 in 26,776 rows (2019-07-15 to 2020-06-24); elsewhere its median is 21.07. ZoneTemp_2 reads 84.65 in 397 rows.
+- **Contradicts:** Data descriptor, data table: ZoneTemp_1 / ZoneTemp_2 'Average zone air temperature', C (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: none** -- described only. The zone points are not mapped (they belong to the reheat zones, not the AHU); described only.
+
+#### 43 rows from 2015, then a 904-day gap
+
+- **Issue:** `stray-2015-rows`
+- **Columns:** `Datetime`
+- **Evidence:** The file starts with 43 rows on 2015-01-01 01:00-11:30 (14 of them carry return, damper, valve and supply readings, 34 a zone-1 reheat valve, no mixed or outdoor temperature); the next row is 2017-06-23 19:30.
+- **Contradicts:** Data descriptor: 900-second (15-minute) time series readings (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested as published; analysis windows effectively start 2017-06-23.
+
+#### 5,205 timestamps are off the 15-minute grid
+
+- **Issue:** `off-grid-timestamps`
+- **Columns:** `Datetime`
+- **Evidence:** 5,205 stamps (2020-06-23 to 2022-11-18) are not on a quarter hour, 5,063 of them one minute past, giving 5,065 pairs of 1-minute and 14-minute steps; 2020 holds 5,197 of them.
+- **Contradicts:** Data descriptor: 900-second (15-minute) time series readings (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the 15-minute mean resample at ingest puts each reading in its quarter hour.
+
+### `nist-heatpump-fdd`: NIST residential heat pump, cooling-mode FDD lab tests (labelled faults)
+
+#### Seventeen reduced-airflow tests are labelled as 110% airflow
+
+- **Issue:** `indoor-airflow-level-mislabelled`
+- **Columns:** `EF`, `Filename`
+- **Runs:** `s14_short_ef110_named_ef80_90`
+- **Evidence:** 17 files of the 14 SEER unit (short line set) named EF-80%, EF-90% and EF-10% carry EF = 110 in the label column, the same as the 5 files named EF-110%. Their measured indoor airflow says otherwise: a median 839.9 scfm (EF-80% files, 73 rows) and 1137.9 scfm (EF-90%, 142 rows) against 1288.2 scfm fault-free (346 rows) and 1366.7 scfm for the EF-110% files -- 65%, 88% and 106% of fault-free.
+- **Contradicts:** Description of data, 'Label Definitions': EF is the indoor airflow fault level, 100% = no fault, 90% = 10% reduced airflow; and the test file names (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: exclude** -- kept out of scoring / analysis. The 17 files are a separate run, ingested for inspection but never scored; the 5 EF-110% files keep their label. CAMBER does not relabel them (the true levels are not published).
+
+#### The '50% blocked' condenser tests are labelled 28% blocked
+
+- **Issue:** `condenser-blockage-level-mislabelled`
+- **Columns:** `CF`, `Filename`
+- **Runs:** `s14_long_cf72_named_cf50`
+- **Evidence:** 6 files named CF_50 (14 SEER, long line set) carry CF = 72 (28% of the coil blocked), the same label as the files named CF_28. They run hotter than those: discharge pressure median 494.4 psia vs 444.6 (CF_28 files) and 383.0 (fault-free), liquid subcooling 15.6 vs 9.5 and 8.2 F.
+- **Contradicts:** Description of data, 'Label Definitions': CF is the outdoor-coil face area free of blockage, 70% = 30% blocked; and the test file names (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: exclude** -- kept out of scoring / analysis. The 6 files are a separate run, ingested for inspection but never scored; the CF_28 files keep their label.
+
+#### Two files the publisher named JUNK are labelled as ordinary fault tests
+
+- **Issue:** `junk-test-file`
+- **Columns:** `Filename`
+- **Runs:** `s16_long_cf67_junk`, `s16_short_uc95p4_junk`
+- **Evidence:** Airtemp-CA-33-JUNK-COOL-LONG-170606a (15 rows, labelled CF = 67) and Airtemp-UC-95p4-JUNK-COOL-SHORT-170327a (5 rows, labelled UC = 95.4) sit among the test data. The first disagrees with its two sibling CF = 67 files: liquid subcooling median 9.0 vs 0.6 F, discharge 324 vs 400 psia.
+- **Contradicts:** Description of data: every row is test data for the fault level in its label columns (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: exclude** -- kept out of scoring / analysis. Each JUNK file is a separate run, ingested for inspection but never scored.
+
+#### Two short-line-set tests carry the long line-set flag
+
+- **Issue:** `line-set-flag-contradicts-file-name`
+- **Columns:** `Long/Short (0/1)`, `Filename`
+- **Runs:** `s16_long_ef109_uc95p4`
+- **Evidence:** Airtemp-UC-95p4-EA-109-COOL-SHORT-170317a and -170326b (151 rows) are named SHORT but carry Long/Short = 0 (long); the three Airtemp-UC-95p4-COOL-SHORT files of the same week carry 1.
+- **Contradicts:** Description of data, 'Label Definitions': Long/Short (0/1), 0 = 50 ft total line set, 1 = 25 ft (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the run id follows the flag. The fault labels (undercharge + high indoor airflow) are unaffected.
+
+#### A repeated header row sits inside the data
+
+- **Issue:** `embedded-header-row`
+- **Columns:** `Filename`
+- **Evidence:** Sheet row 6,396 (between the Airtemp-UC-94p5-COOL-LONG-170704a and Airtemp-UC-95p4-COOL-SHORT-170315a tests) repeats the 98 column names instead of values.
+- **Contradicts:** Description of data: one header row, then one row per test point (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: none** -- described only. No run selects it (its Filename cell reads 'Filename'), so it is never ingested.
+
+### `nist-ibal`: NIST IBAL lab chiller with refrigerant pressures (real, unlabelled)
+
+#### The Experiments page's CSV export has no time column
+
+- **Issue:** `experiments-page-export-has-no-clock`
+- **Columns:** `time`
+- **Evidence:** Download CSV on the Experiments page returns 'date,run' plus the measurements and no time of day: for experiment 1744 it gave 8,737 rows (24.3 h at 10 s) all stamped only 2026-01-19 / run 1. The Measurements page's export of the same measurements carries a 'time' column with UTC offsets.
+- **Contradicts:** Record description: 'select that button and a csv file of the data in the plot is automatically generated' (the plot has a time axis); data 'collected every 10 s' (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: none** -- described only. The download instructions use the Measurements page. An Experiments-page export cannot be ingested (no timestamp column).
+
+#### Experiment start times are Eastern Standard Time all year
+
+- **Issue:** `experiment-table-clock-is-standard-time`
+- **Columns:** `start_time (portal experiment table)`, `time`
+- **Evidence:** Experiment 1689 is listed as starting 2025-06-28 13:24:31; its first data row is 2025-06-28 14:24:34-04:00 (18:24:34 UTC = 13:24:34 EST). Winter experiments agree to the second (e.g. 2026-01-18 00:00:03-05:00).
+- **Contradicts:** IBAL portal experiment table (start times given without a zone) against the data's own UTC offsets (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: annotate** -- left as published and recorded in the provenance. The data are converted to the Eastern wall clock (EDT in summer); add an hour to a summer experiment's listed start time to find it in the store.
+
+#### A few timestamps lack fractional seconds
+
+- **Issue:** `mixed-precision-timestamps`
+- **Columns:** `time`
+- **Evidence:** 12 of 454,801 stamps in the full export (e.g. '2025-03-25 14:45:03-04:00') have no fractional seconds while the rest carry milliseconds; pandas' inferred format turns exactly those 12 into missing values.
+- **Contradicts:** Record description: sensor data every 10 s, one timestamp per sample (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: annotate** -- left as published and recorded in the provenance. The ingest pins timestamp_format ISO8601, which parses both forms; nothing is lost.
+
+#### 37 samples share one timestamp
+
+- **Issue:** `repeated-timestamp`
+- **Columns:** `time`
+- **Evidence:** 37 consecutive rows of the full export are stamped 2025-06-04 16:07:43.774-04:00 with differing values (discharge pressure 295.4 then 296.9 psi); every other stamp is unique, 10 s apart.
+- **Contradicts:** Record description: data collected every 10 s (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: annotate** -- left as published and recorded in the provenance. The ingester keeps the first of duplicated stamps (36 samples dropped), as for every catalog entry.
+
+#### The refrigerant sensors have no instrument or calibration metadata
+
+- **Issue:** `refrigerant-sensors-undocumented`
+- **Columns:** `ch1_p_dis`, `ch1_p_suc`, `ch1_sc_rtd`, `ch1_sh_rtd`
+- **Evidence:** In the portal's measurement metadata the two pressure transducers and the liquid- / suction-line RTDs have no instrument model, serial, calibration date or accuracy (all empty), while the plant's water RTDs list a model, a 2020-2023 calibration and +-0.18-0.21 F. All four refrigerant-line RTDs (both chillers) share one scaling (a0 3.2902, a1 0.9651) where each calibrated RTD has its own. In an export of 2023-10-01 to 2025-02-15 the pressures first report on 2024-04-10 and the liquid-line RTD on 2025-01-28 (UTC).
+- **Contradicts:** Record description: 'Each of the sensors/actuators has associated metadata' (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings.
 
 <!-- END data-issues -->
 

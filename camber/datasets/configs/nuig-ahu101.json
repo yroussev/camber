@@ -1,0 +1,24 @@
+{
+  "_comment": "Run template for nuig-ahu101: a real 100% outdoor-air handler (thermal wheel, frost / cooling / post-heat coils, fixed-step supply fan 0/40/60%) serving one lecture theatre. Hourly resample of the 15-minute store. Only rules that fit that design: supply-air temperature against the BMS's own calculated setpoint (fan-gated), simultaneous heating and cooling on the post-heat and cooling valves, room CO2 against the default occupied schedule, and the fan's night / weekend setback. Left out on purpose: outdoor_air_fraction, economizer_high_limit, leaking_valve and free_cooling_missed need a mixed-air temperature or an economizing damper this unit does not have; dcv_verification needs an outdoor-air flow or damper signal (the OA flow follows the fan speed, which is not an OA measurement); the SAT-reset rules judge a multi-zone VAV reset, not this single-zone cascade. Normal-operation note: simultaneous_heat_cool trips on this unit (both valves > 5% in 13% of fan-on minutes, 78% of them in June-July, with the cooling coil leaving at ~12 C and the post-heat valve at 100%): that is the signature of dehumidification with reheat, which the published data neither confirms nor rules out -- a question for the site, not a verified fault.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-nuig-ahu101"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "supply_air_temp"
+    }
+  ],
+  "rules": [
+    "supply_air_control",
+    "simultaneous_heat_cool",
+    "co2_ventilation",
+    "night_weekend_setback"
+  ],
+  "report": {
+    "level": 2
+  }
+}

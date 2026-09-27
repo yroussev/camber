@@ -1,0 +1,18 @@
+{
+  "_comment": "Run template for nist-heatpump-fdd: deliberately NO rules. The data are residential split heat pumps in a laboratory, one row per steady-state test point on a synthetic clock, and CAMBER has no detector that fits that equipment: the refrigerant-side drift family (subcooling, superheat, head / suction pressure, approach) is written for water-cooled chillers and needs a chilled-water load (flow and supply / return temperatures) this equipment does not have, and every time-based rule would read the synthetic clock as time. Mapping air-side temperatures or airflow onto chilled-water roles to make those rules run would misrepresent the equipment, so the template runs nothing and a `camber run` on it reports no findings. Use the ingested store to inspect the labelled fault signatures (e.g. subcooling 8.2 F fault-free vs 2.7 F at 80% charge and 18.5 F at 110.6% on the 14 SEER unit, long line set) and as validation data for a future heat-pump refrigerant-side or discharge-superheat detector (GitHub issue #6).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-nist-heatpump-fdd"
+  },
+  "equipment": [
+    {
+      "class": "HEAT_PUMP",
+      "marker_role": "subcooling_temp"
+    }
+  ],
+  "rules": [],
+  "report": {
+    "level": 2
+  }
+}
