@@ -78,6 +78,14 @@ _ENCODED: list[tuple[str, str]] = [
         "MTBcLjYwODQv",
         "third-party dataset DOI prefix",
     ),
+    (
+        "KC9Vc2Vycy9bQS1aYS16MC05Ll8tXSsvfC9ob21lL1tBLVphLXowLTkuXy1dKy98L3ByaXZhdGUvKHRtcHx2YXIpL3xbQS1aYS16XTpcXFVzZXJzXFx8Y2xhdWRlLVswLTldezMsfSk=",
+        "absolute local filesystem path (use a repo-relative path)",
+    ),
+    (
+        "c2xvbmE=",
+        "local account name",
+    ),
 ]
 
 
