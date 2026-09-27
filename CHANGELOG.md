@@ -83,6 +83,73 @@ restates its baseline side, and the result carries both**. Every new name below 
   `sep` or `both` the finding carries each projecting model's SEP §6.4.1 verdict (`sep_valid`,
   `sep_validity`) and every adjustment needs `evidence` and `approved_by` (§5.3.2).
 
+### Added -- M&V: versioned baselines and the rebaseline policy (issue #21, phase 21d; #48)
+A reported saving now names the baseline version it used, and the baseline moves only on an
+operator's attributed, audited decision. **CAMBER never rebaselines automatically.** Every new
+name below is provisional (`docs/API-STABILITY.md`).
+
+- **`camber.mandv.rebaseline`** (new).
+  - `MVBaselineStore` wraps `BaselineStore` and keeps **every version** in
+    `state/<fid>/mv_baselines.json`, a file with a `"schema"` field.
+  - Each version carries a provenance record:
+    - the reason, the trigger ids, and `accepted_by` plus the OS user and host;
+    - the data window and a sha256 of the fit frame, so a later change to the data under a
+      frozen baseline is reported;
+    - the model's `as_dict`, `FitStats`, `RegressionTests` and SEP verdict;
+    - the declared method and kernel, the validity regime and the policy;
+    - the append-only adjustment ledger, the CAMBER version and a `content_sha256`.
+- **`RebaselinePolicy`** and **`assess_triggers`** cover triggers T1-T6:
+  - T1: a material step the declared ECMs do not explain. It is found by PELT on the relative
+    deviation of every day since the baseline from the frozen projection.
+  - T2: a declared change.
+  - T3: a static factor beyond its tolerance.
+  - T4: an invalid model or a severe extrapolation.
+  - T5: an achievement period over 36 months.
+  - T6: a new ECM with 12 months of post-ECM data (advisory).
+
+  Outcomes follow BPA's taxonomy: NRA, or rebaseline then chain. The 20% line between an
+  indicator NRA and a rebaseline (`major_step_frac`) is CAMBER's choice.
+- **`propose_rebaseline`** / **`new_baseline_window`** find the latest 12 consecutive months
+  that:
+  - start at least `settle_days` after the trigger, and after any later step;
+  - avoid ECM installation windows;
+  - miss at most 10% of their days;
+  - are valid under the entry's `validity`;
+  - cover the expected conditions.
+
+  Otherwise they **decline**, with the days still needed ("unresolved non-routine event on DATE;
+  rebaseline needs N more days").
+- **`camber mv run | freeze | list | propose | rebaseline | adjust | report`**.
+  - `run`, `list`, `propose` and `report` never write.
+  - `freeze`, `rebaseline` and `adjust` need `--reason` and are dry runs unless `--apply`.
+    Inside a workspace they take the lock and are audited (`mv.freeze`, `mv.rebaseline`,
+    `mv.adjust`).
+  - `rebaseline --from-proposal` freezes a proposed model exactly, after checking its data has
+    not changed.
+  - The drift CLI's `_drift_audit` became the shared `_state_audit`.
+- **The run path reads frozen versions.** `camber run` and `camber mv run` measure a meter with a
+  frozen version against it, never refitting. They record `baseline_version`, emit `mv_trigger`
+  findings and cut the saving at an unresolved trigger (`partial`, or declined, with a caveat).
+  Every `MethodResult` and `AdjustedResult` records the `baseline_version` it used.
+- **`camber mv report`** chains savings across versions (`sequential_chain`, each link dated from
+  the store) with a new **chained CUSUM** (`camber.charts.chained_cusum_plot`): one segment per
+  version, rebaseline markers, and the unreported rebaseline windows shaded.
+- **Portfolio.**
+  - A new `mv_baselines` retention class ("indefinite", all versions) and manifest kind.
+  - `camber portfolio migrate` moves a config's `mv_store` into `state/<fid>/`, every version
+    included.
+  - A non-active facility is skipped by every `camber mv` verb.
+- **Additive hooks.** On `BaselineStore`: keyword-only `model_types=`, a trailing
+  `BaselineRecord.provenance` (left out of `as_dict` when empty, so drift baseline files are
+  unchanged) and `LIST_KEY` / `SCHEMA`. Also:
+  - `IndicatorFit.from_dict`, with `adjustment_from_dict` now rebuilding `fit` losslessly;
+  - `AdjustedResult.baseline_version`;
+  - `MethodProposal.fitted` (the chosen models' `as_dict`);
+  - `sequential_chain(windows=)`;
+  - `camber.config.run_mv_config`;
+  - the config keys `mv[].rebaseline` (a `settle_days` there that differs from
+    `mv[].settle_days` is refused) and the top-level `mv_store`.
+
 ## [0.89.0] — 2026-09-27
 
 **Catalog release 2.** The research-only tier, manual-download entries, Excel workbooks and

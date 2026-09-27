@@ -142,6 +142,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from glob import glob
+from typing import Any
 
 from .driftrun import DRIFT_FAMILIES, family_names, refit_baselines, run_drift
 from .model.mapping import MappingProvider
@@ -167,6 +168,7 @@ __all__ = [
     "RunResult",
     "run_config",
     "run_drift_config",
+    "run_mv_config",
     "drift_store_path",
     "data_sources",
     "drift_refit",
@@ -338,6 +340,7 @@ class _Prepared:
     min_trust: float | None
     data_sources: list = field(default_factory=list)
     ctx: _FacilityCtx | None = None
+    mv_store: object = None  # the facility's MVBaselineStore, opened read-only (#21 phase 21d)
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -563,6 +566,7 @@ def _mv_savings_finding(
         rho=st.rho_lag1,
         extrapolation=policy,
         kernel=kernel,
+        baseline_version=(ctx or {}).get("baseline_version"),
     )
     sav = res
     cov = sav.coverage or {}
@@ -597,7 +601,7 @@ def _mv_savings_finding(
     if ctx is not None:
         daily_b = ctx["daily"]
         _mv_validity_metrics(ctx, [("baseline", model, daily_b)], metrics, caveats)
-        if ctx.get("adj_specs"):
+        if _mv_has_ledger(ctx):
             rows = {
                 "index": daily_r.index,
                 "drivers": daily_r["oat"].values,
@@ -684,6 +688,7 @@ def _mv_method_metrics(res, declared: bool) -> dict:
         "enpi": res.enpi,
         "enpi_uncertainty": res.enpi_uncertainty,
         "sep_range_valid": res.sep_range_valid,
+        "baseline_version": res.baseline_version,
     }
 
 
@@ -775,6 +780,7 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             rho=st_r.rho_lag1,
             extrapolation=policy,
             kernel=kernel,
+            baseline_version=ctx.get("baseline_version"),
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
         used = [("reporting", mr, daily_r)]
@@ -806,6 +812,7 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             rho=st_i.rho_lag1,
             extrapolation=policy,
             kernel=kernel,
+            baseline_version=ctx.get("baseline_version"),
         )
         model_note = {
             "intermediate_period": [str(inter[0]), str(inter[1])],
@@ -849,6 +856,7 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             reporting_cv_rmse=st_r.cv_rmse,
             n_reporting=st_r.n,
             p_reporting=N_PARAMS[mr.kind],
+            baseline_version=ctx.get("baseline_version"),
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
         used = [("baseline", model, daily_b), ("reporting", mr, daily_r)]
@@ -882,7 +890,7 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         )
     _mv_validity_metrics(ctx, used, metrics, caveats)
     suffix = ""
-    if ctx.get("adj_specs"):
+    if _mv_has_ledger(ctx):
         suffix = _mv_record_adjusted(ctx, res, rows, fits, metrics, caveats)
     if res.declined:
         metrics["declined_reason"] = res.declined_reason
@@ -938,7 +946,7 @@ def _mv_proposal_finding(ctx: dict) -> object:
         extrapolation=ctx["policy"],
     )
     caveats = list(prop.caveats)
-    if ctx.get("adj_specs"):
+    if _mv_has_ledger(ctx):
         _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats)
     metrics = {
         "proposed": prop.proposed,
@@ -1053,6 +1061,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     method, kernel, declared = _mv_method_spec(entry, period, reporting)
     validity = _mv_validity(entry)
     schedule = _mv_schedule(entry)
+    if entry.get("rebaseline") is not None:  # a bad policy block is a config error, up front
+        from .mandv.rebaseline import RebaselinePolicy, events_from_entry
+
+        RebaselinePolicy.from_entry(entry)
+        events_from_entry(entry)
     min_days = int(entry.get("min_days", 60))
     adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
@@ -1071,6 +1084,23 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             continue
         if Role.OAT not in full.columns:
             declined(ref.equip, "no outdoor temperature (oat or shared_oat)")
+            continue
+        versions = _mv_versions(prep, ref.equip, role)
+        if versions:
+            out += _mv_versioned_findings(
+                entry,
+                ref.equip,
+                full,
+                role,
+                prep,
+                versions,
+                policy=policy,
+                method=method,
+                declared=declared,
+                validity=validity,
+                schedule=schedule,
+                adj_specs=adj_specs,
+            )
             continue
         frame = full.loc[period[0] : period[1]] if period else full
         daily = daily_energy_vs_temp(frame[role].dropna(), frame[Role.OAT].dropna())
@@ -1159,6 +1189,274 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         else:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
+    return out
+
+
+# --- versioned M&V baselines (#21 phase 21d) -------------------------------------------------
+# When the facility's M&V baseline store (camber.mandv.rebaseline.MVBaselineStore) holds a frozen
+# version for a meter, the run uses it -- read-only, never refitting or writing -- and records the
+# version on every result. Triggers (T1-T6) become ``mv_trigger`` Findings; an unresolved one cuts
+# the saving at its date (a partial result with a caveat), because CAMBER never rebaselines
+# automatically: moving the baseline is ``camber mv rebaseline``.
+
+
+def _mv_store_readonly(config: dict, base_dir: str, ctx):
+    """The config's M&V baseline store for reading (``None`` when none can be named)."""
+    from .mvrun import open_mv_store
+
+    store, _path_, _ctx = open_mv_store(config, base_dir=base_dir, ctx=ctx, required=False)
+    return store
+
+
+def _mv_versions(prep, equip: str, role) -> list:
+    from .mandv.rebaseline import mv_kind
+
+    store = getattr(prep, "mv_store", None)
+    if store is None:
+        return []
+    return store.versions(prep.site, equip, mv_kind(role))
+
+
+def _mv_trigger_finding(equip: str, tr, version: str):
+    from .rules.base import Finding
+
+    live = not tr.resolved
+    sev = "warn" if (live and tr.blocks) else "info"
+    state = f"resolved -- {tr.resolved_by}" if tr.resolved else "unresolved"
+    return Finding(
+        rule="mv_trigger",
+        equip=equip,
+        severity=sev,
+        metrics={**tr.as_dict(), "baseline_version": version},
+        summary=f"{equip}: M&V trigger {tr.key} against {version} -- {tr.title}: {tr.detail} "
+        f"({state}; calls for {tr.outcome.replace('_', ' ')})",
+        caveats=(
+            [
+                "never applied automatically: `camber mv propose` shows the options, and "
+                "`camber mv rebaseline` / `camber mv adjust` record the operator's decision"
+            ]
+            if live
+            else []
+        ),
+    )
+
+
+def _mv_versioned_findings(
+    entry,
+    equip,
+    full,
+    role,
+    prep,
+    versions,
+    *,
+    policy,
+    method,
+    declared,
+    validity,
+    schedule,
+    adj_specs,
+) -> list:
+    """The ``mv`` Findings of one meter measured against its frozen, versioned baseline."""
+    import pandas as pd
+
+    from .mandv.intervalfit import daily_energy_vs_temp
+    from .mandv.models import N_PARAMS
+    from .mandv.rebaseline import (
+        RebaselinePolicy,
+        assess_triggers,
+        event_phrase,
+        events_from_entry,
+        first_block,
+        new_baseline_window,
+        version_label,
+    )
+    from .mandv.stats import cv_rmse_max_for, fit_stats
+    from .mvrun import _fit_valid, versioned_rows
+    from .rules.base import Finding
+
+    store = prep.mv_store
+    out: list = []
+    daily_all = daily_energy_vs_temp(full[role].dropna(), full[Role.OAT].dropna())
+    reporting = _mv_window(entry, "reporting_period")
+    if reporting is None:
+        rec = versions[-1]
+    else:
+        rec = store.in_force(prep.site, equip, versions[-1].kind, reporting[0])
+    live_rec = rec or versions[-1]
+    label = version_label(live_rec)
+    model = store.model_of(live_rec)
+    daily, same = versioned_rows(daily_all, live_rec)
+    if len(daily) <= N_PARAMS.get(getattr(model, "kind", ""), 5):
+        out.append(_mv_declined(equip, f"no data under the frozen baseline {label}'s window"))
+        return out
+    st = fit_stats(
+        daily["energy"].values,
+        model.predict(daily["oat"].values),
+        N_PARAMS[model.kind],
+        cv_rmse_max=cv_rmse_max_for("daily"),
+        time_index=daily.index,
+    )
+    prov = live_rec.provenance or {}
+    caveats = []
+    if not same:
+        caveats.append(
+            f"the data under {label}'s window changed since it was frozen (fit-frame sha256 "
+            "differs): the frozen model is used as recorded, but it no longer reproduces"
+        )
+    out.append(
+        Finding(
+            rule="mv_baseline",
+            equip=equip,
+            severity="ok" if st.accept else "info",
+            metrics={
+                "model": getattr(model, "kind", type(model).__name__),
+                "n_days": st.n,
+                "r2": st.r2,
+                "cv_rmse": st.cv_rmse,
+                "nmbe": st.nmbe,
+                "accept": bool(st.accept),
+                "rho": st.rho_lag1,
+                "baseline_version": label,
+                "versions": len(versions),
+                "window": [live_rec.period_start, live_rec.period_end],
+                "frozen_at": live_rec.frozen_at,
+                "accepted_by": live_rec.accepted_by,
+                "frozen_method": prov.get("method"),
+                "baseline_data_changed": not same,
+            },
+            summary=(
+                f"{equip}: frozen M&V baseline {label} ({getattr(model, 'kind', '')}, "
+                f"{live_rec.period_start}..{live_rec.period_end}), R2 {st.r2:.2f}, CV(RMSE) "
+                f"{st.cv_rmse:.1%} -- read from the versioned store, not refitted"
+            ),
+            caveats=caveats,
+        )
+    )
+    if reporting is None:
+        return out
+    if rec is None:
+        out.append(
+            _mv_declined(
+                equip,
+                "no frozen baseline version ended before the reporting period starts",
+                rule="mv_savings",
+            )
+        )
+        return out
+    fmethod = prov.get("method") or "forecast"
+    if declared and method not in (fmethod, "auto"):
+        out.append(
+            _mv_declined(
+                equip,
+                f"mv.method {method!r} differs from the method frozen with {label} "
+                f"({fmethod!r}); changing the declared method is a rebaseline-class action "
+                "(`camber mv rebaseline`)",
+                rule="mv_savings",
+            )
+        )
+        return out
+    kernel = prov.get("kernel") or (
+        "exact" if fmethod in ("chaining", "standard_conditions") else "g14"
+    )
+    pol = RebaselinePolicy.from_entry(entry)
+    events, statics = events_from_entry(entry)
+    r0, r1 = pd.Timestamp(reporting[0]).normalize(), pd.Timestamp(reporting[1]).normalize()
+    nxt = next(
+        (v for v in versions if v.provenance.get("version") == (prov.get("version") or 0) + 1), None
+    )
+    seen = daily_all.loc[: r1 + pd.Timedelta(hours=23)]
+    trig = assess_triggers(
+        seen,
+        model,
+        baseline=[rec.period_start, rec.period_end],
+        policy=pol,
+        reporting=[r0, r1],
+        fit_valid=_fit_valid(prov),
+        events=events,
+        static_factors=statics,
+        ledger=store.ledger(rec),
+        next_version_start=None if nxt is None else nxt.period_start,
+        intermediate_period=(entry.get("intermediate_period") if fmethod == "chaining" else None),
+        extrapolation=policy,
+    )
+    out += [_mv_trigger_finding(equip, t, label) for t in trig]
+    cut_caveats = []
+    if nxt is not None:
+        nd = pd.Timestamp((nxt.provenance or {}).get("trigger_date") or nxt.period_start)
+        if nd <= r1:
+            r1 = nd - pd.Timedelta(days=1)
+            cut_caveats.append(
+                f"{version_label(nxt)} supersedes {label} from {nd.date()}: this saving stops "
+                "there; `camber mv report` chains the versions"
+            )
+    # any unresolved blocking trigger since the baseline ended counts, not only those inside the
+    # requested reporting days
+    blk = first_block([t for t in trig if pd.Timestamp(t.date) <= r1])
+    if blk is not None:
+        if blk.outcome == "rebaseline":
+            win = new_baseline_window(
+                daily_all, after=blk.date, policy=pol, event=event_phrase(blk)
+            )
+            if win.ok and win.window:
+                what = (
+                    f"{event_phrase(blk)}; a rebaseline window {win.window[0]}..{win.window[1]} "
+                    "is available (`camber mv rebaseline`)"
+                )
+            else:
+                what = str(win.declined_reason)
+        else:
+            what = f"{event_phrase(blk)}; record an NRA (`camber mv adjust`) or rebaseline"
+        if pd.Timestamp(blk.date) <= r0:
+            f = _mv_declined(equip, f"{what} ({blk.key}: {blk.detail})", rule="mv_savings")
+            f.metrics["baseline_version"] = label
+            f.metrics["triggers"] = [t.key for t in trig if not t.resolved]
+            out.append(f)
+            return out
+        r1 = pd.Timestamp(blk.date) - pd.Timedelta(days=1)
+        cut_caveats.append(
+            f"partial: savings after {r1.date()} declined -- {what} ({blk.key}: {blk.detail})"
+        )
+    daily_r = daily_all.loc[r0 : r1 + pd.Timedelta(hours=23)]
+    if daily_r.empty:
+        out.append(_mv_declined(equip, "no usable reporting-period days", rule="mv_savings"))
+        return out
+    win_r = [str(r0.date()), str(r1.date())]
+    ctx = {
+        "equip": equip,
+        "entry": entry,
+        "policy": policy,
+        "period": [rec.period_start, rec.period_end],
+        "reporting": win_r,
+        "full": full,
+        "role": role,
+        "daily": daily,
+        "model": model,
+        "st": st,
+        "validity": validity,
+        "schedule": schedule,
+        "adj_specs": adj_specs,
+        "baseline_version": label,
+        "stored_ledger": store.ledger(rec),
+        "daily_r": daily_r,
+    }
+    fnd: Any
+    if method == "auto":
+        fnd = _mv_proposal_finding(ctx)
+    elif fmethod == "forecast":
+        fnd = _mv_savings_finding(
+            equip, model, st, daily_r, policy, win_r, kernel=kernel, declared=True, ctx=ctx
+        )
+    else:
+        fnd = _mv_other_method_finding(ctx, fmethod, kernel)
+    fnd.metrics["baseline_version"] = label
+    fnd.metrics["partial"] = bool(cut_caveats)
+    fnd.metrics["reporting_period_requested"] = [str(reporting[0]), str(reporting[1])]
+    fnd.metrics["triggers"] = [t.key for t in trig if not t.resolved]
+    fnd.caveats = list(fnd.caveats or []) + caveats + cut_caveats
+    if not declared:
+        fnd.caveats = [c for c in fnd.caveats if c != _MV_UNDECLARED]
+        fnd.metrics["method_declared"] = True  # frozen with the baseline
+    out.append(fnd)
     return out
 
 
@@ -1259,6 +1557,13 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
                 )
             else:
                 ledger.append(adjustment_from_dict(d))
+        # the ledger recorded on the stored baseline version (`camber mv adjust`), dated inside
+        # the rows this saving covers
+        lo = pd.Timestamp(ctx["period"][0]) if ctx.get("period") else None
+        hi = pd.Timestamp(reporting[1])
+        for a in ctx.get("stored_ledger") or ():
+            if (lo is None or pd.Timestamp(a.start) >= lo) and pd.Timestamp(a.start) <= hi:
+                ledger.append(a)
         entry = ctx["entry"]
         adj = apply_adjustments(
             res,
@@ -1271,6 +1576,11 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
     except (ConfoundedAdjustment, ValueError, TypeError) as e:
         return None, str(e)
     return adj, None
+
+
+def _mv_has_ledger(ctx) -> bool:
+    """Whether an ``mv`` run context carries adjustments (config ledger or stored ledger)."""
+    return bool(ctx and (ctx.get("adj_specs") or ctx.get("stored_ledger")))
 
 
 def _mv_record_adjusted(ctx: dict, res, rows: dict, fits: dict, metrics: dict, caveats) -> str:
@@ -1415,6 +1725,8 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             findings += soo_findings(frame, spec, ref.equip)
         ran.append(f"soo:{cls}:{entry.get('library') or entry.get('spec')}")
 
+    if config.get("mv"):
+        prep.mv_store = _mv_store_readonly(config, base_dir, prep.ctx)
     for entry in config.get("mv", []):
         findings += _mv_findings(entry, refs_by_class.get(entry["class"], []), prep)
         ran.append(f"mv:{entry['class']}")
@@ -1685,6 +1997,24 @@ def run_drift_config(
         freeze_if_missing=freeze_if_missing,
         evidence=evidence,
     )
+
+
+def run_mv_config(config: dict, *, base_dir: str = ".", prepared=None) -> list:
+    """Run only a config's ``mv`` section; returns its Findings (``camber mv run``).
+
+    Read-only toward the M&V baseline store, exactly as :func:`run_config` is: a meter with a
+    frozen version is measured against it (``baseline_version`` recorded, triggers as
+    ``mv_trigger`` Findings, a partial or declined saving on an unresolved trigger); one without
+    is fitted afresh as before.
+    """
+    prep = prepared if prepared is not None else _prepare(config, base_dir)
+    if not config.get("mv"):
+        return []
+    prep.mv_store = _mv_store_readonly(config, base_dir, prep.ctx)
+    out: list = []
+    for entry in config.get("mv", []):
+        out += _mv_findings(entry, prep.refs_by_class.get(entry["class"], []), prep)
+    return out
 
 
 def load_config(path: str) -> dict:

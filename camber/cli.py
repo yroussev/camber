@@ -1108,9 +1108,9 @@ def _drift_ctx(cfg, base):
     return _facility_context(cfg, base)
 
 
-def _drift_lock(ctx, *, write: bool = True):
-    """The workspace lock for a baseline-store write (fail fast); a no-op outside a workspace or
-    for a dry run."""
+def _state_lock(ctx, *, write: bool = True):
+    """The workspace lock for a per-facility state write -- a drift or M&V baseline store (fail
+    fast); a no-op outside a workspace or for a dry run."""
     import contextlib
 
     if not ctx.workspace or not write:
@@ -1120,8 +1120,9 @@ def _drift_lock(ctx, *, write: bool = True):
     return portfolio_lock(ctx.workspace, timeout=0.0)
 
 
-def _drift_audit(ctx, action: str, *, reason: str, details: dict) -> None:
-    """Audit a baseline-store change inside a workspace (with the facility's state)."""
+def _state_audit(ctx, action: str, *, reason: str, details: dict) -> None:
+    """Audit a per-facility state change inside a workspace (``drift.*``, ``mv.*``), with the
+    facility's lifecycle state; a no-op outside a workspace."""
     if not ctx.workspace:
         return
     from .portfolio import Portfolio
@@ -1224,7 +1225,7 @@ def _cmd_drift_freeze(args) -> int:
               file=sys.stderr)  # fmt: skip
         return 1
     try:
-        with _drift_lock(ctx, write=not args.dry_run):
+        with _state_lock(ctx, write=not args.dry_run):
             store, path, ctx = _baseline_store(cfg, base_dir=base, ctx=ctx)
             before = {r.fingerprint for r in store.records()}
             res = run_drift_config(
@@ -1246,7 +1247,7 @@ def _cmd_drift_freeze(args) -> int:
                 store.save(path)
                 print(f"wrote {path}")
                 _record_outputs(ctx, {path: "baselines"})
-                _drift_audit(
+                _state_audit(
                     ctx,
                     "drift.freeze",
                     reason=reason,
@@ -1295,7 +1296,7 @@ def _cmd_drift_accept(args) -> int:
     cfg, base = _drift_load(args)
     ctx = _drift_ctx(cfg, base)
     try:
-        with _drift_lock(ctx, write=not args.dry_run):
+        with _state_lock(ctx, write=not args.dry_run):
             return _drift_accept(args, cfg, base, ctx)
     except PortfolioLocked as e:
         print(f"error: {e}", file=sys.stderr)
@@ -1354,7 +1355,7 @@ def _drift_accept(args, cfg, base, ctx) -> int:
         print(f"moved {len(recs)} baseline(s) — accepted by {args.by}: {args.reason}")
         print(f"wrote {path}")
         _record_outputs(ctx, {path: "baselines"})
-        _drift_audit(
+        _state_audit(
             ctx,
             "drift.accept",
             reason=args.reason,
@@ -1367,6 +1368,326 @@ def _drift_accept(args, cfg, base, ctx) -> int:
         )
     else:
         print(f"nothing to accept; {path} left unchanged")
+    return 0
+
+
+# --------------------------------------------------------------------------- mv subcommands
+#
+# Versioned M&V baselines (#21 phase 21d). `run`, `list`, `propose` and `report` read the store;
+# `freeze`, `rebaseline` and `adjust` are the only writers. Each writer needs --reason, is a dry
+# run unless --apply is given, and -- inside a portfolio workspace -- takes the workspace lock
+# (fail fast) and appends one `mv.<verb>` audit line. CAMBER never rebaselines automatically.
+
+
+def _mv_suspended(plan_or_state, ctx) -> bool:
+    state = plan_or_state if isinstance(plan_or_state, str) else plan_or_state.skipped_state
+    if state:
+        print(
+            f"facility {ctx.facility_id} is {state}: skipped (no meters are read while it is not "
+            "active; resume it with `camber facility resume`)"
+        )
+        return True
+    return False
+
+
+def _print_plan(plan, apply: bool) -> None:
+    for ch in plan.changes:
+        bits = [f"{ch['baseline']}: {ch['action']} {ch.get('version', '')}".rstrip()]
+        if ch.get("window"):
+            bits.append(f"window {ch['window'][0]}..{ch['window'][1]}")
+        if ch.get("model"):
+            bits.append(
+                f"{ch['model']} R2 {ch['r2']:.3f} CV(RMSE) {ch['cv_rmse']:.1%} "
+                f"G14 {'ok' if ch['g14_accept'] else 'fail'} SEP "
+                f"{'valid' if ch['sep_valid'] else 'invalid'}"
+            )
+        if ch.get("supersedes"):
+            bits.append(f"supersedes {ch['supersedes']} for {', '.join(ch['triggers'])}")
+        for e in ch.get("entries") or ():
+            bits.append(f"entry: {e}")
+        print("  " + "; ".join(bits))
+        for c in ch.get("caveats") or ():
+            print(f"    caveat: {c}")
+    for r in plan.refused:
+        extra = f" (needs {r['days_needed']} more days)" if r.get("days_needed") else ""
+        print(f"  {r['baseline']}: not {plan.verb}d -- {r['why']}{extra}")
+    if not plan.changes and not plan.refused:
+        print("  no M&V meters found")
+
+
+def _mv_write(args, verb: str, planner) -> int:
+    """The shared write path: lock, plan, print, and (with --apply) save + manifest + audit."""
+    from .config import _record_outputs
+    from .portfolio import PortfolioLocked
+
+    cfg, base = _drift_load(args)
+    ctx = _drift_ctx(cfg, base)
+    reason = (args.reason or "").strip()
+    if not reason:
+        print(f"error: `mv {verb}` needs --reason (it is recorded and audited)", file=sys.stderr)
+        return 1
+    try:
+        with _state_lock(ctx, write=bool(args.apply)):
+            plan = planner(cfg, base, reason)
+            if _mv_suspended(plan, ctx):
+                return 0
+            print(f"mv {verb} -> {plan.path}")
+            _print_plan(plan, args.apply)
+            if not args.apply:
+                print(
+                    f"dry run: {len(plan.changes)} change(s) planned; nothing written "
+                    "(pass --apply to write)"
+                )
+                return 0
+            if not plan.changes:
+                print(f"{plan.path} left unchanged (nothing to {verb})")
+                return 0 if not plan.refused else 1
+            plan.store.save(plan.path)
+            print(f"wrote {plan.path}")
+            _record_outputs(ctx, {plan.path: "mv_baselines"})
+            _state_audit(
+                ctx,
+                f"mv.{verb}",
+                reason=reason,
+                details={"store": plan.path, "changes": plan.changes, "refused": plan.refused},
+            )
+    except PortfolioLocked as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _who(args) -> str:
+    from .portfolio._audit import _actor
+
+    return (getattr(args, "by", None) or "").strip() or _actor()
+
+
+def _cmd_mv_freeze(args) -> int:
+    """Freeze version 1 of each meter's M&V baseline (never overwrites one)."""
+    from .mvrun import plan_freeze
+
+    return _mv_write(
+        args,
+        "freeze",
+        lambda cfg, base, reason: plan_freeze(
+            cfg,
+            base_dir=base,
+            reason=reason,
+            accepted_by=_who(args),
+            equips=args.equip,
+            allow_short=bool(args.allow_short),
+            at=args.run_id or None,
+            store_path=args.store,
+        ),
+    )
+
+
+def _cmd_mv_rebaseline(args) -> int:
+    """Supersede a meter's M&V baseline -- the attributed operator decision."""
+    from .mvrun import plan_rebaseline
+
+    prop = None
+    if args.from_proposal:
+        doc = json.load(open(args.from_proposal))
+        rows = [m for m in doc.get("meters", []) if m.get("equip") == args.equip]
+        if not rows or not rows[0].get("rebaseline"):
+            print(
+                f"error: {args.from_proposal} has no rebaseline proposal for {args.equip}",
+                file=sys.stderr,
+            )
+            return 1
+        prop = rows[0]["rebaseline"]
+    return _mv_write(
+        args,
+        "rebaseline",
+        lambda cfg, base, reason: plan_rebaseline(
+            cfg,
+            base_dir=base,
+            equip=args.equip,
+            reason=reason,
+            accepted_by=args.by,
+            period=args.period,
+            as_of=args.as_of,
+            trigger_ids=args.trigger or (),
+            from_proposal=prop,
+            at=args.run_id or None,
+            store_path=args.store,
+        ),
+    )
+
+
+def _cmd_mv_adjust(args) -> int:
+    """Record accepted NRA / static-factor entries on a meter's live baseline version."""
+    from .mvrun import plan_adjust
+
+    specs = json.load(open(args.spec))
+    if isinstance(specs, dict):
+        specs = specs.get("adjustments", specs)
+    return _mv_write(
+        args,
+        "adjust",
+        lambda cfg, base, reason: plan_adjust(
+            cfg,
+            base_dir=base,
+            equip=args.equip,
+            specs=specs,
+            reason=reason,
+            accepted_by=args.by,
+            as_of=args.as_of,
+            at=args.run_id or None,
+            store_path=args.store,
+        ),
+    )
+
+
+def _mv_cfg(args):
+    cfg, base = _drift_load(args)
+    if getattr(args, "store", None):
+        cfg = {**cfg, "mv_store": os.path.abspath(args.store)}
+    return cfg, base
+
+
+def _cmd_mv_run(args) -> int:
+    """Measure every mv meter against its frozen version -- read-only."""
+    from .config import run_mv_config
+    from .mvrun import _facility_state
+
+    cfg, base = _mv_cfg(args)
+    ctx = _drift_ctx(cfg, base)
+    state = _facility_state(ctx)
+    if state not in (None, "active") and _mv_suspended(state, ctx):
+        return 0
+    if not cfg.get("mv"):
+        print("config has no 'mv' section -- nothing to do")
+        return 0
+    findings = run_mv_config(cfg, base_dir=base)
+    _print_findings(findings)
+    if args.out:
+        os.makedirs(args.out, exist_ok=True)
+        fpath = os.path.join(args.out, "mv_findings.json")
+        json.dump([f.as_dict() for f in findings], open(fpath, "w"), indent=2, default=str)
+        print(f"\nwrote {fpath}")
+        from .config import _record_outputs
+
+        _record_outputs(ctx, {fpath: "report"})
+    return 0
+
+
+def _cmd_mv_list(args) -> int:
+    from .mvrun import _version_row, open_mv_store
+
+    cfg, base = _mv_cfg(args)
+    store, path, ctx = open_mv_store(cfg, base_dir=base)
+    recs = store.records()
+    if args.equip:
+        recs = [r for r in recs if r.equip in set(args.equip)]
+    if not recs:
+        print(f"no frozen M&V baselines in {path} (run `camber mv freeze` first)")
+    rows = []
+    for r in recs:
+        vs = store.versions(r.site, r.equip, r.kind)
+        print(f"{r.equip}/{r.kind}: {len(vs)} version(s)")
+        for v in vs:
+            row = _version_row(v)
+            rows.append({"equip": r.equip, "kind": r.kind, **row})
+            trig = f" triggers={','.join(row['trigger_ids'])}" if row["trigger_ids"] else ""
+            adj = f" adjustments={row['adjustments']}" if row["adjustments"] else ""
+            ok = "" if row["verified"] else "  PROVENANCE MISMATCH"
+            print(
+                f"  {row['version']:4s} [{row['window'][0]}..{row['window'][1]}] "
+                f"{row['model'] or '-':4s} method={row['method']} frozen_at={row['frozen_at']} "
+                f"by={row['accepted_by'] or '-'}{trig}{adj}  {row['reason']}{ok}"
+            )
+    if args.json:
+        json.dump(rows, open(args.json, "w"), indent=2, default=str)
+        print(f"wrote {args.json}")
+    return 0
+
+
+def _cmd_mv_propose(args) -> int:
+    from .mvrun import propose
+
+    cfg, base = _mv_cfg(args)
+    ctx = _drift_ctx(cfg, base)
+    doc = propose(cfg, base_dir=base, as_of=args.as_of, equips=args.equip)
+    if _mv_suspended(doc["skipped_state"] or "", ctx):
+        return 0
+    for m in doc["meters"]:
+        head = f"{m['equip']}/{m['kind']}"
+        if "version" not in m:
+            print(f"{head}: nothing frozen yet (`camber mv freeze`)")
+        else:
+            rb = m["rebaseline"]
+            print(
+                f"{head}: live {m['version']} [{m['window'][0]}..{m['window'][1]}] -> "
+                f"proposal: {rb['outcome']}"
+            )
+            if m.get("baseline_data_changed"):
+                print("  caveat: the data under the frozen window changed since it was frozen")
+            for t in rb["triggers"]:
+                st = f"resolved ({t['resolved_by']})" if t["resolved"] else "UNRESOLVED"
+                print(f"  {t['key']:14s} {t['outcome']:16s} {st}: {t['detail']}")
+            w = rb.get("window") or {}
+            if rb["outcome"] == "rebaseline":
+                print(
+                    f"  new window {w['window'][0]}..{w['window'][1]} ({w['model_kind']}, "
+                    f"{w['missing_frac']:.0%} missing, coverage {w['coverage_tier']})"
+                )
+            elif rb["outcome"] == "declined":
+                print(f"  declined: {rb['declined_reason']}")
+            for spec in rb.get("nra_specs") or ():
+                print(f"  NRA template: {json.dumps(spec)}")
+        mp = m.get("method_proposal")
+        if mp and "error" not in mp:
+            print(
+                f"  SEP method proposal: {mp['proposed'] or 'declined'} "
+                f"({len(mp['sensitivity'])} valid method(s))"
+            )
+    print("\nnothing written: `camber mv rebaseline` / `camber mv adjust` apply a decision")
+    if args.json:
+        json.dump(doc, open(args.json, "w"), indent=2, default=str)
+        print(f"wrote {args.json}")
+    return 0
+
+
+def _cmd_mv_report(args) -> int:
+    from .config import _record_outputs
+    from .mvrun import chained_report
+    from .report.mv import mv_report_html
+
+    cfg, base = _mv_cfg(args)
+    ctx = _drift_ctx(cfg, base)
+    rep = chained_report(cfg, base_dir=base, as_of=args.as_of, equips=args.equip)
+    if _mv_suspended(rep["skipped_state"] or "", ctx):
+        return 0
+    html = mv_report_html(rep, charts=not args.no_charts)
+    open(args.out, "w").write(html)
+    outs = {args.out: "report"}
+    if args.json:
+        json.dump(
+            {**rep, "meters": [m.as_dict() for m in rep["meters"]]},
+            open(args.json, "w"),
+            indent=2,
+            default=str,
+        )
+        outs[args.json] = "report"
+    _record_outputs(ctx, outs)
+    for m in rep["meters"]:
+        ch = m.chain
+        what = (
+            "no reported segment"
+            if ch is None
+            else (
+                f"{ch.method} savings {ch.savings:,.0f}"
+                if ch.savings is not None
+                else f"{ch.method} declined"
+            )
+        )
+        print(f"{m.equip}/{m.kind}: {len(m.versions)} version(s); {what}")
+        for c in m.caveats:
+            print(f"  caveat: {c}")
+    print(f"wrote {args.out}")
     return 0
 
 
@@ -1553,6 +1874,93 @@ def _build_parser() -> argparse.ArgumentParser:
     dra.add_argument("--run-id", default="", help="stamp as frozen_at (default: now, UTC)")
     dra.add_argument("--dry-run", action="store_true", help="show what would move without writing")
     dra.set_defaults(func=_cmd_drift_accept)
+
+    pmv = sub.add_parser(
+        "mv", help="versioned M&V baselines: run, freeze, list, propose, rebaseline, adjust, report"
+    )
+    mvsub = pmv.add_subparsers(dest="mv_cmd", required=True)
+
+    def _mvc(p, *, equip=True):
+        p.add_argument("config", help="analysis config JSON with an 'mv' section")
+        p.add_argument(
+            "--store",
+            help="M&V baseline store (default: state/<facility_id>/mv_baselines.json in the "
+            "workspace, else the config's mv_store)",
+        )
+        if equip:
+            p.add_argument("--equip", action="append", help="only this meter (repeatable)")
+
+    def _mvw(p):
+        p.add_argument("--reason", required=True, help="why (recorded and audited)")
+        p.add_argument("--apply", action="store_true", help="write the change (default: a dry run)")
+        p.add_argument("--run-id", default="", help="stamp as frozen_at (default: now, UTC)")
+
+    mr = mvsub.add_parser("run", help="measure each meter against its frozen version (read-only)")
+    _mvc(mr, equip=False)
+    mr.add_argument("--out", help="output dir for mv_findings.json")
+    mr.set_defaults(func=_cmd_mv_run)
+
+    mf = mvsub.add_parser(
+        "freeze", help="freeze version 1 of each meter's baseline (never overwrites one)"
+    )
+    _mvc(mf)
+    _mvw(mf)
+    mf.add_argument("--by", help="who accepts the baseline (default: the OS user)")
+    mf.add_argument(
+        "--allow-short",
+        action="store_true",
+        help="accept a window shorter than 12 months or >10%% missing (recorded as a caveat)",
+    )
+    mf.set_defaults(func=_cmd_mv_freeze)
+
+    ml = mvsub.add_parser("list", help="every baseline version with its provenance")
+    _mvc(ml)
+    ml.add_argument("--json", help="also write the versions as JSON to this path")
+    ml.set_defaults(func=_cmd_mv_list)
+
+    mp = mvsub.add_parser(
+        "propose", help="triggers T1-T6, the rebaseline proposal and the SEP method proposal"
+    )
+    _mvc(mp)
+    mp.add_argument("--as-of", help="assess with the data up to this date")
+    mp.add_argument("--json", help="write the proposal as JSON (usable by rebaseline)")
+    mp.set_defaults(func=_cmd_mv_propose)
+
+    mb = mvsub.add_parser(
+        "rebaseline", help="supersede a meter's baseline (attributed; dry run unless --apply)"
+    )
+    _mvc(mb, equip=False)
+    _mvw(mb)
+    mb.add_argument("--equip", required=True, help="the meter to rebaseline")
+    mb.add_argument("--by", required=True, help="who accepts the new baseline")
+    mb.add_argument(
+        "--period", nargs=2, metavar=("START", "END"), help="new window (default: the proposal's)"
+    )
+    mb.add_argument("--trigger", action="append", help="trigger id or key it answers (repeatable)")
+    mb.add_argument("--from-proposal", help="a `mv propose --json` file: freeze its model exactly")
+    mb.add_argument("--as-of", help="assess with the data up to this date")
+    mb.set_defaults(func=_cmd_mv_rebaseline)
+
+    ma = mvsub.add_parser(
+        "adjust", help="record accepted NRA / static-factor entries on the live version"
+    )
+    _mvc(ma, equip=False)
+    _mvw(ma)
+    ma.add_argument("--equip", required=True, help="the meter to adjust")
+    ma.add_argument(
+        "--spec", required=True, help="JSON list of ledger entries (mv.adjustments form)"
+    )
+    ma.add_argument("--by", required=True, help="who records the adjustments")
+    ma.add_argument("--as-of", help="reporting days up to this date (indicator estimates)")
+    ma.set_defaults(func=_cmd_mv_adjust)
+
+    mrep = mvsub.add_parser("report", help="savings chained across baseline versions (HTML)")
+    _mvc(mrep)
+    mrep.add_argument("--out", required=True, help="HTML file to write")
+    mrep.add_argument("--json", help="also write the chain as JSON")
+    mrep.add_argument("--as-of", help="report up to this date")
+    mrep.add_argument("--no-charts", action="store_true", help="omit the chained CUSUM chart")
+    mrep.set_defaults(func=_cmd_mv_report)
 
     ped = sub.add_parser(
         "edge", help="one-way edge→cloud BAS forwarder (read-only in, outbound-only out)"

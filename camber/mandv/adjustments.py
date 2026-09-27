@@ -257,6 +257,33 @@ class IndicatorFit:
         d["sigma"] = [list(r) for r in self.sigma]
         return d
 
+    @classmethod
+    def from_dict(cls, d: dict) -> IndicatorFit:
+        """Rebuild a fit written by :meth:`as_dict` (lossless: ``from_dict(f.as_dict()) == f``).
+
+        Unknown keys are an error, so a stored ledger that does not match this CAMBER is refused
+        rather than half-read.
+        """
+        from dataclasses import fields as _fields
+
+        from .coverage import _spec_in
+
+        d = dict(d)
+        known = {f.name for f in _fields(cls)}
+        extra = set(d) - known
+        if extra:
+            raise ValueError(f"unknown indicator-fit key(s): {sorted(extra)}")
+        d["design"] = _spec_in(d.get("design"))
+        d["names"] = tuple(d.get("names") or ())
+        d["beta"] = tuple(float(b) for b in d.get("beta") or ())
+        d["sigma"] = tuple(tuple(float(x) for x in row) for row in d.get("sigma") or ())
+        d["rho"] = None if d.get("rho") is None else float(d["rho"])
+        for k in ("n", "p", "df", "n_event_rows"):
+            d[k] = int(d[k])
+        for k in ("s2", "kappa"):
+            d[k] = float(d[k])
+        return cls(**d)
+
 
 def _check_date(x, what: str):
     if x is None:
@@ -442,14 +469,18 @@ def adjustment_from_dict(d: dict):
 
     The keys are the dataclass fields; ``kind`` picks the class. An indicator entry cannot be
     rebuilt this way without its ``rate`` / ``rate_se`` (estimate it with
-    :func:`estimate_nre_indicator`); ``fit`` is not rebuilt. Unknown keys are an error.
+    :func:`estimate_nre_indicator`). A ``fit`` written by :meth:`NonRoutineAdjustment.as_dict` is
+    rebuilt through :meth:`IndicatorFit.from_dict`, so a stored ledger round-trips losslessly
+    (``adjustment_from_dict(a.as_dict()) == a``). Unknown keys are an error.
     """
     d = dict(d)
     kind = d.pop("kind", "nra")
     cls = {"nra": NonRoutineAdjustment, "static": StaticFactorAdjustment}.get(kind)
     if cls is None:
         raise ValueError(f"adjustment kind must be 'nra' or 'static', got {kind!r}")
-    d.pop("fit", None)
+    fit = d.pop("fit", None)
+    if fit is not None and cls is NonRoutineAdjustment:
+        d["fit"] = fit if isinstance(fit, IndicatorFit) else IndicatorFit.from_dict(fit)
     d.pop("meter_derived", None)
     from dataclasses import fields
 
@@ -748,7 +779,8 @@ class AdjustedResult:
     ``enpi_uncertainty`` the SEnPI's delta-method band. ``ledger`` holds each entry with its
     resolved ``amount``, ``se``, ``material`` flag and ``link``, in application order;
     ``waterfall`` the bars from baseline to reporting energy; ``links`` the adjusted sides of each
-    link of a chain.
+    link of a chain. ``baseline_version`` is the stored baseline version the saving used (copied
+    from the result; see :class:`camber.mandv.rebaseline.MVBaselineStore`).
     """
 
     method: str
@@ -774,6 +806,7 @@ class AdjustedResult:
     enpi_uncertainty: float | None = None
     unadjusted_enpi: float | None = None
     links: list = field(default_factory=list)
+    baseline_version: str | None = None
 
     def as_dict(self) -> dict:
         """Return as a plain dict."""
@@ -1411,6 +1444,10 @@ def _chain_sides(result, link_specs, caveats) -> tuple:
             )  # fmt: skip
         )
         own = rows.index if kind == "forecast" else later
+        if win is None and kind == "forecast" and ln.period:
+            # a link dated by its own record (sequential_chain(windows=...), e.g. from the
+            # versioned baseline store): the reporting days it summed
+            win = (_day(ln.period[0]), _day(ln.period[1]))
         spans.append(win or _span(own))
     return sides, spans, None
 
@@ -1656,6 +1693,7 @@ def apply_adjustments(
         enpi_uncertainty=_rn(enpi_band, 6),
         unadjusted_enpi=_rn(enpi0, 6),
         links=link_rows,
+        baseline_version=getattr(result, "baseline_version", None),
     )
 
 

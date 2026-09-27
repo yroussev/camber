@@ -16,7 +16,7 @@ from .cohort import (
     cohort_small_multiples,
     cohort_summary,
 )
-from .cusum_chart import cusum_plot
+from .cusum_chart import chained_cusum_plot, cusum_plot
 from .diagnostic import (
     DiagnosticTemplate,
     band,
@@ -56,6 +56,7 @@ __all__ = [
     "cohort_small_multiples",
     "cohort_summary",
     "CohortResult",
+    "chained_cusum_plot",
     "cusum_plot",
     "diagnostic_scatter",
     "DiagnosticTemplate",

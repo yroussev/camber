@@ -808,7 +808,7 @@ _EXTENSION = (
 )
 
 
-def sequential_chain(links, *, baseline_version: str | None = None) -> MethodResult:
+def sequential_chain(links, *, baseline_version: str | None = None, windows=None) -> MethodResult:
     """A multi-link chain of method results -- a **CAMBER extension**, not an SEP method.
 
     ``links`` are consecutive :class:`MethodResult` s (for example year-over-year forecasts, each
@@ -823,10 +823,29 @@ def sequential_chain(links, *, baseline_version: str | None = None) -> MethodRes
 
     Every link must be undeclined and share one ``confidence``; a declined link declines the
     chain. The result has no ``sep_terms``: it cannot be aggregated as an SEP SEnPI.
+
+    ``windows`` (keyword-only, optional) dates the links: one ``{"period": [start, end],
+    "model_window": [start, end]}`` per link -- the days the link was applied to and its model's
+    fit period, as the versioned baseline store records them
+    (:class:`camber.mandv.rebaseline.MVBaselineStore`). They are copied onto each
+    :class:`ChainLink`, so :func:`camber.mandv.adjustments.apply_adjustments` can date a ledger
+    entry against a forecast link without its row index.
     """
     links = list(links)
     if len(links) < 2:
         raise ValueError("a sequential chain needs at least two links")
+    wins = list(windows) if windows is not None else [None] * len(links)
+    if len(wins) != len(links):
+        raise ValueError(f"windows= has {len(wins)} items; the chain has {len(links)} links")
+
+    def _win(w, key):
+        v = (w or {}).get(key)
+        if v is None:
+            return None
+        if not (isinstance(v, (list, tuple)) and len(v) == 2):
+            raise ValueError(f"a link's {key} must be a [start, end] pair, got {v!r}")
+        return [str(_ts(v[0]).date()), str(_ts(v[1]).date())]
+
     for k, ln in enumerate(links):
         if not isinstance(ln, MethodResult):
             raise TypeError(f"link {k} is a {type(ln).__name__}, not a MethodResult")
@@ -854,6 +873,8 @@ def sequential_chain(links, *, baseline_version: str | None = None) -> MethodRes
             df=ln.df,
             enpi_uncertainty=ln.enpi_uncertainty,
             uncertainty_terms=None if ln.uncertainty_terms is None else dict(ln.uncertainty_terms),
+            period=_win(wins[k], "period"),
+            model_window=_win(wins[k], "model_window"),
         )
         for k, ln in enumerate(links)
     ]
@@ -937,6 +958,8 @@ class MethodProposal:
     row per **valid** method with its saving, SEnPI and band, so the spread between valid methods
     is visible (Chen & Therkelsen, LBNL-2001209, 2019: all four SEP methods valid on one facility,
     SEnPI 0.93-1.00). ``results`` holds the full :class:`MethodResult` of each valid method.
+    ``fitted`` holds each chosen model's ``as_dict`` (``"baseline"``, ``"reporting"``,
+    ``"intermediate"``), so a reviewed proposal can be frozen exactly as it was proposed.
     """
 
     proposed: str | None
@@ -949,10 +972,16 @@ class MethodProposal:
     declined_reason: str | None = None
     caveats: list = field(default_factory=list)
     results: dict = field(default_factory=dict)
+    fitted: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         """Return as a plain dict."""
         return asdict(self)
+
+
+def _model_dict(model) -> dict | None:
+    fn = getattr(model, "as_dict", None)
+    return fn() if callable(fn) else None
 
 
 _PROPOSAL_CAVEAT = (
@@ -1093,6 +1122,9 @@ def select_method(
     best_r = cand_r[0] if cand_r else None
     models["baseline"] = best_b.summary() if best_b else None
     models["reporting"] = best_r.summary() if best_r else None
+    fitted: dict = {
+        k: _model_dict(c.model) for k, c in (("baseline", best_b), ("reporting", best_r)) if c
+    }
     caveats = [_PROPOSAL_CAVEAT]
 
     # 1. forecast
@@ -1187,6 +1219,7 @@ def select_method(
                 f"(best of {len(found)} covering window(s))"
             )
             models["intermediate"] = c.summary()
+            fitted["intermediate"] = _model_dict(c.model)
             valid = True
             results["chaining"] = chained_savings(
                 c.model,
@@ -1264,6 +1297,7 @@ def select_method(
             declined_reason=why,
             caveats=caveats,
             results=results,
+            fitted=fitted,
         )
     return MethodProposal(
         proposed=proposed,
@@ -1274,4 +1308,5 @@ def select_method(
         intermediate_period=inter,
         caveats=caveats,
         results=results,
+        fitted=fitted,
     )

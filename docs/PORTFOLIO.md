@@ -128,6 +128,8 @@ Analyses run on **active** facilities only.
   `UserWarning`. Pass `include_inactive=True` to analyse it anyway.
 - A store-backed config (`"source": {"kind": "store", ...}`) whose facility is not active runs
   with no equipment and warns once. Set `"include_inactive": true` in the source to override.
+- `camber mv` skips a non-active facility with a message: nothing is read, frozen or
+  rebaselined while it is suspended. Its frozen M&V baselines stay as they are.
 
 Suspending changes nothing else. Data is kept, and writes (dataset ingest, edge landing) still
 succeed. Quarantining edge uploads for non-active facilities is a later step.
@@ -145,6 +147,7 @@ under a path derived from its id, or is listed in its manifest:
 state/<fid>/
   faults.json        fault lifecycle (FaultLifecycle), fingerprint = sha1(facility_id, equip, rule)
   baselines.json     frozen drift baselines (BaselineStore), sha1(facility_id, equip, kind)
+  mv_baselines.json  versioned M&V baselines (MVBaselineStore), every version kept, with provenance
   migrated/          the original records each migrated legacy file held for this facility
   manifest.json      every file above with sha256 and size, plus external artifacts
 ```
@@ -169,6 +172,12 @@ folder config names one with `"workspace": "<root>"`. Then:
   them, and are listed in the manifest as external artifacts (they are regenerable).
 - `camber drift freeze` and `camber drift accept` take the lock without waiting and are audited
   (`drift.freeze`, `drift.accept`); `freeze` needs `--reason` inside a workspace.
+- The M&V baseline store is `state/<fid>/mv_baselines.json` (`{"schema": 1, "mv_baselines":
+  [...]}`). `camber mv freeze`, `camber mv rebaseline` and `camber mv adjust` are its only
+  writers: each needs `--reason`, is a dry run unless `--apply`, takes the lock without waiting
+  and is audited (`mv.freeze`, `mv.rebaseline`, `mv.adjust`). Runs only read it. A config naming
+  a store elsewhere (top-level `"mv_store"`) is migrated like a drift store: `camber portfolio
+  migrate` moves every version into `state/<fid>/` and leaves a redirect stub.
 
 `camber facility show <id>` prints the manifest. Outside a workspace nothing changes: stores stay
 keyed by the site string, and folder configs do not warn about a missing `facility_id`.
@@ -289,6 +298,7 @@ portfolio default**, and the audit log is never deleted whatever an override say
 | Daily rollups | `daily_rollups` | indefinite |
 | Findings / fault history | `findings` | 7 years |
 | Drift baselines | `drift_baselines` | life of the equipment, last 10 accepted versions |
+| M&V baselines | `mv_baselines` | indefinite, **all versions** (past reported savings depend on superseded ones) |
 | Reports / outputs | `reports` | last 12 per facility |
 | Audit log | `audit` | never deleted |
 

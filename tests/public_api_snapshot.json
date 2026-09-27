@@ -151,6 +151,7 @@
     "box_reheat_figure",
     "brush_back",
     "carpet_matrix",
+    "chained_cusum_plot",
     "classify_shape",
     "cohort_deviation",
     "cohort_small_multiples",
@@ -205,6 +206,7 @@
     "cohort_summary"
   ],
   "camber.charts.cusum_chart": [
+    "chained_cusum_plot",
     "cusum_plot"
   ],
   "camber.charts.diagnostic": [
@@ -361,7 +363,8 @@
     "load_config",
     "run_config",
     "run_config_file",
-    "run_drift_config"
+    "run_drift_config",
+    "run_mv_config"
   ],
   "camber.coolingtower": [
     "CoolingTowerResult",
@@ -1096,6 +1099,33 @@
     "daily_schedule",
     "option_d_savings"
   ],
+  "camber.mandv.rebaseline": [
+    "BaselineWindow",
+    "DeclaredChange",
+    "MVBaselineStore",
+    "MV_BASELINES_FILE",
+    "MV_MODEL_TYPES",
+    "MV_SCHEMA",
+    "OUTCOMES",
+    "RebaselinePolicy",
+    "RebaselineProposal",
+    "StaticFactorChange",
+    "TRIGGERS",
+    "Trigger",
+    "assess_triggers",
+    "event_phrase",
+    "events_from_entry",
+    "first_block",
+    "fit_frame_sha256",
+    "mv_kind",
+    "mv_model_from_dict",
+    "mv_provenance",
+    "new_baseline_window",
+    "propose_rebaseline",
+    "version_label",
+    "version_segments",
+    "window_anchor"
+  ],
   "camber.mandv.resample": [
     "cumulative_to_interval",
     "is_cumulative",
@@ -1210,6 +1240,21 @@
   ],
   "camber.model.topology": [
     "Topology"
+  ],
+  "camber.mvrun": [
+    "MVPlan",
+    "MeterChain",
+    "MeterSeries",
+    "chained_report",
+    "fit_version",
+    "meter_series",
+    "mv_store_path",
+    "open_mv_store",
+    "plan_adjust",
+    "plan_freeze",
+    "plan_rebaseline",
+    "propose",
+    "versioned_rows"
   ],
   "camber.oafraction": [
     "OAFractionResult",
@@ -1379,6 +1424,9 @@
     "interactive_scatter_html",
     "multitrend_svg_html",
     "selection_bus_html"
+  ],
+  "camber.report.mv": [
+    "mv_report_html"
   ],
   "camber.report.pump": [
     "pump_diagnosis_table"

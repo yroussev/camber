@@ -194,6 +194,42 @@ it. Read a drift finding as "worth a walkdown", not as a dispatch-grade verdict 
 [CHILLER-DRIFT.md](CHILLER-DRIFT.md#calibrating-the-thresholds) for how to calibrate.
 
 
+## M&V baselines
+
+An `mv` entry that declares its `method` can freeze its baseline and report against it across
+years, with every version kept and every move attributed. See
+[MANDV.md](MANDV.md#versioned-baselines-and-rebaselining) for the triggers and the window rule.
+
+```sh
+camber mv freeze     config.json --reason "2016 baseline" [--by NAME] [--apply]
+camber mv list       config.json [--json versions.json]
+camber mv run        config.json [--out d/]              # read-only
+camber mv propose    config.json [--as-of 2018-12-31] [--json proposal.json]
+camber mv rebaseline config.json --equip METER --by NAME --reason "wing closed" \
+                     [--period START END | --from-proposal proposal.json] [--trigger T2] [--apply]
+camber mv adjust     config.json --equip METER --spec ledger.json --by NAME --reason R [--apply]
+camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [--no-charts]
+```
+
+- **`run`**, **`list`**, **`propose`** and **`report`** only read the store. `run` measures each
+  meter against its version in force and prints the `mv_savings` and `mv_trigger` findings.
+  `propose` prints the triggers T1–T6, the rebaseline proposal (a new window, an NRA template or
+  a decline with the days still needed) and SEP's method proposal. `report` writes the savings
+  chained across versions with the chained CUSUM.
+- **`freeze`**, **`rebaseline`** and **`adjust`** are the only writers. Each needs `--reason`,
+  and each is a **dry run unless `--apply`** is given. Inside a portfolio workspace each takes
+  the workspace lock without waiting, and each applied change appends one audit line
+  (`mv.freeze`, `mv.rebaseline`, `mv.adjust`) with the OS user, the host, the reason and what
+  changed. `freeze` never overwrites a version. `rebaseline` refuses unless an unresolved
+  trigger calls for it and the new window passes the window rule. `--from-proposal` freezes the
+  proposed model exactly, after checking the data under the window has not changed since.
+  `adjust` records accepted NRA / static-factor entries on the live version after the
+  confounding guard and SEP's evidence rule.
+- A facility that is not `active` (suspended, provisioning) is skipped, with a message.
+
+Outside a workspace, name the store with the config's top-level `"mv_store"` (or `--store`).
+`camber portfolio migrate` moves it, every version included, to `state/<fid>/mv_baselines.json`.
+
 ## Open datasets
 
 `camber datasets` fetches open building datasets from their publishers, verifies them, ingests
