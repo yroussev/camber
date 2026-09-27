@@ -69,7 +69,9 @@ def role_frame_to_long(frame: pd.DataFrame, *, equip: str, equip_class: str = ""
     if frame is None or frame.empty:
         return pd.DataFrame(columns=[_TS, _EQUIP, _CLASS, _ROLE, _VALUE])
     f = frame.copy()
-    f.index = pd.to_datetime(f.index)
+    # always nanoseconds: pyarrow reads a whole store with one timestamp unit, so a frame written
+    # at another resolution (a parquet source at ms) would change every facility's readback
+    f.index = pd.DatetimeIndex(pd.to_datetime(f.index)).as_unit("ns")
     f.index.name = _TS
     long = f.reset_index().melt(id_vars=_TS, var_name=_ROLE, value_name=_VALUE)
     long[_ROLE] = long[_ROLE].map(_role_slug)
@@ -346,7 +348,8 @@ class ParquetStore:
             wide = long.pivot_table(index=_TS, columns=_ROLE, values=_VALUE, aggfunc="mean")
         else:
             wide = long.pivot(index=_TS, columns=_ROLE, values=_VALUE)
-        wide.index = pd.to_datetime(wide.index)
+        # nanoseconds whatever unit the store's files hold (CAMBER's rules assume it)
+        wide.index = pd.DatetimeIndex(pd.to_datetime(wide.index)).as_unit("ns")
         wide = wide.sort_index()
         if resample:
             wide = wide.resample(resample).mean()

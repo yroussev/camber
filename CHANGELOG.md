@@ -131,6 +131,11 @@ the published data described with its evidence and handling (`docs/DATASETS.md`)
   dates (it is built twice and compared against its pin, so a second boundary between the builds
   changed its hash; this also broke the research-only manual-entry test), and the portfolio
   idempotence test injects the lock's clock.
+- **Store timestamps are always nanoseconds.** A facility written from a millisecond source
+  (the `at-30bldg-sensors` parquet series) made pyarrow read every facility of a shared store at
+  millisecond resolution, and rules that derive sample spacing from nanosecond integers misread
+  it by 1,000x (`control_hunting` faulted every `rbc-g36-ahu` scenario at 77,381 reversals/hour).
+  The store now writes and reads nanoseconds.
 - **#36:** the sweep's "no G36 verdict without a sequence" check skips citation columns (an action
   plan's `Cite`, an ECM `Standard` / `Reference`) and judges verdict text only.
 

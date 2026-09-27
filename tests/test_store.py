@@ -3,7 +3,9 @@
 import os
 import sys
 
+import numpy as np
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -175,3 +177,29 @@ def test_prune_removes_old_year_partitions(tmp_path):
     assert removed == 1  # the year=2024 partition
     long = st.read_long(facility_id="S")
     assert (pd.to_datetime(long["ts"]).dt.year == 2025).all()
+
+
+def test_timestamps_are_nanoseconds_whatever_unit_a_facility_was_written_at(tmp_path):
+    """A frame at millisecond resolution (a parquet source) must not change how the rest of a
+    shared store reads back: pyarrow reads the store with one timestamp unit, and CAMBER's rules
+    compute sample spacing from nanosecond integers (0.89 integration: a hunting rule read a
+    15-minute grid as 0.9 ms)."""
+    from camber.rules.hunting_rule import reversals_per_hour
+
+    st = ParquetStore(str(tmp_path / "s"))
+    ms = pd.date_range("2024-01-01", periods=8, freq="15min").as_unit("ms")
+    st.write_role_frame(
+        pd.DataFrame({Role.OAT: np.arange(8.0)}, index=ms), facility_id="ds-a", equip="S1"
+    )
+    ns = pd.date_range("2024-01-01", periods=8, freq="15min")
+    wave = np.tile([0.0, 50.0], 4)
+    st.write_role_frame(
+        pd.DataFrame({Role.COOL_VALVE: wave}, index=ns), facility_id="ds-b", equip="AHU"
+    )
+    for fid, eq in (("ds-a", "S1"), ("ds-b", "AHU")):
+        f = st.read_role_frame(facility_id=fid, equip=eq)
+        assert str(f.index.dtype) == "datetime64[ns]"
+        assert (f.index[1] - f.index[0]) == pd.Timedelta("15min")
+    valve = st.read_role_frame(facility_id="ds-b", equip="AHU")[Role.COOL_VALVE]
+    rate, n = reversals_per_hour(valve, 1.0)
+    assert n == 6 and rate == pytest.approx(6 / 1.75)  # 6 reversals over 1.75 observed hours
