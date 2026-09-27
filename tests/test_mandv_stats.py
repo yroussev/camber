@@ -170,12 +170,15 @@ def test_projected_kernel_is_independent_of_how_many_periods():
     assert _rel_unc_projected(0.05, n_fit=365, p_fit=2, rho=0.5) > rel  # rho still widens it
 
 
-def test_unknown_confidence_raises_rather_than_silently_substituting():
-    """It used to fall back to 1.645, so asking for 99% quietly returned a 90% band."""
+def test_any_confidence_is_exact_and_none_is_silently_substituted():
+    """It used to fall back to 1.645, so asking for 99% quietly returned a 90% band; 0.90.1 (#55)
+    computes any level in (0, 1) exactly and still refuses anything outside it."""
     assert _t_value(0.90) == pytest.approx(1.645)
     assert _t_value(0.90, df=7) > _t_value(0.90)  # df-aware: small samples need a bigger t
-    with pytest.raises(ValueError, match="unsupported confidence"):
-        _t_value(0.99)
+    assert _t_value(0.99) == pytest.approx(2.5758, abs=1e-4)
+    for bad in (0.0, 1.0, 1.5, -0.2, float("nan")):
+        with pytest.raises(ValueError, match="in \\(0, 1\\)"):
+            _t_value(bad)
 
 
 # --- the lag-1 estimator ---------------------------------------------------- #

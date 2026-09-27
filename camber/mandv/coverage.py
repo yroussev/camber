@@ -76,6 +76,11 @@ class ExtrapolationPolicy:
     its width) that still reads as ``in_range``. ``decline_share`` / ``decline_distance`` -- the
     share at or above which, or the distance above which, coverage is ``severe``. ``min_cell_obs``
     -- the fewest baseline hours a TOWT (mode x temperature) cell needs to support a reporting hour.
+    ``min_points_outside`` (0.90.1, issue #55) -- the fewest reporting points outside the support
+    for the *share* test to make coverage ``severe``: with fewer, a large share grades at most
+    ``moderate`` (the distance test still applies). It binds only when a single row can carry
+    ``decline_share`` of the points or energy -- in practice monthly or billing data, where one
+    very cold bill is a quarter of a year's heating energy -- so one bill cannot flip a method.
     ``decline`` -- decline a severe saving (numbers become ``None``) rather than report it.
     ``widen_fsu`` -- widen the FSU of a moderate (or undeclined severe) saving by the parameter
     variance factor ``k`` where the model allows it.
@@ -88,6 +93,7 @@ class ExtrapolationPolicy:
     decline_share: float = 0.25
     decline_distance: float = 0.50
     min_cell_obs: int = 20
+    min_points_outside: int = 2
     decline: bool = True
     widen_fsu: bool = True
 
@@ -103,6 +109,8 @@ class ExtrapolationPolicy:
             raise ValueError("decline_distance must be >= caveat_distance")
         if self.min_cell_obs < 1:
             raise ValueError("min_cell_obs must be >= 1")
+        if self.min_points_outside < 1:
+            raise ValueError("min_points_outside must be >= 1")
 
     @classmethod
     def from_dict(cls, d: dict | None) -> ExtrapolationPolicy:
@@ -477,13 +485,12 @@ def _linear_masks(support: _FitRecord, D: np.ndarray, pol: ExtrapolationPolicy, 
     return outside, below, above, variables, zero_conflict, info
 
 
-def _tier(sp, se, rel, zero_conflict, pol: ExtrapolationPolicy) -> str:
+def _tier(sp, se, rel, zero_conflict, pol: ExtrapolationPolicy, n_outside=None) -> str:
     share = max(sp, se if se is not None else 0.0)
-    if (
-        zero_conflict
-        or share >= pol.decline_share
-        or (rel is not None and rel > pol.decline_distance)
-    ):
+    share_severe = share >= pol.decline_share and (
+        n_outside is None or n_outside >= pol.min_points_outside
+    )
+    if zero_conflict or share_severe or (rel is not None and rel > pol.decline_distance):
         return "severe"
     if share <= pol.caveat_share and (rel is None or rel <= pol.caveat_distance):
         return "in_range"
@@ -561,7 +568,14 @@ def _summarise(
     rel = far["max_beyond_rel"] if far else (None if zero_conflict else 0.0)
     if zero_conflict:
         rel = None
-    tier = _tier(sp, se, rel, zero_conflict, pol)
+    n_out = int(outside[rows].sum())
+    tier = _tier(sp, se, rel, zero_conflict, pol, n_out)
+    if tier == "moderate" and max(sp, se or 0.0) >= pol.decline_share:
+        caveats.append(
+            f"{n_out} reporting point(s) outside the support carry "
+            f"{max(sp, se or 0.0):.0%} of the points or energy; fewer than min_points_outside="
+            f"{pol.min_points_outside}, so the share alone does not make coverage severe"
+        )
     cov = Coverage(
         tier=tier,
         n_report=int(n_report),

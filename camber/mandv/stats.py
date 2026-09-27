@@ -210,19 +210,44 @@ _T_BY_DF: dict = {
 def _t_value(confidence: float, df: int | None = None) -> float:
     """Two-sided t critical value at ``confidence``, for ``df`` degrees of freedom.
 
-    Raises ``ValueError`` on an unsupported confidence level rather than silently substituting
-    another one -- the previous behaviour returned a 90% value for any unrecognised level, so
-    asking for 99% quietly got you a 90% band.
+    The table above is a fast path for 80/90/95% (and keeps those values exactly as they were).
+    Any other ``confidence`` in (0, 1) -- 68% for the G14 reporting criterion, 99% -- is the exact
+    Student-t quantile, solved from the incomplete-beta tail :func:`_t_sf` (the normal quantile
+    when ``df`` is unknown). Outside (0, 1) raises ``ValueError`` rather than substituting a level.
     """
+    if not (isinstance(confidence, (int, float)) and 0.0 < float(confidence) < 1.0):
+        raise ValueError(f"confidence must be in (0, 1), got {confidence!r}")
     row = _T_BY_DF.get(round(confidence, 2))
     if row is None:
-        raise ValueError(f"unsupported confidence {confidence!r}; use one of {sorted(_T_BY_DF)}")
+        return _t_quantile_two_sided(float(confidence), df)
     if df is None or df <= 0:
         return row[None]
     for cut in (5, 10, 20, 30, 60, 120):  # conservative: round df *down* to a table row
         if df <= cut:
             return row[cut]
     return row[None]
+
+
+def _t_quantile_two_sided(confidence: float, df: int | float | None) -> float:
+    """``t`` with ``P(|T| <= t) = confidence``: exact, by bisection on :func:`_t_sf`."""
+    from statistics import NormalDist
+
+    tail = (1.0 - confidence) / 2.0
+    z = NormalDist().inv_cdf(1.0 - tail)
+    if df is None or df <= 0:
+        return float(z)
+    lo, hi = 0.0, max(2.0 * z, 1.0)
+    while _t_sf(hi, df) > tail:  # the t quantile exceeds the normal one; widen until bracketed
+        hi *= 2.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if _t_sf(mid, df) > tail:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-12 * max(1.0, hi):
+            break
+    return float(0.5 * (lo + hi))
 
 
 def _n_effective(n: float, rho: float) -> float:
