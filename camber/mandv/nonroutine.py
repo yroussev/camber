@@ -20,6 +20,15 @@ This module provides two complementary detectors:
   in the mean residual (a new operating level held for weeks/months). Catches what
   the point-wise screen misses, because each day of a gradual monthly escalation is
   only mildly off on its own but the segment mean shifts significantly.
+
+**Billing periods** (0.90.1). Given bills -- a :class:`~camber.mandv.billing.BillingSeries`, or
+energy totals a week or more apart against a daily-or-finer temperature -- every detector pairs
+each bill with its own period's mean temperature and works on energy per day (see
+:func:`~camber.mandv.intervalfit.daily_energy_vs_temp`), and ``min_days`` / ``min_segment_days``
+count **days of service** (the sum of the bills' days), not rows. A billing segment also needs at
+least :data:`_MIN_BILLS_PER_SEGMENT` bills, so one odd bill is an outlier, not a level. Results
+then report ``n_days`` as days of service and add ``n_periods`` (the number of bills) and
+``billing``. Daily and sub-daily input behaves exactly as before.
 """
 
 from __future__ import annotations
@@ -33,6 +42,17 @@ from ..ingest.quality import outlier_mask
 from .intervalfit import daily_energy_vs_temp
 from .models import best_model
 
+# A billing-period segment needs at least this many bills, whatever its length in days.
+_MIN_BILLS_PER_SEGMENT = 3
+
+
+def _prepared(energy, temp, rate_is_energy_rate: bool):
+    """(energy-vs-temperature frame, cumulative days of service or ``None`` for daily data)."""
+    df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
+    if not df.attrs.get("billing"):
+        return df, None
+    return df, np.concatenate([[0], np.cumsum(df["days"].to_numpy(dtype=int))])
+
 
 @dataclass
 class NonRoutineResult:
@@ -43,15 +63,22 @@ class NonRoutineResult:
     fraction: float  # flagged / total, 0..1
     mask: pd.Series  # True = non-routine day, indexed by date
     model_kind: str  # baseline model used to compute residuals
+    billing: bool = False  # rows are billing periods (the mask is indexed by bill start)
+    n_days: int | None = None  # days of service covered, for billing input
 
     def as_dict(self) -> dict:
-        """Return the summary (excluding the mask) as a plain dict."""
-        return {
+        """Return the summary (excluding the mask) as a plain dict; billing input adds
+        ``billing`` and ``n_days``."""
+        d = {
             "n_total": self.n_total,
             "n_flagged": self.n_flagged,
             "fraction": self.fraction,
             "model_kind": self.model_kind,
         }
+        if self.billing:
+            d["billing"] = True
+            d["n_days"] = self.n_days
+        return d
 
 
 def residual_outliers(
@@ -75,11 +102,18 @@ def detect_non_routine(
     """Flag non-routine days in an (energy, temp) period against its weather baseline.
 
     Aggregates to daily, fits a change-point baseline, and flags days whose residual
-    is a robust (MAD) outlier at modified-z > ``z``.
+    is a robust (MAD) outlier at modified-z > ``z``. Billing input (see the module docstring)
+    flags bills instead, and ``min_days`` counts their days of service.
     """
-    df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
-    if len(df) < min_days:
-        raise ValueError(f"need >= {min_days} days, got {len(df)}")
+    df, span = _prepared(energy, temp, rate_is_energy_rate)
+    if span is None:
+        if len(df) < min_days:
+            raise ValueError(f"need >= {min_days} days, got {len(df)}")
+    elif span[-1] < min_days or len(df) < 2 * _MIN_BILLS_PER_SEGMENT:
+        raise ValueError(
+            f"need >= {min_days} days and >= {2 * _MIN_BILLS_PER_SEGMENT} bills, got "
+            f"{int(span[-1])} days in {len(df)} bills"
+        )
     model = best_model(df["oat"].to_numpy(), df["energy"].to_numpy())
     mask = residual_outliers(df["energy"], df["oat"], model, z=z)
     return NonRoutineResult(
@@ -88,6 +122,8 @@ def detect_non_routine(
         fraction=round(float(mask.mean()), 4),
         mask=mask,
         model_kind=model.kind,
+        billing=span is not None,
+        n_days=None if span is None else int(span[-1]),
     )
 
 
@@ -107,9 +143,12 @@ class StepChangeResult:
     model_kind: str
     mask: pd.Series  # True on/after the step (the non-routine segment)
     rho: float | None = None  # residual lag-1 autocorrelation, when autocorrelation=True
+    billing: bool = False  # rows are bills: n_days is days of service, n_pre/n_post are bills
+    n_periods: int | None = None  # number of bills, for billing input
 
     def as_dict(self) -> dict:
-        """Return the summary (excluding the mask) as a plain dict; ``rho`` only when set."""
+        """Return the summary (excluding the mask) as a plain dict; ``rho`` only when set, and
+        ``billing`` / ``n_periods`` only for billing input."""
         d = {
             "detected": self.detected,
             "date": None if self.date is None else str(self.date.date()),
@@ -124,6 +163,9 @@ class StepChangeResult:
         }
         if self.rho is not None:
             d["rho"] = self.rho
+        if self.billing:
+            d["billing"] = True
+            d["n_periods"] = self.n_periods
         return d
 
 
@@ -162,11 +204,28 @@ def detect_step_change(
     certain than independent ones, and daily whole-building residuals routinely have rho around
     0.6 (the BDG2 median), which inflates the uncorrected statistic about 2x. The result then
     carries ``rho``.
+
+    Billing input (see the module docstring): ``min_segment_days`` counts days of service and each
+    side also needs :data:`_MIN_BILLS_PER_SEGMENT` bills.
     """
-    df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
+    df, span = _prepared(energy, temp, rate_is_energy_rate)
     n = len(df)
-    if n < 2 * min_segment_days:
-        raise ValueError(f"need >= {2 * min_segment_days} days, got {n}")
+    if span is None:
+        if n < 2 * min_segment_days:
+            raise ValueError(f"need >= {2 * min_segment_days} days, got {n}")
+        splits: list = list(range(min_segment_days, n - min_segment_days + 1))
+    else:
+        m = _MIN_BILLS_PER_SEGMENT
+        splits = [
+            i
+            for i in range(m, n - m + 1)
+            if span[i] >= min_segment_days and span[n] - span[i] >= min_segment_days
+        ]
+        if not splits:
+            raise ValueError(
+                f"need >= {2 * min_segment_days} days and >= {2 * m} bills, got "
+                f"{int(span[n])} days in {n} bills"
+            )
     model = best_model(df["oat"].to_numpy(), df["energy"].to_numpy())
     resid = df["energy"].to_numpy() - model.predict(df["oat"].to_numpy())
 
@@ -174,7 +233,7 @@ def detect_step_change(
     csum = np.concatenate([[0.0], np.cumsum(resid)])
     csum2 = np.concatenate([[0.0], np.cumsum(resid**2)])
     best_i, best_stat, best_delta = None, -1.0, 0.0
-    for i in range(min_segment_days, n - min_segment_days + 1):
+    for i in splits:
         n_pre, n_post = i, n - i
         s_pre, s_post = csum[i], csum[n] - csum[i]
         q_pre, q_post = csum2[i], csum2[n] - csum2[i]
@@ -212,10 +271,12 @@ def detect_step_change(
         post_mean=round(post_mean, 4),
         n_pre=int(best_i),
         n_post=int(n - best_i),
-        n_days=n,
+        n_days=n if span is None else int(span[n]),
         model_kind=model.kind,
         mask=mask,
         rho=None if rho is None else round(rho, 4),
+        billing=span is not None,
+        n_periods=None if span is None else n,
     )
 
 
@@ -260,6 +321,8 @@ class StepChangesResult:
     converged: bool
     segment: pd.Series  # segment number per day
     caveats: list = field(default_factory=list)
+    billing: bool = False  # rows are bills: n_days is days of service
+    n_periods: int | None = None  # number of bills, for billing input
 
     @property
     def detected(self) -> bool:
@@ -281,16 +344,33 @@ class StepChangesResult:
             "iterations": self.iterations,
             "converged": self.converged,
             "caveats": list(self.caveats),
+            **({"billing": True, "n_periods": self.n_periods} if self.billing else {}),
         }
 
 
-def _pelt(x: np.ndarray, *, scale: float, penalty: float, min_seg: int) -> list:
+def _pelt(
+    x: np.ndarray,
+    *,
+    scale: float,
+    penalty: float,
+    min_seg: int,
+    span: np.ndarray | None = None,
+    min_rows: int = 1,
+) -> list:
     """Optimal mean-change segmentation of ``x`` by PELT (Killick, Fearnhead & Eckley 2012).
 
     Gaussian cost with known variance ``scale``: a segment costs its within-segment sum of squares
     divided by ``scale``; each change costs ``penalty``. Segments are at least ``min_seg`` long.
     Returns the change positions (first index of each new segment), ascending.
+
+    ``span`` (length ``n + 1``, cumulative, ``span[0] == 0``) measures a segment's length in other
+    units than rows -- the days of service of billing periods: a segment ``[s, t)`` is then long
+    enough when ``span[t] - span[s] >= min_seg`` *and* it holds at least ``min_rows`` rows.
     """
+    if span is not None:
+        return _pelt_span(
+            x, scale=scale, penalty=penalty, min_seg=min_seg, span=span, rows=min_rows
+        )
     n = len(x)
     s1 = np.concatenate([[0.0], np.cumsum(x)])
     s2 = np.concatenate([[0.0], np.cumsum(x * x)])
@@ -325,8 +405,58 @@ def _pelt(x: np.ndarray, *, scale: float, penalty: float, min_seg: int) -> list:
     return sorted(cps)
 
 
+def _pelt_span(
+    x: np.ndarray, *, scale: float, penalty: float, min_seg: int, span: np.ndarray, rows: int
+) -> list:
+    """:func:`_pelt` with segment lengths measured by ``span`` (see there)."""
+    n = len(x)
+    span = np.asarray(span, dtype=float)
+    rows = max(int(rows), 1)
+    s1 = np.concatenate([[0.0], np.cumsum(x)])
+    s2 = np.concatenate([[0.0], np.cumsum(x * x)])
+
+    def cost(s: np.ndarray, t: int) -> np.ndarray:
+        L = t - s
+        return ((s2[t] - s2[s]) - (s1[t] - s1[s]) ** 2 / L) / scale
+
+    def long_enough(s: np.ndarray, t: int) -> np.ndarray:
+        return (span[t] - span[s] >= min_seg) & (t - s >= rows)
+
+    F = np.full(n + 1, np.inf)
+    F[0] = -penalty
+    last = np.zeros(n + 1, dtype=int)
+    cand = np.array([0])
+    for t in range(1, n + 1):
+        ok = cand[long_enough(cand, t)]
+        if len(ok):
+            vals = F[ok] + cost(ok, t) + penalty
+            j = int(np.argmin(vals))
+            F[t], last[t] = float(vals[j]), int(ok[j])
+            waiting = cand[~long_enough(cand, t)]
+            keep = ok[F[ok] + cost(ok, t) <= F[t]]
+            cand = np.concatenate([keep, waiting])
+        if np.isfinite(F[t]) and long_enough(np.array([t]), n)[0]:
+            cand = np.append(cand, t)
+    cps = []
+    t = n
+    while t > 0:
+        s = int(last[t])
+        if s > 0:
+            cps.append(s)
+        t = s
+    return sorted(cps)
+
+
 def _pelt_capped(
-    x: np.ndarray, *, scale: float, penalty: float, min_seg: int, max_steps: int, floor: float = 0.0
+    x: np.ndarray,
+    *,
+    scale: float,
+    penalty: float,
+    min_seg: int,
+    max_steps: int,
+    floor: float = 0.0,
+    span: np.ndarray | None = None,
+    min_rows: int = 1,
 ) -> tuple | None:
     """:func:`_pelt` with at most ``max_steps`` changes: the penalty is raised x1.5 at a time.
 
@@ -339,12 +469,12 @@ def _pelt_capped(
     if not (np.isfinite(scale) and scale > floor and scale > 0):
         return None
     p_used = float(penalty)
-    new = _pelt(x, scale=scale, penalty=p_used, min_seg=min_seg)
+    new = _pelt(x, scale=scale, penalty=p_used, min_seg=min_seg, span=span, min_rows=min_rows)
     for _ in range(200):  # 1.5**200 ~ 1e35: unreachable above the floor; a guard, not a limit
         if len(new) <= max_steps:
             return new, p_used
         p_used *= 1.5
-        new = _pelt(x, scale=scale, penalty=p_used, min_seg=min_seg)
+        new = _pelt(x, scale=scale, penalty=p_used, min_seg=min_seg, span=span, min_rows=min_rows)
     return None
 
 
@@ -438,13 +568,28 @@ def detect_step_changes(
     Unlike :func:`detect_step_change` (one split, independent residuals) and
     :func:`camber.changedetect.detect_level_shifts` (greedy binary segmentation), the segmentation
     is jointly optimal for the penalty and accounts for autocorrelation.
+
+    Billing input (see the module docstring): each bill is one row at its own period's mean
+    temperature, ``min_segment_days`` counts days of service, every segment also holds at least
+    :data:`_MIN_BILLS_PER_SEGMENT` bills, and a step's date is the start of the first bill at the
+    new level; ``delta`` is then in energy units per day.
     """
     from .stats import lag1_autocorrelation
 
-    df = daily_energy_vs_temp(energy, temp, rate_is_energy_rate=rate_is_energy_rate)
+    df, span = _prepared(energy, temp, rate_is_energy_rate)
     n = len(df)
-    if n < 2 * min_segment_days:
-        raise ValueError(f"need >= {2 * min_segment_days} days, got {n}")
+    seg_kw: dict = {}
+    if span is None:
+        if n < 2 * min_segment_days:
+            raise ValueError(f"need >= {2 * min_segment_days} days, got {n}")
+    else:
+        m = _MIN_BILLS_PER_SEGMENT
+        if span[n] < 2 * min_segment_days or n < 2 * m:
+            raise ValueError(
+                f"need >= {2 * min_segment_days} days and >= {2 * m} bills, got "
+                f"{int(span[n])} days in {n} bills"
+            )
+        seg_kw = {"span": span, "min_rows": m}
     if max_steps < 1 or max_iter < 1:
         raise ValueError("max_steps and max_iter must be >= 1")
     T = df["oat"].to_numpy(dtype=float)
@@ -463,7 +608,7 @@ def detect_step_changes(
     scale = (1.4826 * float(np.median(np.abs(d - np.median(d))))) ** 2 / 2.0
     if not scale > 0:
         scale = float(np.var(x, ddof=1)) or 1.0
-    cps_found = _pelt(x, scale=scale, penalty=pen, min_seg=min_segment_days)
+    cps_found = _pelt(x, scale=scale, penalty=pen, min_seg=min_segment_days, **seg_kw)
     weather, levels, A_lvl, wcps, s2, resid = _refit(T, y, model, kind, cps0, cps_found, n)
     converged = False
     it = 1
@@ -481,6 +626,7 @@ def detect_step_changes(
             min_seg=min_segment_days,
             max_steps=max_steps,
             floor=(1e-9 * float(np.mean(np.abs(y)))) ** 2,
+            **seg_kw,
         )
         if found is None:
             caveats.append("the residual variance is zero or not finite; segmentation stopped")
@@ -521,7 +667,7 @@ def detect_step_changes(
     return StepChangesResult(
         steps=steps,
         levels=[round(float(v), 4) for v in full],
-        n_days=n,
+        n_days=n if span is None else int(span[n]),
         model_kind=kind,
         change_points=tuple(round(float(c), 3) for c in wcps),
         rho=None if rho is None else round(rho, 4),
@@ -531,4 +677,6 @@ def detect_step_changes(
         converged=converged,
         segment=pd.Series(_segment_ids(n, cps_found), index=df.index, name="segment"),
         caveats=caveats,
+        billing=span is not None,
+        n_periods=None if span is None else n,
     )

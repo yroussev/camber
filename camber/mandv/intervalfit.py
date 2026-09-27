@@ -21,10 +21,15 @@ energy-per-target-interval using the sample spacing.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
 
 from .resample import resample
+
+if TYPE_CHECKING:
+    from .billing import BillingSeries
 
 
 def degree_days(
@@ -70,14 +75,28 @@ def rate_to_energy(rate: pd.Series, freq: str) -> pd.Series:
 
 
 def daily_energy_vs_temp(
-    rate: pd.Series, oat: pd.Series, *, rate_is_energy_rate: bool = True
+    rate: pd.Series | BillingSeries, oat: pd.Series, *, rate_is_energy_rate: bool = True
 ) -> pd.DataFrame:
     """Daily energy vs daily-mean OAT, ready for change-point fitting.
 
     ``rate``: interval meter series. If ``rate_is_energy_rate`` it is a rate
     (BTU/hr etc.) integrated to daily energy; otherwise it is already energy per
     interval and is simply summed.
+
+    **Billing periods** (0.90.1): energy that is a :class:`~camber.mandv.billing.BillingSeries`,
+    or energy totals spaced a week or more apart against a daily-or-finer ``oat``, is not resampled
+    to days (which paired each bill with the single day it was stamped on). Each bill is paired
+    with the mean temperature of its own period instead, and ``energy`` is the bill's energy **per
+    day**; the frame then also carries ``days``, ``start``, ``end``, ``estimated``, ``hdd``,
+    ``cdd`` and ``coverage`` (see :meth:`~camber.mandv.billing.BillingSeries.energy_vs_temp`) and
+    ``attrs["billing"]`` is true. Daily and sub-daily input is unchanged.
     """
+    from .billing import BillingSeries, as_billing_series, is_billing_like
+
+    if isinstance(rate, BillingSeries) or (not rate_is_energy_rate and is_billing_like(rate, oat)):
+        out = as_billing_series(rate).energy_vs_temp(oat)
+        out.attrs["billing"] = True
+        return out
     if rate_is_energy_rate:
         e = rate_to_energy(rate, "D")
     else:

@@ -992,6 +992,12 @@
     "nra_from_isolation",
     "propose_adjustments"
   ],
+  "camber.mandv.billing": [
+    "BillingSeries",
+    "as_billing_series",
+    "daily_weather",
+    "is_billing_like"
+  ],
   "camber.mandv.caltrack": [
     "HourlyNMECResult",
     "NMECResult",

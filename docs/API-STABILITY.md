@@ -154,6 +154,11 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `window_coverage`, `n_state_changes` and `frame_checks`, and the flags `late_start`,
     `never_changes`, `fractional_status`, `implausible_fan_off`, `status_speed_mismatch` and
     `all_points_frozen`. The limits and thresholds may be retuned.
+- **M&V billing-period series** (added in 0.90.1; #54): the whole of `camber.mandv.billing`
+  (`BillingSeries`, `as_billing_series`, `is_billing_like`, `daily_weather`), the billing
+  columns and `attrs["billing"]` that `daily_energy_vs_temp` returns for billing input, and the
+  trailing `billing` / `n_days` fields of `NonRoutineResult` and `billing` / `n_periods` fields
+  of `StepChangeResult` and `StepChangesResult` (in `as_dict` only for billing input).
 
 ## Deprecated
 
