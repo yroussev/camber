@@ -1,5 +1,5 @@
 {
-  "_comment": "LBNL FDD dual-duct AHU (DDAHU) point name -> CAMBER Role mapping, at the air-handler level. A fourth BAS naming convention: a hot-deck/cold-deck dual-duct AHU with both coils and an OA economizer. The outdoor-air-fraction detector applies at the mixing box (OA/MA/RA temps + OA damper); the cold-deck discharge maps to supply_air_temp. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions.",
+  "_comment": "LBNL FDD dual-duct AHU (DDAHU) point name -> CAMBER Role mapping, at the air-handler level. A fourth BAS naming convention: a hot-deck/cold-deck dual-duct AHU with both coils and an OA economizer. The outdoor-air-fraction detector applies at the mixing box (OA/MA/RA temps + OA damper); the cold-deck discharge maps to supply_air_temp. Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY). Valves and dampers map to the controller DEMAND columns (*_DM), not the measured positions: CAMBER's rules read these roles as commands (a leak is cooling while the valve is *commanded* closed; economizer drift is OA fraction *at matched damper command*), and a stuck or leaking device's position is precisely what hides the fault. Until 0.82.0 these mapped the positions. FANS, OCCUPANCY AND FLOWS (fixed in 0.86.0): CSF_CS is the cold-deck supply-fan status (equal to HSF_CS in every row; on 36.8% of the year) and maps to supply_fan_status; SYS_CTL (0 shutdown / 1 operate / 2 setback) maps to occupancy after the catalog's recode reads setback as unoccupied; OA_CFM is the measured outdoor airflow (oa_airflow) and SA_CFM_TOTAL, derived at ingest as CSA_CFM + HSA_CFM, the supply airflow. Timestamps are month-first and the catalog pins the format.",
   "aliases": {
     "OA_TEMP": "oat",
     "MA_TEMP": "mixed_air_temp",
@@ -7,7 +7,11 @@
     "OA_DMPR_DM": "oa_damper",
     "CHWC_VLV_DM": "cool_valve",
     "HWC_VLV_DM": "heat_valve",
-    "CSA_TEMP": "supply_air_temp"
+    "CSA_TEMP": "supply_air_temp",
+    "CSF_CS": "supply_fan_status",
+    "SYS_CTL": "occupancy",
+    "OA_CFM": "oa_airflow",
+    "SA_CFM_TOTAL": "airflow"
   },
   "patterns": []
 }

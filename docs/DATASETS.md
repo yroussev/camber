@@ -210,7 +210,37 @@ No published-data issues are recorded for this dataset.
 
 ### `lbnl-ddahu`: LBNL simulated dual-duct AHU (labelled faults)
 
-No published-data issues are recorded for this dataset.
+#### Table 4 mislabels two stuck-OA-damper severities
+
+- **Issue:** `stuck-oa-severity-labels`
+- **Columns:** `OA_DMPR`
+- **Evidence:** Table 4 lists DualDuct_DMPRStuck_OA_28 as 'Stuck at 20%' and DMPRStuck_OA_45 as 'Stuck at 50%'; Table 3, the file names and the data (fan-on median OA_DMPR 0.28 and 0.45) say 28% and 45% -- the unit's two design minimum positions.
+- **Contradicts:** DDAHU inventory Table 4 (file inventory) vs Table 3 (OA damper stuck at 0, 28, 45, 80 and 100%) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Run ids follow the file names (28 / 45), which match the data.
+
+#### The stuck-OA runs' measured OA does not follow the stuck position
+
+- **Issue:** `stuck-oa-runs-do-not-follow-the-position`
+- **Columns:** `OA_CFM`, `CSA_CFM`, `HSA_CFM`, `OA_DMPR`
+- **Evidence:** Measured OA fraction OA_CFM / (CSA_CFM + HSA_CFM), fan-on medians: DMPRStuck_OA_100 gives 21.3% in Jun-Aug and 42% over the year, where the fault-free unit reaches 95% with its damper fully open (17,723 minutes); DMPRStuck_OA_0 gives 17.9% in Jan, Feb, Apr and Oct-Dec (0.3-1.3% in the other months).
+- **Contradicts:** DDAHU inventory Table 3 (OA damper stuck fully open / fully closed: a fixed simulated device position) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and scored under the published labels; a detector that misses the 'stuck open' run in summer is seeing a unit that brings in 21% OA.
+
+#### The static-pressure bias runs are labelled 10x too large
+
+- **Issue:** `static-bias-labels-10x`
+- **Columns:** `CSA_SP`, `HSA_SP`, `CSF_DP`, `HSF_DP`
+- **Evidence:** Run ids say +-2 / +-4 in.wg. The logged deck static stays at the 1.6 setpoint (the controller holds the biased reading) and the fan differential pressure moves by the bias: fault-free cold-deck fan DP 2.18 in.wg; CSP +2 / +4 give 1.98 / 1.78 (-0.2 / -0.4), CSP -2 gives 2.38 (+0.2) and CSP -4 also 2.38 (+0.2, not +0.4); HSP -4 / -2 / +2 / +4 move the hot-deck fan DP by +0.40 / +0.20 / -0.20 / -0.41.
+- **Contradicts:** DDAHU inventory Table 4 (sensor bias +-2 / +-4 in.wg) vs Table 3 (-0.4, -0.2, +0.2, +0.4 in.wg) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Run ids keep the published names; read them as +-0.2 / +-0.4 in.wg, and SensorBias_CSP_m4inwg as a -0.2 in.wg run.
+
+#### The 60 F economizer supply-air setpoint is not in the data
+
+- **Issue:** `economizer-sat-reset-absent`
+- **Columns:** `CSA_TEMPSPT`, `CSA_TEMP`
+- **Evidence:** CSA_TEMPSPT is 55.0 in every row, and in the 89,670 occupied, fan-on economizer minutes (OAT below 60 F, cooling valve shut, outside Jun-Aug) the cold-deck supply temperature itself has a median of 55.0 F.
+- **Contradicts:** DDAHU inventory section 1.2(iii) (economizer cooling mode holds 60 F at the cold deck in the transition season and winter) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: rules comparing the cold deck with its setpoint see a fixed 55 F.
 
 ### `lbnl-fpu`: LBNL simulated fan-powered VAV terminal units (labelled faults)
 
