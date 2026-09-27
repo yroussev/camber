@@ -255,14 +255,16 @@ Three stacked releases; `CHANGELOG.md` has the detail.
 Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** The next releases:
-  - **0.90** (was 0.88) — `camber lab`, a loopback-only local catalog UI (`camber serve` stays
+  - **0.91** (was 0.88) — `camber lab`, a loopback-only local catalog UI (`camber serve` stays
     GET-only), together with the detection-gap revisits on the complete catalog data (#11–#17),
     RCx performance on large runs (#35), the plant RCx week (#32) and two stale VALIDATION cells
     (#33). The intake follow-ups #37–#45 are unscheduled.
-  - **0.91** (was 0.89) — education: worked exercises and learning docs on the catalog datasets.
+  - **0.92** (was 0.89) — education: worked exercises and learning docs on the catalog datasets.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
   bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
   decommissioning.
+- **0.90 — M&V rebaselining, the rest of #21** (#46 21b SEP methods, #47 21c adjustments, #48 21d
+  versioned baselines and rebaselining, #49 21e validation). The detail follows.
 - **M&V rebaselining, the rest of #21:** 21b SEP methods (chained and sequential savings, method
   selection, SEnPI); 21c non-routine and static-factor adjustments; 21d versioned M&V baselines
   and audited rebaselining; 21e validation (a BDG2 injection benchmark and the LBNL three-year
