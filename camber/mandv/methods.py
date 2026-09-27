@@ -372,6 +372,10 @@ def backcast_savings(
             if note:
                 caveats.append(note)
             abs_unc = abs_unc * widened if np.isfinite(abs_unc) else abs_unc
+    if kernel == "g14":
+        from .stats import _G14_CAVEAT
+
+        caveats.append(_G14_CAVEAT)
     frac = abs_unc / abs(savings) if (savings and np.isfinite(abs_unc)) else float("nan")
     r = 0.0 if rho_used is None else rho_used
     n_eff = _n_effective(n_reporting, r)

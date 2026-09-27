@@ -472,6 +472,26 @@ points; the published evidence is that G14 bands under-cover real buildings (Tou
 Jump & Rebello, *Energy & Buildings* 193:216–225, 2019: about 71% at nominal 95% for daily
 models), which synthetic data cannot reproduce.
 
+**G14 stays the default, with a caveat on every result** (a maintainer decision on #21). The
+Monte Carlo index in `tests/test_mandv_mc_coverage.py` (a year of daily 3PC data per period, AR(1)
+residuals at ρ = 0, 0.4 and 0.8, ρ estimated, 400–600 runs per cell) measures every savings path
+with a *correct* model:
+
+| Path | G14 kernel at nominal 90% | Exact kernel at nominal 90% |
+|---|---|---|
+| Forecast (avoided energy) | 82–88% (under-covers) | 87–91% |
+| Backcast | 82–88% (under-covers) | 87–91% |
+| Standard conditions | 99–100% (conservative) | 87–91% |
+
+G14's `1.26·√(m(1 + 2/n))` factor falls short of the `√(2m)` that parameter error plus reporting
+noise need when `m = n`; CAMBER's projected `CV·√(p/n)` kernel for standard conditions errs the
+other way. So every result computed with `kernel="g14"` — a `SavingsResult`, a forecast, backcast
+or standard-conditions `MethodResult` (and so each link of a sequential chain), and an
+`AdjustedResult` whose band is G14's — carries a caveat saying which way its band is miscalibrated
+and that `kernel="exact"` is on target: **switch to `kernel="exact"` for calibrated bands**. The
+caveat is text only; no band, saving or benchmark metric changes. The default will be revisited at
+1.0.
+
 **Unverified.** The ASHRAE text was not consulted. A BPA reproduction of the G14 kernel writes
 `(1 + 2/n′)` where CAMBER writes `(1 + 2/n)`; which is G14's is **unverified**, and CAMBER keeps
 its current form until it can be checked against Reddy & Claridge (2000). The G14 formula for

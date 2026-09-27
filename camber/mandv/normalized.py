@@ -174,6 +174,10 @@ def normalized_savings(
     caveats = [f"baseline model: {c}" for c in cov_b.caveats]
     caveats += [f"reporting model: {c}" for c in cov_r.caveats]
     caveats += rho_notes
+    if kernel == "g14":
+        from .stats import _G14_PROJECTED_CAVEAT
+
+        caveats.append(_G14_PROJECTED_CAVEAT)
     tier = _worst(cov_b.tier, cov_r.tier)
     factor = None
     if kernel == "exact":

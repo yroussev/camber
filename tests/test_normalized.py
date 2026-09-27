@@ -115,7 +115,7 @@ def test_the_band_uses_t_on_the_smaller_fit_dof():
 
 
 def test_rho_is_per_model():
-    from camber.mandv.stats import _rel_unc_projected
+    from camber.mandv.stats import _G14_PROJECTED_CAVEAT, _rel_unc_projected
 
     mb, mr = _two_models()
     kw = dict(baseline_cv_rmse=0.05, n_baseline=200, reporting_cv_rmse=0.06, n_reporting=200,
@@ -131,7 +131,8 @@ def test_rho_is_per_model():
     assert sub.abs_uncertainty < both.abs_uncertainty
     # none known: unadjusted, as before
     none = normalized_savings(mb, mr, _TEMPS, **kw)
-    assert none.abs_uncertainty < sub.abs_uncertainty and not none.caveats
+    assert none.abs_uncertainty < sub.abs_uncertainty
+    assert none.caveats == [_G14_PROJECTED_CAVEAT]  # the G14 calibration caveat only
 
 
 def test_rho_falls_back_to_each_fit_record():

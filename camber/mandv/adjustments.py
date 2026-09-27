@@ -1716,6 +1716,13 @@ def apply_adjustments(
                 var_ln += (o["var_b"] + o["var_r"]) / o["B"] ** 2
         kernels = {o["kernel"] for o in outs}
         kernel = kernels.pop() if len(kernels) == 1 else "mixed"
+        from .stats import _G14_CAVEAT, _G14_PROJECTED_CAVEAT
+
+        for side, o in zip(sides, outs):
+            if o["kernel"] == "g14":
+                c = _G14_PROJECTED_CAVEAT if side.kind == "standard_conditions" else _G14_CAVEAT
+                if c not in caveats:
+                    caveats.append(c)
     band = t * math.sqrt(var) if (np.isfinite(var) and var >= 0) else None
     enpi_band = (
         t * abs(enpi) * math.sqrt(var_ln)

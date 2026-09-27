@@ -275,6 +275,36 @@ def test_adjusted_backcast_without_the_rows_keeps_the_conservative_band():
     assert np.median(band_a) > 5 * 1.645 * err_a.std()  # far wider than the error needs
 
 
+# --------------------------------------------------------------------------- the G14 caveat
+
+
+def test_every_g14_result_carries_the_calibration_caveat():
+    """G14 stays the default kernel (a maintainer decision on #21), and every result using it
+    says what the cells above measured: the measured kernel under-covers, CAMBER's projected
+    kernel is conservative, and kernel='exact' is on target. An exact result carries neither."""
+    from camber.mandv.stats import _G14_CAVEAT, _G14_PROJECTED_CAVEAT
+
+    rng = np.random.default_rng(99)
+    Tb, yb, Tr, yr = _years(rng, 0.0)
+    mb, sb = _fit(Tb, yb, 2019)
+    mr, sr = _fit(Tr, yr, 2020)
+    for kernel in ("g14", "exact"):
+        want = kernel == "g14"
+        fc = _forecast(mb, sb, Tr, yr, kernel)
+        bc = backcast_savings(mr, Tb, yb, cv_rmse=sr.cv_rmse, n_reporting=N, p_reporting=3,
+                              rho=sr.rho_lag1, kernel=kernel)  # fmt: skip
+        assert (_G14_CAVEAT in fc.caveats) is want and (_G14_CAVEAT in bc.caveats) is want
+        adj = apply_adjustments(fc, [])
+        assert (_G14_CAVEAT in adj.caveats) is want
+        kw = {"kernel": kernel}
+        if want:
+            kw.update(baseline_cv_rmse=sb.cv_rmse, n_baseline=N, p_baseline=3,
+                      reporting_cv_rmse=sr.cv_rmse, n_reporting=N, p_reporting=3)  # fmt: skip
+        sc = standard_conditions_savings(mb, mr, _temps(rng), **kw)
+        assert (_G14_PROJECTED_CAVEAT in sc.caveats) is want
+        assert _G14_CAVEAT not in sc.caveats
+
+
 # --------------------------------------------------------------------------- the registry
 
 

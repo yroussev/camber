@@ -444,6 +444,8 @@ def avoided_energy_savings(
             caveats.append(note)
         abs_unc = abs(avoided) * frac_unc if np.isfinite(frac_unc) else float("nan")
     declined = cov.tier == "severe" and pol.decline
+    if kernel == "g14":
+        caveats.append(_G14_CAVEAT)
 
     res = SavingsResult(
         avoided_energy=round(avoided, 2),
@@ -467,6 +469,20 @@ def avoided_energy_savings(
 
 
 _KERNELS = ("g14", "exact")
+
+# The calibration caveat every G14-kernel result carries (a maintainer decision on #21). G14 stays
+# the default kernel; seeded Monte Carlo (tests/test_mandv_mc_coverage.py) shows its bands are not
+# calibrated even with a correct model. Text only: no gated metric reads it.
+_G14_CAVEAT = (
+    "G14 kernel: in simulation this band under-covers even with a correct model (about 82-88% "
+    "at nominal 90% on a year of daily data), while kernel='exact' is on target; use "
+    "kernel='exact' for calibrated bands (the default is to be revisited at 1.0)"
+)
+_G14_PROJECTED_CAVEAT = (
+    "G14 kernel (CAMBER's projected CV*sqrt(p/n) per model): in simulation this band is "
+    "conservative, about 99-100% at nominal 90%, while kernel='exact' is on target; use "
+    "kernel='exact' for calibrated bands (the default is to be revisited at 1.0)"
+)
 
 
 def _check_kernel(kernel: str) -> None:
