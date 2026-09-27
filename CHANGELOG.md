@@ -4,6 +4,44 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+### Added -- M&V: the SEP methods (issue #21, phase 21b; #46)
+- **`camber.mandv.methods`** gains the rest of the DOE SEP 50001 M&V Protocol 2019 Ed. 2 §6.2
+  methods, all returning `MethodResult`: `forecast_savings` (wraps `avoided_energy_savings`),
+  `standard_conditions_savings` (wraps `normalized_savings`, exact kernel by default) and
+  `chained_savings`. `chained_savings` is **exactly SEP's chaining**: one intermediate period of
+  the same length as the baseline and reporting periods, lying between them, whose model covers
+  both. Its SEnPI is the Eq 6 product and its saving the Eq 11 sum. `sequential_chain` chains any
+  number of results; it is **a CAMBER extension, not an SEP method**, and says so.
+- **`select_method`** proposes a method in SEP's order (forecast, backcast, chaining, standard
+  conditions, decline), ranking candidate models by SEP validity and then adjusted R², as the DOE
+  EnPI tool does. It only proposes: the proposal has no headline figure, only a sensitivity table
+  of every valid method.
+- **`MethodResult`** gains trailing fields: `enpi` (SEnPI) and `enpi_uncertainty`, `links`
+  (`ChainLink`), `sep_terms`, `sep_range_valid` / `sep_range`, `uncertainty_terms` and
+  `baseline_version`. `measured` may now be `None` (standard conditions has no measured total).
+  `backcast_savings` fills the new fields and takes a keyword-only `baseline_version`.
+- **Uncertainty.** The SEP chain uses the shared-model covariance
+  `(g_r − g_b)′Σ_i(g_r − g_b)` plus the noise of both measured periods. The SEnPI band comes from
+  the delta method. Sequential chains combine their links by IPMVP 2012 B-19 / B-20. The kernel is
+  recorded on every result: G14 by default for single-model results, exact for multi-model ones
+  (decision D7). In a CI Monte Carlo (AR(1) ρ = 0, 0.4, 0.8), the chain band covers 90–92% at
+  nominal 90%, and the independence form's variance is about 1.5× the exact one.
+- **`camber.mandv.sep`** (new): primary energy (Eq 1) with the Protocol's Annex B multipliers as
+  defaults, overridable by a user table; `senpi` (Eq 5), `chained_senpi` (Eq 6),
+  `improvement_pct` (Eq 7), `top_down_savings` (Eq 8–11), `bottom_up_reconciliation` (Eq 12, the
+  RF < 0.80 rule), `aggregate_energy_types` (the same method for every type, summed on primary
+  energy), and `sep_range_check`. That last one is the SEP mean-in-range rule (§6.4.2.1),
+  reported as a secondary `sep_range_valid` verdict beside the per-point coverage tiers
+  (decision D2).
+- **Config:** `mv[].method` (`forecast` | `backcast` | `chaining` with `intermediate_period` |
+  `standard_conditions` with `normal_year` | `auto`) and `mv[].kernel` (`g14` | `exact`).
+  `mv_savings` findings gain `method`, `method_declared`, `basis`, `kernel`, `enpi`,
+  `enpi_uncertainty` and `sep_range_valid`. `"method": "auto"` gives an `mv_method_proposal`
+  finding instead of a saving. When no method is declared the run still uses the forecast, as
+  before, and the finding carries a caveat saying no method was declared.
+
 ## [0.89.0] — 2026-09-27
 
 **Catalog release 2.** The research-only tier, manual-download entries, Excel workbooks and

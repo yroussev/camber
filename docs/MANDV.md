@@ -285,6 +285,138 @@ res = backcast_savings(
 res.savings, res.savings_pct, res.abs_uncertainty, res.coverage["tier"]
 ```
 
+## SEP methods: forecast, backcast, standard conditions and chaining
+
+`camber.mandv.methods` implements the four adjustment-model methods of the DOE **SEP 50001 M&V
+Protocol, 2019 Edition 2**, §6.2, with one result type, `MethodResult`. All of it is provisional.
+Every result records its `method`, its `basis` and its uncertainty `kernel`.
+
+- **Forecast** (§6.2.1), `forecast_savings`. The saving is `P_b|r − O_r` (Eq 8) and the SEnPI
+  `O_r / P_b|r` (Eq 5). Default kernel: G14.
+- **Backcast** (§6.2.2), `backcast_savings`. The saving is `O_b − P_r|b` (Eq 9) and the SEnPI
+  `P_r|b / O_b` (Eq 5). Default kernel: G14.
+- **Standard conditions** (§6.2.3), `standard_conditions_savings`. The saving is
+  `P_b|s − P_r|s` (Eq 10) and the SEnPI `P_r|s / P_b|s` (Eq 5). Default kernel: exact.
+- **Chaining** (§6.2.4), `chained_savings`. The saving is `(O_b − P_i|b) + (P_i|r − O_r)`
+  (Eq 11) and the SEnPI `(P_i|b / O_b)·(O_r / P_i|r)` (Eq 6). Kernel: exact.
+
+`O` is measured energy and `P_x|y` the model of period `x` applied to the conditions of period
+`y`. `savings_pct` is the SEP improvement as a fraction, `1 − SEnPI` (Eq 7 ÷ 100). `sep_terms`
+holds the SEP quantities for aggregation.
+
+**Chaining is SEP's method, exactly.** It uses one intermediate period "of the same length of,
+and ... in between the baseline and reporting periods" (§6.2.4). Its model is backcast onto the
+baseline and forecast onto the reporting period, and it must cover both (SEP 2012 §3.6.5).
+`chained_savings` checks the period rule and raises `ValueError` when it fails. CAMBER allows one
+day's difference in length, for a leap year; the Protocol states no tolerance. A severe
+extrapolation on either side declines the result. The chained SEnPI is a **product** (Eq 6), and
+the chained saving a **sum** (Eq 11). EnPI V5 adds cumulative improvement percentages for
+pre-model years; that is bookkeeping, and CAMBER follows the Protocol instead.
+
+**`sequential_chain` is a CAMBER extension, not SEP.** It chains any number of consecutive
+`MethodResult` links, for example year-over-year forecasts against rebaselined models. The SEnPI
+is the product of the links and the saving their sum. Every result carries a caveat saying the
+chain is not an SEP method, and it has no `sep_terms`, so it cannot be aggregated into an SEP
+SEnPI.
+
+### Uncertainty
+
+SEP says nothing about uncertainty. These bands are CAMBER's. The kernel defaults follow decision
+D7 on #21: the G14 kernel for single-model results and the exact kernel for multi-model results.
+With `Σ = κ s² A` the model's parameter covariance and `g` the sum of the design rows:
+
+```text
+Forecast / backcast:  as avoided_energy_savings / backcast_savings (G14 or exact)
+Standard conditions:  Var S = V_param,b(s) + V_param,r(s)                     (IPMVP 2012 B-19)
+                      Var ln SEnPI = V_param,r/P_r|s² + V_param,b/P_b|s²      (delta method)
+SEP chain:            Var S = (g_r − g_b)′ Σ_i (g_r − g_b) + V_noise,i(b) + V_noise,i(r)
+                      Var ln SEnPI ≈ T_b/P_i|b² + T_r/P_i|r² − 2 g_b′ Σ_i g_r /(P_i|b · P_i|r)
+                      (T = V_param + V_noise; the noise part taken relative to O_b, O_r)
+Sequential chain:     Var S = Σ_k Var S_k (B-19);  Var ln SEnPI = Σ_k Var ln EnPI_k (B-20)
+Single-model SEnPI:   band(SEnPI) = SEnPI · band(S) / denominator            (delta method)
+```
+
+Both projections of the SEP chain share one `β̂_i`, and their parameter errors enter with opposite
+signs. The independence form therefore **over-states** the chain's uncertainty whenever
+`g_b′ Σ g_r > 0`, which is typical, because the intercept column dominates. So the chain uses the
+exact covariance form and reports the independence variance beside it (`uncertainty_terms`). The
+intermediate model's `κ s²` stands in for the noise of both measured periods. The chain always
+uses the exact kernel (`kernel="g14"` raises), because the G14 expression has no covariance term.
+
+**Monte Carlo.** The test used synthetic 3P-cooling data with AR(1) residuals, ρ estimated from
+the intermediate fit, and 600 seeded runs per ρ. The baseline and reporting climates differed,
+and the intermediate year spanned both. The nominal 90% chain band covered the true saving in
+**90–92%** of runs at ρ = 0, 0.4 and 0.8, and the SEnPI band did the same. At ρ = 0 the
+predicted variance matched the empirical one to within 15%. The independence form's variance was
+about **1.5×** the exact one. CI gates coverage at 85–95%. As elsewhere, these results are
+conditional on the fitted change points.
+
+The sequential chain's B-19/B-20 combination assumes the links are independent. That holds only
+approximately. A link whose model was fitted on a period that another link measures shares that
+period's noise, and the result's caveat says so.
+
+### The SEP range rule (secondary)
+
+SEP §6.4.2.1 requires the **mean** of each relevant variable over the application period to fall
+within the fitted range, or within three standard deviations of the fit mean.
+`sep.sep_range_check` applies it, and every method result reports the outcome as
+`sep_range_valid`, with details in `sep_range`. This verdict is **secondary** (decision D2). The
+primary guard stays the per-point coverage tier: a mild mean can hide hot extremes on a
+change-point slope, and the mean rule passes them. The standard deviation is the sample one
+(`ddof = 1`), a CAMBER choice.
+
+### Choosing a method, and the method-shopping guard
+
+`select_method(frame, baseline=..., reporting=...)` follows SEP's order:
+
+1. forecast, if the baseline model is SEP-valid and covers the reporting period (per-point
+   coverage not severe, and SEP's mean rule holds);
+2. backcast, if the reporting model is valid and covers the baseline;
+3. chaining, through the best-ranked valid intermediate window of the baseline's length lying
+   between the two periods whose model covers both;
+4. standard conditions, if both models are valid and cover the supplied conditions;
+5. otherwise, decline (SEP 2012 §3.6.6).
+
+In every period the candidate models are ranked by SEP validity, then adjusted R², as the DOE
+EnPI tool does.
+
+**It only proposes.** Valid methods can disagree widely. Chen & Therkelsen (LBNL-2001209, 2019)
+found all four SEP methods valid on one facility, with SEnPI ranging from 0.93 to 1.00. So the
+proposal has no headline figure. Its `sensitivity` table lists every valid method's saving,
+SEnPI and band side by side. A reported saving needs a **declared** method: in a config, set
+`mv[].method`. `"method": "auto"` gives an `mv_method_proposal` finding, never an `mv_savings`
+one. When no method is declared the run keeps the SEP default, forecast, and the finding says the
+method was not declared. Freezing the declared method with a versioned baseline comes in a later
+phase of #21.
+
+```json
+{"class": "CHILLEDWATER_METER", "role": "energy_rate",
+ "period": ["2016-01-01", "2016-12-31"], "reporting_period": ["2018-01-01", "2018-12-31"],
+ "method": "chaining", "intermediate_period": ["2017-01-01", "2017-12-31"], "kernel": "exact"}
+```
+
+`method` takes `forecast`, `backcast`, `chaining` (with `intermediate_period`),
+`standard_conditions` (with `normal_year`, a list of daily mean temperatures) or `auto`. `kernel`
+takes `g14` or `exact`, and defaults per D7.
+
+### SEP arithmetic and primary energy (`mandv.sep`)
+
+- `senpi` (Eq 5), `chained_senpi` (Eq 6), `improvement_pct` (Eq 7) and `top_down_savings`
+  (Eq 8–11). Golden tests reproduce the SEP 2019 Guidance's Eagleston ratio example (7.38%) and
+  Ashton forecast (13.53%, which the Guidance rounds to 14%). The Guidance's range-check example
+  is **not** used, because its arithmetic is wrong (see #21).
+- `bottom_up_reconciliation` (Eq 12): `RF = ESP_BU / ESP_TD`. Below 0.80, the verified
+  improvement is the top-down one times RF. RF is never used to scale an improvement up.
+- `primary_energy` (Eq 1) and `ANNEX_B_MULTIPLIERS`: only rows transcribed from the Protocol's
+  own **Annex B** (Tables 4A/4B). Examples are grid electricity 3.0, solar, wind and geothermal
+  electricity 1.0, fired-boiler steam or hot water 1.33, fired absorption chilled water 1.25,
+  engine-driven chilled water 0.83, electric chilled water 0.72, compressed air 3.0, and the
+  fuels 1.0. A user table overrides or extends it. A caveat notes that SEP requires Verification
+  Body approval for site-specific multipliers. A negative net consumption counts as zero (§5.1.2).
+- `aggregate_energy_types`: one `MethodResult` per energy type, all with the **same** method
+  (§6.2). Each is converted to primary energy and summed (§6.3.2) before Eq 5–11 are applied.
+  The savings bands combine in quadrature (B-19).
+
 ## The exact uncertainty kernel
 
 Every savings function takes `kernel="g14"` (the default, as documented above) or

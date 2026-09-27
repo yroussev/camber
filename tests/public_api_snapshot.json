@@ -1011,8 +1011,17 @@
     "rate_to_energy"
   ],
   "camber.mandv.methods": [
+    "ChainLink",
+    "METHODS",
+    "MethodProposal",
     "MethodResult",
-    "backcast_savings"
+    "SAME_LENGTH_TOLERANCE_DAYS",
+    "backcast_savings",
+    "chained_savings",
+    "forecast_savings",
+    "select_method",
+    "sequential_chain",
+    "standard_conditions_savings"
   ],
   "camber.mandv.models": [
     "ChangePointModel",
@@ -1071,6 +1080,23 @@
     "fit_driver_model",
     "isolation_normalized_savings",
     "isolation_savings"
+  ],
+  "camber.mandv.sep": [
+    "ANNEX_B_MULTIPLIERS",
+    "FacilitySEP",
+    "PrimaryEnergy",
+    "RF_THRESHOLD",
+    "Reconciliation",
+    "SEPRange",
+    "SEP_METHODS",
+    "aggregate_energy_types",
+    "bottom_up_reconciliation",
+    "chained_senpi",
+    "improvement_pct",
+    "primary_energy",
+    "senpi",
+    "sep_range_check",
+    "top_down_savings"
   ],
   "camber.mandv.stats": [
     "FitStats",

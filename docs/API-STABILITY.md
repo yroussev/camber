@@ -101,6 +101,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   serialisation format. Later phases (SEP chaining and method selection, adjustments, versioned
   baselines) may reshape them.
 
+- **M&V SEP methods** (issue #21, phase 21b): `camber.mandv.methods` (`forecast_savings`,
+  `standard_conditions_savings`, `chained_savings`, `sequential_chain`, `select_method`,
+  `MethodProposal`, `ChainLink`, `METHODS`, `SAME_LENGTH_TOLERANCE_DAYS`, and the new trailing
+  `MethodResult` fields), the whole of `camber.mandv.sep`, the `mv[].method` / `mv[].kernel`
+  config keys and the `mv_method_proposal` finding. Versioned baselines (21d) will record the
+  declared method and may reshape them.
+
 ## Deprecated
 
 Currently deprecated names and code paths, each with its replacement. Each emits a

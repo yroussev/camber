@@ -51,6 +51,17 @@ the coverage metrics (``coverage_tier``, ``share_points_outside``, ``share_energ
 ``declined_reason``, and a caveat, never a number. The optional ``"extrapolation": {...}`` keys
 tune the grading (:class:`~camber.mandv.coverage.ExtrapolationPolicy`; an unknown key is an error).
 
+``"method"`` declares the SEP adjustment-model method (:mod:`camber.mandv.methods`): ``forecast``
+(the default when absent -- the Finding then says no method was declared), ``backcast`` (a model
+fitted on the reporting days, projected back onto the baseline days), ``chaining`` (SEP's one
+intermediate period, ``"intermediate_period": [start, end]``, of the same length as and between
+the other two) or ``standard_conditions`` (both models on ``"normal_year"``, a list of daily mean
+temperatures). Each gives one ``mv_savings`` Finding with ``method``, ``kernel``, ``enpi`` (the
+SEnPI) and ``sep_range_valid``. ``"method": "auto"`` never reports a saving: it gives one
+``mv_method_proposal`` Finding -- the method SEP's order proposes and a sensitivity table of
+every valid method. ``"kernel"`` is ``g14`` or ``exact``, defaulting to ``g14`` for forecast and
+backcast and ``exact`` for chaining and standard conditions.
+
 The optional ``drift`` section scores a **current** window against a frozen **baseline** one for
 each configured detector family (:mod:`camber.driftrun`), merging its Findings into the run. It is
 strictly read-only toward the baseline store: a config-driven run never creates or moves a frozen
@@ -500,13 +511,15 @@ def _finite_or_none(x):
     return None if x is None or (isinstance(x, float) and not math.isfinite(x)) else x
 
 
-def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> object:
+def _mv_savings_finding(
+    equip: str, model, st, daily_r, policy, window, *, kernel: str = "g14", declared: bool = False
+) -> object:
     """One ``mv_savings`` Finding: the baseline projected onto the reporting period (#20)."""
+    from .mandv.methods import forecast_savings
     from .mandv.models import N_PARAMS
-    from .mandv.stats import avoided_energy_savings
     from .rules.base import Finding
 
-    sav = avoided_energy_savings(
+    res = forecast_savings(
         model,
         daily_r["oat"].values,
         daily_r["energy"].values,
@@ -515,14 +528,16 @@ def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> objec
         p_baseline=N_PARAMS[model.kind],
         rho=st.rho_lag1,
         extrapolation=policy,
+        kernel=kernel,
     )
+    sav = res
     cov = sav.coverage or {}
     metrics = {
         "reporting_period": [str(window[0]), str(window[1])],
         "n_report_days": int(len(daily_r)),
-        "avoided_energy": sav.avoided_energy,
-        "baseline_projected": sav.baseline_projected,
-        "reporting_actual": sav.reporting_actual,
+        "avoided_energy": sav.savings,
+        "baseline_projected": sav.projected,
+        "reporting_actual": sav.measured,
         "savings_pct": _finite_or_none(sav.savings_pct),
         "fsu": _finite_or_none(sav.fractional_uncertainty),
         "abs_uncertainty": _finite_or_none(sav.abs_uncertainty),
@@ -535,8 +550,11 @@ def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> objec
         "max_beyond_rel": cov.get("max_beyond_rel"),
         "n_outside": cov.get("n_outside"),
         "declined": bool(sav.declined),
+        **_mv_method_metrics(res, declared),
     }
     caveats = list(sav.caveats)
+    if not declared:
+        caveats.append(_MV_UNDECLARED)
     if not st.accept:
         caveats.append(
             "the baseline does not meet daily G14 acceptance; this saving is for information only"
@@ -551,7 +569,7 @@ def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> objec
         pct = metrics["savings_pct"]
         band = metrics["abs_uncertainty"]
         summary = (
-            f"{equip}: avoided energy {sav.avoided_energy:,.0f}"
+            f"{equip}: avoided energy {sav.savings:,.0f}"
             + (f" ({pct:.1%})" if pct is not None else "")
             + (f" ± {band:,.0f} at {sav.confidence:.0%}" if band is not None else "")
             + f" over {len(daily_r)} reporting days; baseline coverage {cov.get('tier')}"
@@ -563,6 +581,243 @@ def _mv_savings_finding(equip: str, model, st, daily_r, policy, window) -> objec
         metrics=metrics,
         summary=summary,
         caveats=caveats,
+    )
+
+
+# --------------------------------------------------------------------------- mv method / kernel
+# (#21 phase 21b) -- the ``mv[].method`` and ``mv[].kernel`` keys.
+
+_MV_METHODS = ("forecast", "backcast", "chaining", "standard_conditions", "auto")
+_MV_UNDECLARED = (
+    "no mv.method declared: the SEP default, forecast, was used. A reported saving should declare "
+    "its method, so that it is fixed before the numbers are seen"
+)
+
+
+def _mv_method_spec(entry: dict, period, reporting) -> tuple:
+    """Validate ``method`` / ``kernel`` of an ``mv`` entry: ``(method, kernel, declared)``.
+
+    ``kernel`` defaults per issue #21 decision D7: ``g14`` for the single-model forecast and
+    backcast, ``exact`` for the multi-model chaining and standard conditions.
+    """
+    declared = entry.get("method") is not None
+    method = entry.get("method") or "forecast"
+    if method not in _MV_METHODS:
+        raise ValueError(f"mv.method must be one of {_MV_METHODS}, got {method!r}")
+    kernel = entry.get("kernel")
+    if kernel is None:
+        kernel = "exact" if method in ("chaining", "standard_conditions") else "g14"
+    if kernel not in ("g14", "exact"):
+        raise ValueError(f"mv.kernel must be 'g14' or 'exact', got {kernel!r}")
+    if method == "chaining" and kernel != "exact":
+        raise ValueError("mv.method 'chaining' needs kernel 'exact' (one model, two projections)")
+    if declared and method != "forecast":
+        if reporting is None or period is None:
+            raise ValueError(f"mv.method {method!r} needs both a period and a reporting_period")
+    if method == "chaining" and _mv_window(entry, "intermediate_period") is None:
+        raise ValueError("mv.method 'chaining' needs an intermediate_period [start, end]")
+    if method == "standard_conditions":
+        ny = entry.get("normal_year")
+        if not isinstance(ny, (list, tuple)) or len(ny) < 2:
+            raise ValueError(
+                "mv.method 'standard_conditions' needs normal_year: a list of daily mean outdoor "
+                "temperatures (the standard conditions)"
+            )
+    return method, kernel, declared
+
+
+def _mv_method_metrics(res, declared: bool) -> dict:
+    """The SEP fields every ``mv_savings`` Finding carries (#21 phase 21b)."""
+    return {
+        "method": res.method,
+        "method_declared": bool(declared),
+        "basis": res.basis,
+        "kernel": res.kernel,
+        "enpi": res.enpi,
+        "enpi_uncertainty": res.enpi_uncertainty,
+        "sep_range_valid": res.sep_range_valid,
+    }
+
+
+def _mv_daily(full, role, win):
+    frame = full.loc[win[0] : win[1]]
+    e, t = frame[role].dropna(), frame[Role.OAT].dropna()
+    from .mandv.intervalfit import daily_energy_vs_temp
+
+    return daily_energy_vs_temp(e, t) if len(e) and len(t) else None
+
+
+def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
+    """One ``mv_savings`` Finding by a declared non-forecast SEP method."""
+    import numpy as np
+
+    from .mandv import methods as mm
+    from .mandv.models import N_PARAMS, best_model
+    from .mandv.stats import fit_stats
+    from .rules.base import Finding
+
+    equip, entry, policy = ctx["equip"], ctx["entry"], ctx["policy"]
+    daily_b, daily_r, model = ctx["daily"], ctx["daily_r"], ctx["model"]
+
+    def fit(d):
+        m = best_model(d["oat"].values, d["energy"].values, time_index=d.index)
+        st = fit_stats(
+            d["energy"].values, m.predict(d["oat"].values), N_PARAMS[m.kind], time_index=d.index
+        )
+        return m, st
+
+    if method == "backcast":
+        mr, st_r = fit(daily_r)
+        res = mm.backcast_savings(
+            mr,
+            daily_b["oat"].values,
+            daily_b["energy"].values,
+            cv_rmse=st_r.cv_rmse,
+            n_reporting=st_r.n,
+            p_reporting=N_PARAMS[mr.kind],
+            rho=st_r.rho_lag1,
+            extrapolation=policy,
+            kernel=kernel,
+        )
+        model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
+    elif method == "chaining":
+        inter = _mv_window(entry, "intermediate_period")
+        daily_i = _mv_daily(ctx["full"], ctx["role"], inter)
+        if daily_i is None or len(daily_i) < int(entry.get("min_days", 60)):
+            return _mv_declined(equip, "too few intermediate-period days", rule="mv_savings")
+        mi, st_i = fit(daily_i)
+        res = mm.chained_savings(
+            mi,
+            daily_b["oat"].values,
+            daily_b["energy"].values,
+            daily_r["oat"].values,
+            daily_r["energy"].values,
+            periods={
+                "baseline": list(ctx["period"]),
+                "intermediate": list(inter),
+                "reporting": list(ctx["reporting"]),
+            },
+            rho=st_i.rho_lag1,
+            extrapolation=policy,
+            kernel=kernel,
+        )
+        model_note = {
+            "intermediate_period": [str(inter[0]), str(inter[1])],
+            "intermediate_model": mi.kind,
+            "intermediate_r2": st_i.r2,
+        }
+    else:  # standard_conditions
+        mr, st_r = fit(daily_r)
+        st_b = ctx["st"]
+        res = mm.standard_conditions_savings(
+            model,
+            mr,
+            np.asarray(entry["normal_year"], dtype=float),
+            kernel=kernel,
+            rho_baseline=st_b.rho_lag1,
+            rho_reporting=st_r.rho_lag1,
+            extrapolation=policy,
+            baseline_cv_rmse=st_b.cv_rmse,
+            n_baseline=st_b.n,
+            p_baseline=N_PARAMS[model.kind],
+            reporting_cv_rmse=st_r.cv_rmse,
+            n_reporting=st_r.n,
+            p_reporting=N_PARAMS[mr.kind],
+        )
+        model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
+    cov = res.coverage or {}
+    metrics = {
+        "reporting_period": [str(ctx["reporting"][0]), str(ctx["reporting"][1])],
+        "n_report_days": int(len(daily_r)),
+        "savings": res.savings,
+        "projected": res.projected,
+        "measured": res.measured,
+        "savings_pct": _finite_or_none(res.savings_pct),
+        "fsu": _finite_or_none(res.fractional_uncertainty),
+        "abs_uncertainty": _finite_or_none(res.abs_uncertainty),
+        "confidence": res.confidence,
+        "rho": res.rho,
+        "coverage_tier": cov.get("tier"),
+        "declined": bool(res.declined),
+        **model_note,
+        **_mv_method_metrics(res, True),
+    }
+    if res.links:
+        metrics["links"] = [
+            {k: v for k, v in vars(ln).items() if not k.startswith("_")} for ln in res.links
+        ]
+    caveats = list(res.caveats)
+    if not ctx["st"].accept:
+        caveats.append(
+            "the baseline does not meet daily G14 acceptance; this saving is for information only"
+        )
+    if res.declined:
+        metrics["declined_reason"] = res.declined_reason
+        summary = f"{equip}: M&V {method} savings declined -- {res.declined_reason}"
+    else:
+        pct, band = metrics["savings_pct"], metrics["abs_uncertainty"]
+        summary = (
+            f"{equip}: {method} savings {res.savings:,.0f}"
+            + (f" ({pct:.1%})" if pct is not None else "")
+            + (f" ± {band:,.0f} at {res.confidence:.0%}" if band is not None else "")
+            + (f"; SEnPI {res.enpi:.3f}" if res.enpi is not None else "")
+            + f"; coverage {cov.get('tier')}"
+        )
+    return Finding(
+        rule="mv_savings",
+        equip=equip,
+        severity="info",
+        metrics=metrics,
+        summary=summary,
+        caveats=caveats,
+    )
+
+
+def _mv_proposal_finding(ctx: dict) -> object:
+    """``method: auto`` -- an ``mv_method_proposal`` Finding, never a headline saving."""
+    import pandas as pd
+
+    from .mandv.methods import select_method
+    from .rules.base import Finding
+
+    equip, period, reporting = ctx["equip"], ctx["period"], ctx["reporting"]
+    daily = _mv_daily(ctx["full"], ctx["role"], (period[0], reporting[1]))
+    if daily is None or daily.empty:
+        return Finding(
+            rule="mv_method_proposal",
+            equip=equip,
+            severity="info",
+            metrics={"declined": True, "declined_reason": "no usable days"},
+            summary=f"{equip}: SEP method proposal declined -- no usable days",
+        )
+    ny = ctx["entry"].get("normal_year")
+    prop = select_method(
+        daily,
+        baseline=[str(pd.Timestamp(period[0]).date()), str(pd.Timestamp(period[1]).date())],
+        reporting=[str(pd.Timestamp(reporting[0]).date()), str(pd.Timestamp(reporting[1]).date())],
+        standard_conditions=ny,
+        extrapolation=ctx["policy"],
+    )
+    metrics = {
+        "proposed": prop.proposed,
+        "declined": bool(prop.declined),
+        "intermediate_period": prop.intermediate_period,
+        "steps": prop.steps,
+        "sensitivity": prop.sensitivity,
+        "models": prop.models,
+    }
+    what = prop.proposed or "no method (declined)"
+    summary = (
+        f"{equip}: SEP method proposal -- {what}; {len(prop.sensitivity)} valid method(s) in the "
+        "sensitivity table. Declare mv.method to report a saving"
+    )
+    return Finding(
+        rule="mv_method_proposal",
+        equip=equip,
+        severity="info",
+        metrics=metrics,
+        summary=summary,
+        caveats=list(prop.caveats),
     )
 
 
@@ -581,6 +836,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     period = _mv_window(entry, "period")
     reporting = _mv_window(entry, "reporting_period")
     policy = ExtrapolationPolicy.from_dict(entry.get("extrapolation"))
+    method, kernel, declared = _mv_method_spec(entry, period, reporting)
     min_days = int(entry.get("min_days", 60))
     cv_max = cv_rmse_max_for("daily")
     out = []
@@ -643,6 +899,21 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         )
         if reporting is None:
             continue
+        ctx = {
+            "equip": ref.equip,
+            "entry": entry,
+            "policy": policy,
+            "period": period,
+            "reporting": reporting,
+            "full": full,
+            "role": role,
+            "daily": daily,
+            "model": model,
+            "st": st,
+        }
+        if method == "auto":
+            out.append(_mv_proposal_finding(ctx))
+            continue
         rframe = full.loc[reporting[0] : reporting[1]]
         r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
         daily_r = daily_energy_vs_temp(r_e, r_t) if len(r_e) and len(r_t) else None
@@ -651,7 +922,22 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                 _mv_declined(ref.equip, "no usable reporting-period days", rule="mv_savings")
             )
             continue
-        out.append(_mv_savings_finding(ref.equip, model, st, daily_r, policy, reporting))
+        if method == "forecast":
+            out.append(
+                _mv_savings_finding(
+                    ref.equip,
+                    model,
+                    st,
+                    daily_r,
+                    policy,
+                    reporting,
+                    kernel=kernel,
+                    declared=declared,
+                )
+            )
+        else:
+            ctx["daily_r"] = daily_r
+            out.append(_mv_other_method_finding(ctx, method, kernel))
     return out
 
 

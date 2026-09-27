@@ -69,8 +69,9 @@ their lifecycle (new/ongoing/resolved).
 ### M&V — `camber/mandv/`
 Change-point inverse models (`models.py`: 2P–5P + heating/cooling-zero), the
 schedule-aware TOWT model (`towt.py`), fit statistics + savings uncertainty
-(`stats.py`), CUSUM (`cusum.py`), weather normalization (`weather.py`), and
-rate/energy-aware resampling (`resample.py`, `intervalfit.py`).
+(`stats.py`), the DOE SEP adjustment-model methods and method selection (`methods.py`), SEP
+SEnPI / primary-energy arithmetic (`sep.py`), CUSUM (`cusum.py`), weather normalization
+(`weather.py`), and rate/energy-aware resampling (`resample.py`, `intervalfit.py`).
 
 ### Domain analytics
 `comfort.py` (Std-55 PMV/PPD), `cost.py` (utility cost), `carbon.py` (emissions),
