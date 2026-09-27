@@ -9,7 +9,7 @@
 #
 # Gates: ruff check + format (use the CI ruff: CI installs the latest), mypy,
 # pytest with the 90% coverage floor, the public-API snapshot, the synthetic, fleet,
-# LBNL and BDG2 benchmarks, mkdocs --strict, site neutrality and attribution (tree,
+# LBNL, BDG2 and BDG2 savings benchmarks, mkdocs --strict, site neutrality and attribution (tree,
 # CHANGELOG, commit messages), version consistency and release notes, the
 # validation dossier, and an sdist/wheel build with package-data and clean-install
 # checks.
@@ -86,6 +86,7 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
       bench bench_fleet examples/fleet_fdd/benchmark.py examples/fleet_fdd/benchmark-baseline.json 0.0 0
       bench bench_lbnl examples/lbnl_fdd/benchmark.py examples/lbnl_fdd/benchmark-baseline.json 0.05 1
       bench bench_bdg2 examples/bdg2/benchmark.py examples/bdg2/benchmark-baseline.json 0.05 1
+      bench bench_bdg2_savings examples/bdg2/savings_benchmark.py examples/bdg2/savings-benchmark-baseline.json 0.05 1
       gate mkdocs_strict mkdocs.log "$PYTHON" -m mkdocs build --strict -d "$out/site"
     fi
 

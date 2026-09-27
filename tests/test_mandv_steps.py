@@ -159,3 +159,14 @@ def test_old_detector_kappa_flag():
     runs = [_site(1000 + s, rho=0.8) for s in range(10)]
     assert sum(detect_step_change(y, T).detected for y, T in runs) >= 8
     assert sum(detect_step_change(y, T, autocorrelation=True).detected for y, T in runs) <= 1
+
+
+def test_a_constant_or_dead_meter_does_not_hang():
+    """A meter reading exactly zero all year (one real BDG2 chilled-water meter in 2017) gave a
+    0/0 PELT cost that no penalty could prune, so the max_steps loop never ended."""
+    idx = pd.date_range("2017-01-01", periods=365, freq="D")
+    T = pd.Series(60 + 20 * np.sin(2 * np.pi * np.arange(365) / 365), idx)
+    for level in (0.0, 5.0):
+        r = detect_step_changes(pd.Series(level, index=idx), T)
+        assert not r.detected and r.converged
+        assert any("residual variance is zero" in c for c in r.caveats)

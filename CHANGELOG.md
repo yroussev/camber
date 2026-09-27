@@ -150,6 +150,48 @@ name below is provisional (`docs/API-STABILITY.md`).
   - the config keys `mv[].rebaseline` (a `settle_days` there that differs from
     `mv[].settle_days` is refused) and the top-level `mv_store`.
 
+### Added -- M&V validation: the BDG2 savings benchmark (issue #21, phase 21e; #49)
+- **`examples/bdg2/savings_benchmark.py`** (new) scores CAMBER's savings and their bands on real
+  BDG2 meters: 2016 baseline, 2017 reporting, cleaned meters, whole days, and at least 328 whole
+  days in each year (CalTRACK 2.0 §2.2.1.2). Data are fetched, never redistributed; every draw is
+  seeded. Four experiments:
+  - a **placebo** scored with Touzani et al. 2019's UICF and EUR, for forecast and backcast with
+    both kernels and standard conditions with the exact kernel;
+  - **injected 5/10/20% savings**: forecast recovery is asserted as an exact identity, and backcast
+    and standard conditions are measured (error, SEnPI-band coverage, significance);
+  - **injected single and double steps**: `detect_step_changes` detection and date error,
+    spurious detections, and indicator-NRA recovery and interval coverage of δ;
+  - an **injected proportional static factor**.
+- **A new baseline file, `examples/bdg2/savings-benchmark-baseline.json`**, is gated at `--tol 0.05`
+  in the `mv-accuracy` CI job and in `scripts/gates.sh`. It holds only the new metrics, because
+  `benchmark-baseline.json` is untouched: the acceptance benchmark's `accept` did not change, and
+  none of its keys moved. Coverage is gated on regression, never on the nominal rate: real bands
+  under-cover.
+  - Placebo and injection run on every eligible meter. Steps and static factors run on a seeded
+    subsample of 150 meters per type (`--sample`).
+  - `--jobs` runs buildings in worker processes; results are identical whatever the count.
+- **Dossier track `bdg2_mv_savings`** (`camber validate`): the placebo UICF of the G14 and exact
+  forecast kernels, cited and cross-checked exactly against the new baseline by
+  `tests/test_dossier.py`.
+- **`tests/test_mandv_mc_coverage.py`** indexes Monte Carlo coverage for every savings kernel and
+  references the cells already tested elsewhere.
+  - New cells: G14 forecast and backcast, exact backcast and standard conditions, G14 standard
+    conditions, the sequential chain, an adjusted static factor, and an adjusted backcast.
+  - It records that the G14 kernel under-covers on a year of daily data even with a correct
+    model, and that the sequential chain and the adjusted backcast are conservative.
+- **`lbnl-b59` data issues** (catalog and `docs/DATASETS.md`) for `ele.csv`, which the catalog
+  does not ingest:
+  - from 2020 the file carries six meters under five column names, shifted one place;
+  - the HVAC panel meters read exactly 0 while the rooftop units run;
+  - the replaced heat pump was metered on `hvac_N`, and its replacement is on no meter, so a
+    2018 vs later saving overstates the retrofit.
+
+### Fixed
+- **`detect_step_changes` no longer hangs on a constant or dead meter.** A series the weather fit
+  reproduces exactly (one BDG2 chilled-water meter reads 0 all of 2017) gave PELT a 0/0 cost that
+  no penalty could prune, so the `max_steps` loop never ended. The detector now stops with the
+  steps it has and a caveat.
+
 ## [0.89.0] — 2026-09-27
 
 **Catalog release 2.** The research-only tier, manual-download entries, Excel workbooks and

@@ -255,6 +255,97 @@ CV(RMSE) line. Reporting *both* meter types (not just the flattering one) with c
 the point. The runner also rolls the portfolio up by EUI at real scale (validating the fleet percentile
 path on a real distribution).
 
+## M&V savings — placebo and injection on BDG2
+
+The acceptance benchmark above asks whether a baseline *fits*. `examples/bdg2/savings_benchmark.py`
+asks whether the **savings and their bands** hold up on the same real meters (issue #21 phase 21e).
+The baseline year is 2016 and the reporting year 2017. It uses the publisher's cleaned meters and
+whole days only, as above, and a meter enters when it has at least 328 whole days in *each* year: at
+most 37 of 365 missing, the CalTRACK 2.0 §2.2.1.2 data-sufficiency rule. A meter that reads one
+constant value all year (a dead meter) is left out. The data are fetched, never redistributed, and
+every random draw is seeded.
+
+It runs four experiments:
+
+1. **Placebo.** Nothing is injected, and no building is known to have had a measure, so every
+   saving is error. The benchmark uses the two metrics of Touzani, Granderson, Jump & Rebello,
+   *Energy & Buildings* 193:216–225 (2019):
+   - the error-uncertainty ratio `EUR = (actual − predicted) / band` (their Eq 15);
+   - the uncertainty-interval coverage factor `UICF`, the share of buildings with `|EUR| ≤ 1`
+     (their Eq 16).
+
+   It scores forecast and backcast with both kernels (G14 and exact) and standard conditions with
+   the exact kernel, at nominal 90%. It also scores the G14 forecast at 95%, for comparison with
+   Touzani et al., who found about 71% for G14 at 95% on daily linear models of 69 buildings chosen
+   to have no anomalous changes. **Under-coverage is expected.** A band carries model error only,
+   and a real building's year-to-year change lies outside it, so the gate is on *regression against
+   the committed baseline*, never on the nominal rate.
+2. **Injected savings of 5, 10 and 20%.** Every reporting-year reading is multiplied by `1 − s`, so
+   the true SEnPI is `1 − s` on every basis. For each method the benchmark reports:
+   - the error of `savings_pct` against `s` (median and 90th percentile of its absolute value, and
+     its signed median);
+   - how often the SEnPI band covers `1 − s`;
+   - how often the band lies wholly below 1, a saving it can tell from none.
+
+   Forecast recovery is exact by construction (its error *is* the placebo error), so it is asserted
+   as an identity rather than measured. Backcast and standard conditions are the methods under test.
+   Standard conditions uses a two-year day-of-year normal of the site's own temperatures.
+3. **Injected steps.** The benchmark plants one step (10% or 20% of the meter's mean daily energy)
+   or two steps (20% each), with random sign and date, in the reporting year. It scores:
+   - `detect_step_changes`: the share of planted steps found within 7 days, the date error, and
+     detections that are neither planted nor present in the un-injected series;
+   - the indicator NRA fitted at the true date (`estimate_nre_indicator`): its recovery of the
+     planted effect δ, and whether its 90% interval covers δ;
+   - whether the detector's own step band covers δ.
+
+   The real series keeps its own level shifts; they are part of the noise the detector must work
+   through.
+4. **Injected static-factor change.** A floor-area ratio `r = 1.25` affects a stated share `f = 0.6`
+   of the load, from the start of the reporting year or from 1 July. The benchmark scores the
+   proportional `StaticFactorAdjustment`'s recovery of the placebo saving, and how often the band
+   covers the true zero saving with and without the adjustment.
+
+**Sampling.** Placebo and injected savings run on every eligible meter. Steps and static factors run
+on a deterministic subsample of 150 meters per type (`--sample`), drawn with a fixed seed from the
+sorted eligible list. Each building's draws use a seed derived from its id, so they do not depend on
+which other buildings were sampled or on how many worker processes ran (`--jobs`).
+
+**The gate.** The gated metrics live in their own file, `examples/bdg2/savings-benchmark-baseline.json`.
+`benchmark-baseline.json` and its keys are untouched, and the benchmark CI job gates each file
+separately at `--tol 0.05`. A regression is a fall in coverage, detection or significance rates, or
+a rise in an error, `|EUR|` quantile, spurious-detection or decline rate. Signed quantities (the
+median EUR, the median savings bias) are written under `info.` keys and are not gated, since
+neither direction is better. `camber validate` carries the placebo UICF of the forecast kernels as
+the cited track `bdg2_mv_savings`, and `tests/test_dossier.py` checks it exactly against the
+committed baseline.
+
+### Monte Carlo coverage of every kernel
+
+`tests/test_mandv_mc_coverage.py` is the index. For every savings path it names the seeded Monte
+Carlo that checks the band: synthetic daily 3PC data with AR(1) residuals at ρ ∈ {0, 0.4, 0.8}, ρ
+estimated from the fit, and a known true saving. Cells tested elsewhere are referenced rather than
+repeated, and a registry test fails if a referenced test disappears:
+- forecast, exact kernel;
+- the SEP chain;
+- the indicator NRA band;
+- the adjusted forecast and the adjusted SEP chain;
+- the step detector.
+
+The new cells are:
+- forecast and backcast with the G14 kernel;
+- backcast and standard conditions with the exact kernel;
+- standard conditions with the G14 kernel;
+- the sequential chain;
+- a proportional static factor on a forecast (both kernels);
+- a backcast adjusted for a reporting-period indicator.
+
+The gates:
+- every exact-kernel cell at [0.85, 0.95];
+- the G14 cells at [0.78, 0.95], because the G14 kernel falls short of nominal on a year of daily
+  data even when the model is right;
+- the conservative constructions (G14 standard conditions, the sequential chain's independence sum,
+  the adjusted backcast) at a floor.
+
 ## Cross-validation vs an independent implementation
 
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the
@@ -356,7 +447,7 @@ or the benchmark — fetching the CC-BY datasets (cached), gating against the co
 
 ## The unified dossier — `camber validate`
 
-`camber validate` (module `camber.dossier`) pulls all four tracks into one artifact — text, a
+`camber validate` (module `camber.dossier`) pulls all five tracks into one artifact — text, a
 self-contained HTML page, or JSON — so the whole credibility story is legible in one place:
 
 ```sh
@@ -367,7 +458,8 @@ camber validate --full                # add per-detector / per-family breakdown 
 ```
 
 It **live-recomputes** the two pure tracks (synthetic `faultlab` + generated `fleetlab`) on every
-run — no download, deterministic — and **cites** the two real-data tracks (LBNL FDD, BDG2 M&V) from
+run — no download, deterministic — and **cites** the three real-data tracks (LBNL FDD, BDG2 M&V
+acceptance, BDG2 M&V savings) from
 committed reference figures with provenance and a reproduce command, because they need large
 datasets. The distinction is shown explicitly (a LIVE vs CITED tag on each track), rates carry their
 95% Wilson intervals, and each track states its coverage and honest boundary. The dossier embeds no
@@ -375,7 +467,8 @@ timestamp — it is anchored on the package version, so two builds are byte-iden
 release artifact).
 
 The cited figures can't silently rot: `tests/test_dossier.py` cross-checks the BDG2 numbers **exactly**
-against the committed `examples/bdg2/benchmark-baseline.json` and the LBNL numbers against the pooled
+against the committed `examples/bdg2/benchmark-baseline.json` and
+`examples/bdg2/savings-benchmark-baseline.json`, and the LBNL numbers against the pooled
 OA-fraction row in this document — a drift fails CI.
 
 Every tagged release **attaches the dossier** (`dossier.html` + `dossier.json`) as a GitHub Release
