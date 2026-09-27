@@ -103,13 +103,13 @@
       "damper_stuck_100_short",
       "coi_leakage_010"
      ],
-     "store_bytes_estimate": 45000000
+     "store_bytes_estimate": 42000000
     },
     "full": {
      "description": "every run in the archive",
      "files": "all",
      "runs": "all",
-     "store_bytes_estimate": 95000000
+     "store_bytes_estimate": 100000000
     }
    },
    "ingest": {
@@ -654,13 +654,13 @@
       "OADMPRStuck_100",
       "OADMPRLeak_50"
      ],
-     "store_bytes_estimate": 25000000
+     "store_bytes_estimate": 23000000
     },
     "full": {
      "description": "every run in the archive",
      "files": "all",
      "runs": "all",
-     "store_bytes_estimate": 250000000
+     "store_bytes_estimate": 265000000
     }
    },
    "ingest": {
@@ -1277,13 +1277,13 @@
       "DMPRStuck_OA_0",
       "DMPRStuck_OA_100"
      ],
-     "store_bytes_estimate": 12000000
+     "store_bytes_estimate": 15000000
     },
     "full": {
      "description": "every run in the archive",
      "files": "all",
      "runs": "all",
-     "store_bytes_estimate": 175000000
+     "store_bytes_estimate": 265000000
     }
    },
    "ingest": {
@@ -1987,13 +1987,13 @@
       "PFPU__ReheatVLVStuck_0pct",
       "PFPU__ReheatVLVLeak_50pctMaxFlow"
      ],
-     "store_bytes_estimate": 20000000
+     "store_bytes_estimate": 21000000
     },
     "full": {
      "description": "all 62 runs (31 PFPU + 31 SFPU)",
      "files": "all",
      "runs": "all",
-     "store_bytes_estimate": 215000000
+     "store_bytes_estimate": 260000000
     }
    },
    "ingest": {
@@ -2654,13 +2654,13 @@
       "bypass_stuck_075",
       "chiller_bias_2"
      ],
-     "store_bytes_estimate": 25000000
+     "store_bytes_estimate": 21000000
     },
     "full": {
      "description": "all 24 runs",
      "files": "all",
      "runs": "all",
-     "store_bytes_estimate": 125000000
+     "store_bytes_estimate": 126000000
     }
    },
    "ingest": {
@@ -3068,7 +3068,7 @@
       "boiler_PI",
       "hot_water_temp_bias_2"
      ],
-     "store_bytes_estimate": 18000000
+     "store_bytes_estimate": 16000000
     },
     "full": {
      "description": "all 17 runs",
@@ -3581,7 +3581,7 @@
       "Bull_office_Rob",
       "Robin_office_Antonina"
      ],
-     "store_bytes_estimate": 30000000
+     "store_bytes_estimate": 16000000
     },
     "full": {
      "description": "all 19 files (raw, cleaned and the competition subset); ingest reads every site and every cleaned meter",
@@ -3599,7 +3599,7 @@
      ],
      "max_buildings_per_site": null,
      "include_buildings": [],
-     "store_bytes_estimate": 655000000
+     "store_bytes_estimate": 670000000
     }
    },
    "ingest": {
