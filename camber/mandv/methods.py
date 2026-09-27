@@ -1064,6 +1064,18 @@ def _covers(model, T, pol) -> tuple:
     return (cov.tier != "severe" and rv is not False), cov.tier, rv
 
 
+def _expected_rows(days: int, index) -> float:
+    """Rows a ``days``-long window holds at the modal sampling interval of ``index``.
+
+    Daily rows give ``days`` (the pre-0.90.1 threshold, unchanged); monthly rows about 12 a year;
+    hourly rows ``24 * days``.
+    """
+    from ..timegrid import interval_hours
+
+    hours = interval_hours(index)
+    return float(days) * 24.0 / hours if hours > 0 else float(days)
+
+
 def _intermediate_windows(baseline, reporting, step: str):
     """Candidate intermediate windows: the baseline's length, strictly between the periods.
 
@@ -1205,9 +1217,12 @@ def select_method(
         if not windows:
             reasons.append("no intermediate window of the baseline's length fits between them")
         found = []
+        # a window needs 90% of the rows its length holds at the frame's own sampling interval:
+        # rows against rows (issue #52 -- monthly rows were compared with a day count)
+        need = 0.9 * _expected_rows(lb, frame.index)
         for w in windows:
             Ti, yi, ii = _slice(frame, w, driver, energy)
-            if len(yi) < 0.9 * lb:
+            if len(yi) < need:
                 continue
             cands = _rank_models(Ti, yi, ii, kinds)
             for c in cands:
