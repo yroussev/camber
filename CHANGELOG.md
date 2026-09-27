@@ -4,7 +4,7 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.90.0] — 2026-09-27
 
 **M&V rebaselining: the rest of #21.** A reported saving now declares its SEP method, restates its
 baseline side through an explicit, attributed adjustments ledger, and names the frozen baseline

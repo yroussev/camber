@@ -225,7 +225,7 @@ umbrella rather than as new milestones. `CHANGELOG.md` is the per-release record
   cybersecure **edge forwarder**, and fault economics extended across the newer families.
 
 
-## Released — 0.86–0.89 (2026-09-26 and 27)
+## Released — 0.86–0.90 (2026-09-26 and 27)
 
 Three stacked releases; `CHANGELOG.md` has the detail.
 
@@ -249,6 +249,11 @@ Three stacked releases; `CHANGELOG.md` has the detail.
   Brick grouping, one reconciled ingest design for real-building source layouts and 14 new entries
   (21 in all), with the first real labelled multi-zone VAV result in `docs/VALIDATION.md` (ORNL).
   Fixes #34 and #36.
+- **0.90 — M&V rebaselining, the rest of #21:** SEP methods (forecast, backcast, standard
+  conditions, chaining) with method selection that only proposes; the non-routine and static-factor
+  adjustments ledger; versioned M&V baselines with an audited rebaseline policy and `camber mv`;
+  the change-point + driver model on the config path; and a BDG2 savings benchmark with the
+  published placebo result (bands carry model error only). #46–#49.
 
 ## Next
 
@@ -263,24 +268,6 @@ Version numbers are given only where a release is already planned.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
   bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
   decommissioning.
-- **0.90 — M&V rebaselining, the rest of #21** (integrated; release pending). Its contents:
-  - **21b, SEP methods (#46):** forecast, backcast, standard conditions and SEP chaining (with
-    CAMBER's labelled `sequential_chain` extension); method selection that only proposes; SEnPI
-    and its band; `camber.mandv.sep` (Eq 1-12, Annex B primary energy); `mv[].method` / `kernel`.
-  - **21c, adjustments (#47):** the non-routine and static-factor ledger on any result, chains
-    adjusted per link, the confounding and SEP evidence guards, `mv[].validity`, the waterfall,
-    and the change-point + driver model.
-  - **21d, versioned baselines (#48):** `MVBaselineStore` with full provenance, the rebaseline
-    policy and triggers T1-T6, the new-baseline window rule, `camber mv` (run, freeze, list,
-    propose, rebaseline, adjust, report) and the chained CUSUM.
-  - **21e, validation (#49):** the BDG2 savings benchmark (placebo, injected savings, steps and
-    static factors) with its own gated baseline, the Monte Carlo coverage index of every kernel,
-    the `bdg2_mv_savings` dossier track and the `lbnl-b59` data issues.
-  - **The maintainer's decisions:** the published BDG2 savings result; a refit for an adjusted
-    backcast with a reporting-period indicator; G14 kept as the default kernel with a
-    calibration caveat on every result (revisited at 1.0).
-  - **`mv[].model: "cp_driver"`:** the change-point + driver form on the config `mv` path, for
-    occupancy-driven buildings.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **RCx report, 0.88 follow-up (#32):** the plant reports (LBNL chiller and boiler) decline the
