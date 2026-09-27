@@ -6,18 +6,20 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
-**Catalog release 2, the framework.** The research-only tier, manual-download entries, Excel
-workbooks and Brick-grouped ingest, so the rest of the open catalog can land; plus a weekly link
-check. The `camber.datasets` API stays **provisional**.
+**Catalog release 2.** The research-only tier, manual-download entries, Excel workbooks and
+Brick-grouped ingest (the framework), one reconciled design for the source layouts real buildings
+publish, and 14 new catalog entries -- 21 in all. CAMBER's first result on real, labelled
+multi-zone VAV data is published in `docs/VALIDATION.md`. The `camber.datasets` API stays
+**provisional**.
 
-### Added
-- **Research-only tier** (`access: "research_only"`, exactly when the licence is NC or ND): `camber
-  datasets fetch` refuses such an entry without `--accept-noncommercial` (exit 3) on every fetch,
-  with no environment-variable bypass; each acceptance goes to the `acknowledgements.json` ledger
-  and the manifest before anything downloads. `fetch --all` is the open tier only; research-only
-  entries need `--licence all` and `--accept-noncommercial`. `ingest` needs an acknowledgement of
-  the entry's current licence (or its own `--accept-noncommercial`) and records
-  `redistribution: prohibited`. `datasets list` shows the licence tier.
+### Added -- the catalog framework
+- **Research-only tier** (`access: "research_only"`): `camber datasets fetch` refuses such an
+  entry without `--accept-noncommercial` (exit 3) on every fetch, with no environment-variable
+  bypass; each acceptance goes to the `acknowledgements.json` ledger and the manifest before
+  anything downloads. `fetch --all` is the open tier only; research-only entries need
+  `--licence all` and `--accept-noncommercial`. `ingest` needs an acknowledgement of the entry's
+  current licence (or its own `--accept-noncommercial`) and records `redistribution: prohibited`.
+  `datasets list` shows the licence tier.
 - **Banners everywhere**: store reads stamp the facility's dataset provenance on the frame, so
   `build_dashboard` and `build_site_report` show the licence block and the non-commercial /
   do-not-redistribute banner even when no `data_sources` are passed (audit, RCx and drift already
@@ -40,6 +42,76 @@ check. The `camber.datasets` API stays **provisional**.
   and, with `licence_check` (`expect`, `json_path`), the licence page. `pytest -m network` fetches
   one small open file end to end.
 
+### Added -- source layouts for real buildings (one design)
+Four intake branches built these in parallel; 0.89 ships them as one design, each concept with one
+key and one code path (`camber/datasets/_readers.py`), documented in
+[DATASETS.md](docs/DATASETS.md#source-layouts):
+- `members` -- a run's per-quantity tables joined on the timestamp, or `{raw column: member}` for
+  one file per point (a headerless `timestamp,value` export or a table whose last non-clock column
+  is the value); only the needed members are extracted, and a table several runs share is parsed
+  once.
+- `where: {column: value or [values]}` -- a run's rows of a stacked table.
+- A run's own `mapping` with `vars` filling `{placeholders}`, and its own `timestamp_format`,
+  `units`, `encoding` and `sheet`; `equip_id` stores its equipment verbatim.
+- `group: "mapping"` splits one table into equipment by the mapping file (no Brick model), and a
+  grouped run's `target` names the equipment under test -- the rest is unscored `context`.
+  `derive` gains `copy`. The naming topology understands scenario equipment
+  (`RTU_VAV_104__d2_stuck_040` sits under `RTU__d2_stuck_040`).
+- The `per_point` adapter: one series file per sensor, a sensor `index`, one facility per group,
+  sample-and-hold resampling (`hold`).
+- `clock`: an `elapsed` simulation clock, or a **synthetic** `day` / `rows` clock (recorded as such
+  in the notes and the provenance); `timestamp_format: "ISO8601"`; `source_timezone` ("UTC", an
+  IANA zone or `"offset"`) + `local_timezone` move a dataset onto the site's wall clock (offset
+  labels are otherwise dropped, the wall clock kept).
+- Units `psia` (to psig), `psig`, `m3/min`; licences `CDLA-Permissive-1.0` and `NIST-PD` (open);
+  tar archives' extracted sizes are checked against free disk; `contiguous: false` marks an entry
+  whose days are not consecutive.
+- Duplicate-run detection compares the members' bytes **and** what a run selects from them (rows,
+  mapping, placeholders, worksheet), so a stacked table's rooms are not "duplicates".
+- The validator rejects the intake branches' earlier spellings (`points`, `where: {column, in}`,
+  `tz_convert`, `synthetic_index`, `day_clock`, `timestamp_unit` / `timestamp_origin`, the
+  `per_point` adapter's `points`) and names the key to use.
+
+### Added -- 14 catalog entries
+Every licence re-verified on the host's page, every file pinned (size + SHA-256), every problem in
+the published data described with its evidence and handling (`docs/DATASETS.md`).
+- **DCV and CO2:** `lbnl-b59` (LBNL Building 59: four RTUs with measured OA flow, 11 CO2 zones, 51
+  underfloor terminals, Brick model; manual download, CC-BY-4.0), `finnish-dcv` (a laboratory
+  room with occupancy-based DCV and ground-truth counts, CC-BY-4.0), `b4b-windesheim` (three office
+  rooms, two CO2 sensors each, CC-BY-4.0; cited by pinned commit, it has no DOI).
+- **AHU and refrigerant side:** `nuig-ahu101` (a 100%-OA lecture-theatre AHU, CDLA-Permissive-1.0),
+  `irish-ahu` (an industrial mixing-box AHU, 5.5 years, CC-BY-4.0), `nist-heatpump-fdd` (labelled
+  residential heat-pump lab test points, NIST-PD; `xlsx` extra), `nist-ibal` (a lab chiller with
+  refrigerant pressures; manual download, NIST-PD).
+- **Real buildings and refrigeration:** `robod` (five Singapore rooms, CC-BY-4.0), `sdu-ou44` (three
+  Danish rooms, anonymised days on a synthetic day clock, CC0-1.0), `ornl-frp-ops` (one RTU and ten
+  VAV boxes under seven operating scenarios, CC-BY-4.0), `ornl-supermarket-fdd` (a CO2 booster
+  rack with six labelled faults, reference only, CC-BY-4.0).
+- **Multi-zone VAV and the research-only tier:** `ornl-frp-vav` (one RTU and ten VAV boxes, 31
+  labelled one-day tests, CC-BY-4.0), `rbc-g36-ahu` (simulated G36 and rule-based AHUs with five
+  VAV zones, 414 runs; **research-only**, below), `at-30bldg-sensors` (1,832 raw sensors from a
+  30-building campus, CC-BY-NC-SA-4.0, research-only).
+
+### Changed -- maintainer decisions
+- **`rbc-g36-ahu` is research-only for a stated reason.** Its record is CC BY 4.0, but the archive
+  bundles a folder of ASHRAE 1312-RP data (`01_RBC-ASHRAE1312`) whose open licence CAMBER cannot
+  vouch for. The folder is never ingested (data issue `bundled-1312-rp-folder`), and the whole
+  entry sits behind `--accept-noncommercial`. The new `access_reason` states why an open-licence
+  entry is research-only; the licence gate, `datasets info`, the facility provenance and every
+  report's banner and source block show it. An NC / ND licence can still never be labelled open,
+  and `access_reason` is rejected anywhere but on an open-licence research-only entry.
+  `datasets.catalog(licence="commercial")` is the open tier (it excludes such an entry).
+- **Data-issue citations.** A data issue cites the documentation it contradicts by DOI whenever the
+  dataset has one; a dataset without a DOI may cite a **pinned** https URL -- fixed to a commit or
+  a version, never a moving branch or landing page. The validator enforces exactly this.
+- **The ORNL multi-zone VAV result** is published in `docs/VALIDATION.md`: on `ornl-frp-vav`'s full
+  subset, `unmet_setpoint_hours` catches 10 of 18 stuck-damper days (56%, Wilson 95% 34-75%) with
+  1 false alarm in 13 negatives (8%, 1-33%) -- the documented solar-overheating day. It is a
+  symptom rule on small n in one building, not a gated benchmark, and the caveats are listed there.
+- **Default subsets are bounded by size, not run count:** at most 100 MB once ingested. With that,
+  `ornl-frp-ops`'s default keeps all ten boxes of its two heating scenarios (24 runs, 8.6 MB)
+  instead of two.
+
 ### Changed
 - The site-neutrality guard's rules may carry per-rule `exempt_paths` (a third output field).
   Only the third-party dataset-host rule and its DOI-prefix rule use it, and only for
@@ -47,8 +119,29 @@ check. The `camber.datasets` API stays **provisional**.
   CHANGELOG and release artefacts still apply every rule, and the licence-encumbered dataset rules
   are never exempt. The CI guard, the pre-commit hook and `scripts/gates.sh` apply it.
 - CI installs the `xlsx` extra so the workbook path is tested.
-- `scripts/catalog_sweep.py` verifies manual entries from their seeded copies and sweeps
-  research-only entries only with `--accept-noncommercial`.
+- `scripts/catalog_sweep.py` verifies manual entries from their seeded copies, sweeps
+  research-only entries only with `--accept-noncommercial`, requires the non-commercial banner
+  **exactly** on research-only data, builds an unlabelled entry's reports for its first
+  equipment, and with `--skip-rcx ID,...` builds only the audit report for the named entries (the
+  RCx report's `select_week` takes about 8 minutes on one 23-month `at-30bldg-sensors` sensor,
+  #35).
+
+### Fixed
+- **#34:** three flaky tests are deterministic -- the manual-entry fixture zip has fixed member
+  dates (it is built twice and compared against its pin, so a second boundary between the builds
+  changed its hash; this also broke the research-only manual-entry test), and the portfolio
+  idempotence test injects the lock's clock.
+- **#36:** the sweep's "no G36 verdict without a sequence" check skips citation columns (an action
+  plan's `Cite`, an ECM `Standard` / `Reference`) and judges verdict text only.
+
+### Known follow-ups (0.89 intake)
+- #35: `select_week` (RCx) is slow on long or large runs, and a template run over the
+  2,460-equipment `rbc-g36-ahu` full subset takes a long time.
+- #37 DCV verification by hour of day with a damper fallback; #38 `co2_ventilation` and economizer
+  air; #39 an R-410A saturation transform; #40 heat-pump / DX refrigerant rules on the NIST data;
+  #41 dehumidification-with-reheat vs simultaneous heating and cooling; #42 a fan-heat allowance
+  for `leaking_valve`; #43 setback held by a cycling fan; #44 a zone below setpoint with reheat
+  saturated; #45 a time-series point-type suggester.
 
 ## [0.88.0] — 2026-09-26
 

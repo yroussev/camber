@@ -252,8 +252,19 @@ Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** Each moves up past the three versions that shipped
   first:
-  - **0.89** (was 0.87) — the rest of the catalog and the research-only (NC/ND) tier, behind
-    `--accept-noncommercial`.
+  - **0.89** (was 0.87; in `CHANGELOG.md` under Unreleased) — catalog release 2: the
+    research-only tier behind `--accept-noncommercial` (NC / ND licences, or an open-licence entry
+    held there for a stated `access_reason`), manual-download entries, the `xlsx` extra, Brick
+    grouping, one reconciled design for real-building source layouts (multi-file `members`, `where`
+    row selection, run-level mappings, mapping groups with a `target`, the `per_point` adapter,
+    elapsed / synthetic clocks and time zones), and 14 entries: DCV and CO2 (`lbnl-b59`,
+    `finnish-dcv`, `b4b-windesheim`), AHU and refrigerant side (`nuig-ahu101`, `irish-ahu`,
+    `nist-heatpump-fdd`, `nist-ibal`), real buildings and refrigeration (`robod`, `sdu-ou44`,
+    `ornl-frp-ops`, `ornl-supermarket-fdd`) and multi-zone VAV (`ornl-frp-vav`, and the
+    research-only `rbc-g36-ahu` and `at-30bldg-sensors`). First real labelled multi-zone VAV result
+    in `docs/VALIDATION.md` (ORNL). Fixes #34 and #36. Follow-ups from the intake: #35 (RCx
+    `select_week` and large template runs) and #37–#45 (rules and mapping assist the new data
+    showed are missing).
   - **0.90** (was 0.88) — `camber lab`, a loopback-only local catalog UI (`camber serve` stays
     GET-only).
   - **0.91** (was 0.89) — education: worked exercises and learning docs on the catalog datasets.
