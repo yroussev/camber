@@ -119,6 +119,9 @@ CHILLER_MEMBERS = [
     "ChillerPlant_bypass_stuck_050.csv",
     "ChillerPlant_bypass_stuck_075.csv",
     "ChillerPlant_chiller_bias_2.csv",  # CHW-temp sensor bias — physical-detector negative
+    # chiller-1 fouling: in the archive but not in the inventory's Tables 3-4 (undocumented)
+    "ChillerPlant_chiller_fouling_065.csv",
+    "ChillerPlant_chiller_fouling_095.csv",
 ]
 CHILLER_REQUIRED = ["ChillerPlant.csv", "ChillerPlant_coolingtower_fouling_095.csv"]
 

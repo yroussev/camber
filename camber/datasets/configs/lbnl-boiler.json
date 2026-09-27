@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for lbnl-boiler: the hot-water loop differential-pressure reset. The boiler status points are enables, not firing (see the catalog quirk), so rules needing boiler_status decline here.",
+  "_comment": "Run template for lbnl-boiler: the hot-water loop differential-pressure reset. The boiler status points are enables, not firing (see the catalog's data issues), so rules needing boiler_status decline here. This rule detects none of the 16 faults: boiler fouling shows as gas input per unit of heat (boiler 1's gas +57% at 065) and there is no gas-input role or gas-per-heat rule yet, nor a supply-temperature setpoint to compare the loop supply with -- both are follow-ups.",
   "source": {
     "kind": "store",
     "store": "",

@@ -394,7 +394,11 @@ CHILLER_DETECTORS = {
     },
     "chiller_efficiency": {
         # anything that raises chiller lift -> kW/ton: warmer condenser water from a fouled tower,
-        # a bypassed three-way valve (leak/stuck), or condenser-loop PID mistuning
+        # a bypassed three-way valve (leak/stuck), or condenser-loop PID mistuning -- and a fouled
+        # chiller itself. The chiller-fouling runs are UNDOCUMENTED: they are in the archive but
+        # not in the inventory's Tables 3-4 (see the lbnl-chiller catalog entry's data issues);
+        # only chiller 1's power changes (+61% / +6% a year at 065 / 095). Until 0.86.0 they were
+        # scored as negatives, so a detection on 065 counted as a false positive.
         "make": lambda design=0.85: ChillerEfficiency(design_kw_per_ton=design),
         "metric": "kw_per_ton_median",
         "positive": (
@@ -402,6 +406,7 @@ CHILLER_DETECTORS = {
             "ChillerPlant_coolingtower_PI",
             "ChillerPlant_bypass_leakage",
             "ChillerPlant_bypass_stuck",
+            "ChillerPlant_chiller_fouling",  # undocumented in the inventory
         ),
     },
 }

@@ -280,8 +280,8 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 
 - **Issue:** `oa-dry-wet-bulb-swapped`
 - **Columns:** `OA_TEMP`, `OA_TEMP_WB`
-- **Evidence:** The tower leaving-water setpoint follows max(wet-bulb + 8 F, 60 F): on the 210,661 minutes above the 60 F floor CT_SW_TEMPSPT equals OA_TEMP + 8 to a median 0.28 F but OA_TEMP_WB + 8 only to 6.27 F; OA_TEMP_WB exceeds OA_TEMP in 99.3% of rows (a wet-bulb cannot exceed its dry-bulb).
-- **Contradicts:** Chiller-plant inventory Table 2 (OA_TEMP: dry bulb; OA_TEMP_WB: wet bulb) and Eq. 3 / Table 1 (tower setpoint = wet-bulb + 8 F) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Evidence:** Two independent checks. The tower leaving-water setpoint follows max(wet-bulb + 8 F, 60 F): on the 210,661 minutes above the 60 F floor CT_SW_TEMPSPT equals OA_TEMP + 8 to a median 0.28 F but OA_TEMP_WB + 8 only to 6.27 F. The chilled-water reset follows the outdoor dry-bulb: CWL_PRI_SW_TEMPSPT matches the reset of OA_TEMP_WB with a p90 error of 0.49 F (hourly), and the reset of OA_TEMP only to 4.54 F. OA_TEMP_WB also exceeds OA_TEMP in 99.3% of rows, which a wet-bulb cannot do.
+- **Contradicts:** Chiller-plant inventory Table 2 (OA_TEMP: dry bulb; OA_TEMP_WB: wet bulb), Eq. 3 / Table 1 (tower setpoint = wet-bulb + 8 F) and Eq. 2 (the chilled-water reset follows the dry-bulb) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
 - **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Swapped back before mapping (swap quirk), in every run.
 
 #### Secondary-loop supply and return temperatures are swapped
@@ -292,6 +292,30 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Chiller-plant inventory Table 2 (CWL_SEC_SW_TEMP: supply, CWL_SEC_RW_TEMP: return water temperature) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
 - **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Swapped back before mapping (swap quirk), in every run; the primary loop is left as published.
 
+#### The chilled-water reset spans 44-54 F, not 42-52 F
+
+- **Issue:** `chw-reset-range-44-54`
+- **Columns:** `CWL_PRI_SW_TEMPSPT`
+- **Evidence:** CWL_PRI_SW_TEMPSPT ranges 44.0-54.0 F (54.0 in 327,603 rows, 44.0 in 36,899). Eq. 2 with 44 / 54 F bounds reproduces it from the true dry-bulb to a median 0.00 F (p90 0.49 F, hourly); with the inventory's 42 / 52 F bounds the median error is 2.00 F.
+- **Contradicts:** Chiller-plant inventory Eq. 2 (chilled-water setpoint reset between 42 F and 52 F over 60-80 F outdoor dry-bulb) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the setpoint is not mapped to a role, and nothing in CAMBER assumes the 42-52 F range.
+
+#### CHL_STA_1 and CT_STA_1 are enables, not run status
+
+- **Issue:** `status-points-are-enables`
+- **Columns:** `CHL_STA_1`, `CT_STA_1`
+- **Evidence:** CHL_STA_1 and CT_STA_1 are 1 in 100% of rows of the fault-free run while chiller 1 draws under 1 kW in 5.5% of rows and tower 1's fan is stopped in 71%; units 2 and 3 read 1 in 12.4% and 0.4% of rows.
+- **Contradicts:** Chiller-plant inventory Table 2 (CHL_STA / CT_STA: on-off status of a chiller / cooling tower) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Not mapped: rules that need a chiller or tower run status decline instead of reading the enable as running.
+
+#### The chiller-fouling runs are not in the inventory
+
+- **Issue:** `chiller-fouling-runs-undocumented`
+- **Columns:** `CHL_POW_1`
+- **Evidence:** The archive has ChillerPlant_chiller_fouling_065.csv and _095.csv, which Tables 3-4 do not list. Against the fault-free run chiller 1's annual energy rises 61% (065) and 6.3% (095); chiller 2's falls 3.5% / rises 0.2%.
+- **Contradicts:** Chiller-plant inventory Tables 3-4 (21 faulted cases; no chiller fouling) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested and scored as chiller_fouling, marked undocumented; the severity is read from the file name by analogy with the tower-fouling runs (heat-transfer coefficient x 0.65 / 0.95), which the inventory does not confirm.
+
 ### `lbnl-boiler`: LBNL simulated boiler plant (labelled faults, Brick model)
 
 #### BOI_STA is the boiler enable, not burner firing
@@ -301,6 +325,38 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** In the fault-free run BOI_STA_1 is 1 in 100% of rows while boiler 1 burns no gas (BOI_GAS_CSUM_1 = 0) in 50.5% of them.
 - **Contradicts:** Boiler-plant inventory Table 2 (BOI_STA: on-off status of a boiler, 0-Off; 1-On) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing, so rules needing boiler_status decline on this plant.
+
+#### HWL_DPSPT is the loop DP setpoint in inH2O, not a temperature setpoint
+
+- **Issue:** `dp-setpoint-described-as-temperature`
+- **Columns:** `HWL_DPSPT`
+- **Evidence:** HWL_DPSPT is the constant 480.52 in every row: 17.36 psi expressed in inH2O, matching Table 1's 17.5 psi loop differential-pressure setpoint and the fault-free HWL_DP median (480.52).
+- **Contradicts:** Boiler-plant inventory Table 2 (HWL_DPSPT: hot water loop supply water temperature setpoint, F) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Mapped as hw_diff_press_sp with its unit declared as inH2O (and HWL_DP as hw_diff_press, inH2O, as Table 2 says).
+
+#### Pump 2's power has negative spikes in the fault-free run
+
+- **Issue:** `negative-pump-power-spikes`
+- **Columns:** `PM_POW_2`
+- **Evidence:** Fault-free PM_POW_2 reaches -102,400.7 kW (2018-12-15 11:19, pump 2 off); 40 rows are below -1 kW and 13 below -1,000 kW. (The literal 'NAN' pump-power entries in eight runs are documented by the inventory's Table 4 footnote.)
+- **Contradicts:** Boiler-plant inventory Table 2 (PM_POW: power consumption of pump, kW) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; pump power is not mapped to a role in this entry.
+
+#### hot_water_temp_bias biases the loop return, not the supply
+
+- **Issue:** `loop-temp-bias-is-on-the-return`
+- **Columns:** `HWL_RW_TEMP`, `HWL_SW_TEMP`
+- **Evidence:** In the four hot_water_temp_bias runs HWL_RW_TEMP moves by -7.2 / -3.6 / +3.6 / +7.2 F (median difference from the fault-free run for -4 / -2 / +2 / +4 C) and HWL_SW_TEMP by 0.0.
+- **Contradicts:** Boiler-plant inventory Tables 3-4 (bias of the hot water leaving temperature sensor of the hot water loop) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Scored under the published label; read these runs as a loop return-temperature sensor bias.
+
+#### The boiler and loop-DP bias faults are hidden in their own sensors
+
+- **Issue:** `where-the-bias-faults-show`
+- **Columns:** `BOI_SW_TEMP_1`, `HWL_SW_TEMP`, `HWL_DP`, `PM_SPD_1`
+- **Evidence:** The controlled sensors keep reading their setpoints: in the boiler_bias runs BOI_SW_TEMP_1 stays at 176 F while the loop supply HWL_SW_TEMP moves by +7.2 / +3.6 / -3.6 / -7.2 F (-4 / -2 / +2 / +4 C); in the hot_water_pressure_bias runs HWL_DP stays at its setpoint (median difference 0.0) and pump 1's speed moves by +0.034 / +0.016 / -0.013 / -0.025 (-20 / -10 / +10 / +20%).
+- **Contradicts:** Boiler-plant inventory section 3 (for sensor bias faults the logged value of the faulty sensor is the faulty value) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: a rule looking for these faults must read the other column (HWL_SW_TEMP, PM_SPD_1).
 
 ### `bdg2`: Building Data Genome 2 (whole-building meters)
 
