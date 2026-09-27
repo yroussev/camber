@@ -1154,7 +1154,7 @@ def _adjust_side(side: _Side, items, *, threshold, allow_rows_ops: bool) -> dict
                     # any measured event rows), so the saving is the event-free comparison and
                     # its variance is the joint one of the refit, not the entry's in quadrature
                     d_meas_rows = rep_refit["d_meas"]
-                    R = rep_refit["P_w"] + (d + d_meas_rows) * float(a.fit.beta[-1])
+                    R = rep_refit["P_w"] + (d + d_meas_rows) * rep_refit["b_ind"]
                     var_r = rep_refit["var"]
                     B += amount
                     book(i, a, amount, se, label, {**extra, "reporting_model_refit": True})
@@ -1304,7 +1304,13 @@ def _reporting_refit(side: _Side, order, caveats: list, *, allow_rows_ops: bool,
         f"{pre}the reporting model was refitted with the indicator (p + 1, joint covariance): "
         "the band is the exact OLS kernel of the refit"
     )
-    return {"position": i, "P_w": float(g[:-1] @ beta[:-1]), "d_meas": float(g[-1]), "var": var}
+    return {
+        "position": i,
+        "P_w": float(g[:-1] @ beta[:-1]),
+        "b_ind": float(beta[-1]),
+        "d_meas": float(g[-1]),
+        "var": var,
+    }
 
 
 # ----------------------------------------------------------------- sides of each result type
