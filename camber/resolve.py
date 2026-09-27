@@ -339,7 +339,10 @@ def _resolve_store(ref: StoreEquipRef, roles, resample: str | None) -> pd.DataFr
         frame = pd.concat(cols, axis=1)
     else:
         frame = frame.copy()
-    return normalize_percent_frame(frame)
+    out = normalize_percent_frame(frame)
+    if full.attrs:
+        out.attrs.update(full.attrs)  # dataset provenance (camber._provenance)
+    return out
 
 
 def _candidate_tokens(folder: str, equip: str):

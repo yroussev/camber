@@ -312,6 +312,108 @@ def test_research_only_gate_ledger_and_banner(ahu):
     assert RESEARCH_ONLY_BANNER in res.report.to_html()
 
 
+def _research_only(entry, licence="CC-BY-NC-4.0"):
+    d = entry.as_dict()
+    d.update(licence=licence, access="research_only")
+    return DatasetEntry.from_dict(d)
+
+
+def test_research_only_ack_is_in_ledger_and_manifest_before_any_download(ahu):
+    entry, _opener, _tmp = ahu
+    ro = _research_only(entry)
+
+    class Boom(FakeOpener):
+        def open(self, req, timeout=None):
+            raise OSError("network down")
+
+    with pytest.raises(Exception):  # noqa: B017 - the download fails, the acceptance stands
+        _ops.fetch_dataset(ro, opener=Boom({}), accept_noncommercial=True)
+    root = _paths.data_dir()
+    ledger = _paths.read_acknowledgements(root)
+    assert [r["via"] for r in ledger] == ["fetch"]
+    assert ledger[0]["statement"].startswith("accepted: research / non-commercial")
+    man = _paths.read_manifest(root)["test-ahu"]
+    assert man["acknowledged_licence"] == "CC-BY-NC-4.0" and man["acknowledged_at"]
+
+
+def test_research_only_every_fetch_needs_the_flag_and_every_acceptance_is_logged(ahu):
+    entry, opener, _tmp = ahu
+    ro = _research_only(entry)
+    _ops.fetch_dataset(ro, opener=opener, accept_noncommercial=True)
+    with pytest.raises(PermissionError):  # an earlier acceptance is not a standing licence
+        _ops.fetch_dataset(ro, opener=opener)
+    _ops.fetch_dataset(ro, opener=opener, accept_noncommercial=True)
+    assert len(_paths.read_acknowledgements(_paths.data_dir())) == 2
+
+
+def test_research_only_ingest_needs_an_acknowledgement_of_the_current_licence(ahu):
+    entry, opener, tmp = ahu
+    _ops.fetch_dataset(entry, opener=opener)  # fetched while the entry was open
+    ro = _research_only(entry)
+    store = str(tmp / "store")
+    with pytest.raises(PermissionError, match="ingest it"):
+        _ingest.ingest_dataset(ro, store)
+    # an acknowledgement of a different licence does not carry over
+    _ops.fetch_dataset(
+        _research_only(entry, "CC-BY-NC-SA-4.0"), opener=opener, **{"accept_noncommercial": True}
+    )
+    with pytest.raises(PermissionError):
+        _ingest.ingest_dataset(ro, store)
+    res = _ingest.ingest_dataset(ro, store, accept_noncommercial=True)
+    assert not res.skipped
+    meta = ParquetStore(store).facilities_meta()["ds-test-ahu"]["dataset"]
+    assert meta["access"] == "research_only" and meta["redistribution"] == "prohibited"
+    assert meta["acknowledged_licence"] == "CC-BY-NC-4.0"
+    vias = [r["via"] for r in _paths.read_acknowledgements(_paths.data_dir())]
+    assert vias == ["fetch", "ingest"]
+
+
+def test_research_only_banner_on_every_report_built_from_the_store(ahu):
+    from camber._provenance import PROVENANCE_ATTR
+    from camber.report.dashboard import build_dashboard
+    from camber.report.site import build_site_report
+    from camber.resolve import StoreEquipRef, resolve
+
+    entry, opener, tmp = ahu
+    ro = _research_only(entry)
+    _ops.fetch_dataset(ro, opener=opener, accept_noncommercial=True)
+    store = str(tmp / "store")
+    _ingest.ingest_dataset(ro, store)
+    st = ParquetStore(store)
+    frame = st.read_role_frame(facility_id="ds-test-ahu", equip="AHU__fault_free")
+    assert frame.attrs[PROVENANCE_ATTR][0]["access"] == "research_only"
+    ref = StoreEquipRef("AHU__fault_free", "AHU", "ds-test-ahu", store)
+    resolved = resolve(ref, None, [Role.OAT, Role.SUPPLY_AIR_TEMP], resample="1h")
+    assert resolved.attrs[PROVENANCE_ATTR][0]["redistribution"] == "prohibited"
+    # site report + dashboard: the banner comes from the frame when no data_sources are passed
+    for html in (
+        build_dashboard(frame, sections=()),
+        build_site_report(frame, sections=()),
+    ):
+        assert RESEARCH_ONLY_BANNER in html
+    # ... and an explicit empty list still means "no provenance block"
+    assert RESEARCH_ONLY_BANNER not in build_dashboard(frame, sections=(), data_sources=[])
+    # audit (run_config) and the config-level data_sources used by the drift / RCx CLI paths
+    from camber.config import data_sources
+
+    cfg = _ops.build_config(ro, store)
+    assert run_config(cfg).report is not None
+    assert RESEARCH_ONLY_BANNER in run_config(cfg).report.to_html()
+    assert data_sources(cfg)[0]["access"] == "research_only"
+
+
+def test_open_data_frames_carry_no_banner(ahu):
+    from camber.report.dashboard import build_dashboard
+
+    entry, opener, tmp = ahu
+    _ops.fetch_dataset(entry, opener=opener)
+    store = str(tmp / "store")
+    _ingest.ingest_dataset(entry, store)
+    frame = ParquetStore(store).read_role_frame(facility_id="ds-test-ahu", equip="AHU__fault_free")
+    html = build_dashboard(frame, sections=())
+    assert "CC-BY-4.0" in html and RESEARCH_ONLY_BANNER not in html
+
+
 # --------------------------------------------------------------------------- ingest
 
 
@@ -773,6 +875,60 @@ def test_cli_exit_codes(cli_catalog, monkeypatch, capsys):
     assert main(["datasets", "ingest", "test-ahu", "--store", store, "--subset", "full"]) == 1
     err = capsys.readouterr().err
     assert "needs about 2.0 MB in the store" in err and "(full)" in err
+
+
+def test_cli_research_only_tier(cli_catalog, monkeypatch, capsys):
+    from camber.cli import main
+
+    entry, opener, tmp = cli_catalog
+    ro = _research_only(entry)
+    monkeypatch.setattr(ds, "_entries", lambda: (entry, _renamed(ro, "test-nc")))
+    assert main(["datasets", "list"]) == 0
+    out = capsys.readouterr().out
+    assert "research-only" in out and "open" in out and "--accept-noncommercial" in out
+    assert main(["datasets", "info", "test-nc"]) == 0
+    assert "tier: research-only" in capsys.readouterr().out
+    # --all is the open tier only: the research-only entry is not fetched
+    assert main(["datasets", "fetch", "--all", "--quiet"]) == 0
+    out = capsys.readouterr().out
+    assert "fetching test-ahu" in out and "test-nc" not in out
+    # --licence all without the acknowledgement: refused before anything is downloaded
+    calls = len(opener.calls)
+    assert main(["datasets", "fetch", "--all", "--licence", "all", "--quiet"]) == 3
+    assert "--accept-noncommercial" in capsys.readouterr().err and len(opener.calls) == calls
+    # a named research-only id with an open one: the gate runs first, nothing is fetched
+    assert main(["datasets", "fetch", "test-ahu", "test-nc", "--quiet"]) == 3
+    assert "Nothing was downloaded" in capsys.readouterr().err
+    # --accept-noncommercial alone does not widen --all
+    assert main(["datasets", "fetch", "--all", "--accept-noncommercial", "--quiet"]) == 0
+    assert "open tier only" in capsys.readouterr().out
+    assert _paths.read_acknowledgements(_paths.data_dir()) == []
+    # both flags: research-only data too, acknowledged
+    argv = ["datasets", "fetch", "--all", "--licence", "all", "--accept-noncommercial", "--quiet"]
+    assert main(argv) == 0
+    assert "licence acknowledged: CC-BY-NC-4.0" in capsys.readouterr().out
+    store = str(tmp / "store")
+    assert main(["datasets", "ingest", "test-nc", "--store", store, "--quiet"]) == 0
+    assert "redistribution prohibited" in capsys.readouterr().out
+
+
+def test_cli_no_env_var_bypasses_the_gate(cli_catalog, monkeypatch):
+    from camber.cli import main
+
+    entry, _opener, _tmp = cli_catalog
+    monkeypatch.setattr(ds, "_entries", lambda: (_research_only(entry),))
+    for var in ("CAMBER_ACCEPT_NONCOMMERCIAL", "ACCEPT_NONCOMMERCIAL", "CAMBER_ACCEPT_LICENCE"):
+        monkeypatch.setenv(var, "1")
+    assert main(["datasets", "fetch", "test-ahu", "--quiet"]) == 3
+    with pytest.raises(PermissionError):
+        ds.fetch("test-ahu")
+
+
+def _renamed(entry, new_id):
+    d = entry.as_dict()
+    d["id"] = new_id
+    d["ingest"] = dict(d["ingest"], facility=f"ds-{new_id}")
+    return DatasetEntry.from_dict(d)
 
 
 def test_public_api_wrappers(ahu, monkeypatch):

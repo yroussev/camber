@@ -342,34 +342,10 @@ def _source_kind(source: dict) -> str:
 
 
 def _provenance(meta: dict, facility_id: str) -> dict:
-    """The report-facing provenance of a store facility (empty when it has none recorded).
+    """The report-facing provenance of a store facility (see :mod:`camber._provenance`)."""
+    from ._provenance import facility_provenance
 
-    Provenance lives under the registry entry's namespaced ``"dataset"`` key (written by
-    ``camber datasets ingest``), so other facility metadata can sit beside it without collisions.
-    """
-    meta = meta.get("dataset") or {}
-    if not isinstance(meta, dict):
-        return {}
-    keys = (
-        "dataset_id",
-        "title",
-        "publisher",
-        "licence",
-        "access",
-        "citation",
-        "dois",
-        "landing_url",
-        "attribution_required",
-        "redistribution",
-        "fetched_at",
-        "content_hash",
-        "known_issues",
-    )
-    src = {k: meta[k] for k in keys if k in meta}
-    if not src:
-        return {}
-    src.setdefault("facility_id", facility_id)
-    return src
+    return facility_provenance(meta, facility_id)
 
 
 def _prepare_store(config: dict, base_dir: str) -> _Prepared:

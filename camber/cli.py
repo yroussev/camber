@@ -481,15 +481,26 @@ def _cmd_datasets_list(args) -> int:
     if args.json:
         print(json.dumps([e.as_dict() for e in rows], indent=2))
         return 0
-    head = f"{'id':14s} {'licence':16s} {'access':13s} {'kind':9s} {'labels':6s} {'default':>9s}"
+    head = f"{'id':14s} {'tier':13s} {'licence':16s} {'kind':9s} {'labels':6s} {'default':>9s}"
     print(f"{head}  title")
     for e in rows:
         print(
-            f"{e.id:14s} {e.licence:16s} {e.access:13s} {e.kind:9s} "
-            f"{'yes' if e.labeled_faults else 'no':6s} {_mb(e.download_bytes()):>9s}  {e.title}"
+            f"{e.id:14s} {_ds_tier(e):13s} {e.licence:16s} {e.kind:9s} "
+            f"{'yes' if e.labeled_faults else 'no':6s} {_mb(e.download_bytes()):>9s}  "
+            f"{e.title}"
         )
     print(f"\n{len(rows)} dataset(s). `camber datasets info <id>` for details and citation.")
+    if any(e.research_only for e in rows):
+        print(
+            "research-only: NC/ND licence -- fetch needs --accept-noncommercial (recorded), and "
+            "every report built from it carries a non-commercial / do-not-redistribute banner."
+        )
     return 0
+
+
+def _ds_tier(e) -> str:
+    """The licence tier shown by `datasets list`: ``open`` or ``research-only``."""
+    return "research-only" if e.research_only else "open"
 
 
 @_ds_errors
@@ -502,7 +513,15 @@ def _cmd_datasets_info(args) -> int:
         return 0
     print(f"{e.title}  [{e.id}]\n\n{e.summary}\n")
     print(f"publisher : {e.publisher}")
-    print(f"licence   : {e.licence} ({e.access})" + ("  share-alike" if e.share_alike else ""))
+    print(
+        f"licence   : {e.licence} (tier: {_ds_tier(e)})"
+        + ("  share-alike" if e.share_alike else "")
+    )
+    if e.research_only:
+        print(
+            "            research / non-commercial use only; no redistribution. Fetch needs "
+            "--accept-noncommercial."
+        )
     print(f"source    : {e.landing_url}")
     print(f"cite      : {e.citation}")
     if e.dois:
@@ -591,7 +610,27 @@ def _cmd_datasets_fetch(args) -> int:
     if not args.all and not args.ids:
         print("error: name dataset id(s) or pass --all", file=sys.stderr)
         return 1
+    if args.all and args.licence == "all" and not args.accept_noncommercial:
+        print(
+            "error: --all --licence all includes research-only (NC/ND) datasets; add "
+            "--accept-noncommercial to acknowledge their licences, or drop --licence all to "
+            "fetch the open tier only",
+            file=sys.stderr,
+        )
+        return _DS_EXIT_LICENCE
     entries = _ds_entries(args, include_research=args.licence == "all")
+    # the licence gate runs for every named dataset before anything is downloaded
+    blocked = [e.id for e in entries if e.research_only and not args.accept_noncommercial]
+    if blocked:
+        print(
+            f"error: {', '.join(blocked)}: research / non-commercial use only (NC/ND licence) and "
+            "may not be redistributed; pass --accept-noncommercial to acknowledge the licence "
+            "(recorded in acknowledgements.json). Nothing was downloaded.",
+            file=sys.stderr,
+        )
+        return _DS_EXIT_LICENCE
+    if args.all and args.accept_noncommercial and args.licence != "all":
+        print("note: --all fetches the open tier only; add --licence all for research-only data")
     for e in entries:
         print(f"fetching {e.id} ({args.subset or 'default'}, {_mb(e.download_bytes(args.subset))})")
         res = ds.fetch(
@@ -637,6 +676,7 @@ def _cmd_datasets_ingest(args) -> int:
             force=args.force,
             progress=None if args.quiet else (lambda m: print(f"  {m}", file=sys.stderr)),
             corrections=corrections,
+            accept_noncommercial=args.accept_noncommercial,
         )
         if res.skipped:
             print(f"{e.id}: up to date in {res.store} ({', '.join(res.facilities)}) -- skipped")
@@ -646,6 +686,11 @@ def _cmd_datasets_ingest(args) -> int:
             f"{e.id}: ingested {res.rows:,} rows, {res.equipment} equipment into "
             f"{', '.join(res.facilities)} ({res.store}){mode}"
         )
+        if e.research_only:
+            print(
+                f"  {e.licence}: research / non-commercial use only, redistribution prohibited; "
+                "every report built from it carries that banner"
+            )
         for n in res.notes:
             print(f"  quirk {n}")
         for w in res.warnings:
@@ -1544,6 +1589,13 @@ def _build_parser() -> argparse.ArgumentParser:
     _targets(dsg, fetching=False)
     dsg.add_argument("--store", required=True, help="ParquetStore directory")
     dsg.add_argument("--force", action="store_true", help="re-ingest even if unchanged")
+    dsg.add_argument(
+        "--accept-noncommercial",
+        dest="accept_noncommercial",
+        action="store_true",
+        help="acknowledge a research-only (NC/ND) licence when no fetch recorded one "
+        "(recorded in acknowledgements.json)",
+    )
     dsg.add_argument(
         "--no-corrections",
         dest="no_corrections",

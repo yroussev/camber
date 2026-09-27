@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, field
 
 from .. import __version__
 from ..store import ParquetStore
-from . import _paths
+from . import _licence, _paths
 from ._catalog import DatasetEntry, package_text
 from ._fetch import check_disk, download, human_bytes, sha256_file
 from ._ingest import dataset_meta
@@ -77,13 +77,13 @@ def fetch_dataset(
     sname = subset or "default"
     files = entry.subset_files(sname)
     if entry.research_only and not accept_noncommercial:
-        raise PermissionError(
-            f"{entry.id} is licensed {entry.licence}: research / non-commercial use only, and it "
-            "may not be redistributed. Pass accept_noncommercial=True "
-            "(CLI: --accept-noncommercial) to acknowledge the licence and download it."
-        )
+        # every fetch of research-only data is an explicit act, even when an earlier one was
+        # acknowledged: nothing is downloaded before the gate
+        raise _licence.refusal(entry, "download")
     root = _paths.data_dir(data_dir)
     check_disk(_paths.downloads_dir(root, entry.id), _pending_bytes(root, entry, files))
+    if entry.research_only:  # recorded before the first byte is downloaded
+        _licence.acknowledge(root, entry, subset=sname, via="fetch")
     res = FetchResult(
         dataset_id=entry.id,
         subset=sname,
@@ -139,19 +139,7 @@ def fetch_dataset(
             "camber_version": __version__,
         }
     )
-    if entry.research_only:
-        ack = _paths.append_acknowledgement(
-            root,
-            {
-                "dataset_id": entry.id,
-                "licence": entry.licence,
-                "subset": sname,
-                "camber_version": __version__,
-                "statement": "accepted: research / non-commercial use only; no redistribution",
-            },
-        )
-        rec["acknowledged_at"] = ack["accepted_at"]
-        res.acknowledged = True
+    res.acknowledged = entry.research_only
     manifest[entry.id] = rec
     _paths.write_manifest(root, manifest)
     return res

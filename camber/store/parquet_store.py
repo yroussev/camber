@@ -354,6 +354,13 @@ class ParquetStore:
         slug_to_role = {r.value: r for r in Role}
         wide.columns = [slug_to_role.get(c, c) for c in wide.columns]
         wide.index.name = None
+        # dataset provenance travels with the frame, so a report built from it shows the licence
+        # (and the research-only banner) even when the caller passes no data_sources
+        from .._provenance import PROVENANCE_ATTR, facility_provenance
+
+        prov = facility_provenance(self.facilities_meta().get(facility_id, {}), facility_id)
+        if prov:
+            wide.attrs[PROVENANCE_ATTR] = [prov]
         return wide
 
     # --------------------------------------------------------------- catalog

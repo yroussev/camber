@@ -48,7 +48,7 @@ from ..model.mapping import MappingProvider
 from ..model.roles import Role
 from ..store import FacilityRegistry, ParquetStore
 from ..units import normalize_percent_frame
-from . import _paths
+from . import _licence, _paths
 from ._archive import archive_kind, safe_extract
 from ._catalog import DatasetEntry, package_text
 from ._fetch import check_disk, sha256_file
@@ -416,6 +416,7 @@ def _base_meta(entry: DatasetEntry, root: str, subset: str, shas: dict, chash: s
     )
     if man.get("acknowledged_at"):
         meta["acknowledgement"] = man["acknowledged_at"]
+        meta["acknowledged_licence"] = man.get("acknowledged_licence", entry.licence)
     return meta
 
 
@@ -579,15 +580,27 @@ def ingest_dataset(
     force: bool = False,
     progress: Callable[[str], None] | None = None,
     corrections: bool = True,
+    accept_noncommercial: bool = False,
 ) -> IngestResult:
     """Ingest a fetched dataset into ``store`` (path or :class:`ParquetStore`); see the module.
 
-    ``corrections=False`` skips the entry's ``fix`` quirks and ingests the data as published.
+    ``corrections=False`` skips the entry's ``fix`` quirks and ingests the data as published. A
+    research-only entry needs an acknowledgement of its current licence in the cache manifest (a
+    ``fetch`` with ``accept_noncommercial``) or ``accept_noncommercial=True`` here, which records
+    one; otherwise ``PermissionError``.
     """
     st = store if isinstance(store, ParquetStore) else ParquetStore(os.fspath(store))
     sname = subset or "default"
     entry.subset(sname)  # KeyError on an unknown subset, before any work
     root = _paths.data_dir(data_dir)
+    _licence.require(
+        root,
+        entry,
+        accept_noncommercial=accept_noncommercial,
+        subset=sname,
+        via="ingest",
+        action="ingest",
+    )
     inputs = verified_inputs(entry, sname, root)
     shas = {k: v[1] for k, v in inputs.items()}
     mapping_text = (

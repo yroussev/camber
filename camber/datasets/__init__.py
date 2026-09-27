@@ -126,13 +126,16 @@ def ingest(
     force: bool = False,
     progress=None,
     corrections: bool = True,
+    accept_noncommercial: bool = False,
 ) -> IngestResult:
     """Normalize a fetched dataset subset into ``store`` (path or ParquetStore).
 
     Idempotent: identical inputs are skipped unless ``force``; a changed subset/spec replaces the
     dataset's facilities atomically. ``corrections=False`` skips the entry's ``fix`` quirks and
     ingests the data exactly as published (recorded in the provenance; the entry's data issues say
-    what each fix corrects). See :mod:`camber.datasets._ingest`.
+    what each fix corrects). A research-only dataset needs its licence acknowledged -- by the
+    ``fetch`` that downloaded it, or ``accept_noncommercial=True`` here -- else ``PermissionError``;
+    its facilities record ``redistribution: "prohibited"``. See :mod:`camber.datasets._ingest`.
     """
     return ingest_dataset(
         get(dataset_id),
@@ -142,6 +145,7 @@ def ingest(
         force=force,
         progress=progress,
         corrections=corrections,
+        accept_noncommercial=accept_noncommercial,
     )
 
 

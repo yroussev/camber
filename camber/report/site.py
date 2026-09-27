@@ -91,12 +91,18 @@ def build_site_report(
 
     ``data_sources`` (provenance dicts, see :func:`camber.config.data_sources`) adds the "Data
     source & licence" block first in the body -- with the research-only banner for NC / ND data.
+    When it is ``None``, the provenance a store read stamped on ``df`` is used
+    (:func:`camber._provenance.frame_sources`), so store-backed data never loses its banner.
     """
     style = _STYLE + _SC_STYLE
     parts = [
         f"<!doctype html><html><head><meta charset='utf-8'><style>{style}</style>"
         f"<title>{_html.escape(title)}</title></head><body>",
     ]
+    if data_sources is None:  # a frame read from a store carries its dataset provenance
+        from .._provenance import frame_sources
+
+        data_sources = frame_sources(df)
     src = data_sources_html(data_sources)
     if src:
         parts.append(src)
