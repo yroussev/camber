@@ -179,9 +179,13 @@ def fit_frame_sha256(daily: pd.DataFrame, columns=("oat", "energy")) -> str:
 
     Recomputing it over the same window later tells whether the data under a frozen baseline has
     changed since (a re-ingest, a correction) -- a stored model is then no longer reproducible.
+    The driver columns of a change-point + driver entry (``drv:...``) are hashed after
+    ``columns``; a frame without them hashes exactly as before.
     """
+    from ._mvform import driver_columns
+
     h = hashlib.sha256()
-    cols = [c for c in columns if c in daily.columns]
+    cols = [c for c in columns if c in daily.columns] + driver_columns(daily)
     for ts, row in zip(daily.index, daily[cols].itertuples(index=False)):
         vals = ",".join(repr(float(v)) for v in row)
         h.update(f"{pd.Timestamp(ts).isoformat()},{vals}\n".encode())
@@ -703,10 +707,11 @@ def _savings_steps(rep: pd.DataFrame, model, pol: RebaselinePolicy, max_steps: i
     ``delta_rel`` (the level change), ``delta`` (that change in energy per day at the post-step
     projection), its rho-inflated standard error and ``z``.
     """
+    from ._mvform import design_rows
     from .nonroutine import _pelt, _pelt_capped, _segment_ids
     from .stats import lag1_autocorrelation
 
-    pred = np.asarray(model.predict(rep["oat"].to_numpy(float)), dtype=float)
+    pred = np.asarray(model.predict(design_rows(rep, model)), dtype=float)
     ok = np.isfinite(pred) & (pred > 0) & np.isfinite(rep["energy"].to_numpy(float))
     if ok.sum() < 2 * pol.min_segment_days:
         return []
@@ -906,8 +911,10 @@ def assess_triggers(
             )
         )
     if len(rep):
+        from ._mvform import design_rows
+
         cov = assess_coverage(
-            model, rep["oat"].to_numpy(float), policy=extrapolation or ExtrapolationPolicy()
+            model, design_rows(rep, model), policy=extrapolation or ExtrapolationPolicy()
         )
         if cov.tier == "severe":
             out.append(
@@ -1069,8 +1076,8 @@ def _overlaps(a0, a1, wins) -> tuple | None:
 
 
 def _fit_window(sub: pd.DataFrame, pol: RebaselinePolicy, expected, extrapolation):
+    from . import _mvform
     from .coverage import ExtrapolationPolicy, assess_coverage
-    from .models import N_PARAMS, best_model
     from .stats import (
         cv_rmse_max_for,
         fit_stats,
@@ -1079,15 +1086,15 @@ def _fit_window(sub: pd.DataFrame, pol: RebaselinePolicy, expected, extrapolatio
         sep_validity,
     )
 
-    T = sub["oat"].to_numpy(float)
     y = sub["energy"].to_numpy(float)
-    model = best_model(T, y, time_index=sub.index)
+    model = _mvform.fit(sub)  # the entry's form: the frame carries its driver columns
     if model is None:
         raise ValueError("no change-point model could be fitted")
+    T = _mvform.design_rows(sub, model)
     st = fit_stats(
         y,
         model.predict(T),
-        N_PARAMS[model.kind],
+        _mvform.n_params(model),
         cv_rmse_max=cv_rmse_max_for("daily"),
         time_index=sub.index,
     )
@@ -1096,9 +1103,8 @@ def _fit_window(sub: pd.DataFrame, pol: RebaselinePolicy, expected, extrapolatio
     need = {"g14": (st.accept,), "sep": (vd.sep_valid,), "both": (st.accept, vd.sep_valid)}
     valid = all(need[pol.require_validity])
     exp = np.asarray(expected, dtype=float) if expected is not None else T
-    cov = assess_coverage(
-        model, exp[np.isfinite(exp)], policy=extrapolation or ExtrapolationPolicy()
-    )
+    ok = np.isfinite(exp) if exp.ndim == 1 else np.all(np.isfinite(exp), axis=1)
+    cov = assess_coverage(model, exp[ok], policy=extrapolation or ExtrapolationPolicy())
     return model, st, tests, vd, valid, cov
 
 

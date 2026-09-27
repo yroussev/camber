@@ -552,17 +552,17 @@ def _mv_savings_finding(
 
     With ``ctx`` (the entry's run context) the finding also carries the entry's validity verdicts
     and, when it declares ``adjustments``, the adjusted saving (#21 phases 21b / 21c)."""
+    from .mandv import _mvform
     from .mandv.methods import forecast_savings
-    from .mandv.models import N_PARAMS
     from .rules.base import Finding
 
     res = forecast_savings(
         model,
-        daily_r["oat"].values,
+        _mvform.design_rows(daily_r, model),
         daily_r["energy"].values,
         cv_rmse=st.cv_rmse,
         n_baseline=st.n,
-        p_baseline=N_PARAMS[model.kind],
+        p_baseline=_mvform.n_params(model),
         rho=st.rho_lag1,
         extrapolation=policy,
         kernel=kernel,
@@ -604,7 +604,7 @@ def _mv_savings_finding(
         if _mv_has_ledger(ctx):
             rows = {
                 "index": daily_r.index,
-                "drivers": daily_r["oat"].values,
+                "drivers": _mvform.design_rows(daily_r, model),
                 "measured": daily_r["energy"].values,
                 "model": model,
             }
@@ -692,12 +692,17 @@ def _mv_method_metrics(res, declared: bool) -> dict:
     }
 
 
-def _mv_daily(full, role, win):
+def _mv_daily(full, role, win, entry: dict | None = None):
+    """Daily energy vs temperature over ``win``, with the entry's driver columns (if any)."""
     frame = full.loc[win[0] : win[1]]
     e, t = frame[role].dropna(), frame[Role.OAT].dropna()
+    from .mandv import _mvform
     from .mandv.intervalfit import daily_energy_vs_temp
 
-    return daily_energy_vs_temp(e, t) if len(e) and len(t) else None
+    if not (len(e) and len(t)):
+        return None
+    daily = daily_energy_vs_temp(e, t)
+    return _mvform.add_drivers(daily, entry, frame) if entry is not None else daily
 
 
 # --------------------------------------------------------------------------- mv validity
@@ -718,6 +723,7 @@ def _mv_validity(entry: dict) -> str:
 def _mv_validity_metrics(ctx: dict, models: list, metrics: dict, caveats: list) -> None:
     """Record ``validity`` and, under ``sep`` / ``both``, each projecting model's SEP verdict
     (SEP 2019 Ed. 2 §6.4.1). The G14 acceptance caveat is recorded separately, always."""
+    from .mandv import _mvform
     from .mandv.stats import logical_signs, model_regression_tests, sep_validity
 
     validity = ctx["validity"]
@@ -728,7 +734,10 @@ def _mv_validity_metrics(ctx: dict, models: list, metrics: dict, caveats: list) 
     for role, model, frame in models:
         try:
             tests = model_regression_tests(
-                model, frame["oat"].values, frame["energy"].values, time_index=frame.index
+                model,
+                _mvform.design_rows(frame, model),
+                frame["energy"].values,
+                time_index=frame.index,
             )
             vd = sep_validity(tests, signs=logical_signs(model))
             verdicts[role] = {"sep_valid": bool(vd.sep_valid), "sep_failures": list(vd.failures)}
@@ -753,18 +762,20 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
     """One ``mv_savings`` Finding by a declared non-forecast SEP method."""
     import numpy as np
 
+    from .mandv import _mvform
     from .mandv import methods as mm
-    from .mandv.models import N_PARAMS, best_model
+    from .mandv.models import N_PARAMS
     from .mandv.stats import fit_stats
     from .rules.base import Finding
 
     equip, entry, policy = ctx["equip"], ctx["entry"], ctx["policy"]
     daily_b, daily_r, model = ctx["daily"], ctx["daily_r"], ctx["model"]
+    X = _mvform.design_rows
 
     def fit(d):
-        m = best_model(d["oat"].values, d["energy"].values, time_index=d.index)
+        m = _mvform.fit(d)
         st = fit_stats(
-            d["energy"].values, m.predict(d["oat"].values), N_PARAMS[m.kind], time_index=d.index
+            d["energy"].values, m.predict(X(d, m)), _mvform.n_params(m), time_index=d.index
         )
         return m, st
 
@@ -772,21 +783,22 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         mr, st_r = fit(daily_r)
         res = mm.backcast_savings(
             mr,
-            daily_b["oat"].values,
+            X(daily_b, mr),
             daily_b["energy"].values,
             cv_rmse=st_r.cv_rmse,
             n_reporting=st_r.n,
-            p_reporting=N_PARAMS[mr.kind],
+            p_reporting=_mvform.n_params(mr),
             rho=st_r.rho_lag1,
             extrapolation=policy,
             kernel=kernel,
             baseline_version=ctx.get("baseline_version"),
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
+        model_note.update({f"reporting_{k}": v for k, v in _mvform.metrics(mr).items()})
         used = [("reporting", mr, daily_r)]
         rows = {
             "index": daily_b.index,
-            "drivers": daily_b["oat"].values,
+            "drivers": X(daily_b, mr),
             "measured": daily_b["energy"].values,
             "model": mr,
             "reporting_index": daily_r.index,
@@ -794,15 +806,15 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         fits = {"baseline": (daily_b, mr), "reporting": (daily_r, mr)}
     elif method == "chaining":
         inter = _mv_window(entry, "intermediate_period")
-        daily_i = _mv_daily(ctx["full"], ctx["role"], inter)
+        daily_i = _mv_daily(ctx["full"], ctx["role"], inter, entry)
         if daily_i is None or len(daily_i) < int(entry.get("min_days", 60)):
             return _mv_declined(equip, "too few intermediate-period days", rule="mv_savings")
         mi, st_i = fit(daily_i)
         res = mm.chained_savings(
             mi,
-            daily_b["oat"].values,
+            X(daily_b, mi),
             daily_b["energy"].values,
-            daily_r["oat"].values,
+            X(daily_r, mi),
             daily_r["energy"].values,
             periods={
                 "baseline": list(ctx["period"]),
@@ -824,14 +836,14 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             "links": [
                 {
                     "index": daily_b.index,
-                    "drivers": daily_b["oat"].values,
+                    "drivers": X(daily_b, mi),
                     "measured": daily_b["energy"].values,
                     "model": mi,
                     "reporting_index": daily_i.index,
                 },
                 {
                     "index": daily_r.index,
-                    "drivers": daily_r["oat"].values,
+                    "drivers": X(daily_r, mi),
                     "measured": daily_r["energy"].values,
                     "model": mi,
                 },
@@ -1046,9 +1058,9 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
 
     The order is fixed: the declared method gives the saving, the ``adjustments`` ledger restates
     it, and the Finding reports both (``auto`` only proposes)."""
+    from .mandv import _mvform
     from .mandv.coverage import ExtrapolationPolicy, support_of
     from .mandv.intervalfit import daily_energy_vs_temp
-    from .mandv.models import N_PARAMS, best_model
     from .mandv.stats import cv_rmse_max_for, fit_stats
     from .rules.base import Finding
 
@@ -1059,6 +1071,8 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     reporting = _mv_window(entry, "reporting_period")
     policy = ExtrapolationPolicy.from_dict(entry.get("extrapolation"))
     method, kernel, declared = _mv_method_spec(entry, period, reporting)
+    _mvform.spec_of(entry)  # mv[].model / drivers: a bad form is a config error, up front
+    extra_roles = _mvform.driver_roles(entry)
     validity = _mv_validity(entry)
     schedule = _mv_schedule(entry)
     if entry.get("rebaseline") is not None:  # a bad policy block is a config error, up front
@@ -1077,13 +1091,17 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings"))
 
     for ref in refs:
-        full = resolve(ref, prep.mapping, (role, Role.OAT), resample="1h")
+        full = resolve(ref, prep.mapping, (role, Role.OAT, *extra_roles), resample="1h")
         full = _merge_shared(full, prep.shared)
         if full is None or full.empty or role not in full.columns:
             declined(ref.equip, f"no {role.value} data")
             continue
         if Role.OAT not in full.columns:
             declined(ref.equip, "no outdoor temperature (oat or shared_oat)")
+            continue
+        miss = [r.value for r in extra_roles if r not in full.columns]
+        if miss:
+            declined(ref.equip, f"no data for the mv.drivers role(s) {miss}")
             continue
         versions = _mv_versions(prep, ref.equip, role)
         if versions:
@@ -1104,16 +1122,22 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             continue
         frame = full.loc[period[0] : period[1]] if period else full
         daily = daily_energy_vs_temp(frame[role].dropna(), frame[Role.OAT].dropna())
+        daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
             declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
             continue
-        model = best_model(daily["oat"].values, daily["energy"].values)
+        if _mvform.driver_columns(daily):
+            model = _mvform.fit(daily)
+        else:  # the change-point form, exactly as before 0.90 (no time index at fit)
+            from .mandv.models import best_model
+
+            model = best_model(daily["oat"].values, daily["energy"].values)
         # the index lets fit_stats estimate the residuals' lag-1 autocorrelation (rho), which
         # the savings band needs; without it rho stays None and the band is unadjusted
         st = fit_stats(
             daily["energy"].values,
-            model.predict(daily["oat"].values),
-            N_PARAMS[model.kind],
+            model.predict(_mvform.design_rows(daily, model)),
+            _mvform.n_params(model),
             cv_rmse_max=cv_max,
             time_index=daily.index,
         )
@@ -1137,9 +1161,12 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     "oat_fit_max": sup["fit_max"],
                     "oat_support_lo": sup["support_lo"],
                     "oat_support_hi": sup["support_hi"],
+                    **_mvform.metrics(model),
                 },
                 summary=(
-                    f"{ref.equip}: {model.kind} baseline, R2 {st.r2:.2f}, CV(RMSE) "
+                    f"{ref.equip}: {model.kind}"
+                    + (f" + {'/'.join(model.driver_names)}" if _mvform.metrics(model) else "")
+                    + f" baseline, R2 {st.r2:.2f}, CV(RMSE) "
                     f"{st.cv_rmse:.1%} over {st.n} days -- {verdict} daily G14 acceptance"
                 ),
             )
@@ -1167,6 +1194,8 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         rframe = full.loc[reporting[0] : reporting[1]]
         r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
         daily_r = daily_energy_vs_temp(r_e, r_t) if len(r_e) and len(r_t) else None
+        if daily_r is not None:
+            daily_r = _mvform.add_drivers(daily_r, entry, rframe)
         if daily_r is None or daily_r.empty:
             out.append(
                 _mv_declined(ref.equip, "no usable reporting-period days", rule="mv_savings")
@@ -1259,6 +1288,7 @@ def _mv_versioned_findings(
     """The ``mv`` Findings of one meter measured against its frozen, versioned baseline."""
     import pandas as pd
 
+    from .mandv import _mvform
     from .mandv.intervalfit import daily_energy_vs_temp
     from .mandv.models import N_PARAMS
     from .mandv.rebaseline import (
@@ -1277,6 +1307,7 @@ def _mv_versioned_findings(
     store = prep.mv_store
     out: list = []
     daily_all = daily_energy_vs_temp(full[role].dropna(), full[Role.OAT].dropna())
+    daily_all = _mvform.add_drivers(daily_all, entry, full)
     reporting = _mv_window(entry, "reporting_period")
     if reporting is None:
         rec = versions[-1]
@@ -1289,10 +1320,15 @@ def _mv_versioned_findings(
     if len(daily) <= N_PARAMS.get(getattr(model, "kind", ""), 5):
         out.append(_mv_declined(equip, f"no data under the frozen baseline {label}'s window"))
         return out
+    try:
+        X = _mvform.design_rows(daily, model)
+    except ValueError as e:
+        out.append(_mv_declined(equip, f"the frozen baseline {label}: {e}"))
+        return out
     st = fit_stats(
         daily["energy"].values,
-        model.predict(daily["oat"].values),
-        N_PARAMS[model.kind],
+        model.predict(X),
+        _mvform.n_params(model),
         cv_rmse_max=cv_rmse_max_for("daily"),
         time_index=daily.index,
     )
@@ -1323,6 +1359,7 @@ def _mv_versioned_findings(
                 "accepted_by": live_rec.accepted_by,
                 "frozen_method": prov.get("method"),
                 "baseline_data_changed": not same,
+                **_mvform.metrics(model),
             },
             summary=(
                 f"{equip}: frozen M&V baseline {label} ({getattr(model, 'kind', '')}, "
@@ -1524,6 +1561,7 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
     """
     import pandas as pd
 
+    from .mandv import _mvform
     from .mandv.adjustments import (
         ConfoundedAdjustment,
         adjustment_from_dict,
@@ -1546,7 +1584,7 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
                 kw["reason"] = kw["reason"] or ""
                 ledger.append(
                     estimate_nre_indicator(
-                        frame["oat"].values,
+                        _mvform.design_rows(frame, model),
                         frame["energy"].values,
                         frame.index,
                         start=start,

@@ -152,6 +152,7 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
     facility finds no meters -- see docs/PORTFOLIO.md.
     """
     from .config import _prepare
+    from .mandv import _mvform
     from .mandv.intervalfit import daily_energy_vs_temp
     from .model.roles import Role
     from .resolve import resolve
@@ -162,15 +163,19 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
     out = []
     for k, entry in enumerate(config.get("mv") or []):
         role = Role(entry.get("role", Role.ENERGY_RATE.value))
+        extra = _mvform.driver_roles(entry)
         for ref in prep.refs_by_class.get(entry["class"], []):
             if want is not None and ref.equip not in want:
                 continue
             full = _merge_shared(
-                resolve(ref, prep.mapping, (role, Role.OAT), resample="1h"), prep.shared
+                resolve(ref, prep.mapping, (role, Role.OAT, *extra), resample="1h"), prep.shared
             )
             if full is None or full.empty or role not in full.columns or Role.OAT not in full:
                 continue
+            if any(r not in full.columns for r in extra):
+                continue
             daily = daily_energy_vs_temp(full[role].dropna(), full[Role.OAT].dropna())
+            daily = _mvform.add_drivers(daily, entry, full)
             out.append(MeterSeries(k, entry, ref.equip, role.value, mv_kind(role), daily))
     return out
 
@@ -197,7 +202,7 @@ def fit_version(daily: pd.DataFrame, period, *, entry: dict, allow_short: bool =
     ``ValueError`` unless ``allow_short`` (then a caveat records it; SEP methods are always
     declined on a short baseline, #21 §1.6.8).
     """
-    from .mandv.models import N_PARAMS, best_model
+    from .mandv import _mvform
     from .mandv.stats import (
         cv_rmse_max_for,
         fit_stats,
@@ -224,18 +229,19 @@ def fit_version(daily: pd.DataFrame, period, *, entry: dict, allow_short: bool =
         caveats.append("short or gappy baseline accepted by override: " + why)
     if len(sub) < 10:
         raise ValueError(f"only {len(sub)} days of data in {period}")
-    T, y = sub["oat"].to_numpy(float), sub["energy"].to_numpy(float)
-    model = best_model(T, y, time_index=sub.index)
+    y = sub["energy"].to_numpy(float)
+    model = _mvform.fit(sub)
     if model is None:
         raise ValueError("no change-point model could be fitted")
+    X = _mvform.design_rows(sub, model)
     st = fit_stats(
         y,
-        model.predict(T),
-        N_PARAMS[model.kind],
+        model.predict(X),
+        _mvform.n_params(model),
         cv_rmse_max=cv_rmse_max_for("daily"),
         time_index=sub.index,
     )
-    tests = model_regression_tests(model, T, y, time_index=sub.index)
+    tests = model_regression_tests(model, X, y, time_index=sub.index)
     vd = sep_validity(tests, signs=logical_signs(model))
     return {
         "model": model,
@@ -556,9 +562,10 @@ def plan_rebaseline(
                 }
             )
             continue
+        from .mandv import _mvform
         from .mandv.coverage import assess_coverage
 
-        cov = assess_coverage(fit["model"], ms.daily["oat"].to_numpy(float))
+        cov = assess_coverage(fit["model"], _mvform.design_rows(ms.daily, fit["model"]))
         if cov.tier == "severe":
             plan.refused.append(
                 {
@@ -610,7 +617,7 @@ def plan_rebaseline(
 
 def _refit_stats(model, fit: dict) -> dict:
     """``fit`` with the statistics of a given (proposed) model over the same frame."""
-    from .mandv.models import N_PARAMS
+    from .mandv import _mvform
     from .mandv.stats import (
         cv_rmse_max_for,
         fit_stats,
@@ -620,11 +627,11 @@ def _refit_stats(model, fit: dict) -> dict:
     )
 
     sub = fit["sub"]
-    T, y = sub["oat"].to_numpy(float), sub["energy"].to_numpy(float)
+    T, y = _mvform.design_rows(sub, model), sub["energy"].to_numpy(float)
     st = fit_stats(
         y,
         model.predict(T),
-        N_PARAMS[model.kind],
+        _mvform.n_params(model),
         cv_rmse_max=cv_rmse_max_for("daily"),
         time_index=sub.index,
     )
@@ -658,6 +665,7 @@ def plan_adjust(
     :func:`~camber.mandv.adjustments.apply_adjustments` (the confounding guard on the entry's ECM
     schedule, SEP's evidence rule under ``validity: sep``) before anything is recorded.
     """
+    from .mandv import _mvform
     from .mandv.adjustments import (
         _check_entries,
         adjustment_from_dict,
@@ -706,7 +714,7 @@ def plan_adjust(
                     frame = b if fp == "baseline" else r
                     entries.append(
                         estimate_nre_indicator(
-                            frame["oat"].values,
+                            _mvform.design_rows(frame, model),
                             frame["energy"].values,
                             frame.index,
                             start=start,
@@ -889,8 +897,8 @@ def chained_report(
     can be dated without row indexes). Returns ``{"facility_id", "skipped_state", "meters":
     [MeterChain, ...]}``.
     """
+    from .mandv import _mvform
     from .mandv.methods import forecast_savings, sequential_chain
-    from .mandv.models import N_PARAMS
     from .mandv.rebaseline import event_phrase, first_block
     from .mandv.stats import fit_stats
 
@@ -957,17 +965,17 @@ def chained_report(
                 )
             st = fit_stats(
                 base["energy"].values,
-                model.predict(base["oat"].values),
-                N_PARAMS[model.kind],
+                model.predict(_mvform.design_rows(base, model)),
+                _mvform.n_params(model),
                 time_index=base.index,
             )
             res = forecast_savings(
                 model,
-                rep["oat"].values,
+                _mvform.design_rows(rep, model),
                 rep["energy"].values,
                 cv_rmse=st.cv_rmse,
                 n_baseline=st.n,
-                p_baseline=N_PARAMS[model.kind],
+                p_baseline=_mvform.n_params(model),
                 rho=st.rho_lag1,
                 kernel=rec.provenance.get("kernel") or "g14",
                 baseline_version=label,
@@ -982,7 +990,7 @@ def chained_report(
                 {"period": [_ds(s0), _ds(s1)], "model_window": [rec.period_start, rec.period_end]}
             )
             adjusted.append(_adjust_link(plan.store, rec, res, rep, model, ms.entry, caveats))
-            proj = pd.Series(model.predict(rep["oat"].values), index=rep.index)
+            proj = pd.Series(model.predict(_mvform.design_rows(rep, model)), index=rep.index)
             frames.append(
                 pd.DataFrame({"version": label, "projected": proj, "actual": rep["energy"]})
             )
@@ -1020,6 +1028,7 @@ def chained_report(
 
 def _adjust_link(store, rec, res, rep, model, entry, caveats):
     """The version's recorded ledger applied to one link (``None`` when there is none)."""
+    from .mandv import _mvform
     from .mandv.adjustments import EcmSchedule, apply_adjustments
 
     led = store.ledger(rec)
@@ -1034,7 +1043,7 @@ def _adjust_link(store, rec, res, rep, model, entry, caveats):
             res,
             mine,
             index=rep.index,
-            drivers=rep["oat"].values,
+            drivers=_mvform.design_rows(rep, model),
             measured=rep["energy"].values,
             model=model,
             schedule=EcmSchedule.from_dict(

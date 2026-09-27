@@ -852,6 +852,30 @@ as one 2-D array and carries the standard fit record, so coverage (per column an
 both savings kernels, `model_regression_tests` / `sep_validity` and `as_dict` / `from_dict` work on
 it unchanged.
 
+**In a config** (0.90), `mv[].model: "cp_driver"` fits this form on every `mv` path — the plain
+run, each declared method, the adjustments ledger and the versioned baselines of `camber mv` —
+instead of the temperature-only change-point model. `mv[].drivers` lists the driver columns:
+
+- `"weekday"` — 1 Monday to Friday, 0 at the weekend;
+- `"occupied_day"` — 1 on `mv[].occupied_weekdays` (default Monday to Friday) except the dates in
+  `mv[].holidays`;
+- the name of any mapped numeric role, e.g. `"occupancy"`: its daily mean. A day without it is
+  left out, and a meter without the role mapped is declined, naming it.
+
+```json
+{"class": "METER", "role": "power", "model": "cp_driver", "drivers": ["occupied_day"],
+ "holidays": ["2019-07-04", "2019-12-25"], "method": "forecast",
+ "period": ["2018-01-01", "2018-12-31"], "reporting_period": ["2019-01-01", "2019-12-31"]}
+```
+
+An occupancy-driven building often fails validity with the temperature-only form: the weekly
+cycle is left in the residuals as noise, and autocorrelated noise at that. The driver form models
+it. The `mv_baseline` finding then carries `model_form`, `drivers` and `driver_coef`. A frozen
+driver model reads its own drivers, and the fit-frame sha256 covers the driver columns. Without
+`mv[].model` nothing changes. `"method": "auto"` (whose proposal ranks temperature-only models) and
+`"standard_conditions"` (whose `normal_year` holds temperatures, not standard driver values) are
+refused with this form.
+
 ## Cross-checking against eemeter
 
 eemeter pulls heavier dependencies, so install it in a **separate environment**

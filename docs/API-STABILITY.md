@@ -136,6 +136,10 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `mv_baselines` retention class and manifest kind, the config keys `mv[].rebaseline` and the
     top-level `mv_store`, the `mv_trigger` finding and the `baseline_version`, `partial` and
     `triggers` metrics on `mv_savings`;
+  - the config keys `mv[].model` (`"change_point"` | `"cp_driver"`), `drivers`,
+    `occupied_weekdays` and `holidays`, and the `model_form`, `drivers` and `driver_coef`
+    metrics they add to `mv_baseline` (0.90; the change-point + driver form of phase 21c on the
+    config path);
   - the `camber mv run | freeze | list | propose | rebaseline | adjust | report` commands and
     their `mv.freeze`, `mv.rebaseline` and `mv.adjust` audit actions.
 
