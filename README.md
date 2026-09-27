@@ -197,8 +197,12 @@ The toolkit is data-agnostic. Two open sources are wired as runnable examples
   test — and which stay synthetic-only — is stated in [VALIDATION.md](docs/VALIDATION.md).
 - **[Building Data Genome Project 2](https://github.com/buds-lab/building-data-genome-project-2)**
   (CC-BY-SA 4.0) — 3,053 whole-building hourly meters. `examples/bdg2/` fits the
-  G14/IPMVP change-point engine (textbook 3PC on cooling energy, R² 0.78–0.94)
-  and ingests the portfolio into the store.
+  G14/IPMVP change-point engine to the publisher's cleaned meters (textbook 3PC on cooling
+  energy, R² 0.70–0.88) and ingests the portfolio into the store.
+
+Both are also in the dataset catalog (`camber datasets`, [DATASETS.md](docs/DATASETS.md)), which
+links each dataset exactly as published and lists every problem found in the published data —
+with its evidence, the documentation it contradicts and how CAMBER handles it.
 
 Each example has a `fetch.py` (downloads to the git-ignored `examples/_data/`) and
 a runnable script. See the per-example READMEs.

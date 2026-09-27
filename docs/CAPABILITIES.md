@@ -90,10 +90,17 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   — occupied space temp outside the heating/cooling band, the operator-facing comfort/capacity
   metric). Per-rule flags (e.g. `threshold`, `min_oa_pct`, `occupied_only`, `tol_F`).
   - *Occupancy.* The schedule-based rules (`night_weekend_setback`, `overcooling_min_flow`,
-    `overcooling_severity`, `reheat_penalty`, `zones_heat_cool_census`, the DCV rules) take a
+    `overcooling_severity`, `reheat_penalty`, `zones_heat_cool_census`, `outdoor_air_fraction`,
+    the DCV rules) take a
     trended `OCCUPANCY` point as the truth — it *replaces* the schedule — and otherwise use
     `start_hour` / `end_hour` / `occupied_days` (default Mon–Fri 07–18, a generic office
     assumption; `camber.schedules.effective_occupied_mask`).
+  - *Fan-on only.* `outdoor_air_fraction` judges fan-on samples by default (`fan_gate=True`: fan
+    status, else fan speed, else airflow — `camber.schedules.fan_on_mask`): with the fan stopped
+    the mixing-box temperatures read still air, not a mix. A unit with no fan signal is judged
+    ungated and the finding says so. Its `min_oa_pct` is the unit's own design minimum (confirm it
+    against the sequence — a 10 % minimum *damper position* can be a 1.6 % OA *fraction*), and
+    `min_oa_pct_by_month` sets a seasonal one.
   - *Terminal air temperatures.* At a VAV/CAV box `SUPPLY_AIR_TEMP` is the box **discharge**
     (downstream of its reheat coil) and the **entering primary air** is mapped to
     `MIXED_AIR_TEMP`. `reheat_penalty` judges "reheat into cold supply" on the entering air; with

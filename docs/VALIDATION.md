@@ -47,10 +47,28 @@ Representative result (OA-fraction detector vs stuck dampers):
 | **Pooled** | **89% [56–98%]** | 25% | 13 |
 
 The honest read the CIs force: OA-fraction transfers cleanly to single-duct AHUs and
-FCUs but **degrades on dual-duct AHUs** (mixing-box + mild-weather OAF noise), and the
-modulating-valve **leak detector under-fires** — gaps the benchmark *measures* rather
-than hides. The pooled interval is the defensible headline; the small-n per-family
-numbers are reported with their uncertainty.
+FCUs but **degrades on dual-duct AHUs** (mixing-box + mild-weather OAF noise), and
+`leaking_valve` **misses the dataset's one leak run** — a 10 % leak (the valve sits at 0.10
+whenever it is commanded shut; the published 010/025/040/050 "severities" are one file) — gaps
+the benchmark *measures* rather than hides. The pooled interval is the defensible headline; the
+small-n per-family numbers are reported with their uncertainty.
+
+> **These are the gated 0.85 figures, and they are about to move.** The 0.86 catalog audit
+> (#24–#29) found that several of them rested on CAMBER's own wrong assumptions: a 20 % minimum
+> OA for a single-duct unit whose design minimum is a 10 % damper position (a **1.6 %** OA
+> fraction — its "ok" held only because fan-off samples were judged), a flat 20 % for a dual-duct
+> unit whose minimum is **seasonal** (11.9 % Jun–Aug, 31.8 % otherwise — the source of its
+> FPR of 1.0), and mis-mapped fan and occupancy points. With the fixes, `outdoor_air_fraction`
+> judges fan-on, occupied samples against each unit's own minimum: a damper stuck at the
+> single-duct unit's 10 % minimum (or at 25 %, 4.4 % OA) looks like normal operation outside
+> economizer weather — its real symptom is the missed economizer — so the SDAHU TPR falls, and
+> the dual-duct FPR falls to 0. The refreshed numbers await the maintainer's sign-off (#30);
+> every published-data problem is listed with its evidence in
+> [DATASETS.md](DATASETS.md#data-issues-and-how-camber-handles-them).
+>
+> **The FCU result is fragile.** Its OA-damper leak runs give 12.7 / 15.4 / 17.4 % OA (20 / 50 /
+> 80 % leakage) against the rule's 15 % excess line (the unit's 10 % minimum + 5 %): the leak-50
+> detection the benchmark scores rests on a 0.4-point margin.
 
 ### Drift-family real-data validation (which detectors the data can honestly test)
 
@@ -165,8 +183,9 @@ prints a scored-vs-fixture coverage table so the credibility story is explicit r
 complements — does not replace — the real-data LBNL benchmark above (external validity on real equipment),
 which 0.6 set out to broaden with a cooling-coil-valve leakage **severity sweep**. That sweep does not
 exist: the published SDAHU zip's `coi_leakage_010/025/040/050` files are byte-identical (one simulation
-under four labels) and there is no 100 % file, so the benchmark scores the single leak run once. (The
-four `oa_bias_*` files are likewise one run, and the FCU set's cooling / heating "airside minor fouling"
+under four labels) and there is no 100 % file, so the benchmark scores the single leak run once — as
+`coi_leakage_010`, the label that matches the data (a 10 % leak). (The four `oa_bias_*` files are likewise
+one run, and carry no OA-temperature bias at all; the FCU set's cooling / heating "airside minor fouling"
 files are identical.)
 
 ## M&V accuracy — real-data acceptance on BDG2

@@ -182,9 +182,9 @@ them into a Parquet store and writes a ready-to-run config (see [DATASETS.md](DA
 
 ```
 camber datasets list [--licence commercial|all] [--kind simulated|real|lab] [--labeled] [--json]
-camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, quirks
+camber datasets info  <id> [--json]                  # summary, licence, citation, subsets, data issues
 camber datasets fetch <id>... | --all [--subset S] [--dir D] [--licence all] [--accept-noncommercial]
-camber datasets ingest <id>... | --all --store DIR [--subset S] [--force]
+camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-corrections]
 camber datasets status [--dir D] [--store DIR] [--json]
 camber datasets remove <id> [--dir D] [--store DIR --purge-store]
 camber datasets config <id> --store DIR [--out cfg.json] [--facility ID]
@@ -192,7 +192,10 @@ camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 ```
 
 `fetch --all` takes the open tier only; research-only (NC/ND) datasets also need `--licence all`
-**and** `--accept-noncommercial`. Exit codes: `2` checksum mismatch (the file is kept as `.bad`),
+**and** `--accept-noncommercial`. `ingest --no-corrections` skips the catalog's fixes for problems in
+the published data (`info <id>` lists them) and ingests it exactly as published -- use a second
+store to compare the two; `ingest` warns when the store's disk is smaller than the subset's
+estimated size. Exit codes: `2` checksum mismatch (the file is kept as `.bad`),
 `3` licence gate, `4` not enough disk, `1` any other error. A typical session:
 
 ```

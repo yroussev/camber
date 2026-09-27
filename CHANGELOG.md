@@ -27,6 +27,25 @@ them. This is the first of four catalog releases; the API is **provisional** unt
   - `camber datasets score` scores findings against the dataset's labels with Wilson intervals.
   - CAMBER redistributes no datasets; it downloads them from their publishers (`NOTICE`,
     `docs/SECURITY.md` §7, new `docs/DATASETS.md`).
+- **Published-data issues, described and handled (#24).** The catalog links each dataset exactly
+  as its publisher provides it and never corrects it silently: every problem found in the
+  published data is a `data_issues` record with the affected columns, the evidence (numbers), the
+  publisher documentation it contradicts (cited by DOI) and CAMBER's handling -- `fix`,
+  `annotate`, `exclude` or `none`. `validate_catalog()` checks the records and that each handling
+  is wired (every quirk links to its issue; a `fix` has a fix quirk; an `exclude` names what it
+  excludes). 29 issues across the seven entries, all re-measured on the data, from the audit of
+  2026-09-26.
+  - `camber datasets ingest --no-corrections` (`ingest(corrections=False)`) skips the fix quirks
+    and ingests the data as published; the mode is part of the content hash and recorded in the
+    provenance with the data issues and the runs excluded from scoring.
+  - `camber datasets info <id>` lists the issues and their handling, and each subset's estimated
+    store size (now per subset; `ingest` warns when the disk is smaller than the estimate).
+  - `docs/DATASETS.md` gains a "Data issues and how CAMBER handles them" section generated from
+    `catalog.json` (`scripts/datasets_issues_doc.py`; a test keeps the two identical).
+  - The ingest spec can pin a `timestamp_format` and declare CAMBER's own column semantics
+    (`recode`, e.g. a 0/1/2 mode point read as occupied only in mode 1; `derive`, a sum of columns
+    or a 0/1 "above a threshold" flag). `camber.eval.benchmark` accepts several target fault types
+    per detector.
 - **Store-backed runs:** `"source": {"kind": "store", "path": …, "facility_id": …}` in a config;
   `resolve.StoreEquipRef` / `discover_store` / `clear_store_cache`; `ParquetStore.drop_facility`
   (an irreversible, policy-free primitive) and `.equipment`. Rules, drift and SOO run unchanged.
@@ -35,7 +54,38 @@ them. This is the first of four catalog releases; the API is **provisional** unt
   share-alike note.
 - A config `mv` section: a daily change-point M&V baseline per meter.
 
-### Fixed
+### Fixed -- the catalog's own assumptions (#23, #25-#29, #31)
+The 2026-09-26 audit compared every catalog config with its publisher's documentation and with the
+data. CAMBER's own mistakes are simply fixed:
+- **Single-duct AHU (#25, #23).** `SF_CS` is the supply-fan *speed* (it was mapped as the status;
+  `SF_SPD`, a constant 0.9, was mapped as the speed); a fan status is derived as `SF_CS > 0` (it
+  agrees with fan power in 99.8% of rows). `SYS_CTL` maps to occupancy: the simulated schedule is
+  not Mon-Fri 07-18. The unit's minimum OA is a 10% damper position that measures as a **1.6%** OA
+  fraction, not the assumed 20%; the template adds `economizer_high_limit` at the sequence's 60 F.
+  `SA_CFM` / `RA_CFM` are divided by 60 (published as cfm x 60). The one leak run is
+  `coi_leakage_010`: the four published "severities" are one file with a 10% leak.
+- **Dual-duct AHU (#26).** The minimum OA is **seasonal** (28% damper Jun-Aug, 45% otherwise:
+  11.9% and 31.8% OA); the flat 20% read the fault-free unit as excess OA -- the family's FPR of
+  1.0. Fan status, occupancy (setback read as unoccupied), measured OA flow and supply flow are
+  mapped; `simultaneous_heat_cool` leaves the template (the hot deck heats by design); the
+  month-first timestamp format is pinned.
+- **Fan-coil and fan-powered units (#27).** The FCU's `FCU_SPD` is in rev/s (no longer read as a
+  percent; the fan status comes from the discharge airflow) and `FCU_CTRL` maps to occupancy. The
+  FPU's room setpoints map to `cool_sp` / `heat_sp` (so `unmet_setpoint_hours` evaluates),
+  `reheat_minimization_g36` leaves its template, and scoring targets are declared.
+- **Plants (#28).** The undocumented chiller-fouling runs are scored as `chiller_efficiency`
+  positives (065 reads 2.36 kW/ton and was scored as a false positive); the default subset uses the
+  most severe tower fouling (065, not the mildest 095). The boiler's `BOI_GAS_CSUM_*` is an
+  instantaneous gas input in kW, not a counter; with no gas-input role or gas-per-heat rule yet,
+  that check -- and a supply-vs-setpoint check -- is recorded as a follow-up. The boiler's loop DP
+  points are declared in inH2O.
+- **BDG2 benchmark (#29).** It scored the *raw* meters (~24,700 all-zero outage days per meter
+  type in 2016) while the catalog ingests the cleaned ones; it now uses the cleaned meters, fits
+  whole days only (at least 23 hourly readings) and computes EUI once per building from
+  electricity only (it was per meter record, mixing thermal and electric kWh).
+- **`mandv.rate_to_energy` credited the reading before a gap with the whole gap (#31)** -- two
+  missing days after an hourly reading of 1 put 72 into one day. Each interval is now capped at the
+  series' nominal step, so gaps stay unfilled and a coverage rule can drop the day.
 - **Duplicate runs in published data are ingested once.** Publishers ship one simulation under
   several labels — the LBNL single-duct AHU "leak severities" 010/025/040/050 are one file four
   times, as are its four OA-sensor-bias runs and the fan-coil set's cooling/heating airside
@@ -46,15 +96,33 @@ them. This is the first of four catalog releases; the API is **provisional** unt
   never fired); the duplicate guard caught it.
 
 ### Changed
+- **`outdoor_air_fraction` judges fan-on samples by default** (`fan_gate=True`; fan status, else
+  fan speed, else airflow -- `camber.schedules.fan_on_mask`) and uses a trended `occupancy` point
+  when the unit has one; a unit with no fan signal is judged ungated and the finding says so. With
+  the fan stopped the mixing-box temperatures read still air: on the LBNL single-duct unit they
+  alone made 1.6% OA read "ok" against a 20% assumption (#23). `min_oa_pct_by_month` sets a
+  seasonal minimum. The synthetic and fleet benchmarks are unchanged; `fan_gate=False` restores the
+  old behaviour.
 - The LBNL point mappings moved to `camber/datasets/mappings/`, one source of truth for the
   benchmark and the catalog; the chiller plant's wet-/dry-bulb and secondary-loop supply/return
-  swaps are catalog `fix` quirks. Benchmark metrics unchanged.
+  swaps are catalog `fix` quirks. The LBNL benchmark now also reads each dataset's ingest spec
+  (quirks, timestamp format, column transforms) and its run template's rule parameters, so it
+  scores exactly what `camber datasets ingest` produces.
 - An unknown `source.kind` in a config now warns and falls back to folders.
 
 ### Notes
+- **The LBNL and BDG2 benchmark baselines move with the catalog fixes and are refreshed only after
+  the maintainer signs off the diff (#30).** Expected: SDAHU TPR 0.8 -> 0.4 (a damper stuck at, or
+  near, the unit's 1.6% minimum looks like normal operation outside economizer weather; its symptom
+  is the missed economizer, which `economizer_damper_drift` still catches 4/4), DDAHU FPR 1.0 -> 0
+  and TPR 0.5 -> 1.0, pooled TPR 0.8 -> 0.7 and FPR 0.33 -> 0; BDG2 building counts, the electricity
+  EUI (median 12.2 -> 11.1 kWh/ft2/yr, n 2,044 -> 1,497) and the residual-autocorrelation spread.
+  Until then the LBNL/BDG2 gates report these as regressions. The FCU result rests on a 0.4-point
+  margin (its leak runs give 12.7 / 15.4 / 17.4% OA against a 15% line).
 - New public names: `camber.datasets.*`, `resolve.StoreEquipRef` / `discover_store` /
   `clear_store_cache`, `config.data_sources`, the report `data_sources` helpers, `ParquetStore`
-  methods. Snapshot regenerated. No new core dependency.
+  methods, `schedules.fan_on_mask` / `FAN_GATE_NONE`. Snapshot regenerated. No new core
+  dependency.
 - Portfolio lifecycle (facilities joining and leaving, retention, admin overrides) is designed and
   lands next, before the rest of the catalog.
 

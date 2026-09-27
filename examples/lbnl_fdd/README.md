@@ -42,22 +42,25 @@ conventions** — single-duct AHU (SDAHU), fan-coil unit (FCU), and dual-duct AH
 (DDAHU) — and scores each family plus the pooled set with the generalized harness
 (`camber.eval.benchmark`): overall detection, **per-detector** confusion against
 each detector's target fault, and the correct-diagnosis rate. The *same* role-based
-rules run unchanged across all three; only the `lbnl_*.json` mapping and the unit's
-design-minimum OA differ. (Runs on whatever's downloaded; SDAHU-only without
-`--families`.)
+rules run unchanged across all three; only the `lbnl_*.json` mapping and each unit's
+own design minimum OA differ. The mappings, the ingest spec (the catalog's fixes for
+problems in the published data, its pinned timestamp formats) and each unit's rule
+parameters (the run templates) all come from the dataset catalog, so the benchmark scores
+exactly what `camber datasets ingest` produces. (Runs on whatever's downloaded;
+SDAHU-only without `--families`.)
 
-Results illustrate both the reach and the honest limits of a temperature-based OA
-diagnostic:
+Results with the 0.86 catalog fixes (#24–#29; the committed baseline is refreshed once the
+maintainer signs off the diff, #30):
 
-| Family | OA-fraction TPR | FPR | Note |
-|--------|----------------:|----:|------|
-| SDAHU  | 100% | 0% | dampers open *and* closed; leak detector under-fires on the modulating-valve leak |
-| FCU    | 100% | 0% | incl. the OA-damper leak, once the FCU's ~10% design-min OA is configured |
-| DDAHU  |  50% | 100% | **degrades** — dual-duct hot/cold-deck mixing + mild-weather OAF noise blur the signal |
+| Family | Overall TPR | FPR | Note |
+|--------|------------:|----:|------|
+| SDAHU  | 40% | 0% | judged on fan-on, occupied samples against the unit's own **1.6%** minimum OA (a 10% damper position): dampers stuck at 75/100% fire; stuck at 10% (the minimum itself) or 25% (4.4% OA) look like normal operation outside economizer weather — their real symptom is the missed economizer, which `economizer_damper_drift` catches 4/4. `leaking_valve` misses the one leak run, a 10% leak (the published 010/025/040/050 "severities" are one file) |
+| FCU    | 100% | 0% | incl. the OA-damper leak against the unit's 10% minimum (a 30% damper position measures 10.5% OA) — but that leak gives 15.4% OA against a 15% line: a 0.4-point margin |
+| DDAHU  | 100% | 0% | against the unit's **seasonal** minimum (31.8% OA; 11.9% Jun–Aug). The flat 20% used until 0.86 read the fault-free unit as excess OA (FPR 100%) |
 
-The benchmark **measures** these gaps (the leak under-fire; the dual-duct
-transferability loss) rather than hides them — which is the point of evaluating a
-rule library against public labeled data.
+The benchmark **measures** these gaps rather than hides them — which is the point of
+evaluating a rule library against public labeled data. What the catalog found wrong in the
+published data, and how it is handled, is listed in `docs/DATASETS.md`.
 
 ### AHU-drift validation
 
