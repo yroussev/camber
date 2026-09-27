@@ -263,12 +263,24 @@ Version numbers are given only where a release is already planned.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
   bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
   decommissioning.
-- **0.90 — M&V rebaselining, the rest of #21** (#46 21b SEP methods, #47 21c adjustments, #48 21d
-  versioned baselines and rebaselining, #49 21e validation). The detail follows.
-- **M&V rebaselining, the rest of #21:** 21b SEP methods (chained and sequential savings, method
-  selection, SEnPI); 21c non-routine and static-factor adjustments; 21d versioned M&V baselines
-  and audited rebaselining; 21e validation (a BDG2 injection benchmark and the LBNL three-year
-  dataset in the catalog).
+- **0.90 — M&V rebaselining, the rest of #21** (integrated; release pending). Its contents:
+  - **21b, SEP methods (#46):** forecast, backcast, standard conditions and SEP chaining (with
+    CAMBER's labelled `sequential_chain` extension); method selection that only proposes; SEnPI
+    and its band; `camber.mandv.sep` (Eq 1-12, Annex B primary energy); `mv[].method` / `kernel`.
+  - **21c, adjustments (#47):** the non-routine and static-factor ledger on any result, chains
+    adjusted per link, the confounding and SEP evidence guards, `mv[].validity`, the waterfall,
+    and the change-point + driver model.
+  - **21d, versioned baselines (#48):** `MVBaselineStore` with full provenance, the rebaseline
+    policy and triggers T1-T6, the new-baseline window rule, `camber mv` (run, freeze, list,
+    propose, rebaseline, adjust, report) and the chained CUSUM.
+  - **21e, validation (#49):** the BDG2 savings benchmark (placebo, injected savings, steps and
+    static factors) with its own gated baseline, the Monte Carlo coverage index of every kernel,
+    the `bdg2_mv_savings` dossier track and the `lbnl-b59` data issues.
+  - **The maintainer's decisions:** the published BDG2 savings result; a refit for an adjusted
+    backcast with a reporting-period indicator; G14 kept as the default kernel with a
+    calibration caveat on every result (revisited at 1.0).
+  - **`mv[].model: "cp_driver"`:** the change-point + driver form on the config `mv` path, for
+    occupancy-driven buildings.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **RCx report, 0.88 follow-up (#32):** the plant reports (LBNL chiller and boiler) decline the

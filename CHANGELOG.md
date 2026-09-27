@@ -6,6 +6,16 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
+**M&V rebaselining: the rest of #21.** A reported saving now declares its SEP method, restates its
+baseline side through an explicit, attributed adjustments ledger, and names the frozen baseline
+version it used. The baseline moves only on an operator's audited decision (phases 21b-21d). The
+savings and their bands are validated on real BDG2 meters and in a Monte Carlo index of every
+kernel, and the result is published in `docs/VALIDATION.md` (phase 21e). Three maintainer
+decisions on #21 are applied: the published validation numbers, a refit for an adjusted backcast,
+and G14 kept as the default kernel with a calibration caveat on every result. The config `mv`
+path also gains the change-point + driver model form. The existing BDG2 acceptance and LBNL
+benchmark gates did not move.
+
 ### Added -- M&V: the SEP methods and non-routine adjustments (issue #21, phases 21b and 21c; #46, #47)
 One flow for a reported saving: **the declared method gives the saving, the adjustments ledger
 restates its baseline side, and the result carries both**. Every new name below is provisional
@@ -59,8 +69,9 @@ restates its baseline side, and the result carries both**. Every new name below 
   sequential chain combines its adjusted links by B-19 / B-20. `ChainLink` gains trailing
   `period`, `model_window`, `sep_terms`, `df`, `enpi_uncertainty` and `uncertainty_terms`.
 - **NRA methods:** `indicator` (`estimate_nre_indicator`; +1 to `p`; a baseline-period indicator
-  replaces the projection and uses the joint covariance, a reporting-period one adds in
-  quadrature), `engineering` (estimate + SE, evidence required),
+  replaces the projection and uses the joint covariance; a reporting-period one adds in
+  quadrature, except on a backcast, where it refits the reporting model -- see *Changed*),
+  `engineering` (estimate + SE, evidence required),
   `exclude` (SEP §6.5 anomaly mode) and `submeter` (Option B; `nra_from_isolation`). Static
   factors: `proportional` with an explicit affected share (no default) or `engineering`.
 - **Guards**: a meter-derived NRA dated within `settle_days` of an ECM date raises
@@ -178,7 +189,8 @@ name below is provisional (`docs/API-STABILITY.md`).
   - New cells: G14 forecast and backcast, exact backcast and standard conditions, G14 standard
     conditions, the sequential chain, an adjusted static factor, and an adjusted backcast.
   - It records that the G14 kernel under-covers on a year of daily data even with a correct
-    model, and that the sequential chain and the adjusted backcast are conservative.
+    model (82-88% at nominal 90%), that G14 standard conditions and the sequential chain are
+    conservative, and that the adjusted backcast is on target once refitted (see *Changed*).
 - **`lbnl-b59` data issues** (catalog and `docs/DATASETS.md`) for `ele.csv`, which the catalog
   does not ingest:
   - from 2020 the file carries six meters under five column names, shifted one place;
@@ -186,11 +198,52 @@ name below is provisional (`docs/API-STABILITY.md`).
   - the replaced heat pump was metered on `hvac_N`, and its replacement is on no meter, so a
     2018 vs later saving overstates the retrofit.
 
+### Added -- M&V: the change-point + driver form on the config `mv` path (#47, #48)
+- **`mv[].model: "cp_driver"`** with **`mv[].drivers`** fits phase 21c's change-point + driver
+  model instead of the temperature-only one, on every `mv` path: the plain run, each declared
+  method, validity verdicts, the adjustments ledger, and the versioned baselines of `camber mv`
+  (freeze, rebaseline windows, triggers, adjust, the chained report). A driver is `"weekday"`,
+  `"occupied_day"` (`mv[].occupied_weekdays`, default Monday to Friday, minus `mv[].holidays`), or
+  any mapped numeric role (its daily mean).
+- Phase 21d found that an occupancy-driven building fails validity with the temperature-only
+  form, which left `mv` unusable there; with a weekday driver the weekly cycle is modelled.
+- `mv_baseline` gains `model_form`, `drivers` and `driver_coef`. A frozen driver model reads its
+  own drivers, and the fit-frame sha256 covers them. `"method": "auto"` and
+  `"standard_conditions"` are refused with this form, each with the reason. Without `mv[].model`
+  nothing changes.
+
+### Changed -- the maintainer's decisions on #21
+- **Published: the BDG2 M&V savings validation result** (`docs/VALIDATION.md`). With nothing
+  injected, the nominal-90% forecast band covers zero for 33% of 1,023 electricity and 52% of 334
+  chilled-water meters (G14; exact 36% / 54%). At nominal 95% the G14 figures are 38% / 57%,
+  against the ~71% Touzani et al. 2019 found on 69 screened buildings. It also publishes the
+  injected-saving recovery, step detection and static-factor figures. Every figure was
+  regenerated from the 0.90 code, and all 321 gated metrics are identical to the committed
+  baseline. A new `tests/test_dossier.py` check recomputes each published percentage from that
+  file. No `lbnl-b59` figures are published.
+- **An adjusted backcast with a reporting-period indicator refits the reporting model** with the
+  indicator (joint Σ, `p + 1`), as a baseline-period indicator already does on the baseline side.
+  Before, the band was the reporting model's, fitted *through* the event: about 20× too wide,
+  covering 100% at nominal 90%. The refit covers 86% / 88% / 86% at AR(1) ρ = 0 / 0.4 / 0.8,
+  unbiased, gated at [0.85, 0.95]. The refit needs the baseline rows' `drivers=` (the config
+  path passes them). Without them, inside a chain, with a second such indicator, or with an
+  indicator fitted on another window, the old conservative band is kept with a caveat.
+- **G14 stays the default kernel, with a caveat on every result that uses it.** In simulation
+  with a correct model the G14 forecast and backcast bands under-cover (about 82-88% at nominal
+  90%), and CAMBER's projected G14 kernel for standard conditions is conservative (99-100%), while
+  `kernel="exact"` is on target. Every `SavingsResult`, `MethodResult` and `AdjustedResult` with a
+  G14 band says so and recommends `kernel="exact"` for calibrated bands. `docs/MANDV.md` gives the
+  Monte Carlo evidence; the default will be revisited at 1.0. The caveat is text only: no band,
+  saving or benchmark metric changes.
+
 ### Fixed
-- **`detect_step_changes` no longer hangs on a constant or dead meter.** A series the weather fit
+- **The step searches no longer hang on a constant, dead or noise-free series.** A series the fit
   reproduces exactly (one BDG2 chilled-water meter reads 0 all of 2017) gave PELT a 0/0 cost that
-  no penalty could prune, so the `max_steps` loop never ended. The detector now stops with the
-  steps it has and a caveat.
+  no penalty could prune, so the `max_steps` loop never ended. `detect_step_changes` and the
+  rebaseline T1 step search now share one guard: they stop with the steps found so far (the
+  detector adds a caveat).
+- `camber mv propose` says why it runs no SEP method proposal for a `cp_driver` entry, and prints
+  a proposal error instead of skipping it silently.
 
 ## [0.89.0] — 2026-09-27
 
