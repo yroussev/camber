@@ -403,7 +403,7 @@ def _facilities(st: ParquetStore, dataset_id: str) -> dict:
 
 def step_ingest(ctx: Ctx, entry, subset: str, log: str) -> dict:
     extracted = sum(int(f.get("extracted_size") or 0) for f in entry.subset_files(subset))
-    est = int((entry.as_dict().get("store_bytes_estimate") or 0) * 4)
+    est = int((entry.store_bytes(subset) or 0) * 4)
     rec: dict = {"disk": ctx.disk_guard(extracted + est, f"{entry.id} ingest")}
     t0 = time.monotonic()
     msgs: list = []
@@ -471,7 +471,7 @@ def step_ingest(ctx: Ctx, entry, subset: str, log: str) -> dict:
         }
     rec["facility"] = fac
     rec["store_bytes"] = sum(v["store_bytes"] for v in fac.values())
-    rec["store_bytes_estimate"] = entry.as_dict().get("store_bytes_estimate")
+    rec["store_bytes_estimate"] = entry.store_bytes(subset)
     if entry.id != "bdg2":
         t1 = time.monotonic()
         rec["quality"] = {fid: _quality(ParquetStore(ctx.store), fid) for fid in fac}
