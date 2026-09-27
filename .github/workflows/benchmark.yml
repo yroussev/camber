@@ -70,7 +70,8 @@ jobs:
 
   mv-accuracy:
     # BDG2 real-data M&V validation: the ASHRAE G14 baseline-model acceptance rate across ~2,000 real
-    # whole-building meters. Large CC-BY download (~250 MB), cached.
+    # whole-building meters, then the savings benchmark (placebo band coverage, injected savings,
+    # steps and static factors; 2016 baseline, 2017 reporting). Large CC-BY-SA download, cached.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -95,9 +96,20 @@ jobs:
           python examples/bdg2/benchmark.py \
             --gate examples/bdg2/benchmark-baseline.json --json /tmp/bdg2-metrics.json --tol 0.05
 
+      - name: Run M&V savings benchmark (placebo + injection) + gate against its own baseline
+        # Separate baseline file: benchmark-baseline.json's keys are untouched. Placebo and
+        # injected savings run on every eligible meter; steps and static factors on a seeded
+        # subsample of 150 meters per type (--sample), to keep the job within a few minutes.
+        run: |
+          python examples/bdg2/savings_benchmark.py \
+            --gate examples/bdg2/savings-benchmark-baseline.json \
+            --json /tmp/bdg2-savings-metrics.json --tol 0.05
+
       - name: Upload M&V metrics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bdg2-metrics
-          path: /tmp/bdg2-metrics.json
+          path: |
+            /tmp/bdg2-metrics.json
+            /tmp/bdg2-savings-metrics.json

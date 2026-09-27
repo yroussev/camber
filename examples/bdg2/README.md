@@ -18,7 +18,17 @@ across many sites/climates. It demonstrates:
 python examples/bdg2/fetch.py      # metadata, weather and the CLEANED electricity/chilledwater meters
 python examples/bdg2/run_mv.py
 python examples/bdg2/benchmark.py  # G14 acceptance across ~2,000 buildings (whole days only)
+python examples/bdg2/savings_benchmark.py  # placebo band coverage + injected savings/steps/static factors
 ```
+
+`savings_benchmark.py` (2016 baseline, 2017 reporting) scores the **savings** rather than the fit:
+how often the uncertainty band covers a saving of zero when nothing was done (Touzani et al. 2019's
+UICF and EUR), how well forecast, backcast and standard conditions recover an injected 5/10/20%
+saving, how `detect_step_changes` and the indicator NRA handle planted steps, and how the
+proportional static-factor adjustment restores a planted floor-area change. It gates against its own
+baseline, `savings-benchmark-baseline.json`; `--sample` sets the seeded subsample for the step and
+static-factor experiments (default 150 meters per type) and `--jobs` the worker processes (the
+metrics do not depend on it). Methodology: [docs/VALIDATION.md](../../docs/VALIDATION.md).
 
 The examples use the publisher's **cleaned** meters, the files `camber datasets ingest bdg2`
 ingests: the raw export carries ~24,700 all-zero building-days per meter type in 2016 (meter
