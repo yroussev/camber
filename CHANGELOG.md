@@ -4,7 +4,7 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.89.0] — 2026-09-27
 
 **Catalog release 2.** The research-only tier, manual-download entries, Excel workbooks and
 Brick-grouped ingest (the framework), one reconciled design for the source layouts real buildings

@@ -225,7 +225,7 @@ umbrella rather than as new milestones. `CHANGELOG.md` is the per-release record
   cybersecure **edge forwarder**, and fault economics extended across the newer families.
 
 
-## Released — 0.86–0.88 (2026-09-26)
+## Released — 0.86–0.89 (2026-09-26 and 27)
 
 Three stacked releases; `CHANGELOG.md` has the detail.
 
@@ -245,28 +245,20 @@ Three stacked releases; `CHANGELOG.md` has the detail.
   uncertainty kernel and multi-step non-routine event detection.
 - **0.88 — the RCx report** (`camber report --layout rcx`) and its linked-issue layer, with rules
   that judge fan-on samples and evidence charts that match their verdicts.
+- **0.89 — catalog release 2:** the research-only tier, manual-download entries, the `xlsx` extra,
+  Brick grouping, one reconciled ingest design for real-building source layouts and 14 new entries
+  (21 in all), with the first real labelled multi-zone VAV result in `docs/VALIDATION.md` (ORNL).
+  Fixes #34 and #36.
 
 ## Next
 
 Version numbers are given only where a release is already planned.
 
-- **Dataset catalog, the remaining releases.** Each moves up past the three versions that shipped
-  first:
-  - **0.89** (was 0.87; in `CHANGELOG.md` under Unreleased) — catalog release 2: the
-    research-only tier behind `--accept-noncommercial` (NC / ND licences, or an open-licence entry
-    held there for a stated `access_reason`), manual-download entries, the `xlsx` extra, Brick
-    grouping, one reconciled design for real-building source layouts (multi-file `members`, `where`
-    row selection, run-level mappings, mapping groups with a `target`, the `per_point` adapter,
-    elapsed / synthetic clocks and time zones), and 14 entries: DCV and CO2 (`lbnl-b59`,
-    `finnish-dcv`, `b4b-windesheim`), AHU and refrigerant side (`nuig-ahu101`, `irish-ahu`,
-    `nist-heatpump-fdd`, `nist-ibal`), real buildings and refrigeration (`robod`, `sdu-ou44`,
-    `ornl-frp-ops`, `ornl-supermarket-fdd`) and multi-zone VAV (`ornl-frp-vav`, and the
-    research-only `rbc-g36-ahu` and `at-30bldg-sensors`). First real labelled multi-zone VAV result
-    in `docs/VALIDATION.md` (ORNL). Fixes #34 and #36. Follow-ups from the intake: #35 (RCx
-    `select_week` and large template runs) and #37–#45 (rules and mapping assist the new data
-    showed are missing).
+- **Dataset catalog, the remaining releases.** The next releases:
   - **0.90** (was 0.88) — `camber lab`, a loopback-only local catalog UI (`camber serve` stays
-    GET-only).
+    GET-only), together with the detection-gap revisits on the complete catalog data (#11–#17),
+    RCx performance on large runs (#35), the plant RCx week (#32) and two stale VALIDATION cells
+    (#33). The intake follow-ups #37–#45 are unscheduled.
   - **0.91** (was 0.89) — education: worked exercises and learning docs on the catalog datasets.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
   bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
