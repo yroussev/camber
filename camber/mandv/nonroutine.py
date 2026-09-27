@@ -449,6 +449,12 @@ def detect_step_changes(
         rho = lag1_autocorrelation(resid, index=df.index)
         kappa = 1.0 if rho is None else (1.0 + rho) / (1.0 - rho)
         x = y - weather  # residual plus the segment levels
+        if not (np.isfinite(s2 * kappa) and s2 * kappa > 0):
+            # the fit is exact (a constant or dead meter): the cost is 0/0 and no penalty would
+            # ever prune the segmentation, so keep the steps found so far and stop
+            caveats.append("the residual variance is zero or not finite; segmentation stopped")
+            converged = True
+            break
         p_used = pen
         new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=min_segment_days)
         while len(new) > max_steps:
