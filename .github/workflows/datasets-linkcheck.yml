@@ -1,0 +1,52 @@
+name: datasets-linkcheck
+
+# Weekly, advisory check that every dataset catalog file is still served at its pinned size /
+# ETag, and that licence pages (catalog `licence_check`) still state the licence we recorded.
+# Runs scripts/datasets_linkcheck.py; the report goes to the job summary, and each drift or error
+# becomes a warning annotation on the run.
+#
+# Non-blocking on purpose (continue-on-error, and the script exits 0 on drift): a publisher host
+# being down for a day is not a CAMBER defect, and drift can never reach a learner anyway --
+# `camber datasets fetch` refuses any file whose size or sha256 differs from the pin. This is
+# only the early warning to re-verify an entry (scripts/datasets_refresh.py).
+#
+# It writes a job summary rather than opening issues: the token stays read-only (contents: read,
+# like every other workflow here), and transient host outages do not turn into issue noise. The
+# network smoke test (pytest -m network) also runs here, the one place tests reach the internet.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"          # Mondays 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linkcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install --upgrade pip && pip install -e .[dev]
+
+      - name: Link check (sizes, ETags, licence pages) -> job summary
+        run: python scripts/datasets_linkcheck.py --json linkcheck.json
+
+      - name: Network smoke test (fetch + verify one small open file end to end)
+        run: python -m pytest -q -p no:cacheprovider -m network tests/test_datasets_linkcheck.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: datasets-linkcheck
+          path: linkcheck.json
+          if-no-files-found: ignore
