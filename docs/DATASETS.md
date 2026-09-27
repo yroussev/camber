@@ -58,7 +58,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `nist-ibal` | lab chiller with refrigerant pressures, 10 s (manual download) | lab | no | NIST-PD | 11 days |
 | `robod` | 5 rooms, Singapore: CO2, outdoor-air flow, occupancy (weekdays only) | real | no | CC-BY-4.0 | all 5 rooms |
 | `sdu-ou44` | 3 rooms, Denmark: CO2, VAV damper, occupant counts (44 shuffled days) | real | no | CC0-1.0 | all 3 rooms |
-| `ornl-frp-ops` | 1 RTU + 10 VAV boxes, 7 operating scenarios, 1-minute | real | no | CC-BY-4.0 | RTU, weather, 2 boxes x 2 scenarios |
+| `ornl-frp-ops` | 1 RTU + 10 VAV boxes, 7 operating scenarios, 1-minute | real | no | CC-BY-4.0 | RTU, weather and all 10 boxes x 2 scenarios |
 | `ornl-supermarket-fdd` | CO2 booster refrigeration rack, 6 faults (reference only) | lab | yes | CC-BY-4.0 | 2 fault / baseline pairs |
 | `ornl-frp-vav` | one RTU + 10 VAV boxes, 31 one-day tests | real | yes | CC-BY-4.0 | one damper test set (7 days) |
 | `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 (**research-only**: see [Licences](#licences)) | 8 runs |
@@ -67,9 +67,11 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
 
-Every entry has a `default` subset (small enough to try) and a `full` one. A subset selects the
-files to download and, for labelled datasets, the runs to ingest; for `bdg2` it selects sites,
-meters and a cap on buildings per site. Choose one with `--subset full`.
+Every entry has a `default` subset (small enough to try -- small in **bytes**: at most 100 MB once
+ingested, whatever its run count, since a real building's runs are its equipment) and a `full`
+one. A subset selects the files to download and, for labelled datasets, the runs to ingest; for
+`bdg2` it selects sites, meters and a cap on buildings per site, for `at-30bldg-sensors` the
+buildings (`groups`). Choose one with `--subset full`.
 
 ## Licences
 

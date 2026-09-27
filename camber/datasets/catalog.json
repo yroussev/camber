@@ -8339,7 +8339,7 @@
    ],
    "subsets": {
     "default": {
-     "description": "the heating-season baseline and night setback: the RTU, weather and two boxes (102, chronically under-heated, and 104)",
+     "description": "the heating-season baseline and night setback: the RTU, weather and all ten boxes",
      "files": [
       "Building_Base_Heating.csv",
       "Weather_Base_Heating.csv",
@@ -8349,14 +8349,30 @@
      "runs": [
       "rtu__base_heating",
       "vav102__base_heating",
+      "vav103__base_heating",
       "vav104__base_heating",
+      "vav105__base_heating",
+      "vav106__base_heating",
+      "vav202__base_heating",
+      "vav203__base_heating",
+      "vav204__base_heating",
+      "vav205__base_heating",
+      "vav206__base_heating",
       "weather__base_heating",
       "rtu__sb_heating",
       "vav102__sb_heating",
+      "vav103__sb_heating",
       "vav104__sb_heating",
+      "vav105__sb_heating",
+      "vav106__sb_heating",
+      "vav202__sb_heating",
+      "vav203__sb_heating",
+      "vav204__sb_heating",
+      "vav205__sb_heating",
+      "vav206__sb_heating",
       "weather__sb_heating"
      ],
-     "store_bytes_estimate": 2687809
+     "store_bytes_estimate": 8596952
     },
     "full": {
      "description": "all seven scenarios",

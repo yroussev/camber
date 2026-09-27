@@ -103,18 +103,19 @@ def test_every_file_is_pinned_https_and_bdg2_is_share_alike():
     assert all(datasets.get(i).licence == "CC-BY-4.0" for i in ("lbnl-sdahu", "lbnl-boiler"))
 
 
+#: A default subset is a quick first ingest: small in bytes, whatever its run count (a real
+#: building's runs are its equipment, a simulated collection's its scenarios).
+DEFAULT_STORE_BYTES_MAX = 100_000_000
+
+
 def test_run_counts_and_default_subsets_are_bounded():
     counts = {e.id: len(e.ingest.get("runs", [])) for e in datasets.catalog()}
     assert counts["lbnl-fpu"] == 62 and counts["lbnl-chiller"] == 24
     assert counts["lbnl-boiler"] == 17 and counts["lbnl-sdahu"] == 21
     for e in datasets.catalog():
+        assert e.store_bytes() <= DEFAULT_STORE_BYTES_MAX, e.id
+        assert e.store_bytes() <= e.store_bytes("full"), e.id
         if e.ingest.get("runs"):
-            # a handful of scenarios by default; a real building's runs are its equipment, so its
-            # default subset is bounded by the store size instead
-            if e.kind == "real":
-                assert e.store_bytes() <= 100_000_000
-            else:
-                assert len(e.runs()) <= 8
             # full = every run whose file the full subset fetches (a manual entry's default and
             # full windows are separate portal exports, each read by its own run)
             full_files = {f["name"] for f in e.subset_files("full")}
