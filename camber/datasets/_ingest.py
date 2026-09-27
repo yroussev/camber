@@ -53,6 +53,7 @@ from ._archive import archive_kind, safe_extract
 from ._catalog import DatasetEntry, package_text
 from ._fetch import check_disk, sha256_file
 from ._quirks import apply_quirks, quirk_columns
+from ._readers import read_table, require_extras
 from ._units import convert_frame, convert_series, plausibility_warnings
 
 INGEST_VERSION = 1
@@ -267,8 +268,13 @@ def read_raw_run(
     run_id: str | None = None,
     *,
     corrections: bool = True,
+    sheet=None,
 ):
-    """One wide CSV run -> ``(raw frame indexed by timestamp, quirk notes)``, before role mapping.
+    """One wide table run -> ``(raw frame indexed by timestamp, quirk notes)``, before role mapping.
+
+    The table is read by extension through :func:`._readers.read_table`: CSV in the core, an
+    ``.xlsx`` workbook through the ``xlsx`` extra (``sheet``, else the spec's ``sheet``, names
+    the worksheet; default the first).
 
     Reads only the timestamp, the mapped columns and the columns quirks and transforms need;
     parses timestamps with the spec's ``timestamp_format`` when it pins one; drops unparseable and
@@ -280,9 +286,10 @@ def read_raw_run(
     extra = quirk_columns(quirks) | transform_columns(spec)
     derived = {dv.get("column") for dv in spec.get("derive") or []}
     fmt = spec.get("timestamp_format")
-    raw = pd.read_csv(
+    raw = read_table(
         path,
         usecols=lambda c: c == ts or c in extra or (c not in derived and mapping.role_of(c)),
+        sheet=sheet if sheet is not None else spec.get("sheet"),
     )
     raw[ts] = (
         pd.to_datetime(raw[ts], format=fmt, errors="coerce")
@@ -303,9 +310,10 @@ def read_wide_run(
     run_id: str | None = None,
     *,
     corrections: bool = True,
+    sheet=None,
 ):
-    """One wide CSV run -> (role frame at the spec's resample, quirk notes, warnings)."""
-    raw, notes = read_raw_run(path, mapping, spec, run_id, corrections=corrections)
+    """One wide table run -> (role frame at the spec's resample, quirk notes, warnings)."""
+    raw, notes = read_raw_run(path, mapping, spec, run_id, corrections=corrections, sheet=sheet)
     cols: dict = {}
     for c in raw.columns:
         role = mapping.role_of(c)
@@ -442,8 +450,10 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress, corrections=Tru
     for i, run in enumerate(runs, 1):
         if progress:
             progress(f"{entry.id}: run {i}/{len(runs)} {run['id']}")
-        path = paths[(run["file"], run["member"])]
-        frame, qn, w = read_wide_run(path, mapping, spec, run_id=run["id"], corrections=corrections)
+        path = paths[(run["file"], run["member"])] if run.get("member") else inputs[run["file"]][0]
+        frame, qn, w = read_wide_run(
+            path, mapping, spec, run_id=run["id"], corrections=corrections, sheet=run.get("sheet")
+        )
         notes += [n for n in qn if n not in notes]
         warns += w
         eq = _equip_id(run)
@@ -593,6 +603,7 @@ def ingest_dataset(
     sname = subset or "default"
     entry.subset(sname)  # KeyError on an unknown subset, before any work
     root = _paths.data_dir(data_dir)
+    require_extras(entry.requires_extras, what=f"dataset {entry.id}")
     _licence.require(
         root,
         entry,

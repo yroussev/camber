@@ -79,7 +79,7 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev,brick]
+          pip install -e .[dev,brick,xlsx]
       - run: pytest -q
 
   # ---- PyPI via Trusted Publishing (OIDC; no API token stored) ----

@@ -793,6 +793,70 @@ def test_bdg2_one_facility_per_site_weather_in_f_and_mv(tmp_path, monkeypatch):
     assert store.facilities() == ["ds-tb-ant"]
 
 
+# --------------------------------------------------------------------------- xlsx extra
+
+
+def _xlsx_entry(tmp_path):
+    pytest.importorskip("openpyxl")
+    csv = pd.read_csv(io.BytesIO(_run_csv("ok", periods=6 * 60)))
+    path = tmp_path / "run.xlsx"
+    with pd.ExcelWriter(path, engine="openpyxl") as xw:
+        pd.DataFrame({"about": ["cover sheet"]}).to_excel(xw, sheet_name="README", index=False)
+        csv.to_excel(xw, sheet_name="data", index=False)
+    body = path.read_bytes()
+    d = _ahu_entry_dict(_zip_bytes())
+    d["files"] = [_file("run.xlsx", body)]
+    d["requires_extras"] = ["xlsx"]
+    run = {"id": "fault_free", "file": "run.xlsx", "sheet": "data", "equip": "AHU"}
+    d["ingest"] = dict(d["ingest"], runs=[dict(run, **{"class": "AHU", "label": ""})], derived=[])
+    d["subsets"] = {
+        k: {"files": "all", "runs": "all", "store_bytes_estimate": 1000}
+        for k in ("default", "full")
+    }
+    assert validate_catalog({"schema": 1, "datasets": [d]}) == []
+    return DatasetEntry.from_dict(d), FakeOpener({BASE + "run.xlsx": body})
+
+
+def test_xlsx_run_ingests_through_the_extra(ahu):
+    _entry, _opener, tmp = ahu
+    entry, opener = _xlsx_entry(tmp)
+    _ops.fetch_dataset(entry, opener=opener)
+    store = ParquetStore(str(tmp / "store"))
+    res = _ingest.ingest_dataset(entry, store)
+    assert res.equipment == 1
+    ff = store.read_role_frame(facility_id="ds-test-ahu", equip="AHU__fault_free")
+    assert len(ff) == 24 and ff[Role.OAT].min() > 60  # 6 h at 15 min, degC -> degF
+
+
+def test_workbook_runs_must_declare_the_extra(ahu):
+    _entry, _opener, tmp = ahu
+    entry, _ = _xlsx_entry(tmp)
+    d = entry.as_dict()
+    d["requires_extras"] = []
+    errs = validate_catalog({"schema": 1, "datasets": [d]})
+    assert any("requires_extras must list 'xlsx'" in e for e in errs)
+    d["requires_extras"] = ["xlsx", "gpu"]
+    assert any("unknown extra 'gpu'" in e for e in validate_catalog({"schema": 1, "datasets": [d]}))
+
+
+def test_missing_extra_is_an_actionable_cli_error(ahu, monkeypatch, capsys):
+    from camber.cli import main
+    from camber.datasets import _readers
+
+    _entry, _opener, tmp = ahu
+    entry, opener = _xlsx_entry(tmp)
+    _ops.fetch_dataset(entry, opener=opener)
+    monkeypatch.setattr(ds, "_entries", lambda: (entry,))
+    real = _readers.importlib.import_module
+    monkeypatch.setattr(
+        _readers.importlib,
+        "import_module",
+        lambda n, *a, **k: (_ for _ in ()).throw(ImportError(n)) if n == "openpyxl" else real(n),
+    )
+    assert main(["datasets", "ingest", "test-ahu", "--store", str(tmp / "s"), "--quiet"]) == 1
+    assert 'pip install "camber-toolkit[xlsx]"' in capsys.readouterr().err
+
+
 # --------------------------------------------------------------------------- CLI
 
 

@@ -447,6 +447,7 @@ def _ds_errors(fn):
     def wrapped(args) -> int:
         from .datasets._archive import UnsafeArchive
         from .datasets._fetch import ChecksumMismatch, FetchError, InsufficientSpace
+        from .datasets._readers import MissingExtra
 
         try:
             return fn(args)
@@ -459,7 +460,14 @@ def _ds_errors(fn):
         except InsufficientSpace as e:
             print(f"error: {e}", file=sys.stderr)
             return _DS_EXIT_DISK
-        except (FetchError, UnsafeArchive, FileNotFoundError, KeyError, ValueError) as e:
+        except (
+            FetchError,
+            UnsafeArchive,
+            MissingExtra,
+            FileNotFoundError,
+            KeyError,
+            ValueError,
+        ) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
 

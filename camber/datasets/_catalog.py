@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files as _files
 
 from ._quirks import validate_quirk
+from ._readers import EXTRAS, needs_extra
 from ._units import canonical_unit
 
 SCHEMA_VERSION = 1
@@ -560,6 +561,23 @@ def _check_subsets(did: str, d: dict, file_names: dict, run_ids: set, errs: list
                     errs.append(f"{did}/{sname}: subset run {rid!r} is not a run")
 
 
+def _check_extras(did: str, d: dict, errs: list) -> None:
+    """``requires_extras`` names known extras, and lists ``xlsx`` when any run reads a workbook."""
+    extras = d.get("requires_extras") or []
+    if not isinstance(extras, list):
+        errs.append(f"{did}: requires_extras must be a list")
+        return
+    for x in extras:
+        if x not in EXTRAS:
+            errs.append(f"{did}: unknown extra {x!r} in requires_extras (known: {sorted(EXTRAS)})")
+    for r in (d.get("ingest") or {}).get("runs") or []:
+        need = needs_extra(r.get("member") or r.get("file") or "")
+        if need and need not in extras:
+            errs.append(
+                f"{did}/{r.get('id')}: reads a workbook, so requires_extras must list {need!r}"
+            )
+
+
 def _check_entry(d: dict, deny: list, errs: list) -> None:
     did = d.get("id", "?")
     for k in _REQUIRED:
@@ -594,6 +612,7 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
     _check_subsets(did, d, file_names, run_ids, errs)
     _check_targets(did, d, errs)
     _check_issues(did, d, run_ids, errs)
+    _check_extras(did, d, errs)
     tmpl = (d.get("suggested_analyses") or {}).get("config_template")
     if tmpl is not None and not _package_has("configs", tmpl):
         errs.append(f"{did}: config template {tmpl!r} is not shipped in camber/datasets/configs/")

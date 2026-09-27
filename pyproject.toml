@@ -49,6 +49,10 @@ dev = ["pytest>=7", "pytest-cov>=5", "hypothesis>=6", "ruff>=0.6", "mypy>=1.8"]
 # Docs site only (never a runtime dep): build the MkDocs site with `mkdocs build`.
 docs = ["mkdocs>=1.5", "mkdocs-material>=9.5"]
 brick = ["rdflib>=6"]   # robust Brick/RDF parsing (camber.interop.brick backend="rdflib")
+# Excel workbooks (.xlsx) in the dataset catalog (camber.datasets._readers imports openpyxl lazily,
+# only when a workbook is read). Legacy .xls (xlrd) is deliberately not included: no catalog entry
+# needs one -- see docs/DATASETS.md.
+xlsx = ["openpyxl>=3.1"]
 # a maintained Haystack client to wire via camber.ingest.haystack.client_transport;
 # phable is modern but needs Python >= 3.11, pyhaystack covers older Pythons.
 haystack = [
