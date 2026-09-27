@@ -21,7 +21,8 @@ samples only. It applies to the roles whose reading depends on moving air: duct 
 airflow, static and duct humidity (`FAN_GATED_ROLES`). A supply-air sensor that settles to one value
 while the unit is off is then not called stuck, and a run is broken wherever the fan stops. Coverage,
 range and outlier reads are unchanged, and an OAT or space temperature is never gated. The default
-(`gate=None`) is unchanged, so the runner's trust gate behaves exactly as before. The
+(`gate=None`) is unchanged, so the runner's trust gate behaves exactly as before (apart from the
+0.90.1 checks below). The
 [RCx report](RCX-REPORT.md) shows both reads. `schedules.fan_on_mask(frame)` picks the gate: fan
 status, else fan speed, else airflow, else "ungated — no fan signal".
 
@@ -51,6 +52,45 @@ Two information flags (no trust penalty):
 - `scale_suspect` -- an airflow role whose data is bounded to 0-100 (see below);
 - `below_ambient` -- a zone CO2 point reading under 380 ppm on more than 5 % of samples: below any
   outdoor background, so its calibration (often NDIR automatic baseline calibration) is suspect.
+
+**Stuck by duration, not by share (0.90.1).** The flatline read above is the longest identical
+run *as a share of the series*, so a long series dilutes a real outage: a zone temperature pinned
+for 12 days of a year is 4 % of it. Every analog role in `STUCK_HOURS` is therefore also judged on
+the **absolute duration** of its runs -- 24 h for temperatures, humidity, flows, static, pump head
+and power, 48 h for CO2 (an empty building over a weekend). A run longer than the limit sets the
+`stuck` flag, is listed in `stuck_intervals` (`start`, `end`, `hours`, `value`), and caps the trust
+at "suspect" (0.75, less the stuck share of the samples); `longest_flat_hours` is always reported.
+Flows, static, pump head and power legitimately sit at their "off" value for a weekend, so a run
+at or below 2 % of the series' 99th-percentile magnitude is never counted. The fan-dependent roles
+(`FAN_GATED_ROLES`) are judged on fan-on stretches only, in the gated mode: without a gate a duct
+temperature holding still while the fan is off can't be told from a stuck one. Override a limit
+with `sensor_trust(..., stuck_hours={Role.SPACE_TEMP: 12})`.
+
+**Coverage over the point's own span.** A point that was added part-way through the window is not
+a low-coverage point: coverage is judged from its first valid sample (`first_valid`), the point is
+flagged `late_start`, and `window_coverage` keeps the whole-window figure. A point that stops
+reporting part-way is still `low_coverage`.
+
+**Binary points.** A status point reports `n_state_changes`. With no change over 14 days or more it
+is flagged `never_changes`; for a supply-fan status that caps it at "suspect" (a dead point, or a
+unit nobody runs -- both worth a look). Pumps, compressors and boilers sit off for a whole season,
+so for them the flag carries no penalty. A status holding values between 0 and 1 on more than 5 %
+of samples at a native rate of 15 minutes or finer is flagged `fractional_status` (interpolated,
+not logged) and is "suspect"; on a coarser grid those fractions are the duty resample and are fine.
+
+**Frame-level checks (`frame_checks`).** `frame_sensor_health` and the runner's trust gate
+(`untrusted_roles`) also judge the points of one equipment against each other. Each records a
+`frame_checks` entry on the points it marks and caps them at "suspect":
+
+- `implausible_fan_off` -- duct static above 0.5 in.w.c. (filter DP above 0.3) on more than half of
+  the samples where the supply fan is clearly off (status and speed agree). The transmitter is
+  offset, mis-scaled or mapped to the wrong point.
+- `status_speed_mismatch` -- the fan status reads off (<= 0.05) while the drive runs above 20 %, or on
+  (>= 0.95) with the drive stopped, on at least 1 % (and 3) of the samples. The status is capped; the
+  speed is flagged only.
+- `all_points_frozen` -- every varying analog sensor on the unit (at least two) holds its value at
+  the same time for 12 h or more: a forward-filled collection outage. Any other point that held
+  still through the same intervals is marked too.
 
 ## Cross-sensor and provenance checks
 

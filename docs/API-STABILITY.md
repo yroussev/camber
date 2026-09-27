@@ -143,6 +143,18 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the `camber mv run | freeze | list | propose | rebaseline | adjust | report` commands and
     their `mv.freeze`, `mv.rebaseline` and `mv.adjust` audit actions.
 
+- **False-verdict and sensor-trust fixes** (0.90.1; #57, #58), all additive:
+  - `min_unoccupied_run_pct=` on `setback.analyze_setback` and `NightWeekendSetback`, and the
+    trailing `SetbackResult.unoccupied_to_occupied_ratio` / `min_unoccupied_run_pct`;
+  - the trailing `SATResetComplianceResult` fields `mean_abs_error_f`, `pct_above_g36_target`,
+    `mean_above_gap_f` and `n_warm`, `track_gap_f=` on `SupplyAirResetCompliance`, and the optional
+    rule attribute `equip_classes` that `Registry.run` declines other classes by;
+  - `sensorhealth.STUCK_HOURS`, `sensorhealth.frame_checks`, `stuck_hours=` on `sensor_trust`, the
+    trailing `SensorTrust` fields `longest_flat_hours`, `stuck_intervals`, `first_valid`,
+    `window_coverage`, `n_state_changes` and `frame_checks`, and the flags `late_start`,
+    `never_changes`, `fractional_status`, `implausible_fan_off`, `status_speed_mismatch` and
+    `all_points_frozen`. The limits and thresholds may be retuned.
+
 ## Deprecated
 
 Currently deprecated names and code paths, each with its replacement. Each emits a

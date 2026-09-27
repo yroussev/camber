@@ -49,6 +49,8 @@ __all__ = [
     "sensor_trust",
     "FAN_GATED_ROLES",
     "frame_sensor_health",
+    "frame_checks",
+    "STUCK_HOURS",
     "trusted_roles",
     "untrusted_roles",
     "ConsistencyResult",
@@ -279,11 +281,26 @@ class SensorTrust:
     trust: float  # 0..1 (1 = fully trustworthy)
     verdict: str  # "trusted" | "suspect" | "untrusted"
     flags: list = field(default_factory=list)
+    # Provisional (#58). Stuck runs judged by absolute duration: the longest identical run in
+    # hours, and every run longer than the role's limit as ``{"start", "end", "hours", "value"}``.
+    longest_flat_hours: float | None = None
+    stuck_intervals: list = field(default_factory=list)
+    # The point's own span: its first valid sample, and coverage over the whole window it was
+    # handed (``coverage`` above is over the point's own span, from ``first_valid`` on).
+    first_valid: str | None = None
+    window_coverage: float | None = None
+    # Binary (status) points: how many state changes the series holds (None for other roles).
+    n_state_changes: int | None = None
+    # Frame-level findings that touched this point (all-points freeze, fan-off plausibility,
+    # status-vs-speed), as ``{"check": ..., ...}`` dicts; filled by :func:`frame_sensor_health`.
+    frame_checks: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         """Return the trust result as a plain dict."""
         d = self.__dict__.copy()
         d["flags"] = list(self.flags)
+        d["stuck_intervals"] = [dict(x) for x in self.stuck_intervals]
+        d["frame_checks"] = [dict(x) for x in self.frame_checks]
         return d
 
 
@@ -326,7 +343,183 @@ def _gated_flatline_frac(series: pd.Series, gate: pd.Series) -> float | None:
     return longest / len(on)
 
 
-def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> SensorTrust:
+# --------------------------------------------------------------------------------------------- #
+# Stuck runs by absolute duration (#58)                                                         #
+# --------------------------------------------------------------------------------------------- #
+
+#: Longest believable identical run, in hours, per analog role. The share-of-series flatline read
+#: (``flatline_frac > 0.5``) dilutes with series length -- a zone temperature pinned for 12 days of
+#: a year is 3 % of the series -- so a run is also judged on its own duration. A real temperature,
+#: humidity or CO2 reading moves within a day; flows, static and power sit at an "off" value for a
+#: weekend, so for those an idle run (near zero) is never counted (see :data:`_IDLE_ROLES`). The
+#: fan-dependent roles (:data:`FAN_GATED_ROLES`) are judged only in the gated mode, on fan-on
+#: stretches. Provisional: tune per site with ``stuck_hours=``.
+STUCK_HOURS: dict = {
+    **{
+        r: 24.0
+        for r in (
+            Role.OAT,
+            Role.WETBULB_TEMP,
+            Role.SUPPLY_AIR_TEMP,
+            Role.MIXED_AIR_TEMP,
+            Role.RETURN_AIR_TEMP,
+            Role.SPACE_TEMP,
+            Role.CHW_SUPPLY_TEMP,
+            Role.CHW_RETURN_TEMP,
+            Role.HW_SUPPLY_TEMP,
+            Role.HW_RETURN_TEMP,
+            Role.CW_SUPPLY_TEMP,
+            Role.CW_RETURN_TEMP,
+            Role.OUTDOOR_RH,
+            Role.AIRFLOW,
+            Role.CHW_FLOW,
+            Role.HW_FLOW,
+            Role.PUMP_HEAD,
+            Role.POWER,
+            Role.DUCT_STATIC,
+        )
+    },
+    Role.CO2: 48.0,  # an empty building over a weekend can sit at the outdoor background
+}
+
+# Roles that legitimately hold an "off" reading (near zero) for days; an idle run is not stuck.
+_IDLE_ROLES: frozenset = frozenset(
+    {
+        Role.AIRFLOW,
+        Role.OA_AIRFLOW,
+        Role.CHW_FLOW,
+        Role.HW_FLOW,
+        Role.POWER,
+        Role.DUCT_STATIC,
+        Role.PUMP_HEAD,
+    }
+)
+_IDLE_FRAC = 0.02  # |value| at or below this share of the series' P99 magnitude reads as idle
+
+# Stuck runs cap the trust at "suspect": the point may be fine outside the interval, but a rule
+# run over the whole window would read the stuck stretch as data.
+_SUSPECT_CAP = 0.75
+
+
+def _step(index) -> pd.Timedelta:
+    idx = pd.DatetimeIndex(index)
+    if len(idx) < 2:
+        return pd.Timedelta(0)
+    d = pd.Series(idx).diff().dropna()
+    d = d[d > pd.Timedelta(0)]
+    return d.median() if len(d) else pd.Timedelta(0)
+
+
+def _value_runs(series: pd.Series, gate=None) -> pd.DataFrame:
+    """Identical-value runs of ``series`` (non-null) as a frame: start, end, n, value, hours.
+
+    With ``gate`` (boolean, same index) only gated samples count and a run breaks wherever the
+    gate goes False, as in the gated flatline read.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    step = _step(s.index)
+    if gate is not None:
+        g = pd.Series(gate).reindex(s.index).fillna(False).astype(bool)
+        seg = (~g).cumsum()[g]
+        s = s[g]
+    else:
+        seg = None
+    s = s.dropna()
+    if s.empty or not isinstance(s.index, pd.DatetimeIndex):
+        return pd.DataFrame(columns=["start", "end", "n", "value", "hours"])
+    changed = s.ne(s.shift())
+    if seg is not None:
+        sg = seg.reindex(s.index)
+        changed = changed | sg.ne(sg.shift())
+    rid = changed.cumsum()
+    ts = pd.Series(s.index, index=s.index)
+    g2 = pd.DataFrame({"ts": ts, "v": s, "rid": rid}).groupby("rid")
+    out = pd.DataFrame(
+        {
+            "start": g2["ts"].min(),
+            "end": g2["ts"].max(),
+            "n": g2["v"].size(),
+            "value": g2["v"].first(),
+        }
+    )
+    out["hours"] = (out["end"] - out["start"] + step).dt.total_seconds() / 3600.0
+    return out.reset_index(drop=True)
+
+
+def _stuck_runs(series: pd.Series, role, gate=None, stuck_hours=None):
+    """``(longest_hours, [interval dicts], stuck sample count)`` for a role with a stuck limit."""
+    limits = STUCK_HOURS if stuck_hours is None else {**STUCK_HOURS, **stuck_hours}
+    if role not in limits:
+        return None, [], 0
+    use_gate = None
+    if role in FAN_GATED_ROLES:
+        if gate is None:
+            # a duct reading holds still whenever the fan is off (a weekend), so its run length
+            # says nothing without knowing when the fan ran: judged in the gated mode only
+            return None, [], 0
+        use_gate = gate
+    runs = _value_runs(series, use_gate)
+    if runs.empty:
+        return None, [], 0
+    if role in _IDLE_ROLES:
+        v = pd.to_numeric(series, errors="coerce").dropna().abs()
+        p99 = float(np.percentile(v, 99)) if len(v) else 0.0
+        runs = runs[runs["value"].abs() > _IDLE_FRAC * p99] if p99 > 0 else runs.iloc[0:0]
+    if runs.empty:
+        return 0.0, [], 0
+    longest = round(float(runs["hours"].max()), 2)
+    over = runs[runs["hours"] > float(limits[role])]
+    intervals = [
+        {
+            "start": str(r.start),
+            "end": str(r.end),
+            "hours": round(float(r.hours), 2),
+            "value": float(r.value),
+        }
+        for r in over.itertuples()
+    ]
+    return longest, intervals, int(over["n"].sum())
+
+
+# Run-status points whose state should change: a supply fan that never changes over two weeks is
+# either a dead point or a unit nobody runs -- both worth a look. Pumps, compressors and boilers
+# legitimately sit off for a whole season, so for them the count is reported, never penalized.
+_CHANGE_CHECKED: frozenset = frozenset({Role.SUPPLY_FAN_STATUS})
+_MIN_CHANGE_SPAN_DAYS = 14.0
+_FRACTIONAL_MAX_STEP = pd.Timedelta("15min")  # a coarser grid is a duty resample: fractions fine
+
+
+def _status_checks(series: pd.Series, role, expected_freq=None):
+    """``(n_changes, flags, cap)`` for a binary status point."""
+    s = pd.to_numeric(series, errors="coerce").dropna()
+    if s.empty:
+        return 0, [], None
+    flags: list = []
+    cap = None
+    v = s.to_numpy(dtype="float64")
+    frac = (v > 1e-6) & (v < 1 - 1e-6)
+    step = pd.Timedelta(expected_freq) if expected_freq is not None else _step(s.index)
+    if float(frac.mean()) > 0.05 and pd.Timedelta(0) < step <= _FRACTIONAL_MAX_STEP:
+        # a native-rate status holding values between 0 and 1: interpolated, not logged, data
+        flags.append("fractional_status")
+        cap = _SUSPECT_CAP
+    state = np.where(v >= 0.5, 1, 0)
+    n_changes = int((np.diff(state) != 0).sum())
+    span_days = (s.index[-1] - s.index[0]).total_seconds() / 86400.0 if len(s) > 1 else 0.0
+    if n_changes == 0 and span_days >= _MIN_CHANGE_SPAN_DAYS:
+        flags.append("never_changes")
+        if role in _CHANGE_CHECKED:
+            cap = _SUSPECT_CAP
+    return n_changes, flags, cap
+
+
+def _verdict(trust: float) -> str:
+    return "trusted" if trust >= 0.8 else ("suspect" if trust >= 0.5 else "untrusted")
+
+
+def sensor_trust(
+    series: pd.Series, role, *, expected_freq=None, gate=None, stuck_hours=None
+) -> SensorTrust:
     """Score one point's trustworthiness from quality stats + physical-range checks.
 
     ``gate`` (optional boolean Series, e.g. fan-on from :func:`camber.schedules.fan_on_mask`)
@@ -334,8 +527,27 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> S
     ``stuck`` flag and its share of the score) is taken over the gated samples only, so a duct
     sensor holding a constant value while the unit is off is not called stuck. Coverage, range and
     outlier reads are unchanged. With ``gate=None`` (the default) nothing changes.
+
+    Also (provisional, #58): an analog point is ``stuck`` when an identical run outlasts the role's
+    :data:`STUCK_HOURS` limit (override per role with ``stuck_hours={Role: hours}``), whatever its
+    share of the series; the runs are reported in ``stuck_intervals`` and cap the trust at
+    "suspect". Coverage is judged over the point's **own span**, from its first valid sample
+    (``first_valid``; a point that starts late is flagged ``late_start``, not ``low_coverage``);
+    ``window_coverage`` keeps the whole-window figure. A binary status point reports its state
+    changes, and is flagged ``never_changes`` (no change over 14 days or more; a supply-fan status
+    is then "suspect") or ``fractional_status`` (values between 0 and 1 at a native <= 15 min rate:
+    interpolated, not logged).
     """
     intermittent = role in _INTERMITTENT_ROLES
+    full = series
+    window_cov = round(float(full.notna().mean()), 4) if len(full) else 0.0
+    first = full.first_valid_index()
+    late = False
+    if first is not None and len(full) and first != full.index[0]:
+        lead = float((full.index < first).mean())
+        if lead > 0.05:
+            late = True
+        series = full.loc[first:]
     q = assess(
         series,
         expected_freq,
@@ -355,6 +567,8 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> S
             flat_frac = round(gated, 4)
 
     flags = []
+    if late:
+        flags.append("late_start")
     if q.coverage < 0.9:
         flags.append("low_coverage")
     if q.n_gaps > 0:
@@ -373,6 +587,18 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> S
     if role in _SENSOR_ROLES and flat_frac > 0.5:
         flags.append("stuck")
         trust *= 0.5  # a stuck analog sensor is bad
+    longest_h, stuck_iv, n_stuck = _stuck_runs(series, role, gate, stuck_hours)
+    if stuck_iv:
+        if "stuck" not in flags:
+            flags.append("stuck")
+        share = n_stuck / q.n if q.n else 1.0
+        trust = min(trust * (1.0 - share), _SUSPECT_CAP)
+    n_changes = None
+    if role in STATUS_ROLES:
+        n_changes, sflags, cap = _status_checks(series, role, expected_freq)
+        flags += sflags
+        if cap is not None:
+            trust = min(trust, cap)
     if percent_scale_suspect(series, role):
         flags.append("scale_suspect")  # a 0-100 signal mapped to a cfm role: check the mapping
     if role == Role.CO2:
@@ -386,7 +612,6 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> S
         flags.append("intermittent" if intermittent else "bimodal")
 
     trust = round(float(max(0.0, min(1.0, trust))), 4)
-    verdict = "trusted" if trust >= 0.8 else ("suspect" if trust >= 0.5 else "untrusted")
     return SensorTrust(
         role=role.value if isinstance(role, Role) else str(role),
         n=q.n,
@@ -395,9 +620,182 @@ def sensor_trust(series: pd.Series, role, *, expected_freq=None, gate=None) -> S
         outlier_frac=q.outlier_frac,
         range_violation_frac=rng,
         trust=trust,
-        verdict=verdict,
+        verdict=_verdict(trust),
         flags=flags,
+        longest_flat_hours=longest_h,
+        stuck_intervals=stuck_iv,
+        first_valid=None if first is None else str(first),
+        window_coverage=window_cov,
+        n_state_changes=n_changes,
     )
+
+
+# --------------------------------------------------------------------------------------------- #
+# Frame-level trust checks (#58): points judged against each other                              #
+# --------------------------------------------------------------------------------------------- #
+
+#: Pressure roles that must read near zero with the supply fan off, and the plausible ceiling for
+#: a fan-off reading (in.w.c.): a transmitter that holds several inches with the fan stopped is
+#: offset, mis-scaled or mapped to the wrong point.
+_FAN_OFF_PRESSURE: dict = {Role.DUCT_STATIC: 0.5, Role.FILTER_DIFF_PRESS: 0.3}
+_STATUS_OFF = 0.05  # a status (or duty) at or below this is off for the whole sample
+_STATUS_ON = 0.95
+_SPEED_RUNNING_PCT = 20.0  # a drive above this is running, whatever the status says
+_SPEED_STOPPED_PCT = 1.0
+_FREEZE_HOURS = 12.0  # every varying sensor on the unit identical this long = collection outage
+
+
+def _col(frame: pd.DataFrame, role):
+    for key in (role, getattr(role, "value", role)):
+        if key in frame.columns:
+            s = pd.to_numeric(frame[key], errors="coerce")
+            return s if s.notna().any() else None
+    return None
+
+
+def _mark(health: dict, role, flag: str, check: dict, *, cap=None, share=0.0) -> None:
+    t = health.get(role)
+    if t is None:
+        return
+    if flag not in t.flags:
+        t.flags.append(flag)
+    t.frame_checks.append(check)
+    if cap is not None:
+        t.trust = round(float(max(0.0, min(t.trust * (1.0 - share), cap))), 4)
+        t.verdict = _verdict(t.trust)
+
+
+def _fan_off(frame: pd.DataFrame):
+    """Samples where the supply fan is clearly off: status and speed agree (either alone else)."""
+    from .units import normalize_percent
+
+    status, speed = _col(frame, Role.SUPPLY_FAN_STATUS), _col(frame, Role.SUPPLY_FAN_SPEED)
+    off = None
+    if status is not None:
+        off = status <= _STATUS_OFF
+    if speed is not None:
+        sp_off = normalize_percent(speed) < _SPEED_STOPPED_PCT
+        off = sp_off if off is None else (off & sp_off)
+    return off
+
+
+def _check_fan_off_pressure(frame: pd.DataFrame, health: dict) -> None:
+    off = _fan_off(frame)
+    if off is None:
+        return
+    for role, ceiling in _FAN_OFF_PRESSURE.items():
+        p = _col(frame, role)
+        if p is None or role not in health:
+            continue
+        both = off & p.notna()
+        n_off = int(both.sum())
+        if n_off < _MIN_GATED:
+            continue
+        bad = both & (p.abs() > ceiling)
+        frac = float(bad.sum()) / n_off
+        if frac > 0.5:
+            check = {
+                "check": "fan_off_pressure",
+                "n_fan_off": n_off,
+                "frac_implausible": round(frac, 4),
+                "median_fan_off": round(float(p[both].median()), 3),
+                "ceiling": ceiling,
+            }
+            share = float(bad.sum()) / max(int(p.notna().sum()), 1)
+            _mark(health, role, "implausible_fan_off", check, cap=_SUSPECT_CAP, share=share)
+
+
+def _check_status_speed(frame: pd.DataFrame, health: dict) -> None:
+    from .units import normalize_percent
+
+    status, speed = _col(frame, Role.SUPPLY_FAN_STATUS), _col(frame, Role.SUPPLY_FAN_SPEED)
+    if status is None or speed is None:
+        return
+    pct = normalize_percent(speed)
+    both = status.notna() & pct.notna()
+    n = int(both.sum())
+    if n < _MIN_GATED:
+        return
+    off_running = both & (status <= _STATUS_OFF) & (pct > _SPEED_RUNNING_PCT)
+    on_stopped = both & (status >= _STATUS_ON) & (pct < _SPEED_STOPPED_PCT)
+    bad = off_running | on_stopped
+    k = int(bad.sum())
+    if k >= 3 and k / n >= 0.01:
+        check = {
+            "check": "status_vs_speed",
+            "n_checked": n,
+            "n_status_off_speed_running": int(off_running.sum()),
+            "n_status_on_speed_stopped": int(on_stopped.sum()),
+            "frac_inconsistent": round(k / n, 4),
+            "first": str(bad[bad].index[0]),
+        }
+        _mark(health, Role.SUPPLY_FAN_STATUS, "status_speed_mismatch", check, cap=_SUSPECT_CAP)
+        _mark(health, Role.SUPPLY_FAN_SPEED, "status_speed_mismatch", check)
+
+
+def _check_all_frozen(frame: pd.DataFrame, health: dict) -> None:
+    cols = []
+    for c in frame.columns:
+        role = c if isinstance(c, Role) else None
+        if role is None or role not in _SENSOR_ROLES:
+            continue
+        v = pd.to_numeric(frame[c], errors="coerce")
+        if v.nunique(dropna=True) > 1:
+            cols.append(c)
+    if len(cols) < 2 or not isinstance(frame.index, pd.DatetimeIndex) or len(frame) < 3:
+        return
+    w = frame[cols].apply(pd.to_numeric, errors="coerce")
+    same = (w.diff() == 0).all(axis=1) & w.notna().all(axis=1) & w.shift().notna().all(axis=1)
+    if not same.any():
+        return
+    step = _step(frame.index)
+    rid = (~same).cumsum()
+    intervals, n_frozen = [], 0
+    for _, grp in same[same].groupby(rid[same]):
+        start = frame.index[frame.index.get_loc(grp.index[0]) - 1]  # the value held from here
+        end = grp.index[-1]
+        hours = (end - start + step).total_seconds() / 3600.0
+        if hours >= _FREEZE_HOURS:
+            intervals.append({"start": str(start), "end": str(end), "hours": round(hours, 2)})
+            n_frozen += len(grp) + 1
+    if not intervals:
+        return
+    roles: list = [c.value for c in cols]
+    check: dict = {"check": "all_points_frozen", "roles": roles, "intervals": intervals}
+    # Any other point that varies elsewhere but held still through every frozen interval froze
+    # with them (a drive speed or valve command in a forward-filled outage).
+    for c in frame.columns:
+        if c in cols or not isinstance(c, Role):
+            continue
+        v = pd.to_numeric(frame[c], errors="coerce")
+        if v.nunique(dropna=True) <= 1:
+            continue
+        if all(
+            v.loc[iv["start"] : iv["end"]].notna().all()
+            and v.loc[iv["start"] : iv["end"]].nunique() == 1
+            for iv in intervals
+        ):
+            cols.append(c)
+            roles.append(c.value)
+    share = n_frozen / max(len(frame), 1)
+    for c in cols:
+        _mark(health, c, "all_points_frozen", dict(check), cap=_SUSPECT_CAP, share=share)
+
+
+def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
+    """Apply the frame-level trust checks to ``health`` (``{Role: SensorTrust}``) in place.
+
+    Provisional (#58). Each check judges points against the others on the same equipment and marks
+    only the roles present in ``health``: a pressure point reading several inches with the supply
+    fan off (``implausible_fan_off``), a fan status that disagrees with the drive speed
+    (``status_speed_mismatch``), and every varying sensor on the unit holding its value at once
+    for 12 h or more -- a forward-filled collection outage (``all_points_frozen``). A marked point
+    records the check in ``frame_checks`` and is capped at "suspect". Returns ``health``.
+    """
+    _check_fan_off_pressure(frame, health)
+    _check_status_speed(frame, health)
+    _check_all_frozen(frame, health)
+    return health
 
 
 def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None, gate=None) -> dict:
@@ -405,7 +803,8 @@ def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None, gate=None) -
 
     ``gate`` is passed to :func:`sensor_trust` (gated mode for the fan-dependent roles); pass
     ``"fan"`` to derive it from the frame's own fan signal via
-    :func:`camber.schedules.fan_on_mask` (ungated when the frame has none).
+    :func:`camber.schedules.fan_on_mask` (ungated when the frame has none). The frame-level checks
+    of :func:`frame_checks` are then applied.
     """
     if isinstance(gate, str):
         if gate != "fan":
@@ -413,10 +812,11 @@ def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None, gate=None) -
         from .schedules import fan_on_mask
 
         gate = fan_on_mask(frame)[0]
-    return {
+    health = {
         role: sensor_trust(frame[role], role, expected_freq=expected_freq, gate=gate)
         for role in frame.columns
     }
+    return frame_checks(frame, health)
 
 
 def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=None) -> set:
@@ -439,13 +839,10 @@ def untrusted_roles(
     rule runner). Returns the offending roles in the order given, for gating a rule's
     required inputs.
     """
-    out = []
-    for r in roles:
-        if r not in frame.columns:
-            continue
-        if sensor_trust(frame[r], r, expected_freq=expected_freq).trust < min_trust:
-            out.append(r)
-    return out
+    present = [r for r in roles if r in frame.columns]
+    health = {r: sensor_trust(frame[r], r, expected_freq=expected_freq) for r in present}
+    frame_checks(frame, health)
+    return [r for r in present if health[r].trust < min_trust]
 
 
 @dataclass
