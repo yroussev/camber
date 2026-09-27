@@ -703,7 +703,7 @@ def _savings_steps(rep: pd.DataFrame, model, pol: RebaselinePolicy, max_steps: i
     ``delta_rel`` (the level change), ``delta`` (that change in energy per day at the post-step
     projection), its rho-inflated standard error and ``z``.
     """
-    from .nonroutine import _pelt, _segment_ids
+    from .nonroutine import _pelt, _pelt_capped, _segment_ids
     from .stats import lag1_autocorrelation
 
     pred = np.asarray(model.predict(rep["oat"].to_numpy(float)), dtype=float)
@@ -719,8 +719,8 @@ def _savings_steps(rep: pd.DataFrame, model, pol: RebaselinePolicy, max_steps: i
     scale = (1.4826 * float(np.median(np.abs(d - np.median(d))))) ** 2 / 2.0
     if not scale > 0:
         scale = float(np.var(x, ddof=1))
-    if not (np.isfinite(scale) and scale > 0):
-        return []
+    if not (np.isfinite(scale) and scale > 1e-18):
+        return []  # noise-free (x is relative: 1e-9 is rounding)
     cps = _pelt(x, scale=scale, penalty=pen, min_seg=pol.min_segment_days)
     kappa, s2 = 1.0, scale
     for _ in range(3):
@@ -730,15 +730,19 @@ def _savings_steps(rep: pd.DataFrame, model, pol: RebaselinePolicy, max_steps: i
         s2 = float(resid.var(ddof=len(means))) if n > len(means) else scale
         rho = lag1_autocorrelation(resid, index=idx)
         kappa = 1.0 if rho is None else (1.0 + rho) / (1.0 - rho)
-        if not (np.isfinite(s2 * kappa) and s2 * kappa > 0):
-            return []  # no residual variability: nothing can be told apart from noise
-        p_used = pen
-        new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=pol.min_segment_days)
-        for _k in range(40):  # raise the penalty until at most max_steps remain
-            if len(new) <= max_steps:
-                break
-            p_used *= 1.5
-            new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=pol.min_segment_days)
+        # no residual variability (a noise-free series): nothing can be told apart from noise.
+        # x is relative, so a floor of 1e-9 is rounding noise.
+        found = _pelt_capped(
+            x,
+            scale=s2 * kappa,
+            penalty=pen,
+            min_seg=pol.min_segment_days,
+            max_steps=max_steps,
+            floor=1e-18,
+        )
+        if found is None:
+            return []
+        new = found[0]
         if new == cps:
             break
         cps = new

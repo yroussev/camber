@@ -325,6 +325,29 @@ def _pelt(x: np.ndarray, *, scale: float, penalty: float, min_seg: int) -> list:
     return sorted(cps)
 
 
+def _pelt_capped(
+    x: np.ndarray, *, scale: float, penalty: float, min_seg: int, max_steps: int, floor: float = 0.0
+) -> tuple | None:
+    """:func:`_pelt` with at most ``max_steps`` changes: the penalty is raised x1.5 at a time.
+
+    Returns ``(change positions, penalty used)``, or ``None`` when the noise scale is zero, not
+    finite or at most ``floor`` (an exact fit: a constant or dead meter, or a noise-free series).
+    There the Gaussian cost is 0/0 or pure rounding and no penalty would prune the segmentation, so
+    the caller stops. The single guard for every PELT round with a noise scale estimated from a
+    refit (:func:`detect_step_changes` and the rebaseline T1 savings-step search).
+    """
+    if not (np.isfinite(scale) and scale > floor and scale > 0):
+        return None
+    p_used = float(penalty)
+    new = _pelt(x, scale=scale, penalty=p_used, min_seg=min_seg)
+    for _ in range(200):  # 1.5**200 ~ 1e35: unreachable above the floor; a guard, not a limit
+        if len(new) <= max_steps:
+            return new, p_used
+        p_used *= 1.5
+        new = _pelt(x, scale=scale, penalty=p_used, min_seg=min_seg)
+    return None
+
+
 def _segment_ids(n: int, cps: list) -> np.ndarray:
     seg = np.zeros(n, dtype=int)
     for c in cps:
@@ -449,17 +472,21 @@ def detect_step_changes(
         rho = lag1_autocorrelation(resid, index=df.index)
         kappa = 1.0 if rho is None else (1.0 + rho) / (1.0 - rho)
         x = y - weather  # residual plus the segment levels
-        if not (np.isfinite(s2 * kappa) and s2 * kappa > 0):
-            # the fit is exact (a constant or dead meter): the cost is 0/0 and no penalty would
-            # ever prune the segmentation, so keep the steps found so far and stop
+        # an exact fit (a constant or dead meter) gives a 0/0 cost that no penalty prunes: keep
+        # the steps found so far and stop. The floor is rounding noise on the meter's own scale.
+        found = _pelt_capped(
+            x,
+            scale=s2 * kappa,
+            penalty=pen,
+            min_seg=min_segment_days,
+            max_steps=max_steps,
+            floor=(1e-9 * float(np.mean(np.abs(y)))) ** 2,
+        )
+        if found is None:
             caveats.append("the residual variance is zero or not finite; segmentation stopped")
             converged = True
             break
-        p_used = pen
-        new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=min_segment_days)
-        while len(new) > max_steps:
-            p_used *= 1.5
-            new = _pelt(x, scale=s2 * kappa, penalty=p_used, min_seg=min_segment_days)
+        new, p_used = found
         if p_used != pen:
             note = f"penalty raised to {p_used:.1f} to keep at most max_steps={max_steps} steps"
             caveats = [c for c in caveats if not c.startswith("penalty raised")] + [note]

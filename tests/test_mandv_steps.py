@@ -170,3 +170,22 @@ def test_a_constant_or_dead_meter_does_not_hang():
         r = detect_step_changes(pd.Series(level, index=idx), T)
         assert not r.detected and r.converged
         assert any("residual variance is zero" in c for c in r.caveats)
+
+
+def test_pelt_capped_is_the_one_guard_for_both_step_searches():
+    """detect_step_changes and the rebaseline T1 search share one capped PELT: a zero, non-finite
+    or rounding-level noise scale stops the search instead of looping on the max_steps cap."""
+    from camber.mandv.nonroutine import _pelt_capped
+
+    rng = np.random.default_rng(0)
+    x = np.r_[np.zeros(60), np.ones(60)] + rng.normal(0, 0.1, 120)
+    cps, pen = _pelt_capped(x, scale=0.01, penalty=3 * np.log(120), min_seg=28, max_steps=5)
+    assert cps == [60] and pen == 3 * np.log(120)
+    cps, pen = _pelt_capped(x, scale=1e-8, penalty=1.0, min_seg=5, max_steps=1)
+    assert len(cps) <= 1 and pen > 1.0  # the penalty was raised until at most one step remained
+    for bad in (0.0, np.nan, np.inf, -1.0):
+        assert _pelt_capped(x, scale=bad, penalty=1.0, min_seg=5, max_steps=1) is None
+    assert (
+        _pelt_capped(x * 1e-12, scale=1e-30, penalty=1.0, min_seg=5, max_steps=1, floor=1e-24)
+        is None
+    )
