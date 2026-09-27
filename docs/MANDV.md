@@ -285,6 +285,29 @@ res = backcast_savings(
 res.savings, res.savings_pct, res.abs_uncertainty, res.coverage["tier"]
 ```
 
+## The M&V flow: method, then adjustments, then result
+
+A reported saving is built in three fixed steps, in this order, and each step is recorded on the
+result:
+
+1. **Method.** A declared SEP adjustment-model method (below) gives the routine saving:
+   forecast, backcast, standard conditions or chaining (or CAMBER's `sequential_chain`), each a
+   `MethodResult` with its SEnPI, band and kernel. `select_method` and `"method": "auto"` only
+   *propose* one.
+2. **Adjustments.** An explicit ledger of non-routine and static-factor adjustments restates the
+   method's **baseline side** (`apply_adjustments`, [below](#non-routine-and-static-factor-adjustments)).
+   For a chain each entry restates the one link whose dates hold it, and the SEnPI and saving are
+   recombined by Eq 6 and Eq 11.
+3. **Result.** The unadjusted and the adjusted saving are reported side by side, with the
+   ledger, the waterfall and the combined band. Nothing is adjusted implicitly: a detected step
+   is only a proposal until an analyst accepts it.
+
+One `validity` setting (`g14`, `sep` or `both`; decision D1 on #21) governs the whole flow: G14
+acceptance for the savings claim, SEP §6.4.1 model validity for the SEnPI, and, under `sep` or
+`both`, SEP §5.3.2's evidence and approval on every adjustment. The ECM dates and the settle
+window after each (`EcmSchedule`, 14 days by default) are declared once and shared by the
+confounding guard, the detection proposals and, in the next phase, rebaselining.
+
 ## SEP methods: forecast, backcast, standard conditions and chaining
 
 `camber.mandv.methods` implements the four adjustment-model methods of the DOE **SEP 50001 M&V
@@ -490,8 +513,194 @@ change-point weather model:
     binary segmentation, independent-residual statistic) finds the same clear steps but also
     spurious ones: it fired on most step-free runs at ρ = 0.8.
 
-Detection only reports. Adjusting for a detected event (an indicator, an engineering estimate,
-excluding the span) and rebaselining are later phases of issue #21.
+Detection only reports. `adjustments.propose_adjustments` turns detected steps into *proposed*
+adjustments, which must be accepted explicitly before they change a saving (next section).
+Rebaselining is a later phase of issue #21.
+
+## Non-routine and static-factor adjustments
+
+IPMVP writes savings as `(Baseline − Reporting) ± Routine ± Non-routine` (IPMVP 2012 Vol. I §4.5.3,
+Eq 1a). The routine part is the weather model; the non-routine part restates the baseline for what
+the model cannot see — a change in a *static factor* (floor area, occupancy type, shifts,
+equipment) or a *non-routine event* (a shutdown, a new load). SEP requires the numeric inputs of
+such an adjustment to be observed, measured or metered, the method and rationale recorded, and
+prior Verification Body approval (SEP 50001 M&V Protocol 2019 Ed. 2 §5.3.2).
+
+`camber.mandv.adjustments` (provisional) keeps every adjustment as an explicit **ledger entry** —
+a `NonRoutineAdjustment` or a `StaticFactorAdjustment` — and never adjusts implicitly.
+`apply_adjustments(result, ledger, ...)` takes a finished saving (a `SavingsResult` or any
+`MethodResult`), restates its **baseline side** entry by entry and returns an `AdjustedResult`:
+the adjusted saving, SEnPI and bands, the resolved ledger (each entry with its amount, standard
+error, materiality flag and, in a chain, its link) and the waterfall from baseline to reporting
+energy. An empty ledger reproduces the method's own saving, SEnPI and bands.
+
+**Sign convention.** An amount is the change to the *baseline side*, in the result's energy units
+over the rows it summed: a new load in the reporting period is positive, a partial shutdown
+negative.
+
+**Each method's baseline side.**
+
+| Method | Baseline side restated | How an entry is dated |
+|---|---|---|
+| Forecast | the baseline projection onto the reporting rows | against the reporting rows it summed (`index=`) |
+| Backcast | the measured baseline energy | by its share of the reporting model's fit rows (`reporting_index=`), times the rows summed; an indicator dated inside the baseline rows is removed from `O_b` |
+| Standard conditions | the baseline model's projection at standard conditions | as for a backcast; the rows are the (undated) standard conditions, so `exclude` is refused, and a baseline-period indicator replaces that projection by its augmented fit with the event absent |
+| SEP chain | link 1: the measured baseline; link 2: the intermediate model's forecast | each entry belongs to the one link whose dates hold it: link 1 runs from the baseline start to the day before the intermediate period, link 2 from the day after it to the reporting end |
+| Sequential chain | each link's own baseline side | a link's dates are its reporting rows (forecast link) or its model's fit rows (backcast or standard-conditions link), from `links=` |
+
+In a chain an entry restates only its own link; the chained SEnPI is re-multiplied (Eq 6) and the
+saving re-summed (Eq 11). The SEP chain carries its shared-model covariance through: with `c₂` the
+multiplier a proportional factor applied to link 2's projection,
+`Var S = Σ_k (Var B′_k + Var R′_k) − 2 c₂ g_b′Σ_i g_r`, and the SEnPI's delta-method variance loses
+`2 c₂ g_b′Σ_i g_r / (P_i|b · B′_2)`. A sequential chain combines its adjusted links as independent
+(B-19 / B-20). Three things are refused inside a chain, each with the reason: an entry dated in the
+SEP chain's intermediate period (both links share that model, so one link cannot be restated
+alone), an `exclude` entry (drop the rows from the chain's inputs and recompute it instead; the
+two are the same thing), and a baseline-period indicator refit (refit that link's model and
+recompute). For standard conditions the band is split between the two models by their exact-kernel
+terms (with the G14 kernel, by assuming equal relative uncertainty, with a caveat).
+
+| Method | What it is | Uncertainty |
+|---|---|---|
+| `indicator` | The event's effect per row, as the coefficient of an indicator in the weather regression (BPA *Regression for M&V Reference Guide* 2024 §3.1.7; BPA/SBW *Potential Analytics for NRAs* 2018 §3.1), by `estimate_nre_indicator`. Each indicator adds one to `p`. | `fit_period="baseline"`: the indicator is fitted inside the baseline model, whose augmented form **replaces** the projection (indicator 1 on the rows the event covers, 0 elsewhere); the band is `g′Σg + κs²m` of the augmented fit with the **joint** `Σ = κs²(X′X)⁻¹`. `fit_period="reporting"`: a mini pre/post fit inside the reporting period, independent of the baseline, so quadrature. |
+| `engineering` | An estimate and its standard error; `evidence` is required (SEP §5.3.2). | Quadrature (IPMVP 2012 App. B-5, B-19). |
+| `exclude` | Drop the event's span from both sides — SEP §6.5 treats an anomaly as its own operating mode. | The G14 band rescales as the kernel does (`∝ P²/m`); the exact kernel is recomputed on the kept rows. A caveat gives the rows dropped. |
+| `submeter` | The effect measured at a sub-meter, the Option B path IPMVP 2012 §8.2 prefers; `nra_from_isolation` builds one from an `IsolationSavings`. | Quadrature. |
+
+**Static factors.** `proportional` scales the affected share `f` of the baseline by the factor's
+ratio `r = s_r/s_b`: `B′ = (1 + (r − 1)f)·B`. There is **no default share** (CAMBER decision D8
+on #21): `affected_share` must be stated. The baseline side's standard error scales with the
+multiplier — correlated with the projection, not added in quadrature — plus the terms of the
+optional standard errors of `r` and `f`. A factor that starts mid-period scales only the rows
+after it (weighted by projected energy when the model and drivers are given). `engineering` is an
+estimate with a standard error and evidence. A driver that *varies continuously* — occupancy,
+production, hours — is a relevant variable, not a static factor (SEP §5.4): model it with a
+change-point + driver model (below) instead.
+
+The combined band is at Student's t on the smallest contributing degrees of freedom. The saving's
+own band is converted back to a standard error at its confidence and degrees of freedom (the
+large-sample t when a `SavingsResult` does not record them, which slightly overstates it).
+
+**Guards.**
+
+- **Confounding.** A meter-derived NRA (indicator, exclude) whose start or end is within
+  `settle_days` (default 14) of an ECM date raises `ConfoundedAdjustment`: the meter cannot tell the
+  event from the measure. IPMVP 2012 §8.2 goes further — "Option C cannot be used to determine
+  savings when the facility's energy meter is also used to quantify the impact of changes to static
+  factors" — so every meter-derived entry carries that caveat (CAMBER decision D6 on #21 allows it
+  with the guard).
+- **SEP.** Under `validity="sep"` (or `"both"`) every entry needs `evidence` and `approved_by`.
+- **Proposals.** `propose_adjustments(detect_step_changes(...))` returns one `status="proposed"`
+  indicator entry per step, with a materiality flag and a caveat when it falls near an ECM date.
+  `apply_adjustments` refuses a proposed entry; `entry.accept(approved_by=...)` accepts it. Better:
+  re-estimate the declared window with `estimate_nre_indicator` — the detector's step size comes
+  from a fit over the whole series.
+
+**Materiality** is CAMBER's rule, by analogy with IPMVP 2012 App. B-1.2 (savings should exceed
+twice their standard error): an event is flagged when `|effect| ≥ max(threshold, 2·SE)`
+(`is_material`; `materiality_threshold` in energy units over the period).
+
+```python
+from camber.mandv.adjustments import (
+    NonRoutineAdjustment,
+    StaticFactorAdjustment,
+    apply_adjustments,
+    estimate_nre_indicator,
+)
+
+nra = estimate_nre_indicator(
+    T_report,
+    y_report,
+    report_index,
+    start="2024-06-01",
+    fit_period="reporting",
+    model=baseline,
+    reason="tenant moved out",
+)
+wing = StaticFactorAdjustment(
+    factor="floor area",
+    method="proportional",
+    start="2024-01-01",
+    reason="new wing",
+    baseline_value=10_000,
+    reporting_value=12_000,
+    affected_share=0.5,
+)
+adj = apply_adjustments(
+    savings,
+    [nra, wing],
+    index=report_index,
+    drivers=T_report,
+    measured=y_report,
+    model=baseline,
+    ecm_dates=["2024-03-01"],
+)
+adj.savings, adj.abs_uncertainty, adj.ledger, adj.waterfall
+```
+
+`camber.charts.adjustment_waterfall(adj)` draws the waterfall: the baseline projection (and, given
+`baseline_actual=`, the measured baseline and the routine adjustment), each entry in the order it
+was applied, the adjusted baseline, the saving with its band, and the reporting energy; material
+entries are starred.
+
+**Coverage.** In seeded Monte Carlo runs — daily 3PC data with AR(1) residuals, the change point
+re-searched with the indicator in the design, ρ estimated, 600 runs per case — the indicator's
+nominal 90% band covered the planted effect **91.5%, 90.0% and 84.8%** of the time at ρ = 0, 0.4
+and 0.8 for a mini pre/post fit in the reporting period, and **90.0%, 86.3% and 85.0%** for a
+closure inside the baseline. CI gates these at 85–95%, and at 80–95% for ρ = 0.8, where the
+lag-1 estimate of a one-year fit is biased low and κ under-corrects. The adjusted saving after a
+baseline-period indicator refit covered **86–89%, 84–86% and 83%** at ρ = 0, 0.4 and 0.8 (400
+runs, a winter and a summer closure) — two to three points below the plain exact kernel, the cost
+of re-searching the change point on less data. All of these are conditional on the change points.
+The adjusted **SEP chain** — a new 30-per-day load planted in the reporting year, estimated by a
+reporting-period indicator on link 2, the chain's shared-model covariance carried through —
+covered the true saving **89.5%** of 200 seeded runs (the CI gate, 85–95%) and **91.3%** of 600;
+the unadjusted chain, biased by the load, covered it in none.
+
+**A caution.** An indicator fitted over a short window soaks up whatever the
+weather model misses: on a synthetic autumn window with a smooth, slightly mis-specified cooling
+response, an indicator at an arbitrary date came out "material". Prefer a full-year fit window, and
+treat an indicator that is not backed by a logged event as a question, not an adjustment.
+
+**Config runs.** An `mv` entry with a `reporting_period` may carry an `adjustments` ledger — the
+dict form of the entries (`"kind": "nra"` or `"static"`, plus the dataclass fields). It is applied
+after the declared `method`, to that method's result. An `indicator` entry carries no numbers: it
+is estimated per meter on the baseline days (`"fit_period": "baseline"`) or the reporting days
+(`"reporting"`), by default the period its `start` falls in, against the model the method projects
+(the baseline model for a forecast, the reporting model for a backcast, the intermediate model for
+a chain). `ecm_dates`, `settle_days`, `validity` and `materiality_threshold` drive the guards. The
+`mv_savings` finding then carries `adjusted_savings`, `adjusted_savings_pct`,
+`adjusted_abs_uncertainty`, `adjusted_baseline`, `adjusted_enpi` (and, for a chain,
+`adjusted_links`), the resolved `adjustments` and the `waterfall`; a refused ledger (confounded,
+missing SEP evidence, or an entry a chain cannot take) records `adjustments_refused` and a caveat
+and leaves the unadjusted saving standing. With `"method": "auto"` the ledger does not change the
+proposal; each sensitivity row gains the `adjusted_*` figures beside its unadjusted ones. A malformed entry (for example a proportional factor without
+`affected_share`) is a config error.
+
+```json
+{"class": "CHILLEDWATER_METER", "role": "energy_rate",
+ "period": ["2016-01-01", "2016-12-31"], "reporting_period": ["2017-01-01", "2017-12-31"],
+ "method": "forecast", "validity": "g14", "ecm_dates": ["2017-03-01"], "settle_days": 14,
+ "adjustments": [
+   {"kind": "nra", "method": "indicator", "start": "2017-05-01", "reason": "server migration",
+    "evidence": "work order 123"},
+   {"kind": "static", "method": "proportional", "factor": "floor area", "start": "2017-01-01",
+    "reason": "new wing", "baseline_value": 10000, "reporting_value": 12000,
+    "affected_share": 0.5}]}
+```
+
+## Change-point + driver models
+
+When energy also follows a continuously varying driver — occupancy, production, operating hours,
+a school-day flag — that driver belongs in the model (SEP 2019 Ed. 2 §5.4, and the multivariable
+change-point form of §6.3.2 as summarised in the #21 plan). `multivariable.fit_cp_driver_model(T,
+drivers, y)` (provisional) fits `E = W(T; change points)·β + D·γ`: one of the usual change-point
+shapes plus linear driver terms, with the change points grid-searched **with the drivers in the
+design** so a driver that co-varies with season is not absorbed into the temperature slope, and
+the kind chosen by BIC with the drivers counted in `p`. The model takes rows `[T, driver_1, ...]`
+as one 2-D array and carries the standard fit record, so coverage (per column and by leverage),
+both savings kernels, `model_regression_tests` / `sep_validity` and `as_dict` / `from_dict` work on
+it unchanged.
 
 ## Cross-checking against eemeter
 

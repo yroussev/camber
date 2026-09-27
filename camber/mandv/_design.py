@@ -104,6 +104,10 @@ def design_names(model) -> tuple:
         return tuple(cols)
     if spec[0] == "affine":
         return ("intercept",) + tuple(rec.names)
+    if spec[0] == "cpd":
+        from .models import _coef_names
+
+        return _coef_names(spec[1], spec[2]) + tuple(rec.names[1:])
     raise TypeError(f"unknown design spec {spec!r}")
 
 
@@ -174,4 +178,6 @@ def _beta(model):
         return np.array([float(vals[nm]) for nm in names])
     if kind == "affine":
         return np.array([float(inner.intercept), *map(float, inner.coef)])
+    if kind == "cpd":
+        return inner._beta()
     return None

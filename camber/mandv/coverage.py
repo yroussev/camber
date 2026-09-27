@@ -299,6 +299,10 @@ def _design(spec: tuple, D: np.ndarray) -> np.ndarray:
         return _design_for(spec[1], spec[2])(D[:, 0])
     if kind == "affine":
         return np.hstack([np.ones((len(D), 1)), D])
+    if kind == "cpd":  # change-point + driver multivariable form (camber.mandv.multivariable)
+        from .multivariable import _cpd_design
+
+        return _cpd_design(spec[1], spec[2], D)
     if kind == "dd":
         from .degreeday import degree_days
 

@@ -80,6 +80,12 @@ class ChainLink:
     For the SEP chain the links are the intermediate model backcast to the baseline
     (``enpi = P_i|b / O_b``) and forecast to the reporting period (``enpi = O_r / P_i|r``). For a
     :func:`sequential_chain` they summarise the component results.
+
+    The trailing fields let :func:`camber.mandv.adjustments.apply_adjustments` restate one link:
+    ``period`` is the ``[start, end]`` of the period the link was applied to and ``model_window``
+    that of the model's fit period (both set by :func:`chained_savings`), ``sep_terms`` the link's
+    SEP quantities (its baseline and reporting sides), and ``df``, ``enpi_uncertainty`` and
+    ``uncertainty_terms`` its band's degrees of freedom, SEnPI band and variance components.
     """
 
     role: str
@@ -94,6 +100,12 @@ class ChainLink:
     kernel: str | None = None
     coverage_tier: str | None = None
     sep_range_valid: bool | None = None
+    period: list | None = None
+    model_window: list | None = None
+    sep_terms: dict | None = None
+    df: int | None = None
+    enpi_uncertainty: float | None = None
+    uncertainty_terms: dict | None = None
 
 
 @dataclass
@@ -693,6 +705,7 @@ def chained_savings(
     tier = _worst(cov_b.tier, cov_r.tier)
     rho_used = pv_b.rho
     n_eff = _n_effective(rec.n, rho_used or 0.0) if rec.n is not None else float("nan")
+    win = {k: [str(_ts(v[0]).date()), str(_ts(v[1]).date())] for k, v in periods.items()}
     links = [
         ChainLink(
             role="baseline to intermediate",
@@ -706,6 +719,10 @@ def chained_savings(
             kernel="exact",
             coverage_tier=cov_b.tier,
             sep_range_valid=rv_b,
+            period=win["baseline"],
+            model_window=win["intermediate"],
+            sep_terms={"observed_baseline": round(O_b, 2), "adjusted_reporting": round(P_ib, 2)},
+            df=pv_b.df,
         ),
         ChainLink(
             role="intermediate to reporting",
@@ -719,6 +736,10 @@ def chained_savings(
             kernel="exact",
             coverage_tier=cov_r.tier,
             sep_range_valid=rv_r,
+            period=win["reporting"],
+            model_window=win["intermediate"],
+            sep_terms={"adjusted_baseline": round(P_ir, 2), "observed_reporting": round(O_r, 2)},
+            df=pv_b.df,
         ),
     ]
     res = MethodResult(
@@ -775,7 +796,7 @@ def chained_savings(
         ]
         _decline_method(res, " ".join(reasons))
         for ln in res.links:
-            ln.projected = ln.savings = ln.enpi = None
+            ln.projected = ln.savings = ln.enpi = ln.sep_terms = None
     return res
 
 
@@ -829,6 +850,10 @@ def sequential_chain(links, *, baseline_version: str | None = None) -> MethodRes
             kernel=ln.kernel,
             coverage_tier=(ln.coverage or {}).get("tier"),
             sep_range_valid=ln.sep_range_valid,
+            sep_terms=None if ln.sep_terms is None else dict(ln.sep_terms),
+            df=ln.df,
+            enpi_uncertainty=ln.enpi_uncertainty,
+            uncertainty_terms=None if ln.uncertainty_terms is None else dict(ln.uncertainty_terms),
         )
         for k, ln in enumerate(links)
     ]

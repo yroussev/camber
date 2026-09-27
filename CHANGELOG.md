@@ -6,7 +6,11 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
-### Added -- M&V: the SEP methods (issue #21, phase 21b; #46)
+### Added -- M&V: the SEP methods and non-routine adjustments (issue #21, phases 21b and 21c; #46, #47)
+One flow for a reported saving: **the declared method gives the saving, the adjustments ledger
+restates its baseline side, and the result carries both**. Every new name below is provisional
+(`docs/API-STABILITY.md`).
+
 - **`camber.mandv.methods`** gains the rest of the DOE SEP 50001 M&V Protocol 2019 Ed. 2 §6.2
   methods, all returning `MethodResult`: `forecast_savings` (wraps `avoided_energy_savings`),
   `standard_conditions_savings` (wraps `normalized_savings`, exact kernel by default) and
@@ -41,6 +45,43 @@ All notable changes to CAMBER are documented here. The format follows
   `enpi_uncertainty` and `sep_range_valid`. `"method": "auto"` gives an `mv_method_proposal`
   finding instead of a saving. When no method is declared the run still uses the forecast, as
   before, and the finding carries a caveat saying no method was declared.
+- **`camber.mandv.adjustments`** (new): `NonRoutineAdjustment` and `StaticFactorAdjustment` are
+  explicit, attributed ledger entries. `apply_adjustments` restates the baseline side of a
+  `SavingsResult` or of **any** `MethodResult` -- forecast, backcast, standard conditions (the
+  baseline model's projection at standard conditions; the band split between the two models by
+  their exact-kernel terms), the SEP chain and `sequential_chain` -- and returns an
+  `AdjustedResult` with the adjusted saving, SEnPI and bands, the resolved ledger and the
+  waterfall components. An empty ledger reproduces the method's own numbers.
+- **Chains are adjusted per link.** Each entry restates the one link whose dates hold it; the
+  savings are re-summed (Eq 11) and the SEnPI re-multiplied (Eq 6). The SEP chain carries the
+  shared-model covariance through (a proportional factor on the forecast link scales it); an
+  entry dated in its intermediate period is refused, since both links share that model. A
+  sequential chain combines its adjusted links by B-19 / B-20. `ChainLink` gains trailing
+  `period`, `model_window`, `sep_terms`, `df`, `enpi_uncertainty` and `uncertainty_terms`.
+- **NRA methods:** `indicator` (`estimate_nre_indicator`; +1 to `p`; a baseline-period indicator
+  replaces the projection and uses the joint covariance, a reporting-period one adds in
+  quadrature), `engineering` (estimate + SE, evidence required),
+  `exclude` (SEP §6.5 anomaly mode) and `submeter` (Option B; `nra_from_isolation`). Static
+  factors: `proportional` with an explicit affected share (no default) or `engineering`.
+- **Guards**: a meter-derived NRA dated within `settle_days` of an ECM date raises
+  `ConfoundedAdjustment` (IPMVP 2012 §8.2). ECM dates and the settle window live in one place,
+  `EcmSchedule` (`DEFAULT_SETTLE_DAYS = 14`), which the guard, the proposals and the config read.
+  `validity="sep"` requires `evidence` and `approved_by`. `propose_adjustments` turns
+  `detect_step_changes` output into proposed entries that must be accepted explicitly. Materiality: `|effect| >= max(threshold, 2 SE)`.
+- **`camber.mandv.multivariable`** (new): `fit_cp_driver_model` /
+  `ChangePointDriverModel`, a change-point + linear-driver baseline for continuously varying
+  drivers (occupancy, production); it works with coverage, both savings kernels, the regression
+  tests and model serialisation unchanged.
+- **`camber.charts.adjustment_waterfall`**, and the config key **`mv[].adjustments`** (with
+  `ecm_dates`, `settle_days`, `materiality_threshold`). It applies after whichever `mv[].method`
+  is declared; `mv_savings` findings gain the adjusted saving and SEnPI, ledger and waterfall.
+  With `"method": "auto"` each sensitivity row shows the adjusted figures beside the unadjusted
+  ones and the proposal itself is unchanged. Monte Carlo coverage of the indicator band is in
+  `docs/MANDV.md` (0.85-0.95 at nominal 90%; 0.80-0.95 at AR(1) rho 0.8, where a one-year lag-1
+  estimate is biased low).
+- **`mv[].validity`** (`g14` | `sep` | `both`; decision D1) is one key for the whole entry: under
+  `sep` or `both` the finding carries each projecting model's SEP §6.4.1 verdict (`sep_valid`,
+  `sep_validity`) and every adjustment needs `evidence` and `approved_by` (§5.3.2).
 
 ## [0.89.0] — 2026-09-27
 

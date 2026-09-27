@@ -143,6 +143,7 @@
     "DiagnosticTemplate",
     "Evidence",
     "HeCMetrics",
+    "adjustment_waterfall",
     "ahu_hec_scatter",
     "ahu_hec_timeseries",
     "band",
@@ -182,6 +183,9 @@
     "template_violations",
     "zones_timeofweek_figure",
     "zones_vs_oat_figure"
+  ],
+  "camber.charts.adjustments": [
+    "adjustment_waterfall"
   ],
   "camber.charts.box_reheat": [
     "box_reheat_figure"
@@ -965,6 +969,26 @@
     "normalized_savings",
     "option_d_savings"
   ],
+  "camber.mandv.adjustments": [
+    "AdjustedResult",
+    "ConfoundedAdjustment",
+    "DEFAULT_SETTLE_DAYS",
+    "EcmSchedule",
+    "IndicatorFit",
+    "NRA_METHODS",
+    "NonRoutineAdjustment",
+    "STATIC_METHODS",
+    "StaticFactorAdjustment",
+    "VALIDITY",
+    "WaterfallStep",
+    "adjustment_from_dict",
+    "apply_adjustments",
+    "check_validity",
+    "estimate_nre_indicator",
+    "is_material",
+    "nra_from_isolation",
+    "propose_adjustments"
+  ],
   "camber.mandv.caltrack": [
     "HourlyNMECResult",
     "NMECResult",
@@ -1028,6 +1052,10 @@
     "N_PARAMS",
     "best_model",
     "fit_model"
+  ],
+  "camber.mandv.multivariable": [
+    "ChangePointDriverModel",
+    "fit_cp_driver_model"
   ],
   "camber.mandv.nonroutine": [
     "NonRoutineResult",

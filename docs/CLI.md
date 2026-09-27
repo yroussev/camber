@@ -250,7 +250,11 @@ support (`oat_fit_min`/`oat_fit_max`, `oat_support_lo`/`oat_support_hi`). Add
 `"reporting_period": [start, end]` for an `mv_savings` finding per meter (avoided energy, `fsu`,
 coverage); a reporting period outside the baseline's conditions is declined rather than reported,
 and `"extrapolation": {...}` tunes that policy (see
-[MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining)).
+[MANDV.md](MANDV.md#extrapolation-coverage-caveats-and-declining)). `"method"` declares the SEP
+method (`forecast`, `backcast`, `chaining`, `standard_conditions`, or `auto` for a proposal
+only), and an `"adjustments": [...]` ledger then restates that method's saving for non-routine
+events and static factors, guarded by `ecm_dates` / `settle_days`; `"validity"` (`g14`, `sep` or
+`both`) governs both (see [MANDV.md](MANDV.md#the-mv-flow-method-then-adjustments-then-result)).
 
 ## Portfolio and facility lifecycle
 

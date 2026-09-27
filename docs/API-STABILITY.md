@@ -100,13 +100,28 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   the keyword-only `kernel=` on the savings functions, and the `as_dict()` / `from_dict()` model
   serialisation format. Later phases (SEP chaining and method selection, adjustments, versioned
   baselines) may reshape them.
+- **M&V SEP methods and adjustments** (issue #21, phases 21b and 21c; one flow: method, then
+  adjustments, then result):
+  - `camber.mandv.methods`: `forecast_savings`, `standard_conditions_savings`, `chained_savings`,
+    `sequential_chain`, `select_method`, `MethodProposal`, `ChainLink` (with its trailing
+    `period`, `model_window`, `sep_terms`, `df`, `enpi_uncertainty` and `uncertainty_terms`),
+    `METHODS`, `SAME_LENGTH_TOLERANCE_DAYS`, and the new trailing `MethodResult` fields;
+  - the whole of `camber.mandv.sep`;
+  - `camber.mandv.adjustments`: `NonRoutineAdjustment`, `StaticFactorAdjustment`,
+    `IndicatorFit`, `AdjustedResult` (with its trailing `enpi`, `enpi_uncertainty`,
+    `unadjusted_enpi` and `links`), `WaterfallStep`, `ConfoundedAdjustment`, `EcmSchedule`,
+    `DEFAULT_SETTLE_DAYS`, `VALIDITY`, `check_validity`, `apply_adjustments` (and its keyword-only
+    `reporting_index=`, `links=` and `schedule=`), `estimate_nre_indicator`,
+    `nra_from_isolation`, `propose_adjustments`, `is_material`, `adjustment_from_dict`,
+    `NRA_METHODS`, `STATIC_METHODS`;
+  - `camber.mandv.multivariable` (`ChangePointDriverModel`, `fit_cp_driver_model`) and
+    `camber.charts.adjustment_waterfall`;
+  - the config keys `mv[].method`, `kernel`, `intermediate_period`, `normal_year`, `validity`,
+    `adjustments`, `ecm_dates`, `settle_days` and `materiality_threshold`, the `mv_savings`
+    metrics they add, and the `mv_method_proposal` finding.
 
-- **M&V SEP methods** (issue #21, phase 21b): `camber.mandv.methods` (`forecast_savings`,
-  `standard_conditions_savings`, `chained_savings`, `sequential_chain`, `select_method`,
-  `MethodProposal`, `ChainLink`, `METHODS`, `SAME_LENGTH_TOLERANCE_DAYS`, and the new trailing
-  `MethodResult` fields), the whole of `camber.mandv.sep`, the `mv[].method` / `mv[].kernel`
-  config keys and the `mv_method_proposal` finding. Versioned baselines (21d) will record the
-  declared method and may reshape them.
+  Versioned baselines (21d) will record the declared method, take the same `EcmSchedule` and
+  `validity`, and may reshape the ledger's storage.
 
 ## Deprecated
 

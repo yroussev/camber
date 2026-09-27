@@ -62,6 +62,28 @@ SEnPI) and ``sep_range_valid``. ``"method": "auto"`` never reports a saving: it 
 every valid method. ``"kernel"`` is ``g14`` or ``exact``, defaulting to ``g14`` for forecast and
 backcast and ``exact`` for chaining and standard conditions.
 
+An ``mv`` entry with a ``reporting_period`` may also carry an ``"adjustments": [...]`` ledger of
+non-routine and static-factor adjustments (:mod:`camber.mandv.adjustments`): each item is the dict
+form of a ``NonRoutineAdjustment`` (``"kind": "nra"``) or ``StaticFactorAdjustment`` (``"kind":
+"static"``); an ``indicator`` NRA is estimated per meter on the baseline or reporting days
+(``"fit_period"``, by default the period its ``start`` falls in) against the model the method
+projects. The order is fixed: **the declared method gives the saving, the ledger restates its
+baseline side, and the Finding reports both** -- for a chain, each entry restates the one link
+whose dates hold it. ``"ecm_dates"`` and ``"settle_days"`` (default 14; one
+:class:`~camber.mandv.adjustments.EcmSchedule`) drive the confounding guard and
+``"materiality_threshold"`` the materiality flag. The ``mv_savings`` finding then adds
+``adjusted_savings``, ``adjusted_savings_pct``, ``adjusted_abs_uncertainty``,
+``adjusted_baseline``, ``adjusted_enpi``, the resolved ``adjustments`` and the ``waterfall``; a
+refused ledger records ``adjustments_refused`` and a caveat and leaves the unadjusted saving
+standing. With ``"method": "auto"`` the ledger never changes the proposal: each sensitivity row
+shows the method's ``adjusted_*`` figures beside the unadjusted ones.
+
+``"validity"`` (``g14`` default, ``sep`` or ``both``; issue #21 decision D1) is one key for the
+whole entry: the regime the saving is reported under. ``g14`` keeps the G14 acceptance caveat;
+``sep`` and ``both`` add each projecting model's SEP 2019 Ed. 2 §6.4.1 verdict (``sep_valid``,
+``sep_validity``, and a caveat when a model fails, since its SEnPI is then not reportable under
+SEP) and require ``evidence`` and ``approved_by`` on every adjustment (§5.3.2).
+
 The optional ``drift`` section scores a **current** window against a frozen **baseline** one for
 each configured detector family (:mod:`camber.driftrun`), merging its Findings into the run. It is
 strictly read-only toward the baseline store: a config-driven run never creates or moves a frozen
@@ -512,9 +534,21 @@ def _finite_or_none(x):
 
 
 def _mv_savings_finding(
-    equip: str, model, st, daily_r, policy, window, *, kernel: str = "g14", declared: bool = False
+    equip: str,
+    model,
+    st,
+    daily_r,
+    policy,
+    window,
+    *,
+    kernel: str = "g14",
+    declared: bool = False,
+    ctx: dict | None = None,
 ) -> object:
-    """One ``mv_savings`` Finding: the baseline projected onto the reporting period (#20)."""
+    """One ``mv_savings`` Finding: the baseline projected onto the reporting period (#20).
+
+    With ``ctx`` (the entry's run context) the finding also carries the entry's validity verdicts
+    and, when it declares ``adjustments``, the adjusted saving (#21 phases 21b / 21c)."""
     from .mandv.methods import forecast_savings
     from .mandv.models import N_PARAMS
     from .rules.base import Finding
@@ -559,6 +593,19 @@ def _mv_savings_finding(
         caveats.append(
             "the baseline does not meet daily G14 acceptance; this saving is for information only"
         )
+    suffix = ""
+    if ctx is not None:
+        daily_b = ctx["daily"]
+        _mv_validity_metrics(ctx, [("baseline", model, daily_b)], metrics, caveats)
+        if ctx.get("adj_specs"):
+            rows = {
+                "index": daily_r.index,
+                "drivers": daily_r["oat"].values,
+                "measured": daily_r["energy"].values,
+                "model": model,
+            }
+            fits = {"baseline": (daily_b, model), "reporting": (daily_r, model)}
+            suffix = _mv_record_adjusted(ctx, res, rows, fits, metrics, caveats)
     if sav.declined:
         metrics["declined_reason"] = sav.declined_reason
         summary = (
@@ -573,6 +620,7 @@ def _mv_savings_finding(
             + (f" ({pct:.1%})" if pct is not None else "")
             + (f" ± {band:,.0f} at {sav.confidence:.0%}" if band is not None else "")
             + f" over {len(daily_r)} reporting days; baseline coverage {cov.get('tier')}"
+            + suffix
         )
     return Finding(
         rule="mv_savings",
@@ -647,6 +695,55 @@ def _mv_daily(full, role, win):
     return daily_energy_vs_temp(e, t) if len(e) and len(t) else None
 
 
+# --------------------------------------------------------------------------- mv validity
+# (#21 decision D1) -- one ``mv[].validity`` key for the whole entry: which validity regime the
+# saving is reported under. It gates the SEP model-validity verdict here and the SEP evidence
+# rule of the adjustments ledger (camber.mandv.adjustments.VALIDITY).
+
+
+def _mv_validity(entry: dict) -> str:
+    from .mandv.adjustments import check_validity
+
+    try:
+        return check_validity(entry.get("validity", "g14"))
+    except ValueError as e:
+        raise ValueError(f"mv.{e}") from None
+
+
+def _mv_validity_metrics(ctx: dict, models: list, metrics: dict, caveats: list) -> None:
+    """Record ``validity`` and, under ``sep`` / ``both``, each projecting model's SEP verdict
+    (SEP 2019 Ed. 2 §6.4.1). The G14 acceptance caveat is recorded separately, always."""
+    from .mandv.stats import logical_signs, model_regression_tests, sep_validity
+
+    validity = ctx["validity"]
+    metrics["validity"] = validity
+    if validity == "g14":
+        return
+    verdicts: dict = {}
+    for role, model, frame in models:
+        try:
+            tests = model_regression_tests(
+                model, frame["oat"].values, frame["energy"].values, time_index=frame.index
+            )
+            vd = sep_validity(tests, signs=logical_signs(model))
+            verdicts[role] = {"sep_valid": bool(vd.sep_valid), "sep_failures": list(vd.failures)}
+        except (TypeError, ValueError) as e:
+            verdicts[role] = {"sep_valid": None, "sep_failures": [f"not evaluated: {e}"]}
+    metrics["sep_valid"] = (
+        None
+        if any(v["sep_valid"] is None for v in verdicts.values())
+        else all(v["sep_valid"] for v in verdicts.values())
+    )
+    metrics["sep_validity"] = verdicts
+    for role, v in verdicts.items():
+        if v["sep_valid"] is False:
+            caveats.append(
+                f"the {role} model is not SEP-valid (SEP 2019 Ed. 2 §6.4.1: "
+                f"{'; '.join(v['sep_failures'])}); its SEnPI is not reportable under "
+                f"validity '{validity}'"
+            )
+
+
 def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
     """One ``mv_savings`` Finding by a declared non-forecast SEP method."""
     import numpy as np
@@ -680,6 +777,15 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             kernel=kernel,
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
+        used = [("reporting", mr, daily_r)]
+        rows = {
+            "index": daily_b.index,
+            "drivers": daily_b["oat"].values,
+            "measured": daily_b["energy"].values,
+            "model": mr,
+            "reporting_index": daily_r.index,
+        }
+        fits = {"baseline": (daily_b, mr), "reporting": (daily_r, mr)}
     elif method == "chaining":
         inter = _mv_window(entry, "intermediate_period")
         daily_i = _mv_daily(ctx["full"], ctx["role"], inter)
@@ -706,13 +812,33 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             "intermediate_model": mi.kind,
             "intermediate_r2": st_i.r2,
         }
+        used = [("intermediate", mi, daily_i)]
+        rows = {
+            "links": [
+                {
+                    "index": daily_b.index,
+                    "drivers": daily_b["oat"].values,
+                    "measured": daily_b["energy"].values,
+                    "model": mi,
+                    "reporting_index": daily_i.index,
+                },
+                {
+                    "index": daily_r.index,
+                    "drivers": daily_r["oat"].values,
+                    "measured": daily_r["energy"].values,
+                    "model": mi,
+                },
+            ]
+        }
+        fits = {"baseline": (daily_b, mi), "reporting": (daily_r, mi)}
     else:  # standard_conditions
         mr, st_r = fit(daily_r)
         st_b = ctx["st"]
+        normal = np.asarray(entry["normal_year"], dtype=float)
         res = mm.standard_conditions_savings(
             model,
             mr,
-            np.asarray(entry["normal_year"], dtype=float),
+            normal,
             kernel=kernel,
             rho_baseline=st_b.rho_lag1,
             rho_reporting=st_r.rho_lag1,
@@ -725,6 +851,9 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             p_reporting=N_PARAMS[mr.kind],
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
+        used = [("baseline", model, daily_b), ("reporting", mr, daily_r)]
+        rows = {"drivers": normal, "model": model, "reporting_index": daily_r.index}
+        fits = {"baseline": (daily_b, model), "reporting": (daily_r, mr)}
     cov = res.coverage or {}
     metrics = {
         "reporting_period": [str(ctx["reporting"][0]), str(ctx["reporting"][1])],
@@ -751,6 +880,10 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         caveats.append(
             "the baseline does not meet daily G14 acceptance; this saving is for information only"
         )
+    _mv_validity_metrics(ctx, used, metrics, caveats)
+    suffix = ""
+    if ctx.get("adj_specs"):
+        suffix = _mv_record_adjusted(ctx, res, rows, fits, metrics, caveats)
     if res.declined:
         metrics["declined_reason"] = res.declined_reason
         summary = f"{equip}: M&V {method} savings declined -- {res.declined_reason}"
@@ -762,6 +895,7 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             + (f" ± {band:,.0f} at {res.confidence:.0%}" if band is not None else "")
             + (f"; SEnPI {res.enpi:.3f}" if res.enpi is not None else "")
             + f"; coverage {cov.get('tier')}"
+            + suffix
         )
     return Finding(
         rule="mv_savings",
@@ -774,7 +908,10 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
 
 
 def _mv_proposal_finding(ctx: dict) -> object:
-    """``method: auto`` -- an ``mv_method_proposal`` Finding, never a headline saving."""
+    """``method: auto`` -- an ``mv_method_proposal`` Finding, never a headline saving.
+
+    With an ``adjustments`` ledger, each sensitivity row also shows the method's saving after the
+    ledger (``adjusted_*``) beside the unadjusted one -- still a proposal, not a result."""
     import pandas as pd
 
     from .mandv.methods import select_method
@@ -791,13 +928,18 @@ def _mv_proposal_finding(ctx: dict) -> object:
             summary=f"{equip}: SEP method proposal declined -- no usable days",
         )
     ny = ctx["entry"].get("normal_year")
+    base_w = [str(pd.Timestamp(period[0]).date()), str(pd.Timestamp(period[1]).date())]
+    rep_w = [str(pd.Timestamp(reporting[0]).date()), str(pd.Timestamp(reporting[1]).date())]
     prop = select_method(
         daily,
-        baseline=[str(pd.Timestamp(period[0]).date()), str(pd.Timestamp(period[1]).date())],
-        reporting=[str(pd.Timestamp(reporting[0]).date()), str(pd.Timestamp(reporting[1]).date())],
+        baseline=base_w,
+        reporting=rep_w,
         standard_conditions=ny,
         extrapolation=ctx["policy"],
     )
+    caveats = list(prop.caveats)
+    if ctx.get("adj_specs"):
+        _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats)
     metrics = {
         "proposed": prop.proposed,
         "declined": bool(prop.declined),
@@ -805,6 +947,7 @@ def _mv_proposal_finding(ctx: dict) -> object:
         "steps": prop.steps,
         "sensitivity": prop.sensitivity,
         "models": prop.models,
+        "validity": ctx["validity"],
     }
     what = prop.proposed or "no method (declined)"
     summary = (
@@ -817,13 +960,84 @@ def _mv_proposal_finding(ctx: dict) -> object:
         severity="info",
         metrics=metrics,
         summary=summary,
-        caveats=list(prop.caveats),
+        caveats=caveats,
+    )
+
+
+def _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats) -> None:
+    """Add the adjusted figures to each sensitivity row of a proposal (``auto`` + adjustments).
+
+    The models are refitted exactly as :func:`~camber.mandv.methods.select_method` ranked them
+    (same windows, kinds and order), so the ledger is applied to the same results."""
+    from .mandv.methods import _rank_models, _slice
+
+    kinds = ("2P", "3PC", "3PH", "4P", "5P")
+
+    def best(win):
+        sub = daily.loc[str(win[0]) : str(win[1]), ["oat", "energy"]].dropna()
+        T, y, idx = _slice(daily, win, "oat", "energy")
+        c = _rank_models(T, y, idx, kinds) if len(y) > 5 else []
+        return (c[0].model if c else None), sub
+
+    mb, db = best(base_w)
+    mr, dr = best(rep_w)
+    di = mi = None
+    if prop.intermediate_period:
+        mi, di = best(prop.intermediate_period)
+
+    def cols(d):
+        return {"index": d.index, "drivers": d["oat"].values, "measured": d["energy"].values}
+
+    for row in prop.sensitivity:
+        res = prop.results.get(row["method"])
+        name = row["method"]
+        if res is None or res.declined:
+            continue
+        if name == "forecast":
+            rows = {**cols(dr), "model": mb}
+            fits = {"baseline": (db, mb), "reporting": (dr, mb)}
+        elif name == "backcast":
+            rows = {**cols(db), "model": mr, "reporting_index": dr.index}
+            fits = {"baseline": (db, mr), "reporting": (dr, mr)}
+        elif name == "chaining":
+            assert di is not None and mi is not None  # a chaining result names its window
+            rows = {
+                "links": [
+                    {**cols(db), "model": mi, "reporting_index": di.index},
+                    {**cols(dr), "model": mi},
+                ]
+            }
+            fits = {"baseline": (db, mi), "reporting": (dr, mi)}
+        else:
+            import numpy as np
+
+            rows = {
+                "drivers": np.asarray(ctx["entry"]["normal_year"], dtype=float),
+                "model": mb,
+                "reporting_index": dr.index,
+            }
+            fits = {"baseline": (db, mb), "reporting": (dr, mr)}
+        adj, err = _mv_apply_ledger(ctx, res, rows, fits)
+        if err is not None:
+            row["adjustments_refused"] = err
+            continue
+        row["adjusted_savings"] = adj.savings
+        row["adjusted_savings_pct"] = adj.savings_pct
+        row["adjusted_enpi"] = adj.enpi
+        row["adjusted_enpi_uncertainty"] = adj.enpi_uncertainty
+        row["adjusted_abs_uncertainty"] = adj.abs_uncertainty
+    caveats.append(
+        "the sensitivity table shows each valid method before and after the declared adjustments "
+        "ledger; the ledger does not change which method SEP's order proposes"
     )
 
 
 def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     """Per equipment: an ``mv_baseline`` Finding (a daily change-point fit vs outdoor temp) and,
-    when the entry names a ``reporting_period``, an ``mv_savings`` Finding (#20)."""
+    when the entry names a ``reporting_period``, an ``mv_savings`` Finding (#20).
+
+    The order is fixed: the declared method gives the saving, the ``adjustments`` ledger restates
+    it, and the Finding reports both (``auto`` only proposes)."""
     from .mandv.coverage import ExtrapolationPolicy, support_of
     from .mandv.intervalfit import daily_energy_vs_temp
     from .mandv.models import N_PARAMS, best_model
@@ -837,7 +1051,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     reporting = _mv_window(entry, "reporting_period")
     policy = ExtrapolationPolicy.from_dict(entry.get("extrapolation"))
     method, kernel, declared = _mv_method_spec(entry, period, reporting)
+    validity = _mv_validity(entry)
+    schedule = _mv_schedule(entry)
     min_days = int(entry.get("min_days", 60))
+    adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
     out = []
 
@@ -910,6 +1127,9 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             "daily": daily,
             "model": model,
             "st": st,
+            "validity": validity,
+            "schedule": schedule,
+            "adj_specs": adj_specs,
         }
         if method == "auto":
             out.append(_mv_proposal_finding(ctx))
@@ -933,11 +1153,172 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     reporting,
                     kernel=kernel,
                     declared=declared,
+                    ctx=ctx,
                 )
             )
         else:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
+    return out
+
+
+# --- mv[].adjustments: non-routine and static-factor adjustments (#21 phase 21c) -------------
+
+
+def _mv_schedule(entry: dict):
+    """The entry's ECM dates and settle window (``ecm_dates``, ``settle_days``), validated once.
+
+    :class:`camber.mandv.adjustments.EcmSchedule` is the one home of both; phase 21d's
+    rebaselining policy reads the same object."""
+    from .mandv.adjustments import EcmSchedule
+
+    ecm = entry.get("ecm_dates") or ()
+    if isinstance(ecm, str) or not isinstance(ecm, (list, tuple)):
+        raise ValueError(f"mv.ecm_dates must be a list of dates, got {ecm!r}")
+    try:
+        return EcmSchedule.from_dict(
+            {k: entry[k] for k in ("ecm_dates", "settle_days") if entry.get(k) is not None}
+        )
+    except ValueError as e:
+        raise ValueError(f"mv: {e}") from None
+
+
+def _mv_adjustment_specs(entry: dict) -> list:
+    """Validate an ``mv`` entry's ``adjustments`` ledger up front (a bad entry is a config error).
+
+    Each item is a :func:`camber.mandv.adjustments.adjustment_from_dict` dict (``"kind": "nra"``
+    or ``"static"``). An ``indicator`` NRA carries no numbers: it is estimated per meter, on the
+    baseline days (``"fit_period": "baseline"``) or the reporting days (``"reporting"``), by
+    default the period its ``start`` falls in.
+    """
+    from .mandv.adjustments import NRA_METHODS, adjustment_from_dict
+
+    specs = entry.get("adjustments") or []
+    if not isinstance(specs, list):
+        raise ValueError("mv.adjustments must be a list of adjustment objects")
+    if specs and entry.get("reporting_period") is None:
+        raise ValueError("mv.adjustments needs a reporting_period to adjust")
+    out = []
+    for k, spec in enumerate(specs):
+        if not isinstance(spec, dict):
+            raise ValueError(f"mv.adjustments[{k}] must be an object, got {spec!r}")
+        d = dict(spec)
+        fp = d.pop("fit_period", None)
+        if d.get("kind", "nra") == "nra" and d.get("method") == "indicator":
+            if fp not in (None, "baseline", "reporting"):
+                raise ValueError(f"mv.adjustments[{k}].fit_period must be baseline or reporting")
+            # validate the rest with a placeholder estimate; the real one is fitted per meter
+            adjustment_from_dict({**d, "rate": 0.0, "rate_se": 0.0})
+        else:
+            if d.get("method") not in NRA_METHODS + ("proportional", "engineering"):
+                raise ValueError(f"mv.adjustments[{k}]: unknown method {d.get('method')!r}")
+            adjustment_from_dict(d)
+        out.append((d, fp))
+    return out
+
+
+def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
+    """Build the entry's ledger for one meter and apply it to ``res``: ``(adjusted, error)``.
+
+    ``rows`` are the per-row keyword arguments of
+    :func:`~camber.mandv.adjustments.apply_adjustments` for the method; ``fits`` maps
+    ``"baseline"`` / ``"reporting"`` to the ``(daily frame, model)`` an indicator is estimated on.
+    """
+    import pandas as pd
+
+    from .mandv.adjustments import (
+        ConfoundedAdjustment,
+        adjustment_from_dict,
+        apply_adjustments,
+        estimate_nre_indicator,
+    )
+
+    if res.declined:
+        return None, f"the unadjusted saving is declined ({res.declined_reason})"
+    reporting = ctx["reporting"]
+    try:
+        ledger = []
+        for d, fp in ctx["adj_specs"]:
+            if d.get("kind", "nra") == "nra" and d.get("method") == "indicator":
+                start = pd.Timestamp(d["start"])
+                if fp is None:
+                    fp = "reporting" if start >= pd.Timestamp(reporting[0]) else "baseline"
+                frame, model = fits[fp]
+                kw = {k: d.get(k) for k in ("end", "reason", "evidence", "approved_by")}
+                kw["reason"] = kw["reason"] or ""
+                ledger.append(
+                    estimate_nre_indicator(
+                        frame["oat"].values,
+                        frame["energy"].values,
+                        frame.index,
+                        start=start,
+                        fit_period=fp,
+                        model=model,
+                        **kw,
+                    )
+                )
+            else:
+                ledger.append(adjustment_from_dict(d))
+        entry = ctx["entry"]
+        adj = apply_adjustments(
+            res,
+            ledger,
+            schedule=ctx["schedule"],
+            validity=ctx["validity"],
+            materiality_threshold=float(entry.get("materiality_threshold", 0.0)),
+            **rows,
+        )
+    except (ConfoundedAdjustment, ValueError, TypeError) as e:
+        return None, str(e)
+    return adj, None
+
+
+def _mv_record_adjusted(ctx: dict, res, rows: dict, fits: dict, metrics: dict, caveats) -> str:
+    """Apply the ledger to a method's result and record it in the Finding; return the summary
+    suffix. A refused ledger records ``adjustments_refused`` and a caveat and leaves the
+    unadjusted saving standing."""
+    if res.declined:
+        metrics["adjusted"] = None
+        return ""
+    adj, err = _mv_apply_ledger(ctx, res, rows, fits)
+    if err is not None:
+        metrics["adjusted"] = None
+        metrics["adjustments_refused"] = err
+        caveats.append(f"adjustments not applied: {err}")
+        return "; adjustments refused"
+    metrics["adjusted"] = True
+    metrics["adjusted_savings"] = adj.savings
+    metrics["adjusted_savings_pct"] = adj.savings_pct
+    metrics["adjusted_abs_uncertainty"] = adj.abs_uncertainty
+    metrics["adjusted_baseline"] = adj.adjusted_baseline
+    metrics["adjusted_enpi"] = adj.enpi
+    metrics["adjusted_enpi_uncertainty"] = adj.enpi_uncertainty
+    if adj.links:
+        metrics["adjusted_links"] = adj.links
+    metrics["adjustments"] = [_json_ledger(e) for e in adj.ledger]
+    metrics["waterfall"] = [w.as_dict() for w in adj.waterfall]
+    caveats.extend(c for c in adj.caveats if c not in caveats)
+    band = adj.abs_uncertainty
+    n_mat = sum(1 for e in adj.ledger if e.get("material"))
+    return (
+        f"; adjusted for {len(adj.ledger)} non-routine/static entr"
+        + ("y" if len(adj.ledger) == 1 else "ies")
+        + f" ({n_mat} material): {adj.savings:,.0f}"
+        + (f" ± {band:,.0f}" if band is not None else "")
+    )
+
+
+def _json_ledger(e: dict) -> dict:
+    """A ledger entry for Finding metrics: the fit's covariance matrix is dropped (bulky)."""
+    import math
+
+    out = {k: v for k, v in e.items() if k != "fit"}
+    fit = e.get("fit")
+    if fit:
+        out["fit"] = {k: fit[k] for k in ("fit_period", "names", "beta", "n", "p", "df", "rho")}
+    for k, v in out.items():
+        if isinstance(v, float) and not math.isfinite(v):
+            out[k] = None
     return out
 
 
