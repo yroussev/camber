@@ -1,0 +1,12 @@
+{
+  "_comment": "ORNL supermarket refrigeration (transcritical CO2 booster rack) -> CAMBER roles for the LOW-TEMPERATURE circuit: two LT compressors (reciprocating; LT-COMP1 cycles 8-11 times an hour in every baseline, LT-COMP2 essentially never runs) serving one 4-door LT display case and a false load. REFERENCE ONLY: CAMBER has no refrigeration-rack class or detector, so this mapping exists to put the circuit's key points in the store for trend viewing next to the fault labels. P-LT-SUC is the LT suction pressure and P-MT_SUC the LT compressors' discharge (the booster's MT suction), both psig as exported (CAMBER does not convert them); T-LTcase-Sup / T-LTcase-Ret are the display case's discharge and return AIR temperatures (F), mapped to the air roles for viewing only; W_LT-COMP1 is compressor power (kW); LT_COMP1_ON is derived at ingest (power above 0.3 kW). The ambient is T-GC-Fan2-In (the gas-cooler inlet air, as the publisher's DataProcess.py uses; T-GC-Fan1-In is not a usable temperature). The published superheat / subcooling columns are empty or zero (see the entry's data issues) and are not mapped. Dataset: ORNL supermarket refrigeration FDD (CC-BY-4.0), doi:10.1038/s41597-021-00927-6.",
+  "aliases": {
+    "P-LT-SUC": "suction_pressure",
+    "P-MT_SUC": "discharge_pressure",
+    "T-LTcase-Sup": "supply_air_temp",
+    "T-LTcase-Ret": "return_air_temp",
+    "W_LT-COMP1": "power",
+    "LT_COMP1_ON": "compressor_status",
+    "T-GC-Fan2-In": "oat"
+  }
+}

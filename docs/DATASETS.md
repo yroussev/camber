@@ -56,6 +56,10 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `irish-ahu` | industrial mixing-box AHU, 5.5 years at 15 min | real | no | CC-BY-4.0 | the one unit |
 | `nist-heatpump-fdd` | residential heat pumps, cooling-mode lab test points, 60 runs (`xlsx` extra) | lab | yes | NIST-PD | 8 runs |
 | `nist-ibal` | lab chiller with refrigerant pressures, 10 s (manual download) | lab | no | NIST-PD | 11 days |
+| `robod` | 5 rooms, Singapore: CO2, outdoor-air flow, occupancy (weekdays only) | real | no | CC-BY-4.0 | all 5 rooms |
+| `sdu-ou44` | 3 rooms, Denmark: CO2, VAV damper, occupant counts (44 shuffled days) | real | no | CC0-1.0 | all 3 rooms |
+| `ornl-frp-ops` | 1 RTU + 10 VAV boxes, 7 operating scenarios, 1-minute | real | no | CC-BY-4.0 | RTU, weather, 2 boxes x 2 scenarios |
+| `ornl-supermarket-fdd` | CO2 booster refrigeration rack, 6 faults (reference only) | lab | yes | CC-BY-4.0 | 2 fault / baseline pairs |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -824,6 +828,182 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** In the portal's measurement metadata the two pressure transducers and the liquid- / suction-line RTDs have no instrument model, serial, calibration date or accuracy (all empty), while the plant's water RTDs list a model, a 2020-2023 calibration and +-0.18-0.21 F. All four refrigerant-line RTDs (both chillers) share one scaling (a0 3.2902, a1 0.9651) where each calibrated RTD has its own. In an export of 2023-10-01 to 2025-02-15 the pressures first report on 2024-04-10 and the liquid-line RTD on 2025-01-28 (UTC).
 - **Contradicts:** Record description: 'Each of the sensors/actuators has associated metadata' (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings.
+
+### `robod`: ROBOD: room-level occupancy and building operation (Singapore, 5 rooms)
+
+#### Indoor CO2 reads below outdoor CO2 and is clipped at 400 ppm
+
+- **Issue:** `indoor-co2-below-outdoor`
+- **Columns:** `indoor_co2 [ppm]`, `outdoor_co2 [ppm]`
+- **Evidence:** Indoor CO2 is below the outdoor reading in 78.8 / 75.7 / 51.0 / 54.2 / 75.8% of rows (Room1-5; median deficit 31-45 ppm, up to 101 ppm), and in 55-72% of occupied rows; outdoor CO2 spans 438.6-509.6 ppm (median 471.3). No indoor value is below 400: 0.11-1.16% of rows read exactly 400 (Room3: 97 rows at 400, then 27 / 58 / 89 in the 400-401 / 401-405 / 405-410 ppm bins).
+- **Contradicts:** Data descriptor: the rooms are supplied by a dedicated outdoor-air system, so incoming air carries the outdoor CO2 level (a ventilated room cannot sit below it); sensor table: indoor CO2 range 400-5000 ppm (±75 ppm or 10%) (Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. The two sensors disagree by more than their stated accuracy (a relative calibration offset), and indoor values at 400 are the sensor's range floor, not a measurement: co2_ventilation's 'CO2 near outdoor' (over-ventilation) reading is biased toward over-ventilation here.
+
+#### Supply airflow reads above zero with the air handler off
+
+- **Issue:** `airflow-with-fan-off`
+- **Columns:** `supply_air_flow [CMH]`
+- **Runs:** `room3`, `room4`, `room5`
+- **Evidence:** With the air-handler fan below 1 Hz, supply_air_flow reads a median 44.5 m3/h (Room4, above zero in 87% of fan-off rows) and 111 m3/h (Room5, 76.6%); Room3 reads above zero in 32.6% of its fan-off rows.
+- **Contradicts:** Sensor table: supply air flow from the VAV box (Johnson Controls), 0-3375 m3/h ±15% (Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published (a flow-sensor zero offset); rules that read oa_airflow also see the derived fan status, so fan-off hours can be excluded.
+
+#### Room5 airflow and damper are missing for 9 of its 47 days
+
+- **Issue:** `room5-airflow-missing-9-days`
+- **Columns:** `supply_air_flow [CMH]`, `damper_position [%]`
+- **Runs:** `room5`
+- **Evidence:** Both columns are blank on 9 weekdays, 2021-09-21 to 2021-09-24 and 2021-09-27 to 2021-10-01: 2,580 rows, 19.1% of Room5's 13,536; every other column of those rows is present.
+- **Contradicts:** Data descriptor / README: 47 days of all data categories for Room 5 (Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9)
+- **Handling: none** -- described only. Left missing; the analyses see those days without an airflow or damper value.
+
+#### Cooling-valve position reads above the command at zero
+
+- **Issue:** `valve-position-offset`
+- **Columns:** `cooling_coil_valve_position [%]`, `cooling_coil_valve_command [%]`
+- **Runs:** `room3`, `room4`, `room5`
+- **Evidence:** Position and command correlate at r = 1.000 but position reads about 1.7 points (Room3) and 7.8 points (Room4/5) at a 0% command (median +6.0 above command when the command is above 5%).
+- **Contradicts:** Sensor table: cooling-coil valve position and command, 0-100% (Johnson Controls) (Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9)
+- **Handling: none** -- described only. The command is mapped (cool_valve); the position feedback is not, so the offset cannot read as a leaking valve.
+
+### `sdu-ou44`: SDU OU44: room CO2, VAV damper and camera occupant counts (Denmark, 3 rooms)
+
+#### ROOM1 CO2 is forward-filled over gaps of 347 and 1,016 minutes
+
+- **Issue:** `room1-co2-filled-over-long-gaps`
+- **Columns:** `room_1 (co2_room_1.csv)`
+- **Runs:** `room1`
+- **Evidence:** In the original stream ROOM1 CO2 has 209 readings on DayId 7 (last at 18:12:46 UTC) and 83 on DayId 30 (last at 07:03:34 UTC); the filled series holds one value for 347 and 1,016 consecutive minutes. Rooms 2 and 3 never gap more than 20 minutes.
+- **Contradicts:** Data descriptor, day selection: days where the CO2 stream had more than three missing readings in a row were not considered (gaps of at most 15 minutes) (Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). The two held stretches are masked to missing (mask quirks on the ROOM1 run, in the synthetic clock); --no-corrections keeps them.
+
+#### The filled series lag the original readings by one minute
+
+- **Issue:** `filled-data-lags-one-minute`
+- **Columns:** `co2_room_x`, `vav_room_x`, `temperature_room_x`, `occupant_count_room_x`
+- **Evidence:** The filled value at minute m+1 equals the original reading taken inside minute m in 99.9% of CO2 rows and 100% of camera-count rows (a reading at 00:02:12 appears from 00:03:00); before each day's first CO2 reading (median 143-163 s after midnight) the fill is neither that reading nor the previous day's last.
+- **Contradicts:** Data descriptor: forward fill then backward fill of the original streams to minute-wise sampling (Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: a one-minute shift is invisible at the 15-minute resample.
+
+#### The filled files hold 44 days, not the 47 the descriptor counts
+
+- **Issue:** `upsampled-row-count`
+- **Columns:** `filleddata/*`
+- **Evidence:** Every filled file has 63,360 rows = 44 days x 1,440 minutes (DayId 0-43).
+- **Contradicts:** Data descriptor: the upsampled dataset has 67,680 readings per stream (47 days) (Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4)
+- **Handling: none** -- described only. Nothing to correct; the catalog describes the 44 days that are published.
+
+#### The README's file names, column name and workday values differ from the data
+
+- **Issue:** `readme-names-and-values`
+- **Columns:** `README.txt`, `DayId`, `Workday`
+- **Evidence:** 3 of the README's file patterns do not exist as named (occupant_data_room_x.csv is occupant_count_room_x.csv, vav_data_room_x.csv is vav_room_x.csv, illuminance_room_x.csv is Illuminance_room_x.csv); the day column is DayId, not DayID; Workday holds True/False (True on all 44 days), not 1/0.
+- **Contradicts:** Dataset README (published with the data and described by the data descriptor) (Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4)
+- **Handling: none** -- described only. The catalog names the files and columns as published.
+
+#### The published Brick model has a room 4 and one AHU for every VAV
+
+- **Issue:** `brick-model-contradicts-rooms`
+- **Columns:** `brick_graph.ttl`
+- **Evidence:** brick_graph.ttl (legacy BrickFrame namespace, identical in original/ and filleddata/) declares co2_room_4, vav_room_4 and other room-4 points that have no data, one AHU (/ahus/1) feeding VAVs 1-4, and measurements in files that do not exist (lux_room_x.csv, occ_count_room_x.csv).
+- **Contradicts:** Data descriptor: no two rooms are served by the same AHU nor VAV damper position (Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4)
+- **Handling: none** -- described only. Not used: the entry groups the per-point files by room itself.
+
+#### Occupant counts are above zero at night
+
+- **Issue:** `phantom-night-occupants`
+- **Columns:** `occupant_count_room_x`
+- **Evidence:** Between 00:00 and 04:00 UTC (01-06 local) the count is above zero in 13.4 / 51.8 / 26.1% of minutes (max 2 / 7 / 8) in ROOM1 / 2 / 3, and above zero at 02:00 UTC on 6 / 23 / 13 of the 44 days.
+- **Contradicts:** Data descriptor: occupant counts from overhead cameras corrected by PLCount (RMSE 0.075) (Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the derived OCCUPIED flag (count above 0) counts those minutes as occupied, which the DCV rule's occupied-hours window mostly excludes.
+
+### `ornl-frp-ops`: ORNL FRP-2 multizone office: one RTU and ten VAV boxes under seven operating scenarios
+
+#### The WH_* energy columns are average power in W, not Wh per minute
+
+- **Issue:** `wh-columns-are-average-power`
+- **Columns:** `WH_RTU_Total`, `WH_RTU_Comp1`, `WH_RTU_Comp2`, `WH_RTU_Sup_Fan`, `WH_RTU_VAV*`
+- **Evidence:** Read as Wh per 1-minute interval, the supply fan's median of 1,795 would be 108 kW (the RTU is rated 44 kW); read as W it is 1.8 kW, compressors 3.6-4.8 kW on, reheat 0.4-5 kW per box. The values step in multiples of 2.77 (idle readings 2.77 / 5.54 / 8.31) and are not cumulative (15-55% of steps fall).
+- **Contradicts:** Data descriptor Table 7 and Building_Information.csv: energy consumption in Wh at 1-minute resolution (Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the mapped fan and reheat power columns are declared in W (converted to kW), and the fan / compressor status are derived above 200 W.
+
+#### RTU supply airflow is 24-26% above the sum of the ten box airflows
+
+- **Issue:** `rtu-flow-exceeds-box-flows`
+- **Columns:** `AF_RTU`, `AF_VAV_*`
+- **Evidence:** AF_RTU divided by the sum of AF_VAV_102-206 has a median of 1.24-1.26 in every scenario with the fan running (p5 1.21, p95 1.27).
+- **Contradicts:** Data descriptor, cooling-season analysis: the RTU supply airflow rate was the same as the supply airflow from the 10 VAV boxes, with no duct leakage (Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6)
+- **Handling: none** -- described only. Left as published: a 25% airflow mismatch is either duct leakage or a sensor calibration difference, and the data cannot say which.
+
+#### The pre-heating test covers 5 days, not the documented 9
+
+- **Issue:** `pre-heating-period-is-5-days`
+- **Columns:** `TIMESTAMP`
+- **Runs:** `rtu__pre_heating`, `vav102__pre_heating`, `vav103__pre_heating`, `vav104__pre_heating`, `vav105__pre_heating`, `vav106__pre_heating`, `vav202__pre_heating`, `vav203__pre_heating`, `vav204__pre_heating`, `vav205__pre_heating`, `vav206__pre_heating`, `weather__pre_heating`
+- **Evidence:** Building_Pre_Heating.csv and Weather_Pre_Heating.csv run from 2022-01-19 00:00 to 2022-01-23 23:59 (7,200 one-minute rows).
+- **Contradicts:** Data descriptor Table 2: pre-heating test 15/01/22-23/01/22 (Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6)
+- **Handling: none** -- described only. Nothing to correct; the scenario is the five days published.
+
+#### Barometric pressure reads 0 Pa in two weather files
+
+- **Issue:** `barometric-pressure-zero`
+- **Columns:** `BP`
+- **Evidence:** BP = 0 in 54 rows of Weather_FF_Heating.csv and 52 rows of Weather_Base_Heating.csv; elsewhere it reads about 98,500 Pa.
+- **Contradicts:** Data descriptor Table 8: barometric pressure 500-1,100 hPa (CS106) (Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6)
+- **Handling: none** -- described only. Not mapped; nothing in CAMBER reads the barometric pressure.
+
+#### Global solar radiation is negative at night
+
+- **Issue:** `negative-night-solar`
+- **Columns:** `Glo_Solar`
+- **Evidence:** Glo_Solar falls to -34 W/m2; the night median is -20.5 W/m2 (setback heating test) and -18.6 W/m2 (pre-heating test), with 5,500 rows below -5 W/m2 in the setback heating test.
+- **Contradicts:** Data descriptor Table 8: global solar radiation, Eppley SPP, 0-2,000 W/m2 range (Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6)
+- **Handling: none** -- described only. Not mapped; a pyranometer's night-time thermal offset, left as published.
+
+### `ornl-supermarket-fdd`: ORNL supermarket refrigeration FDD tests (CO2 booster rack, labelled faults; reference only)
+
+#### Two fault files carry minute stamps for 1-second and 3-second data
+
+- **Issue:** `minute-stamps-in-two-files`
+- **Columns:** `Timestamp`
+- **Runs:** `lt__ice_accumulation`, `mt__ice_accumulation`, `lt__evap_valve_failure`, `mt__evap_valve_failure`
+- **Evidence:** Fault2_IceAccumulation.csv has 26,395 rows on 1,440 distinct stamps (up to 19 per minute) and Fault3_EvapValveFailure.csv 81,280 rows on 1,440 stamps (up to 57 per minute), formatted M/D/YYYY H:MM; the other nine files use MM/DD/YYYY HH:MM:SS with one row per stamp.
+- **Contradicts:** Data descriptor Table 4: sample time 1 s (Fault3) and 3 s (Fault2) (Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6)
+- **Handling: annotate** -- left as published and recorded in the provenance. Read with their own timestamp format; CAMBER keeps the first row of each minute, so these two runs carry one sample per minute (15 per 15-minute bin).
+
+#### The LT expansion-valve failure starts at about 13:56
+
+- **Issue:** `valve-failure-starts-mid-day`
+- **Columns:** `T-LTcase-EEVout`, `T-LTcase-Sup`, `T-LT-Suc`
+- **Runs:** `lt__evap_valve_failure`, `mt__evap_valve_failure`
+- **Evidence:** Against baseline C, the hourly means differ by less than 1 F until 13:56; after it the LT EEV outlet rises by up to 78 F, the LT case supply air by up to 69 F and the LT suction temperature by up to 31 F for the remaining 603 minutes.
+- **Contradicts:** Data descriptor Table 4: Fault3_EvapValveFailure.csv is the fault test (the whole file) (Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the whole day carries the label.
+
+#### BaselineTestE's MT case return-air temperature is 40 F too warm
+
+- **Issue:** `baseline-e-mt-return-air`
+- **Columns:** `T-MTCase-Ret`
+- **Runs:** `mt__baseline_e`
+- **Evidence:** T-MTCase-Ret has a median of 94.1 F in BaselineTestE against 44.7-52.3 F in every other file (including Fault5, the day it is the baseline for).
+- **Contradicts:** Data descriptor: each baseline test ran with operating conditions similar to those of its fault test (MT case discharge air setpoint 30 F) (Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Dropped for that run (a drop quirk); --no-corrections keeps it.
+
+#### The published superheat, subcooling and capacity columns are empty
+
+- **Issue:** `derived-columns-empty`
+- **Columns:** `SupHEvap1`, `SupHEvap2`, `SubcoolCond1`, `SubcoolCond2`, `SupHCompSuc`, `EER`
+- **Evidence:** 21 of the 23 columns after the unnamed column 161 (SupHEvap1/2, SubClComCond, SubcoolCond1/2, SuncoolLiq, RefHSct, RefHLiq, Tsetpt, RHsetpt, AirHRet, AirHSup, Tstat*, CapaAirside, CapaRefrside, EnergyBalance, EERA, EER) are blank in all 11 files; SupHCompSuc is 0 at its 95th percentile everywhere.
+- **Contradicts:** Data descriptor, Data Records: evaporator exiting superheat among the variables representing evaporator characteristics (Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6)
+- **Handling: none** -- described only. Not mapped; the entry maps no superheat or subcooling role.
+
+#### Several temperature and flow channels hold a -98,590 sentinel
+
+- **Issue:** `sentinel-temperatures`
+- **Columns:** `T-GC-Out`, `T-BP-EEVin`, `T-GC-Fan1-In`, `T-spare-*`, `F-LT-BPHX`, `F-MT-BPHX`
+- **Evidence:** Values near -98,590 fill T-GC-Out in 24-99% of rows (99% in Fault1), T-BP-EEVin in 1-34%, T-GC-Fan1-In in 17% of baselines A and B (its other values run 40-1,027), and 100% of the five spare channels and both BPHX flow meters; the LT mass flow M-LTcooler is a constant -1.25.
+- **Contradicts:** Data descriptor Table 5: thermocouples -270 to 400 C; Coriolis mass flow meters 0-10 kg/min (Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6)
+- **Handling: none** -- described only. None of these channels is mapped; the ambient is T-GC-Fan2-In, as the publisher's script uses.
 
 <!-- END data-issues -->
 

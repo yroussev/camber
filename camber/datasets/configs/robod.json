@@ -1,0 +1,25 @@
+{
+  "_comment": "Run template for robod: room ventilation adequacy from CO2 in all five rooms (Room1/Room2 on fan-coil units, class FCU; Room3-5 VAV boxes on 100% outdoor-air handlers, class VAV), hourly. co2_ventilation reads the measured outdoor CO2 (outdoor_co2). Expected verdicts: every room 'over-ventilated' (CO2 near outdoor in 93-100% of occupied hours) -- Room5's outdoor airflow is pinned near 1,943 m3/h (about 178 L/s per occupant), but the verdict is also pushed by the data issue indoor-co2-below-outdoor (indoor reads below outdoor in 51-79% of rows), so read it as 'no under-ventilation' first and 'over-ventilation' second. Not run: dcv_verification (the rooms have no demand-controlled ventilation -- flow follows the fan schedule, r = 0.06-0.28 with CO2 -- so a 'DCV not functioning' verdict would describe a design that has none; it returns 'not judged' on Room3-5), unmet_setpoint_hours (the room temperature is the IAQ monitor's, not the thermostat's: it reads 54-100% 'too hot'), and any drift or schedule rule (weekends were removed and the days are non-contiguous).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-robod"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "FCU",
+      "marker_role": "co2"
+    },
+    {
+      "class": "VAV",
+      "marker_role": "co2"
+    }
+  ],
+  "rules": [
+    "co2_ventilation"
+  ],
+  "report": {
+    "level": 2
+  }
+}

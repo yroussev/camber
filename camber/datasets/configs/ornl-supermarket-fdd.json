@@ -1,0 +1,19 @@
+{
+  "_comment": "Run template for ornl-supermarket-fdd: REFERENCE ONLY -- no rule. CAMBER has no refrigeration-rack detector: its superheat / subcooling / suction and head-pressure drift rules are chiller rules (load-normalised through chilled-water flow and tons, which a rack does not have, and fed by controller-reported superheat, which this dataset publishes empty), and compressor_short_cycle would flag every fault-free baseline (the fixed-speed MT compressors stage in 8-17 s bursts, the LT compressor cycles 8-11 times an hour by design). The template exists so `camber report` and the trend viewer show both circuits (LT_CIRCUIT / MT_CIRCUIT __<test>, class REFRIG_CIRCUIT) next to their fault labels.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-ornl-supermarket-fdd"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "REFRIG_CIRCUIT",
+      "marker_role": "suction_pressure"
+    }
+  ],
+  "rules": [],
+  "report": {
+    "level": 2
+  }
+}

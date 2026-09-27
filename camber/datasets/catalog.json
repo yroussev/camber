@@ -7608,6 +7608,2328 @@
      "handling_note": "Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings."
     }
    ]
+  },
+  {
+   "id": "robod",
+   "title": "ROBOD: room-level occupancy and building operation (Singapore, 5 rooms)",
+   "summary": "Five rooms of a net-zero-energy university building in Singapore at 5-minute resolution, weekdays of September-December 2021: room CO2, temperature and setpoint, camera-counted occupancy, outdoor weather and CO2; two lecture rooms on fan-coil units, three rooms (an administrative office, a research office, a library) on 100% outdoor-air handlers with a VAV box, supply airflow and damper per room.",
+   "teaches": [
+    "ventilation adequacy from room CO2 against a measured outdoor CO2",
+    "why an indoor CO2 reading below outdoor is a sensor-calibration question, not fresh air",
+    "outdoor-air flow per person in a dedicated-outdoor-air room without demand control"
+   ],
+   "publisher": "National University of Singapore (IDEAS lab, Department of the Built Environment)",
+   "citation": "Tekler, Z. D., Ono, E., Peng, Y., Zhan, S., Lasternas, B., Chong, A. (2022). ROBOD, room-level occupancy and building operation dataset. Building Simulation 15(12), 2127-2137. doi:10.1007/s12273-022-0925-9. Data: figshare, doi:10.6084/m9.figshare.19234530.v7",
+   "dois": [
+    "10.1007/s12273-022-0925-9",
+    "10.6084/m9.figshare.19234530.v7"
+   ],
+   "landing_url": "https://figshare.com/articles/dataset/ROBOD_Room-level_Occupancy_and_Building_Operation_Dataset/19234530",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://api.figshare.com/v2/articles/19234530",
+    "json_path": "license.url",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "contiguous": false,
+   "equipment": "5 rooms: Room1/Room2 lecture rooms (fan-coil units, class FCU); Room3 administrative office, Room4 research office, Room5 library (VAV box on a 100% outdoor-air handler, class VAV; Room3 on its own air handler, Room4 and Room5 on a shared one)",
+   "timezone": "Singapore wall clock (UTC+08:00, no DST): stamps carry '+08:00' and are stored as local time; 5-minute samples; weekdays only -- the publisher removed weekends, and each room covers 29 (Room1-3) or 47 (Room4-5) days between 2021-09-07 and 2021-12-23",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "SupplementaryData.zip",
+     "url": "https://ndownloader.figshare.com/files/36228765",
+     "size": 4464742,
+     "sha256": "c9ce6b6085d42fe44550fa89dedd25d38feede42e090c552796b84cb7b0b3939",
+     "pinned": true,
+     "etag": null,
+     "archive": "zip",
+     "extracted_size": 15098661,
+     "members": [
+      "combined_Room1.csv",
+      "combined_Room2.csv",
+      "combined_Room3.csv",
+      "combined_Room4.csv",
+      "combined_Room5.csv",
+      "README.md"
+     ]
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "all five rooms (the whole dataset is 4.5 MB)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 1470384
+    },
+    "full": {
+     "description": "all five rooms",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 1470384
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-robod",
+    "timestamp": "timestamp",
+    "timestamp_format": "%Y-%m-%d %H:%M %z",
+    "resample": "15min",
+    "mapping": "robod.json",
+    "units": {
+     "space_temp": "degC",
+     "cool_sp": "degC",
+     "supply_air_temp": "degC",
+     "oat": "degC",
+     "oa_airflow": "m3/h",
+     "cool_valve": "percent",
+     "damper": "percent"
+    },
+    "derive": [
+     {
+      "column": "FAN_ON",
+      "above": [
+       "fcu_fan_speed [Hz]",
+       1
+      ]
+     },
+     {
+      "column": "FAN_ON",
+      "above": [
+       "ahu_fan_speed [Hz]",
+       1
+      ]
+     }
+    ],
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "indoor_co2 reads below outdoor_co2 in 51-79% of rows and is clipped at the sensor's 400 ppm range floor; left as published (see the data issue).",
+      "issue": "indoor-co2-below-outdoor"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "supply_air_flow reads a median 44.5 / 111 m3/h in Room4 / Room5 with the air handler's fan off; left as published.",
+      "issue": "airflow-with-fan-off",
+      "runs": [
+       "room4",
+       "room5"
+      ]
+     }
+    ],
+    "runs": [
+     {
+      "id": "room1",
+      "file": "SupplementaryData.zip",
+      "member": "combined_Room1.csv",
+      "equip": "Room1",
+      "equip_id": "Room1",
+      "class": "FCU",
+      "label": ""
+     },
+     {
+      "id": "room2",
+      "file": "SupplementaryData.zip",
+      "member": "combined_Room2.csv",
+      "equip": "Room2",
+      "equip_id": "Room2",
+      "class": "FCU",
+      "label": ""
+     },
+     {
+      "id": "room3",
+      "file": "SupplementaryData.zip",
+      "member": "combined_Room3.csv",
+      "equip": "Room3",
+      "equip_id": "Room3",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "room4",
+      "file": "SupplementaryData.zip",
+      "member": "combined_Room4.csv",
+      "equip": "Room4",
+      "equip_id": "Room4",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "room5",
+      "file": "SupplementaryData.zip",
+      "member": "combined_Room5.csv",
+      "equip": "Room5",
+      "equip_id": "Room5",
+      "class": "VAV",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "co2_ventilation"
+    ],
+    "config_template": "robod.json"
+   },
+   "known_issues": [
+    "Weekends were removed by the publisher and the rooms cover 29 or 47 non-consecutive weekdays with gaps of up to 68 days (contiguous: false): the template runs no drift, setback or other schedule rule.",
+    "Room3 has its own air handler; Room4 and Room5 share one -- every air-handler column is identical in their two files, so their supply temperature, fan and valve are one unit seen twice.",
+    "No demand-controlled ventilation: supply airflow follows the fan schedule (08:00-19:00), not CO2 or occupancy (r = 0.06 / 0.21 / 0.28 in Room3 / 4 / 5), so dcv_verification is not in the template -- a 'DCV not functioning' verdict would describe a design that has none. Room5's flow sits at about 1,943 m3/h whenever the fan runs (about 178 L/s per occupant at its median occupancy of 4).",
+    "The fan-speed columns are in Hz; the ingest derives a 0/1 fan status (speed above 1 Hz).",
+    "Every room reads warmer than its temp_setpoint (the fan-coil rooms by a median 1.4-2.2 C with the fan on; Room3 against a constant 25 C): the room temperature comes from the IAQ monitor, not the thermostat the setpoint controls, so unmet_setpoint_hours (which reads 54-100% of occupied hours 'too hot') is not in the template -- it would measure sensor placement as much as comfort.",
+    "The GitHub copy of ROBOD carries no licence; this entry links the CC-BY-4.0 figshare publication only."
+   ],
+   "data_issues": [
+    {
+     "id": "indoor-co2-below-outdoor",
+     "title": "Indoor CO2 reads below outdoor CO2 and is clipped at 400 ppm",
+     "columns": [
+      "indoor_co2 [ppm]",
+      "outdoor_co2 [ppm]"
+     ],
+     "evidence": "Indoor CO2 is below the outdoor reading in 78.8 / 75.7 / 51.0 / 54.2 / 75.8% of rows (Room1-5; median deficit 31-45 ppm, up to 101 ppm), and in 55-72% of occupied rows; outdoor CO2 spans 438.6-509.6 ppm (median 471.3). No indoor value is below 400: 0.11-1.16% of rows read exactly 400 (Room3: 97 rows at 400, then 27 / 58 / 89 in the 400-401 / 401-405 / 405-410 ppm bins).",
+     "contradicts": {
+      "document": "Data descriptor: the rooms are supplied by a dedicated outdoor-air system, so incoming air carries the outdoor CO2 level (a ventilated room cannot sit below it); sensor table: indoor CO2 range 400-5000 ppm (\u00b175 ppm or 10%)",
+      "citation": "Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. The two sensors disagree by more than their stated accuracy (a relative calibration offset), and indoor values at 400 are the sensor's range floor, not a measurement: co2_ventilation's 'CO2 near outdoor' (over-ventilation) reading is biased toward over-ventilation here."
+    },
+    {
+     "id": "airflow-with-fan-off",
+     "title": "Supply airflow reads above zero with the air handler off",
+     "columns": [
+      "supply_air_flow [CMH]"
+     ],
+     "evidence": "With the air-handler fan below 1 Hz, supply_air_flow reads a median 44.5 m3/h (Room4, above zero in 87% of fan-off rows) and 111 m3/h (Room5, 76.6%); Room3 reads above zero in 32.6% of its fan-off rows.",
+     "contradicts": {
+      "document": "Sensor table: supply air flow from the VAV box (Johnson Controls), 0-3375 m3/h \u00b115%",
+      "citation": "Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published (a flow-sensor zero offset); rules that read oa_airflow also see the derived fan status, so fan-off hours can be excluded.",
+     "runs": [
+      "room3",
+      "room4",
+      "room5"
+     ]
+    },
+    {
+     "id": "room5-airflow-missing-9-days",
+     "title": "Room5 airflow and damper are missing for 9 of its 47 days",
+     "columns": [
+      "supply_air_flow [CMH]",
+      "damper_position [%]"
+     ],
+     "evidence": "Both columns are blank on 9 weekdays, 2021-09-21 to 2021-09-24 and 2021-09-27 to 2021-10-01: 2,580 rows, 19.1% of Room5's 13,536; every other column of those rows is present.",
+     "contradicts": {
+      "document": "Data descriptor / README: 47 days of all data categories for Room 5",
+      "citation": "Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9"
+     },
+     "handling": "none",
+     "handling_note": "Left missing; the analyses see those days without an airflow or damper value.",
+     "runs": [
+      "room5"
+     ]
+    },
+    {
+     "id": "valve-position-offset",
+     "title": "Cooling-valve position reads above the command at zero",
+     "columns": [
+      "cooling_coil_valve_position [%]",
+      "cooling_coil_valve_command [%]"
+     ],
+     "evidence": "Position and command correlate at r = 1.000 but position reads about 1.7 points (Room3) and 7.8 points (Room4/5) at a 0% command (median +6.0 above command when the command is above 5%).",
+     "contradicts": {
+      "document": "Sensor table: cooling-coil valve position and command, 0-100% (Johnson Controls)",
+      "citation": "Tekler et al. 2022, Building Simulation 15:2127, doi:10.1007/s12273-022-0925-9"
+     },
+     "handling": "none",
+     "handling_note": "The command is mapped (cool_valve); the position feedback is not, so the offset cannot read as a leaking valve.",
+     "runs": [
+      "room3",
+      "room4",
+      "room5"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "sdu-ou44",
+   "title": "SDU OU44: room CO2, VAV damper and camera occupant counts (Denmark, 3 rooms)",
+   "summary": "Three teaching rooms (a lecture room and two study zones) of a university building in Denmark at 1-minute resolution: room CO2, temperature, the room's VAV damper position and camera-counted occupants on 44 anonymised workdays (March 2018 - February 2019), shuffled by the publisher into a random order.",
+   "teaches": [
+    "demand-controlled ventilation verified from room CO2 and the outdoor-air damper",
+    "reading a room whose damper stays shut at high CO2 (a DCV fault in two of three rooms)",
+    "why shuffled, non-contiguous days rule out drift and schedule analyses"
+   ],
+   "publisher": "University of Southern Denmark (SDU Center for Energy Informatics)",
+   "citation": "Schwee, J. H., Johansen, A., J\u00f8rgensen, B. N., Kj\u00e6rgaard, M. B., Mattera, C. G., Sangogboye, F. C., Veje, C. (2019). Room-level occupant counts and environmental quality from heterogeneous sensing modalities in a smart building. Scientific Data 6, 287. doi:10.1038/s41597-019-0274-4. Data: figshare, doi:10.6084/m9.figshare.9959417.v1",
+   "dois": [
+    "10.1038/s41597-019-0274-4",
+    "10.6084/m9.figshare.9959417.v1"
+   ],
+   "landing_url": "https://figshare.com/articles/dataset/Room-level_occupant_counts_and_environmental_quality_from_heterogeneous_sensing_modalities_in_a_smart_building/9959417",
+   "licence": "CC0-1.0",
+   "access": "open",
+   "attribution_required": false,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://api.figshare.com/v2/articles/9959417",
+    "json_path": "license.url",
+    "expect": "creativecommons.org/publicdomain/zero/1.0"
+   },
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "contiguous": false,
+   "equipment": "3 rooms, each with its own VAV damper on an outdoor-air supply with heat recovery (class VAV): ROOM1 lecture room (139 m2, 84 seats), ROOM2 / ROOM3 study zones (125 m2, 32 seats)",
+   "timezone": "UTC time of day on a SYNTHETIC day clock: the publisher replaced every date with a random DayId (0-43), so day d is stored on 2000-01-03 + 7*d days (every stored day a Monday -- all 44 are workdays -- and a week apart, so no rule bridges two unrelated days); the real year and month are not ingested. 1-minute samples (the publisher's filled data)",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "Dataset.zip",
+     "url": "https://ndownloader.figshare.com/files/17938001",
+     "size": 8636538,
+     "sha256": "3b78dc827af7bdd970e9d172e8aeb933ac78e5a06fcacd147977e5deca814522",
+     "pinned": true,
+     "etag": null,
+     "archive": "zip",
+     "extracted_size": 98735731,
+     "members": [
+      "filleddata/co2_room_1.csv",
+      "filleddata/vav_room_1.csv",
+      "filleddata/temperature_room_1.csv",
+      "filleddata/occupant_count_room_1.csv",
+      "filleddata/co2_room_2.csv",
+      "filleddata/vav_room_2.csv",
+      "filleddata/temperature_room_2.csv",
+      "filleddata/occupant_count_room_2.csv",
+      "filleddata/co2_room_3.csv",
+      "filleddata/vav_room_3.csv",
+      "filleddata/temperature_room_3.csv",
+      "filleddata/occupant_count_room_3.csv",
+      "README.txt",
+      "roominfo.txt",
+      "original/brick_graph.ttl"
+     ]
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "all three rooms (the whole dataset is 8.6 MB)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 325980
+    },
+    "full": {
+     "description": "all three rooms",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 325980
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-sdu-ou44",
+    "timestamp": "Datetime",
+    "clock": {
+     "kind": "day",
+     "day": "DayId",
+     "time": "Time",
+     "start": "2000-01-03",
+     "every_days": 7
+    },
+    "resample": "15min",
+    "mapping": "sdu_ou44.json",
+    "units": {
+     "space_temp": "degC",
+     "oa_damper": "percent"
+    },
+    "derive": [
+     {
+      "column": "OCCUPIED",
+      "above": [
+       "occupants",
+       0
+      ]
+     }
+    ],
+    "quirks": [
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "co2"
+      ],
+      "after": "2000-02-21 18:13:00",
+      "before": "2000-02-22 00:00:00",
+      "runs": [
+       "room1"
+      ],
+      "note": "ROOM1 CO2, DayId 7 (stored 2000-02-21): the sensor stopped at 18:12:46 UTC and the publisher's forward fill holds that value for 347 minutes; masked to missing.",
+      "issue": "room1-co2-filled-over-long-gaps"
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "co2"
+      ],
+      "after": "2000-07-31 07:04:00",
+      "before": "2000-08-01 00:00:00",
+      "runs": [
+       "room1"
+      ],
+      "note": "ROOM1 CO2, DayId 30 (stored 2000-07-31): the sensor stopped at 07:03:34 UTC and the forward fill holds that value for 1,016 minutes -- the whole occupied day; masked to missing.",
+      "issue": "room1-co2-filled-over-long-gaps"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "The filled 1-minute series are a forward fill labelled one minute late; left as published (negligible at the 15-minute resample).",
+      "issue": "filled-data-lags-one-minute"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "Occupant counts above zero at night (00-04 UTC) in 13-52% of minutes; OCCUPIED (count above 0) includes them.",
+      "issue": "phantom-night-occupants"
+     }
+    ],
+    "runs": [
+     {
+      "id": "room1",
+      "file": "Dataset.zip",
+      "members": {
+       "co2": "filleddata/co2_room_1.csv",
+       "damper": "filleddata/vav_room_1.csv",
+       "temp": "filleddata/temperature_room_1.csv",
+       "occupants": "filleddata/occupant_count_room_1.csv"
+      },
+      "equip": "ROOM1",
+      "equip_id": "ROOM1",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "room2",
+      "file": "Dataset.zip",
+      "members": {
+       "co2": "filleddata/co2_room_2.csv",
+       "damper": "filleddata/vav_room_2.csv",
+       "temp": "filleddata/temperature_room_2.csv",
+       "occupants": "filleddata/occupant_count_room_2.csv"
+      },
+      "equip": "ROOM2",
+      "equip_id": "ROOM2",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "room3",
+      "file": "Dataset.zip",
+      "members": {
+       "co2": "filleddata/co2_room_3.csv",
+       "damper": "filleddata/vav_room_3.csv",
+       "temp": "filleddata/temperature_room_3.csv",
+       "occupants": "filleddata/occupant_count_room_3.csv"
+      },
+      "equip": "ROOM3",
+      "equip_id": "ROOM3",
+      "class": "VAV",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "dcv_verification"
+    ],
+    "config_template": "sdu-ou44.json"
+   },
+   "known_issues": [
+    "The publisher anonymised the dates (a random DayId per day, plus year, month and a workday flag): the 44 days are not consecutive and their order is random, so the store uses a synthetic day clock (see timezone) and the entry is contiguous: false -- the template runs no drift, setback or other schedule rule.",
+    "CAMBER ingests the publisher's minute-wise filled series (forward then backward fill of the change-of-value originals); damper, temperature and CO2 are 99% / 92-96% / 81% filled minutes. The originals are in the same archive (original/).",
+    "The data descriptor warns that CO2 was not cleaned of sensor offsets and drift: the night-time (01-04 UTC) CO2 median is 506 / 438 / 502 ppm in ROOM1 / 2 / 3, about 100 ppm above ambient in rooms 1 and 3. There is no outdoor CO2 series.",
+    "ROOM2 and ROOM3 keep the damper shut at high CO2 on specific days (ROOM2: 294 of 396 minutes above 800 ppm; shut all day on DayIds 24, 35 and 41 with up to 26 occupants), while ROOM1's damper follows CO2 (open 96% of the time above 800 ppm).",
+    "The published Brick model (brick_graph.ttl, legacy BrickFrame namespace) is not used for grouping: see the data issue brick-model-contradicts-rooms."
+   ],
+   "data_issues": [
+    {
+     "id": "room1-co2-filled-over-long-gaps",
+     "title": "ROOM1 CO2 is forward-filled over gaps of 347 and 1,016 minutes",
+     "columns": [
+      "room_1 (co2_room_1.csv)"
+     ],
+     "evidence": "In the original stream ROOM1 CO2 has 209 readings on DayId 7 (last at 18:12:46 UTC) and 83 on DayId 30 (last at 07:03:34 UTC); the filled series holds one value for 347 and 1,016 consecutive minutes. Rooms 2 and 3 never gap more than 20 minutes.",
+     "contradicts": {
+      "document": "Data descriptor, day selection: days where the CO2 stream had more than three missing readings in a row were not considered (gaps of at most 15 minutes)",
+      "citation": "Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4"
+     },
+     "handling": "fix",
+     "handling_note": "The two held stretches are masked to missing (mask quirks on the ROOM1 run, in the synthetic clock); --no-corrections keeps them.",
+     "runs": [
+      "room1"
+     ]
+    },
+    {
+     "id": "filled-data-lags-one-minute",
+     "title": "The filled series lag the original readings by one minute",
+     "columns": [
+      "co2_room_x",
+      "vav_room_x",
+      "temperature_room_x",
+      "occupant_count_room_x"
+     ],
+     "evidence": "The filled value at minute m+1 equals the original reading taken inside minute m in 99.9% of CO2 rows and 100% of camera-count rows (a reading at 00:02:12 appears from 00:03:00); before each day's first CO2 reading (median 143-163 s after midnight) the fill is neither that reading nor the previous day's last.",
+     "contradicts": {
+      "document": "Data descriptor: forward fill then backward fill of the original streams to minute-wise sampling",
+      "citation": "Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: a one-minute shift is invisible at the 15-minute resample."
+    },
+    {
+     "id": "upsampled-row-count",
+     "title": "The filled files hold 44 days, not the 47 the descriptor counts",
+     "columns": [
+      "filleddata/*"
+     ],
+     "evidence": "Every filled file has 63,360 rows = 44 days x 1,440 minutes (DayId 0-43).",
+     "contradicts": {
+      "document": "Data descriptor: the upsampled dataset has 67,680 readings per stream (47 days)",
+      "citation": "Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4"
+     },
+     "handling": "none",
+     "handling_note": "Nothing to correct; the catalog describes the 44 days that are published."
+    },
+    {
+     "id": "readme-names-and-values",
+     "title": "The README's file names, column name and workday values differ from the data",
+     "columns": [
+      "README.txt",
+      "DayId",
+      "Workday"
+     ],
+     "evidence": "3 of the README's file patterns do not exist as named (occupant_data_room_x.csv is occupant_count_room_x.csv, vav_data_room_x.csv is vav_room_x.csv, illuminance_room_x.csv is Illuminance_room_x.csv); the day column is DayId, not DayID; Workday holds True/False (True on all 44 days), not 1/0.",
+     "contradicts": {
+      "document": "Dataset README (published with the data and described by the data descriptor)",
+      "citation": "Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4"
+     },
+     "handling": "none",
+     "handling_note": "The catalog names the files and columns as published."
+    },
+    {
+     "id": "brick-model-contradicts-rooms",
+     "title": "The published Brick model has a room 4 and one AHU for every VAV",
+     "columns": [
+      "brick_graph.ttl"
+     ],
+     "evidence": "brick_graph.ttl (legacy BrickFrame namespace, identical in original/ and filleddata/) declares co2_room_4, vav_room_4 and other room-4 points that have no data, one AHU (/ahus/1) feeding VAVs 1-4, and measurements in files that do not exist (lux_room_x.csv, occ_count_room_x.csv).",
+     "contradicts": {
+      "document": "Data descriptor: no two rooms are served by the same AHU nor VAV damper position",
+      "citation": "Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4"
+     },
+     "handling": "none",
+     "handling_note": "Not used: the entry groups the per-point files by room itself."
+    },
+    {
+     "id": "phantom-night-occupants",
+     "title": "Occupant counts are above zero at night",
+     "columns": [
+      "occupant_count_room_x"
+     ],
+     "evidence": "Between 00:00 and 04:00 UTC (01-06 local) the count is above zero in 13.4 / 51.8 / 26.1% of minutes (max 2 / 7 / 8) in ROOM1 / 2 / 3, and above zero at 02:00 UTC on 6 / 23 / 13 of the 44 days.",
+     "contradicts": {
+      "document": "Data descriptor: occupant counts from overhead cameras corrected by PLCount (RMSE 0.075)",
+      "citation": "Schwee et al. 2019, Sci Data 6:287, doi:10.1038/s41597-019-0274-4"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the derived OCCUPIED flag (count above 0) counts those minutes as occupied, which the DCV rule's occupied-hours window mostly excludes."
+    }
+   ]
+  },
+  {
+   "id": "ornl-frp-ops",
+   "title": "ORNL FRP-2 multizone office: one RTU and ten VAV boxes under seven operating scenarios",
+   "summary": "An unoccupied two-storey research office (ORNL Flexible Research Platform, Oak Ridge, Tennessee) at 1-minute resolution: one DX rooftop unit and ten VAV boxes with electric reheat, run for about a week each as a 24/7 baseline, a night setback, a morning pre-heat and free-float (HVAC off), in heating and cooling seasons, with rooftop weather. Measured, not simulated; operation scenarios, not fault labels.",
+   "teaches": [
+    "comparing one building under a 24/7 schedule and a night setback",
+    "cool-then-reheat: DX cooling and VAV reheat running together in winter at minimum flow",
+    "what a VAV fleet dataset without setpoints can and cannot support"
+   ],
+   "publisher": "Oak Ridge National Laboratory (Building Technologies Research and Integration Center)",
+   "citation": "Yoon, Y., Jung, S., Im, P., Gehl, A. (2022). Datasets of a multizone office building under different HVAC system operation scenarios. Scientific Data 9, 775. doi:10.1038/s41597-022-01858-6. Data: Im, P., Jung, S., Yoon, Y. (2022), figshare, doi:10.6084/m9.figshare.20520438.v3",
+   "dois": [
+    "10.1038/s41597-022-01858-6",
+    "10.6084/m9.figshare.20520438.v3"
+   ],
+   "landing_url": "https://figshare.com/articles/dataset/Datasets_of_a_Multizone_Office_Building_under_Different_HVAC_System_Operation_Scenarios/20520438",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://api.figshare.com/v2/articles/20520438",
+    "json_path": "license.url",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "1 DX rooftop unit (RTU, class AHU; no outdoor-air intake, gas furnace off) and 10 VAV boxes with electric reheat (VAV_102-106, VAV_202-206, class VAV), plus rooftop weather (WEATHER); each per scenario: <equip>__<scenario>",
+   "timezone": "local wall clock of Oak Ridge, Tennessee (EST in the winter tests, EDT in the July tests; no DST transition falls inside any test); 1-minute samples; month-first timestamps (M/D/YYYY H:MM)",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "Building_Base_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624451",
+     "size": 7333141,
+     "sha256": "3fe474f72ba4641104a9db9ee634b91ce005a3e705bf1d7a8dabff156727592c",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_Base_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624475",
+     "size": 747202,
+     "sha256": "b04009bbde3efc4c319b2f23687d8642638755fea39b2189ea34819a579960b7",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_SB_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624469",
+     "size": 5570180,
+     "sha256": "aabc94b41e039c76edfa186ca0f219db3d3e89cc7091f289efc86d3b81cec3c5",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_SB_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624484",
+     "size": 649539,
+     "sha256": "ddc1e668b4021df8d874c852d87cfe81784d487697ae06734af3dd660eb4cb04",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_Pre_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624454",
+     "size": 4842237,
+     "sha256": "c9152889caf56fabd5f3b4407f9edee17a0b3eac9f3971015e711e21284d91dc",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_Pre_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624490",
+     "size": 544315,
+     "sha256": "26e05a69158615bc91d47de2f44c6f16f38eb5a5ff2de5554ec0cb7af4a11786",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_FF_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624463",
+     "size": 3546063,
+     "sha256": "22266a1f8fe75d085b1c5dd321f153365eccc1a217049b2ea3debb8b70fec132",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_FF_Heating.csv",
+     "url": "https://ndownloader.figshare.com/files/37624481",
+     "size": 635643,
+     "sha256": "3ce5911e2026095c82049ad96186d9166835ac2b1679d624e4737acd77ab2dc6",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_Base_Cooling.csv",
+     "url": "https://ndownloader.figshare.com/files/37624448",
+     "size": 6957847,
+     "sha256": "44c1b04d9a54eb46dbe520942b0aab8445e8f22caa8f089c00bbdf602f70feb0",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_Base_Cooling.csv",
+     "url": "https://ndownloader.figshare.com/files/37624472",
+     "size": 765520,
+     "sha256": "dd7f8abc12647cc2cf41869609311806a7649b122f346645477a4eaad4806df2",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_SB_Cooling.csv",
+     "url": "https://ndownloader.figshare.com/files/37624460",
+     "size": 6676383,
+     "sha256": "7a81893513279e0481b9888ae5b0b5b8414c809fd18ef0f10a454d52af1730ba",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_SB_Cooling.csv",
+     "url": "https://ndownloader.figshare.com/files/37624493",
+     "size": 853699,
+     "sha256": "21882cde02c37f951bac76b7c60bfb280a718c08eb15a160625b9c13ccdc32e4",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_FF_Cooling.csv",
+     "url": "https://ndownloader.figshare.com/files/37624457",
+     "size": 3497606,
+     "sha256": "533a016701426452572167a49363f8ffbbc967372c71dbd82b89592eed12ef27",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_FF_Cooling.csv",
+     "url": "https://ndownloader.figshare.com/files/37624478",
+     "size": 633314,
+     "sha256": "8cb06d014546a148efa7f938f7f0f0ab001d7042d58837116ce4e737329c2c95",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Building_Information.csv",
+     "url": "https://ndownloader.figshare.com/files/37624466",
+     "size": 3692,
+     "sha256": "94b7968505900084a47d8e684d945f7da420557007aa227c3b8aaa424904ceb4",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Weather_Information.csv",
+     "url": "https://ndownloader.figshare.com/files/37624487",
+     "size": 285,
+     "sha256": "c2203f7efbf3b0bad763d7de041a44c66e2cb730e1bc94d20124a78cf5e92706",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "the heating-season baseline and night setback: the RTU, weather and two boxes (102, chronically under-heated, and 104)",
+     "files": [
+      "Building_Base_Heating.csv",
+      "Weather_Base_Heating.csv",
+      "Building_SB_Heating.csv",
+      "Weather_SB_Heating.csv"
+     ],
+     "runs": [
+      "rtu__base_heating",
+      "vav102__base_heating",
+      "vav104__base_heating",
+      "weather__base_heating",
+      "rtu__sb_heating",
+      "vav102__sb_heating",
+      "vav104__sb_heating",
+      "weather__sb_heating"
+     ],
+     "store_bytes_estimate": 2687809
+    },
+    "full": {
+     "description": "all seven scenarios",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 23197272
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-ornl-frp-ops",
+    "timestamp": "TIMESTAMP",
+    "timestamp_format": "%m/%d/%Y %H:%M",
+    "resample": "1min",
+    "units": {
+     "supply_air_temp": "degC",
+     "return_air_temp": "degC",
+     "mixed_air_temp": "degC",
+     "space_temp": "degC",
+     "oat": "degC",
+     "airflow": "m3/s",
+     "power": "W"
+    },
+    "derive": [
+     {
+      "column": "SUPPLY_FAN_ON",
+      "above": [
+       "WH_RTU_Sup_Fan",
+       200
+      ]
+     },
+     {
+      "column": "COMP1_ON",
+      "above": [
+       "WH_RTU_Comp1",
+       200
+      ]
+     }
+    ],
+    "quirks": [
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "WH_* columns are read as average power in W (documented as Wh per minute).",
+      "issue": "wh-columns-are-average-power"
+     }
+    ],
+    "runs": [
+     {
+      "id": "rtu__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__base_heating",
+      "file": "Building_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__base_heating",
+      "file": "Weather_Base_Heating.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "rtu__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__sb_heating",
+      "file": "Building_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__sb_heating",
+      "file": "Weather_SB_Heating.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "rtu__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__pre_heating",
+      "file": "Building_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__pre_heating",
+      "file": "Weather_Pre_Heating.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "rtu__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__ff_heating",
+      "file": "Building_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__ff_heating",
+      "file": "Weather_FF_Heating.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "rtu__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__base_cooling",
+      "file": "Building_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__base_cooling",
+      "file": "Weather_Base_Cooling.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "rtu__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__sb_cooling",
+      "file": "Building_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__sb_cooling",
+      "file": "Weather_SB_Cooling.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "rtu__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_rtu.json",
+      "equip": "RTU",
+      "class": "AHU",
+      "label": ""
+     },
+     {
+      "id": "vav102__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "102"
+      },
+      "equip": "VAV_102",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav103__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "103"
+      },
+      "equip": "VAV_103",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav104__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "104"
+      },
+      "equip": "VAV_104",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav105__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "105"
+      },
+      "equip": "VAV_105",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav106__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "106"
+      },
+      "equip": "VAV_106",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav202__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "202"
+      },
+      "equip": "VAV_202",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav203__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "203"
+      },
+      "equip": "VAV_203",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav204__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "204"
+      },
+      "equip": "VAV_204",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav205__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "205"
+      },
+      "equip": "VAV_205",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "vav206__ff_cooling",
+      "file": "Building_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_vav.json",
+      "vars": {
+       "n": "206"
+      },
+      "equip": "VAV_206",
+      "class": "VAV",
+      "label": ""
+     },
+     {
+      "id": "weather__ff_cooling",
+      "file": "Weather_FF_Cooling.csv",
+      "mapping": "ornl_frp_ops_weather.json",
+      "equip": "WEATHER",
+      "class": "WEATHER",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [
+     "compressor_short_cycle",
+     "night_weekend_setback"
+    ],
+    "config_template": "ornl-frp-ops.json"
+   },
+   "known_issues": [
+    "Not a fault dataset: the scenarios are operating schedules on an unoccupied building with no internal gains, so no finding is scored. It is also distinct from ORNL's multi-zone VAV fault datasets of the same building, which carry a non-commercial licence.",
+    "The dataset has no zone setpoint, damper, airflow setpoint, supply-air-temperature setpoint or duct static pressure column (the setpoints are fixed in the descriptor's Tables 3-4: 21 C heating / 24 C cooling occupied, 15.6 / 29.4 C setback, discharge 13.9 C heating / 12.8 C cooling season; static 249 Pa). The G36 VAV fleet rules (rogue-zone census, cohort starvation, reset effectiveness, zone heat/cool census, reheat penalty, overcooling, VAV airflow drift) therefore decline on every box -- injecting the documented constants as trends would be fabricated data.",
+    "Every box holds a constant minimum airflow in every test (coefficient of variation 0.007-0.017 in the baseline and pre-heat tests); reheat runs whenever the fan runs (discharge more than 3 C above the RTU supply in 50-100% of fan-on rows in the heating tests), with DX cooling cycling in winter: cool-then-reheat by test design.",
+    "Room 102 is chronically under-heated (median 16.9-20.4 C in the heating tests, within 20.5-24.5 C for 0-47% of fan-on time) with its reheat pinned at about 1.1 kW; room 202 is low in the setback and pre-heat tests. The staircases are unconditioned.",
+    "When the RTU is off its airflow and temperatures are blank, not zero, so the fan and compressor status are derived from their power. The unit runs 24/7 in the baseline tests and overnight in the pre-heat test (on 10:00-05:00, pre-heat 05:00-08:00, off 08:00-10:00: descriptor Table 3); in the setback tests it is scheduled off 22:00-07:00, but in the heating season it cycles on for 46-85% of each hour from 00:00 to 06:00 to hold the 15.6 C setback. The free-float tests are kept for the envelope response only.",
+    "The ingest keeps 1-minute resolution (not the catalog's usual 15 minutes): the DX compressor runs about 4-5 minute cycles in winter, which a 15-minute duty average cannot count.",
+    "The supply air runs above the documented 13.9 C discharge setpoint in the heating tests (median 14.3-15.3 C, p95 18-20.6 C); the descriptor gives 12.7 C in its text and 12.8 C in Table 4 for the cooling season (medians 12.4 / 12.8 C)."
+   ],
+   "data_issues": [
+    {
+     "id": "wh-columns-are-average-power",
+     "title": "The WH_* energy columns are average power in W, not Wh per minute",
+     "columns": [
+      "WH_RTU_Total",
+      "WH_RTU_Comp1",
+      "WH_RTU_Comp2",
+      "WH_RTU_Sup_Fan",
+      "WH_RTU_VAV*"
+     ],
+     "evidence": "Read as Wh per 1-minute interval, the supply fan's median of 1,795 would be 108 kW (the RTU is rated 44 kW); read as W it is 1.8 kW, compressors 3.6-4.8 kW on, reheat 0.4-5 kW per box. The values step in multiples of 2.77 (idle readings 2.77 / 5.54 / 8.31) and are not cumulative (15-55% of steps fall).",
+     "contradicts": {
+      "document": "Data descriptor Table 7 and Building_Information.csv: energy consumption in Wh at 1-minute resolution",
+      "citation": "Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the mapped fan and reheat power columns are declared in W (converted to kW), and the fan / compressor status are derived above 200 W."
+    },
+    {
+     "id": "rtu-flow-exceeds-box-flows",
+     "title": "RTU supply airflow is 24-26% above the sum of the ten box airflows",
+     "columns": [
+      "AF_RTU",
+      "AF_VAV_*"
+     ],
+     "evidence": "AF_RTU divided by the sum of AF_VAV_102-206 has a median of 1.24-1.26 in every scenario with the fan running (p5 1.21, p95 1.27).",
+     "contradicts": {
+      "document": "Data descriptor, cooling-season analysis: the RTU supply airflow rate was the same as the supply airflow from the 10 VAV boxes, with no duct leakage",
+      "citation": "Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6"
+     },
+     "handling": "none",
+     "handling_note": "Left as published: a 25% airflow mismatch is either duct leakage or a sensor calibration difference, and the data cannot say which."
+    },
+    {
+     "id": "pre-heating-period-is-5-days",
+     "title": "The pre-heating test covers 5 days, not the documented 9",
+     "columns": [
+      "TIMESTAMP"
+     ],
+     "evidence": "Building_Pre_Heating.csv and Weather_Pre_Heating.csv run from 2022-01-19 00:00 to 2022-01-23 23:59 (7,200 one-minute rows).",
+     "contradicts": {
+      "document": "Data descriptor Table 2: pre-heating test 15/01/22-23/01/22",
+      "citation": "Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6"
+     },
+     "handling": "none",
+     "handling_note": "Nothing to correct; the scenario is the five days published.",
+     "runs": [
+      "rtu__pre_heating",
+      "vav102__pre_heating",
+      "vav103__pre_heating",
+      "vav104__pre_heating",
+      "vav105__pre_heating",
+      "vav106__pre_heating",
+      "vav202__pre_heating",
+      "vav203__pre_heating",
+      "vav204__pre_heating",
+      "vav205__pre_heating",
+      "vav206__pre_heating",
+      "weather__pre_heating"
+     ]
+    },
+    {
+     "id": "barometric-pressure-zero",
+     "title": "Barometric pressure reads 0 Pa in two weather files",
+     "columns": [
+      "BP"
+     ],
+     "evidence": "BP = 0 in 54 rows of Weather_FF_Heating.csv and 52 rows of Weather_Base_Heating.csv; elsewhere it reads about 98,500 Pa.",
+     "contradicts": {
+      "document": "Data descriptor Table 8: barometric pressure 500-1,100 hPa (CS106)",
+      "citation": "Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6"
+     },
+     "handling": "none",
+     "handling_note": "Not mapped; nothing in CAMBER reads the barometric pressure."
+    },
+    {
+     "id": "negative-night-solar",
+     "title": "Global solar radiation is negative at night",
+     "columns": [
+      "Glo_Solar"
+     ],
+     "evidence": "Glo_Solar falls to -34 W/m2; the night median is -20.5 W/m2 (setback heating test) and -18.6 W/m2 (pre-heating test), with 5,500 rows below -5 W/m2 in the setback heating test.",
+     "contradicts": {
+      "document": "Data descriptor Table 8: global solar radiation, Eppley SPP, 0-2,000 W/m2 range",
+      "citation": "Yoon et al. 2022, Sci Data 9:775, doi:10.1038/s41597-022-01858-6"
+     },
+     "handling": "none",
+     "handling_note": "Not mapped; a pyranometer's night-time thermal offset, left as published."
+    }
+   ]
+  },
+  {
+   "id": "ornl-supermarket-fdd",
+   "title": "ORNL supermarket refrigeration FDD tests (CO2 booster rack, labelled faults; reference only)",
+   "summary": "A laboratory transcritical CO2 booster refrigeration system (3 MT + 2 LT compressors, one MT open display case, one LT 4-door case, air-cooled gas cooler) at 1-second resolution: five fault-free baseline days and six fault days (LT case door open, LT coil ice, LT expansion valve failure, MT evaporator fan failure, condenser and MT evaporator air-path blockage). A refrigerant-side reference: CAMBER has no refrigeration detector, so nothing is scored.",
+   "teaches": [
+    "what refrigerant-side fault signatures look like (suction pressure, case air, compressor staging) next to their labels",
+    "why a chiller detector does not transfer to a refrigeration rack",
+    "reading a fault that starts mid-file (the LT valve failure at about 13:56)"
+   ],
+   "publisher": "Oak Ridge National Laboratory (Building Technologies Research and Integration Center)",
+   "citation": "Sun, J., Im, P., Bae, Y., Munk, J., Kuruganti, T., Fricke, B. (2021). Dataset of low global warming potential refrigerant refrigeration system for fault detection and diagnostics. Scientific Data 8, 144. doi:10.1038/s41597-021-00927-6. Data: Sun, J. (2021), Test Data of Supermarket Refrigeration System Fault Detection and Diagnostics, figshare, doi:10.6084/m9.figshare.13232627.v1",
+   "dois": [
+    "10.1038/s41597-021-00927-6",
+    "10.6084/m9.figshare.13232627.v1"
+   ],
+   "landing_url": "https://figshare.com/articles/dataset/Test_Data_of_Supermarket_Refrigeration_System_Fault_Detection_and_Diagnostics/13232627",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-26",
+   "licence_check": {
+    "url": "https://api.figshare.com/v2/articles/13232627",
+    "json_path": "license.url",
+    "expect": "creativecommons.org/licenses/by/4.0"
+   },
+   "kind": "lab",
+   "labeled_faults": true,
+   "labels": {
+    "targets": {},
+    "fault_types": {
+     "door_open": "LT display case door opened 5/10/15% of the time",
+     "ice_accumulation": "ice build-up on the LT evaporator coil (defrosts withheld)",
+     "evap_valve_failure": "LT evaporator expansion valve partially / fully closed",
+     "evap_fan_failure": "MT evaporator fans switched off (25/50/75%)",
+     "condenser_blockage": "gas-cooler inlet air path blocked (25/50/75%)",
+     "evap_airpath_blockage": "MT evaporator return-air path blocked (25/50/75%)"
+    }
+   },
+   "equipment": "1 transcritical CO2 booster rack, as two circuits per test day (class REFRIG_CIRCUIT): LT_CIRCUIT (LT compressors, LT case) and MT_CIRCUIT (MT compressors, MT case, gas cooler); equipment <circuit>__<test>",
+   "timezone": "naive laboratory clock, one calendar day per file (July-November 2019); 1-second samples (3-second in the ice test), month-first timestamps; two files carry minute-resolution stamps (see the data issues)",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "BaselineTestA.csv",
+     "url": "https://ndownloader.figshare.com/files/27479363",
+     "size": 97299974,
+     "sha256": "5b8924f95a6fe2eee101a1435060e38e6218bb46203254102b123d2ae16b9615",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "BaselineTestB.csv",
+     "url": "https://ndownloader.figshare.com/files/27479366",
+     "size": 97837127,
+     "sha256": "39512db75dcb8f7fff03ca9e371d30177839b2944ba8fdcc8d6a13a3770c1a09",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "BaselineTestC.csv",
+     "url": "https://ndownloader.figshare.com/files/27479369",
+     "size": 98036828,
+     "sha256": "72ee9c15f67f133a97fc722613477c50de5d452279daf8e1dc64e84661435aa5",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "BaselineTestD.csv",
+     "url": "https://ndownloader.figshare.com/files/27479375",
+     "size": 97417314,
+     "sha256": "bdafe299988a53a372cf255a544a370124ba79d4e5beeeb8d3da8488b475100f",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "BaselineTestE.csv",
+     "url": "https://ndownloader.figshare.com/files/27479381",
+     "size": 97764085,
+     "sha256": "0c3b4d83be1213963525b2c5efcd54920ed084f2e31345e3f1e091ef9007fba3",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Fault1_DisplayCaseDoorOpen.csv",
+     "url": "https://ndownloader.figshare.com/files/27479384",
+     "size": 97691827,
+     "sha256": "8e51f738d6411be596e133702b8a7ddbd4799de811c73240f83196068ccdb2cf",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Fault2_IceAccumulation.csv",
+     "url": "https://ndownloader.figshare.com/files/27479387",
+     "size": 31489417,
+     "sha256": "7e9c00d837edc1f7dd8d62a1ebb0af2c91a48010ef5d04554820bc1deb145e25",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Fault3_EvapValveFailure.csv",
+     "url": "https://ndownloader.figshare.com/files/27479390",
+     "size": 97523063,
+     "sha256": "162dd3dd86ccf9d297d966c63e663a9930dd2f4255d6bdf41ef54c2997ea4967",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Fault4_MTEvapFanFailure.csv",
+     "url": "https://ndownloader.figshare.com/files/27479393",
+     "size": 97278711,
+     "sha256": "2416bf03c8cfd2aba8a7ee87e28569e742aacd8606684904b1b699e9f3d24ac4",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Fault5_CondAPBlock.csv",
+     "url": "https://ndownloader.figshare.com/files/27479402",
+     "size": 97461318,
+     "sha256": "85725f40514a6860f96bb025a12013804e20a6a57ce414dcab43d9a33810844a",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "Fault6_MTEvapAPBlock.csv",
+     "url": "https://ndownloader.figshare.com/files/27479408",
+     "size": 97489449,
+     "sha256": "cc1a78bbdd0252695132ba6407cff68186c6ede04fcd73fedc10bb99e0012efe",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    },
+    {
+     "name": "DataProcess.py",
+     "url": "https://ndownloader.figshare.com/files/26661266",
+     "size": 8844,
+     "sha256": "934c54cefd61331a276ff14b5f3aa982cec96c68f6b516800814e007fda4c20c",
+     "pinned": true,
+     "etag": null,
+     "archive": null
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "two fault / baseline pairs: LT valve failure vs baseline C, LT door open vs baseline A",
+     "files": [
+      "BaselineTestA.csv",
+      "BaselineTestC.csv",
+      "Fault1_DisplayCaseDoorOpen.csv",
+      "Fault3_EvapValveFailure.csv"
+     ],
+     "runs": [
+      "lt__baseline_c",
+      "mt__baseline_c",
+      "lt__evap_valve_failure",
+      "mt__evap_valve_failure",
+      "lt__baseline_a",
+      "mt__baseline_a",
+      "lt__door_open",
+      "mt__door_open"
+     ],
+     "store_bytes_estimate": 86514
+    },
+    "full": {
+     "description": "all eleven test days and the publisher's plotting script",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 237731
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-ornl-supermarket-fdd",
+    "timestamp": "Timestamp",
+    "timestamp_format": "%m/%d/%Y  %H:%M:%S",
+    "resample": "15min",
+    "units": {
+     "oat": "degF",
+     "supply_air_temp": "degF",
+     "return_air_temp": "degF"
+    },
+    "derive": [
+     {
+      "column": "LT_COMP1_ON",
+      "above": [
+       "W_LT-COMP1",
+       0.3
+      ]
+     },
+     {
+      "column": "MT_COMP2_ON",
+      "above": [
+       "W_MT-COMP2",
+       0.3
+      ]
+     }
+    ],
+    "quirks": [
+     {
+      "op": "drop",
+      "action": "fix",
+      "columns": [
+       "T-MTCase-Ret"
+      ],
+      "runs": [
+       "mt__baseline_e"
+      ],
+      "note": "BaselineTestE's MT case return-air temperature reads a median 94.1 F (every other file 44.7-52.3 F); dropped for that run.",
+      "issue": "baseline-e-mt-return-air"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "Fault2 / Fault3 stamps have no seconds: CAMBER keeps the first row of each minute (1 of up to 19 / 57 samples).",
+      "issue": "minute-stamps-in-two-files",
+      "runs": [
+       "*__ice_accumulation",
+       "*__evap_valve_failure"
+      ]
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "note": "The LT valve failure starts at about 13:56; the file is fault-free before that.",
+      "issue": "valve-failure-starts-mid-day",
+      "runs": [
+       "*__evap_valve_failure"
+      ]
+     }
+    ],
+    "runs": [
+     {
+      "id": "lt__baseline_a",
+      "file": "BaselineTestA.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "mt__baseline_a",
+      "file": "BaselineTestA.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "lt__baseline_b",
+      "file": "BaselineTestB.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "mt__baseline_b",
+      "file": "BaselineTestB.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "lt__baseline_c",
+      "file": "BaselineTestC.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "mt__baseline_c",
+      "file": "BaselineTestC.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "lt__baseline_d",
+      "file": "BaselineTestD.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "mt__baseline_d",
+      "file": "BaselineTestD.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "lt__baseline_e",
+      "file": "BaselineTestE.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "mt__baseline_e",
+      "file": "BaselineTestE.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": ""
+     },
+     {
+      "id": "lt__door_open",
+      "file": "Fault1_DisplayCaseDoorOpen.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "door_open"
+     },
+     {
+      "id": "mt__door_open",
+      "file": "Fault1_DisplayCaseDoorOpen.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "door_open"
+     },
+     {
+      "id": "lt__ice_accumulation",
+      "file": "Fault2_IceAccumulation.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "ice_accumulation",
+      "timestamp_format": "%m/%d/%Y %H:%M"
+     },
+     {
+      "id": "mt__ice_accumulation",
+      "file": "Fault2_IceAccumulation.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "ice_accumulation",
+      "timestamp_format": "%m/%d/%Y %H:%M"
+     },
+     {
+      "id": "lt__evap_valve_failure",
+      "file": "Fault3_EvapValveFailure.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "evap_valve_failure",
+      "timestamp_format": "%m/%d/%Y %H:%M"
+     },
+     {
+      "id": "mt__evap_valve_failure",
+      "file": "Fault3_EvapValveFailure.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "evap_valve_failure",
+      "timestamp_format": "%m/%d/%Y %H:%M"
+     },
+     {
+      "id": "lt__mt_evap_fan_failure",
+      "file": "Fault4_MTEvapFanFailure.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "evap_fan_failure"
+     },
+     {
+      "id": "mt__mt_evap_fan_failure",
+      "file": "Fault4_MTEvapFanFailure.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "evap_fan_failure"
+     },
+     {
+      "id": "lt__condenser_blockage",
+      "file": "Fault5_CondAPBlock.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "condenser_blockage"
+     },
+     {
+      "id": "mt__condenser_blockage",
+      "file": "Fault5_CondAPBlock.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "condenser_blockage"
+     },
+     {
+      "id": "lt__mt_evap_blockage",
+      "file": "Fault6_MTEvapAPBlock.csv",
+      "mapping": "ornl_supermarket_lt.json",
+      "equip": "LT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "evap_airpath_blockage"
+     },
+     {
+      "id": "mt__mt_evap_blockage",
+      "file": "Fault6_MTEvapAPBlock.csv",
+      "mapping": "ornl_supermarket_mt.json",
+      "equip": "MT_CIRCUIT",
+      "class": "REFRIG_CIRCUIT",
+      "label": "evap_airpath_blockage"
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "ornl-supermarket-fdd.json"
+   },
+   "known_issues": [
+    "Reference only. CAMBER's refrigerant-side detectors (superheat, subcooling, suction and head pressure drift) are chiller rules: they fit load through chilled-water flow and tons, which a refrigeration rack does not have, and they need controller-reported superheat / subcooling (CAMBER has no refrigerant property model). The published superheat columns are empty (see the data issues). The compressor short-cycle rule would flag every baseline: MT-COMP2 / MT-COMP3 stage in bursts of 8-17 s (up to 35 starts an hour in summer) and LT-COMP1 cycles 8-11 times an hour by design. The template therefore runs no rule and no fault is scored.",
+    "Fault severities (door open 5/10/15% of the time; ice mild / moderate / severe; valve partially / fully closed; fan and blockage 25/50/75%) are not identifiable: each fault is one file of one day with no severity column and no step change marking stages. The labels are the fault types only.",
+    "Each fault day is paired with a baseline day in the descriptor (Table 4: A-door open, B-ice, C-valve, D-MT fan, E-condenser, A-MT evaporator blockage); the ambient differs between the paired days (the door-open day was about 10 F warmer than baseline A), which confounds a naive comparison.",
+    "Defrost is visible in the data: one LT defrost a day at about 12:20 (79-102 minutes) and six MT off-cycle defrosts (about 01:30, 05:30, 09:30, 13:30, 17:30, 21:30).",
+    "The four fault types that move the data clearly are the LT valve failure (LT case air +69 F after onset), ice accumulation (LT suction +5 psig all day) and the door opening (LT return-air hourly standard deviation up 1.2-4x, 09:00-16:00); the MT fan, MT air-path and condenser blockage days are within day-to-day noise in hourly means.",
+    "Pressures are psig and temperatures F as exported; the MT discharge is above the CO2 critical pressure (1,055 psig) in 7-12% of the rows of the summer files, where discharge superheat is undefined."
+   ],
+   "data_issues": [
+    {
+     "id": "minute-stamps-in-two-files",
+     "title": "Two fault files carry minute stamps for 1-second and 3-second data",
+     "columns": [
+      "Timestamp"
+     ],
+     "evidence": "Fault2_IceAccumulation.csv has 26,395 rows on 1,440 distinct stamps (up to 19 per minute) and Fault3_EvapValveFailure.csv 81,280 rows on 1,440 stamps (up to 57 per minute), formatted M/D/YYYY H:MM; the other nine files use MM/DD/YYYY HH:MM:SS with one row per stamp.",
+     "contradicts": {
+      "document": "Data descriptor Table 4: sample time 1 s (Fault3) and 3 s (Fault2)",
+      "citation": "Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6"
+     },
+     "handling": "annotate",
+     "handling_note": "Read with their own timestamp format; CAMBER keeps the first row of each minute, so these two runs carry one sample per minute (15 per 15-minute bin).",
+     "runs": [
+      "lt__ice_accumulation",
+      "mt__ice_accumulation",
+      "lt__evap_valve_failure",
+      "mt__evap_valve_failure"
+     ]
+    },
+    {
+     "id": "valve-failure-starts-mid-day",
+     "title": "The LT expansion-valve failure starts at about 13:56",
+     "columns": [
+      "T-LTcase-EEVout",
+      "T-LTcase-Sup",
+      "T-LT-Suc"
+     ],
+     "evidence": "Against baseline C, the hourly means differ by less than 1 F until 13:56; after it the LT EEV outlet rises by up to 78 F, the LT case supply air by up to 69 F and the LT suction temperature by up to 31 F for the remaining 603 minutes.",
+     "contradicts": {
+      "document": "Data descriptor Table 4: Fault3_EvapValveFailure.csv is the fault test (the whole file)",
+      "citation": "Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published; the whole day carries the label.",
+     "runs": [
+      "lt__evap_valve_failure",
+      "mt__evap_valve_failure"
+     ]
+    },
+    {
+     "id": "baseline-e-mt-return-air",
+     "title": "BaselineTestE's MT case return-air temperature is 40 F too warm",
+     "columns": [
+      "T-MTCase-Ret"
+     ],
+     "evidence": "T-MTCase-Ret has a median of 94.1 F in BaselineTestE against 44.7-52.3 F in every other file (including Fault5, the day it is the baseline for).",
+     "contradicts": {
+      "document": "Data descriptor: each baseline test ran with operating conditions similar to those of its fault test (MT case discharge air setpoint 30 F)",
+      "citation": "Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6"
+     },
+     "handling": "fix",
+     "handling_note": "Dropped for that run (a drop quirk); --no-corrections keeps it.",
+     "runs": [
+      "mt__baseline_e"
+     ]
+    },
+    {
+     "id": "derived-columns-empty",
+     "title": "The published superheat, subcooling and capacity columns are empty",
+     "columns": [
+      "SupHEvap1",
+      "SupHEvap2",
+      "SubcoolCond1",
+      "SubcoolCond2",
+      "SupHCompSuc",
+      "EER"
+     ],
+     "evidence": "21 of the 23 columns after the unnamed column 161 (SupHEvap1/2, SubClComCond, SubcoolCond1/2, SuncoolLiq, RefHSct, RefHLiq, Tsetpt, RHsetpt, AirHRet, AirHSup, Tstat*, CapaAirside, CapaRefrside, EnergyBalance, EERA, EER) are blank in all 11 files; SupHCompSuc is 0 at its 95th percentile everywhere.",
+     "contradicts": {
+      "document": "Data descriptor, Data Records: evaporator exiting superheat among the variables representing evaporator characteristics",
+      "citation": "Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6"
+     },
+     "handling": "none",
+     "handling_note": "Not mapped; the entry maps no superheat or subcooling role."
+    },
+    {
+     "id": "sentinel-temperatures",
+     "title": "Several temperature and flow channels hold a -98,590 sentinel",
+     "columns": [
+      "T-GC-Out",
+      "T-BP-EEVin",
+      "T-GC-Fan1-In",
+      "T-spare-*",
+      "F-LT-BPHX",
+      "F-MT-BPHX"
+     ],
+     "evidence": "Values near -98,590 fill T-GC-Out in 24-99% of rows (99% in Fault1), T-BP-EEVin in 1-34%, T-GC-Fan1-In in 17% of baselines A and B (its other values run 40-1,027), and 100% of the five spare channels and both BPHX flow meters; the LT mass flow M-LTcooler is a constant -1.25.",
+     "contradicts": {
+      "document": "Data descriptor Table 5: thermocouples -270 to 400 C; Coriolis mass flow meters 0-10 kg/min",
+      "citation": "Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6"
+     },
+     "handling": "none",
+     "handling_note": "None of these channels is mapped; the ambient is T-GC-Fan2-In, as the publisher's script uses."
+    }
+   ]
   }
  ]
 }

@@ -1,0 +1,10 @@
+{
+  "_comment": "ORNL Flexible Research Platform (FRP-2) VAV box point -> CAMBER Role mapping; each run fills {n} with the box / room number (102-106 on the first floor, 202-206 on the second). T_VAV_{n} is the box discharge (leaving, after electric reheat) temperature, T_Sup_RTU the rooftop unit's supply air entering the box (mixed_air_temp, CAMBER's role for a terminal's entering primary air, as in the LBNL fan-powered-box mapping), AF_VAV_{n} the box airflow (m3/s), T_Room_{n} the room temperature, WH_RTU_VAV{n} the box's reheat power (documented as Wh per minute, behaves as W: see the entry's data issues). The boxes hold a constant minimum airflow in every test; the dataset has no damper, airflow setpoint or zone setpoint column, so G36 zone rules that need them decline. The two staircases (T_Stair_101 / T_Stair_201) are unconditioned and have no box. Units (metric) are declared on the catalog entry. Dataset: ORNL FRP operation scenarios (CC-BY-4.0), doi:10.1038/s41597-022-01858-6.",
+  "aliases": {
+    "T_Room_{n}": "space_temp",
+    "T_VAV_{n}": "supply_air_temp",
+    "T_Sup_RTU": "mixed_air_temp",
+    "AF_VAV_{n}": "airflow",
+    "WH_RTU_VAV{n}": "power"
+  }
+}

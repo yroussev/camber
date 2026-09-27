@@ -1,0 +1,13 @@
+{
+  "_comment": "ORNL Flexible Research Platform (FRP-2) rooftop unit point -> CAMBER Role mapping (Building_<scenario>.csv). One DX rooftop unit (44 kW / 12.5 ton, gas furnace off in every test) feeds ten VAV boxes with electric reheat; there is no outdoor-air intake in any test and the duct static pressure is fixed at 249 Pa (data descriptor, test settings). T_Sup_RTU / T_Ret_RTU are the unit's supply and return air temperature, AF_RTU its supply airflow (m3/s). The WH_* columns are documented as Wh per 1-minute interval but behave as average power in W (see the entry's data issues): WH_RTU_Sup_Fan is mapped as the fan's power in W. SUPPLY_FAN_ON (fan power above 200 W) and COMP1_ON (compressor 1 power above 200 W; idle readings are 0-5.5 W) are derived at ingest, because AF_RTU and the temperatures are blank -- not zero -- whenever the unit is off. Compressor 2 runs only in the cooling-season tests (0.5-0.8 starts per hour) and is not mapped. The dataset has no supply-air-temperature setpoint, duct static pressure, damper or zone setpoint column. Units (metric) are declared on the catalog entry. Dataset: ORNL FRP operation scenarios (CC-BY-4.0), doi:10.1038/s41597-022-01858-6.",
+  "aliases": {
+    "T_Sup_RTU": "supply_air_temp",
+    "T_Ret_RTU": "return_air_temp",
+    "RH_Sup_RTU": "supply_air_humidity",
+    "RH_Ret_RTU": "return_air_humidity",
+    "AF_RTU": "airflow",
+    "WH_RTU_Sup_Fan": "power",
+    "SUPPLY_FAN_ON": "supply_fan_status",
+    "COMP1_ON": "compressor_status"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "_comment": "SDU OU44 point -> CAMBER Role mapping. The publisher ships one file per quantity and room (co2_room_<n>.csv, vav_room_<n>.csv, ...), each with a single value column named room_<n>; the catalog's per-point runs name those values co2 / damper / temp / occupants, so one mapping serves every room. Each room has its own VAV damper on an air handler that supplies outdoor air through heat recovery (data descriptor: 'the air is outdoor air heated using heat recovery'; the damper position estimates the in-room airflow), so the damper is the room's outdoor-air signal: oa_damper, which lets dcv_verification judge the room like a single-zone unit. OCCUPIED is derived at ingest from the camera occupant count being above zero. Humidity, illuminance and the per-door camera counters have no role here. Units: temperature degC (declared on the entry), damper percent 0-100 (8-bit quantised), CO2 ppm. Dataset: SDU OU44 (CC0-1.0), doi:10.1038/s41597-019-0274-4.",
+  "aliases": {
+    "co2": "co2",
+    "damper": "oa_damper",
+    "temp": "space_temp",
+    "OCCUPIED": "occupancy"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "_comment": "ORNL Flexible Research Platform (FRP-2) rooftop weather station -> CAMBER Role mapping (Weather_<scenario>.csv): outdoor dry-bulb (degC, declared on the entry) and relative humidity. Solar, wind and barometric pressure have no role. Dataset: ORNL FRP operation scenarios (CC-BY-4.0), doi:10.1038/s41597-022-01858-6.",
+  "aliases": {
+    "T_out": "oat",
+    "RH_out": "outdoor_rh"
+  }
+}

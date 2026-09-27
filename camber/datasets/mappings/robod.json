@@ -1,0 +1,18 @@
+{
+  "_comment": "ROBOD (Room-level Occupancy and Building Operation Dataset) point -> CAMBER Role mapping, one file per room (combined_Room<N>.csv). Rooms 1-2 are lecture rooms on fan-coil units; rooms 3-5 are served by 100% outdoor-air (dedicated outdoor air) handlers through a VAV box per room -- the data descriptor states the incoming air's CO2 equals outdoor -- so their supply airflow (supply_air_flow, m3/h) is the room's outdoor-air flow and maps to oa_airflow; the VAV box damper is damper. Room 3 has its own air handler; rooms 4 and 5 share one (every air-handler column is identical in the two files). temp_setpoint is the room cooling setpoint (Singapore, cooling only) -> cool_sp. The fan-speed columns are in Hz (0-50 Hz drives), not percent, so they are not mapped as a speed: the ingest derives a 0/1 fan status from speed above 1 Hz. The cooling-coil valve COMMAND is mapped, not the position feedback, which reads 1.7-7.8 points above the command when it is 0 (see the entry's data issues). offcoil_air_temp / offcoil_temp_setpoint (the coil-leaving control point), energy counters (kWh per 5-minute interval), pressures, VOC, PM2.5, illuminance, Wi-Fi and occupant counts have no CAMBER role here. occupant_presence (camera ground truth, 1 exactly when occupant_count > 0) is the occupancy role; rooms 1-2 export it without the '[binary]' unit suffix. Units (metric) are declared on the catalog entry. Dataset: ROBOD (CC-BY-4.0), doi:10.1007/s12273-022-0925-9.",
+  "aliases": {
+    "indoor_co2 [ppm]": "co2",
+    "outdoor_co2 [ppm]": "outdoor_co2",
+    "air_temperature [Celsius]": "space_temp",
+    "temp_setpoint [Celsius]": "cool_sp",
+    "supply_air_flow [CMH]": "oa_airflow",
+    "damper_position [%]": "damper",
+    "cooling_coil_valve_command [%]": "cool_valve",
+    "supply_air_temperature [Celsius]": "supply_air_temp",
+    "FAN_ON": "supply_fan_status",
+    "occupant_presence [binary]": "occupancy",
+    "occupant_presence": "occupancy",
+    "dry_bulb_temp [Celsius]": "oat",
+    "outdoor_relative_humidity [%]": "outdoor_rh"
+  }
+}

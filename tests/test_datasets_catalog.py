@@ -78,6 +78,11 @@ def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
         "irish-ahu",
         "nist-heatpump-fdd",
         "nist-ibal",
+        # 0.89 intake C: real buildings and refrigeration
+        "robod",
+        "sdu-ou44",
+        "ornl-frp-ops",
+        "ornl-supermarket-fdd",
     ]
 
 
@@ -164,26 +169,30 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 14
+    assert len(datasets.catalog()) == 18
     assert [e.id for e in datasets.catalog(kind="real")] == [
         "bdg2",
         "lbnl-b59",
         "b4b-windesheim",
         "nuig-ahu101",
         "irish-ahu",
+        "robod",
+        "sdu-ou44",
+        "ornl-frp-ops",
     ]
     assert [e.id for e in datasets.catalog(kind="lab")] == [
         "finnish-dcv",
         "nist-heatpump-fdd",
         "nist-ibal",
+        "ornl-supermarket-fdd",
     ]
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
-    assert len(datasets.catalog(labeled=False)) == 7
-    assert len(datasets.catalog(labeled=True)) == 7
+    assert len(datasets.catalog(labeled=False)) == 10
+    assert len(datasets.catalog(labeled=True)) == 8
     # the open tier: research-only (NC/ND) entries are out
     commercial = datasets.catalog(licence="commercial")
     assert [e.id for e in datasets.catalog() if e.research_only] == []
-    assert len(commercial) == 14 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 18 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):

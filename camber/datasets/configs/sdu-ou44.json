@@ -1,0 +1,28 @@
+{
+  "_comment": "Run template for sdu-ou44: demand-controlled ventilation per room (ROOM1-3, class VAV), 15-minute resample. The room's VAV damper is its outdoor-air signal (oa_damper) and OCCUPIED (camera count above 0) the occupancy truth. Times are UTC (Danish local = UTC+1/+2), so the rule's occupied window is 05-17 UTC (06/07-18/19 local); the stored days are a synthetic clock, all Mondays. Expected verdicts: ROOM1 'OA rises with demand (DCV functioning)' (r = 0.89); ROOM2 / ROOM3 'not judged' -- their CO2 rarely reaches the level where DCV should respond, even though both keep the damper shut at high CO2 on some days (see known issues). co2_ventilation has no outdoor CO2 series and uses its default outdoor reference; ROOM2 reads 'over-ventilated' (CO2 near outdoor 66% of occupied hours). Not run: any drift, setback or other schedule rule (the 44 days are anonymised and shuffled: contiguous false), and ventilation_rate_62_1 (needs a static design population).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-sdu-ou44"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "co2"
+    }
+  ],
+  "rules": [
+    {
+      "name": "dcv_verification",
+      "params": {
+        "start_hour": 5,
+        "end_hour": 17
+      }
+    },
+    "co2_ventilation"
+  ],
+  "report": {
+    "level": 2
+  }
+}

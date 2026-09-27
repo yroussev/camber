@@ -1,0 +1,12 @@
+{
+  "_comment": "ORNL supermarket refrigeration (transcritical CO2 booster rack) -> CAMBER roles for the MEDIUM-TEMPERATURE circuit: three MT compressors (MT-COMP1 variable speed and on 100% of the time; MT-COMP2 / MT-COMP3 fixed speed, staging on and off in bursts with median runs of 8-17 s) serving one open MT display case and a false load, with an air-cooled gas cooler. REFERENCE ONLY: CAMBER has no refrigeration-rack class or detector, so this mapping exists to put the circuit's key points in the store for trend viewing next to the fault labels. P-MT_SUC is the MT suction pressure and P-MT_Dis-OilSepIn the MT discharge pressure, both psig as exported (CAMBER does not convert them; the discharge is above the CO2 critical pressure in 7-12% of the rows of the summer files); T-MTCase-Sup / T-MTCase-Ret are the display case's discharge and return AIR temperatures (F), mapped to the air roles for viewing only; W_MT-COMP1 is the lead compressor's power (kW); MT_COMP2_ON is derived at ingest (power above 0.3 kW). The ambient is T-GC-Fan2-In (the gas-cooler inlet air, as the publisher's DataProcess.py uses). The published superheat / subcooling columns are empty or zero (see the entry's data issues) and are not mapped. Dataset: ORNL supermarket refrigeration FDD (CC-BY-4.0), doi:10.1038/s41597-021-00927-6.",
+  "aliases": {
+    "P-MT_SUC": "suction_pressure",
+    "P-MT_Dis-OilSepIn": "discharge_pressure",
+    "T-MTCase-Sup": "supply_air_temp",
+    "T-MTCase-Ret": "return_air_temp",
+    "W_MT-COMP1": "power",
+    "MT_COMP2_ON": "compressor_status",
+    "T-GC-Fan2-In": "oat"
+  }
+}
