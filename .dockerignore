@@ -30,3 +30,6 @@ examples/demo/demo_audit_report.html
 
 # Real building trend data is mounted at runtime, never baked in.
 data/
+
+# Private third-party data for local analysis only
+Data-Private/
