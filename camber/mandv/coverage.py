@@ -371,8 +371,8 @@ def support_of(x, *, quantile: float = 0.01) -> dict:
     ``x`` (the values are ``None`` when there are none). The band uses order statistics, so it is
     always one of the observed values.
     """
-    v = np.asarray(x, dtype=float).ravel()
-    v = np.sort(v[np.isfinite(v)])
+    raw = np.asarray(x, dtype=float).ravel()
+    v = np.sort(raw[np.isfinite(raw)])
     if not len(v):
         return {"n": 0, "fit_min": None, "fit_max": None, "support_lo": None, "support_hi": None}
     lo, hi = _band(v, quantile)
