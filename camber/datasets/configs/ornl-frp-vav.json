@@ -1,0 +1,37 @@
+{
+  "_comment": "Run template for ornl-frp-vav: the rooftop unit (AHU RTU__<scenario>) and its ten VAV boxes (VAV RTU_VAV_<room>__<scenario>) of each one-day scenario. Zone rules run on every box; only the box under test is scored (unmet_setpoint_hours -> terminal_damper). The SAT rogue-zone and cohort-starvation censuses group each scenario's boxes under that scenario's RTU through the naming topology (scenario-aware). economizer_high_limit uses the building's own sequence (economizer enabled below 10 C = 50 F outdoor air; 10% minimum damper, Table 3). Declined: outdoor_air_fraction (the mixed-air sensor reads below return air in cooling -- data issue mixed-air-below-return-in-cooling -- so it faults on every summer fault-free day); supply_air_reset_compliance (the design is a fixed 12.8 C supply air, not a G36 reset); airflow_tracking, overcooling_min_flow, reheat_minimization_g36 and the static-pressure censuses (no airflow setpoint is logged); reheat_penalty and zones_heat_cool_census (the electric reheat is logged as energy, not a valve); damper_census, cohort_airflow and cohort_space_temp (they pool every box building-wide, which here mixes 31 different test days).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-ornl-frp-vav"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp"
+    },
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "unmet_setpoint_hours",
+    "overcooling_severity",
+    "control_hunting",
+    "night_weekend_setback",
+    {
+      "name": "economizer_high_limit",
+      "params": {
+        "high_limit_f": 50.0,
+        "min_damper": 0.1
+      }
+    },
+    "sat_rogue_zone_census",
+    "sat_cohort_starvation"
+  ],
+  "report": {
+    "level": 2
+  }
+}

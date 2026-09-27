@@ -87,6 +87,7 @@ REPORT_FAULTED = {
     "lbnl-fpu": "PFPU__VAVDMPRStuck_50pct",
     "lbnl-chiller": "PLANT__coolingtower_fouling_095",
     "lbnl-boiler": "PLANT__boiler_PI",
+    "ornl-frp-vav": "RTU_VAV_205__d3_stuck_000",
 }
 
 # Reviewed classifications of rules that trip on a fault-free scenario, keyed (dataset, rule).
@@ -106,10 +107,23 @@ KNOWN_TRIPS: dict = {
         "unit; the LBNL benchmark already records this as its DDAHU transferability gap "
         "(FPR 1.0); the design minimum is undocumented (issue #23)",
     ),
+    ("ornl-frp-vav", "unmet_setpoint_hours"): (
+        "design",
+        "real weather, not a fault: on the set-3 fault-free day (2023-12-14) the room-205 box's "
+        "room overheated to 26 C in the afternoon from solar gain through its south and west "
+        "windows, as the data descriptor's technical validation reports",
+    ),
 }
 
 # G36 mentions are fine only when qualified as a reference / declined verdict.
-_G36_OK = ("reference", "declined", "not a verdict", "no site sequence", "not the unit")
+_G36_OK = (
+    "reference",
+    "declined",
+    "not a verdict",
+    "no site sequence",
+    "not the unit",
+    "not evaluated",
+)
 
 
 class StopSweep(RuntimeError):
@@ -800,13 +814,14 @@ def check_report(entry, html: str) -> dict:
     }
 
 
-def _report_ok(c: dict, *, share_alike: bool) -> bool:
+def _report_ok(c: dict, *, share_alike: bool, research_only: bool = False) -> bool:
+    """The licence block is complete, and the NC/ND banner shows exactly on research-only data."""
     return bool(
         c["has_data_source_block"]
         and c["licence_shown"]
         and c["doi_shown"] is not False
         and (c["share_alike_note"] if share_alike else True)
-        and not c["research_only_banner"]
+        and c["research_only_banner"] == research_only
         and not c["g36_unqualified"]
     )
 
@@ -818,7 +833,11 @@ def _recheck_reports(ctx: Ctx, entry, rec: dict) -> None:
         if v.get("rc") == 0 and os.path.isfile(html):
             with open(html, encoding="utf-8") as fh:
                 v["checks"] = check_report(entry, fh.read())
-            v["ok"] = _report_ok(v["checks"], share_alike="-SA" in entry.licence.upper())
+            v["ok"] = _report_ok(
+                v["checks"],
+                share_alike="-SA" in entry.licence.upper(),
+                research_only=entry.research_only,
+            )
 
 
 def _report_pair(entry, labels: dict) -> list:
@@ -827,6 +846,14 @@ def _report_pair(entry, labels: dict) -> list:
     if faulted not in labels:
         faulted = next((eq for eq, lab in sorted(labels.items()) if lab), None)
     return [e for e in (ff[:1] + [faulted]) if e]
+
+
+def _first_equipment(ctx: Ctx, run: dict) -> list:
+    """An unlabelled entry's report subject: the first equipment of the run's facility."""
+    cfg = _read_json(run["config"])
+    fid = cfg["source"]["facility_id"]
+    eqs = ParquetStore(ctx.store).equipment(facility_id=fid).get(fid, {})
+    return sorted(eqs)[:1]
 
 
 def step_reports(ctx: Ctx, entry, run: dict, equips: list, ddir: str, log: str) -> dict:
@@ -848,7 +875,9 @@ def step_reports(ctx: Ctx, entry, run: dict, equips: list, ddir: str, log: str) 
                 rec["bytes"] = len(body.encode("utf-8"))
                 rec["checks"] = check_report(entry, body)
                 c = rec["checks"]
-                rec["ok"] = _report_ok(c, share_alike="-SA" in entry.licence.upper())
+                rec["ok"] = _report_ok(
+                    c, share_alike="-SA" in entry.licence.upper(), research_only=entry.research_only
+                )
             else:
                 rec["ok"] = False
                 rec["error"] = _cli_error(r)
@@ -1029,7 +1058,7 @@ def sweep_dataset(ctx: Ctx, entry) -> dict:
                 labels = {}
                 for m in ingest["facility"].values():
                     labels.update(m.get("labels") or {})
-                pair = _report_pair(entry, labels)
+                pair = _report_pair(entry, labels) or _first_equipment(ctx, run)
                 step("reports", step_reports, ctx, entry, run, pair, ddir, log)
         if not ctx.keep_extracted:
             shutil.rmtree(os.path.join(ctx.cache, entry.id, "extracted"), ignore_errors=True)

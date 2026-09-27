@@ -11,8 +11,8 @@ records where each dataset is published, its licence and citation, and the size 
 every file; `camber datasets fetch` downloads the files from the publisher onto your machine.
 
 > **Status:** 0.86 shipped the first seven entries and the command-line workflow; 0.89 adds the
-> research-only tier, manual-download entries, Excel workbooks (the `xlsx` extra) and Brick-grouped
-> ingest. A local catalog UI (`camber lab`) and worked exercises follow in later releases. The
+> research-only tier, manual-download entries, Excel workbooks (the `xlsx` extra), Brick-grouped
+> ingest, the real-building source layouts below and 14 more entries. A local catalog UI (`camber lab`) and worked exercises follow in later releases. The
 > Python API (`camber.datasets`) is **provisional** -- see [API-STABILITY.md](API-STABILITY.md).
 
 ## Quick start
@@ -60,6 +60,9 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `sdu-ou44` | 3 rooms, Denmark: CO2, VAV damper, occupant counts (44 shuffled days) | real | no | CC0-1.0 | all 3 rooms |
 | `ornl-frp-ops` | 1 RTU + 10 VAV boxes, 7 operating scenarios, 1-minute | real | no | CC-BY-4.0 | RTU, weather, 2 boxes x 2 scenarios |
 | `ornl-supermarket-fdd` | CO2 booster refrigeration rack, 6 faults (reference only) | lab | yes | CC-BY-4.0 | 2 fault / baseline pairs |
+| `ornl-frp-vav` | one RTU + 10 VAV boxes, 31 one-day tests | real | yes | CC-BY-4.0 | one damper test set (7 days) |
+| `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 | 8 runs |
+| `at-30bldg-sensors` | 1,832 raw sensors, 30 buildings, 23 months | real | no | CC-BY-NC-SA-4.0 (research-only) | 3 buildings |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -1004,6 +1007,183 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** Values near -98,590 fill T-GC-Out in 24-99% of rows (99% in Fault1), T-BP-EEVin in 1-34%, T-GC-Fan1-In in 17% of baselines A and B (its other values run 40-1,027), and 100% of the five spare channels and both BPHX flow meters; the LT mass flow M-LTcooler is a constant -1.25.
 - **Contradicts:** Data descriptor Table 5: thermocouples -270 to 400 C; Coriolis mass flow meters 0-10 kg/min (Sun et al. 2021, Sci Data 8:144, doi:10.1038/s41597-021-00927-6)
 - **Handling: none** -- described only. None of these channels is mapped; the ambient is T-GC-Fan2-In, as the publisher's script uses.
+
+### `ornl-frp-vav`: ORNL multi-zone VAV terminal faults (real building, labelled)
+
+#### The 'biased airflow sensor' runs log the true flow at a moved minimum setpoint
+
+- **Issue:** `airflow-bias-emulated-by-setpoint`
+- **Columns:** `VAV Box - Room 205: Discharge Airflow Rate`
+- **Runs:** `a1_bias_*`, `a2_bias_*`
+- **Evidence:** Occupied-hour median discharge flow of the Room 205 box: 10.57 / 10.61 m3/min fault-free (sets 1 / 2), 14.92 / 15.01 at +40%, 12.68 / 12.77 at +20%, 8.37 / 8.34 at -20% and 6.38 / 6.49 at -40% -- the 10.5 m3/min minimum moved by the bias, delivered and logged. A sensor reading 40% high would log about the setpoint while delivering about 29% less. The workbooks carry no airflow setpoint column.
+- **Contradicts:** Table 4 (VAV airflow sensor biased by +40/+20/-20/-40%), whose data the Methods describe as emulated by altering the minimum airflow value in the BAS (Im, P., Jung, S. & Yoon, Y. 2025, Datasets of Faults in Variable Air Volume Terminal Units in a Multi-Zone Commercial Building, Sci Data 12:763, doi:10.1038/s41597-025-05063-z)
+- **Handling: annotate** -- left as published and recorded in the provenance. Scored under the published label (airflow_sensor_bias). Read '+40%' as 'the box delivers 40% more than its design minimum', the opposite sign of a real sensor reading 40% high; with no airflow setpoint logged, airflow_tracking cannot run.
+
+#### Duct static collapses in five damper-test days (an unlabelled upstream condition)
+
+- **Issue:** `duct-static-collapse-in-damper-runs`
+- **Columns:** `RTU: Static Pressure`, `RTU: Supply Air Fan Electricity `, `VAV Box - Room * : VAV Damper Opening`
+- **Runs:** `d1_stuck_080`, `d1_stuck_100`, `d2_stuck_040`, `d2_stuck_080`, `d2_stuck_100`
+- **Evidence:** Occupied-hour median duct static 38 / 39 Pa (set 1: stuck at 80 / 100%) and 41 / 35 / 40 Pa (set 2: stuck at 40 / 80 / 100%) against 148-249 Pa in the other 27 runs; from about 10:00 the supply-fan draw falls to ~1.0 kW (1.4-1.7 kW in the other runs) while a median 5-7 of the 10 boxes sit at or above 95% open. In set 1 the stuck-at-100% box gets 7.54 m3/min, less than the stuck-at-60% box's 12.62.
+- **Contradicts:** Methods, basic test settings applied consistently across all scenarios (supply fan static pressure set at 249 Pa) (Im, P., Jung, S. & Yoon, Y. 2025, Datasets of Faults in Variable Air Volume Terminal Units in a Multi-Zone Commercial Building, Sci Data 12:763, doi:10.1038/s41597-025-05063-z)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and scored under the damper labels. In these runs the box under test is also starved by the air handler: every box's flow is limited, so a fleet-level rule may (correctly) point upstream instead of at the stuck damper.
+
+#### Mixed air reads below return air in cooling with the OA damper at its minimum
+
+- **Issue:** `mixed-air-below-return-in-cooling`
+- **Columns:** `RTU: Mixed Air Temperature`, `RTU: Return Air Temperature`
+- **Runs:** `d1_*`, `d2_*`
+- **Evidence:** In the August damper runs, over the 1,915 occupied fan-on minutes with the outdoor air at least 5 C warmer than the return (median 6.0 C) and the OA damper at its 10% minimum, MAT - RAT has a median of -0.31 C (p10 -0.44, p90 -0.17) and is negative in 99.8% of them; a 10% OA share should put MAT about +0.6 C above RAT. In winter the same 10% damper gives a temperature-balance OA fraction of 0.17.
+- **Contradicts:** Table 3 (minimum 10% OA damper opening when occupied) and Table 9 (mixed, return and outdoor temperatures within +-0.1 C) (Im, P., Jung, S. & Yoon, Y. 2025, Datasets of Faults in Variable Air Volume Terminal Units in a Multi-Zone Commercial Building, Sci Data 12:763, doi:10.1038/s41597-025-05063-z)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. An OA fraction from the mixing-box temperature balance reads ~0% in these summer runs; that is a sensor-placement artefact, not missing outdoor air.
+
+### `rbc-g36-ahu`: RBC and Guideline 36 AHU fault simulations (labelled, five-zone VAV)
+
+#### Four zone damper-loop tuning runs are copies (of each other, or of the baseline)
+
+- **Issue:** `damper-control-runs-duplicated`
+- **Columns:** `South Zone VAV Damper Position`, `East Zone VAV Damper Position`
+- **Runs:** `c1_ConVAVSoukDam_5`, `s1_Convavsoukdam_5`, `h1_Convaveaskdam_05`, `h1_Convaveaskdam_5`
+- **Evidence:** In 04_G36-1wk the cooling-season ConVAVSoukDam_05.csv and _5.csv are byte-identical (same CRC-32 and size), as are the shoulder-season Convavsoukdam_05 / _5; the heating-season Convaveaskdam_05.csv and _5.csv are byte-identical to that season's BaselineSystem.csv (0 of 114 columns differ in any of 10,081 rows). The cooling and shoulder copies do carry a fault: the South damper reverses direction ~3,900 times in the week against ~400-500 in the baseline.
+- **Contradicts:** G36-1wk explanations Table 2 (zone VAV damper-loop gain faults at two distinct intensities, 0.5 and 5, in each season) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: exclude** -- kept out of scoring / analysis. Cooling and shoulder: the _05 run is kept under its label and the identical _5 copy excluded (the data cannot say which gain it is). Heating: both runs are the fault-free baseline and are excluded; the ingester also skips byte-identical members.
+
+#### Two cooling-season plant runs end early (all-empty rows)
+
+- **Issue:** `truncated-cooling-runs`
+- **Columns:** `all columns`
+- **Runs:** `c1_ChiNonCon_25`, `c1_ChiConValLea_01`
+- **Evidence:** 04_G36-1wk/CoolingSeason: ChiNonCon_25.csv has 6,515 of its 10,081 rows empty from t = 17,839,560 s and ChiConValLea_01.csv 2,360 rows empty from t = 18,088,860 s (5.7 MB and 10.9 MB against 13.5-13.6 MB for the same runs in the shoulder season).
+- **Contradicts:** G36-1wk explanations Table 1 (every run is one week of 1-minute data) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the rows are empty, so these plant runs cover ~2.5 and ~5.4 days.
+
+#### The one-week G36 runs are occupied 06:00-19:00, not 07:00-20:00
+
+- **Issue:** `g36-1wk-occupied-06-to-19`
+- **Columns:** `Indicator if the System Operates in Occupied Mode (0: unoccupied mode, 1: occupied mode)`
+- **Runs:** `c1_*`, `h1_*`, `s1_*`
+- **Evidence:** In the 04_G36-1wk baselines the occupied-mode indicator is 1 from 06:00 to 18:59 on all 7 days in the cooling and shoulder seasons and from 05:59 to 18:58 in the heating season (the clock read from 1 January) -- the same window in winter and summer, so not a daylight-saving shift.
+- **Contradicts:** G36-1wk explanations Table 2 (system operated in occupied mode from 7 a.m. to 8 p.m. each day) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; the occupancy point is mapped, so occupancy-aware rules use the simulation's own schedule.
+
+#### The zone 'VAV Damper Control Signal' is a normalised airflow setpoint
+
+- **Issue:** `zone-damper-signal-is-airflow-setpoint`
+- **Columns:** `<Zone> Zone VAV Damper Control Signal`
+- **Evidence:** Against the zone's discharge airflow the 'damper control signal' correlates 0.98-1.00 with a constant flow/signal ratio per zone (0.906 / 0.951 / 0.702 / 0.954 / 4.576 m3/s East / South / West / North / Core), while the damper position itself sits at a fan-on median of 0.69-0.90 (cooling-season baseline).
+- **Contradicts:** conventions.pdf / column header (fraction: 0 damper should be fully closed to 1 fully open) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Not mapped: the damper role reads the damper position column. With no documented nominal flows CAMBER derives no airflow setpoint, so airflow_tracking and the static-pressure censuses decline.
+
+#### HIL runs use -123456 for missing values
+
+- **Issue:** `hil-sentinel-values`
+- **Columns:** `AHU Mixed Air Temperature`, `AHU Supply Air Fan Status`, `AHU Supply Air Temperature`, `True Value for AHU Outdoor Air Damper Stuck Position`, `time (s)`
+- **Runs:** `hil_*`
+- **Evidence:** In 08_G36-HIL -123456 fills 29 columns in all 289 rows of every run (including the true OA-damper position), 28-38 rows of the AHU temperature, fan, valve, static and occupancy columns in Cyber_Device_Reinit_Attack, and 2-18 rows of most columns (time included) in Cyber_Network_DOS_Attack.
+- **Contradicts:** Sci Data descriptor, Methods (HIL data exported through the BAS; physical quantities in the stated units) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Masked to missing at ingest (mask quirk: value equals -123456) on every mapped column of the HIL runs; --no-corrections keeps the sentinel.
+
+#### The HIL network denial-of-service run is short and sentinel-ridden
+
+- **Issue:** `hil-dos-run-corrupted`
+- **Columns:** `time (s)`, `all columns`
+- **Runs:** `hil_Cyber_Network_DOS_Attack`
+- **Evidence:** Cyber_Network_DOS_Attack.csv has 278 of the 289 five-minute rows of the other HIL runs, 2 of them with a -123456 clock value (read as 34 h before the run starts).
+- **Contradicts:** G36-HIL explanations Table 1 (one day at 5-minute sampling) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: exclude** -- kept out of scoring / analysis. Ingested for inspection; not scored.
+
+#### The HIL clock starts at 1 January although the run uses August weather
+
+- **Issue:** `hil-clock-origin`
+- **Columns:** `time (s)`
+- **Runs:** `hil_*`
+- **Evidence:** Every 08_G36-HIL run's clock runs 0-86,400 s (1 January on a year clock).
+- **Contradicts:** G36-HIL explanations (the test day uses 1 August weather) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: with CAMBER's 2025-01-01 origin the HIL runs are dated 1 January.
+
+#### RBC-5wk is Latin-1 with three renamed columns; the Cyber headers double-encode
+
+- **Issue:** `rbc-5wk-encoding-and-names`
+- **Columns:** `South Zone Discharge Air Temperature`, `North Zone Discharge Air Temperature`, `AHU Supply Air Fan Speed`
+- **Runs:** `r5_*`, `cy_*`
+- **Evidence:** 03_RBC-5wk headers are Latin-1 (a UTF-8 read fails on the degree sign) and name 3 of the 114 columns differently ('South/North Zone Discharge Air Temperature', 'AHU Supply Air Fan Speed'); the 8 07_G36-Cyber headers spell the degree sign 'Â°' in 37 columns.
+- **Contradicts:** conventions.pdf (the six simulated datasets share the same list of 114 features) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Read as published: the RBC-5wk runs declare encoding latin-1 and the mapping lists every spelling.
+
+#### The 5-week and RBC summer baselines cannot hold the zones at setpoint
+
+- **Issue:** `summer-baselines-capacity-limited`
+- **Columns:** `<Zone> Zone Room Temperature`, `<Zone> Zone VAV Damper Position`
+- **Runs:** `g5_BaselineSystem`, `r5_BaselineSystem`, `dg_BaselineSystem`
+- **Evidence:** Occupied room temperature exceeds the cooling setpoint by up to 3.5-4.9 K in the 05_G36-5wk and 03_RBC-5wk baselines; the RBC baseline zones are too hot 14-19% of occupied hours with every damper pinned fully open, and in the 5-week baseline all 5 zones request cooling at once on 73% of active cycles.
+- **Contradicts:** Sci Data descriptor (baseline = fault-free operation) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Scored as fault-free as published; zone comfort and cohort rules may (correctly) flag these baselines as capacity-limited.
+
+#### With the fan off the simulated air temperatures stagnate far apart
+
+- **Issue:** `fan-off-stagnant-temperatures`
+- **Columns:** `AHU Supply Air Temperature`, `AHU Mixed Air Temperature`
+- **Evidence:** In the 04_G36-1wk baselines, fan-off supply minus mixed air temperature has a median of -10.4 K (cooling season) and +23.8 K (heating season) at zero flow.
+- **Contradicts:** conventions.pdf (measured supply and mixed air temperatures) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; coil and mixing rules must judge fan-on samples only (leaking_valve is declined in the template because it does not gate on the fan).
+
+### `at-30bldg-sensors`: Austrian 30-building campus sensors (research-only)
+
+#### Placeholder and clamp values sit in the raw series
+
+- **Issue:** `placeholder-and-clamp-values`
+- **Columns:** `value (TeVentRo, TeVentSu, TeCoolSu and other classes)`, `value (PrVentRo)`
+- **Evidence:** 150.0 appears in temperature classes (8,495 rows on 168 TeVentRo sensors, 5,247 rows on 162 TeVentSu sensors), 165.0 in 24-405 rows per class, -50 and -60 in several, and one -1.70e38 (float32 minimum) on a TeCoolSu sensor; PrVentRo is pinned at 80.0 Pa in 3,292 rows of 19 sensors. 0.0 bursts appear on 24 TeVentSu sensors (2,993 rows).
+- **Contradicts:** README, data_anon: 'the full raw time series' of sensor readings (value: sensor reading) for temperature, humidity and pressure classes (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place: they are what the sensor-health checks (range violation, trust) are meant to find. A mean-based analysis of an affected sensor is skewed.
+
+#### Two sensors hold raw bit patterns, not readings
+
+- **Issue:** `denormal-float-sensors`
+- **Columns:** `sensor_fnnb (B06, TeCoolSu)`, `sensor_uiyt (B06, TeCoolRe)`
+- **Evidence:** sensor_fnnb has a median value of 1.7e-39 and sensor_uiyt 2.8e-40: denormal floats, consistent with integer registers decoded as float32; every other temperature sensor reads in degrees Celsius (class medians 14-49).
+- **Contradicts:** README class table (Temp_Sensor_Cooling_Supply / _Return) (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested as published; their range and trust checks fail, which is the point of a sensor-health exercise. Leave them out of any temperature statistics.
+
+#### Duplicated timestamps with different values
+
+- **Issue:** `duplicate-timestamps`
+- **Columns:** `datetime (109 sensors)`
+- **Evidence:** 39,211 duplicated timestamps across 109 sensors, every pair with two different values (one sensor alone has 12,101 in 10.0 M rows); they are not concentrated on daylight-saving dates.
+- **Contradicts:** README, data_anon: one timestamp and value per measurement (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: annotate** -- left as published and recorded in the provenance. CAMBER keeps the first value of each duplicated stamp, as for every table it reads (the authors' own pipeline also drops them); the count is recorded per facility.
+
+#### Timestamps are naive and follow no daylight saving
+
+- **Issue:** `clock-is-utc-like`
+- **Columns:** `datetime`
+- **Evidence:** The 02:00-03:00 hour carries data on both spring-forward days (17,852 rows on 2023-03-26, 8,922 on 2024-03-31), an hour local Austrian time does not have, and the daily outdoor-temperature peak of the 76 fast OA sensors has a median of 13.7 h in both winter and summer (no one-hour shift).
+- **Contradicts:** README, data_anon: datetime is 'the timestamp of the measurement' (no time zone stated) (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and read as a fixed-offset clock (UTC-like); hour-of-day analyses should not assume local civil time.
+
+#### Every sensor is silent for two days in December 2023
+
+- **Issue:** `shared-outages`
+- **Columns:** `datetime (all sensors)`
+- **Evidence:** All 1,832 sensors log nothing from 2023-12-06 08:00 to 2023-12-08 09:00 (2.08 days); 96.8% are silent on 2024-04-01 10:00-21:00; 18 sensors have a gap longer than 30 days (up to 57) and 4 are silent for more than half the period.
+- **Contradicts:** Record description: 'over 23 months of continuous measurements' (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as gaps: the sample-and-hold resample carries a value for at most 8 h 5 min, so a longer silence stays missing.
+
+#### The cooling supply/return classes mix chilled-water and warmer circuits
+
+- **Issue:** `cooling-classes-mix-circuits`
+- **Columns:** `value (TeCoolSu, TeCoolRe)`
+- **Evidence:** TeCoolSu: the median of per-sensor medians is 14.4 C but the top decile of sensors sits at 28.6 C (p99 42 C); TeCoolRe: 20.6 C, top decile 28 C (p99 44 C). 26 of 88 TeCoolSu and 15 of 45 TeCoolRe sensors spend more than 10% of their hours outside chilled-water bounds.
+- **Contradicts:** README class table (Temp_Sensor_Cooling_Supply / Temp_Sensor_Cooling_Return: one class per circuit role) (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: annotate** -- left as published and recorded in the provenance. Mapped as chw_supply_temp / chw_return_temp as labelled; a warm-circuit sensor reads as out of range. Check a sensor's level before treating it as chilled water.
+
+#### Some room differential-pressure sensors are saturated
+
+- **Issue:** `room-pressure-saturation`
+- **Columns:** `value (PrVentRo)`
+- **Evidence:** 7 PrVentRo sensors hold -39.6 to -39.9 Pa and one -99.7 Pa for the whole period (p99 - p01 under 0.05 Pa).
+- **Contradicts:** README class table (DiffPressure_Sensor_Ventilation_Room) (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
+- **Handling: none** -- described only. Described only: PrVentRo has no CAMBER role and is not ingested.
 
 <!-- END data-issues -->
 

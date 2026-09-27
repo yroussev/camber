@@ -1,0 +1,34 @@
+{
+  "_comment": "Run template for rbc-g36-ahu: the air handler (AHU AHU__<scenario>) and its five VAV zones (VAV AHU_VAV_<zone>__<scenario>) of each simulated scenario. Scored target: night_weekend_setback -> schedule (a fan run outside the occupied mode is the physics of the no-setback fault). The SAT rogue-zone census and SAT cohort-starvation rules group each scenario's zones under that scenario's AHU through the naming topology and are FLEET rules: their finding is on '<fleet>' and names the rogue zone / starved group in its metrics, so they are context here and not scorable per equipment (a zone room-temperature bias shows as a rogue zone; a stuck-closed OA damper as a starved cohort). unmet_setpoint_hours, overcooling_severity, control_hunting, supply_air_control, supply_air_reset_compliance (the design is a G36 trim-and-respond SAT reset), static_pressure_reset and simultaneous_heat_cool run for context. Declined: sat/static_reset_effectiveness (no reset-request counts are exported); leaking_valve (it does not gate on the fan, and fan-off supply/mixed temperatures stagnate 10-24 K apart, so it faults on every baseline -- data issue fan-off-stagnant-temperatures); outdoor_air_fraction (the G36 minimum OA is a flow setpoint, not a damper fraction: cooling baselines run 25-47% OA and fault the fixed-fraction check); economizer_high_limit (a fixed 65 F dry-bulb limit, which faults the RBC baseline in its climate); airflow_tracking, static_rogue_zone_census and static_cohort_starvation (no airflow setpoint: the zone 'damper control signal' is a normalised airflow setpoint without documented nominal flows); reheat rules (zone reheat is a power signal, not a valve); damper_census, cohort_airflow and cohort_space_temp (they pool every zone building-wide, which here mixes ~400 scenarios, and zone sizes differ 5x).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-rbc-g36-ahu"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp"
+    },
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "night_weekend_setback",
+    "unmet_setpoint_hours",
+    "overcooling_severity",
+    "control_hunting",
+    "supply_air_control",
+    "supply_air_reset_compliance",
+    "static_pressure_reset",
+    "simultaneous_heat_cool",
+    "sat_rogue_zone_census",
+    "sat_cohort_starvation"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "_comment": "Run template for at-30bldg-sensors (research-only, CC-BY-NC-SA-4.0: every report built from it carries the non-commercial / do-not-redistribute banner). One building per facility (`camber datasets config at-30bldg-sensors --facility ds-at-30bldg-sensors-b02` picks one; default: the first ingested), one equipment per anonymised sensor. No fault rule runs: every rule needs several points of one piece of equipment, a fan status, an occupancy schedule or setpoints, and this dataset has none of them (no topology, anonymised ids). The supply-air and chilled-water reset rules would also judge European ventilation units supplying near-neutral air against US VAV sequences. Use the RCx report's sensor-health section (range violations, flatlines, gaps and trust per sensor) -- that is what this dataset teaches.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-at-30bldg-sensors-b02"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "SENSOR_TEVENT"
+    },
+    {
+      "class": "SENSOR_TEHEAT"
+    },
+    {
+      "class": "SENSOR_TECOOL"
+    },
+    {
+      "class": "SENSOR_HUVENT"
+    },
+    {
+      "class": "SENSOR_PRVENT"
+    }
+  ],
+  "rules": [],
+  "report": {
+    "level": 2
+  }
+}
