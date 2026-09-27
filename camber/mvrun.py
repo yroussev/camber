@@ -45,6 +45,7 @@ __all__ = [
     "mv_store_path",
     "open_mv_store",
     "meter_series",
+    "baseline_window_check",
     "fit_version",
     "plan_freeze",
     "plan_rebaseline",
@@ -193,6 +194,27 @@ def _declared_method(entry: dict) -> tuple:
     return method, kernel, declared
 
 
+def baseline_window_check(n_with_data: int, period, entry: dict) -> tuple:
+    """``(missing_frac, why)`` for a baseline window; ``why`` is ``None`` when it is long enough.
+
+    The one baseline-length rule (#21 §1.6.8): a window shorter than the entry's
+    ``min_baseline_days`` (365) or missing more than ``max_missing_frac`` of its days is short.
+    :func:`fit_version` refuses it (unless overridden); the plain config ``mv`` path fits it with
+    this as a caveat (0.90.1, issue #59). ``n_with_data`` counts the window's days with data.
+    """
+    pol = RebaselinePolicy.from_entry(entry)
+    n_days = int((_day(period[1]) - _day(period[0])).days) + 1
+    missing = 1.0 - n_with_data / float(max(n_days, 1))
+    if n_days >= pol.min_baseline_days and missing <= pol.max_missing_frac:
+        return missing, None
+    return missing, (
+        f"the window {_ds(period[0])}..{_ds(period[1])} is {n_days} days "
+        f"({n_with_data} with data, {missing:.0%} missing); an M&V baseline needs "
+        f"{pol.min_baseline_days} consecutive days with at most {pol.max_missing_frac:.0%} "
+        "missing (SEP 2019 Ed. 2 §4.2; IPMVP 2012 §4.5.2; CalTRACK §3.1.3)"
+    )
+
+
 def fit_version(daily: pd.DataFrame, period, *, entry: dict, allow_short: bool = False) -> dict:
     """Fit a baseline over ``period`` the way the ``mv`` config path does, with its verdicts.
 
@@ -211,19 +233,10 @@ def fit_version(daily: pd.DataFrame, period, *, entry: dict, allow_short: bool =
         sep_validity,
     )
 
-    pol = RebaselinePolicy.from_entry(entry)
     sub = _window(daily, period)
-    n_days = int((_day(period[1]) - _day(period[0])).days) + 1
-    missing = 1.0 - len(sub) / float(max(n_days, 1))
+    missing, why = baseline_window_check(len(sub), period, entry)
     caveats = []
-    short = n_days < pol.min_baseline_days
-    if short or missing > pol.max_missing_frac:
-        why = (
-            f"the window {_ds(period[0])}..{_ds(period[1])} is {n_days} days "
-            f"({len(sub)} with data, {missing:.0%} missing); an M&V baseline needs "
-            f"{pol.min_baseline_days} consecutive days with at most {pol.max_missing_frac:.0%} "
-            "missing (SEP 2019 Ed. 2 §4.2; IPMVP 2012 §4.5.2; CalTRACK §3.1.3)"
-        )
+    if why:
         if not allow_short:
             raise ValueError(why + " -- pass --allow-short to freeze it anyway, with a caveat")
         caveats.append("short or gappy baseline accepted by override: " + why)

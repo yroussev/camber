@@ -918,9 +918,14 @@ def logical_signs(model) -> dict | None:
     """The coefficient signs physics fixes for a change-point ``model`` (``None`` if none do).
 
     Heating and cooling arms (3P, 5P and their zero-intercept variants) must slope upward away
-    from the change point; pass the result as ``signs=`` to :func:`sep_validity`.
+    from the change point, and a degree-day model's heating / cooling slopes must be positive
+    (0.90.1, issue #59); pass the result as ``signs=`` to :func:`sep_validity`.
     """
     spec = getattr(getattr(model, "_fit_record", None), "design", None)
+    if spec and spec[0] == "dd":
+        dd = {"heating": ("heating_slope",), "cooling": ("cooling_slope",)}
+        cols = dd.get(spec[1], ("heating_slope", "cooling_slope"))
+        return {c: 1 for c in cols}
     if not spec or spec[0] not in ("cp", "cpd") or not spec[2]:
         return None  # includes the 5P -> 2P fallback, whose line may slope either way
     signs = _LOGICAL_SIGNS.get(spec[1])

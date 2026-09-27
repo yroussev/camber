@@ -1245,6 +1245,7 @@
     "MVPlan",
     "MeterChain",
     "MeterSeries",
+    "baseline_window_check",
     "chained_report",
     "fit_version",
     "meter_series",

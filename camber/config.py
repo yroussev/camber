@@ -1115,6 +1115,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     from .mandv.coverage import ExtrapolationPolicy, support_of
     from .mandv.intervalfit import daily_energy_vs_temp
     from .mandv.stats import cv_rmse_max_for, fit_stats
+    from .mvrun import baseline_window_check
     from .rules.base import Finding
 
     if entry.get("interval", "daily") != "daily":
@@ -1196,6 +1197,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         )
         sup = support_of(daily["oat"].values, quantile=policy.support_quantile)
         verdict = "meets" if st.accept else "does not meet"
+        # the baseline-length rule fit_version (camber mv freeze) enforces, as a caveat here (#59)
+        win = period or [daily.index.min(), daily.index.max()]
+        _, short_why = baseline_window_check(len(daily), win, entry)
+        base_caveats = [f"short or gappy baseline: {short_why}"] if short_why else []
+        n_before = len(out)
         out.append(
             Finding(
                 rule="mv_baseline",
@@ -1221,9 +1227,12 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
                     + (f" + {'/'.join(model.driver_names)}" if _mvform.metrics(model) else "")
                     + f" baseline, R2 {st.r2:.2f}, CV(RMSE) "
                     f"{st.cv_rmse:.1%} over {st.n} days -- {verdict} daily G14 acceptance"
+                    + (" (short baseline)" if short_why else "")
                 ),
+                caveats=list(base_caveats),
             )
         )
+        out[-1].metrics["short_baseline"] = bool(short_why)
         if reporting is None:
             continue
         ctx = {
@@ -1243,6 +1252,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         }
         if method == "auto":
             out.append(_mv_proposal_finding(ctx))
+            _add_caveats(out[n_before + 1 :], base_caveats)
             continue
         rframe = full.loc[reporting[0] : reporting[1]]
         r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
@@ -1271,7 +1281,13 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         else:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
+        _add_caveats(out[n_before + 1 :], base_caveats)  # they rest on the same baseline
     return out
+
+
+def _add_caveats(findings: list, caveats: list) -> None:
+    for f in findings:
+        f.caveats = list(f.caveats or []) + [c for c in caveats if c not in (f.caveats or [])]
 
 
 # --- versioned M&V baselines (#21 phase 21d) -------------------------------------------------

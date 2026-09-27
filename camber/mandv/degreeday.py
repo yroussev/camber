@@ -36,6 +36,8 @@ class DegreeDayModel:
     fit: object  # camber.mandv.stats.FitStats
     # the one private fit-time record (support, pinv(X'X), ...; camber.mandv.coverage)
     _fit_record: object = field(default=None, repr=False, compare=False)
+    # 0.90.1 (#59): why the model should not be trusted as fitted (a slope of the wrong sign)
+    caveats: list = field(default_factory=list)
 
     def predict(self, tavg):
         """Predicted energy for period average temperature(s) ``tavg``."""
@@ -57,6 +59,8 @@ class DegreeDayModel:
             "heating_slope": self.heating_slope,
             "cooling_slope": self.cooling_slope,
         }
+        if self.caveats:
+            d["caveats"] = list(self.caveats)
         d["fit"] = self.fit.as_dict() if hasattr(self.fit, "as_dict") else self.fit
         from .coverage import _FitRecord
 
@@ -83,7 +87,18 @@ class DegreeDayModel:
             cooling_slope=float(d["cooling_slope"]),
             fit=fit,
             _fit_record=_FitRecord.from_dict(d.get("fit_record")),
+            caveats=list(d.get("caveats") or []),
         )
+
+
+def _wrong_signs(heating_slope: float, cooling_slope: float) -> list:
+    """The slopes of the wrong (negative) sign, described; ``[]`` when both are logical."""
+    out = []
+    if heating_slope < 0:
+        out.append(f"heating slope {heating_slope:.4g} per HDD is negative")
+    if cooling_slope < 0:
+        out.append(f"cooling slope {cooling_slope:.4g} per CDD is negative")
+    return out
 
 
 def _fit_at(tavg, energy, bp: float, kind: str):
@@ -121,6 +136,13 @@ def fit_degree_day(
     ``balance_point`` is None, it's chosen from ``balance_range`` (stepped by ``step``) by minimum
     CV(RMSE). ``kind`` restricts to ``"heating"``/``"cooling"`` or fits ``"both"`` legs.
     ``time_index`` (aligned to ``tavg``) lets the fit record the residuals' lag-1 autocorrelation.
+
+    **Signs** (0.90.1, issue #59). Energy cannot fall as degree-days rise, so the heating and
+    cooling slopes must be >= 0 (:func:`~camber.mandv.stats.logical_signs` gives the SEP sign test
+    the same rule). The balance-point search prefers a balance point whose fitted slopes are
+    logical; when none is, the best fit is returned **declined** -- ``fit.accept`` is ``False``
+    and ``caveats`` names the offending slope (typically a ``"both"`` fit on a building with no
+    cooling load: refit with ``kind="heating"``).
     """
     if kind not in ("heating", "cooling", "both"):
         raise ValueError("kind must be 'heating', 'cooling', or 'both'")
@@ -145,11 +167,24 @@ def fit_degree_day(
     best = None
     for bp in candidates:
         base, hs, cs, fs = _fit_at(tavg, energy, bp, kind)
-        key = fs.cv_rmse if fs.cv_rmse == fs.cv_rmse else float("inf")
+        cv = fs.cv_rmse if fs.cv_rmse == fs.cv_rmse else float("inf")
+        key = (bool(_wrong_signs(hs, cs)), cv)  # a logical fit beats any illogical one
         if best is None or key < best[0]:
             best = (key, bp, base, hs, cs, fs)
     assert best is not None  # candidates is non-empty, so the loop always sets best
     _, bp, base, hs, cs, fs = best
+    wrong = _wrong_signs(round(hs, 4), round(cs, 4))
+    caveats = []
+    if wrong:
+        from dataclasses import replace
+
+        caveats.append(
+            "declined: "
+            + "; ".join(wrong)
+            + " -- energy cannot fall as degree-days rise, so the model is not physically logical"
+            + (" (refit with kind='heating' or kind='cooling')" if kind == "both" else "")
+        )
+        fs = replace(fs, accept=False, notes=(fs.notes + "; " if fs.notes else "") + caveats[0])
     from .coverage import _linear_fit_record, _safe
     from .models import _rho_of
 
@@ -160,6 +195,7 @@ def fit_degree_day(
         heating_slope=round(hs, 4),
         cooling_slope=round(cs, 4),
         fit=fs,
+        caveats=caveats,
     )
     # the record's s2 is the reported (rounded) model's, so an exact band matches its predictions
     resid = energy - model.predict(tavg)
