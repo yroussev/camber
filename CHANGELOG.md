@@ -4,6 +4,60 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.86.0] — 2026-09-26
+
+**An open dataset catalog, and analysis that runs from the store.** A learner — or anyone
+validating CAMBER — can list open building datasets, download them with verified checksums,
+ingest them into a `ParquetStore`, and run the ordinary `camber run` / `report` / `drift` against
+them. This is the first of four catalog releases; the API is **provisional** until 1.0.
+
+### Added
+- **`camber.datasets`** and `camber datasets list | info | fetch | ingest | status | remove |
+  config | score`. Seven entries: the LBNL FDD single-duct AHU, fan-coil, dual-duct AHU,
+  fan-powered units (parallel and series), chiller plant and boiler plant (CC-BY-4.0), and Building
+  Data Genome 2 (CC-BY-SA-4.0, all 19 files). Every file is pinned by size and SHA-256.
+  - Downloads are HTTPS-only (redirects included), resumable, verified before use, written
+    atomically; a changed upstream file is refused, never silently accepted. A disk-space check
+    runs first. Research-only (NC/ND) entries need `--accept-noncommercial`, recorded in a ledger.
+  - Archive extraction refuses path traversal, absolute paths, links and decompression bombs.
+  - Ingest is idempotent (content-hashed; `--force` replaces, never appends): one facility per
+    dataset (`ds-<id>`, BDG2 one per site), each labelled run as `<equip>__<scenario>`, a spliced
+    fault-onset run for drift exercises, metric → IP unit conversion, and declared data fixes vs
+    annotations. Provenance and labels are recorded on the facility.
+  - `camber datasets score` scores findings against the dataset's labels with Wilson intervals.
+  - CAMBER redistributes no datasets; it downloads them from their publishers (`NOTICE`,
+    `docs/SECURITY.md` §7, new `docs/DATASETS.md`).
+- **Store-backed runs:** `"source": {"kind": "store", "path": …, "facility_id": …}` in a config;
+  `resolve.StoreEquipRef` / `discover_store` / `clear_store_cache`; `ParquetStore.drop_facility`
+  (an irreversible, policy-free primitive) and `.equipment`. Rules, drift and SOO run unchanged.
+- **Data source & licence in reports:** `AuditReport.data_sources` renders the citation and licence
+  in audit and drift reports, with a non-commercial banner for research-only data and a
+  share-alike note.
+- A config `mv` section: a daily change-point M&V baseline per meter.
+
+### Fixed
+- **Duplicate runs in published data are ingested once.** Publishers ship one simulation under
+  several labels — the LBNL single-duct AHU "leak severities" 010/025/040/050 are one file four
+  times, as are its four OA-sensor-bias runs and the fan-coil set's cooling/heating airside
+  minor-fouling runs. Ingest now keeps the first of any byte-identical archive members (same CRC-32
+  and size) and records the rest as duplicates, so one case is scored once. (The same flaw in the
+  LBNL benchmark was fixed on `main` before this release: it listed three copies of the leak run.)
+- The dataset-ingest test fixture's "leak" run was byte-identical to its fault-free run (its leak
+  never fired); the duplicate guard caught it.
+
+### Changed
+- The LBNL point mappings moved to `camber/datasets/mappings/`, one source of truth for the
+  benchmark and the catalog; the chiller plant's wet-/dry-bulb and secondary-loop supply/return
+  swaps are catalog `fix` quirks. Benchmark metrics unchanged.
+- An unknown `source.kind` in a config now warns and falls back to folders.
+
+### Notes
+- New public names: `camber.datasets.*`, `resolve.StoreEquipRef` / `discover_store` /
+  `clear_store_cache`, `config.data_sources`, the report `data_sources` helpers, `ParquetStore`
+  methods. Snapshot regenerated. No new core dependency.
+- Portfolio lifecycle (facilities joining and leaving, retention, admin overrides) is designed and
+  lands next, before the rest of the catalog.
+
 ## [0.85.0] — 2026-09-25
 
 **Sensor health and semantic models, checked against real buildings.** The trust layer scored a

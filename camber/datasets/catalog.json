@@ -93,7 +93,7 @@
    ],
    "subsets": {
     "default": {
-     "description": "fault-free + 4 stuck-damper + 3 valve-leak runs (the LBNL benchmark's SDAHU set) and a spliced fault-onset run",
+     "description": "fault-free + 4 stuck-damper runs + the single valve-leak run (the LBNL benchmark's SDAHU set) and a spliced fault-onset run",
      "files": "all",
      "runs": [
       "fault_free",
@@ -101,8 +101,6 @@
       "damper_stuck_025",
       "damper_stuck_075",
       "damper_stuck_100_short",
-      "coi_leakage_010",
-      "coi_leakage_025",
       "coi_leakage_050"
      ]
     },

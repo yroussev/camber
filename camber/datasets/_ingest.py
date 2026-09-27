@@ -124,6 +124,37 @@ def _pending_bytes(path: str, members, dest: str) -> int:
     return total
 
 
+def _duplicate_runs(runs, inputs: dict) -> dict:
+    """``{run id: canonical run id}`` for runs whose archive member is byte-identical to an earlier
+    run's (same CRC-32 and size in the same zip).
+
+    Publishers do ship one simulation under several labels -- LBNL's single-duct AHU "leakage
+    severities" 010/025/040/050 are one file four times -- and ingesting each copy as its own
+    scenario would score one case several times.
+    """
+    import zipfile
+
+    seen: dict = {}
+    dupes: dict = {}
+    by_file: dict = {}
+    for r in runs:
+        if r.get("member"):
+            by_file.setdefault(r["file"], []).append(r)
+    for fname, rs in by_file.items():
+        path = inputs[fname][0]
+        if archive_kind(path) != "zip":  # pragma: no cover - every 0.86 archive is a zip
+            continue
+        with zipfile.ZipFile(path) as z:
+            for r in rs:
+                info = z.getinfo(r["member"])
+                key = (fname, info.CRC, info.file_size)
+                if key in seen:
+                    dupes[r["id"]] = seen[key]
+                else:
+                    seen[key] = r["id"]
+    return dupes
+
+
 def _extract_members(entry, runs, inputs: dict, root: str) -> dict:
     """Extract the archive members the runs need; returns ``{(file, member): path}``."""
     by_file: dict = {}
@@ -299,12 +330,16 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress) -> tuple:
     mapping_text = package_text("mappings", spec["mapping"])
     mapping = MappingProvider.from_dict(json.loads(mapping_text))
     runs = entry.runs(subset)
+    duplicates = _duplicate_runs(runs, inputs)
+    runs = [r for r in runs if r["id"] not in duplicates]
     paths = _extract_members(entry, runs, inputs, root)
     fid = spec["facility"]
     st = ParquetStore(staging)
     keep = {d[k] for d in spec.get("derived") or [] for k in ("base", "fault")}
     frames: dict = {}
     labels, onsets, notes, warns = {}, {}, [], []
+    for dup, canon in duplicates.items():
+        notes.append(f"{dup} skipped: byte-identical to {canon} in the archive (one run, not two)")
     rows = 0
     for i, run in enumerate(runs, 1):
         if progress:
@@ -329,7 +364,13 @@ def _ingest_wide(entry, subset, inputs, root, staging, progress) -> tuple:
         joined = splice(frames[dv["base"]], frames[dv["fault"]], dv["onset"])
         rows += st.write_role_frame(joined, facility_id=fid, equip=eq, equip_class=cls)
         onsets[eq] = {"label": run["label"], "onset": str(dv["onset"]), "base": dv["base"]}
-    extra = {"labels": labels, "onsets": onsets, "quirks": notes, "runs": len(runs)}
+    extra = {
+        "labels": labels,
+        "onsets": onsets,
+        "quirks": notes,
+        "runs": len(runs),
+        "duplicates": duplicates,
+    }
     return {fid: (entry.title, rows, len(labels) + len(onsets), extra)}, mapping_text, warns
 
 

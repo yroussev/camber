@@ -49,7 +49,9 @@ def _run_csv(kind: str, periods: int = 2 * 24 * 60) -> bytes:
     valve = np.clip(0.5 + 0.4 * np.sin(t / 200), 0, 1)
     sat = mat - valve * 15
     if kind == "leak":
-        sat = sat - 6 * (valve < 0.05)
+        # cooling while the valve is nearly shut; the valve never goes below 0.1, so gate at 0.2
+        # (a < 0.05 gate never fired and made this run byte-identical to the fault-free one)
+        sat = sat - 6 * (valve < 0.2)
     df = pd.DataFrame(
         {
             "Datetime": idx.strftime("%Y-%m-%d %H:%M:%S"),
@@ -609,3 +611,46 @@ def test_public_api_wrappers(ahu, monkeypatch):
     assert ds.score("test-ahu", store)["n"] == 2
     assert ds.status(store=store)[0]["id"] == "test-ahu"
     assert ds.remove("test-ahu")["dataset_id"] == "test-ahu"
+
+
+def test_byte_identical_archive_runs_are_ingested_once(tmp_path, monkeypatch):
+    """A publisher shipping one simulation under several labels (LBNL's single-duct AHU "leak
+    severities" 010/025/040/050 are one file four times) must not become several scored cases."""
+    buf = io.BytesIO()
+    leak = _run_csv("leak")
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("TEST/AHU_ff.csv", _run_csv("ok"))
+        z.writestr("TEST/AHU_damper.csv", _run_csv("damper"))
+        z.writestr("TEST/AHU_leak.csv", leak)
+        z.writestr("TEST/AHU_leak_copy.csv", leak)
+    zb = buf.getvalue()
+    d = _ahu_entry_dict(_zip_bytes())
+    members = [
+        "TEST/AHU_ff.csv",
+        "TEST/AHU_damper.csv",
+        "TEST/AHU_leak.csv",
+        "TEST/AHU_leak_copy.csv",
+    ]
+    d["files"] = [_file("test.zip", zb, archive="zip", members=members)]
+    d["ingest"]["runs"].append(
+        {
+            "id": "leak_copy",
+            "file": "test.zip",
+            "member": members[3],
+            "equip": "AHU",
+            "class": "AHU",
+            "label": "valve_leak",
+        }
+    )
+    assert validate_catalog({"schema": 1, "datasets": [d]}) == []
+    entry = DatasetEntry.from_dict(d)
+    monkeypatch.setenv("CAMBER_DATA_DIR", str(tmp_path / "cache"))
+    _ops.fetch_dataset(entry, opener=FakeOpener({BASE + "test.zip": zb}))
+    store = ParquetStore(str(tmp_path / "store"))
+    res = _ingest.ingest_dataset(entry, store, subset="full")
+    eq = store.equipment()["ds-test-ahu"]
+    assert "AHU__leak" in eq and "AHU__leak_copy" not in eq
+    meta = store.facilities_meta()["ds-test-ahu"]["dataset"]
+    assert meta["duplicates"] == {"leak_copy": "leak"}
+    assert list(meta["labels"].values()).count("valve_leak") == 1  # scored once, not twice
+    assert any("leak_copy skipped: byte-identical to leak" in n for n in res.notes)
