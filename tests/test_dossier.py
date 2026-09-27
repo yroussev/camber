@@ -20,17 +20,25 @@ from camber.validation import metrics_with_ci  # noqa: E402
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BDG2_BASELINE = os.path.join(_ROOT, "examples", "bdg2", "benchmark-baseline.json")
+_BDG2_SAVINGS_BASELINE = os.path.join(_ROOT, "examples", "bdg2", "savings-benchmark-baseline.json")
 _VALIDATION_MD = os.path.join(_ROOT, "docs", "VALIDATION.md")
 
 
-def test_build_dossier_has_four_tracks_two_live_two_cited():
+def test_build_dossier_has_five_tracks_two_live_three_cited():
     d = dossier.build_dossier()
-    assert [t.key for t in d.tracks] == ["synthetic_fdd", "fleet_fdd", "lbnl_fdd", "bdg2_mv"]
+    assert [t.key for t in d.tracks] == [
+        "synthetic_fdd",
+        "fleet_fdd",
+        "lbnl_fdd",
+        "bdg2_mv",
+        "bdg2_mv_savings",
+    ]
     kinds = {t.key: t.kind for t in d.tracks}
     assert kinds["synthetic_fdd"] == "live-recomputed"
     assert kinds["fleet_fdd"] == "live-recomputed"
     assert kinds["lbnl_fdd"] == "cited-reference"
     assert kinds["bdg2_mv"] == "cited-reference"
+    assert kinds["bdg2_mv_savings"] == "cited-reference"
 
 
 def test_live_synthetic_track_matches_faultlab():
@@ -66,6 +74,30 @@ def test_reference_bdg2_matches_committed_baseline_exactly():
         assert ci.lo == base[f"{prefix}.acceptance_ci_lo"], label
         assert ci.hi == base[f"{prefix}.acceptance_ci_hi"], label
         assert ci.n == base[f"{prefix}.n_buildings"], label
+
+
+def test_reference_bdg2_savings_matches_committed_baseline_exactly():
+    """Anti-rot: each cited placebo UICF is the committed savings baseline's uicf and n, with the
+    95% Wilson interval recomputed from them -- and the headline quotes the same percentages."""
+    from camber.validation import wilson_interval
+
+    base = json.load(open(_BDG2_SAVINGS_BASELINE))
+    ref = dossier._REFERENCE["bdg2_mv_savings"]
+    assert set(ref["rates"]) == {
+        f"placebo_uicf_{k}_{m}" for k in ("g14", "exact") for m in ("electricity", "chilledwater")
+    }
+    for label, ci in ref["rates"].items():
+        _, _, kernel, meter = label.split("_")
+        key = f"{meter}.placebo.forecast_{kernel}"
+        rate, n = base[f"{key}.uicf"], base[f"{key}.n"]
+        lo, hi = wilson_interval(round(rate * n), n)
+        assert (ci.rate, ci.n) == (rate, n), label
+        assert (ci.lo, ci.hi) == (round(lo, 4), round(hi, 4)), label
+        assert f"{100 * rate:.0f}%" in ref["headline"], label
+    assert f"{base['electricity.n_eligible']:,}" in ref["headline"]
+    assert f"{base['chilledwater.n_eligible']:,}" in ref["headline"]
+    total = base["electricity.n_eligible"] + base["chilledwater.n_eligible"]
+    assert f"{total:,} BDG2 meters" in ref["coverage"]
 
 
 def test_reference_lbnl_matches_validation_doc():
@@ -111,7 +143,7 @@ def test_dossier_is_deterministic():
 def test_dossier_as_dict_is_json_serializable():
     payload = dossier.build_dossier(full=True).as_dict()
     round_tripped = json.loads(json.dumps(payload))
-    assert len(round_tripped["tracks"]) == 4
+    assert len(round_tripped["tracks"]) == 5
 
 
 def test_cli_validate_writes_json_and_html(tmp_path):
@@ -124,6 +156,7 @@ def test_cli_validate_writes_json_and_html(tmp_path):
         "fleet_fdd",
         "lbnl_fdd",
         "bdg2_mv",
+        "bdg2_mv_savings",
     ]
 
 

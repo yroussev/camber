@@ -1,6 +1,6 @@
 """Unified validation & credibility dossier — one artifact across every validation track.
 
-CAMBER validates itself four ways, each with its own benchmark, metrics, and CI gate; this module
+CAMBER validates itself five ways, each with its own benchmark, metrics, and CI gate; this module
 pulls them into one legible, sellable artifact (text / HTML / JSON) via :func:`build_dossier`
 and the ``camber validate`` CLI verb:
 
@@ -8,11 +8,12 @@ and the ``camber validate`` CLI verb:
   injected fault + a G36 FC engine. **Live-recomputed** here (deterministic, no download).
 * **Generated fleet FDD** (`camber.fleetlab`) — the G36 reset fleet detectors scored on a generated
   labeled multi-zone fleet, with correct-attribution. **Live-recomputed** (no download).
-* **Real-data FDD (LBNL, CC-BY)** and **real-data M&V (BDG2, CC-BY-SA)** — scored on public labeled
-  datasets that need large downloads, so their headline results are carried here as **cited
-  reference results** (with provenance + a reproduce command), not recomputed at import time. Two
-  tests (see ``tests/test_dossier.py``) fail the build if a cited figure drifts from the committed
-  BDG2 baseline or the ``docs/VALIDATION.md`` table — the numbers cannot silently rot.
+* **Real-data FDD (LBNL, CC-BY)**, **real-data M&V (BDG2, CC-BY-SA)** and **real-data M&V savings
+  (BDG2 placebo and injection)** — scored on public datasets that need large downloads, so their
+  headline results are carried here as **cited reference results** (with provenance + a reproduce
+  command), not recomputed at import time. Tests (see ``tests/test_dossier.py``) fail the build if
+  a cited figure drifts from the committed BDG2 baselines or the ``docs/VALIDATION.md`` table — the
+  numbers cannot silently rot.
 
 The dossier embeds **no wall-clock timestamp** — it is anchored on the package version only, so two
 builds are byte-identical (a stable, diff-able capstone). Dependency-light: numpy/pandas + stdlib,
@@ -177,6 +178,34 @@ _REFERENCE: dict = {
         ),
         "provenance": "BDG2 (CC-BY-SA); reproduce via examples/bdg2/benchmark.py",
     },
+    # The savings benchmark (issue #21 phase 21e): placebo band coverage (Touzani et al. 2019's
+    # UICF) of the G14 and exact forecast kernels at nominal 90%, 2016 baseline -> 2017 reporting.
+    # Each RateCI is the committed savings-benchmark-baseline.json's uicf and n with a 95% Wilson
+    # interval; tests/test_dossier.py recomputes and checks every value.
+    "bdg2_mv_savings": {
+        "title": "Real-data M&V savings — BDG2 placebo and injection (CC-BY-SA)",
+        "rates": {
+            "placebo_uicf_g14_electricity": RateCI(0.3333, 0.3051, 0.3628, 1023),
+            "placebo_uicf_g14_chilledwater": RateCI(0.518, 0.4645, 0.571, 334),
+            "placebo_uicf_exact_electricity": RateCI(0.3646, 0.3357, 0.3946, 1023),
+            "placebo_uicf_exact_chilledwater": RateCI(0.5449, 0.4913, 0.5975, 334),
+        },
+        "headline": (
+            "Placebo (no measure, 2016 -> 2017): the nominal-90% forecast band covers zero for 33% "
+            "of 1,023 electricity and 52% of 334 chilled-water meters (G14 kernel; exact 36% / "
+            "54%) -- real bands under-cover, as Touzani et al. 2019 found"
+        ),
+        "coverage": (
+            "1,357 BDG2 meters with >= 328 whole days in each year; forecast, backcast and "
+            "standard conditions; injected 5/10/20% savings, steps and a static factor on a seeded "
+            "subsample of 150 meters per type"
+        ),
+        "boundary": (
+            "a band carries model error only: a real building's year-to-year change is outside "
+            "it, so coverage is far below nominal; gated on regression, never on the nominal rate"
+        ),
+        "provenance": "BDG2 (CC-BY-SA); reproduce via examples/bdg2/savings_benchmark.py",
+    },
 }
 
 
@@ -297,7 +326,8 @@ def build_dossier(*, full: bool = False) -> ValidationDossier:
     """Build the unified validation dossier.
 
     Live-recomputes the two pure tracks (synthetic ``faultlab`` + generated ``fleetlab``, no
-    download) and cites the two real-data tracks (LBNL FDD, BDG2 M&V) from the committed reference
+    download) and cites the three real-data tracks (LBNL FDD, BDG2 M&V acceptance, BDG2 M&V
+    savings) from the committed reference
     figures. ``full=True`` adds per-detector / per-family breakdown into each track's ``metrics``.
     Deterministic and timestamp-free — anchored on the package version.
     """
@@ -308,6 +338,7 @@ def build_dossier(*, full: bool = False) -> ValidationDossier:
             _fleet_track(full=full),
             _cited_track("lbnl_fdd"),
             _cited_track("bdg2_mv"),
+            _cited_track("bdg2_mv_savings"),
         ],
     )
 
