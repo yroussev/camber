@@ -1,11 +1,12 @@
-# Weather fetch — NASA POWER + NOAA/ISD (`camber.weather_source`)
+# Weather fetch — NASA POWER, NOAA/ISD and Open-Meteo (`camber.weather_source`)
 
 CAMBER's weather-dependent analytics — M&V weather normalization and OAT-sensor validation — need an
 external temperature series. Until now you brought your own (a local EPW/TMY file via
 `mandv.weather.load_epw`, or any series you already had). `camber.weather_source` **fetches** one from
 either of two free, keyless providers — **NASA POWER** (global reanalysis; the default below) and
 **NOAA/ISD** (real weather stations; see the [NOAA/ISD section](#noaaisd-station-data-a-second-station-precise-provider))
-— in the exact °F Series shape (`name="oat_f"`) those consumers already accept.
+— in the exact °F Series shape (`name="oat_f"`) those consumers already accept. Since 0.92,
+**Open-Meteo** (keyless reanalysis) is a third source; see [Open-Meteo](#open-meteo-a-third-source-provisional-092).
 
 ```sh
 # no API key, global coverage; returns a °F pandas Series
@@ -177,8 +178,10 @@ Series, but does not fail when the ISD catalog ends before your window or one st
 
 1. **Stations.** Up to `max_stations` (3) stations within `max_distance_km` (100 km), nearest first.
    A station still reporting when the catalog was built is tried past its catalog end date, in case
-   only the catalog is stale. The nearest station fills the window; each later one fills only runs
-   of at least `gap_hours` (24) missing hours. Station-to-station offsets are not corrected.
+   only the catalog is stale. The nearest station that returns data is the reference and fills the
+   window. Each later one fills only runs of at least `gap_hours` (24) missing hours. Since 0.92 it is
+   first **offset-corrected** against the reference: the same monthly and hour-of-day correction as
+   below, estimated over the hours both stations report (`station_offsets=False` turns this off).
 2. **NASA POWER** fills what is still missing, read at the snapped grid cell (`power_grid_cell`: the
    0.5° × 0.625° cell centre, so every point in a cell shares one URL and one cache entry). POWER lags
    real time by days to weeks and returns not-yet-published trailing hours as fill: those stay
@@ -188,14 +191,89 @@ Series, but does not fail when the ISD catalog ends before your window or one st
    `[min(start, end − overlap_days), end]` (`overlap_days` = 365). A calendar month with at least 240
    paired hours (~10 days, pooled across years) gets its own offset; otherwise its meteorological
    season's (DJF/MAM/JJA/SON, at least 240 pairs); otherwise one offset over all pairs (at least 168);
-   otherwise none, and the caveat says **UNCORRECTED**. The RMSE of the paired hours before and after
-   the correction is recorded.
+   otherwise none, and the caveat says **UNCORRECTED**. Since 0.92 an **hour-of-day** step follows
+   (`diurnal=True`, the default). What the monthly offset leaves is averaged per (season, UTC hour),
+   where a cell has at least 30 pairs; otherwise per UTC hour over all seasons; otherwise 0.
+   Reanalysis damps the daily cycle (warm nights, cool afternoons), and a monthly offset cannot
+   remove that. Each cell's residual averages zero, so the monthly and daily means do not move. The
+   RMSE of the paired hours is recorded before (`rmse_before_f`), after the monthly step
+   (`rmse_after_monthly_f`) and after both (`rmse_after_f`).
 4. **Provenance.** `series.attrs["weather_provenance"]` holds the stations tried (distance, missing
    years, hours filled), the per-source date `segments` (`isd:<usaf>-<wban>`, `nasa_power`,
    `missing`), the POWER cell and coverage end, the `bias_correction` (offsets, basis per month, pair
    counts, RMSE) and the `caveats`, which are also on `series.attrs["caveats"]`. Any fallback raises one
    `UserWarning` with the same text.
 
-`cache_dir=` caches both sources (a POWER response that still ends in fill is not cached, so it is
-re-fetched once published); `offline=True` then reads only the cache and raises `WeatherCacheMiss` on a
-miss, so a re-run is reproducible without the network.
+`cache_dir=` caches every source. A POWER or Open-Meteo response whose trailing hours are not yet
+published is not cached, so it is re-fetched once it is. With `offline=True` only the cache is read,
+and a miss raises `WeatherCacheMiss`, so a re-run is reproducible without the network.
+
+<!-- 092-mv -->
+### How much the corrections help (0.92)
+
+The measure is out of sample: each correction was estimated on 2022-2023 and tested on 2024, at
+three public airports with a second ISD station 3-22 km away. The table gives the hourly RMSE
+against the airport station, in °F:
+
+| Site | Source | Raw | Monthly offset | + hour of day |
+|---|---|---|---|---|
+| Chicago O'Hare | NASA POWER | 4.67 | 3.83 | **2.86** |
+| | Open-Meteo | 3.35 | 2.60 | **2.31** |
+| | nearby station | 2.11 | 1.99 | **1.96** |
+| Phoenix Sky Harbor | NASA POWER | 7.30 | 5.85 | **2.99** |
+| | Open-Meteo | 4.27 | 2.99 | **2.72** |
+| | nearby station | 3.68 | 2.04 | **1.95** |
+| Boston Logan | NASA POWER | 4.98 | 4.20 | **3.43** |
+| | Open-Meteo | 2.99 | 2.82 | **2.59** |
+| | nearby station | 1.67 | 1.45 | **1.32** |
+
+The daily-mean RMSE (1.2-2.1 °F) is the same with or without the hour-of-day step, which leaves
+daily means alone by design. The step matters for hourly uses (sensor-drift checks, hourly models,
+degree-hours), not for daily or billing M&V. For those the monthly offset is the correction that
+counts.
+
+### The fallback order, and one entry point
+
+`oat_reference_blended(..., fallbacks=("nasa_power",))` is the 0.90.1 behaviour and stays the
+default. `fallbacks=("nasa_power", "open_meteo")` fills whatever POWER leaves (its publication lag,
+a failed request) from Open-Meteo, which is corrected the same way. A source whose request fails is
+recorded in `weather_provenance["fallbacks"]` and the next one is tried. With a single fallback, a
+failure is still raised. Each fallback's grid cell, coverage end, hours filled and
+`bias_correction` are recorded there, and POWER's also stay under `power` / `bias_correction`.
+
+`oat_reference_auto(lat, lon, start, end, source=...)` picks the source by name:
+
+| `source` | What it returns |
+|---|---|
+| `"auto"` | ISD, offset-corrected neighbouring stations, then NASA POWER, then Open-Meteo |
+| `"isd"` | ISD stations only (gap-filled, offset-corrected) |
+| `"nasa_power"` | NASA POWER alone, uncorrected |
+| `"open_meteo"` | Open-Meteo alone, uncorrected |
+
+A config reaches it in two places:
+- the RCx report's `oat_reference` (`{"fetch": "auto", "latitude", "longitude", "tz", "cache_dir",
+  "offline"}`), where the report lists the hours from each source and the fallback caveats under
+  the OAT comparison. `{"fetch": "nasa_power"}` still means POWER alone;
+- an `mv` billing entry's `oat` (see [MANDV.md](MANDV.md#billing-data)).
+
+Weather requests carry coordinates and dates only: no key, account or other identifier.
+
+## Open-Meteo, a third source (provisional, 0.92)
+
+`fetch_open_meteo(lat, lon, start, end)` reads Open-Meteo's historical-weather API
+(`archive-api.open-meteo.com`): hourly 2 m temperature in °F, UTC, from its `best_match` reanalysis
+(ERA5 and higher-resolution companions; pass `models=` to choose one). The frame's `attrs` carry the
+grid point (coordinates and elevation) as `open_meteo_cell`, and `open_meteo_coverage_end`.
+`oat_reference_open_meteo` returns the `oat_f` series. Requests are one per calendar year, through the
+same injectable JSON transport as POWER (`open_meteo_transport`, `cached_transport`). `null` hours
+are missing, never data. A payload not in UTC, or in an unknown unit, is refused.
+
+Like POWER it is gridded, not a station, so in the blend it is a fallback, bias-corrected against
+the reference station. In the table above its raw error is lower than POWER's. **Terms.**
+Open-Meteo's data are licensed CC BY 4.0: attribute "Weather data by Open-Meteo.com" where you
+publish them. Its free API is for non-commercial use under its terms of service, within limits
+(fewer than 10,000 calls a day). Commercial use needs one of its subscriptions or a self-hosted
+instance. The reanalysis itself comes from the Copernicus Climate Change Service. These terms were
+checked on open-meteo.com on 2026-09-27. CAMBER only sends the request, and whether your use is
+covered is for you to check.
+<!-- /092-mv -->

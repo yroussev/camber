@@ -2081,6 +2081,7 @@
     "min_night_flow"
   ],
   "camber.weather_source": [
+    "FALLBACKS",
     "FILL_VALUE",
     "GeoResult",
     "IsdStation",
@@ -2090,6 +2091,7 @@
     "cached_transport",
     "fetch_isd",
     "fetch_nasa_power",
+    "fetch_open_meteo",
     "geocode",
     "isd_catalog_end",
     "isd_nearest_station",
@@ -2100,9 +2102,13 @@
     "nominatim_transport",
     "nominatim_url",
     "oat_reference",
+    "oat_reference_auto",
     "oat_reference_blended",
     "oat_reference_for",
     "oat_reference_isd",
+    "oat_reference_open_meteo",
+    "open_meteo_transport",
+    "open_meteo_url",
     "power_grid_cell"
   ],
   "camber.zones": [
