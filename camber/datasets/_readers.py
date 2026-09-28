@@ -13,6 +13,10 @@ extension:
   steady-state summary appendix, is not time-series data and is not ingested). Install ``xlrd``
   yourself to read one.
 
+A text export that opens with a metadata block (a key/value preamble, unit and description rows
+of a different length in every file) declares ``header_marker``, the first field of its real header
+line, and ``sep`` when it is not comma-separated (both on the entry's ingest spec).
+
 Both Excel engines are imported lazily, only when such a file is read, and a missing engine
 raises :class:`MissingExtra` naming the exact install command. ``usecols`` (a column predicate)
 prunes the read the same way for every format; ``sheet`` names a worksheet (default: the first).
@@ -104,12 +108,32 @@ def needs_extra(filename: str) -> str | None:
     return "xlsx" if ext in EXCEL_EXTS + LEGACY_EXCEL_EXTS else None
 
 
-def read_table(path: str, *, usecols=None, sheet=None, encoding=None, **kw) -> pd.DataFrame:
+def _marker_row(path, marker: str, sep: str, encoding) -> int:
+    """The 0-based line number of the first line whose first ``sep`` field is ``marker``."""
+    with open(path, encoding=encoding or "utf-8", errors="replace") as fh:
+        for i, line in enumerate(fh):
+            if line.lstrip("\ufeff").split(sep, 1)[0].strip() == marker:
+                return i
+    raise ValueError(f"{os.path.basename(str(path))}: no line starts with the header {marker!r}")
+
+
+def text_layout(spec: dict) -> dict:
+    """A text table's layout keys from an ingest spec (``sep``, ``header_marker``), for
+    :func:`read_table`; empty when the spec declares neither."""
+    return {k: spec[k] for k in ("sep", "header_marker") if spec.get(k) is not None}
+
+
+def read_table(
+    path: str, *, usecols=None, sheet=None, encoding=None, header_marker=None, **kw
+) -> pd.DataFrame:
     """Read one source table by extension (see the module docstring).
 
     ``usecols`` is a predicate on column names (or a list); ``sheet`` a worksheet name or index for
     a workbook (ignored for other files); ``encoding`` a text file's encoding (ignored for binary
-    formats). Extra keyword arguments go to the pandas reader.
+    formats). For a text table, ``sep`` overrides the extension's delimiter and ``header_marker``
+    names the first field of the header line: every line above it (a metadata block, unit and
+    description rows of varying length per file) is skipped. Extra keyword arguments go to the
+    pandas reader.
     """
     ext = os.path.splitext(str(path))[1].lower()
     if ext in EXCEL_EXTS:
@@ -135,10 +159,12 @@ def read_table(path: str, *, usecols=None, sheet=None, encoding=None, **kw) -> p
         elif usecols is not None:
             cols = list(usecols)
         return pd.read_parquet(path, columns=cols)
-    sep = "\t" if ext == ".tsv" else ","
+    sep = kw.pop("sep", None) or ("\t" if ext == ".tsv" else ",")
     if encoding:
         kw["encoding"] = encoding
-    return pd.read_csv(path, usecols=usecols, sep=kw.pop("sep", sep), **kw)
+    if header_marker:
+        kw["skiprows"] = _marker_row(path, str(header_marker), sep, encoding)
+    return pd.read_csv(path, usecols=usecols, sep=sep, **kw)
 
 
 # --------------------------------------------------------------------------- clocks
@@ -285,16 +311,21 @@ def to_local_clock(raw: pd.DataFrame, spec: dict) -> pd.DataFrame:
 def table_key(path, spec: dict) -> tuple:
     """The identity of one table read: file, worksheet, text encoding and how its clock parses
     (a run may carry its own ``timestamp_format``)."""
-    clock = tuple(
-        repr(spec.get(k)) for k in ("timestamp", "timestamp_format", "source_timezone", "clock")
-    )
+    keys = ("timestamp", "timestamp_format", "source_timezone", "clock", "sep", "header_marker")
+    clock = tuple(repr(spec.get(k)) for k in keys)
     return (os.fspath(path), spec.get("sheet"), spec.get("encoding"), clock)
 
 
 def _read_stamped(key: tuple, spec: dict, keep: Callable[[str], bool]) -> pd.DataFrame:
     path, sheet, encoding, _clock_sig = key
     clock = clock_columns(spec)
-    raw = read_table(path, usecols=lambda c: c in clock or keep(c), sheet=sheet, encoding=encoding)
+    raw = read_table(
+        path,
+        usecols=lambda c: c in clock or keep(c),
+        sheet=sheet,
+        encoding=encoding,
+        **text_layout(spec),
+    )
     return stamp(raw, spec)
 
 
@@ -345,16 +376,19 @@ def read_point(path, spec: dict, *, value: str | None = None) -> tuple:
     ts = spec.get("timestamp", "Datetime")
     clock = clock_columns(spec)
     enc = spec.get("encoding")
+    lay = text_layout(spec)
     if value is None:
-        header = list(read_table(path, nrows=0, encoding=enc).columns)
+        header = list(read_table(path, nrows=0, encoding=enc, **lay).columns)
         if clock and clock <= set(header):
             value = [c for c in header if c not in clock][-1]
-            raw = read_table(path, usecols=lambda c: c in clock or c == value, encoding=enc)
+            raw = read_table(path, usecols=lambda c: c in clock or c == value, encoding=enc, **lay)
         else:  # headerless: timestamp, value
             value = "value"
-            raw = read_table(path, header=None, names=[ts, value], dtype={ts: str}, encoding=enc)
+            raw = read_table(
+                path, header=None, names=[ts, value], dtype={ts: str}, encoding=enc, **lay
+            )
     else:
-        raw = read_table(path, usecols=lambda c: c in clock or c == value, encoding=enc)
+        raw = read_table(path, usecols=lambda c: c in clock or c == value, encoding=enc, **lay)
     out, dups = index_rows(stamp(raw, spec), spec)
     return pd.to_numeric(out[value], errors="coerce"), dups
 

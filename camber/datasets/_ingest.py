@@ -76,6 +76,7 @@ from ._readers import (
     require_extras,
     synthetic_clock_note,
     table_key,
+    text_layout,
     to_local_clock,
 )
 from ._units import convert_frame, convert_series, plausibility_warnings
@@ -478,7 +479,7 @@ def _grouped_run(path, run, spec, grouping, mapping_spec, corrections, used: set
         grouping = BrickGrouping()
     mp, over = mapping_overrides(mapping_spec)
     header = read_table(
-        path, sheet=spec.get("sheet"), nrows=0, encoding=spec.get("encoding")
+        path, sheet=spec.get("sheet"), nrows=0, encoding=spec.get("encoding"), **text_layout(spec)
     ).columns
     clock = clock_columns(spec)
     derived = [dv["column"] for dv in spec.get("derive") or [] if dv["column"] not in header]
