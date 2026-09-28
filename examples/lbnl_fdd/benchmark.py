@@ -80,6 +80,9 @@ def template_params(dataset_id, rule):
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "..", "_data", "lbnl")
+# The opt-in FPU / chiller subsets' metrics as last measured: never gated, but docs/VALIDATION.md
+# quotes them and tests/test_validation_doc.py checks those cells against this record.
+OPTIN_RECORD = os.path.join(HERE, "optin-measured.json")
 
 # Detector names are constant; each targets one fault type. OA-fraction is shared
 # across all families; the leak detector only applies to the SDAHU coil-leak case.
@@ -330,12 +333,20 @@ def build_drift_cases(frames, det, *, baseline_frac=0.6, fault_free="AHU_annual.
     return cases
 
 
-def score_drift(frames, detectors=None, *, fault_free="AHU_annual.csv", label="AHU air-side drift"):
+def score_drift(
+    frames,
+    detectors=None,
+    *,
+    fault_free="AHU_annual.csv",
+    label="AHU air-side drift",
+    counts=False,
+):
     """Score a set of drift detectors on ``frames``; return the flat metrics dict.
 
     ``detectors`` defaults to the SDAHU air-side set; pass a subset-specific dict (e.g. the FPU VAV
     set) with its own ``fault_free`` baseline file to score another equipment subset with the same
-    machinery.
+    machinery. ``counts`` adds the confusion counts (``tp``, ``fn``, ``fp``, ``tn``, ``declined``),
+    which docs/VALIDATION.md quotes for the opt-in subsets (the gated SDAHU keys are unchanged).
     """
     detectors = detectors if detectors is not None else DRIFT_DETECTORS
     metrics = {}
@@ -364,6 +375,15 @@ def score_drift(frames, detectors=None, *, fault_free="AHU_annual.csv", label="A
         ):
             if val == val:  # not NaN
                 metrics[f"drift.{name}.{key}"] = round(val, 4)
+        if counts:
+            for key, val in (
+                ("tp", c.tp),
+                ("fn", c.fn),
+                ("fp", c.fp),
+                ("tn", c.tn),
+                ("declined", score.n_declined),
+            ):
+                metrics[f"drift.{name}.{key}"] = int(val)
     return metrics
 
 
@@ -460,6 +480,9 @@ def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant
         for key, val in (("tpr", tpr), ("fpr", fpr)):
             if val == val:  # omit NaN -> valid JSON
                 metrics[f"chiller.{name}.{key}"] = round(val, 4)
+        # the confusion counts docs/VALIDATION.md quotes (opt-in subset: never gated)
+        for key, n in (("tp", tp), ("fn", fn), ("fp", fp), ("tn", tn), ("declined", declined)):
+            metrics[f"chiller.{name}.{key}"] = int(n)
     return metrics
 
 
@@ -518,6 +541,7 @@ def main(argv=None) -> int:
                 FPU_DRIFT_DETECTORS,
                 fault_free="PFPU_FaultFree.csv",
                 label="VAV zone-terminal drift (FPU)",
+                counts=True,
             )
         )
 
@@ -550,6 +574,17 @@ def main(argv=None) -> int:
         print("\n(Only SDAHU present. Run `python examples/lbnl_fdd/fetch.py --families`")
         print(" to download FCU + DDAHU and score the full cross-equipment benchmark.)")
 
+    optin = {k: v for k, v in metrics.items() if k.startswith(("chiller.", "drift.vav_"))}
+    if optin and os.path.exists(OPTIN_RECORD):
+        recorded = json.load(open(OPTIN_RECORD))
+        moved = sorted(k for k in set(optin) | set(recorded) if optin.get(k) != recorded.get(k))
+        if moved:
+            print(f"\nopt-in metrics differ from {os.path.basename(OPTIN_RECORD)} (not gated):")
+            for k in moved:
+                print(f"  {k}: recorded {recorded.get(k)} -> measured {optin.get(k)}")
+            print("  regenerate the record and the docs/VALIDATION.md cells that quote it")
+        else:
+            print(f"\nopt-in metrics match {os.path.basename(OPTIN_RECORD)}")
     if args.json:
         json.dump(metrics, open(args.json, "w"), indent=2, sort_keys=True)
         print(f"\nwrote metrics -> {args.json}")
