@@ -4,7 +4,7 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.91.0] — 2026-09-27
 
 **0.91: real-data correctness (#60-#63, #32, #33, #35).** Fixes for wrong or misleading results
 found in private checks on real buildings (two offices with air handlers, chillers, boilers and VAV

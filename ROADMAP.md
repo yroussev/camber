@@ -225,7 +225,7 @@ umbrella rather than as new milestones. `CHANGELOG.md` is the per-release record
   cybersecure **edge forwarder**, and fault economics extended across the newer families.
 
 
-## Released — 0.86–0.90.1 (2026-09-26 and 27)
+## Released — 0.86–0.91 (2026-09-26 and 27)
 
 Three stacked releases; `CHANGELOG.md` has the detail.
 
@@ -257,27 +257,18 @@ Three stacked releases; `CHANGELOG.md` has the detail.
 - **0.90.1 — patch:** nine fixes found on real data (#51–#59): UTC timestamps converted to the site
   time zone, autocorrelation on monthly and billing data, weather falling back to bias-corrected NASA
   POWER (whose client now requests UTC), sensor-trust and rule-verdict fixes, and billing-period series.
+- **0.91 — real-data correctness:** the G36 engine gates on the supply fan, handles cooling-only
+  AHUs, applies G36 ModeDelay / AlarmDelay and runs as the `g36_afdd` rule (#60); one
+  equipment-class table and config topology (#61); chilled-water supply tracking with the plant
+  linked as the upstream cause of warm supply air (#62); economizer, reheat and reset misreads
+  (#63); RCx speed, plant weeks and G36 advice only with a declared sequence (#35, #32); VALIDATION
+  cells (#33). Follow-ups: #65, #66, #67.
 
 ## Next
 
 Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** The next releases:
-  - **0.91 — real-data correctness** (integrated, awaiting release): fixes from the private
-    real-building checks.
-    - #60: the G36 engine gates on the supply fan, handles cooling-only AHUs, applies the G36
-      ModeDelay / AlarmDelay, and runs from a config as the `g36_afdd` rule.
-    - #61: one equipment-class table for every built-in rule (`g36_afdd` included), a config
-      `topology` section, and the RCx OAT check across every OAT source.
-    - #62: `chw_plant_reset` judges running hours only; the new `chw_supply_tracking` rule; a
-      short plant is linked as the upstream cause of warm supply air (including G36 FC13), and the
-      RCx issue page points at the plant first.
-    - #63: integrated economizer (one helper for the rule and the RCx page), reheat valve vs
-      discharge rise, and setpoint resets that are only one-time steps.
-    - RCx report speed and one-equipment store reads (#35), plant weeks and G36 advice only with a
-      declared G36 sequence (#32), and two stale VALIDATION cells (#33).
-    - Follow-ups: #65 (the `supply_air_reset` sign against OAT) and #66 (a plant run gate for
-      sensor trust).
   - **0.92 — detection gaps on the complete catalog data** (#11–#17), real-data chaining (#50) and
     the 0.90.1 billing and weather follow-ups (#64).
   - **0.93** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only).
