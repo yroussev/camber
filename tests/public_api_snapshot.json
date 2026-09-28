@@ -533,6 +533,7 @@
     "total_cost"
   ],
   "camber.faultlab": [
+    "PENDING_SCENARIOS",
     "SCENARIOS",
     "coverage",
     "cross_fire",
@@ -1643,6 +1644,12 @@
   ],
   "camber.rules.compressor_stage_rule": [
     "CompressorStaging"
+  ],
+  "camber.rules.condenser_bypass_rule": [
+    "BYPASS_FAULT_F",
+    "BYPASS_WARN_F",
+    "CLOSED_PCT",
+    "CondenserBypassLeak"
   ],
   "camber.rules.condenserwater_rule": [
     "CondenserWaterReset"

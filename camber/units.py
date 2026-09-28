@@ -43,6 +43,7 @@ PERCENT_ROLES = frozenset(
         Role.CHW_PUMP_SPEED,
         Role.HW_PUMP_SPEED,
         Role.TOWER_FAN_SPEED,
+        Role.CW_BYPASS_VALVE,  # 0.92 (#15)
         Role.OUTDOOR_RH,
         Role.SUPPLY_AIR_HUMIDITY,
         Role.RETURN_AIR_HUMIDITY,

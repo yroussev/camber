@@ -90,6 +90,14 @@ class Role(str, Enum):
     CW_SUPPLY_TEMP = "cw_supply_temp"  # condenser water leaving the tower (to condenser)
     CW_RETURN_TEMP = "cw_return_temp"  # condenser water returning to the tower (from condenser)
     TOWER_FAN_SPEED = "tower_fan_speed"  # cooling-tower fan speed (%)
+    # 092-plant (#15): the condenser water actually *entering the chiller condensers*, downstream of
+    # the tower-bypass mixing -- equal to the tower's leaving water (CW_SUPPLY_TEMP) whenever the
+    # bypass is shut. Map it only where the plant trends both points (with no bypass, or no
+    # separate tower-leaving sensor, the one condenser-supply point is CW_SUPPLY_TEMP).
+    COND_ENTERING_WATER_TEMP = "cond_entering_water_temp"
+    # 092-plant (#15): the condenser-water tower-bypass valve's command or position, % open to the
+    # bypass (0 = all condenser water through the towers).
+    CW_BYPASS_VALVE = "cw_bypass_valve"
 
     # --- ambient (psychrometric) ---
     WETBULB_TEMP = "wetbulb_temp"  # outdoor wet-bulb temperature
@@ -215,6 +223,8 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.CW_SUPPLY_TEMP: "condenser water leaving temp sensor",
     Role.CW_RETURN_TEMP: "condenser water entering temp sensor",
     Role.TOWER_FAN_SPEED: "cooling tower fan speed cmd",
+    Role.COND_ENTERING_WATER_TEMP: "condenser water entering temp sensor chiller",
+    Role.CW_BYPASS_VALVE: "condenser water bypass valve cmd",
     Role.WETBULB_TEMP: "outside air wetBulb temp sensor",
     Role.OUTDOOR_RH: "outside air humidity sensor",
     Role.CO2: "zone air co2 sensor",

@@ -135,6 +135,9 @@ PHYSICAL_BOUNDS: dict = {
     Role.OUTDOOR_CO2: (250.0, 1000.0),
     # 092-plant (#13): boiler gas input rate, kW -- wide; only rejects dropouts / sentinels
     Role.GAS_INPUT_RATE: (-1.0, 1e7),
+    # 092-plant (#15): condenser water entering the chillers, and the tower-bypass valve
+    Role.COND_ENTERING_WATER_TEMP: (40.0, 120.0),
+    Role.CW_BYPASS_VALVE: (-2.0, 102.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -154,6 +157,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.HW_RETURN_TEMP,
         Role.CW_SUPPLY_TEMP,
         Role.CW_RETURN_TEMP,
+        Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
@@ -370,6 +374,7 @@ PLANT_GATED_ROLES: dict = {
             Role.CHW_RETURN_TEMP,
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
+            Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
             Role.COND_APPROACH_TEMP,
             Role.EVAP_APPROACH_TEMP,
             Role.SUBCOOLING_TEMP,
@@ -448,6 +453,7 @@ STUCK_HOURS: dict = {
             Role.HW_RETURN_TEMP,
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
+            Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
             Role.OUTDOOR_RH,
             Role.AIRFLOW,
             Role.CHW_FLOW,

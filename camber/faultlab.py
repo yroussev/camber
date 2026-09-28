@@ -33,6 +33,7 @@ from .model.roles import Role
 
 __all__ = [
     "SCENARIOS",
+    "PENDING_SCENARIOS",
     "dcv_sim",
     "labeled_records",
     "g36_accuracy",
@@ -563,6 +564,39 @@ SCENARIOS: dict = {
     "night_weekend_setback": _setback,
     "outdoor_air_fraction": _oa_fraction,
     "reheat_minimization_g36": _reheat_min,
+}
+
+
+# --------------------------------------------------------------------------- 092-plant (#15)
+# Scenarios for rules added in 0.92 whose tpr/fpr are NOT yet gated synthetic keys. They are scored
+# by the tests (and reported for sign-off) but kept out of SCENARIOS, which the gated synthetic
+# benchmark reads with strict_new: moving one into SCENARIOS adds baseline keys, a maintainer
+# decision.
+
+
+def _cond_bypass(idx, *, faulty):
+    """A running chiller plant with the tower bypass commanded shut; faulty = 60 % mixed back in."""
+    n = len(idx)
+    load = 0.5 + 0.5 * np.clip(np.sin((idx.hour - 6) / 24 * 2 * np.pi), 0, None)  # 0.5..1
+    tower = 78.0 + 4.0 * load
+    ret = tower + 10.0 * load
+    frac = 0.6 if faulty else 0.0
+    entering = (1 - frac) * tower + frac * ret
+    return pd.DataFrame(
+        {
+            Role.CW_BYPASS_VALVE: np.zeros(n),
+            Role.CW_SUPPLY_TEMP: tower,
+            Role.CW_RETURN_TEMP: ret,
+            Role.COND_ENTERING_WATER_TEMP: entering,
+            Role.COMPRESSOR_STATUS: np.ones(n),
+        },
+        index=idx,
+    )
+
+
+#: 0.92 scenarios pending sign-off as gated synthetic keys (see the note above).
+PENDING_SCENARIOS: dict = {
+    "condenser_bypass_leak": _cond_bypass,
 }
 
 

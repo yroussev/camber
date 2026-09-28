@@ -104,6 +104,7 @@ RULE_CATEGORY = {
     "vav_airflow_drift": "maintenance",
     "vav_reheat_valve_drift": "maintenance",
     "boiler_efficiency_drift": "maintenance",  # 092-plant (#13)
+    "condenser_bypass_leak": "energy",  # 092-plant (#15): warmer condenser water, higher kW/ton
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")

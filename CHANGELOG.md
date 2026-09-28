@@ -28,6 +28,20 @@ All notable changes to CAMBER are documented here. The format follows
   warn. `plantdrift.diagnose_boiler_drift` rolls it up. The `lbnl-boiler` catalog mapping now maps
   `BOI_GAS_CSUM_1` (boiler 1's gas input, kW) to `gas_input_rate`; Brick `Natural_Gas_Flow_Sensor`
   maps to it, and `Gas_Meter` used as a point type is accepted as an alias with a caveat.
+- **Condenser-water tower-bypass valve leak (#15).** `rules.condenser_bypass_rule.
+  CondenserBypassLeak` (`condenser_bypass_leak`, built-in) compares the water entering the chiller
+  condensers with the towers' leaving water while the bypass is commanded shut and a chiller runs:
+  warn at a 2 F median difference, fault at 5 F (screening-grade), with the bypassed fraction
+  estimated from the condenser range. A difference that does not grow with the range (a
+  miscalibrated sensor), or entering water colder than the tower's, is reported as a sensor offset
+  (`info`), not a leak. Two new roles: `Role.COND_ENTERING_WATER_TEMP` (condenser water after the
+  bypass mixing) and `Role.CW_BYPASS_VALVE` (the bypass command/position, %). Brick:
+  `Condenser_Water_Bypass_Valve` valve points and `Bypass_Command` map to the valve role; a cooling
+  tower's `Leaving_/Entering_Water_Temperature_Sensor` map to `cw_supply_temp` / `cw_return_temp`,
+  and a chiller's `Entering_Condenser_Water_Temperature_Sensor` becomes `cond_entering_water_temp`
+  when the model has that separate tower point. The `lbnl-chiller` catalog mapping maps
+  `CDWL_SW_TEMP` and `TWV_CTRL` to them. Its synthetic scenario is in
+  `faultlab.PENDING_SCENARIOS`, not yet a gated benchmark key.
 - **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
   the site's OAT sources with each other: three or more against their median (the outlier gets a
   scoped `sensor_drift:oat` finding), two shown side by side with no finding.
