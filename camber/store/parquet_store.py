@@ -28,6 +28,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import pandas as pd
@@ -51,6 +53,52 @@ _YEAR = "year"
 # points() needn't rescan every partition. Arrow's dataset discovery ignores leading-"_"
 # paths, so this file is invisible to reads.
 _CATALOG = "_catalog.json"
+
+
+# Per-facility fragment index (#35): which part files hold which equipment, so a one-equipment read
+# opens only that equipment's files instead of every file of the facility. Keyed on (root,
+# facility_id); each entry carries the facility partition's modification signature, so a write,
+# prune or drop rebuilds it. The dataset schema is captured with it, so a pruned read materializes
+# exactly the columns and types a full-dataset read does.
+_FRAG_INDEX_MAX = 16
+_FRAG_INDEX: OrderedDict = OrderedDict()
+_FRAG_LOCK = threading.Lock()
+
+
+def _partition_signature(fdir: str) -> tuple:
+    """mtimes and file counts of a facility partition and its year dirs (changes on any write)."""
+    try:
+        sig: list = [os.stat(fdir).st_mtime_ns]
+        for d in sorted(os.listdir(fdir)):
+            p = os.path.join(fdir, d)
+            sig.append((d, os.stat(p).st_mtime_ns))
+            sig.append(len(os.listdir(p)) if os.path.isdir(p) else 0)
+        return tuple(sig)
+    except OSError:
+        return ()
+
+
+def _fragment_equips(frag) -> frozenset | None:
+    """The equipment ids a part file holds: from its row-group statistics when every row group
+    holds one equipment (min == max), else from a projected read of the equip column."""
+    try:
+        md = frag.metadata
+        col = md.schema.to_arrow_schema().get_field_index(_EQUIP)
+        if col >= 0 and md.num_row_groups:
+            vals: set = set()
+            for i in range(md.num_row_groups):
+                st = md.row_group(i).column(col).statistics
+                if st is None or not st.has_min_max or st.min != st.max or st.null_count:
+                    break
+                vals.add(st.min)
+            else:  # every row group holds a single equipment
+                return frozenset(vals)
+        if col < 0:
+            return frozenset()
+        tab = frag.to_table(columns=[_EQUIP])
+        return frozenset(v for v in tab.column(0).unique().to_pylist() if v is not None)
+    except Exception:  # noqa: BLE001 - an unreadable footer means "don't prune this file"
+        return None
 
 
 def _role_slug(r) -> str:
@@ -263,6 +311,47 @@ class ParquetStore:
     def _dataset(self):
         return ds.dataset(self.root, format="parquet", partitioning="hive")
 
+    def _facility_dataset(self, facility_id, equips):
+        """A dataset over only the part files of ``facility_id`` that hold one of ``equips`` (in
+        the full dataset's file order and schema), or ``None`` to read the full dataset.
+
+        Filtering this dataset gives exactly the rows, order and types that filtering the full
+        dataset does -- the files left out hold none of ``equips`` -- without opening every file of
+        the facility on each equipment read (#35).
+        """
+        root = os.path.abspath(self.root)
+        fdir = os.path.join(root, f"{_FACILITY}={facility_id}")
+        if not os.path.isdir(fdir):
+            return None
+        key = (root, str(facility_id))
+        sig = _partition_signature(fdir)
+        with _FRAG_LOCK:
+            hit = _FRAG_INDEX.get(key)
+            if hit is not None and hit[0] == sig:
+                _FRAG_INDEX.move_to_end(key)
+                entry = hit[1]
+            else:
+                entry = None
+        if entry is None:
+            try:
+                full = self._dataset()
+                frags = [
+                    (f, _fragment_equips(f))
+                    for f in full.get_fragments(filter=ds.field(_FACILITY) == facility_id)
+                ]
+            except Exception:  # noqa: BLE001 - the full-dataset read reports its own error
+                return None
+            entry = (full.schema, full.format, full.filesystem, frags)
+            with _FRAG_LOCK:
+                _FRAG_INDEX[key] = (sig, entry)
+                _FRAG_INDEX.move_to_end(key)
+                while len(_FRAG_INDEX) > _FRAG_INDEX_MAX:
+                    _FRAG_INDEX.popitem(last=False)
+        schema, fmt, fs, frags = entry
+        want = set(equips)
+        keep = [f for f, eqs in frags if eqs is None or (eqs & want)]
+        return ds.FileSystemDataset(keep, schema=schema, format=fmt, filesystem=fs)
+
     @staticmethod
     def _build_filter(*, facility_id=None, equips=None, roles=None, start=None, end=None):
         """Assemble a pyarrow dataset filter, pruning ``year`` partitions from the ts range.
@@ -306,7 +395,13 @@ class ParquetStore:
         if not os.path.isdir(self.root):
             cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _FACILITY, _YEAR]
             return pd.DataFrame(columns=cols)
-        dataset = self._dataset()
+        dataset = None
+        if equips is not None:
+            equips = list(equips)
+            if isinstance(facility_id, str) and all(isinstance(e, str) for e in equips):
+                dataset = self._facility_dataset(facility_id, equips)
+        if dataset is None:
+            dataset = self._dataset()
         filt = self._build_filter(
             facility_id=facility_id, equips=equips, roles=roles, start=start, end=end
         )

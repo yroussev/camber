@@ -224,8 +224,12 @@ def test_fpu_score_drift_emits_valid_keys():
         _fpu_frames(), B.FPU_DRIFT_DETECTORS, fault_free="PFPU_FaultFree.csv", label="FPU"
     )
     assert any(k.startswith("drift.vav_airflow_drift.") for k in m)
-    for v in m.values():
-        assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
+    counts = ("tp", "fn", "fp", "tn", "declined")
+    for k, v in m.items():
+        if k.rsplit(".", 1)[1] in counts:  # the confusion counts VALIDATION.md quotes
+            assert isinstance(v, int) and v >= 0
+        else:
+            assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
 
 
 def test_fpu_detectors_registered_and_multi_positive():
@@ -293,8 +297,13 @@ def test_chiller_calibrates_and_fires_on_physical_fault():
 
 def test_chiller_score_metric_keys_are_valid_floats():
     B = _bench()
-    for v in B.score_chiller(_chiller_frames()).values():
-        assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
+    m = B.score_chiller(_chiller_frames())
+    for k, v in m.items():
+        if k.rsplit(".", 1)[1] in ("tp", "fn", "fp", "tn", "declined"):
+            assert isinstance(v, int) and v >= 0
+        else:
+            assert isinstance(v, float) and v == v and 0.0 <= v <= 1.0
+    assert m["chiller.chiller_efficiency.tp"] == 1 and m["chiller.chiller_efficiency.tn"] == 2
 
 
 def test_chiller_score_empty_without_fault_free_baseline():

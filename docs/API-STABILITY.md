@@ -70,7 +70,8 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   stubs. See [PORTFOLIO.md](PORTFOLIO.md).
 - **The RCx report** (added in 0.88): `camber.report.rcx` -- `RcxOptions`, `RcxReport`
   (`to_html`, `to_dict`, `slots`), `build_rcx_report`, `select_week`, `WeekChoice`, `load_notes`,
-  `notes_template`, `P3_FAMILIES`, `WEEK_MODES` -- and the issue layer in
+  `notes_template`, `P3_FAMILIES`, `WEEK_MODES`; `PLANT_FAMILIES` and `select_week(roles_for=)`
+  are provisional additions in 0.91 (#32) -- and the issue layer in
   `camber.rules.triage`: `Issue`, `SensorCause`, `Confidence`, `link_findings`,
   `finding_confidence`, `sensor_causes`, `issue_totals`, `SHARED_ROLES`. The HTML layout, the
   notes-file schema and the `report.rcx` config keys may change with the grounded-prose work. The
