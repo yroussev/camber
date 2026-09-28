@@ -444,7 +444,7 @@ SYSTEMS: dict = {
     "ip": {"energy": "kBtu", "power": "kBtu/h", "eui": "kBtu/ft2/yr", "area": "ft2"},
     "si": {"energy": "kWh", "power": "kW", "eui": "kWh/m2/yr", "area": "m2"},
 }
-_CONFIG_KEYS = {"system", "area"}
+_CONFIG_KEYS = {"system", "area", "factor_set", "region"}
 
 
 @dataclass(frozen=True)
@@ -454,6 +454,13 @@ class UnitSystem:
     ``energy``, ``power`` and ``eui`` are the reported unit labels; ``area`` is the unit a
     config's floor areas are stated in (``ft2`` for IP and ``m2`` for SI unless ``units.area``
     says otherwise).
+
+    ``factor_set`` and ``region`` (opt-in, both or neither) name a :mod:`camber.energy_factors`
+    set, such as ``"energy_star_thermal_2015"`` with ``"US"`` or ``"CA"``: billed fuels in volume
+    or mass (gas in cf/kcf/MMcf/m3, oil and propane in gallons or litres, steam in lb/klb, coal
+    and wood in tons) then convert with the set's heat contents when no explicit
+    ``heat_content`` / ``enthalpy`` is given. Without them a volume or mass still needs its heat
+    content or enthalpy, as before.
     """
 
     system: str
@@ -461,13 +468,36 @@ class UnitSystem:
     power: str
     eui: str
     area: str
+    factor_set: str | None = None
+    region: str | None = None
 
     @classmethod
-    def of(cls, system: str, *, area: str | None = None) -> UnitSystem:
-        """The :class:`UnitSystem` named ``"ip"`` or ``"si"``."""
+    def of(
+        cls,
+        system: str,
+        *,
+        area: str | None = None,
+        factor_set: str | None = None,
+        region: str | None = None,
+    ) -> UnitSystem:
+        """The :class:`UnitSystem` named ``"ip"`` or ``"si"`` (optionally with a factor set)."""
         key = str(system).strip().lower()
         if key not in SYSTEMS:
             raise ValueError(f'units.system must be "ip" or "si", got {system!r}')
+        if (factor_set is None) != (region is None):
+            raise ValueError(
+                'units.factor_set and units.region go together, e.g. "factor_set": '
+                '"energy_star_thermal_2015", "region": "US"'
+            )
+        if factor_set is not None:
+            from .energy_factors import get_factor_set
+
+            fs = get_factor_set(str(factor_set))
+            if region not in fs.regions:
+                raise ValueError(
+                    f"units.region must be one of {', '.join(fs.regions)} for {factor_set}, "
+                    f"got {region!r}"
+                )
         s = SYSTEMS[key]
         return cls(
             system=key,
@@ -475,6 +505,8 @@ class UnitSystem:
             power=s["power"],
             eui=s["eui"],
             area=_area(area) if area is not None else s["area"],
+            factor_set=factor_set,
+            region=region,
         )
 
     @classmethod
@@ -487,11 +519,18 @@ class UnitSystem:
         if isinstance(spec, str):
             spec = {"system": spec}
         if not isinstance(spec, Mapping) or "system" not in spec:
-            raise ValueError('units must be {"system": "ip" | "si"} (optionally "area")')
+            raise ValueError(
+                'units must be {"system": "ip" | "si"} (optionally "area", "factor_set", "region")'
+            )
         extra = set(spec) - _CONFIG_KEYS
         if extra:
             raise ValueError(f"units: unknown key(s) {sorted(extra)}")
-        return cls.of(spec["system"], area=spec.get("area"))
+        return cls.of(
+            spec["system"],
+            area=spec.get("area"),
+            factor_set=spec.get("factor_set"),
+            region=spec.get("region"),
+        )
 
     def energy_factor(self, from_unit, *, heat_content=None, enthalpy=None) -> float:
         """The factor from ``from_unit`` to this system's energy unit."""
@@ -506,11 +545,14 @@ class UnitSystem:
         return eui_factor(from_unit, self.eui)
 
     def as_dict(self) -> dict:
-        """Return as a plain dict."""
-        return {
+        """Return as a plain dict (``factor_set`` / ``region`` only when set)."""
+        d: dict = {
             "system": self.system,
             "energy": self.energy,
             "power": self.power,
             "eui": self.eui,
             "area": self.area,
         }
+        if self.factor_set is not None:
+            d["factor_set"], d["region"] = self.factor_set, self.region
+        return d

@@ -32,7 +32,14 @@ import os
 
 import pandas as pd
 
-__all__ = ["billing_label", "load_bills", "billing_oat", "billing_units", "billing_findings"]
+__all__ = [
+    "billing_label",
+    "load_bills",
+    "billing_oat",
+    "billing_units",
+    "billing_conversion",
+    "billing_findings",
+]
 
 _KNOWN = {
     "bills",
@@ -62,6 +69,7 @@ _FULL_YEAR_DAYS = 330  # a baseline of bills covering fewer days of service is f
 _BILL_KEYS = {"file", "start", "end", "energy", "estimated", "units", "end_inclusive"}
 _BILL_KEYS |= {"merge_estimated", "units_column"}
 _BILL_KEYS |= {"heat_content", "enthalpy"}  # 0.92 (#69): gas volumes and steam mass
+_BILL_KEYS |= {"meter_type"}  # 0.92: the fuel a units.factor_set looks up (camber.energy_factors)
 
 
 def _spec(entry: dict) -> dict:
@@ -172,10 +180,27 @@ def billing_units(spec: dict, bills, units) -> tuple | None:
 
     ``bills.heat_content`` (gas volumes: ``"10.37 therm/Mcf"``) and ``bills.enthalpy`` (steam:
     ``"1000 Btu/lb"``) are validated whenever given. With a unit system the bills must name a
-    parseable unit, and a volume or mass needs its heat content or enthalpy; there is no default.
+    parseable unit, and a volume or mass needs its heat content or enthalpy -- or, opt-in, a
+    ``units.factor_set`` (:mod:`camber.energy_factors`) supplies it; an explicit heat content or
+    enthalpy always wins. :func:`billing_conversion` also returns the factor's provenance.
     """
-    from .energy_units import parse_heat_content, parse_unit
+    return billing_conversion(spec, bills, units)[0]
 
+
+def billing_conversion(spec: dict, bills, units) -> tuple:
+    """``(conv, extra)``: :func:`billing_units`' tuple (or ``None``) and ``extra`` =
+    ``{"metrics": {...}, "caveats": [...]}`` recording a factor set's use (provisional, 0.92).
+
+    With ``units.factor_set`` a unit :mod:`camber.energy_units` cannot convert on its own (a
+    volume or mass without ``heat_content`` / ``enthalpy``, or gallons, litres, tons, tonnes,
+    ``kcf``, ``MMcf``, ``MMlb``) is looked up in the set for ``bills.meter_type`` (default:
+    ``natural_gas`` for a gas volume, ``district_steam`` for a mass, as camber.energy_units
+    reads them) and converted from the set's kBtu. Energy units (kWh, therm, MMBtu ...) keep the
+    exact factors. A bare ``Mcf`` is a thousand cubic feet on either path, with a caveat.
+    """
+    from .energy_units import _norm, parse_heat_content, parse_unit
+
+    extra: dict = {"metrics": {}, "caveats": []}
     hc, en = spec.get("heat_content"), spec.get("enthalpy")
     for key, v in (("heat_content", hc), ("enthalpy", en)):
         if v is not None:
@@ -183,31 +208,92 @@ def billing_units(spec: dict, bills, units) -> tuple | None:
                 parse_heat_content(v)
             except ValueError as e:
                 raise ValueError(f"mv.bills.{key}: {e}") from None
+    mtype = spec.get("meter_type")
+    fset = getattr(units, "factor_set", None)
+    if mtype is not None and fset is None:
+        raise ValueError("mv.bills.meter_type is read only with a units.factor_set")
     if units is None:
-        return None
+        return None, extra
     if not bills.units:
         raise ValueError(
             f"units.system is {units.system!r}, but the bills in {spec['file']!r} name no unit: "
             'give bills.units (e.g. "kWh", "therm", "Mcf") or a units column'
         )
+    bare_m = _norm(bills.units) in ("mcf", "mscf")
+    if fset is not None and hc is None and en is None:
+        try:
+            by_set = parse_unit(bills.units, kind=("energy", "volume", "mass")).kind != "energy"
+        except ValueError:
+            by_set = True
+        if by_set:
+            return _billing_by_factor_set(spec, bills, units, extra)
     try:
         k = units.energy_factor(bills.units, heat_content=hc, enthalpy=en)
         name = parse_unit(bills.units).name
     except ValueError as e:
         raise ValueError(f"mv.bills units: {e}") from None
-    return k, units.energy, name, units.system
+    if bare_m:
+        from .energy_factors import _m_caveat
+
+        extra["caveats"].append(_m_caveat(bills.units, fset))
+    return (k, units.energy, name, units.system), extra
+
+
+# a gas volume or a mass with no bills.meter_type: read as camber.energy_units reads them
+_DEFAULT_METER = {k: "natural_gas" for k in ("ft3", "CCF", "kcf", "MMcf", "m3")}
+_DEFAULT_METER.update({k: "district_steam" for k in ("lb", "klb", "MMlb", "kg")})
+
+
+def _billing_by_factor_set(spec: dict, bills, units, extra: dict) -> tuple:
+    """The factor-set path of :func:`billing_conversion`."""
+    from .energy_factors import factor_for, resolve_unit
+    from .energy_units import energy_factor
+
+    mtype = spec.get("meter_type")
+    if mtype is None:
+        try:
+            key = resolve_unit(bills.units)[0]
+        except ValueError as e:
+            raise ValueError(f"mv.bills units: {e}") from None
+        mtype = _DEFAULT_METER.get(key)
+        kind = "volume" if mtype == "natural_gas" else "mass"
+        if mtype is None:
+            raise ValueError(
+                f"mv.bills units: {bills.units!r} needs bills.meter_type to use "
+                f'{units.factor_set} (e.g. "fuel_oil_2", "propane", "coal_bituminous")'
+            )
+        extra["caveats"].append(
+            f"bills.meter_type not given: {bills.units!r} bills read as {mtype} "
+            f"({'a gas volume' if kind == 'volume' else 'steam by mass'}); set bills.meter_type "
+            "if they are another fuel."
+        )
+    try:
+        c = factor_for(bills.units, mtype, factor_set=units.factor_set, region=units.region)
+    except ValueError as e:
+        raise ValueError(f"mv.bills units: {e}") from None
+    k = c.multiplier * energy_factor("kBtu", units.energy)
+    extra["metrics"]["energy_factor"] = c.as_dict()
+    extra["caveats"] = [f"Converted with {c.describe()}.", *extra["caveats"], *c.caveats]
+    return (k, units.energy, c.unit, units.system), extra
 
 
 def billing_findings(entry: dict, prep, *, base_dir: str = ".") -> list:
     """``mv_baseline`` (and, with a ``reporting_period``, ``mv_savings`` or
     ``mv_method_proposal``) Findings for one billing entry. A bad entry is a ``ValueError``; a
     meter the data cannot serve is a declined Finding. With a config ``units`` block the reported
-    energy is converted (0.92, #69); the fit stays in the bills' own unit."""
-    from .config import _mv_apply_units
+    energy is converted (0.92, #69); the fit stays in the bills' own unit. A factor set's use
+    (``units.factor_set``) is recorded as ``energy_factor`` and a caveat on every finding."""
+    from .config import _add_caveats, _mv_apply_units
 
     box: dict = {}
     out = _billing_findings(entry, prep, base_dir=base_dir, box=box)
-    return _mv_apply_units(out, box.get("conv"))
+    out = _mv_apply_units(out, box.get("conv"))
+    extra = box.get("extra") or {}
+    if extra.get("metrics") or extra.get("caveats"):
+        for f in out:
+            f.metrics.update(extra.get("metrics") or {})
+        _add_caveats(out, list(extra.get("caveats") or []))
+    return out
 
 
 def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
@@ -251,7 +337,9 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     base_f = float(entry.get("base_f", 65.0))
 
     bills = load_bills(entry, base_dir=base_dir)
-    box["conv"] = billing_units(_spec(entry), bills, getattr(prep, "units", None))  # 0.92 (#69)
+    box["conv"], box["extra"] = billing_conversion(  # 0.92 (#69)
+        _spec(entry), bills, getattr(prep, "units", None)
+    )
     if not len(bills):
         return _declined(label, "the bills file has no bills", reporting)
     f = bills.frame

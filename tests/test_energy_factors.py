@@ -12,12 +12,14 @@ import sys
 import warnings
 
 import numpy as np
+import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber import energy_factors as ef  # noqa: E402
 from camber import energy_units as eu  # noqa: E402
+from camber.config import run_config  # noqa: E402
 
 ES = "energy_star_thermal_2015"
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -376,6 +378,159 @@ def test_to_kbtu_arrays_warnings_and_refusals():
     c = ef.factor_for("klb", "steam", factor_set=ES, region="US")
     assert c.as_dict()["heat_content"] == "1,194 Btu/Lb" and c.multiplier == 1194.0
     assert "1 kLbs (thousand pounds) = 1,194 kBtu, heat content 1,194 Btu/Lb" in c.describe()
+
+
+# --------------------------------------------------------------------------- config billing
+
+
+def _bills(tmp_path, *, unit, name, per_therm, seed=3):
+    """Synthetic monthly bills whose energy is ``therms x per_therm`` in ``unit``."""
+    rng = np.random.default_rng(seed)
+    days = pd.date_range("2020-01-01", "2023-12-31", freq="D")
+    T = 52 - 24 * np.cos(2 * np.pi * (days.dayofyear - 15) / 365.25) + rng.normal(0, 5, len(days))
+    use = 30 + 5.0 * np.maximum(0, 60 - T) + rng.normal(0, 10, len(days))
+    use = np.where(days >= "2023-01-01", use * 0.85, use)
+    rows, i = [], 0
+    while i < len(days):
+        j = min(i + int(rng.integers(28, 34)), len(days))
+        e = round(float(use[i:j].sum()) * per_therm, 6)
+        rows.append({"start": days[i].date(), "end": days[j - 1].date(), "energy": e,
+                     "units": unit})  # fmt: skip
+        i = j
+    pd.DataFrame(rows).to_csv(tmp_path / name, index=False)
+    pd.DataFrame({"timestamp": days, "oat": np.round(T, 2)}).to_csv(
+        tmp_path / "oat.csv", index=False
+    )
+
+
+def _cfg(units=None, bills=None):
+    e = {
+        "bills": bills,
+        "name": "Fuel",
+        "period": ["2020-01-01", "2022-12-31"],
+        "reporting_period": ["2023-01-01", "2023-12-31"],
+        "method": "forecast",
+    }
+    cfg = {"site": "Demo", "shared_oat": {"file": "oat.csv"}, "mv": [e]}
+    if units is not None:
+        cfg["units"] = units
+    return cfg
+
+
+def _sav(res):
+    return next(f for f in res.findings if f.rule == "mv_savings")
+
+
+UNITS_US = {"system": "ip", "factor_set": ES, "region": "US"}
+
+
+def test_config_gas_in_mcf_and_therms_with_the_factor_set(tmp_path):
+    # the same gas: therms, and thousand cubic feet at ENERGY STAR's 1,026 Btu/cf
+    _bills(tmp_path, unit="therm", name="therm.csv", per_therm=1.0)
+    _bills(tmp_path, unit="Mcf", name="mcf.csv", per_therm=100.0 / 1026.0)
+    _bills(tmp_path, unit="kcf", name="kcf.csv", per_therm=100.0 / 1026.0)
+    therm = _sav(run_config(_cfg(UNITS_US, {"file": "therm.csv"}), base_dir=str(tmp_path)))
+    mcf = _sav(run_config(_cfg(UNITS_US, {"file": "mcf.csv"}), base_dir=str(tmp_path)))
+    kcf = _sav(run_config(_cfg(UNITS_US, {"file": "kcf.csv"}), base_dir=str(tmp_path)))
+    for f in (mcf, kcf):
+        assert f.metrics["avoided_energy"] == pytest.approx(
+            therm.metrics["avoided_energy"], rel=1e-4
+        )
+        assert f.metrics["meter_unit"] == "kcf" and f.metrics["energy_unit"] == "kBtu"
+        ef_used = f.metrics["energy_factor"]
+        assert ef_used["factor_set"] == ES and ef_used["region"] == "US"
+        assert ef_used["multiplier"] == 1026.0 and ef_used["heat_content"] == "1,026 Btu/cf"
+        assert any("1 Kcf (thousand cubic feet) = 1,026 kBtu" in c for c in f.caveats)
+    # a bare Mcf is a thousand cf, and says so; kcf does not need the caveat
+    assert any("THOUSAND" in c and "MILLION" in c for c in mcf.caveats)
+    assert not any("THOUSAND" in c for c in kcf.caveats)
+    # therms are energy: exact factor, no factor-set record
+    assert "energy_factor" not in therm.metrics and therm.metrics["meter_unit"] == "therm"
+    # the meter type was not given, so the assumption is stated
+    assert any("read as natural_gas" in c for c in mcf.caveats)
+    # every finding of the entry carries the record, the baseline too
+    res = run_config(_cfg(UNITS_US, {"file": "kcf.csv"}), base_dir=str(tmp_path))
+    assert all(f.metrics.get("energy_factor") for f in res.findings)
+
+
+def test_config_canadian_region_and_si(tmp_path):
+    _bills(tmp_path, unit="m3", name="m3.csv", per_therm=100.0 / 36.425)
+    _bills(tmp_path, unit="therm", name="therm.csv", per_therm=1.0)
+    u = {"system": "si", "factor_set": ES, "region": "CA"}
+    m3 = _sav(run_config(_cfg(u, {"file": "m3.csv"}), base_dir=str(tmp_path)))
+    th = _sav(run_config(_cfg(u, {"file": "therm.csv"}), base_dir=str(tmp_path)))
+    assert m3.metrics["energy_unit"] == "kWh"
+    assert m3.metrics["avoided_energy"] == pytest.approx(th.metrics["avoided_energy"], rel=1e-4)
+    assert m3.metrics["energy_factor"]["multiplier"] == 36.425
+
+
+def test_config_fuel_oil_gallons_and_steam_klb(tmp_path):
+    _bills(tmp_path, unit="gallons", name="oil.csv", per_therm=100.0 / 138.0)
+    _bills(tmp_path, unit="klb", name="steam.csv", per_therm=100.0 / 1194.0)
+    _bills(tmp_path, unit="therm", name="therm.csv", per_therm=1.0)
+    th = _sav(run_config(_cfg(UNITS_US, {"file": "therm.csv"}), base_dir=str(tmp_path)))
+    oil = _sav(run_config(
+        _cfg(UNITS_US, {"file": "oil.csv", "meter_type": "fuel_oil_2"}), base_dir=str(tmp_path)
+    ))  # fmt: skip
+    steam = _sav(run_config(_cfg(UNITS_US, {"file": "steam.csv"}), base_dir=str(tmp_path)))
+    for f, mult, unit in ((oil, 138, "gal_US"), (steam, 1194, "klb")):
+        assert f.metrics["avoided_energy"] == pytest.approx(th.metrics["avoided_energy"], rel=1e-4)
+        assert f.metrics["energy_factor"]["multiplier"] == mult
+        assert f.metrics["meter_unit"] == unit
+    assert any("read as district_steam" in c for c in steam.caveats)
+    assert not any("meter_type not given" in c for c in oil.caveats)
+    # gallons need a meter type: gas and oil both come by volume
+    with pytest.raises(ValueError, match="needs bills.meter_type"):
+        run_config(_cfg(UNITS_US, {"file": "oil.csv"}), base_dir=str(tmp_path))
+    with pytest.raises(ValueError, match="lists no 'gal_US' for district_steam"):
+        run_config(
+            _cfg(UNITS_US, {"file": "oil.csv", "meter_type": "steam"}), base_dir=str(tmp_path)
+        )
+
+
+def test_config_explicit_heat_content_wins_and_the_default_still_requires_it(tmp_path):
+    _bills(tmp_path, unit="Mcf", name="mcf.csv", per_therm=1 / 10.37)
+    hc = {"file": "mcf.csv", "heat_content": "10.37 therm/Mcf"}
+    own = _sav(run_config(_cfg(UNITS_US, hc), base_dir=str(tmp_path)))
+    assert "energy_factor" not in own.metrics and own.metrics["meter_unit"] == "Mcf"
+    assert not any("energy_star" in c for c in own.caveats if "Converted with" in c)
+    assert any("THOUSAND" in c for c in own.caveats)  # the bare Mcf caveat, on the #69 path too
+    plain = _sav(run_config(_cfg({"system": "ip"}, hc), base_dir=str(tmp_path)))
+    assert own.metrics["avoided_energy"] == plain.metrics["avoided_energy"]
+    with pytest.raises(ValueError, match="heat_content"):  # no factor set: no default
+        run_config(_cfg({"system": "ip"}, {"file": "mcf.csv"}), base_dir=str(tmp_path))
+    with pytest.raises(ValueError, match="only with a units.factor_set"):
+        run_config(_cfg({"system": "ip"}, {"file": "mcf.csv", "meter_type": "natural_gas"}),
+                   base_dir=str(tmp_path))  # fmt: skip
+
+
+def test_config_units_block_refusals(tmp_path):
+    _bills(tmp_path, unit="therm", name="therm.csv", per_therm=1.0)
+    for units, match in [
+        ({"system": "ip", "factor_set": ES}, "go together"),
+        ({"system": "ip", "region": "US"}, "go together"),
+        ({"system": "ip", "factor_set": ES, "region": "MX"}, "units.region"),
+        ({"system": "ip", "factor_set": "nope", "region": "US"}, "unknown factor set"),
+    ]:
+        with pytest.raises(ValueError, match=match):
+            run_config(_cfg(units, {"file": "therm.csv"}), base_dir=str(tmp_path))
+    us = eu.UnitSystem.of("ip", factor_set=ES, region="CA")
+    assert us.as_dict()["factor_set"] == ES and us.as_dict()["region"] == "CA"
+    assert set(eu.UnitSystem.of("ip").as_dict()) == {"system", "energy", "power", "eui", "area"}
+
+
+def test_default_outputs_are_byte_identical_without_a_factor_set(tmp_path):
+    """No ``units`` block, or one without ``factor_set``: nothing from this module appears."""
+    _bills(tmp_path, unit="therm", name="therm.csv", per_therm=1.0)
+    base = run_config(_cfg(None, {"file": "therm.csv"}), base_dir=str(tmp_path))
+    ip = run_config(_cfg({"system": "ip"}, {"file": "therm.csv"}), base_dir=str(tmp_path))
+    ipf = run_config(_cfg(UNITS_US, {"file": "therm.csv"}), base_dir=str(tmp_path))
+    for f in base.findings:
+        assert "energy_factor" not in f.metrics and "energy_unit" not in f.metrics
+    # a therm meter never uses the set, so the factor-set config reports exactly what ip does
+    dump = lambda r: json.dumps([(f.rule, f.summary, f.metrics, f.caveats) for f in r.findings],  # noqa: E731
+                                sort_keys=True, default=str)  # fmt: skip
+    assert dump(ip) == dump(ipf)
 
 
 # --------------------------------------------------------------------------- docs
