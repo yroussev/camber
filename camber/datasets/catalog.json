@@ -17045,6 +17045,1919 @@
      "handling_note": "Described only: PrVentRo has no CAMBER role and is not ingested."
     }
    ]
+  },
+  {
+   "id": "cofactor-drammen",
+   "title": "COFACTOR Drammen (45 Norwegian public buildings, hourly energy)",
+   "summary": "Four years (2018 to Dec 2021 / Mar 2022) of hourly energy use from 45 public buildings in Drammen, Norway (16 schools, 20 kindergartens, 7 nursing homes, 2 offices): the total electricity import (AMS main meter) of every building, electricity and heat sub-meters (electric boilers, heat pumps, hot water, district heat, oil) for many, and each building's own outdoor weather, with floor area, heating and ventilation metadata.",
+   "teaches": [
+    "change-point M&V baselines in a heating-dominated, highly electrified climate (electric boilers and heat pumps inside the electricity meter)",
+    "non-routine periods: the spring 2020 COVID-19 school and kindergarten closures",
+    "a fixed UTC+1 clock moved onto Oslo summer time, checked against the buildings' own morning start-up",
+    "sub-meter balance checks: sub-meters against the main import meter"
+   ],
+   "publisher": "SINTEF Community (COFACTOR project, Research Council of Norway grant 326891; data from Drammen Municipality)",
+   "citation": "Lien, S.K., Walnum, H.T. & S\u00f8rensen, \u00c5.L. (2025). COFACTOR Drammen dataset - 4 years of hourly energy use data from 45 public buildings in Drammen, Norway. Scientific Data 12, 393. doi:10.1038/s41597-025-04708-3. Data: Zenodo, version 3, doi:10.5281/zenodo.14752397 (all versions: doi:10.5281/zenodo.11060088)",
+   "dois": [
+    "10.1038/s41597-025-04708-3",
+    "10.5281/zenodo.14752397",
+    "10.5281/zenodo.11060088"
+   ],
+   "landing_url": "https://zenodo.org/records/14752397",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-28",
+   "licence_check": {
+    "url": "https://zenodo.org/api/records/14752397",
+    "expect": "cc-by-4.0",
+    "json_path": "metadata.license.id"
+   },
+   "kind": "real",
+   "labeled_faults": false,
+   "labels": {},
+   "equipment": "whole-building energy meters (no HVAC points): one facility, one equipment per building meter b<id>_<column> -- ElImp as ELECTRICITY_METER (all 45 buildings), ElPV as PV_METER, other El* as ELECTRICITY_SUB_METER, HtDH as DISTRICT_HEAT_METER, other Ht* as HEAT_SUB_METER -- each carrying the building's own outdoor temperature (oat)",
+   "timezone": "stamps carry a fixed +01:00 offset (Etc/GMT-1, no daylight saving; hour-beginning labels, e.g. 00:00 is 00:00-01:00); ingested as instants and stored in Europe/Oslo wall-clock time (see the timestamps-fixed-utc-plus-1 data issue)",
+   "requires_extras": [],
+   "files": [
+    {
+     "name": "Cofactor_Drammen_Buildings_45_v3.zip",
+     "url": "https://zenodo.org/api/records/14752397/files/Cofactor_Drammen_Buildings_45_v3.zip/content",
+     "size": 22417463,
+     "sha256": "20b6795f859ff62ccd39a2af12078423535223e5cfa285d960364b3f20952a11",
+     "pinned": true,
+     "etag": null,
+     "archive": "zip",
+     "extracted_size": 97972653,
+     "members": [
+      "building_6396.txt",
+      "building_6397.txt",
+      "building_6398.txt",
+      "building_6399.txt",
+      "building_6400.txt",
+      "building_6402.txt",
+      "building_6404.txt",
+      "building_6405.txt",
+      "building_6406.txt",
+      "building_6407.txt",
+      "building_6408.txt",
+      "building_6409.txt",
+      "building_6410.txt",
+      "building_6411.txt",
+      "building_6412.txt",
+      "building_6413.txt",
+      "building_6414.txt",
+      "building_6415.txt",
+      "building_6416.txt",
+      "building_6417.txt",
+      "building_6418.txt",
+      "building_6419.txt",
+      "building_6420.txt",
+      "building_6421.txt",
+      "building_6422.txt",
+      "building_6423.txt",
+      "building_6424.txt",
+      "building_6425.txt",
+      "building_6426.txt",
+      "building_6428.txt",
+      "building_6429.txt",
+      "building_6431.txt",
+      "building_6432.txt",
+      "building_6433.txt",
+      "building_6434.txt",
+      "building_6436.txt",
+      "building_6437.txt",
+      "building_6438.txt",
+      "building_6439.txt",
+      "building_6440.txt",
+      "building_6441.txt",
+      "building_6442.txt",
+      "building_6443.txt",
+      "building_6444.txt",
+      "building_6445.txt"
+     ],
+     "role": "data"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "description": "every building's electricity import (ElImp, 45 meters) and district-heat import (HtDH, 3 meters), each with its own outdoor temperature, all years",
+     "files": "all",
+     "runs": [
+      "b6396_ElImp",
+      "b6397_ElImp",
+      "b6398_ElImp",
+      "b6399_ElImp",
+      "b6400_ElImp",
+      "b6402_ElImp",
+      "b6404_HtDH",
+      "b6404_ElImp",
+      "b6405_ElImp",
+      "b6406_ElImp",
+      "b6407_ElImp",
+      "b6408_ElImp",
+      "b6409_ElImp",
+      "b6410_ElImp",
+      "b6411_ElImp",
+      "b6412_ElImp",
+      "b6413_ElImp",
+      "b6414_ElImp",
+      "b6415_ElImp",
+      "b6416_ElImp",
+      "b6417_ElImp",
+      "b6418_ElImp",
+      "b6419_ElImp",
+      "b6420_ElImp",
+      "b6421_ElImp",
+      "b6422_ElImp",
+      "b6423_ElImp",
+      "b6424_ElImp",
+      "b6425_ElImp",
+      "b6426_ElImp",
+      "b6428_ElImp",
+      "b6429_ElImp",
+      "b6429_HtDH",
+      "b6431_ElImp",
+      "b6432_ElImp",
+      "b6433_ElImp",
+      "b6434_ElImp",
+      "b6436_ElImp",
+      "b6436_HtDH",
+      "b6437_ElImp",
+      "b6438_ElImp",
+      "b6439_ElImp",
+      "b6440_ElImp",
+      "b6441_ElImp",
+      "b6442_ElImp",
+      "b6443_ElImp",
+      "b6444_ElImp",
+      "b6445_ElImp"
+     ],
+     "store_bytes_estimate": 39105371
+    },
+    "full": {
+     "description": "adds every electricity and heat sub-meter and the PV production meters (111 meters in all)",
+     "files": "all",
+     "runs": "all",
+     "store_bytes_estimate": 86830673
+    }
+   },
+   "ingest": {
+    "adapter": "wide_csv",
+    "facility": "ds-cofactor-drammen",
+    "timestamp": "TimeStamp",
+    "timestamp_format": "%Y-%m-%dT%H:%M:%S%z",
+    "sep": ";",
+    "header_marker": "TimeStamp",
+    "source_timezone": "offset",
+    "local_timezone": "Europe/Oslo",
+    "resample": "1h",
+    "units": {
+     "oat": "degC",
+     "power": "W",
+     "energy_rate": "W"
+    },
+    "quirks": [
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "HtHP"
+      ],
+      "before": "2019-05-09 03:00",
+      "runs": [
+       "b6412_HtHP"
+      ],
+      "note": "building_6412 HtHP before 2019-05-09 03:00 UTC (04:00 +01:00) is 100x the building's total heat (median ratio 100.0); masked, not rescaled.",
+      "issue": "b6412-heat-pump-heat-100x"
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "HtTot",
+       "HtHP"
+      ],
+      "gt": 100000000,
+      "runs": [
+       "b6412_HtTot",
+       "b6412_HtHP"
+      ],
+      "note": "building_6412 HtTot (3 h, 1.85e9 Wh) and HtHP (1 h, 5.3e9 Wh) register-sized spikes above 1e8 Wh masked.",
+      "issue": "b6412-heat-register-spikes"
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "HtDHW"
+      ],
+      "gt": 10000000,
+      "runs": [
+       "b6412_HtDHW"
+      ],
+      "note": "building_6412 HtDHW spike of 11,466,010 Wh (2018-07-03) above 1e7 Wh masked.",
+      "issue": "b6412-heat-register-spikes"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "b*_ElImp"
+      ],
+      "note": "Spring 2020 COVID-19 closures: school and kindergarten weekday daytime import falls to about 0.5x and 0.6x of 2019; a non-routine period, left in place.",
+      "issue": "covid-19-closures-2020"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "b*_ElImp",
+       "b*_Ht*"
+      ],
+      "note": "Hourly readings are quantised to 1 kWh (ElImp in 42 buildings) or 10 kWh (several heat meters); use daily or longer aggregates.",
+      "issue": "meter-resolution-quantised"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "b6413_*"
+      ],
+      "note": "building_6413: every meter is empty from 2020-03-01 to the end of the file (16,104 h).",
+      "issue": "b6413-meters-stop-2020-03"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "b6420_*"
+      ],
+      "note": "building_6420: ElImp equals ElBoil in 10,987 hours, nearly every summer hour; the summer ElBoil values are not a boiler load.",
+      "issue": "b6420-import-equals-boiler-in-summer"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "b6428_ElImp"
+      ],
+      "note": "building_6428: ElImp is 0-1 kWh in most hours of July-November 2020 (2,486 zero hours); undocumented, left in place.",
+      "issue": "b6428-near-zero-import-2020"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "b6417_ElHWH"
+      ],
+      "note": "building_6417: ElHWH reads 0 for 20,655 consecutive hours from 2019-10-16; a dead meter, not a stopped heater.",
+      "issue": "b6417-hot-water-heater-meter-zero"
+     }
+    ],
+    "runs": [
+     {
+      "id": "b6396_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6396.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6396",
+      "equip_id": "b6396_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6397_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6397.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6397",
+      "equip_id": "b6397_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6397_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6397.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6397",
+      "equip_id": "b6397_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6397_ElHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6397.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHP"
+      },
+      "equip": "b6397",
+      "equip_id": "b6397_ElHP",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6397_ElPV",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6397.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElPV"
+      },
+      "equip": "b6397",
+      "equip_id": "b6397_ElPV",
+      "class": "PV_METER",
+      "label": ""
+     },
+     {
+      "id": "b6398_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6398.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6398",
+      "equip_id": "b6398_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6399_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6399.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6399",
+      "equip_id": "b6399_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6399_ElHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6399.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHP"
+      },
+      "equip": "b6399",
+      "equip_id": "b6399_ElHP",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6400_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6400.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6400",
+      "equip_id": "b6400_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6400_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6400.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6400",
+      "equip_id": "b6400_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6400_HtOil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6400.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtOil"
+      },
+      "equip": "b6400",
+      "equip_id": "b6400_HtOil",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6402_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6402.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6402",
+      "equip_id": "b6402_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6404_HtDH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6404.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDH"
+      },
+      "equip": "b6404",
+      "equip_id": "b6404_HtDH",
+      "class": "DISTRICT_HEAT_METER",
+      "label": ""
+     },
+     {
+      "id": "b6404_HtOil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6404.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtOil"
+      },
+      "equip": "b6404",
+      "equip_id": "b6404_HtOil",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6404_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6404.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6404",
+      "equip_id": "b6404_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6405_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6405.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6405",
+      "equip_id": "b6405_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6406_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6406.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6406",
+      "equip_id": "b6406_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6407_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6407.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6407",
+      "equip_id": "b6407_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6408_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6408.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6408",
+      "equip_id": "b6408_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6408_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6408.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6408",
+      "equip_id": "b6408_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6409_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6409.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6409",
+      "equip_id": "b6409_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6409_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6409.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6409",
+      "equip_id": "b6409_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6409_HtTot",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6409.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtTot"
+      },
+      "equip": "b6409",
+      "equip_id": "b6409_HtTot",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6409_HtHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6409.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtHP"
+      },
+      "equip": "b6409",
+      "equip_id": "b6409_HtHP",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6409_ElHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6409.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHP"
+      },
+      "equip": "b6409",
+      "equip_id": "b6409_ElHP",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6410_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6410.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6410",
+      "equip_id": "b6410_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6410_ElDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6410.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElDHW"
+      },
+      "equip": "b6410",
+      "equip_id": "b6410_ElDHW",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6410_HtDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6410.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDHW"
+      },
+      "equip": "b6410",
+      "equip_id": "b6410_HtDHW",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6411_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6411.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6411",
+      "equip_id": "b6411_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_HtTot",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtTot"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_HtTot",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_HtHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtHP"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_HtHP",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_ElHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHP"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_ElHP",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_ElHWH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHWH"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_ElHWH",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6412_HtDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6412.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDHW"
+      },
+      "equip": "b6412",
+      "equip_id": "b6412_HtDHW",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtPool",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtPool"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtPool",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElVentPool",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElVentPool"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElVentPool",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElLight",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElLight"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElLight",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElEV",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElEV"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElEV",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtSnow",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtSnow"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtSnow",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElLightOut",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElLightOut"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElLightOut",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtRoom",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtRoom"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtRoom",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtHP"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtHP",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHP"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElHP",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtSC",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtSC"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtSC",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElPump",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElPump"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElPump",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDHW"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtDHW",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElHWH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHWH"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElHWH",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_ElFan",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElFan"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_ElFan",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6413_HtVent",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6413.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtVent"
+      },
+      "equip": "b6413",
+      "equip_id": "b6413_HtVent",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6414_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6414.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6414",
+      "equip_id": "b6414_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6414_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6414.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6414",
+      "equip_id": "b6414_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6415_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6415.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6415",
+      "equip_id": "b6415_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6416_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6416.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6416",
+      "equip_id": "b6416_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6416_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6416.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6416",
+      "equip_id": "b6416_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6417_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6417.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6417",
+      "equip_id": "b6417_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6417_ElHWH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6417.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHWH"
+      },
+      "equip": "b6417",
+      "equip_id": "b6417_ElHWH",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6417_HtDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6417.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDHW"
+      },
+      "equip": "b6417",
+      "equip_id": "b6417_HtDHW",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6418_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6418.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6418",
+      "equip_id": "b6418_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6419_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6419.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6419",
+      "equip_id": "b6419_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6420_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6420.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6420",
+      "equip_id": "b6420_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6420_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6420.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6420",
+      "equip_id": "b6420_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6421_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6421.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6421",
+      "equip_id": "b6421_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6421_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6421.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6421",
+      "equip_id": "b6421_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6421_HtHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6421.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtHP"
+      },
+      "equip": "b6421",
+      "equip_id": "b6421_HtHP",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6422_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6422.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6422",
+      "equip_id": "b6422_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6423_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6423.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6423",
+      "equip_id": "b6423_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6424_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6424.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6424",
+      "equip_id": "b6424_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6425_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6425.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6425",
+      "equip_id": "b6425_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6426_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6426.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6426",
+      "equip_id": "b6426_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6428_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6428.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6428",
+      "equip_id": "b6428_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6429_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6429.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6429",
+      "equip_id": "b6429_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6429_HtDH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6429.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDH"
+      },
+      "equip": "b6429",
+      "equip_id": "b6429_HtDH",
+      "class": "DISTRICT_HEAT_METER",
+      "label": ""
+     },
+     {
+      "id": "b6429_HtTot",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6429.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtTot"
+      },
+      "equip": "b6429",
+      "equip_id": "b6429_HtTot",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6431_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6431.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6431",
+      "equip_id": "b6431_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6431_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6431.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6431",
+      "equip_id": "b6431_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6431_HtOil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6431.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtOil"
+      },
+      "equip": "b6431",
+      "equip_id": "b6431_HtOil",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6432_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6432.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6432",
+      "equip_id": "b6432_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6432_HtSpace",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6432.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtSpace"
+      },
+      "equip": "b6432",
+      "equip_id": "b6432_HtSpace",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6432_HtHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6432.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtHP"
+      },
+      "equip": "b6432",
+      "equip_id": "b6432_HtHP",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6432_HtSC",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6432.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtSC"
+      },
+      "equip": "b6432",
+      "equip_id": "b6432_HtSC",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6433_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6433.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6433",
+      "equip_id": "b6433_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6434_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6434.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6434",
+      "equip_id": "b6434_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6436_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6436.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6436",
+      "equip_id": "b6436_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6436_HtDH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6436.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDH"
+      },
+      "equip": "b6436",
+      "equip_id": "b6436_HtDH",
+      "class": "DISTRICT_HEAT_METER",
+      "label": ""
+     },
+     {
+      "id": "b6436_HtTot",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6436.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtTot"
+      },
+      "equip": "b6436",
+      "equip_id": "b6436_HtTot",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6436_ElDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6436.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElDHW"
+      },
+      "equip": "b6436",
+      "equip_id": "b6436_ElDHW",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6436_HtDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6436.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDHW"
+      },
+      "equip": "b6436",
+      "equip_id": "b6436_HtDHW",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6437_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6437.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6437",
+      "equip_id": "b6437_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6438_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6438.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6438",
+      "equip_id": "b6438_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6438_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6438.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6438",
+      "equip_id": "b6438_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6438_ElHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6438.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHP"
+      },
+      "equip": "b6438",
+      "equip_id": "b6438_ElHP",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6439_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6439.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6439",
+      "equip_id": "b6439_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6440_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6440.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6440",
+      "equip_id": "b6440_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6441_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6441.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6441",
+      "equip_id": "b6441_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_ElSnow",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElSnow"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_ElSnow",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_HtTot",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtTot"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_HtTot",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_HtOil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtOil"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_HtOil",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_HtHP",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtHP"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_HtHP",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_ElHWH",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElHWH"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_ElHWH",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6442_HtDHW",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6442.txt",
+      "mapping": "cofactor_drammen_heat.json",
+      "vars": {
+       "m": "HtDHW"
+      },
+      "equip": "b6442",
+      "equip_id": "b6442_HtDHW",
+      "class": "HEAT_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6443_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6443.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6443",
+      "equip_id": "b6443_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6444_ElBoil",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6444.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElBoil"
+      },
+      "equip": "b6444",
+      "equip_id": "b6444_ElBoil",
+      "class": "ELECTRICITY_SUB_METER",
+      "label": ""
+     },
+     {
+      "id": "b6444_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6444.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6444",
+      "equip_id": "b6444_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6445_ElImp",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6445.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElImp"
+      },
+      "equip": "b6445",
+      "equip_id": "b6445_ElImp",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "b6445_ElPV",
+      "file": "Cofactor_Drammen_Buildings_45_v3.zip",
+      "member": "building_6445.txt",
+      "mapping": "cofactor_drammen_power.json",
+      "vars": {
+       "m": "ElPV"
+      },
+      "equip": "b6445",
+      "equip_id": "b6445_ElPV",
+      "class": "PV_METER",
+      "label": ""
+     }
+    ],
+    "derived": []
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "cofactor-drammen.json"
+   },
+   "known_issues": [
+    "Licence is CC-BY-4.0 (the Zenodo record): analysis and commercial use are fine with attribution to the data descriptor.",
+    "Readings are Wh per hour; they are stored as the hourly-mean rate in kW (Wh per hour / 1000), electricity under 'power' and heat under 'energy_rate', so an hourly value in kW equals the published kWh for that hour.",
+    "Each building file is read past its key;value metadata block and three unit/description rows (header_marker 'TimeStamp', sep ';'). The block's floor area, year, category and heating sources agree with Table 1 for all 45 buildings, but they are not stored: normalise by floor area from the descriptor.",
+    "ElImp is grid import, not consumption: from 2021 at 6397 and from 2020-09-07 at 6445 on-site PV (ElPV) covers part of the load. ElPV at 6397 reads 0, not empty, before the 2021 installation.",
+    "Weather is MET Nordic at each building's post code: 20 distinct outdoor-temperature series across the 45 buildings, differing by 2.3 degC at the median hour. SolGlob and wind are empty in 6,694-6,763 hours per file (autumn 2018 to spring 2019, including a 1,287-hour block from 2019-02-24); Tout is empty in 55-120 hours.",
+    "Seventeen files end on 2021-12-31 23:00; the other 28 run on to between 2022-02-23 and 2022-03-18 and stop mid-day, and ElImp's last day is usually empty.",
+    "HtTot equals HtDH exactly at 6429 and 6436 (district heat is the only heat source), so their heat is stored twice (as DISTRICT_HEAT_METER and HEAT_SUB_METER).",
+    "Metadata notes record non-routine changes that an M&V period should respect: new ventilation with heat recovery in 2019 (6405, 6415, 6417, 6418, 6434, 6436), new buildings after 2018 (6416, 6431), changed use and electric boiler after 2018 (6412), heat-pump meter errors (6424, 6442), and closures in 2022 (6422, 6423, 6426).",
+    "Sub-meters have gaps of their own (e.g. 6397 ElHP is 62% complete, 6410 ElDHW starts 2018-10-08); per the descriptor, heat sub-meters are of varying reliability and may overlap."
+   ],
+   "data_issues": [
+    {
+     "id": "timestamps-fixed-utc-plus-1",
+     "title": "Timestamps are a fixed UTC+1 clock; the buildings run on Oslo summer time",
+     "columns": [
+      "TimeStamp (every building file)"
+     ],
+     "evidence": "All 1,628,777 rows in the 45 files carry the offset +0100 and every file is one unbroken hourly grid: no missing or repeated hour at any of the eight daylight-saving switches 2018-2021. The weekday morning rise of ElImp (the hour its mean profile crosses halfway between night and day) comes 0.98 h earlier in summer-time weeks (April, September-October) than in standard-time weeks (March, October-November): median of 44 buildings, 41 of them earlier by at least 0.5 h. The global-radiation (SolGlob) daily centroid stays at 11.8-12.0 h in both seasons. So the stamps are true UTC+1 instants, never shifted for summer time, while occupancy follows Europe/Oslo clock time.",
+     "contradicts": {
+      "document": "Data descriptor Table 4 describes TimeStamp as 'Time stamp in local UTC time'. The Data Records section gives the zone as Etc/Gmt-1 (UTC+1) with Europe/Oslo as the actual local zone, which the data bear out.",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "none",
+     "handling_note": "Not a correction of values: the ingest parses each stamp as an instant (source_timezone 'offset') and stores Europe/Oslo wall-clock time (local_timezone), so schedules and time-of-day analyses line up with building operation. The spring-forward hour is a gap. The autumn fall-back hour holds two readings, which the hourly resample averages, so that day's energy is one hour short. Quirk timestamps below are UTC."
+    },
+    {
+     "id": "covid-19-closures-2020",
+     "title": "The spring 2020 COVID-19 school and kindergarten closures are in the data, undocumented",
+     "columns": [
+      "ElImp (schools and kindergartens, from 2020-03-12)"
+     ],
+     "evidence": "Mean weekday 08-15 h ElImp in 16 March-3 April 2020 compared with 18 March-5 April 2019, at a similar outdoor temperature (5.0-6.7 vs 5.0-6.0 degC): schools 0.49x the 2019 load (median of 14 buildings, range 0.35-1.03), kindergartens 0.63x (20 buildings, 0.32-0.92), nursing homes 0.98x (7 buildings, 0.87-1.06), offices 0.69x and 0.99x. Norway closed schools and kindergartens from 12 March 2020 and reopened them in stages from 20 April to 11 May 2020.",
+     "contradicts": {
+      "document": "Data descriptor, Background & Summary: presents the four years as continuous measurement 'capturing the effects of the weather and user behaviour'. The descriptor never mentions the 2020 pandemic closures.",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: a documented non-routine period, not a meter fault. The config template's M&V baseline (2018) avoids it. A reporting period that includes spring 2020, or the later 2020-2021 restrictions, needs a non-routine adjustment before any saving is claimed."
+    },
+    {
+     "id": "meter-resolution-quantised",
+     "title": "Hourly readings are quantised to 1 kWh (electricity) and 10 kWh (several heat meters)",
+     "columns": [
+      "ElImp (42 of 45 buildings)",
+      "HtDH (6404, 6436)",
+      "HtTot (6412, 6436, 6442)",
+      "HtHP (6413, 6421, 6432, 6442)",
+      "HtSpace (6432)",
+      "heat meters of 6413"
+     ],
+     "evidence": "In 42 of the 45 buildings every ElImp reading is a whole number of kWh (a multiple of 1,000 Wh). For the 20 kindergartens, whose median hourly import is 11 kWh (3 kWh at the smallest), one step is 5-33% of a typical hour. 88.5-99.6% of the non-zero hours of the heat meters listed are multiples of 10,000 Wh, e.g. 6432 HtSpace (median 20 kWh/h) and 6442 HtTot and HtHP (20-30 kWh/h).",
+     "contradicts": {
+      "document": "Data descriptor, Table 6: the AMS main meters are 'assumed to have high accuracy and high metering resolution'; Methods: hourly resolution.",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. The hourly values of these meters step in whole register units, which is noise at hourly scale. Daily and longer aggregates, which the M&V template uses, are unaffected."
+    },
+    {
+     "id": "submeters-exceed-import",
+     "title": "Electricity sub-meters exceed the total import in some hours",
+     "columns": [
+      "ElImp",
+      "ElBoil",
+      "ElHP",
+      "sub-meters of 6413"
+     ],
+     "evidence": "ElImp (+ ElPV) minus the building's electricity sub-meters is negative in 1,024 hours at 6409 (down to -18 kWh), 297 at 6413 (-68 kWh), 234 at 6397 (-28 kWh), 24 at 6438 (-67 kWh), 12 at 6421 and 4 at 6399. The descriptor's Supplementary Table 1 lists the same negative 'ElRest' hours (1,024, 339, 234, 24, 12 and 4, plus 1 at 6412, with its own treatment of missing hours).",
+     "contradicts": {
+      "document": "Data descriptor, Tables 4 and 6: ElImp is the building's total imported electricity, and an electric boiler's own AMS meter is summed into it.",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "none",
+     "handling_note": "Described only: the descriptor flags the same hours. Nothing is changed. A disaggregation or balance check should drop those hours."
+    },
+    {
+     "id": "b6412-heat-pump-heat-100x",
+     "title": "One nursing home's heat-pump heat is 100x too large until May 2019",
+     "columns": [
+      "HtHP (building_6412)"
+     ],
+     "evidence": "Until 2019-05-09 03:00 (+01:00) HtHP is a median 100.0x the building's total heat HtTot (interquartile 93-108x, 11,171 hours), e.g. 7,000,000 Wh against 60,000-70,000 Wh on the morning of the change. Divided by the heat pump's electricity ElHP that implies a COP of 251. From 04:00 on the ratio is 1.00x and the COP is 2.5. The descriptor's Supplementary Table 1 sums the column to 90 GWh as a result.",
+     "contradicts": {
+      "document": "Data descriptor, Methods (Cleaning of the energy time series): every meter was converted to the standard unit (Wh, Table 4)",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "fix",
+     "handling_note": "The scaled period is masked (NaN), not rescaled: the factor of 100 is inferred, not documented. --no-corrections keeps the published values."
+    },
+    {
+     "id": "b6412-heat-register-spikes",
+     "title": "Register-sized spikes in one nursing home's heat meters",
+     "columns": [
+      "HtTot (building_6412)",
+      "HtHP (building_6412)",
+      "HtDHW (building_6412)"
+     ],
+     "evidence": "HtTot reads 1,850,530,000 Wh in three hours (2021-12-15 17-19 h), HtHP 5,323,830,000 Wh in one hour (2021-12-08 11 h) and HtDHW 11,466,010 Wh in one hour (2018-07-03 03 h). Outside these hours the maxima are 230,000 Wh (HtTot), 229,690 Wh (HtHP after May 2019) and 39,840 Wh (HtDHW): factors of about 290-23,000.",
+     "contradicts": {
+      "document": "Data descriptor, Methods (Cleaning of the energy time series): values above a per-meter outlier threshold were removed",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "fix",
+     "handling_note": "The five values are masked (HtTot and HtHP above 1e8 Wh, HtDHW above 1e7 Wh). --no-corrections keeps them."
+    },
+    {
+     "id": "b6413-meters-stop-2020-03",
+     "title": "One school's meters all stop at the end of February 2020",
+     "columns": [
+      "every meter of building_6413 (ElImp and 16 sub-meters)"
+     ],
+     "evidence": "All 17 energy columns of building_6413, ElImp included, are empty from 2020-03-01 00:00 to the file's last row, 2021-12-31 23:00: 16,104 hours, 46% of the file. ElLight has already stopped on 2019-10-11. The timestamps and weather continue.",
+     "contradicts": {
+      "document": "Data descriptor, Usage Notes: 'All buildings have main meter data (ElImp) which is considered to be of high quality for the majority of the time series duration, with few missing data points'; Methods: series from 01.01.2018 to 31.12.21 / 18.03.22",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: the building has 26 months of data (2018-01 to 2020-02). The 2018 M&V baseline is complete; any later period for this building has no data."
+    },
+    {
+     "id": "b6420-import-equals-boiler-in-summer",
+     "title": "One school's total import equals its boiler meter every summer",
+     "columns": [
+      "ElImp (building_6420)",
+      "ElBoil (building_6420)"
+     ],
+     "evidence": "ElImp equals ElBoil exactly in 10,987 hours: 99-100% of the hours of June-September 2018 and 2021, June-August 2020 and August 2019 (92% of July 2019). In those months ElBoil carries the school's daytime load shape, e.g. 8-17 kWh on 2018-07-02, peaking at 09-10 h. The non-boiler load of a 6,290 m2 school would then be zero.",
+     "contradicts": {
+      "document": "Data descriptor, Table 6: ElBoil is the electric boiler's own AMS meter, summed with the building's other AMS meters into ElImp",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. ElImp is plausible as the building's total. The summer ElBoil values are not a boiler load, so boiler-disaggregation work should drop those months."
+    },
+    {
+     "id": "b6428-near-zero-import-2020",
+     "title": "One kindergarten's import is near zero from July to November 2020",
+     "columns": [
+      "ElImp (building_6428)"
+     ],
+     "evidence": "After a 360-hour gap from 2020-03-21, ElImp is 0 in 2,486 hours of 2020 (July 605, August 543, September 568, October 452, November 291), and 1 kWh in most of the rest. Monthly imports of 143-204 kWh in August-October 2020 compare with 1,712-5,262 kWh in the same months of 2019. The metadata notes give no closure or renovation.",
+     "contradicts": {
+      "document": "Data descriptor, Cleaning of the energy time series (repeating zero values removed) and Usage Notes (ElImp of high quality)",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published: it may be a vacancy or a meter fault; neither is documented. The 2018 M&V baseline is unaffected. Treat mid-2020 as non-routine for this building."
+    },
+    {
+     "id": "b6417-hot-water-heater-meter-zero",
+     "title": "One nursing home's hot-water-heater meter reads zero for 28 months",
+     "columns": [
+      "ElHWH (building_6417)"
+     ],
+     "evidence": "ElHWH is exactly 0 for 20,655 consecutive hours, from 2019-10-16 15:00 to the file's end on 2022-02-23. Before, it averages 4.5 kWh/h. The building's DHW heat meter HtDHW keeps reading (median 3.7 kWh/h over the same period).",
+     "contradicts": {
+      "document": "Data descriptor, Cleaning of the energy time series: repeating zero values were removed",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. Treat ElHWH after 2019-10-16 as missing, not as a heater that stopped."
+    },
+    {
+     "id": "solar-radiation-above-solar-constant",
+     "title": "Global radiation exceeds the solar constant at two buildings in March 2022",
+     "columns": [
+      "SolGlob (building_6411, building_6441)"
+     ],
+     "evidence": "SolGlob reaches 2,653 W/m2 (6411) and 2,689 W/m2 (6441) between 2022-03-14 and 2022-03-18. That is 21 and 22 hours above 1,100 W/m2, 10 and 14 of them above the 1,361 W/m2 solar constant. Every file also holds 386-446 hours of slightly negative SolGlob (down to -0.11 W/m2).",
+     "contradicts": {
+      "document": "Data descriptor, Table 5: SolGlob is MET Nordic global horizontal radiation (W/m2)",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "none",
+     "handling_note": "Not ingested: CAMBER has no irradiance role, and only Tout is stored."
+    },
+    {
+     "id": "b6397-pv-metadata-mangled",
+     "title": "One school's PV metadata field reads as a clock time",
+     "columns": [
+      "pv (header block of building_6397)"
+     ],
+     "evidence": "The pv field of building_6397 is '238:46:00', a spreadsheet time value. Table 2's format is location:kWp:kW (e.g. 'Roof:3:3'), so a size of about 238 kWp with a 46 kW inverter was probably intended; the building's ElPV peaks at 32.75 kWh/h.",
+     "contradicts": {
+      "document": "Data descriptor, Table 2 (pv: 'Location, size (kWp) and inverter capacity (kW)')",
+      "citation": "Lien, Walnum & S\u00f8rensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3"
+     },
+     "handling": "none",
+     "handling_note": "Metadata only; CAMBER does not ingest the header block."
+    }
+   ]
   }
  ]
 }

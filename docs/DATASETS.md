@@ -63,6 +63,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `ornl-frp-vav` | one RTU + 10 VAV boxes, 31 one-day tests | real | yes | CC-BY-4.0 | one damper test set (7 days) |
 | `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 (**research-only**: see [Licences](#licences)) | 8 runs |
 | `at-30bldg-sensors` | 1,832 raw sensors, 30 buildings, 23 months | real | no | CC-BY-NC-SA-4.0 (research-only) | 3 buildings |
+| `cofactor-drammen` | 45 Norwegian public buildings (schools, kindergartens, nursing homes, offices): hourly electricity import, sub-meters and district heat, 4 years | real | no | CC-BY-4.0 | every building's import meters (48 meters) |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -209,6 +210,10 @@ Measured datasets rarely come as one wide table per scenario. Each layout has on
   are in the publisher's clock. A DST fall-back's repeated hour keeps both readings (the resample
   averages them).
 - **Text encoding** -- `"encoding"` on the spec or a run (`"latin-1"`).
+- **A metadata preamble** -- `"header_marker"` names the first field of a text file's real header
+  line and every line above it is skipped, however long the block is in each file; `"sep"` sets
+  the delimiter (`cofactor-drammen`: a `key;value` building block, then unit and description rows,
+  then `TimeStamp;Tout;...`).
 - **Units** add `psia` (converted to psig, CAMBER's refrigerant-pressure unit), `psig` and `m3/min`.
 - **Days that are not consecutive** -- `"contiguous": false` (`robod` has no weekends, `sdu-ou44`
   shuffles its days) is recorded in the provenance; such an entry's template runs no drift,
@@ -1236,6 +1241,104 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** 7 PrVentRo sensors hold -39.6 to -39.9 Pa and one -99.7 Pa for the whole period (p99 - p01 under 0.05 Pa).
 - **Contradicts:** README class table (DiffPressure_Sensor_Ventilation_Room) (Hadwiger, Hirsch, Kadkhoda Masoumali & Schweiger 2026, dataset README and record description (Zenodo, doi:10.5281/zenodo.20065842); paper: BuildSys '26, doi:10.1145/3744256.3812577)
 - **Handling: none** -- described only. Described only: PrVentRo has no CAMBER role and is not ingested.
+
+### `cofactor-drammen`: COFACTOR Drammen (45 Norwegian public buildings, hourly energy)
+
+#### Timestamps are a fixed UTC+1 clock; the buildings run on Oslo summer time
+
+- **Issue:** `timestamps-fixed-utc-plus-1`
+- **Columns:** `TimeStamp (every building file)`
+- **Evidence:** All 1,628,777 rows in the 45 files carry the offset +0100 and every file is one unbroken hourly grid: no missing or repeated hour at any of the eight daylight-saving switches 2018-2021. The weekday morning rise of ElImp (the hour its mean profile crosses halfway between night and day) comes 0.98 h earlier in summer-time weeks (April, September-October) than in standard-time weeks (March, October-November): median of 44 buildings, 41 of them earlier by at least 0.5 h. The global-radiation (SolGlob) daily centroid stays at 11.8-12.0 h in both seasons. So the stamps are true UTC+1 instants, never shifted for summer time, while occupancy follows Europe/Oslo clock time.
+- **Contradicts:** Data descriptor Table 4 describes TimeStamp as 'Time stamp in local UTC time'. The Data Records section gives the zone as Etc/Gmt-1 (UTC+1) with Europe/Oslo as the actual local zone, which the data bear out. (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: none** -- described only. Not a correction of values: the ingest parses each stamp as an instant (source_timezone 'offset') and stores Europe/Oslo wall-clock time (local_timezone), so schedules and time-of-day analyses line up with building operation. The spring-forward hour is a gap. The autumn fall-back hour holds two readings, which the hourly resample averages, so that day's energy is one hour short. Quirk timestamps below are UTC.
+
+#### The spring 2020 COVID-19 school and kindergarten closures are in the data, undocumented
+
+- **Issue:** `covid-19-closures-2020`
+- **Columns:** `ElImp (schools and kindergartens, from 2020-03-12)`
+- **Evidence:** Mean weekday 08-15 h ElImp in 16 March-3 April 2020 compared with 18 March-5 April 2019, at a similar outdoor temperature (5.0-6.7 vs 5.0-6.0 degC): schools 0.49x the 2019 load (median of 14 buildings, range 0.35-1.03), kindergartens 0.63x (20 buildings, 0.32-0.92), nursing homes 0.98x (7 buildings, 0.87-1.06), offices 0.69x and 0.99x. Norway closed schools and kindergartens from 12 March 2020 and reopened them in stages from 20 April to 11 May 2020.
+- **Contradicts:** Data descriptor, Background & Summary: presents the four years as continuous measurement 'capturing the effects of the weather and user behaviour'. The descriptor never mentions the 2020 pandemic closures. (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: a documented non-routine period, not a meter fault. The config template's M&V baseline (2018) avoids it. A reporting period that includes spring 2020, or the later 2020-2021 restrictions, needs a non-routine adjustment before any saving is claimed.
+
+#### Hourly readings are quantised to 1 kWh (electricity) and 10 kWh (several heat meters)
+
+- **Issue:** `meter-resolution-quantised`
+- **Columns:** `ElImp (42 of 45 buildings)`, `HtDH (6404, 6436)`, `HtTot (6412, 6436, 6442)`, `HtHP (6413, 6421, 6432, 6442)`, `HtSpace (6432)`, `heat meters of 6413`
+- **Evidence:** In 42 of the 45 buildings every ElImp reading is a whole number of kWh (a multiple of 1,000 Wh). For the 20 kindergartens, whose median hourly import is 11 kWh (3 kWh at the smallest), one step is 5-33% of a typical hour. 88.5-99.6% of the non-zero hours of the heat meters listed are multiples of 10,000 Wh, e.g. 6432 HtSpace (median 20 kWh/h) and 6442 HtTot and HtHP (20-30 kWh/h).
+- **Contradicts:** Data descriptor, Table 6: the AMS main meters are 'assumed to have high accuracy and high metering resolution'; Methods: hourly resolution. (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. The hourly values of these meters step in whole register units, which is noise at hourly scale. Daily and longer aggregates, which the M&V template uses, are unaffected.
+
+#### Electricity sub-meters exceed the total import in some hours
+
+- **Issue:** `submeters-exceed-import`
+- **Columns:** `ElImp`, `ElBoil`, `ElHP`, `sub-meters of 6413`
+- **Evidence:** ElImp (+ ElPV) minus the building's electricity sub-meters is negative in 1,024 hours at 6409 (down to -18 kWh), 297 at 6413 (-68 kWh), 234 at 6397 (-28 kWh), 24 at 6438 (-67 kWh), 12 at 6421 and 4 at 6399. The descriptor's Supplementary Table 1 lists the same negative 'ElRest' hours (1,024, 339, 234, 24, 12 and 4, plus 1 at 6412, with its own treatment of missing hours).
+- **Contradicts:** Data descriptor, Tables 4 and 6: ElImp is the building's total imported electricity, and an electric boiler's own AMS meter is summed into it. (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: none** -- described only. Described only: the descriptor flags the same hours. Nothing is changed. A disaggregation or balance check should drop those hours.
+
+#### One nursing home's heat-pump heat is 100x too large until May 2019
+
+- **Issue:** `b6412-heat-pump-heat-100x`
+- **Columns:** `HtHP (building_6412)`
+- **Evidence:** Until 2019-05-09 03:00 (+01:00) HtHP is a median 100.0x the building's total heat HtTot (interquartile 93-108x, 11,171 hours), e.g. 7,000,000 Wh against 60,000-70,000 Wh on the morning of the change. Divided by the heat pump's electricity ElHP that implies a COP of 251. From 04:00 on the ratio is 1.00x and the COP is 2.5. The descriptor's Supplementary Table 1 sums the column to 90 GWh as a result.
+- **Contradicts:** Data descriptor, Methods (Cleaning of the energy time series): every meter was converted to the standard unit (Wh, Table 4) (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). The scaled period is masked (NaN), not rescaled: the factor of 100 is inferred, not documented. --no-corrections keeps the published values.
+
+#### Register-sized spikes in one nursing home's heat meters
+
+- **Issue:** `b6412-heat-register-spikes`
+- **Columns:** `HtTot (building_6412)`, `HtHP (building_6412)`, `HtDHW (building_6412)`
+- **Evidence:** HtTot reads 1,850,530,000 Wh in three hours (2021-12-15 17-19 h), HtHP 5,323,830,000 Wh in one hour (2021-12-08 11 h) and HtDHW 11,466,010 Wh in one hour (2018-07-03 03 h). Outside these hours the maxima are 230,000 Wh (HtTot), 229,690 Wh (HtHP after May 2019) and 39,840 Wh (HtDHW): factors of about 290-23,000.
+- **Contradicts:** Data descriptor, Methods (Cleaning of the energy time series): values above a per-meter outlier threshold were removed (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). The five values are masked (HtTot and HtHP above 1e8 Wh, HtDHW above 1e7 Wh). --no-corrections keeps them.
+
+#### One school's meters all stop at the end of February 2020
+
+- **Issue:** `b6413-meters-stop-2020-03`
+- **Columns:** `every meter of building_6413 (ElImp and 16 sub-meters)`
+- **Evidence:** All 17 energy columns of building_6413, ElImp included, are empty from 2020-03-01 00:00 to the file's last row, 2021-12-31 23:00: 16,104 hours, 46% of the file. ElLight has already stopped on 2019-10-11. The timestamps and weather continue.
+- **Contradicts:** Data descriptor, Usage Notes: 'All buildings have main meter data (ElImp) which is considered to be of high quality for the majority of the time series duration, with few missing data points'; Methods: series from 01.01.2018 to 31.12.21 / 18.03.22 (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the building has 26 months of data (2018-01 to 2020-02). The 2018 M&V baseline is complete; any later period for this building has no data.
+
+#### One school's total import equals its boiler meter every summer
+
+- **Issue:** `b6420-import-equals-boiler-in-summer`
+- **Columns:** `ElImp (building_6420)`, `ElBoil (building_6420)`
+- **Evidence:** ElImp equals ElBoil exactly in 10,987 hours: 99-100% of the hours of June-September 2018 and 2021, June-August 2020 and August 2019 (92% of July 2019). In those months ElBoil carries the school's daytime load shape, e.g. 8-17 kWh on 2018-07-02, peaking at 09-10 h. The non-boiler load of a 6,290 m2 school would then be zero.
+- **Contradicts:** Data descriptor, Table 6: ElBoil is the electric boiler's own AMS meter, summed with the building's other AMS meters into ElImp (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. ElImp is plausible as the building's total. The summer ElBoil values are not a boiler load, so boiler-disaggregation work should drop those months.
+
+#### One kindergarten's import is near zero from July to November 2020
+
+- **Issue:** `b6428-near-zero-import-2020`
+- **Columns:** `ElImp (building_6428)`
+- **Evidence:** After a 360-hour gap from 2020-03-21, ElImp is 0 in 2,486 hours of 2020 (July 605, August 543, September 568, October 452, November 291), and 1 kWh in most of the rest. Monthly imports of 143-204 kWh in August-October 2020 compare with 1,712-5,262 kWh in the same months of 2019. The metadata notes give no closure or renovation.
+- **Contradicts:** Data descriptor, Cleaning of the energy time series (repeating zero values removed) and Usage Notes (ElImp of high quality) (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published: it may be a vacancy or a meter fault; neither is documented. The 2018 M&V baseline is unaffected. Treat mid-2020 as non-routine for this building.
+
+#### One nursing home's hot-water-heater meter reads zero for 28 months
+
+- **Issue:** `b6417-hot-water-heater-meter-zero`
+- **Columns:** `ElHWH (building_6417)`
+- **Evidence:** ElHWH is exactly 0 for 20,655 consecutive hours, from 2019-10-16 15:00 to the file's end on 2022-02-23. Before, it averages 4.5 kWh/h. The building's DHW heat meter HtDHW keeps reading (median 3.7 kWh/h over the same period).
+- **Contradicts:** Data descriptor, Cleaning of the energy time series: repeating zero values were removed (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. Treat ElHWH after 2019-10-16 as missing, not as a heater that stopped.
+
+#### Global radiation exceeds the solar constant at two buildings in March 2022
+
+- **Issue:** `solar-radiation-above-solar-constant`
+- **Columns:** `SolGlob (building_6411, building_6441)`
+- **Evidence:** SolGlob reaches 2,653 W/m2 (6411) and 2,689 W/m2 (6441) between 2022-03-14 and 2022-03-18. That is 21 and 22 hours above 1,100 W/m2, 10 and 14 of them above the 1,361 W/m2 solar constant. Every file also holds 386-446 hours of slightly negative SolGlob (down to -0.11 W/m2).
+- **Contradicts:** Data descriptor, Table 5: SolGlob is MET Nordic global horizontal radiation (W/m2) (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: none** -- described only. Not ingested: CAMBER has no irradiance role, and only Tout is stored.
+
+#### One school's PV metadata field reads as a clock time
+
+- **Issue:** `b6397-pv-metadata-mangled`
+- **Columns:** `pv (header block of building_6397)`
+- **Evidence:** The pv field of building_6397 is '238:46:00', a spreadsheet time value. Table 2's format is location:kWp:kW (e.g. 'Roof:3:3'), so a size of about 238 kWp with a 46 kW inverter was probably intended; the building's ElPV peaks at 32.75 kWh/h.
+- **Contradicts:** Data descriptor, Table 2 (pv: 'Location, size (kWp) and inverter capacity (kW)') (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
+- **Handling: none** -- described only. Metadata only; CAMBER does not ingest the header block.
 
 <!-- END data-issues -->
 

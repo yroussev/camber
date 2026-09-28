@@ -1,0 +1,7 @@
+{
+  "_comment": "COFACTOR Drammen electricity meters -> CAMBER Role mapping: each run fills {m} with one meter column of one building file (ElImp, the grid import; ElPV, PV production; or an electricity sub-meter such as ElBoil, ElHP, ElHWH) and stores it with the building's own outdoor temperature (Tout, degC, MET Nordic at the building's post code) as one equipment. Readings are Wh per hour; the entry's units ('power': 'W') store them as the hourly-mean rate in kW (Wh per hour / 1000). Dataset: Lien, Walnum & Sorensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3.",
+  "aliases": {
+    "{m}": "power",
+    "Tout": "oat"
+  }
+}
