@@ -40,7 +40,7 @@ __all__ = [
     "economizer_active_mask",
     "DEFAULT_DCV_ENGAGE_PPM",
     "DEFAULT_ECON_HIGH_LIMIT_F",
-    # 092-air (#17, 0.92): system-level Ventilation Rate Procedure
+    # 0.92 (#17): system-level Ventilation Rate Procedure
     "DEFAULT_EZ_COOLING",
     "DEFAULT_EZ_HEATING",
     "VentZone",
@@ -561,7 +561,7 @@ def assess_dcv(
     return _result("functioning" if ok else "uncorrelated", **common)
 
 
-# ============================================================================ 092-air (#17)
+# ============================================================================ 0.92 (#17)
 # System-level Ventilation Rate Procedure (0.92). A multiple-zone recirculating system (one air
 # handler serving several zones) must bring in Vot = Vou / Ev, not one zone's Voz.
 #
@@ -1157,6 +1157,3 @@ def load_vent_zones(spec, *, base_dir: str = ".") -> list:
             raise ValueError(f"ventilation zone {z.zone!r} is listed twice")
         seen.add(z.zone)
     return out
-
-
-# -- /092-air (#17)

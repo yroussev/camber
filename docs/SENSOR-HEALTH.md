@@ -26,7 +26,6 @@ range and outlier reads are unchanged, and an OAT or space temperature is never 
 [RCx report](RCX-REPORT.md) shows both reads. `schedules.fan_on_mask(frame)` picks the gate: fan
 status, else fan speed, else airflow, else "ungated — no fan signal".
 
-<!-- 092-plant -->
 **Plant run gate (0.92, #66; provisional).** A chiller that is off lets its chilled-water supply
 drift to the plant-room temperature and hold there for days; a boiler that is off lets its loop
 cool. Read ungated, that is a `stuck` or `out_of_range` sensor, and the RCx report made every plant
@@ -52,7 +51,6 @@ enable (a boiler on through a mild month with the loop cold) splits them in two,
 off throughout. The runner's trust gate (`untrusted_roles`) and the RCx report apply the plant gate;
 `frame_sensor_health` keeps `plant_gate=None` as its default. `SensorTrust.run_gate` names the gate
 a point was judged on.
-<!-- /092-plant -->
 
 **Outliers are read shape-aware.** The plain robust test (median / MAD modified z-score) assumes
 one tight population. On a healthy plant that assumption fails two ways:
@@ -120,7 +118,6 @@ not logged) and is "suspect"; on a coarser grid those fractions are the duty res
   the same time for 12 h or more: a forward-filled collection outage. Any other point that held
   still through the same intervals is marked too.
 
-<!-- 092-air (#16) -->
 Since 0.92 (#16) two cross-sensor checks below feed trust as well:
 
 - `copied_signal` -- a measured point carries another measured point's data
@@ -153,7 +150,6 @@ actionable issues from the per-unit rules on the four units, 3 become conditiona
 economizer high-limit finding (on the copied return air) and RTU01/RTU02's SAT-reset compliance
 (on OAT, which the failing balance also names). On 2020 alone the copy covers the whole window, so
 both points are flagged "undetermined".
-<!-- /092-air -->
 
 ## Cross-sensor and provenance checks
 

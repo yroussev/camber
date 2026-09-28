@@ -6,42 +6,13 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
-<!-- 092-bench -->
-### Changed (benchmarks, #11 #12)
-- **Chiller-plant benchmark lists are explicit (#11).** The chiller-fouling runs have been
-  `chiller_efficiency` targets since 0.86. The chiller, tower and secondary-DP sensor-bias runs
-  are now *listed* as negatives for both plant rules, and the chiller-fouling and bypass runs as
-  cross-negatives for `cooling_tower_approach`. A run on no list is excluded and printed instead of
-  counting as a negative by default. No count moved: `chiller_efficiency` TPR 6/11, FPR 2/13;
-  `cooling_tower_approach` TPR 0/3, FPR 0/14 with 7 declined.
-- **The `lbnl-chiller` catalog entry declares its scored targets**, so `camber datasets score
-  lbnl-chiller` reproduces the benchmark's `chiller_efficiency` 6/11 and 2/13 from the store.
-- **Sensor bias vs physical fault on the chiller plant (#11, new, opt-in, ungated).**
-  `compare_to_reference` compares chiller 1's leaving water with the primary supply (chiller 1
-  running alone) and tower 1's leaving water with the condenser supply (tower 1 alone, bypass
-  commanded shut). At the default 2.0 °F threshold both pairs score TPR 2/4. The chiller pair has
-  FPR 0/20. The tower pair has FPR 5/20: on the five bypass-valve runs the valve ignores its
-  command. New keys `chiller.sensor.*`.
-- **VAV drift target lists revised, and series fan-powered boxes scored (#12).** The lists now
-  follow each rule's one-sided physics. Stuck dampers at 0 / 20 % are excluded from airflow drift.
-  Reheat targets the valve stuck at 0 / 20 % and coil fouling. Over-delivering valves, the stuck
-  dampers and the sensor biases are cross-negatives. Parallel boxes: airflow 4/6 → 5/5 with 0 false
-  positives in 24, reheat 1/7 → 2/8 with 0 in 17. Series boxes are scored for the first time, with
-  the reheat duty on the fan discharge flow: airflow 5/5 with 4 false positives in 24, reheat 2/8
-  with 4 in 14. New keys `drift.sfpu.*`. None of these metrics is gated (`optin-measured.json`).
+**0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67).** New plant detectors
+(boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
+plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the
+G36 supply-air reset direction and the FC13-only plant link, days-weighted billing M&V with a
+config path and weather fallbacks, revised benchmark target lists, and two open meter datasets,
+one of them the published real-data SEP chaining case.
 
-### Added (datasets, #50)
-- **Quirk ops `remap` and `fill`.** `remap` moves columns within a time window, all at once, for a
-  header that names the wrong columns from a date onward. `fill` fills a short run of missing
-  values with the median of the same clock time on nearby days; gaps longer than `max_run` stay
-  missing.
-- **`lbnl-b59` ingests its electricity meters and the heat pump's water temperature.** Six
-  `ELECTRICITY_METER` equipment and `HP` are added. The 2020 column shift is undone by a `remap`
-  fix. The HVAC meters' zero dropouts are masked and filled. The heat-pump swap that leaves the
-  metering boundary is annotated, not corrected: it is a non-routine event. The fixes reproduce the
-  earlier hand correction to within 0.4 % of HVAC energy.
-<!-- /092-bench -->
-<!-- 092-plant -->
 ### Added
 - **A plant run gate for sensor trust (#66).** `schedules.plant_run_mask(frame, loop)` reads when
   a chiller (`"chw"`: run status, else power above a tenth of its own 95th percentile) or a boiler
@@ -75,8 +46,8 @@ All notable changes to CAMBER are documented here. The format follows
   tower's `Leaving_/Entering_Water_Temperature_Sensor` map to `cw_supply_temp` / `cw_return_temp`,
   and a chiller's `Entering_Condenser_Water_Temperature_Sensor` becomes `cond_entering_water_temp`
   when the model has that separate tower point. The `lbnl-chiller` catalog mapping maps
-  `CDWL_SW_TEMP` and `TWV_CTRL` to them. Its synthetic scenario is in
-  `faultlab.PENDING_SCENARIOS`, not yet a gated benchmark key.
+  `CDWL_SW_TEMP` and `TWV_CTRL` to them. Its synthetic scenario `condenser_bypass_leak` is a gated
+  synthetic benchmark key (see Benchmarks).
 - **Cooling-tower fouling from fan effort (#14).** `rules.tower_fan_effort_rule.
   CoolingTowerFanEffortDrift` (`cooling_tower_fan_effort_drift`, in the new `tower` drift family
   with the approach drift) compares the tower's fan speed with a frozen baseline at matched load
@@ -95,22 +66,6 @@ All notable changes to CAMBER are documented here. The format follows
 - **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
   the site's OAT sources with each other: three or more against their median (the outlier gets a
   scoped `sensor_drift:oat` finding), two shown side by side with no finding.
-
-### Changed
-- **The chilled-water plant rules fall back to chiller power (#66).** `chw_plant_reset` and
-  `chw_supply_tracking` gate on the chiller's power (`run_source="power"`, with a caveat) when no
-  run status is mapped, before falling back to the supply temperature.
-- The all-points-frozen trust check ignores intervals a plant was off throughout (#66).
-
-### Fixed
-- **One unit's stuck OAT made the whole site conditional (#66).** A stuck or untrusted OAT on
-  one air handler that trends its own sensor was a site-wide cause, so the chiller and boiler
-  findings (which read the weather station) were marked conditional on it. The RCx report now
-  passes `link_findings(..., shared_scope=...)` (and `sensor_causes`) the units that read each
-  OAT source, and the cause taints only them.
-<!-- /092-plant -->
-<!-- 092-air -->
-### Added
 - **System-level ASHRAE 62.1 Ventilation Rate Procedure (#17).** An air handler serving several
   zones is judged against the system intake `Vot = Vou / Ev` (`Vou = D·ΣRp·Pz + ΣRa·Az`,
   `D = Ps / ΣPz`), not one zone's Voz. `camber.ventilation.system_outdoor_air` computes it with the
@@ -128,6 +83,79 @@ All notable changes to CAMBER are documented here. The format follows
   a single-source fallback, and says so. Section and table numbers of the 2019/2022 editions,
   default densities and Ez rows are marked unverified (docs/VENTILATION.md). On the open LBNL
   Building 59 data, with a stated area assumption, all four RTUs are over-ventilated 3.4–5.6×.
+- **Days-weighted billing fits (#64).** A bill's per-day energy is the mean of its days, so its variance
+  falls as 1/days. The change-point fitters, `fit_stats`, the regression tests, the NRE indicator
+  fit, the exact kernel and the G14 FSU now take the bills' days: `weights=` fits by weighted least
+  squares, and `days=` sums per-day predictions back to energy with the matching noise term.
+  Equal weights are neutral (the unweighted fit, byte for byte), and daily and hourly paths are
+  unchanged. On synthetic bills of uneven length (8-62 days), the exact 90% band covers the planted
+  saving 89.9% of the time over 1,000 runs, and a linear fit's slope error falls 11%. The
+  non-routine detectors fit billing baselines with the same weights.
+- **Config `mv` entries on bills (#64).** An entry with `"bills": "gas.csv"` (start, end, energy, and
+  optional units and estimated-read columns) runs the full M&V flow on
+  `camber.mandv.billing.BillingSeries`: per-bill mean temperature and degree-days, days-weighted
+  baseline at the G14 monthly thresholds, coverage, validity, every SEP method and `auto`, and the
+  adjustments ledger (bills expanded to their days, so an adjustment is dated to the day).
+  Estimated reads are merged into the next actual read (`BillingSeries.merge_estimated`). The
+  temperature comes from the entry's `oat` file, an opt-in fetch, or `shared_oat`; a bills-only
+  config needs no `source`. Versioned baselines and `cp_driver` are not supported for bills yet
+  (docs/MANDV.md, "Billing data").
+- **Weather fallbacks (#64).** An hour-of-day correction after the monthly offset, per season and UTC
+  hour: out of sample at three public airports it cut the NASA POWER fallback's hourly RMSE from
+  3.8-5.9 °F to 2.9-3.4 °F. Neighbouring ISD stations that fill gaps are now offset-corrected
+  against the reference station by the same method. **Open-Meteo** is a third, keyless source
+  (`fetch_open_meteo`), bias-corrected in the same way. `oat_reference_blended(fallbacks=...)` sets
+  the fallback order, and `oat_reference_auto` picks a source by name. The RCx `oat_reference`
+  accepts `"fetch": "auto"`: ISD, then POWER, then Open-Meteo, with the source of each hour in the
+  report. Weather requests carry only coordinates and dates.
+- **Quirk ops `remap` and `fill` (#50).** `remap` moves columns within a time window, all at once, for a
+  header that names the wrong columns from a date onward. `fill` fills a short run of missing
+  values with the median of the same clock time on nearby days; gaps longer than `max_run` stay
+  missing.
+- **`lbnl-b59` ingests its electricity meters and the heat pump's water temperature (#50).** Six
+  `ELECTRICITY_METER` equipment and `HP` are added. The 2020 column shift is undone by a `remap`
+  fix. The HVAC meters' zero dropouts are masked and filled. The heat-pump swap that leaves the
+  metering boundary is annotated, not corrected: it is a non-routine event. The fixes reproduce the
+  earlier hand correction to within 0.4 % of HVAC energy.
+- **Catalog: `valladolid-uva` (#50).** Two University of Valladolid buildings (Mendeley Data
+  doi:10.17632/mzkyh37mtr.2, CC BY 4.0, re-verified on the host): hourly whole-building
+  electricity 2016-2020 with the publisher's daily NASA POWER weather. Pinned originals, mappings,
+  a daily M&V template, and eight data issues with evidence: hour-ending local stamps with DST
+  handling that changes between years, daily weather repeated on every hour, mislabelled weather
+  units, a `HOLIDAY` flag that is an academic calendar and changes in 2020, gaps left empty
+  although the paper says they were interpolated, files named A/B against the paper's Building 1/2,
+  Building B's meter netting out on-site generation, and a 2020 COVID-19 year the description does
+  not mention (kept out of the chaining analysis).
+- **`examples/valladolid/chaining.py` (#50):** the real-data SEP chaining case. Working days,
+  monthly rows weighted by days, a station OAT series from the weather fallback chain, baseline
+  2016, reporting 2019, 2017 and 2018 intermediates and `select_method`'s own proposal; 2020 kept
+  out. Its results are described in docs/VALIDATION.md once the maintainer signs them off.
+<!-- cofactor -->
+
+### Changed
+- **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and
+  so `frame_sensor_health`, the runner's trust gate and the RCx report) now applies
+  `copied_signal_consistency` and `mixing_flow_consistency`. A measured point that carries another
+  point's data is flagged `copied_signal`; the copy is told from the original at the edges of the
+  identical stretch (it jumps across the gap between them) and loses trust by the share of its
+  samples that are copied, capped at "suspect"; when the copy cannot be told apart both are
+  flagged and capped at "suspect". A MAT that fails the flow-weighted OA/RA balance is flagged
+  `mixing_balance` and capped at "suspect"; OAT and RAT are flagged, not lowered. Both flags make
+  the unit's findings on that point conditional in triage (`sensor_causes`), on that unit only. On
+  the open LBNL Building 59 data (catalog example) RTU01/RTU02's MAT drop to "suspect" and RTU04's
+  copied return air to 0.56, while its supply air keeps its score.
+- **The chilled-water plant rules fall back to chiller power (#66).** `chw_plant_reset` and
+  `chw_supply_tracking` gate on the chiller's power (`run_source="power"`, with a caveat) when no
+  run status is mapped, before falling back to the supply temperature.
+- The all-points-frozen trust check ignores intervals a plant was off throughout (#66).
+- **`oat_reference_blended` corrects the daily cycle by default (#64)** (`diurnal=False` gives
+  the 0.90.1 monthly-only offset) and corrects gap-filling stations (`station_offsets=False` turns
+  this off).
+  The bias record's `rmse_after_f` is the RMSE after the full correction, and
+  `rmse_after_monthly_f` is the RMSE after the monthly step alone.
+- **`lbnl-b59` is a documented data-issues teaching case for M&V, with no published savings
+  (#50).** Its known issues now point to `valladolid-uva` for chaining, and say that the
+  system-level 62.1 VRP (#17) runs on it with stated assumptions rather than not at all.
 
 ### Fixed
 - **`supply_air_reset` read supply air rising with OAT as a reset (#65).** A G36 cooling SAT reset
@@ -147,56 +175,40 @@ All notable changes to CAMBER are documented here. The format follows
   `link_findings(part_mask_for=...)` reads FC13's own hours (the RCx report passes it).
   `UpstreamCause.unit_hours` says which hours were used (`"FC13"` or `"finding"`), and the "why"
   line names them.
+- **One unit's stuck OAT made the whole site conditional (#66).** A stuck or untrusted OAT on
+  one air handler that trends its own sensor was a site-wide cause, so the chiller and boiler
+  findings (which read the weather station) were marked conditional on it. The RCx report now
+  passes `link_findings(..., shared_scope=...)` (and `sensor_causes`) the units that read each
+  OAT source, and the cause taints only them.
 
-### Changed
-- **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and
-  so `frame_sensor_health`, the runner's trust gate and the RCx report) now applies
-  `copied_signal_consistency` and `mixing_flow_consistency`. A measured point that carries another
-  point's data is flagged `copied_signal`; the copy is told from the original at the edges of the
-  identical stretch (it jumps across the gap between them) and loses trust by the share of its
-  samples that are copied, capped at "suspect"; when the copy cannot be told apart both are
-  flagged and capped at "suspect". A MAT that fails the flow-weighted OA/RA balance is flagged
-  `mixing_balance` and capped at "suspect"; OAT and RAT are flagged, not lowered. Both flags make
-  the unit's findings on that point conditional in triage (`sensor_causes`), on that unit only. On
-  the open LBNL Building 59 data (catalog example) RTU01/RTU02's MAT drop to "suspect" and RTU04's
-  copied return air to 0.56, while its supply air keeps its score.
-<!-- /092-air -->
-## [Unreleased]
-
-<!-- 092-mv -->
-### Added (#64)
-- **Days-weighted billing fits.** A bill's per-day energy is the mean of its days, so its variance
-  falls as 1/days. The change-point fitters, `fit_stats`, the regression tests, the NRE indicator
-  fit, the exact kernel and the G14 FSU now take the bills' days: `weights=` fits by weighted least
-  squares, and `days=` sums per-day predictions back to energy with the matching noise term.
-  Equal weights are neutral (the unweighted fit, byte for byte), and daily and hourly paths are
-  unchanged. On synthetic bills of uneven length (8-62 days), the exact 90% band covers the planted
-  saving 89.9% of the time over 1,000 runs, and a linear fit's slope error falls 11%. The
-  non-routine detectors fit billing baselines with the same weights.
-- **Config `mv` entries on bills.** An entry with `"bills": "gas.csv"` (start, end, energy, and
-  optional units and estimated-read columns) runs the full M&V flow on
-  `camber.mandv.billing.BillingSeries`: per-bill mean temperature and degree-days, days-weighted
-  baseline at the G14 monthly thresholds, coverage, validity, every SEP method and `auto`, and the
-  adjustments ledger (bills expanded to their days, so an adjustment is dated to the day).
-  Estimated reads are merged into the next actual read (`BillingSeries.merge_estimated`). The
-  temperature comes from the entry's `oat` file, an opt-in fetch, or `shared_oat`; a bills-only
-  config needs no `source`. Versioned baselines and `cp_driver` are not supported for bills yet
-  (docs/MANDV.md, "Billing data").
-- **Weather fallbacks.** An hour-of-day correction after the monthly offset, per season and UTC
-  hour: out of sample at three public airports it cut the NASA POWER fallback's hourly RMSE from
-  3.8-5.9 °F to 2.9-3.4 °F. Neighbouring ISD stations that fill gaps are now offset-corrected
-  against the reference station by the same method. **Open-Meteo** is a third, keyless source
-  (`fetch_open_meteo`), bias-corrected in the same way. `oat_reference_blended(fallbacks=...)` sets
-  the fallback order, and `oat_reference_auto` picks a source by name. The RCx `oat_reference`
-  accepts `"fetch": "auto"`: ISD, then POWER, then Open-Meteo, with the source of each hour in the
-  report. Weather requests carry only coordinates and dates.
-
-### Changed (#64)
-- `oat_reference_blended` corrects the daily cycle by default (`diurnal=False` gives the 0.90.1
-  monthly-only offset) and corrects gap-filling stations (`station_offsets=False` turns this off).
-  The bias record's `rmse_after_f` is the RMSE after the full correction, and
-  `rmse_after_monthly_f` is the RMSE after the monthly step alone.
-<!-- /092-mv -->
+### Benchmarks
+- **Chiller-plant benchmark lists are explicit (#11).** The chiller-fouling runs have been
+  `chiller_efficiency` targets since 0.86. The chiller, tower and secondary-DP sensor-bias runs
+  are now *listed* as negatives for both plant rules, and the chiller-fouling and bypass runs as
+  cross-negatives for `cooling_tower_approach`. A run on no list is excluded and printed instead of
+  counting as a negative by default. No count moved: `chiller_efficiency` TPR 6/11, FPR 2/13;
+  `cooling_tower_approach` TPR 0/3, FPR 0/14 with 7 declined.
+- **The `lbnl-chiller` catalog entry declares its scored targets**, so `camber datasets score
+  lbnl-chiller` reproduces the benchmark's `chiller_efficiency` 6/11 and 2/13 from the store.
+- **Sensor bias vs physical fault on the chiller plant (#11, new, opt-in, ungated).**
+  `compare_to_reference` compares chiller 1's leaving water with the primary supply (chiller 1
+  running alone) and tower 1's leaving water with the condenser supply (tower 1 alone, bypass
+  commanded shut). At the default 2.0 °F threshold both pairs score TPR 2/4. The chiller pair has
+  FPR 0/20. The tower pair has FPR 5/20: on the five bypass-valve runs the valve ignores its
+  command. New keys `chiller.sensor.*`.
+- **VAV drift target lists revised, and series fan-powered boxes scored (#12).** The lists now
+  follow each rule's one-sided physics. Stuck dampers at 0 / 20 % are excluded from airflow drift.
+  Reheat targets the valve stuck at 0 / 20 % and coil fouling. Over-delivering valves, the stuck
+  dampers and the sensor biases are cross-negatives. Parallel boxes: airflow 4/6 → 5/5 with 0 false
+  positives in 24, reheat 1/7 → 2/8 with 0 in 17. Series boxes are scored for the first time, with
+  the reheat duty on the fan discharge flow: airflow 5/5 with 4 false positives in 24, reheat 2/8
+  with 4 in 14. New keys `drift.sfpu.*`. None of these metrics is gated (`optin-measured.json`).
+- **Synthetic baseline refreshed for `condenser_bypass_leak` (#15; maintainer sign-off for 0.92).**
+  Its `faultlab` scenario moved from `faultlab.PENDING_SCENARIOS` (now empty) into `SCENARIOS`.
+  Added: `condenser_bypass_leak.tpr` 1.0 / `condenser_bypass_leak.fpr` 0.0; `coverage.n_scored`
+  and `coverage.n_single` 38 -> 39. Every other synthetic key is byte-identical to 0.91.0, and the
+  fleet, LBNL, BDG2 and BDG2 savings baselines did not move. The plant run gate (#66) left the
+  opt-in chiller metrics unchanged (`optin-measured.json` matches).
 
 ## [0.91.0] — 2026-09-27
 
@@ -371,10 +383,6 @@ the two new rules and nothing else (see Changed).
   BDG2 and BDG2 savings baselines were not touched.
 
 ### Known follow-ups
-- **#65:** without a trended setpoint, `supply_air_reset` still reads supply air rising with OAT as
-  a reset, which is backwards for a G36 OAT-based SAT reset (it usually means a capacity
-  shortfall). Since #63 a flat trended setpoint vetoes that reading, and without one the verdict
-  carries a capacity-shortfall caveat.
 - **#66:** sensor trust has no run gate for plant equipment, so a chilled-water supply sensor that
   drifts while its chiller is off can score untrusted and make a genuine plant issue conditional.
   Also deferred there: cross-checking OAT sources against each other without a reference, and

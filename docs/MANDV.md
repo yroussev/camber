@@ -877,7 +877,6 @@ driver model reads its own drivers, and the fit-frame sha256 covers the driver c
 `"standard_conditions"` (whose `normal_year` holds temperatures, not standard driver values) are
 refused with this form.
 
-<!-- 092-mv -->
 ## Billing data
 
 Utility bills are not days. Each bill covers its own service period (28 to 35 days for most
@@ -983,7 +982,6 @@ config with no `equipment` needs no `source`:
 
 With only 12 to 36 bills, rho is often not estimable, and the band is then unadjusted, with a
 caveat.
-<!-- /092-mv -->
 
 ## Cross-checking against eemeter
 

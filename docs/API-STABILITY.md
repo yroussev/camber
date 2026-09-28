@@ -206,7 +206,24 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - `sources=True` on the RCx report's OAT-source helper is internal; the per-source OAT rows and
     `oat_equips` / `scope_equips` metrics on `sensor_drift:oat` findings are provisional.
 
-<!-- 092-air -->
+- **Plant detectors and the plant run gate** (0.92; #13, #14, #15, #66), all additive and
+  provisional:
+  - the run gate (#66): `camber.schedules.plant_run_mask` with `CHILLER_POWER_RUN_FRAC`,
+    `GAS_FIRING_FRAC` and `PLANT_GATE_NONE`; in `camber.sensorhealth`, `PLANT_GATED_ROLES`,
+    `PLANT_SETTLE`, `plant_gates`, `frame_sensor_health(plant_gate=)`,
+    `sensor_trust(run_gate=, run_gate_source=)`, the trailing `SensorTrust.run_gate` and the
+    `not_running` flag; `link_findings(shared_scope=)` / `sensor_causes(shared_scope=)`; the
+    chilled-water plant rules' `run_source="power"` fallback (`POWER_GATE_CAVEAT`); the RCx
+    report's OAT peer check without a reference;
+  - roles `gas_input_rate`, `cond_entering_water_temp` and `cw_bypass_valve`, and their Brick
+    mappings;
+  - `camber.rules.boiler_efficiency_rule` (`BoilerEfficiencyDrift`), `camber.rules.
+    tower_fan_effort_rule` (`CoolingTowerFanEffortDrift`), `camber.rules.condenser_bypass_rule`
+    (`CondenserBypassLeak`, built-in) and their threshold constants, which are screening-grade
+    and may be retuned; `camber.plantdrift` (`PlantDriftDiagnosis`, `diagnose_boiler_drift`,
+    `diagnose_tower_drift`) and the `boiler` / `tower` drift families;
+  - `camber.faultlab.PENDING_SCENARIOS` (scenarios awaiting sign-off as gated synthetic keys;
+    empty in 0.92).
 - **Air-side correctness** (0.92; #16, #17, #65, #67), all additive and provisional:
   - system-level ASHRAE 62.1 VRP (#17): in `camber.ventilation`, `VentZone`,
     `SystemVrpRequirement`, `SystemVrpResult`, `system_outdoor_air`, `simplified_ev`,
@@ -219,8 +236,6 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - `SATResetResult.direction` and the `reset_direction` / `sp_wrong_direction` metrics of
     `supply_air_reset` (#65);
   - `Evidence.masks`, `link_findings(part_mask_for=)` and `UpstreamCause.unit_hours` (#67).
-<!-- /092-air -->
-<!-- 092-mv -->
 - **Billing M&V and weather fallbacks** (0.92; #64), all additive:
   - days-weighted fits: `weights=` on `mandv.models.fit_model` / `best_model`,
     `mandv.stats.fit_stats`, `regression_tests` / `model_regression_tests` and
@@ -244,7 +259,6 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `stations[].offset_correction`, `hour_of_day_f`, `hour_basis` and `rmse_after_monthly_f`;
     the RCx `oat_reference.fetch` values `auto`, `isd` and `open_meteo` with `cache_dir` /
     `offline`. The correction method and its thresholds may be retuned.
-<!-- /092-mv -->
 
 ## Deprecated
 

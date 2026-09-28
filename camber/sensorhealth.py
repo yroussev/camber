@@ -133,9 +133,9 @@ PHYSICAL_BOUNDS: dict = {
     # CO₂, ppm -- nothing real sits below ~250 (outdoor is ~420); above 10000 is a sentinel
     Role.CO2: (250.0, 10000.0),
     Role.OUTDOOR_CO2: (250.0, 1000.0),
-    # 092-plant (#13): boiler gas input rate, kW -- wide; only rejects dropouts / sentinels
+    # 0.92 (#13): boiler gas input rate, kW -- wide; only rejects dropouts / sentinels
     Role.GAS_INPUT_RATE: (-1.0, 1e7),
-    # 092-plant (#15): condenser water entering the chillers, and the tower-bypass valve
+    # 0.92 (#15): condenser water entering the chillers, and the tower-bypass valve
     Role.COND_ENTERING_WATER_TEMP: (40.0, 120.0),
     Role.CW_BYPASS_VALVE: (-2.0, 102.0),
 }
@@ -157,7 +157,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.HW_RETURN_TEMP,
         Role.CW_SUPPLY_TEMP,
         Role.CW_RETURN_TEMP,
-        Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
+        Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
@@ -188,7 +188,7 @@ _INTERMITTENT_ROLES: frozenset = (
             Role.POWER,
             Role.COMPRESSOR_STAGE,
             Role.HEAT_STAGE,
-            Role.GAS_INPUT_RATE,  # 092-plant (#13): zero between firing cycles
+            Role.GAS_INPUT_RATE,  # 0.92 (#13): zero between firing cycles
         }
     )
     | STATUS_ROLES
@@ -304,7 +304,7 @@ class SensorTrust:
     # Frame-level findings that touched this point (all-points freeze, fan-off plausibility,
     # status-vs-speed), as ``{"check": ..., ...}`` dicts; filled by :func:`frame_sensor_health`.
     frame_checks: list = field(default_factory=list)
-    # 092-plant (#66): what the plant run gate was read from ("chiller status", ...) when this
+    # 0.92 (#66): what the plant run gate was read from ("chiller status", ...) when this
     # point was judged on its equipment's running samples only; None when it was not.
     run_gate: str | None = None
 
@@ -357,7 +357,7 @@ def _gated_flatline_frac(series: pd.Series, gate: pd.Series) -> float | None:
 
 
 # --------------------------------------------------------------------------------------------- #
-# 092-plant (#66): the plant run gate                                                            #
+# 0.92 (#66): the plant run gate                                                            #
 # --------------------------------------------------------------------------------------------- #
 
 #: Plant roles whose reading only means something while the equipment runs, and the loop whose run
@@ -374,7 +374,7 @@ PLANT_GATED_ROLES: dict = {
             Role.CHW_RETURN_TEMP,
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
-            Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
+            Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
             Role.COND_APPROACH_TEMP,
             Role.EVAP_APPROACH_TEMP,
             Role.SUBCOOLING_TEMP,
@@ -453,7 +453,7 @@ STUCK_HOURS: dict = {
             Role.HW_RETURN_TEMP,
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
-            Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
+            Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
             Role.OUTDOOR_RH,
             Role.AIRFLOW,
             Role.CHW_FLOW,
@@ -476,7 +476,7 @@ _IDLE_ROLES: frozenset = frozenset(
         Role.POWER,
         Role.DUCT_STATIC,
         Role.PUMP_HEAD,
-        Role.GAS_INPUT_RATE,  # 092-plant (#13): a boiler sits unfired all summer
+        Role.GAS_INPUT_RATE,  # 0.92 (#13): a boiler sits unfired all summer
     }
 )
 _IDLE_FRAC = 0.02  # |value| at or below this share of the series' P99 magnitude reads as idle
@@ -499,7 +499,7 @@ def _value_runs(series: pd.Series, gate=None, *, join=False) -> pd.DataFrame:
     """Identical-value runs of ``series`` (non-null) as a frame: start, end, n, value, hours.
 
     With ``gate`` (boolean, same index) only gated samples count and a run breaks wherever the
-    gate goes False, as in the gated flatline read. With ``join=True`` (092-plant, #66) a run is
+    gate goes False, as in the gated flatline read. With ``join=True`` (0.92, #66) a run is
     *not* broken where the gate goes False -- a value identical across successive running
     stretches is one run -- and its ``hours`` are the gated hours it spans (samples x step), not
     the wall-clock time the off stretches would add.
@@ -543,7 +543,7 @@ def _stuck_runs(series: pd.Series, role, gate=None, stuck_hours=None, run_gate=N
     if role not in limits:
         return None, [], 0
     use_gate = None
-    if run_gate is not None:  # 092-plant (#66): runs judged within running stretches only
+    if run_gate is not None:  # 0.92 (#66): runs judged within running stretches only
         use_gate = run_gate
     elif role in FAN_GATED_ROLES:
         if gate is None:
@@ -664,7 +664,7 @@ def sensor_trust(
         shape_aware=True,
         scale_floor=_scale_floor(series, role),
     )
-    # 092-plant (#66): a plant point is judged on its equipment's running samples
+    # 0.92 (#66): a plant point is judged on its equipment's running samples
     qj, plant_g, not_running = q, None, False
     if run_gate is not None and (role in PLANT_GATED_ROLES or role == Role.POWER):
         plant_g = pd.Series(run_gate).reindex(series.index).fillna(False).astype(bool)
@@ -725,7 +725,7 @@ def sensor_trust(
         # tightly-controlled point or a pump idling then ramping with load isn't a fault
         out_frac = qj.shape_outlier_frac
     if not_running:
-        flags.append("not_running")  # 092-plant (#66)
+        flags.append("not_running")  # 0.92 (#66)
     elif out_frac > 0.05:
         flags.append("outliers")
     if rng == rng and rng > 0.01:
@@ -899,7 +899,7 @@ def _check_all_frozen(frame: pd.DataFrame, health: dict) -> None:
     if not same.any():
         return
     step = _step(frame.index)
-    # 092-plant (#66): points judged on a plant run gate hold still while the plant is off (a
+    # 0.92 (#66): points judged on a plant run gate hold still while the plant is off (a
     # change-of-value log records nothing) -- that is not a collection outage
     plant_on = None
     if any(getattr(health.get(c), "run_gate", None) for c in cols):
@@ -965,10 +965,9 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     _check_fan_off_pressure(frame, health)
     _check_status_speed(frame, health)
     _check_all_frozen(frame, health)
-    # -- 092-air (#16): cross-sensor physics into trust
+    # 0.92 (#16): cross-sensor physics into trust
     _check_copied_signal(frame, health)
     _check_mixing_balance(frame, health)
-    # -- /092-air
     return health
 
 
@@ -995,7 +994,7 @@ def frame_sensor_health(
         gate = fan_on_mask(frame)[0]
     if plant_gate not in (None, "auto"):
         raise ValueError(f"plant_gate must be 'auto' or None, got {plant_gate!r}")
-    pg = plant_gates(frame) if plant_gate == "auto" else {}  # 092-plant (#66)
+    pg = plant_gates(frame) if plant_gate == "auto" else {}  # 0.92 (#66)
     health = {
         role: sensor_trust(
             frame[role],
@@ -1017,7 +1016,7 @@ def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=
     when an input it depends on is below the bar -- "decline to fire on data we don't
     trust" rather than emit a fault that is really a sensor problem.
     """
-    # 092-plant (#66): plant points judged on running samples
+    # 0.92 (#66): plant points judged on running samples
     health = frame_sensor_health(frame, expected_freq=expected_freq, plant_gate="auto")
     return {role for role, t in health.items() if t.trust >= min_trust}
 
@@ -1033,7 +1032,7 @@ def untrusted_roles(
     carries a run signal (0.92, #66; see :func:`plant_gates`).
     """
     present = [r for r in roles if r in frame.columns]
-    pg = plant_gates(frame)  # 092-plant (#66): plant points judged on running samples
+    pg = plant_gates(frame)  # 0.92 (#66): plant points judged on running samples
     health = {
         r: sensor_trust(
             frame[r],
@@ -1684,7 +1683,7 @@ def cross_unit_identity(
 
 
 # --------------------------------------------------------------------------------------------- #
-# 092-air (#16, 0.92): the copied-signal and mixed-air flow-balance checks feed sensor trust      #
+# 0.92 (#16): the copied-signal and mixed-air flow-balance checks feed sensor trust      #
 # --------------------------------------------------------------------------------------------- #
 
 #: A copied stretch is judged at its edges: this much of each point's data just outside the stretch
@@ -1867,6 +1866,3 @@ def _check_mixing_balance(frame: pd.DataFrame, health: dict) -> None:
     _mark(health, Role.MIXED_AIR_TEMP, "mixing_balance", dict(check), cap=_SUSPECT_CAP)
     for role in (Role.OAT, Role.RETURN_AIR_TEMP):
         _mark(health, role, "mixing_balance", dict(check))
-
-
-# -- /092-air (#16)

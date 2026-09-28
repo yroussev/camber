@@ -103,9 +103,9 @@ RULE_CATEGORY = {
     "loop_dp_drift": "maintenance",
     "vav_airflow_drift": "maintenance",
     "vav_reheat_valve_drift": "maintenance",
-    "boiler_efficiency_drift": "maintenance",  # 092-plant (#13)
-    "cooling_tower_fan_effort_drift": "maintenance",  # 092-plant (#14)
-    "condenser_bypass_leak": "energy",  # 092-plant (#15): warmer condenser water, higher kW/ton
+    "boiler_efficiency_drift": "maintenance",  # 0.92 (#13)
+    "cooling_tower_fan_effort_drift": "maintenance",  # 0.92 (#14)
+    "condenser_bypass_leak": "energy",  # 0.92 (#15): warmer condenser water, higher kW/ton
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")

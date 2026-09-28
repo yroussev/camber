@@ -91,7 +91,6 @@ cooling, **fan-on** samples (the same fan-signal precedence) and records `fan_ga
 draws exactly those samples. With the fan off the "supply" sensor reads unconditioned plenum air,
 which bends the slope and widens the spread. `fan_gate=False` restores the ungated read.
 
-<!-- 092-air (#65) -->
 **The reset direction follows the driver (#65, 0.92).** A G36 cooling SAT reset lowers supply air as
 OAT rises (§5.16.2.2.b) and lowers it again for each cooling SAT reset request beyond the ignored
 ones (the trim-and-respond response is negative, Table 5.16.2.2; `camber.g36_reset.SAT_TR`). So
@@ -103,7 +102,6 @@ with OAT over cooling hours is supply air rising with load: it is reported as "S
 in the wrong direction" (`sp_wrong_direction`, never `ok`). Until 0.92 the rule read the positive
 slope as the reset. `static_pressure_reset` is unchanged: a static reset raises its setpoint with
 requests.
-<!-- /092-air (#65) -->
 
 **A trended setpoint beats the SAT shape (#63).** Supply air that looks reset can still be a
 setpoint that never moved. When `SUPPLY_AIR_TEMP_SP` is mapped, `supply_air_reset` asks the

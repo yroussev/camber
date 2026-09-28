@@ -77,11 +77,11 @@ as an upstream cause (`Issue.upstream_causes`): its page opens with an "Upstream
 short of setpoint" banner, its recommended action (on the page and in the summary) starts with the
 plant, and a "why" line says to check plant capacity before the coil valve. The G36 link reads the
 `g36_afdd` finding's `flagged_fcs` for FC13 (supply air too warm with the cooling valve full open);
-FC12 and FC1 are not plant-capacity symptoms. <!-- 092-air (#67) -->Since 0.92 the same-hours
+FC12 and FC1 are not plant-capacity symptoms. Since 0.92 the same-hours
 test for a G36 finding uses **FC13's own hours** (the rule's evidence carries one mask per fault
 condition, `Evidence.masks`), not the union of every fault condition it reported, so duct-static or
 economizer hours no longer count as plant symptoms; `UpstreamCause.unit_hours` records `"FC13"` (or
-`"finding"` when only the whole mask was available).<!-- /092-air --> The plant issue lists the findings it may explain
+`"finding"` when only the whole mask was available). The plant issue lists the findings it may explain
 (`Issue.downstream`). A config `topology` ([TOPOLOGY.md](TOPOLOGY.md)) decides which plant
 serves which unit; without one the site's plant is assumed and the line says so.
 
@@ -183,13 +183,13 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
   with `{"fetch": "nasa_power", "latitude": …, "longitude": …, "tz": "America/Chicago"}`.
   Every distinct OAT source is compared (0.91): units reading one sensor
   share a row, and an AHU trending its own sensor gets its own row and `sensor_drift:oat` finding,
-  which makes only that unit's findings conditional. <!-- 092-plant --> Without a reference
+  which makes only that unit's findings conditional. Without a reference
   (0.92, #66), the site's OAT sources are cross-checked against each other: with three or more,
   each against the site median (one wrong sensor is out-voted and gets a scoped
   `sensor_drift:oat` finding, `metrics["reference"] = "peer_median"`); with exactly two, their
   disagreement is shown in the data section but raises no finding, since it cannot say which one
   is wrong. Plant points (chilled-, condenser- and hot-water temperatures) are judged for trust on
-  their equipment's running samples (see [Sensor health](SENSOR-HEALTH.md)). <!-- /092-plant -->
+  their equipment's running samples (see [Sensor health](SENSOR-HEALTH.md)).
 - `chart_format: "svg"` renders the line charts as SVG; dense scatters stay PNG.
 
 In Python:

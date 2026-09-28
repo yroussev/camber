@@ -178,7 +178,7 @@ class RcxOptions:
             ref = dict(ref)
             if ref.get("csv") and not os.path.isabs(ref["csv"]):
                 ref["csv"] = os.path.join(base_dir, ref["csv"])
-            if ref.get("cache_dir") and not os.path.isabs(ref["cache_dir"]):  # 092-mv
+            if ref.get("cache_dir") and not os.path.isabs(ref["cache_dir"]):  # 0.92 (#64)
                 ref["cache_dir"] = os.path.join(base_dir, ref["cache_dir"])
             opts.oat_reference = ref
         price = spec.get("price") or report.get("price")
@@ -990,7 +990,7 @@ def _load_reference_oat(spec: dict, index) -> pd.Series | None:
             index.max(),
             tz=spec.get("tz", "UTC"),
         )
-    if spec.get("fetch") in ("auto", "isd", "open_meteo"):  # 092-mv: the fallback chain
+    if spec.get("fetch") in ("auto", "isd", "open_meteo"):  # 0.92 (#64): the fallback chain
         import warnings
 
         from ..weather_source import oat_reference_auto
@@ -1173,7 +1173,7 @@ def build_rcx_report(
             plant.append(e)
         num = fr.select_dtypes(include="number")
         trust_raw[e] = frame_sensor_health(num)
-        # 092-plant (#66): plant points (CHW/CW/HW temperatures, a chiller's power) are judged on
+        # 0.92 (#66): plant points (CHW/CW/HW temperatures, a chiller's power) are judged on
         # their equipment's running samples, so a chiller that is off doesn't read as a bad sensor
         if g is not None or plant_gates(num):
             trust_gated[e] = frame_sensor_health(num, gate=g, plant_gate="auto")
@@ -1187,12 +1187,12 @@ def build_rcx_report(
     # +5 F is its own finding, scoped to the units that read it, not hidden behind the first one.
     findings = list(ctx.findings)
     ref_rows, ref_note, ref_kind, ref_source = [], "", "reference", ""
-    # 092-plant (#66): every distinct OAT source and the units reading it -- scopes a stuck OAT's
+    # 0.92 (#66): every distinct OAT source and the units reading it -- scopes a stuck OAT's
     # trust cause to those units, and (without a reference) feeds the peer cross-check
     all_oat = _oat_of({e: ctx.frame(e) for e in ctx.equips}, sources=True)
     oat_scope = {e: list(eqs) for _s, eqs in all_oat for e in eqs} if len(all_oat) > 1 else None
     if not o.oat_reference:
-        # 092-plant (#66, deferred from #61/#62): no reference -- cross-check the OAT sources
+        # 0.92 (#66, deferred from #61/#62): no reference -- cross-check the OAT sources
         peer_rows, peer_findings, ref_note = _oat_peer_check(all_oat)
         if peer_rows:
             ref_rows, ref_kind = peer_rows, "peer"
@@ -1327,7 +1327,7 @@ def build_rcx_report(
         facility_id=getattr(run, "facility_id", None) or "",
         site=getattr(run, "site", "") or "",
         topology=getattr(run, "topology", None),  # a declared served-by map ties AHU to plant
-        # 092-plant (#66): a unit's own OAT sensor taints only the units that read it
+        # 0.92 (#66): a unit's own OAT sensor taints only the units that read it
         shared_scope=oat_scope,
     )
     totals = issue_totals(issues)
@@ -1654,7 +1654,7 @@ def _sec_data(S) -> dict:
             fig, ax = plt.subplots(figsize=(10, 0.35 * len(cols) + 1.4))
             readiness_ribbon(fr[cols], ax=ax, title=f"{e}: data readiness")
             blocks.append(_figure(fig, alt=f"{e} readiness", fmt="png", dpi=ctx.dpi))
-    if S["ref_rows"] and S.get("ref_kind") == "peer":  # 092-plant (#66)
+    if S["ref_rows"] and S.get("ref_kind") == "peer":  # 0.92 (#66)
         blocks.append(
             _p(
                 "No OAT reference configured, so the site's OAT sources were cross-checked against "

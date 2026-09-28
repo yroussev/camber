@@ -606,7 +606,7 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
                 why = "stuck" if "stuck" in flags else "untrusted"
                 detail = f"{slug} {why} (trust {getattr(t, 'trust', float('nan')):.2f})"
                 scope = (shared_scope or {}).get(equip) if slug in SHARED_ROLES else None
-                if scope:  # 092-plant (#66): the units that read this sensor, not the site
+                if scope:  # 0.92 (#66): the units that read this sensor, not the site
                     out.extend(
                         SensorCause("trust", str(eq), (slug,), detail) for eq in sorted(set(scope))
                     )
@@ -621,13 +621,12 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
                     )
                 )
                 continue
-            # -- 092-air (#16): a copied point, or a failing mixed-air flow balance, makes the
+            # 0.92 (#16): a copied point, or a failing mixed-air flow balance, makes the
             # unit's findings on that point conditional -- on this unit only (both are checks of
             # this unit's own points, even when one of them is the site OAT)
             cross = _cross_sensor_detail(slug, t, flags)
             if cross:
                 out.append(SensorCause("trust", equip, (slug,), cross))
-            # -- /092-air
     for equip, res in sorted((mixing or {}).items()):
         if getattr(res, "severity", "") in _ACTIONABLE:
             out.append(
@@ -643,7 +642,7 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
 
 
 def _cross_sensor_detail(slug: str, t, flags: list) -> str | None:
-    """092-air (#16): the cause line for a ``copied_signal`` / ``mixing_balance`` trust flag."""
+    """0.92 (#16): the cause line for a ``copied_signal`` / ``mixing_balance`` trust flag."""
     checks = list(getattr(t, "frame_checks", []) or [])
     score = f"trust {getattr(t, 'trust', float('nan')):.2f}"
     if "copied_signal" in flags:

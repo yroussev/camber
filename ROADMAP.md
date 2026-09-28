@@ -262,15 +262,29 @@ Three stacked releases; `CHANGELOG.md` has the detail.
   equipment-class table and config topology (#61); chilled-water supply tracking with the plant
   linked as the upstream cause of warm supply air (#62); economizer, reheat and reset misreads
   (#63); RCx speed, plant weeks and G36 advice only with a declared sequence (#35, #32); VALIDATION
-  cells (#33). Follow-ups: #65, #66, #67.
+  cells (#33). Follow-ups: #65, #66, #67 (all fixed in 0.92).
 
 ## Next
 
 Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** The next releases:
-  - **0.92 — detection gaps on the complete catalog data** (#11–#17), real-data chaining (#50) and
-    the 0.90.1 billing and weather follow-ups (#64).
+  - **0.92 — detection gaps on the complete catalog data** (integrated; `CHANGELOG.md`,
+    Unreleased):
+    - plant detectors: boiler combustion-efficiency drift (#13), tower fouling from fan effort
+      (#14) and the condenser-water bypass leak with two new roles (#15), scored on the LBNL plants
+      in [PLANT-DETECTORS.md](docs/PLANT-DETECTORS.md);
+    - sensor trust: a plant run gate, an OAT cross-check without a reference and chiller power as
+      a run signal (#66); copied points and the mixed-air flow balance (#16);
+    - the system-level ASHRAE 62.1 VRP, `Vot = Vou / Ev` per air handler (#17); the G36 SAT reset
+      read as SAT falling with OAT (#65); the plant link reads FC13's own hours (#67);
+    - days-weighted billing fits, the config billing path and weather fallbacks with an hour-of-day
+      correction and Open-Meteo (#64);
+    - benchmark target lists made explicit and the series fan-powered boxes scored (#11, #12);
+      the synthetic baseline refreshed for `condenser_bypass_leak` with sign-off;
+    - #50: the `lbnl-b59` meters as a data-issues teaching case, and two open meter datasets,
+      `valladolid-uva` (the real-data SEP chaining case; results pending sign-off) and
+      `cofactor-drammen`.
   - **0.93** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only).
   - **0.94** — education: worked exercises and learning docs on the catalog datasets.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export

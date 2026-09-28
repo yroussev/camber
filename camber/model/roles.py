@@ -68,7 +68,7 @@ class Role(str, Enum):
     HW_DIFF_PRESS_SP = "hw_diff_press_sp"  # hot-water loop DP setpoint
     HW_PUMP_SPEED = "hw_pump_speed"  # hot-water pump VFD speed (%)
     HW_FLOW = "hw_flow"  # hot-water volumetric flow (gpm)
-    # 092-plant (#13): a boiler's fuel (gas) input *rate*, kW of fuel energy -- an instantaneous
+    # 0.92 (#13): a boiler's fuel (gas) input *rate*, kW of fuel energy -- an instantaneous
     # rate, never a cumulative meter reading (difference a totalizer before mapping it here). The
     # boiler efficiency drift is judged on a relative change, so a consistent rate unit is what
     # matters; kW is the documented canonical unit. Also the hot-water run gate's firing signal
@@ -90,12 +90,12 @@ class Role(str, Enum):
     CW_SUPPLY_TEMP = "cw_supply_temp"  # condenser water leaving the tower (to condenser)
     CW_RETURN_TEMP = "cw_return_temp"  # condenser water returning to the tower (from condenser)
     TOWER_FAN_SPEED = "tower_fan_speed"  # cooling-tower fan speed (%)
-    # 092-plant (#15): the condenser water actually *entering the chiller condensers*, downstream of
+    # 0.92 (#15): the condenser water actually *entering the chiller condensers*, downstream of
     # the tower-bypass mixing -- equal to the tower's leaving water (CW_SUPPLY_TEMP) whenever the
     # bypass is shut. Map it only where the plant trends both points (with no bypass, or no
     # separate tower-leaving sensor, the one condenser-supply point is CW_SUPPLY_TEMP).
     COND_ENTERING_WATER_TEMP = "cond_entering_water_temp"
-    # 092-plant (#15): the condenser-water tower-bypass valve's command or position, % open to the
+    # 0.92 (#15): the condenser-water tower-bypass valve's command or position, % open to the
     # bypass (0 = all condenser water through the towers).
     CW_BYPASS_VALVE = "cw_bypass_valve"
 

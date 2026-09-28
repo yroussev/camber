@@ -208,7 +208,6 @@ Series, but does not fail when the ISD catalog ends before your window or one st
 published is not cached, so it is re-fetched once it is. With `offline=True` only the cache is read,
 and a miss raises `WeatherCacheMiss`, so a re-run is reproducible without the network.
 
-<!-- 092-mv -->
 ### How much the corrections help (0.92)
 
 The measure is out of sample: each correction was estimated on 2022-2023 and tested on 2024, at
@@ -276,4 +275,3 @@ publish them. Its free API is for non-commercial use under its terms of service,
 instance. The reanalysis itself comes from the Copernicus Climate Change Service. These terms were
 checked on open-meteo.com on 2026-09-27. CAMBER only sends the request, and whether your use is
 covered is for you to check.
-<!-- /092-mv -->

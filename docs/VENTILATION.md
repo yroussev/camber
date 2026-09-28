@@ -69,7 +69,6 @@ an energy penalty), or **adequate**.
 | `under_tol` | `0.9` | flag **under** below this fraction of required |
 | `over_factor` | `1.5` | flag **over** above this multiple of required |
 
-<!-- 092-air (#17) -->
 ## System-level VRP (multiple-zone systems)
 
 `assess_62_1` compares an air handler's outdoor air with **one zone's** Voz. An air handler that
@@ -171,7 +170,6 @@ Vot covers the listed zones only.
 Verdict thresholds are validated on synthetic systems only; no licence-clean dataset has design
 zone areas and populations with measured OA.
 
-<!-- /092-air -->
 ## DCV verification
 
 ```python
@@ -317,7 +315,7 @@ Sub-checks, each `None` when it cannot be evaluated:
   a caveat; with several, unattributed zones are declined rather than guessed. One finding, with a
   `per_ahu` breakdown.
 - **`ventilation_system_62_1`** (`VentilationSystemVRP`, 0.92) — the system-level VRP above; runs
-  from the config's `ventilation` section. <!-- 092-air (#17) -->
+  from the config's `ventilation` section.
 - **`ventilation_rate_62_1`** (`VentilationRateProcedure`) — needs the zone's design inputs, so
   it's instantiated explicitly (not auto-registered). It judges one zone; for an air handler
   serving several zones use `ventilation_system_62_1`:

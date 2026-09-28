@@ -158,7 +158,7 @@ def fan_on_mask(frame: pd.DataFrame, *, speed_min_pct: float = 1.0, flow_frac: f
 
 
 # --------------------------------------------------------------------------------------------- #
-# 092-plant (#66): the plant run gate                                                            #
+# 0.92 (#66): the plant run gate                                                            #
 # --------------------------------------------------------------------------------------------- #
 
 #: The gate label reported when a plant frame trends no run signal for that loop.

@@ -62,7 +62,7 @@ _MODEL_TYPES = {
     "pump_head": LoadBaseline,
     "loop_deltat": LoadBaseline,
     "loop_dp": LoadBaseline,
-    # 092-plant (#13, #14)
+    # 0.92 (#13, #14)
     "boiler_efficiency": LoadBaseline,
     "boiler_gas_signature": LoadBaseline,
     "cooling_tower_fan_effort": LoadBaseline,

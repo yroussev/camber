@@ -178,7 +178,7 @@ def _vav_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm
 
 
 def _boiler_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm):
-    # 092-plant (#13): combustion-efficiency drift (gas in per unit of heat out)
+    # 0.92 (#13): combustion-efficiency drift (gas in per unit of heat out)
     from .rules.boiler_efficiency_rule import BoilerEfficiencyDrift
 
     kw = {"site": site, "run_id": run_id, "freeze_if_missing": freeze_if_missing}
@@ -186,7 +186,7 @@ def _boiler_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_al
 
 
 def _tower_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm):
-    # 092-plant (#14): a tower's heat rejection, read two ways -- the approach it holds, and the fan
+    # 0.92 (#14): a tower's heat rejection, read two ways -- the approach it holds, and the fan
     # effort it spends holding it (a controlled tower that fouls keeps its approach)
     from .rules.coolingtower_drift_rule import CoolingTowerApproachDrift
     from .rules.tower_fan_effort_rule import CoolingTowerFanEffortDrift
@@ -226,11 +226,11 @@ DRIFT_FAMILIES: dict = {
     ),
     "pump": DriftFamily("pump", "Pump / hydronic drift", _pump_rules, diagnose_pump_drift),
     "vav": DriftFamily("vav", "VAV zone-terminal drift", _vav_rules, diagnose_vav_drift),
-    # 092-plant (#13)
+    # 0.92 (#13)
     "boiler": DriftFamily(
         "boiler", "Boiler combustion-efficiency drift", _boiler_rules, diagnose_boiler_drift
     ),
-    # 092-plant (#14)
+    # 0.92 (#14)
     "tower": DriftFamily("tower", "Cooling-tower drift", _tower_rules, diagnose_tower_drift),
 }
 

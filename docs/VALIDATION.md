@@ -136,7 +136,6 @@ ORNL's (below) — but it is small and scores zone symptoms, not the Trim-&-Resp
 why the reset/fleet family is still validated on a **generated** fleet (next section), exactly as
 the G36 authors intend the public Trim-&-Respond logic to be reused.
 
-<!-- 092-plant -->
 ### 0.92 plant detectors on the LBNL plants
 
 `examples/lbnl_fdd/plant_detectors.py` scores the three [plant detectors](PLANT-DETECTORS.md) on the
@@ -158,7 +157,6 @@ The chiller-plant mapping gained `CDWL_SW_TEMP` -> `cond_entering_water_temp` an
 `cw_bypass_valve`, the boiler mapping `BOI_GAS_CSUM_1` -> `gas_input_rate`; the catalog entries
 carry the evidence. The simulated RBC/G36 collection's plant faults were also run locally as a
 research check; as for every research-only set, its numbers are not published.
-<!-- /092-plant -->
 
 ### Real labelled multi-zone VAV cohort — ORNL FRP (`ornl-frp-vav`, CC-BY-4.0)
 
@@ -246,7 +244,7 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage (0.91): **all 38 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+Current coverage (0.92): **all 39 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
 their injected faults) — the fixture-only list is empty; the fleet rules are scored separately. A
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This
@@ -267,6 +265,14 @@ supplying 48 °F against a 40 °F setpoint while its chiller runs). New keys: `g
 `coverage.n_scored` and `coverage.n_single` went from 36 to 38. Every other synthetic key is
 byte-identical to 0.90.1 (the G36 engine harness keys `g36.*` included), and the fleet, LBNL, BDG2
 and BDG2 savings baselines did not move.
+
+**Baseline refresh, 0.92 (maintainer sign-off).** Refreshed once more for 0.92, to add the
+condenser-water tower-bypass leak rule (#15), whose `faultlab` scenario (`condenser_bypass_leak`:
+a running plant with the bypass commanded shut and 60% of the condenser return mixed back in) was
+held in `faultlab.PENDING_SCENARIOS` until the sign-off and is now in `SCENARIOS`. New keys:
+`condenser_bypass_leak.tpr` 1.0 and `condenser_bypass_leak.fpr` 0.0; `coverage.n_scored` and
+`coverage.n_single` went from 38 to 39. Every other synthetic key is byte-identical to 0.91.0, and
+the fleet, LBNL, BDG2 and BDG2 savings baselines did not move.
 
 ## M&V accuracy — real-data acceptance on BDG2
 
@@ -406,6 +412,30 @@ the indicator (joint Σ, `p + 1`). Its exact band covers 86% / 88% / 86% at ρ =
 runs each), unbiased, and is gated at [0.85, 0.95]. Before that change the band was the reporting
 model's fitted through the event, about 20× too wide; that band survives, with a caveat, only where
 nothing can be refitted, and a test pins it at a floor.
+
+## M&V savings — SEP chaining on real meters (`valladolid-uva`)
+
+The published real-data chaining case (issue #50). The case planned in 0.90, `lbnl-b59`
+2018→2019→2020, is not publishable: its meters need a column remap, dropout fills and a
+metering-boundary annotation before any saving means anything (see
+[DATASETS.md](DATASETS.md)), so it stays a data-issues teaching case with no published savings.
+`examples/valladolid/chaining.py` runs the chain on two buildings of the University of Valladolid
+instead (Mendeley Data doi:10.17632/mzkyh37mtr.2; buildings described in Mariano-Hernández et al.,
+*Energy Science & Engineering* 10:4694–4707, 2022, doi:10.1002/ese3.1298). Building 1 (file A)
+is stable across the years and is the control. Building 2 (file B) had equipment replaced and
+on-site renewable generation added, which its meter nets out, so a saving measured on it includes
+that generation.
+
+The analysis is declared in the script before any saving is read:
+- stamps moved from the end to the start of each hour, whole days only;
+- working days only (the publisher's academic calendar, 2016–2019), one row per month, weighted
+  by its working days (the 0.92 days-weighted fits);
+- hourly OAT from CAMBER's weather source (the nearest ISD station with the NASA POWER and
+  Open-Meteo fallbacks), with the file's daily NASA POWER temperature as a sensitivity;
+- baseline 2016, reporting 2019, calendar-year intermediates 2017 and 2018, plus
+  `select_method`'s own proposal; 2020 (the COVID-19 closure) is outside every period.
+
+The results are pending maintainer sign-off and are not stated here yet.
 
 ## Cross-validation vs an independent implementation
 

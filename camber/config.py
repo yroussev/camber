@@ -522,7 +522,7 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
 
 
 def _prepare_bare(config: dict, base_dir: str) -> _Prepared:
-    """A config with no ``source`` and no equipment -- ``mv`` billing entries only (092-mv).
+    """A config with no ``source`` and no equipment -- ``mv`` billing entries only (0.92, #64).
 
     Only the facility identity and a ``shared_oat.file`` are read."""
     ctx = _facility_context(config, base_dir)
@@ -542,7 +542,7 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     Shared by :func:`run_config` and :func:`run_drift_config` so the two entry points discover
     equipment identically -- a drift run must see exactly the equipment the ordinary run does.
     """
-    if "source" not in config and not config.get("equipment"):  # 092-mv: bills-only config
+    if "source" not in config and not config.get("equipment"):  # 0.92 (#64): bills-only config
         return _prepare_bare(config, base_dir)
     if _source_kind(config["source"]) == "store":
         return _prepare_store(config, base_dir)
@@ -652,7 +652,7 @@ def _mv_savings_finding(
     from .mandv.methods import forecast_savings
     from .rules.base import Finding
 
-    days_r = _mvform.row_days(daily_r)  # 092-mv: bills sum as days * per-day energy
+    days_r = _mvform.row_days(daily_r)  # 0.92 (#64): bills sum as days * per-day energy
     res = forecast_savings(
         model,
         _mvform.design_rows(daily_r, model),
@@ -793,11 +793,11 @@ def _mv_method_metrics(res, declared: bool) -> dict:
 
 def _mv_interval(ctx) -> str:
     """The G14 interval a context's baseline is judged at: ``daily``, or ``monthly`` for bills."""
-    return (ctx or {}).get("interval", "daily")  # 092-mv
+    return (ctx or {}).get("interval", "daily")  # 0.92 (#64)
 
 
 def _mv_frame(ctx: dict, win, entry: dict | None = None):
-    """The context's rows over ``win``: daily from the resolved frame, or bills (092-mv)."""
+    """The context's rows over ``win``: daily from the resolved frame, or bills (0.92, #64)."""
     if ctx.get("slice") is not None:
         return ctx["slice"](win)
     return _mv_daily(ctx["full"], ctx["role"], win, entry)
@@ -849,7 +849,7 @@ def _mv_validity_metrics(ctx: dict, models: list, metrics: dict, caveats: list) 
                 _mvform.design_rows(frame, model),
                 frame["energy"].values,
                 time_index=frame.index,
-                weights=_mvform.row_days(frame),  # 092-mv: a billing fit's own weights
+                weights=_mvform.row_days(frame),  # 0.92 (#64): a billing fit's own weights
             )
             vd = sep_validity(tests, signs=logical_signs(model))
             verdicts[role] = {"sep_valid": bool(vd.sep_valid), "sep_failures": list(vd.failures)}
@@ -891,11 +891,11 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             m.predict(X(d, m)),
             _mvform.n_params(m),
             time_index=d.index,
-            weights=_mvform.row_days(d),  # 092-mv
+            weights=_mvform.row_days(d),  # 0.92 (#64)
         )
         return m, st
 
-    rows_of = _mvform.ledger_rows  # 092-mv: bills expand to their days for the ledger
+    rows_of = _mvform.ledger_rows  # 0.92 (#64): bills expand to their days for the ledger
 
     if method == "backcast":
         mr, st_r = fit(daily_r)
@@ -920,7 +920,7 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
     elif method == "chaining":
         inter = _mv_window(entry, "intermediate_period")
         daily_i = _mv_frame(ctx, inter, entry)
-        need = ctx.get("min_rows") or int(entry.get("min_days", 60))  # 092-mv: bills count rows
+        need = ctx.get("min_rows") or int(entry.get("min_days", 60))  # 0.92 (#64): bills count rows
         if daily_i is None or len(daily_i) < need:
             return _mv_declined(equip, "too few intermediate-period days", rule="mv_savings")
         mi, st_i = fit(daily_i)
@@ -1065,7 +1065,7 @@ def _mv_proposal_finding(ctx: dict) -> object:
         reporting=rep_w,
         standard_conditions=ny,
         extrapolation=ctx["policy"],
-        days="days" if "days" in daily.columns else None,  # 092-mv: bills
+        days="days" if "days" in daily.columns else None,  # 0.92 (#64): bills
     )
     caveats = list(prop.caveats)
     if _mv_has_ledger(ctx):
@@ -1103,7 +1103,7 @@ def _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats) -> None:
     from .mandv.methods import _rank_models, _slice_days
 
     kinds = ("2P", "3PC", "3PH", "4P", "5P")
-    dcol = "days" if "days" in daily.columns else None  # 092-mv: bills, as select_method ranked
+    dcol = "days" if "days" in daily.columns else None  # 0.92 (#64): bills, as select_method ranked
 
     def best(win):
         T, y, idx, dd = _slice_days(daily, win, "oat", "energy", dcol)
@@ -1718,7 +1718,7 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
                         start=start,
                         fit_period=fp,
                         model=model,
-                        weights=_mvform.row_days(frame),  # 092-mv: bills, per-day rate
+                        weights=_mvform.row_days(frame),  # 0.92 (#64): bills, per-day rate
                         **kw,
                     )
                 )
@@ -1858,11 +1858,10 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     reg = builtin_registry()
     findings, ran = [], []
-    # -- 092-air (#17): the "ventilation" section configures the system-level 62.1 VRP rule
+    # 0.92 (#17): the "ventilation" section configures the system-level 62.1 VRP rule
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
         reg.register(vent_rule)
-    # -- /092-air
     for entry in config.get("rules", []):
         # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
         # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
@@ -1891,7 +1890,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
             )
         ran.append(name)
-    # -- 092-air (#17): a configured ventilation section runs even when "rules" omits the rule
+    # 0.92 (#17): a configured ventilation section runs even when "rules" omits the rule
     if vent_rule is not None and vent_rule.name not in ran:
         f = reg.run_fleet(
             vent_rule.name,
@@ -1905,7 +1904,6 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         if f is not None:
             findings.append(f)
         ran.append(vent_rule.name)
-    # -- /092-air
 
     # Optional SOO conformance: per equipment class, a packaged library sequence or a
     # JSON clause spec is evaluated over each matched equipment's role-frame, and the
@@ -1930,7 +1928,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     if config.get("mv"):
         prep.mv_store = _mv_store_readonly(config, base_dir, prep.ctx)
     for entry in config.get("mv", []):
-        if entry.get("bills") is not None:  # 092-mv: a billing-data entry (camber.mvbilling)
+        if entry.get("bills") is not None:  # 0.92 (#64): a billing-data entry (camber.mvbilling)
             from .mvbilling import billing_findings, billing_label
 
             findings += billing_findings(entry, prep, base_dir=base_dir)
@@ -2014,7 +2012,6 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     )
 
 
-# -- 092-air (#17)
 _VENTILATION_KEYS = frozenset(
     {
         "zones",
@@ -2049,9 +2046,6 @@ def _ventilation_rule(config: dict, base_dir: str):
         kw["occupied_days"] = tuple(kw["occupied_days"])
     zones = load_vent_zones(spec["zones"], base_dir=base_dir) if spec.get("zones") else []
     return VentilationSystemVRP(zones=zones, systems=spec.get("systems") or {}, **kw)
-
-
-# -- /092-air
 
 
 def _frame_resolver(prep: _Prepared) -> Callable:
@@ -2263,7 +2257,7 @@ def run_mv_config(config: dict, *, base_dir: str = ".", prepared=None) -> list:
     prep.mv_store = _mv_store_readonly(config, base_dir, prep.ctx)
     out: list = []
     for entry in config.get("mv", []):
-        if entry.get("bills") is not None:  # 092-mv: a billing-data entry (camber.mvbilling)
+        if entry.get("bills") is not None:  # 0.92 (#64): a billing-data entry (camber.mvbilling)
             from .mvbilling import billing_findings
 
             out += billing_findings(entry, prep, base_dir=base_dir)
