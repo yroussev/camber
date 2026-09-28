@@ -166,6 +166,33 @@ SEP chaining case.
 
   `bps.EUI_FACTORS_KBTU` keeps its historical 3.412 kBtu/kWh, 0.004% below the exact factor, so
   `site_eui` does not move (docs/UNITS.md).
+- **Energy conversion factor sets: ENERGY STAR "Thermal Energy Conversions" (#69,
+  provisional).** The new `camber.energy_factors` loads published factor sets from JSON files in
+  the package and validates each one. The first set is `energy_star_thermal_2015`: every factor
+  of Figures 2 and 3 of the ENERGY STAR Portfolio Manager technical reference (U.S. EPA, August
+  2015), with US and Canadian columns. It covers 17 meter types, from electricity, natural gas,
+  fuel oils, propane and district energy to coal, coke and wood, in 210 entries. The set is
+  pinned by URL, edition, retrieval date and sha256, and keeps the source's footnotes (40 CFR 98
+  Tables C-1/C-2, Statistics Canada, IDEA). The loader checks every multiplier against its heat
+  content and unit size. Five rows that the source prints inconsistently are kept as printed and
+  raise a caveat when used. `to_kbtu(value, unit, meter_type, factor_set=, region=)` and
+  `factor_for` convert with a set.
+  - **Config (opt-in).** `"units": {"system": ..., "factor_set": "energy_star_thermal_2015",
+    "region": "US" | "CA"}` converts billing entries in volume or mass with the set's heat
+    contents: gas in cf/kcf/MMcf/m3 (1,026 Btu/cf US, 1,031.43 CA), oil, diesel, kerosene and
+    propane in gallons or litres, steam in lb/klb, and coal and wood in tons. `bills.meter_type`
+    names the fuel. An explicit `heat_content` or `enthalpy` always wins. Energy units keep the
+    exact factors. The findings record the factor used (`energy_factor`) and a provenance
+    caveat. Without `factor_set` nothing changes.
+  - **"M" means a thousand or a million.** ENERGY STAR writes Mcf for a million cubic feet, and
+    many US utilities write it for a thousand. A bare `Mcf` stays a thousand cubic feet, as in
+    `camber.energy_units`, and `MBtu` and `Mlb` stay refused. Each conversion of a bare `Mcf`
+    now carries a caveat naming the 1,000x conflict. With a set, `kcf`, `MMcf` and
+    `million cf`, `MMBtu` and `MMlb` are accepted.
+  - `bps.EUI_FACTORS_KBTU` is unchanged. Its 3.412 per kWh, 100 per therm and 12 per ton-hour
+    equal ENERGY STAR's, and a test keeps them so. docs/UNITS.md has the details, and
+    docs/ENERGY-FACTORS.md is the generated table. `scripts/energy_factors_refresh.py`
+    validates, re-pins and documents a set.
 
 ### Changed
 - **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and

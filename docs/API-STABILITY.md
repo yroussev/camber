@@ -274,6 +274,16 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `PrimaryEnergy` and `FacilitySEP` (serialised only when set);
   - `bps.site_eui_units`, `BillingSeries.converted`, `mvbilling.billing_units` and the trailing
     `Benchmark.unit`.
+- **Energy conversion factor sets** (0.92; #69), all additive and provisional:
+  - the package `camber.energy_factors`: `factor_sets`, `get_factor_set`, `load_factor_set`,
+    `validate_factor_set`, `resolve_unit`, `resolve_meter_type`, `factor_for`, `to_kbtu`,
+    `reference_markdown`, `FactorSet`, `FactorEntry`, `Conversion`, `EnergyFactorWarning`,
+    `UNIT_KEYS` and `SCHEMA`. The factor-set JSON schema (`camber.energy_factors/1`), the unit
+    keys, the meter-type aliases and the bundled sets may grow. A published set's numbers change
+    only to correct a transcription error; a new edition is a new set;
+  - the config keys `units.factor_set` / `units.region` and `bills.meter_type`, the metric
+    `energy_factor` on billing `mv_*` findings, `mvbilling.billing_conversion`, and the
+    trailing `UnitSystem.factor_set` / `UnitSystem.region` fields.
 
 ## Deprecated
 

@@ -48,6 +48,8 @@ IT therm throughout. EUI converts as 1 kBtu/ft2/yr = 3.15459 kWh/m2/yr.
 
 `camber.bps.site_eui` has always converted electricity at **3.412 kBtu/kWh**. That is the exact
 3.412142 rounded, and it is 0.004% low. It is **kept**, so existing EUI outputs do not move.
+It is also ENERGY STAR Portfolio Manager's standard multiplier, and so is its 100 kBtu per therm
+(see [Energy conversion factors](#energy-conversion-factors); a test keeps them equal).
 The unit-aware `bps.site_eui_units` uses the exact factors. On a building that is all electric,
 the two differ by 0.004% of the EUI (108.24 against 108.2428 kBtu/ft2/yr in the test example). Its
 other rows (100 kBtu per therm, 12 kBtu per ton-hour) are already exact.
@@ -59,7 +61,8 @@ other rows (100 kBtu per therm, 12 kBtu per ton-hour) are already exact.
 - **Energy:** kWh (`kilowatt-hours`), MWh, GWh, Wh, Btu, kBtu, MMBtu (`dekatherm`, `Dth`), therm
   (`therms`, `thm`), ton-hour (`ton-hr`, `ton·h`), kJ, MJ and GJ.
 - **Power:** kW, MW, W, Btu/h, kBtu/h (`MBH`), MMBtu/h and ton (`tons`).
-- **Gas volume:** ft3 (`cf`), CCF, Mcf and m3.
+- **Gas volume:** ft3 (`cf`), CCF, Mcf and m3. A bare `Mcf` is a **thousand** cubic feet, the
+  US gas-utility reading. `MMcf` is read only through a factor set.
 - **Steam mass:** lb, klb and kg.
 
 It **refuses**:
@@ -116,8 +119,11 @@ Gas meter: avoided energy 554,023 kBtu (16.3%) ± 85,632 kBtu at 90% over 365 re
 - **Billing entries.** The bills' unit comes from `bills.units` or the file's `units` column, and
   more than one unit in the column is an error. Under a unit system the unit must parse.
   `bills.heat_content` is required for gas billed by volume (Mcf, CCF, m3), and `bills.enthalpy`
-  for steam billed by mass. Both are validated whenever they are given. Without a system, bills
-  in Mcf are fitted and reported in Mcf, as before.
+  for steam billed by mass. Both are validated whenever they are given. Opt-in, a
+  `units.factor_set` supplies them instead (see
+  [Energy conversion factors](#energy-conversion-factors)). Without a system, bills in Mcf are
+  fitted and reported in Mcf, as before. Bills in a bare `Mcf` carry a caveat under a system
+  (see [The "M" problem](#the-m-problem)).
   `BillingSeries.converted(unit, heat_content=...)` converts a series in code.
 
 ### SEP primary energy
@@ -166,7 +172,129 @@ plain `electricity_per_kwh` / `gas_per_therm` keys are read as before.
 `fault_economics.annotate_costs(..., units="ip" | "si")` adds `waste_energy` (both fuels' site
 energy) and `energy_unit` beside the existing `waste_kwh` / `waste_therms`.
 
+## Energy conversion factors
+
+`camber.energy_factors` (provisional) holds **published conversion factor sets**: the multipliers
+that turn a billed quantity (cubic feet of gas, gallons of oil, pounds of steam, tons of coal)
+into energy. Each set is a JSON file in the package, transcribed from its source and pinned to it
+by URL, edition, retrieval date and the source file's sha256. Every entry is listed in
+[the factor tables](ENERGY-FACTORS.md).
+
+### The ENERGY STAR set
+
+`energy_star_thermal_2015` is the ENERGY STAR Portfolio Manager technical reference *Thermal
+Energy Conversions* (U.S. EPA, August 2015), retrieved 2026-09-28 from
+<https://portfoliomanager.energystar.gov/pdf/reference/Thermal%20Conversions.pdf>. It is a work
+of the U.S. Government, and the numbers are transcribed as printed.
+
+- **Figure 2** (quick reference) gives the standard multipliers between kWh, MWh, kBtu, MMBtu and
+  GJ, the same for both countries.
+- **Figure 3** gives the multiplier to kBtu and the heat content for every unit Portfolio Manager
+  accepts, for 17 meter types: electricity, natural gas, fuel oil No. 1, No. 2, No. 4 and
+  No. 5 & 6, diesel, kerosene, propane, district steam, hot water and chilled water, anthracite
+  and bituminous coal, coke, wood and "other". That is 105 unit rows per region, 210 entries.
+- **Regions.** `US` (U.S. property assumptions) and `CA` (Canadian property assumptions). The US
+  heat contents come from the EPA Greenhouse Gas Reporting Rule, 40 CFR 98, subpart C,
+  Tables C-1 and C-2. The Canadian fossil-fuel heat contents come from Statistics Canada's
+  *Report on Energy Supply and Demand* (Text Table 1.1, 2009). District steam uses the
+  International District Energy Association's 1,194 Btu/lb for both. For example, natural gas is
+  1,026 Btu/cf (US) and 1,031.43 Btu/cf (CA).
+- **Source discrepancies.** Five printed multipliers disagree with the table's own heat content
+  beyond rounding: US natural gas per cubic metre (36.303, where 1,026 Btu/cf gives 36.233), the
+  three Canadian propane liquid rows (they follow 0.090809 MBtu/gallon; the printed heat content
+  reads 0.09089), and US wood per tonne (15,857, which is 17,480 divided by 1.10231 instead of
+  multiplied). They are kept as printed, because they are what Portfolio Manager applies. Each
+  is marked in the file, and using one raises a caveat.
+
+```python
+from camber.energy_factors import factor_sets, factor_for, to_kbtu
+
+factor_sets()  # ['energy_star_thermal_2015']
+to_kbtu(120, "kcf", "natural_gas", factor_set="energy_star_thermal_2015", region="US")  # 123,120
+to_kbtu(500, "gallons", "fuel_oil_2", factor_set="energy_star_thermal_2015", region="CA")
+factor_for("klb", "district_steam", factor_set="energy_star_thermal_2015", region="US").describe()
+```
+
+`to_kbtu(value, unit, meter_type, *, factor_set, region)` takes a meter type by its key
+(`natural_gas`), its printed name (`"Fuel Oil (No. 2)"`) or an alias (`gas`, `steam`,
+`fuel_oil`). A unit the set does not list for that meter type is an error that lists the units it
+does. `factor_for` returns the entry with its heat content, footnotes and caveats. `to_kbtu`
+issues each caveat as an `EnergyFactorWarning`.
+
+### The "M" problem
+
+!!! warning "Mcf: a thousand or a million cubic feet?"
+    ENERGY STAR writes **M for million** and k/K for thousand: its `Mcf` is a *million* cubic
+    feet (1,026,000 kBtu), its `Kcf` a thousand, and its `MBtu` a million Btu (the source's own
+    note 5). Many US gas utilities write **M for thousand**: their `Mcf` is a *thousand* cubic
+    feet, and a million is `MMcf`. The two readings differ by 1,000x.
+
+CAMBER keeps one reading for bare strings everywhere. A bare `Mcf` is a **thousand** cubic feet,
+as `camber.energy_units` reads it, and `MBtu` and `Mlb` are refused as ambiguous. Each factor set
+records its own convention (`conventions.M`), and its entries use unambiguous keys: `kcf` and
+`MMcf`, `klb` and `MMlb`, and `MMBtu`. With a factor set these labels are accepted: `kcf`,
+`thousand cubic feet`, `MMcf`, `million cf`, `MMBtu`, `klb`, `MMlb` and `million lb`.
+
+**Whenever a bare `Mcf` is converted,** in `to_kbtu` or in a billing entry under a unit system,
+with a factor set or with an explicit heat content, a caveat names the conflict. If the bill
+follows ENERGY STAR's convention, the energy is 1,000x too low. To remove the caveat, write
+`kcf` or `MMcf`.
+
+### In a config (opt-in)
+
+```json
+"units": {"system": "ip", "factor_set": "energy_star_thermal_2015", "region": "US"}
+```
+
+`factor_set` and `region` go together. Without them nothing changes: a gas volume still needs
+`bills.heat_content`, and steam by mass `bills.enthalpy`. With them, a billing entry in a unit
+that `camber.energy_units` cannot convert on its own is converted with the set's multiplier to
+kBtu, and then to the system's energy unit. Such units are volumes and masses without an explicit
+heat content, and gallons, litres, tons, tonnes, `kcf`, `MMcf` and `MMlb`.
+
+- `bills.meter_type` names the fuel, for example `"fuel_oil_2"`, `"propane"` or
+  `"coal_bituminous"`. Without it, a gas volume is read as `natural_gas` and a mass as
+  `district_steam`, as `camber.energy_units` reads them, and a caveat says so. Gallons and tons
+  need it.
+- **An explicit `heat_content` or `enthalpy` always wins.** The set is not used then.
+- Energy units (kWh, therms, MMBtu, ton-hours) keep the exact factors above. An electric or
+  therm meter reports the same with or without a factor set.
+- Every finding of the entry records the factor as `energy_factor` (the set, region, meter type,
+  printed unit, multiplier, heat content and footnotes), and carries a caveat such as
+  `Converted with energy_star_thermal_2015 (..., 2015-08), US, Natural Gas: 1 Kcf (thousand
+  cubic feet) = 1,026 kBtu, heat content 1,026 Btu/cf.`
+
+### Exact and rounded factors
+
+`camber.energy_units` converts with exact definitions: 1 kWh = 3.412142 kBtu. A published set
+carries its publisher's numbers, which are often rounded: ENERGY STAR converts a kWh at 3.412
+kBtu and a GJ at 947.817 kBtu. Which one applies depends on the path. `to_kbtu` with a set uses
+the set's numbers. The default path, and energy-unit bills under a factor set, use the exact
+factors. `bps.EUI_FACTORS_KBTU` keeps its historical values. Its electricity (3.412), gas (100
+per therm) and chilled-water (12 per ton-hour) rows equal ENERGY STAR's. Its propane (91.6 per
+gallon) and fuel-oil (138.7 per gallon) rows are other published values, within 0.5% of ENERGY
+STAR's 92 and 138, and are unchanged.
+
+### Adding or updating a set
+
+A new set is a new JSON file in `camber/energy_factors/`. It needs no code change, unless it uses
+a physical unit outside `camber.energy_factors.UNIT_KEYS`. Examples are an EIA or Statistics
+Canada update, an ASHRAE table, site-to-source factors, or emission factors with their own
+`kind` and `output_unit`. A new edition of an existing source is a new file, so that results
+citing the old one stay reproducible.
+
+`scripts/energy_factors_refresh.py` validates a draft (`--validate file.json`) and checks a
+set's source against its pinned sha256 (`--check`). It re-pins the sha256, retrieval date and
+edition (`--pin ... --edition ... --write`) and regenerates [the factor tables](ENERGY-FACTORS.md)
+(`--docs --write`). Its docstring is the checklist. On load, every set is validated: the schema,
+the unit keys, the footnote references, and that each multiplier equals heat content x unit size
+within the printed precision. A row the source prints inconsistently must be marked a
+`source_discrepancy`.
+
 ## Not converted (0.92)
+
+- Factor sets apply only to config billing entries and `camber.energy_factors` itself, not to
+  SEP, EUI or price conversions, which still take an explicit heat content.
 
 - Temperatures, pressures, flows, and every rule's own metrics.
 - The versioned-baseline chain report (`camber mv report`).
