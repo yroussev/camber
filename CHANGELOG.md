@@ -109,6 +109,58 @@ All notable changes to CAMBER are documented here. The format follows
   passes `link_findings(..., shared_scope=...)` (and `sensor_causes`) the units that read each
   OAT source, and the cause taints only them.
 <!-- /092-plant -->
+<!-- 092-air -->
+### Added
+- **System-level ASHRAE 62.1 Ventilation Rate Procedure (#17).** An air handler serving several
+  zones is judged against the system intake `Vot = Vou / Ev` (`Vou = D·ΣRp·Pz + ΣRa·Az`,
+  `D = Ps / ΣPz`), not one zone's Voz. `camber.ventilation.system_outdoor_air` computes it with the
+  simplified Ev of the free 62.1-2016 Addendum f (`0.88·D + 0.22` below D = 0.60, else 0.75; the
+  default, with the addendum's `Vpz-min ≥ 1.5·Voz` check when minimum primary airflows are given)
+  or the multiple-zone appendix calculation (`Evz = 1 + Xs − Zpz`), for multiple-zone, single-zone
+  and 100 % OA systems, with mode-aware Ez (1.0 cooling, 0.8 heating). `assess_system_62_1`
+  judges each sample against its mode's Vot; without a flow station `estimate_oa_cfm` estimates OA
+  from the mixing temperatures × supply airflow with a propagated band, and a verdict must hold
+  across it. The fleet rule `ventilation_system_62_1` (`VentilationSystemVRP`) runs from a new
+  config `ventilation` section (a zones CSV or list, per-system `ps` / `d` / `vps_cfm` /
+  `system_type` / `method`); zones join their air handler by a declared `system`, else the config
+  `topology`. It declines when an input is missing, caps at `warn` for assumed areas or
+  populations, a temperature estimate, or membership from a Brick model, the naming heuristic or
+  a single-source fallback, and says so. Section and table numbers of the 2019/2022 editions,
+  default densities and Ez rows are marked unverified (docs/VENTILATION.md). On the open LBNL
+  Building 59 data, with a stated area assumption, all four RTUs are over-ventilated 3.4–5.6×.
+
+### Fixed
+- **`supply_air_reset` read supply air rising with OAT as a reset (#65).** A G36 cooling SAT reset
+  lowers supply air as OAT rises and for each cooling request (§5.16.2.2; the trim-and-respond
+  response is negative), so the reset is now a **negative** SAT-vs-OAT slope, and a trended
+  setpoint must move against its driver (OAT or SAT reset requests). Supply air that rises with OAT
+  over cooling hours reads "SAT RISING WITH LOAD (possible capacity shortfall, not a reset)"
+  (`info`, `warn` when cold supply air dominates) with a caveat to check the chilled-water supply
+  and the cooling valve; a setpoint that rises with its driver is "in the wrong direction"
+  (`sp_wrong_direction`) and never `ok`. New: `SATResetResult.direction` and the finding metric
+  `reset_direction` (`reset` / `rising_with_load` / `flat` / None). The `faultlab` clean scenario
+  for `supply_air_reset` now resets in the G36 direction; the synthetic benchmark did not move.
+- **The G36 -> plant link overlapped the plant with every G36 fault hour (#67).** The same-hours
+  test for a `g36_afdd` FC13 finding used the rule's violation mask, the union of all fault
+  conditions, so duct-static (FC1) or economizer hours counted as plant symptoms. `g36_afdd`
+  evidence now carries one mask per evaluated fault condition (`Evidence.masks`, provisional), and
+  `link_findings(part_mask_for=...)` reads FC13's own hours (the RCx report passes it).
+  `UpstreamCause.unit_hours` says which hours were used (`"FC13"` or `"finding"`), and the "why"
+  line names them.
+
+### Changed
+- **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and
+  so `frame_sensor_health`, the runner's trust gate and the RCx report) now applies
+  `copied_signal_consistency` and `mixing_flow_consistency`. A measured point that carries another
+  point's data is flagged `copied_signal`; the copy is told from the original at the edges of the
+  identical stretch (it jumps across the gap between them) and loses trust by the share of its
+  samples that are copied, capped at "suspect"; when the copy cannot be told apart both are
+  flagged and capped at "suspect". A MAT that fails the flow-weighted OA/RA balance is flagged
+  `mixing_balance` and capped at "suspect"; OAT and RAT are flagged, not lowered. Both flags make
+  the unit's findings on that point conditional in triage (`sensor_causes`), on that unit only. On
+  the open LBNL Building 59 data (catalog example) RTU01/RTU02's MAT drop to "suspect" and RTU04's
+  copied return air to 0.56, while its supply air keeps its score.
+<!-- /092-air -->
 
 ## [0.91.0] — 2026-09-27
 

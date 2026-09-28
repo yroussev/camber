@@ -23,7 +23,7 @@ for a stamped 62.1 calculation.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -40,6 +40,18 @@ __all__ = [
     "economizer_active_mask",
     "DEFAULT_DCV_ENGAGE_PPM",
     "DEFAULT_ECON_HIGH_LIMIT_F",
+    # 092-air (#17, 0.92): system-level Ventilation Rate Procedure
+    "DEFAULT_EZ_COOLING",
+    "DEFAULT_EZ_HEATING",
+    "VentZone",
+    "SystemVrpRequirement",
+    "SystemVrpResult",
+    "simplified_ev",
+    "system_outdoor_air",
+    "estimate_oa_cfm",
+    "assess_system_62_1",
+    "zones_from_records",
+    "load_vent_zones",
 ]
 
 # ASHRAE 62.1 Table 6.1 minimum rates: space type -> (Rp cfm/person, Ra cfm/ft²).
@@ -547,3 +559,604 @@ def assess_dcv(
         ok = lift >= min_lift_ppm
     common["demand_lift"] = round(lift, 3 if kind == "presence" else 1)
     return _result("functioning" if ok else "uncorrelated", **common)
+
+
+# ============================================================================ 092-air (#17)
+# System-level Ventilation Rate Procedure (0.92). A multiple-zone recirculating system (one air
+# handler serving several zones) must bring in Vot = Vou / Ev, not one zone's Voz.
+#
+# Sources (the standard's text is not quoted; the maintainer has no licensed 62.1-2022 copy):
+#   * ASHRAE 62.1-2016 Addendum f, published free by ASHRAE: the uncorrected outdoor air intake
+#     Vou = D * sum(Rp*Pz) + sum(Ra*Az) with occupant diversity D = Ps / sum(Pz), and the
+#     simplified system ventilation efficiency Ev = 0.88*D + 0.22 for D < 0.60, else 0.75
+#     (§6.2.5 of the addendum; carried into 62.1-2019, where it is numbered §6.2.4 -- the 2022
+#     numbering is unverified here).
+#   * The addendum's condition for using the simplified Ev on a VAV system -- each zone's minimum
+#     primary airflow at least 1.5 x its Voz -- as described in public secondary sources (design
+#     guides and ASHRAE Journal columns on Addendum f). Treat the exact wording as unverified.
+#   * The multiple-zone calculation of the standard's normative appendix (Zpz = Voz / Vpz,
+#     Xs = Vou / Vps, Evz = 1 + Xs - Zpz for a single-supply system without secondary
+#     recirculation, Ev = min Evz), as given in the pre-2016 editions' Ev procedure and public
+#     secondary sources. Section and table numbers are unverified for the 2019/2022 editions.
+#   * Zone air-distribution effectiveness: 1.0 for ceiling supply of cool air, 0.8 for ceiling
+#     supply of warm air (15 F or more above space temperature) with ceiling return -- the Ez
+#     table's rows, from public secondary sources; unverified for 2022. Other configurations
+#     (floor supply, displacement) have other values: set them per zone.
+
+#: Zone air-distribution effectiveness defaults (see above): cooling-mode ceiling supply, and the
+#: heating-mode default the maintainer approved (warm-air ceiling supply, the conservative row).
+DEFAULT_EZ_COOLING = 1.0
+DEFAULT_EZ_HEATING = 0.8
+
+#: Occupant diversity below which the simplified Ev falls with D (62.1-2016 Addendum f).
+_EV_D_BREAK = 0.60
+
+_SYSTEM_TYPES = ("multiple_zone", "single_zone", "100pct_oa")
+_METHODS = ("simplified", "appendix")
+
+
+@dataclass
+class VentZone:
+    """One zone's 62.1 VRP inputs.
+
+    ``population`` is the zone's design population Pz; ``area_sqft`` its floor area Az. Rates come
+    from ``space_type`` (:data:`OA_RATES_62_1`) unless ``rp`` / ``ra`` are given. ``ez_cooling`` /
+    ``ez_heating`` override the defaults. ``vpz_min_cfm`` is the zone's minimum primary airflow
+    (for the simplified method's 1.5 x Voz check); ``vpz_cfm`` the primary airflow at the
+    condition the appendix method analyses (default: ``vpz_min_cfm``, the critical condition of a
+    VAV zone). ``system`` names the air handler serving it, when declared. ``area_assumed`` /
+    ``population_assumed`` mark inputs that are stated assumptions rather than design data --
+    every result built on one says so and is capped at ``warn``.
+    """
+
+    zone: str
+    area_sqft: float | None = None
+    population: float | None = None
+    space_type: str | None = None
+    rp: float | None = None
+    ra: float | None = None
+    ez_cooling: float | None = None
+    ez_heating: float | None = None
+    vpz_min_cfm: float | None = None
+    vpz_cfm: float | None = None
+    system: str | None = None
+    area_assumed: bool = False
+    population_assumed: bool = False
+    note: str = ""
+
+    def rates(self) -> tuple[float, float] | None:
+        """``(Rp, Ra)``, or ``None`` when neither the rates nor a known space type are given."""
+        if self.rp is not None and self.ra is not None:
+            return float(self.rp), float(self.ra)
+        if self.space_type is None:
+            return None
+        try:
+            d_rp, d_ra = oa_rates_for(self.space_type)
+        except KeyError:
+            return None
+        return (
+            float(d_rp if self.rp is None else self.rp),
+            float(d_ra if self.ra is None else self.ra),
+        )
+
+    def missing(self) -> list:
+        """Which inputs the VRP needs and this zone lacks."""
+        out = []
+        if self.area_sqft is None or not np.isfinite(float(self.area_sqft)):
+            out.append("area_sqft")
+        if self.population is None or not np.isfinite(float(self.population)):
+            out.append("population")
+        if self.rates() is None:
+            out.append("rp/ra or a known space_type")
+        return out
+
+
+def simplified_ev(d: float) -> float:
+    """Simplified system ventilation efficiency: ``0.88*D + 0.22`` for ``D < 0.60``, else ``0.75``
+    (62.1-2016 Addendum f)."""
+    d = float(d)
+    if not 0.0 < d <= 1.0:
+        raise ValueError(f"occupant diversity D must be in (0, 1], got {d}")
+    return 0.88 * d + 0.22 if d < _EV_D_BREAK else 0.75
+
+
+@dataclass
+class SystemVrpRequirement:
+    """The 62.1 VRP outdoor-air requirement of one system, per operating mode.
+
+    ``vot_cooling_cfm`` / ``vot_heating_cfm`` differ only where the zone air-distribution
+    effectiveness enters (single-zone and 100 % OA systems, the appendix method, the Vpz-min
+    check); the simplified multiple-zone Vot does not depend on Ez. ``declined`` names why no
+    requirement could be computed (then the numbers are None).
+    """
+
+    system: str
+    system_type: str
+    method: str | None
+    n_zones: int
+    sum_pz: float | None = None
+    ps: float | None = None
+    d: float | None = None
+    vou_cfm: float | None = None
+    ev_cooling: float | None = None
+    ev_heating: float | None = None
+    vot_cooling_cfm: float | None = None
+    vot_heating_cfm: float | None = None
+    zones: list = field(default_factory=list)  # per-zone dicts (Vbz, Voz by mode, Zpz, Evz)
+    vpz_min_short: list = field(default_factory=list)  # zones with Vpz-min < 1.5 * Voz
+    assumed: list = field(default_factory=list)  # "<zone>: area" / "<zone>: population"
+    caveats: list = field(default_factory=list)
+    declined: str | None = None
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def _voz(z: VentZone, ez: float) -> tuple[float, float]:
+    rp, ra = z.rates()  # type: ignore[misc]  # callers check missing() first
+    vbz = rp * float(z.population) + ra * float(z.area_sqft)  # type: ignore[arg-type]
+    return vbz, vbz / ez
+
+
+def system_outdoor_air(
+    zones,
+    *,
+    system: str = "",
+    system_type: str = "multiple_zone",
+    method: str = "simplified",
+    ps: float | None = None,
+    d: float | None = None,
+    vps_cfm: float | None = None,
+    ez_cooling: float = DEFAULT_EZ_COOLING,
+    ez_heating: float = DEFAULT_EZ_HEATING,
+) -> SystemVrpRequirement:
+    """The 62.1 VRP outdoor-air intake of one system (cfm), per mode.
+
+    ``zones`` is a list of :class:`VentZone`. ``system_type``:
+
+    * ``"multiple_zone"`` (default) -- recirculating, one air handler serving several zones:
+      ``Vot = Vou / Ev`` with ``Vou = D*sum(Rp*Pz) + sum(Ra*Az)``. ``D = Ps / sum(Pz)`` from the
+      system population ``ps`` (or ``d`` directly); **without either, D = 1** (no diversity) --
+      the largest Vou and, with the simplified method, Ev = 0.75: a conservative requirement that
+      can over-state it, said in a caveat. ``method="simplified"`` (default) takes
+      :func:`simplified_ev`, and checks each zone's ``vpz_min_cfm`` against ``1.5 * Voz`` where
+      given (a shortfall is listed in ``vpz_min_short`` with a caveat: the simplified Ev may
+      over-state the system's efficiency there). ``method="appendix"`` computes
+      ``Evz = 1 + Xs - Zpz`` per zone (``Zpz = Voz / Vpz``, ``Xs = Vou / Vps``; single supply, no
+      secondary recirculation) and ``Ev = min Evz``; it needs every zone's ``vpz_cfm`` (or
+      ``vpz_min_cfm``), and ``vps_cfm`` (default ``sum(Vpz)`` -- which over-states Vps, and so the
+      requirement, when zone peaks do not coincide).
+    * ``"single_zone"`` -- ``Vot = Voz`` of its one zone.
+    * ``"100pct_oa"`` -- ``Vot = sum(Voz)``.
+
+    Voz uses ``ez_cooling`` / ``ez_heating`` (a zone's own values win). A zone missing an input,
+    or an unknown system type / method, declines the system (``declined``). Zones whose area or
+    population is marked assumed are listed in ``assumed``.
+    """
+    zones = list(zones)
+    if system_type not in _SYSTEM_TYPES:
+        raise ValueError(f"system_type must be one of {_SYSTEM_TYPES}, got {system_type!r}")
+    if method not in _METHODS:
+        raise ValueError(f"method must be one of {_METHODS}, got {method!r}")
+    req = SystemVrpRequirement(
+        system=system,
+        system_type=system_type,
+        method=method if system_type == "multiple_zone" else None,
+        n_zones=len(zones),
+    )
+    if not zones:
+        req.declined = "no zones"
+        return req
+    lacking = {z.zone: z.missing() for z in zones if z.missing()}
+    if lacking:
+        req.declined = "zone inputs missing: " + "; ".join(
+            f"{k} ({', '.join(v)})" for k, v in sorted(lacking.items())
+        )
+        return req
+    for z in zones:
+        if z.area_assumed:
+            req.assumed.append(f"{z.zone}: area")
+        if z.population_assumed:
+            req.assumed.append(f"{z.zone}: population")
+    if req.assumed:
+        req.caveats.append(
+            "the requirement rests on assumed inputs (" + ", ".join(req.assumed) + "), not design "
+            "data: confirm them against the mechanical schedule"
+        )
+    if system_type == "single_zone" and len(zones) != 1:
+        req.declined = f"a single-zone system has one zone, {len(zones)} given"
+        return req
+
+    rows = []
+    for z in zones:
+        ezc = float(z.ez_cooling if z.ez_cooling is not None else ez_cooling)
+        ezh = float(z.ez_heating if z.ez_heating is not None else ez_heating)
+        if ezc <= 0 or ezh <= 0:
+            raise ValueError(f"zone {z.zone}: Ez must be > 0")
+        vbz, voz_c = _voz(z, ezc)
+        voz_h = vbz / ezh
+        rp, ra = z.rates()  # type: ignore[misc,unused-ignore]
+        rows.append(
+            {
+                "zone": z.zone,
+                "rp": rp,
+                "ra": ra,
+                "pz": float(z.population or 0.0),  # missing() checked above
+                "az": float(z.area_sqft or 0.0),
+                "vbz_cfm": round(vbz, 1),
+                "ez_cooling": ezc,
+                "ez_heating": ezh,
+                "voz_cooling_cfm": round(voz_c, 1),
+                "voz_heating_cfm": round(voz_h, 1),
+                "_voz": {"cooling": voz_c, "heating": voz_h},
+                "_z": z,
+            }
+        )
+    req.sum_pz = round(sum(r["pz"] for r in rows), 2)
+
+    if system_type == "single_zone":
+        req.vot_cooling_cfm = round(rows[0]["_voz"]["cooling"], 1)
+        req.vot_heating_cfm = round(rows[0]["_voz"]["heating"], 1)
+    elif system_type == "100pct_oa":
+        req.vot_cooling_cfm = round(sum(r["_voz"]["cooling"] for r in rows), 1)
+        req.vot_heating_cfm = round(sum(r["_voz"]["heating"] for r in rows), 1)
+    else:
+        spz = sum(r["pz"] for r in rows)
+        if d is not None:
+            dd = float(d)
+            req.ps = round(dd * spz, 2)
+        elif ps is not None and spz > 0:
+            dd = min(float(ps) / spz, 1.0)
+            req.ps = float(ps)
+            if float(ps) > spz:
+                req.caveats.append(
+                    f"system population Ps {float(ps):g} exceeds the zones' sum {spz:g}: D = 1"
+                )
+        else:
+            dd = 1.0
+            req.caveats.append(
+                "no system population (Ps) given: occupant diversity D = 1, the most "
+                "conservative Vou (and, simplified, Ev = 0.75) -- set systems.<id>.ps"
+            )
+        if spz <= 0:
+            dd = 1.0  # an unoccupied system: the area term alone; D is moot
+        if not 0.0 < dd <= 1.0:
+            raise ValueError(f"occupant diversity D must be in (0, 1], got {dd}")
+        req.d = round(dd, 4)
+        vou = dd * sum(r["rp"] * r["pz"] for r in rows) + sum(r["ra"] * r["az"] for r in rows)
+        req.vou_cfm = round(vou, 1)
+        if method == "simplified":
+            ev = simplified_ev(dd)
+            req.ev_cooling = req.ev_heating = round(ev, 4)
+            req.vot_cooling_cfm = req.vot_heating_cfm = round(vou / ev, 1)
+            for r in rows:
+                vmin = r["_z"].vpz_min_cfm
+                if vmin is None:
+                    continue
+                r["vpz_min_cfm"] = float(vmin)
+                for mode in ("cooling", "heating"):
+                    need = 1.5 * r["_voz"][mode]
+                    if float(vmin) < need:
+                        req.vpz_min_short.append(
+                            {
+                                "zone": r["zone"],
+                                "mode": mode,
+                                "vpz_min_cfm": float(vmin),
+                                "needed_cfm": round(need, 1),
+                            }
+                        )
+            if req.vpz_min_short:
+                zs = sorted({x["zone"] for x in req.vpz_min_short})
+                req.caveats.append(
+                    f"{len(zs)} zone(s) have a minimum primary airflow below 1.5 x Voz ("
+                    + ", ".join(zs[:5])
+                    + ("..." if len(zs) > 5 else "")
+                    + "): the simplified Ev may over-state the system's efficiency there -- "
+                    "use method='appendix' with the zones' primary airflows"
+                )
+        else:
+            vpz = {}
+            for r in rows:
+                z = r["_z"]
+                v = z.vpz_cfm if z.vpz_cfm is not None else z.vpz_min_cfm
+                if v is None or not float(v) > 0:
+                    req.declined = (
+                        f"the appendix method needs every zone's primary airflow ({r['zone']} "
+                        "has none)"
+                    )
+                    return req
+                vpz[r["zone"]] = float(v)
+            if vps_cfm is not None:
+                vps = float(vps_cfm)
+            else:
+                vps = sum(vpz.values())
+                req.caveats.append(
+                    "system primary airflow Vps taken as the sum of the zones' Vpz: over-states "
+                    "Vps (and the requirement) when zone peaks do not coincide -- set "
+                    "systems.<id>.vps_cfm"
+                )
+            xs = vou / vps
+            for mode in ("cooling", "heating"):
+                evz = {}
+                for r in rows:
+                    zpz = r["_voz"][mode] / vpz[r["zone"]]
+                    e = 1.0 + xs - zpz
+                    evz[r["zone"]] = e
+                    r[f"zpz_{mode}"] = round(zpz, 3)
+                    r[f"evz_{mode}"] = round(e, 3)
+                ev = min(evz.values())
+                if ev <= 0:
+                    req.declined = (
+                        f"appendix Ev <= 0 in {mode} (a zone's Voz exceeds its primary airflow "
+                        "by more than the system's OA fraction): the system cannot ventilate it"
+                    )
+                    return req
+                setattr(req, f"ev_{mode}", round(ev, 4))
+                setattr(req, f"vot_{mode}_cfm", round(vou / ev, 1))
+    for r in rows:
+        r.pop("_voz")
+        r.pop("_z")
+    req.zones = rows
+    return req
+
+
+def estimate_oa_cfm(
+    mat: pd.Series,
+    rat: pd.Series,
+    oat: pd.Series,
+    supply_cfm: pd.Series,
+    *,
+    sensor_err_f: float = 2.0,
+    flow_uncertainty: float = 0.10,
+    min_delta_t: float = 10.0,
+) -> pd.DataFrame:
+    """Outdoor airflow from the mixing temperatures x supply airflow, with an uncertainty band.
+
+    ``f = (MAT - RAT) / (OAT - RAT)`` and ``OA = f * SA`` on samples with ``|OAT - RAT| >=
+    min_delta_t`` (the balance cannot resolve anything closer) and ``0 <= f <= 1``. Each
+    temperature's error ``sensor_err_f`` propagates to ``sigma_f = sensor_err_f / |OAT - RAT| *
+    sqrt(1 + f**2 + (1 - f)**2)`` (first order), combined in quadrature with a relative supply-flow
+    uncertainty; the band is +/- one combined sigma, floored at 0. The default 2 F per sensor is
+    the field accuracy of a single-point mixed-air sensor in a stratified plenum rather than a
+    laboratory figure -- and even that under-covers real errors: on the open LBNL Building 59 data
+    (catalog example) the estimate reads 0.4-0.7 of the RTUs' flow stations, whose own accuracy is
+    unknown, while their MAT sensors fail the flow balance. Returns columns ``oa_cfm``,
+    ``oa_lo_cfm``, ``oa_hi_cfm`` and ``oa_fraction`` on the usable samples. A MAT sensor biased by
+    a few degrees shifts ``f`` by ``bias / |OAT - RAT|`` -- see
+    :func:`camber.sensorhealth.mixing_flow_consistency`.
+    """
+    w = (
+        pd.concat({"mat": mat, "rat": rat, "oat": oat, "sa": supply_cfm}, axis=1)
+        .apply(pd.to_numeric, errors="coerce")
+        .dropna()
+    )
+    dt = w["oat"] - w["rat"]
+    w = w[dt.abs() >= min_delta_t]
+    dt = w["oat"] - w["rat"]
+    f = (w["mat"] - w["rat"]) / dt
+    keep = f.between(0.0, 1.0) & (w["sa"] > 0)
+    w, f, dt = w[keep], f[keep], dt[keep]
+    sig_f = sensor_err_f / dt.abs() * np.sqrt(1.0 + f**2 + (1.0 - f) ** 2)
+    oa = f * w["sa"]
+    rel = np.sqrt((sig_f / f.where(f > 0)) ** 2 + flow_uncertainty**2)
+    sig = (oa * rel).fillna(sig_f * w["sa"])
+    return pd.DataFrame(
+        {
+            "oa_cfm": oa,
+            "oa_lo_cfm": (oa - sig).clip(lower=0.0),
+            "oa_hi_cfm": oa + sig,
+            "oa_fraction": f,
+        },
+        index=w.index,
+    )
+
+
+@dataclass
+class SystemVrpResult:
+    """Measured (or estimated) system outdoor air against its 62.1 VRP requirement.
+
+    ``status`` is ``under`` / ``adequate`` / ``over``, ``uncertain`` (the estimated OA's band
+    straddles a threshold) or ``insufficient`` (too few judged samples). ``ratio`` is the median of
+    the per-sample OA / Vot, each sample judged against its mode's Vot (heating when
+    ``heating_mask`` says so). ``basis`` is ``"oa_flow"`` (a flow station) or
+    ``"temperature_estimate"`` (:func:`estimate_oa_cfm`), with ``ratio_lo`` / ``ratio_hi`` its band.
+    """
+
+    system: str
+    status: str
+    basis: str
+    n: int
+    ratio: float | None = None
+    ratio_lo: float | None = None
+    ratio_hi: float | None = None
+    ratio_cooling: float | None = None
+    ratio_heating: float | None = None
+    n_heating: int = 0
+    measured_cfm: float | None = None
+    required_cfm: float | None = None
+    deficit_cfm: float | None = None
+    under_hours_pct: float | None = None
+    requirement: SystemVrpRequirement | None = None
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def _med(x) -> float | None:
+    x = np.asarray(x, dtype=float)
+    x = x[np.isfinite(x)]
+    return round(float(np.median(x)), 3) if len(x) else None
+
+
+def assess_system_62_1(
+    oa_cfm,
+    requirement: SystemVrpRequirement,
+    *,
+    heating_mask=None,
+    judged_mask=None,
+    oa_lo_cfm=None,
+    oa_hi_cfm=None,
+    under_tol: float = 0.9,
+    over_factor: float = 1.5,
+    min_samples: int = 24,
+) -> SystemVrpResult:
+    """Judge a system's outdoor airflow (a Series, cfm) against its VRP ``requirement``.
+
+    ``judged_mask`` keeps the samples to judge (occupied, fan on). ``heating_mask`` marks the
+    heating-mode samples, judged against ``vot_heating_cfm``; the rest are judged against
+    ``vot_cooling_cfm``. Status from the median per-sample ratio OA / Vot: **under** below
+    ``under_tol``, **over** above ``over_factor``, else **adequate**. With ``oa_lo_cfm`` /
+    ``oa_hi_cfm`` (an estimate's band) the verdict must hold across the band: **under** only when
+    the band's top is under, **over** only when its bottom is over; a band that straddles a
+    threshold is **uncertain**.
+    """
+    req = requirement
+    basis = "temperature_estimate" if oa_lo_cfm is not None else "oa_flow"
+    base = {"system": req.system, "basis": basis, "requirement": req}
+    if req.declined or req.vot_cooling_cfm is None:
+        return SystemVrpResult(status="insufficient", n=0, **base)  # type: ignore[arg-type]
+    s = pd.to_numeric(pd.Series(oa_cfm), errors="coerce")
+    keep = s.notna()
+    if judged_mask is not None:
+        keep &= pd.Series(judged_mask).reindex(s.index).fillna(False).astype(bool)
+    s = s[keep]
+    heat = (
+        pd.Series(heating_mask).reindex(s.index).fillna(False).astype(bool)
+        if heating_mask is not None
+        else pd.Series(False, index=s.index)
+    )
+    n = int(len(s))
+    if n < min_samples:
+        return SystemVrpResult(status="insufficient", n=n, **base)  # type: ignore[arg-type]
+    vot_c = float(req.vot_cooling_cfm)
+    vot_h = float(req.vot_heating_cfm if req.vot_heating_cfm is not None else vot_c)
+    vot = np.where(heat.to_numpy(), vot_h, vot_c)
+    r = s.to_numpy(dtype=float) / vot
+    ratio = _med(r)
+    lo = hi = None
+    if oa_lo_cfm is not None and oa_hi_cfm is not None:
+        lo = _med(pd.Series(oa_lo_cfm).reindex(s.index).to_numpy(dtype=float) / vot)
+        hi = _med(pd.Series(oa_hi_cfm).reindex(s.index).to_numpy(dtype=float) / vot)
+    rc = _med(r[~heat.to_numpy()]) if (~heat).any() else None
+    rh = _med(r[heat.to_numpy()]) if heat.any() else None
+    if ratio is None:
+        status = "insufficient"
+    elif lo is not None and hi is not None:
+        if hi < under_tol:
+            status = "under"
+        elif lo > over_factor:
+            status = "over"
+        elif lo >= under_tol and hi <= over_factor:
+            status = "adequate"
+        else:
+            status = "uncertain"
+    elif ratio < under_tol:
+        status = "under"
+    elif ratio > over_factor:
+        status = "over"
+    else:
+        status = "adequate"
+    measured = round(float(s.median()), 1)
+    required = round(float(np.median(vot)), 1)
+    return SystemVrpResult(
+        status=status,
+        n=n,
+        ratio=ratio,
+        ratio_lo=lo,
+        ratio_hi=hi,
+        ratio_cooling=rc,
+        ratio_heating=rh,
+        n_heating=int(heat.sum()),
+        measured_cfm=measured,
+        required_cfm=required,
+        deficit_cfm=round(max(0.0, required - measured), 1),
+        under_hours_pct=round(100.0 * float(np.mean(r < under_tol)), 1),
+        **base,  # type: ignore[arg-type]
+    )
+
+
+_ZONE_FIELDS = {f for f in VentZone.__dataclass_fields__}
+_BOOL_TRUE = ("1", "true", "yes", "y", "assumed")
+
+
+def _num_or_none(v):
+    if v is None:
+        return None
+    if isinstance(v, str):
+        v = v.strip()
+        if v == "":
+            return None
+    x = float(v)
+    return x if np.isfinite(x) else None
+
+
+def zones_from_records(records) -> list:
+    """:class:`VentZone` objects from dicts (a config list, or CSV rows).
+
+    Keys are the :class:`VentZone` field names; ``zone`` (or ``id`` / ``zone_id``) is required,
+    ``ahu`` is accepted for ``system``, ``area`` / ``area_ft2`` for ``area_sqft`` and ``pz`` /
+    ``occupants`` for ``population``. ``area_assumed`` / ``population_assumed`` accept booleans or
+    yes/no text. An unknown key is an error (a typo would otherwise drop an input silently).
+    """
+    alias = {
+        "id": "zone",
+        "zone_id": "zone",
+        "ahu": "system",
+        "air_handler": "system",
+        "area": "area_sqft",
+        "area_ft2": "area_sqft",
+        "pz": "population",
+        "occupants": "population",
+    }
+    out = []
+    for i, rec in enumerate(records):
+        d = {}
+        for k, v in dict(rec).items():
+            key = alias.get(str(k).strip().lower(), str(k).strip().lower())
+            if key not in _ZONE_FIELDS:
+                raise ValueError(f"ventilation zone {i}: unknown field {k!r}")
+            d[key] = v
+        if not str(d.get("zone") or "").strip():
+            raise ValueError(f"ventilation zone {i}: needs a zone id")
+        kw: dict = {"zone": str(d["zone"]).strip()}
+        for k in ("area_sqft", "population", "rp", "ra", "ez_cooling", "ez_heating"):
+            kw[k] = _num_or_none(d.get(k))
+        for k in ("vpz_min_cfm", "vpz_cfm"):
+            kw[k] = _num_or_none(d.get(k))
+        for k in ("space_type", "system", "note"):
+            v = d.get(k)
+            if v is not None and str(v).strip() != "":
+                kw[k] = str(v).strip()
+        for k in ("area_assumed", "population_assumed"):
+            v = d.get(k)
+            kw[k] = bool(v) if isinstance(v, bool) else str(v or "").strip().lower() in _BOOL_TRUE
+        out.append(VentZone(**kw))
+    return out
+
+
+def load_vent_zones(spec, *, base_dir: str = ".") -> list:
+    """Zones from a config ``ventilation.zones`` entry: a CSV path (relative to ``base_dir``), a
+    list of dicts, or a list mixing both."""
+    import csv
+    import os
+
+    items = spec if isinstance(spec, list) else [spec]
+    out: list = []
+    for it in items:
+        if isinstance(it, str):
+            path = it if os.path.isabs(it) else os.path.join(base_dir, it)
+            with open(path, newline="") as fh:
+                out += zones_from_records(csv.DictReader(fh))
+        elif isinstance(it, dict):
+            out += zones_from_records([it])
+        else:
+            raise ValueError("ventilation.zones must be a CSV path or a list of zone objects")
+    seen: set = set()
+    for z in out:
+        if z.zone in seen:
+            raise ValueError(f"ventilation zone {z.zone!r} is listed twice")
+        seen.add(z.zone)
+    return out
+
+
+# -- /092-air (#17)

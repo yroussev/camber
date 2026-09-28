@@ -206,6 +206,21 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - `sources=True` on the RCx report's OAT-source helper is internal; the per-source OAT rows and
     `oat_equips` / `scope_equips` metrics on `sensor_drift:oat` findings are provisional.
 
+<!-- 092-air -->
+- **Air-side correctness** (0.92; #16, #17, #65, #67), all additive and provisional:
+  - system-level ASHRAE 62.1 VRP (#17): in `camber.ventilation`, `VentZone`,
+    `SystemVrpRequirement`, `SystemVrpResult`, `system_outdoor_air`, `simplified_ev`,
+    `estimate_oa_cfm`, `assess_system_62_1`, `zones_from_records`, `load_vent_zones`,
+    `DEFAULT_EZ_COOLING`, `DEFAULT_EZ_HEATING`; the fleet rule
+    `camber.rules.ventilation_rule.VentilationSystemVRP` (`ventilation_system_62_1`, not
+    auto-registered) and the config `ventilation` section. The defaults (D = 1 without a system
+    population, Ez 1.0 / 0.8, the 2 F estimate error) and the finding metrics may change;
+  - the `copied_signal` / `mixing_balance` trust flags and their `frame_checks` entries (#16);
+  - `SATResetResult.direction` and the `reset_direction` / `sp_wrong_direction` metrics of
+    `supply_air_reset` (#65);
+  - `Evidence.masks`, `link_findings(part_mask_for=)` and `UpstreamCause.unit_hours` (#67).
+<!-- /092-air -->
+
 ## Deprecated
 
 Currently deprecated names and code paths, each with its replacement. Each emits a

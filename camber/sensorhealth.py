@@ -955,10 +955,20 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     (``status_speed_mismatch``), and every varying sensor on the unit holding its value at once
     for 12 h or more -- a forward-filled collection outage (``all_points_frozen``). A marked point
     records the check in ``frame_checks`` and is capped at "suspect". Returns ``health``.
+
+    Since 0.92 (#16) two cross-sensor checks feed trust too: a measured point that carries another
+    measured point's data (``copied_signal``, from :func:`copied_signal_consistency`) and a
+    mixed-air temperature that fails the flow-weighted OA/RA balance (``mixing_balance``, from
+    :func:`mixing_flow_consistency`). See :func:`_check_copied_signal` and
+    :func:`_check_mixing_balance` for what each lowers.
     """
     _check_fan_off_pressure(frame, health)
     _check_status_speed(frame, health)
     _check_all_frozen(frame, health)
+    # -- 092-air (#16): cross-sensor physics into trust
+    _check_copied_signal(frame, health)
+    _check_mixing_balance(frame, health)
+    # -- /092-air
     return health
 
 
@@ -1671,3 +1681,192 @@ def cross_unit_identity(
         metrics={"hits": hits[:50], "n_windows_tested": n_tested},
         caveats=caveats,
     )
+
+
+# --------------------------------------------------------------------------------------------- #
+# 092-air (#16, 0.92): the copied-signal and mixed-air flow-balance checks feed sensor trust      #
+# --------------------------------------------------------------------------------------------- #
+
+#: A copied stretch is judged at its edges: this much of each point's data just outside the stretch
+#: against as much just inside it.
+_COPY_EDGE = pd.Timedelta(days=7)
+_COPY_EDGE_MIN_SAMPLES = 12
+#: The copy is the point that closes at least this share of the pair's gap at an edge of the
+#: stretch, and moves at least this many times as far as the other point.
+_COPY_GAP_SHARE = 0.5
+_COPY_SHIFT_RATIO = 2.0
+
+#: The roles the mixed-air balance ``MAT = f*OAT + (1-f)*RAT`` ties together.
+_MIXING_TEMP_ROLES = (Role.MIXED_AIR_TEMP, Role.OAT, Role.RETURN_AIR_TEMP)
+
+
+def _as_role(slug):
+    try:
+        return Role(slug)
+    except ValueError:
+        return slug
+
+
+def _edge(series: pd.Series, lo, hi, *, left_open: bool = False, right_open: bool = False):
+    """Median of ``series`` on ``[lo, hi]`` (open ends dropped), ``None`` with too few samples."""
+    s = pd.to_numeric(series, errors="coerce").dropna().loc[lo:hi]
+    if left_open and len(s) and s.index[0] == pd.Timestamp(lo):
+        s = s.iloc[1:]
+    if right_open and len(s) and s.index[-1] == pd.Timestamp(hi):
+        s = s.iloc[:-1]
+    return float(s.median()) if len(s) >= _COPY_EDGE_MIN_SAMPLES else None
+
+
+def _copy_blame(frame: pd.DataFrame, a, b, start, end) -> tuple[list, str]:
+    """Which of a copied pair is the copy: ``([roles to blame], basis)``.
+
+    Before (and after) the identical stretch the two points read different quantities, so there
+    is a gap between them; inside it they agree. The original keeps measuring through the edge,
+    so it barely moves there, while the copy jumps across the gap to the other point's level (a
+    return air suddenly reading supply-air temperatures). At each edge with data on both sides,
+    the median of the week just outside is compared with the week just inside. The point that
+    closes at least half the gap and moves at least twice as far as the other is the copy; when
+    neither stands out -- or the stretch has no data around it -- both are blamed: the check
+    cannot tell which is the copy.
+    """
+    t0, t1 = pd.Timestamp(start), pd.Timestamp(end)
+    move = {a: 0.0, b: 0.0}
+    gap = 0.0
+    judged = False
+    for out_lo, out_hi, in_lo, in_hi, before in (
+        (t0 - _COPY_EDGE, t0, t0, t0 + _COPY_EDGE, True),
+        (t1, t1 + _COPY_EDGE, t1 - _COPY_EDGE, t1, False),
+    ):
+        o = {
+            r: _edge(frame[r], out_lo, out_hi, right_open=before, left_open=not before)
+            for r in (a, b)
+        }
+        i = {r: _edge(frame[r], in_lo, in_hi) for r in (a, b)}
+        if any(v is None for v in (*o.values(), *i.values())):
+            continue
+        judged = True
+        gap += abs(o[a] - o[b])
+        for r in (a, b):
+            move[r] += abs(i[r] - o[r])
+    if judged and gap > 0:
+        for r, other in ((a, b), (b, a)):
+            if move[r] >= _COPY_GAP_SHARE * gap and move[r] >= _COPY_SHIFT_RATIO * move[other]:
+                return [r], "level_shift"
+    return [a, b], "undetermined"
+
+
+def _copied_stretch(frame: pd.DataFrame, a, b, *, min_changing: int = 24, rel_tol: float = 1e-6):
+    """``(mask, first, last)`` for every identical stretch of ``a`` and ``b`` that carries at least
+    ``min_changing`` changing samples (the flagging rule of :func:`copied_signal_consistency`, over
+    *all* such stretches rather than the longest); ``mask`` is on ``frame.index``."""
+    w = frame[[a, b]].apply(pd.to_numeric, errors="coerce").dropna()
+    mask = pd.Series(False, index=frame.index)
+    if len(w) < 2:
+        return mask, None, None
+    x = w[a].to_numpy(dtype="float64")
+    y = w[b].to_numpy(dtype="float64")
+    same = np.abs(x - y) <= rel_tol * np.maximum(1.0, np.abs(x))
+    changing = np.concatenate(([False], np.diff(x) != 0))
+    hit = np.zeros(len(w), dtype=bool)
+    for s0, e0 in _runs(same):
+        if int(changing[s0:e0].sum()) >= min_changing:
+            hit[s0:e0] = True
+    if not hit.any():
+        return mask, None, None
+    mask.loc[w.index[hit]] = True
+    return mask, w.index[hit][0], w.index[hit][-1]
+
+
+def _check_copied_signal(frame: pd.DataFrame, health: dict) -> None:
+    """A measured point that carries another measured point's data is not measuring its quantity.
+
+    :func:`copied_signal_consistency` finds a copied pair; every identical stretch of the pair
+    long enough to flag is then collected (a copy is often interrupted by gaps or a few samples
+    that differ), and :func:`_copy_blame` decides which of the two is the copy. The copy is flagged
+    ``copied_signal`` and its trust scaled by the share of its samples inside those stretches,
+    capped at "suspect": the same treatment as a stuck run, since outside the stretches the point
+    may be fine. A copy covering most of the window therefore reads "untrusted". When the check
+    cannot tell which is the copy, both points are flagged and capped at "suspect", unscaled.
+    """
+    cols = [c for c in frame.columns if c in _MEASURED_ROLES]
+    if len(cols) < 2 or not any(c in health for c in cols):
+        return
+    if not isinstance(frame.index, pd.DatetimeIndex):
+        return
+    res = copied_signal_consistency(frame[cols])
+    if res.severity != "fault":
+        return
+    for pair in res.metrics.get("pairs", []):
+        a, b = (_as_role(x) for x in pair["roles"])
+        if a not in frame.columns or b not in frame.columns:
+            continue
+        mask, first, last = _copied_stretch(frame, a, b)
+        if first is None:
+            continue
+        blamed, basis = _copy_blame(frame, a, b, first, last)
+        for role in blamed:
+            if role not in health:
+                continue
+            valid = pd.to_numeric(frame[role], errors="coerce").notna()
+            share = float((mask & valid).sum()) / max(int(valid.sum()), 1)
+            other = b if role == a else a
+            check = {
+                "check": "copied_signal",
+                "copy_of": _slug(other),
+                "start": str(first),
+                "end": str(last),
+                "longest_identical_changing": pair["longest_identical_changing"],
+                "n_identical_samples": int(mask.sum()),
+                "share_of_samples": round(share, 4),
+                "blame": basis,  # "level_shift" (this point is the copy) | "undetermined"
+            }
+            # the identified copy loses the share of its samples that are the other point's; when
+            # the check cannot tell which is the copy, both are only capped at "suspect" (and
+            # flagged, so triage makes their findings conditional) -- neither is known to be bad
+            _mark(
+                health,
+                role,
+                "copied_signal",
+                check,
+                cap=_SUSPECT_CAP,
+                share=share if basis == "level_shift" else 0.0,
+            )
+
+
+def _check_mixing_balance(frame: pd.DataFrame, health: dict) -> None:
+    """A mixed-air temperature that fails the flow-weighted OA/RA balance lowers trust.
+
+    Needs what :func:`mixing_flow_consistency` needs (MAT, OAT, RAT, OA and supply airflow). On a
+    ``warn`` the mixed-air temperature is flagged ``mixing_balance`` and capped at "suspect": a
+    single-point MAT sensor in a stratified mixing plenum is the usual culprit, and the check is
+    screening-grade (the flow stations' accuracy is unknown), so it never makes a point
+    "untrusted" on its own. OAT and RAT are flagged too, with the same check recorded, but their
+    scores are left alone: the balance cannot say which of the set is wrong (an OAT reading low
+    shifts it as well -- compare OAT with a reference), and the flag is enough for
+    :func:`camber.rules.triage.sensor_causes` to make the unit's dependent findings conditional.
+    """
+    need = (*_MIXING_TEMP_ROLES, Role.OA_AIRFLOW, Role.AIRFLOW)
+    if any(r not in frame.columns for r in need):
+        return
+    if not any(r in health for r in _MIXING_TEMP_ROLES):
+        return
+    res = mixing_flow_consistency(frame)
+    if res.severity != "warn":
+        return
+    m = res.metrics
+    check = {
+        "check": "mixing_flow_balance",
+        "bias_f": m.get("bias_f"),
+        "expected_band_f": m.get("expected_band_f"),
+        "bias_cold_half_f": m.get("bias_cold_half_f"),
+        "bias_warm_half_f": m.get("bias_warm_half_f"),
+        "median_oa_fraction": m.get("median_oa_fraction"),
+        "n_checked": res.n_checked,
+        "summary": res.summary,
+    }
+    _mark(health, Role.MIXED_AIR_TEMP, "mixing_balance", dict(check), cap=_SUSPECT_CAP)
+    for role in (Role.OAT, Role.RETURN_AIR_TEMP):
+        _mark(health, role, "mixing_balance", dict(check))
+
+
+# -- /092-air (#16)

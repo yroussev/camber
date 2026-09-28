@@ -120,6 +120,41 @@ not logged) and is "suspect"; on a coarser grid those fractions are the duty res
   the same time for 12 h or more: a forward-filled collection outage. Any other point that held
   still through the same intervals is marked too.
 
+<!-- 092-air (#16) -->
+Since 0.92 (#16) two cross-sensor checks below feed trust as well:
+
+- `copied_signal` -- a measured point carries another measured point's data
+  (`copied_signal_consistency` finds the pair; every identical stretch of it long enough to flag is
+  then collected). The **copy** is told from the original at the stretch's edges: the original
+  keeps measuring its own quantity, while the copy jumps across the gap between the two to the
+  other's level (a return air suddenly reading supply-air temperatures). The point that closes at
+  least half of that gap, and moves at least twice as far as the other, is the copy (`blame:
+  "level_shift"`): its trust is scaled by the share of its samples inside the copied stretches and
+  capped at "suspect", so a copy covering most of the window reads "untrusted". When the check
+  cannot tell (no data around the stretch, or both moved), both points are flagged
+  (`blame: "undetermined"`) and capped at "suspect", unscaled.
+- `mixing_balance` -- the mixed-air temperature fails the flow-weighted OA/RA balance
+  (`mixing_flow_consistency` at `warn`; it needs MAT, OAT, RAT, `OA_AIRFLOW` and `AIRFLOW` in the
+  frame). MAT is capped at "suspect" -- a single-point sensor in a stratified plenum is the usual
+  culprit, and the balance is screening-grade, so it never makes a point "untrusted" on its own.
+  OAT and RAT are flagged with the same check but keep their scores: the balance cannot say which
+  of the set is wrong.
+
+Both flags make the unit's findings on that point **conditional** in triage
+(`camber.rules.triage.sensor_causes`), on that unit only -- even on OAT, since the check judged this
+unit's own points. The rule runner's trust gate resolves only a rule's own roles, so the flow balance
+applies there only when the rule loads both flows; the RCx report scores the whole frame.
+
+On the open LBNL Building 59 data (catalog example `lbnl-b59`, 2018-2020, hourly): RTU01 and RTU02's
+MAT reads +4.7 F and +3.1 F against the balance and drop from "trusted" (0.96 / 0.95) to "suspect"
+(0.75); RTU04's return air, a copy of its supply air from September 2019, is identified as the copy
+and drops from 0.98 to 0.56 over the three years, while the supply air keeps its score. Of 10
+actionable issues from the per-unit rules on the four units, 3 become conditional: RTU04's
+economizer high-limit finding (on the copied return air) and RTU01/RTU02's SAT-reset compliance
+(on OAT, which the failing balance also names). On 2020 alone the copy covers the whole window, so
+both points are flagged "undetermined".
+<!-- /092-air -->
+
 ## Cross-sensor and provenance checks
 
 Each returns a `ConsistencyResult` (`check`, `n_checked`, `violation_frac`, `severity`, `summary`,
@@ -157,7 +192,8 @@ A return-air sensor reading bit-for-bit what the supply-air sensor reads, sample
 both change, is not measuring return air. Two sensors on different quantities cannot agree exactly
 by coincidence, so `copied_signal_consistency` counts consecutive *changing* samples where two
 measured roles are equal; a run of 24 (a day of hourly data) is a `fault`. Co-flat stretches
-(both 0 while off) don't count. It cannot tell which of the two is the copy.
+(both 0 while off) don't count. It cannot tell which of the two is the copy on its own; the trust
+check above (0.92) tells them apart at the stretch's edges when it can.
 
 ### Gap-filled data
 

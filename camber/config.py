@@ -147,6 +147,19 @@ cohort starvation, system DCV) then group by it instead of guessing from equipme
 the RCx report ties an air handler to the plant serving it. The run records it as
 ``RunResult.topology`` with its provenance in ``RunResult.topology_source``.
 
+**System ventilation (ASHRAE 62.1 VRP)** (provisional, 0.92; #17). ``"ventilation": {"zones":
+"zones.csv", "systems": {"AHU-1": {"ps": 40}}}`` runs the system-level Ventilation Rate Procedure
+(:class:`camber.rules.ventilation_rule.VentilationSystemVRP`, rule ``ventilation_system_62_1``):
+each air handler's outdoor air against ``Vot = Vou / Ev`` over the zones it serves. ``zones`` is a
+CSV path or a list of objects with ``zone``, ``area_sqft``, ``population``, ``space_type`` (or
+``rp`` / ``ra``) and optionally ``system``, ``ez_cooling``, ``ez_heating``, ``vpz_min_cfm``,
+``vpz_cfm``, ``area_assumed``, ``population_assumed`` (see
+:func:`camber.ventilation.zones_from_records`); a zone without ``system`` joins its air handler
+through the ``topology``. ``systems`` sets ``ps`` (system population) or ``d``, ``vps_cfm``,
+``system_type`` and ``method`` per air handler; the other keys (``method``, ``ez_cooling``,
+``ez_heating``, ``under_tol``, ``over_factor``, ``start_hour``, ``end_hour``, ``occupied_days``)
+tune the rule. The section registers the rule and runs it even when ``rules`` does not list it.
+
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
 relative to the config file's directory.
@@ -1811,6 +1824,11 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     reg = builtin_registry()
     findings, ran = [], []
+    # -- 092-air (#17): the "ventilation" section configures the system-level 62.1 VRP rule
+    vent_rule = _ventilation_rule(config, base_dir)
+    if vent_rule is not None:
+        reg.register(vent_rule)
+    # -- /092-air
     for entry in config.get("rules", []):
         # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
         # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
@@ -1839,6 +1857,21 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
             )
         ran.append(name)
+    # -- 092-air (#17): a configured ventilation section runs even when "rules" omits the rule
+    if vent_rule is not None and vent_rule.name not in ran:
+        f = reg.run_fleet(
+            vent_rule.name,
+            refs,
+            mapping,
+            resample=resample,
+            shared=shared,
+            min_trust=min_trust,
+            topology=topology,
+        )
+        if f is not None:
+            findings.append(f)
+        ran.append(vent_rule.name)
+    # -- /092-air
 
     # Optional SOO conformance: per equipment class, a packaged library sequence or a
     # JSON clause spec is evaluated over each matched equipment's role-frame, and the
@@ -1939,6 +1972,46 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         topology=topology,
         topology_source=topology_source,
     )
+
+
+# -- 092-air (#17)
+_VENTILATION_KEYS = frozenset(
+    {
+        "zones",
+        "systems",
+        "method",
+        "ez_cooling",
+        "ez_heating",
+        "under_tol",
+        "over_factor",
+        "start_hour",
+        "end_hour",
+        "occupied_days",
+    }
+)
+
+
+def _ventilation_rule(config: dict, base_dir: str):
+    """The configured :class:`~camber.rules.ventilation_rule.VentilationSystemVRP`, or None."""
+    spec = config.get("ventilation")
+    if spec is None:
+        return None
+    if not isinstance(spec, dict):
+        raise ValueError('"ventilation" must be an object, e.g. {"zones": "zones.csv"}')
+    unknown = set(spec) - _VENTILATION_KEYS
+    if unknown:
+        raise ValueError(f"unknown ventilation key(s): {sorted(unknown)}")
+    from .rules.ventilation_rule import VentilationSystemVRP
+    from .ventilation import load_vent_zones
+
+    kw = {k: v for k, v in spec.items() if k not in ("zones", "systems")}
+    if "occupied_days" in kw:
+        kw["occupied_days"] = tuple(kw["occupied_days"])
+    zones = load_vent_zones(spec["zones"], base_dir=base_dir) if spec.get("zones") else []
+    return VentilationSystemVRP(zones=zones, systems=spec.get("systems") or {}, **kw)
+
+
+# -- /092-air
 
 
 def _frame_resolver(prep: _Prepared) -> Callable:

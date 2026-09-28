@@ -6,16 +6,24 @@ sustains terminal reheat and wastes energy. Adapts
 SUPPLY_AIR_TEMP, and uses COOL_VALVE (to isolate cooling-mode hours) and OAT
 (the reset regressor) when present.
 
+**The reset direction follows the driver (#65, 0.92).** A G36 cooling SAT reset lowers supply air
+as OAT rises (§5.16.2.2) and as zone cooling requests rise (trim-and-respond answers each request
+beyond the ignored ones by lowering the setpoint, Table 5.16.2.2; :data:`camber.g36_reset.SAT_TR`),
+so a reset is a *negative* slope against OAT and a *negative* association with requests. Supply air
+that rises with OAT is supply air rising with load and is reported as "SAT rising with load
+(possible capacity shortfall)" -- never as a reset (until 0.92 that shape was read as the reset).
+
 **A trended setpoint overrides the SAT-shape inference (#63).** Without a setpoint, "reset" is read
-from supply air rising with OAT -- but a cooling coil that runs out of capacity on hot days produces
-exactly that shape. When ``SUPPLY_AIR_TEMP_SP`` is mapped, the rule asks the setpoint instead
+from supply air falling as OAT rises. When ``SUPPLY_AIR_TEMP_SP`` is mapped, the rule asks the
+setpoint instead
 (:func:`camber.setpoint_reset.classify_setpoint_reset`, on fan-on samples): it must move on at least
 3 days and 10 % of the days judged, and move with its driver -- the SAT reset requests when trended,
-else OAT (``|Spearman rho| >= 0.3``). A flat setpoint, or one that only stepped once or a few times,
+else OAT (``|Spearman rho| >= 0.3``), in the reset direction (rho < 0; a setpoint that rises with
+its driver is not confirmed). A flat setpoint, or one that only stepped once or a few times,
 is reported as **not reset** -- "not reset (setpoint flat); SAT deviates" when supply air drifts off
 it -- and never as "reset present"; a setpoint that moves but not with its driver is not confirmed.
 The setpoint can only *remove* a reset the SAT shape suggested; it never upgrades a verdict. Without
-a setpoint, an apparent reset from the SAT shape alone carries a capacity-shortfall caveat.
+a setpoint, an apparent reset from the SAT shape alone carries a caveat that asks for it.
 """
 
 from __future__ import annotations
@@ -38,6 +46,9 @@ _SP_MOVE_MIN_F = 0.5
 # supply air this far off a flat setpoint on average (°F) "deviates" -- beyond the ±2 °F band a
 # tuned discharge-air loop holds (the supply_air_control rule's default tolerance class)
 _SP_DEVIATION_F = 2.0
+# #65: the sign a cooling SAT reset has against each driver. G36 §5.16.2.2 lowers SAT as OAT
+# rises, and trim-and-respond lowers it for each cooling SAT reset request (SAT_TR.sp_res < 0).
+_RESET_SIGN = {"OAT": -1, "SAT reset requests": -1}
 
 _ROLE_TO_SAT_COL = {
     Role.SUPPLY_AIR_TEMP: "SupplyAir",
@@ -115,7 +126,10 @@ class SupplyAirReset:
         reset_evaluated = slope is not None and not math.isnan(slope)
         if not reset_evaluated:
             caveats.append("SAT reset not evaluated: no OAT")
-        resetting_up = reset_evaluated and slope > 0.10
+        # #65: a cooling SAT reset lowers supply air as OAT rises -- the reset is a negative slope;
+        # supply air rising with OAT is rising with load (a possible capacity shortfall)
+        resetting = reset_evaluated and res.direction == "reset"
+        rising_with_load = reset_evaluated and res.direction == "rising_with_load"
         cold_dominant = res.pct_sat_below_58 >= 50.0
         verdict = res.verdict
         sp_metrics, sp_note, sp_blocks = self._setpoint(frame, fan, slope)
@@ -123,19 +137,27 @@ class SupplyAirReset:
             verdict = sp_note
         elif sp_note:
             verdict = f"{verdict}; {sp_note}"
-        if resetting_up and sp_metrics.get("sp_behaviour") in (None, "insufficient"):
+        if resetting and sp_metrics.get("sp_behaviour") in (None, "insufficient"):
             caveats.append(
-                "reset inferred from supply air alone: SAT rising with OAT can also be a cooling "
-                "coil running out of capacity on hot days -- map SUPPLY_AIR_TEMP_SP to confirm"
+                "reset inferred from supply air alone: warmer supply air in mild weather can also "
+                "be part-load or economizer hours with the coil not holding a fixed setpoint -- "
+                "map SUPPLY_AIR_TEMP_SP to confirm"
+            )
+        if rising_with_load:
+            caveats.append(
+                "SAT rises with OAT over cooling hours: supply air rising with load, which a G36 "
+                "reset does not do (it lowers SAT as OAT rises) -- a cooling coil or plant short "
+                "of capacity on hot hours is the usual cause; check the chilled-water supply "
+                "temperature and whether the cooling valve sits at full open"
             )
         if sp_blocks == "no_reset":
-            resetting_up = False
-        elif resetting_up and sp_blocks == "unconfirmed":
+            resetting = False
+        elif resetting and sp_blocks == "unconfirmed":
             caveats.append(
-                "SAT rises with OAT, but the trended setpoint does not move repeatedly with its "
-                "driver: the reset is not confirmed (a capacity shortfall looks the same)"
+                "SAT falls as OAT rises, but the trended setpoint does not move repeatedly with "
+                "its driver in the reset direction: the reset is not confirmed"
             )
-        if resetting_up:
+        if resetting:
             severity = "info" if sp_blocks == "unconfirmed" else "ok"
         elif cold_dominant:
             severity = "warn"
@@ -155,6 +177,8 @@ class SupplyAirReset:
                 "n_considered": res.n_considered,
                 "fan_gate": fan_src,
                 "_missing_optional": self._missing(frame, fan_src),
+                # 0.92 (#65): "reset" | "rising_with_load" | "flat" | None (no OAT)
+                "reset_direction": res.direction,
                 **sp_metrics,
             },
             summary=(
@@ -226,7 +250,7 @@ class SupplyAirReset:
             if off or rises:
                 how = [f"mean {mean_dev:+.1f}F off setpoint"] if mean_dev is not None else []
                 if rises:
-                    how.append("rising with OAT")
+                    how.append("rising with OAT (with load)")
                 verdict += (
                     f"; SAT deviates ({', '.join(how)}) -- a capacity or control shortfall, "
                     "not a reset"
@@ -235,6 +259,18 @@ class SupplyAirReset:
         if beh.kind in ("varies", "unclear"):
             return metrics, f"setpoint {beh.label}", "unconfirmed"
         if beh.kind == "reset":
+            # #65: a cooling SAT reset moves against its driver (lower SAT at higher OAT / more
+            # requests); a setpoint that rises with it is not the reset this rule looks for
+            sign = _RESET_SIGN.get(beh.driver or "")
+            rho = beh.driver_rho
+            if sign is not None and rho is not None and rho * sign < 0:
+                metrics["sp_wrong_direction"] = True
+                return (
+                    metrics,
+                    f"setpoint moves with {beh.driver} in the wrong direction (rises as "
+                    f"{beh.driver} rises, rho {rho:+.2f}; a cooling SAT reset lowers it)",
+                    "unconfirmed",
+                )
             return metrics, f"setpoint {beh.label}", None
         return metrics, None, None
 

@@ -69,6 +69,109 @@ an energy penalty), or **adequate**.
 | `under_tol` | `0.9` | flag **under** below this fraction of required |
 | `over_factor` | `1.5` | flag **over** above this multiple of required |
 
+<!-- 092-air (#17) -->
+## System-level VRP (multiple-zone systems)
+
+`assess_62_1` compares an air handler's outdoor air with **one zone's** Voz. An air handler that
+serves several zones must bring in the **system** intake instead (0.92, #17):
+
+```
+Vou = D·Σ(Rp·Pz) + Σ(Ra·Az)     D = Ps / ΣPz          (uncorrected OA intake, occupant diversity)
+Vot = Vou / Ev                                          (multiple-zone recirculating system)
+```
+
+Judged against one zone, a correctly ventilated four-zone unit reads "over-ventilated 5×", and a
+unit 60 % short of its system requirement can read "adequate".
+
+**Sources.** The maintainer has no licensed 62.1-2022 copy, so the procedure follows the free
+**ASHRAE 62.1-2016 Addendum f** (Vou, D and the simplified Ev; numbered §6.2.5 there and §6.2.4 in
+62.1-2019) and public secondary sources (design guides and ASHRAE Journal columns on the addendum);
+the standard's text is not quoted. The 2019/2022 section and table numbers, the default occupant
+densities and the Ez rows are **unverified** against those editions.
+
+**Which Ev.** `system_outdoor_air(zones, method=...)` offers both:
+
+- **`simplified`** (the default): `Ev = 0.88·D + 0.22` for `D < 0.60`, else `0.75`. It needs only
+  each zone's area, population and rates — what a site can usually state — and it is the path the
+  addendum added for exactly that reason. The addendum limits it on VAV systems to zones whose
+  minimum primary airflow is at least `1.5 × Voz` (per the secondary sources; wording unverified):
+  give `vpz_min_cfm` and zones below it are listed (`vpz_min_short`) with a caveat to use the
+  appendix method. In the simplified procedure Ez does not change Vot.
+- **`appendix`**: the multiple-zone calculation of the standard's normative appendix for a single
+  supply system without secondary recirculation — `Zpz = Voz / Vpz`, `Xs = Vou / Vps`,
+  `Evz = 1 + Xs − Zpz`, `Ev = min Evz`. It needs every zone's primary airflow (`vpz_cfm`, else
+  `vpz_min_cfm`, the critical condition of a VAV zone) and the system's `vps_cfm` (default ΣVpz,
+  which over-states Vps and the requirement when zone peaks do not coincide; caveated).
+
+`system_type="single_zone"` gives `Vot = Voz`, and `"100pct_oa"` gives `Vot = ΣVoz`. Voz uses the
+zone air-distribution effectiveness by mode: `DEFAULT_EZ_COOLING = 1.0` (ceiling supply of cool
+air) and `DEFAULT_EZ_HEATING = 0.8` (ceiling supply of warm air with ceiling return, the
+maintainer-approved heating default). Floor supply and displacement have other values; set
+`ez_cooling` / `ez_heating` per zone. **Without a system population** (`ps`, or `d`), D = 1: the
+largest Vou and, simplified, Ev = 0.75 — a conservative requirement that can over-state it, said
+in a caveat.
+
+**Measured OA.** `assess_system_62_1(oa, requirement, heating_mask=, judged_mask=)` judges each
+sample against its mode's Vot and takes the median ratio: **under** below 0.9, **over** above 1.5,
+else **adequate**. With no flow station, `estimate_oa_cfm` estimates OA from
+`(MAT − RAT)/(OAT − RAT) × supply airflow` on samples with `|OAT − RAT| ≥ 10 °F`, with ±2 °F per
+sensor and ±10 % on supply flow propagated to a band; a verdict must then hold across the band, or
+it is **uncertain**. The rule refuses the estimate when one of the temperatures is a copy of
+another point or MAT leaves the OA/RA band (the sensor-health checks).
+
+**The rule.** `VentilationSystemVRP` (`ventilation_system_62_1`, a fleet rule, not
+auto-registered) runs from the config's `ventilation` section:
+
+```json
+"ventilation": {
+  "zones": "zones.csv",
+  "systems": {"AHU-1": {"ps": 40}, "AHU-2": {"method": "appendix", "vps_cfm": 9000}}
+}
+```
+
+`zones.csv` has one row per zone: `zone`, `area_sqft`, `population`, `space_type` (or `rp`, `ra`),
+and optionally `system`, `ez_cooling`, `ez_heating`, `vpz_min_cfm`, `vpz_cfm`, `area_assumed`,
+`population_assumed`. A zone without `system` joins the air handler that serves it through the
+config `topology` (the zone's nearest ancestor with an OA signal; ids match ignoring case and
+separators). Occupied (a trended `OCCUPANCY` point, else weekdays 07–18), fan-on samples are judged;
+heating-valve samples (above 5 %) against the heating Vot.
+
+| Outcome | Severity |
+|---|---|
+| no zones configured, a zone missing area / population / rates, no OA flow and no usable estimate | `info`, declined, with the reason |
+| under-ventilated | `fault` |
+| over-ventilated (a conditioning-energy penalty) | `warn` |
+| adequate | `ok` |
+| uncertain (estimate band straddles a threshold) or too few samples | `info` |
+
+Severity is **capped at `warn`** when any zone's area or population is marked assumed (a caveat
+lists them), when OA is estimated from temperatures, or when membership was not declared — read
+from a semantic (Brick) model or the naming heuristic, or all zones given to the only OA source.
+When the topology lists more terminals under the unit than the zones table does, the finding says
+Vot covers the listed zones only.
+
+**On open data** (catalog examples; not gated benchmarks):
+
+- **`lbnl-b59`** publishes no per-zone areas or populations, only two office floors of 2,325 m².
+  With a stated assumption — that area split equally over the 51 underfloor terminals (981 ft²
+  each) at the office default of 5 people per 1,000 ft² (unverified) — and the Brick model's
+  terminal → RTU assignment (disputed at the 0.89 intake, so capped at `warn`), the four RTUs need
+  Vot 1,110–2,000 cfm (D = 1) and measured 5,570–7,490 cfm of OA over occupied hours from
+  2020-04-11 (median): **over-ventilated 3.4–5.6×**, every RTU, and still 3.5–5.8× at D = 0.5. The
+  temperature estimate on the same hours reads 0.4–0.7 of the flow stations (0.16 on RTU04, whose
+  return air copies its supply air); with the stations removed the rule says `uncertain` on
+  RTU01–03 and declines RTU04. Neither the stations' nor the MAT sensors' accuracy is known
+  (the MAT sensors fail the flow balance; see [SENSOR-HEALTH.md](SENSOR-HEALTH.md)).
+- **`ornl-frp-vav`** (one RTU and ten VAV boxes, no OA flow station, no published room areas):
+  with an assumed 300 ft² per room and the office default density, the 31 one-day runs read `over`
+  on 7 (OA estimated at 930–1,850 cfm against Vot 340 cfm), `uncertain` on 4 and too few samples
+  on 20 (15-minute data; mild days with `|OAT − RAT| < 10 °F` leave nothing to estimate from).
+  There is no ground truth for OA, so this exercises the plumbing only.
+
+Verdict thresholds are validated on synthetic systems only; no licence-clean dataset has design
+zone areas and populations with measured OA.
+
+<!-- /092-air -->
 ## DCV verification
 
 ```python
@@ -213,8 +316,11 @@ Sub-checks, each `None` when it cannot be evaluated:
   air handler as above. With no usable grouping and exactly one OA source, all zones join it, with
   a caveat; with several, unattributed zones are declined rather than guessed. One finding, with a
   `per_ahu` breakdown.
+- **`ventilation_system_62_1`** (`VentilationSystemVRP`, 0.92) — the system-level VRP above; runs
+  from the config's `ventilation` section. <!-- 092-air (#17) -->
 - **`ventilation_rate_62_1`** (`VentilationRateProcedure`) — needs the zone's design inputs, so
-  it's instantiated explicitly (not auto-registered):
+  it's instantiated explicitly (not auto-registered). It judges one zone; for an air handler
+  serving several zones use `ventilation_system_62_1`:
 
   ```python
   from camber.rules.ventilation_rule import VentilationRateProcedure

@@ -20,9 +20,16 @@ from ..model.roles import Role
 from ..schedules import occupied_mask
 from ..ventilation import (
     DEFAULT_ECON_HIGH_LIMIT_F,
+    DEFAULT_EZ_COOLING,
+    DEFAULT_EZ_HEATING,
+    VentZone,
     assess_62_1,
     assess_dcv,
+    assess_system_62_1,
     economizer_active_mask,
+    estimate_oa_cfm,
+    system_outdoor_air,
+    zones_from_records,
 )
 from ._topology_grouping import HEURISTIC_CAVEAT
 from .base import Finding
@@ -588,3 +595,431 @@ class VentilationRateProcedure:
             },
             summary=f"{equip}: {tail}",
         )
+
+
+# ============================================================================ 092-air (#17)
+
+
+def _norm_id(x) -> str:
+    return "".join(ch for ch in str(x).lower() if ch.isalnum())
+
+
+class VentilationSystemVRP:
+    """ASHRAE 62.1 VRP per **system**: each air handler's outdoor air against Vot = Vou / Ev.
+
+    A fleet rule (provisional, 0.92, #17). The zone inputs (floor area, design population, space
+    type or Rp/Ra, optional Ez and minimum primary airflow) come from the config's ``ventilation``
+    section -- nothing in a trend export carries them -- so with no zones it declines. Each zone
+    joins the air handler that serves it: the zone's declared ``system``, else the served-by
+    topology (the zone's nearest ancestor that carries an OA signal; a config ``topology`` counts as
+    declared, a semantic (Brick) or naming-heuristic one caps severity at ``warn``), else -- with
+    exactly one OA source -- that one, also capped at ``warn``. See
+    :func:`camber.ventilation.system_outdoor_air` for the requirement and
+    :func:`camber.ventilation.assess_system_62_1` for the verdict.
+
+    Measured OA is the air handler's ``OA_AIRFLOW`` over occupied, fan-on samples; without a flow
+    station it is estimated from MAT/RAT/OAT x ``AIRFLOW`` with a propagated uncertainty band
+    (capped at ``warn``), and without either the system is declined. Heating-mode samples (the
+    heating valve above 5 %) are judged against the heating Vot. Severity per system: ``fault``
+    under-ventilated, ``warn`` over-ventilated (a conditioning-energy penalty), ``ok`` adequate,
+    ``info`` uncertain / insufficient / declined; assumed zone inputs cap it at ``warn``.
+    """
+
+    name = "ventilation_system_62_1"
+    roles_required: tuple = ()
+    roles_optional = (
+        Role.OA_AIRFLOW,
+        Role.AIRFLOW,
+        Role.MIXED_AIR_TEMP,
+        Role.RETURN_AIR_TEMP,
+        Role.OAT,
+        Role.HEAT_VALVE,
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
+        Role.OCCUPANCY,
+        Role.WARMUP,
+        Role.COOLDOWN,
+    )
+    wants_topology = True
+
+    def __init__(
+        self,
+        *,
+        zones=(),
+        systems=None,
+        method: str = "simplified",
+        ez_cooling: float = DEFAULT_EZ_COOLING,
+        ez_heating: float = DEFAULT_EZ_HEATING,
+        under_tol: float = 0.9,
+        over_factor: float = 1.5,
+        heat_active_pct: float = 5.0,
+        start_hour: int = 7,
+        end_hour: int = 18,
+        occupied_days: tuple = (0, 1, 2, 3, 4),
+        sensor_err_f: float = 2.0,
+        flow_uncertainty: float = 0.10,
+        min_samples: int = 24,
+    ):
+        zs = list(zones or ())
+        self.zones = [z if isinstance(z, VentZone) else zones_from_records([z])[0] for z in zs]
+        self.systems = dict(systems or {})
+        unknown = {
+            k
+            for v in self.systems.values()
+            for k in v
+            if k not in ("ps", "d", "vps_cfm", "system_type", "method")
+        }
+        if unknown:
+            raise ValueError(f"unknown ventilation system key(s): {sorted(unknown)}")
+        self.method = method
+        self.ez_cooling, self.ez_heating = ez_cooling, ez_heating
+        self.under_tol, self.over_factor = under_tol, over_factor
+        self.heat_active_pct = heat_active_pct
+        self.start_hour, self.end_hour = start_hour, end_hour
+        self.occupied_days = tuple(occupied_days)
+        self.sensor_err_f, self.flow_uncertainty = sensor_err_f, flow_uncertainty
+        self.min_samples = min_samples
+
+    # ---------------------------------------------------------------- inputs
+    @staticmethod
+    def _oa_capable(fr: pd.DataFrame) -> bool:
+        if Role.OA_AIRFLOW in fr.columns and fr[Role.OA_AIRFLOW].notna().any():
+            return True
+        need = (Role.AIRFLOW, Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP, Role.OAT)
+        return all(r in fr.columns and fr[r].notna().any() for r in need)
+
+    def _assign(self, sources: dict, topology) -> tuple[dict, dict, list]:
+        """``({zone: system}, {zone: provenance}, caveats)`` -- declared, topology, single."""
+        by_norm = {_norm_id(e): e for e in sources}
+        assign: dict = {}
+        prov: dict = {}
+        caveats: list = []
+        pending = []
+        for z in self.zones:
+            if z.system:
+                sysid = by_norm.get(_norm_id(z.system), z.system)
+                assign[z.zone], prov[z.zone] = sysid, "declared"
+            else:
+                pending.append(z.zone)
+        if pending and topology is not None:
+            nodes = {_norm_id(n): n for e in topology.edges for n in e}
+            ids = {zid: nodes.get(_norm_id(zid)) for zid in pending}
+            got = topology.group_map(
+                [v for v in ids.values() if v is not None], pred=lambda e: e in sources
+            )
+            tprov = getattr(topology, "provenance", "explicit")
+            for zid, node in ids.items():
+                if node is not None and node in got:
+                    assign[zid] = got[node]
+                    prov[zid] = "declared" if tprov == "explicit" else tprov
+            if tprov == "heuristic" and any(prov.get(z) == "heuristic" for z in pending):
+                caveats.append(HEURISTIC_CAVEAT)
+            if tprov == "semantic" and any(prov.get(z) == "semantic" for z in pending):
+                caveats.append(
+                    "zone -> air handler membership read from the semantic (Brick) model: "
+                    "verify it against the mechanical drawings; severity capped at warn"
+                )
+            pending = [z for z in pending if z not in assign]
+        if pending and len(sources) == 1:
+            only = next(iter(sources))
+            for zid in pending:
+                assign[zid], prov[zid] = only, "single_source"
+            caveats.append(
+                f"{len(pending)} zone(s) with no declared system assumed served by the only OA "
+                f"source, {only}; severity capped at warn"
+            )
+            pending = []
+        if pending:
+            caveats.append(
+                f"{len(pending)} zone(s) could not be attributed to an air handler and were not "
+                "used: " + ", ".join(sorted(pending)[:8]) + ("..." if len(pending) > 8 else "")
+            )
+        return assign, prov, caveats
+
+    def _occupied(self, fr: pd.DataFrame) -> pd.Series:
+        if Role.OCCUPANCY in fr.columns and fr[Role.OCCUPANCY].notna().any():
+            return occupied_mask(
+                fr.index,
+                start_hour=0,
+                end_hour=24,
+                days=range(7),
+                occ=fr[Role.OCCUPANCY],
+                warmup=fr.get(Role.WARMUP),
+                cooldown=fr.get(Role.COOLDOWN),
+            )
+        return occupied_mask(
+            fr.index,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            days=self.occupied_days,
+            warmup=fr.get(Role.WARMUP),
+            cooldown=fr.get(Role.COOLDOWN),
+        )
+
+    @staticmethod
+    def _estimate_unusable(fr: pd.DataFrame, judged: pd.Series) -> str | None:
+        """Why the mixing temperatures cannot carry an OA estimate (None when they can): one of
+        them is a copy of another point, or MAT leaves the OA/RA band too often (#16's checks)."""
+        from ..sensorhealth import copied_signal_consistency, mixing_consistency
+
+        cols = [
+            r
+            for r in (Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP, Role.OAT, Role.SUPPLY_AIR_TEMP)
+            if r in fr.columns
+        ]
+        cp = copied_signal_consistency(fr[cols])
+        if cp.severity == "fault":
+            return cp.summary
+        mx = mixing_consistency(fr[judged.reindex(fr.index).fillna(False).to_numpy()])
+        if mx.severity in ("warn", "fault"):
+            return mx.summary
+        return None
+
+    # ---------------------------------------------------------------- one system
+    def _system(self, sysid: str, fr: pd.DataFrame, zones: list, cap: bool) -> dict:
+        from ..schedules import FAN_GATE_NONE, fan_on_mask
+
+        cfg = self.systems.get(sysid) or self.systems.get(
+            next((k for k in self.systems if _norm_id(k) == _norm_id(sysid)), ""), {}
+        )
+        req = system_outdoor_air(
+            zones,
+            system=sysid,
+            system_type=cfg.get("system_type", "multiple_zone"),
+            method=cfg.get("method", self.method),
+            ps=cfg.get("ps"),
+            d=cfg.get("d"),
+            vps_cfm=cfg.get("vps_cfm"),
+            ez_cooling=self.ez_cooling,
+            ez_heating=self.ez_heating,
+        )
+        caveats = list(req.caveats)
+        out: dict = {
+            "n_zones": len(zones),
+            "zones": [z.zone for z in zones],
+            "requirement": {
+                k: v for k, v in req.as_dict().items() if k not in ("zones", "caveats", "system")
+            },
+            "zone_detail": req.zones,
+        }
+        if req.declined:
+            out.update(severity="info", status="declined", reason=req.declined)
+            out["summary"] = f"{sysid}: 62.1 system VRP not evaluated -- {req.declined}"
+            out["caveats"] = caveats
+            return out
+        occ = self._occupied(fr)
+        fan, fan_src = fan_on_mask(fr)
+        judged = occ.copy()
+        if fan is not None:
+            judged &= fan.reindex(fr.index).fillna(False).astype(bool)
+        else:
+            caveats.append("no fan signal: occupied samples judged with the fan state unknown")
+        heat = None
+        if Role.HEAT_VALVE in fr.columns and fr[Role.HEAT_VALVE].notna().any():
+            from ..units import normalize_percent
+
+            heat = normalize_percent(pd.to_numeric(fr[Role.HEAT_VALVE], errors="coerce"))
+            heat = heat > self.heat_active_pct
+        elif req.vot_heating_cfm != req.vot_cooling_cfm:
+            caveats.append(
+                "no heating-valve point: every sample judged against the cooling-mode Vot "
+                f"({req.vot_cooling_cfm:,.0f} cfm; heating-mode Vot {req.vot_heating_cfm:,.0f})"
+            )
+        lo = hi = None
+        if Role.OA_AIRFLOW in fr.columns and fr[Role.OA_AIRFLOW].notna().any():
+            oa = pd.to_numeric(fr[Role.OA_AIRFLOW], errors="coerce")
+        elif self._oa_capable(fr):
+            unusable = self._estimate_unusable(fr, judged)
+            if unusable:
+                out.update(
+                    severity="info",
+                    status="declined",
+                    reason=f"no OA flow station, and the OA estimate is not usable: {unusable}",
+                )
+                out["summary"] = f"{sysid}: 62.1 system VRP not evaluated -- {out['reason']}"
+                out["caveats"] = caveats
+                return out
+            est = estimate_oa_cfm(
+                fr[Role.MIXED_AIR_TEMP],
+                fr[Role.RETURN_AIR_TEMP],
+                fr[Role.OAT],
+                fr[Role.AIRFLOW],
+                sensor_err_f=self.sensor_err_f,
+                flow_uncertainty=self.flow_uncertainty,
+            )
+            oa, lo, hi = est["oa_cfm"], est["oa_lo_cfm"], est["oa_hi_cfm"]
+            cap = True
+            caveats.append(
+                "no OA flow station: OA estimated from MAT/RAT/OAT x supply airflow on samples "
+                f"with |OAT - RAT| >= 10 F, +/-{self.sensor_err_f:g} F per sensor and "
+                f"+/-{100 * self.flow_uncertainty:.0f} % on supply flow; a biased MAT sensor "
+                "shifts it (see the mixed-air flow balance); severity capped at warn"
+            )
+        else:
+            out.update(
+                severity="info",
+                status="declined",
+                reason="no OA flow station and no MAT/RAT/OAT + supply airflow to estimate OA",
+            )
+            out["summary"] = f"{sysid}: 62.1 system VRP not evaluated -- {out['reason']}"
+            out["caveats"] = caveats
+            return out
+        res = assess_system_62_1(
+            oa,
+            req,
+            heating_mask=heat,
+            judged_mask=judged,
+            oa_lo_cfm=lo,
+            oa_hi_cfm=hi,
+            under_tol=self.under_tol,
+            over_factor=self.over_factor,
+            min_samples=self.min_samples,
+        )
+        if req.assumed:
+            cap = True
+        sev = {"under": "fault", "over": "warn", "adequate": "ok"}.get(res.status, "info")
+        if cap and sev == "fault":
+            sev = "warn"
+        band = (
+            f" (band {res.ratio_lo:.2f}-{res.ratio_hi:.2f})"
+            if res.ratio_lo is not None and res.ratio_hi is not None
+            else ""
+        )
+        vot = (
+            f"Vot {req.vot_cooling_cfm:,.0f} cfm"
+            if req.vot_cooling_cfm == req.vot_heating_cfm
+            else f"Vot {req.vot_cooling_cfm:,.0f} cfm cooling / {req.vot_heating_cfm:,.0f} heating"
+        )
+        how = (
+            f"{req.method} Ev {req.ev_cooling:.2f}, D {req.d:.2f}"
+            if req.system_type == "multiple_zone"
+            else req.system_type.replace("_", " ")
+        )
+        if res.status in ("insufficient",):
+            tail = f"too few occupied, fan-on samples to judge ({res.n})"
+        else:
+            tail = (
+                f"OA {res.measured_cfm:,.0f} cfm vs {vot} ({how}; {len(zones)} zones) -- "
+                f"ratio {res.ratio:.2f}{band}: {res.status}"
+            )
+            if res.status == "under":
+                tail += f", {res.under_hours_pct:.0f}% of judged hours under"
+            elif res.status == "over":
+                tail += " (conditioning-energy penalty)"
+        out.update(
+            severity=sev,
+            status=res.status,
+            basis=res.basis,
+            fan_gate=fan_src if fan is not None else FAN_GATE_NONE,
+            **{
+                k: v
+                for k, v in res.as_dict().items()
+                if k not in ("requirement", "system", "status", "basis")
+            },
+        )
+        out["summary"] = f"{sysid}: {tail}"
+        out["caveats"] = caveats
+        return out
+
+    # ---------------------------------------------------------------- the rule
+    def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
+        """Judge every air handler with configured zones; one Finding with ``per_system``."""
+        base = {"n_zones_configured": len(self.zones)}
+        if not self.zones:
+            return Finding(
+                rule=self.name,
+                equip="<fleet>",
+                severity="info",
+                metrics={**base, "declined": True},
+                summary=(
+                    "62.1 system VRP not evaluated: needs zone design inputs (floor area, "
+                    "population, space type) -- the config's ventilation.zones"
+                ),
+                caveats=["ventilation.zones not configured: nothing in the trends carries them"],
+            )
+        sources = {e: fr for e, fr in frames.items() if self._oa_capable(fr)}
+        assign, prov, caveats = self._assign(sources, topology)
+        by_sys: dict = {}
+        for z in self.zones:
+            if z.zone in assign:
+                by_sys.setdefault(assign[z.zone], []).append(z)
+        per: dict = {}
+        worst, worst_sys = "ok", None
+        rank = _SEVERITY_RANK
+        for sysid, zs in sorted(by_sys.items()):
+            provs = sorted({prov[z.zone] for z in zs})
+            cap = any(p != "declared" for p in provs)
+            if sysid not in sources:
+                why = (
+                    f"{sysid} is not an equipment with an OA signal in this run"
+                    if sysid not in frames
+                    else f"{sysid} has no OA flow and no MAT/RAT/OAT + supply airflow"
+                )
+                per[sysid] = {
+                    "severity": "info",
+                    "status": "declined",
+                    "reason": why,
+                    "n_zones": len(zs),
+                    "zones": [z.zone for z in zs],
+                    "membership": provs,
+                    "summary": f"{sysid}: 62.1 system VRP not evaluated -- {why}",
+                    "caveats": [],
+                }
+            else:
+                per[sysid] = {**self._system(sysid, sources[sysid], zs, cap), "membership": provs}
+            if topology is not None:
+                served = (
+                    set(topology.zones_of(sysid))
+                    if sysid in {n for e in topology.edges for n in e}
+                    else set()
+                )
+                listed = {_norm_id(z.zone) for z in zs}
+                extra = sorted(x for x in served if _norm_id(x) not in listed)
+                if extra:
+                    per[sysid]["n_served_without_inputs"] = len(extra)
+                    per[sysid]["caveats"].append(
+                        f"the topology lists {len(extra)} more terminal(s) under {sysid} with no "
+                        "ventilation inputs: Vot covers the listed zones only (an adequate or "
+                        "over verdict may be over-stated)"
+                    )
+            caveats.extend(f"{sysid}: {c}" for c in per[sysid]["caveats"])
+            sev = per[sysid]["severity"]
+            if worst_sys is None or rank[sev] > rank[worst]:
+                worst, worst_sys = sev, sysid
+        metrics = {
+            **base,
+            "n_systems": len(per),
+            "n_zones_attributed": len(assign),
+            "method": self.method,
+            "per_system": per,
+        }
+        if not per:
+            return Finding(
+                rule=self.name,
+                equip="<fleet>",
+                severity="info",
+                metrics={**metrics, "declined": True},
+                caveats=caveats,
+                summary="62.1 system VRP not evaluated: no zone could be joined to an air handler",
+            )
+        flagged = [k for k, v in per.items() if v["severity"] in ("warn", "fault")]
+        if flagged:
+            summary = (
+                f"62.1 system VRP: {len(flagged)} of {len(per)} system(s) flagged -- "
+                + per[str(worst_sys)]["summary"]
+            )
+        else:
+            summary = f"62.1 system VRP: {len(per)} system(s) judged; none flagged -- " + "; ".join(
+                v["summary"] for v in per.values()
+            )
+        return Finding(
+            rule=self.name,
+            equip="<fleet>",
+            severity=worst if worst_sys is not None else "info",
+            metrics=metrics,
+            caveats=caveats,
+            summary=summary,
+        )
+
+
+# -- /092-air (#17)

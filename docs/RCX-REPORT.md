@@ -77,7 +77,11 @@ as an upstream cause (`Issue.upstream_causes`): its page opens with an "Upstream
 short of setpoint" banner, its recommended action (on the page and in the summary) starts with the
 plant, and a "why" line says to check plant capacity before the coil valve. The G36 link reads the
 `g36_afdd` finding's `flagged_fcs` for FC13 (supply air too warm with the cooling valve full open);
-FC12 and FC1 are not plant-capacity symptoms. The plant issue lists the findings it may explain
+FC12 and FC1 are not plant-capacity symptoms. <!-- 092-air (#67) -->Since 0.92 the same-hours
+test for a G36 finding uses **FC13's own hours** (the rule's evidence carries one mask per fault
+condition, `Evidence.masks`), not the union of every fault condition it reported, so duct-static or
+economizer hours no longer count as plant symptoms; `UpstreamCause.unit_hours` records `"FC13"` (or
+`"finding"` when only the whole mask was available).<!-- /092-air --> The plant issue lists the findings it may explain
 (`Issue.downstream`). A config `topology` ([TOPOLOGY.md](TOPOLOGY.md)) decides which plant
 serves which unit; without one the site's plant is assumed and the line says so.
 

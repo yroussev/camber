@@ -338,7 +338,10 @@ class UpstreamCause:
     which the unit was also in violation -- ``None`` when either side exposes no hours.
     ``overlap_hours`` is the coincident time. ``basis`` says how the two were tied:
     ``"topology"`` (a served-by graph lists the plant upstream of the unit) or ``"site"`` (no
-    topology covers the unit, so the site's plant is assumed).
+    topology covers the unit, so the site's plant is assumed). ``unit_hours`` (0.92, #67) names
+    the unit hours the overlap was taken on: ``"FC13"`` when a G36 finding's own FC13 hours were
+    available, ``"finding"`` for the finding's whole violation mask (``supply_air_control``, or a
+    G36 finding that exposes only its any-FC union), ``None`` when no overlap was assessed.
     """
 
     kind: str  # "plant_capacity"
@@ -350,6 +353,7 @@ class UpstreamCause:
     basis: str = "site"
     source: object = field(default=None, compare=False, repr=False)
     plant_share: float | None = None
+    unit_hours: str | None = None  # 0.92 (#67): "FC13" | "finding" | None
 
     def label(self) -> str:
         return f"{self.detail} on {self.equip}"
@@ -556,6 +560,9 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
     * a ``sensor_drift:<role>`` finding at ``warn``/``fault``;
     * an ``untrusted`` verdict or a ``stuck`` flag in ``trust`` (``{equip: {role: SensorTrust}}``,
       scored on gated samples where a fan gate exists);
+    * (0.92, #16) a ``copied_signal`` or ``mixing_balance`` flag in ``trust`` -- a point carrying
+      another point's data, or a mixed-air temperature failing the flow-weighted OA/RA balance
+      (:func:`camber.sensorhealth.frame_checks`); unit-local, even on OAT;
     * a ``warn``/``fault`` mixing-consistency result in ``mixing`` (``{equip: ConsistencyResult}``)
       -- one of MAT / OAT / RAT on that unit is wrong, so all three are tainted *on that unit*.
 
@@ -613,6 +620,14 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
                         shared=slug in SHARED_ROLES,
                     )
                 )
+                continue
+            # -- 092-air (#16): a copied point, or a failing mixed-air flow balance, makes the
+            # unit's findings on that point conditional -- on this unit only (both are checks of
+            # this unit's own points, even when one of them is the site OAT)
+            cross = _cross_sensor_detail(slug, t, flags)
+            if cross:
+                out.append(SensorCause("trust", equip, (slug,), cross))
+            # -- /092-air
     for equip, res in sorted((mixing or {}).items()):
         if getattr(res, "severity", "") in _ACTIONABLE:
             out.append(
@@ -625,6 +640,25 @@ def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> li
                 )
             )
     return out
+
+
+def _cross_sensor_detail(slug: str, t, flags: list) -> str | None:
+    """092-air (#16): the cause line for a ``copied_signal`` / ``mixing_balance`` trust flag."""
+    checks = list(getattr(t, "frame_checks", []) or [])
+    score = f"trust {getattr(t, 'trust', float('nan')):.2f}"
+    if "copied_signal" in flags:
+        c: dict = next((c for c in checks if c.get("check") == "copied_signal"), {})
+        who = "is a copy of" if c.get("blame") == "level_shift" else "carries the same data as"
+        return (
+            f"{slug} {who} {c.get('copy_of', 'another point')} "
+            f"({c.get('start', '?')} .. {c.get('end', '?')}; {score})"
+        )
+    if "mixing_balance" in flags:
+        c2: dict = next((c for c in checks if c.get("check") == "mixing_flow_balance"), {})
+        bias = c2.get("bias_f")
+        b = f"MAT {bias:+.1f}F" if isinstance(bias, (int, float)) else "MAT off"
+        return f"{slug}: mixed-air flow balance fails ({b} vs the OA/RA blend; {score})"
+    return None
 
 
 def _taints(cause: SensorCause, equip: str, roles: set) -> bool:
@@ -662,6 +696,7 @@ def link_findings(
     topology=None,
     plant_overlap_min: float = 0.25,
     shared_scope=None,
+    part_mask_for=None,
 ) -> list:
     """Link findings into ranked :class:`Issue` objects (provisional API).
 
@@ -697,7 +732,10 @@ def link_findings(
       whenever the plant is short is still its symptom). When either side has no mask the link
       is made and says the overlap was not assessed. The plant issue lists the linked
       findings in ``downstream``. Nothing is removed, demoted or re-costed; a "why" line on each
-      side names the link.
+      side names the link. A G36 finding's unit hours are its **FC13** hours only (0.92, #67):
+      ``part_mask_for(finding, "FC13") -> bool Series | None`` supplies them (the RCx report reads
+      the rule's per-FC evidence masks); without it, or when it returns ``None``, the finding's
+      whole violation mask is used, as before, and ``UpstreamCause.unit_hours`` says which.
     """
     from ..fault_economics import cost_findings
 
@@ -814,7 +852,7 @@ def link_findings(
             if other is not iss and any(id(c.source) in ids for c in other.conditional_on):
                 iss.dependents.extend(other.members)
 
-    _link_plant_capacity(issues, mask_for, runtime, topology, plant_overlap_min)
+    _link_plant_capacity(issues, mask_for, runtime, topology, plant_overlap_min, part_mask_for)
 
     # confidence
     for iss in issues:
@@ -854,7 +892,40 @@ def _mask_union(findings, mask_for, gate):
     return union
 
 
-def _link_plant_capacity(issues, mask_for, runtime, topology, overlap_min) -> None:
+def _sat_high_mask(findings, mask_for, part_mask_for, gate):
+    """``(mask | None, basis)``: the SAT-high hours of a unit's SAT-high findings (#67).
+
+    A G36 finding contributes its FC13 hours (:data:`G36_SAT_HIGH_FCS`) when ``part_mask_for``
+    supplies them -- its violation mask is the union of every fault condition, which would count
+    duct-static or economizer hours as plant symptoms. Anything else (``supply_air_control``, or a
+    G36 finding without per-FC masks) contributes its whole violation mask. ``basis`` is ``"FC13"``
+    when every G36 member was read on its FC13 hours, else ``"finding"``.
+    """
+    union = None
+    basis = "FC13"
+    for f in findings:
+        m = None
+        if _attr(f, "rule", "") not in SAT_HIGH_RULES and part_mask_for is not None:
+            for label in G36_SAT_HIGH_FCS:
+                pm = part_mask_for(f, label)
+                if pm is not None:
+                    pm = pm.fillna(False).astype(bool)
+                    m = pm if m is None else _or(m, pm)
+        if m is None:
+            basis = "finding"
+            m = mask_for(f) if mask_for is not None else None
+            if m is None:
+                continue
+            m = m.fillna(False).astype(bool)
+        union = m if union is None else _or(union, m)
+    if union is not None and gate is not None:
+        union = union & gate.reindex(union.index).fillna(False).astype(bool)
+    return union, basis
+
+
+def _link_plant_capacity(
+    issues, mask_for, runtime, topology, overlap_min, part_mask_for=None
+) -> None:
     """Attach plant-capacity issues as upstream causes of the SAT-high issues they may explain."""
     plants = []
     for iss in issues:
@@ -873,7 +944,7 @@ def _link_plant_capacity(issues, mask_for, runtime, topology, overlap_min) -> No
         gate = None
         if runtime is not None:
             gate = (runtime(iss.equip) or (None, ""))[0]
-        unit_mask = _mask_union(sat, mask_for, gate)
+        unit_mask, unit_basis = _sat_high_mask(sat, mask_for, part_mask_for, gate)
         for p, cap in plants:
             if serving:
                 if p.equip not in serving:
@@ -903,6 +974,7 @@ def _link_plant_capacity(issues, mask_for, runtime, topology, overlap_min) -> No
                 basis=basis,
                 source=cap[0],
                 plant_share=None if pshare is None else round(pshare, 3),
+                unit_hours=None if hours is None else unit_basis,
             )
             iss.upstream_causes.append(cause)
             for f in sat:
@@ -915,9 +987,10 @@ def _upstream_why(iss) -> list:
     out = []
     for c in iss.upstream_causes:
         if c.overlap_hours is not None:
+            unit = "FC13 hours" if c.unit_hours == "FC13" else "violation hours"
             when = (
                 f"for {c.overlap_hours:,.0f} h of the same hours ("
-                f"{100 * (c.overlap_share or 0):.0f}% of this unit's violation hours; the unit was "
+                f"{100 * (c.overlap_share or 0):.0f}% of this unit's {unit}; the unit was "
                 f"in violation {100 * (c.plant_share or 0):.0f}% of the plant's short hours)"
             )
         else:
