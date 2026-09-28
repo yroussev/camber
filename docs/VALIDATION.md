@@ -134,6 +134,30 @@ ORNL's (below) — but it is small and scores zone symptoms, not the Trim-&-Resp
 why the reset/fleet family is still validated on a **generated** fleet (next section), exactly as
 the G36 authors intend the public Trim-&-Respond logic to be reused.
 
+<!-- 092-plant -->
+### 0.92 plant detectors on the LBNL plants
+
+`examples/lbnl_fdd/plant_detectors.py` scores the three [plant detectors](PLANT-DETECTORS.md) on the
+labelled LBNL boiler plant (17 runs) and chiller plant (24 runs). Each detector's target faults
+are the positives; the fault-free year, every other physical fault and every sensor bias are
+negatives. The drift rules freeze their baseline from the fault-free year and score each run as the
+current period; the bypass rule scores each run on its own. A detection is a warn or fault. These are
+**measured, not gated** results (the subsets are opt-in downloads), and with three to five
+positives the 95 % Wilson intervals are wide: they bound the detectors, they do not rank them.
+
+| Detector | Target runs | TPR (95 % CI) | FPR (95 % CI) | Notes |
+|---|---|---:|---:|---|
+| `boiler_efficiency_drift` | boiler fouling 065 / 080 / 095 | 3/3 (0.44-1.00) | 0/14 (0.00-0.21) | ratio +54 % / +25 % / +5.1 %: the 95 % run clears the 5 % warn floor by 0.1 point. The +2 / +4 F hot-water temperature-bias runs raise the ratio 11 % / 25 % with gas at matched OAT up only 3-5 %, so they are reported as heat-metering problems (`info`), not fouling |
+| `cooling_tower_fan_effort_drift` | tower fouling 065 / 080 / 095 | 2/3 (0.21-0.94) | 0/21 (0.00-0.15) | fan +17.8 / +10.9 / +3.3 %-points at matched range and wet-bulb; the 95 % run stays under the 5-point floor. The +1 / +2 F tower-sensor-bias runs drive the fans harder than 65 % fouling (+29 / +48 points) and are caught by the leaving-water vs condenser-entering cross-check (+1.6 / +3.5 F shifts) and reported as sensor offsets |
+| `cooling_tower_approach_drift` (for comparison) | tower fouling | 0/3 (0.00-0.56) | 0/21 (0.00-0.15) | the controller holds the approach, as #14 found |
+| `condenser_bypass_leak` | bypass leakage 25 / 50 / 75 %, stuck 50 / 75 % | 5/5 (0.57-1.00) | 0/19 (0.00-0.17) | medians 42-62 F with the valve commanded shut vs 0.0-0.04 F on every healthy run. The -2 / +2 F tower-sensor-bias runs (3.6 / -3.1 F) are flat across the condenser range and reported as sensor offsets |
+
+The chiller-plant mapping gained `CDWL_SW_TEMP` -> `cond_entering_water_temp` and `TWV_CTRL` ->
+`cw_bypass_valve`, the boiler mapping `BOI_GAS_CSUM_1` -> `gas_input_rate`; the catalog entries
+carry the evidence. The simulated RBC/G36 collection's plant faults were also run locally as a
+research check; as for every research-only set, its numbers are not published.
+<!-- /092-plant -->
+
 ### Real labelled multi-zone VAV cohort — ORNL FRP (`ornl-frp-vav`, CC-BY-4.0)
 
 CAMBER's **first result on real, labelled, multi-zone VAV data** (0.89): the ORNL Flexible Research

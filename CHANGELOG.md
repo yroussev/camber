@@ -52,6 +52,11 @@ All notable changes to CAMBER are documented here. The format follows
   checks the two sensors' offset against the baseline; a shift of 1 F or more is reported as a
   sensor problem (`info`, `attribution="sensor_offset"`). `plantdrift.diagnose_tower_drift`
   rolls the family up.
+- **`examples/lbnl_fdd/plant_detectors.py`** scores the three plant detectors on the labelled
+  LBNL chiller and boiler plants with Wilson intervals (measured, not gated): boiler fouling 3/3
+  with 0/14 false alarms, tower fouling from fan effort 2/3 with 0/21 (the approach drift: 0/3),
+  the condenser bypass 5/5 with 0/19. New page `docs/PLANT-DETECTORS.md`; results in
+  `docs/VALIDATION.md`.
 - **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
   the site's OAT sources with each other: three or more against their median (the outlier gets a
   scoped `sensor_drift:oat` finding), two shown side by side with no finding.

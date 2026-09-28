@@ -89,6 +89,13 @@ physical faults, with sensor-bias runs as genuine negatives. The subset is **wat
 refrigerant points), so the refrigerant-side chiller-drift family (evaporator/condenser approach,
 subcooling, superheat) stays synthetic-only.
 
+<!-- 092-plant -->
+`plant_detectors.py` scores the 0.92 plant detectors on the chiller- and boiler-plant runs:
+boiler fouling (`boiler_efficiency_drift`), tower fouling from fan effort
+(`cooling_tower_fan_effort_drift`) and the condenser-bypass valve (`condenser_bypass_leak`), with
+TPR/FPR and Wilson intervals (measured, not gated; see `docs/VALIDATION.md`).
+<!-- /092-plant -->
+
 ## Data & license
 
 Dataset: **LBNL Fault Detection and Diagnostics Datasets**, by LBNL/PNNL/NREL/
