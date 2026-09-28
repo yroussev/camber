@@ -7,7 +7,7 @@
 # See docs/DEPLOY.md and RELEASING.md.
 context:
   name: camber-toolkit
-  version: "0.88.0"
+  version: "0.89.0"
 
 package:
   name: ${{ name|lower }}
@@ -15,7 +15,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/${{ name|replace('-', '_') }}-${{ version }}.tar.gz
-  sha256: 7b77ac3e105fafa80cd53bcda06d5fe056755c8f7ca0450b975c9ca884b2910b
+  sha256: ec070a89ad051ee41185b7942f29c65717e6c29b90982c81c5b332b2bb7b7695
 
 build:
   noarch: python
