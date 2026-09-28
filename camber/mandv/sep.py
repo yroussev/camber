@@ -61,8 +61,11 @@ SEP_METHODS = ("forecast", "backcast", "standard_conditions", "chaining")
 
 #: Primary Energy Multipliers ``m(*)`` transcribed from SEP 2019 Ed. 2 **Annex B** (Tables 4A and
 #: 4B, pp. 34-40; the two tables give the same multipliers). They convert *delivered* energy, in
-#: energy units, to primary energy; converting physical units (kWh, therms, ton-hours, pounds of
-#: steam) to energy is the user's job (Annex B gives the unit factors). Notes from the Protocol:
+#: energy units, to primary energy. Delivered amounts in physical units (kWh, therms, Mcf of gas,
+#: ton-hours, pounds of steam) are converted to one energy unit first by passing ``units=`` to
+#: :func:`primary_energy` / :func:`aggregate_energy_types` (0.92, #69; :mod:`camber.energy_units`:
+#: a gas volume needs its ``heat_content``, steam mass its ``enthalpy``, an ambiguous unit is
+#: refused). Without ``units`` the amounts must already share one energy unit. Protocol notes:
 #: fired-boiler rows assume 75% combustion efficiency and chilled-water rows ``1/COP``; 3.0 is the
 #: default for grid electricity and any other factor needs Verification Body approval; the
 #: compressed-air row assumes a motor-driven compressor at 100 psi (7 bar) only; energy generated
@@ -132,21 +135,70 @@ def _multipliers(types, user: Mapping | None) -> tuple:
     return out, caveats
 
 
+def _unit_factors(types, units, heat_content, enthalpy, energy_unit) -> tuple:
+    """0.92 (#69): ``({type: factor to energy_unit}, {type: unit}, caveats)``, or all ``None``
+    without ``units``. Every type needs a unit: one type in physical units beside others assumed to
+    be in energy units is exactly the mix-up the conversion step exists to stop."""
+    if units is None:
+        return None, None, []
+    from ..energy_units import energy_factor, parse_unit
+
+    units, hc, en = dict(units), dict(heat_content or {}), dict(enthalpy or {})
+    missing = [t for t in types if t not in units]
+    if missing:
+        raise ValueError(f"units= names no unit for energy type(s) {missing}")
+    parse_unit(energy_unit, kind="energy")
+    fac, caveats = {}, []
+    for t in types:
+        try:
+            fac[t] = energy_factor(
+                units[t], energy_unit, heat_content=hc.get(t), enthalpy=en.get(t)
+            )
+        except ValueError as e:
+            raise ValueError(f"{t}: {e}") from None
+        u = parse_unit(units[t])
+        if u.kind != "energy":
+            what = "heat content" if u.kind == "volume" else "enthalpy"
+            src = hc.get(t) if u.kind == "volume" else en.get(t)
+            caveats.append(
+                f"{t}: delivered {u.name} converted to {energy_unit} with the stated {what} "
+                f"{src!r} (Annex B unit factors are defaults only; use the supplier's value)"
+            )
+    return fac, {t: str(units[t]) for t in types}, caveats
+
+
 @dataclass
 class PrimaryEnergy:
-    """Delivered energy converted to primary energy (SEP 2019 Ed. 2 §5.1.1, Eq 1)."""
+    """Delivered energy converted to primary energy (SEP 2019 Ed. 2 §5.1.1, Eq 1).
+
+    ``unit`` and ``delivered_units`` are set when the delivered amounts were converted from
+    physical units (``units=``, 0.92); they are left out of :meth:`as_dict` otherwise."""
 
     total: float
     by_type: dict
     multipliers: dict
     caveats: list = field(default_factory=list)
+    unit: str | None = None
+    delivered_units: dict | None = None
 
     def as_dict(self) -> dict:
         """Return as a plain dict."""
-        return asdict(self)
+        d = asdict(self)
+        for k in ("unit", "delivered_units"):
+            if d[k] is None:
+                del d[k]
+        return d
 
 
-def primary_energy(delivered: Mapping, *, multipliers: Mapping | None = None) -> PrimaryEnergy:
+def primary_energy(
+    delivered: Mapping,
+    *,
+    multipliers: Mapping | None = None,
+    units: Mapping | None = None,
+    heat_content: Mapping | None = None,
+    enthalpy: Mapping | None = None,
+    energy_unit: str = "kWh",
+) -> PrimaryEnergy:
     """Primary energy of delivered energy by type: ``ECP(*) = m(*) x ECD(*)`` (Eq 1), summed.
 
     ``delivered`` maps an energy type to its delivered (net) consumption in energy units.
@@ -154,8 +206,17 @@ def primary_energy(delivered: Mapping, *, multipliers: Mapping | None = None) ->
     ``ValueError``. SEP §5.1.2: a net consumption calculated to be negative "shall be accounted for
     as zero" -- such a type is counted as zero, with a caveat. The multiplier chosen for a type must
     be the same in the baseline and reporting periods (§5.1.1): convert both with one table.
+
+    **Physical units** (0.92, #69): ``units`` maps every type to the unit its delivered amount is
+    in (``{"grid_electricity": "kWh", "natural_gas": "Mcf"}``); each amount is converted to
+    ``energy_unit`` (kWh by default; ``"kBtu"`` for IP) *before* the multiplier. A gas volume needs
+    ``heat_content[type]`` (``"10.37 therm/Mcf"``) and steam mass ``enthalpy[type]``
+    (``"1000 Btu/lb"``); a type without a unit, and an unknown or ambiguous unit, raise
+    ``ValueError``. The result then carries ``unit`` and ``delivered_units``.
     """
     m, caveats = _multipliers(list(delivered), multipliers)
+    fac, dunits, ucav = _unit_factors(list(delivered), units, heat_content, enthalpy, energy_unit)
+    caveats += ucav
     by_type = {}
     for t, e in delivered.items():
         e = float(e)
@@ -166,9 +227,14 @@ def primary_energy(delivered: Mapping, *, multipliers: Mapping | None = None) ->
                 f"{t}: net consumption {e:g} is negative and is counted as zero (§5.1.2)"
             )
             e = 0.0
-        by_type[t] = m[t] * e
+        by_type[t] = m[t] * e * (1.0 if fac is None else fac[t])
     return PrimaryEnergy(
-        total=float(sum(by_type.values())), by_type=by_type, multipliers=m, caveats=caveats
+        total=float(sum(by_type.values())),
+        by_type=by_type,
+        multipliers=m,
+        caveats=caveats,
+        unit=None if fac is None else energy_unit,
+        delivered_units=dunits,
     )
 
 
@@ -481,13 +547,27 @@ class FacilitySEP:
     declined: bool = False
     declined_reason: str | None = None
     caveats: list = field(default_factory=list)
+    unit: str | None = None  # 0.92 (#69): set when delivered units were converted
+    delivered_units: dict | None = None
 
     def as_dict(self) -> dict:
-        """Return as a plain dict."""
-        return asdict(self)
+        """Return as a plain dict (``unit`` / ``delivered_units`` only when set)."""
+        d = asdict(self)
+        for k in ("unit", "delivered_units"):
+            if d[k] is None:
+                del d[k]
+        return d
 
 
-def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = None) -> FacilitySEP:
+def aggregate_energy_types(
+    results: Mapping,
+    *,
+    multipliers: Mapping | None = None,
+    units: Mapping | None = None,
+    heat_content: Mapping | None = None,
+    enthalpy: Mapping | None = None,
+    energy_unit: str = "kWh",
+) -> FacilitySEP:
     """Combine per-energy-type method results into one facility SEnPI on primary energy.
 
     ``results`` maps an energy type (a key of :data:`ANNEX_B_MULTIPLIERS` or of ``multipliers``)
@@ -498,6 +578,10 @@ def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = No
     declines the facility figure. Each type's terms are multiplied by its multiplier (Eq 1) and
     summed (§6.3.2) before Eq 5-11 are applied. Energy types totalling 5.0% or less of consumption
     may be left out in both periods (§5.1.3); that choice is the caller's.
+
+    ``units`` / ``heat_content`` / ``enthalpy`` / ``energy_unit`` (0.92, #69) convert each type's
+    results from its delivered physical unit to ``energy_unit`` before the multiplier, exactly as
+    in :func:`primary_energy`; the per-type models stay fitted in their own units.
     """
     if not results:
         raise ValueError("no energy-type results to aggregate")
@@ -514,6 +598,11 @@ def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = No
             "into an SEnPI"
         )
     m, caveats = _multipliers(list(results), multipliers)
+    fac, dunits, ucav = _unit_factors(list(results), units, heat_content, enthalpy, energy_unit)
+    caveats += ucav
+    unit_out = None if fac is None else energy_unit
+    # the effective multiplier: delivered unit -> energy_unit -> primary (Eq 1)
+    me = m if fac is None else {t: m[t] * fac[t] for t in m}
     declined = [t for t, r in results.items() if r.declined]
     need = _TERMS[method]
     by_type: dict[str, dict] = {}
@@ -521,7 +610,7 @@ def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = No
         terms = r.sep_terms or {}
         if not declined and any(terms.get(k) is None for k in need):
             raise ValueError(f"{t}: the result carries no SEP terms for {method}")
-        by_type[t] = {k: (None if terms.get(k) is None else m[t] * terms[k]) for k in need}
+        by_type[t] = {k: (None if terms.get(k) is None else me[t] * terms[k]) for k in need}
     conf = {r.confidence for r in results.values()}
     confidence = conf.pop() if len(conf) == 1 else None
     if declined:
@@ -539,6 +628,8 @@ def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = No
             declined=True,
             declined_reason=f"declined for energy type(s): {', '.join(declined)}",
             caveats=caveats,
+            unit=unit_out,
+            delivered_units=dunits,
         )
     total = {k: math.fsum(by_type[t][k] for t in by_type) for k in need}
     s = _senpi_of(method, total)
@@ -554,7 +645,7 @@ def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = No
             if r.abs_uncertainty is None or not np.isfinite(r.abs_uncertainty):
                 ok = False
                 break
-            var += (m[t] * r.abs_uncertainty / _t_value(r.confidence, r.df)) ** 2
+            var += (me[t] * r.abs_uncertainty / _t_value(r.confidence, r.df)) ** 2
             if r.df is not None:
                 dfs.append(r.df)
         if ok:
@@ -582,4 +673,6 @@ def aggregate_energy_types(results: Mapping, *, multipliers: Mapping | None = No
         by_type=by_type,
         multipliers=m,
         caveats=caveats,
+        unit=unit_out,
+        delivered_units=dunits,
     )
