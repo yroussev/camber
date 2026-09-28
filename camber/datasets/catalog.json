@@ -2583,7 +2583,18 @@
    },
    "equipment": "3 chillers, 3 cooling towers, primary/secondary CHW loops; unit 1 mapped",
    "labels": {
-    "targets": {},
+    "targets": {
+     "chiller_efficiency": [
+      "tower_fouling",
+      "chiller_fouling",
+      "bypass_valve",
+      "control"
+     ],
+     "cooling_tower_approach": [
+      "tower_fouling",
+      "control"
+     ]
+    },
     "fault_types": {
      "tower_fouling": "cooling-tower 1 fill fouling (heat-transfer coefficient x 0.65 / 0.80 / 0.95; 065 is the most severe)",
      "chiller_fouling": "chiller-1 heat-exchanger fouling (undocumented: absent from the inventory's Tables 3-4)",
@@ -2899,7 +2910,8 @@
     "Two label swaps in the export (outdoor wet/dry-bulb; secondary-loop supply/return) are fixed at ingest; see the data issues.",
     "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
     "Water-side only: the refrigerant-side chiller drift detectors cannot run on it.",
-    "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees)."
+    "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees).",
+    "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning. The sensor-bias runs are negatives for both, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports."
    ],
    "data_issues": [
     {

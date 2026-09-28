@@ -318,3 +318,142 @@ def test_chiller_detectors_registered():
     # chiller_efficiency targets the tower-fouling/PID AND the three-way-bypass faults
     pos = B.CHILLER_DETECTORS["chiller_efficiency"]["positive"]
     assert any(p.endswith("bypass_leakage") for p in pos) and any("fouling" in p for p in pos)
+
+
+# --- 0.92.0 (#11, #12): explicit chiller negatives, sensor-reference pairs, series FPU boxes --- #
+
+
+def test_chiller_run_on_no_list_is_excluded_not_a_negative():
+    B = _bench()
+    frames = _chiller_frames()
+    frames["ChillerPlant_unlisted_fault.csv"] = _chiller_frame(seed=4, kw_per_ton=0.98)
+    m = B.score_chiller(frames)
+    # the unlisted run would have been a false positive under the old "everything else" rule
+    assert m["chiller.chiller_efficiency.fp"] == 0 and m["chiller.chiller_efficiency.tn"] == 2
+    det = B.CHILLER_DETECTORS["chiller_efficiency"]
+    assert B._run_class("ChillerPlant.csv", det) == "negative"
+    assert B._run_class("ChillerPlant_chiller_bias_-1.csv", det) == "negative"
+    assert B._run_class("ChillerPlant_chiller_fouling_065.csv", det) == "positive"
+    assert B._run_class("ChillerPlant_unlisted_fault.csv", det) is None
+    # the tower rule: a fouled chiller / bypassed loop are cross-negatives, every bias a negative
+    tower = B.CHILLER_DETECTORS["cooling_tower_approach"]
+    for run in (
+        "ChillerPlant_chiller_fouling_065.csv",
+        "ChillerPlant_bypass_stuck_050.csv",
+        "ChillerPlant_secondary_chilled_water_pressure_bias_010.csv",
+    ):
+        assert B._run_class(run, tower) == "negative"
+
+
+def _sensor_frame(n=400, *, chl_bias=0.0, ct_bias=0.0, bypass_mix=0.0):
+    """Raw chiller-plant columns for the reference pairs: chiller 1 and tower 1 run alone."""
+    idx = pd.date_range("2018-01-01", periods=n, freq="1h")
+    rng = np.random.default_rng(0)
+    chw = 44 + rng.normal(0, 0.5, n)
+    cdw = 70 + rng.normal(0, 1.0, n)
+    return pd.DataFrame(
+        {
+            "CHL_SW_TEMP_1": chw + chl_bias,
+            "CWL_PRI_SW_TEMP": chw,
+            "CT_SW_TEMP_1": cdw + ct_bias,
+            "CDWL_SW_TEMP": cdw - bypass_mix,
+            "TWV_CTRL": np.zeros(n),
+            "CHL_POW_1": np.full(n, 100.0),
+            "CHL_POW_2": np.zeros(n),
+            "CHL_POW_3": np.zeros(n),
+            "CT_FAN_SPD_1": np.full(n, 0.6),
+            "CT_FAN_SPD_2": np.zeros(n),
+            "CT_FAN_SPD_3": np.zeros(n),
+        },
+        index=idx,
+    )
+
+
+def test_chiller_sensor_pairs_separate_bias_from_physical_faults():
+    B = _bench()
+    frames = {
+        "ChillerPlant.csv": _sensor_frame(),
+        "ChillerPlant_chiller_bias_2.csv": _sensor_frame(chl_bias=3.6),
+        "ChillerPlant_chiller_bias_1.csv": _sensor_frame(chl_bias=1.8),  # under the 2.0 F default
+        "ChillerPlant_coolingtower_bias_-2.csv": _sensor_frame(ct_bias=-3.6),
+        "ChillerPlant_chiller_fouling_065.csv": _sensor_frame(),
+        # a leaking bypass mixes condenser water past the tower while its command reads shut
+        "ChillerPlant_bypass_leakage_050.csv": _sensor_frame(bypass_mix=-40.0),
+    }
+    m = B.score_chiller_sensors(frames)
+    assert (
+        m["chiller.sensor.chiller_leaving_water.tp"],
+        m["chiller.sensor.chiller_leaving_water.fn"],
+    ) == (1, 1)
+    assert m["chiller.sensor.chiller_leaving_water.fp"] == 0
+    assert m["chiller.sensor.tower_leaving_water.tp"] == 1
+    assert m["chiller.sensor.tower_leaving_water.fp"] == 1  # the bypass run: honestly a false alarm
+    # a pair whose physics never holds (chiller 2 always on) declines instead of scoring
+    busy = _sensor_frame()
+    busy["CHL_POW_2"] = 50.0
+    m2 = B.score_chiller_sensors({"ChillerPlant.csv": busy})
+    assert m2["chiller.sensor.chiller_leaving_water.declined"] == 1
+    assert "chiller.sensor.chiller_leaving_water.fpr" not in m2  # nothing scored -> no rate
+
+
+def test_fpu_target_lists_follow_the_documented_direction():
+    B = _bench()
+    air = B.fpu_drift_detectors("SFPU")["vav_airflow_drift"]
+    rh = B.fpu_drift_detectors("SFPU")["vav_reheat_valve_drift"]
+    names = [
+        "SFPU_VAVDMPRStuck_0%.csv",
+        "SFPU_VAVDMPRStuck_20%.csv",
+        "SFPU_VAVDMPRStuck_50%.csv",
+        "SFPU_SensorBias_VAVAirflow_-200CFM.csv",
+        "SFPU_SensorBias_VAVAirflow_+200CFM.csv",
+        "SFPU_ReheatVLVStuck_20%.csv",
+        "SFPU_ReheatVLVStuck_80%.csv",
+        "SFPU_ReheatCoilFouling_Waterside_Minor.csv",
+        "SFPU_RMTEMPUnstable.csv",
+    ]
+
+    def kind(det, n):
+        if any(n.startswith(p) for p in det["positive"]):
+            return "pos"
+        return "neg" if any(n.startswith(p) for p in det["cross_negative"]) else None
+
+    assert [kind(air, n) for n in names] == [
+        None,  # stuck at 0 / 20 %: a DOWN drift, outside the one-sided claim -> excluded
+        None,
+        "pos",
+        "pos",
+        "neg",
+        "neg",
+        "neg",
+        "neg",
+        "neg",
+    ]
+    assert [kind(rh, n) for n in names] == [
+        "neg",
+        "neg",
+        "neg",
+        "neg",
+        "neg",
+        "pos",
+        "neg",  # stuck at 80 %: over-delivers, the demand falls
+        "pos",
+        None,  # instability: the rule's physics predicts nothing -> excluded
+    ]
+    assert (
+        air["equip"] == "lbnl_sfpu"
+        and B.FPU_DRIFT_DETECTORS["vav_airflow_drift"]["equip"] == "lbnl_fpu"
+    )
+
+
+def test_series_fpu_scores_under_its_own_keys_and_frames():
+    B = _bench()
+    frames = {k.replace("PFPU", "SFPU"): v for k, v in _fpu_frames().items()}
+    dets = B.fpu_drift_detectors("SFPU")
+    dets["vav_reheat_valve_drift"]["frames"] = frames  # a per-detector frame set is honoured
+    m = B.score_drift(
+        frames, dets, fault_free="SFPU_FaultFree.csv", counts=True, key_prefix="drift.sfpu."
+    )
+    assert m and all(k.startswith("drift.sfpu.") for k in m)
+    assert m["drift.sfpu.vav_airflow_drift.tp"] == 1
+    mp = B.sfpu_reheat_mapping()
+    assert mp.role_of("VAV_DA_CFM_S") == Role.AIRFLOW and mp.role_of("VAV_PM_CFM_S") is None

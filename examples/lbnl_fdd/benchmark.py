@@ -83,6 +83,8 @@ DATA = os.path.join(HERE, "..", "_data", "lbnl")
 # The opt-in FPU / chiller subsets' metrics as last measured: never gated, but docs/VALIDATION.md
 # quotes them and tests/test_validation_doc.py checks those cells against this record.
 OPTIN_RECORD = os.path.join(HERE, "optin-measured.json")
+#: Metric-key prefixes of the opt-in subsets (FPU parallel + series, chiller plant): never gated.
+OPTIN_PREFIXES = ("chiller.", "drift.vav_", "drift.sfpu.")
 
 # Detector names are constant; each targets one fault type. OA-fraction is shared
 # across all families; the leak detector only applies to the SDAHU coil-leak case.
@@ -278,31 +280,97 @@ DRIFT_DETECTORS = {
     },
 }
 
-# VAV zone-terminal drift on the LBNL Fan-Power-Unit subset (the South-zone box is the one faulted).
-# vav_airflow_drift (DAMPER ~ AIRFLOW_SP, one-sided up) targets a stuck damper and a LOW-reading
-# airflow sensor (the controller opens further); a high-reading sensor closes the damper -> cross-
-# negative. vav_reheat_valve_drift (reheat-valve demand at matched duty, one-sided up) targets a
-# valve stuck closed and coil fouling; a stuck-open or leaking valve lowers the demand -> cross-
-# negative. Single box -> no rogue/cohort here.
-FPU_DRIFT_DETECTORS = {
-    "vav_airflow_drift": {
-        "build": lambda: VavAirflowDrift(BaselineStore(), site="lbnl_fpu", run_id="bench"),
-        "equip": "lbnl_fpu",
-        "positive": ("PFPU_VAVDMPRStuck", "PFPU_SensorBias_VAVAirflow_-400CFM"),
-        "cross_negative": ("PFPU_Reheat", "PFPU_SensorBias_VAVAirflow_+400CFM"),
-    },
-    "vav_reheat_valve_drift": {
-        "build": lambda: VavReheatValveDrift(BaselineStore(), site="lbnl_fpu", run_id="bench"),
-        "equip": "lbnl_fpu",
-        "positive": ("PFPU_ReheatVLVStuck_0%", "PFPU_ReheatCoilFouling"),
-        "cross_negative": (
-            "PFPU_VAVDMPRStuck",
-            "PFPU_SensorBias",
-            "PFPU_ReheatVLVStuck_100%",
-            "PFPU_ReheatVLVLeak",
-        ),
-    },
+# VAV zone-terminal drift on the LBNL Fan-Power-Unit subset (the South-zone box is the one faulted),
+# scored per box family: parallel (PFPU, keys ``drift.vav_*``) and series (SFPU, keys
+# ``drift.sfpu.vav_*``, since 0.92.0), each against its own fault-free run. The target lists are
+# written from each rule's documented physics (revised in 0.92.0, #12) and are the same for both
+# families; a run on no list is excluded (neither a target nor a negative).
+#
+# vav_airflow_drift (DAMPER ~ AIRFLOW_SP, one-sided UP) targets a damper that has to open further
+# for the same commanded flow: stuck at 50 / 80 / 100 % (it sits above where the controller wants
+# it) and a LOW-reading airflow sensor (-200 / -400 cfm: the controller opens to make up the
+# phantom shortfall). Stuck at 0 / 20 % pulls the damper DOWN, outside the one-sided claim, so
+# those are excluded rather than scored either way. Cross-negatives (the relation holds, so the
+# detector must stay quiet): a high-reading sensor (+200 / +400 cfm), damper instability, fan
+# restriction, the room-temperature faults (they move the command along the same curve) and every
+# reheat-valve / coil fault.
+#
+# vav_reheat_valve_drift (reheat-valve demand at matched duty, one-sided UP) targets a valve that
+# delivers less than asked: stuck closed or nearly (0 / 20 %) and coil fouling (air- or waterside).
+# Cross-negatives: a valve stuck at 50 / 80 / 100 % or leaking (it over-delivers, demand FALLS),
+# the stuck dampers, and the airflow and room-temperature sensor biases (duty moves, the valve ~
+# duty relation does not). Excluded: the room-temperature and damper instability runs and fan
+# restriction, whose effect on the coil's entering air the rule's physics predicts neither way.
+FPU_AIRFLOW_LISTS = {
+    "positive": (
+        "VAVDMPRStuck_50%",
+        "VAVDMPRStuck_80%",
+        "VAVDMPRStuck_100%",
+        "SensorBias_VAVAirflow_-200CFM",
+        "SensorBias_VAVAirflow_-400CFM",
+    ),
+    "cross_negative": (
+        "SensorBias_VAVAirflow_+",
+        "VAVDMPRUnstable",
+        "VAVFanRestrictFlow",
+        "SensorBias_RMTEMP",
+        "RMTEMPUnstable",
+        "Reheat",
+    ),
 }
+FPU_REHEAT_LISTS = {
+    "positive": ("ReheatVLVStuck_0%", "ReheatVLVStuck_20%", "ReheatCoilFouling"),
+    "cross_negative": (
+        "ReheatVLVStuck_50%",
+        "ReheatVLVStuck_80%",
+        "ReheatVLVStuck_100%",
+        "ReheatVLVLeak",
+        "VAVDMPRStuck",
+        "SensorBias_VAVAirflow",
+        "SensorBias_RMTEMP",
+    ),
+}
+
+
+def fpu_drift_detectors(family="PFPU"):
+    """The VAV drift detector specs for one FPU family (``"PFPU"`` or ``"SFPU"``)."""
+    site = "lbnl_fpu" if family == "PFPU" else f"lbnl_{family.lower()}"  # PFPU: the pre-0.92 name
+
+    def lists(spec):
+        return {k: tuple(f"{family}_{p}" for p in v) for k, v in spec.items()}
+
+    return {
+        "vav_airflow_drift": {
+            "build": lambda: VavAirflowDrift(BaselineStore(), site=site, run_id="bench"),
+            "equip": site,
+            **lists(FPU_AIRFLOW_LISTS),
+        },
+        "vav_reheat_valve_drift": {
+            "build": lambda: VavReheatValveDrift(BaselineStore(), site=site, run_id="bench"),
+            "equip": site,
+            **lists(FPU_REHEAT_LISTS),
+        },
+    }
+
+
+FPU_DRIFT_DETECTORS = fpu_drift_detectors("PFPU")
+
+# In a SERIES box the fan runs whenever the box is occupied and pulls primary AND plenum air through
+# the reheat coil, so the coil's duty is carried by the fan discharge flow (VAV_DA_CFM_S), not the
+# primary flow the damper controls (VAV_PM_CFM_S). The SFPU reheat score reads this mapping (the
+# packaged lbnl_fpu.json with airflow -> the discharge flow); the SFPU airflow score, like PFPU,
+# reads the packaged mapping (damper vs the PRIMARY-flow command). The coil's entering-air
+# temperature is still the primary SA_TEMP proxy -- in a series box a primary/plenum mix -- which
+# is why the room-temperature-bias runs can read as reheat creep there.
+SFPU_REHEAT_FLOW = "VAV_DA_CFM_S"
+
+
+def sfpu_reheat_mapping():
+    """The packaged FPU mapping with the reheat duty's airflow read from the fan discharge."""
+    m = packaged_mapping("lbnl_fpu.json")
+    aliases = {k: v for k, v in m["aliases"].items() if v != "airflow"}
+    aliases[SFPU_REHEAT_FLOW] = "airflow"
+    return MappingProvider.from_dict({"aliases": aliases})
 
 
 def build_drift_cases(frames, det, *, baseline_frac=0.6, fault_free="AHU_annual.csv"):
@@ -340,6 +408,7 @@ def score_drift(
     fault_free="AHU_annual.csv",
     label="AHU air-side drift",
     counts=False,
+    key_prefix="drift.",
 ):
     """Score a set of drift detectors on ``frames``; return the flat metrics dict.
 
@@ -347,12 +416,15 @@ def score_drift(
     set) with its own ``fault_free`` baseline file to score another equipment subset with the same
     machinery. ``counts`` adds the confusion counts (``tp``, ``fn``, ``fp``, ``tn``, ``declined``),
     which docs/VALIDATION.md quotes for the opt-in subsets (the gated SDAHU keys are unchanged).
+    A detector spec may carry its own ``frames`` (a subset read through a different mapping), and
+    ``key_prefix`` names the metrics (``drift.`` by default; the series FPU boxes use
+    ``drift.sfpu.``).
     """
     detectors = detectors if detectors is not None else DRIFT_DETECTORS
     metrics = {}
     print(f"\n=== {label} (camber.driftvalidation) ===")
     for name, det in detectors.items():
-        cases = build_drift_cases(frames, det, fault_free=fault_free)
+        cases = build_drift_cases(det.get("frames", frames), det, fault_free=fault_free)
         pos = sum(1 for c in cases if c.fault)
         if len(cases) < 2 or (det["positive"] and pos == 0):
             print(f"  {name:24s} skipped (no usable cases)")
@@ -374,7 +446,7 @@ def score_drift(
             ("fpr", fpr),
         ):
             if val == val:  # not NaN
-                metrics[f"drift.{name}.{key}"] = round(val, 4)
+                metrics[f"{key_prefix}{name}.{key}"] = round(val, 4)
         if counts:
             for key, val in (
                 ("tp", c.tp),
@@ -383,7 +455,7 @@ def score_drift(
                 ("tn", c.tn),
                 ("declined", score.n_declined),
             ):
-                metrics[f"drift.{name}.{key}"] = int(val)
+                metrics[f"{key_prefix}{name}.{key}"] = int(val)
     return metrics
 
 
@@ -405,12 +477,32 @@ def score_drift(
 # --------------------------------------------------------------------------- #
 
 CHILLER_FAULT_FREE = "ChillerPlant.csv"
+# The plant's three sensor-bias families (#11): a chiller-1 leaving-water sensor (+-1 / +-2 C), a
+# tower-1 leaving-water sensor (+-1 / +-2 C) and the secondary-loop differential-pressure sensor
+# (+-10 / +-20 %). For a *physical* plant-level detector each is a genuine NEGATIVE: the plant runs
+# healthy and only a sensor lies, so firing on one is a false alarm (a biased temperature corrupts
+# the tonnage, and the detector cannot tell). Listed explicitly (0.92.0; until then every run that
+# was not a positive counted as a negative by default) so a run matching no list is *excluded* and
+# printed, never silently scored.
+CHILLER_SENSOR_BIAS = (
+    "ChillerPlant_chiller_bias",
+    "ChillerPlant_coolingtower_bias",
+    "ChillerPlant_secondary_chilled_water_pressure_bias",
+)
 CHILLER_DETECTORS = {
     "cooling_tower_approach": {
         # tower fouling (fouled fill -> can't approach wet-bulb) + condenser-loop PID mistuning
         "make": lambda design=7.0: CoolingTowerApproach(design_approach_f=design),
         "metric": "approach_median_f",
         "positive": ("ChillerPlant_coolingtower_fouling", "ChillerPlant_coolingtower_PI"),
+        # a fouled chiller and a bypassed condenser loop leave the tower's own approach alone
+        # (cross-negatives); the sensor biases are negatives for every physical detector
+        "negative": (
+            "ChillerPlant_chiller_fouling",
+            "ChillerPlant_bypass_leakage",
+            "ChillerPlant_bypass_stuck",
+            *CHILLER_SENSOR_BIAS,
+        ),
     },
     "chiller_efficiency": {
         # anything that raises chiller lift -> kW/ton: warmer condenser water from a fouled tower,
@@ -428,8 +520,54 @@ CHILLER_DETECTORS = {
             "ChillerPlant_bypass_stuck",
             "ChillerPlant_chiller_fouling",  # undocumented in the inventory
         ),
+        "negative": CHILLER_SENSOR_BIAS,
     },
 }
+
+# Sensor-vs-physical (#11): the two reference pairs that separate a biased sensor from a real
+# fault on this plant, scored with camber.sensordrift.compare_to_reference at its documented
+# temperature defaults (warn at |bias| >= 2.0 F). Each pair holds only while its physics does:
+#   * chiller 1's leaving water (CHL_SW_TEMP_1) IS the primary loop's supply (CWL_PRI_SW_TEMP)
+#     when chiller 1 runs alone (chillers 2 and 3 under 1 kW) -- nothing mixes in between;
+#   * tower 1's leaving water (CT_SW_TEMP_1) IS the condenser loop's supply (CDWL_SW_TEMP) when
+#     tower 1's fan runs alone and the bypass valve is commanded shut (TWV_CTRL <= 0.01).
+# Positives are the runs biasing that pair's sensor; every other run is a negative. The bypass
+# condition reads the valve COMMAND, which a leaking or stuck valve does not obey, so on those runs
+# the tower pair compares tower water with bypass-mixed water: counted as the false alarms they are.
+CHILLER_SENSOR_PAIRS = {
+    "chiller_leaving_water": {
+        "sensor": "CHL_SW_TEMP_1",
+        "reference": "CWL_PRI_SW_TEMP",
+        "positive": ("ChillerPlant_chiller_bias",),
+    },
+    "tower_leaving_water": {
+        "sensor": "CT_SW_TEMP_1",
+        "reference": "CDWL_SW_TEMP",
+        "positive": ("ChillerPlant_coolingtower_bias",),
+    },
+}
+CHILLER_SENSOR_COLUMNS = (
+    "CHL_SW_TEMP_1",
+    "CWL_PRI_SW_TEMP",
+    "CT_SW_TEMP_1",
+    "CDWL_SW_TEMP",
+    "TWV_CTRL",
+    "CHL_POW_1",
+    "CHL_POW_2",
+    "CHL_POW_3",
+    "CT_FAN_SPD_1",
+    "CT_FAN_SPD_2",
+    "CT_FAN_SPD_3",
+)
+
+
+def _run_class(fname, det):
+    """``"positive"`` / ``"negative"`` / ``None`` (excluded) for one chiller run and detector."""
+    if any(fname.startswith(p) for p in det["positive"]):
+        return "positive"
+    if fname == CHILLER_FAULT_FREE or any(fname.startswith(p) for p in det.get("negative", ())):
+        return "negative"
+    return None
 
 
 def _calibrated_metric(det, frame):
@@ -445,8 +583,10 @@ def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant
     Each detector's absolute design ceiling is calibrated from the fault-free run's healthy median
     (the metric is data-derived and design-independent), then the calibrated detector runs on every
     scenario. A run whose name starts with a detector's ``positive`` prefix is a target fault (it
-    should fire); every other run -- fault-free and sensor-bias -- is a negative (stays quiet). Pure
+    should fire); the fault-free run and the ``negative`` runs (sensor biases, cross-faults) should
+    stay quiet. Pure
     and deterministic given the frames, so it's unit-testable on synthetic plant-shaped frames.
+    A run on neither the ``positive`` nor the ``negative`` list is excluded (and printed).
     """
     metrics = {}
     ff = frames.get(fault_free)
@@ -461,16 +601,23 @@ def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant
             continue
         rule = det["make"](healthy)  # design ceiling := the healthy plant's own median
         tp = fn = fp = tn = declined = 0
+        excluded = []
         for fname, frame in sorted(frames.items()):
+            kind = _run_class(fname, det)
+            if kind is None:
+                excluded.append(fname)  # on no list: neither a target nor a negative
+                continue
             finding = rule.analyze("CH1", frame)
             if (finding.metrics or {}).get("declined"):
                 declined += 1  # could not test its claim: neither a detection nor a negative
                 continue
             fired = finding.severity in ("warn", "fault")
-            if any(fname.startswith(p) for p in det["positive"]):
+            if kind == "positive":
                 tp, fn = tp + fired, fn + (not fired)
             else:
                 fp, tn = fp + fired, tn + (not fired)
+        if excluded:
+            print(f"  {name:24s} excluded (on no list): {', '.join(excluded)}")
         tpr = tp / (tp + fn) if (tp + fn) else float("nan")
         fpr = fp / (fp + tn) if (fp + tn) else float("nan")
         print(
@@ -483,6 +630,80 @@ def score_chiller(frames, *, fault_free=CHILLER_FAULT_FREE, label="Chiller-plant
         # the confusion counts docs/VALIDATION.md quotes (opt-in subset: never gated)
         for key, n in (("tp", tp), ("fn", fn), ("fp", fp), ("tn", tn), ("declined", declined)):
             metrics[f"chiller.{name}.{key}"] = int(n)
+    return metrics
+
+
+def load_sensor_frame(csv, spec, columns=CHILLER_SENSOR_COLUMNS):
+    """The raw (unmapped) chiller-plant columns the sensor-reference pairs read, hourly means.
+
+    Read through the catalog's ingest path (:func:`camber.datasets._ingest.read_raw_run`, so the
+    entry's ``fix`` quirks and timestamp handling apply); the placeholder role only tells the reader
+    which columns to keep.
+    """
+    from camber.datasets._ingest import read_raw_run
+
+    keep = MappingProvider.from_dict({"aliases": {c: "power" for c in columns}})
+    df, _ = read_raw_run(csv, keep, dict(spec))
+    return (
+        df[[c for c in columns if c in df.columns]]
+        .apply(pd.to_numeric, errors="coerce")
+        .resample("1h")
+        .mean()
+    )
+
+
+def _pair_windows(df):
+    """``{pair: boolean hours}`` where each reference pair's physics holds (see the pairs)."""
+    alone_ch1 = (df["CHL_POW_1"] > 1) & (df["CHL_POW_2"] < 1) & (df["CHL_POW_3"] < 1)
+    alone_ct1 = (
+        (df["CT_FAN_SPD_1"] > 0.01)
+        & (df["CT_FAN_SPD_2"] < 0.01)
+        & (df["CT_FAN_SPD_3"] < 0.01)
+        & (df["TWV_CTRL"] <= 0.01)
+    )
+    return {"chiller_leaving_water": alone_ch1, "tower_leaving_water": alone_ct1}
+
+
+def score_chiller_sensors(raw_frames, *, label="Chiller-plant sensor vs reference"):
+    """Score the sensor-reference pairs on ``{scenario_csv: raw sensor frame}``; return metrics.
+
+    Each pair runs :func:`camber.sensordrift.compare_to_reference` on the hours its physics holds;
+    a ``warn``/``fault`` verdict is a detection. Positives are the pair's own sensor-bias runs,
+    every other run (fault-free, physical faults, the other sensors' biases) is a negative, and a
+    pair with too few valid hours (``info``) is declined. Keys ``chiller.sensor.<pair>.*`` (opt-in,
+    never gated).
+    """
+    from camber.sensordrift import compare_to_reference
+
+    metrics = {}
+    print(f"\n=== {label} (camber.sensordrift, default 2.0 F bias threshold) ===")
+    for pair, spec in CHILLER_SENSOR_PAIRS.items():
+        tp = fn = fp = tn = declined = 0
+        for fname, df in sorted(raw_frames.items()):
+            if not {spec["sensor"], spec["reference"]} <= set(df.columns):
+                declined += 1
+                continue
+            hours = _pair_windows(df)[pair]
+            res = compare_to_reference(
+                df.loc[hours, spec["sensor"]], df.loc[hours, spec["reference"]], name=pair
+            )
+            if res.severity == "info":
+                declined += 1
+                continue
+            fired = res.severity in ("warn", "fault")
+            if any(fname.startswith(p) for p in spec["positive"]):
+                tp, fn = tp + fired, fn + (not fired)
+            else:
+                fp, tn = fp + fired, tn + (not fired)
+            print(f"  {pair:22s} {fname:60s} bias {res.bias:+6.2f} F  {res.severity}")
+        tpr = tp / (tp + fn) if (tp + fn) else float("nan")
+        fpr = fp / (fp + tn) if (fp + tn) else float("nan")
+        print(f"  {pair:22s} TPR {tp}/{tp + fn}  FPR {fp}/{fp + tn}  {declined} declined")
+        for key, val in (("tpr", tpr), ("fpr", fpr)):
+            if val == val:
+                metrics[f"chiller.sensor.{pair}.{key}"] = round(val, 4)
+        for key, n in (("tp", tp), ("fn", fn), ("fp", fp), ("tn", tn), ("declined", declined)):
+            metrics[f"chiller.sensor.{pair}.{key}"] = int(n)
     return metrics
 
 
@@ -537,13 +758,31 @@ def main(argv=None) -> int:
         }
         metrics.update(
             score_drift(
-                fpu_frames,
+                {f: v for f, v in fpu_frames.items() if f.startswith("PFPU_")},
                 FPU_DRIFT_DETECTORS,
                 fault_free="PFPU_FaultFree.csv",
-                label="VAV zone-terminal drift (FPU)",
+                label="VAV zone-terminal drift (parallel FPU)",
                 counts=True,
             )
         )
+        if os.path.exists(os.path.join(fpu_base, "SFPU_FaultFree.csv")):
+            series = sfpu_reheat_mapping()
+            sfpu = fpu_drift_detectors("SFPU")
+            sfpu["vav_reheat_valve_drift"]["frames"] = {
+                f: load_role_frame(os.path.join(fpu_base, f), series, spec=fpu_spec)
+                for f in fpu_frames
+                if f.startswith("SFPU_")
+            }
+            metrics.update(
+                score_drift(
+                    {f: v for f, v in fpu_frames.items() if f.startswith("SFPU_")},
+                    sfpu,
+                    fault_free="SFPU_FaultFree.csv",
+                    label="VAV zone-terminal drift (series FPU)",
+                    counts=True,
+                    key_prefix="drift.sfpu.",
+                )
+            )
 
     # Chiller-plant plant-level detectors (opt-in via fetch.py --chiller)
     chiller_base = os.path.join(DATA, "chiller")
@@ -556,6 +795,12 @@ def main(argv=None) -> int:
             if f.endswith(".csv")
         }
         metrics.update(score_chiller(chiller_frames))
+        sensor_frames = {
+            f: load_sensor_frame(os.path.join(chiller_base, f), chiller_spec)
+            for f in os.listdir(chiller_base)
+            if f.endswith(".csv")
+        }
+        metrics.update(score_chiller_sensors(sensor_frames))
 
     families_present = sum(
         1
@@ -574,7 +819,7 @@ def main(argv=None) -> int:
         print("\n(Only SDAHU present. Run `python examples/lbnl_fdd/fetch.py --families`")
         print(" to download FCU + DDAHU and score the full cross-equipment benchmark.)")
 
-    optin = {k: v for k, v in metrics.items() if k.startswith(("chiller.", "drift.vav_"))}
+    optin = {k: v for k, v in metrics.items() if k.startswith(OPTIN_PREFIXES)}
     if optin and os.path.exists(OPTIN_RECORD):
         recorded = json.load(open(OPTIN_RECORD))
         moved = sorted(k for k in set(optin) | set(recorded) if optin.get(k) != recorded.get(k))

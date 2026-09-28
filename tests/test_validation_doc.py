@@ -54,6 +54,31 @@ def test_fpu_drift_row_matches_the_opt_in_run(md, optin):
     assert want_r + ("**" if not r["declined"] else f", {r['declined']} declined**") in row
 
 
+def test_series_fpu_row_matches_the_opt_in_run(md, optin):
+    # the series (SFPU) boxes are scored as their own subset since 0.92.0 (#12)
+    row = _row(md, "series-box (SFPU) `vav_airflow_drift`")
+    for label, name in (
+        ("airflow", "vav_airflow_drift"),
+        ("reheat valve", "vav_reheat_valve_drift"),
+    ):
+        c = _counts(optin, f"drift.sfpu.{name}")
+        want = f"{label} **recall {c['tp']}/{c['tp'] + c['fn']}, {c['fp']} false positives in "
+        want += f"{c['fp'] + c['tn']}"
+        assert want + ("**" if not c["declined"] else f", {c['declined']} declined**") in row, want
+
+
+def test_chiller_sensor_reference_row_matches_the_opt_in_run(md, optin):
+    row = _row(md, "sensor bias vs physical fault on the chiller plant")
+    for label, pair in (
+        ("chiller leaving water", "chiller_leaving_water"),
+        ("tower leaving water", "tower_leaving_water"),
+    ):
+        c = _counts(optin, f"chiller.sensor.{pair}")
+        cell = f"{label} **TPR {c['tp']}/{c['tp'] + c['fn']}, FPR {c['fp']}/{c['fp'] + c['tn']}"
+        cell += f", {c['declined']} declined**" if c["declined"] else "**"
+        assert cell in row, cell
+
+
 def test_chiller_plant_row_matches_the_opt_in_run(md, optin):
     row = _row(md, "`chiller_efficiency`, `cooling_tower_approach`")
     for name in ("chiller_efficiency", "cooling_tower_approach"):
@@ -81,4 +106,4 @@ def test_opt_in_record_holds_only_opt_in_metrics(optin):
     # the gated baseline stays the only gate; the opt-in record never overlaps it
     base = json.load(open(_BASELINE))
     assert optin and not set(optin) & set(base)
-    assert all(k.startswith(("chiller.", "drift.vav_")) for k in optin)
+    assert all(k.startswith(("chiller.", "drift.vav_", "drift.sfpu.")) for k in optin)
