@@ -22,11 +22,19 @@ Generic ASHRAE / CTI standards citations are deliberately NOT matched -- those
 are legitimate engineering references.
 
 A rule may carry ``exempt_paths``: repository paths the TRACKED-FILE scans skip
-for that one rule. Only the third-party dataset host and its DOI prefix are
-exempt, and only in ``camber/datasets/catalog.json`` -- the catalog must link
-the data as published. Commit messages, CHANGELOG.md and the release artefacts
-are scanned with every rule and ignore exemptions, and the licence-encumbered
-dataset rules are never exempt anywhere.
+for that one rule. Only two kinds of rule are exempt, each in one file:
+
+- the third-party dataset host and its DOI prefix, only in
+  ``camber/datasets/catalog.json`` -- the catalog must link the data as
+  published;
+- the building-type label, only in the ENERGY STAR national median EUI
+  reference (``camber/energy_factors/energy_star_us_median_eui_2024.json``),
+  which transcribes every Portfolio Manager property type as printed, that
+  generic type among them.
+
+Commit messages, CHANGELOG.md and the release artefacts are scanned with every
+rule and ignore exemptions, and the licence-encumbered dataset rules are never
+exempt anywhere.
 
 Output: one rule per line, TAB-separated ``regex<TAB>reason<TAB>exempt_paths``
 where ``exempt_paths`` is a comma-separated list (empty when the rule has none).
@@ -40,6 +48,8 @@ import base64
 
 # The one file the dataset-host rules exempt (see the module docstring).
 CATALOG_PATH = "camber/datasets/catalog.json"
+# The one file the building-type label rule exempts: the ENERGY STAR property-type table.
+EUI_REFERENCE_PATH = "camber/energy_factors/energy_star_us_median_eui_2024.json"
 
 # (encoded regex, human-readable reason shown when the pattern fires[, exempt_paths])
 _ENCODED: list[tuple] = [
@@ -66,6 +76,7 @@ _ENCODED: list[tuple] = [
     (
         "Y291cnRob3VzZQ==",
         "specific-site building-type label",
+        (EUI_REFERENCE_PATH,),
     ),
     (
         "IkVMQyI=",

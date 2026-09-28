@@ -8,11 +8,21 @@
 # Format: one case-insensitive extended-regex (grep -E) per line. Blank lines and lines
 # starting with '#' are ignored. Any staged ADDED line matching a pattern blocks the commit.
 #
+# Optional per-line exemption: a TAB after the pattern, then a comma-separated list of
+# repository paths that pattern alone skips (the same mechanism as a committed rule's
+# exempt_paths in .github/scripts/site_neutrality_patterns.py). Every other path, and every
+# other pattern, still applies to those files. Keep the list as narrow as possible.
+#
+#   pattern<TAB>path/one.json,docs/two.md
+#
 # Enable the hooks once per clone:  bash scripts/install-hooks.sh
 #
 # --- Example: keep the project vendor-/site-neutral (no real client site names) ---
 # my[ -]?client[ -]?site
 # some-building-name
+#
+# --- Example: a generic word refused everywhere except one reference table (TAB-separated) ---
+# generic-type-word	camber/some_reference_table.json
 #
 # --- Example: extra AI-attribution catches (belt-and-suspenders with the built-in guard) ---
 # co-authored-by:.*(gpt|copilot|gemini)

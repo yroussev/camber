@@ -97,12 +97,26 @@ fi
 #    committed (.gitignore), it can safely hold sensitive terms -- e.g. a real client site
 #    name -- without embedding them in the repo, which a tracked denylist would. One
 #    case-insensitive extended-regex per line; blank lines and '#' comments are ignored.
+#    A line may add a TAB and a comma-separated list of paths exempt from that pattern alone
+#    (`pattern<TAB>path1,path2`), as a committed rule's third field does above.
 #    Create/edit .githooks/denylist.local to use it (see .githooks/denylist.local.example).
 denylist="$(git rev-parse --show-toplevel)/.githooks/denylist.local"
 if [ -f "$denylist" ] && [ -n "$added" ]; then
-  while IFS= read -r pat || [ -n "$pat" ]; do
-    case "$pat" in '' | \#*) continue ;; esac
-    if printf '%s\n' "$added" | grep -iqE "$pat"; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in '' | \#*) continue ;; esac
+    pat="${line%%$'\t'*}"
+    exempt=""
+    [ "$pat" = "$line" ] || exempt="${line#*$'\t'}"
+    [ -n "$pat" ] || continue
+    scan="$added"
+    if [ -n "$exempt" ]; then
+      rule_ex=()
+      IFS=',' read -r -a _paths <<<"$exempt"
+      for p in "${_paths[@]}"; do if [ -n "$p" ]; then rule_ex+=(":(exclude)$p"); fi; done
+      scan="$(added_lines ${rule_ex[@]+"${rule_ex[@]}"})"
+    fi
+    [ -n "$scan" ] || continue
+    if printf '%s\n' "$scan" | grep -iqE -- "$pat"; then
       echo "------------------------------------------------------------------" >&2
       echo "COMMIT REJECTED: staged content matches a local denylist rule." >&2
       echo "Matched pattern: /$pat/i  (from .githooks/denylist.local)" >&2

@@ -74,7 +74,11 @@ def _host_rules() -> list:
     spec = importlib.util.spec_from_file_location("snp", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    rules = [rx.replace("[:space:]", r"\s") for rx, _w, ex in mod.rules() if ex]
+    rules = [
+        rx.replace("[:space:]", r"\s")
+        for rx, _w, ex in mod.rules()
+        if "camber/datasets/catalog.json" in ex
+    ]
     assert rules
     return rules
 

@@ -87,6 +87,18 @@ def test_reference_sets_are_registered_by_kind_and_validated():
     assert eui.property_type("college laboratory")["key"] == "laboratory"
     assert eui.property_type("Data Center")["site_eui"] is None
     assert eui.property_type(None) is None and eui.property_type("spaceport") is None
+    # every printed Portfolio Manager row, in the PDF's order (the full table, 0.92)
+    pts = eui.doc["property_types"]
+    assert len(pts) == 46 and len({p["key"] for p in pts}) == 46
+    keys = [p["key"] for p in pts]
+    # page 4: Public Services opens with the row after Parking, then fire/police station
+    ps = [p for p in pts if p["broad_category"] == "Public Services"]
+    assert ps[0]["reference_data"] == "CBECS - " + ps[0]["name"]
+    assert (ps[0]["site_eui_text"], ps[0]["source_eui_text"]) == ("101.2", "211.4")
+    assert ps[0]["key"] == ps[0]["name"].lower() and ps[0]["aliases"] == []
+    assert keys.index(ps[0]["key"]) + 1 == keys.index("fire_police_station")
+    assert keys.index("office") + 1 == keys.index(ps[0]["key"])
+    assert eui.property_type(ps[0]["name"])["site_eui"] == 101.2
     assert eui.doc["source"]["sha256"].startswith("5e5dfab8")
     assert "5e5dfab80800" in eui.citation()
     assert "policy" in eui.policy["note"].lower()
