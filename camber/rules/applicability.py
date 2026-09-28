@@ -13,6 +13,9 @@ declines a recognised class outside them (an ``info`` finding that says why) and
 unrecognised class is never declined: the rule runs on its roles, with a caveat.
 
 A rule's own ``equip_classes`` attribute wins over this table (a custom rule declares its own).
+A built-in rule that carries the attribute (``supply_air_reset_compliance`` since 0.90.1,
+``g36_afdd``) takes its value *from* this table, so the table is the one place a built-in rule's
+classes are declared and the attribute can't disagree with it.
 Rules absent from the table -- and :data:`ROLES_SUFFICE`, listed so the classification is
 complete -- keep the roles-only behaviour: their inputs already say what the equipment is, or the
 check is valid on any equipment that carries them.
@@ -40,6 +43,7 @@ RULE_EQUIP_CLASSES: dict = {
     "leaking_valve": _AIR,
     "static_pressure_reset": _AIR,
     "static_reset_effectiveness": _AIR,
+    "g36_afdd": _AIR,  # G36 §5.16.14 AHU fault conditions (#60)
     # both coils on one unit: an air handler or a four-pipe fan coil (a VAV box has no cooling
     # valve; a heat pump has no valves)
     "simultaneous_heat_cool": ("air_handler", "fan_coil"),

@@ -49,6 +49,7 @@ from ..fdd_g36 import (
 )
 from ..model.roles import Role
 from ..units import normalize_percent
+from .applicability import RULE_EQUIP_CLASSES
 from .base import Finding
 
 # role -> engine column (the engine's own variable names, see camber.fdd_g36)
@@ -92,7 +93,8 @@ class G36AFDD:
 
     name = "g36_afdd"
     #: provisional: G36 §5.16.14 is written for air handlers; the runner declines other classes
-    equip_classes = ("AHU", "RTU", "DOAS", "MAU")
+    #: (the air-handler family: AHU, RTU, DOAS, MAU ...), from the central applicability table
+    equip_classes = RULE_EQUIP_CLASSES["g36_afdd"]
     roles_required = (Role.SUPPLY_AIR_TEMP, Role.COOL_VALVE)
     roles_optional = (
         Role.HEAT_VALVE,
@@ -367,6 +369,9 @@ class G36AFDD:
             metrics={
                 "worst_fc": worst_fc,
                 "worst_pct": worst,
+                # the FCs reported on warn_pct % or more of enough applicable hours (0.91): what
+                # the summary lists, and what the plant-capacity link reads for FC13
+                "flagged_fcs": [k for k, _v in flagged],
                 "fc": fcs,
                 "fan_gate": res.fan_gate,
                 "fan_on_hours": round(float(fan_h), 2),

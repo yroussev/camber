@@ -124,7 +124,6 @@ auto-builds a naming-heuristic one from the equipment ids so the census still au
 
 ## Declaring the topology in a config
 
-<!-- 091-plant (#61) -->
 A config run can take the served-by map from the site instead of guessing it from names. The
 `topology` section (provisional, 0.91) takes an explicit `{child: parent}` mapping, CSV files, or
 both:
@@ -151,7 +150,6 @@ pooled with the partial-coverage caveat. The run keeps it as `RunResult.topology
 count, the ids that named no discovered equipment, and any edges dropped to break a cycle. The RCx
 report uses it to tie an air handler to the chilled-water plant serving it
 ([RCX-REPORT.md](RCX-REPORT.md)).
-<!-- /091-plant -->
 
 ## Honesty is built into the type
 

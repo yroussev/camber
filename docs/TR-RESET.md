@@ -69,9 +69,12 @@ an `ok` finding says "tracks the G36 reset target" only when the mean absolute e
 
 **Air handlers only (0.90.1).** Rules are gated by roles, so a heat pump's or a terminal unit's
 discharge air would otherwise be read as an air handler's reset supply air. The rule declares
-`equip_classes = ("AHU", "RTU", "DOAS", "MAU")` (provisional), and the runner declines it with an
-`info` finding and a caveat on equipment of any other recorded class. Equipment with no recorded
-class still runs.
+the air-handler classes (provisional; AHU, RTU, DOAS, MAU and their spellings), and the runner
+declines it with an `info` finding and a caveat on equipment of any other recognised class.
+Equipment with no recorded class still runs, and an unrecognised class runs with a caveat. Since
+0.91 the rule's `equip_classes` attribute is its entry in the central table
+`camber.rules.applicability.RULE_EQUIP_CLASSES` (`("air_handler",)`), the one place every built-in
+rule's classes are declared.
 
 **Operating-state gates.** By default, the rule judges only samples where the supply fan runs (fan
 status, else fan speed, else airflow) and the space is occupied (a trended occupancy point, else the

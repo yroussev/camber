@@ -189,7 +189,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   heating coil. Otherwise FC14 and FC15 are declined. FC8/FC9 hours that coincide with a
   confirmed FC14 are attributed to FC14, so a passing valve is reported as a leak, not under the
   free-cooling labels. Parameters: `heating_coil`, `min_oa_pct` (enables FC6),
-  `mode_delay_min`, `alarm_delay_min`, and the screening-grade `warn_pct` / `fault_pct`.
+  `mode_delay_min`, `alarm_delay_min`, and the screening-grade `warn_pct` / `fault_pct`. Like
+  every air-handler rule it declines a VAV box, heat pump, fan coil or plant
+  (`camber.rules.applicability`), and an FC13 it reports is linked to a chilled-water plant short
+  of setpoint in the same hours (`chw_supply_tracking`) as the likely upstream cause.
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference — fetch one with `weather_source.oat_reference` (NASA POWER by lat/lon), `oat_reference_for`

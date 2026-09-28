@@ -263,10 +263,21 @@ Three stacked releases; `CHANGELOG.md` has the detail.
 Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** The next releases:
-  - **0.91 — real-data correctness:** fixes from the private real-building checks (#60 G36 engine fan
-    gate, cooling-only AHUs and start-up delay; #61 equipment-class gating and config topology; #62
-    chilled-water supply against setpoint; #63 economizer, reheat and reset misreads), RCx report
-    speed (#35) and plant weeks (#32), and two stale VALIDATION cells (#33).
+  - **0.91 — real-data correctness** (integrated, awaiting release): fixes from the private
+    real-building checks.
+    - #60: the G36 engine gates on the supply fan, handles cooling-only AHUs, applies the G36
+      ModeDelay / AlarmDelay, and runs from a config as the `g36_afdd` rule.
+    - #61: one equipment-class table for every built-in rule (`g36_afdd` included), a config
+      `topology` section, and the RCx OAT check across every OAT source.
+    - #62: `chw_plant_reset` judges running hours only; the new `chw_supply_tracking` rule; a
+      short plant is linked as the upstream cause of warm supply air (including G36 FC13), and the
+      RCx issue page points at the plant first.
+    - #63: integrated economizer (one helper for the rule and the RCx page), reheat valve vs
+      discharge rise, and setpoint resets that are only one-time steps.
+    - RCx report speed and one-equipment store reads (#35), plant weeks and G36 advice only with a
+      declared G36 sequence (#32), and two stale VALIDATION cells (#33).
+    - Follow-ups: #65 (the `supply_air_reset` sign against OAT) and #66 (a plant run gate for
+      sensor trust).
   - **0.92 — detection gaps on the complete catalog data** (#11–#17), real-data chaining (#50) and
     the 0.90.1 billing and weather follow-ups (#64).
   - **0.93** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only).
@@ -276,9 +287,6 @@ Version numbers are given only where a release is already planned.
   decommissioning.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
-- **RCx report, 0.88 follow-up (#32):** the plant reports (LBNL chiller and boiler) decline the
-  representative week although the data is there (the week panels consider air-side roles only),
-  and a report should not give G36 advice to a unit with no declared G36 sequence.
 - **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'
   feedback; nothing is built.
 - **On hold — an MCP server** for CAMBER.

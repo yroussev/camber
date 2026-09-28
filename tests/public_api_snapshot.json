@@ -1819,6 +1819,7 @@
     "CAUSE_CHAINS",
     "Confidence",
     "FaultRegister",
+    "G36_SAT_HIGH_FCS",
     "Issue",
     "PLANT_CAPACITY_RULES",
     "Ranked",

@@ -24,6 +24,7 @@ import pandas as pd
 from ..g36_reset import sat_reset_compliance
 from ..model.roles import Role
 from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask
+from .applicability import RULE_EQUIP_CLASSES
 from .base import Finding
 
 # Whether the rule gates on fan-on / occupied samples by default (see the class docstring).
@@ -44,7 +45,8 @@ class SupplyAirResetCompliance:
     name = "supply_air_reset_compliance"
     #: provisional (#57): the runner declines this rule on equipment of any other known class --
     #: a heat pump's or terminal unit's discharge air is not an air handler's reset supply air
-    equip_classes = ("AHU", "RTU", "DOAS", "MAU")
+    #: (the air-handler family: AHU, RTU, DOAS, MAU ...), from the central applicability table
+    equip_classes = RULE_EQUIP_CLASSES["supply_air_reset_compliance"]
     roles_required = (Role.SUPPLY_AIR_TEMP,)
     roles_optional = (
         Role.OAT,

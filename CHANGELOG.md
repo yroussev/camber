@@ -6,7 +6,13 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
-<!-- 091-g36 (#60): begin -->
+**0.91: real-data correctness (#60-#63, #32, #33, #35).** Fixes for wrong or misleading results
+found in private checks on real buildings (two offices with air handlers, chillers, boilers and VAV
+boxes; a ground-source heat-pump school), plus RCx report speed and plant weeks. Every fix has a
+synthetic reproduction in the test suite. New names are provisional (`docs/API-STABILITY.md`).
+The fleet, LBNL, BDG2 and BDG2 savings benchmark gates did not move; the synthetic baseline gained
+the two new rules and nothing else (see Changed).
+
 ### Fixed
 - **The G36 engine scored fan-off intervals (#60).** `run_g36_afdd` read a stopped AHU with both
   valves shut as OS#2 free cooling and tripped FC8/FC9 on stagnant duct air. G36 §5.16.14
@@ -30,37 +36,6 @@ All notable changes to CAMBER are documented here. The format follows
 
   All three are keyword arguments (`mode_delay_min`, `alarm_delay_min`, `avg_window_min`); set
   them to 0 to score the raw per-interval equations.
-- New provisional names: `fdd_g36.MODE_DELAY_MIN`, `ALARM_DELAY_MIN`, `AVG_WINDOW_MIN`,
-  `FC_OMIT_NO_HEATING`, `FC_OMIT_NO_COOLING`; `G36Thresholds.fc14_fan_heat` (the fan-heat term in
-  FC14, signed for where the coil sensors sit); `G36Result` fields `fan_gate`, `n_fan_off`,
-  `n_suspended`, `fault_hours`, `omitted`, `missing_inputs`, `caveats`, `declined`, `delays` and
-  `masks` (`keep_masks=True`).
-- The synthetic G36 scenarios (`faultlab.g36_accuracy`) now show the supply fan running (`FS`
-  100 %) unless a scenario sets it. Without that, every scenario but FC1 would be declined for
-  lack of a fan signal. The G36 benchmark numbers did not move.
-
-### Added
-- **`g36_afdd`: the G36 engine as a registered rule (#60).** `rules: ["g36_afdd"]` in a config
-  runs FC1-FC15 on every AHU. The results reach `camber run`, the audit report and the RCx
-  report, and the RCx evidence shades the reported fault hours. The rule gives one finding per AHU:
-  - each FC's rate, hours and applicable hours;
-  - the fan gate;
-  - the ModeDelay suspension, which follows a fan start or a change in the occupancy, warm-up or
-    cool-down points.
-
-  Coil semantics:
-  - MAT/SAT stand in for the cooling-coil entering/leaving temperatures only on an AHU without a
-    heating coil. The FC14 fan-heat term is signed for SAT downstream of the fan.
-  - Otherwise FC14 and FC15 are declined with a caveat.
-  - FC8/FC9 hours that coincide with a confirmed FC14 are attributed to FC14, so a passing
-    chilled-water valve no longer reports under the free-cooling labels.
-
-  `heating_coil=True` declines an AHU whose heating valve isn't trended, rather than guessing.
-  `min_oa_pct` enables FC6. Severity is screening-grade (`warn_pct` 5 %, `fault_pct` 20 % of
-  applicable hours, with at least 24 applicable hours).
-<!-- 091-g36 (#60): end -->
-<!-- 091-plant (#61, #62) -->
-### Fixed
 - **Rules ran on the wrong kind of equipment (#61).** Rules are gated by roles, so a VAV box's
   discharge air ran `supply_air_reset`, `supply_air_control` and the SAT reset census as if it were
   an air handler, an air handler's heating valve entered the terminal reheat census, and any
@@ -80,27 +55,6 @@ All notable changes to CAMBER are documented here. The format follows
   temperature alone, which a stopped chiller on a cold or shared loop satisfies. It now uses the
   chiller's run status or command (`compressor_status`) when mapped: a chiller that never ran is
   reported as not judged. Without a status it falls back to the temperature window and says so.
-
-### Added
-- **`chw_supply_tracking` (#62):** does chilled-water supply temperature reach its trended setpoint
-  while the plant runs? Gated on the run status (the first hour after each start left out as
-  pull-down), it reports the share of running time more than 3 °F above setpoint and the loop ΔT,
-  overall and while short. `warn` at 10 %, `fault` at 25 % of running time. 3 °F sits outside a
-  healthy loop's ~1 °F control band plus ~0.5 °F sensor accuracy and hourly staging transients;
-  a plant supplying 48 °F against a 40 °F setpoint clears it by a wide margin. Without a run status
-  it falls back to the temperature window, caveats that, and never goes beyond `warn`.
-- **Plant capacity in the cause chains (#62).** `link_findings` attaches a chilled-water plant that
-  is short of setpoint as an `UpstreamCause` of an air handler's supply-air-too-warm finding
-  (`supply_air_control` running warm, or a G36 FC13) when the two coincide in the same hours (at
-  least 25 % either way) and the plant serves the unit (per the topology, else the site's plant).
-  Nothing is removed, demoted or re-costed; both issues say why they are linked.
-- **Served-by topology in the config (#61):** a `topology` section with a `{child: parent}` map
-  and/or CSV schedules (`vav_id,parent_ahu` style), matched to the discovered equipment. It
-  replaces the naming heuristic for the grouping-aware fleet rules, feeds the plant link, and is
-  recorded with its provenance on `RunResult.topology_source`.
-<!-- /091-plant -->
-<!-- 091-rules (#63) begin -->
-### Fixed (#63)
 - **`free_cooling_missed` counted an integrated economizer as missed free cooling (#63).**
   Mechanical cooling while the unit is already on ~100 % outside air is no longer counted. The test
   is the RCx economizer page's, now shared as `camber.freecooling.integrated_economizer_mask`: the
@@ -121,9 +75,6 @@ All notable changes to CAMBER are documented here. The format follows
   stepped reads "NOT RESET (setpoint flat …); SAT deviates …" instead of "reset present". A
   setpoint that moves but not with its driver is not confirmed (`info`). Without a SAT setpoint, a
   reset read from the SAT shape alone carries a capacity-shortfall caveat.
-<!-- 091-rules (#63) end -->
-<!-- 091-rcx block (#35, #32, #33): the integrator merges this with the other 0.91 blocks -->
-### Fixed
 - **The RCx report's week selection was slow on long or irregular trends (#35).** `select_week`
   reindexed every series onto every candidate week's grid, so one 23-month sensor logged in
   sub-second bursts took about 8 minutes. Each window's coverage, occupied days and evidence are
@@ -153,7 +104,87 @@ All notable changes to CAMBER are documented here. The format follows
   counts for the FPU and chiller subsets, records them in `examples/lbnl_fdd/optin-measured.json`
   and says when a run differs from that record; a test checks the VALIDATION cells against it and
   the SDAHU drift rows against the gated baseline. No gated metric moved.
-<!-- end 091-rcx block -->
+- **The RCx issue page now names a short plant as the upstream cause (#62).** An air-handler issue
+  that `link_findings` ties to a chilled-water plant short of setpoint opens with an "Upstream cause:
+  plant short of setpoint" banner, and its recommended action (on the issue page and in the summary
+  table) starts with "Check the chilled-water plant first", before any advice on the unit's coil
+  valve. The plant's own page lists the downstream findings it may explain.
+
+### Added
+- **`g36_afdd`: the G36 engine as a registered rule (#60).** `rules: ["g36_afdd"]` in a config
+  runs FC1-FC15 on every AHU. The results reach `camber run`, the audit report and the RCx
+  report, and the RCx evidence shades the reported fault hours. The rule gives one finding per AHU:
+  - each FC's rate, hours and applicable hours;
+  - the fan gate;
+  - the ModeDelay suspension, which follows a fan start or a change in the occupancy, warm-up or
+    cool-down points.
+
+  Coil semantics:
+  - MAT/SAT stand in for the cooling-coil entering/leaving temperatures only on an AHU without a
+    heating coil. The FC14 fan-heat term is signed for SAT downstream of the fan.
+  - Otherwise FC14 and FC15 are declined with a caveat.
+  - FC8/FC9 hours that coincide with a confirmed FC14 are attributed to FC14, so a passing
+    chilled-water valve no longer reports under the free-cooling labels.
+
+  `heating_coil=True` declines an AHU whose heating valve isn't trended, rather than guessing.
+  `min_oa_pct` enables FC6. Severity is screening-grade (`warn_pct` 5 %, `fault_pct` 20 % of
+  applicable hours, with at least 24 applicable hours).
+- **`chw_supply_tracking` (#62):** does chilled-water supply temperature reach its trended setpoint
+  while the plant runs? Gated on the run status (the first hour after each start left out as
+  pull-down), it reports the share of running time more than 3 °F above setpoint and the loop ΔT,
+  overall and while short. `warn` at 10 %, `fault` at 25 % of running time. 3 °F sits outside a
+  healthy loop's ~1 °F control band plus ~0.5 °F sensor accuracy and hourly staging transients;
+  a plant supplying 48 °F against a 40 °F setpoint clears it by a wide margin. Without a run status
+  it falls back to the temperature window, caveats that, and never goes beyond `warn`.
+- **Plant capacity in the cause chains (#62).** `link_findings` attaches a chilled-water plant that
+  is short of setpoint as an `UpstreamCause` of an air handler's supply-air-too-warm finding
+  (`supply_air_control` running warm, or a G36 FC13) when the two coincide in the same hours (at
+  least 25 % either way) and the plant serves the unit (per the topology, else the site's plant).
+  Nothing is removed, demoted or re-costed; both issues say why they are linked.
+- **Served-by topology in the config (#61):** a `topology` section with a `{child: parent}` map
+  and/or CSV schedules (`vav_id,parent_ahu` style), matched to the discovered equipment. It
+  replaces the naming heuristic for the grouping-aware fleet rules, feeds the plant link, and is
+  recorded with its provenance on `RunResult.topology_source`.
+- **The plant link reads the `g36_afdd` finding (#60, #62).** The `g36_afdd` finding lists the fault
+  conditions it reports in `metrics["flagged_fcs"]`, and `is_sat_high` treats FC13 (supply air too
+  warm with the cooling valve full open) as the supply-air-too-warm symptom a short plant produces
+  (`triage.G36_SAT_HIGH_FCS`). FC12 (SAT above MAT, which a coil that is simply off also trips)
+  and FC1 (duct static) are not plant symptoms and are not linked.
+
+### Changed
+- **One equipment-class table (#60, #61).** `g36_afdd` is gated by `camber.rules.applicability`
+  like every other class-gated built-in rule: it runs on the air-handler family (AHU, RTU, DOAS,
+  MAU and their spellings) and declines a VAV box, a heat pump, a fan coil or a plant. The
+  `equip_classes` attribute that `supply_air_reset_compliance` has carried since 0.90.1 (and that
+  `g36_afdd` now carries) is read from that table, so a built-in rule's classes are declared in one
+  place. A custom rule's own attribute still wins. A declined finding names the family
+  (`air_handler`) rather than the four class spellings.
+- **The RCx economizer page uses `integrated_economizer_mask` (#63),** the helper the
+  `free_cooling_missed` rule uses, instead of its own copy of the test. The page's numbers are
+  unchanged.
+- New provisional names: `fdd_g36.MODE_DELAY_MIN`, `ALARM_DELAY_MIN`, `AVG_WINDOW_MIN`,
+  `FC_OMIT_NO_HEATING`, `FC_OMIT_NO_COOLING`; `G36Thresholds.fc14_fan_heat` (the fan-heat term in
+  FC14, signed for where the coil sensors sit); `G36Result` fields `fan_gate`, `n_fan_off`,
+  `n_suspended`, `fault_hours`, `omitted`, `missing_inputs`, `caveats`, `declined`, `delays` and
+  `masks` (`keep_masks=True`).
+- The synthetic G36 scenarios (`faultlab.g36_accuracy`) now show the supply fan running (`FS`
+  100 %) unless a scenario sets it. Without that, every scenario but FC1 would be declined for
+  lack of a fan signal. The G36 benchmark numbers did not move.
+- **Synthetic benchmark baseline refreshed for the two new rules** (maintainer sign-off for 0.91).
+  Added: `g36_afdd.tpr` 1.0 / `g36_afdd.fpr` 0.0 and `chw_supply_tracking.tpr` 1.0 /
+  `chw_supply_tracking.fpr` 0.0 (each rule has a `faultlab` scenario); `coverage.n_scored` and
+  `coverage.n_single` 36 -> 38. Every other synthetic key is byte-identical, and the fleet, LBNL,
+  BDG2 and BDG2 savings baselines were not touched.
+
+### Known follow-ups
+- **#65:** without a trended setpoint, `supply_air_reset` still reads supply air rising with OAT as
+  a reset, which is backwards for a G36 OAT-based SAT reset (it usually means a capacity
+  shortfall). Since #63 a flat trended setpoint vetoes that reading, and without one the verdict
+  carries a capacity-shortfall caveat.
+- **#66:** sensor trust has no run gate for plant equipment, so a chilled-water supply sensor that
+  drifts while its chiller is off can score untrusted and make a genuine plant issue conditional.
+  Also deferred there: cross-checking OAT sources against each other without a reference, and
+  chiller power as a fallback run signal.
 
 ## [0.90.1] — 2026-09-27
 

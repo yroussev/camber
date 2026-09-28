@@ -276,19 +276,41 @@ PLANT_CAPACITY_RULES = ("chw_supply_tracking",)
 #: condition 13 ("SAT too high in full cooling") counts under any rule that names it.
 SAT_HIGH_RULES = ("supply_air_control",)
 
+#: G36 §5.16.14 fault conditions that read as "supply air too warm with the cooling coil at full
+#: output" -- FC13 only: FC12 (SAT above MAT) also fires on a coil that is simply off, and FC1
+#: (duct static) is an airflow fault, neither a plant-capacity symptom.
+G36_SAT_HIGH_FCS = ("FC13",)
+
 
 def is_sat_high(finding) -> bool:
     """True when ``finding`` reports an air handler's supply air too warm (SAT-high / G36 FC13).
 
-    ``supply_air_control`` qualifies when its too-warm share is at least its too-cold share; a
-    G36 finding qualifies when its rule name carries ``fc13`` or its metrics name fault
-    condition 13 (``fault_condition`` / ``fc`` of 13, or a positive ``fc13*`` metric).
+    ``supply_air_control`` qualifies when its too-warm share is at least its too-cold share; the
+    ``g36_afdd`` rule's finding qualifies when FC13 is among its ``flagged_fcs`` (reported on its
+    warn share of enough applicable hours; an older finding without that list, when its
+    ``fc["FC13"]`` entry was evaluated at or above the rule's default warn share); any other G36
+    finding when its rule name carries ``fc13`` or its metrics name fault condition 13
+    (``fault_condition`` / ``fc`` of 13, or a positive ``fc13*`` metric).
     """
     rule = str(_attr(finding, "rule", "") or "")
     m = _attr(finding, "metrics", {}) or {}
     if rule in SAT_HIGH_RULES:
         warm, cold = m.get("too_warm_pct"), m.get("too_cold_pct")
         return isinstance(warm, (int, float)) and warm > 0 and warm >= (cold or 0)
+    flagged = m.get("flagged_fcs")
+    if isinstance(flagged, (list, tuple)):
+        return any(str(x).upper() in G36_SAT_HIGH_FCS for x in flagged)
+    fcs = m.get("fc")
+    if isinstance(fcs, dict):  # the g36_afdd per-FC table without a flagged list
+        from .g36_rule import WARN_PCT
+
+        for label in G36_SAT_HIGH_FCS:
+            e = fcs.get(label)
+            if isinstance(e, dict) and e.get("status") == "evaluated":
+                pct = e.get("pct")
+                if isinstance(pct, (int, float)) and pct >= WARN_PCT:
+                    return True
+        return False
     low = rule.lower().replace("-", "_")
     if "fc13" in low or "fc_13" in low:
         return True

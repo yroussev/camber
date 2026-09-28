@@ -220,8 +220,8 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage (0.6): **all 33 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
-their injected faults) — the fixture-only list is now empty; the 5 fleet rules are scored separately. A
+Current coverage (0.91): **all 38 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+their injected faults) — the fixture-only list is empty; the fleet rules are scored separately. A
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This
 complements — does not replace — the real-data LBNL benchmark above (external validity on real equipment),
@@ -231,6 +231,16 @@ under four labels) and there is no 100 % file, so the benchmark scores the singl
 `coi_leakage_010`, the label that matches the data (a 10 % leak). (The four `oa_bias_*` files are likewise
 one run, and carry no OA-temperature bias at all; the FCU set's cooling / heating "airside minor fouling"
 files are identical.)
+
+**Baseline refresh, 0.91 (maintainer sign-off).** The committed synthetic baseline
+(`examples/synthetic_fdd/benchmark-baseline.json`) was refreshed once for 0.91, to add the two rules
+that release registers, each with a `faultlab` scenario: `g36_afdd` (the G36 engine as a rule; the
+scenario is FC13, supply air 10 °F over setpoint in full cooling) and `chw_supply_tracking` (a plant
+supplying 48 °F against a 40 °F setpoint while its chiller runs). New keys: `g36_afdd.tpr` 1.0,
+`g36_afdd.fpr` 0.0, `chw_supply_tracking.tpr` 1.0, `chw_supply_tracking.fpr` 0.0;
+`coverage.n_scored` and `coverage.n_single` went from 36 to 38. Every other synthetic key is
+byte-identical to 0.90.1 (the G36 engine harness keys `g36.*` included), and the fleet, LBNL, BDG2
+and BDG2 savings baselines did not move.
 
 ## M&V accuracy — real-data acceptance on BDG2
 

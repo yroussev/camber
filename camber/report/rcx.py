@@ -1644,7 +1644,12 @@ def _sec_week(S) -> dict:
 def _sec_economizer(S) -> dict | None:
     plt = _plt()
     from ..charts.diagnostic import diagnostic_scatter
-    from ..freecooling import free_cooling_opportunity
+    from ..freecooling import (
+        ECON_DAMPER_MIN_PCT,
+        ECON_MIN_DELTA_F,
+        free_cooling_opportunity,
+        integrated_economizer_mask,
+    )
     from ..rules.economizer_lockout_rule import EconomizerHighLimit
     from ..units import normalize_percent
 
@@ -1729,20 +1734,16 @@ def _sec_economizer(S) -> dict | None:
             oat = _col(fr, Role.OAT)[on]
             sig = (normalize_percent(cool) / 100.0)[on]
             # Mechanical cooling while the unit is already on (nearly) 100 % outside air is an
-            # integrated economizer doing its job, not missed free cooling. Judge that on the
-            # measured OA fraction where the temperature balance is stable (a damper *command*
-            # can read open while the damper is stuck), else on the damper signal.
-            econ = pd.Series(False, index=fr.index)
-            damper = _col(fr, Role.OA_DAMPER)
-            if damper is not None:
-                econ = normalize_percent(damper).fillna(0) >= 90.0
-            mat, rat = _col(fr, Role.MIXED_AIR_TEMP), _col(fr, Role.RETURN_AIR_TEMP)
-            if mat is not None and rat is not None:
-                oat_all = _col(fr, Role.OAT)
-                dt = rat - oat_all
-                stable = dt.abs() >= 5.0
-                oaf = 100.0 * (rat - mat) / dt.where(stable)
-                econ = econ.where(~stable, oaf >= 80.0)
+            # integrated economizer doing its job, not missed free cooling: the same test the
+            # free_cooling_missed rule applies (#63), so the page and the rule agree.
+            econ = integrated_economizer_mask(
+                _col(fr, Role.OAT),
+                damper=_col(fr, Role.OA_DAMPER),
+                mat=_col(fr, Role.MIXED_AIR_TEMP),
+                rat=_col(fr, Role.RETURN_AIR_TEMP),
+            )
+            if econ is None:
+                econ = pd.Series(False, index=fr.index)
             sig = sig.where(~econ[on].fillna(False).astype(bool), 0.0)
             fc = free_cooling_opportunity(oat, sig, high_limit_f=float(rule.high_limit_f))
             rows_fc.append(
@@ -1769,7 +1770,8 @@ def _sec_economizer(S) -> dict | None:
                 f"{float(rule.high_limit_f):g}°F high "
                 "limit while the cooling valve was open and the unit was not already near 100 % "
                 "outside air -- an integrated economizer is not counted; OA fraction from the "
-                "temperature balance where |OAT − RAT| ≥ 5 °F, else the damper signal ≥ 90 %):"
+                f"temperature balance where |OAT − RAT| ≥ {ECON_MIN_DELTA_F:g} °F, else the "
+                f"damper signal ≥ {ECON_DAMPER_MIN_PCT:g} %):"
             )
         )
         blocks.append(_table(["Equipment", "Hours available", "Hours missed", "Missed"], rows_fc))
@@ -2039,7 +2041,32 @@ def _advice(S, iss, rec) -> tuple:
     """``(title, action, suggested)`` for an issue from its packaged recommendation (``action`` is
     ``""`` when there is none). With no G36 sequence declared for the unit, a check that assumes one
     gets no packaged action, and an action that prescribes a G36 sequence is qualified as reference
-    practice rather than stated as the fix."""
+    practice rather than stated as the fix. When a chilled-water plant short of setpoint may explain
+    the issue (``Issue.upstream_causes``), the action points at the plant first."""
+    title, action, suggested = _packaged_advice(S, iss, rec)
+    plant = _plant_first(iss)
+    if plant:
+        action = f"{plant} Then, if the unit still runs warm: {action}" if action else plant
+    return title, action, suggested
+
+
+def _plant_first(iss) -> str:
+    """The "check the plant first" action for an issue a short chilled-water plant may explain
+    (``Issue.upstream_causes``, 0.91 #62), or ``""``."""
+    plants = sorted(
+        {c.equip for c in getattr(iss, "upstream_causes", None) or () if c.kind == "plant_capacity"}
+    )
+    if not plants:
+        return ""
+    return (
+        f"Check the chilled-water plant first ({', '.join(plants)}): it was short of its supply "
+        "setpoint while this unit ran warm, so restore plant capacity, staging or the CHW setpoint "
+        "before adjusting this unit's coil valve or its controls."
+    )
+
+
+def _packaged_advice(S, iss, rec) -> tuple:
+    """:func:`_advice` before the upstream-cause step: the packaged advice, G36-qualified."""
     rule = getattr(iss.root, "rule", "")
     title = rec.title if rec is not None else _humanize(rule)
     if rec is None:
@@ -2079,6 +2106,16 @@ def _sec_issue(S, iss) -> dict:
                 "kind": "banner",
                 "text": "Conditional pending a sensor fix: "
                 + "; ".join(c.label() for c in iss.conditional_on),
+            }
+        )
+    ups = [c for c in getattr(iss, "upstream_causes", None) or () if c.kind == "plant_capacity"]
+    if ups:
+        blocks.append(
+            {
+                "kind": "banner",
+                "text": "Upstream cause: plant short of setpoint -- "
+                + "; ".join(c.label() for c in ups)
+                + ". This finding is kept; check the plant before the coil valve.",
             }
         )
     head = [
@@ -2154,6 +2191,16 @@ def _sec_issue(S, iss) -> dict:
         blocks.append(_p("Recommended action: engineer to specify (no packaged recommendation)."))
     blocks.append(_p(f"Confidence {iss.confidence} — why we believe this:"))
     blocks.append({"kind": "list", "items": list(iss.why)})
+    if getattr(iss, "downstream", None):
+        blocks.append(_p("Downstream findings this plant shortfall may explain (kept, linked):"))
+        blocks.append(
+            {
+                "kind": "list",
+                "items": [
+                    f"{getattr(f, 'rule', '')} on {getattr(f, 'equip', '')}" for f in iss.downstream
+                ],
+            }
+        )
     if iss.dependents:
         blocks.append(_p("Findings conditional on this sensor issue (kept, demoted, not deleted):"))
         blocks.append(

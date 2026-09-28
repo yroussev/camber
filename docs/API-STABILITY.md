@@ -176,7 +176,6 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   trailing `billing` / `n_days` fields of `NonRoutineResult` and `billing` / `n_periods` fields
   of `StepChangeResult` and `StepChangesResult` (in `as_dict` only for billing input).
 
-<!-- 091-plant (#61, #62) -->
 - **Equipment classes, plant tracking and plant links** (0.91; #61, #62), all additive:
   - `camber.model.equipclass` (`EQUIP_FAMILIES`, `equip_family`, `family_matches`) and
     `camber.rules.applicability` (`RULE_EQUIP_CLASSES`, `ROLES_SUFFICE`, `rule_equip_classes`):
@@ -192,12 +191,20 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `CHWPlantResult.run_source` in `camber.chwplant`; the `run_source` metric of
     `chw_plant_reset`. The tracking threshold and severity bands may be retuned;
   - in `camber.rules.triage`: `UpstreamCause`, `PLANT_CAPACITY_RULES`, `SAT_HIGH_RULES`,
-    `is_sat_high`, `link_findings(topology=, plant_overlap_min=)`, the trailing `Issue` fields
+    `G36_SAT_HIGH_FCS`, `is_sat_high`, `link_findings(topology=, plant_overlap_min=)`, the trailing `Issue` fields
     `upstream_causes` / `downstream`, and the `scope_equips` metric that scopes a sensor-drift
     cause to the units reading that sensor;
+  - the G36 engine as a rule: `camber.rules.g36_rule.G36AFDD` (`g36_afdd`, #60) and its
+    finding metrics (`fc`, `flagged_fcs`, `worst_fc`, `fan_gate`, ...); the new `fdd_g36` names
+    (`MODE_DELAY_MIN`, `ALARM_DELAY_MIN`, `AVG_WINDOW_MIN`, `FC_OMIT_NO_HEATING`,
+    `FC_OMIT_NO_COOLING`, `G36Thresholds.fc14_fan_heat`) and the trailing `G36Result` fields.
+    A built-in rule's `equip_classes` attribute (`g36_afdd`, `supply_air_reset_compliance`) is its
+    `RULE_EQUIP_CLASSES` entry, the air-handler family;
+  - `camber.freecooling.integrated_economizer_mask` with `ECON_DAMPER_MIN_PCT`,
+    `ECON_OAF_MIN_PCT`, `ECON_MIN_DELTA_F`, and `camber.setpoint_reset`
+    (`classify_setpoint_reset`, #63); the thresholds may be retuned;
   - `sources=True` on the RCx report's OAT-source helper is internal; the per-source OAT rows and
     `oat_equips` / `scope_equips` metrics on `sensor_drift:oat` findings are provisional.
-<!-- /091-plant -->
 
 ## Deprecated
 
