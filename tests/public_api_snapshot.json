@@ -1838,6 +1838,14 @@
   "camber.rules.staticreset_rule": [
     "StaticPressureReset"
   ],
+  "camber.rules.tower_fan_effort_rule": [
+    "CoolingTowerFanEffortDrift",
+    "FAN_FAULT_PCT",
+    "FAN_RUNNING_PCT",
+    "FAN_WARN_PCT",
+    "HIGH_FAN_PCT",
+    "SENSOR_SHIFT_F"
+  ],
   "camber.rules.triage": [
     "CAUSE_CHAINS",
     "Confidence",

@@ -42,6 +42,16 @@ All notable changes to CAMBER are documented here. The format follows
   when the model has that separate tower point. The `lbnl-chiller` catalog mapping maps
   `CDWL_SW_TEMP` and `TWV_CTRL` to them. Its synthetic scenario is in
   `faultlab.PENDING_SCENARIOS`, not yet a gated benchmark key.
+- **Cooling-tower fouling from fan effort (#14).** `rules.tower_fan_effort_rule.
+  CoolingTowerFanEffortDrift` (`cooling_tower_fan_effort_drift`, in the new `tower` drift family
+  with the approach drift) compares the tower's fan speed with a frozen baseline at matched load
+  (the tower range, else chilled-water tons) and wet-bulb (measured, or OAT + RH). A controlled
+  tower that fouls keeps its approach and works its fans harder, which the approach rules cannot
+  see. One-sided; warn at +5 %-points, fault at +10 (screening-grade). A biased leaving-water
+  sensor drives the fans the same way, so when the condenser-entering water is trended the rule
+  checks the two sensors' offset against the baseline; a shift of 1 F or more is reported as a
+  sensor problem (`info`, `attribution="sensor_offset"`). `plantdrift.diagnose_tower_drift`
+  rolls the family up.
 - **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
   the site's OAT sources with each other: three or more against their median (the outlier gets a
   scoped `sensor_drift:oat` finding), two shown side by side with no finding.

@@ -66,7 +66,6 @@ _MODEL_TYPES = {
     "boiler_efficiency": LoadBaseline,
     "boiler_gas_signature": LoadBaseline,
     "cooling_tower_fan_effort": LoadBaseline,
-    "cooling_tower_sensor_offset": LoadBaseline,
 }
 
 
