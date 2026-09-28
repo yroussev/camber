@@ -305,51 +305,32 @@ def select_week(
         daily_median = float(oat.resample("1D").mean().median())
 
     cands = []
-    for st in starts:
-        en = st + pd.Timedelta(days=7)
-        grid = pd.date_range(st, en, freq=step, inclusive="left")
-        n_ok = n_all = 0
-        occ_days: set = set()
-        for e, fr in frames.items():
-            w = fr.reindex(grid)
-            g = gates[e]
-            gm = pd.Series(True, index=grid) if g is None else _on(g, grid)
-            present = [r for r in roles if _col(fr, r) is not None]
-            if not present:
-                continue
-            vals = pd.DataFrame({str(r): _col(w, r) for r in present}, index=grid)
-            gv = vals[gm.to_numpy()]
-            n_all += gv.size
-            n_ok += int(gv.notna().to_numpy().sum())
-            om = _on(occs[e], grid)
-            has = vals.notna().any(axis=1) & gm & om
-            occ_days |= {d.date() for d in grid[has.to_numpy()]}
+    span = pd.Timedelta(days=7)
+    stats = _week_stats(frames, starts, step, roles, gates, occs)
+    ev = _evidence_counts(issues, starts, span) if mode == "evidence" else None
+    oat_pos = _window_positions(oat, starts, span) if oat is not None else None
+    for k, st in enumerate(starts):
+        en = st + span
+        n_ok, n_all, n_occ_days = stats[k]
         coverage = (n_ok / n_all) if n_all else 0.0
         c = {
             "start": st,
             "coverage": round(coverage, 4),
-            "occupied_days": len(occ_days),
+            "occupied_days": n_occ_days,
         }
-        c["eligible"] = coverage >= min_coverage and len(occ_days) >= min_occupied_days
+        c["eligible"] = coverage >= min_coverage and n_occ_days >= min_occupied_days
         comp = {}
         if mode == "evidence":
             total = 0.0
-            for iss in issues or ():
-                m = getattr(iss, "mask", None)
-                if m is None:
-                    continue
-                m = _on(m)
-                tot = float(m.sum())
-                if tot <= 0:
-                    continue
-                inw = float(m[(m.index >= st) & (m.index < en)].sum())
+            for iss, tot, inws in ev or ():
+                inw = float(inws[k])
                 weight = 0.5 if getattr(iss, "conditional", False) else 1.0
                 total += weight * (1.0 / max(int(getattr(iss, "rank", 1) or 1), 1)) * (inw / tot)
             comp["evidence"] = round(total, 4)
         elif mode == "oat_range":
             val = 0.0
             if oat is not None and edges is not None and len(edges) > 1:
-                wo = oat[(oat.index >= st) & (oat.index < en)].dropna().to_numpy(float)
+                wo = _window(oat, oat_pos, k, st, en).dropna().to_numpy(float)
                 if len(wo):
                     bins = np.clip(np.searchsorted(edges, wo, side="right") - 1, 0, len(edges) - 2)
                     comp["deciles_present"] = round(len(np.unique(bins)) / (len(edges) - 1), 4)
@@ -361,7 +342,7 @@ def select_week(
         elif mode == "typical":
             val = float("-inf")
             if oat is not None and daily_median is not None:
-                d = oat[(oat.index >= st) & (oat.index < en)].resample("1D").mean().dropna()
+                d = _window(oat, oat_pos, k, st, en).resample("1D").mean().dropna()
                 if len(d):
                     rms = float(np.sqrt(np.mean((d.to_numpy(float) - daily_median) ** 2)))
                     comp["rms_from_median_f"] = round(rms, 4)
@@ -451,6 +432,180 @@ def select_week(
         explanation=expl,
         candidates=cands,
     )
+
+
+# ---- week scoring internals (#35). Every window statistic is computed once per series from the
+# timestamps it actually holds -- never by reindexing each series onto each candidate window's grid,
+# which cost O(weeks x grid) and ran for minutes on long or irregular trends. Each helper returns
+# exactly what the per-window reindexing did; exotic inputs (duplicate or non-datetime indexes,
+# naive/aware clashes) fall back to that per-window path so errors and edge cases stay the same.
+
+
+def _ns(index) -> np.ndarray:
+    """int64 UTC nanoseconds of a DatetimeIndex (NaT -> int64 min, below every window)."""
+    return pd.DatetimeIndex(index).as_unit("ns").asi8
+
+
+def _day_key(index) -> np.ndarray:
+    """An integer per calendar date on the index's own (local) clock."""
+    idx = pd.DatetimeIndex(index)
+    if idx.tz is not None:
+        idx = idx.tz_localize(None)
+    return idx.as_unit("ns").asi8 // 86_400_000_000_000
+
+
+def _same_clock(index, ref) -> bool:
+    """A unique DatetimeIndex whose naive/aware-ness matches ``ref`` (a Timestamp)."""
+    return (
+        isinstance(index, pd.DatetimeIndex)
+        and index.is_unique
+        and ((index.tz is None) == (getattr(ref, "tz", None) is None))
+    )
+
+
+def _week_of(ns: np.ndarray, starts_ns: np.ndarray, span_ns: int) -> np.ndarray:
+    """Window number of each timestamp (``-1`` outside every window)."""
+    k = np.searchsorted(starts_ns, ns, side="right") - 1
+    k[ns >= starts_ns[-1] + span_ns] = -1  # the windows are contiguous: only the ends matter
+    return k
+
+
+def _week_stats_loop(frames, starts, step, roles, gates, occs) -> list:
+    """The reference per-window computation (reindex every series onto each window's grid)."""
+    out = []
+    for st in starts:
+        en = st + pd.Timedelta(days=7)
+        grid = pd.date_range(st, en, freq=step, inclusive="left")
+        n_ok = n_all = 0
+        occ_days: set = set()
+        for e, fr in frames.items():
+            w = fr.reindex(grid)
+            g = gates[e]
+            gm = pd.Series(True, index=grid) if g is None else _on(g, grid)
+            present = [r for r in roles if _col(fr, r) is not None]
+            if not present:
+                continue
+            vals = pd.DataFrame({str(r): _col(w, r) for r in present}, index=grid)
+            gv = vals[gm.to_numpy()]
+            n_all += gv.size
+            n_ok += int(gv.notna().to_numpy().sum())
+            om = _on(occs[e], grid)
+            has = vals.notna().any(axis=1) & gm & om
+            occ_days |= {d.date() for d in grid[has.to_numpy()]}
+        out.append((n_ok, n_all, len(occ_days)))
+    return out
+
+
+def _week_stats(frames, starts, step, roles, gates, occs) -> list:
+    """``[(n_ok, n_all, occupied_days)]`` per window: charted-role samples present / expected on
+    the window's gated grid, and the distinct dates with an occupied, gated, non-empty sample."""
+    ref = starts[0]
+    stride = int(pd.Timedelta(step).value)
+    fast = stride > 0
+    for e, fr in frames.items():
+        masks = [m for m in (gates[e], occs[e]) if m is not None]
+        if not _same_clock(fr.index, ref) or fr.columns.has_duplicates:
+            fast = False
+        for m in masks:
+            if not isinstance(m, pd.Series) or not _same_clock(m.index, ref):
+                fast = False
+    if not fast:
+        return _week_stats_loop(frames, starts, step, roles, gates, occs)
+
+    n = len(starts)
+    starts_ns = _ns(pd.DatetimeIndex(list(starts)))
+    span_ns = int(pd.Timedelta(days=7).value)
+    per_window = -(-span_ns // stride)  # grid points in one window: ceil(7 days / step)
+    n_ok = np.zeros(n, dtype=np.int64)
+    n_all = np.zeros(n, dtype=np.int64)
+    day_keys, day_weeks = [], []
+
+    def on_grid(index):
+        ns = _ns(index)
+        k = _week_of(ns, starts_ns, span_ns)
+        hit = k >= 0
+        hit[hit] = (ns[hit] - starts_ns[k[hit]]) % stride == 0
+        return hit, k
+
+    for e, fr in frames.items():
+        present = [r for r in roles if _col(fr, r) is not None]
+        if not present:
+            continue
+        cols = {str(r): _col(fr, r) for r in present}
+        g = gates[e]
+        # expected samples: the gated grid points of each window, times the charted columns
+        gated: np.ndarray
+        if g is None:
+            gated = np.full(n, per_window, dtype=np.int64)
+        else:
+            gc = _on(g)
+            hit, k = on_grid(gc.index)
+            hit &= gc.to_numpy()
+            gated = np.bincount(k[hit], minlength=n)
+        n_all += gated * len(cols)
+        # present samples: the frame's own on-grid rows (a grid point it lacks is NaN)
+        hit, k = on_grid(fr.index)
+        if not hit.any():
+            continue
+        rows = fr.index[hit]
+        vals = pd.DataFrame(
+            {c: pd.Series(s.to_numpy()[hit], index=rows) for c, s in cols.items()}, index=rows
+        )
+        gm = np.ones(len(rows), bool) if g is None else _on(g, rows).to_numpy()
+        nn = vals.notna().to_numpy()
+        n_ok += np.bincount(k[hit][gm], weights=nn[gm].sum(axis=1), minlength=n).astype(np.int64)
+        om = _on(occs[e], rows).to_numpy()
+        has = nn.any(axis=1) & gm & om
+        day_keys.append(_day_key(rows[has]))
+        day_weeks.append(k[hit][has])
+    occ: np.ndarray = np.zeros(n, dtype=np.int64)
+    if day_keys:
+        pairs = np.unique(np.stack([np.concatenate(day_weeks), np.concatenate(day_keys)]), axis=1)
+        occ = np.bincount(pairs[0], minlength=n)
+    return [(int(n_ok[i]), int(n_all[i]), int(occ[i])) for i in range(n)]
+
+
+def _evidence_counts(issues, starts, span) -> list:
+    """``[(issue, total violation hours, per-window hours)]`` for the issues that have any."""
+    out = []
+    starts_ns = _ns(pd.DatetimeIndex(list(starts)))
+    for iss in issues or ():
+        m = getattr(iss, "mask", None)
+        if m is None:
+            continue
+        m = _on(m)
+        tot = float(m.sum())
+        if tot <= 0:
+            continue
+        idx = m.index
+        inws: np.ndarray | list
+        if isinstance(idx, pd.DatetimeIndex) and (idx.tz is None) == (starts[0].tz is None):
+            t = np.sort(_ns(idx[m.to_numpy()]))
+            lo = np.searchsorted(t, starts_ns, side="left")
+            hi = np.searchsorted(t, starts_ns + int(span.value), side="left")
+            inws = hi - lo
+        else:  # the per-window comparison (raises on a naive/aware clash, as it always did)
+            inws = [int(m[(idx >= st) & (idx < st + span)].sum()) for st in starts]
+        out.append((iss, tot, inws))
+    return out
+
+
+def _window_positions(s, starts, span):
+    """Row positions of ``s`` in each window (original order), or ``None`` to slice per window."""
+    idx = s.index
+    if not isinstance(idx, pd.DatetimeIndex) or (idx.tz is None) != (starts[0].tz is None):
+        return None
+    k = _week_of(_ns(idx), _ns(pd.DatetimeIndex(list(starts))), int(span.value))
+    order = np.argsort(k, kind="stable")
+    bounds = np.searchsorted(k[order], np.arange(len(starts) + 1), side="left")
+    return order, bounds
+
+
+def _window(s, pos, k, st, en):
+    if pos is None:
+        return s[(s.index >= st) & (s.index < en)]
+    order, bounds = pos
+    return s.iloc[order[bounds[k] : bounds[k + 1]]]
 
 
 def _ineligible(c, min_coverage, min_days) -> str:
