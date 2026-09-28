@@ -291,6 +291,187 @@ the unit keys, the footnote references, and that each multiplier equals heat con
 within the printed precision. A row the source prints inconsistently must be marked a
 `source_discrepancy`.
 
+## Unit-scale plausibility
+
+`camber.unit_scale` (provisional, 0.92, #71) asks of every meter whether its billed quantities
+are right **as given, or 1,000x off**. A unit prefix read the wrong way passes every schema check
+and moves every result by a factor of 1,000: a steam utility that prints `MLb` for *thousands*
+of pounds, a bill in `MMcf` entered as `Mcf`, an export in MWh labelled kWh. It usually
+surfaces only when an EUI comes out impossible and someone works backwards.
+
+For the three candidate scales (the quantities x0.001, x1 and x1000) the check collects
+evidence, combines it by a fixed rule and returns a `UnitScaleCheck`: the most likely scale, a
+confidence (`high`, `medium`, `low`), a status and a readable explanation. **It never corrects
+anything.** A correction is an explicit `scale_override` with a reason, recorded on every result.
+
+```python
+from camber.unit_scale import check_bills
+
+chk = check_bills(bills, unit="MMlb", fuel="steam", area=200_000, property_type="office")
+chk.status, chk.scale, chk.confidence  # ('implausible', 0.001, 'high')
+chk.explanation
+```
+
+`bills` is a `BillingSeries` or a table with `start`, `end` (exclusive unless
+`end_inclusive=True`) and `quantity`, and optionally `cost` (the invoiced $), `demand` (billed
+kW), `read_start` / `read_end` / `multiplier` and `hdd`. `check_series` does the same for an
+interval meter (energy per interval, summed by month), and `check_eui` for a stated EUI.
+
+### Evidence
+
+| Item | Weight | Compares |
+|---|---|---|
+| `tariff` | 4 | The bill recomputed at each scale under a `Tariff` or a URDB rate (`urdb=`, e.g. from `interop.openei.fetch_urdb_rate`), per bill, with `tariff.validate_bill` (15% tolerance). The fixed charge does not scale. Electricity only. |
+| `price` | 3 | The implied $/MMBtu (all charges divided by the energy) against the state's EIA commercial average (opt-in) or the bundled price bands. |
+| `eui` | 2 or 3 | The annualised site EUI of the meter, and of the building when the other meters' kBtu are given, against the property type's ENERGY STAR median x policy factors (2), or against hard bounds no building crosses (3). |
+| `weather_intensity` | 2 | Heating fuel per HDD65 per ft2 (plausible 0.3-150 Btu/ft2/degF-day), and the peak bill's average heating power per ft2 (plausible up to 150 Btu/h/ft2; for steam also shown as lb/h). |
+| `load_factor` | 2 | kWh against billed kW. A load factor above 1 is impossible. |
+| `meter_reads` | 2 | The billed quantity against (end read - start read) x multiplier. |
+| `continuity` | -- | A ~1000x step in the series (see below). |
+
+### The combination rule
+
+1. A scale is **ruled out** when the evidence against it includes an item of weight 3 or more,
+   or adds up to 4 or more, **and** the heaviest item against it outweighs the heaviest item for
+   it. So a tariff match (4) beats a hard EUI bound (3). A price band (3) beats any EUI policy
+   verdict (2). Equal weights on both sides rule nothing out. EUI and weather intensity together
+   (2 + 2) rule a scale out only when no price or tariff evidence supports it.
+2. The chosen scale is the one not ruled out with the highest net score (support minus against).
+   A tie goes to x1, the reading as billed.
+3. The status is `implausible` when x1 is ruled out, or the series has a ~1000x step. It is
+   `uncertain` when another scale scores higher but x1 is not ruled out, `plausible` when x1 is
+   chosen, and `insufficient` when no item had an opinion.
+4. The confidence is `high` when every other scale is ruled out and either the tariff decides it
+   or two items of weight 2 or more support the chosen scale. It is `medium` when every other
+   scale is ruled out, and `low` otherwise.
+
+**Decisive price evidence is enough on its own.** The bands are built so that a correctly scaled
+bill priced anywhere inside its band puts both 1,000x readings beyond the implausible bounds.
+When every item against x1 depends on the floor area, the explanation says to check the area too.
+
+**Continuity.** A step between two bills counts when both sides are steady (two or more bills
+within 10x of each other, not one repeated placeholder value) and about 1,000x apart
+(10^2.5-10^3.5), and when the bills after it are also ~1000x their year-earlier bills. When there
+is no earlier year, it counts only for electricity, because a heating or chilled-water meter can
+drop 1,000x every season; the check notes that it saw the change. A run of year-over-year ratios
+near 1,000 marks a step on its own. The series is split at each step and each segment is judged
+separately.
+
+### References (CAMBER screening policy)
+
+The bands and factors are **CAMBER screening policy, not a standard.** They are wide on purpose,
+because the error they look for is a factor of 1,000, and a correctly billed laboratory, hospital
+or data centre must stay inside them. Both sets are `camber.energy_factors` files, validated on
+load (`get_reference_set`, `factor_sets("price_band")`).
+
+- **`camber_price_bands_2024`** (`kind` `price_band`), implied $/MMBtu:
+
+    | Fuel | Plausible | Implausible below / above |
+    |---|---|---|
+    | electricity | 5-300 | 0.35 / 3,000 |
+    | natural gas | 1.5-150 | 0.2 / 1,000 |
+    | district steam, hot water | 4-200 | 0.25 / 3,000 |
+    | district chilled water | 3-200 | 0.25 / 2,500 |
+    | fuel oil (all grades), propane | 5-150, 5-200 | 0.2 / 4,000, 0.25 / 4,000 |
+
+    Sources: the EIA Open Data API's 2024 state commercial electricity prices (7.19-38.18
+    cents/kWh) and natural gas prices (5.94-36.73 $/Mcf), EIA weekly heating oil and propane
+    prices (2024-25), and CBECS 2018 Tables C1 and C2 (sha256 pinned), whose all-building
+    averages are $29.2 per MMBtu for electricity, $7.1 for gas, $16.3 for fuel oil and $14.1 for
+    district heat. No public national series exists for district chilled water, so its band is
+    policy around the cost of chilled water from an electric plant, and is marked unverified.
+- **`energy_star_us_median_eui_2024`** (`kind` `eui_reference`): the national median site and
+  source EUIs of every Portfolio Manager property type, transcribed from the ENERGY STAR
+  technical reference *U.S. Energy Use Intensity by Property Type* (August 2024, mostly
+  CBECS 2018; sha256 pinned). The policy block around it:
+    - A building's total EUI is plausible within median / 8 to median x 6, and implausible
+      outside median / 60 to median x 25.
+    - A single fuel is implausible above median x 25.
+    - Hard bounds hold for any building: electricity 0.1 to 10,000 kBtu/ft2/yr (10,000 is a
+      continuous 330 W/ft2, beyond any data centre), heating fuels up to 3,000, and the total
+      0.3 to 10,000.
+    - Data centres (printed as a PUE), parking and manufacturing have no median, so only the
+      hard bounds apply.
+  The table gives medians, not percentiles; the CBECS percentile distributions are not used.
+
+### Regional prices (EIA, opt-in)
+
+`price_source="eia"` with `state="NY"` compares the implied price with the state's average
+commercial price from EIA Open Data API v2 (`camber.interop.eia.fetch_state_price`), as a band of
+average / 4 to average x 4 (implausible beyond / 40 and x 40). It uses `electricity/retail-sales`
+for electricity and `natural-gas/pri/sum` (process `PCS`) for gas. It needs a free key in
+`EIA_API_KEY`, or an injected `eia_transport`. The request carries **only the state and the
+months**. The key is added by the live transport and never enters the cache (`eia_cache_dir`,
+keyed by the key-free URL) or a result. `eia_offline=True` reads only the cache. With no key,
+no network or a cache miss, the check falls back to the bundled bands and says so in a note.
+
+### Where it runs
+
+- **Billing M&V** (`mv` entries with `bills`). The check runs whenever the bills name a unit. It
+  reads the bills file's `cost`, `demand`, `read_start`, `read_end` and `multiplier` columns when
+  they are present, and pairs each bill with the entry's outdoor temperature. An optional
+  `bills.scale_check` block adds the rest:
+
+    ```json
+    "bills": {
+      "file": "steam.csv", "energy": "usage", "units": "MMlb",
+      "scale_check": {"fuel": "steam", "area": 200000, "property_type": "office",
+                      "cost": "amount", "price_source": "eia", "state": "NY",
+                      "tariff": {"urdb_file": "rate.json"}, "on_implausible": "decline"},
+      "scale_override": {"factor": 0.001, "reason": "the utility's MLb is thousands of pounds"}
+    }
+    ```
+
+    The other keys are `area_unit`, `demand`, `read_start`, `read_end`, `multiplier`,
+    `eia_cache_dir`, `eia_offline`, `other_site_kbtu_per_year` and `enabled`
+    (`"scale_check": false` turns the check off). A `tariff` is a `Tariff`'s fields,
+    `{"urdb_file": ...}` or `{"urdb_label": ...}` (fetched from OpenEI: opt-in, and only the rate
+    label is sent).
+
+    When the bills are implausible as given, the entry gets a `unit_scale` finding (`warn`, with
+    the whole check in `metrics["unit_scale"]`). By default its M&V is **declined**; with
+    `"on_implausible": "warn"` it is fitted as billed. A plausible, uncertain or unjudgeable
+    check adds nothing, so existing outputs do not change.
+- **The override.** `bills.scale_override` multiplies every billed quantity before the fit. Each
+  finding records it as `metrics["scale_override"]` and carries a caveat naming the factor and
+  the reason. The check then judges the corrected quantities.
+- **EUI and BPS.** `bps.site_eui_plausibility(energy_by_fuel, area, ...)` judges each fuel behind
+  an EUI as a year-long bill (with `cost_by_fuel` for price evidence). A report `benchmark` whose
+  `site_eui` is implausible as given adds a `unit_scale` finding for `benchmark`; the optional
+  `benchmark.property_type` names its ENERGY STAR type.
+- **Catalog ingest.** The BDG2 adapter judges every electricity, chilled-water, steam, hot-water
+  and gas meter, using the metadata's floor area and primary use and the site's weather. An
+  implausible meter is an ingest warning. The data are never rescaled.
+
+### Validation
+
+- **Synthetic bills** (`tests/test_unit_scale.py`): each injected 1000x error is caught, in the
+  expected direction. The cases are steam billed `MLb` for thousands of pounds and entered as
+  million pounds, gas in `MMcf` for `Mcf` and the reverse, MWh labelled kWh (with a tariff
+  recompute and a URDB rate), and fuel oil. None of the correct cases is flagged: a 1.2 million
+  ft2 hospital, a 2,000 ft2 shop, a laboratory at 420 kBtu/ft2/yr of steam, a restaurant at
+  900 kBtu/ft2/yr of gas, a data centre at 2,500 kBtu/ft2/yr, a small office, a warehouse and a
+  mild-climate hot-water meter.
+- **BDG2 cleaned meters** (2,835 meters; the metadata floor area and primary use, the site weather):
+
+    | Meter | Meters | Flagged |
+    |---|---|---|
+    | electricity | 1,572 | 4 (0.25%) |
+    | chilled water | 550 | 84 |
+    | hot water | 185 | 74 |
+    | steam | 351 | 2 |
+    | gas | 177 | 4 |
+
+    - **Eagle's chilled water.** The check catches the documented 1,000x error at Eagle
+      (`eagle-chilled-water-1000x` in the catalog) on its own, with no knowledge of it: 82 of the
+      87 meters are `implausible` with x0.001 most likely. Four more are `uncertain` leaning
+      x0.001, and one reads zero.
+    - **Eagle's hot water.** 58 of its 60 hot-water meters are flagged the same way, x0.001 most
+      likely, at a median 830x the same building's electricity. The catalog does not record this.
+    - **Other flags.** 28 of the 2,539 meters outside Eagle are flagged. Most are thermal meters at
+      thousands of kBtu/ft2/yr (15 at Fox, all hot water), which is a unit or floor-area problem.
+      The four electricity flags are meters that stopped reading or read a near-zero constant.
+
 ## Not converted (0.92)
 
 - Factor sets apply only to config billing entries and `camber.energy_factors` itself, not to

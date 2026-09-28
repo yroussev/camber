@@ -6,7 +6,7 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
-**0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69).** New plant detectors
+**0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69, #71).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
 plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the
 G36 supply-air reset direction and the FC13-only plant link, days-weighted billing M&V with a
@@ -193,6 +193,45 @@ SEP chaining case.
     equal ENERGY STAR's, and a test keeps them so. docs/UNITS.md has the details, and
     docs/ENERGY-FACTORS.md is the generated table. `scripts/energy_factors_refresh.py`
     validates, re-pins and documents a set.
+- **Unit-scale plausibility: 1000x prefix errors in billed quantities (#71, provisional).** The
+  new `camber.unit_scale` asks of each meter whether its quantities are right as given, x0.001 or
+  x1000. A steam bill printing `MLb` for thousands of pounds, `MMcf` entered as `Mcf`, and MWh
+  labelled kWh all pass every schema check and move every result 1,000x. `check_bills`,
+  `check_series` and `check_eui` return a `UnitScaleCheck`: the most likely scale, a confidence,
+  each evidence item's verdict and an explanation. The evidence items are:
+  - a tariff recompute of each electricity bill under a `Tariff` or URDB rate (weight 4);
+  - the implied $/MMBtu against the state's EIA commercial price, or the bundled bands (3);
+  - site EUI against the ENERGY STAR property-type median and hard bounds (2 or 3);
+  - heating fuel per HDD per ft2 and the peak bill's load, as lb/h for steam (2);
+  - the load factor (2) and the meter-read arithmetic (2);
+  - ~1000x steps bill to bill, confirmed year over year.
+
+  The rule is fixed and conservative. A scale is ruled out only by an item of weight 3 or more
+  (or 4 in total) that outweighs the strongest item for it. Price and tariff evidence outweigh
+  EUI, and decisive price evidence is enough on its own. **Nothing is corrected**: the explicit
+  `bills.scale_override: {"factor": 0.001, "reason": ...}` is the only correction, and it is
+  recorded on every finding. Where it runs:
+  - **Billing M&V.** Bills that are implausible as given get a `unit_scale` warning, and their
+    M&V is declined unless `bills.scale_check.on_implausible` is `"warn"`. `bills.scale_check`
+    names the fuel, area, property type, cost and demand columns, a tariff and the price source.
+    Plausible bills produce exactly the output they did before.
+  - **Report benchmark.** An implausible `benchmark.site_eui` adds a `unit_scale` finding.
+  - **BPS.** `bps.site_eui_plausibility` judges each fuel behind an EUI.
+  - **BDG2 ingest.** Each implausible meter is an ingest warning. The data are not rescaled.
+
+  Two screening references join `camber.energy_factors` as new kinds (`factor_sets(kind)`,
+  `get_reference_set`). `camber_price_bands_2024` (`price_band`) holds $/MMBtu bands per fuel,
+  from EIA 2024 state prices and CBECS 2018 Tables C1/C2. `energy_star_us_median_eui_2024`
+  (`eui_reference`) is the ENERGY STAR *U.S. Energy Use Intensity by Property Type* (August
+  2024), sha256-pinned, with CAMBER's policy factors. `camber.interop.eia.fetch_state_price` is
+  opt-in: it needs `EIA_API_KEY`, sends only the state and the months, caches by the key-free URL
+  and works offline. Without a key the bundled bands are used.
+
+  On the BDG2 cleaned meters the check independently catches the documented Eagle chilled-water
+  error: 82 of 87 meters are implausible and 4 more are uncertain, all pointing to x0.001. It
+  also finds the same signature in 58 of Eagle's 60 hot-water meters, which the catalog does not
+  record. It flags 4 of 1,572 electricity meters (0.25%), all meters that stopped reading.
+  docs/UNITS.md, "Unit-scale plausibility".
 
 ### Changed
 - **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and

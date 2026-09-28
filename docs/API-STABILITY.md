@@ -284,6 +284,22 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the config keys `units.factor_set` / `units.region` and `bills.meter_type`, the metric
     `energy_factor` on billing `mv_*` findings, `mvbilling.billing_conversion`, and the
     trailing `UnitSystem.factor_set` / `UnitSystem.region` fields.
+- **Unit-scale plausibility** (0.92; #71), all additive and provisional:
+  - the module `camber.unit_scale`: `check_bills`, `check_series`, `check_eui`,
+    `parse_scale_override`, `fuel_group`, `kbtu_per_unit`, `Evidence`, `UnitScaleCheck`,
+    `SCALES`, `DEFAULT_PRICE_BANDS` and `DEFAULT_EUI_REFERENCE`. The evidence weights, the
+    combination rule, the intensity bounds and the step test may be retuned;
+  - the module `camber.interop.eia`: `fetch_state_price`, `eia_price_url`, `eia_transport`,
+    `StatePrice` and `EIA_FUELS`;
+  - in `camber.energy_factors`: the `kind` argument of `factor_sets` (its default keeps the
+    0.92 conversion-only list), `get_reference_set`, `load_reference_set`, `ReferenceSet` and
+    `PRICE_BAND_METER_TYPES`, and the `price_band` and `eui_reference` document kinds. The
+    bundled bands and policy factors are CAMBER screening policy and may be revised; the
+    transcribed ENERGY STAR medians change only to correct a transcription;
+  - the config keys `bills.scale_check` and `bills.scale_override` and `report.benchmark.
+    property_type`, the `unit_scale` finding (and `scale_override` metric),
+    `mvbilling.billing_scale_check`, `bps.site_eui_plausibility`, and
+    `datasets._ingest.meter_scale_warning` with the BDG2 ingest warnings.
 
 ## Deprecated
 
