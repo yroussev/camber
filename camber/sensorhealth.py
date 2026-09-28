@@ -48,6 +48,9 @@ __all__ = [
     "SensorTrust",
     "sensor_trust",
     "FAN_GATED_ROLES",
+    "PLANT_GATED_ROLES",
+    "PLANT_SETTLE",
+    "plant_gates",
     "frame_sensor_health",
     "frame_checks",
     "STUCK_HOURS",
@@ -130,6 +133,11 @@ PHYSICAL_BOUNDS: dict = {
     # CO₂, ppm -- nothing real sits below ~250 (outdoor is ~420); above 10000 is a sentinel
     Role.CO2: (250.0, 10000.0),
     Role.OUTDOOR_CO2: (250.0, 1000.0),
+    # 092-plant (#13): boiler gas input rate, kW -- wide; only rejects dropouts / sentinels
+    Role.GAS_INPUT_RATE: (-1.0, 1e7),
+    # 092-plant (#15): condenser water entering the chillers, and the tower-bypass valve
+    Role.COND_ENTERING_WATER_TEMP: (40.0, 120.0),
+    Role.CW_BYPASS_VALVE: (-2.0, 102.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -149,6 +157,7 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.HW_RETURN_TEMP,
         Role.CW_SUPPLY_TEMP,
         Role.CW_RETURN_TEMP,
+        Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
@@ -179,6 +188,7 @@ _INTERMITTENT_ROLES: frozenset = (
             Role.POWER,
             Role.COMPRESSOR_STAGE,
             Role.HEAT_STAGE,
+            Role.GAS_INPUT_RATE,  # 092-plant (#13): zero between firing cycles
         }
     )
     | STATUS_ROLES
@@ -294,6 +304,9 @@ class SensorTrust:
     # Frame-level findings that touched this point (all-points freeze, fan-off plausibility,
     # status-vs-speed), as ``{"check": ..., ...}`` dicts; filled by :func:`frame_sensor_health`.
     frame_checks: list = field(default_factory=list)
+    # 092-plant (#66): what the plant run gate was read from ("chiller status", ...) when this
+    # point was judged on its equipment's running samples only; None when it was not.
+    run_gate: str | None = None
 
     def as_dict(self) -> dict:
         """Return the trust result as a plain dict."""
@@ -344,6 +357,76 @@ def _gated_flatline_frac(series: pd.Series, gate: pd.Series) -> float | None:
 
 
 # --------------------------------------------------------------------------------------------- #
+# 092-plant (#66): the plant run gate                                                            #
+# --------------------------------------------------------------------------------------------- #
+
+#: Plant roles whose reading only means something while the equipment runs, and the loop whose run
+#: gate (:func:`camber.schedules.plant_run_mask`) judges them. With the chiller off, its leaving
+#: chilled water drifts to the plant-room temperature and its condenser water to ambient; with the
+#: boiler off, the hot-water loop cools. A drift, a range excursion or a long identical run there
+#: is the plant being off, not a bad sensor -- so in the gated mode these roles are judged (range,
+#: outliers, flatline, stuck runs) on running samples only; coverage stays over the whole span.
+PLANT_GATED_ROLES: dict = {
+    **{
+        r: "chw"
+        for r in (
+            Role.CHW_SUPPLY_TEMP,
+            Role.CHW_RETURN_TEMP,
+            Role.CW_SUPPLY_TEMP,
+            Role.CW_RETURN_TEMP,
+            Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
+            Role.COND_APPROACH_TEMP,
+            Role.EVAP_APPROACH_TEMP,
+            Role.SUBCOOLING_TEMP,
+            Role.SUPERHEAT_TEMP,
+        )
+    },
+    Role.HW_SUPPLY_TEMP: "hw",
+    Role.HW_RETURN_TEMP: "hw",
+}
+
+
+#: A plant point is judged once its equipment has settled: the samples within this long of a start
+#: are left out of the running set (a loop pulling down from standby is not a sensor fault).
+PLANT_SETTLE = pd.Timedelta("30min")
+
+
+def _settled(mask: pd.Series, settle: pd.Timedelta = PLANT_SETTLE) -> pd.Series:
+    """``mask`` without the samples less than ``settle`` after each off -> on transition."""
+    m = mask.astype(bool)
+    if not isinstance(m.index, pd.DatetimeIndex) or not m.any():
+        return m
+    starts = m & ~m.shift(fill_value=False)
+    t = pd.Series(m.index, index=m.index)
+    last_start = t.where(starts).ffill()
+    return m & ((t - last_start) >= settle)
+
+
+def plant_gates(frame: pd.DataFrame) -> dict:
+    """``{Role: (running mask, source)}`` for the plant-gated roles ``frame`` carries.
+
+    Each role in :data:`PLANT_GATED_ROLES` gets its loop's gate, less the first
+    :data:`PLANT_SETTLE` after every start. A chiller's ``power`` is gated
+    too when the chilled-water gate comes from a run status (a status says when the machine ran,
+    so a power reading stuck at zero while it ran is a fault; a power-derived gate cannot judge
+    the power it was derived from). Roles without a gate are absent.
+    """
+    from .schedules import plant_run_mask
+
+    have = {c for c in frame.columns if isinstance(c, Role)}
+    loops = {PLANT_GATED_ROLES[r] for r in have if r in PLANT_GATED_ROLES}
+    masks = {}
+    for loop in sorted(loops):
+        m, src = plant_run_mask(frame, loop)
+        if m is not None:
+            masks[loop] = (_settled(m), src)
+    out = {r: masks[PLANT_GATED_ROLES[r]] for r in have if PLANT_GATED_ROLES.get(r) in masks}
+    if Role.POWER in have and "chw" in masks and masks["chw"][1] == "chiller status":
+        out[Role.POWER] = masks["chw"]
+    return out
+
+
+# --------------------------------------------------------------------------------------------- #
 # Stuck runs by absolute duration (#58)                                                         #
 # --------------------------------------------------------------------------------------------- #
 
@@ -370,6 +453,7 @@ STUCK_HOURS: dict = {
             Role.HW_RETURN_TEMP,
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
+            Role.COND_ENTERING_WATER_TEMP,  # 092-plant (#15)
             Role.OUTDOOR_RH,
             Role.AIRFLOW,
             Role.CHW_FLOW,
@@ -392,6 +476,7 @@ _IDLE_ROLES: frozenset = frozenset(
         Role.POWER,
         Role.DUCT_STATIC,
         Role.PUMP_HEAD,
+        Role.GAS_INPUT_RATE,  # 092-plant (#13): a boiler sits unfired all summer
     }
 )
 _IDLE_FRAC = 0.02  # |value| at or below this share of the series' P99 magnitude reads as idle
@@ -410,17 +495,20 @@ def _step(index) -> pd.Timedelta:
     return d.median() if len(d) else pd.Timedelta(0)
 
 
-def _value_runs(series: pd.Series, gate=None) -> pd.DataFrame:
+def _value_runs(series: pd.Series, gate=None, *, join=False) -> pd.DataFrame:
     """Identical-value runs of ``series`` (non-null) as a frame: start, end, n, value, hours.
 
     With ``gate`` (boolean, same index) only gated samples count and a run breaks wherever the
-    gate goes False, as in the gated flatline read.
+    gate goes False, as in the gated flatline read. With ``join=True`` (092-plant, #66) a run is
+    *not* broken where the gate goes False -- a value identical across successive running
+    stretches is one run -- and its ``hours`` are the gated hours it spans (samples x step), not
+    the wall-clock time the off stretches would add.
     """
     s = pd.to_numeric(series, errors="coerce")
     step = _step(s.index)
     if gate is not None:
         g = pd.Series(gate).reindex(s.index).fillna(False).astype(bool)
-        seg = (~g).cumsum()[g]
+        seg = None if join else (~g).cumsum()[g]
         s = s[g]
     else:
         seg = None
@@ -442,23 +530,28 @@ def _value_runs(series: pd.Series, gate=None) -> pd.DataFrame:
             "value": g2["v"].first(),
         }
     )
-    out["hours"] = (out["end"] - out["start"] + step).dt.total_seconds() / 3600.0
+    if join and gate is not None:
+        out["hours"] = out["n"] * step.total_seconds() / 3600.0
+    else:
+        out["hours"] = (out["end"] - out["start"] + step).dt.total_seconds() / 3600.0
     return out.reset_index(drop=True)
 
 
-def _stuck_runs(series: pd.Series, role, gate=None, stuck_hours=None):
+def _stuck_runs(series: pd.Series, role, gate=None, stuck_hours=None, run_gate=None):
     """``(longest_hours, [interval dicts], stuck sample count)`` for a role with a stuck limit."""
     limits = STUCK_HOURS if stuck_hours is None else {**STUCK_HOURS, **stuck_hours}
     if role not in limits:
         return None, [], 0
     use_gate = None
-    if role in FAN_GATED_ROLES:
+    if run_gate is not None:  # 092-plant (#66): runs judged within running stretches only
+        use_gate = run_gate
+    elif role in FAN_GATED_ROLES:
         if gate is None:
             # a duct reading holds still whenever the fan is off (a weekend), so its run length
             # says nothing without knowing when the fan ran: judged in the gated mode only
             return None, [], 0
         use_gate = gate
-    runs = _value_runs(series, use_gate)
+    runs = _value_runs(series, use_gate, join=run_gate is not None)
     if runs.empty:
         return None, [], 0
     if role in _IDLE_ROLES:
@@ -518,7 +611,14 @@ def _verdict(trust: float) -> str:
 
 
 def sensor_trust(
-    series: pd.Series, role, *, expected_freq=None, gate=None, stuck_hours=None
+    series: pd.Series,
+    role,
+    *,
+    expected_freq=None,
+    gate=None,
+    stuck_hours=None,
+    run_gate=None,
+    run_gate_source: str | None = None,
 ) -> SensorTrust:
     """Score one point's trustworthiness from quality stats + physical-range checks.
 
@@ -537,6 +637,15 @@ def sensor_trust(
     changes, and is flagged ``never_changes`` (no change over 14 days or more; a supply-fan status
     is then "suspect") or ``fractional_status`` (values between 0 and 1 at a native <= 15 min rate:
     interpolated, not logged).
+
+    ``run_gate`` (provisional, 0.92, #66; a boolean Series, e.g. from
+    :func:`camber.schedules.plant_run_mask`) judges a plant point on its equipment's **running**
+    samples: the range, outlier and flatline reads and the stuck runs are taken over running
+    samples (a run breaks where the equipment stops), while coverage stays over the point's whole
+    span. It applies to the roles in :data:`PLANT_GATED_ROLES` and to ``power``; others ignore
+    it. When the equipment ran for fewer than 24 samples the point is flagged ``not_running`` and
+    scored on coverage alone -- there is nothing to judge it on. ``run_gate_source`` names the
+    gate in the result's ``run_gate``.
     """
     intermittent = role in _INTERMITTENT_ROLES
     full = series
@@ -555,10 +664,41 @@ def sensor_trust(
         shape_aware=True,
         scale_floor=_scale_floor(series, role),
     )
-    rng = range_violation_frac(series, role)
-    rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)  # out-of-range is serious
-    trust = q.score * (1.0 - rng_pen)
-    flat_frac = q.flatline_frac
+    # 092-plant (#66): a plant point is judged on its equipment's running samples
+    qj, plant_g, not_running = q, None, False
+    if run_gate is not None and (role in PLANT_GATED_ROLES or role == Role.POWER):
+        plant_g = pd.Series(run_gate).reindex(series.index).fillna(False).astype(bool)
+        on = pd.to_numeric(series, errors="coerce")[plant_g].dropna()
+        if len(on) < _MIN_GATED:
+            not_running = True
+        else:
+            # regime-aware: a gate that is really an enable (a boiler "on" through a mild month
+            # with the loop cold) splits the running samples in two -- flagged "bimodal", not
+            # read as outliers of the sensor
+            qj = assess(
+                on,
+                None,
+                regime_aware=True,
+                shape_aware=True,
+                scale_floor=_scale_floor(on, role),
+            )
+    if not_running:
+        rng = float("nan")  # not judged: the equipment never ran long enough
+        trust = q.coverage
+        flat_frac = 0.0
+    else:
+        rng = range_violation_frac(series if plant_g is None else series[plant_g], role)
+        rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)  # out-of-range is serious
+        if plant_g is None:
+            trust = q.score * (1.0 - rng_pen)
+            flat_frac = q.flatline_frac
+        else:
+            # coverage over the whole span; everything else over the running samples, read as
+            # one series -- a value held across successive running stretches is one flat run,
+            # the off time between them is not counted
+            quality = qj.score / qj.coverage if qj.coverage > 0 else 0.0
+            trust = q.coverage * quality * (1.0 - rng_pen)
+            flat_frac = qj.flatline_frac
     if gate is not None and role in FAN_GATED_ROLES:
         gated = _gated_flatline_frac(series, gate)
         if gated is not None:
@@ -573,25 +713,34 @@ def sensor_trust(
         flags.append("low_coverage")
     if q.n_gaps > 0:
         flags.append("gaps")
-    out_frac = q.outlier_frac
-    if intermittent and q.n_regimes == 2 and q.regime_outlier_frac is not None:
-        out_frac = q.regime_outlier_frac  # judged within each regime, so a duty cycle isn't a fault
-    elif q.shape_outlier_frac is not None:
+    out_frac = qj.outlier_frac
+    if (
+        (intermittent or plant_g is not None)
+        and qj.n_regimes == 2
+        and qj.regime_outlier_frac is not None
+    ):
+        out_frac = qj.regime_outlier_frac  # judged within each regime: a duty cycle isn't a fault
+    elif qj.shape_outlier_frac is not None:
         # floored at the sensor's precision and two-sided for a skewed operating tail, so a
         # tightly-controlled point or a pump idling then ramping with load isn't a fault
-        out_frac = q.shape_outlier_frac
-    if out_frac > 0.05:
+        out_frac = qj.shape_outlier_frac
+    if not_running:
+        flags.append("not_running")  # 092-plant (#66)
+    elif out_frac > 0.05:
         flags.append("outliers")
     if rng == rng and rng > 0.01:
         flags.append("out_of_range")
     if role in _SENSOR_ROLES and flat_frac > 0.5:
         flags.append("stuck")
         trust *= 0.5  # a stuck analog sensor is bad
-    longest_h, stuck_iv, n_stuck = _stuck_runs(series, role, gate, stuck_hours)
+    if not_running:
+        longest_h, stuck_iv, n_stuck = None, [], 0
+    else:
+        longest_h, stuck_iv, n_stuck = _stuck_runs(series, role, gate, stuck_hours, plant_g)
     if stuck_iv:
         if "stuck" not in flags:
             flags.append("stuck")
-        share = n_stuck / q.n if q.n else 1.0
+        share = n_stuck / qj.n if qj.n else 1.0
         trust = min(trust * (1.0 - share), _SUSPECT_CAP)
     n_changes = None
     if role in STATUS_ROLES:
@@ -605,7 +754,7 @@ def sensor_trust(
         v = pd.to_numeric(series, errors="coerce").dropna()
         if len(v) and float((v < _CO2_AMBIENT_FLOOR).mean()) > 0.05:
             flags.append("below_ambient")  # reads under outdoor background: calibration suspect
-    if q.n_regimes == 2:
+    if qj.n_regimes == 2 and not not_running:
         # Two meanings, both honest, neither a penalty: for a duty-cycled role this explains why
         # the outliers were read within-regime; for anything else it is new information -- a point
         # that should have one population has two, which is a "look here", not a verdict.
@@ -617,7 +766,7 @@ def sensor_trust(
         n=q.n,
         coverage=q.coverage,
         flatline_frac=flat_frac,
-        outlier_frac=q.outlier_frac,
+        outlier_frac=qj.outlier_frac,
         range_violation_frac=rng,
         trust=trust,
         verdict=_verdict(trust),
@@ -627,6 +776,7 @@ def sensor_trust(
         first_valid=None if first is None else str(first),
         window_coverage=window_cov,
         n_state_changes=n_changes,
+        run_gate=run_gate_source if plant_g is not None else None,
     )
 
 
@@ -749,13 +899,20 @@ def _check_all_frozen(frame: pd.DataFrame, health: dict) -> None:
     if not same.any():
         return
     step = _step(frame.index)
+    # 092-plant (#66): points judged on a plant run gate hold still while the plant is off (a
+    # change-of-value log records nothing) -- that is not a collection outage
+    plant_on = None
+    if any(getattr(health.get(c), "run_gate", None) for c in cols):
+        masks = [m for m, _src in plant_gates(frame).values()]
+        if masks:
+            plant_on = pd.concat(masks, axis=1).any(axis=1)
     rid = (~same).cumsum()
     intervals, n_frozen = [], 0
     for _, grp in same[same].groupby(rid[same]):
         start = frame.index[frame.index.get_loc(grp.index[0]) - 1]  # the value held from here
         end = grp.index[-1]
         hours = (end - start + step).total_seconds() / 3600.0
-        if hours >= _FREEZE_HOURS:
+        if hours >= _FREEZE_HOURS and not _plant_off_throughout(plant_on, start, end):
             intervals.append({"start": str(start), "end": str(end), "hours": round(hours, 2)})
             n_frozen += len(grp) + 1
     if not intervals:
@@ -782,6 +939,13 @@ def _check_all_frozen(frame: pd.DataFrame, health: dict) -> None:
         _mark(health, c, "all_points_frozen", dict(check), cap=_SUSPECT_CAP, share=share)
 
 
+def _plant_off_throughout(plant_on, start, end) -> bool:
+    """True when a plant run mask exists and shows the plant off for all of ``[start, end]``."""
+    if plant_on is None:
+        return False
+    return not bool(plant_on.loc[start:end].any())
+
+
 def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     """Apply the frame-level trust checks to ``health`` (``{Role: SensorTrust}``) in place.
 
@@ -798,13 +962,20 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     return health
 
 
-def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None, gate=None) -> dict:
+def frame_sensor_health(
+    frame: pd.DataFrame, *, expected_freq=None, gate=None, plant_gate=None
+) -> dict:
     """Trust score every role-column of a role-frame -> ``{Role: SensorTrust}``.
 
     ``gate`` is passed to :func:`sensor_trust` (gated mode for the fan-dependent roles); pass
     ``"fan"`` to derive it from the frame's own fan signal via
     :func:`camber.schedules.fan_on_mask` (ungated when the frame has none). The frame-level checks
     of :func:`frame_checks` are then applied.
+
+    ``plant_gate`` (provisional, 0.92, #66): ``"auto"`` judges the plant roles
+    (:data:`PLANT_GATED_ROLES`, and a chiller's power) on their equipment's running samples, with
+    the gate read from the frame by :func:`plant_gates`; ``None`` (the default) leaves them
+    ungated.
     """
     if isinstance(gate, str):
         if gate != "fan":
@@ -812,8 +983,18 @@ def frame_sensor_health(frame: pd.DataFrame, *, expected_freq=None, gate=None) -
         from .schedules import fan_on_mask
 
         gate = fan_on_mask(frame)[0]
+    if plant_gate not in (None, "auto"):
+        raise ValueError(f"plant_gate must be 'auto' or None, got {plant_gate!r}")
+    pg = plant_gates(frame) if plant_gate == "auto" else {}  # 092-plant (#66)
     health = {
-        role: sensor_trust(frame[role], role, expected_freq=expected_freq, gate=gate)
+        role: sensor_trust(
+            frame[role],
+            role,
+            expected_freq=expected_freq,
+            gate=gate,
+            run_gate=pg[role][0] if role in pg else None,
+            run_gate_source=pg[role][1] if role in pg else None,
+        )
         for role in frame.columns
     }
     return frame_checks(frame, health)
@@ -826,7 +1007,8 @@ def trusted_roles(frame: pd.DataFrame, *, min_trust: float = 0.5, expected_freq=
     when an input it depends on is below the bar -- "decline to fire on data we don't
     trust" rather than emit a fault that is really a sensor problem.
     """
-    health = frame_sensor_health(frame, expected_freq=expected_freq)
+    # 092-plant (#66): plant points judged on running samples
+    health = frame_sensor_health(frame, expected_freq=expected_freq, plant_gate="auto")
     return {role for role, t in health.items() if t.trust >= min_trust}
 
 
@@ -837,10 +1019,21 @@ def untrusted_roles(
 
     Roles absent from the frame are skipped (their absence is handled separately by the
     rule runner). Returns the offending roles in the order given, for gating a rule's
-    required inputs.
+    required inputs. Plant points are judged on their equipment's running samples when the frame
+    carries a run signal (0.92, #66; see :func:`plant_gates`).
     """
     present = [r for r in roles if r in frame.columns]
-    health = {r: sensor_trust(frame[r], r, expected_freq=expected_freq) for r in present}
+    pg = plant_gates(frame)  # 092-plant (#66): plant points judged on running samples
+    health = {
+        r: sensor_trust(
+            frame[r],
+            r,
+            expected_freq=expected_freq,
+            run_gate=pg[r][0] if r in pg else None,
+            run_gate_source=pg[r][1] if r in pg else None,
+        )
+        for r in present
+    }
     frame_checks(frame, health)
     return [r for r in present if health[r].trust < min_trust]
 

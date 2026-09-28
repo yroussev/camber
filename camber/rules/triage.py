@@ -550,7 +550,7 @@ def _rule_roles(rules_map: dict, rule_name: str) -> set:
     }
 
 
-def sensor_causes(findings, *, trust=None, mixing=None) -> list:
+def sensor_causes(findings, *, trust=None, mixing=None, shared_scope=None) -> list:
     """The sensor problems that make other findings conditional, derived from the data.
 
     * a ``sensor_drift:<role>`` finding at ``warn``/``fault``;
@@ -562,6 +562,10 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
     A cause on a role in :data:`SHARED_ROLES` (other than a unit-local mixing check) taints every
     equipment that uses the role -- unless the drift finding names the units that read that
     sensor in ``metrics["scope_equips"]`` (0.91: one AHU's own OAT), which then scopes it to them.
+
+    ``shared_scope`` (0.92, #66; ``{equip: [equips reading the same sensor]}``) scopes a *trust*
+    cause on a shared role the same way: one AHU's own stuck OAT then taints the units that read
+    that sensor, not a chiller or boiler reading the building's weather station.
     """
     out: list = []
     for f in findings:
@@ -593,6 +597,13 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
             flags = list(getattr(t, "flags", []) or [])
             if getattr(t, "verdict", "") == "untrusted" or "stuck" in flags:
                 why = "stuck" if "stuck" in flags else "untrusted"
+                detail = f"{slug} {why} (trust {getattr(t, 'trust', float('nan')):.2f})"
+                scope = (shared_scope or {}).get(equip) if slug in SHARED_ROLES else None
+                if scope:  # 092-plant (#66): the units that read this sensor, not the site
+                    out.extend(
+                        SensorCause("trust", str(eq), (slug,), detail) for eq in sorted(set(scope))
+                    )
+                    continue
                 out.append(
                     SensorCause(
                         "trust",
@@ -650,6 +661,7 @@ def link_findings(
     actionable_only: bool = True,
     topology=None,
     plant_overlap_min: float = 0.25,
+    shared_scope=None,
 ) -> list:
     """Link findings into ranked :class:`Issue` objects (provisional API).
 
@@ -661,6 +673,7 @@ def link_findings(
       same equipment -- or on any equipment for a shared role like OAT -- makes its issue
       *conditional*: annotated in ``conditional_on`` and listed in the ``sensor_drift`` issue's
       ``dependents``, never deleted. Its cost counts as "at risk pending sensor fix".
+      ``shared_scope`` (0.92) scopes a trust cause on a shared role (see :func:`sensor_causes`).
     * **Hours** are the union of the members' violation masks (``mask_for(finding) -> bool Series |
       None``), gated to fan-on by ``runtime(equip) -> (fan_on_mask | None, gate_label)`` when given;
       ``fan_on_hours`` is the % runtime denominator.
@@ -701,7 +714,7 @@ def link_findings(
         costs = cost_findings(findings, loads, price, params=cost_params)
     cost_of = {id(f): c for f, c in zip(findings, costs)}
 
-    causes = sensor_causes(findings, trust=trust, mixing=mixing)
+    causes = sensor_causes(findings, trust=trust, mixing=mixing, shared_scope=shared_scope)
     items = [
         f for f in findings if (not actionable_only) or _attr(f, "severity", "") in _ACTIONABLE
     ]

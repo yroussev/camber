@@ -21,6 +21,7 @@ from .cohort import CohortDeviation
 from .cohort_starvation_rule import CohortStarvation
 from .compressor_cycle_rule import CompressorShortCycle
 from .compressor_stage_rule import CompressorStaging
+from .condenser_bypass_rule import CondenserBypassLeak  # 092-plant (#15)
 from .condenserwater_rule import CondenserWaterReset
 from .coolingtower_rule import CoolingTowerApproach
 from .economizer_lockout_rule import EconomizerHighLimit
@@ -95,6 +96,7 @@ RULE_CLASSES: list[type] = [
     ChillerStagingFleet,
     DcvSystemVerification,
     G36AFDD,
+    CondenserBypassLeak,  # 092-plant (#15)
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

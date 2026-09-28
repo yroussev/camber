@@ -22,6 +22,10 @@ __all__ = [
     "effective_occupied_mask",
     "fan_on_mask",
     "FAN_GATE_NONE",
+    "plant_run_mask",
+    "PLANT_GATE_NONE",
+    "CHILLER_POWER_RUN_FRAC",
+    "GAS_FIRING_FRAC",
     "day_type",
     "time_of_week_bin",
 ]
@@ -151,3 +155,85 @@ def fan_on_mask(frame: pd.DataFrame, *, speed_min_pct: float = 1.0, flow_frac: f
         if p95 > 0:
             return (flow > flow_frac * p95).fillna(False), "airflow proxy"
     return None, FAN_GATE_NONE
+
+
+# --------------------------------------------------------------------------------------------- #
+# 092-plant (#66): the plant run gate                                                            #
+# --------------------------------------------------------------------------------------------- #
+
+#: The gate label reported when a plant frame trends no run signal for that loop.
+PLANT_GATE_NONE = "ungated — no plant run signal"
+
+#: Share of its own 95th percentile a chiller's power must exceed to read as running. A stopped
+#: chiller still draws controls, oil-heater and crankcase power; a tenth of its working draw is
+#: above that standby load on the machines we have seen and well below its lightest running load.
+CHILLER_POWER_RUN_FRAC = 0.10
+#: Share of its own 95th percentile a boiler's gas input must exceed to read as firing (a pilot or a
+#: purge reads a few percent).
+GAS_FIRING_FRAC = 0.05
+
+_AIR_FAN_ROLES = ("supply_fan_status", "supply_fan_speed")
+
+
+def plant_run_mask(
+    frame: pd.DataFrame,
+    loop: str,
+    *,
+    power_frac: float = CHILLER_POWER_RUN_FRAC,
+    gas_frac: float = GAS_FIRING_FRAC,
+):
+    """``(mask, source)``: which samples the plant equipment serving ``loop`` was running.
+
+    Provisional (0.92, #66). ``loop`` is ``"chw"`` (a chiller: chilled- and condenser-water points)
+    or ``"hw"`` (a boiler: hot-water points). Strongest evidence first:
+
+    * ``"chw"``: the chiller's run status / command (``compressor_status``) > 0.5 -> ``"chiller
+      status"``; else its electric ``power`` above ``power_frac`` of its own 95th percentile ->
+      ``"chiller power proxy"``. Power is read as the chiller's only on a frame that carries a
+      chilled-water role and no supply-fan signal (on an air handler it is the fan's).
+    * ``"hw"``: the boiler's run status (``boiler_status``) > 0.5 -> ``"boiler status"``; else its
+      gas input rate above ``gas_frac`` of its own 95th percentile -> ``"boiler firing (gas
+      input)"``.
+
+    A resampled status is a duty fraction: the equipment counts as running in an interval when it
+    ran for more than half of it, as for the fan gate. Missing samples count as *not running*.
+    Returns ``(None, PLANT_GATE_NONE)`` when no signal is present.
+    """
+    from .model.roles import Role
+
+    def _get(role):
+        for key in (role, role.value):
+            if key in frame.columns:
+                s = pd.to_numeric(frame[key], errors="coerce")
+                return s if s.notna().any() else None
+        return None
+
+    def _above(s, frac):
+        p95 = float(s.quantile(0.95))
+        if not p95 > 0:
+            return None
+        return (s > frac * p95).fillna(False)
+
+    if loop == "chw":
+        status = _get(Role.COMPRESSOR_STATUS)
+        if status is not None:
+            return (status > 0.5).fillna(False), "chiller status"
+        cols = {getattr(c, "value", c) for c in frame.columns}
+        chw = {Role.CHW_SUPPLY_TEMP.value, Role.CHW_RETURN_TEMP.value, Role.CHW_FLOW.value}
+        power = _get(Role.POWER)
+        if power is not None and cols & chw and not cols.intersection(_AIR_FAN_ROLES):
+            m = _above(power, power_frac)
+            if m is not None:
+                return m, "chiller power proxy"
+        return None, PLANT_GATE_NONE
+    if loop == "hw":
+        status = _get(Role.BOILER_STATUS)
+        if status is not None:
+            return (status > 0.5).fillna(False), "boiler status"
+        gas = _get(Role.GAS_INPUT_RATE)
+        if gas is not None:
+            m = _above(gas, gas_frac)
+            if m is not None:
+                return m, "boiler firing (gas input)"
+        return None, PLANT_GATE_NONE
+    raise ValueError(f"loop must be 'chw' or 'hw', got {loop!r}")

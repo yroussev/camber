@@ -90,6 +90,7 @@ left as they are.
 | `ChillerSuperheatDrift` | suction superheat | two-sided | evaporator **feed** (overfeed/floodback vs. starvation) |
 | `ChillerCwRangeDrift` | condenser-water range / ΔT | two-sided | condenser-side hydraulics |
 | `CoolingTowerApproachDrift` | tower approach (CW supply − wet-bulb) | one-sided (up) | tower heat rejection (fouled/scaled fill, plugged nozzles, reduced airflow) |
+| `CoolingTowerFanEffortDrift` (0.92) | tower fan speed at matched load and wet-bulb | one-sided (up) | the same faults on a tower whose fan controller holds the approach -- it works harder instead (see [Plant detectors](PLANT-DETECTORS.md)) |
 | `ChillerHeadPressureDrift` | discharge / condensing pressure | one-sided (up) | high-side heat rejection (fouling/scale, non-condensables, reduced CW flow), read off the gauge |
 | `ChillerSuctionPressureDrift` | suction / evaporating pressure | two-sided | low-side evaporator condition — a fall is heat-transfer loss / low charge / starved feed, a rise is overfeed / flooding |
 

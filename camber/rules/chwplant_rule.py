@@ -35,12 +35,37 @@ TEMPERATURE_GATE_CAVEAT = (
 )
 
 
+POWER_GATE_CAVEAT = (
+    "no chiller run status or command mapped: running hours read from the chiller's power above "
+    "a tenth of its own 95th-percentile draw -- map the status or command (compressor_status) "
+    "for a firmer gate"
+)
+
+
 def _run_mask(frame: pd.DataFrame):
-    """``(running mask | None, source)``: the chiller's status/command, else ``None``."""
-    if RUN_STATUS_ROLE not in frame.columns:
-        return None, "temperature"
-    run = chiller_running(frame[RUN_STATUS_ROLE], index=frame.index)
-    return (run, "status") if run is not None else (None, "temperature")
+    """``(running mask | None, source)``: the chiller's status/command, else its power, else None.
+
+    0.92 (#66): a chiller with no run status but a power point is gated on the power
+    (:func:`camber.schedules.plant_run_mask`), source ``"power"``; only without either do the
+    rules fall back to the supply temperature.
+    """
+    if RUN_STATUS_ROLE in frame.columns:
+        run = chiller_running(frame[RUN_STATUS_ROLE], index=frame.index)
+        if run is not None:
+            return run, "status"
+    if Role.POWER in frame.columns:
+        from ..schedules import plant_run_mask
+
+        run, src = plant_run_mask(frame, "chw")
+        if run is not None and src == "chiller power proxy":
+            return run, "power"
+    return None, "temperature"
+
+
+def _gate_caveats(source: str) -> list:
+    if source == "temperature":
+        return [TEMPERATURE_GATE_CAVEAT]
+    return [POWER_GATE_CAVEAT] if source == "power" else []
 
 
 class CHWPlantReset:
@@ -49,7 +74,13 @@ class CHWPlantReset:
 
     name = "chw_plant_reset"
     roles_required = (Role.CHW_SUPPLY_TEMP,)
-    roles_optional = (Role.CHW_RETURN_TEMP, Role.CHW_SUPPLY_TEMP_SP, Role.OAT, RUN_STATUS_ROLE)
+    roles_optional = (
+        Role.CHW_RETURN_TEMP,
+        Role.CHW_SUPPLY_TEMP_SP,
+        Role.OAT,
+        RUN_STATUS_ROLE,
+        Role.POWER,  # 0.92 (#66): the run gate's fallback when no status is mapped
+    )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -62,7 +93,7 @@ class CHWPlantReset:
                 equip=equip,
                 severity="info",
                 metrics={"n_running": 0, "run_source": source},
-                summary=f"{equip}: did not run in the window (run status never on); not judged",
+                summary=f"{equip}: did not run in the window (run {source} never on); not judged",
             )
         res = analyze_chw_plant(legacy, equip, running=run)
         if res is None:
@@ -72,11 +103,9 @@ class CHWPlantReset:
                 severity="info",
                 metrics={"n_running": 0, "run_source": source},
                 summary="insufficient data",
-                caveats=[TEMPERATURE_GATE_CAVEAT] if source == "temperature" else [],
+                caveats=_gate_caveats(source),
             )
-        caveats = []
-        if source == "temperature":
-            caveats.append(TEMPERATURE_GATE_CAVEAT)
+        caveats = _gate_caveats(source)
         # Low-deltaT sub-check: a NaN pct means no usable CHW return temp -> not evaluated
         # (must not count toward the fault). Reset sub-check: None means OAT was absent/thin
         # -> not evaluated (must not read as a confident "no reset").
@@ -119,7 +148,7 @@ class CHWPlantReset:
                 "deltaT_median_f": res.deltaT_median_f,
                 "low_deltaT_pct": res.low_deltaT_pct,
                 "n_running": res.n_running,
-                "run_source": res.run_source,
+                "run_source": source if run is not None else res.run_source,
             },
             summary=f"{equip}: CHWST median {res.chwst_median_f:.1f}F, {dt_note}; {reset_note}",
             caveats=caveats,
@@ -143,7 +172,7 @@ class CHWSupplyTracking:
 
     name = "chw_supply_tracking"
     roles_required = (Role.CHW_SUPPLY_TEMP, Role.CHW_SUPPLY_TEMP_SP)
-    roles_optional = (RUN_STATUS_ROLE, Role.CHW_RETURN_TEMP)
+    roles_optional = (RUN_STATUS_ROLE, Role.CHW_RETURN_TEMP, Role.POWER)  # POWER: 0.92 (#66)
 
     def __init__(
         self,
@@ -174,7 +203,7 @@ class CHWSupplyTracking:
                 equip=equip,
                 severity="info",
                 metrics={**base, "n_running": 0, "above_pct": None},
-                summary=f"{equip}: did not run in the window (run status never on); not judged",
+                summary=f"{equip}: did not run in the window (run {source} never on); not judged",
             )
         res = analyze_chw_tracking(
             self._legacy(frame),
@@ -183,7 +212,7 @@ class CHWSupplyTracking:
             above_f=self.above_f,
             settle_intervals=self.settle_intervals,
         )
-        caveats = [TEMPERATURE_GATE_CAVEAT] if source == "temperature" else []
+        caveats = _gate_caveats(source)
         if res is None or res.n_running < self.min_running:
             n = 0 if res is None else res.n_running
             return Finding(

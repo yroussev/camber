@@ -25,6 +25,7 @@ nav:
       - Packaged / DX FDD: FDD-DX.md
       - Chiller drift & calibration: CHILLER-DRIFT.md
       - Pump / hydronic drift: PUMP-DRIFT.md
+      - "Plant detectors: boiler, tower, bypass": PLANT-DETECTORS.md  # 092-plant
       - AHU / air-side drift: AHU-DRIFT.md
       - VAV / zone-terminal drift: VAV-DRIFT.md
       - Trim-and-Respond / G36 reset: TR-RESET.md

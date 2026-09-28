@@ -37,6 +37,7 @@ ROLE_TO_223 = {
     Role.OUTDOOR_RH: ("RelativeHumidity", "Air"),
     Role.CHW_FLOW: ("VolumeFlowRate", "Water"),
     Role.HW_FLOW: ("VolumeFlowRate", "Water"),
+    Role.GAS_INPUT_RATE: ("Power", "NaturalGas"),  # 0.92 (#13): fuel energy input rate
     Role.PUMP_HEAD: ("Pressure", "Water"),
     Role.COOL_VALVE: ("PositionRatio", "Water"),
     Role.HEAT_VALVE: ("PositionRatio", "Water"),
@@ -57,6 +58,8 @@ ROLE_TO_223 = {
     Role.HW_DIFF_PRESS: ("Pressure", "Water"),
     Role.HW_PUMP_SPEED: ("DimensionlessRatio", "Water"),
     Role.CW_SUPPLY_TEMP: ("Temperature", "Water"),
+    Role.COND_ENTERING_WATER_TEMP: ("Temperature", "Water"),  # 0.92 (#15)
+    Role.CW_BYPASS_VALVE: ("PositionRatio", "Water"),  # 0.92 (#15)
     Role.CW_RETURN_TEMP: ("Temperature", "Water"),
     Role.TOWER_FAN_SPEED: ("DimensionlessRatio", "Air"),
     # --- 0.6: ambient / setpoints / humidity / filtration ---

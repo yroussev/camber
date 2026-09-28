@@ -41,8 +41,10 @@ def test_coverage_partitions_the_registry():
     assert len(cov["scored"]) + len(cov["fixture_only"]) == cov["n_single"]
     # scored + fixture-only + fleet accounts for every registered rule
     assert len(cov["scored"]) + len(cov["fixture_only"]) + len(cov["fleet"]) == len(reg.names())
-    # 0.6: the whole single-equipment suite is accuracy-scored — no fixture-only rules remain
-    assert cov["fixture_only"] == [] and len(cov["scored"]) == cov["n_single"]
+    # 0.6: the whole single-equipment suite is accuracy-scored — no fixture-only rules remain,
+    # except 0.92's rules whose scenarios wait (PENDING_SCENARIOS) for sign-off as gated keys
+    assert cov["fixture_only"] == sorted(faultlab.PENDING_SCENARIOS)
+    assert len(cov["scored"]) + len(faultlab.PENDING_SCENARIOS) == cov["n_single"]
 
 
 def test_records_are_deterministic():

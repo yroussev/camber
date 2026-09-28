@@ -1,5 +1,5 @@
 {
-  "_comment": "LBNL FDD boiler-plant point -> CAMBER Role mapping, at the plant (loop) level: two boilers (_1/_2) and two hot-water pumps feed one loop; boiler 1 and pump 1 are the lead units. Derived from the dataset's own Brick model (LBNL_FDD_Data_Sets_Boiler_Plant_ttl) and checked against the data. BOI_STA_1 / BOI_STA_2 are NOT mapped: the Brick model types them On_Off_Status, and in this simulation they are the boiler ENABLE (on all season), not burner firing -- mapping one to boiler_status would read every enabled-but-idle hour as firing (short-cycle, summer-lockout and plant-delta-T rules would all misfire). The gas points (BOI_GAS_CSUM_*) are each boiler's instantaneous gas input in kW (inventory Table 2; not a cumulative counter despite the name -- corrected in 0.86.0) and, with the heating-demand point (SEC_POW), have no CAMBER role yet. HWL_DP and HWL_DPSPT are the loop differential pressure and its setpoint, both in inH2O (the inventory's Table 2 describes HWL_DPSPT as a temperature setpoint; it is the 17.4 psi DP setpoint). Units are IP as exported (temperatures in F). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
+  "_comment": "LBNL FDD boiler-plant point -> CAMBER Role mapping, at the plant (loop) level: two boilers (_1/_2) and two hot-water pumps feed one loop; boiler 1 and pump 1 are the lead units. Derived from the dataset's own Brick model (LBNL_FDD_Data_Sets_Boiler_Plant_ttl) and checked against the data. BOI_STA_1 / BOI_STA_2 are NOT mapped: the Brick model types them On_Off_Status, and in this simulation they are the boiler ENABLE (on all season), not burner firing -- mapping one to boiler_status would read every enabled-but-idle hour as firing (short-cycle, summer-lockout and plant-delta-T rules would all misfire). The gas points (BOI_GAS_CSUM_*) are each boiler's instantaneous gas input in kW (inventory Table 2; not a cumulative counter despite the name -- corrected in 0.86.0). BOI_GAS_CSUM_1 maps to gas_input_rate (0.92, #13): boiler 1 is the lead boiler whose flow BOI_FLOW_1 is hw_flow, so gas in and heat out (BOI_FLOW_1 x the loop delta-T) describe the same machine -- over the fault-free year boiler 2 fires in about 1% of hours, and boiler 1's gas-in/heat-out ratio reads 1.25 from either its own supply/return temperatures or the loop's. BOI_GAS_CSUM_2 and the heating-demand point (SEC_POW) stay unmapped. HWL_DP and HWL_DPSPT are the loop differential pressure and its setpoint, both in inH2O (the inventory's Table 2 describes HWL_DPSPT as a temperature setpoint; it is the 17.4 psi DP setpoint). Units are IP as exported (temperatures in F). Dataset: LBNL Fault Detection and Diagnostics Datasets (CC-BY).",
   "aliases": {
     "HWL_SW_TEMP": "hw_supply_temp",
     "HWL_RW_TEMP": "hw_return_temp",
@@ -8,6 +8,7 @@
     "BOI_FLOW_1": "hw_flow",
     "PM_SPD_1": "hw_pump_speed",
     "PM_STA_1": "pump_status",
-    "OA_TEMP": "oat"
+    "OA_TEMP": "oat",
+    "BOI_GAS_CSUM_1": "gas_input_rate"
   }
 }

@@ -41,6 +41,74 @@ All notable changes to CAMBER are documented here. The format follows
   metering boundary is annotated, not corrected: it is a non-routine event. The fixes reproduce the
   earlier hand correction to within 0.4 % of HVAC energy.
 <!-- /092-bench -->
+<!-- 092-plant -->
+### Added
+- **A plant run gate for sensor trust (#66).** `schedules.plant_run_mask(frame, loop)` reads when
+  a chiller (`"chw"`: run status, else power above a tenth of its own 95th percentile) or a boiler
+  (`"hw"`: status, else gas input) ran, and `frame_sensor_health(frame, plant_gate="auto")` judges
+  the plant roles (`sensorhealth.PLANT_GATED_ROLES`) on those running samples: range, outliers,
+  flatline and stuck runs over running samples, coverage over the whole span, the first 30 minutes
+  after a start left out. A chiller that sat off no longer reads as a stuck or out-of-range
+  chilled-water sensor. New flag `not_running`; `SensorTrust.run_gate` names the gate. The runner's
+  trust gate and the RCx report use it; `frame_sensor_health` keeps `plant_gate=None` by default.
+- **`Role.GAS_INPUT_RATE`** (`gas_input_rate`): a boiler's fuel input rate, kW (#13, #66).
+- **Boiler combustion-efficiency drift (#13).** `rules.boiler_efficiency_rule.BoilerEfficiencyDrift`
+  (`boiler_efficiency_drift`, the new `boiler` drift family) compares a boiler's gas input per
+  unit of heat delivered (`500 x gpm x delta-T`, or pump speed x delta-T without a flow meter)
+  with a frozen baseline at matched load (and return-water temperature where it moves).
+  One-sided up; warn at +5 % and 1.5 sigma, fault at +15 % and 3 sigma (screening-grade). A
+  second frozen model, gas against OAT, corroborates: a ratio rise that the gas burned at matched
+  weather does not share is reported as a heat-metering problem (`info`,
+  `attribution="heat_metering"`), not a fouled boiler; without OAT the severity is capped at
+  warn. `plantdrift.diagnose_boiler_drift` rolls it up. The `lbnl-boiler` catalog mapping now maps
+  `BOI_GAS_CSUM_1` (boiler 1's gas input, kW) to `gas_input_rate`; Brick `Natural_Gas_Flow_Sensor`
+  maps to it, and `Gas_Meter` used as a point type is accepted as an alias with a caveat.
+- **Condenser-water tower-bypass valve leak (#15).** `rules.condenser_bypass_rule.
+  CondenserBypassLeak` (`condenser_bypass_leak`, built-in) compares the water entering the chiller
+  condensers with the towers' leaving water while the bypass is commanded shut and a chiller runs:
+  warn at a 2 F median difference, fault at 5 F (screening-grade), with the bypassed fraction
+  estimated from the condenser range. A difference that does not grow with the range (a
+  miscalibrated sensor), or entering water colder than the tower's, is reported as a sensor offset
+  (`info`), not a leak. Two new roles: `Role.COND_ENTERING_WATER_TEMP` (condenser water after the
+  bypass mixing) and `Role.CW_BYPASS_VALVE` (the bypass command/position, %). Brick:
+  `Condenser_Water_Bypass_Valve` valve points and `Bypass_Command` map to the valve role; a cooling
+  tower's `Leaving_/Entering_Water_Temperature_Sensor` map to `cw_supply_temp` / `cw_return_temp`,
+  and a chiller's `Entering_Condenser_Water_Temperature_Sensor` becomes `cond_entering_water_temp`
+  when the model has that separate tower point. The `lbnl-chiller` catalog mapping maps
+  `CDWL_SW_TEMP` and `TWV_CTRL` to them. Its synthetic scenario is in
+  `faultlab.PENDING_SCENARIOS`, not yet a gated benchmark key.
+- **Cooling-tower fouling from fan effort (#14).** `rules.tower_fan_effort_rule.
+  CoolingTowerFanEffortDrift` (`cooling_tower_fan_effort_drift`, in the new `tower` drift family
+  with the approach drift) compares the tower's fan speed with a frozen baseline at matched load
+  (the tower range, else chilled-water tons) and wet-bulb (measured, or OAT + RH). A controlled
+  tower that fouls keeps its approach and works its fans harder, which the approach rules cannot
+  see. One-sided; warn at +5 %-points, fault at +10 (screening-grade). A biased leaving-water
+  sensor drives the fans the same way, so when the condenser-entering water is trended the rule
+  checks the two sensors' offset against the baseline; a shift of 1 F or more is reported as a
+  sensor problem (`info`, `attribution="sensor_offset"`). `plantdrift.diagnose_tower_drift`
+  rolls the family up.
+- **`examples/lbnl_fdd/plant_detectors.py`** scores the three plant detectors on the labelled
+  LBNL chiller and boiler plants with Wilson intervals (measured, not gated): boiler fouling 3/3
+  with 0/14 false alarms, tower fouling from fan effort 2/3 with 0/21 (the approach drift: 0/3),
+  the condenser bypass 5/5 with 0/19. New page `docs/PLANT-DETECTORS.md`; results in
+  `docs/VALIDATION.md`.
+- **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
+  the site's OAT sources with each other: three or more against their median (the outlier gets a
+  scoped `sensor_drift:oat` finding), two shown side by side with no finding.
+
+### Changed
+- **The chilled-water plant rules fall back to chiller power (#66).** `chw_plant_reset` and
+  `chw_supply_tracking` gate on the chiller's power (`run_source="power"`, with a caveat) when no
+  run status is mapped, before falling back to the supply temperature.
+- The all-points-frozen trust check ignores intervals a plant was off throughout (#66).
+
+### Fixed
+- **One unit's stuck OAT made the whole site conditional (#66).** A stuck or untrusted OAT on
+  one air handler that trends its own sensor was a site-wide cause, so the chiller and boiler
+  findings (which read the weather station) were marked conditional on it. The RCx report now
+  passes `link_findings(..., shared_scope=...)` (and `sensor_causes`) the units that read each
+  OAT source, and the cause taints only them.
+<!-- /092-plant -->
 
 ## [0.91.0] — 2026-09-27
 

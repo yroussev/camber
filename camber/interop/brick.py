@@ -65,6 +65,7 @@ DIRECT_CLASS_TO_ROLE = {
     "Hot_Water_Differential_Pressure_Sensor": Role.HW_DIFF_PRESS,
     "Hot_Water_Differential_Pressure_Setpoint": Role.HW_DIFF_PRESS_SP,
     "Hot_Water_Flow_Sensor": Role.HW_FLOW,
+    "Natural_Gas_Flow_Sensor": Role.GAS_INPUT_RATE,  # 0.92 (#13): a rate -- check the unit
     # --- chilled-water plant ---
     "Chilled_Water_Supply_Temperature_Sensor": Role.CHW_SUPPLY_TEMP,
     "Chilled_Water_Return_Temperature_Sensor": Role.CHW_RETURN_TEMP,
@@ -101,6 +102,12 @@ ALIAS_CLASS_TO_ROLE = {
         Role.CHW_FLOW,
         "non-standard class; read as Chilled_Water_Flow_Sensor",
     ),
+    # 0.92 (#13): the LBNL boiler plant types each boiler's gas-input point as a meter
+    "Gas_Meter": (
+        Role.GAS_INPUT_RATE,
+        "a meter *equipment* class used as a point type; read as the gas input rate -- confirm "
+        "it is an instantaneous rate, not a cumulative counter, and note its unit",
+    ),
 }
 
 # Classes a CAMBER role *could* come from but whose meaning the class alone does not pin down.
@@ -113,6 +120,10 @@ AMBIGUOUS_CLASSES = {
     "Occupant_Count": "a head count, not the binary occupied/unoccupied OCCUPANCY signal",
     "Enable_Status": "an enable is not proof of operation -- not mapped to a running status",
     "Enable_Command": "an enable is not proof of operation -- not mapped to a running status",
+    "Natural_Gas_Usage_Sensor": (
+        "gas used over a period (a cumulative amount), not the input rate gas_input_rate needs "
+        "-- difference it to a rate and map by hand"
+    ),
 }
 
 # Point classes whose role depends on the owning equipment part.
@@ -133,6 +144,10 @@ _CONTEXT_CLASSES = {
     "Entering_Hot_Water_Temperature_Sensor",
     "Leaving_Chilled_Water_Temperature_Sensor",
     "Entering_Chilled_Water_Temperature_Sensor",
+    # 0.92 (#15): a cooling tower's own leaving / entering water, and the condenser bypass valve
+    "Leaving_Water_Temperature_Sensor",
+    "Entering_Water_Temperature_Sensor",
+    "Bypass_Command_Context",
 }
 
 # Command classes: mapped (via the same owner context as their sensor counterpart) only when the
@@ -143,6 +158,7 @@ _COMMAND_FALLBACK = {
     "Damper_Position_Command": "Damper_Position_Sensor",
     "Damper_Command": "Damper_Position_Sensor",
     "Speed_Command": "Speed_Status",
+    "Bypass_Command": "Bypass_Command_Context",  # 0.92 (#15): only on a condenser bypass valve
 }
 
 # Volumetric-flow roles (cfm / gpm). A point typed as one of these whose *name* says it is a
@@ -241,6 +257,19 @@ def _context_role(point: str, pcls: str, owner_cls: str, owner_name: str):
     when the class simply has no CAMBER role in that context).
     """
     oc, on = (owner_cls or ""), (owner_name or "")
+    # 0.92 (#15): the condenser-water tower-bypass valve (Brick Condenser_Water_Bypass_Valve)
+    cw_bypass = "Bypass" in oc and "Condenser" in oc
+    if pcls == "Bypass_Command_Context":
+        if cw_bypass:
+            return Role.CW_BYPASS_VALVE, ""
+        return None, "a bypass command whose owner is not a condenser-water bypass valve"
+    if pcls == "Valve_Position_Sensor" and cw_bypass:
+        return Role.CW_BYPASS_VALVE, ""
+    if pcls in ("Leaving_Water_Temperature_Sensor", "Entering_Water_Temperature_Sensor"):
+        if "Cooling_Tower" in oc:
+            leaving = pcls.startswith("Leaving")
+            return (Role.CW_SUPPLY_TEMP if leaving else Role.CW_RETURN_TEMP), ""
+        return None, "leaving/entering water without a medium is mapped only on a cooling tower"
     if pcls == "Valve_Position_Sensor":
         if "Chilled" in oc or "Cooling" in oc:
             return Role.COOL_VALVE, ""
@@ -476,7 +505,38 @@ def report_from_triples(types: dict, has_point: dict) -> BrickMappingReport:
         part = owner.get(subj)
         if part:
             results[subj] = replace(r, owner=part, owner_class=types.get(part, ""))
+    _split_condenser_supply(results)
     return BrickMappingReport(tuple(results[k] for k in sorted(results)))
+
+
+def _split_condenser_supply(results: dict) -> None:
+    """0.92 (#15): tell the tower's leaving water from the water entering the chillers.
+
+    Brick's ``Entering_Condenser_Water_Temperature_Sensor`` maps to ``cw_supply_temp`` -- on a plant
+    with one condenser-supply sensor it *is* the tower's leaving water. When the model also has a
+    cooling tower's own leaving-water point, the two differ by the tower-bypass mixing: the
+    tower's point keeps ``cw_supply_temp`` and the chiller-side one becomes
+    ``cond_entering_water_temp`` (in place, with a note).
+    """
+    tower = [
+        r
+        for r in results.values()
+        if r.role == Role.CW_SUPPLY_TEMP and "Cooling_Tower" in (r.owner_class or "")
+    ]
+    if not tower:
+        return
+    for k, r in list(results.items()):
+        if (
+            r.role == Role.CW_SUPPLY_TEMP
+            and r.brick_class == "Entering_Condenser_Water_Temperature_Sensor"
+            and "Cooling_Tower" not in (r.owner_class or "")
+        ):
+            results[k] = replace(
+                r,
+                role=Role.COND_ENTERING_WATER_TEMP,
+                note="the model has a separate cooling-tower leaving-water point, so this is the "
+                "water entering the condenser (after any tower-bypass mixing)",
+            )
 
 
 def roles_from_triples(types: dict, has_point: dict) -> dict:

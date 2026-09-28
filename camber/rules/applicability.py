@@ -69,6 +69,7 @@ RULE_EQUIP_CLASSES: dict = {
     "chw_pump_dp_reset": ("chw_plant", "pump"),
     "condenser_water_reset": ("cooling_tower", "chw_plant"),
     "cooling_tower_approach": ("cooling_tower", "chw_plant"),
+    "condenser_bypass_leak": ("cooling_tower", "chw_plant"),  # 092-plant (#15)
     # --- hot-water plant
     "boiler_summer_lockout": _HW,
     "boiler_short_cycle": _HW,
