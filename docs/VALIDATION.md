@@ -435,7 +435,25 @@ The analysis is declared in the script before any saving is read:
 - baseline 2016, reporting 2019, calendar-year intermediates 2017 and 2018, plus
   `select_method`'s own proposal; 2020 (the COVID-19 closure) is outside every period.
 
-The results are pending maintainer sign-off and are not stated here yet.
+**Result** (2016 baseline, 2019 reporting, working days, 90% bands). Every yearly model of
+Building 1 is SEP-valid and passes G14 (4P, R² 0.91–0.95, CV(RMSE) 4.3–6.2%, 10–11 monthly rows of
+177–188 working days). Building 2's are SEP-valid in every year but pass G14 only in 2018 and 2019
+(3PH, R² 0.88 / 0.83; 2016 and 2017 reach R² 0.66 / 0.64). The chain through the 2018
+intermediate, whose model is valid under both SEP and G14 for both buildings, gives:
+- **Building 2:** SEnPI 0.838 ± 0.037, a 16.2% saving (76,500 kWh of 2019 working-day
+  electricity). The saving includes the on-site generation behind the meter; the data cannot
+  separate it from the equipment replacement.
+- **Building 1 (the control):** SEnPI 1.022 ± 0.046, no change distinguishable from zero.
+
+Through the 2017 intermediate the chains agree (0.836 ± 0.077 and 1.001 ± 0.050); Building 2's
+band is wider because its 2017 model is the weaker one. `select_method` proposes forecast for both
+buildings, the first valid method in SEP's order. Its three valid methods agree on Building 2
+(SEnPI 0.838–0.839) but spread on Building 1: forecast 1.066 ± 0.036, backcast 1.049 ± 0.049,
+chaining 1.024 ± 0.046. This is the spread between valid methods that Chen & Therkelsen (2019)
+describe, and the reason the proposal carries no headline figure. With the file's NASA POWER daily
+temperature in place of the station series, Building 2's 2018 chain reads 0.829 ± 0.040 and
+Building 1's 1.002 ± 0.049. Building 1's forecast moves from 1.066 to 1.028, so on that building the
+forecast depends on the weather source and the chain does not.
 
 ## Cross-validation vs an independent implementation
 

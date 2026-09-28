@@ -129,7 +129,9 @@ one of them the published real-data SEP chaining case.
 - **`examples/valladolid/chaining.py` (#50):** the real-data SEP chaining case. Working days,
   monthly rows weighted by days, a station OAT series from the weather fallback chain, baseline
   2016, reporting 2019, 2017 and 2018 intermediates and `select_method`'s own proposal; 2020 kept
-  out. Its results are described in docs/VALIDATION.md once the maintainer signs them off.
+  out. Published in docs/VALIDATION.md with the maintainer's sign-off: building 2 SEnPI
+  0.838 ± 0.037 (16.2%, including on-site generation behind the meter), building 1 (the
+  control) 1.022 ± 0.046, agreeing through both intermediate years.
 - **Catalog: `cofactor-drammen` (#50).** 45 Norwegian public buildings (Lien, Walnum & Sørensen
   2025, doi:10.1038/s41597-025-04708-3; Zenodo v3, CC BY 4.0, re-verified on the host): four years
   of hourly electricity import, sub-meters, district heat and per-building outdoor temperature.
