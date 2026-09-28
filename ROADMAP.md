@@ -263,11 +263,14 @@ Three stacked releases; `CHANGELOG.md` has the detail.
 Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** The next releases:
-  - **0.91** (was 0.88) — `camber lab`, a loopback-only local catalog UI (`camber serve` stays
-    GET-only), together with the detection-gap revisits on the complete catalog data (#11–#17),
-    RCx performance on large runs (#35), the plant RCx week (#32) and two stale VALIDATION cells
-    (#33). The intake follow-ups #37–#45 are unscheduled.
-  - **0.92** (was 0.89) — education: worked exercises and learning docs on the catalog datasets.
+  - **0.91 — real-data correctness:** fixes from the private real-building checks (#60 G36 engine fan
+    gate, cooling-only AHUs and start-up delay; #61 equipment-class gating and config topology; #62
+    chilled-water supply against setpoint; #63 economizer, reheat and reset misreads), RCx report
+    speed (#35) and plant weeks (#32), and two stale VALIDATION cells (#33).
+  - **0.92 — detection gaps on the complete catalog data** (#11–#17), real-data chaining (#50) and
+    the 0.90.1 billing and weather follow-ups (#64).
+  - **0.93** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only).
+  - **0.94** — education: worked exercises and learning docs on the catalog datasets.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
   bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
   decommissioning.
