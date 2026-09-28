@@ -163,6 +163,8 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
     want = None if not equips else set(equips)
     out = []
     for k, entry in enumerate(config.get("mv") or []):
+        if entry.get("bills") is not None:  # billing entries are not versioned (0.92)
+            continue
         role = Role(entry.get("role", Role.ENERGY_RATE.value))
         extra = _mvform.driver_roles(entry)
         for ref in prep.refs_by_class.get(entry["class"], []):

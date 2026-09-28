@@ -1266,6 +1266,12 @@
   "camber.model.topology": [
     "Topology"
   ],
+  "camber.mvbilling": [
+    "billing_findings",
+    "billing_label",
+    "billing_oat",
+    "load_bills"
+  ],
   "camber.mvrun": [
     "MVPlan",
     "MeterChain",

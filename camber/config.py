@@ -508,12 +508,29 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
     )
 
 
+def _prepare_bare(config: dict, base_dir: str) -> _Prepared:
+    """A config with no ``source`` and no equipment -- ``mv`` billing entries only (092-mv).
+
+    Only the facility identity and a ``shared_oat.file`` are read."""
+    ctx = _facility_context(config, base_dir)
+    resample = config.get("resample", "1h")
+    shared = None
+    so = config.get("shared_oat") or {}
+    if so.get("file"):
+        tzkw = _site_timezone({"timezone": so.get("timezone")})
+        oat = load_point(_path(base_dir, so["file"]), "oat", **tzkw).resample(resample).mean()
+        shared = {Role.OAT: oat}
+    return _Prepared(ctx.site, resample, _identity_mapping(), shared, [], {}, None, [], ctx)
+
+
 def _prepare(config: dict, base_dir: str) -> _Prepared:
     """Resolve a config's source, mapping, shared points and discovered equipment.
 
     Shared by :func:`run_config` and :func:`run_drift_config` so the two entry points discover
     equipment identically -- a drift run must see exactly the equipment the ordinary run does.
     """
+    if "source" not in config and not config.get("equipment"):  # 092-mv: bills-only config
+        return _prepare_bare(config, base_dir)
     if _source_kind(config["source"]) == "store":
         return _prepare_store(config, base_dir)
     ctx = _facility_context(config, base_dir)
@@ -622,6 +639,7 @@ def _mv_savings_finding(
     from .mandv.methods import forecast_savings
     from .rules.base import Finding
 
+    days_r = _mvform.row_days(daily_r)  # 092-mv: bills sum as days * per-day energy
     res = forecast_savings(
         model,
         _mvform.design_rows(daily_r, model),
@@ -633,12 +651,14 @@ def _mv_savings_finding(
         extrapolation=policy,
         kernel=kernel,
         baseline_version=(ctx or {}).get("baseline_version"),
+        days=days_r,
     )
     sav = res
     cov = sav.coverage or {}
+    n_rep = int(len(daily_r)) if days_r is None else int(days_r.sum())
     metrics = {
         "reporting_period": [str(window[0]), str(window[1])],
-        "n_report_days": int(len(daily_r)),
+        "n_report_days": n_rep,
         "avoided_energy": sav.savings,
         "baseline_projected": sav.projected,
         "reporting_actual": sav.measured,
@@ -656,24 +676,22 @@ def _mv_savings_finding(
         "declined": bool(sav.declined),
         **_mv_method_metrics(res, declared),
     }
+    if days_r is not None:
+        metrics["n_report_bills"] = int(len(daily_r))
     caveats = list(sav.caveats)
     if not declared:
         caveats.append(_MV_UNDECLARED)
     if not st.accept:
         caveats.append(
-            "the baseline does not meet daily G14 acceptance; this saving is for information only"
+            f"the baseline does not meet {_mv_interval(ctx)} G14 acceptance; this saving is for "
+            "information only"
         )
     suffix = ""
     if ctx is not None:
         daily_b = ctx["daily"]
         _mv_validity_metrics(ctx, [("baseline", model, daily_b)], metrics, caveats)
         if _mv_has_ledger(ctx):
-            rows = {
-                "index": daily_r.index,
-                "drivers": _mvform.design_rows(daily_r, model),
-                "measured": daily_r["energy"].values,
-                "model": model,
-            }
+            rows = {**_mvform.ledger_rows(daily_r, model), "model": model}
             fits = {"baseline": (daily_b, model), "reporting": (daily_r, model)}
             suffix = _mv_record_adjusted(ctx, res, rows, fits, metrics, caveats)
     if sav.declined:
@@ -689,7 +707,9 @@ def _mv_savings_finding(
             f"{equip}: avoided energy {sav.savings:,.0f}"
             + (f" ({pct:.1%})" if pct is not None else "")
             + (f" ± {band:,.0f} at {sav.confidence:.0%}" if band is not None else "")
-            + f" over {len(daily_r)} reporting days; baseline coverage {cov.get('tier')}"
+            + f" over {n_rep} reporting days"
+            + (f" ({len(daily_r)} bills)" if days_r is not None else "")
+            + f"; baseline coverage {cov.get('tier')}"
             + suffix
         )
     return Finding(
@@ -758,6 +778,18 @@ def _mv_method_metrics(res, declared: bool) -> dict:
     }
 
 
+def _mv_interval(ctx) -> str:
+    """The G14 interval a context's baseline is judged at: ``daily``, or ``monthly`` for bills."""
+    return (ctx or {}).get("interval", "daily")  # 092-mv
+
+
+def _mv_frame(ctx: dict, win, entry: dict | None = None):
+    """The context's rows over ``win``: daily from the resolved frame, or bills (092-mv)."""
+    if ctx.get("slice") is not None:
+        return ctx["slice"](win)
+    return _mv_daily(ctx["full"], ctx["role"], win, entry)
+
+
 def _mv_daily(full, role, win, entry: dict | None = None):
     """Daily energy vs temperature over ``win``, with the entry's driver columns (if any)."""
     frame = full.loc[win[0] : win[1]]
@@ -804,6 +836,7 @@ def _mv_validity_metrics(ctx: dict, models: list, metrics: dict, caveats: list) 
                 _mvform.design_rows(frame, model),
                 frame["energy"].values,
                 time_index=frame.index,
+                weights=_mvform.row_days(frame),  # 092-mv: a billing fit's own weights
             )
             vd = sep_validity(tests, signs=logical_signs(model))
             verdicts[role] = {"sep_valid": bool(vd.sep_valid), "sep_failures": list(vd.failures)}
@@ -841,9 +874,15 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
     def fit(d):
         m = _mvform.fit(d)
         st = fit_stats(
-            d["energy"].values, m.predict(X(d, m)), _mvform.n_params(m), time_index=d.index
+            d["energy"].values,
+            m.predict(X(d, m)),
+            _mvform.n_params(m),
+            time_index=d.index,
+            weights=_mvform.row_days(d),  # 092-mv
         )
         return m, st
+
+    rows_of = _mvform.ledger_rows  # 092-mv: bills expand to their days for the ledger
 
     if method == "backcast":
         mr, st_r = fit(daily_r)
@@ -858,22 +897,18 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             extrapolation=policy,
             kernel=kernel,
             baseline_version=ctx.get("baseline_version"),
+            days=_mvform.row_days(daily_b),
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
         model_note.update({f"reporting_{k}": v for k, v in _mvform.metrics(mr).items()})
         used = [("reporting", mr, daily_r)]
-        rows = {
-            "index": daily_b.index,
-            "drivers": X(daily_b, mr),
-            "measured": daily_b["energy"].values,
-            "model": mr,
-            "reporting_index": daily_r.index,
-        }
+        rows = {**rows_of(daily_b, mr), "model": mr, "reporting_index": daily_r.index}
         fits = {"baseline": (daily_b, mr), "reporting": (daily_r, mr)}
     elif method == "chaining":
         inter = _mv_window(entry, "intermediate_period")
-        daily_i = _mv_daily(ctx["full"], ctx["role"], inter, entry)
-        if daily_i is None or len(daily_i) < int(entry.get("min_days", 60)):
+        daily_i = _mv_frame(ctx, inter, entry)
+        need = ctx.get("min_rows") or int(entry.get("min_days", 60))  # 092-mv: bills count rows
+        if daily_i is None or len(daily_i) < need:
             return _mv_declined(equip, "too few intermediate-period days", rule="mv_savings")
         mi, st_i = fit(daily_i)
         res = mm.chained_savings(
@@ -891,6 +926,8 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             extrapolation=policy,
             kernel=kernel,
             baseline_version=ctx.get("baseline_version"),
+            days_baseline=_mvform.row_days(daily_b),
+            days_reporting=_mvform.row_days(daily_r),
         )
         model_note = {
             "intermediate_period": [str(inter[0]), str(inter[1])],
@@ -900,19 +937,8 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         used = [("intermediate", mi, daily_i)]
         rows = {
             "links": [
-                {
-                    "index": daily_b.index,
-                    "drivers": X(daily_b, mi),
-                    "measured": daily_b["energy"].values,
-                    "model": mi,
-                    "reporting_index": daily_i.index,
-                },
-                {
-                    "index": daily_r.index,
-                    "drivers": X(daily_r, mi),
-                    "measured": daily_r["energy"].values,
-                    "model": mi,
-                },
+                {**rows_of(daily_b, mi), "model": mi, "reporting_index": daily_i.index},
+                {**rows_of(daily_r, mi), "model": mi},
             ]
         }
         fits = {"baseline": (daily_b, mi), "reporting": (daily_r, mi)}
@@ -941,9 +967,10 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         rows = {"drivers": normal, "model": model, "reporting_index": daily_r.index}
         fits = {"baseline": (daily_b, model), "reporting": (daily_r, mr)}
     cov = res.coverage or {}
+    days_r = _mvform.row_days(daily_r)
     metrics = {
         "reporting_period": [str(ctx["reporting"][0]), str(ctx["reporting"][1])],
-        "n_report_days": int(len(daily_r)),
+        "n_report_days": int(len(daily_r)) if days_r is None else int(days_r.sum()),
         "savings": res.savings,
         "projected": res.projected,
         "measured": res.measured,
@@ -961,10 +988,13 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         metrics["links"] = [
             {k: v for k, v in vars(ln).items() if not k.startswith("_")} for ln in res.links
         ]
+    if days_r is not None:
+        metrics["n_report_bills"] = int(len(daily_r))
     caveats = list(res.caveats)
     if not ctx["st"].accept:
         caveats.append(
-            "the baseline does not meet daily G14 acceptance; this saving is for information only"
+            f"the baseline does not meet {_mv_interval(ctx)} G14 acceptance; this saving is for "
+            "information only"
         )
     _mv_validity_metrics(ctx, used, metrics, caveats)
     suffix = ""
@@ -1004,7 +1034,7 @@ def _mv_proposal_finding(ctx: dict) -> object:
     from .rules.base import Finding
 
     equip, period, reporting = ctx["equip"], ctx["period"], ctx["reporting"]
-    daily = _mv_daily(ctx["full"], ctx["role"], (period[0], reporting[1]))
+    daily = _mv_frame(ctx, (period[0], reporting[1]))
     if daily is None or daily.empty:
         return Finding(
             rule="mv_method_proposal",
@@ -1022,6 +1052,7 @@ def _mv_proposal_finding(ctx: dict) -> object:
         reporting=rep_w,
         standard_conditions=ny,
         extrapolation=ctx["policy"],
+        days="days" if "days" in daily.columns else None,  # 092-mv: bills
     )
     caveats = list(prop.caveats)
     if _mv_has_ledger(ctx):
@@ -1055,14 +1086,16 @@ def _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats) -> None:
 
     The models are refitted exactly as :func:`~camber.mandv.methods.select_method` ranked them
     (same windows, kinds and order), so the ledger is applied to the same results."""
-    from .mandv.methods import _rank_models, _slice
+    from .mandv import _mvform
+    from .mandv.methods import _rank_models, _slice_days
 
     kinds = ("2P", "3PC", "3PH", "4P", "5P")
+    dcol = "days" if "days" in daily.columns else None  # 092-mv: bills, as select_method ranked
 
     def best(win):
-        sub = daily.loc[str(win[0]) : str(win[1]), ["oat", "energy"]].dropna()
-        T, y, idx = _slice(daily, win, "oat", "energy")
-        c = _rank_models(T, y, idx, kinds) if len(y) > 5 else []
+        T, y, idx, dd = _slice_days(daily, win, "oat", "energy", dcol)
+        sub = daily.loc[idx]
+        c = _rank_models(T, y, idx, kinds, dd) if len(y) > 5 else []
         return (c[0].model if c else None), sub
 
     mb, db = best(base_w)
@@ -1072,7 +1105,7 @@ def _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats) -> None:
         mi, di = best(prop.intermediate_period)
 
     def cols(d):
-        return {"index": d.index, "drivers": d["oat"].values, "measured": d["energy"].values}
+        return _mvform.ledger_rows(d, None)
 
     for row in prop.sensitivity:
         res = prop.results.get(row["method"])
@@ -1672,6 +1705,7 @@ def _mv_apply_ledger(ctx: dict, res, rows: dict, fits: dict) -> tuple:
                         start=start,
                         fit_period=fp,
                         model=model,
+                        weights=_mvform.row_days(frame),  # 092-mv: bills, per-day rate
                         **kw,
                     )
                 )
@@ -1863,6 +1897,12 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     if config.get("mv"):
         prep.mv_store = _mv_store_readonly(config, base_dir, prep.ctx)
     for entry in config.get("mv", []):
+        if entry.get("bills") is not None:  # 092-mv: a billing-data entry (camber.mvbilling)
+            from .mvbilling import billing_findings, billing_label
+
+            findings += billing_findings(entry, prep, base_dir=base_dir)
+            ran.append(f"mv:bills:{billing_label(entry)}")
+            continue
         findings += _mv_findings(entry, refs_by_class.get(entry["class"], []), prep)
         ran.append(f"mv:{entry['class']}")
 
@@ -2150,6 +2190,11 @@ def run_mv_config(config: dict, *, base_dir: str = ".", prepared=None) -> list:
     prep.mv_store = _mv_store_readonly(config, base_dir, prep.ctx)
     out: list = []
     for entry in config.get("mv", []):
+        if entry.get("bills") is not None:  # 092-mv: a billing-data entry (camber.mvbilling)
+            from .mvbilling import billing_findings
+
+            out += billing_findings(entry, prep, base_dir=base_dir)
+            continue
         out += _mv_findings(entry, prep.refs_by_class.get(entry["class"], []), prep)
     return out
 

@@ -66,7 +66,8 @@ flowchart LR
   serially correlated (ρ≈0.85 is ordinary), and the effective-sample-size correction bites: measured
   on a 20-week synthetic, n=3360 hours becomes n_eff=282 and the band widens from 1.6% at ρ=0 to
   9.7% at ρ=0.85. Finer data does not buy proportionally more certainty.
-- **Billing/monthly** ↔ change-point on monthly data (looser CV(RMSE) tier).
+- **Billing/monthly** ↔ change-point on monthly data (looser CV(RMSE) tier); utility bills are
+  fitted per bill, weighted by days (see [Billing data](#billing-data)).
 
 ## Quick use
 
@@ -875,6 +876,114 @@ driver model reads its own drivers, and the fit-frame sha256 covers the driver c
 `mv[].model` nothing changes. `"method": "auto"` (whose proposal ranks temperature-only models) and
 `"standard_conditions"` (whose `normal_year` holds temperatures, not standard driver values) are
 refused with this form.
+
+<!-- 092-mv -->
+## Billing data
+
+Utility bills are not days. Each bill covers its own service period (28 to 35 days for most
+meters, sometimes 8 or 60), and its energy belongs to that period's weather.
+`camber.mandv.billing.BillingSeries` (0.90.1) pairs each bill with its own period's mean temperature
+and heating and cooling degree-days, and expresses the energy **per day** so bills of different
+lengths can be compared. Since 0.92 the rest of the M&V stack treats those rows as bills.
+
+### Fits weighted by days (provisional, 0.92)
+
+A bill's per-day energy is the mean of its `d` daily values, so with independent daily noise its
+variance falls as `1/d`. Least squares weighted by `d` is then the efficient fit. It is also exactly
+the ordinary fit of the bills expanded to their days: each day carries its bill's mean temperature
+and per-day energy. An unweighted fit gives an 8-day bill the same say as a 62-day one.
+
+- `fit_model` / `best_model(..., weights=days)` fit every candidate kind by weighted least squares,
+  including the change-point search. The weights are normalised to mean 1. `sse` is the weighted SSE,
+  and the fit record keeps `(X'WX)^-1` and the mean bill length as `weight_scale`.
+- `fit_stats(..., weights=days)` weights SSE and SST. The mean becomes total energy over total days,
+  and NMBE becomes the bias of the bill totals (zero for a model with an intercept). ρ is estimated
+  on the standardised residuals `√w·r`. `regression_tests` / `model_regression_tests` and the SEP
+  verdict use the same weights, and so does `estimate_nre_indicator` (its rate is per day).
+- `days=` on `avoided_energy_savings`, `forecast_savings` and `backcast_savings`, and
+  `days_baseline=` / `days_reporting=` on `chained_savings`, sum `days × per-day value`, so every
+  total is in energy units. The energy share outside the model's support is weighted the same way.
+  The G14 kernel counts `m` bills. In the exact kernel, `g = Σ d_j x_j` and
+  `V_noise = κ s² c Σ d_j`, where `c` is the fit's mean bill length (`weight_scale`; 1 for a model
+  fitted on daily rows).
+- `select_method` weights a frame whose `attrs["billing"]` is set (what `energy_vs_temp` returns),
+  or any frame given `days="days"`. A bill counts toward a window only when it both starts and ends
+  inside it.
+- The non-routine detectors fit their billing baselines with the same weights.
+
+**Equal weights are neutral.** The fit takes the unweighted path byte for byte and only records
+`weight_scale`. Daily and hourly callers pass no weights, so their results, and the gated BDG2
+benchmarks, do not move.
+
+**Evidence** (synthetic, `tests/test_mandv_billing_wls.py` and a larger scratch run). Bills of
+uneven length were drawn from a daily truth with AR(1) noise, and 10% was saved in the reporting
+year. Over 1,000 runs:
+
+| | Savings error (RMSE) | Mean error | G14 90% band covers | Exact 90% band covers |
+|---|---|---|---|---|
+| Unweighted fit | 1,937 | −69 | 93.6% | not usable (see below) |
+| Days-weighted fit | 1,907 | +23 | 92.3% | **89.9%** |
+
+The exact kernel scales its noise term by the fit's mean bill length, which only a weighted fit
+records. An unweighted fit on bills, projected with `days=`, is treated as if it had been fitted
+on daily rows, and its band covered only 65%. Fit bills with their days.
+
+For a linear (2P) truth, the weighted slope's RMSE is 11% lower (0.132 vs 0.149). With a
+change-point truth the weighted change-point slope is no better: a long bill that spans the
+change point averages a nonlinearity (Jensen's inequality), and weighting gives such bills more say.
+The saving, which is what is reported, still improves.
+
+### In a config (provisional, 0.92)
+
+An `mv` entry with `bills` runs the M&V flow on a bills CSV. It needs no trended equipment, and a
+config with no `equipment` needs no `source`:
+
+```json
+{"site": "Example office", "shared_oat": {"file": "oat.csv"},
+ "mv": [{"bills": {"file": "gas_bills.csv", "energy": "therms", "estimated": "read_type"},
+         "name": "Gas meter", "period": ["2019-01-01", "2021-12-31"],
+         "reporting_period": ["2023-01-01", "2023-12-31"], "method": "forecast",
+         "kernel": "exact", "validity": "both"}]}
+```
+
+- **`bills`** is a file path, or `{"file", "start", "end", "energy", "estimated", "units",
+  "units_column", "end_inclusive", "merge_estimated"}`. The defaults are the columns `start`, `end`
+  (the last day served, inclusive), `energy`, `estimated` (optional: `true`/`false`, `yes`/`no`,
+  `1`/`0`, `E`/`A`) and `units` (optional; one unit per file). `name` labels the findings (default:
+  the file's base name).
+- **Estimated reads.** An estimated read is the utility's guess, and the next actual read trues it
+  up. `merge_estimated` (default `true`) merges each run of estimated bills into the next actual
+  bill: one period, the summed energy. An estimated bill that no contiguous actual read follows (the
+  last bill, or one before a missing bill) is dropped. The `mv_baseline` finding reports both
+  counts (`estimated_merged`, `estimated_dropped`) with a caveat. With `false` the estimates are kept
+  as billed and flagged.
+- **Temperature.** The entry's `oat` is `{"file": ..., "timezone": ...}`, or an opt-in fetch
+  `{"fetch": "auto" | "isd" | "nasa_power" | "open_meteo", "latitude", "longitude", "tz",
+  "cache_dir", "offline"}` (see [WEATHER.md](WEATHER.md)). Without it, the config's `shared_oat` is
+  used. `base_f` (65) sets the degree-day base. A bill whose days are less than `min_coverage`
+  (0.9) covered by temperature data is dropped and counted (`bills_dropped`).
+- **Baseline.** Energy per day against the bill's mean temperature, fitted with the best
+  change-point model weighted by days. It is judged at the G14 **monthly** thresholds (CV(RMSE)
+  15%) and needs `min_bills` (9) bills wholly inside `period`. A baseline covering fewer than 330
+  days is flagged `short_baseline`. The finding carries `n_bills`, `n_days`, `hdd_total` /
+  `cdd_total`, `oat_source` and `mean_bill_days`.
+- **Savings.** `method` (forecast, backcast, chaining, standard conditions, or `auto` for the SEP
+  proposal), `kernel`, `validity`, `extrapolation` and `adjustments` work as for a trended meter.
+  Totals are `days × energy per day`, and `n_report_days` counts days of service alongside
+  `n_report_bills`. The adjustments ledger sees the bills expanded to their days, so an entry is
+  dated to the day it starts, not to its bill. An indicator estimated on bills marks a bill as
+  inside the event by its start date.
+
+**Not supported for bills (0.92):**
+- `model: "cp_driver"`: bills carry no daily driver values.
+- Versioned baselines: `camber mv freeze` / `rebaseline` / `adjust` skip billing entries. The 21d
+  store keys meters by equipment and fits daily windows. A stored version with the entry's name is
+  ignored, with a caveat.
+- `interval`.
+
+With only 12 to 36 bills, rho is often not estimable, and the band is then unadjusted, with a
+caveat.
+<!-- /092-mv -->
 
 ## Cross-checking against eemeter
 
