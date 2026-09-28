@@ -95,6 +95,7 @@ def fit_stats(
     nmbe_max: float = 0.005,
     *,
     time_index=None,
+    weights=None,
 ) -> FitStats:
     """Goodness-of-fit + G14 acceptance for observed ``y`` vs predicted ``yhat``.
 
@@ -107,24 +108,43 @@ def fit_stats(
     optional-in-spirit: this function drops non-finite rows, which compresses the array and would
     otherwise make non-adjacent residuals look neighbouring. Without it ``rho_lag1`` stays ``None``
     and any band computed from this fit is reported as unadjusted.
+
+    ``weights`` (aligned to ``y``; provisional, 0.92) gives the statistics of a weighted fit --
+    for bills, their day counts (:mod:`camber.mandv.billing`). With the weights normalised to
+    mean 1: SSE and SST are weighted, the mean is the weighted mean (total energy over total days
+    for bills), NMBE is the weighted residual sum -- the bias of the bill totals -- and ``rho`` is
+    estimated on the standardised residuals ``sqrt(w) * r``. ``n`` stays the number of rows
+    (bills). Equal weights are neutral: the unweighted statistics, byte for byte.
     """
+    from .models import fit_weights
+
     y = np.asarray(y, dtype=float)
     yhat = np.asarray(yhat, dtype=float)
     m = np.isfinite(y) & np.isfinite(yhat)
     idx = None if time_index is None else np.asarray(time_index)[m]
+    w, _scale = fit_weights(weights, m)
     y, yhat = y[m], yhat[m]
     n = len(y)
     if n <= p:
         raise ValueError("need n > p for statistics")
     resid = y - yhat
-    sse = float(resid @ resid)
-    ybar = float(y.mean())
-    sst = float(((y - ybar) ** 2).sum())
+    if w is None:
+        sse = float(resid @ resid)
+        ybar = float(y.mean())
+        sst = float(((y - ybar) ** 2).sum())
+        rsum = resid.sum()
+        resid_std = resid
+    else:
+        sse = float((w * resid) @ resid)
+        ybar = float((w * y).sum() / w.sum())
+        sst = float((w * (y - ybar) ** 2).sum())
+        rsum = (w * resid).sum()
+        resid_std = np.sqrt(w) * resid
     r2 = 1.0 - sse / sst if sst > 0 else float("nan")
     # RMSE with the regression dof correction (n - p), per G14
     rmse = float(np.sqrt(sse / (n - p)))
     cv_rmse = rmse / ybar if ybar != 0 else float("nan")
-    nmbe = float(resid.sum() / ((n - p) * ybar)) if ybar != 0 else float("nan")
+    nmbe = float(rsum / ((n - p) * ybar)) if ybar != 0 else float("nan")
     # overall F: (explained/p-1) / (residual/(n-p))
     ssr = sst - sse
     f_stat = (ssr / (p - 1)) / (sse / (n - p)) if (p > 1 and sse > 0) else float("nan")
@@ -156,7 +176,7 @@ def fit_stats(
         f_stat=round(f_stat, 2) if np.isfinite(f_stat) else float("nan"),
         accept=bool(ok),
         notes="; ".join(notes) or "meets G14 thresholds",
-        rho_lag1=(None if idx is None else lag1_autocorrelation(resid, index=idx)),
+        rho_lag1=(None if idx is None else lag1_autocorrelation(resid_std, index=idx)),
         f_pvalue=float(f"{f_p:.4g}") if np.isfinite(f_p) else None,
         adj_r2=round(adj, 4) if np.isfinite(adj) else None,
     )
@@ -429,6 +449,7 @@ def avoided_energy_savings(
     rho: float | None = None,
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "g14",
+    days=None,
 ) -> SavingsResult:
     """IPMVP Option-C avoided energy use with G14 Annex-B fractional uncertainty.
 
@@ -465,6 +486,12 @@ def avoided_energy_savings(
     widened again: ``fsu_extrapolation_factor`` is 1.0. It needs a model fitted by CAMBER (one that
     records ``(X'X)^-1`` and ``s2``); with ``rho=None`` it uses the rho the fit recorded from a
     ``time_index``, where the G14 kernel stays unadjusted.
+
+    **Billing periods** (provisional, 0.92). ``days`` (aligned to the reporting rows) says each
+    row is a bill of that many days whose ``y_report`` is energy **per day**: the totals are then
+    ``sum(days * value)``, the G14 kernel counts ``m`` bills, the exact kernel sums the design
+    rows weighted by days with the noise of ``sum(days)`` days, and the energy share outside the
+    support is weighted by days. ``None`` (the default) is the unweighted sum, as before.
     """
     _check_kernel(kernel)
     pol = extrapolation or ExtrapolationPolicy()
@@ -473,17 +500,26 @@ def avoided_energy_savings(
     n_report = int(len(y_report))
     proj_all = np.asarray(baseline_model.predict(T_report), dtype=float)
     mask = np.isfinite(proj_all) & np.isfinite(y_report)
+    d_all = None if days is None else _days_array(days, n_report)
+    if d_all is not None:
+        mask &= np.isfinite(d_all)
     proj, y_report = proj_all[mask], y_report[mask]
     m = len(y_report)
-    base_sum = float(proj.sum())
-    rep_sum = float(y_report.sum())
+    if d_all is None:
+        base_sum = float(proj.sum())
+        rep_sum = float(y_report.sum())
+    else:
+        base_sum = float((proj * d_all[mask]).sum())
+        rep_sum = float((y_report * d_all[mask]).sum())
     avoided = base_sum - rep_sum
     savings_pct = avoided / base_sum if base_sum != 0 else float("nan")
 
     rho_used = 0.0 if rho is None or not np.isfinite(rho) else float(rho)
     rho_known = rho is not None
     if kernel == "exact":
-        abs_exact, rho_x, _ = _exact_band(baseline_model, T_report, mask, rho, confidence)
+        abs_exact, rho_x, _ = _exact_band(
+            baseline_model, T_report, mask, rho, confidence, days=d_all
+        )
         frac_unc = abs_exact / abs(avoided) if avoided else float("nan")
         rho_known = rho_x is not None
         rho_used = 0.0 if rho_x is None else max(0.0, float(rho_x))
@@ -500,8 +536,9 @@ def avoided_energy_savings(
     abs_unc = abs(avoided) * frac_unc if np.isfinite(frac_unc) else float("nan")
     n_eff = _n_effective(n_baseline, rho_used)
 
+    proj_energy = proj_all if d_all is None else proj_all * d_all
     cov = _with_used(
-        assess_coverage(baseline_model, T_report, projected=proj_all, policy=pol), n_report, m
+        assess_coverage(baseline_model, T_report, projected=proj_energy, policy=pol), n_report, m
     )
     caveats = list(cov.caveats)
     if m < n_report:
@@ -513,7 +550,14 @@ def avoided_energy_savings(
     if kernel == "exact":
         k = 1.0  # the leverage of the reporting drivers is already inside the exact kernel
     elif cov.tier in ("moderate", "severe"):
-        k = _fsu_factor(baseline_model, T_report[mask], m=m, projected_kernel=False, policy=pol)
+        k = _fsu_factor(
+            baseline_model,
+            T_report[mask],
+            m=m,
+            projected_kernel=False,
+            policy=pol,
+            days=None if d_all is None else d_all[mask],
+        )
         frac_unc, note = _widen(frac_unc, k, pol, towt="unit" in cov.info)
         if note:
             caveats.append(note)
@@ -567,12 +611,23 @@ def _check_kernel(kernel: str) -> None:
         raise ValueError(f"unknown kernel {kernel!r}; use one of {_KERNELS}")
 
 
-def _exact_band(model, drivers, rows, rho, confidence: float) -> tuple:
+def _days_array(days, n: int) -> np.ndarray:
+    """``days`` as a float array of ``n`` values (billing rows), or ``ValueError``."""
+    d = np.asarray(days, dtype=float).ravel()
+    if len(d) != n:
+        raise ValueError(f"days has {len(d)} values for {n} rows")
+    if np.any(d[np.isfinite(d)] <= 0):
+        raise ValueError("days must be positive")
+    return d
+
+
+def _exact_band(model, drivers, rows, rho, confidence: float, days=None) -> tuple:
     """``(abs_uncertainty, rho_used, df)`` of a measured-minus-projected saving by the exact
-    kernel: ``t(df) * sqrt(V_param + V_noise)`` of ``model`` at ``drivers[rows]``."""
+    kernel: ``t(df) * sqrt(V_param + V_noise)`` of ``model`` at ``drivers[rows]`` (bills of
+    ``days`` days when given)."""
     from ._design import projection_variance
 
-    pv = projection_variance(model, drivers, rows=rows, rho=rho)
+    pv = projection_variance(model, drivers, rows=rows, rho=rho, days=days)
     var = pv.v_param + pv.v_noise
     t = _t_value(confidence, pv.df)
     band = t * math.sqrt(var) if np.isfinite(var) and var >= 0 else float("nan")
@@ -782,6 +837,7 @@ def regression_tests(
     time_index=None,
     n_change_points: int = 0,
     conditional: bool | None = None,
+    weights=None,
 ) -> RegressionTests:
     """t-tests per coefficient and the overall F-test of an OLS fit of ``y`` on design ``X``.
 
@@ -797,7 +853,13 @@ def regression_tests(
     Distribution tails are computed in the standard library: a regularized incomplete beta
     evaluated by its continued fraction (modified Lentz; DLMF 8.17.22), so t and F p-values need
     no SciPy.
+
+    ``weights`` (provisional, 0.92; bills' day counts) makes it the weighted least-squares fit:
+    ``(X'WX)^-1``, the weighted SSE and SST (weights normalised to mean 1) and ``rho`` on the
+    standardised residuals. Equal weights are neutral.
     """
+    from .models import fit_weights
+
     X = np.asarray(X, dtype=float)
     if X.ndim == 1:
         X = X[:, None]
@@ -809,22 +871,36 @@ def regression_tests(
         raise ValueError(f"{len(names)} names for {X.shape[1]} design columns")
     ok = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
     idx = None if time_index is None else np.asarray(time_index)[ok]
+    w, _scale = fit_weights(weights, ok)
     X, y = X[ok], y[ok]
     n, k = X.shape
     n_params = k + int(n_change_points)
     df = n - n_params
     if df < 1:
         raise ValueError(f"need n > parameters for tests (n={n}, parameters={n_params})")
-    A = np.linalg.pinv(X.T @ X)
-    beta = A @ (X.T @ y)
-    resid = y - X @ beta
-    sse = float(resid @ resid)
+    if w is None:
+        A = np.linalg.pinv(X.T @ X)
+        beta = A @ (X.T @ y)
+        resid = y - X @ beta
+        sse = float(resid @ resid)
+        resid_std = resid
+    else:
+        Xw = X * w[:, None]
+        A = np.linalg.pinv(X.T @ Xw)
+        beta = A @ (Xw.T @ y)
+        resid = y - X @ beta
+        sse = float((w * resid) @ resid)
+        resid_std = np.sqrt(w) * resid
     s2 = sse / df
     se = np.sqrt(np.clip(np.diag(A) * s2, 0.0, None))
     with np.errstate(divide="ignore", invalid="ignore"):
         tt = np.where(se > 0, beta / se, np.where(beta == 0, 0.0, np.inf * np.sign(beta)))
     p = tuple(_t_two_sided_p(float(v), df) for v in tt)
-    sst = float(((y - y.mean()) ** 2).sum())
+    if w is None:
+        sst = float(((y - y.mean()) ** 2).sum())
+    else:
+        ybar = float((w * y).sum() / w.sum())
+        sst = float((w * (y - ybar) ** 2).sum())
     r2 = 1.0 - sse / sst if sst > 0 else float("nan")
     adj = 1.0 - (1.0 - r2) * (n - 1) / df if np.isfinite(r2) else float("nan")
     constant = np.all(np.isclose(X, X[:1], rtol=0.0, atol=0.0), axis=0) & np.any(X != 0, axis=0)
@@ -835,7 +911,7 @@ def regression_tests(
         f_p = _f_sf(f_stat, n_params - 1, df)
     elif n_params > 1 and sse == 0:
         f_stat, f_p = float("inf"), 0.0
-    rho = None if idx is None else lag1_autocorrelation(resid, index=idx)
+    rho = None if idx is None else lag1_autocorrelation(resid_std, index=idx)
     p_adj = f_adj = None
     caveats = []
     if rho is not None:
@@ -889,7 +965,7 @@ _LOGICAL_SIGNS = {
 }
 
 
-def model_regression_tests(model, drivers, y, *, time_index=None) -> RegressionTests:
+def model_regression_tests(model, drivers, y, *, time_index=None, weights=None) -> RegressionTests:
     """:func:`regression_tests` for a fitted change-point, degree-day or driver model.
 
     Rebuilds the model's own design at ``drivers`` (from its fit record), so the coefficients
@@ -897,6 +973,7 @@ def model_regression_tests(model, drivers, y, *, time_index=None) -> RegressionT
     p-values conditional on them; a degree-day model's balance point is searched too, so its tests
     are flagged conditional (it is not counted, matching the model's own ``fit.p``). Raises
     ``TypeError`` for a model without a linear design record (TOWT, categorical, duck-typed).
+    ``weights`` are passed to :func:`regression_tests` (a weighted fit's own weights).
     """
     from ._design import design_names, design_rows
 
@@ -911,6 +988,7 @@ def model_regression_tests(model, drivers, y, *, time_index=None) -> RegressionT
         time_index=time_index,
         n_change_points=n_cp,
         conditional=True if spec[0] == "dd" else None,
+        weights=weights,
     )
 
 

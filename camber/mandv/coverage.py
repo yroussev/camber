@@ -198,6 +198,11 @@ class _FitRecord:
     ``rho`` the residuals' lag-1 autocorrelation -- ``None`` unless the fit was given a time index.
     A TOWT record also carries ``xtx_pinv`` (of its full design), which the exact projection
     variance uses; its ``design`` stays ``None`` so coverage treats it as TOWT, never as linear.
+
+    A weighted fit (0.92, provisional; billing periods weighted by their day counts) records
+    ``xtx_pinv`` as ``(X'WX)^-1`` with the weights normalised to mean 1, ``s2`` as the weighted
+    residual variance and ``weight_scale`` as the mean raw weight: a row of raw weight ``d`` then
+    has residual variance ``s2 * weight_scale / d``. ``None`` for an unweighted fit.
     """
 
     names: tuple = ()
@@ -210,6 +215,7 @@ class _FitRecord:
     n: int | None = None
     p: int | None = None
     rho: float | None = None
+    weight_scale: float | None = None
 
     @property
     def linear(self) -> bool:
@@ -229,7 +235,7 @@ class _FitRecord:
                 "mode_max": _floats(c.mode_max),
                 "tow_counts": np.asarray(c.tow_counts).astype(int).tolist(),
             }
-        return {
+        out = {
             "names": list(self.names),
             "values": [_floats(v) for v in self.values],
             "design": _spec_out(self.design),
@@ -241,6 +247,9 @@ class _FitRecord:
             "p": None if self.p is None else int(self.p),
             "rho": _float_or_none(self.rho),
         }
+        if self.weight_scale is not None:  # only a weighted fit carries it (unweighted: as before)
+            out["weight_scale"] = float(self.weight_scale)
+        return out
 
     @classmethod
     def from_dict(cls, d: dict | None) -> _FitRecord | None:
@@ -270,6 +279,7 @@ class _FitRecord:
             n=d.get("n"),
             p=d.get("p"),
             rho=d.get("rho"),
+            weight_scale=d.get("weight_scale"),
         )
 
 
@@ -332,20 +342,38 @@ def _as_2d(x) -> np.ndarray:
 
 
 def _linear_fit_record(
-    drivers, names, design: tuple | None, *, s2=None, n=None, p=None, rho=None
+    drivers,
+    names,
+    design: tuple | None,
+    *,
+    s2=None,
+    n=None,
+    p=None,
+    rho=None,
+    weights=None,
+    weight_scale=None,
 ) -> _FitRecord | None:
     """Record the finite baseline support (and ``pinv(X'X)``) of a fitted linear baseline, plus
-    the fit's residual variance ``s2``, point and parameter counts and ``rho``."""
+    the fit's residual variance ``s2``, point and parameter counts and ``rho``.
+
+    ``weights`` (normalised, aligned to ``drivers``) makes it ``pinv(X'WX)`` and the leverages
+    ``w_i x_i' A x_i``; ``weight_scale`` is recorded as given (see :class:`_FitRecord`)."""
     D = _as_2d(drivers)
-    D = D[np.all(np.isfinite(D), axis=1)]
+    fin = np.all(np.isfinite(D), axis=1)
+    D = D[fin]
     if not len(D):
         return None
+    w = None if weights is None else np.asarray(weights, dtype=float).ravel()[fin]
     values = tuple(np.sort(D[:, j]) for j in range(D.shape[1]))
     A = h_max = None
     if design is not None:
         X = _design(design, D)
-        A = np.linalg.pinv(X.T @ X)
-        h = np.einsum("ij,jk,ik->i", X, A, X)
+        if w is None:
+            A = np.linalg.pinv(X.T @ X)
+            h = np.einsum("ij,jk,ik->i", X, A, X)
+        else:
+            A = np.linalg.pinv(X.T @ (X * w[:, None]))
+            h = w * np.einsum("ij,jk,ik->i", X, A, X)
         h_max = float(np.max(h)) if len(h) else None
     return _FitRecord(
         tuple(names),
@@ -357,6 +385,7 @@ def _linear_fit_record(
         n=None if n is None else int(n),
         p=None if p is None else int(p),
         rho=rho,
+        weight_scale=None if weight_scale is None else float(weight_scale),
     )
 
 
@@ -906,7 +935,9 @@ def assess_coverage(model, drivers, *, projected=None, policy=None) -> Coverage:
     return cov
 
 
-def _fsu_factor(model, drivers_used, *, m: int, projected_kernel: bool, policy) -> float | None:
+def _fsu_factor(
+    model, drivers_used, *, m: int, projected_kernel: bool, policy, days=None
+) -> float | None:
     """Parameter-variance widening factor ``k`` for a linear-in-parameters baseline, or ``None``.
 
     With ``s`` the sum of the reporting design rows and ``s_c`` the same with each driver clamped
@@ -920,13 +951,18 @@ def _fsu_factor(model, drivers_used, *, m: int, projected_kernel: bool, policy) 
     (they are treated as known), and it is 1 where the extrapolated points sit on a flat segment,
     because clamping them changes nothing there. ``None`` for models without a linear design (TOWT,
     categorical, duck-typed).
+
+    ``days`` (billing rows, aligned to ``drivers_used``; provisional) sums the design rows weighted
+    by each bill's days and puts the measured term in the fit's units, ``weight_scale * sum(days)``
+    (see :func:`camber.mandv._design.projection_variance`).
     """
     support = getattr(model, "_fit_record", None)
     if not isinstance(support, _FitRecord) or support.xtx_pinv is None or support.design is None:
         return None
     try:
         D = _as_2d(drivers_used)
-        D = D[np.all(np.isfinite(D), axis=1)]
+        fin = np.all(np.isfinite(D), axis=1)
+        D = D[fin]
         if not len(D) or D.shape[1] != len(support.values):
             return None
         Dc = D.copy()
@@ -934,13 +970,22 @@ def _fsu_factor(model, drivers_used, *, m: int, projected_kernel: bool, policy) 
             lo, hi = _band(v, policy.support_quantile)
             Dc[:, j] = np.clip(D[:, j], lo, hi)
         A = support.xtx_pinv
-        s = _design(support.design, D).sum(axis=0)
-        sc = _design(support.design, Dc).sum(axis=0)
+        m_noise = 0.0
+        if days is None:
+            s = _design(support.design, D).sum(axis=0)
+            sc = _design(support.design, Dc).sum(axis=0)
+        else:
+            dd = np.asarray(days, dtype=float).ravel()[fin][:, None]
+            s = (_design(support.design, D) * dd).sum(axis=0)
+            sc = (_design(support.design, Dc) * dd).sum(axis=0)
+            m_noise = float((support.weight_scale or 1.0) * dd.sum())
         q, qc = float(s @ A @ s), float(sc @ A @ sc)
         if projected_kernel:
             k = math.sqrt(q / qc) if qc > 0 else float("nan")
-        else:
+        elif days is None:
             k = math.sqrt((m + q) / (m + qc)) if m + qc > 0 else float("nan")
+        else:
+            k = math.sqrt((m_noise + q) / (m_noise + qc)) if m_noise + qc > 0 else float("nan")
     except Exception:  # noqa: BLE001
         return None
     return float(k) if np.isfinite(k) else None

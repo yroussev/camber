@@ -19,11 +19,22 @@ point(s), grid-search the change-point temperature(s) over the observed range an
 at each candidate, solve
 the segment slopes/intercept by ordinary least squares; keep the change point that
 minimizes the sum of squared residuals. numpy-only (no scipy dependency).
+
+**Weighted fits** (0.92, provisional). :func:`fit_model` and :func:`best_model` take optional
+``weights`` -- for billing periods, each bill's day count (:mod:`camber.mandv.billing`), since a
+bill's per-day energy is the mean of ``days`` daily values and its variance falls as ``1/days``.
+Every least-squares solve, the change-point search and the fit record then use weighted least
+squares: the weights are normalised to mean 1 over the fitted rows, ``sse`` is the weighted sum of
+squared residuals, and the fit record keeps ``(X'WX)^-1`` and the mean raw weight
+(``weight_scale``), which :func:`camber.mandv._design.projection_variance` needs to put a
+projected bill total's noise in energy units. Equal weights are **neutral**: the fit takes the
+unweighted path, byte for byte, and only ``weight_scale`` is recorded.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -207,14 +218,42 @@ def _predict_from_design(kind: str, change_points: tuple, beta):
     return predict
 
 
-def _lstsq_sse(X, y):
-    beta, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+def _lstsq_sse(X, y, w=None):
+    if w is None:
+        beta, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+        resid = y - X @ beta
+        return beta, float(resid @ resid)
+    sw = np.sqrt(w)
+    beta, _, _, _ = np.linalg.lstsq(X * sw[:, None], y * sw, rcond=None)
     resid = y - X @ beta
-    return beta, float(resid @ resid)
+    return beta, float((w * resid) @ resid)
 
 
-def _fit_2p(T, y):
-    beta, sse = _lstsq_sse(_design_2p(T), y)
+def fit_weights(weights, mask=None) -> tuple:
+    """``(w, scale)``: fit weights normalised to mean 1, and their mean raw value (provisional).
+
+    ``w`` is ``None`` when every weight is equal -- the neutral case, which then takes the
+    unweighted least-squares path exactly -- or when ``weights`` is ``None`` (``scale`` is then
+    ``None`` too). Non-positive or non-finite weights raise ``ValueError``; ``mask`` selects the
+    fitted rows first.
+    """
+    if weights is None:
+        return None, None
+    w = np.asarray(weights, dtype=float).ravel()
+    if mask is not None:
+        w = w[np.asarray(mask, dtype=bool)]
+    if not len(w):
+        return None, None
+    if not np.all(np.isfinite(w)) or np.any(w <= 0):
+        raise ValueError("weights must be finite and positive")
+    scale = float(w.mean())
+    if np.all(w == w[0]):
+        return None, scale
+    return w / scale, scale
+
+
+def _fit_2p(T, y, w=None):
+    beta, sse = _lstsq_sse(_design_2p(T), y, w)
     coeffs = {"base": beta[0], "slope": beta[1]}
     return coeffs, sse, (), lambda t: beta[0] + beta[1] * t
 
@@ -234,29 +273,34 @@ def _grid(T, n=40):
 _OBJECTIVE = "sse"
 
 
-def _cp_score(beta, X, y, objective):
+def _cp_score(beta, X, y, objective, w=None):
     resid = y - X @ beta
+    if w is not None:  # weighted: the bias of the weighted totals, the weighted SSE
+        if objective == "bias":
+            denom = (w * y).sum()
+            return abs((w * resid).sum() / denom) if denom != 0 else abs((w * resid).sum())
+        return float((w * resid) @ resid)
     if objective == "bias":
         denom = y.sum()
         return abs(resid.sum() / denom) if denom != 0 else abs(resid.sum())
     return float(resid @ resid)  # sse
 
 
-def _fit_one_cp(T, y, design, name_slopes, objective=None):
+def _fit_one_cp(T, y, design, name_slopes, objective=None, w=None):
     objective = objective or _OBJECTIVE
     best = None
     for tc in _grid(T):
         X = design(T, tc)
-        beta, sse = _lstsq_sse(X, y)
-        score = _cp_score(beta, X, y, objective)
+        beta, sse = _lstsq_sse(X, y, w)
+        score = _cp_score(beta, X, y, objective, w)
         if best is None or score < best[0]:
             best = (score, beta, sse, tc)
     _, beta, sse, tc = best
     return beta, sse, tc
 
 
-def _fit_3pc(T, y, objective=None):
-    beta, sse, tc = _fit_one_cp(T, y, _design_3pc, None, objective)
+def _fit_3pc(T, y, objective=None, w=None):
+    beta, sse, tc = _fit_one_cp(T, y, _design_3pc, None, objective, w)
     return (
         {"base": beta[0], "cool_slope": beta[1], "Tc": tc},
         sse,
@@ -265,8 +309,8 @@ def _fit_3pc(T, y, objective=None):
     )
 
 
-def _fit_3ph(T, y, objective=None):
-    beta, sse, tc = _fit_one_cp(T, y, _design_3ph, None, objective)
+def _fit_3ph(T, y, objective=None, w=None):
+    beta, sse, tc = _fit_one_cp(T, y, _design_3ph, None, objective, w)
     return (
         {"base": beta[0], "heat_slope": beta[1], "Tc": tc},
         sse,
@@ -275,13 +319,13 @@ def _fit_3ph(T, y, objective=None):
     )
 
 
-def _fit_3ph_zero(T, y):
+def _fit_3ph_zero(T, y, w=None):
     # heating that goes to ZERO above the change point: energy = slope*max(0, tc-T),
     # no intercept (the "heating-to-zero" variant -- gas used only for space heating).
     best = None
     for tc in _grid(T):
         x = np.maximum(0.0, tc - T).reshape(-1, 1)
-        beta, sse = _lstsq_sse(x, y)
+        beta, sse = _lstsq_sse(x, y, w)
         if best is None or sse < best[1]:
             best = (beta, sse, tc)
     beta, sse, tc = best
@@ -294,12 +338,12 @@ def _fit_3ph_zero(T, y):
     )
 
 
-def _fit_3pc_zero(T, y):
+def _fit_3pc_zero(T, y, w=None):
     # cooling that goes to zero below the change point (the cooling analogue).
     best = None
     for tc in _grid(T):
         x = np.maximum(0.0, T - tc).reshape(-1, 1)
-        beta, sse = _lstsq_sse(x, y)
+        beta, sse = _lstsq_sse(x, y, w)
         if best is None or sse < best[1]:
             best = (beta, sse, tc)
     beta, sse, tc = best
@@ -312,8 +356,8 @@ def _fit_3pc_zero(T, y):
     )
 
 
-def _fit_4p(T, y, objective=None):
-    beta, sse, tc = _fit_one_cp(T, y, _design_4p, None, objective)
+def _fit_4p(T, y, objective=None, w=None):
+    beta, sse, tc = _fit_one_cp(T, y, _design_4p, None, objective, w)
     return (
         {"base": beta[0], "left_slope": beta[1], "right_slope": beta[2], "Tc": tc},
         sse,
@@ -322,18 +366,18 @@ def _fit_4p(T, y, objective=None):
     )
 
 
-def _fit_5p(T, y):
+def _fit_5p(T, y, w=None):
     grid = _grid(T)
     best = None
     for i, tlo in enumerate(grid):
         for thi in grid[i:]:
             if thi - tlo < (grid[1] - grid[0]):  # keep a real dead-band
                 continue
-            beta, sse = _lstsq_sse(_design_5p(T, tlo, thi), y)
+            beta, sse = _lstsq_sse(_design_5p(T, tlo, thi), y, w)
             if best is None or sse < best[1]:
                 best = (beta, sse, tlo, thi)
     if best is None:
-        return _fit_2p(T, y)
+        return _fit_2p(T, y) if w is None else _fit_2p(T, y, w)
     beta, sse, tlo, thi = best
     return (
         {"base": beta[0], "heat_slope": beta[1], "cool_slope": beta[2], "Tc_lo": tlo, "Tc_hi": thi},
@@ -343,7 +387,7 @@ def _fit_5p(T, y):
     )
 
 
-def _fit_5p_zero(T, y):
+def _fit_5p_zero(T, y, w=None):
     # 5P with the dead-band (base) forced to ZERO: heating arm below Tlo, zero
     # between, cooling arm above Thi, no intercept (the heating/cooling-to-zero variant).
     # For weather-only loads (heat + cool, nothing in between), e.g. an all-electric
@@ -356,11 +400,11 @@ def _fit_5p_zero(T, y):
             if thi - tlo < step:
                 continue
             X = np.column_stack([np.maximum(0.0, tlo - T), np.maximum(0.0, T - thi)])
-            beta, sse = _lstsq_sse(X, y)
+            beta, sse = _lstsq_sse(X, y, w)
             if best is None or sse < best[1]:
                 best = (beta, sse, tlo, thi)
     if best is None:
-        return _fit_2p(T, y)
+        return _fit_2p(T, y) if w is None else _fit_2p(T, y, w)
     beta, sse, tlo, thi = best
     bh, bc = float(beta[0]), float(beta[1])
     return (
@@ -391,7 +435,9 @@ N_PARAMS = {"2P": 2, "3PC": 3, "3PH": 3, "3PHZ": 2, "3PCZ": 2, "4P": 4, "5P": 5,
 _OBJECTIVE_AWARE = {"3PC", "3PH", "4P"}
 
 
-def fit_model(T, y, kind: str, *, objective: str = "sse", time_index=None) -> ChangePointModel:
+def fit_model(
+    T, y, kind: str, *, objective: str = "sse", time_index=None, weights=None
+) -> ChangePointModel:
     """Fit one model ``kind`` to (temperature, energy) data.
 
     ``objective``: "sse" (default, minimize squared error) or "bias" (choose the
@@ -401,6 +447,9 @@ def fit_model(T, y, kind: str, *, objective: str = "sse", time_index=None) -> Ch
 
     ``time_index`` (aligned to ``T``) lets the fit record the residuals' lag-1 autocorrelation,
     which the exact uncertainty kernel uses when no ``rho`` is passed to it.
+
+    ``weights`` (aligned to ``T``; provisional, 0.92) makes it a weighted least-squares fit --
+    for bills, their day counts (see the module docstring). Equal weights are neutral.
     """
     T = np.asarray(T, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -409,15 +458,20 @@ def fit_model(T, y, kind: str, *, objective: str = "sse", time_index=None) -> Ch
     T, y = T[mask], y[mask]
     if len(T) < 3:
         raise ValueError("need >=3 finite points to fit")
+    w, scale = fit_weights(weights, mask)
+    kw = {} if w is None else {"w": w}
+    fitter: Any = _FITTERS[kind]  # the fitters' signatures differ; the union hides that from mypy
     if kind in _OBJECTIVE_AWARE:
-        # _OBJECTIVE_AWARE fitters accept objective=; the union type hides that from mypy.
-        res = _FITTERS[kind](T, y, objective=objective)  # type: ignore[call-arg]
+        res = fitter(T, y, objective=objective, **kw)
     else:
-        res = _FITTERS[kind](T, y)
+        res = fitter(T, y, **kw)
     coeffs, sse, cps, pred = res
     from .coverage import _linear_fit_record, _safe
 
     n, p = len(T), N_PARAMS[kind]
+    resid = y - np.asarray(pred(T), dtype=float)
+    if w is not None:
+        resid = np.sqrt(w) * resid  # standardised: equal variance, for rho
     return ChangePointModel(
         kind=kind,
         coeffs=coeffs,
@@ -434,7 +488,9 @@ def fit_model(T, y, kind: str, *, objective: str = "sse", time_index=None) -> Ch
             s2=sse / (n - p) if n > p else None,
             n=n,
             p=p,
-            rho=_safe(_rho_of, y - np.asarray(pred(T), dtype=float), idx),
+            rho=_safe(_rho_of, resid, idx),
+            weights=w,
+            weight_scale=scale,
         ),
     )
 
@@ -449,7 +505,7 @@ def _rho_of(resid, index):
 
 
 def best_model(
-    T, y, kinds=("2P", "3PC", "3PH", "4P", "5P"), *, time_index=None
+    T, y, kinds=("2P", "3PC", "3PH", "4P", "5P"), *, time_index=None, weights=None
 ) -> ChangePointModel:
     """Fit several model kinds and return the best by adjusted goodness of fit.
 
@@ -457,14 +513,14 @@ def best_model(
     their keep) -- a simple BIC-like guard against overfitting with 5P. The
     "heating/cooling goes to zero" kinds (3PHZ/3PCZ) are not in the default set
     (they encode a modeling assumption -- no base load -- the caller opts into);
-    pass them explicitly via ``kinds`` when appropriate. ``time_index`` is passed to
-    :func:`fit_model`.
+    pass them explicitly via ``kinds`` when appropriate. ``time_index`` and ``weights`` are
+    passed to :func:`fit_model` (with weights the BIC uses the weighted SSE).
     """
     n_params = N_PARAMS
     best, best_score = None, np.inf
     for k in kinds:
         try:
-            m = fit_model(T, y, k, time_index=time_index)
+            m = fit_model(T, y, k, time_index=time_index, weights=weights)
         except Exception:
             continue
         p = n_params[k]

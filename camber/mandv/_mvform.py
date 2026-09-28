@@ -165,16 +165,51 @@ def design_rows(frame: pd.DataFrame, model) -> np.ndarray:
     return np.column_stack([T] + [frame[PREFIX + n].to_numpy(dtype=float) for n in names])
 
 
+def row_days(frame: pd.DataFrame):
+    """Each row's day count when the frame's rows are bills (a ``days`` column), else ``None``.
+
+    The weights of a billing fit and the multipliers that sum per-day values back to energy
+    (0.92, provisional); a daily frame has no ``days`` column and is unweighted, as before."""
+    if frame is None or "days" not in frame.columns:
+        return None
+    return frame["days"].to_numpy(dtype=float)
+
+
+def ledger_rows(frame: pd.DataFrame, model) -> dict:
+    """``index`` / ``drivers`` / ``measured`` rows of ``frame`` for the adjustments ledger.
+
+    Daily rows pass through. Bills are expanded to their days (each day carries its bill's
+    drivers and per-day energy), so every ledger sum is ``sum(days * value)`` -- energy -- and an
+    adjustment is dated to the day, not the bill."""
+    X = design_rows(frame, model)
+    d = row_days(frame)
+    if d is None:
+        return {"index": frame.index, "drivers": X, "measured": frame["energy"].to_numpy(float)}
+    n = d.astype(int)
+    starts = pd.DatetimeIndex(frame["start"]) if "start" in frame.columns else frame.index
+    idx = pd.DatetimeIndex(
+        np.concatenate(
+            [pd.date_range(s, periods=k, freq="D").to_numpy() for s, k in zip(starts, n)]
+        )
+    )
+    return {
+        "index": idx,
+        "drivers": np.repeat(X, n, axis=0),
+        "measured": np.repeat(frame["energy"].to_numpy(float), n),
+    }
+
+
 def fit(frame: pd.DataFrame):
     """The entry's model on a daily frame: change-point + drivers when the frame carries driver
-    columns, else the best change-point model (``None`` when none can be fitted)."""
+    columns, else the best change-point model (``None`` when none can be fitted). A billing frame
+    (:func:`row_days`) is fitted with the bills' days as weights."""
     cols = driver_columns(frame)
     T = frame["oat"].to_numpy(dtype=float)
     y = frame["energy"].to_numpy(dtype=float)
     if not cols:
         from .models import best_model
 
-        return best_model(T, y, time_index=frame.index)
+        return best_model(T, y, time_index=frame.index, weights=row_days(frame))
     from .multivariable import fit_cp_driver_model
 
     return fit_cp_driver_model(

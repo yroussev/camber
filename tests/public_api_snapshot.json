@@ -1073,7 +1073,8 @@
     "ChangePointModel",
     "N_PARAMS",
     "best_model",
-    "fit_model"
+    "fit_model",
+    "fit_weights"
   ],
   "camber.mandv.multivariable": [
     "ChangePointDriverModel",
