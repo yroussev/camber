@@ -25,6 +25,19 @@ All notable changes to CAMBER are documented here. The format follows
   `link_findings(part_mask_for=...)` reads FC13's own hours (the RCx report passes it).
   `UpstreamCause.unit_hours` says which hours were used (`"FC13"` or `"finding"`), and the "why"
   line names them.
+
+### Changed
+- **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and
+  so `frame_sensor_health`, the runner's trust gate and the RCx report) now applies
+  `copied_signal_consistency` and `mixing_flow_consistency`. A measured point that carries another
+  point's data is flagged `copied_signal`; the copy is told from the original at the edges of the
+  identical stretch (it jumps across the gap between them) and loses trust by the share of its
+  samples that are copied, capped at "suspect"; when the copy cannot be told apart both are
+  flagged and capped at "suspect". A MAT that fails the flow-weighted OA/RA balance is flagged
+  `mixing_balance` and capped at "suspect"; OAT and RAT are flagged, not lowered. Both flags make
+  the unit's findings on that point conditional in triage (`sensor_causes`), on that unit only. On
+  the open LBNL Building 59 data (catalog example) RTU01/RTU02's MAT drop to "suspect" and RTU04's
+  copied return air to 0.56, while its supply air keeps its score.
 <!-- /092-air -->
 
 ## [0.91.0] — 2026-09-27

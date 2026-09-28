@@ -560,6 +560,9 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
     * a ``sensor_drift:<role>`` finding at ``warn``/``fault``;
     * an ``untrusted`` verdict or a ``stuck`` flag in ``trust`` (``{equip: {role: SensorTrust}}``,
       scored on gated samples where a fan gate exists);
+    * (0.92, #16) a ``copied_signal`` or ``mixing_balance`` flag in ``trust`` -- a point carrying
+      another point's data, or a mixed-air temperature failing the flow-weighted OA/RA balance
+      (:func:`camber.sensorhealth.frame_checks`); unit-local, even on OAT;
     * a ``warn``/``fault`` mixing-consistency result in ``mixing`` (``{equip: ConsistencyResult}``)
       -- one of MAT / OAT / RAT on that unit is wrong, so all three are tainted *on that unit*.
 
@@ -606,6 +609,14 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
                         shared=slug in SHARED_ROLES,
                     )
                 )
+                continue
+            # -- 092-air (#16): a copied point, or a failing mixed-air flow balance, makes the
+            # unit's findings on that point conditional -- on this unit only (both are checks of
+            # this unit's own points, even when one of them is the site OAT)
+            cross = _cross_sensor_detail(slug, t, flags)
+            if cross:
+                out.append(SensorCause("trust", equip, (slug,), cross))
+            # -- /092-air
     for equip, res in sorted((mixing or {}).items()):
         if getattr(res, "severity", "") in _ACTIONABLE:
             out.append(
@@ -618,6 +629,25 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
                 )
             )
     return out
+
+
+def _cross_sensor_detail(slug: str, t, flags: list) -> str | None:
+    """092-air (#16): the cause line for a ``copied_signal`` / ``mixing_balance`` trust flag."""
+    checks = list(getattr(t, "frame_checks", []) or [])
+    score = f"trust {getattr(t, 'trust', float('nan')):.2f}"
+    if "copied_signal" in flags:
+        c: dict = next((c for c in checks if c.get("check") == "copied_signal"), {})
+        who = "is a copy of" if c.get("blame") == "level_shift" else "carries the same data as"
+        return (
+            f"{slug} {who} {c.get('copy_of', 'another point')} "
+            f"({c.get('start', '?')} .. {c.get('end', '?')}; {score})"
+        )
+    if "mixing_balance" in flags:
+        c2: dict = next((c for c in checks if c.get("check") == "mixing_flow_balance"), {})
+        bias = c2.get("bias_f")
+        b = f"MAT {bias:+.1f}F" if isinstance(bias, (int, float)) else "MAT off"
+        return f"{slug}: mixed-air flow balance fails ({b} vs the OA/RA blend; {score})"
+    return None
 
 
 def _taints(cause: SensorCause, equip: str, roles: set) -> bool:
