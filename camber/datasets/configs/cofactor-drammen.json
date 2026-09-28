@@ -1,0 +1,57 @@
+{
+  "_comment": "Run template for cofactor-drammen: a daily M&V baseline (ASHRAE Guideline 14) over calendar 2018 for every building's electricity import (ElImp, the AMS main meter) and district-heat import (HtDH), each weather-normalized on the building's own outdoor temperature (the oat role stored on each meter; no shared weather). The electricity baseline is change-point + an occupied-day driver (Monday to Friday except the 2018 Norwegian public holidays listed): these are schools, kindergartens, nursing homes and offices whose electricity follows the week as much as the weather (a temperature-only change-point meets the daily G14 acceptance on 12 of 45 meters in 2018, with the driver on 37). District heat is temperature-only. Meter data only, so no fault rules. 2018 precedes the spring 2020 COVID-19 closures and the building-6413 meter outage (see the entry's data issues); a reporting period in 2020-2021 needs a non-routine adjustment.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-cofactor-drammen"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "ELECTRICITY_METER"
+    },
+    {
+      "class": "DISTRICT_HEAT_METER"
+    }
+  ],
+  "rules": [],
+  "mv": [
+    {
+      "class": "ELECTRICITY_METER",
+      "role": "power",
+      "period": [
+        "2018-01-01",
+        "2018-12-31"
+      ],
+      "interval": "daily",
+      "model": "cp_driver",
+      "drivers": [
+        "occupied_day"
+      ],
+      "holidays": [
+        "2018-01-01",
+        "2018-03-29",
+        "2018-03-30",
+        "2018-04-02",
+        "2018-05-01",
+        "2018-05-10",
+        "2018-05-17",
+        "2018-05-21",
+        "2018-12-25",
+        "2018-12-26"
+      ]
+    },
+    {
+      "class": "DISTRICT_HEAT_METER",
+      "role": "energy_rate",
+      "period": [
+        "2018-01-01",
+        "2018-12-31"
+      ],
+      "interval": "daily"
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

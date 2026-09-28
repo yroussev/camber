@@ -590,8 +590,10 @@ def _check_transforms(did: str, ing: dict, errs: list) -> None:
     wall-clock column (an elapsed simulation clock, or a synthetic day / row clock);
     ``source_timezone`` / ``local_timezone`` move a dataset published in UTC, another zone or with
     per-row UTC offsets (``"offset"``) onto the site's wall clock; ``encoding`` (on the spec or a
-    run) is a CSV's text encoding; ``recode`` maps a raw column's values (``{"SYS_CTL": {"2":
-    0}}``: a 0/1/2 mode point read as occupied only in mode 1); ``derive`` adds a raw column: the
+    run) is a CSV's text encoding; ``sep`` (one character) and ``header_marker`` (the first field
+    of the header line, every line above it skipped) read a text export with a metadata preamble;
+    ``recode`` maps a raw column's values (``{"SYS_CTL": {"2": 0}}``: a 0/1/2 mode point read as
+    occupied only in mode 1); ``derive`` adds a raw column: the
     ``sum`` of others (a dual-duct unit's supply airflow is its cold- plus hot-deck flows), a 0/1
     flag for another column being ``above`` a threshold (``["SF_CS", 0]``: the fan runs when its
     speed command is above zero), or a ``copy`` of one column (one building-wide schedule read by
@@ -603,6 +605,11 @@ def _check_transforms(did: str, ing: dict, errs: list) -> None:
         except ValueError as e:
             errs.append(f"{did}: units[{role!r}]: {e}")
     _check_timestamp_format(f"{did}: ingest", ing.get("timestamp_format"), errs)
+    sep, marker = ing.get("sep"), ing.get("header_marker")
+    if sep is not None and not (isinstance(sep, str) and len(sep) == 1):
+        errs.append(f"{did}: ingest.sep must be a single delimiter character")
+    if marker is not None and not (isinstance(marker, str) and marker.strip()):
+        errs.append(f"{did}: ingest.header_marker must name the header line's first field")
     _check_clock(did, ing, errs)
     src, local = ing.get("source_timezone"), ing.get("local_timezone")
     if src is not None and src != "offset" and not _valid_tz(src):

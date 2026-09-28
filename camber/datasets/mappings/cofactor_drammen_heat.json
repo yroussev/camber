@@ -1,0 +1,7 @@
+{
+  "_comment": "COFACTOR Drammen heat meters -> CAMBER Role mapping: each run fills {m} with one heat column of one building file (HtDH, district heat import; or a heat sub-meter such as HtTot, HtHP, HtDHW, HtOil) and stores it with the building's own outdoor temperature (Tout, degC) as one equipment. Readings are Wh of heat per hour; the entry's units ('energy_rate': 'W') store them as the hourly-mean thermal rate in kW. Dataset: Lien, Walnum & Sorensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3.",
+  "aliases": {
+    "{m}": "energy_rate",
+    "Tout": "oat"
+  }
+}

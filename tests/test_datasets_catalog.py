@@ -89,6 +89,8 @@ def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
         "ornl-frp-vav",
         "rbc-g36-ahu",
         "at-30bldg-sensors",
+        # 0.92 intake: meter data
+        "cofactor-drammen",
     ]
 
 
@@ -189,6 +191,7 @@ def test_catalog_filters_and_get():
         "ornl-frp-ops",
         "ornl-frp-vav",
         "at-30bldg-sensors",
+        "cofactor-drammen",
     ]
     assert [e.id for e in datasets.catalog(kind="lab")] == [
         "finnish-dcv",
