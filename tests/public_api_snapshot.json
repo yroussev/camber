@@ -583,8 +583,12 @@
     "seasonal_forecast"
   ],
   "camber.freecooling": [
+    "ECON_DAMPER_MIN_PCT",
+    "ECON_MIN_DELTA_F",
+    "ECON_OAF_MIN_PCT",
     "FreeCoolingOpportunity",
-    "free_cooling_opportunity"
+    "free_cooling_opportunity",
+    "integrated_economizer_mask"
   ],
   "camber.g36_reset": [
     "CohortStarvationResult",
@@ -1892,6 +1896,10 @@
     "SETBACK_MEASURES",
     "SetbackResult",
     "analyze_setback"
+  ],
+  "camber.setpoint_reset": [
+    "SetpointResetBehaviour",
+    "classify_setpoint_reset"
   ],
   "camber.soo": [
     "Clause",

@@ -105,7 +105,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     (downstream of its reheat coil) and the **entering primary air** is mapped to
     `MIXED_AIR_TEMP`. `reheat_penalty` judges "reheat into cold supply" on the entering air; with
     only the discharge mapped the count is a lower bound (reheat warms it), so it is caveated and
-    never reported as a confident ok.
+    never reported as a confident ok. It also cross-checks the valve against the discharge-air
+    rise (#63): a valve at ≥ 90 % with a median rise under 5 °F is **declined** (nothing counted or
+    costed), and a shut valve with a ≥ 10 °F rise on a quarter of its samples is caveated.
   - *Not overcooling.* `overcooling_severity` excludes morning recovery (`WARMUP`, else the first
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
     setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**.
@@ -135,8 +137,11 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   `min_oa_pct` only excess above a generous 50 % bound is scored and OA that is excess only against
   a generic 20 % minimum is declined, since it depends on the unknown design minimum),
   `free_cooling_missed` (mechanical cooling — cooling valve above `active` %, default 5 % — ran while
-  OAT was cool enough for free; durations in hours), `static_pressure_reset` (duct-static setpoint
-  that doesn't trim with demand). Flags: `high_limit_f`, `min_oa_pct`, `min_damper`, `differential`,
+  OAT was cool enough for free; durations in hours; hours already on ~100 % outside air are an
+  integrated economizer, not missed — the RCx economizer page's test, shared as
+  `camber.freecooling.integrated_economizer_mask`), `static_pressure_reset` (duct-static setpoint
+  that doesn't trim with demand; a one-time step is reported as a step, not a reset — see
+  `camber.setpoint_reset`). Flags: `high_limit_f`, `min_oa_pct`, `min_damper`, `differential`,
   `active`, `min_range_inwc`.
 - **Packaged / DX & refrigerant-side** (`docs/FDD-DX.md`) — `compressor_short_cycle` and
   `compressor_staging` (RTU/DX cycling + staging), `heatpump_defrost` (excess reversing-valve

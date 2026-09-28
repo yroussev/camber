@@ -4,6 +4,32 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 091-rules (#63) begin -->
+### Fixed (#63)
+- **`free_cooling_missed` counted an integrated economizer as missed free cooling (#63).**
+  Mechanical cooling while the unit is already on ~100 % outside air is no longer counted. The test
+  is the RCx economizer page's, now shared as `camber.freecooling.integrated_economizer_mask`: the
+  measured OA fraction ≥ 80 % where `|OAT − RAT| ≥ 5 °F`, else the OA damper ≥ 90 %. The rule
+  takes `OA_DAMPER`, `MIXED_AIR_TEMP` and `RETURN_AIR_TEMP` as optional roles and reports the
+  integrated hours; without any of them it counts as before and caveats that it can't tell.
+- **`reheat_penalty` trusted contradictory valve data (#63).** The reheat valve is cross-checked
+  against the discharge-air rise over the entering primary air (else the box's closed-valve
+  discharge, else a nominal 55 °F primary air). A valve at ≥ 90 % with a median rise under 5 °F is
+  declined: severity `info`, the valve-based shares withheld, so nothing is counted or costed. A
+  shut valve with a ≥ 10 °F rise on ≥ 25 % of its samples is caveated, and a confident `ok`
+  becomes `info`.
+- **`static_pressure_reset` called a one-time setpoint step a reset, and `supply_air_reset` read a
+  capacity shortfall as one (#63).** The new `camber.setpoint_reset.classify_setpoint_reset` requires
+  a reset to move on at least 3 days and 10 % of the days judged (fan-on samples), and to move with
+  its driver (requests; else supply airflow for static, OAT for supply air; `|Spearman rho| ≥ 0.3`).
+  A flat or stepped static setpoint warns as "not reset"; a trended SAT setpoint that is flat or
+  stepped reads "NOT RESET (setpoint flat …); SAT deviates …" instead of "reset present". A
+  setpoint that moves but not with its driver is not confirmed (`info`). Without a SAT setpoint, a
+  reset read from the SAT shape alone carries a capacity-shortfall caveat.
+<!-- 091-rules (#63) end -->
+
 ## [0.90.1] — 2026-09-27
 
 **0.90.1 patch: fixes from two private real-data checks (#51-#59).** Every fix has a synthetic

@@ -88,6 +88,15 @@ cooling, **fan-on** samples (the same fan-signal precedence) and records `fan_ga
 draws exactly those samples. With the fan off the "supply" sensor reads unconditioned plenum air,
 which bends the slope and widens the spread. `fan_gate=False` restores the ungated read.
 
+**A trended setpoint beats the SAT shape (#63).** A coil that runs out of capacity on hot days also
+makes supply air rise with OAT. When `SUPPLY_AIR_TEMP_SP` is mapped, `supply_air_reset` asks the
+setpoint (`camber.setpoint_reset.classify_setpoint_reset`, fan-on samples): a reset must move on at
+least 3 days and 10 % of the days judged, *with* its driver (`SAT_RESET_REQUESTS`, else OAT;
+`|Spearman rho| >= 0.3`). A flat setpoint reads "NOT RESET (setpoint flat …); SAT deviates …", a
+setpoint that only stepped reads as a one-time step or manual change, and one that moves but not
+with its driver leaves an apparent reset unconfirmed (`info`). `static_pressure_reset` applies the
+same test with static-pressure requests, else supply airflow, as the driver.
+
 ## Reset effectiveness — is the reset actually trimming-and-responding?
 
 `supply_air_reset_compliance` above asks whether SAT sits at the right *target*; **reset

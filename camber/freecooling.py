@@ -20,9 +20,26 @@ import pandas as pd
 from .timegrid import interval_hours
 
 __all__ = [
+    "ECON_DAMPER_MIN_PCT",
+    "ECON_MIN_DELTA_F",
+    "ECON_OAF_MIN_PCT",
     "FreeCoolingOpportunity",
     "free_cooling_opportunity",
+    "integrated_economizer_mask",
 ]
+
+# --- #63: shared "already on (nearly) 100 % outside air" test -------------------------------
+#: OA-damper signal (%) at or above which the unit counts as on full outside air. A 0-1 signal is
+#: rescaled first. 90 % rather than 100 % because an economizer damper at "full open" commonly
+#: reads a few percent short (actuator span, stroke limits) and still passes ~all outside air.
+ECON_DAMPER_MIN_PCT = 90.0
+#: measured OA fraction (%) at or above which the unit counts as on full outside air -- a mixed-air
+#: temperature within ~20 % of the OAT-RAT span of the OAT (sensor error and stratification in the
+#: mixing box keep a true 100 %-OA unit from reading exactly 100 %).
+ECON_OAF_MIN_PCT = 80.0
+#: |OAT - RAT| (°F) below which the temperature-balance OA fraction is ill-conditioned (the
+#: denominator is within a couple of sensor errors of zero) and the damper signal is used instead.
+ECON_MIN_DELTA_F = 5.0
 
 
 @dataclass
@@ -94,3 +111,49 @@ def free_cooling_opportunity(
         savings_usd=round(savings, 2) if np.isfinite(savings) else float("nan"),
         high_limit_f=high_limit_f,
     )
+
+
+def integrated_economizer_mask(
+    oat,
+    *,
+    damper=None,
+    mat=None,
+    rat=None,
+    damper_min_pct: float = ECON_DAMPER_MIN_PCT,
+    oaf_min_pct: float = ECON_OAF_MIN_PCT,
+    min_delta_f: float = ECON_MIN_DELTA_F,
+):
+    """Where the unit already runs on (nearly) 100 % outside air -- an *integrated* economizer.
+
+    Mechanical cooling while the unit is on full outside air is an integrated economizer doing its
+    job (outside air alone can't meet the load), not missed free cooling. This is the one test both
+    the ``free_cooling_missed`` rule and the RCx report's economizer page apply:
+
+    * where the temperature balance is well conditioned (``|OAT - RAT| >= min_delta_f``), the
+      measured OA fraction ``(RAT - MAT) / (RAT - OAT) >= oaf_min_pct`` decides -- a damper
+      *command* can read open while the damper is stuck, the mixed-air temperature can't;
+    * elsewhere, the OA-damper signal ``>= damper_min_pct`` % decides (0-1 or 0-100 accepted);
+    * with neither signal usable on a sample, the sample is not counted as integrated.
+
+    Returns a boolean Series on ``oat``'s index, or ``None`` when neither a damper nor both mixed-
+    and return-air temperatures were supplied -- callers must then say they couldn't tell an
+    integrated economizer from missed free cooling. Provisional API (0.91, #63).
+    """
+    from .units import normalize_percent
+
+    oat = pd.Series(oat, dtype=float)
+    have_temps = mat is not None and rat is not None
+    if damper is None and not have_temps:
+        return None
+    econ = pd.Series(False, index=oat.index)
+    if damper is not None:
+        d = normalize_percent(pd.Series(damper).reindex(oat.index).astype(float))
+        econ = (d.fillna(0.0) >= damper_min_pct).astype(bool)
+    if have_temps:
+        m = pd.Series(mat).reindex(oat.index).astype(float)
+        r = pd.Series(rat).reindex(oat.index).astype(float)
+        dt = r - oat
+        stable = (dt.abs() >= min_delta_f).fillna(False)
+        oaf = 100.0 * (r - m) / dt.where(stable)
+        econ = econ.where(~stable, (oaf >= oaf_min_pct).fillna(False)).astype(bool)
+    return econ
