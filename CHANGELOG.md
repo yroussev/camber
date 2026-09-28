@@ -4,7 +4,7 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.90.1] — 2026-09-27
 
 **0.90.1 patch: fixes from two private real-data checks (#51-#59).** Every fix has a synthetic
 reproduction in the test suite. New names are provisional (`docs/API-STABILITY.md`). The synthetic,

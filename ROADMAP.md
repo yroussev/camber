@@ -225,7 +225,7 @@ umbrella rather than as new milestones. `CHANGELOG.md` is the per-release record
   cybersecure **edge forwarder**, and fault economics extended across the newer families.
 
 
-## Released — 0.86–0.90 (2026-09-26 and 27)
+## Released — 0.86–0.90.1 (2026-09-26 and 27)
 
 Three stacked releases; `CHANGELOG.md` has the detail.
 
@@ -254,6 +254,9 @@ Three stacked releases; `CHANGELOG.md` has the detail.
   adjustments ledger; versioned M&V baselines with an audited rebaseline policy and `camber mv`;
   the change-point + driver model on the config path; and a BDG2 savings benchmark with the
   published placebo result (bands carry model error only). #46–#49.
+- **0.90.1 — patch:** nine fixes found on real data (#51–#59): UTC timestamps converted to the site
+  time zone, autocorrelation on monthly and billing data, weather falling back to bias-corrected NASA
+  POWER (whose client now requests UTC), sensor-trust and rule-verdict fixes, and billing-period series.
 
 ## Next
 
