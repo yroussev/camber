@@ -130,7 +130,15 @@ one of them the published real-data SEP chaining case.
   monthly rows weighted by days, a station OAT series from the weather fallback chain, baseline
   2016, reporting 2019, 2017 and 2018 intermediates and `select_method`'s own proposal; 2020 kept
   out. Its results are described in docs/VALIDATION.md once the maintainer signs them off.
-<!-- cofactor -->
+- **Catalog: `cofactor-drammen` (#50).** 45 Norwegian public buildings (Lien, Walnum & Sørensen
+  2025, doi:10.1038/s41597-025-04708-3; Zenodo v3, CC BY 4.0, re-verified on the host): four years
+  of hourly electricity import, sub-meters, district heat and per-building outdoor temperature.
+  The fixed UTC+1 stamps are stored on the Europe/Oslo clock. Twelve data issues are documented,
+  among them the spring-2020 COVID-19 closures, a heat-pump heat meter 100x too large at one
+  building until May 2019 (masked), meters that stop in March 2020, and sub-meters that exceed
+  the import. An M&V template fits 2018 daily baselines, electricity with an occupied-day driver.
+  The wide-CSV reader gains `sep` and `header_marker` for text exports that open with a metadata
+  block.
 
 ### Changed
 - **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and

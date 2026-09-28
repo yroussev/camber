@@ -178,7 +178,7 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 22
+    assert len(datasets.catalog()) == 23
     assert [e.id for e in datasets.catalog(kind="real")] == [
         "bdg2",
         "lbnl-b59",
@@ -200,7 +200,7 @@ def test_catalog_filters_and_get():
         "ornl-supermarket-fdd",
     ]
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
-    assert len(datasets.catalog(labeled=False)) == 12
+    assert len(datasets.catalog(labeled=False)) == 13
     assert len(datasets.catalog(labeled=True)) == 10
     # the open tier: research-only entries (an NC/ND licence, or a stated access_reason) are out
     commercial = datasets.catalog(licence="commercial")
@@ -208,7 +208,7 @@ def test_catalog_filters_and_get():
         "rbc-g36-ahu",  # CC BY, held research-only for its stated access_reason
         "at-30bldg-sensors",  # CC-BY-NC-SA
     ]
-    assert len(commercial) == 20 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 21 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):
