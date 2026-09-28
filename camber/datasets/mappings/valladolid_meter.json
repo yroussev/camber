@@ -1,0 +1,6 @@
+{
+  "_comment": "Valladolid university buildings (Mendeley Data doi:10.17632/mzkyh37mtr.2, CC BY 4.0) -> CAMBER Role mapping for the whole-building electricity meter. ENERGY is the active energy of one hour (kWh); it is stored under 'power' as the hour's mean rate in kW (numerically equal), as the bdg2 entry stores its electricity. The stamps are local Spanish time labelled at the END of each hour (see the entry's data issues).",
+  "aliases": {
+    "ENERGY": "power"
+  }
+}

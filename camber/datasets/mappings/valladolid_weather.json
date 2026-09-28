@@ -1,0 +1,6 @@
+{
+  "_comment": "Valladolid university buildings -> CAMBER Role mapping for the weather the publisher ships with the meters: T2M, the NASA POWER daily mean air temperature at 2 m (degC), repeated on every hour of its day. It is stored as 'oat' on the equipment 'weather' and is a DAILY mean: fit for daily or monthly models, not for hour-of-day analyses (use a station series, e.g. camber.weather_source.oat_reference_auto). The other NASA POWER columns (T2M_MIN/MAX, RH2M, PRECTOT, ALLSKY, degree days) and the HOLIDAY flag have no role here.",
+  "aliases": {
+    "T2M": "oat"
+  }
+}

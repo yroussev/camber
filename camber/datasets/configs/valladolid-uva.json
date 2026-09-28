@@ -1,0 +1,33 @@
+{
+  "_comment": "Run template for valladolid-uva: a daily change-point M&V baseline (ASHRAE Guideline 14) for each of the two buildings' electricity meters on the 2016 calendar year, weather-normalized on the publisher's daily NASA POWER temperature (stored as 'oat' on 'weather'; a daily mean, which is what a daily model needs). All days are modelled: a university building's weekends and academic breaks scatter a daily all-days model (G14 rejects it, honestly). The SEP chaining case in examples/valladolid/chaining.py models working days only, monthly and weighted by days, on a station OAT series; see docs/VALIDATION.md.",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-valladolid-uva"
+  },
+  "resample": "1h",
+  "shared_oat": {
+    "equip": "weather",
+    "role": "oat"
+  },
+  "equipment": [
+    {
+      "class": "ELECTRICITY_METER"
+    }
+  ],
+  "rules": [],
+  "mv": [
+    {
+      "class": "ELECTRICITY_METER",
+      "role": "power",
+      "period": [
+        "2016-01-01",
+        "2016-12-31"
+      ],
+      "interval": "daily"
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

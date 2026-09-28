@@ -50,6 +50,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `lbnl-boiler` | boiler plant, 17 runs, Brick model | simulated | yes | CC-BY-4.0 | 4 runs |
 | `bdg2` | 3,053 whole-building meters, 19 sites | real | no | CC-BY-SA-4.0 | 10 sites x up to 4 buildings |
 | `lbnl-b59` | real office: 4 rooftop units with measured OA flow, 11 zone CO2 sensors, 51 underfloor terminals, 15-minute electricity panel meters, Brick model (manual download) | real | no | CC-BY-4.0 | RTUs, CO2 zones, weather and meters, 3 years |
+| `valladolid-uva` | 2 university buildings, Spain: hourly whole-building electricity 2016-2020 with daily weather; the published SEP chaining case | real | no | CC-BY-4.0 | both buildings |
 | `finnish-dcv` | laboratory office room with occupancy-based DCV and ground-truth counts | lab | no | CC-BY-4.0 | all 3 files |
 | `b4b-windesheim` | 3 office rooms, two CO2 sensors each, ventilation valve, PIR | real | no | CC-BY-4.0 | all 5 runs |
 | `nuig-ahu101` | lecture-theatre AHU (100% outdoor air) + room + weather, 14 months at 1 min | real | no | CDLA-Permissive-1.0 | the one unit |
@@ -643,6 +644,74 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** While the old heat pump runs (hot-water supply 85-105 F in hp_hws_temp) hvac_N carries an extra 15.4 kW (hourly regression 2018-11-27 to 2019-03-31, se 0.26 kW; hvac_S -0.3 kW); hvac_N falls from 33-42 to 20-25 kW on each trial of the new unit (2018-12-17/18 and 2019-01-09 to 01-11, water at 120 F), returns with the old unit (2019-01-14 to 02-05) and stays at 9-20 kW after the switch on 2019-02-06. In August-December 2020 HVAC power does not rise with the new unit's metered heat (-0.07 kW per kW of heat, se 0.011). On the 302 calendar days complete in both years, 2018 to 2019 HVAC energy falls 44% while plug loads and lighting are flat or up; hvac_S also steps down about 10 kW inside the 2018-11-16 to 11-27 data gap, undocumented.
 - **Contradicts:** Data descriptor: the heat pump is 'air-source type before March 2019, later replaced with water-source', and the EUI of 2018 is higher than 2019 and 2020 'due to the building retrofit' (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left in place (annotate quirk on ele_hvac_N and hp): the meter readings are right; the metering boundary changed. A weather-normalised comparison across 2019-02-06 needs a non-routine adjustment (about 15.4 kW on hvac_N while the old unit runs) or a baseline that starts after the switch. The ingest stores the heat pump's hot-water supply temperature as equipment HP (hw_supply_temp), which identifies the old unit's hours (85-105 F, the new unit holds about 120 F), so the adjustment can be computed from the store.
+
+### `valladolid-uva`: Valladolid university buildings: hourly whole-building electricity, 2016-2020
+
+#### Local-time stamps label the end of each hour, and the DST handling changes between years
+
+- **Issue:** `hour-ending-local-clock`
+- **Columns:** `DATE`
+- **Evidence:** The spring-forward days lack the 03:00 label, not 02:00 (A: 2016-03-27, 2018-03-25, 2019-03-31, 2020-03-29; B: the same except 2020), and the fall-back days repeat 03:00 (A: 2016-10-30, 2018-10-28, 2019-10-27, 2020-10-25; B: 2016, 2018, 2019): an hour-ending label on Spanish local time, where the skipped and repeated interval is 02:00-03:00. 2017 has neither a gap nor a repeat in either file (24 rows on 2017-03-26 and 2017-10-29), nor does B in 2020. The first stamp, 2016-01-01 00:00, has no energy in A (the interval before the file starts).
+- **Contradicts:** The dataset description gives '1-hour intervals' and no time zone or interval convention (Mendeley Data description, doi:10.17632/mzkyh37mtr.2)
+- **Handling: annotate** -- left as published and recorded in the provenance. Stored as published (1 h, local, no time zone conversion). The duplicated fall-back labels keep their first reading (ingest drops duplicated stamps), so one hour a year is lost in the affected years. Analyses that form days move each reading to the start of its hour first; the chaining example does.
+
+#### The files run to the end of 2020; the description says 2016-2019
+
+- **Issue:** `data-extend-to-2020`
+- **Columns:** `DATE`, `ENERGY`
+- **Evidence:** Both files hold 43,848 rows from 2016-01-01 00:00 to 2020-12-31 23:00 (8,716-8,780 energy readings a year). 2020 is a COVID-19 year: Building A used 1,344 MWh (1,443-1,491 MWh in 2016-2019) and Building B 390 MWh (554-701 MWh), with the monthly mean load in April and May 2020 at 54% and 62% (A) and 38% and 30% (B) of the same months in 2019.
+- **Contradicts:** 'These datasets contain historical energy consumption data for two buildings from 2016 to 2019' (Mendeley Data description, doi:10.17632/mzkyh37mtr.2)
+- **Handling: exclude** -- kept out of scoring / analysis. Ingested in full. 2020 is kept out of baseline and reporting in the chaining example: the COVID-19 closure (Spain's state of alarm from 14 March 2020) is a non-routine period, and the HOLIDAY flag changes convention in 2020 (see holiday-flag-is-an-academic-calendar).
+
+#### The weather columns are daily values repeated on every hour
+
+- **Issue:** `weather-is-daily`
+- **Columns:** `T2M`, `T2M_MIN`, `T2M_MAX`, `RH2M`, `PRECTOT`, `ALLSKY`, `HDD18_3`, `CDD0`, `CDD10`
+- **Runs:** `weather`
+- **Evidence:** Every weather column has exactly one value per calendar day in both files (1,827 days); T2M ranges -2.62 to 28.63 C. The daily mean of the nearest ISD station (VALLADOLID, 4.6 km) correlates 0.99 with T2M and runs 1.3 F warmer on average (2016-2020).
+- **Contradicts:** 'The data is provided in 1-hour intervals. It also has other variables such as weather variables' (Mendeley Data description, doi:10.17632/mzkyh37mtr.2)
+- **Handling: annotate** -- left as published and recorded in the provenance. T2M is stored as 'oat' on the equipment 'weather' (degC -> F) and fits daily or monthly models; it is not an hourly temperature. Hour-of-day analyses need a station series (camber.weather_source.oat_reference_auto).
+
+#### ALLSKY and PRECTOT do not carry the units or quantity the description gives
+
+- **Issue:** `weather-units-mislabelled`
+- **Columns:** `ALLSKY`, `PRECTOT`
+- **Evidence:** ALLSKY ranges 0.27-8.67 (median 4.45): the range of NASA POWER's all-sky surface shortwave irradiance in kWh/m2/day, not a longwave downward irradiance in W/m2 (roughly 200-400 W/m2 at this site). PRECTOT reaches 46.17 on one day with a median of 0.08 and is constant over each day: a daily total in mm/day, not mm/hour.
+- **Contradicts:** 'ALLSKY - All-Sky Surface Longwave Downward Irradiance (W/m^2)'; 'PRECTOT - Precipitation (mm/hour)' (Mendeley Data description, doi:10.17632/mzkyh37mtr.2)
+- **Handling: none** -- described only. Neither column is mapped.
+
+#### HOLIDAY marks weekends and the academic breaks, and changes convention in 2020
+
+- **Issue:** `holiday-flag-is-an-academic-calendar`
+- **Columns:** `HOLIDAY`
+- **Evidence:** In 2016-2019 HOLIDAY is 1 on 173-186 days a year: every weekend, all of July and August, the Christmas and Easter breaks and the public holidays (2017: 177 days). In 2020 it is 1 on 15 days in A's file and on some or all hours of 22 days in B's (14 of them only partly, April-October), so the two files' 2020 calendars differ; weekends and the summer break are no longer flagged.
+- **Contradicts:** 'HOLIDAY - Holidays in Spain' (Mendeley Data description, doi:10.17632/mzkyh37mtr.2)
+- **Handling: none** -- described only. Not mapped. The chaining example uses it, 2016-2019 only, as the working-day calendar (Monday-Friday with HOLIDAY 0 on most of the day's hours).
+
+#### Missing hours are left empty, not interpolated
+
+- **Issue:** `missing-hours-not-interpolated`
+- **Columns:** `ENERGY`
+- **Evidence:** A has 102 empty ENERGY hours (15 / 4 / 12 / 3 / 68 in 2016-2020; longest runs 23 h from 2020-05-23 00:00 and 17 h from 2020-05-08 17:00), B 67 (longest 23 h from 2020-05-23 00:00). No reading is zero or negative, and no value repeats more than twice in a row.
+- **Contradicts:** The buildings' paper: missing values (under 0.3%) were filled by linear interpolation (Mariano-Hernandez et al. 2022, Energy Sci Eng 10:4694-4707, doi:10.1002/ese3.1298)
+- **Handling: none** -- described only. Nothing to correct: the gaps are real missing readings. Daily analyses use whole days only (at least 23 readings and none missing).
+
+#### The files are A and B; the documentation names Building 1 and Building 2
+
+- **Issue:** `building-labels`
+- **Columns:** `db_building_A.csv`, `db_building_B.csv`
+- **Evidence:** The Mendeley record does not say which file is which building. A's annual energy is flat (1,491 / 1,442 / 1,484 / 1,483 MWh in 2016-2019) and B's falls every year (701 / 660 / 612 / 554 MWh), as the paper describes Building 1 (similar consumption across the years) and Building 2 (retrofits and renewables reducing annual consumption); B's summer-weekend midday load sits below its night load, by 6.5 kWh in 2016 and 20.4 kWh in 2019, the signature of on-site solar.
+- **Contradicts:** Table 2 and section 2.1 of the buildings' paper name Building 1 and Building 2 (Mariano-Hernandez et al. 2022, Energy Sci Eng 10:4694-4707, doi:10.1002/ese3.1298)
+- **Handling: none** -- described only. The catalog keeps the file names (UVA_A, UVA_B) and reads A as Building 1, B as Building 2, stating it as an inference.
+
+#### Building B's meter is net of on-site generation added during the record
+
+- **Issue:** `building-b-net-of-onsite-generation`
+- **Columns:** `ENERGY (db_building_B.csv)`
+- **Runs:** `building_b`
+- **Evidence:** On summer weekends (May-August) B's 12:00-15:59 load is below its 02:00-05:59 load by 6.5 / 9.4 / 15.1 / 20.4 kWh in 2016 / 2017 / 2018 / 2019 (A: +1.7 to +7.2 kWh); B's lowest readings (5.6-6.7 kWh) all fall around midday. The paper documents the incorporation of renewable energy but gives no dates or capacity.
+- **Contradicts:** The dataset description calls ENERGY the energy consumption of the building; the paper describes the renewable generation (Mariano-Hernandez et al. 2022, Energy Sci Eng 10:4694-4707, doi:10.1002/ese3.1298)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. A saving measured on B's meter includes the on-site generation behind it, not only the efficiency measures; the VALIDATION chaining case says so.
 
 ### `finnish-dcv`: Finnish laboratory office room with occupancy-based DCV (ground-truth counts)
 
