@@ -6,12 +6,13 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
-**0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67).** New plant detectors
+**0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
 plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the
 G36 supply-air reset direction and the FC13-only plant link, days-weighted billing M&V with a
-config path and weather fallbacks, revised benchmark target lists, and two open meter datasets,
-one of them the published real-data SEP chaining case.
+config path and weather fallbacks, energy reported in kBtu or kWh by a config unit system,
+revised benchmark target lists, and two open meter datasets, one of them the published real-data
+SEP chaining case.
 
 ### Added
 - **A plant run gate for sensor trust (#66).** `schedules.plant_run_mask(frame, loop)` reads when
@@ -141,6 +142,30 @@ one of them the published real-data SEP chaining case.
   the import. An M&V template fits 2018 daily baselines, electricity with an occupied-day driver.
   The wide-CSV reader gains `sep` and `header_marker` for text exports that open with a metadata
   block.
+- **Energy units: kBtu (IP) or kWh (SI) (#69, provisional).** A config `"units": {"system": "ip" |
+  "si"}` reports energy in kBtu or kWh, demand in kBtu/h or kW, and EUI in kBtu/ft2/yr or
+  kWh/m2/yr. Temperatures, pressures and flows are unchanged. Without the block every output is
+  byte-identical to before. The new `camber.energy_units` converts kWh, MWh, Wh, kBtu, MMBtu,
+  Btu, therms, GJ, MJ and ton-hours through kWh, and kW, kBtu/h, MBH and tons. The factors are exact:
+  the IT Btu is 1055.05585262 J, so 1 kWh = 3.412142 kBtu and 1 kBtu = 1.055056 MJ. Gas by volume
+  (Mcf, CCF, m3) needs an explicit heat content and steam by mass an explicit enthalpy. Unknown
+  and ambiguous units (`MBtu`, `Mlb`, a bare `ton` for energy) are refused. Where the system
+  applies:
+  - **M&V.** Savings, bands, adjusted figures, chain links, the waterfall and the `auto`
+    sensitivity table are converted and named (`energy_unit`, `meter_unit`, the unit in each
+    summary). The fits stay in the meter's unit. A trended entry names its rate unit
+    (`"units": "kW"`).
+  - **Billing.** The bills' unit must parse, and gas in Mcf needs `bills.heat_content`.
+    `BillingSeries.converted` converts a series in code.
+  - **SEP.** `primary_energy` and `aggregate_energy_types` take `units=` and convert each energy
+    type's delivered units to energy before the Annex B multipliers.
+  - **EUI.** `bps.site_eui_units` takes a stated area unit, and `report.benchmark.unit` labels the
+    audit report's EUI.
+  - **Prices.** A `price` block takes a rate in any unit (`{"rate": 8.5, "per": "Mcf",
+    "heat_content": ...}`).
+
+  `bps.EUI_FACTORS_KBTU` keeps its historical 3.412 kBtu/kWh, 0.004% below the exact factor, so
+  `site_eui` does not move (docs/UNITS.md).
 
 ### Changed
 - **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and

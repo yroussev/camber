@@ -227,6 +227,12 @@ camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [
   confounding guard and SEP's evidence rule.
 - A facility that is not `active` (suspended, provisioning) is skipped, with a message.
 
+**Energy units (provisional, 0.92).** A top-level `"units": {"system": "ip" | "si"}` reports M&V
+energy in kBtu or kWh. The fits stay in the meter's unit, and the findings carry `energy_unit` and
+`meter_unit`. A trended `mv` entry then names its meter's rate unit (`"units": "kW"`). A billing
+entry's gas volumes need `bills.heat_content`. Without the block nothing changes. See
+[UNITS.md](UNITS.md).
+
 Outside a workspace, name the store with the config's top-level `"mv_store"` (or `--store`).
 `camber portfolio migrate` moves it, every version included, to `state/<fid>/mv_baselines.json`.
 

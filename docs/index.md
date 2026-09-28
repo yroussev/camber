@@ -31,7 +31,7 @@ flowchart LR
 
 ## By layer
 
-- **Analytics** — [M&V](MANDV.md) · [Streaming / online](STREAMING.md) · [Forecasting](FORECAST.md)
+- **Analytics** — [M&V](MANDV.md) · [Energy units](UNITS.md) · [Streaming / online](STREAMING.md) · [Forecasting](FORECAST.md)
   · [Grid-interactive (GEB)](GEB.md) · [Carbon](CARBON.md) · [Ventilation](VENTILATION.md) ·
   [Sensor health](SENSOR-HEALTH.md) · [Visualization](VISUALIZATION.md)
 - **Platform** — [Ingest protocols](INGEST-PROTOCOLS.md) · [Ontology / interop](ONTOLOGY.md) ·

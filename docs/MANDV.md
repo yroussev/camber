@@ -441,6 +441,11 @@ takes `g14` or `exact`, and defaults per D7.
 - `aggregate_energy_types`: one `MethodResult` per energy type, all with the **same** method
   (§6.2). Each is converted to primary energy and summed (§6.3.2) before Eq 5–11 are applied.
   The savings bands combine in quadrature (B-19).
+- **Delivered physical units (0.92, #69).** Both functions take `units=` (every type's delivered
+  unit, such as kWh, therm or Mcf), `heat_content=` / `enthalpy=` for gas volumes and steam, and
+  `energy_unit=` (kWh or kBtu). Each type is converted to energy first and the Annex B multiplier
+  is applied after. A missing, unknown or ambiguous unit, or a volume without its heat content, is
+  refused. See [UNITS.md](UNITS.md#sep-primary-energy).
 
 ## The exact uncertainty kernel
 
@@ -946,7 +951,7 @@ config with no `equipment` needs no `source`:
 ```
 
 - **`bills`** is a file path, or `{"file", "start", "end", "energy", "estimated", "units",
-  "units_column", "end_inclusive", "merge_estimated"}`. The defaults are the columns `start`, `end`
+  "units_column", "end_inclusive", "merge_estimated", "heat_content", "enthalpy"}`. The defaults are the columns `start`, `end`
   (the last day served, inclusive), `energy`, `estimated` (optional: `true`/`false`, `yes`/`no`,
   `1`/`0`, `E`/`A`) and `units` (optional; one unit per file). `name` labels the findings (default:
   the file's base name).
@@ -972,6 +977,12 @@ config with no `equipment` needs no `source`:
   `n_report_bills`. The adjustments ledger sees the bills expanded to their days, so an entry is
   dated to the day it starts, not to its bill. An indicator estimated on bills marks a bill as
   inside the event by its start date.
+
+- **Units (0.92, #69).** With a config `"units": {"system": "ip" | "si"}` the savings, bands and
+  adjusted figures are reported in kBtu or kWh, and the fit stays in the bills' own unit. The
+  bills must then name a parseable unit. Gas billed by volume (Mcf, CCF, m3) needs
+  `bills.heat_content`, such as `"10.37 therm/Mcf"`; there is no default. Without `units` nothing
+  is converted. See [UNITS.md](UNITS.md).
 
 **Not supported for bills (0.92):**
 - `model: "cp_driver"`: bills carry no daily driver values.

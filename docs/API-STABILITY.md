@@ -259,6 +259,21 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `stations[].offset_correction`, `hour_of_day_f`, `hour_basis` and `rmse_after_monthly_f`;
     the RCx `oat_reference.fetch` values `auto`, `isd` and `open_meteo` with `cache_dir` /
     `offline`. The correction method and its thresholds may be retuned.
+- **Energy units** (0.92; #69), all additive and provisional:
+  - the module `camber.energy_units`: the factor tables, `parse_unit`, `parse_heat_content`,
+    `convert`, `energy_factor`, `to_kwh`, `convert_power`, `power_factor`,
+    `energy_unit_of_rate`, `convert_eui`, `eui_factor`, `convert_rate`, `format_energy`, `Unit`
+    and `UnitSystem`. The alias table and the ambiguous-unit list may grow;
+  - the config block `units` (`system`, `area`), an `mv` entry's `units`, `bills.heat_content` /
+    `bills.enthalpy`, `report.benchmark.unit`, and the per-unit `price.electricity` /
+    `price.gas` forms (`EnergyPrice.from_dict`);
+  - the metrics `energy_unit`, `meter_unit` and `unit_system` on `mv_*` findings under a unit
+    system, and `waste_energy` / `energy_unit` from `annotate_costs(units=)`;
+  - `units=` / `heat_content=` / `enthalpy=` / `energy_unit=` on `mandv.sep.primary_energy` and
+    `aggregate_energy_types`, with the trailing `unit` / `delivered_units` fields of
+    `PrimaryEnergy` and `FacilitySEP` (serialised only when set);
+  - `bps.site_eui_units`, `BillingSeries.converted`, `mvbilling.billing_units` and the trailing
+    `Benchmark.unit`.
 
 ## Deprecated
 
