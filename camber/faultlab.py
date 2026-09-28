@@ -361,6 +361,23 @@ def _chw_reset(idx, *, faulty):
     )
 
 
+def _chw_tracking(idx, *, faulty):
+    # a chiller on weekday days (status mapped): faulty supplies 48 F against a 40 F setpoint,
+    # clean holds 40.5 F; off hours read a warming, stagnant loop the rule must not judge
+    n = len(idx)
+    on = np.asarray((idx.dayofweek < 5) & (idx.hour >= 6) & (idx.hour < 19))
+    sup = np.where(on, 48.0 if faulty else 40.5, 60.0)
+    return pd.DataFrame(
+        {
+            Role.CHW_SUPPLY_TEMP: pd.Series(sup, index=idx),
+            Role.CHW_SUPPLY_TEMP_SP: pd.Series(np.full(n, 40.0), index=idx),
+            Role.CHW_RETURN_TEMP: pd.Series(sup + np.where(on, 9.0, 0.5), index=idx),
+            Role.COMPRESSOR_STATUS: pd.Series(on.astype(float), index=idx),
+        },
+        index=idx,
+    )
+
+
 def _fine_idx(days=3):
     return pd.date_range("2025-07-07", periods=days * 24 * 12, freq="5min")  # 5-min sampling
 
@@ -530,6 +547,7 @@ SCENARIOS: dict = {
     "co2_ventilation": _co2,
     "dcv_verification": _dcv,
     "chw_plant_reset": _chw_reset,
+    "chw_supply_tracking": _chw_tracking,
     "compressor_short_cycle": _compressor_cycle,
     "compressor_staging": _compressor_stage,
     "heatpump_defrost": _heatpump,

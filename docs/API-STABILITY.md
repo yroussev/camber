@@ -175,6 +175,29 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   trailing `billing` / `n_days` fields of `NonRoutineResult` and `billing` / `n_periods` fields
   of `StepChangeResult` and `StepChangesResult` (in `as_dict` only for billing input).
 
+<!-- 091-plant (#61, #62) -->
+- **Equipment classes, plant tracking and plant links** (0.91; #61, #62), all additive:
+  - `camber.model.equipclass` (`EQUIP_FAMILIES`, `equip_family`, `family_matches`) and
+    `camber.rules.applicability` (`RULE_EQUIP_CLASSES`, `ROLES_SUFFICE`, `rule_equip_classes`):
+    which equipment family each built-in rule applies to. `Registry.run` / `run_periods` decline
+    a recognised class outside a rule's families and caveat an unrecognised one; `run_fleet`
+    leaves such equipment out of the batch and records `metrics["_class_excluded"]`. The families,
+    spellings and per-rule classification may change;
+  - the config `topology` section, `camber.topology_infer.topology_from_config`,
+    `CHILD_COLUMNS` / `PARENT_COLUMNS`, and `RunResult.topology` / `topology_source`;
+  - `CHWSupplyTracking` (`chw_supply_tracking`), `RUN_STATUS_ROLE` and `TEMPERATURE_GATE_CAVEAT`
+    in `camber.rules.chwplant_rule`; `analyze_chw_tracking`, `CHWTrackingResult`,
+    `chiller_running`, `chw_tracking_mask`, `analyze_chw_plant(running=)` and the trailing
+    `CHWPlantResult.run_source` in `camber.chwplant`; the `run_source` metric of
+    `chw_plant_reset`. The tracking threshold and severity bands may be retuned;
+  - in `camber.rules.triage`: `UpstreamCause`, `PLANT_CAPACITY_RULES`, `SAT_HIGH_RULES`,
+    `is_sat_high`, `link_findings(topology=, plant_overlap_min=)`, the trailing `Issue` fields
+    `upstream_causes` / `downstream`, and the `scope_equips` metric that scopes a sensor-drift
+    cause to the units reading that sensor;
+  - `sources=True` on the RCx report's OAT-source helper is internal; the per-source OAT rows and
+    `oat_equips` / `scope_equips` metrics on `sensor_drift:oat` findings are provisional.
+<!-- /091-plant -->
+
 ## Deprecated
 
 Currently deprecated names and code paths, each with its replacement. Each emits a

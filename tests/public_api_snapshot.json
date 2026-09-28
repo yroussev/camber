@@ -311,7 +311,11 @@
   "camber.chwplant": [
     "CHWPLANT_MEASURES",
     "CHWPlantResult",
-    "analyze_chw_plant"
+    "CHWTrackingResult",
+    "analyze_chw_plant",
+    "analyze_chw_tracking",
+    "chiller_running",
+    "chw_tracking_mask"
   ],
   "camber.chwpump": [
     "CHWPumpResult",
@@ -1241,6 +1245,11 @@
     "runnable_rules",
     "template_for"
   ],
+  "camber.model.equipclass": [
+    "EQUIP_FAMILIES",
+    "equip_family",
+    "family_matches"
+  ],
   "camber.model.mapping": [
     "MappingProvider"
   ],
@@ -1491,6 +1500,11 @@
   "camber.rules.airflow_rule": [
     "AirflowTracking"
   ],
+  "camber.rules.applicability": [
+    "ROLES_SUFFICE",
+    "RULE_EQUIP_CLASSES",
+    "rule_equip_classes"
+  ],
   "camber.rules.base": [
     "Finding",
     "FleetRule",
@@ -1576,7 +1590,10 @@
     "ChillerStaging"
   ],
   "camber.rules.chwplant_rule": [
-    "CHWPlantReset"
+    "CHWPlantReset",
+    "CHWSupplyTracking",
+    "RUN_STATUS_ROLE",
+    "TEMPERATURE_GATE_CAVEAT"
   ],
   "camber.rules.chwpump_rule": [
     "CHWPumpDPReset"
@@ -1798,14 +1815,18 @@
     "Confidence",
     "FaultRegister",
     "Issue",
+    "PLANT_CAPACITY_RULES",
     "Ranked",
     "RootCauseGroup",
+    "SAT_HIGH_RULES",
     "SEVERITY_ORDER",
     "SHARED_ROLES",
     "SensorCause",
+    "UpstreamCause",
     "finding_confidence",
     "group_findings",
     "impact_score",
+    "is_sat_high",
     "issue_totals",
     "link_findings",
     "rank_findings",
@@ -1978,6 +1999,9 @@
     "regularize"
   ],
   "camber.topology_infer": [
+    "CHILD_COLUMNS",
+    "PARENT_COLUMNS",
+    "topology_from_config",
     "topology_from_naming"
   ],
   "camber.tsparse": [

@@ -138,6 +138,15 @@ The ``report`` section selects the report: ``"layout": "audit"`` (the default St
 "oat_reference", "sequence", "notes"}`` (``camber report CONFIG --layout rcx``). ``report.loads``
 (``{equip: {"heating_capacity_kbtuh": ...}}``) sizes equipment for the existing cost estimators.
 
+**Served-by topology** (provisional, 0.91; #61). ``"topology": {"parents": {"VAV-101": "AHU-1",
+"AHU-1": ["CH-1", "CH-2"]}, "csv": ["vav_to_ahu.csv"]}`` declares which equipment serves which --
+an explicit ``{child: parent}`` map and/or CSV schedules (``vav_id,parent_ahu`` style; see
+:func:`camber.topology_infer.topology_from_config`). Ids match the discovered equipment ignoring
+case and separators unless ``"match": "exact"``. Grouping-aware fleet rules (the rogue-zone census,
+cohort starvation, system DCV) then group by it instead of guessing from equipment names, and
+the RCx report ties an air handler to the plant serving it. The run records it as
+``RunResult.topology`` with its provenance in ``RunResult.topology_source``.
+
 Run it: ``python -m camber.config config.json``. JSON is used (not YAML/TOML) to
 stay dependency-free and consistent with the mapping files. Paths are resolved
 relative to the config file's directory.
@@ -214,6 +223,10 @@ class RunResult:
     data_sources: list = field(default_factory=list)  # ingest provenance (dataset, licence, ...)
     config: dict | None = None  # the config dict the run executed
     base_dir: str = "."  # what the config's relative paths resolve against
+    # -- 0.91 (#61): the served-by topology the config declared (None when it declares none) and
+    # its provenance (source file(s), edge count, ids that named no discovered equipment).
+    topology: object | None = None
+    topology_source: dict | None = None
 
 
 def _path(base: str, p: str) -> str:
@@ -1787,6 +1800,15 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     site, resample, mapping, shared = prep.site, prep.resample, prep.mapping, prep.shared
     refs, refs_by_class, min_trust = prep.refs, prep.refs_by_class, prep.min_trust
 
+    # -- 0.91 (#61): a declared served-by topology replaces the naming guess for fleet rules
+    topology, topology_source = None, None
+    if config.get("topology") is not None:
+        from .topology_infer import topology_from_config
+
+        topology, topology_source = topology_from_config(
+            config["topology"], base_dir=base_dir, equip_ids=[r.equip for r in refs]
+        )
+
     reg = builtin_registry()
     findings, ran = [], []
     for entry in config.get("rules", []):
@@ -1802,7 +1824,13 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         rule = reg.get(name)  # KeyError on unknown name
         if is_fleet(rule):
             f = reg.run_fleet(
-                name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
+                name,
+                refs,
+                mapping,
+                resample=resample,
+                shared=shared,
+                min_trust=min_trust,
+                topology=topology,
             )
             if f is not None:
                 findings.append(f)
@@ -1908,6 +1936,8 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         data_sources=list(prep.data_sources),
         config=config,
         base_dir=base_dir,
+        topology=topology,
+        topology_source=topology_source,
     )
 
 

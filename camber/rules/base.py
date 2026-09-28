@@ -172,22 +172,53 @@ def _merge_shared(frame: pd.DataFrame, shared) -> pd.DataFrame:
     return out
 
 
+def _name_match(classes, cls: str) -> bool:
+    """The 0.90.1 spelling match: equal ignoring case, or a longer class *containing* one of the
+    names (``"AHU_DOAS"`` matches ``"AHU"``). Names shorter than three letters must match whole."""
+    up = cls.upper()
+    for c in classes:
+        cu = str(c).upper()
+        if cu == up or (len(cu) >= 3 and cu in up):
+            return True
+    return False
+
+
+def _class_verdict(rule, ref):
+    """``(applies, classes)`` for a rule's equipment-class gate on ``ref``.
+
+    ``applies`` is ``True`` (the rule is written for this class, or declares no classes, or the
+    equipment records none), ``False`` (a recognised class outside the rule's families) or
+    ``None`` (a class :func:`camber.model.equipclass.equip_family` does not recognise -- the rule
+    then runs on its roles alone). ``classes`` is what the rule declares (``None`` when nothing).
+    """
+    from ..model.equipclass import family_matches
+    from .applicability import rule_equip_classes
+
+    classes = rule_equip_classes(rule)
+    cls = str(getattr(ref, "equip_class", "") or "")
+    if not classes or not cls or _name_match(classes, cls):
+        return True, classes
+    return family_matches(cls, classes), classes
+
+
 def _class_declined(rule, ref):
-    """A declined Finding when ``rule`` names the equipment classes it applies to (the optional,
-    provisional ``equip_classes`` attribute) and ``ref`` is of another, known class; else None.
+    """A declined Finding when ``rule`` applies to other classes than ``ref``'s; else None.
 
     Rules are gated by roles, so a rule written for air handlers would otherwise run on any
-    equipment that happens to carry the same roles (a heat pump's discharge air read as supply
-    air). A class match is case-insensitive and a class *containing* one of the names also
-    matches (``"AHU_DOAS"``); an equipment with no recorded class is not declined.
+    equipment that happens to carry the same roles (a heat pump's or a VAV box's discharge air
+    read as supply air). What a rule applies to is its optional, provisional ``equip_classes``
+    attribute, else its entry in :data:`camber.rules.applicability.RULE_EQUIP_CLASSES`. A class
+    matches by spelling (case-insensitive; a class *containing* one of the names also matches,
+    ``"AHU_DOAS"``) or by family (:mod:`camber.model.equipclass`: ``"RTU"`` and ``"AHU"`` are both
+    air handlers). An equipment with no recorded class, or a class no family recognises, is not
+    declined.
     """
-    classes = getattr(rule, "equip_classes", None)
-    cls = str(getattr(ref, "equip_class", "") or "")
-    if not classes or not cls:
+    applies, classes = _class_verdict(rule, ref)
+    if applies is not False:
         return None
-    up = cls.upper()
-    if any(str(c).upper() == up or str(c).upper() in up for c in classes):
-        return None
+    from ..model.equipclass import equip_family
+
+    cls = str(ref.equip_class)
     names = ", ".join(str(c) for c in classes)
     return Finding(
         rule=rule.name,
@@ -197,6 +228,7 @@ def _class_declined(rule, ref):
             "declined": True,
             "reason": f"not applicable to equipment class {cls!r}",
             "equip_class": cls,
+            "equip_family": equip_family(cls),
             "applies_to_classes": [str(c) for c in classes],
         },
         summary=f"{ref.equip}: declined -- {rule.name} applies to {names}, not {cls}",
@@ -204,6 +236,24 @@ def _class_declined(rule, ref):
             f"{rule.name} not evaluated: it is written for {names} equipment and this is a {cls}"
         ],
     )
+
+
+def _class_unrecognised_note(rule, ref) -> str | None:
+    """A caveat when a class-gated rule ran on equipment whose class no family recognises."""
+    applies, classes = _class_verdict(rule, ref)
+    if applies is not None:
+        return None
+    names = ", ".join(str(c) for c in classes)
+    return (
+        f"equipment class {ref.equip_class!r} is not a recognised class; {rule.name} (written for "
+        f"{names}) ran on its roles alone"
+    )
+
+
+def _note_unrecognised(finding, rule, ref) -> None:
+    note = _class_unrecognised_note(rule, ref)
+    if finding is not None and note and note not in finding.caveats:
+        finding.caveats.append(note)
 
 
 def _as_bound(value):
@@ -306,6 +356,7 @@ class Registry:
                     continue
             f = rule.analyze(ref.equip, frame)
             _note_missing_optional(f, _missing_optional(rule, frame))
+            _note_unrecognised(f, rule, ref)
             if f is not None:
                 out.append(f)
         return out
@@ -344,6 +395,10 @@ class Registry:
             frame = _merge_shared(frame, shared)
             if frame.empty or any(r not in frame.columns for r in rule.roles_required):
                 continue
+            declined = _class_declined(rule, ref)
+            if declined is not None:
+                out.append(declined)
+                continue
             if min_trust is not None:
                 bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
                 if bad:
@@ -381,6 +436,7 @@ class Registry:
                 continue
             f = rule.analyze_periods(ref.equip, base_frame, cur_frame)  # type: ignore[attr-defined]
             _note_missing_optional(f, _missing_optional(rule, frame))
+            _note_unrecognised(f, rule, ref)
             if f is not None:
                 out.append(f)
         return out
@@ -413,7 +469,13 @@ class Registry:
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
         frames = {}
+        other_class: dict = {}  # equip -> class, for equipment the rule is not written for
+        unrecognised: list = []
         for ref in equip_refs:
+            applies, _classes = _class_verdict(rule, ref)
+            if applies is False:  # decided before resolving: no data is read for it
+                other_class[ref.equip] = str(ref.equip_class)
+                continue
             frame = resolve(ref, mapping, load, resample=resample)
             frame = _merge_shared(frame, shared)
             if frame.empty or any(r not in frame.columns for r in rule.roles_required):
@@ -423,9 +485,24 @@ class Registry:
             ):
                 continue
             frames[ref.equip] = frame
+            if applies is None:
+                unrecognised.append(ref)
         if topology is None and getattr(rule, "wants_topology", False):
             topology = _heuristic_topology(equip_refs)
         f = rule.analyze_fleet(frames, topology=topology)  # type: ignore[attr-defined]  # fleet only
+        if f is not None and other_class:
+            f.metrics.setdefault(
+                "_class_excluded",
+                {"n": len(other_class), "classes": sorted(set(other_class.values()))},
+            )
+        if f is not None and unrecognised:
+            classes = sorted({str(r.equip_class) for r in unrecognised})
+            note = (
+                f"equipment of unrecognised class(es) {', '.join(classes)} entered {rule.name} on "
+                "roles alone"
+            )
+            if note not in f.caveats:
+                f.caveats.append(note)
         # backstop: optional roles that were present on no equipment at all
         if frames:
             never = [
