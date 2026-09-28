@@ -83,12 +83,14 @@ def test_registered_and_evidence():
     assert Role.COND_ENTERING_WATER_TEMP in ev.roles and ev.mask.any()
 
 
-def test_pending_faultlab_scenario_scores_clean():
-    recs = faultlab.labeled_records(scenarios=faultlab.PENDING_SCENARIOS)
-    rep = benchmark(recs, faultlab.targets(faultlab.PENDING_SCENARIOS))
+def test_faultlab_scenario_scores_clean():
+    # promoted from PENDING_SCENARIOS to the gated SCENARIOS at the 0.92 sign-off
+    sc = {"condenser_bypass_leak": faultlab.SCENARIOS["condenser_bypass_leak"]}
+    recs = faultlab.labeled_records(scenarios=sc)
+    rep = benchmark(recs, faultlab.targets(sc))
     c = rep.per_detector["condenser_bypass_leak"]
     assert c.true_positive_rate == 1.0 and c.false_positive_rate == 0.0
-    assert not set(faultlab.PENDING_SCENARIOS) & set(faultlab.SCENARIOS)
+    assert not faultlab.PENDING_SCENARIOS
 
 
 def test_brick_bypass_valve_and_condenser_temperatures():
