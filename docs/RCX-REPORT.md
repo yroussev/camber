@@ -179,7 +179,13 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
   with `{"fetch": "nasa_power", "latitude": …, "longitude": …, "tz": "America/Chicago"}`.
   Every distinct OAT source is compared (0.91): units reading one sensor
   share a row, and an AHU trending its own sensor gets its own row and `sensor_drift:oat` finding,
-  which makes only that unit's findings conditional.
+  which makes only that unit's findings conditional. <!-- 092-plant --> Without a reference
+  (0.92, #66), the site's OAT sources are cross-checked against each other: with three or more,
+  each against the site median (one wrong sensor is out-voted and gets a scoped
+  `sensor_drift:oat` finding, `metrics["reference"] = "peer_median"`); with exactly two, their
+  disagreement is shown in the data section but raises no finding, since it cannot say which one
+  is wrong. Plant points (chilled-, condenser- and hot-water temperatures) are judged for trust on
+  their equipment's running samples (see [Sensor health](SENSOR-HEALTH.md)). <!-- /092-plant -->
 - `chart_format: "svg"` renders the line charts as SVG; dense scatters stay PNG.
 
 In Python:

@@ -68,6 +68,12 @@ class Role(str, Enum):
     HW_DIFF_PRESS_SP = "hw_diff_press_sp"  # hot-water loop DP setpoint
     HW_PUMP_SPEED = "hw_pump_speed"  # hot-water pump VFD speed (%)
     HW_FLOW = "hw_flow"  # hot-water volumetric flow (gpm)
+    # 092-plant (#13): a boiler's fuel (gas) input *rate*, kW of fuel energy -- an instantaneous
+    # rate, never a cumulative meter reading (difference a totalizer before mapping it here). The
+    # boiler efficiency drift is judged on a relative change, so a consistent rate unit is what
+    # matters; kW is the documented canonical unit. Also the hot-water run gate's firing signal
+    # when no boiler status is mapped (camber.schedules.plant_run_mask).
+    GAS_INPUT_RATE = "gas_input_rate"
 
     # --- chilled-water plant ---
     CHW_SUPPLY_TEMP = "chw_supply_temp"  # chilled-water supply temp
@@ -196,6 +202,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.HW_PUMP_SPEED: "hot water pump speed cmd",
     Role.HW_DIFF_PRESS_SP: "hot water delta pressure sp",
     Role.HW_FLOW: "hot water flow sensor",
+    Role.GAS_INPUT_RATE: "naturalGas flow sensor",
     Role.CHW_SUPPLY_TEMP: "chilled water leaving temp sensor",
     Role.CHW_RETURN_TEMP: "chilled water entering temp sensor",
     Role.CHW_SUPPLY_TEMP_SP: "chilled water leaving temp sp",

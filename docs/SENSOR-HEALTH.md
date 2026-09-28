@@ -26,6 +26,34 @@ range and outlier reads are unchanged, and an OAT or space temperature is never 
 [RCx report](RCX-REPORT.md) shows both reads. `schedules.fan_on_mask(frame)` picks the gate: fan
 status, else fan speed, else airflow, else "ungated — no fan signal".
 
+<!-- 092-plant -->
+**Plant run gate (0.92, #66; provisional).** A chiller that is off lets its chilled-water supply
+drift to the plant-room temperature and hold there for days; a boiler that is off lets its loop
+cool. Read ungated, that is a `stuck` or `out_of_range` sensor, and the RCx report made every plant
+finding that leans on it *conditional*. `frame_sensor_health(frame, plant_gate="auto")` now judges
+the plant roles (`PLANT_GATED_ROLES`: chilled- and condenser-water temperatures, the refrigerant
+approaches, subcooling and superheat for a chiller; hot-water supply and return for a boiler) on
+their equipment's **running** samples: range, outliers, flatline and stuck runs are read over
+running samples only, coverage over the whole span. `schedules.plant_run_mask(frame, loop)` picks
+the gate:
+
+| Loop | Gate, strongest first |
+|---|---|
+| `"chw"` | the chiller's run status / command (`compressor_status`) > 0.5; else its `power` above a tenth of its own 95th percentile (only on a frame with a chilled-water role and no supply-fan signal) |
+| `"hw"` | the boiler's status (`boiler_status`) > 0.5; else its gas input (`gas_input_rate`) above 5 % of its own 95th percentile |
+
+The first 30 minutes after each start are left out (a loop pulling down from standby is not a
+sensor fault), and a value held across successive running stretches still counts as one stuck run
+(the off time between them is not added). A chiller's `power` is gated too when the gate comes from
+its status. A point whose equipment ran for fewer than 24 samples is flagged `not_running` and
+scored on coverage alone. The running samples are read regime-aware: a "status" that is really an
+enable (a boiler on through a mild month with the loop cold) splits them in two, which is flagged
+`bimodal` rather than read as outliers. The all-points-frozen check ignores intervals the plant was
+off throughout. The runner's trust gate (`untrusted_roles`) and the RCx report apply the plant gate;
+`frame_sensor_health` keeps `plant_gate=None` as its default. `SensorTrust.run_gate` names the gate
+a point was judged on.
+<!-- /092-plant -->
+
 **Outliers are read shape-aware.** The plain robust test (median / MAD modified z-score) assumes
 one tight population. On a healthy plant that assumption fails two ways:
 

@@ -1597,6 +1597,7 @@
   "camber.rules.chwplant_rule": [
     "CHWPlantReset",
     "CHWSupplyTracking",
+    "POWER_GATE_CAVEAT",
     "RUN_STATUS_ROLE",
     "TEMPERATURE_GATE_CAVEAT"
   ],
@@ -1887,11 +1888,15 @@
     "detect_schedule"
   ],
   "camber.schedules": [
+    "CHILLER_POWER_RUN_FRAC",
     "FAN_GATE_NONE",
+    "GAS_FIRING_FRAC",
+    "PLANT_GATE_NONE",
     "day_type",
     "effective_occupied_mask",
     "fan_on_mask",
     "occupied_mask",
+    "plant_run_mask",
     "time_of_week_bin"
   ],
   "camber.scorecard": [
@@ -1910,6 +1915,8 @@
     "ConsistencyResult",
     "FAN_GATED_ROLES",
     "PHYSICAL_BOUNDS",
+    "PLANT_GATED_ROLES",
+    "PLANT_SETTLE",
     "STUCK_HOURS",
     "SensorTrust",
     "co2_outdoor_consistency",
@@ -1921,6 +1928,7 @@
     "mixing_consistency",
     "mixing_flow_consistency",
     "percent_scale_suspect",
+    "plant_gates",
     "range_violation_frac",
     "sensor_trust",
     "trusted_roles",

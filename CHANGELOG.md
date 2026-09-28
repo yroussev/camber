@@ -4,6 +4,37 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 092-plant -->
+### Added
+- **A plant run gate for sensor trust (#66).** `schedules.plant_run_mask(frame, loop)` reads when
+  a chiller (`"chw"`: run status, else power above a tenth of its own 95th percentile) or a boiler
+  (`"hw"`: status, else gas input) ran, and `frame_sensor_health(frame, plant_gate="auto")` judges
+  the plant roles (`sensorhealth.PLANT_GATED_ROLES`) on those running samples: range, outliers,
+  flatline and stuck runs over running samples, coverage over the whole span, the first 30 minutes
+  after a start left out. A chiller that sat off no longer reads as a stuck or out-of-range
+  chilled-water sensor. New flag `not_running`; `SensorTrust.run_gate` names the gate. The runner's
+  trust gate and the RCx report use it; `frame_sensor_health` keeps `plant_gate=None` by default.
+- **`Role.GAS_INPUT_RATE`** (`gas_input_rate`): a boiler's fuel input rate, kW (#13, #66).
+- **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
+  the site's OAT sources with each other: three or more against their median (the outlier gets a
+  scoped `sensor_drift:oat` finding), two shown side by side with no finding.
+
+### Changed
+- **The chilled-water plant rules fall back to chiller power (#66).** `chw_plant_reset` and
+  `chw_supply_tracking` gate on the chiller's power (`run_source="power"`, with a caveat) when no
+  run status is mapped, before falling back to the supply temperature.
+- The all-points-frozen trust check ignores intervals a plant was off throughout (#66).
+
+### Fixed
+- **One unit's stuck OAT made the whole site conditional (#66).** A stuck or untrusted OAT on
+  one air handler that trends its own sensor was a site-wide cause, so the chiller and boiler
+  findings (which read the weather station) were marked conditional on it. The RCx report now
+  passes `link_findings(..., shared_scope=...)` (and `sensor_causes`) the units that read each
+  OAT source, and the cause taints only them.
+<!-- /092-plant -->
+
 ## [0.91.0] — 2026-09-27
 
 **0.91: real-data correctness (#60-#63, #32, #33, #35).** Fixes for wrong or misleading results

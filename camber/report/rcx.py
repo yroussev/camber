@@ -279,6 +279,68 @@ def _oat_of(frames: dict, *, sources: bool = False):
     return groups
 
 
+def _oat_peer_check(sources: list):
+    """``(rows, findings, note)``: each OAT source against the median of the others (0.92, #66).
+
+    Used when no OAT reference is configured and the site trends more than one distinct OAT
+    source. With three or more, each source is compared (:func:`camber.sensordrift.drift_finding`)
+    against the median of all of them, so one wrong sensor is out-voted; its finding is scoped to
+    the units that read it, and a warn/fault makes their findings conditional like a reference
+    check would. With exactly two there is no majority: the pair's disagreement is reported in the
+    table and the note, but no finding is raised -- configure a reference to tell which is wrong.
+    """
+    from ..sensordrift import drift_finding
+
+    if len(sources) < 2:
+        return [], [], ""
+    idx = sources[0][0].index
+    for s_, _eqs in sources[1:]:
+        idx = idx.union(s_.index)
+    aligned = [pd.to_numeric(s_, errors="coerce").reindex(idx) for s_, _e in sources]
+    rows, out = [], []
+
+    def _label(eqs):
+        return eqs[0] if len(eqs) == 1 else "OAT shared by " + ", ".join(eqs)
+
+    consensus = pd.concat(aligned, axis=1).median(axis=1, skipna=True)
+    for i, (_s, eqs) in enumerate(sources):
+        # three or more: the site median, which one wrong sensor cannot move (a leave-one-out
+        # median of two would be their mean, and would drag the good sensors with the bad)
+        ref = consensus if len(sources) >= 3 else aligned[1 - i]
+        f = drift_finding(aligned[i], ref, _label(eqs), Role.OAT)
+        m = f.metrics
+        f.metrics["oat_equips"] = list(eqs)
+        f.metrics["scope_equips"] = list(eqs)
+        f.metrics["reference"] = "peer_median"
+        f.caveats.append(
+            "no OAT reference configured: compared with the site's other OAT sources, not "
+            "with weather"
+        )
+        if len(sources) >= 3:
+            out.append(f)
+        name = _label(eqs) if len(sources) >= 3 else f"{_label(eqs)} vs {_label(sources[1][1])}"
+        rows.append(
+            [
+                f"{name}: {f.severity}",
+                m.get("bias"),
+                m.get("drift_per_month"),
+                m.get("rmse"),
+                m.get("correlation"),
+                m.get("n"),
+            ]
+        )
+        if len(sources) == 2:
+            break  # the second row would be the same comparison with the sign flipped
+    note = ""
+    if len(sources) == 2:
+        note = (
+            "Only two OAT sources: a disagreement cannot say which one is wrong, so it is not "
+            "raised as a finding. Configure an OAT reference (report.rcx.oat_reference) to "
+            "check each against weather."
+        )
+    return rows, out, note
+
+
 def _grid_step(frames: dict) -> pd.Timedelta:
     from ..timegrid import interval_hours
 
@@ -1029,7 +1091,7 @@ def build_rcx_report(
     from ..fault_economics import DEFAULTS, cost_findings
     from ..rules.triage import finding_confidence, issue_totals, link_findings
     from ..sensordrift import drift_finding
-    from ..sensorhealth import frame_sensor_health, mixing_consistency
+    from ..sensorhealth import frame_sensor_health, mixing_consistency, plant_gates
 
     base_dir = getattr(run, "base_dir", ".") or "."
     cfg = getattr(run, "config", None) or {}
@@ -1061,7 +1123,12 @@ def build_rcx_report(
             plant.append(e)
         num = fr.select_dtypes(include="number")
         trust_raw[e] = frame_sensor_health(num)
-        trust_gated[e] = frame_sensor_health(num, gate=g) if g is not None else trust_raw[e]
+        # 092-plant (#66): plant points (CHW/CW/HW temperatures, a chiller's power) are judged on
+        # their equipment's running samples, so a chiller that is off doesn't read as a bad sensor
+        if g is not None or plant_gates(num):
+            trust_gated[e] = frame_sensor_health(num, gate=g, plant_gate="auto")
+        else:
+            trust_gated[e] = trust_raw[e]
         gfr = fr[_on(g, fr.index).to_numpy()] if g is not None else fr
         mixing[e] = mixing_consistency(gfr)
 
@@ -1069,7 +1136,17 @@ def build_rcx_report(
     # Every distinct OAT source is compared, per equipment (#61): one AHU's own sensor reading
     # +5 F is its own finding, scoped to the units that read it, not hidden behind the first one.
     findings = list(ctx.findings)
-    ref_rows, ref_note = [], ""
+    ref_rows, ref_note, ref_kind = [], "", "reference"
+    # 092-plant (#66): every distinct OAT source and the units reading it -- scopes a stuck OAT's
+    # trust cause to those units, and (without a reference) feeds the peer cross-check
+    all_oat = _oat_of({e: ctx.frame(e) for e in ctx.equips}, sources=True)
+    oat_scope = {e: list(eqs) for _s, eqs in all_oat for e in eqs} if len(all_oat) > 1 else None
+    if not o.oat_reference:
+        # 092-plant (#66, deferred from #61/#62): no reference -- cross-check the OAT sources
+        peer_rows, peer_findings, ref_note = _oat_peer_check(all_oat)
+        if peer_rows:
+            ref_rows, ref_kind = peer_rows, "peer"
+            findings.extend(peer_findings)
     if o.oat_reference:
         oat_sources = _oat_of({e: ctx.frame(e) for e in air or ctx.equips}, sources=True)
         if not oat_sources:
@@ -1198,6 +1275,8 @@ def build_rcx_report(
         facility_id=getattr(run, "facility_id", None) or "",
         site=getattr(run, "site", "") or "",
         topology=getattr(run, "topology", None),  # a declared served-by map ties AHU to plant
+        # 092-plant (#66): a unit's own OAT sensor taints only the units that read it
+        shared_scope=oat_scope,
     )
     totals = issue_totals(issues)
 
@@ -1270,6 +1349,7 @@ def build_rcx_report(
         "declined": declined,
         "ref_rows": ref_rows,
         "ref_note": ref_note,
+        "ref_kind": ref_kind,
         "costs": costs,
         "cost_defaults": {**DEFAULTS, **(o.cost_params or {})},
         "exclude_cost": exclude_cost,
@@ -1521,7 +1601,21 @@ def _sec_data(S) -> dict:
             fig, ax = plt.subplots(figsize=(10, 0.35 * len(cols) + 1.4))
             readiness_ribbon(fr[cols], ax=ax, title=f"{e}: data readiness")
             blocks.append(_figure(fig, alt=f"{e} readiness", fmt="png", dpi=ctx.dpi))
-    if S["ref_rows"]:
+    if S["ref_rows"] and S.get("ref_kind") == "peer":  # 092-plant (#66)
+        blocks.append(
+            _p(
+                "No OAT reference configured, so the site's OAT sources were cross-checked against "
+                "each other (each against the site median, or the pair against each other):"
+            )
+        )
+        blocks.append(
+            _table(
+                ["Result", "Bias °F", "Drift °F/month", "RMSE °F", "r", "Samples"], S["ref_rows"]
+            )
+        )
+        if S["ref_note"]:
+            blocks.append(_p(S["ref_note"]))
+    elif S["ref_rows"]:
         blocks.append(_p("BAS outdoor-air temperature vs the configured reference:"))
         blocks.append(
             _table(
