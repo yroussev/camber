@@ -68,6 +68,22 @@ def test_satreset_warns_when_cold_and_flat():
 
 
 def test_satreset_ok_when_resetting_up():
+    # #65 (0.92): the reset raises SAT as OAT *falls* -- a negative slope against OAT
+    n = 24 * 30
+    idx = _idx(n)
+    rng = np.random.default_rng(1)
+    oat = 90 + 12 * np.sin((idx.hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 1, n)
+    sat = np.clip(62 - 0.25 * (oat - 78) + rng.normal(0, 0.5, n), 53, 65)
+    frame = pd.DataFrame(
+        {Role.SUPPLY_AIR_TEMP: sat, Role.COOL_VALVE: np.full(n, 60.0), Role.OAT: oat}, index=idx
+    )
+    f = SupplyAirReset().analyze("AHU_2", frame)
+    assert f.metrics["slope_per_F"] < -0.10
+    assert f.severity == "ok"
+
+
+def test_satreset_rising_with_oat_is_not_ok():
+    # #65: the pre-0.92 "resetting up" shape -- SAT warmer as OAT rises -- is a capacity shortfall
     n = 24 * 30
     idx = _idx(n)
     rng = np.random.default_rng(1)
@@ -77,8 +93,9 @@ def test_satreset_ok_when_resetting_up():
         {Role.SUPPLY_AIR_TEMP: sat, Role.COOL_VALVE: np.full(n, 60.0), Role.OAT: oat}, index=idx
     )
     f = SupplyAirReset().analyze("AHU_2", frame)
-    assert f.metrics["slope_per_F"] > 0.10
-    assert f.severity == "ok"
+    assert f.metrics["slope_per_F"] > 0.10 and f.severity == "info"
+    assert f.metrics["reset_direction"] == "rising_with_load"
+    assert "possible capacity shortfall" in f.summary
 
 
 # ---- zones (fleet) ----

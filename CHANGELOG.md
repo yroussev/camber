@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 092-air -->
+### Fixed
+- **`supply_air_reset` read supply air rising with OAT as a reset (#65).** A G36 cooling SAT reset
+  lowers supply air as OAT rises and for each cooling request (§5.16.2.2; the trim-and-respond
+  response is negative), so the reset is now a **negative** SAT-vs-OAT slope, and a trended
+  setpoint must move against its driver (OAT or SAT reset requests). Supply air that rises with OAT
+  over cooling hours reads "SAT RISING WITH LOAD (possible capacity shortfall, not a reset)"
+  (`info`, `warn` when cold supply air dominates) with a caveat to check the chilled-water supply
+  and the cooling valve; a setpoint that rises with its driver is "in the wrong direction"
+  (`sp_wrong_direction`) and never `ok`. New: `SATResetResult.direction` and the finding metric
+  `reset_direction` (`reset` / `rising_with_load` / `flat` / None). The `faultlab` clean scenario
+  for `supply_air_reset` now resets in the G36 direction; the synthetic benchmark did not move.
+<!-- /092-air -->
+
 ## [0.91.0] — 2026-09-27
 
 **0.91: real-data correctness (#60-#63, #32, #33, #35).** Fixes for wrong or misleading results

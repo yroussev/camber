@@ -18,6 +18,13 @@ behind the reheat penalty.
 
 Method note: we fit an ordinary least-squares line SAT ~ a + b*OAT over occupied
 cooling-mode hours (CHW valve open). |b| small AND sat_std small => no reset.
+
+**The reset direction is negative against OAT (#65, 0.92).** A G36-style cooling SAT reset
+(§5.16.2.2) holds supply air at its warmest in mild weather and lowers it towards the minimum as
+OAT rises, so a reset shows as a *negative* slope. Supply air that *rises* with OAT over cooling
+hours is supply air rising with load -- usually a cooling coil or plant that cannot hold its
+setpoint on hot hours -- and is reported as ``SAT RISING WITH LOAD (possible capacity shortfall)``,
+never as a reset. (Until 0.92 the sign was the other way round.)
 """
 
 from __future__ import annotations
@@ -61,6 +68,9 @@ class SATResetResult:
     verdict: str
     coverage_start: str
     coverage_end: str
+    # 0.92 (#65): "reset" (SAT falls as OAT rises), "rising_with_load" (SAT rises with OAT --
+    # a possible capacity shortfall, not a reset), "flat", or None (no OAT: not evaluated)
+    direction: str | None = None
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -148,7 +158,8 @@ def analyze_satreset(
     flat = (not np.isnan(slope)) and abs(slope) < slope_flat
     tight = sat_std < spread_tight
     # Reset is SAT-vs-OAT modulation. Without OAT the slope is NaN and we CANNOT judge
-    # reset direction -- say so, never assert a confident "INVERSE / load tracking".
+    # reset direction -- say so, never assert a confident direction.
+    direction: str | None = None
     if np.isnan(slope):
         verdict = "RESET NOT EVALUATED (no OAT)"
     elif flat and tight:
@@ -161,10 +172,16 @@ def analyze_satreset(
             verdict = f"NO RESET (SAT held at ~{level:.0f} F regardless of OAT)"
     elif flat:
         verdict = "WEAK/NO RESET (flat SAT vs OAT)"
-    elif slope > 0:
-        verdict = "RESET PRESENT (SAT rises with OAT)"
+    elif slope < 0:
+        # #65: the G36 OAT reset lowers SAT as OAT rises -- a negative slope is the reset
+        verdict = "RESET PRESENT (SAT falls as OAT rises)"
+        direction = "reset"
     else:
-        verdict = "INVERSE (SAT falls as OAT rises — load tracking)"
+        # #65: SAT rising with OAT over cooling hours is supply air rising with load
+        verdict = "SAT RISING WITH LOAD (possible capacity shortfall, not a reset)"
+        direction = "rising_with_load"
+    if direction is None and not np.isnan(slope):
+        direction = "flat"
 
     return SATResetResult(
         equip=equip,
@@ -179,4 +196,5 @@ def analyze_satreset(
         verdict=verdict,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        direction=direction,
     )

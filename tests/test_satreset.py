@@ -17,8 +17,8 @@ def _frame(n=24 * 30, reset=False, seed=0):
     hour = idx.hour + idx.minute / 60.0
     oat = 90 + 12 * np.sin((hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 1, n)
     if reset:
-        # good reset: SAT rises as OAT falls below design -> positive slope vs OAT
-        sat = 55 + 0.25 * (oat - 75) + rng.normal(0, 0.5, n)
+        # good reset (#65: the G36 direction): SAT lowered as OAT rises -> negative slope vs OAT
+        sat = 62 - 0.25 * (oat - 78) + rng.normal(0, 0.5, n)
         sat = np.clip(sat, 53, 65)
     else:
         # no reset: SAT pinned ~55 regardless of OAT
@@ -43,24 +43,35 @@ def test_no_reset_detected():
 
 def test_reset_present_detected():
     r = analyze_satreset(_frame(reset=True), "AHU_T", occupied_only=False)
-    assert r.slope_per_F > 0.10
-    assert "RESET PRESENT" in r.verdict
+    assert r.slope_per_F < -0.10
+    assert "RESET PRESENT" in r.verdict and "falls as OAT rises" in r.verdict
+    assert r.direction == "reset"
 
 
-def _frame_inverse(n=24 * 30, seed=3):
-    # SAT gets colder as OAT rises (load tracking) -> negative slope
+def _frame_rising(n=24 * 30, seed=3):
+    # #65: SAT gets WARMER as OAT rises -- supply air rising with load, a capacity shortfall
+    # shape (until 0.92 this was the "reset present" case)
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2025-07-01", periods=n, freq="1h")
     hour = idx.hour + idx.minute / 60.0
     oat = 90 + 12 * np.sin((hour - 9) / 24 * 2 * np.pi) + rng.normal(0, 1, n)
-    sat = 56 - 0.15 * (oat - 90) + rng.normal(0, 1.0, n)
+    sat = 55 + 0.25 * (oat - 75) + rng.normal(0, 0.5, n)
     return pd.DataFrame({"SupplyAir": sat, "CHW_Valve": np.full(n, 60.0), "OSA": oat}, index=idx)
 
 
-def test_inverse_load_tracking_detected():
-    r = analyze_satreset(_frame_inverse(), "AHU_T", occupied_only=False)
-    assert r.slope_per_F < -0.05
-    assert "INVERSE" in r.verdict
+def test_sat_rising_with_oat_is_a_possible_capacity_shortfall_not_a_reset():
+    r = analyze_satreset(_frame_rising(), "AHU_T", occupied_only=False)
+    assert r.slope_per_F > 0.10
+    assert "RESET PRESENT" not in r.verdict
+    assert "RISING WITH LOAD" in r.verdict and "capacity shortfall" in r.verdict
+    assert r.direction == "rising_with_load"
+
+
+def test_direction_flat_and_not_evaluated():
+    assert analyze_satreset(_frame(reset=False), "AHU_T", occupied_only=False).direction == "flat"
+    no_oat = _frame(reset=True).drop(columns=["OSA"])
+    r = analyze_satreset(no_oat, "AHU_T", occupied_only=False)
+    assert r.direction is None and "NOT EVALUATED" in r.verdict
 
 
 def test_returns_none_without_sat():

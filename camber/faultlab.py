@@ -77,7 +77,9 @@ def _sat_reset(idx, *, faulty):
     if faulty:
         sat = 55 + rng.normal(0, 0.4, len(idx))  # pinned cold, no reset
     else:
-        sat = np.clip(55 + 0.25 * (oat - 75) + rng.normal(0, 0.5, len(idx)), 53, 65)
+        # 0.92 (#65): an OAT reset in the G36 direction -- SAT lowered as OAT rises (until 0.92
+        # this clean case rose with OAT, the shape of a capacity shortfall)
+        sat = np.clip(62 - 0.25 * (oat - 78) + rng.normal(0, 0.5, len(idx)), 53, 65)
     return pd.DataFrame(
         {Role.SUPPLY_AIR_TEMP: sat, Role.COOL_VALVE: np.full(len(idx), 60.0), Role.OAT: oat},
         index=idx,

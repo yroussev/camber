@@ -331,7 +331,10 @@ def test_capacity_shortfall_with_flat_setpoint_is_not_a_reset():
     sat = 52.0 + np.clip(oat - 62.0, 0, None) * 0.5  # coil can't hold 52 °F on hot hours
     frame, _ = _ahu(idx, sat=sat, sp=52.0, oat=oat)
     no_sp = SupplyAirReset().analyze("AHU", frame.drop(columns=[Role.SUPPLY_AIR_TEMP_SP]))
-    assert no_sp.severity == "ok" and "RESET PRESENT" in no_sp.summary
+    # #65: without a setpoint, SAT rising with OAT is no longer read as a reset
+    assert no_sp.severity == "warn" and "RESET PRESENT" not in no_sp.summary
+    assert "possible capacity shortfall" in no_sp.summary
+    assert no_sp.metrics["reset_direction"] == "rising_with_load"
     assert any("capacity" in c for c in no_sp.caveats)
     f = SupplyAirReset().analyze("AHU", frame)
     assert f.severity == "warn"
@@ -356,18 +359,55 @@ def test_sat_setpoint_step_is_reported_as_step():
 def test_sat_setpoint_reset_with_oat_stands():
     idx = _idx(days=21)
     base, oat = _ahu(idx, sat=0.0)
-    sp = np.clip(55 + 0.4 * (oat - 60), 53, 65)  # rises with OAT, the shape the rule rewards
+    # #65: falls as OAT rises -- the G36 OAT-reset direction the rule rewards
+    sp = np.clip(65 - 0.4 * (oat - 60), 53, 65)
     frame, _ = _ahu(idx, sat=sp + 0.1, sp=sp, oat=oat)
     f = SupplyAirReset().analyze("AHU", frame)
     assert f.metrics["sp_behaviour"] == "reset" and f.metrics["sp_driver"] == "OAT"
+    assert f.metrics["sp_driver_rho"] < 0 and f.metrics["reset_direction"] == "reset"
     assert f.severity == "ok" and "setpoint resets with OAT" in f.summary
     assert not f.caveats
+
+
+def test_sat_setpoint_rising_with_oat_is_not_confirmed_as_a_reset():
+    # #65: a setpoint that rises with OAT moves with its driver, but in the wrong direction
+    idx = _idx(days=21)
+    base, oat = _ahu(idx, sat=0.0)
+    sp = np.clip(55 + 0.4 * (oat - 60), 53, 65)
+    frame, _ = _ahu(idx, sat=sp + 0.1, sp=sp, oat=oat)
+    f = SupplyAirReset().analyze("AHU", frame)
+    assert f.metrics["sp_behaviour"] == "reset" and f.metrics["sp_driver_rho"] > 0
+    assert f.metrics.get("sp_wrong_direction") is True
+    assert f.severity != "ok" and "wrong direction" in f.summary
+    assert "RESET PRESENT" not in f.summary
+
+
+def test_sat_setpoint_reset_with_requests_needs_the_negative_sign():
+    # #65: trim-and-respond lowers the SAT setpoint for each request beyond the ignored ones
+    from camber.g36_reset import SAT_TR, tr_simulate
+
+    idx = _idx(days=21)
+    base, oat = _ahu(idx, sat=0.0)
+    req = np.where(((np.arange(len(idx)) // 24) // 2) % 2 == 0, 6.0, 0.0)
+    sp = tr_simulate(req, SAT_TR)
+    sat = np.clip(65 - 0.4 * (oat - 60), 53, 65)  # the SAT shape of a reset
+    frame, _ = _ahu(idx, sat=sat, sp=sp, oat=oat)
+    frame[Role.SAT_RESET_REQUESTS] = pd.Series(req, index=idx)
+    f = SupplyAirReset().analyze("AHU", frame)
+    assert f.metrics["sp_driver"] == "SAT reset requests"
+    assert f.metrics["sp_driver_rho"] < 0
+    assert f.metrics["sp_behaviour"] == "reset" and not f.metrics.get("sp_wrong_direction")
+    assert f.severity == "ok"
+    inverted = frame.copy()
+    inverted[Role.SUPPLY_AIR_TEMP_SP] = 120.0 - pd.Series(sp, index=idx)  # rises with requests
+    g = SupplyAirReset().analyze("AHU", inverted)
+    assert g.metrics.get("sp_wrong_direction") is True and g.severity == "info"
 
 
 def test_sat_setpoint_unrelated_to_driver_downgrades_ok_to_info():
     idx = _idx(days=21)
     base, oat = _ahu(idx, sat=0.0)
-    sat = np.clip(55 + 0.4 * (oat - 60), 53, 65)
+    sat = np.clip(65 - 0.4 * (oat - 60), 53, 65)  # #65: the reset direction
     req = pd.Series(_tr(idx, 0, 6, phase=np.pi / 2), index=idx)
     sp = 58 + 3 * np.sin(np.arange(len(idx)) / 24 * 2 * np.pi)  # moves daily, not with requests
     frame, _ = _ahu(idx, sat=sat, sp=sp, oat=oat)
