@@ -276,6 +276,24 @@ class BillingSeries:
         out["estimated"] = False
         return BillingSeries(out, units=self.units, merged=list(self.merged) + log)
 
+    def converted(self, unit: str, *, heat_content=None, enthalpy=None) -> BillingSeries:
+        """The same bills with their energy in ``unit`` (provisional, 0.92, #69).
+
+        :attr:`units` must name a unit :func:`camber.energy_units.parse_unit` reads; a gas volume
+        (``Mcf``, ``CCF``, ``m3``) needs ``heat_content`` and a steam mass (``lb``, ``klb``)
+        ``enthalpy``, with no default. Raises ``ValueError`` otherwise.
+        """
+        from ..energy_units import energy_factor, parse_unit
+
+        if not self.units:
+            raise ValueError("these bills name no unit; set units= before converting")
+        k = energy_factor(self.units, unit, heat_content=heat_content, enthalpy=enthalpy)
+        f = self.frame.reset_index(drop=True)
+        f["energy"] = f["energy"] * k
+        return BillingSeries(
+            f, units=parse_unit(unit, kind="energy").name, merged=list(self.merged)
+        )
+
     # ------------------------------------------------------------------ views
     def __len__(self) -> int:
         return len(self.frame)

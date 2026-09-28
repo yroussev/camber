@@ -32,7 +32,7 @@ import os
 
 import pandas as pd
 
-__all__ = ["billing_label", "load_bills", "billing_oat", "billing_findings"]
+__all__ = ["billing_label", "load_bills", "billing_oat", "billing_units", "billing_findings"]
 
 _KNOWN = {
     "bills",
@@ -61,6 +61,7 @@ _KNOWN = {
 _FULL_YEAR_DAYS = 330  # a baseline of bills covering fewer days of service is flagged short
 _BILL_KEYS = {"file", "start", "end", "energy", "estimated", "units", "end_inclusive"}
 _BILL_KEYS |= {"merge_estimated", "units_column"}
+_BILL_KEYS |= {"heat_content", "enthalpy"}  # 0.92 (#69): gas volumes and steam mass
 
 
 def _spec(entry: dict) -> dict:
@@ -165,10 +166,51 @@ def _slicer(frame: pd.DataFrame):
     return cut
 
 
+def billing_units(spec: dict, bills, units) -> tuple | None:
+    """0.92 (#69): ``(factor, reported unit, bills unit, system)`` converting a billing entry's
+    energy to the config's ``units`` system, or ``None`` without one.
+
+    ``bills.heat_content`` (gas volumes: ``"10.37 therm/Mcf"``) and ``bills.enthalpy`` (steam:
+    ``"1000 Btu/lb"``) are validated whenever given. With a unit system the bills must name a
+    parseable unit, and a volume or mass needs its heat content or enthalpy; there is no default.
+    """
+    from .energy_units import parse_heat_content, parse_unit
+
+    hc, en = spec.get("heat_content"), spec.get("enthalpy")
+    for key, v in (("heat_content", hc), ("enthalpy", en)):
+        if v is not None:
+            try:
+                parse_heat_content(v)
+            except ValueError as e:
+                raise ValueError(f"mv.bills.{key}: {e}") from None
+    if units is None:
+        return None
+    if not bills.units:
+        raise ValueError(
+            f"units.system is {units.system!r}, but the bills in {spec['file']!r} name no unit: "
+            'give bills.units (e.g. "kWh", "therm", "Mcf") or a units column'
+        )
+    try:
+        k = units.energy_factor(bills.units, heat_content=hc, enthalpy=en)
+        name = parse_unit(bills.units).name
+    except ValueError as e:
+        raise ValueError(f"mv.bills units: {e}") from None
+    return k, units.energy, name, units.system
+
+
 def billing_findings(entry: dict, prep, *, base_dir: str = ".") -> list:
     """``mv_baseline`` (and, with a ``reporting_period``, ``mv_savings`` or
     ``mv_method_proposal``) Findings for one billing entry. A bad entry is a ``ValueError``; a
-    meter the data cannot serve is a declined Finding."""
+    meter the data cannot serve is a declined Finding. With a config ``units`` block the reported
+    energy is converted (0.92, #69); the fit stays in the bills' own unit."""
+    from .config import _mv_apply_units
+
+    box: dict = {}
+    out = _billing_findings(entry, prep, base_dir=base_dir, box=box)
+    return _mv_apply_units(out, box.get("conv"))
+
+
+def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     import numpy as np
 
     from .config import (
@@ -209,6 +251,7 @@ def billing_findings(entry: dict, prep, *, base_dir: str = ".") -> list:
     base_f = float(entry.get("base_f", 65.0))
 
     bills = load_bills(entry, base_dir=base_dir)
+    box["conv"] = billing_units(_spec(entry), bills, getattr(prep, "units", None))  # 0.92 (#69)
     if not len(bills):
         return _declined(label, "the bills file has no bills", reporting)
     f = bills.frame

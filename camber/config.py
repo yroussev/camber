@@ -378,6 +378,7 @@ class _Prepared:
     data_sources: list = field(default_factory=list)
     ctx: _FacilityCtx | None = None
     mv_store: object = None  # the facility's MVBaselineStore, opened read-only (#21 phase 21d)
+    units: object = None  # 0.92 (#69): the config's reporting UnitSystem, or None (meter units)
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -542,6 +543,16 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     Shared by :func:`run_config` and :func:`run_drift_config` so the two entry points discover
     equipment identically -- a drift run must see exactly the equipment the ordinary run does.
     """
+    from .energy_units import UnitSystem
+
+    units = UnitSystem.from_config(config)  # 0.92 (#69): a bad units block fails up front
+    prep = _prepare_sources(config, base_dir)
+    prep.units = units
+    return prep
+
+
+def _prepare_sources(config: dict, base_dir: str) -> _Prepared:
+    """:func:`_prepare` without the ``units`` block."""
     if "source" not in config and not config.get("equipment"):  # 0.92 (#64): bills-only config
         return _prepare_bare(config, base_dir)
     if _source_kind(config["source"]) == "store":
@@ -1196,6 +1207,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     min_days = int(entry.get("min_days", 60))
     adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
+    conv = _mv_trended_units(entry, getattr(prep, "units", None))  # 0.92 (#69)
     out = []
 
     def declined(equip, why):
@@ -1341,7 +1353,135 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
         _add_caveats(out[n_before + 1 :], base_caveats)  # they rest on the same baseline
-    return out
+    return _mv_apply_units(out, conv)
+
+
+# --------------------------------------------------------------------------- 0.92 (#69) units
+# A config ``units`` block reports M&V energy in kBtu (IP) or kWh (SI). The fits stay in the
+# meter's own unit; only the reported quantities are converted, after the Finding is built, so a
+# config without ``units`` is untouched. See camber.energy_units and docs/UNITS.md.
+
+_MV_ENERGY_KEYS = (
+    "avoided_energy",
+    "baseline_projected",
+    "reporting_actual",
+    "abs_uncertainty",
+    "savings",
+    "projected",
+    "measured",
+    "adjusted_savings",
+    "adjusted_abs_uncertainty",
+    "adjusted_baseline",
+)
+_MV_VARIANCE_KEYS = (
+    "var_savings",
+    "v_param_baseline",
+    "v_param_reporting",
+    "covariance",
+    "v_noise_baseline",
+    "v_noise_reporting",
+)
+_MV_LINK_KEYS = ("projected", "measured", "savings", "abs_uncertainty")
+_MV_ADJ_LINK_KEYS = ("baseline", "reporting", "adjusted_baseline", "adjusted_reporting", "savings")
+_MV_LEDGER_KEYS = ("amount", "se", "resolved_amount", "resolved_se")
+_MV_SENS_KEYS = ("savings", "abs_uncertainty", "adjusted_savings", "adjusted_abs_uncertainty")
+
+
+def _mv_trended_units(entry: dict, units) -> tuple | None:
+    """``(factor, reported unit, meter energy unit, system)`` for a trended ``mv`` entry, or
+    ``None`` without a config ``units`` block. The entry's ``units`` names the metered rate (kW,
+    Btu/h, kBtu/h, MBH, tons); its hourly integral is the meter's energy unit."""
+    if units is None:
+        if entry.get("units") is not None:  # validated even when nothing is converted
+            from .energy_units import energy_unit_of_rate
+
+            energy_unit_of_rate(entry["units"])
+        return None
+    from .energy_units import energy_unit_of_rate
+
+    if entry.get("units") is None:
+        raise ValueError(
+            f"units.system is {units.system!r}, but mv entry {entry.get('class')!r} does not name "
+            'its meter\'s rate unit: add "units": "kW" (or Btu/h, kBtu/h, MBH, tons)'
+        )
+    try:
+        meter = energy_unit_of_rate(entry["units"])
+    except ValueError as e:
+        raise ValueError(f"mv.units: {e} (a trended meter's units are its rate)") from None
+    return units.energy_factor(meter), units.energy, meter, units.system
+
+
+def _scale(d: dict, keys, k: float, *, digits: int | None = 2) -> None:
+    for key in keys:
+        v = d.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            d[key] = v * k if digits is None else round(v * k, digits)
+
+
+def _mv_units_summary(summary: str, old: dict, new: dict, unit: str) -> str:
+    """Put the unit after every energy number of an ``mv_savings`` summary, converted."""
+    s = summary
+
+    def sub(prefix, key, suffix=""):
+        nonlocal s
+        if old.get(key) is None or new.get(key) is None:
+            return
+        a = f"{prefix}{old[key]:,.0f}{suffix}"
+        if a in s:
+            s = s.replace(a, f"{prefix}{new[key]:,.0f} {unit}{suffix}", 1)
+
+    sub("avoided energy ", "avoided_energy")
+    sub(f"{old.get('method')} savings ", "savings")
+    sub("± ", "abs_uncertainty", " at ")
+    sub("): ", "adjusted_savings")
+    ab = old.get("adjusted_abs_uncertainty")
+    if ab is not None and s.endswith(f" ± {ab:,.0f}"):
+        s = s[: -len(f" ± {ab:,.0f}")] + f" ± {new['adjusted_abs_uncertainty']:,.0f} {unit}"
+    return s
+
+
+def _mv_apply_units(findings: list, conv) -> list:
+    """Convert the reported energy of ``mv`` Findings in place (``conv`` from
+    :func:`_mv_trended_units` or the billing path); ``None`` leaves them exactly as they are."""
+    if conv is None:
+        return findings
+    k, unit, meter, system = conv
+    for f in findings:
+        m = f.metrics
+        m["unit_system"] = system
+        m["meter_unit"] = meter  # the fits, coefficients and indicator rates stay in this unit
+        if m.get("declined") and f.rule != "mv_savings":
+            continue
+        if f.rule == "mv_baseline":
+            continue
+        old = dict(m)
+        _scale(m, _MV_ENERGY_KEYS, k)
+        # nested rows are copied before scaling: they may share dicts with the method results
+        for key, keys in (
+            ("links", _MV_LINK_KEYS),
+            ("adjusted_links", _MV_ADJ_LINK_KEYS),
+            ("adjustments", _MV_LEDGER_KEYS),
+            ("waterfall", ("value",)),
+            ("sensitivity", _MV_SENS_KEYS),
+        ):
+            if not isinstance(m.get(key), list):
+                continue
+            rows = [dict(r) if isinstance(r, dict) else r for r in m[key]]
+            for r in rows:
+                if not isinstance(r, dict):
+                    continue
+                _scale(r, keys, k)
+                if isinstance(r.get("sep_terms"), dict):
+                    r["sep_terms"] = dict(r["sep_terms"])
+                    _scale(r["sep_terms"], list(r["sep_terms"]), k)
+                if isinstance(r.get("uncertainty_terms"), dict):
+                    r["uncertainty_terms"] = dict(r["uncertainty_terms"])
+                    _scale(r["uncertainty_terms"], _MV_VARIANCE_KEYS, k * k, digits=None)
+            m[key] = rows
+        m["energy_unit"] = unit
+        if f.rule == "mv_savings":
+            f.summary = _mv_units_summary(f.summary, old, m, unit)
+    return findings
 
 
 def _add_caveats(findings: list, caveats: list) -> None:
