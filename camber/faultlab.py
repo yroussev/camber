@@ -461,6 +461,26 @@ def _leaking_valve(idx, *, faulty):
     )
 
 
+def _g36_afdd(idx, *, faulty):
+    # a cooling-only AHU on a weekday 06-18 schedule, cooling valve full open at minimum OA (OS#4);
+    # faulty: supply air 10F over its setpoint in full cooling (G36 FC13)
+    on = (idx.dayofweek < 5) & (idx.hour >= 6) & (idx.hour < 18)
+    sat = np.where(on, 65.0 if faulty else 55.0, 80.0)
+    return pd.DataFrame(
+        {
+            Role.SUPPLY_FAN_STATUS: on.astype(float),
+            Role.COOL_VALVE: np.where(on, 100.0, 0.0),
+            Role.OA_DAMPER: np.full(len(idx), 20.0),
+            Role.SUPPLY_AIR_TEMP: sat,
+            Role.SUPPLY_AIR_TEMP_SP: np.full(len(idx), 55.0),
+            Role.MIXED_AIR_TEMP: np.where(on, 75.0, 76.0),
+            Role.RETURN_AIR_TEMP: np.full(len(idx), 74.0),
+            Role.OAT: np.full(len(idx), 85.0),
+        },
+        index=idx,
+    )
+
+
 def _setback(idx, *, faulty):
     occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
     fan = np.ones(len(idx)) if faulty else occ.astype(float)  # 24/7 vs occupied-only runtime
@@ -521,6 +541,7 @@ SCENARIOS: dict = {
     "chw_pump_dp_reset": _chw_pump,
     "hw_pump_dp_reset": _hw_pump,
     "leaking_valve": _leaking_valve,
+    "g36_afdd": _g36_afdd,
     "night_weekend_setback": _setback,
     "outdoor_air_fraction": _oa_fraction,
     "reheat_minimization_g36": _reheat_min,
@@ -568,6 +589,10 @@ def labeled_records(registry=None, *, scenarios=None, days: int = 21) -> list:
 
 
 def _g36_frame(n=200, **cols):
+    # Every scenario is a running AHU: the engine suspends AFDD while the fan is off and declines a
+    # frame with no fan signal at all, so the supply fan is shown running unless a scenario says
+    # otherwise (FS only feeds FC1, whose scenarios set it explicitly).
+    cols.setdefault("FS", 100.0)
     idx = pd.date_range("2025-07-07", periods=n, freq="1h")
     return pd.DataFrame({c: np.full(n, v, dtype=float) for c, v in cols.items()}, index=idx)
 

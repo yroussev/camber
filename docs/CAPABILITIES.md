@@ -174,7 +174,17 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   operating-state gating (an interval with a missing valve command is *unclassified* — no FC is
   scored there — rather than read as free cooling; unsorted/duplicate timestamps are sorted and
   de-duplicated first); cross-validated vs open-fdd 0.1.5 and accuracy-scored in the synthetic harness
-  ([VALIDATION.md](VALIDATION.md)).
+  ([VALIDATION.md](VALIDATION.md)). Since 0.91 it applies the G36 time filters: evaluation only
+  while the supply fan runs (a run with no fan signal is declined), ModeDelay (30 min) after a fan
+  start or zone-group mode change, AlarmDelay (30 min) persistence, and 5-minute averaging. It
+  also scores cooling-only AHUs, with the heating-coil tests omitted. The registered rule
+  **`g36_afdd`** runs it from a config (`rules: ["g36_afdd"]`). It gives one finding per AHU with
+  every FC's hours and rate, and those findings flow into `camber run` and the RCx report. MAT and
+  SAT stand in for the cooling-coil entering and leaving temperatures only on an AHU without a
+  heating coil. Otherwise FC14 and FC15 are declined. FC8/FC9 hours that coincide with a
+  confirmed FC14 are attributed to FC14, so a passing valve is reported as a leak, not under the
+  free-cooling labels. Parameters: `heating_coil`, `min_oa_pct` (enables FC6),
+  `mode_delay_min`, `alarm_delay_min`, and the screening-grade `warn_pct` / `fault_pct`.
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference — fetch one with `weather_source.oat_reference` (NASA POWER by lat/lon), `oat_reference_for`

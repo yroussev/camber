@@ -4,6 +4,62 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 091-g36 (#60): begin -->
+### Fixed
+- **The G36 engine scored fan-off intervals (#60).** `run_g36_afdd` read a stopped AHU with both
+  valves shut as OS#2 free cooling and tripped FC8/FC9 on stagnant duct air. G36 §5.16.14
+  suspends AFDD while the AHU is not operating, so the engine now gates on the supply fan in the
+  `schedules.fan_on_mask` order: `FAN_STATUS`, else `FS` (speed), else `AIRFLOW`.
+  `G36Result.fan_gate` records which signal was used. With no fan signal the run is declined
+  (`G36Result.declined` plus a caveat). `fan_gate="none"` evaluates every row and says so.
+  `os_distribution` and `n_unclassified` now count fan-on intervals only.
+- **Cooling-only AHUs returned None (#60).** A frame without `HC` is now an AHU without a heating
+  coil: HC is taken as 0 %, FC7 and FC15 are omitted (`G36Result.omitted`), and a caveat says so.
+  A frame without `CC` is handled the same way (FC13 and FC14 omitted). With neither valve the
+  run is declined.
+- **No G36 time delays (#60).** FC1 fired on the normal morning duct-static ramp, and a single
+  5-minute excursion at a state change counted as a fault. The engine now applies the §5.16.14
+  filters, with the defaults verified in the public Addendum p to Guideline 36-2021:
+  - **ModeDelay**, 30 min: no evaluation after a fan start, or after a change of the optional
+    `MODE` (zone-group mode) column.
+  - **AlarmDelay**, 30 min: an FC counts only in episodes that stayed true that long. A confirmed
+    episode counts in full, and a data gap breaks an episode.
+  - **Rolling averages**, 5 min, of the measured temperatures and duct static.
+
+  All three are keyword arguments (`mode_delay_min`, `alarm_delay_min`, `avg_window_min`); set
+  them to 0 to score the raw per-interval equations.
+- New provisional names: `fdd_g36.MODE_DELAY_MIN`, `ALARM_DELAY_MIN`, `AVG_WINDOW_MIN`,
+  `FC_OMIT_NO_HEATING`, `FC_OMIT_NO_COOLING`; `G36Thresholds.fc14_fan_heat` (the fan-heat term in
+  FC14, signed for where the coil sensors sit); `G36Result` fields `fan_gate`, `n_fan_off`,
+  `n_suspended`, `fault_hours`, `omitted`, `missing_inputs`, `caveats`, `declined`, `delays` and
+  `masks` (`keep_masks=True`).
+- The synthetic G36 scenarios (`faultlab.g36_accuracy`) now show the supply fan running (`FS`
+  100 %) unless a scenario sets it. Without that, every scenario but FC1 would be declined for
+  lack of a fan signal. The G36 benchmark numbers did not move.
+
+### Added
+- **`g36_afdd`: the G36 engine as a registered rule (#60).** `rules: ["g36_afdd"]` in a config
+  runs FC1-FC15 on every AHU. The results reach `camber run`, the audit report and the RCx
+  report, and the RCx evidence shades the reported fault hours. The rule gives one finding per AHU:
+  - each FC's rate, hours and applicable hours;
+  - the fan gate;
+  - the ModeDelay suspension, which follows a fan start or a change in the occupancy, warm-up or
+    cool-down points.
+
+  Coil semantics:
+  - MAT/SAT stand in for the cooling-coil entering/leaving temperatures only on an AHU without a
+    heating coil. The FC14 fan-heat term is signed for SAT downstream of the fan.
+  - Otherwise FC14 and FC15 are declined with a caveat.
+  - FC8/FC9 hours that coincide with a confirmed FC14 are attributed to FC14, so a passing
+    chilled-water valve no longer reports under the free-cooling labels.
+
+  `heating_coil=True` declines an AHU whose heating valve isn't trended, rather than guessing.
+  `min_oa_pct` enables FC6. Severity is screening-grade (`warn_pct` 5 %, `fault_pct` 20 % of
+  applicable hours, with at least 24 applicable hours).
+<!-- 091-g36 (#60): end -->
+
 ## [0.90.1] — 2026-09-27
 
 **0.90.1 patch: fixes from two private real-data checks (#51-#59).** Every fix has a synthetic

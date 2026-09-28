@@ -76,6 +76,8 @@ RULE_CATEGORY = {
     "damper_census": "maintenance",
     "chiller_approach_fouling": "maintenance",
     "filter_fouling": "maintenance",
+    # G36 §5.16.14 AFDD: sensor, valve, damper and control faults across FC1-FC15
+    "g36_afdd": "maintenance",
     # the drift family (camber.driftrun): every one of these measures a *condition* against a
     # frozen baseline, so the whole family is maintenance regardless of which loop it watches.
     # Kept complete on purpose -- test_scorecard's parity test fails if a new drift rule is added
