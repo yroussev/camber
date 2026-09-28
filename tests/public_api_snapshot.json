@@ -1870,7 +1870,8 @@
   "camber.rules.ventilation_rule": [
     "DcvSystemVerification",
     "DemandControlledVentilation",
-    "VentilationRateProcedure"
+    "VentilationRateProcedure",
+    "VentilationSystemVRP"
   ],
   "camber.rules.zones_rule": [
     "ZonesHeatCoolCensus"
@@ -2053,14 +2054,25 @@
     "DEFAULT_DCV_ENGAGE_PPM",
     "DEFAULT_ECON_HIGH_LIMIT_F",
     "DEFAULT_EZ",
+    "DEFAULT_EZ_COOLING",
+    "DEFAULT_EZ_HEATING",
     "DcvResult",
     "OA_RATES_62_1",
+    "SystemVrpRequirement",
+    "SystemVrpResult",
+    "VentZone",
     "VrpResult",
     "assess_62_1",
     "assess_dcv",
+    "assess_system_62_1",
     "economizer_active_mask",
+    "estimate_oa_cfm",
+    "load_vent_zones",
     "oa_rates_for",
-    "required_oa_cfm"
+    "required_oa_cfm",
+    "simplified_ev",
+    "system_outdoor_air",
+    "zones_from_records"
   ],
   "camber.water": [
     "GAL_PER_CCF",

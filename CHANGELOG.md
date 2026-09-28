@@ -7,6 +7,25 @@ All notable changes to CAMBER are documented here. The format follows
 ## Unreleased
 
 <!-- 092-air -->
+### Added
+- **System-level ASHRAE 62.1 Ventilation Rate Procedure (#17).** An air handler serving several
+  zones is judged against the system intake `Vot = Vou / Ev` (`Vou = D·ΣRp·Pz + ΣRa·Az`,
+  `D = Ps / ΣPz`), not one zone's Voz. `camber.ventilation.system_outdoor_air` computes it with the
+  simplified Ev of the free 62.1-2016 Addendum f (`0.88·D + 0.22` below D = 0.60, else 0.75; the
+  default, with the addendum's `Vpz-min ≥ 1.5·Voz` check when minimum primary airflows are given)
+  or the multiple-zone appendix calculation (`Evz = 1 + Xs − Zpz`), for multiple-zone, single-zone
+  and 100 % OA systems, with mode-aware Ez (1.0 cooling, 0.8 heating). `assess_system_62_1`
+  judges each sample against its mode's Vot; without a flow station `estimate_oa_cfm` estimates OA
+  from the mixing temperatures × supply airflow with a propagated band, and a verdict must hold
+  across it. The fleet rule `ventilation_system_62_1` (`VentilationSystemVRP`) runs from a new
+  config `ventilation` section (a zones CSV or list, per-system `ps` / `d` / `vps_cfm` /
+  `system_type` / `method`); zones join their air handler by a declared `system`, else the config
+  `topology`. It declines when an input is missing, caps at `warn` for assumed areas or
+  populations, a temperature estimate, or membership from a Brick model, the naming heuristic or
+  a single-source fallback, and says so. Section and table numbers of the 2019/2022 editions,
+  default densities and Ez rows are marked unverified (docs/VENTILATION.md). On the open LBNL
+  Building 59 data, with a stated area assumption, all four RTUs are over-ventilated 3.4–5.6×.
+
 ### Fixed
 - **`supply_air_reset` read supply air rising with OAT as a reset (#65).** A G36 cooling SAT reset
   lowers supply air as OAT rises and for each cooling request (§5.16.2.2; the trim-and-respond
