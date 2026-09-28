@@ -220,6 +220,31 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `supply_air_reset` (#65);
   - `Evidence.masks`, `link_findings(part_mask_for=)` and `UpstreamCause.unit_hours` (#67).
 <!-- /092-air -->
+<!-- 092-mv -->
+- **Billing M&V and weather fallbacks** (0.92; #64), all additive:
+  - days-weighted fits: `weights=` on `mandv.models.fit_model` / `best_model`,
+    `mandv.stats.fit_stats`, `regression_tests` / `model_regression_tests` and
+    `mandv.adjustments.estimate_nre_indicator`; `mandv.models.fit_weights`; `days=` on
+    `avoided_energy_savings`, `forecast_savings`, `backcast_savings` and
+    `mandv._design.projection_variance`, `days_baseline=` / `days_reporting=` on
+    `chained_savings`, `days=` on `select_method`; the fit records' `weight_scale` (serialised
+    only when set) and the trailing `IndicatorFit.weight_scale` / `noise_scale`;
+  - `BillingSeries.from_csv`, `BillingSeries.merge_estimated` and the trailing
+    `BillingSeries.merged` field; `energy_vs_temp` now sets `attrs["billing"]`;
+  - `camber.mvbilling` (`billing_label`, `load_bills`, `billing_oat`, `billing_findings`) and
+    the config keys of an `mv` entry with `bills` (`bills.*`, `name`, `oat`, `base_f`,
+    `min_coverage`, `min_bills`), a config with no `source` when it has no `equipment`, and the
+    billing metrics of `mv_baseline` / `mv_savings` (`billing`, `weighted_by_days`, `n_bills`,
+    `n_report_bills`, `g14_interval`, `hdd_total`, `cdd_total`, `oat_source`, `bills_dropped`,
+    `estimated_merged`, `estimated_dropped`, `mean_bill_days`);
+  - in `camber.weather_source`: `FALLBACKS`, `open_meteo_url`, `open_meteo_transport`,
+    `fetch_open_meteo`, `oat_reference_open_meteo`, `oat_reference_auto`,
+    `oat_reference_blended(fallbacks=, meteo_transport=, diurnal=, station_offsets=)`,
+    `oat_reference_isd(fallback="open_meteo")`, and the provenance keys `fallbacks`,
+    `stations[].offset_correction`, `hour_of_day_f`, `hour_basis` and `rmse_after_monthly_f`;
+    the RCx `oat_reference.fetch` values `auto`, `isd` and `open_meteo` with `cache_dir` /
+    `offline`. The correction method and its thresholds may be retuned.
+<!-- /092-mv -->
 
 ## Deprecated
 

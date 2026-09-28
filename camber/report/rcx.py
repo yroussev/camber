@@ -127,8 +127,11 @@ class RcxOptions:
     (:class:`~camber.fault_economics.EnergyPrice`, ``{equip: EquipmentLoad}``). ``occupancy``
     overrides the assumed schedule (``{"start_hour", "end_hour", "days"}``) where no occupancy
     point is trended. ``oat_reference`` compares the BAS OAT to a reference: ``{"csv": path}``
-    (offline, default) or ``{"fetch": "nasa_power", "latitude", "longitude", "tz"}`` (opt-in
-    network). ``sequence`` declares the site's SAT reset (``{"sat_reset": {"oat": [lo, hi], "sat":
+    (offline, default) or ``{"fetch": SOURCE, "latitude", "longitude", "tz"}`` (opt-in network;
+    optional ``cache_dir`` / ``offline``). ``SOURCE`` is ``"auto"`` -- the nearest ISD station
+    with offset-corrected neighbours, then bias-corrected NASA POWER, then Open-Meteo (0.92) --
+    or ``"isd"``, ``"open_meteo"``, or ``"nasa_power"`` (POWER alone, as before 0.92).
+    ``sequence`` declares the site's SAT reset (``{"sat_reset": {"oat": [lo, hi], "sat":
     [at_lo, at_hi], "tol_f": 2}}``). ``g36_reference`` draws the G36 map on the no-sequence tier,
     labelled a reference, never a verdict. ``lifecycle`` pulls notes from the fault store.
     """
@@ -175,6 +178,8 @@ class RcxOptions:
             ref = dict(ref)
             if ref.get("csv") and not os.path.isabs(ref["csv"]):
                 ref["csv"] = os.path.join(base_dir, ref["csv"])
+            if ref.get("cache_dir") and not os.path.isabs(ref["cache_dir"]):  # 092-mv
+                ref["cache_dir"] = os.path.join(base_dir, ref["cache_dir"])
             opts.oat_reference = ref
         price = spec.get("price") or report.get("price")
         if price:
@@ -962,7 +967,9 @@ def _synthetic_per_rule() -> dict:
 
 
 def _load_reference_oat(spec: dict, index) -> pd.Series | None:
-    """A reference OAT series from ``spec`` (offline CSV, or an opt-in NASA POWER fetch)."""
+    """A reference OAT series from ``spec`` (offline CSV, or an opt-in fetch: ``"nasa_power"``
+    alone, or ``"auto"`` / ``"isd"`` / ``"open_meteo"`` through
+    :func:`camber.weather_source.oat_reference_auto`)."""
     if spec.get("csv"):
         df = pd.read_csv(spec["csv"])
         tcol = spec.get("time_col") or df.columns[0]
@@ -983,7 +990,41 @@ def _load_reference_oat(spec: dict, index) -> pd.Series | None:
             index.max(),
             tz=spec.get("tz", "UTC"),
         )
+    if spec.get("fetch") in ("auto", "isd", "open_meteo"):  # 092-mv: the fallback chain
+        import warnings
+
+        from ..weather_source import oat_reference_auto
+
+        with warnings.catch_warnings():  # the caveats are carried on the series, and reported
+            warnings.simplefilter("ignore", UserWarning)
+            return oat_reference_auto(
+                spec["latitude"],
+                spec["longitude"],
+                index.min(),
+                index.max(),
+                source=spec["fetch"],
+                tz=spec.get("tz", "UTC"),
+                cache_dir=spec.get("cache_dir"),
+                offline=bool(spec.get("offline", False)),
+            )
+    if spec.get("fetch"):
+        raise ValueError(
+            f"unknown oat_reference fetch {spec['fetch']!r}; use auto, isd, nasa_power or "
+            "open_meteo"
+        )
     return None
+
+
+def _reference_source_note(ref) -> str:
+    """One sentence on where a fetched reference came from (its fallback caveats), or ``""``."""
+    prov = (getattr(ref, "attrs", None) or {}).get("weather_provenance")
+    if not prov:
+        return ""
+    hours = prov.get("hours_by_source") or {}
+    parts = [f"{k}: {v} h" for k, v in sorted(hours.items(), key=lambda kv: -kv[1])]
+    note = "Reference source by hour -- " + ", ".join(parts) + "."
+    cav = prov.get("caveats") or []
+    return note + (" " + " ".join(cav) if cav else "")
 
 
 def _rule_param_overrides(config: dict | None) -> dict:
@@ -1145,7 +1186,7 @@ def build_rcx_report(
     # Every distinct OAT source is compared, per equipment (#61): one AHU's own sensor reading
     # +5 F is its own finding, scoped to the units that read it, not hidden behind the first one.
     findings = list(ctx.findings)
-    ref_rows, ref_note, ref_kind = [], "", "reference"
+    ref_rows, ref_note, ref_kind, ref_source = [], "", "reference", ""
     # 092-plant (#66): every distinct OAT source and the units reading it -- scopes a stuck OAT's
     # trust cause to those units, and (without a reference) feeds the peer cross-check
     all_oat = _oat_of({e: ctx.frame(e) for e in ctx.equips}, sources=True)
@@ -1169,6 +1210,7 @@ def build_rcx_report(
             except Exception as exc:  # noqa: BLE001 - a bad reference is reported, not fatal
                 ref, ref_note = None, f"OAT reference could not be loaded: {exc}"
             if ref is not None:
+                ref_source = _reference_source_note(ref)
                 many = len(oat_sources) > 1
                 for series, eqs in oat_sources:
                     label = (
@@ -1360,6 +1402,7 @@ def build_rcx_report(
         "ref_rows": ref_rows,
         "ref_note": ref_note,
         "ref_kind": ref_kind,
+        "ref_source": ref_source,
         "costs": costs,
         "cost_defaults": {**DEFAULTS, **(o.cost_params or {})},
         "exclude_cost": exclude_cost,
@@ -1632,6 +1675,8 @@ def _sec_data(S) -> dict:
                 ["Result", "Bias °F", "Drift °F/month", "RMSE °F", "r", "Samples"], S["ref_rows"]
             )
         )
+        if S.get("ref_source"):
+            blocks.append(_p(S["ref_source"]))
     elif S["ref_note"]:
         blocks.append(_p(S["ref_note"]))
     else:

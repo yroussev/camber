@@ -223,7 +223,14 @@ def test_blend_fills_a_missing_year_from_the_next_station_without_power():
     assert prov["segments"][1]["end"].startswith("2018-12-31 23")
     assert prov["stations"][0]["missing_years"] == [2018]
     assert prov["bias_correction"] is None
-    assert any("uncorrected for any station-to-station offset" in c for c in s.attrs["caveats"])
+    # 0.92: the second station runs 0.3 °C warm; its offset is estimated over 2017 and 2019, where
+    # both stations report, and removed before it fills 2018
+    off = prov["stations"][1]["offset_correction"]
+    assert off["reference_station"] == "000001-99999"
+    assert all(v == pytest.approx(-0.54, abs=0.02) for v in off["offsets_f"].values())
+    gap = s["2018-01-01":"2018-12-31"]
+    assert (gap - _true_f(gap.index)).abs().max() < 0.1
+    assert any("offset (-0.5 to -0.5 °F)" in c for c in s.attrs["caveats"])
     assert len(s) == 3 * 8760  # 2017-2019, no leap day
     assert s.attrs["isd_station"]["usaf"] == "000001"
 

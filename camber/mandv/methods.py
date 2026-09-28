@@ -34,6 +34,12 @@ intermediate model's parameter covariance and ``g`` the design-row sums:
   with ``T = V_param + V_noise`` (noise taken relative to the measured totals).
 * Sequential chain: ``Var S = Σ Var S_k`` (IPMVP 2012 B-19) and ``Var ln SEnPI = Σ Var ln
   EnPI_k`` (B-20), which assume the links independent.
+
+**Billing periods** (provisional, 0.92). Rows that are bills -- energy per day of each bill with
+its day count (:meth:`camber.mandv.billing.BillingSeries.energy_vs_temp`) -- are summed weighted
+by their days (``days=`` on the single-model methods, ``days_baseline=`` / ``days_reporting=`` on
+the chain), so every total is in energy units; :func:`select_method` fits its candidates with the
+days as weights and sums the same way. Without days every row counts once, as before.
 """
 
 from __future__ import annotations
@@ -218,6 +224,7 @@ def forecast_savings(
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "g14",
     baseline_version: str | None = None,
+    days=None,
 ) -> MethodResult:
     """SEP forecast savings (§6.2.1, Eq 8): the baseline model at reporting drivers minus measured.
 
@@ -226,6 +233,7 @@ def forecast_savings(
     :func:`camber.mandv.stats.avoided_energy_savings` (same arguments; the G14 kernel by default,
     D7); this adds the SEP fields -- ``enpi`` and its delta-method band, ``sep_terms`` and the
     secondary ``sep_range_valid`` verdict of the baseline model against the reporting drivers.
+    ``days`` marks the reporting rows as bills (module docstring).
     """
     from .stats import avoided_energy_savings
 
@@ -240,6 +248,7 @@ def forecast_savings(
         rho=rho,
         extrapolation=extrapolation,
         kernel=kernel,
+        days=days,
     )
     rv, rng = _range(baseline_model, T_report)
     proj = sav.baseline_projected
@@ -299,6 +308,7 @@ def backcast_savings(
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "g14",
     baseline_version: str | None = None,
+    days=None,
 ) -> MethodResult:
     """SEP backcast savings: measured baseline energy minus the reporting model at baseline drivers.
 
@@ -326,7 +336,10 @@ def backcast_savings(
     (it needs a CAMBER-fitted model), which already contains the leverage of extrapolating, so
     ``fsu_extrapolation_factor`` is 1.0. With ``rho=None`` the G14 band is unadjusted; the exact
     kernel falls back to the rho recorded when the model was fitted with a ``time_index``.
+    ``days`` marks the baseline rows as bills (module docstring).
     """
+    from .stats import _days_array
+
     _check_kernel(kernel)
     pol = extrapolation or ExtrapolationPolicy()
     Tb = np.asarray(T_baseline, dtype=float)
@@ -334,14 +347,24 @@ def backcast_savings(
     n_b = int(len(yb))
     proj_all = np.asarray(reporting_model.predict(Tb), dtype=float)
     mask = np.isfinite(proj_all) & np.isfinite(yb)
+    d_all = None if days is None else _days_array(days, n_b)
+    if d_all is not None:
+        mask &= np.isfinite(d_all)
     proj, meas = proj_all[mask], yb[mask]
     m = int(len(meas))
-    proj_sum = float(proj.sum())
-    meas_sum = float(meas.sum())
+    if d_all is None:
+        proj_sum = float(proj.sum())
+        meas_sum = float(meas.sum())
+    else:
+        proj_sum = float((proj * d_all[mask]).sum())
+        meas_sum = float((meas * d_all[mask]).sum())
     savings = meas_sum - proj_sum
     pct = savings / meas_sum if meas_sum != 0 else float("nan")
 
-    cov = _with_used(assess_coverage(reporting_model, Tb, projected=proj_all, policy=pol), n_b, m)
+    proj_energy = proj_all if d_all is None else proj_all * d_all
+    cov = _with_used(
+        assess_coverage(reporting_model, Tb, projected=proj_energy, policy=pol), n_b, m
+    )
     caveats = list(cov.caveats)
     if m < n_b:
         caveats.append(
@@ -351,7 +374,7 @@ def backcast_savings(
     k = None
     df = int(n_reporting) - int(p_reporting)
     if kernel == "exact":
-        abs_unc, rho_used, df = _exact_band(reporting_model, Tb, mask, rho, confidence)
+        abs_unc, rho_used, df = _exact_band(reporting_model, Tb, mask, rho, confidence, days=d_all)
         k = 1.0
     else:
         rho_used = None if rho is None or not np.isfinite(rho) else float(rho)
@@ -367,7 +390,14 @@ def backcast_savings(
         )
         abs_unc = abs(savings) * fsu_proj if np.isfinite(fsu_proj) else float("nan")
         if cov.tier in ("moderate", "severe"):
-            k = _fsu_factor(reporting_model, Tb[mask], m=m, projected_kernel=False, policy=pol)
+            k = _fsu_factor(
+                reporting_model,
+                Tb[mask],
+                m=m,
+                projected_kernel=False,
+                policy=pol,
+                days=None if d_all is None else d_all[mask],
+            )
             widened, note = _widen(1.0, k, pol, towt="unit" in cov.info)
             if note:
                 caveats.append(note)
@@ -604,7 +634,7 @@ def _check_sep_periods(periods) -> dict:
     return {"baseline_days": lb, "intermediate_days": li, "reporting_days": lr}
 
 
-def _side(model, T, y, pol):
+def _side(model, T, y, pol, days=None):
     T = np.asarray(T, dtype=float)
     y = np.asarray(y, dtype=float)
     proj_all = np.asarray(model.predict(T), dtype=float)
@@ -613,10 +643,19 @@ def _side(model, T, y, pol):
         mask &= np.all(np.isfinite(T), axis=1)
     else:
         mask &= np.isfinite(T)
+    if days is None:
+        cov = _with_used(
+            assess_coverage(model, T, projected=proj_all, policy=pol), len(y), int(mask.sum())
+        )
+        return T, mask, float(proj_all[mask].sum()), float(y[mask].sum()), cov
+    from .stats import _days_array
+
+    d = _days_array(days, len(y))
+    mask &= np.isfinite(d)
     cov = _with_used(
-        assess_coverage(model, T, projected=proj_all, policy=pol), len(y), int(mask.sum())
+        assess_coverage(model, T, projected=proj_all * d, policy=pol), len(y), int(mask.sum())
     )
-    return T, mask, float(proj_all[mask].sum()), float(y[mask].sum()), cov
+    return T, mask, float((proj_all * d)[mask].sum()), float((y * d)[mask].sum()), cov
 
 
 def chained_savings(
@@ -632,6 +671,8 @@ def chained_savings(
     extrapolation: ExtrapolationPolicy | None = None,
     kernel: str = "exact",
     baseline_version: str | None = None,
+    days_baseline=None,
+    days_reporting=None,
 ) -> MethodResult:
     """SEP chaining (SEP 2019 Ed. 2 §6.2.4, Eq 6 and Eq 11), exactly as the Protocol defines it.
 
@@ -655,6 +696,8 @@ def chained_savings(
     freedom. ``uncertainty_terms`` also reports the independence (IPMVP B-19) variance the shared
     covariance replaces. ``kernel="g14"`` raises ``ValueError``: G14's kernel has no covariance
     term. A multi-link chain is not SEP; see :func:`sequential_chain`.
+
+    ``days_baseline`` / ``days_reporting`` mark each side's rows as bills (module docstring).
     """
     from ._design import fit_record, projection_variance
 
@@ -666,15 +709,17 @@ def chained_savings(
         )
     lengths = _check_sep_periods(periods)
     pol = extrapolation or ExtrapolationPolicy()
-    Tb, mb, P_ib, O_b, cov_b = _side(intermediate_model, T_baseline, y_baseline, pol)
-    Tr, mr, P_ir, O_r, cov_r = _side(intermediate_model, T_reporting, y_reporting, pol)
+    Tb, mb, P_ib, O_b, cov_b = _side(intermediate_model, T_baseline, y_baseline, pol, days_baseline)
+    Tr, mr, P_ir, O_r, cov_r = _side(
+        intermediate_model, T_reporting, y_reporting, pol, days_reporting
+    )
     savings = (O_b - P_ib) + (P_ir - O_r)
     enpi_b = P_ib / O_b if O_b else float("nan")
     enpi_r = O_r / P_ir if P_ir else float("nan")
     enpi = enpi_b * enpi_r
 
-    pv_b = projection_variance(intermediate_model, Tb, rows=mb, rho=rho)
-    pv_r = projection_variance(intermediate_model, Tr, rows=mr, rho=rho)
+    pv_b = projection_variance(intermediate_model, Tb, rows=mb, rho=rho, days=days_baseline)
+    pv_r = projection_variance(intermediate_model, Tr, rows=mr, rho=rho, days=days_reporting)
     rec = fit_record(intermediate_model)
     if rec is None or rec.xtx_pinv is None:  # projection_variance has already refused it
         raise TypeError("chained_savings needs a model fitted by CAMBER")
@@ -1027,18 +1072,21 @@ class _Candidate:
         }
 
 
-def _rank_models(T, y, index, kinds) -> list:
-    """Fit each kind and rank by SEP validity, then adjusted R² (the DOE EnPI tool's order)."""
+def _rank_models(T, y, index, kinds, weights=None) -> list:
+    """Fit each kind and rank by SEP validity, then adjusted R² (the DOE EnPI tool's order).
+
+    ``weights`` (bills' day counts) make every fit, statistic and test a weighted one."""
     from .models import N_PARAMS, fit_model
     from .stats import fit_stats, logical_signs, model_regression_tests, sep_validity
 
     out = []
+    kw = {} if weights is None else {"weights": weights}
     for kind in kinds:
         try:
-            m = fit_model(T, y, kind, time_index=index)
+            m = fit_model(T, y, kind, time_index=index, **kw)
             p = N_PARAMS[kind]
-            st = fit_stats(y, m.predict(T), p, time_index=index)
-            tests = model_regression_tests(m, T, y, time_index=index)
+            st = fit_stats(y, m.predict(T), p, time_index=index, **kw)
+            tests = model_regression_tests(m, T, y, time_index=index, **kw)
             v = sep_validity(tests, signs=logical_signs(m))
         except (ValueError, TypeError, np.linalg.LinAlgError):
             continue
@@ -1055,6 +1103,28 @@ def _rank_models(T, y, index, kinds) -> list:
 def _slice(frame, win, driver, energy):
     sub = frame.loc[str(win[0]) : str(win[1]), [driver, energy]].dropna()
     return sub[driver].to_numpy(float), sub[energy].to_numpy(float), sub.index
+
+
+def _slice_days(frame, win, driver, energy, days):
+    """:func:`_slice` plus the rows' day counts (``None`` without a ``days`` column).
+
+    Billing rows are indexed by their start; a bill is in the window only when it also ends in
+    it (an ``end`` column, exclusive, as :class:`~camber.mandv.billing.BillingSeries` keeps it)."""
+    if days is None:
+        return (*_slice(frame, win, driver, energy), None)
+    sub = frame.loc[str(win[0]) : str(win[1])]
+    if "end" in sub.columns:
+        import pandas as pd
+
+        last = pd.Timestamp(str(win[1])).normalize() + pd.Timedelta(days=1)
+        sub = sub[pd.DatetimeIndex(sub["end"]) <= last]
+    sub = sub[[driver, energy, days]].dropna()
+    return (
+        sub[driver].to_numpy(float),
+        sub[energy].to_numpy(float),
+        sub.index,
+        sub[days].to_numpy(float),
+    )
 
 
 def _covers(model, T, pol) -> tuple:
@@ -1108,6 +1178,7 @@ def select_method(
     confidence: float = 0.90,
     extrapolation: ExtrapolationPolicy | None = None,
     window_step: str = "MS",
+    days: str | None = None,
 ) -> MethodProposal:
     """Propose an SEP adjustment-model method, in the Protocol's order, with a sensitivity table.
 
@@ -1133,15 +1204,22 @@ def select_method(
     carries no headline figure: ``sensitivity`` lists every valid method's saving, SEnPI and band
     side by side. Forecast and backcast use the G14 kernel, chaining and standard conditions the
     exact kernel (D7).
+
+    **Billing rows** (provisional, 0.92): ``days`` names the column holding each row's day count
+    -- by default ``"days"`` when ``frame.attrs["billing"]`` is set (a
+    :meth:`~camber.mandv.billing.BillingSeries.energy_vs_temp` frame). The candidates are then
+    fitted with the days as weights and every total is summed weighted by them.
     """
     pol = extrapolation or ExtrapolationPolicy()
-    Tb, yb, ib = _slice(frame, baseline, driver, energy)
-    Tr, yr, ir = _slice(frame, reporting, driver, energy)
+    if days is None and frame.attrs.get("billing") and "days" in frame.columns:
+        days = "days"
+    Tb, yb, ib, db = _slice_days(frame, baseline, driver, energy, days)
+    Tr, yr, ir, dr = _slice_days(frame, reporting, driver, energy, days)
     steps: list = []
     results: dict = {}
     models: dict = {}
-    cand_b = _rank_models(Tb, yb, ib, kinds) if len(yb) > 5 else []
-    cand_r = _rank_models(Tr, yr, ir, kinds) if len(yr) > 5 else []
+    cand_b = _rank_models(Tb, yb, ib, kinds, db) if len(yb) > 5 else []
+    cand_r = _rank_models(Tr, yr, ir, kinds, dr) if len(yr) > 5 else []
     best_b = cand_b[0] if cand_b else None
     best_r = cand_r[0] if cand_r else None
     models["baseline"] = best_b.summary() if best_b else None
@@ -1173,6 +1251,7 @@ def select_method(
             confidence=confidence,
             rho=best_b.rho,
             extrapolation=pol,
+            days=dr,
         )
     steps.append({"method": "forecast", "valid": valid, "reasons": reasons})
 
@@ -1197,6 +1276,7 @@ def select_method(
             confidence=confidence,
             rho=best_r.rho,
             extrapolation=pol,
+            days=db,
         )
     steps.append({"method": "backcast", "valid": valid, "reasons": reasons})
 
@@ -1221,10 +1301,10 @@ def select_method(
         # rows against rows (issue #52 -- monthly rows were compared with a day count)
         need = 0.9 * _expected_rows(lb, frame.index)
         for w in windows:
-            Ti, yi, ii = _slice(frame, w, driver, energy)
+            Ti, yi, ii, di = _slice_days(frame, w, driver, energy, days)
             if len(yi) < need:
                 continue
-            cands = _rank_models(Ti, yi, ii, kinds)
+            cands = _rank_models(Ti, yi, ii, kinds, di)
             for c in cands:
                 if not c.sep_valid:
                     break
@@ -1262,6 +1342,8 @@ def select_method(
                 confidence=confidence,
                 rho=c.rho,
                 extrapolation=pol,
+                days_baseline=db,
+                days_reporting=dr,
             )
     steps.append({"method": "chaining", "valid": valid, "reasons": reasons})
 

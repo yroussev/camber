@@ -7,6 +7,10 @@ series the caller brought themselves (`camber.sensordrift.compare_to_reference`)
 hourly historical air temperature (and optionally relative humidity) from **NASA POWER**
 (https://power.larc.nasa.gov) — a free, keyless, global reanalysis service — and returns it in the
 exact °F Series shape those consumers already expect (`name="oat_f"`, matching `load_epw`).
+Two more sources follow the same contract: NOAA ISD-Lite stations (station-precise, gappy) and,
+since 0.92, **Open-Meteo** (keyless gridded reanalysis). :func:`oat_reference_blended` joins them:
+the nearest station first, then offset-corrected neighbouring stations, then bias-corrected
+gridded fallbacks; :func:`oat_reference_auto` selects a source by name.
 
 Dependency-light and testable: the HTTP call goes through an **injectable transport** (a
 ``callable(url) -> parsed-JSON dict``, default a stdlib ``urllib`` one, mirroring
@@ -69,6 +73,13 @@ __all__ = [
     "power_grid_cell",
     "isd_catalog_end",
     "oat_reference_blended",
+    # provisional (0.92): Open-Meteo as a third source, and one entry point by source name
+    "FALLBACKS",
+    "open_meteo_url",
+    "open_meteo_transport",
+    "fetch_open_meteo",
+    "oat_reference_open_meteo",
+    "oat_reference_auto",
 ]
 
 _BASE_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
@@ -818,11 +829,13 @@ def oat_reference_isd(
     ``fallback="nasa_power"`` (provisional) delegates to :func:`oat_reference_blended`: missing
     station years are filled from the next-nearest station, and dates no station serves (e.g.
     after the catalog's end) from bias-corrected NASA POWER (``power_transport``), with the source
-    of every date recorded in ``series.attrs["weather_provenance"]``.
+    of every date recorded in ``series.attrs["weather_provenance"]``. ``fallback="open_meteo"``
+    (0.92) falls back to Open-Meteo instead (its transport is the stdlib default; use
+    :func:`oat_reference_blended` to inject one).
     """
     if fallback is not None:
-        if fallback != "nasa_power":
-            raise ValueError("fallback must be None or 'nasa_power'")
+        if fallback not in FALLBACKS:
+            raise ValueError(f"fallback must be None or one of {FALLBACKS}")
         return oat_reference_blended(
             latitude,
             longitude,
@@ -833,6 +846,7 @@ def oat_reference_isd(
             power_transport=power_transport,
             tz=tz,
             timeout=timeout,
+            fallbacks=(fallback,),
         )
     station = isd_nearest_station(
         latitude, longitude, start, end, transport=catalog_transport, timeout=timeout
@@ -845,18 +859,174 @@ def oat_reference_isd(
     return series
 
 
-# --------------------------------------------------------------------------- ISD + NASA POWER blend
+# ------------------------------------------------------------------------ Open-Meteo (third source)
 #
-# Provisional (0.90.1). ISD is station-precise but gappy, and its catalog can lag real time by
-# months; NASA POWER is gap-free and global but a ~55 km reanalysis cell that lags real time by days
-# to weeks. The blend takes the station where it exists and fills the rest, correcting POWER's
-# offset against the station over the dates both cover, and says which dates came from where.
+# Provisional (0.92). Open-Meteo's historical-weather API serves hourly reanalysis (ERA5 and its
+# higher-resolution companions, "best_match" by default) for any point, keyless. Like NASA POWER it
+# is gap-free and gridded, not a station, so the blend uses it as a fallback and bias-corrects it
+# against the reference station exactly as it does POWER. Its data are CC BY 4.0 (attribute
+# "Weather data by Open-Meteo.com"), and the free API is for non-commercial use under its terms --
+# see docs/WEATHER.md. The request carries coordinates and dates only: no key, no identifier.
+
+_OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
+_OPEN_METEO_START = pd.Timestamp("1940-01-01")  # the archive's first day
+
+
+def open_meteo_url(latitude, longitude, start, end, *, models: str | None = None) -> str:
+    """Build the Open-Meteo historical-weather URL for hourly 2 m temperature in °F, UTC (pure).
+
+    Provisional (0.92). ``start`` / ``end`` accept ``YYYYMMDD`` / ``YYYY-MM-DD`` strings or dates;
+    ``models`` selects a reanalysis (the service default, ``best_match``, when ``None``).
+    """
+    from urllib.parse import urlencode
+
+    def iso(d):
+        t = _yyyymmdd(d)
+        return f"{t[:4]}-{t[4:6]}-{t[6:8]}"
+
+    q = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "start_date": iso(start),
+        "end_date": iso(end),
+        "hourly": "temperature_2m",
+        "temperature_unit": "fahrenheit",
+        "timezone": "GMT",
+    }
+    if models:
+        q["models"] = models
+    return f"{_OPEN_METEO_URL}?{urlencode(q)}"
+
+
+def open_meteo_transport(*, timeout: float = 30.0) -> Callable[[str], dict]:
+    """The default stdlib transport for Open-Meteo: ``callable(url) -> parsed JSON`` (provisional).
+
+    Sends only an ``Accept`` header (no key, no identifier). Compose with
+    :func:`cached_transport`, or inject a canned callable to run offline.
+    """
+    import json as _json
+    from urllib.request import Request, urlopen
+
+    def transport(url: str) -> dict:  # pragma: no cover - the one real-network path
+        request = Request(url, headers={"Accept": "application/json"})
+        with urlopen(request, timeout=timeout) as resp:  # noqa: S310 - https Open-Meteo endpoint
+            return _json.loads(resp.read().decode("utf-8"))
+
+    return transport
+
+
+def _open_meteo_complete(payload) -> bool:
+    """False when the last hour is still ``null``: Open-Meteo has not published it yet."""
+    try:
+        vals = payload["hourly"]["temperature_2m"]
+    except (KeyError, TypeError):
+        return False
+    return bool(vals) and vals[-1] is not None
+
+
+def fetch_open_meteo(
+    latitude,
+    longitude,
+    start,
+    end,
+    *,
+    transport: Callable[[str], dict] | None = None,
+    tz: str = "UTC",
+    timeout: float = 30.0,
+    models: str | None = None,
+) -> pd.DataFrame:
+    """Fetch hourly Open-Meteo reanalysis temperature as a frame (``oat_f``, °F). Provisional.
+
+    One request per calendar year (the cache key of :func:`cached_transport`), concatenated into a
+    unique, sorted hourly index; ``null`` hours become NaN. ``tz`` is the same switch as the NASA
+    POWER and ISD paths (``"UTC"`` tz-aware, or a site IANA zone for naive local time). The result's
+    ``attrs`` carry ``open_meteo_cell`` (requested and grid-point coordinates, elevation, model)
+    and ``open_meteo_coverage_end`` (the last hour holding a value). A payload not in UTC, or in an
+    unknown temperature unit, is refused; a window with no values raises ``ValueError``.
+    """
+    transport = transport or open_meteo_transport(timeout=timeout)
+    frames = []
+    meta: dict = {}
+    for cs, ce in _year_chunks(start, end):
+        payload = transport(open_meteo_url(latitude, longitude, cs, ce, models=models))
+        try:
+            hourly = payload["hourly"]
+            times, vals = hourly["time"], hourly["temperature_2m"]
+        except (KeyError, TypeError) as e:
+            raise ValueError("Open-Meteo response missing hourly.time / temperature_2m") from e
+        if int(payload.get("utc_offset_seconds") or 0) != 0:
+            raise ValueError("Open-Meteo response is not in UTC (timezone=GMT was not honoured)")
+        unit = str((payload.get("hourly_units") or {}).get("temperature_2m") or "°F")
+        s = pd.Series(
+            [float("nan") if v is None else float(v) for v in vals],
+            index=pd.to_datetime(list(times), utc=True),
+            dtype=float,
+        )
+        if unit.replace("°", "").strip().upper() in ("C", "CELSIUS"):
+            s = c_to_f(s)
+        elif unit.replace("°", "").strip().upper() not in ("F", "FAHRENHEIT"):
+            raise ValueError(f"Open-Meteo temperature unit {unit!r} is neither °F nor °C")
+        frames.append(s)
+        if not meta:
+            meta = {
+                "latitude": payload.get("latitude"),
+                "longitude": payload.get("longitude"),
+                "elevation_m": payload.get("elevation"),
+            }
+    oat = pd.concat(frames) if frames else pd.Series(dtype=float)
+    oat = oat[~oat.index.duplicated(keep="first")].sort_index()
+    if oat.dropna().empty:
+        raise _NoData(f"Open-Meteo returned no data for ({latitude}, {longitude}) {start}..{end}")
+    if tz.upper() != "UTC":
+        oat.index = oat.index.tz_convert(tz).tz_localize(None)
+    frame = pd.DataFrame({"oat_f": oat})
+    valid = oat.dropna()
+    frame.attrs["open_meteo_coverage_end"] = str(valid.index.max()) if len(valid) else None
+    frame.attrs["open_meteo_cell"] = {
+        "requested_latitude": float(latitude),
+        "requested_longitude": float(longitude),
+        **meta,
+        "models": models or "best_match",
+    }
+    return frame
+
+
+def oat_reference_open_meteo(
+    latitude,
+    longitude,
+    start,
+    end,
+    *,
+    transport: Callable[[str], dict] | None = None,
+    tz: str = "UTC",
+    timeout: float = 30.0,
+) -> pd.Series:
+    """The Open-Meteo °F OAT series (NaNs dropped, ``name="oat_f"``). Provisional (0.92)."""
+    df = fetch_open_meteo(
+        latitude, longitude, start, end, transport=transport, tz=tz, timeout=timeout
+    )
+    s = df["oat_f"].dropna()
+    s.name = "oat_f"
+    s.attrs["open_meteo_cell"] = df.attrs["open_meteo_cell"]
+    return s
+
+
+# ------------------------------------------------------------------------- ISD + gridded fallbacks
+#
+# Provisional (0.90.1; refined 0.92). ISD is station-precise but gappy, and its catalog can lag
+# real time by months; NASA POWER and Open-Meteo are gap-free and global but gridded reanalysis that
+# lags real time by days to weeks. The blend takes the station where it exists and fills the rest,
+# correcting each other source's offset against the reference station over the dates both cover,
+# and says which dates came from where.
 
 _SEASON = {12: "DJF", 1: "DJF", 2: "DJF", 3: "MAM", 4: "MAM", 5: "MAM"}
 _SEASON.update({6: "JJA", 7: "JJA", 8: "JJA", 9: "SON", 10: "SON", 11: "SON"})
 _MIN_PAIRS_MONTH = 240  # paired hours (~10 days) for a month to get its own offset
 _MIN_PAIRS_SEASON = 240  # ... else its season's offset
 _MIN_PAIRS_GLOBAL = 168  # ... else one offset from >= 7 days of overlap; below that, no correction
+_MIN_PAIRS_HOUR = 30  # paired hours for a (season, UTC hour) cell of the daily-cycle correction
+FALLBACKS = ("nasa_power", "open_meteo")  # the gridded sources the blend can fall back to
+_SOURCE_NAME = {"nasa_power": "NASA POWER", "open_meteo": "Open-Meteo"}
 
 
 def _power_complete(payload) -> bool:
@@ -871,14 +1041,21 @@ def _power_complete(payload) -> bool:
     return True
 
 
-def _bias_offsets(station: pd.Series, power: pd.Series) -> dict:
-    """Monthly mean offset (station - POWER, °F) over the hours both carry, with fallbacks.
+def _bias_offsets(station: pd.Series, power: pd.Series, *, diurnal: bool = True) -> dict:
+    """Offset (station - other source, °F) over the hours both carry: monthly, then daily cycle.
 
-    A calendar month with at least ``_MIN_PAIRS_MONTH`` paired hours (pooled across years) gets its
-    own mean offset; otherwise its meteorological season's (``_MIN_PAIRS_SEASON``); otherwise one
-    offset over all pairs (``_MIN_PAIRS_GLOBAL``); otherwise none (0, ``basis="none"``). The mean,
-    not the median: an additive correction that preserves the station's mean is what degree-day and
-    M&V consumers integrate.
+    Step 1, **monthly**: a calendar month with at least ``_MIN_PAIRS_MONTH`` paired hours (pooled
+    across years) gets its own mean offset; otherwise its meteorological season's
+    (``_MIN_PAIRS_SEASON``); otherwise one offset over all pairs (``_MIN_PAIRS_GLOBAL``);
+    otherwise none (0, ``basis="none"``). The mean, not the median: an additive correction that
+    preserves the station's mean is what degree-day and M&V consumers integrate.
+
+    Step 2, **hour of day** (``diurnal``, 0.92): what the monthly offset leaves is averaged per
+    (season, UTC hour) cell with at least ``_MIN_PAIRS_HOUR`` pairs, else per UTC hour over all
+    seasons, else 0. Reanalysis damps and shifts the daily cycle (warm nights, cool afternoons);
+    this removes the systematic part. Each cell's mean residual is zero by construction, so the
+    correction does not move the monthly means. UTC hours are fixed to the sun at a site, unlike a
+    local clock across DST.
     """
     d = (station - power.reindex(station.index)).dropna()
     n = len(d)
@@ -903,8 +1080,13 @@ def _bias_offsets(station: pd.Series, power: pd.Series) -> dict:
             offsets[m], basis[m] = 0.0, "none"
     applied = months.map(offsets) if n else months
     rmse_before = float((d**2).mean() ** 0.5) if n else None
-    rmse_after = float(((d - applied) ** 2).mean() ** 0.5) if n else None
-    return {
+    rmse_monthly = float(((d - applied) ** 2).mean() ** 0.5) if n else None
+    min_pairs: dict = {
+        "month": _MIN_PAIRS_MONTH,
+        "season": _MIN_PAIRS_SEASON,
+        "global": _MIN_PAIRS_GLOBAL,
+    }
+    out = {
         "method": "monthly_mean_offset",
         "units": "degF",
         "offsets_f": {m: round(v, 3) for m, v in offsets.items()},
@@ -912,14 +1094,68 @@ def _bias_offsets(station: pd.Series, power: pd.Series) -> dict:
         "n_pairs": pairs,
         "n_pairs_total": n,
         "overlap": [str(d.index.min()), str(d.index.max())] if n else None,
-        "min_pairs": {
-            "month": _MIN_PAIRS_MONTH,
-            "season": _MIN_PAIRS_SEASON,
-            "global": _MIN_PAIRS_GLOBAL,
-        },
+        "min_pairs": min_pairs,
         "rmse_before_f": None if rmse_before is None else round(rmse_before, 3),
-        "rmse_after_f": None if rmse_after is None else round(rmse_after, 3),
+        "rmse_after_f": None if rmse_monthly is None else round(rmse_monthly, 3),
     }
+    if not diurnal:
+        return out
+    hourly: dict = {s: {h: 0.0 for h in range(24)} for s in ("DJF", "MAM", "JJA", "SON")}
+    hbasis: dict = {s: {} for s in hourly}
+    if n and any(b != "none" for b in basis.values()):
+        r = d - applied
+        hrs = pd.Series(d.index.hour, index=d.index)
+        cell = r.groupby([months.map(_SEASON), hrs]).agg(["mean", "size"])
+        by_hour = r.groupby(hrs).agg(["mean", "size"])
+        for sea in hourly:
+            for h in range(24):
+                key = (sea, h)
+                if key in cell.index and int(cell.loc[key, "size"]) >= _MIN_PAIRS_HOUR:
+                    hourly[sea][h], hbasis[sea][h] = float(cell.loc[key, "mean"]), "season_hour"
+                elif h in by_hour.index and int(by_hour.loc[h, "size"]) >= _MIN_PAIRS_HOUR:
+                    hourly[sea][h], hbasis[sea][h] = float(by_hour.loc[h, "mean"]), "hour"
+                else:
+                    hbasis[sea][h] = "none"
+    else:
+        for sea in hourly:
+            hbasis[sea] = {h: "none" for h in range(24)}
+    out["method"] = "monthly_mean_offset+hour_of_day"
+    out["hour_of_day_f"] = {s: {h: round(v, 3) for h, v in hs.items()} for s, hs in hourly.items()}
+    out["hour_basis"] = hbasis
+    min_pairs["season_hour"] = _MIN_PAIRS_HOUR
+    out["rmse_after_monthly_f"] = out["rmse_after_f"]
+    if n:
+        total = _correction(d.index, out)
+        out["rmse_after_f"] = round(float(((d - total) ** 2).mean() ** 0.5), 3)
+    return out
+
+
+def _correction(index: pd.DatetimeIndex, bias: dict) -> pd.Series:
+    """The additive correction (°F) a :func:`_bias_offsets` result applies at UTC ``index``."""
+    off = pd.Series(index.month, index=index).map(bias["offsets_f"]).astype(float)
+    hod = bias.get("hour_of_day_f")
+    if hod:
+        seasons = pd.Series(index.month, index=index).map(_SEASON)
+        hours = index.hour
+        off = off + [float(hod[s][h]) for s, h in zip(seasons, hours)]
+    return off
+
+
+def _bias_note(bias: dict, against: str) -> str:
+    """How a fallback source was corrected, for a caveat."""
+    if bias["n_pairs_total"] == 0 or all(b == "none" for b in bias["basis"].values()):
+        return (
+            "UNCORRECTED: too little station overlap to estimate an offset "
+            f"({bias['n_pairs_total']} paired hours; {_MIN_PAIRS_GLOBAL} needed)"
+        )
+    offs = sorted(set(bias["offsets_f"].values()))
+    how = f"a monthly mean offset ({min(offs):+.1f} to {max(offs):+.1f} °F)"
+    if bias.get("hour_of_day_f"):
+        how += " and an hour-of-day correction"
+    return (
+        f"bias-corrected against {against} by {how}; {bias['n_pairs_total']} paired hours, "
+        f"hourly RMSE {bias['rmse_before_f']:.1f} -> {bias['rmse_after_f']:.1f} °F in the overlap"
+    )
 
 
 def _long_gaps(values: pd.Series, gap_hours: int) -> pd.Series:
@@ -966,40 +1202,55 @@ def oat_reference_blended(
     offline: bool = False,
     clock: Callable[[], _dt.datetime] | None = None,
     timeout: float = 30.0,
+    fallbacks: Sequence[str] = ("nasa_power",),
+    meteo_transport: Callable[[str], dict] | None = None,
+    diurnal: bool = True,
+    station_offsets: bool = True,
 ) -> pd.Series:
-    """°F OAT for a window: nearest ISD station, gaps from the next ones, the rest from POWER.
+    """°F OAT for a window: nearest ISD station, gaps from the next ones, the rest from reanalysis.
 
-    Provisional (0.90.1). Returns the same ``oat_f`` Series contract as :func:`oat_reference_isd`
-    (NaNs dropped; ``tz`` the same UTC / naive-local switch) and never fails just because the ISD
-    catalog ends before the window or one station-year file is missing:
+    Provisional (0.90.1; refined 0.92). Returns the same ``oat_f`` Series contract as
+    :func:`oat_reference_isd` (NaNs dropped; ``tz`` the same UTC / naive-local switch) and never
+    fails just because the ISD catalog ends before the window or one station-year file is missing:
 
     1. **Stations.** Up to ``max_stations`` ISD stations within ``max_distance_km`` whose record
        overlaps the window, nearest first. A station still reporting when the catalog was built
        (its end within 30 days of the catalog's latest end) is tried past its catalog end date, in
-       case the catalog is stale and the files are not. The nearest station fills the window; each
-       later one fills only the runs of at least ``gap_hours`` missing hours its predecessors left
-       (a missing year file, a long outage). Shorter ISD gaps stay missing, as in
-       :func:`oat_reference_isd`. Station-to-station offsets are *not* corrected.
-    2. **NASA POWER.** Runs still missing are filled from POWER at the snapped grid cell
-       (:func:`power_grid_cell`), bias-corrected against the reference station (the nearest one
-       that returned data) by a **monthly mean offset** (station − POWER) estimated over the hours
-       both carry in ``[min(start, end − overlap_days), end]``: a month with >= 240 paired hours
-       gets its own offset, else its season's (>= 240), else one overall offset (>= 168 pairs),
-       else none. POWER's not-yet-published trailing hours (fill) stay missing.
+       case the catalog is stale and the files are not. The nearest station that returns data is
+       the **reference**; each later one fills only the runs of at least ``gap_hours`` missing
+       hours its predecessors left (a missing year file, a long outage), **offset-corrected**
+       against the reference (``station_offsets``, 0.92) over the hours both carry in
+       ``[min(start, end − overlap_days), end]`` -- the same monthly + hour-of-day correction as
+       below. Shorter ISD gaps stay missing, as in :func:`oat_reference_isd`.
+    2. **Gridded fallbacks**, in the order of ``fallbacks`` (a subset of :data:`FALLBACKS`:
+       ``"nasa_power"`` at the snapped POWER grid cell, :func:`power_grid_cell`, and
+       ``"open_meteo"``, :func:`fetch_open_meteo`, 0.92, through ``meteo_transport``). Each fills
+       the runs still missing,
+       bias-corrected against the reference station over the same calibration window by a
+       **monthly mean offset** (a month with >= 240 paired hours gets its own, else its
+       season's, else one overall offset from >= 168 pairs, else none) and, with ``diurnal``
+       (0.92, default), an **hour-of-day** correction per (season, UTC hour) -- see
+       :func:`_bias_offsets`. A source's not-yet-published trailing hours stay missing; a source
+       whose fetch fails is recorded and the next one is tried.
     3. **Provenance.** ``series.attrs["weather_provenance"]`` records the stations tried (distance,
-       missing years, hours filled), the per-source date ``segments``, the POWER cell and coverage
-       end, the ``bias_correction`` (offsets, basis, pair counts, RMSE before/after) and the
-       ``caveats``, which are also on ``series.attrs["caveats"]``. A UserWarning summarises any
-       fallback, and a catalog whose latest end is more than ``stale_after_days`` before today is
-       warned about as stale.
+       missing years, hours filled, the offset correction applied to each gap-filling station),
+       the per-source date ``segments``, every fallback's grid cell, coverage end and
+       ``bias_correction`` under ``fallbacks`` (POWER's also under ``power`` /
+       ``bias_correction``, as before), and the ``caveats``, which are also on
+       ``series.attrs["caveats"]``. A UserWarning summarises any fallback, and a catalog whose
+       latest end is more than ``stale_after_days`` before today is warned about as stale.
 
     ``cache_dir`` wraps the transports in :func:`cached_bytes_transport` / :func:`cached_transport`
-    (a POWER response with a fill tail is not cached; a missing ISD file is remembered);
+    (a gridded response with an unpublished tail is not cached; a missing ISD file is remembered);
     ``offline=True`` reads only that cache and raises :class:`WeatherCacheMiss` on a miss.
     ``clock`` (tz-aware UTC ``now``) is injectable for tests.
     """
     import warnings
 
+    fallbacks = tuple(fallbacks)
+    bad = [f for f in fallbacks if f not in FALLBACKS]
+    if bad:
+        raise ValueError(f"unknown fallback source(s) {bad}; use a subset of {FALLBACKS}")
     now = (clock or _default_clock)()
     today = pd.Timestamp(now.astimezone(_dt.timezone.utc).date())
     s = pd.Timestamp(_yyyymmdd(start))
@@ -1010,6 +1261,7 @@ def oat_reference_blended(
     t_isd = transport or isd_transport(timeout=timeout)
     t_cat = catalog_transport or t_isd
     t_pow = power_transport or nasa_power_transport(timeout=timeout)
+    t_om = meteo_transport or open_meteo_transport(timeout=timeout)
     if cache_dir is not None:
         t_isd = cached_bytes_transport(t_isd, os.path.join(cache_dir, "isd"), offline=offline)
         t_cat = cached_bytes_transport(
@@ -1017,6 +1269,12 @@ def oat_reference_blended(
         )
         t_pow = cached_transport(
             t_pow, os.path.join(cache_dir, "power"), offline=offline, should_cache=_power_complete
+        )
+        t_om = cached_transport(
+            t_om,
+            os.path.join(cache_dir, "open_meteo"),
+            offline=offline,
+            should_cache=_open_meteo_complete,
         )
 
     cat = stations if stations is not None else isd_stations(transport=t_cat, timeout=timeout)
@@ -1045,12 +1303,40 @@ def oat_reference_blended(
     cands.sort(key=lambda st: _haversine_km(latitude, longitude, st.latitude, st.longitude))
     cands = cands[:max_stations]
 
+    ext = min(s, e - pd.Timedelta(days=overlap_days))  # the calibration window starts here
     grid = pd.date_range(s, e + pd.Timedelta(hours=23), freq="h", tz="UTC")
     values = pd.Series(float("nan"), index=grid)
     label = pd.Series(None, index=grid, dtype=object)
     tried: list[dict] = []
     ref: IsdStation | None = None
     ref_series: pd.Series | None = None
+    calib_cache: dict = {}
+
+    def _calib() -> pd.Series | None:
+        """The reference station over the calibration window ``[ext, e]`` (fetched once)."""
+        if ref is None or ref_series is None:
+            return None
+        if "s" not in calib_cache:
+            calib = ref_series
+            if ext < s:  # the reference station before the window, for the overlap
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    try:
+                        pre = fetch_isd(
+                            ref.usaf,
+                            ref.wban,
+                            ext,
+                            s - pd.Timedelta(days=1),
+                            transport=t_isd,
+                            tz="UTC",
+                        )["oat_f"]
+                        calib = pd.concat([pre, ref_series]).sort_index()
+                        calib = calib[~calib.index.duplicated(keep="first")]
+                    except ValueError:
+                        pass
+            calib_cache["s"] = calib
+        return calib_cache["s"]
+
     for st in cands:
         need = _long_gaps(values, gap_hours)
         if not need.any():
@@ -1060,15 +1346,32 @@ def oat_reference_blended(
             **st.as_dict(),
             "distance_km": round(_haversine_km(latitude, longitude, st.latitude, st.longitude), 1),
         }
+        secondary = ref is not None and station_offsets
+        lo = hours[0]
+        if secondary:  # fetch the overlap with the reference too, to estimate the offset
+            lo = min(hours[0], pd.Timestamp(ext).tz_localize("UTC"))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             try:
-                df = fetch_isd(st.usaf, st.wban, hours[0], hours[-1], transport=t_isd, tz="UTC")
+                df = fetch_isd(st.usaf, st.wban, lo, hours[-1], transport=t_isd, tz="UTC")
             except ValueError as exc:
                 rec.update(hours_filled=0, missing_years=None, error=str(exc))
                 tried.append(rec)
                 continue
         oat = df["oat_f"]
+        if secondary:
+            calib = _calib()
+            off = _bias_offsets(calib, oat, diurnal=diurnal) if calib is not None else None
+            if (
+                off is not None
+                and off["n_pairs_total"]
+                and any(b != "none" for b in off["basis"].values())
+            ):
+                off["reference_station"] = f"{ref.usaf}-{ref.wban}"  # type: ignore[union-attr]
+                oat = oat + _correction(oat.index, off)
+                rec["offset_correction"] = off
+            else:
+                rec["offset_correction"] = None
         fill = need & oat.reindex(grid).notna()
         values[fill] = oat.reindex(grid)[fill]
         label[fill] = f"isd:{st.usaf}-{st.wban}"
@@ -1092,106 +1395,124 @@ def oat_reference_blended(
             )
     used = [r for r in tried if r.get("hours_filled")]
     if len(used) > 1:
-        names = ", ".join(f"{r['usaf']}-{r['wban']} ({r['distance_km']} km)" for r in used[1:])
-        caveats.append(
-            f"Gaps of the nearest station are filled from station(s) {names}, uncorrected for any "
-            "station-to-station offset."
-        )
+        fixed = [r for r in used[1:] if r.get("offset_correction")]
+        raw = [r for r in used[1:] if not r.get("offset_correction")]
+        if fixed:
+            names = ", ".join(f"{r['usaf']}-{r['wban']} ({r['distance_km']} km)" for r in fixed)
+            ref_name = f"{used[0]['usaf']}-{used[0]['wban']}"
+            caveats.append(
+                f"Gaps of the nearest station are filled from station(s) {names}, "
+                + "; ".join(
+                    _bias_note(r["offset_correction"], f"station {ref_name}") for r in fixed
+                )
+                + "."
+            )
+        if raw:
+            names = ", ".join(f"{r['usaf']}-{r['wban']} ({r['distance_km']} km)" for r in raw)
+            why = "" if station_offsets else " (station_offsets=False)"
+            caveats.append(
+                f"Gaps of the nearest station are filled from station(s) {names}, uncorrected for "
+                f"any station-to-station offset{why}."
+            )
 
+    fb_info: list[dict] = []
     power_info: dict | None = None
     bias: dict | None = None
-    need = _long_gaps(values, gap_hours)
-    if need.any():
-        ext = min(s, e - pd.Timedelta(days=overlap_days))
-        p_start = max(
-            min(ext, need[need].index[0].tz_localize(None).normalize()), _POWER_HOURLY_START
-        )
+    for src in fallbacks:
+        need = _long_gaps(values, gap_hours)
+        if not need.any():
+            break
+        first = _POWER_HOURLY_START if src == "nasa_power" else _OPEN_METEO_START
+        p_start = max(min(ext, need[need].index[0].tz_localize(None).normalize()), first)
         p_end = min(e, today)
-        power_oat = None
+        info: dict = {"source": src, "requested": [str(p_start.date()), str(p_end.date())]}
+        series = None
         if p_end >= p_start:
             try:
-                pw = fetch_nasa_power(
-                    latitude,
-                    longitude,
-                    p_start,
-                    p_end,
-                    transport=t_pow,
-                    tz="UTC",
-                    snap_to_cell=True,
-                )
-                power_oat = pw["oat_f"]
-                power_info = {
-                    "cell": pw.attrs.get("power_cell"),
-                    "coverage_end": pw.attrs.get("power_coverage_end"),
-                    "requested": [str(p_start.date()), str(p_end.date())],
-                }
+                if src == "nasa_power":
+                    pw = fetch_nasa_power(
+                        latitude,
+                        longitude,
+                        p_start,
+                        p_end,
+                        transport=t_pow,
+                        tz="UTC",
+                        snap_to_cell=True,
+                    )
+                    info.update(
+                        cell=pw.attrs.get("power_cell"),
+                        coverage_end=pw.attrs.get("power_coverage_end"),
+                    )
+                else:
+                    pw = fetch_open_meteo(latitude, longitude, p_start, p_end, transport=t_om)
+                    info.update(
+                        cell=pw.attrs.get("open_meteo_cell"),
+                        coverage_end=pw.attrs.get("open_meteo_coverage_end"),
+                    )
+                series = pw["oat_f"]
             except _NoData:
-                power_oat = None
-        if power_oat is not None:
-            if ref is not None and ref_series is not None:
-                calib = ref_series
-                if ext < s:  # the reference station before the window, for the overlap
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore", UserWarning)
-                        try:
-                            pre = fetch_isd(
-                                ref.usaf,
-                                ref.wban,
-                                ext,
-                                s - pd.Timedelta(days=1),
-                                transport=t_isd,
-                                tz="UTC",
-                            )["oat_f"]
-                            calib = pd.concat([pre, ref_series]).sort_index()
-                            calib = calib[~calib.index.duplicated(keep="first")]
-                        except ValueError:
-                            pass
-                bias = _bias_offsets(calib, power_oat)
-                bias["reference_station"] = f"{ref.usaf}-{ref.wban}"
+                series = None
+            except (OSError, ValueError) as exc:  # a failed source: record it, try the next
+                if src == fallbacks[-1] and len(fallbacks) == 1:
+                    raise
+                info["error"] = f"{type(exc).__name__}: {exc}"
+                caveats.append(f"{_SOURCE_NAME[src]} could not be fetched ({info['error']}).")
+        b: dict | None = None
+        if series is not None:
+            calib = _calib()
+            if calib is not None and ref is not None:
+                b = _bias_offsets(calib, series, diurnal=diurnal)
+                b["reference_station"] = f"{ref.usaf}-{ref.wban}"
             else:
-                bias = _bias_offsets(
-                    pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC")), power_oat
+                b = _bias_offsets(
+                    pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC")),
+                    series,
+                    diurnal=diurnal,
                 )
-                bias["reference_station"] = None
-            off = pd.Series(power_oat.index.month, index=power_oat.index).map(bias["offsets_f"])
-            corrected = (power_oat + off).reindex(grid)
+                b["reference_station"] = None
+            corrected = (series + _correction(series.index, b)).reindex(grid)
             fill = need & corrected.notna()
             values[fill] = corrected[fill]
-            label[fill] = "nasa_power"
+            label[fill] = src
+            info["hours_filled"] = int(fill.sum())
+        info["bias_correction"] = b
+        fb_info.append(info)
+        if src == "nasa_power":
+            power_info = {k: info[k] for k in ("cell", "coverage_end", "requested") if k in info}
+            bias = b
 
     gone = _long_gaps(values, gap_hours)
     label[gone] = "missing"
-    n_power = int((label == "nasa_power").sum())
     n_missing = int(gone.sum())
     segs = _segments(label, tz)
-    if n_power:
-        dates = "; ".join(
-            f"{g['start'][:10]}..{g['end'][:10]}" for g in segs if g["source"] == "nasa_power"
-        )
-        assert bias is not None
-        if bias["n_pairs_total"] == 0 or all(b == "none" for b in bias["basis"].values()):
-            how = (
-                "UNCORRECTED: too little station overlap to estimate an offset "
-                f"({bias['n_pairs_total']} paired hours; {_MIN_PAIRS_GLOBAL} needed)"
-            )
-        else:
-            offs = sorted(set(bias["offsets_f"].values()))
-            how = (
-                f"bias-corrected against station {bias['reference_station']} by a monthly mean "
-                f"offset ({min(offs):+.1f} to {max(offs):+.1f} °F; "
-                f"{bias['n_pairs_total']} paired hours)"
-            )
-        cell = (power_info or {}).get("cell") or {}
+    for info in fb_info:
+        src = info["source"]
+        n_src = int((label == src).sum())
+        if not n_src:
+            continue
+        dates = "; ".join(f"{g['start'][:10]}..{g['end'][:10]}" for g in segs if g["source"] == src)
+        bc = info["bias_correction"]
+        assert bc is not None
+        how = _bias_note(bc, f"station {bc.get('reference_station')}")
+        cell = info.get("cell") or {}
+        size = "~55 km" if src == "nasa_power" else "~9-25 km"
         caveats.append(
-            f"{n_power} h ({100 * n_power / len(grid):.0f}% of the window) come from NASA POWER "
-            f"reanalysis (grid cell {cell.get('latitude')}, {cell.get('longitude')}, ~55 km), not "
-            f"a station: {dates}; {how}."
+            f"{n_src} h ({100 * n_src / len(grid):.0f}% of the window) come from "
+            f"{_SOURCE_NAME[src]} reanalysis (grid cell {cell.get('latitude')}, "
+            f"{cell.get('longitude')}, {size}), not a station: {dates}; {how}."
         )
     if n_missing:
-        cov = (power_info or {}).get("coverage_end")
+        ends = [
+            f"{_SOURCE_NAME[i['source']]} is published through {i['coverage_end']}"
+            for i in fb_info
+            if i.get("coverage_end")
+        ]
+        names = " and ".join(["ISD", *(_SOURCE_NAME[f] for f in fallbacks)])
         caveats.append(
-            f"{n_missing} h of the window have no source (ISD and NASA POWER both missing"
-            + (f"; POWER is published through {cov}" if cov else "")
+            f"{n_missing} h of the window have no source ({names} "
+            + ("both " if len(fallbacks) == 1 else "all ")
+            + "missing"
+            + (f"; {'; '.join(ends)}" if ends else "")
             + ")."
         )
     if caveats:
@@ -1202,7 +1523,13 @@ def oat_reference_blended(
         out.index = out.index.tz_convert(tz).tz_localize(None)
     out.name = "oat_f"
     out.attrs["weather_provenance"] = {
-        "method": "isd_with_nasa_power_fallback",
+        "method": (
+            "isd_with_nasa_power_fallback"
+            if fallbacks == ("nasa_power",)
+            else "isd_with_fallbacks:" + ",".join(fallbacks)
+            if fallbacks
+            else "isd_only"
+        ),
         "window": [str(s.date()), str(e.date())],
         "tz": tz,
         "catalog_end": last,
@@ -1212,9 +1539,66 @@ def oat_reference_blended(
         "hours_by_source": {k: int(v) for k, v in label.value_counts().items()},
         "power": power_info,
         "bias_correction": bias,
+        "fallbacks": fb_info,
         "caveats": caveats,
     }
     out.attrs["caveats"] = list(caveats)
     if ref is not None:
         out.attrs["isd_station"] = ref.as_dict()
     return out
+
+
+def oat_reference_auto(
+    latitude,
+    longitude,
+    start,
+    end,
+    *,
+    source: str = "auto",
+    tz: str = "UTC",
+    cache_dir: str | None = None,
+    offline: bool = False,
+    **kwargs,
+) -> pd.Series:
+    """°F OAT reference from a named source -- what a config's ``fetch`` key selects. Provisional.
+
+    ``source``: ``"auto"`` -- ISD with the NASA POWER then Open-Meteo fallbacks
+    (:func:`oat_reference_blended`, ``fallbacks=("nasa_power", "open_meteo")``); ``"isd"`` -- ISD
+    stations only, gap-filled and offset-corrected between stations (``fallbacks=()``);
+    ``"nasa_power"`` -- NASA POWER alone (:func:`oat_reference`, uncorrected); ``"open_meteo"``
+    -- Open-Meteo alone (:func:`oat_reference_open_meteo`, uncorrected). ``cache_dir`` /
+    ``offline`` cache the requests as in :func:`oat_reference_blended`; ``kwargs`` go to the
+    underlying function (transports, ``clock`` ...). The series' ``attrs["weather_source"]``
+    names the source used.
+    """
+    if source in ("auto", "isd"):
+        fb = ("nasa_power", "open_meteo") if source == "auto" else ()
+        s = oat_reference_blended(
+            latitude,
+            longitude,
+            start,
+            end,
+            tz=tz,
+            cache_dir=cache_dir,
+            offline=offline,
+            fallbacks=kwargs.pop("fallbacks", fb),
+            **kwargs,
+        )
+    elif source in ("nasa_power", "open_meteo"):
+        t = kwargs.pop("transport", None)
+        if t is None:
+            t = nasa_power_transport() if source == "nasa_power" else open_meteo_transport()
+        if cache_dir is not None:
+            complete = _power_complete if source == "nasa_power" else _open_meteo_complete
+            sub = "power" if source == "nasa_power" else "open_meteo"
+            t = cached_transport(
+                t, os.path.join(cache_dir, sub), offline=offline, should_cache=complete
+            )
+        fn = oat_reference if source == "nasa_power" else oat_reference_open_meteo
+        s = fn(latitude, longitude, start, end, transport=t, tz=tz, **kwargs)
+    else:
+        raise ValueError(
+            f"unknown weather source {source!r}; use auto, isd, nasa_power or open_meteo"
+        )
+    s.attrs["weather_source"] = source
+    return s

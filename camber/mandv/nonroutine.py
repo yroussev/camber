@@ -28,7 +28,9 @@ each bill with its own period's mean temperature and works on energy per day (se
 count **days of service** (the sum of the bills' days), not rows. A billing segment also needs at
 least :data:`_MIN_BILLS_PER_SEGMENT` bills, so one odd bill is an outlier, not a level. Results
 then report ``n_days`` as days of service and add ``n_periods`` (the number of bills) and
-``billing``. Daily and sub-daily input behaves exactly as before.
+``billing``. Daily and sub-daily input behaves exactly as before. Since 0.92 the weather
+baseline of billing input is fitted with each bill's days as its weight (see
+:mod:`camber.mandv.models`).
 """
 
 from __future__ import annotations
@@ -52,6 +54,11 @@ def _prepared(energy, temp, rate_is_energy_rate: bool):
     if not df.attrs.get("billing"):
         return df, None
     return df, np.concatenate([[0], np.cumsum(df["days"].to_numpy(dtype=int))])
+
+
+def _bill_days(df, span):
+    """The bills' day counts, the weather baseline's fit weights (``None`` for daily data)."""
+    return None if span is None else df["days"].to_numpy(dtype=float)
 
 
 @dataclass
@@ -114,7 +121,7 @@ def detect_non_routine(
             f"need >= {min_days} days and >= {2 * _MIN_BILLS_PER_SEGMENT} bills, got "
             f"{int(span[-1])} days in {len(df)} bills"
         )
-    model = best_model(df["oat"].to_numpy(), df["energy"].to_numpy())
+    model = best_model(df["oat"].to_numpy(), df["energy"].to_numpy(), weights=_bill_days(df, span))
     mask = residual_outliers(df["energy"], df["oat"], model, z=z)
     return NonRoutineResult(
         n_total=len(df),
@@ -226,7 +233,7 @@ def detect_step_change(
                 f"need >= {2 * min_segment_days} days and >= {2 * m} bills, got "
                 f"{int(span[n])} days in {n} bills"
             )
-    model = best_model(df["oat"].to_numpy(), df["energy"].to_numpy())
+    model = best_model(df["oat"].to_numpy(), df["energy"].to_numpy(), weights=_bill_days(df, span))
     resid = df["energy"].to_numpy() - model.predict(df["oat"].to_numpy())
 
     # prefix sums of resid and resid^2 -> each split's segment means/SS in O(1)
@@ -594,7 +601,7 @@ def detect_step_changes(
         raise ValueError("max_steps and max_iter must be >= 1")
     T = df["oat"].to_numpy(dtype=float)
     y = df["energy"].to_numpy(dtype=float)
-    model = best_model(T, y)
+    model = best_model(T, y, weights=_bill_days(df, span))
     kind, cps0 = model.kind, tuple(model.change_points)
     pen = float(penalty) if penalty is not None else 3.0 * float(np.log(n))
     caveats: list = []

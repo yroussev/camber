@@ -241,7 +241,9 @@ class IndicatorFit:
     ``design`` is the weather model's design spec (change points fixed), ``beta`` all coefficients
     in design order with the indicator last, ``sigma`` their joint covariance
     ``kappa * s2 * (X'X)^-1``. ``p`` counts the model's parameters (change points included) plus
-    one for the indicator; ``df = n - p``.
+    one for the indicator; ``df = n - p``. A fit weighted by billing days (0.92, provisional)
+    records ``weight_scale``, the mean bill length, so a measured total over ``m`` rows of one day
+    each carries noise ``kappa * s2 * weight_scale * m`` (``None`` for an unweighted fit).
     """
 
     fit_period: str
@@ -256,6 +258,7 @@ class IndicatorFit:
     p: int
     df: int
     n_event_rows: int
+    weight_scale: float | None = None
 
     def as_dict(self) -> dict:
         """Return as a plain JSON-safe dict."""
@@ -264,7 +267,14 @@ class IndicatorFit:
         d = asdict(self)
         d["design"] = _spec_out(self.design)
         d["sigma"] = [list(r) for r in self.sigma]
+        if self.weight_scale is None:  # unweighted fits serialise exactly as before 0.92
+            d.pop("weight_scale")
         return d
+
+    @property
+    def noise_scale(self) -> float:
+        """Per-row noise multiplier of ``s2``: ``weight_scale`` for a day-weighted fit, else 1."""
+        return 1.0 if self.weight_scale is None else float(self.weight_scale)
 
     @classmethod
     def from_dict(cls, d: dict) -> IndicatorFit:
@@ -291,6 +301,8 @@ class IndicatorFit:
             d[k] = int(d[k])
         for k in ("s2", "kappa"):
             d[k] = float(d[k])
+        if d.get("weight_scale") is not None:
+            d["weight_scale"] = float(d["weight_scale"])
         return cls(**d)
 
 
@@ -530,18 +542,24 @@ def _linear_spec(model, D):
     return spec, int(p)
 
 
-def _research_change_points(spec, D, y, ev, ok):
-    """Re-search a change-point spec's change points with the event indicator in the design."""
+def _research_change_points(spec, D, y, ev, ok, w=None):
+    """Re-search a change-point spec's change points with the event indicator in the design
+    (weighted least squares when ``w``, aligned to ``D``, is given)."""
     from .coverage import _design
     from .nonroutine import _cp_candidates
 
     Dk, yk, evk = D[ok], y[ok], ev[ok].astype(float)
+    sw = None if w is None else np.sqrt(np.asarray(w, dtype=float)[ok])
     best = None
     for cps in _cp_candidates(spec[1], Dk[:, 0], spec[2]):
         cand = (spec[0], spec[1], tuple(float(c) for c in cps))
         X = np.column_stack([_design(cand, Dk), evk])
-        beta, *_ = np.linalg.lstsq(X, yk, rcond=None)
-        r = yk - X @ beta
+        if sw is None:
+            beta, *_ = np.linalg.lstsq(X, yk, rcond=None)
+            r = yk - X @ beta
+        else:
+            beta, *_ = np.linalg.lstsq(X * sw[:, None], yk * sw, rcond=None)
+            r = (yk - X @ beta) * sw
         sse = float(r @ r)
         if best is None or sse < best[0]:
             best = (sse, cand)
@@ -561,6 +579,7 @@ def estimate_nre_indicator(
     reason: str = "",
     evidence: str | None = None,
     approved_by: str | None = None,
+    weights=None,
 ) -> NonRoutineAdjustment:
     """Estimate a non-routine event's effect with an indicator variable (BPA 2024 §3.1.7).
 
@@ -582,6 +601,11 @@ def estimate_nre_indicator(
 
     Returns an accepted ``"indicator"`` :class:`NonRoutineAdjustment` whose ``rate`` is the
     effect per row (post minus pre) and ``rate_se`` its standard error.
+
+    ``weights`` (provisional, 0.92) makes it a weighted least-squares fit -- billing rows weighted
+    by their day counts, whose ``energy`` is energy per day, so ``rate`` is per day. The fit
+    records the mean weight (``IndicatorFit.weight_scale``); a bill is inside the event when its
+    start date is.
     """
     from .coverage import _as_2d, _design
     from .stats import lag1_autocorrelation
@@ -595,19 +619,26 @@ def estimate_nre_indicator(
         raise ValueError("drivers, energy and index must be the same length")
     ev = _event_mask(idx, start, end)
     ok = np.isfinite(y) & np.all(np.isfinite(D), axis=1)
+    w_all = None if weights is None else np.asarray(weights, dtype=float).ravel()
+    if w_all is not None:
+        if len(w_all) != len(y):
+            raise ValueError("weights must be the same length as energy")
+        ok &= np.isfinite(w_all) & (w_all > 0)
     if model is None:
         clean = ok & ~ev
         if D.shape[1] == 1:
             from .models import best_model
 
-            model = best_model(D[clean, 0], y[clean])
+            model = best_model(
+                D[clean, 0], y[clean], weights=None if w_all is None else w_all[clean]
+            )
         else:
             from .multivariable import fit_cp_driver_model
 
             model = fit_cp_driver_model(D[clean, 0], D[clean, 1:], y[clean])
     spec, p_model = _linear_spec(model, D)
     if refit_change_points and spec[0] in ("cp", "cpd") and spec[2]:
-        spec = _research_change_points(spec, D, y, ev, ok)
+        spec = _research_change_points(spec, D, y, ev, ok, w_all)
     W = _design(spec, D)
     ok &= np.all(np.isfinite(W), axis=1)
     X = np.column_stack([W, ev.astype(float)])[ok]
@@ -623,11 +654,22 @@ def estimate_nre_indicator(
     df = n - p
     if df < 1:
         raise ValueError(f"too few rows ({n}) for {p} parameters")
-    A = np.linalg.pinv(X.T @ X)
-    beta = A @ (X.T @ yy)
-    resid = yy - X @ beta
-    s2 = float(resid @ resid) / df
-    rho = lag1_autocorrelation(resid, index=ii)
+    from .models import fit_weights
+
+    w, w_scale = fit_weights(w_all, ok)
+    if w is None:
+        A = np.linalg.pinv(X.T @ X)
+        beta = A @ (X.T @ yy)
+        resid = yy - X @ beta
+        s2 = float(resid @ resid) / df
+        rho = lag1_autocorrelation(resid, index=ii)
+    else:
+        Xw = X * w[:, None]
+        A = np.linalg.pinv(X.T @ Xw)
+        beta = A @ (Xw.T @ yy)
+        resid = yy - X @ beta
+        s2 = float((w * resid) @ resid) / df
+        rho = lag1_autocorrelation(np.sqrt(w) * resid, index=ii)
     kappa = 1.0 if rho is None else (float("inf") if rho >= 1 else (1.0 + rho) / (1.0 - rho))
     sigma = kappa * s2 * A
     from ._design import design_names
@@ -649,6 +691,7 @@ def estimate_nre_indicator(
         p=p,
         df=df,
         n_event_rows=n_ev,
+        weight_scale=w_scale,
     )
     caveats = [
         "the indicator's standard error is conditional on the weather model's change points",
@@ -1093,7 +1136,7 @@ def _adjust_side(side: _Side, items, *, threshold, allow_rows_ops: bool) -> dict
         se = abs(d) * float(a.rate_se)
         m = int(use.sum())
         # a projection at standard conditions has no noise term (nothing is measured there)
-        var_b = float(g_eff @ Sig @ g_eff) + (0.0 if std else f.kappa * f.s2 * m)
+        var_b = float(g_eff @ Sig @ g_eff) + (0.0 if std else f.kappa * f.s2 * m * f.noise_scale)
         dfs.append(f.df)
         bars.append(WaterfallStep(pre + "baseline refit with indicator", P_w - B, "delta", i))
         B = P_w
@@ -1299,7 +1342,7 @@ def _reporting_refit(side: _Side, order, caveats: list, *, allow_rows_ops: bool,
     Sig = np.asarray(f.sigma)
     m = int(use.sum())
     # S = O_b - (g_w' b_w + d_meas b_ind): the event-free comparison, measured noise included
-    var = float(g @ Sig @ g) + f.kappa * f.s2 * m
+    var = float(g @ Sig @ g) + f.kappa * f.s2 * m * f.noise_scale
     caveats.append(
         f"{pre}the reporting model was refitted with the indicator (p + 1, joint covariance): "
         "the band is the exact OLS kernel of the refit"

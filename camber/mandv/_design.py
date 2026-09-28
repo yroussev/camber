@@ -19,6 +19,13 @@ correlation, the conservative choice (CAMBER decision D3 on issue #21). Unlike t
 fractional-savings kernel it carries the leverage of the application conditions itself -- a
 projection far from the fitted mean has a large ``g'Ag`` -- which is why a savings band computed
 with it is never widened again for extrapolation. Change points are treated as known.
+
+**Billing rows** (provisional, 0.92). When each row is a bill of ``d_j`` days whose value is
+energy per day, the projected total is ``sum_j d_j x_j beta``, so ``g = sum_j d_j x_j``; a bill's
+per-day value has variance ``s2 * c / d_j`` for a model fitted with day weights (``c`` the fit's
+mean bill length, ``weight_scale`` in its record) and ``s2 / d_j`` for one fitted on daily rows
+(``c = 1``), so the noise of the measured total is ``V_noise = kappa * s2 * c * sum_j d_j``. A row
+without days counts as one day of a weighted model's fit.
 """
 
 from __future__ import annotations
@@ -111,7 +118,9 @@ def design_names(model) -> tuple:
     raise TypeError(f"unknown design spec {spec!r}")
 
 
-def projection_variance(model, drivers, *, rows=None, rho=None, index=None) -> ProjectionVariance:
+def projection_variance(
+    model, drivers, *, rows=None, rho=None, index=None, days=None
+) -> ProjectionVariance:
     """Exact ``V_param`` / ``V_noise`` of ``model``'s projected total at ``drivers``.
 
     ``rows`` (a boolean mask aligned to ``drivers``) selects the rows actually summed -- the
@@ -119,6 +128,10 @@ def projection_variance(model, drivers, *, rows=None, rho=None, index=None) -> P
     residual autocorrelation; with neither, ``kappa`` is 1 and the result is unadjusted
     (``rho=None``). Raises ``TypeError`` when the model carries no ``(X'X)^-1`` and ``s2`` -- a
     model not fitted by CAMBER, or one built by hand.
+
+    ``days`` (aligned to ``drivers``; provisional) are billing rows' day counts: ``g`` is then the
+    day-weighted sum and ``V_noise`` the noise of ``sum(days)`` days (module docstring). ``m``
+    stays the number of rows.
     """
     rec = fit_record(model)
     if rec is None or rec.xtx_pinv is None or rec.s2 is None:
@@ -127,11 +140,19 @@ def projection_variance(model, drivers, *, rows=None, rho=None, index=None) -> P
             f"{type(model).__name__} carries neither"
         )
     X = design_rows(model, drivers, index=index)
+    d: np.ndarray | None = None if days is None else np.asarray(days, dtype=float).ravel()
+    if d is not None and len(d) != len(X):
+        raise ValueError(f"days has {len(d)} values for {len(X)} rows")
     if rows is not None:
         X = X[np.asarray(rows, dtype=bool)]
-    X = X[np.all(np.isfinite(X), axis=1)]
+        d = None if d is None else d[np.asarray(rows, dtype=bool)]
+    fin = np.all(np.isfinite(X), axis=1)
+    if d is not None:
+        fin &= np.isfinite(d)
+        d = d[fin]
+    X = X[fin]
     m = int(len(X))
-    g = X.sum(axis=0)
+    g = X.sum(axis=0) if d is None else (X * d[:, None]).sum(axis=0)
     r = rho if rho is not None else rec.rho
     if r is None or not np.isfinite(r) or r <= 0:
         kappa = 1.0
@@ -141,7 +162,11 @@ def projection_variance(model, drivers, *, rows=None, rho=None, index=None) -> P
         kappa = (1.0 + r) / (1.0 - r)
     s2 = float(rec.s2)
     v_param = float(kappa * s2 * (g @ rec.xtx_pinv @ g))
-    v_noise = float(kappa * s2 * m)
+    if d is None and rec.weight_scale is None:
+        v_noise = float(kappa * s2 * m)
+    else:
+        n_days = float(m) if d is None else float(d.sum())
+        v_noise = float(kappa * s2 * float(rec.weight_scale or 1.0) * n_days)
     df = None if rec.n is None or rec.p is None else int(rec.n) - int(rec.p)
     beta = _beta(model)
     total = float(g @ beta) if beta is not None and len(beta) == len(g) else float("nan")

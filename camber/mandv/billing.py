@@ -29,12 +29,26 @@ Conventions
 use to recognise billing input: a :class:`BillingSeries`, or a plain energy series spaced a week
 or more apart paired with a temperature series that is daily or finer.
 
+**Fitting bills** (0.92). A bill's per-day energy is the mean of ``days`` daily values, so its
+variance falls as ``1 / days``: fit it by least squares weighted by ``days`` (``weights=`` on
+:func:`~camber.mandv.models.fit_model`, :func:`~camber.mandv.stats.fit_stats` and the SEP method
+selector), and sum a per-day model's predictions back to energy with the same days (``days=`` on
+the savings functions). The config ``mv`` path does both for a ``bills`` entry
+(docs/MANDV.md, "Billing data").
+
+**Estimated reads** (0.92). An estimated bill's energy is the utility's guess; the next actual
+read corrects the running total, so the estimate and that correction belong together.
+:meth:`BillingSeries.merge_estimated` merges each run of estimated bills into the next actual bill
+(one period, the summed energy) and drops an estimated bill that no contiguous actual read
+follows, recording both in :attr:`BillingSeries.merged`. :meth:`BillingSeries.from_csv` reads a
+bills table (start, end, energy, and optional units and estimated columns).
+
 Provisional (0.90.1): names and signatures may change in a minor release.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -64,6 +78,8 @@ class BillingSeries:
 
     frame: pd.DataFrame
     units: str | None = None
+    # what merge_estimated() did: one dict per merged run or dropped estimate (provisional, 0.92)
+    merged: list = field(default_factory=list)
 
     def __post_init__(self):
         f = self.frame
@@ -119,6 +135,57 @@ class BillingSeries:
         return cls(out, units=units)
 
     @classmethod
+    def from_csv(
+        cls,
+        path,
+        *,
+        start: str = "start",
+        end: str = "end",
+        energy: str = "energy",
+        estimated: str | None = "estimated",
+        units: str | None = None,
+        units_column: str = "units",
+        end_inclusive: bool = True,
+    ) -> BillingSeries:
+        """Bills from a CSV file: one row per bill (provisional, 0.92).
+
+        The columns are named by ``start``, ``end`` and ``energy``; ``estimated`` names an optional
+        estimated-read flag (``true``/``false``, ``yes``/``no``, ``1``/``0``, ``E``/``A`` -- a
+        missing column means every read is actual). ``units`` names the energy unit; without it a
+        ``units_column`` holding one value is used, and more than one unit in that column is an
+        error. ``end_inclusive`` is as in :meth:`from_frame`. Raises ``ValueError`` on a missing
+        column or an unreadable date or flag.
+        """
+        df = pd.read_csv(path, encoding="utf-8-sig")
+        missing = [c for c in (start, end, energy) if c not in df.columns]
+        if missing:
+            raise ValueError(f"bills file has no column(s) {missing}; it has {list(df.columns)}")
+        if units is None and units_column in df.columns:
+            found = sorted({str(u).strip() for u in df[units_column].dropna()})
+            if len(found) > 1:
+                raise ValueError(f"bills file mixes energy units {found}; convert to one first")
+            units = found[0] if found else None
+        flag = None
+        if estimated and estimated in df.columns:
+            flag = "_estimated"
+            df[flag] = [_read_flag(v) for v in df[estimated]]
+        try:
+            df[start] = pd.to_datetime(df[start])
+            df[end] = pd.to_datetime(df[end])
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"bills file has an unreadable date: {e}") from None
+        df[energy] = pd.to_numeric(df[energy], errors="coerce")
+        return cls.from_frame(
+            df,
+            start=start,
+            end=end,
+            energy=energy,
+            estimated=flag,
+            units=units,
+            end_inclusive=end_inclusive,
+        )
+
+    @classmethod
     def from_reads(
         cls,
         energy: pd.Series,
@@ -158,6 +225,56 @@ class BillingSeries:
             {"start": starts, "end": ends, "energy": s.to_numpy(float), "estimated": est}
         )
         return cls(frame, units=units)
+
+    def merge_estimated(self) -> BillingSeries:
+        """Merge each run of estimated bills into the next actual bill (provisional, 0.92).
+
+        A utility's estimated read is trued up by the next actual read: the actual bill carries
+        the correction, so neither bill alone is a measurement, but together they are. Each run of
+        consecutive estimated bills followed, with no gap, by an actual bill becomes one bill
+        from the first estimate's start to the actual bill's end, with the summed energy and
+        ``estimated=False``. An estimated bill that no contiguous actual read follows (the last
+        bill, or one before a missing bill) is dropped. :attr:`merged` lists every merge
+        (``{"action": "merged", "start", "end", "n_estimated"}``) and drop
+        (``{"action": "dropped", "start", "end"}``), with ``end`` the last day served; a series
+        with no estimated read is returned unchanged.
+        """
+        f = self.frame
+        if not f["estimated"].any():
+            return self
+        rows: list = []
+        log: list = []
+        run: list = []  # pending estimated bills
+
+        def _drop(run):
+            for r in run:
+                log.append({"action": "dropped", "start": _ds(r.start), "end": _ds(r.end - _DAY)})
+
+        for r in f.itertuples(index=False):
+            if run and r.start != run[-1].end:  # a gap: the pending estimates cannot be trued up
+                _drop(run)
+                run = []
+            if r.estimated:
+                run.append(r)
+                continue
+            if run:
+                energy = float(sum(x.energy for x in run) + r.energy)
+                rows.append((run[0].start, r.end, energy))
+                log.append(
+                    {
+                        "action": "merged",
+                        "start": _ds(run[0].start),
+                        "end": _ds(r.end - _DAY),
+                        "n_estimated": len(run),
+                    }
+                )
+                run = []
+            else:
+                rows.append((r.start, r.end, float(r.energy)))
+        _drop(run)
+        out = pd.DataFrame(rows, columns=["start", "end", "energy"])
+        out["estimated"] = False
+        return BillingSeries(out, units=self.units, merged=list(self.merged) + log)
 
     # ------------------------------------------------------------------ views
     def __len__(self) -> int:
@@ -254,7 +371,38 @@ class BillingSeries:
             & (out["coverage"] >= min_coverage)
             & (out["energy"] >= 0)
         )
-        return out[keep]
+        out = out[keep]
+        out.attrs["billing"] = True
+        return out
+
+
+def _ds(x) -> str:
+    """A date as ``YYYY-MM-DD``."""
+    return str(pd.Timestamp(x).date())
+
+
+_TRUE = {"true", "t", "yes", "y", "1", "e", "est", "estimated"}
+_FALSE = {"false", "f", "no", "n", "0", "a", "act", "actual", ""}
+
+
+def _read_flag(v) -> bool:
+    """An estimated-read flag cell as a bool (``ValueError`` on anything unrecognised)."""
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return False
+    if isinstance(v, (bool, np.bool_)):
+        return bool(v)
+    if isinstance(v, (int, float, np.integer, np.floating)):
+        return bool(v)
+    t = str(v).strip().lower()
+    if t in _TRUE:
+        return True
+    if t in _FALSE:
+        return False
+    try:  # a numeric cell read as text ("0.0", "1.0") in a column that mixes forms
+        return bool(float(t))
+    except ValueError:
+        pass
+    raise ValueError(f"unreadable estimated-read flag {v!r} (use true/false, yes/no, 1/0, E/A)")
 
 
 def daily_weather(

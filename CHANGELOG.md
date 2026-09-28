@@ -161,6 +161,42 @@ All notable changes to CAMBER are documented here. The format follows
   the open LBNL Building 59 data (catalog example) RTU01/RTU02's MAT drop to "suspect" and RTU04's
   copied return air to 0.56, while its supply air keeps its score.
 <!-- /092-air -->
+## [Unreleased]
+
+<!-- 092-mv -->
+### Added (#64)
+- **Days-weighted billing fits.** A bill's per-day energy is the mean of its days, so its variance
+  falls as 1/days. The change-point fitters, `fit_stats`, the regression tests, the NRE indicator
+  fit, the exact kernel and the G14 FSU now take the bills' days: `weights=` fits by weighted least
+  squares, and `days=` sums per-day predictions back to energy with the matching noise term.
+  Equal weights are neutral (the unweighted fit, byte for byte), and daily and hourly paths are
+  unchanged. On synthetic bills of uneven length (8-62 days), the exact 90% band covers the planted
+  saving 89.9% of the time over 1,000 runs, and a linear fit's slope error falls 11%. The
+  non-routine detectors fit billing baselines with the same weights.
+- **Config `mv` entries on bills.** An entry with `"bills": "gas.csv"` (start, end, energy, and
+  optional units and estimated-read columns) runs the full M&V flow on
+  `camber.mandv.billing.BillingSeries`: per-bill mean temperature and degree-days, days-weighted
+  baseline at the G14 monthly thresholds, coverage, validity, every SEP method and `auto`, and the
+  adjustments ledger (bills expanded to their days, so an adjustment is dated to the day).
+  Estimated reads are merged into the next actual read (`BillingSeries.merge_estimated`). The
+  temperature comes from the entry's `oat` file, an opt-in fetch, or `shared_oat`; a bills-only
+  config needs no `source`. Versioned baselines and `cp_driver` are not supported for bills yet
+  (docs/MANDV.md, "Billing data").
+- **Weather fallbacks.** An hour-of-day correction after the monthly offset, per season and UTC
+  hour: out of sample at three public airports it cut the NASA POWER fallback's hourly RMSE from
+  3.8-5.9 °F to 2.9-3.4 °F. Neighbouring ISD stations that fill gaps are now offset-corrected
+  against the reference station by the same method. **Open-Meteo** is a third, keyless source
+  (`fetch_open_meteo`), bias-corrected in the same way. `oat_reference_blended(fallbacks=...)` sets
+  the fallback order, and `oat_reference_auto` picks a source by name. The RCx `oat_reference`
+  accepts `"fetch": "auto"`: ISD, then POWER, then Open-Meteo, with the source of each hour in the
+  report. Weather requests carry only coordinates and dates.
+
+### Changed (#64)
+- `oat_reference_blended` corrects the daily cycle by default (`diurnal=False` gives the 0.90.1
+  monthly-only offset) and corrects gap-filling stations (`station_offsets=False` turns this off).
+  The bias record's `rmse_after_f` is the RMSE after the full correction, and
+  `rmse_after_monthly_f` is the RMSE after the monthly step alone.
+<!-- /092-mv -->
 
 ## [0.91.0] — 2026-09-27
 
