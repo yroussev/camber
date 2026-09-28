@@ -31,6 +31,7 @@ nav:
       - Trim-and-Respond / G36 reset: TR-RESET.md
       - M&V: MANDV.md
       - Energy units (IP / SI): UNITS.md
+      - Energy conversion factor tables: ENERGY-FACTORS.md
       - "M&V: Option D (calibrated sim)": OPTION-D.md
       - Weather fetch (NASA POWER + NOAA/ISD): WEATHER.md
       - Sensor health & data trust: SENSOR-HEALTH.md

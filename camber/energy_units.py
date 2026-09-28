@@ -44,7 +44,12 @@ with an explicit ``enthalpy`` (``"1000 Btu/lb"``). There is no silent default.
 spellings (``kilowatt-hours``, ``therms``, ``MMBtu``, ``ton-hr``, ``MBH``, ``m³``). Unknown units
 raise ``ValueError``, and so do **ambiguous** ones: ``MBtu`` and ``Mlb`` (M is a thousand in US
 utility usage and a million in SI), a bare ``ton`` where energy is expected, and ``therm`` where
-power is expected.
+power is expected. A bare ``Mcf`` is a *thousand* cubic feet (the US gas-utility reading);
+ENERGY STAR Portfolio Manager writes Mcf for a *million*.
+
+**Published factor sets** (:mod:`camber.energy_factors`, opt-in) supply heat contents for fuels
+billed by volume or mass, e.g. ENERGY STAR's 1,026 Btu/cf for US natural gas. They carry the
+publisher's own, often rounded, multipliers (3.412 kBtu/kWh); the exact factors here are unchanged.
 
 Provisional (0.92): names and signatures may change in a minor release.
 """
@@ -181,7 +186,8 @@ _AMBIGUOUS = {
     "write kBtu or MMBtu",
     "mlb": "'Mlb' is ambiguous (a thousand or a million pounds): write klb",
     "mlbs": "'Mlb' is ambiguous (a thousand or a million pounds): write klb",
-    "mmcf": "'MMcf' is not supported: write the volume in Mcf",
+    "mmcf": "'MMcf' (a million cubic feet) is read only through a factor set "
+    "(camber.energy_factors, units.factor_set); otherwise write the volume in Mcf",
     "mm3": "'Mm3' is ambiguous (million cubic metres or cubic millimetres): write m3",
 }
 

@@ -496,6 +496,23 @@
     "Spool",
     "SpoolEntry"
   ],
+  "camber.energy_factors": [
+    "Conversion",
+    "EnergyFactorWarning",
+    "FactorEntry",
+    "FactorSet",
+    "SCHEMA",
+    "UNIT_KEYS",
+    "factor_for",
+    "factor_sets",
+    "get_factor_set",
+    "load_factor_set",
+    "reference_markdown",
+    "resolve_meter_type",
+    "resolve_unit",
+    "to_kbtu",
+    "validate_factor_set"
+  ],
   "camber.energy_units": [
     "BTU_J",
     "ENERGY_UNITS",
