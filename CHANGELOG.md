@@ -4,6 +4,41 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 091-rcx block (#35, #32, #33): the integrator merges this with the other 0.91 blocks -->
+### Fixed
+- **The RCx report's week selection was slow on long or irregular trends (#35).** `select_week`
+  reindexed every series onto every candidate week's grid, so one 23-month sensor logged in
+  sub-second bursts took about 8 minutes. Each window's coverage, occupied days and evidence are
+  now counted once per series from the timestamps it holds: about 0.1 s on the same shape of data.
+  The chosen week, its scores and every candidate are byte-identical (a test holds the fast path to
+  the per-window reference).
+- **A store-backed run read the whole facility for every equipment (#35).** Each one-equipment
+  read opened every part file of the facility, so a template run over thousands of equipment grew
+  with the square of their count (about 108 minutes for 2,460). `ParquetStore` keeps a
+  per-facility index of which part files hold which equipment (rebuilt when the facility's
+  partition changes) and reads only those files. A synthetic 600-equipment run fell from 363 s
+  to 45 s and a 2,460-equipment one takes 267 s, with identical findings.
+- **RCx reports for chiller and boiler plants declined the representative week (#32).** The week
+  view considered only air-side roles. Water-side plants now have their own panels
+  (`PLANT_FAMILIES`: CHW / CW / HW supply and return temperatures, loop differential pressure, kW
+  and status). A report with no air handler chooses its week on the plants; a mixed site keeps its
+  air-side week and adds up to two plant panels. `select_week` takes a provisional `roles_for` for
+  per-equipment roles. Air-only reports are unchanged.
+- **The RCx report gave G36 advice to units with no declared G36 sequence (#32).** A check that
+  assumes a G36 sequence (`*_g36`) now gets "engineer to specify" unless a `soo` entry with a
+  `g36_*` library covers the unit's class (a terminal unit counts when `AHU` has one), and any other
+  action worded as G36 practice is labelled a reference to check against the unit's own sequence.
+- **Two stale `docs/VALIDATION.md` cells (#33).** `cooling_tower_approach` on the LBNL chiller plant
+  reads FPR 0/14 with 7 declined (was 0/2, 6 declined); the FPU drift row reads airflow recall 4/6,
+  0 false positives in 16, and reheat valve recall 1/7, 0 false positives in 15, 3 declined (was
+  3/3 and 1/2 on an earlier, smaller file set). The opt-in LBNL benchmark now writes the confusion
+  counts for the FPU and chiller subsets, records them in `examples/lbnl_fdd/optin-measured.json`
+  and says when a run differs from that record; a test checks the VALIDATION cells against it and
+  the SDAHU drift rows against the gated baseline. No gated metric moved.
+<!-- end 091-rcx block -->
+
 ## [0.90.1] — 2026-09-27
 
 **0.90.1 patch: fixes from two private real-data checks (#51-#59).** Every fix has a synthetic
