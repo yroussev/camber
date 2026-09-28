@@ -981,6 +981,15 @@ class _Ctx:
             self._evidence[k] = ev
         return self._evidence[k]
 
+    def part_mask_for(self, f, part):
+        """0.92 (#67): one named sub-mask of the finding's evidence (e.g. a G36 finding's
+        ``"FC13"`` hours), or ``None`` when the rule exposes no such part."""
+        ev = self.evidence(f)
+        masks = getattr(ev, "masks", None) if ev is not None else None
+        if not isinstance(masks, dict) or masks.get(part) is None:
+            return None
+        return _on(masks[part])
+
     def mask_for(self, f):
         """The finding's violation mask from its evidence (rule-provided or rule-derived only)."""
         ev = self.evidence(f)
@@ -1191,6 +1200,7 @@ def build_rcx_report(
         costs=costs,
         exclude_cost=exclude_cost,
         mask_for=ctx.mask_for,
+        part_mask_for=ctx.part_mask_for,  # 0.92 (#67): the G36 plant link reads FC13 only
         runtime=lambda e: (gates.get(e), gate_src.get(e, FAN_GATE_NONE)),
         trust=trust_for_causes,
         mixing=mixing,

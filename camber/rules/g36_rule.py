@@ -388,7 +388,12 @@ class G36AFDD:
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Multi-trend of the AHU's air temperatures with the reported G36 fault hours shaded."""
+        """Multi-trend of the AHU's air temperatures with the reported G36 fault hours shaded.
+
+        ``mask`` is the union of the evaluated fault conditions' reported hours (after the FC14
+        attribution); ``masks`` (0.92, #67) holds each evaluated condition's own hours by label
+        (``"FC1"`` .. ``"FC15"``), which the plant-capacity link reads for FC13.
+        """
         from ..charts.evidence import Evidence
 
         res, _c, declined_fcs, reason = self._run(frame)
@@ -397,9 +402,17 @@ class G36AFDD:
         step_h = float(_median_step(res.masks.index) / pd.Timedelta(hours=1))
         reported, _moved = self._attributed(res, declined_fcs, step_h)
         any_fc = np.zeros(len(res.masks), dtype=bool)
+        # 0.92 (#67): each evaluated FC's own reported hours, so a consumer (the plant-capacity
+        # link reads FC13) can use one condition instead of the any-FC union
+        per_fc: dict = {}
         for fc, m in reported.items():
-            if fc not in declined_fcs and fc not in res.omitted:
-                any_fc |= m
+            if fc in declined_fcs or fc in res.omitted:
+                continue
+            any_fc |= m
+            if not res.missing_inputs.get(fc):
+                per_fc[f"FC{fc}"] = pd.Series(m, index=res.masks.index).reindex(
+                    frame.index, fill_value=False
+                )
         mask = pd.Series(any_fc, index=res.masks.index).reindex(frame.index, fill_value=False)
         roles = [
             r
@@ -418,4 +431,5 @@ class G36AFDD:
             mask=mask,
             label="G36 fault reported",
             title=f"{equip}: G36 §5.16.14 fault conditions",
+            masks=per_fc,
         )

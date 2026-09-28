@@ -42,6 +42,10 @@ class Evidence:
     # on derived columns (a chiller's ``tons``, a coil's air-DT) cannot point a renderer at raw
     # roles, so they hand over the frame they actually fitted. None = use the caller's frame.
     frame: object = None
+    # 0.92 (#67, provisional): named sub-masks of ``mask`` -- e.g. one bool Series per G36 fault
+    # condition (``{"FC13": ...}``) -- so a consumer can read one condition's hours instead of the
+    # union. None = the rule exposes only the union ``mask``.
+    masks: object = None
 
 
 def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):

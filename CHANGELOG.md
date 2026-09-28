@@ -18,6 +18,13 @@ All notable changes to CAMBER are documented here. The format follows
   (`sp_wrong_direction`) and never `ok`. New: `SATResetResult.direction` and the finding metric
   `reset_direction` (`reset` / `rising_with_load` / `flat` / None). The `faultlab` clean scenario
   for `supply_air_reset` now resets in the G36 direction; the synthetic benchmark did not move.
+- **The G36 -> plant link overlapped the plant with every G36 fault hour (#67).** The same-hours
+  test for a `g36_afdd` FC13 finding used the rule's violation mask, the union of all fault
+  conditions, so duct-static (FC1) or economizer hours counted as plant symptoms. `g36_afdd`
+  evidence now carries one mask per evaluated fault condition (`Evidence.masks`, provisional), and
+  `link_findings(part_mask_for=...)` reads FC13's own hours (the RCx report passes it).
+  `UpstreamCause.unit_hours` says which hours were used (`"FC13"` or `"finding"`), and the "why"
+  line names them.
 <!-- /092-air -->
 
 ## [0.91.0] — 2026-09-27
