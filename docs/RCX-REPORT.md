@@ -27,7 +27,7 @@ headers repeat, and the screen-only table of contents is hidden in print.
 | P0 | Cover and provenance | The dataset's source, licence and citation first in the body. Research-only (NC/ND) data gets the non-commercial banner, repeated at the top of **every printed page**. |
 | P1 | Executive summary | One page: a KPI strip — costed, non-conditional $/yr; uncosted / conditional issue counts; data coverage; declined checks — and the top-N (default 8) issue table with each issue's $/yr (or `uncosted — needs X`), severity, confidence and a one-line action, linked to its page. |
 | P2 | Data coverage and sensor health | The readiness ribbon; the BAS OAT against a reference (when one is configured); a trust table scored **gated** (fan-on samples) and ungated, naming the gate used (`fan status`, `fan speed proxy`, `airflow proxy`, or `ungated — no fan signal`); mixing consistency. |
-| P3 | Representative week | The week [selected below](#choosing-the-representative-week), as stacked panels, one unit family each (°F / % / in.w.c.). Values are never normalized. Violation shading covers occupied, fan-on time only. |
+| P3 | Representative week | The week [selected below](#choosing-the-representative-week), as stacked panels, one unit family each (°F / % / in.w.c.). Values are never normalized. Violation shading covers occupied, fan-on time only. Up to four air handlers are charted, then up to two water-side plants (chilled-, condenser- and hot-water plants) on their own panels (`PLANT_FAMILIES`): water temperatures, loop differential pressure (in the site's own units), electric power and status. A plant has no fan, so its shading covers occupied time. |
 | P4 | Economizer | OA fraction vs OAT (temperature balance when MAT/RAT/OAT exist, else damper vs OAT) drawn with **the rule's own** high limit, minimum OA and differential changeover, next to its verdict. Also MAT-between-OAT-and-RAT and a free-cooling table. When an OAT sensor issue exists, a banner says the verdicts are conditional on OAT. |
 | P5 | SAT reset census | Three labelled tiers, [below](#sat-reset-tiers). |
 | P6 | Air distribution | Duct static by hour of day (fan-on samples only) and any static-reset findings. Omitted when there is no duct static. |
@@ -68,6 +68,13 @@ default map because no site sequence is known. Those findings are shown as a ref
 are left out of the dollar totals, and their confidence is L. A declared sequence re-judges them
 against the site's own map.
 
+**G36 advice needs a declared G36 sequence.** A recommended action that prescribes a Guideline 36
+sequence is given as the fix only when the config declares one for the unit: a `soo` entry with a
+`g36_*` library for its class (a terminal unit counts when its air handler's class, `AHU`, has one).
+Otherwise a check that assumes a G36 sequence (a rule named `*_g36` or `g36_*`) gets no packaged
+action ("engineer to specify"), and any other action worded as G36 practice is labelled a G36
+reference, to be checked against the unit's own sequence first.
+
 ## Confidence
 
 Each issue gets H, M or L: the **minimum** over the components below. Each component writes one
@@ -89,7 +96,10 @@ A component that cannot be assessed is left out of the minimum, and its line say
 
 1. The candidates are the Monday-00:00 7-day windows, in the data's local clock.
 2. A window is **eligible** when the charted roles cover at least 80 % of its gated (fan-on)
-   samples and it has at least 3 occupied days. When no window is eligible, the report declines to
+   samples and it has at least 3 occupied days. The week is scored on the air handlers' air-side
+   roles (`P3_FAMILIES`). A report with no air handler (a chiller or boiler plant on its own) is
+   scored on its plants' roles (`PLANT_FAMILIES`) instead, ungated when a plant has no fan signal;
+   on a mixed site the plants are charted in the air handlers' week. When no window is eligible, the report declines to
    chart a week and says why.
 3. Each window is scored by the chosen mode, plus `0.1 × coverage`:
    - `evidence` (default, and `auto`): the sum over issues of

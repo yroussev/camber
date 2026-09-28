@@ -1440,6 +1440,7 @@
   ],
   "camber.report.rcx": [
     "P3_FAMILIES",
+    "PLANT_FAMILIES",
     "RcxOptions",
     "RcxReport",
     "WEEK_MODES",

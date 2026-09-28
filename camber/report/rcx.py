@@ -26,6 +26,7 @@ import html as _html
 import io
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -48,6 +49,7 @@ __all__ = [
     "load_notes",
     "notes_template",
     "P3_FAMILIES",
+    "PLANT_FAMILIES",
     "WEEK_MODES",
 ]
 
@@ -74,6 +76,37 @@ P3_FAMILIES = (
 _P3_ROLES = tuple(r for _u, _t, roles in P3_FAMILIES for r in roles)
 # roles that make an equipment "air side" for the report (OAT alone does not)
 _AIR_ROLES = frozenset(_P3_ROLES) - {Role.OAT}
+
+#: Representative-week panels for a water-side plant (chilled water, condenser water, hot water):
+#: an equipment with none of the air-side roles but some of these is charted and scored with these.
+#: Loop differential pressure is shown in the site's own units (psi, ftH2O or kPa as trended).
+PLANT_FAMILIES = (
+    (
+        "°F",
+        "Water temperatures",
+        (
+            Role.OAT,
+            Role.CHW_SUPPLY_TEMP,
+            Role.CHW_SUPPLY_TEMP_SP,
+            Role.CHW_RETURN_TEMP,
+            Role.CW_SUPPLY_TEMP,
+            Role.CW_RETURN_TEMP,
+            Role.HW_SUPPLY_TEMP,
+            Role.HW_RETURN_TEMP,
+        ),
+    ),
+    (
+        "DP (as trended)",
+        "Loop differential pressure",
+        (Role.CHW_DIFF_PRESS, Role.CHW_DIFF_PRESS_SP, Role.HW_DIFF_PRESS, Role.HW_DIFF_PRESS_SP),
+    ),
+    ("kW", "Electric power", (Role.POWER,)),
+    ("0-1", "Status", (Role.PUMP_STATUS, Role.BOILER_STATUS, Role.COMPRESSOR_STATUS)),
+)
+_PLANT_ROLES = tuple(r for _u, _t, roles in PLANT_FAMILIES for r in roles)
+# roles that make a non-air equipment a "plant" for the week view (OAT and power alone do not: an
+# air handler or a meter can carry those)
+_PLANT_MARKERS = frozenset(_PLANT_ROLES) - {Role.OAT, Role.POWER}
 
 WEEK_MODES = ("evidence", "oat_range", "typical", "fixed:YYYY-MM-DD")
 
@@ -245,6 +278,7 @@ def select_week(
     high_limit_f: float = 65.0,
     min_coverage: float = 0.8,
     min_occupied_days: int = 3,
+    roles_for=None,
 ) -> WeekChoice:
     """Pick the representative week for the report, deterministically, and say why in numbers.
 
@@ -254,6 +288,8 @@ def select_week(
     where a unit trends no fan signal) and it has >= ``min_occupied_days`` occupied days
     (``occupied_for(equip) -> mask``; default the trended occupancy, else the assumed schedule).
     Otherwise -- or when nothing is eligible -- the result is ``declined`` with the reason.
+    ``roles_for(equip) -> roles`` (provisional) overrides ``roles`` per equipment, so air handlers
+    and water-side plants (:data:`PLANT_FAMILIES`) can share one choice of week.
 
     Scores (every mode then adds ``0.1 x coverage``; ties go to the earliest week):
 
@@ -306,7 +342,7 @@ def select_week(
 
     cands = []
     span = pd.Timedelta(days=7)
-    stats = _week_stats(frames, starts, step, roles, gates, occs)
+    stats = _week_stats(frames, starts, step, roles, gates, occs, roles_for)
     ev = _evidence_counts(issues, starts, span) if mode == "evidence" else None
     oat_pos = _window_positions(oat, starts, span) if oat is not None else None
     for k, st in enumerate(starts):
@@ -470,7 +506,7 @@ def _week_of(ns: np.ndarray, starts_ns: np.ndarray, span_ns: int) -> np.ndarray:
     return k
 
 
-def _week_stats_loop(frames, starts, step, roles, gates, occs) -> list:
+def _week_stats_loop(frames, starts, step, roles, gates, occs, roles_for=None) -> list:
     """The reference per-window computation (reindex every series onto each window's grid)."""
     out = []
     for st in starts:
@@ -482,7 +518,8 @@ def _week_stats_loop(frames, starts, step, roles, gates, occs) -> list:
             w = fr.reindex(grid)
             g = gates[e]
             gm = pd.Series(True, index=grid) if g is None else _on(g, grid)
-            present = [r for r in roles if _col(fr, r) is not None]
+            want = roles if roles_for is None else roles_for(e)
+            present = [r for r in want if _col(fr, r) is not None]
             if not present:
                 continue
             vals = pd.DataFrame({str(r): _col(w, r) for r in present}, index=grid)
@@ -496,7 +533,7 @@ def _week_stats_loop(frames, starts, step, roles, gates, occs) -> list:
     return out
 
 
-def _week_stats(frames, starts, step, roles, gates, occs) -> list:
+def _week_stats(frames, starts, step, roles, gates, occs, roles_for=None) -> list:
     """``[(n_ok, n_all, occupied_days)]`` per window: charted-role samples present / expected on
     the window's gated grid, and the distinct dates with an occupied, gated, non-empty sample."""
     ref = starts[0]
@@ -510,7 +547,7 @@ def _week_stats(frames, starts, step, roles, gates, occs) -> list:
             if not isinstance(m, pd.Series) or not _same_clock(m.index, ref):
                 fast = False
     if not fast:
-        return _week_stats_loop(frames, starts, step, roles, gates, occs)
+        return _week_stats_loop(frames, starts, step, roles, gates, occs, roles_for)
 
     n = len(starts)
     starts_ns = _ns(pd.DatetimeIndex(list(starts)))
@@ -528,7 +565,8 @@ def _week_stats(frames, starts, step, roles, gates, occs) -> list:
         return hit, k
 
     for e, fr in frames.items():
-        present = [r for r in roles if _col(fr, r) is not None]
+        want = roles if roles_for is None else roles_for(e)
+        present = [r for r in want if _col(fr, r) is not None]
         if not present:
             continue
         cols = {str(r): _col(fr, r) for r in present}
@@ -980,7 +1018,7 @@ def build_rcx_report(
     o = options
 
     # ---- per-equipment operating state, trust and mixing
-    air, gates, gate_src, occ, occ_src = [], {}, {}, {}, {}
+    air, plant, gates, gate_src, occ, occ_src = [], [], {}, {}, {}, {}
     trust_gated, trust_raw, mixing = {}, {}, {}
     for e in ctx.equips:
         fr = ctx.frame(e)
@@ -991,6 +1029,8 @@ def build_rcx_report(
         occ[e], occ_src[e] = _occupancy_mask(fr, o.occupancy)
         if any(_col(fr, r) is not None for r in _AIR_ROLES):
             air.append(e)
+        elif any(_col(fr, r) is not None for r in _PLANT_MARKERS):
+            plant.append(e)
         num = fr.select_dtypes(include="number")
         trust_raw[e] = frame_sensor_health(num)
         trust_gated[e] = frame_sensor_health(num, gate=g) if g is not None else trust_raw[e]
@@ -1131,13 +1171,18 @@ def build_rcx_report(
     econ_rule = ctx.rule("economizer_high_limit")
     if econ_rule is not None:
         hl = float(getattr(econ_rule, "high_limit_f", 65.0))
+    # The week is scored on the air handlers; a site with none (a plant-only report) is scored on
+    # its water-side plants and their panels instead (#32). A mixed site keeps its air-side week, so
+    # a plant's logging gaps never disqualify it; the plant panels are drawn for the same week.
+    plant_set = set() if air else set(plant)
     week = select_week(
-        {e: ctx.frame(e) for e in air},
+        {e: ctx.frame(e) for e in (air or plant)},
         issues=issues,
         mode=o.week_mode(),
         gate_for=gates.get,
         occupied_for=occ.get,
         high_limit_f=hl,
+        roles_for=lambda e: _PLANT_ROLES if e in plant_set else _P3_ROLES,
     )
 
     idx_all = [
@@ -1161,6 +1206,7 @@ def build_rcx_report(
         "ctx": ctx,
         "o": o,
         "air": air,
+        "plant": plant,
         "gates": gates,
         "gate_src": gate_src,
         "occ": occ,
@@ -1183,6 +1229,7 @@ def build_rcx_report(
         "exclude_cost": exclude_cost,
         "kpis": kpis,
         "hl": hl,
+        "g36_declared": _g36_declared_for(cfg, ctx.refs),
     }
     wanted = set(o.sections) if o.sections else None
 
@@ -1378,9 +1425,9 @@ def _sec_summary(S) -> dict:
         )
     rows = []
     for iss in issues[: max(int(o.top_n), 0)]:
-        rec = recommend(iss.root)
-        title = rec.title if rec is not None else _humanize(getattr(iss.root, "rule", ""))
-        action = rec.action if rec is not None else "Engineer to specify (no packaged action)."
+        title, action, _sug = _advice(S, iss, recommend(iss.root))
+        action = action[:1].upper() + action[1:] if action else ""
+        action = action or "Engineer to specify (no packaged action)."
         cost = _fmt_usd(iss.cost) if iss.cost is not None else _cut(iss.cost_basis_note, 60)
         if iss.conditional:
             cost += " (at risk)" if iss.cost is not None else " (conditional)"
@@ -1497,12 +1544,13 @@ def _sec_week(S) -> dict:
         if iss.mask is not None:
             by_equip.setdefault(iss.equip, []).append(iss)
     order = sorted(S["air"], key=lambda e: (-len(by_equip.get(e, [])), e))
-    for e in order[:4]:
+    plant = sorted(S.get("plant", ()), key=lambda e: (-len(by_equip.get(e, [])), e))
+    # up to four air handlers, then up to two water-side plants on their own panels (#32)
+    charted = [(e, P3_FAMILIES) for e in order[:4]] + [(e, PLANT_FAMILIES) for e in plant[:2]]
+    for e, families in charted:
         fr = ctx.frame(e)
         win = fr[(fr.index >= w.start) & (fr.index < w.end)]
-        fams = [
-            (u, t, [r for r in roles if _col(win, r) is not None]) for u, t, roles in P3_FAMILIES
-        ]
+        fams = [(u, t, [r for r in roles if _col(win, r) is not None]) for u, t, roles in families]
         fams = [f for f in fams if f[2]]
         if not fams or win.empty:
             continue
@@ -1532,7 +1580,11 @@ def _sec_week(S) -> dict:
                 fig,
                 alt=f"{e} representative week",
                 caption=(
-                    "Shaded: violations during occupied, fan-on time only."
+                    (
+                        "Shaded: violations during occupied, fan-on time only."
+                        if families is P3_FAMILIES or gate is not None
+                        else "Shaded: violations during occupied time only."
+                    )
                     if spans
                     else "No masked violations in this week."
                 ),
@@ -1904,14 +1956,76 @@ def _sec_mv(S) -> dict | None:
     return _section("mv", "M&V and drift", blocks)
 
 
+# ---- G36 advice only where a G36 sequence is declared (#32)
+
+_G36_NOT_DECLARED = "no ASHRAE Guideline 36 sequence is declared for this unit"
+
+
+def _g36_rule(rule) -> bool:
+    """A check that assumes a Guideline 36 sequence (by the ``_g36`` / ``g36_`` naming)."""
+    r = str(rule or "")
+    return r.endswith("_g36") or r.startswith("g36_")
+
+
+def _g36_declared_for(cfg: dict, refs) -> Callable:
+    """``declared(equip) -> bool``: the config declares a G36 sequence for the unit -- a ``soo``
+    entry with a ``g36_*`` library for its class. A terminal unit counts when its air system (the
+    ``AHU`` class) declares one, since G36 sequences the terminals with their air handler."""
+    from ..resolve import TERMINAL_CLASSES
+
+    classes = {
+        str(e.get("class") or "")
+        for e in (cfg.get("soo") or [])
+        if isinstance(e, dict) and str(e.get("library") or "").startswith("g36")
+    }
+    cls_of = {r.equip: str(getattr(r, "equip_class", "") or "") for r in refs or ()}
+
+    def declared(equip) -> bool:
+        c = cls_of.get(equip, "")
+        if c in classes:
+            return True
+        return (c in TERMINAL_CLASSES or c == "TERMINAL") and "AHU" in classes
+
+    return declared
+
+
+def _advice(S, iss, rec) -> tuple:
+    """``(title, action, suggested)`` for an issue from its packaged recommendation (``action`` is
+    ``""`` when there is none). With no G36 sequence declared for the unit, a check that assumes one
+    gets no packaged action, and an action that prescribes a G36 sequence is qualified as reference
+    practice rather than stated as the fix."""
+    rule = getattr(iss.root, "rule", "")
+    title = rec.title if rec is not None else _humanize(rule)
+    if rec is None:
+        return title, "", ""
+    action = rec.action
+    suggested = f"{rec.parameter} → {rec.suggested}" if rec.suggested else ""
+    declared = S.get("g36_declared")
+    if declared is None or declared(iss.equip):
+        return title, action, suggested
+    if _g36_rule(rule):
+        return (
+            _humanize(rule),
+            "engineer to specify -- this check assumes a Guideline 36 sequence and "
+            f"{_G36_NOT_DECLARED}, so no G36 action is given. Confirm the unit's actual sequence "
+            "first (declare one with a g36_* library `soo` entry to get the G36 advice).",
+            "",
+        )
+    if "G36" in action:
+        action = (
+            f"{action} (G36 reference practice: {_G36_NOT_DECLARED}; check it against the "
+            "unit's own sequence first.)"
+        )
+    return title, action, suggested
+
+
 def _sec_issue(S, iss) -> dict:
     from ..aso import recommend
     from .dashboard import render_evidence_blocks
 
     ctx = S["ctx"]
     root = iss.root
-    rec = recommend(root, frame=ctx.frame(iss.equip))
-    title = rec.title if rec is not None else _humanize(getattr(root, "rule", ""))
+    title, action, suggested = _advice(S, iss, recommend(root, frame=ctx.frame(iss.equip)))
     blocks: list = []
     if iss.conditional:
         blocks.append(
@@ -1986,10 +2100,10 @@ def _sec_issue(S, iss) -> dict:
             ]
         )
     blocks.append(_table(["Role", "Rule", "Severity", "Estimate $/yr", "Finding"], mrows))
-    if rec is not None:
-        blocks.append(_p(f"Recommended action: {rec.action}"))
-        if rec.suggested:
-            blocks.append(_p(f"Suggested: {rec.parameter} → {rec.suggested}"))
+    if action:
+        blocks.append(_p(f"Recommended action: {action}"))
+        if suggested:
+            blocks.append(_p(f"Suggested: {suggested}"))
     else:
         blocks.append(_p("Recommended action: engineer to specify (no packaged recommendation)."))
     blocks.append(_p(f"Confidence {iss.confidence} — why we believe this:"))
