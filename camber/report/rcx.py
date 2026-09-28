@@ -216,13 +216,34 @@ def _on(mask, index=None) -> pd.Series:
     return m if index is None else m.reindex(index, fill_value=False)
 
 
-def _oat_of(frames: dict):
-    """One OAT series for the site: the first equipment frame that carries one."""
-    for _e, fr in sorted(frames.items()):
+def _oat_of(frames: dict, *, sources: bool = False):
+    """One OAT series for the site: the first equipment frame that carries one.
+
+    With ``sources=True`` (0.91, #61) return every distinct OAT source instead, as a list of
+    ``(series, [equip, ...])`` in equipment order: units reading the same sensor (the building
+    OAT merged into every frame, or identical trends) share one entry, and a unit trending its
+    own sensor gets its own -- so each source can be checked, not only the first unit's.
+    """
+    if not sources:
+        for _e, fr in sorted(frames.items()):
+            s = _col(fr, Role.OAT)
+            if s is not None and s.notna().any():
+                return s
+        return None
+    groups: list = []
+    for e, fr in sorted(frames.items()):
         s = _col(fr, Role.OAT)
-        if s is not None and s.notna().any():
-            return s
-    return None
+        if s is None or not s.notna().any():
+            continue
+        for g in groups:
+            a, b = g[0].align(s, join="inner")
+            both = a.notna() & b.notna()
+            if both.sum() and bool(((a[both] - b[both]).abs() < 1e-6).mean() >= 0.99):
+                g[1].append(e)
+                break
+        else:
+            groups.append((s, [e]))
+    return groups
 
 
 def _grid_step(frames: dict) -> pd.Timedelta:
@@ -825,6 +846,9 @@ def build_rcx_report(
     o = options
 
     # ---- per-equipment operating state, trust and mixing
+    from ..model.equipclass import family_matches
+
+    klass = {r.equip: str(getattr(r, "equip_class", "") or "") for r in ctx.refs}
     air, gates, gate_src, occ, occ_src = [], {}, {}, {}, {}
     trust_gated, trust_raw, mixing = {}, {}, {}
     for e in ctx.equips:
@@ -834,7 +858,11 @@ def build_rcx_report(
         g, src = fan_on_mask(fr)
         gates[e], gate_src[e] = g, src
         occ[e], occ_src[e] = _occupancy_mask(fr, o.occupancy)
-        if any(_col(fr, r) is not None for r in _AIR_ROLES):
+        # air side = air-handler roles on an air handler (#61): a VAV box's discharge air, a heat
+        # pump's or a fan coil's is not an AHU's; a class no family recognises keeps the roles test
+        if any(_col(fr, r) is not None for r in _AIR_ROLES) and family_matches(
+            klass.get(e, ""), ("air_handler",)
+        ) in (True, None):
             air.append(e)
         num = fr.select_dtypes(include="number")
         trust_raw[e] = frame_sensor_health(num)
@@ -842,32 +870,49 @@ def build_rcx_report(
         gfr = fr[_on(g, fr.index).to_numpy()] if g is not None else fr
         mixing[e] = mixing_consistency(gfr)
 
-    # ---- optional OAT reference comparison (adds a sensor_drift:oat finding for the report)
+    # ---- optional OAT reference comparison (adds sensor_drift:oat findings for the report)
+    # Every distinct OAT source is compared, per equipment (#61): one AHU's own sensor reading
+    # +5 F is its own finding, scoped to the units that read it, not hidden behind the first one.
     findings = list(ctx.findings)
     ref_rows, ref_note = [], ""
     if o.oat_reference:
-        site_oat = _oat_of({e: ctx.frame(e) for e in air or ctx.equips})
-        if site_oat is None:
+        oat_sources = _oat_of({e: ctx.frame(e) for e in air or ctx.equips}, sources=True)
+        if not oat_sources:
             ref_note = "An OAT reference is configured, but no equipment trends OAT."
         else:
+            idx = oat_sources[0][0].index
+            for s_, _eqs in oat_sources[1:]:
+                idx = idx.union(s_.index)
             try:
-                ref = _load_reference_oat(o.oat_reference, site_oat.index)
+                ref = _load_reference_oat(o.oat_reference, idx)
             except Exception as exc:  # noqa: BLE001 - a bad reference is reported, not fatal
                 ref, ref_note = None, f"OAT reference could not be loaded: {exc}"
             if ref is not None:
-                f = drift_finding(site_oat, ref, "site OAT", Role.OAT)
-                findings.append(f)
-                m = f.metrics
-                ref_rows.append(
-                    [
-                        f.severity,
-                        m.get("bias"),
-                        m.get("drift_per_month"),
-                        m.get("rmse"),
-                        m.get("correlation"),
-                        m.get("n"),
-                    ]
-                )
+                many = len(oat_sources) > 1
+                for series, eqs in oat_sources:
+                    label = (
+                        "site OAT"
+                        if not many
+                        else eqs[0]
+                        if len(eqs) == 1
+                        else "OAT shared by " + ", ".join(eqs)
+                    )
+                    f = drift_finding(series, ref.reindex(series.index), label, Role.OAT)
+                    f.metrics["oat_equips"] = list(eqs)
+                    if many:  # a unit-local sensor taints only the units that read it
+                        f.metrics["scope_equips"] = list(eqs)
+                    findings.append(f)
+                    m = f.metrics
+                    ref_rows.append(
+                        [
+                            f"{label}: {f.severity}" if many else f.severity,
+                            m.get("bias"),
+                            m.get("drift_per_month"),
+                            m.get("rmse"),
+                            m.get("correlation"),
+                            m.get("n"),
+                        ]
+                    )
 
     # ---- SAT reset tiers (decides which compliance findings may be priced)
     seq = (o.sequence or {}).get("sat_reset")
@@ -957,6 +1002,7 @@ def build_rcx_report(
         confidence_for=confidence_for,
         facility_id=getattr(run, "facility_id", None) or "",
         site=getattr(run, "site", "") or "",
+        topology=getattr(run, "topology", None),  # a declared served-by map ties AHU to plant
     )
     totals = issue_totals(issues)
 

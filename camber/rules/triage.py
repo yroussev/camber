@@ -267,6 +267,72 @@ class SensorCause:
         return f"{self.detail} on {self.equip}" if self.equip else self.detail
 
 
+#: Rules whose finding says the chilled-water plant did not make its supply setpoint while it ran:
+#: a capacity (or plant control) problem every air handler it serves inherits.
+PLANT_CAPACITY_RULES = ("chw_supply_tracking",)
+
+#: Air-handler rules whose finding can mean "supply air too warm" -- the symptom a starved plant
+#: produces downstream. ``supply_air_control`` counts when its too-warm share leads; a G36 fault
+#: condition 13 ("SAT too high in full cooling") counts under any rule that names it.
+SAT_HIGH_RULES = ("supply_air_control",)
+
+
+def is_sat_high(finding) -> bool:
+    """True when ``finding`` reports an air handler's supply air too warm (SAT-high / G36 FC13).
+
+    ``supply_air_control`` qualifies when its too-warm share is at least its too-cold share; a
+    G36 finding qualifies when its rule name carries ``fc13`` or its metrics name fault
+    condition 13 (``fault_condition`` / ``fc`` of 13, or a positive ``fc13*`` metric).
+    """
+    rule = str(_attr(finding, "rule", "") or "")
+    m = _attr(finding, "metrics", {}) or {}
+    if rule in SAT_HIGH_RULES:
+        warm, cold = m.get("too_warm_pct"), m.get("too_cold_pct")
+        return isinstance(warm, (int, float)) and warm > 0 and warm >= (cold or 0)
+    low = rule.lower().replace("-", "_")
+    if "fc13" in low or "fc_13" in low:
+        return True
+    for k in ("fault_condition", "fc"):
+        v = m.get(k)
+        if v is not None and str(v).lower().lstrip("fc_") == "13":
+            return True
+    return any(
+        str(k).lower().startswith("fc13")
+        and isinstance(v, (int, float))
+        and not isinstance(v, bool)
+        and v > 0
+        for k, v in m.items()
+    )
+
+
+@dataclass(frozen=True)
+class UpstreamCause:
+    """Upstream equipment that may explain an issue: e.g. a chilled-water plant short of setpoint
+    behind an air handler's warm supply air. A conditional *explanation*, never a deletion: the
+    downstream finding stands, and the plant is named as the place to look first.
+
+    ``overlap_share`` is the share of the issue's violation hours during which the plant was also
+    short, and ``plant_share`` the share of the plant's short hours (with the unit running) during
+    which the unit was also in violation -- ``None`` when either side exposes no hours.
+    ``overlap_hours`` is the coincident time. ``basis`` says how the two were tied:
+    ``"topology"`` (a served-by graph lists the plant upstream of the unit) or ``"site"`` (no
+    topology covers the unit, so the site's plant is assumed).
+    """
+
+    kind: str  # "plant_capacity"
+    equip: str  # the upstream equipment
+    rule: str  # the upstream finding's rule
+    detail: str
+    overlap_share: float | None = None
+    overlap_hours: float | None = None
+    basis: str = "site"
+    source: object = field(default=None, compare=False, repr=False)
+    plant_share: float | None = None
+
+    def label(self) -> str:
+        return f"{self.detail} on {self.equip}"
+
+
 @dataclass
 class Confidence:
     """A finding's confidence grade (H/M/L) with one level + one "why" line per component."""
@@ -284,9 +350,11 @@ class Issue:
     issue -- and any engineer note written against it -- follows the fault across runs.
     ``members`` are ordered root first. ``dependents`` lists the findings (on any equipment) that
     are conditional on *this* issue when it is a sensor problem; ``conditional_on`` lists the
-    sensor causes *this* issue leans on. ``hours_union`` is the union of the members' violation
-    masks (never a sum; ``None`` when no member exposes a mask) and ``cost`` the largest costed
-    member estimate (``None`` when none is costed). Fields after ``why`` are additive detail.
+    sensor causes *this* issue leans on. ``upstream_causes`` (0.91) lists the
+    :class:`UpstreamCause` s -- upstream equipment that may explain the issue -- and ``downstream``
+    the findings an upstream issue may explain. ``hours_union`` is the union of the members'
+    violation masks (never a sum; ``None`` when no member exposes a mask) and ``cost`` the largest
+    costed member estimate (``None`` when none is costed). Fields after ``why`` are additive detail.
     """
 
     key: str
@@ -308,6 +376,10 @@ class Issue:
     mask: object = None  # the union violation mask (bool Series) when one exists
     member_costs: list = field(default_factory=list)  # FaultCost per member, members' order
     confidence_components: dict = field(default_factory=dict)
+    # 0.91: upstream equipment that may explain this issue (a plant short of setpoint behind warm
+    # supply air), and -- on that upstream issue -- the downstream findings it may explain.
+    upstream_causes: list = field(default_factory=list)
+    downstream: list = field(default_factory=list)
 
     @property
     def conditional(self) -> bool:
@@ -466,7 +538,8 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
       -- one of MAT / OAT / RAT on that unit is wrong, so all three are tainted *on that unit*.
 
     A cause on a role in :data:`SHARED_ROLES` (other than a unit-local mixing check) taints every
-    equipment that uses the role.
+    equipment that uses the role -- unless the drift finding names the units that read that
+    sensor in ``metrics["scope_equips"]`` (0.91: one AHU's own OAT), which then scopes it to them.
     """
     out: list = []
     for f in findings:
@@ -474,12 +547,20 @@ def sensor_causes(findings, *, trust=None, mixing=None) -> list:
         if rule.startswith("sensor_drift:") and _attr(f, "severity", "") in _ACTIONABLE:
             slug = rule.split(":", 1)[1]
             summ = str(_attr(f, "summary", "") or "")
+            detail = f"{rule} {_attr(f, 'severity', '')}" + (f" ({summ})" if summ else "")
+            # a unit's own sensor (e.g. one AHU's OAT among several) taints only the units that
+            # read it: the finding names them in metrics["scope_equips"]
+            scope = (_attr(f, "metrics", {}) or {}).get("scope_equips")
+            if isinstance(scope, (list, tuple)) and scope:
+                for eq in scope:
+                    out.append(SensorCause("sensor_drift", str(eq), (slug,), detail, source=f))
+                continue
             out.append(
                 SensorCause(
                     "sensor_drift",
                     _attr(f, "equip", ""),
                     (slug,),
-                    f"{rule} {_attr(f, 'severity', '')}" + (f" ({summ})" if summ else ""),
+                    detail,
                     shared=slug in SHARED_ROLES,
                     source=f,
                 )
@@ -545,6 +626,8 @@ def link_findings(
     facility_id: str = "",
     site: str = "",
     actionable_only: bool = True,
+    topology=None,
+    plant_overlap_min: float = 0.25,
 ) -> list:
     """Link findings into ranked :class:`Issue` objects (provisional API).
 
@@ -568,6 +651,18 @@ def link_findings(
       descending; ties break on the key, so the order is deterministic.
     * **Confidence**: ``confidence_for(issue) -> Confidence`` (default: :func:`finding_confidence`
       of the root with the trust scores of its inputs and the conditional causes).
+    * **Plant capacity** (0.91): an issue carrying a SAT-high finding (:func:`is_sat_high`) gets
+      each chilled-water plant issue (:data:`PLANT_CAPACITY_RULES`) that serves it as an
+      :class:`UpstreamCause` -- served per ``topology`` (a :class:`camber.model.topology.Topology`
+      whose ancestors of the unit include the plant equipment), or, when no topology covers the
+      unit, the site's plant. When both sides expose violation masks the two must coincide: the
+      plant short during at least ``plant_overlap_min`` of the unit's violation hours, or the
+      unit in violation during at least ``plant_overlap_min`` of the plant's short hours (a plant
+      that runs part of the time explains only part of a unit's hours, but a unit that runs warm
+      whenever the plant is short is still its symptom). When either side has no mask the link
+      is made and says the overlap was not assessed. The plant issue lists the linked
+      findings in ``downstream``. Nothing is removed, demoted or re-costed; a "why" line on each
+      side names the link.
     """
     from ..fault_economics import cost_findings
 
@@ -684,6 +779,8 @@ def link_findings(
             if other is not iss and any(id(c.source) in ids for c in other.conditional_on):
                 iss.dependents.extend(other.members)
 
+    _link_plant_capacity(issues, mask_for, runtime, topology, plant_overlap_min)
+
     # confidence
     for iss in issues:
         if confidence_for is not None:
@@ -691,7 +788,7 @@ def link_findings(
         else:
             conf = finding_confidence(iss.root, conditional_on=iss.conditional_on)
         iss.confidence = conf.level
-        iss.why = list(conf.why)
+        iss.why = list(conf.why) + _upstream_why(iss)
         iss.confidence_components = dict(conf.components)
 
     issues.sort(
@@ -706,6 +803,107 @@ def link_findings(
     for n, iss in enumerate(issues, 1):
         iss.rank = n
     return issues
+
+
+def _mask_union(findings, mask_for, gate):
+    """OR of the findings' violation masks, gated to ``gate`` (``None`` when no mask exists)."""
+    union = None
+    for f in findings:
+        m = mask_for(f) if mask_for is not None else None
+        if m is None:
+            continue
+        m = m.fillna(False).astype(bool)
+        union = m if union is None else _or(union, m)
+    if union is not None and gate is not None:
+        union = union & gate.reindex(union.index).fillna(False).astype(bool)
+    return union
+
+
+def _link_plant_capacity(issues, mask_for, runtime, topology, overlap_min) -> None:
+    """Attach plant-capacity issues as upstream causes of the SAT-high issues they may explain."""
+    plants = []
+    for iss in issues:
+        cap = [f for f in iss.members if _attr(f, "rule", "") in PLANT_CAPACITY_RULES]
+        if cap:
+            plants.append((iss, cap))
+    if not plants:
+        return
+    for iss in issues:
+        if any(iss is p for p, _cap in plants):
+            continue
+        sat = [f for f in iss.members if is_sat_high(f)]
+        if not sat:
+            continue
+        serving = frozenset(topology.ancestors(iss.equip)) if topology is not None else frozenset()
+        gate = None
+        if runtime is not None:
+            gate = (runtime(iss.equip) or (None, ""))[0]
+        unit_mask = _mask_union(sat, mask_for, gate)
+        for p, cap in plants:
+            if serving:
+                if p.equip not in serving:
+                    continue
+                basis = "topology"
+            else:
+                basis = "site"
+            plant_mask = _mask_union(cap, mask_for, gate)  # plant short while the unit runs
+            share = pshare = hours = None
+            if unit_mask is not None and plant_mask is not None:
+                both = unit_mask & plant_mask.reindex(unit_mask.index).fillna(False)
+                n_unit, n_plant = int(unit_mask.sum()), int(plant_mask.sum())
+                share = float(both.sum()) / n_unit if n_unit else None
+                pshare = float(both.sum()) / n_plant if n_plant else None
+                hours = round(float(both.sum()) * _interval_hours(unit_mask.index), 2)
+                if max(share or 0.0, pshare or 0.0) < overlap_min:
+                    continue
+            rules = ", ".join(sorted({_attr(f, "rule", "") for f in cap}))
+            detail = f"chilled-water plant short of setpoint ({rules} {p.severity})"
+            cause = UpstreamCause(
+                "plant_capacity",
+                p.equip,
+                rules,
+                detail,
+                overlap_share=None if share is None else round(share, 3),
+                overlap_hours=hours,
+                basis=basis,
+                source=cap[0],
+                plant_share=None if pshare is None else round(pshare, 3),
+            )
+            iss.upstream_causes.append(cause)
+            for f in sat:
+                if not any(f is d for d in p.downstream):
+                    p.downstream.append(f)
+
+
+def _upstream_why(iss) -> list:
+    """The "why" lines naming an issue's upstream causes / the downstream findings it explains."""
+    out = []
+    for c in iss.upstream_causes:
+        if c.overlap_hours is not None:
+            when = (
+                f"for {c.overlap_hours:,.0f} h of the same hours ("
+                f"{100 * (c.overlap_share or 0):.0f}% of this unit's violation hours; the unit was "
+                f"in violation {100 * (c.plant_share or 0):.0f}% of the plant's short hours)"
+            )
+        else:
+            when = "(same-hours overlap not assessed: no violation mask on one side)"
+        tie = (
+            "served per the configured topology"
+            if c.basis == "topology"
+            else "assumed to serve this unit (no served-by topology covers it)"
+        )
+        out.append(
+            f"Likely upstream cause (conditional): {c.label()} {when}, {tie}. Check the plant's "
+            "capacity and staging before the coil valve; this finding is kept, not removed."
+        )
+    if iss.downstream:
+        names = sorted(
+            {f"{_attr(f, 'rule', '')} on {_attr(f, 'equip', '')}" for f in iss.downstream}
+        )
+        out.append(
+            "May explain downstream: " + "; ".join(names) + " (linked as a conditional cause)"
+        )
+    return out
 
 
 def _interval_hours(index) -> float:

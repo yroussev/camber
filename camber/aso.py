@@ -294,6 +294,33 @@ def _rec_reset_generic(f, frame, P):
     )
 
 
+def _rec_chw_tracking(f, frame, P):
+    m = getattr(f, "metrics", {}) or {}
+    dt, dt_above = m.get("deltaT_median_f"), m.get("deltaT_median_above_f")
+    lean = (
+        "load beyond the running capacity (the loop deltaT widens while short of setpoint)"
+        if dt is not None and dt_above is not None and dt_above > dt + 1.0
+        else "capacity or control (check whether the loop deltaT or flow is the limit)"
+    )
+    return _rec(
+        f,
+        title="Restore chilled-water supply temperature to setpoint",
+        action=(
+            f"Chilled-water supply runs above its setpoint while the plant is on — likely {lean}. "
+            "Check chiller staging (a second machine available but not called), the chiller's "
+            "own limits (demand limit, condenser conditions, refrigerant charge, fouled tubes), "
+            "and whether the setpoint is below what the machine can make; then the air handlers "
+            "that report warm supply air."
+        ),
+        parameter="Chiller staging / capacity / CHW setpoint",
+        suggested="stage capacity to hold setpoint; confirm chiller limits and sensor calibration",
+        expected_effect="Supply air and zones recover; coil valves stop pinning open.",
+        confidence="medium",
+        standard="PNNL Building Re-tuning, Ch.8 (chilled-water plant)",
+        caveats=["A miscalibrated supply sensor or setpoint mimics a capacity fault."],
+    )
+
+
 def _rec_cooling_tower(f, frame, P):
     return _rec(
         f,
@@ -495,6 +522,7 @@ RECOMMENDERS = {
     "chiller_efficiency": _rec_chiller_eff,
     "condenser_water_reset": _rec_reset_generic,
     "chw_plant_reset": _rec_reset_generic,
+    "chw_supply_tracking": _rec_chw_tracking,
     "chw_pump_dp_reset": _rec_reset_generic,
     "hw_pump_dp_reset": _rec_reset_generic,
     "cooling_tower_approach": _rec_cooling_tower,

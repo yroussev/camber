@@ -15,7 +15,7 @@ from .chiller_approach_rule import ChillerApproachFouling
 from .chiller_rule import ChillerEfficiency
 from .chillerfleet_rule import ChillerStagingFleet
 from .chillerstaging_rule import ChillerStaging
-from .chwplant_rule import CHWPlantReset
+from .chwplant_rule import CHWPlantReset, CHWSupplyTracking
 from .chwpump_rule import CHWPumpDPReset
 from .cohort import CohortDeviation
 from .cohort_starvation_rule import CohortStarvation
@@ -68,6 +68,7 @@ RULE_CLASSES: list[type] = [
     NightWeekendSetback,
     OutdoorAirFraction,
     CHWPlantReset,
+    CHWSupplyTracking,
     CHWPumpDPReset,
     ChillerEfficiency,
     ChillerStaging,

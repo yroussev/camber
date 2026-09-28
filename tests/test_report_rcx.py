@@ -278,8 +278,11 @@ def test_oat_reference_drift_makes_economizer_conditional(tmp_path, captured):
     cfg = fx.config(oat_reference={"csv": "ref.csv"})
     run = run_config(cfg, base_dir=str(tmp_path))
     rep = build_rcx_report(run)
-    drift = next(i for i in rep.issues if i.rules == ["sensor_drift:oat"])
     econ = next(i for i in rep.issues if "economizer_high_limit" in i.rules)
+    # each AHU's own OAT sensor is its own source (#61); the economizer leans on its unit's
+    drift = next(
+        i for i in rep.issues if i.rules == ["sensor_drift:oat"] and i.root.equip == econ.equip
+    )
     assert econ.conditional and econ.confidence == "L"
     assert {f.rule for f in drift.dependents} >= {"economizer_high_limit"}
     ec = next(s for s in rep.sections if s["id"] == "economizer")
@@ -466,7 +469,8 @@ def test_oat_reference_fetch_is_opt_in_and_errors_are_reported(run, captured, mo
     assert calls == [(1.0, 2.0, "Etc/UTC")]
     data = rep.sections[0]
     ref = next(b for b in data["blocks"] if b["kind"] == "table" and "Bias °F" in b["header"])
-    assert ref["rows"][0][0] == "ok"
+    # one row per OAT source (#61): the fixture's two AHUs trend their own OAT sensors
+    assert ref["rows"][0][0] == "DemoAHU: ok" and ref["rows"][1][0].startswith("DemoAHU2: ")
     bad = RcxOptions(sections=("data",), oat_reference={"csv": "/no/such/file.csv"})
     texts = [b.get("text", "") for b in build_rcx_report(run, options=bad).sections[0]["blocks"]]
     assert any("could not be loaded" in t for t in texts)

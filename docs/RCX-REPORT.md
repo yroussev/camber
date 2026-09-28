@@ -68,6 +68,18 @@ default map because no site sequence is known. Those findings are shown as a ref
 are left out of the dollar totals, and their confidence is L. A declared sequence re-judges them
 against the site's own map.
 
+<!-- 091-plant (#61, #62) -->
+**Air side and plant links (0.91).** The air-side pages (economizer, SAT reset census, air
+distribution) cover air handlers only: a VAV box's discharge air, a heat pump's or a fan coil's is
+not an AHU's (`camber.model.equipclass`; an unrecognised class keeps the roles test). When a
+chilled-water plant is short of setpoint (`chw_supply_tracking`) in the same hours an air
+handler's supply air runs warm (`supply_air_control`, G36 FC13), the AHU issue carries the plant
+as an upstream cause (`Issue.upstream_causes`) and a "why" line says to check plant capacity
+before the coil valve; the plant issue lists the findings it may explain (`Issue.downstream`). A
+config `topology` ([TOPOLOGY.md](TOPOLOGY.md)) decides which plant serves which unit; without one
+the site's plant is assumed and the line says so.
+<!-- /091-plant -->
+
 ## Confidence
 
 Each issue gets H, M or L: the **minimum** over the components below. Each component writes one
@@ -154,6 +166,9 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
 - `report.loads` (or `report.rcx.loads`) sizes equipment for the existing cost estimators.
 - `oat_reference` is offline by default (a CSV of time and °F). To fetch NASA POWER instead, opt in
   with `{"fetch": "nasa_power", "latitude": …, "longitude": …, "tz": "America/Chicago"}`.
+  <!-- 091-plant (#61) --> Every distinct OAT source is compared (0.91): units reading one sensor
+  share a row, and an AHU trending its own sensor gets its own row and `sensor_drift:oat` finding,
+  which makes only that unit's findings conditional. <!-- /091-plant -->
 - `chart_format: "svg"` renders the line charts as SVG; dense scatters stay PNG.
 
 In Python:

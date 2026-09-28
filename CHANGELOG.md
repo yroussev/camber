@@ -4,6 +4,49 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 091-plant (#61, #62) -->
+### Fixed
+- **Rules ran on the wrong kind of equipment (#61).** Rules are gated by roles, so a VAV box's
+  discharge air ran `supply_air_reset`, `supply_air_control` and the SAT reset census as if it were
+  an air handler, an air handler's heating valve entered the terminal reheat census, and any
+  `power` point looked like a chiller. Every built-in rule is now classified
+  (`camber.rules.applicability`): air-handler rules, terminal-box rules and plant rules decline a
+  recognised equipment class they are not written for (an `info` finding that says why), fleet
+  rules leave it out of the batch, and the rules whose roles already say enough stay roles-only.
+  Class names are read by family (`camber.model.equipclass`: `RTU` and `AHU` are both air
+  handlers, `HEAT_PUMP` and `WSHP` are heat pumps, `CHILLEDWATER_METER` is a meter). An
+  unrecognised class is never declined; the rule runs on its roles with a caveat. The RCx report's
+  air side (the SAT reset census, the economizer, air distribution) holds air handlers only.
+- **The RCx OAT reference check compared only the first AHU's OAT (#61).** Every distinct OAT source
+  is now compared, one row per source: units reading the same sensor share a row, and a unit
+  trending its own sensor gets its own `sensor_drift:oat` finding, scoped (`scope_equips`) to the
+  units that read it, so one AHU's offset no longer makes the other AHU's findings conditional.
+- **`chw_plant_reset` faulted a chiller that never ran (#62).** It decided "running" from the supply
+  temperature alone, which a stopped chiller on a cold or shared loop satisfies. It now uses the
+  chiller's run status or command (`compressor_status`) when mapped: a chiller that never ran is
+  reported as not judged. Without a status it falls back to the temperature window and says so.
+
+### Added
+- **`chw_supply_tracking` (#62):** does chilled-water supply temperature reach its trended setpoint
+  while the plant runs? Gated on the run status (the first hour after each start left out as
+  pull-down), it reports the share of running time more than 3 °F above setpoint and the loop ΔT,
+  overall and while short. `warn` at 10 %, `fault` at 25 % of running time. 3 °F sits outside a
+  healthy loop's ~1 °F control band plus ~0.5 °F sensor accuracy and hourly staging transients;
+  a plant supplying 48 °F against a 40 °F setpoint clears it by a wide margin. Without a run status
+  it falls back to the temperature window, caveats that, and never goes beyond `warn`.
+- **Plant capacity in the cause chains (#62).** `link_findings` attaches a chilled-water plant that
+  is short of setpoint as an `UpstreamCause` of an air handler's supply-air-too-warm finding
+  (`supply_air_control` running warm, or a G36 FC13) when the two coincide in the same hours (at
+  least 25 % either way) and the plant serves the unit (per the topology, else the site's plant).
+  Nothing is removed, demoted or re-costed; both issues say why they are linked.
+- **Served-by topology in the config (#61):** a `topology` section with a `{child: parent}` map
+  and/or CSV schedules (`vav_id,parent_ahu` style), matched to the discovered equipment. It
+  replaces the naming heuristic for the grouping-aware fleet rules, feeds the plant link, and is
+  recorded with its provenance on `RunResult.topology_source`.
+<!-- /091-plant -->
+
 ## [0.90.1] — 2026-09-27
 
 **0.90.1 patch: fixes from two private real-data checks (#51-#59).** Every fix has a synthetic

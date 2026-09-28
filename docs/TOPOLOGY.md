@@ -122,6 +122,37 @@ drives how much the result is trusted — a `semantic` grouping drops the census
 a `heuristic` one keeps a softened screening caveat. When no topology is passed, `run_fleet`
 auto-builds a naming-heuristic one from the equipment ids so the census still auto-scopes.
 
+## Declaring the topology in a config
+
+<!-- 091-plant (#61) -->
+A config run can take the served-by map from the site instead of guessing it from names. The
+`topology` section (provisional, 0.91) takes an explicit `{child: parent}` mapping, CSV files, or
+both:
+
+```json
+"topology": {
+  "parents": {"AHU-1": ["CH-1", "CH-2"], "AHU-2": ["CH-1", "CH-2"]},
+  "csv": ["vav_to_ahu.csv", {"path": "ahu_to_plant.csv", "child": "ahu", "parent": "plant"}]
+}
+```
+
+A parent may be one id or a list (an air handler fed by two chillers). A CSV names its columns in
+the entry, or is read by its headers (`vav_id` / `parent_ahu`, `child` / `parent`, `ahu_id` /
+`parent_plant`, ...), or, with exactly two columns, as child then parent, so a controls
+contractor's VAV-to-AHU schedule can be used as delivered. Ids match the discovered equipment
+ignoring case and separators (`VAV_101` names `VAV-101`) unless `"match": "exact"`.
+
+The result is a `provenance="explicit"` topology
+(`camber.topology_infer.topology_from_config`). `run_config` hands it to every fleet rule in place
+of the naming heuristic, so the rogue-zone census and cohort starvation report
+`grouping_provenance: "explicit"` without the heuristic caveat, and zones the map leaves out are
+pooled with the partial-coverage caveat. The run keeps it as `RunResult.topology`, and
+`RunResult.topology_source` records where it came from: the files and their row counts, the edge
+count, the ids that named no discovered equipment, and any edges dropped to break a cycle. The RCx
+report uses it to tie an air handler to the chilled-water plant serving it
+([RCX-REPORT.md](RCX-REPORT.md)).
+<!-- /091-plant -->
+
 ## Honesty is built into the type
 
 Topology is often incomplete, so the type degrades rather than guesses:

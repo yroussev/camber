@@ -62,6 +62,7 @@ RULE_CATEGORY = {
     "overcooling_min_flow": "comfort",
     "overcooling_severity": "comfort",
     "supply_air_control": "comfort",
+    "chw_supply_tracking": "comfort",  # a plant short of setpoint starves every AHU downstream
     "airflow_tracking": "comfort",
     "zones_heat_cool_census": "comfort",
     "cohort_airflow": "comfort",
