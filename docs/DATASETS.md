@@ -49,7 +49,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `lbnl-chiller` | chiller plant, 24 runs | simulated | yes | CC-BY-4.0 | 4 runs |
 | `lbnl-boiler` | boiler plant, 17 runs, Brick model | simulated | yes | CC-BY-4.0 | 4 runs |
 | `bdg2` | 3,053 whole-building meters, 19 sites | real | no | CC-BY-SA-4.0 | 10 sites x up to 4 buildings |
-| `lbnl-b59` | real office: 4 rooftop units with measured OA flow, 11 zone CO2 sensors, 51 underfloor terminals, Brick model (manual download) | real | no | CC-BY-4.0 | RTUs, CO2 zones and weather, 3 years |
+| `lbnl-b59` | real office: 4 rooftop units with measured OA flow, 11 zone CO2 sensors, 51 underfloor terminals, 15-minute electricity panel meters, Brick model (manual download) | real | no | CC-BY-4.0 | RTUs, CO2 zones, weather and meters, 3 years |
 | `finnish-dcv` | laboratory office room with occupancy-based DCV and ground-truth counts | lab | no | CC-BY-4.0 | all 3 files |
 | `b4b-windesheim` | 3 office rooms, two CO2 sensors each, ventilation valve, PIR | real | no | CC-BY-4.0 | all 5 runs |
 | `nuig-ahu101` | lecture-theatre AHU (100% outdoor air) + room + weather, 14 months at 1 min | real | no | CDLA-Permissive-1.0 | the one unit |
@@ -246,7 +246,9 @@ rejects their earlier spellings and names the key to use:
   CAMBER handles it (see [Data issues](#data-issues-and-how-camber-handles-them) below). A **fix**
   is applied before mapping by a declared quirk (the chiller plant's swapped outdoor wet/dry-bulb
   and secondary-loop supply/return columns; the single-duct AHU's placeholder static-pressure
-  values); `camber datasets ingest --no-corrections` skips every fix and ingests the data exactly
+  values; `lbnl-b59`'s 2020 meter-column shift, undone by a time-windowed `remap`, and its HVAC
+  meter dropouts, masked and then refilled by a `fill` from the same clock time on nearby days,
+  never across a gap longer than the quirk's `max_run`); `camber datasets ingest --no-corrections` skips every fix and ingests the data exactly
   as published, so the two can be compared (use a second store). An **annotated** problem is left
   in place; an **excluded** run is ingested for inspection but never scored. CAMBER's *own*
   mistakes (a mapping, an assumed design parameter, a template rule) are simply fixed.
@@ -624,7 +626,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `mels_N`, `hvac_N`, `hvac_S`
 - **Evidence:** The header is date,mels_S,lig_S,mels_N,hvac_N,hvac_S plus a trailing empty name. Through 2020-01-01 00:00 UTC the sixth value is empty; from 00:15 UTC every 2020 row (35,136 rows) fills it. At that boundary mels_N's 8.20 kW reappears under hvac_N (8.21), hvac_N's 23.71 kW under hvac_S (24.02) and hvac_S's 28.02 kW in the unnamed sixth column (25.88); the hourly weekly profile of January 2020 'hvac_N' correlates 0.95 with December 2019 mels_N at the same level (12.0 vs 12.2 kW). The 2020 'mels_N' slot holds an unidentified meter (about 20 MWh a year, never zero at night). Read by the header, 2020 sums to 342.9 MWh; remapped by position, 509.4 MWh.
 - **Contradicts:** Data description table (ele.csv: five meters mels_S, lig_S, mels_N, hvac_N, hvac_S; its cleaning notes cover ele.csv only to 2020-01-01) and the ele.csv header (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
-- **Handling: none** -- described only. ele.csv is not ingested by this entry. Anyone reading it must remap 2020 by position (file mels_N -> an unidentified sixth meter, file hvac_N -> mels_N, file hvac_S -> hvac_N, the sixth value -> hvac_S) and sum all six meters; a whole-building series read by the header understates 2020 by about a third, which is what an M&V chain across 2019-2020 would report as savings.
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Remapped by position at ingest (remap quirk on the ele_* runs, from 2020-01-01 00:15 UTC): file mels_N -> unlabelled_meter (stored as ELE_unlabelled_meter, empty before 2020), file hvac_N -> mels_N, file hvac_S -> hvac_N, the unnamed sixth column -> hvac_S. Corrected, mels_N runs on across the boundary (8.3 -> 8.2 kW at local midnight) instead of dropping to 1.9 kW. The whole-building series is the sum of the stored meters, and it has six from 2020 against five before: a boundary change of about 20 MWh a year that an M&V comparison across 2019-2020 has to treat as non-routine. --no-corrections ingests the header as published (and no unlabelled meter).
 
 #### The HVAC panel meters read exactly 0 kW while the rooftop units run
 
@@ -632,7 +634,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `hvac_N`, `hvac_S`
 - **Evidence:** hvac_S reads exactly 0 in 3,191 (2018), 8,912 (2019) and 4,378 (2020) of its 15-minute intervals (UTC years; the 2020 values are the shifted sixth column), and hvac_N in 4,113 intervals of 2019; about 98% of those hvac_S zeros fall while an RTU 1-2 supply fan runs above 20%, which a panel feeding two running fans cannot read. Runs reach 23-28 h (for example 2019-05-25 and 2019-09-29) and cluster in February-May and October-November 2019. Filling them with the same clock time's median within 7 days adds 16.6 MWh to 2018 and 45.4 MWh to 2019 over complete days.
 - **Contradicts:** README_Dryad_Bldg59.txt (gaps filled by linear interpolation, K-nearest neighbors and matrix factorization); data description table (the only electricity outlier criterion is < 0) (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
-- **Handling: none** -- described only. ele.csv is not ingested by this entry. Treat an HVAC-panel zero while the panel's RTU supply fans run as missing, so that day fails completeness instead of entering a baseline as a low-energy day; left in, the dropouts make the 2019 daily weather model look worse (adjusted R2 0.47 vs 0.54) and create step changes a detector finds in 2019.
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Masked and filled at ingest on ele_hvac_N / ele_hvac_S (after the 2020 remap): every exact 0 kW reading is masked (a mask quirk; about 2% of the zeros fall while neither of the panel's RTU supply fans is above 20%, and they are masked too), then every missing run of up to 48 h is filled with the median of the same UTC clock time over the 7 days either side (a fill quirk); longer gaps stay missing, so those days still fail completeness. The fill adds about 2 MWh (hvac_N) and 15 MWh (hvac_S) to 2018 and 20 / 29 MWh to 2019, and reproduces a hand correction masked only on fan-running intervals and filled in local clock time to within 0.4% of the HVAC energy on the 1,026 complete days. --no-corrections keeps the zeros.
 
 #### The replaced air-source heat pump was metered on hvac_N; its water-source replacement is on no ele.csv meter
 
@@ -640,7 +642,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `hvac_N`, `hvac_S`
 - **Evidence:** While the old heat pump runs (hot-water supply 85-105 F in hp_hws_temp) hvac_N carries an extra 15.4 kW (hourly regression 2018-11-27 to 2019-03-31, se 0.26 kW; hvac_S -0.3 kW); hvac_N falls from 33-42 to 20-25 kW on each trial of the new unit (2018-12-17/18 and 2019-01-09 to 01-11, water at 120 F), returns with the old unit (2019-01-14 to 02-05) and stays at 9-20 kW after the switch on 2019-02-06. In August-December 2020 HVAC power does not rise with the new unit's metered heat (-0.07 kW per kW of heat, se 0.011). On the 302 calendar days complete in both years, 2018 to 2019 HVAC energy falls 44% while plug loads and lighting are flat or up; hvac_S also steps down about 10 kW inside the 2018-11-16 to 11-27 data gap, undocumented.
 - **Contradicts:** Data descriptor: the heat pump is 'air-source type before March 2019, later replaced with water-source', and the EUI of 2018 is higher than 2019 and 2020 'due to the building retrofit' (Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q)
-- **Handling: none** -- described only. ele.csv is not ingested by this entry. The swap is a real equipment change and a textbook non-routine event, but it moves heating energy out of the metered boundary, so a 2018 vs later saving on ele.csv overstates the retrofit: a weather-normalised comparison across 2019-02-06 needs a non-routine adjustment (about 15.4 kW on hvac_N while the old unit runs) or a baseline that starts after the switch.
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place (annotate quirk on ele_hvac_N and hp): the meter readings are right; the metering boundary changed. A weather-normalised comparison across 2019-02-06 needs a non-routine adjustment (about 15.4 kW on hvac_N while the old unit runs) or a baseline that starts after the switch. The ingest stores the heat pump's hot-water supply temperature as equipment HP (hw_supply_temp), which identifies the old unit's hours (85-105 F, the new unit holds about 120 F), so the adjustment can be computed from the store.
 
 ### `finnish-dcv`: Finnish laboratory office room with occupancy-based DCV (ground-truth counts)
 

@@ -2583,7 +2583,18 @@
    },
    "equipment": "3 chillers, 3 cooling towers, primary/secondary CHW loops; unit 1 mapped",
    "labels": {
-    "targets": {},
+    "targets": {
+     "chiller_efficiency": [
+      "tower_fouling",
+      "chiller_fouling",
+      "bypass_valve",
+      "control"
+     ],
+     "cooling_tower_approach": [
+      "tower_fouling",
+      "control"
+     ]
+    },
     "fault_types": {
      "tower_fouling": "cooling-tower 1 fill fouling (heat-transfer coefficient x 0.65 / 0.80 / 0.95; 065 is the most severe)",
      "chiller_fouling": "chiller-1 heat-exchanger fouling (undocumented: absent from the inventory's Tables 3-4)",
@@ -2899,7 +2910,8 @@
     "Two label swaps in the export (outdoor wet/dry-bulb; secondary-loop supply/return) are fixed at ingest; see the data issues.",
     "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
     "Water-side only: the refrigerant-side chiller drift detectors cannot run on it.",
-    "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees)."
+    "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees).",
+    "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning. The sensor-bias runs are negatives for both, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports."
    ],
    "data_issues": [
     {
@@ -3669,12 +3681,13 @@
   {
    "id": "lbnl-b59",
    "title": "LBNL Building 59: three years of a real office's rooftop units, zone CO2 and underfloor terminals",
-   "summary": "A real two-floor office in Berkeley, California (2018-2020, 1-minute BAS trends): four 20,000 cfm rooftop units with measured outdoor-air flow (from April 2020) and OA-damper position, 11 zone CO2 sensors, 51 underfloor fan-powered terminals with reheat, site weather and a Brick model. The building has no DCV; its record includes wildfire smoke-mode damper closures, the 2020 shelter-in-place occupancy drop and real sensor faults.",
+   "summary": "A real two-floor office in Berkeley, California (2018-2020, 1-minute BAS trends): four 20,000 cfm rooftop units with measured outdoor-air flow (from April 2020) and OA-damper position, 11 zone CO2 sensors, 51 underfloor fan-powered terminals with reheat, site weather, 15-minute electricity panel meters and a Brick model. The building has no DCV; its record includes wildfire smoke-mode damper closures, the 2020 shelter-in-place occupancy drop and real sensor faults.",
    "teaches": [
     "DCV verification on a building without DCV: the honest answer is 'not judged', never a false 'functioning'",
     "joining zone CO2 to the air handler that brings in outdoor air (served-by grouping from a Brick model)",
     "sensor health on real faults: a return-air point that copies supply air, gap-filled OA flow, inaccurate mixed-air sensors",
-    "timestamps published in UTC: moving a dataset onto the site's wall clock"
+    "timestamps published in UTC: moving a dataset onto the site's wall clock",
+    "meter data issues before M&V: a header shift, meter dropouts read as zero, and a heat pump that leaves the metering boundary, each corrected or annotated by a declared quirk"
    ],
    "publisher": "Lawrence Berkeley National Laboratory",
    "citation": "Luo, N., Wang, Z., Blum, D., Weyandt, C., Bourassa, N., Piette, M.A., Hong, T. (2022). A three-year dataset supporting research on building energy management and occupancy analytics. Scientific Data 9, 156. doi:10.1038/s41597-022-01257-x. Data: Hong, T., Luo, N., Blum, D., Wang, Z. (2022). A three-year building operational performance dataset for informing energy efficiency. Dryad. doi:10.7941/D1N33Q",
@@ -3696,7 +3709,7 @@
    "kind": "real",
    "labeled_faults": false,
    "labels": {},
-   "equipment": "4 rooftop units (AHU), 11 zone CO2 sensors and 51 underfloor fan terminals (VAV) grouped to their RTU by the Brick model, site weather",
+   "equipment": "4 rooftop units (AHU), 11 zone CO2 sensors and 51 underfloor fan terminals (VAV) grouped to their RTU by the Brick model, site weather, six electricity panel meters (ELECTRICITY_METER; ELE_<meter>) and the heat pump's hot-water supply temperature (HEAT_PUMP)",
    "timezone": "published in UTC (undocumented; see the data issues) and converted at ingest to America/Los_Angeles wall-clock time; 1-minute RTU and zone data, 15-minute weather; 2018-01-01 to 2020-12-31 with a few multi-day gaps; zone CO2 from 2019-08-19 (none in February-March 2020)",
    "requires_extras": [],
    "files": [
@@ -3727,7 +3740,9 @@
       "Bldg59_clean data/uft_hw_valve.csv",
       "Bldg59_clean data/uft_fan_spd.csv",
       "Bldg59_w_occ Brick model.ttl",
-      "Bldg59_w_occ metadata of dataset.json"
+      "Bldg59_w_occ metadata of dataset.json",
+      "Bldg59_clean data/ele.csv",
+      "Bldg59_clean data/hp_hws_temp.csv"
      ]
     },
     {
@@ -3760,7 +3775,7 @@
    ],
    "subsets": {
     "default": {
-     "description": "the four RTUs, the 11 CO2 zones and site weather, all three years",
+     "description": "the four RTUs, the 11 CO2 zones, site weather, the electricity meters and the heat pump's water temperature, all three years",
      "files": [
       "Building_59.zip",
       "README_Dryad_Bldg59.txt"
@@ -3786,15 +3801,22 @@
       "zone_062",
       "zone_068",
       "zone_072",
-      "weather"
+      "weather",
+      "ele_mels_S",
+      "ele_lig_S",
+      "ele_mels_N",
+      "ele_hvac_N",
+      "ele_hvac_S",
+      "ele_unlabelled_meter",
+      "hp"
      ],
-     "store_bytes_estimate": 53016315
+     "store_bytes_estimate": 61298954
     },
     "full": {
      "description": "adds the 51 underfloor fan terminals (zone temperature, setpoints, reheat valve, fan speed) and the documentation files",
      "files": "all",
      "runs": "all",
-     "store_bytes_estimate": 253217570
+     "store_bytes_estimate": 261500209
     }
    },
    "ingest": {
@@ -3894,6 +3916,61 @@
       ],
       "note": "Brick point names differ from the CSV columns for the OA flow and damper, and five RTU points are missing from the model; the mapping file overrides the Brick grouping for those 20 columns.",
       "issue": "brick-point-names-differ-from-csv"
+     },
+     {
+      "op": "remap",
+      "action": "fix",
+      "map": {
+       "mels_N": "unlabelled_meter",
+       "hvac_N": "mels_N",
+       "hvac_S": "hvac_N",
+       "Unnamed: 6": "hvac_S"
+      },
+      "after": "2020-01-01 00:00",
+      "runs": [
+       "ele_*"
+      ],
+      "note": "From 2020-01-01 00:15 UTC ele.csv carries six meters under five names, shifted one place right: remapped by position (file mels_N -> unlabelled_meter, hvac_N -> mels_N, hvac_S -> hvac_N, the unnamed sixth column -> hvac_S).",
+      "issue": "ele-2020-columns-shifted"
+     },
+     {
+      "op": "mask",
+      "action": "fix",
+      "columns": [
+       "hvac_N",
+       "hvac_S"
+      ],
+      "eq": 0,
+      "runs": [
+       "ele_hvac_*"
+      ],
+      "note": "HVAC panel meters reading exactly 0 kW are dropouts (the panels feed rooftop-unit fans that run around the clock); masked, after the 2020 remap.",
+      "issue": "ele-hvac-zero-dropouts"
+     },
+     {
+      "op": "fill",
+      "action": "fix",
+      "columns": [
+       "hvac_N",
+       "hvac_S"
+      ],
+      "window_days": 7,
+      "max_run": 192,
+      "runs": [
+       "ele_hvac_*"
+      ],
+      "note": "Masked HVAC-meter dropouts (and any other gap of up to 48 h) are filled with the median of the same UTC clock time over the 7 days either side; longer gaps stay missing.",
+      "issue": "ele-hvac-zero-dropouts"
+     },
+     {
+      "op": "annotate",
+      "action": "annotate",
+      "runs": [
+       "ele_hvac_N",
+       "hp"
+      ],
+      "note": "The old air-source heat pump is metered on hvac_N until 2019-02-06; its water-source replacement is on no meter. Left in place: a real boundary change that an M&V comparison across the switch must adjust for (non-routine adjustment), not a data error.",
+      "issue": "heat-pump-swap-leaves-the-meter"
      }
     ],
     "runs": [
@@ -4132,6 +4209,94 @@
       "equip": "weather",
       "equip_id": "weather",
       "class": "WEATHER",
+      "label": ""
+     },
+     {
+      "id": "ele_mels_S",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/ele.csv",
+      "mapping": "b59_ele.json",
+      "vars": {
+       "m": "mels_S"
+      },
+      "equip": "ELE",
+      "equip_id": "ELE_mels_S",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "ele_lig_S",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/ele.csv",
+      "mapping": "b59_ele.json",
+      "vars": {
+       "m": "lig_S"
+      },
+      "equip": "ELE",
+      "equip_id": "ELE_lig_S",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "ele_mels_N",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/ele.csv",
+      "mapping": "b59_ele.json",
+      "vars": {
+       "m": "mels_N"
+      },
+      "equip": "ELE",
+      "equip_id": "ELE_mels_N",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "ele_hvac_N",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/ele.csv",
+      "mapping": "b59_ele.json",
+      "vars": {
+       "m": "hvac_N"
+      },
+      "equip": "ELE",
+      "equip_id": "ELE_hvac_N",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "ele_hvac_S",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/ele.csv",
+      "mapping": "b59_ele.json",
+      "vars": {
+       "m": "hvac_S"
+      },
+      "equip": "ELE",
+      "equip_id": "ELE_hvac_S",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "ele_unlabelled_meter",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/ele.csv",
+      "mapping": "b59_ele.json",
+      "vars": {
+       "m": "unlabelled_meter"
+      },
+      "equip": "ELE",
+      "equip_id": "ELE_unlabelled_meter",
+      "class": "ELECTRICITY_METER",
+      "label": ""
+     },
+     {
+      "id": "hp",
+      "file": "Building_59.zip",
+      "member": "Bldg59_clean data/hp_hws_temp.csv",
+      "mapping": "b59_hp.json",
+      "equip": "HP",
+      "equip_id": "HP",
+      "class": "HEAT_PUMP",
       "label": ""
      },
      {
@@ -5122,7 +5287,8 @@
     "Camera occupancy counts (occ.csv, May 2018 - Feb 2019) and Wi-Fi counts (wifi.csv) are floor-level, and neither overlaps the CO2 record in a usable way; they are not mapped.",
     "Per-RTU floor areas and design populations are not published (two office floors of 2,325 m2 each), so the ASHRAE 62.1 VRP is not run per RTU; see issue #17 for the system-level procedure this dataset could validate.",
     "34 duplicated timestamps in rtu_sa_t.csv (February 2020) are dropped (the first reading is kept).",
-    "Ingest cost (measured): the default subset extracts 644 MB and ingests in about 15 s; the full subset extracts 2.0 GB, ingests in about 75 s and peaks near 7 GB of memory, because the five 1-minute terminal tables (51 zones each) are held while their 51 runs are split out."
+    "Ingest cost (measured): the default subset extracts 673 MB and ingests in about 16 s; the full subset extracts 2.0 GB, ingests in about 75 s and peaks near 7 GB of memory, because the five 1-minute terminal tables (51 zones each) are held while their 51 runs are split out.",
+    "ele.csv (15-minute panel meters) is ingested as six ELECTRICITY_METER equipment; its 2020 column shift and the HVAC meters' zero dropouts are corrected at ingest, and the heat-pump swap that moves heating out of the metering boundary is annotated (see the data issues). The meters are there for M&V exercises; the run template does not analyse them."
    ],
    "data_issues": [
     {
@@ -5312,8 +5478,8 @@
       "document": "Data description table (ele.csv: five meters mels_S, lig_S, mels_N, hvac_N, hvac_S; its cleaning notes cover ele.csv only to 2020-01-01) and the ele.csv header",
       "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
      },
-     "handling": "none",
-     "handling_note": "ele.csv is not ingested by this entry. Anyone reading it must remap 2020 by position (file mels_N -> an unidentified sixth meter, file hvac_N -> mels_N, file hvac_S -> hvac_N, the sixth value -> hvac_S) and sum all six meters; a whole-building series read by the header understates 2020 by about a third, which is what an M&V chain across 2019-2020 would report as savings."
+     "handling": "fix",
+     "handling_note": "Remapped by position at ingest (remap quirk on the ele_* runs, from 2020-01-01 00:15 UTC): file mels_N -> unlabelled_meter (stored as ELE_unlabelled_meter, empty before 2020), file hvac_N -> mels_N, file hvac_S -> hvac_N, the unnamed sixth column -> hvac_S. Corrected, mels_N runs on across the boundary (8.3 -> 8.2 kW at local midnight) instead of dropping to 1.9 kW. The whole-building series is the sum of the stored meters, and it has six from 2020 against five before: a boundary change of about 20 MWh a year that an M&V comparison across 2019-2020 has to treat as non-routine. --no-corrections ingests the header as published (and no unlabelled meter)."
     },
     {
      "id": "ele-hvac-zero-dropouts",
@@ -5327,8 +5493,8 @@
       "document": "README_Dryad_Bldg59.txt (gaps filled by linear interpolation, K-nearest neighbors and matrix factorization); data description table (the only electricity outlier criterion is < 0)",
       "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
      },
-     "handling": "none",
-     "handling_note": "ele.csv is not ingested by this entry. Treat an HVAC-panel zero while the panel's RTU supply fans run as missing, so that day fails completeness instead of entering a baseline as a low-energy day; left in, the dropouts make the 2019 daily weather model look worse (adjusted R2 0.47 vs 0.54) and create step changes a detector finds in 2019."
+     "handling": "fix",
+     "handling_note": "Masked and filled at ingest on ele_hvac_N / ele_hvac_S (after the 2020 remap): every exact 0 kW reading is masked (a mask quirk; about 2% of the zeros fall while neither of the panel's RTU supply fans is above 20%, and they are masked too), then every missing run of up to 48 h is filled with the median of the same UTC clock time over the 7 days either side (a fill quirk); longer gaps stay missing, so those days still fail completeness. The fill adds about 2 MWh (hvac_N) and 15 MWh (hvac_S) to 2018 and 20 / 29 MWh to 2019, and reproduces a hand correction masked only on fan-running intervals and filled in local clock time to within 0.4% of the HVAC energy on the 1,026 complete days. --no-corrections keeps the zeros."
     },
     {
      "id": "heat-pump-swap-leaves-the-meter",
@@ -5342,8 +5508,8 @@
       "document": "Data descriptor: the heat pump is 'air-source type before March 2019, later replaced with water-source', and the EUI of 2018 is higher than 2019 and 2020 'due to the building retrofit'",
       "citation": "Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x; data doi:10.7941/D1N33Q"
      },
-     "handling": "none",
-     "handling_note": "ele.csv is not ingested by this entry. The swap is a real equipment change and a textbook non-routine event, but it moves heating energy out of the metered boundary, so a 2018 vs later saving on ele.csv overstates the retrofit: a weather-normalised comparison across 2019-02-06 needs a non-routine adjustment (about 15.4 kW on hvac_N while the old unit runs) or a baseline that starts after the switch."
+     "handling": "annotate",
+     "handling_note": "Left in place (annotate quirk on ele_hvac_N and hp): the meter readings are right; the metering boundary changed. A weather-normalised comparison across 2019-02-06 needs a non-routine adjustment (about 15.4 kW on hvac_N while the old unit runs) or a baseline that starts after the switch. The ingest stores the heat pump's hot-water supply temperature as equipment HP (hw_supply_temp), which identifies the old unit's hours (85-105 F, the new unit holds about 120 F), so the adjustment can be computed from the store."
     }
    ]
   },

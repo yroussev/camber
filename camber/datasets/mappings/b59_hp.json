@@ -1,0 +1,6 @@
+{
+  "_comment": "LBNL Building 59 heat pump hot-water supply temperature (hp_hws_temp.csv, degF, 1-minute) -> CAMBER Role mapping, stored as equipment HP (class HEAT_PUMP). It is the only trended point of the heat pump and identifies which unit runs: the old air-source unit holds 85-105 F, the water-source replacement (in service from 2019-02-06, with trials on 2018-12-17/18 and 2019-01-09 to 01-11) about 120 F. The old unit is metered on hvac_N and the new one on no ele.csv meter, so this series is what a non-routine adjustment across the switch is computed from (see the heat-pump-swap-leaves-the-meter data issue). Dataset: Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x.",
+  "aliases": {
+    "hp_hws_temp": "hw_supply_temp"
+  }
+}

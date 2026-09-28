@@ -4,6 +4,44 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## Unreleased
+
+<!-- 092-bench -->
+### Changed (benchmarks, #11 #12)
+- **Chiller-plant benchmark lists are explicit (#11).** The chiller-fouling runs have been
+  `chiller_efficiency` targets since 0.86. The chiller, tower and secondary-DP sensor-bias runs
+  are now *listed* as negatives for both plant rules, and the chiller-fouling and bypass runs as
+  cross-negatives for `cooling_tower_approach`. A run on no list is excluded and printed instead of
+  counting as a negative by default. No count moved: `chiller_efficiency` TPR 6/11, FPR 2/13;
+  `cooling_tower_approach` TPR 0/3, FPR 0/14 with 7 declined.
+- **The `lbnl-chiller` catalog entry declares its scored targets**, so `camber datasets score
+  lbnl-chiller` reproduces the benchmark's `chiller_efficiency` 6/11 and 2/13 from the store.
+- **Sensor bias vs physical fault on the chiller plant (#11, new, opt-in, ungated).**
+  `compare_to_reference` compares chiller 1's leaving water with the primary supply (chiller 1
+  running alone) and tower 1's leaving water with the condenser supply (tower 1 alone, bypass
+  commanded shut). At the default 2.0 °F threshold both pairs score TPR 2/4. The chiller pair has
+  FPR 0/20. The tower pair has FPR 5/20: on the five bypass-valve runs the valve ignores its
+  command. New keys `chiller.sensor.*`.
+- **VAV drift target lists revised, and series fan-powered boxes scored (#12).** The lists now
+  follow each rule's one-sided physics. Stuck dampers at 0 / 20 % are excluded from airflow drift.
+  Reheat targets the valve stuck at 0 / 20 % and coil fouling. Over-delivering valves, the stuck
+  dampers and the sensor biases are cross-negatives. Parallel boxes: airflow 4/6 → 5/5 with 0 false
+  positives in 24, reheat 1/7 → 2/8 with 0 in 17. Series boxes are scored for the first time, with
+  the reheat duty on the fan discharge flow: airflow 5/5 with 4 false positives in 24, reheat 2/8
+  with 4 in 14. New keys `drift.sfpu.*`. None of these metrics is gated (`optin-measured.json`).
+
+### Added (datasets, #50)
+- **Quirk ops `remap` and `fill`.** `remap` moves columns within a time window, all at once, for a
+  header that names the wrong columns from a date onward. `fill` fills a short run of missing
+  values with the median of the same clock time on nearby days; gaps longer than `max_run` stay
+  missing.
+- **`lbnl-b59` ingests its electricity meters and the heat pump's water temperature.** Six
+  `ELECTRICITY_METER` equipment and `HP` are added. The 2020 column shift is undone by a `remap`
+  fix. The HVAC meters' zero dropouts are masked and filled. The heat-pump swap that leaves the
+  metering boundary is annotated, not corrected: it is a non-routine event. The fixes reproduce the
+  earlier hand correction to within 0.4 % of HVAC energy.
+<!-- /092-bench -->
+
 ## [0.91.0] — 2026-09-27
 
 **0.91: real-data correctness (#60-#63, #32, #33, #35).** Fixes for wrong or misleading results
