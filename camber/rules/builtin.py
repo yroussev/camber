@@ -26,6 +26,7 @@ from .coolingtower_rule import CoolingTowerApproach
 from .economizer_lockout_rule import EconomizerHighLimit
 from .filter_rule import FilterFouling
 from .freecoolingmissed_rule import FreeCoolingMissed
+from .g36_rule import G36AFDD
 from .heatpump_rule import HeatPumpDefrost
 from .hunting_rule import ControlHunting
 from .hwplant_deltat_rule import HWPlantDeltaT
@@ -92,6 +93,7 @@ RULE_CLASSES: list[type] = [
     ChillerApproachFouling,
     ChillerStagingFleet,
     DcvSystemVerification,
+    G36AFDD,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

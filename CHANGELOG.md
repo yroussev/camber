@@ -38,6 +38,26 @@ All notable changes to CAMBER are documented here. The format follows
 - The synthetic G36 scenarios (`faultlab.g36_accuracy`) now show the supply fan running (`FS`
   100 %) unless a scenario sets it. Without that, every scenario but FC1 would be declined for
   lack of a fan signal. The G36 benchmark numbers did not move.
+
+### Added
+- **`g36_afdd`: the G36 engine as a registered rule (#60).** `rules: ["g36_afdd"]` in a config
+  runs FC1-FC15 on every AHU. The results reach `camber run`, the audit report and the RCx
+  report, and the RCx evidence shades the reported fault hours. The rule gives one finding per AHU:
+  - each FC's rate, hours and applicable hours;
+  - the fan gate;
+  - the ModeDelay suspension, which follows a fan start or a change in the occupancy, warm-up or
+    cool-down points.
+
+  Coil semantics:
+  - MAT/SAT stand in for the cooling-coil entering/leaving temperatures only on an AHU without a
+    heating coil. The FC14 fan-heat term is signed for SAT downstream of the fan.
+  - Otherwise FC14 and FC15 are declined with a caveat.
+  - FC8/FC9 hours that coincide with a confirmed FC14 are attributed to FC14, so a passing
+    chilled-water valve no longer reports under the free-cooling labels.
+
+  `heating_coil=True` declines an AHU whose heating valve isn't trended, rather than guessing.
+  `min_oa_pct` enables FC6. Severity is screening-grade (`warn_pct` 5 %, `fault_pct` 20 % of
+  applicable hours, with at least 24 applicable hours).
 <!-- 091-g36 (#60): end -->
 
 ## [0.90.1] — 2026-09-27

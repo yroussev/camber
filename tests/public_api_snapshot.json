@@ -1669,6 +1669,12 @@
   "camber.rules.freecoolingmissed_rule": [
     "FreeCoolingMissed"
   ],
+  "camber.rules.g36_rule": [
+    "FAULT_PCT",
+    "G36AFDD",
+    "MIN_APPLICABLE_HOURS",
+    "WARN_PCT"
+  ],
   "camber.rules.heatpump_rule": [
     "HeatPumpDefrost"
   ],
