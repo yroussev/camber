@@ -544,6 +544,22 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Miller et al. 2020, Usage Notes (the BDG2 timestamps, weather included, are in the local time zone) (Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published: the offset is inferred (4 or 5 h), not documented, so it is not shifted. Daily models are barely affected; an hourly or time-of-week analysis of Eagle should shift its meters.
 
+#### One site's hot water is about 1,000x too large
+
+- **Issue:** `eagle-hot-water-1000x`
+- **Columns:** `Eagle_* (hotwater)`
+- **Evidence:** 58 of the 60 Eagle hot-water meters carry the chilled-water issue's signature: a median 2016 intensity of 10,797 kWh/ft2/yr (cleaned; 11,771 raw) and a median 867x the same building's electricity (827x over 2016-2017). The hot-water meters at Bobcat, Crow, Moose and Robin run at a per-site median of 0.3-2.1x their electricity. CAMBER's unit-scale check (#71) judges those 58 meters implausible as given, with x0.001 most likely at high confidence; the other two are plausible at low confidence. Divided by 1,000 Eagle's median is 10.8 kWh/ft2/yr, 0.87x its electricity -- the factor a kBTU series converted as mmBTU (the unit Table 4 lists for Eagle's hot water) would carry.
+- **Contradicts:** Miller et al. 2020, Table 4 (Eagle hot water in mmBTU) and Usage Notes (unit-conversion mistakes fixed in the raw and cleaned sets) (Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested as published (no rescale: the factor is inferred, not documented), as for the site's chilled water. The BDG2 ingest's unit-scale check reports each of the 58 meters as an ingest warning (x0.001 most likely); nothing is corrected. No benchmark reads them: the EUI rollup is electricity-only.
+
+#### One site's hot water reads thousands of kBtu/ft2 a year
+
+- **Issue:** `fox-hot-water-scale`
+- **Columns:** `Fox_* (hotwater)`
+- **Evidence:** 15 of Fox's 68 hot-water meters read 658-12,832 kWh/ft2/yr in 2016 (cleaned; 2,244-43,785 kBtu/ft2/yr), 53-399x (median 82x) the same building's electricity. CAMBER's unit-scale check (#71) judges them implausible as given (x0.001 most likely) and 38 more uncertain. The floor area does not explain it: Fox's sqft and sqm agree (ratio 10.764), its median building (71,421 ft2) is typical of the other sites, and the same 15 buildings' electricity is an ordinary 8.0-48.0 kWh/ft2/yr (median 23.4) on the same floor area, so an area error could account for a factor of 2-3 at most. The hot-water energy scale is the problem, but no single factor fits: the site's hot-water/electricity ratio runs continuously from under 1 to 399x (median 23.5x over all 68 meters, against 0.3-2.1x at Bobcat, Crow, Moose and Robin), and x0.001 applied to the whole site would put its other meters at a median 0.018x their electricity.
+- **Contradicts:** Miller et al. 2020, Table 4 (Fox hot water in mmBTU, converted to kWh by Table 5) and Usage Notes (unit-conversion mistakes fixed in the raw and cleaned sets) (Miller et al. 2020, Sci Data 7:368, doi:10.1038/s41597-020-00712-x)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested as published, not rescaled: the factor is neither documented nor uniform across the site. The BDG2 ingest's unit-scale check reports each flagged meter as an ingest warning. Treat Fox hot-water intensities as unreliable; no benchmark reads them (the EUI rollup is electricity-only).
+
 ### `lbnl-b59`: LBNL Building 59: three years of a real office's rooftop units, zone CO2 and underfloor terminals
 
 #### Timestamps are UTC, which no document states

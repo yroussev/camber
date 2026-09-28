@@ -467,9 +467,12 @@ no network or a cache miss, the check falls back to the bundled bands and says s
       87 meters are `implausible` with x0.001 most likely. Four more are `uncertain` leaning
       x0.001, and one reads zero.
     - **Eagle's hot water.** 58 of its 60 hot-water meters are flagged the same way, x0.001 most
-      likely, at a median 830x the same building's electricity. The catalog does not record this.
+      likely, at a median 830x the same building's electricity. The catalog records it as
+      `eagle-hot-water-1000x` (annotated, not rescaled).
     - **Other flags.** 28 of the 2,539 meters outside Eagle are flagged. Most are thermal meters at
-      thousands of kBtu/ft2/yr (15 at Fox, all hot water), which is a unit or floor-area problem.
+      thousands of kBtu/ft2/yr (15 at Fox, all hot water). Fox's floor areas are consistent and
+      the same buildings' electricity is ordinary, so the hot-water energy scale is at fault, but
+      no single factor fits the site (`fox-hot-water-scale` in the catalog, annotated).
       The four electricity flags are meters that stopped reading or read a near-zero constant.
 
 ## Not converted (0.92)

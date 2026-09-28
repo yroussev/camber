@@ -229,9 +229,18 @@ SEP chaining case.
 
   On the BDG2 cleaned meters the check independently catches the documented Eagle chilled-water
   error: 82 of 87 meters are implausible and 4 more are uncertain, all pointing to x0.001. It
-  also finds the same signature in 58 of Eagle's 60 hot-water meters, which the catalog does not
-  record. It flags 4 of 1,572 electricity meters (0.25%), all meters that stopped reading.
+  also finds the same signature in 58 of Eagle's 60 hot-water meters (now a catalog data issue,
+  below). It flags 4 of 1,572 electricity meters (0.25%), all meters that stopped reading.
   docs/UNITS.md, "Unit-scale plausibility".
+- **The ENERGY STAR median EUI reference is complete, and two BDG2 hot-water data issues (#71).**
+  `energy_star_us_median_eui_2024` now carries all 46 printed Portfolio Manager property types,
+  the Public Services row that opens page 4 included. The site-neutrality guard exempts that one
+  rule in that one file only (`exempt_paths`), and the local denylist accepts the same per-line
+  exemption (`pattern<TAB>paths`, see `.githooks/denylist.local.example`). The `bdg2` entry
+  records `eagle-hot-water-1000x` (58 of 60 meters at a median 867x the building's electricity,
+  x0.001 most likely) and `fox-hot-water-scale` (15 meters at 2,244-43,785 kBtu/ft2/yr on sound
+  floor areas; the hot-water energy scale is at fault, with no single factor). Both are
+  annotated, flagged by the unit-scale check at ingest and never rescaled. docs/DATASETS.md.
 
 ### Changed
 - **Sensor trust reads the mixed-air flow balance and copied points (#16).** `frame_checks` (and
