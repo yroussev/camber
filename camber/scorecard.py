@@ -103,6 +103,7 @@ RULE_CATEGORY = {
     "loop_dp_drift": "maintenance",
     "vav_airflow_drift": "maintenance",
     "vav_reheat_valve_drift": "maintenance",
+    "boiler_efficiency_drift": "maintenance",  # 092-plant (#13)
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")

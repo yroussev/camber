@@ -126,7 +126,7 @@ def test_family_class_must_be_in_the_equipment_list(tmp_path):
 
 
 def test_unknown_family_name_raises(tmp_path):
-    path = _make_site(str(tmp_path), families=[{"class": "AHU", "family": "boiler"}])
+    path = _make_site(str(tmp_path), families=[{"class": "AHU", "family": "steam"}])
     with pytest.raises(KeyError, match="unknown drift family"):
         run_drift_config(load_config(path), base_dir=str(tmp_path))
 

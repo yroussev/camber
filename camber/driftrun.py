@@ -54,6 +54,7 @@ from .chillerdiag import diagnose_chiller_drift
 from .condenserdrift import diagnose_condenser_drift
 from .driftthresholds import threshold_confidence
 from .evaporatordrift import diagnose_evaporator_drift
+from .plantdrift import diagnose_boiler_drift
 from .pumpdrift import diagnose_pump_drift
 from .pumpplantdiag import diagnose_pump_plant
 from .resolve import resolve
@@ -176,6 +177,14 @@ def _vav_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm
     return [VavAirflowDrift(store, **kw), VavReheatValveDrift(store, **kw)]
 
 
+def _boiler_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm):
+    # 092-plant (#13): combustion-efficiency drift (gas in per unit of heat out)
+    from .rules.boiler_efficiency_rule import BoilerEfficiencyDrift
+
+    kw = {"site": site, "run_id": run_id, "freeze_if_missing": freeze_if_missing}
+    return [BoilerEfficiencyDrift(store, **kw)]
+
+
 @dataclass(frozen=True)
 class DriftFamily:
     """One drift-detector family: its suite builder and the roll-up that reads its Findings.
@@ -207,6 +216,10 @@ DRIFT_FAMILIES: dict = {
     ),
     "pump": DriftFamily("pump", "Pump / hydronic drift", _pump_rules, diagnose_pump_drift),
     "vav": DriftFamily("vav", "VAV zone-terminal drift", _vav_rules, diagnose_vav_drift),
+    # 092-plant (#13)
+    "boiler": DriftFamily(
+        "boiler", "Boiler combustion-efficiency drift", _boiler_rules, diagnose_boiler_drift
+    ),
 }
 
 

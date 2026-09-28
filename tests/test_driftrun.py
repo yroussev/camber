@@ -65,7 +65,7 @@ def test_suite_matches_the_legacy_sim_builder(family, legacy):
 
 def test_unknown_family_raises_and_names_the_known_ones():
     with pytest.raises(KeyError) as ei:
-        build_drift_suite("boiler", BaselineStore())
+        build_drift_suite("steam", BaselineStore())
     for name in family_names():
         assert name in str(ei.value)
     assert sorted(DRIFT_FAMILIES) == family_names()

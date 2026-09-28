@@ -1301,6 +1301,11 @@
     "HWPlantResult",
     "analyze_hw_plant"
   ],
+  "camber.plantdrift": [
+    "PlantDriftDiagnosis",
+    "diagnose_boiler_drift",
+    "diagnose_tower_drift"
+  ],
   "camber.plugins": [
     "GROUPS",
     "LoadedPlugin",
@@ -1516,6 +1521,16 @@
     "PeriodRule",
     "Registry",
     "Rule"
+  ],
+  "camber.rules.boiler_efficiency_rule": [
+    "BTU_PER_KWH",
+    "BoilerEfficiencyDrift",
+    "CORROBORATION_MIN_REL",
+    "CORROBORATION_SHARE",
+    "RATIO_FAULT_REL",
+    "RATIO_FAULT_SIGMA",
+    "RATIO_WARN_REL",
+    "RATIO_WARN_SIGMA"
   ],
   "camber.rules.boiler_rule": [
     "BoilerSummerLockout"

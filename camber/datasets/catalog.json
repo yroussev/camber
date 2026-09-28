@@ -3243,7 +3243,7 @@
    },
    "known_issues": [
     "The boiler status points are enables (see the data issues); boiler_status is not mapped.",
-    "BOI_GAS_CSUM_1 / _2 are the boilers' instantaneous gas input in kW (Table 2), not cumulative counters: 26% of consecutive steps fall and the value is 0 in 50.5% of rows. CAMBER has no gas-input role yet, so the gas-per-heat signature of boiler fouling (boiler 1's annual gas +57% / +26% / +5.5% at 065 / 080 / 095) has no detector; nor is there a supply-temperature-vs-setpoint check (the plant exports no supply-temperature setpoint; Table 1 fixes it at 176 F). Both are follow-ups: hw_pump_dp_reset, the template's one rule, detects none of the 16 faults.",
+    "BOI_GAS_CSUM_1 / _2 are the boilers' instantaneous gas input in kW (Table 2), not cumulative counters: 26% of consecutive steps fall and the value is 0 in 50.5% of rows. Since 0.92 (#13) BOI_GAS_CSUM_1 maps to gas_input_rate and the boiler drift family's boiler_efficiency_drift reads the gas-per-heat signature of boiler fouling (boiler 1's annual gas +57% / +26% / +5.5% at 065 / 080 / 095) against the fault-free run (see docs/VALIDATION.md). There is still no supply-temperature-vs-setpoint check (the plant exports no supply-temperature setpoint; Table 1 fixes it at 176 F), and hw_pump_dp_reset, the template's one rule, detects none of the 16 faults.",
     "PM_POW_1 / PM_POW_2 are the literal string 'NAN' in the eight runs the inventory's Table 4 marks with an asterisk."
    ],
    "data_issues": [

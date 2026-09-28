@@ -17,6 +17,17 @@ All notable changes to CAMBER are documented here. The format follows
   chilled-water sensor. New flag `not_running`; `SensorTrust.run_gate` names the gate. The runner's
   trust gate and the RCx report use it; `frame_sensor_health` keeps `plant_gate=None` by default.
 - **`Role.GAS_INPUT_RATE`** (`gas_input_rate`): a boiler's fuel input rate, kW (#13, #66).
+- **Boiler combustion-efficiency drift (#13).** `rules.boiler_efficiency_rule.BoilerEfficiencyDrift`
+  (`boiler_efficiency_drift`, the new `boiler` drift family) compares a boiler's gas input per
+  unit of heat delivered (`500 x gpm x delta-T`, or pump speed x delta-T without a flow meter)
+  with a frozen baseline at matched load (and return-water temperature where it moves).
+  One-sided up; warn at +5 % and 1.5 sigma, fault at +15 % and 3 sigma (screening-grade). A
+  second frozen model, gas against OAT, corroborates: a ratio rise that the gas burned at matched
+  weather does not share is reported as a heat-metering problem (`info`,
+  `attribution="heat_metering"`), not a fouled boiler; without OAT the severity is capped at
+  warn. `plantdrift.diagnose_boiler_drift` rolls it up. The `lbnl-boiler` catalog mapping now maps
+  `BOI_GAS_CSUM_1` (boiler 1's gas input, kW) to `gas_input_rate`; Brick `Natural_Gas_Flow_Sensor`
+  maps to it, and `Gas_Meter` used as a point type is accepted as an alias with a caveat.
 - **OAT cross-check without a reference (#66).** With no `oat_reference`, the RCx report compares
   the site's OAT sources with each other: three or more against their median (the outlier gets a
   scoped `sensor_drift:oat` finding), two shown side by side with no finding.

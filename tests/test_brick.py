@@ -328,7 +328,9 @@ def test_real_lbnl_boiler_plant_model():
     with zipfile.ZipFile(_BOILER_ZIP) as z:
         ttl = z.read(z.namelist()[0]).decode()
     rep = brick_mapping_report(ttl, backend="minimal")
-    assert rep.counts() == {"mapped": 17, "alias": 0, "ambiguous": 2, "unmapped": 3, "points": 22}
+    # 0.92 (#13): the two Gas_Meter-typed gas-input points are accepted as aliases
+    assert rep.counts() == {"mapped": 17, "alias": 2, "ambiguous": 2, "unmapped": 1, "points": 22}
+    assert {p.point for p in rep.with_status("alias")} == {"BOI_GAS_CSUM_1", "BOI_GAS_CSUM_2"}
     assert all(p.brick_class == "On_Off_Status" for p in rep.with_status("ambiguous"))
     assert Role.BOILER_STATUS not in rep.roles.values()  # the enable is not firing status
 

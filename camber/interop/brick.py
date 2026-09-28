@@ -65,6 +65,7 @@ DIRECT_CLASS_TO_ROLE = {
     "Hot_Water_Differential_Pressure_Sensor": Role.HW_DIFF_PRESS,
     "Hot_Water_Differential_Pressure_Setpoint": Role.HW_DIFF_PRESS_SP,
     "Hot_Water_Flow_Sensor": Role.HW_FLOW,
+    "Natural_Gas_Flow_Sensor": Role.GAS_INPUT_RATE,  # 0.92 (#13): a rate -- check the unit
     # --- chilled-water plant ---
     "Chilled_Water_Supply_Temperature_Sensor": Role.CHW_SUPPLY_TEMP,
     "Chilled_Water_Return_Temperature_Sensor": Role.CHW_RETURN_TEMP,
@@ -101,6 +102,12 @@ ALIAS_CLASS_TO_ROLE = {
         Role.CHW_FLOW,
         "non-standard class; read as Chilled_Water_Flow_Sensor",
     ),
+    # 0.92 (#13): the LBNL boiler plant types each boiler's gas-input point as a meter
+    "Gas_Meter": (
+        Role.GAS_INPUT_RATE,
+        "a meter *equipment* class used as a point type; read as the gas input rate -- confirm "
+        "it is an instantaneous rate, not a cumulative counter, and note its unit",
+    ),
 }
 
 # Classes a CAMBER role *could* come from but whose meaning the class alone does not pin down.
@@ -113,6 +120,10 @@ AMBIGUOUS_CLASSES = {
     "Occupant_Count": "a head count, not the binary occupied/unoccupied OCCUPANCY signal",
     "Enable_Status": "an enable is not proof of operation -- not mapped to a running status",
     "Enable_Command": "an enable is not proof of operation -- not mapped to a running status",
+    "Natural_Gas_Usage_Sensor": (
+        "gas used over a period (a cumulative amount), not the input rate gas_input_rate needs "
+        "-- difference it to a rate and map by hand"
+    ),
 }
 
 # Point classes whose role depends on the owning equipment part.
