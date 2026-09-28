@@ -26,6 +26,13 @@ data and matches to 0.00 pts on a common denominator; see ``docs/ECOSYSTEM.md``.
 (input-validity) fault % for cross-tool reconciliation, without changing the default
 operating-state-gated output.
 
+G36 filters (0.91): before any FC is scored, ``run_g36_afdd`` applies the §5.16.14 time filters --
+evaluation only while the AHU runs (a fan status / speed / airflow gate; no fan signal declines the
+run), ModeDelay after a fan start or a zone-group mode change, AlarmDelay persistence, and the
+5-minute rolling averages. An AHU without a heating (cooling) valve is scored as having no such
+coil, with the tests of that coil omitted. See the constants below for what was verified in the
+public G36 text.
+
 Variable conventions (all temperatures degF here):
   SAT/MAT/RAT/OAT supply/mixed/return/outdoor air temps; SATSP supply-air-temp
   setpoint; HC/CC heating/cooling valve command %; FS supply-fan speed %; DSP/
@@ -36,7 +43,7 @@ Variable conventions (all temperatures degF here):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -54,7 +61,42 @@ __all__ = [
     "FC_DESC",
     "G36Result",
     "run_g36_afdd",
+    "MODE_DELAY_MIN",
+    "ALARM_DELAY_MIN",
+    "AVG_WINDOW_MIN",
+    "FC_OMIT_NO_HEATING",
+    "FC_OMIT_NO_COOLING",
 ]
+
+# --------------------------------------------------------------------------- #
+# G36 §5.16.14 time delays and averaging. Verified against the public text of Addendum p to
+# Guideline 36-2021 (approved 2024-02-29), which restates §5.16.14 in full:
+#   * AFDD internal-variables table: ModeDelay 30 min ("suspend fault-condition evaluation after a
+#     change in mode"), AlarmDelay 30 min ("a fault condition must persist" that long before it is
+#     reported), TestModeDelay 120 min (not modelled: test mode is a commissioning action);
+#   * suspension clause: evaluation is suspended while the AHU is not operating, and for ModeDelay
+#     after a change in the mode (e.g. warm-up to occupied) of any zone group the AHU serves;
+#   * persistence clause: a fault condition must be TRUE continuously for AlarmDelay before it is
+#     reported;
+#   * averaging clause: five-minute rolling averages, one-minute sampling, of SAT, MAT, RAT, OAT,
+#     DSP and the coil entering/leaving temperatures.
+# The same values appear in the first-public-review Addendum u to G36-2018. G36 keys ModeDelay to
+# the zone-group *mode*, which it states is distinct from the AHU operating state; an OS change is
+# counted by FC#4, and a transient at an OS change is filtered by AlarmDelay, not by ModeDelay.
+# --------------------------------------------------------------------------- #
+MODE_DELAY_MIN = 30.0
+ALARM_DELAY_MIN = 30.0
+AVG_WINDOW_MIN = 5.0
+
+#: fault conditions that test a heating coil: omitted on an AHU without one (G36 omits FC#7 when
+#: there is no heating coil, and tests of absent components generally). FC#5 applies only in OS#1,
+#: which cannot occur without a heating valve, so it needs no entry.
+FC_OMIT_NO_HEATING = (7, 15)
+#: fault conditions that test a cooling coil: omitted on an AHU without one.
+FC_OMIT_NO_COOLING = (13, 14)
+
+# the measured points G36 averages (§5.16.14 averaging clause); commands and setpoints are not
+_AVERAGED = ("SAT", "MAT", "RAT", "OAT", "DSP", "CCET", "CCLT", "HCET", "HCLT")
 
 
 @dataclass
@@ -77,6 +119,11 @@ class G36Thresholds:
     e_hclt: float = 2.0
     valve_on: float = 99.0  # valve commanded "fully open" threshold (%)
     fan_full: float = 99.0  # fan "full speed" threshold (%)
+    # Fan-heat term in FC#14 (degF). G36 prints "+ dT_sf" with a footnote that the fan-heat factor
+    # is included or not depending on where the coil sensors sit; None keeps the printed +dT_sf.
+    # When SAT (downstream of the supply fan) stands in for the cooling-coil leaving temperature,
+    # the air is dT_sf warmer than it left the coil, so the correct term is -dT_sf.
+    fc14_fan_heat: float | None = None
 
 
 # Operating states. Classification keys off the heating- and cooling-valve
@@ -215,7 +262,8 @@ def _fc14(r, k):  # temperature drop across an inactive cooling coil (leak/stuck
     cet, clt = r.get("CCET"), r.get("CCLT")
     if cet is None or clt is None:
         return False
-    return cet - clt >= np.hypot(k.e_ccet, k.e_cclt) + k.dT_sf
+    fan_heat = k.dT_sf if getattr(k, "fc14_fan_heat", None) is None else k.fc14_fan_heat
+    return cet - clt >= np.hypot(k.e_ccet, k.e_cclt) + fan_heat
 
 
 def _fc15(r, k):  # temperature rise across an inactive heating coil (leak/stuck)
@@ -353,7 +401,8 @@ def _vfc13(c, dos, k, n):
 def _vfc14(c, dos, k, n):
     if c["CCET"] is None or c["CCLT"] is None:
         return _false(n)
-    return c["CCET"] - c["CCLT"] >= np.hypot(k.e_ccet, k.e_cclt) + k.dT_sf
+    fan_heat = k.dT_sf if k.fc14_fan_heat is None else k.fc14_fan_heat
+    return c["CCET"] - c["CCLT"] >= np.hypot(k.e_ccet, k.e_cclt) + fan_heat
 
 
 def _vfc15(c, dos, k, n):
@@ -455,7 +504,7 @@ class G36Result:
 
     equip: str
     n_intervals: int
-    os_distribution: dict  # OS code -> count
+    os_distribution: dict  # OS code -> count (fan-on intervals only)
     fault_pct: dict  # FC number -> % of *applicable* intervals tripped
     fault_n_applicable: dict  # FC number -> intervals where its OS applied
     coverage_start: str
@@ -465,8 +514,32 @@ class G36Result:
     # cross-tool reconciliation (e.g. open-fdd). Same fault equation/fires as
     # fault_pct, different denominator. See docs/ECOSYSTEM.md.
     fault_pct_singlesignal: dict | None = None
-    # intervals with a missing valve command: no operating state, so no FC was evaluated there
+    # fan-on intervals with a missing valve command: no operating state, so no FC was evaluated
     n_unclassified: int = 0
+    # --- provisional (0.91) -------------------------------------------------------------------
+    #: what the unit-running gate was read from ("fan status", "fan speed proxy", "airflow proxy",
+    #: or "ungated (caller asserts the fan ran)"); "" on a declined result
+    fan_gate: str = ""
+    #: intervals the gate classed as fan off (never evaluated: G36 suspends AFDD then)
+    n_fan_off: int = 0
+    #: fan-on intervals inside ModeDelay after a fan start or a zone-group mode change
+    n_suspended: int = 0
+    #: FC number -> hours reported (after AlarmDelay), from the median sampling interval
+    fault_hours: dict = field(default_factory=dict)
+    #: FC number -> why it was not evaluated at all (e.g. no heating coil for FC#7)
+    omitted: dict = field(default_factory=dict)
+    #: FC number -> input columns absent from the frame (the FC can never fire; its fault_pct
+    #: still reads 0.0 over the OS-gated denominator -- callers decide whether to decline it)
+    missing_inputs: dict = field(default_factory=dict)
+    #: "could not evaluate X" notes (see camber.rules.base, honesty convention)
+    caveats: list = field(default_factory=list)
+    #: why the whole run was declined (no fan signal, no valve commands); None when it ran
+    declined: str | None = None
+    #: ModeDelay / AlarmDelay / averaging window actually applied, in minutes
+    delays: dict = field(default_factory=dict)
+    #: per-interval masks (``keep_masks=True`` only): ``FC<n>`` reported, ``FC<n>_app`` evaluated
+    #: and applicable, plus ``fan_on``, ``suspended`` and ``os``; indexed like the cleaned frame
+    masks: pd.DataFrame | None = None
 
     def as_dict(self):
         """Return the result as a plain dict (faults flattened to FC<n>_pct keys).
@@ -481,11 +554,115 @@ class G36Result:
             "n_unclassified": self.n_unclassified,
             "coverage_start": self.coverage_start,
             "coverage_end": self.coverage_end,
+            "fan_gate": self.fan_gate,
+            "n_fan_off": self.n_fan_off,
+            "n_suspended": self.n_suspended,
+            "declined": self.declined,
+            "caveats": list(self.caveats),
         }
         d.update({f"FC{n}_pct": self.fault_pct.get(n) for n in _FCS})
         if self.fault_pct_singlesignal is not None:
             d.update({f"FC{n}_pct_singlesignal": self.fault_pct_singlesignal.get(n) for n in _FCS})
         return d
+
+
+def _median_step(index: pd.DatetimeIndex) -> pd.Timedelta:
+    """The frame's typical sampling interval (1 min when it cannot be inferred)."""
+    if len(index) < 2:
+        return pd.Timedelta(minutes=1)
+    d = pd.Series(index).diff().dropna()
+    d = d[d > pd.Timedelta(0)]
+    return d.median() if len(d) else pd.Timedelta(minutes=1)
+
+
+def _persistent(mask: np.ndarray, index, step: pd.Timedelta, alarm_delay_min: float) -> np.ndarray:
+    """Keep only episodes that stayed TRUE for at least AlarmDelay (G36 persistence clause).
+
+    Each sample stands for one sampling interval, so an episode's duration is ``last - first +
+    step``: at 5-minute data a single excursion lasts 5 minutes and is dropped, at hourly data one
+    hourly sample already spans 60 minutes. A timestamp gap wider than 1.5 sampling intervals ends
+    an episode (missing data is not evidence of persistence). A confirmed episode counts in full --
+    the fault existed from its first interval; it was only *reported* AlarmDelay later.
+    """
+    m = np.asarray(mask, dtype=bool)
+    if alarm_delay_min <= 0 or not m.any():
+        return m
+    t = index.asi8
+    starts = m.copy()
+    starts[1:] = m[1:] & (~m[:-1] | ((t[1:] - t[:-1]) > 1.5 * step.value))
+    run_id = np.cumsum(starts)[m]
+    ts = pd.Series(t[m])
+    grp = ts.groupby(run_id)
+    dur = grp.transform("max").to_numpy() - grp.transform("min").to_numpy() + step.value
+    out = np.zeros(len(m), dtype=bool)
+    out[m] = dur >= pd.Timedelta(minutes=alarm_delay_min).value
+    return out
+
+
+def _mode_suspension(on: np.ndarray, index, step, mode, mode_delay_min: float) -> np.ndarray:
+    """Fan-on intervals within ModeDelay of a fan start or a zone-group mode change.
+
+    A fan start is an off->on transition inside the data; a frame that *begins* with the fan on
+    has no observed start and is not suspended (the start time is unknown). A timestamp gap wider
+    than 1.5 sampling intervals hides what the fan did, so the first fan-on row after a gap is
+    treated as a start too.
+    """
+    n = len(on)
+    if mode_delay_min <= 0 or n == 0:
+        return np.zeros(n, dtype=bool)
+    t = index.asi8
+    event = np.zeros(n, dtype=bool)
+    prev_on = np.zeros(n, dtype=bool)
+    prev_on[1:] = on[:-1]
+    gap = np.zeros(n, dtype=bool)
+    gap[1:] = (t[1:] - t[:-1]) > 1.5 * step.value
+    event[1:] = on[1:] & (~prev_on[1:] | gap[1:])
+    if mode is not None:
+        m = pd.Series(mode)
+        changed = (m != m.shift()) & m.notna() & m.shift().notna()
+        event |= changed.to_numpy() & on
+    if not event.any():
+        return np.zeros(n, dtype=bool)
+    last = pd.Series(np.where(event, t, np.nan)).ffill().to_numpy()
+    since = t - last  # NaN before the first event -> comparisons False
+    with np.errstate(invalid="ignore"):
+        return on & (since < pd.Timedelta(minutes=mode_delay_min).value)
+
+
+def _fan_gate(df: pd.DataFrame):
+    """``(mask, source)`` from the frame's fan signals, in the :func:`camber.schedules.fan_on_mask`
+    precedence: ``FAN_STATUS``, else ``FS`` (speed) > 0, else ``AIRFLOW`` > 0."""
+    from .model.roles import Role
+    from .schedules import fan_on_mask
+
+    sig = {}
+    for col, role in (
+        ("FAN_STATUS", Role.SUPPLY_FAN_STATUS),
+        ("FS", Role.SUPPLY_FAN_SPEED),
+        ("AIRFLOW", Role.AIRFLOW),
+    ):
+        if col in df.columns:
+            sig[role] = df[col]
+    mask, source = fan_on_mask(pd.DataFrame(sig, index=df.index))
+    if mask is None:
+        return None, source
+    return mask.to_numpy(dtype=bool), source
+
+
+def _declined_result(df, equip, reason, caveats, delays) -> G36Result:
+    n = len(df)
+    return G36Result(
+        equip=equip,
+        n_intervals=n,
+        os_distribution={o: 0 for o in range(1, 6)},
+        fault_pct={fc: None for fc in _FCS},
+        fault_n_applicable={fc: 0 for fc in _FCS},
+        coverage_start=str(df.index.min()) if n else "",
+        coverage_end=str(df.index.max()) if n else "",
+        declined=reason,
+        caveats=list(caveats) + [f"G36 AFDD not evaluated: {reason}"],
+        delays=delays,
+    )
 
 
 def run_g36_afdd(
@@ -496,22 +673,54 @@ def run_g36_afdd(
     econ_damper_open: float = 80.0,
     valve_thr: float = 5.0,
     comparability: bool = False,
+    fan_gate: str = "auto",
+    mode_delay_min: float = MODE_DELAY_MIN,
+    alarm_delay_min: float = ALARM_DELAY_MIN,
+    avg_window_min: float = AVG_WINDOW_MIN,
+    keep_masks: bool = False,
 ) -> G36Result | None:
     """Run the G36 AFDD fault set over an AHU frame.
 
     ``df`` columns (any subset; faults needing missing inputs are skipped):
     HC, CC, SAT, MAT, RAT, OAT, SATSP, FS, DSP, DSPSP, OA_Damper, pct_oa,
-    pct_oa_min, CCET, CCLT, HCET, HCLT. Index is time. Each FC is evaluated only in
-    intervals whose operating state lists it (G36 §5.16.14.9) -- the operating-state
-    denominator convention (see the module docstring).
+    pct_oa_min, CCET, CCLT, HCET, HCLT, plus the gating inputs FAN_STATUS, AIRFLOW and MODE.
+    Index is time. Each FC is evaluated only in intervals whose operating state lists it (G36
+    §5.16.14 applicability lists) -- the operating-state denominator convention (see the module
+    docstring).
+
+    G36 §5.16.14 filters, applied before any FC is scored (see the module constants for what was
+    verified in the public text):
+
+    * **Unit-running gate** (``fan_gate="auto"``): evaluation is suspended while the AHU is not
+      operating. The fan is read from ``FAN_STATUS`` (> 0.5), else ``FS`` (speed > 1 %), else
+      ``AIRFLOW`` (> 5 % of its 95th percentile) -- :func:`camber.schedules.fan_on_mask`. With none
+      of the three the run is **declined** (``declined`` + a caveat), because a fan-off interval
+      with both valves shut reads as OS#2 free cooling and trips FC#8/FC#9 on stagnant air.
+      ``fan_gate="none"`` evaluates every row (the caller asserts the fan ran) and says so.
+    * **ModeDelay** (``mode_delay_min``, default 30): suspended after a fan start (an off->on
+      transition in the data) and after any change of the optional ``MODE`` column (a zone-group
+      mode code, e.g. unoccupied / warm-up / occupied).
+    * **AlarmDelay** (``alarm_delay_min``, default 30): an FC counts only in episodes that stayed
+      TRUE continuously for that long (a confirmed episode counts in full).
+    * **Averaging** (``avg_window_min``, default 5): rolling time-window means of the measured
+      temperatures and duct static over fan-on rows; a no-op at 5-minute or coarser data.
+
+    Set the delays and the window to 0 to score raw per-interval equations.
+
+    **Missing coil.** A frame without ``HC`` is an AHU without a heating coil: HC is taken as 0 %
+    (explicitly, with a caveat) and the heating-coil tests (:data:`FC_OMIT_NO_HEATING`) are
+    omitted; likewise a frame without ``CC`` (:data:`FC_OMIT_NO_COOLING`). With neither valve
+    the run is declined.
 
     ``comparability``: when True, ALSO compute ``fault_pct_singlesignal`` -- the same
     fault equations scored over a single-signal (input-validity) denominator instead
     of the operating-state one, for cross-tool reconciliation (e.g. open-fdd). The
     default operating-state-gated ``fault_pct`` output is unchanged either way; this
     only populates an additional field.
+
+    Returns None for an empty frame.
     """
-    if df.empty or "HC" not in df.columns or "CC" not in df.columns:
+    if df.empty:
         return None
     # The trailing-60-min dOS window needs a sorted, unique time index (rolling on an unsorted one
     # raises); a DST fall-back / re-export duplicate keeps its last row. Timestamp strings are
@@ -525,72 +734,168 @@ def run_g36_afdd(
         df = df.set_axis(pd.to_datetime(df.index))
     if not (df.index.is_monotonic_increasing and df.index.is_unique):
         df = df[~df.index.duplicated(keep="last")].sort_index()
+    if fan_gate not in ("auto", "none"):
+        raise ValueError(f"fan_gate must be 'auto' or 'none', got {fan_gate!r}")
     k = thr or G36Thresholds()
     n = len(df)
-
-    # operating state per interval (vectorized over the whole frame)
-    hc = df["HC"].to_numpy(dtype=float)
-    cc = df["CC"].to_numpy(dtype=float)
-    oa = df["OA_Damper"].to_numpy(dtype=float) if "OA_Damper" in df.columns else np.full(n, np.nan)
-    os_codes = _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open)
-    # dOS: operating-state changes in the trailing 60 min (time-based 1h window)
-    os_ser = pd.Series(os_codes, index=df.index)
-    changes = (os_ser != os_ser.shift()).astype(float)
-    dos = changes.rolling("60min").sum().to_numpy(dtype=float)
-
-    # Pull every measure column once (None when absent) and evaluate each FC over
-    # the whole column; a missing column / NaN value yields False for that interval.
-    cols = {
-        col: (df[col].to_numpy(dtype=float) if col in df.columns else None)
-        for col in (
-            "HC",
-            "CC",
-            "SAT",
-            "MAT",
-            "RAT",
-            "OAT",
-            "SATSP",
-            "FS",
-            "DSP",
-            "DSPSP",
-            "pct_oa",
-            "pct_oa_min",
-            "CCET",
-            "CCLT",
-            "HCET",
-            "HCLT",
-        )
+    delays = {
+        "mode_delay_min": float(mode_delay_min),
+        "alarm_delay_min": float(alarm_delay_min),
+        "avg_window_min": float(avg_window_min),
     }
+    caveats: list = []
+    omitted: dict = {}
 
-    fault_pct, fault_n = {}, {}
-    fault_pct_ss: dict | None = {} if comparability else None
-    for fc in _FCS:
-        fired = _VFCS[fc](cols, dos, k, n)  # the fault equation, once
-        # default: operating-state-gated denominator (the G36-faithful convention)
-        applicable = np.isin(os_codes, _FC_STATES[fc])
-        n_app = int(applicable.sum())
-        fault_n[fc] = n_app
-        fault_pct[fc] = (
-            None if n_app == 0 else round(100.0 * int((fired & applicable).sum()) / n_app, 2)
+    # ---- coils: a missing valve column is an absent coil (valve = 0), said out loud
+    has_hc, has_cc = "HC" in df.columns, "CC" in df.columns
+    if not has_hc and not has_cc:
+        return _declined_result(
+            df, equip, "no heating- or cooling-valve command (HC/CC)", caveats, delays
         )
-        # opt-in: single-signal (input-validity) denominator, same fires
-        if comparability:
-            assert fault_pct_ss is not None  # non-None exactly when comparability
-            valid = _input_valid_mask(cols, fc, n)
-            n_valid = int(valid.sum())
-            fault_pct_ss[fc] = (
-                None if n_valid == 0 else round(100.0 * int((fired & valid).sum()) / n_valid, 2)
+    if not has_hc:
+        caveats.append(
+            "no heating-valve command: treated as an AHU without a heating coil (HC = 0 %); "
+            "FC7 and FC15 not evaluated"
+        )
+        omitted.update({fc: "no heating coil" for fc in FC_OMIT_NO_HEATING})
+    if not has_cc:
+        caveats.append(
+            "no cooling-valve command: treated as an AHU without a cooling coil (CC = 0 %); "
+            "FC13 and FC14 not evaluated"
+        )
+        omitted.update({fc: "no cooling coil" for fc in FC_OMIT_NO_COOLING})
+
+    # ---- unit-running gate (G36: evaluation is suspended when the AHU is not operating)
+    if fan_gate == "none":
+        on = np.ones(n, dtype=bool)
+        gate_src = "ungated (caller asserts the fan ran)"
+        caveats.append(
+            "fan gate disabled by the caller: every interval is assumed to have the fan running"
+        )
+    else:
+        on, gate_src = _fan_gate(df)
+        if on is None:
+            return _declined_result(
+                df,
+                equip,
+                "no supply-fan status, speed or airflow to tell when the AHU was operating",
+                caveats,
+                delays,
             )
 
-    os_dist = {int(o): int((os_codes == o).sum()) for o in range(1, 6)}
+    step = _median_step(df.index)
+    mode = df["MODE"].to_numpy() if "MODE" in df.columns else None
+    suspended = _mode_suspension(on, df.index, step, mode, float(mode_delay_min))
+    evaluable = on & ~suspended
+
+    # operating state per interval (vectorized over the whole frame)
+    hc = df["HC"].to_numpy(dtype=float) if has_hc else np.zeros(n)
+    cc = df["CC"].to_numpy(dtype=float) if has_cc else np.zeros(n)
+    oa = df["OA_Damper"].to_numpy(dtype=float) if "OA_Damper" in df.columns else np.full(n, np.nan)
+    os_codes = _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open)
+    # dOS: operating-state changes between consecutive fan-on intervals in the trailing 60 min
+    os_ser = pd.Series(os_codes, index=df.index)
+    prev_on = np.zeros(n, dtype=bool)
+    prev_on[1:] = on[:-1]
+    changes = ((os_ser != os_ser.shift()).to_numpy() & on & prev_on).astype(float)
+    dos = pd.Series(changes, index=df.index).rolling("60min").sum().to_numpy(dtype=float)
+
+    # Pull every measure column once (None when absent); the measured points G36 averages are
+    # rolling time-window means over fan-on rows (a fan-off tail does not bleed into a start).
+    window = pd.Timedelta(minutes=avg_window_min) if avg_window_min and avg_window_min > 0 else None
+    cols: dict = {}
+    for col in (
+        "HC",
+        "CC",
+        "SAT",
+        "MAT",
+        "RAT",
+        "OAT",
+        "SATSP",
+        "FS",
+        "DSP",
+        "DSPSP",
+        "pct_oa",
+        "pct_oa_min",
+        "CCET",
+        "CCLT",
+        "HCET",
+        "HCLT",
+    ):
+        if col not in df.columns:
+            cols[col] = None
+            continue
+        s = pd.to_numeric(df[col], errors="coerce").astype(float)
+        if window is not None and col in _AVERAGED:
+            s = s.where(on).rolling(window, min_periods=1).mean()
+        cols[col] = s.to_numpy(dtype=float)
+    if not has_hc:
+        cols["HC"] = hc
+    if not has_cc:
+        cols["CC"] = cc
+
+    missing = {
+        fc: [c for c in _FC_INPUTS[fc] if cols.get(c) is None]
+        for fc in _FCS
+        if any(cols.get(c) is None for c in _FC_INPUTS[fc])
+    }
+
+    fault_pct: dict = {}
+    fault_n: dict = {}
+    fault_h: dict = {}
+    fault_pct_ss: dict | None = {} if comparability else None
+    hours_per_row = step / pd.Timedelta(hours=1)
+    masks: dict | None = {} if keep_masks else None
+    for fc in _FCS:
+        if fc in omitted:
+            fault_pct[fc], fault_n[fc], fault_h[fc] = None, 0, None
+            if comparability:
+                assert fault_pct_ss is not None
+                fault_pct_ss[fc] = None
+            if masks is not None:
+                masks[f"FC{fc}"] = np.zeros(n, dtype=bool)
+                masks[f"FC{fc}_app"] = np.zeros(n, dtype=bool)
+            continue
+        fired = _VFCS[fc](cols, dos, k, n)  # the fault equation, once
+        # default: operating-state-gated denominator (the G36-faithful convention), fan-on and
+        # outside ModeDelay only
+        applicable = np.isin(os_codes, _FC_STATES[fc]) & evaluable
+        n_app = int(applicable.sum())
+        reported = _persistent(fired & applicable, df.index, step, float(alarm_delay_min))
+        fault_n[fc] = n_app
+        fault_pct[fc] = None if n_app == 0 else round(100.0 * int(reported.sum()) / n_app, 2)
+        fault_h[fc] = round(float(reported.sum()) * hours_per_row, 2)
+        if masks is not None:
+            masks[f"FC{fc}"] = reported
+            masks[f"FC{fc}_app"] = applicable
+        # opt-in: single-signal (input-validity) denominator, same equation and filters
+        if comparability:
+            assert fault_pct_ss is not None  # non-None exactly when comparability
+            valid = _input_valid_mask(cols, fc, n) & evaluable
+            n_valid = int(valid.sum())
+            ss = _persistent(fired & valid, df.index, step, float(alarm_delay_min))
+            fault_pct_ss[fc] = None if n_valid == 0 else round(100.0 * int(ss.sum()) / n_valid, 2)
+
+    os_on = os_codes[on]
+    if masks is not None:
+        masks.update({"fan_on": on, "suspended": suspended, "os": os_codes})
     return G36Result(
         equip=equip,
         n_intervals=n,
-        os_distribution=os_dist,
+        os_distribution={int(o): int((os_on == o).sum()) for o in range(1, 6)},
         fault_pct=fault_pct,
         fault_n_applicable=fault_n,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
         fault_pct_singlesignal=fault_pct_ss,
-        n_unclassified=int((os_codes == OS_UNCLASSIFIED).sum()),
+        n_unclassified=int((os_on == OS_UNCLASSIFIED).sum()),
+        fan_gate=gate_src,
+        n_fan_off=int((~on).sum()),
+        n_suspended=int(suspended.sum()),
+        fault_hours=fault_h,
+        omitted=omitted,
+        missing_inputs=missing,
+        caveats=caveats,
+        delays=delays,
+        masks=None if masks is None else pd.DataFrame(masks, index=df.index),
     )

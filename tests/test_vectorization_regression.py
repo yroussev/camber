@@ -71,7 +71,8 @@ def _g36_golden_frame():
 
 
 def test_g36_matches_rowloop_golden():
-    g = run_g36_afdd(_g36_golden_frame(), "AHU_1")
+    # the golden values pin the per-interval equations, so the G36 time filters (0.91) are off
+    g = run_g36_afdd(_g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0)
     assert g.n_intervals == 400
     assert g.os_distribution == {1: 115, 2: 114, 3: 34, 4: 137, 5: 0}
     assert g.fault_n_applicable == {

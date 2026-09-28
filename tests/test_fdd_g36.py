@@ -52,6 +52,7 @@ def test_os_fault_map_matches_g36():
 
 
 def _frame(n=200, **cols):
+    cols.setdefault("FS", 100.0)  # a running AHU (the engine gates on the supply fan)
     idx = pd.date_range("2025-07-07", periods=n, freq="1h")
     return pd.DataFrame({c: np.full(n, v) for c, v in cols.items()}, index=idx)
 
@@ -128,6 +129,7 @@ def test_comparability_same_fires_different_denominator():
             "OA_Damper": np.where(econ, 100.0, 10.0),  # econ -> OS#3, else OS#4
             "MAT": np.where(econ, 80.0, 60.0),  # mismatch only in econ rows
             "OAT": np.full(n, 60.0),
+            "FS": np.full(n, 60.0),  # fan running
         },
         index=idx,
     )
@@ -196,3 +198,155 @@ def test_unsorted_and_duplicate_timestamps_do_not_crash():
     assert as_text.fault_pct == r.fault_pct
     with pytest.raises(TypeError, match="DatetimeIndex"):
         run_g36_afdd(df.reset_index(drop=True), "AHU")
+
+
+# ---- 0.91 (#60): unit-running gate, cooling-only AHUs, G36 ModeDelay / AlarmDelay ----
+
+
+def _day_frame(days=3, freq="5min", **cols):
+    """A 5-minute AHU frame whose fan runs 06:00-18:00; the columns may be arrays or scalars."""
+    idx = pd.date_range("2026-07-06", periods=int(days * 24 * 60 / int(freq[:-3])), freq=freq)
+    on = (idx.hour >= 6) & (idx.hour < 18)
+    data = {c: (v(idx, on) if callable(v) else v) for c, v in cols.items()}
+    return pd.DataFrame(data, index=idx), on
+
+
+def test_fan_off_intervals_are_not_evaluated():
+    # fan off: duct air warms to 80F with both valves shut -> used to read as OS#2 and trip FC8/FC9
+    df, on = _day_frame(
+        HC=0.0,
+        CC=lambda i, on: np.where(on, 40.0, 0.0),
+        SAT=lambda i, on: np.where(on, 55.0, 80.0),
+        MAT=lambda i, on: np.where(on, 70.0, 72.0),
+        RAT=74.0,
+        OAT=lambda i, on: np.where(on, 80.0, 70.0),
+        SATSP=55.0,
+        FS=lambda i, on: np.where(on, 60.0, 0.0),
+    )
+    r = run_g36_afdd(df, "AHU", keep_masks=True)
+    assert r.fan_gate == "fan speed proxy"
+    assert r.n_fan_off == int((~on).sum())
+    assert r.os_distribution[OS_FREECOOL] == 0  # no fan-off row is classed as free cooling
+    assert r.fault_pct[8] is None and r.fault_pct[9] is None  # OS#2 never occurred with fan on
+    assert not r.masks.loc[~on, [f"FC{fc}" for fc in range(1, 16)]].any().any()
+    # fan status outranks speed, which outranks airflow
+    df["FAN_STATUS"] = on.astype(float)
+    assert run_g36_afdd(df, "AHU").fan_gate == "fan status"
+    only_flow = df.drop(columns=["FAN_STATUS", "FS"]).assign(AIRFLOW=np.where(on, 9000.0, 0.0))
+    assert run_g36_afdd(only_flow, "AHU").fan_gate == "airflow proxy"
+
+
+def test_no_fan_signal_declines_unless_the_caller_opts_out():
+    df = _frame(HC=0, CC=0, SAT=66, MAT=55, RAT=72, OAT=50).drop(columns=["FS"])
+    r = run_g36_afdd(df, "AHU")
+    assert r.declined and "supply-fan" in r.declined
+    assert all(v is None for v in r.fault_pct.values())
+    assert any("not evaluated" in c for c in r.caveats)
+    assert r.as_dict()["declined"] == r.declined
+    forced = run_g36_afdd(df, "AHU", fan_gate="none")
+    assert forced.declined is None and forced.fault_pct[8] > 95
+    assert forced.fan_gate.startswith("ungated") and any("fan gate" in c for c in forced.caveats)
+    import pytest
+
+    with pytest.raises(ValueError, match="fan_gate"):
+        run_g36_afdd(df, "AHU", fan_gate="off")
+
+
+def test_cooling_only_ahu_runs_with_heating_valve_zero():
+    # no HC column: an AHU without a heating coil, not an unrunnable frame
+    df = _frame(CC=100, SAT=70, SATSP=55, MAT=78, RAT=74, OAT=72, OA_Damper=100)
+    r = run_g36_afdd(df, "AHU")
+    assert r is not None and r.declined is None
+    assert r.fault_pct[13] > 95  # FC13 still scored
+    assert r.fault_pct[7] is None and r.fault_pct[15] is None
+    assert r.omitted == {7: "no heating coil", 15: "no heating coil"}
+    assert any("without a heating coil" in c for c in r.caveats)
+    # heating-only: the cooling-coil tests are omitted instead
+    h = run_g36_afdd(_frame(HC=100, SAT=80, SATSP=95, MAT=78, RAT=72, OAT=60), "AHU")
+    assert h.fault_pct[7] > 95 and h.fault_pct[13] is None and 14 in h.omitted
+    # neither valve: nothing to classify the operating state from
+    none = run_g36_afdd(_frame(SAT=70, MAT=72), "AHU")
+    assert none.declined and "valve" in none.declined
+
+
+def test_mode_delay_suppresses_the_morning_static_ramp():
+    # the fan starts at full speed and static takes 40 min to reach setpoint every morning
+    def mins(i, on):
+        return np.where(on, (i.hour - 6) * 60 + i.minute, 0)
+
+    df, on = _day_frame(
+        days=5,
+        HC=0.0,
+        CC=20.0,
+        SAT=55.0,
+        SATSP=55.0,
+        MAT=65.0,
+        RAT=72.0,
+        OAT=75.0,
+        FS=lambda i, on: np.where(on, np.where(mins(i, on) < 40, 100.0, 60.0), 0.0),
+        DSP=lambda i, on: np.where(on, np.minimum(1.5, 1.5 * mins(i, on) / 40.0), 0.0),
+        DSPSP=1.5,
+    )
+    raw = run_g36_afdd(df, "AHU", mode_delay_min=0, alarm_delay_min=0)
+    assert raw.fault_pct[1] > 4  # the ramp alone trips FC1 without the G36 delays
+    r = run_g36_afdd(df, "AHU")
+    assert r.fault_pct[1] == 0.0
+    assert r.n_suspended == 5 * 6  # 30 min of 5-minute rows after each of the 5 starts
+    assert r.delays == {"mode_delay_min": 30.0, "alarm_delay_min": 30.0, "avg_window_min": 5.0}
+
+
+def test_mode_delay_follows_a_zone_group_mode_change():
+    df, on = _day_frame(
+        days=1,
+        HC=0.0,
+        CC=20.0,
+        SAT=55.0,
+        MAT=65.0,
+        FS=60.0,  # fan runs all day: no start inside the data
+        MODE=lambda i, on: np.where(i.hour >= 7, 1.0, 0.0),  # unoccupied -> occupied at 07:00
+    )
+    r = run_g36_afdd(df, "AHU", keep_masks=True)
+    s = r.masks["suspended"]
+    assert r.n_suspended == 6 and s[s].index.min() == pd.Timestamp("2026-07-06 07:00")
+    assert not run_g36_afdd(df.drop(columns=["MODE"]), "AHU").n_suspended  # data-start: unknown
+
+
+def test_alarm_delay_drops_a_single_excursion_and_keeps_a_persistent_fault():
+    # OS#2 -> OS#4 at row 12, with one 5-minute SAT excursion right at the change
+    idx = pd.date_range("2026-06-01 08:00", periods=24, freq="5min")
+    base = dict(HC=0.0, CC=0.0, SAT=55.0, MAT=70.0, RAT=72.0, OAT=60.0, SATSP=55.0, FS=60.0)
+    df = pd.DataFrame(base, index=idx).assign(OA_Damper=30.0)
+    df.loc[idx[12] :, "CC"] = 100.0
+    df.loc[idx[12], "SAT"] = 62.0
+    assert run_g36_afdd(df, "AHU", alarm_delay_min=0).fault_pct[13] > 0  # raw equation trips
+    assert run_g36_afdd(df, "AHU").fault_pct[13] == 0.0
+    # the same excursion held for 45 min is a fault, counted from its first interval
+    df.loc[idx[12] : idx[20], "SAT"] = 62.0
+    r = run_g36_afdd(df, "AHU", keep_masks=True)
+    assert r.fault_hours[13] == 0.75 and r.masks["FC13"].sum() == 9
+    # a missing sample breaks the episode: 20 + 25 minutes around a gap are not 50 of fault
+    df.loc[idx[12] : idx[21], "SAT"] = 62.0
+    assert run_g36_afdd(df, "AHU").fault_hours[13] == round(10 * 5 / 60, 2)
+    assert run_g36_afdd(df.drop(index=idx[16]), "AHU").fault_pct[13] == 0.0
+
+
+def test_rolling_average_smooths_a_one_minute_spike():
+    idx = pd.date_range("2026-06-01 08:00", periods=120, freq="1min")
+    df = pd.DataFrame(
+        dict(HC=0.0, CC=100.0, SAT=55.0, SATSP=55.0, MAT=70.0, FS=60.0, OA_Damper=30.0), index=idx
+    )
+    df.loc[idx[60], "SAT"] = 62.0  # one 1-minute spike 7F over the setpoint
+    kw = dict(alarm_delay_min=0, mode_delay_min=0)
+    assert run_g36_afdd(df, "AHU", avg_window_min=0, **kw).fault_pct[13] > 0
+    assert run_g36_afdd(df, "AHU", **kw).fault_pct[13] == 0.0  # 5-min mean 56.4F <= SP + 2F
+
+
+def test_fc14_fan_heat_term_is_configurable():
+    from camber.fdd_g36 import G36Thresholds
+
+    # MAT 70 / SAT 66 as coil entering/leaving: a 4F drop is inside the printed +dT_sf form ...
+    df = _frame(HC=0, CC=0, MAT=70, SAT=66, CCET=70, CCLT=66)
+    assert run_g36_afdd(df, "AHU").fault_pct[14] == 0.0
+    # ... but with SAT downstream of the fan the coil drop is 6F, past hypot(5, 2)
+    thr = G36Thresholds(fc14_fan_heat=-2.0)
+    assert run_g36_afdd(df, "AHU", thr=thr).fault_pct[14] > 95

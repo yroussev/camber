@@ -147,6 +147,11 @@ comparison only.** Current open-fdd (4.x) is a different engine (see
 [Current open-fdd](#current-open-fdd-4x-not-yet-re-compared) below), and these
 results say nothing about it.
 
+> **Since 0.91** `run_g36_afdd` also applies the G36 §5.16.14 time filters by default: fan-on
+> gating, ModeDelay, AlarmDelay and 5-minute averaging. The 0.1.5 comparison below compares the
+> per-interval fault equations. To reproduce it, pass `mode_delay_min=0, alarm_delay_min=0,
+> avg_window_min=0`, and pass `fan_gate="none"` when the frame has no fan signal.
+
 ### What was runnable
 
 With the signals available in this dataset, the runnable common set was

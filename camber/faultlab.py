@@ -568,6 +568,10 @@ def labeled_records(registry=None, *, scenarios=None, days: int = 21) -> list:
 
 
 def _g36_frame(n=200, **cols):
+    # Every scenario is a running AHU: the engine suspends AFDD while the fan is off and declines a
+    # frame with no fan signal at all, so the supply fan is shown running unless a scenario says
+    # otherwise (FS only feeds FC1, whose scenarios set it explicitly).
+    cols.setdefault("FS", 100.0)
     idx = pd.date_range("2025-07-07", periods=n, freq="1h")
     return pd.DataFrame({c: np.full(n, v, dtype=float) for c, v in cols.items()}, index=idx)
 

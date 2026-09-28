@@ -174,7 +174,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   operating-state gating (an interval with a missing valve command is *unclassified* — no FC is
   scored there — rather than read as free cooling; unsorted/duplicate timestamps are sorted and
   de-duplicated first); cross-validated vs open-fdd 0.1.5 and accuracy-scored in the synthetic harness
-  ([VALIDATION.md](VALIDATION.md)).
+  ([VALIDATION.md](VALIDATION.md)). Since 0.91 it applies the G36 time filters: evaluation only
+  while the supply fan runs (a run with no fan signal is declined), ModeDelay (30 min) after a fan
+  start or zone-group mode change, AlarmDelay (30 min) persistence, and 5-minute averaging. It
+  also scores cooling-only AHUs, with the heating-coil tests omitted.
 - **Sensor health / data trust** — `sensorhealth` (physical bounds, cross-sensor consistency,
   per-role trust roll-up + `trusted_roles` gate), `sensordrift` (bias / drift / tracking vs a
   reference — fetch one with `weather_source.oat_reference` (NASA POWER by lat/lon), `oat_reference_for`

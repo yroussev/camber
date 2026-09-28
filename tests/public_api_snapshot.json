@@ -545,9 +545,14 @@
     "STATUSES"
   ],
   "camber.fdd_g36": [
+    "ALARM_DELAY_MIN",
+    "AVG_WINDOW_MIN",
     "FC_DESC",
+    "FC_OMIT_NO_COOLING",
+    "FC_OMIT_NO_HEATING",
     "G36Result",
     "G36Thresholds",
+    "MODE_DELAY_MIN",
     "OS_FAULTS",
     "OS_FREECOOL",
     "OS_HEATING",
