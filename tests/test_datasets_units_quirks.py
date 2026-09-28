@@ -163,6 +163,60 @@ def test_swap_with_one_column_missing_is_an_error_and_both_missing_a_noop():
     assert apply_quirks(_raw(), q)[0].equals(_raw())
 
 
+def test_remap_moves_columns_inside_the_window_all_at_once():
+    # a header that names the wrong columns from a date on: b and c shifted one place right
+    idx = pd.date_range("2020-01-01", periods=4, freq="1D")
+    raw = pd.DataFrame(
+        {"a": [1.0, 2, 3, 4], "b": [10.0, 20, 30, 40], "Unnamed: 3": [np.nan, np.nan, 7.0, 8.0]},
+        index=idx,
+    )
+    q = {
+        "op": "remap",
+        "action": "fix",
+        "map": {"a": "extra", "b": "a", "Unnamed: 3": "b"},
+        "after": "2020-01-02",
+        "note": "shifted",
+    }
+    assert validate_quirk(q) == []
+    assert quirk_columns([q]) == {"a", "b", "Unnamed: 3", "extra"}
+    out, _ = apply_quirks(raw, [q])
+    assert out["a"].tolist() == [1.0, 2.0, 30.0, 40.0]  # moved simultaneously, not chained
+    assert out["b"].tolist() == [10.0, 20.0, 7.0, 8.0]
+    assert out["extra"].isna().tolist() == [True, True, False, False]
+    assert out["extra"].iloc[2] == 3.0
+    assert out["Unnamed: 3"].isna().all()  # moved out: emptied in the window
+    assert apply_quirks(raw, [q], corrections=False)[0].equals(raw)
+    # none of the sources present -> a no-op
+    assert apply_quirks(raw[["Unnamed: 3"]].rename(columns=str.upper), [q])[0].shape == (4, 1)
+
+
+def test_fill_uses_the_same_clock_time_on_nearby_days_and_skips_long_gaps():
+    idx = pd.date_range("2019-01-01", periods=10 * 4, freq="6h")  # 10 days, 4 readings a day
+    vals = np.tile([1.0, 2.0, 3.0, 4.0], 10)
+    raw = pd.DataFrame({"m": vals, "n": vals.copy()}, index=idx)
+    raw.iloc[[9, 10], 0] = np.nan  # a 2-row dropout (day 2, 06:00 and 12:00)
+    raw.iloc[20:30, 1] = np.nan  # a 10-row outage: longer than max_run, left alone
+    q = {
+        "op": "fill",
+        "action": "fix",
+        "columns": ["m", "n", "absent"],
+        "window_days": 2,
+        "max_run": 4,
+        "note": "dropouts",
+    }
+    assert validate_quirk(q) == []
+    out, _ = apply_quirks(raw, [q])
+    assert out["m"].iloc[9] == 2.0 and out["m"].iloc[10] == 3.0  # same clock time, other days
+    assert out["n"].iloc[20:30].isna().all()
+    assert out.loc[raw["m"].notna(), "m"].equals(raw.loc[raw["m"].notna(), "m"])  # rest untouched
+    # masking an exact zero first, then filling, is how a meter dropout is repaired
+    z = raw.copy()
+    z.iloc[5, 0] = 0.0
+    zq = [{"op": "mask", "action": "fix", "columns": ["m"], "eq": 0, "note": "zero"}, q]
+    assert apply_quirks(z, zq)[0]["m"].iloc[5] == 2.0
+    assert apply_quirks(pd.DataFrame({"m": []}, index=pd.DatetimeIndex([])), [q])[0].empty
+
+
 @pytest.mark.parametrize(
     "q, needle",
     [
@@ -175,6 +229,37 @@ def test_swap_with_one_column_missing_is_an_error_and_both_missing_a_noop():
         ({"op": "rename", "action": "fix", "from": "A", "note": "x"}, "'from' and 'to'"),
         ({"op": "scale", "action": "fix", "note": "x"}, "needs 'columns'"),
         ({"op": "mask", "action": "fix", "columns": ["A"], "note": "x"}, "needs a condition"),
+        ({"op": "remap", "action": "fix", "after": "2020", "note": "x"}, "non-empty 'map'"),
+        (
+            {
+                "op": "remap",
+                "action": "fix",
+                "map": {"A": "C", "B": "C"},
+                "after": "2020",
+                "note": "x",
+            },
+            "distinct",
+        ),
+        ({"op": "remap", "action": "fix", "map": {"A": "B"}, "note": "x"}, "time window"),
+        (
+            {"op": "fill", "action": "fix", "columns": ["A"], "max_run": 4, "note": "x"},
+            "window_days",
+        ),
+        (
+            {
+                "op": "fill",
+                "action": "fix",
+                "columns": ["A"],
+                "window_days": 1,
+                "max_run": 0,
+                "note": "x",
+            },
+            "max_run",
+        ),
+        (
+            {"op": "fill", "action": "fix", "window_days": 1, "max_run": 2, "note": "x"},
+            "needs 'columns'",
+        ),
         ({"op": "scale", "action": "fix", "columns": ["A"], "factor": "2", "note": "x"}, "number"),
         (
             {"op": "convert", "action": "fix", "columns": ["A"], "from": "bar", "note": "x"},

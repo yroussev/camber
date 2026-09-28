@@ -483,11 +483,23 @@ def test_shipped_dcv_entries_wire_their_data_issues():
     assert rtu["equipment"]["rtu_004_oa_flow_tn"] == "RTU04"  # Brick calls it rtu_004_oa_fr
     assert rtu["aliases"]["rtu_004_oadmpr_pct"] == "oa_damper"
     fixes = [q for q in b59.ingest["quirks"] if q["action"] == "fix"]
-    assert len(fixes) == 1 and fixes[0]["before"] == "2020-04-10 22:00"
+    assert fixes[0]["before"] == "2020-04-10 22:00"
+    # 0.92.0 (#50): the meter issues are fixed by quirks on the ele_* runs only
+    assert {q["issue"] for q in fixes} == {
+        "oa-flow-gap-filled",
+        "ele-2020-columns-shifted",
+        "ele-hvac-zero-dropouts",
+    }
+    assert all(q["runs"][0].startswith("ele_") for q in fixes[1:])
     assert b59.data_issue("oa-flow-gap-filled")["handling"] == "fix"
     assert b59.data_issue("rtu4-return-copies-supply")["handling"] == "annotate"
     assert all(r.get("group") == "brick" for r in b59.runs() if r["id"].startswith("rtu_"))
-    assert {r.get("equip_id") for r in b59.runs()} >= {"RTU01_zone_022", "weather"}
+    assert {r.get("equip_id") for r in b59.runs()} >= {
+        "RTU01_zone_022",
+        "weather",
+        "ELE_hvac_N",
+        "HP",
+    }
     assert all(not r["id"].startswith("uft_") for r in b59.runs())
     assert len(b59.runs("full")) == len(b59.runs()) + 51
     assert any("CC0" in k for k in b59.known_issues)  # the host's CC0 vs the metadata's CC BY
@@ -506,3 +518,46 @@ def test_shipped_dcv_entries_wire_their_data_issues():
     assert "bms_valve_frac__0" not in novalve
     for name in ("b4b_bms.json", "b4b_scd41.json", "b4b_bms_novalve.json"):
         assert "temp_out__degC" not in json.loads(package_text("mappings", name))["aliases"]
+
+
+def test_b59_meter_quirks_undo_the_2020_shift_and_repair_hvac_dropouts():
+    """The shipped lbnl-b59 quirks on a synthetic ele.csv shaped like the published one (#50)."""
+    from camber.datasets._quirks import apply_quirks
+
+    b59 = ds.get("lbnl-b59")
+    idx = pd.date_range("2019-12-24", "2020-01-08", freq="15min")  # UTC, as published
+    n = len(idx)
+    true = {
+        "mels_S": np.full(n, 1.5),
+        "lig_S": np.full(n, 0.3),
+        "mels_N": np.full(n, 8.0),
+        "hvac_N": np.full(n, 24.0),
+        "hvac_S": np.full(n, 27.0),
+        "sixth": np.full(n, 2.0),
+    }
+    raw = pd.DataFrame({k: v.copy() for k, v in true.items() if k != "sixth"}, index=idx)
+    raw["Unnamed: 6"] = np.nan
+    new = idx > pd.Timestamp("2020-01-01 00:00")  # six meters under five names, one place right
+    raw.loc[new, "mels_N"] = true["sixth"][new]
+    raw.loc[new, "hvac_N"] = true["mels_N"][new]
+    raw.loc[new, "hvac_S"] = true["hvac_N"][new]
+    raw.loc[new, "Unnamed: 6"] = true["hvac_S"][new]
+    raw.iloc[100:140, raw.columns.get_loc("hvac_S")] = 0.0  # a 10-hour dropout reading zero
+    for run, col, want in (
+        ("ele_mels_N", "mels_N", 8.0),
+        ("ele_hvac_N", "hvac_N", 24.0),
+        ("ele_hvac_S", "hvac_S", 27.0),
+        ("ele_unlabelled_meter", "unlabelled_meter", 2.0),
+    ):
+        out, notes = apply_quirks(raw, b59.ingest["quirks"], run=run)
+        got = out[col]
+        if col == "unlabelled_meter":
+            assert got[~new].isna().all() and (got[new] == want).all()
+        else:
+            assert (got == want).all(), run  # shift undone, dropout masked and filled
+        assert any("remap" in n or "remapped" in n for n in notes)
+    published, _ = apply_quirks(raw, b59.ingest["quirks"], run="ele_hvac_S", corrections=False)
+    assert (published["hvac_S"][new] == 24.0).all()  # --no-corrections keeps the shift
+    assert b59.data_issue("ele-2020-columns-shifted")["handling"] == "fix"
+    assert b59.data_issue("ele-hvac-zero-dropouts")["handling"] == "fix"
+    assert b59.data_issue("heat-pump-swap-leaves-the-meter")["handling"] == "annotate"

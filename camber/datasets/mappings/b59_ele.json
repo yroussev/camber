@@ -1,0 +1,6 @@
+{
+  "_comment": "LBNL Building 59 electricity meters (ele.csv, 15-minute kW) -> CAMBER Role mapping: each run fills {m} with one meter column and stores it as its own ELECTRICITY_METER equipment ELE_<m> (role power, kW). The meters are panel meters: mels_S / mels_N (plug loads, south / north), lig_S (lighting, south), hvac_N / hvac_S (HVAC panels, north / south; the four rooftop units and, until 2019-02-06, the air-source heat pump on hvac_N). unlabelled_meter is a sixth meter that exists only from 2020-01-01 (about 20 MWh a year, never zero at night) and that no document names; it is filled by the lbnl-b59 entry's remap quirk, which corrects the 2020 column shift (see the ele-2020-columns-shifted data issue). The whole-building series is the sum of the meters: five until 2019-12-31, six from 2020 (a metering-boundary change of its own). Dataset: Luo et al. 2022, Sci Data 9:156, doi:10.1038/s41597-022-01257-x.",
+  "aliases": {
+    "{m}": "power"
+  }
+}
