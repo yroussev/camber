@@ -33,6 +33,7 @@ __all__ = [
     "assess_bps",
     "EUI_FACTORS_KBTU",
     "site_eui",
+    "site_eui_units",
     "assess_eui",
     "emissions_intensity",
 ]
@@ -115,6 +116,9 @@ def assess_bps(value: float, standard: BPSStandard) -> BPSResult | None:
 # Site-energy conversion to kBtu per the fuel's native unit (delivered/site energy).
 # Caller can override or extend per project. (Source EUI would additionally apply
 # site-to-source multipliers -- out of scope here; this is site EUI.)
+# 0.92 (#69): electricity keeps the historical rounded 3.412 kBtu/kWh so site_eui() outputs do
+# not move; the exact factor is 3.412142 (camber.energy_units.KBTU_PER_KWH), 0.004 % higher.
+# site_eui_units() uses the exact factors. See docs/UNITS.md.
 EUI_FACTORS_KBTU: dict = {
     "electricity": 3.412,  # per kWh
     "natural_gas": 100.0,  # per therm
@@ -141,6 +145,43 @@ def site_eui(energy_by_fuel: dict, area_sqft: float, *, factors: dict | None = N
         float(energy) * float(fac.get(fuel, 0.0)) for fuel, energy in energy_by_fuel.items()
     )
     return total_kbtu / float(area_sqft)
+
+
+def site_eui_units(
+    energy_by_fuel: dict,
+    units: dict,
+    area: float,
+    *,
+    area_unit: str,
+    system: str = "ip",
+    heat_content: dict | None = None,
+    enthalpy: dict | None = None,
+) -> float:
+    """Site EUI in the ``system``'s unit -- kBtu/ft2/yr (``"ip"``) or kWh/m2/yr (``"si"``) --
+    from annual amounts in their own stated units (provisional, 0.92, #69).
+
+    ``units`` maps every fuel in ``energy_by_fuel`` to its unit (``"kWh"``, ``"therm"``,
+    ``"MMBtu"``, ``"Mcf"`` ...); ``area_unit`` states the floor area's unit (``"ft2"`` or ``"m2"``)
+    and is required. Conversions are exact (:mod:`camber.energy_units`), unlike the historical
+    3.412 kBtu/kWh of :func:`site_eui`. A gas volume needs ``heat_content[fuel]`` and steam mass
+    ``enthalpy[fuel]``; a fuel without a unit, or an unknown or ambiguous unit, raises
+    ``ValueError``. Returns ``nan`` if ``area`` is not positive.
+    """
+    from .energy_units import UnitSystem, energy_factor, eui_factor
+
+    us = UnitSystem.of(system)
+    if not math.isfinite(area) or area <= 0:
+        return float("nan")
+    missing = [f for f in energy_by_fuel if f not in units]
+    if missing:
+        raise ValueError(f"no unit given for fuel(s) {missing}")
+    hc, en = heat_content or {}, enthalpy or {}
+    kwh = math.fsum(
+        float(v) * energy_factor(units[f], "kWh", heat_content=hc.get(f), enthalpy=en.get(f))
+        for f, v in energy_by_fuel.items()
+    )
+    per_area = kwh / float(area)  # kWh per area_unit per year
+    return per_area * eui_factor(f"kWh/{area_unit}/yr", us.eui)
 
 
 def assess_eui(

@@ -119,7 +119,8 @@
     "assess_bps",
     "assess_eui",
     "emissions_intensity",
-    "site_eui"
+    "site_eui",
+    "site_eui_units"
   ],
   "camber.carbon": [
     "DEFAULT_FACTORS",

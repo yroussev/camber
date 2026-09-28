@@ -183,8 +183,7 @@ class RcxOptions:
             opts.oat_reference = ref
         price = spec.get("price") or report.get("price")
         if price:
-            known = {"electricity_per_kwh", "gas_per_therm"}
-            opts.price = EnergyPrice(**{k: v for k, v in price.items() if k in known})
+            opts.price = EnergyPrice.from_dict(price)  # 0.92 (#69): also per-unit rates
         loads = spec.get("loads") or report.get("loads")
         if loads:
             opts.loads = {e: EquipmentLoad(**dict(v)) for e, v in loads.items()}

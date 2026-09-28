@@ -2105,8 +2105,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             data_sources=list(prep.data_sources),
         )
         if "benchmark" in rep:
-            b = rep["benchmark"]
-            report.benchmark = Benchmark(b["site_eui"], b["peer_median_eui"])
+            report.benchmark = _benchmark(rep["benchmark"], prep.units)
         report.add_findings(findings, magnitude_key=rep.get("magnitude_key"))
         if rep.get("out_text"):
             with open(_path(base_dir, rep["out_text"]), "w") as fh:
@@ -2118,8 +2117,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             if rep.get("price"):
                 from .fault_economics import EnergyPrice
 
-                known = {"electricity_per_kwh", "gas_per_therm"}
-                price = EnergyPrice(**{k: v for k, v in rep["price"].items() if k in known})
+                price = EnergyPrice.from_dict(rep["price"])  # 0.92 (#69): also per-unit rates
             body = report.to_html(recommend=bool(rep.get("recommend")), price=price)
             if drift is not None:
                 # the audit body already carries the data-source block; don't repeat it
@@ -2150,6 +2148,21 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         topology=topology,
         topology_source=topology_source,
     )
+
+
+def _benchmark(b: dict, units) -> Benchmark:
+    """The report benchmark. ``unit`` (0.92, #69) states the EUIs' unit (``kBtu/ft2/yr`` by
+    default); a config ``units`` block converts both to its EUI unit (kBtu/ft2/yr or kWh/m2/yr)."""
+    if b.get("unit") is None and units is None:
+        return Benchmark(b["site_eui"], b["peer_median_eui"])
+    unit = b.get("unit") or "kBtu/ft2/yr"
+    site, peer = b["site_eui"], b["peer_median_eui"]
+    from .energy_units import eui_factor
+
+    k = eui_factor(unit, unit if units is None else units.eui)  # validates the stated unit
+    if units is not None:
+        site, peer, unit = round(site * k, 1), round(peer * k, 1), units.eui
+    return Benchmark(site, peer, unit=unit)
 
 
 _VENTILATION_KEYS = frozenset(

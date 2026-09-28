@@ -75,6 +75,37 @@ class EnergyPrice:
             if v is None or v != v or v < 0:
                 raise ValueError(f"EnergyPrice.{name} must be a non-negative number, got {v!r}")
 
+    @classmethod
+    def from_dict(cls, spec: dict) -> EnergyPrice:
+        """A price from a config ``price`` block (provisional per-unit form, 0.92, #69).
+
+        ``electricity_per_kwh`` and ``gas_per_therm`` are read as before (other keys ignored).
+        ``"electricity": {"rate": 95, "per": "MWh"}`` and ``"gas": {"rate": 8.5, "per": "Mcf",
+        "heat_content": "10.37 therm/Mcf"}`` give a rate in any unit instead, converted exactly
+        (:func:`camber.energy_units.convert_rate`); a gas volume needs its heat content.
+        """
+        known = {"electricity_per_kwh", "gas_per_therm"}
+        kw = {k: v for k, v in spec.items() if k in known}
+        for fuel, key, to in (("electricity", "electricity_per_kwh", "kWh"),
+                              ("gas", "gas_per_therm", "therm")):  # fmt: skip
+            r = spec.get(fuel)
+            if r is None:
+                continue
+            if key in kw:
+                raise ValueError(f"price: give {key} or {fuel}, not both")
+            if not isinstance(r, dict) or "rate" not in r or "per" not in r:
+                raise ValueError(f'price.{fuel} must be {{"rate": ..., "per": "<unit>"}}')
+            from .energy_units import convert_rate
+
+            kw[key] = convert_rate(
+                float(r["rate"]),
+                r["per"],
+                to,
+                heat_content=r.get("heat_content"),
+                enthalpy=r.get("enthalpy"),
+            )
+        return cls(**kw)
+
 
 @dataclass
 class EquipmentLoad:
@@ -544,10 +575,20 @@ def annotate_costs(
     *,
     params: dict | None = None,
     models: dict | None = None,
+    units=None,
 ) -> list:
     """Write ``annual_cost_usd`` / ``waste_kwh`` / ``waste_therms`` into each finding's metrics
     (in place) so the severity-first prioritizer can rank within a tier by dollars via
-    ``rank_findings(..., magnitude_key="annual_cost_usd")``. Returns the findings."""
+    ``rank_findings(..., magnitude_key="annual_cost_usd")``. Returns the findings.
+
+    ``units`` (0.92, #69: ``"ip"``, ``"si"`` or a :class:`camber.energy_units.UnitSystem`) also
+    writes ``waste_energy``, the site energy of both fuels in kBtu or kWh, and its ``energy_unit``.
+    """
+    us = None
+    if units is not None:
+        from .energy_units import UnitSystem
+
+        us = units if isinstance(units, UnitSystem) else UnitSystem.of(units)
     out = list(findings)
     for f in out:
         fc = estimate_cost(f, _resolve_load(loads, f), price, params=params, models=models)
@@ -556,6 +597,13 @@ def annotate_costs(
             m["annual_cost_usd"] = fc.annual_cost_usd
             m["waste_kwh"] = fc.electricity_kwh
             m["waste_therms"] = fc.gas_therms
+            if us is not None:
+                m["waste_energy"] = round(
+                    fc.electricity_kwh * us.energy_factor("kWh")
+                    + fc.gas_therms * us.energy_factor("therm"),
+                    1,
+                )
+                m["energy_unit"] = us.energy
     return out
 
 

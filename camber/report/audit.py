@@ -160,9 +160,10 @@ def data_sources_html(sources) -> str:
 class Benchmark:
     """EUI benchmark vs a peer median (Std 211 §5.2.3 / §6.1.3)."""
 
-    site_eui: float  # kBtu/ft2/yr
+    site_eui: float  # in ``unit``
     peer_median_eui: float
     metric_name: str = "ENERGY STAR property-type median"
+    unit: str = "kBtu/ft2/yr"  # 0.92 (#69): kWh/m2/yr under a config "units": {"system": "si"}
 
     @property
     def pct_over(self) -> float:
@@ -259,7 +260,7 @@ class AuditReport:
         if self.benchmark:
             b = self.benchmark
             L.append(
-                f"\nBenchmark: site EUI {b.site_eui} kBtu/ft2/yr vs "
+                f"\nBenchmark: site EUI {b.site_eui} {b.unit} vs "
                 f"{b.peer_median_eui} ({b.metric_name}) = {b.pct_over:+.0f}%"
             )
         if self.end_use_notes:
@@ -342,7 +343,7 @@ class AuditReport:
         if self.benchmark:
             b = self.benchmark
             parts.append(
-                f"<p><b>Benchmark:</b> site EUI {b.site_eui} kBtu/ft&sup2;/yr "
+                f"<p><b>Benchmark:</b> site EUI {b.site_eui} {e(b.unit).replace('2/', '&sup2;/')} "
                 f"vs {b.peer_median_eui} ({e(b.metric_name)}) = "
                 f"<b>{b.pct_over:+.0f}%</b></p>"
             )
