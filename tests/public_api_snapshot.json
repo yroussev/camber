@@ -120,6 +120,7 @@
     "assess_eui",
     "emissions_intensity",
     "site_eui",
+    "site_eui_plausibility",
     "site_eui_units"
   ],
   "camber.carbon": [
@@ -501,12 +502,16 @@
     "EnergyFactorWarning",
     "FactorEntry",
     "FactorSet",
+    "PRICE_BAND_METER_TYPES",
+    "ReferenceSet",
     "SCHEMA",
     "UNIT_KEYS",
     "factor_for",
     "factor_sets",
     "get_factor_set",
+    "get_reference_set",
     "load_factor_set",
+    "load_reference_set",
     "reference_markdown",
     "resolve_meter_type",
     "resolve_unit",
@@ -927,6 +932,13 @@
     "roles_from_triples",
     "topology_from_brick"
   ],
+  "camber.interop.eia": [
+    "EIA_FUELS",
+    "StatePrice",
+    "eia_price_url",
+    "eia_transport",
+    "fetch_state_price"
+  ],
   "camber.interop.energyplus": [
     "compare_option_d"
   ],
@@ -1313,6 +1325,7 @@
     "billing_findings",
     "billing_label",
     "billing_oat",
+    "billing_scale_check",
     "billing_units",
     "load_bills"
   ],
@@ -2107,6 +2120,19 @@
     "TimezoneWarning",
     "check_timezone",
     "parse_timestamps"
+  ],
+  "camber.unit_scale": [
+    "DEFAULT_EUI_REFERENCE",
+    "DEFAULT_PRICE_BANDS",
+    "Evidence",
+    "SCALES",
+    "UnitScaleCheck",
+    "check_bills",
+    "check_eui",
+    "check_series",
+    "fuel_group",
+    "kbtu_per_unit",
+    "parse_scale_override"
   ],
   "camber.units": [
     "FRACTION_MAX",

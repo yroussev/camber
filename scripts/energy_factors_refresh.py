@@ -84,6 +84,17 @@ def pin_text(text: str, *, sha256: str, retrieved: str, edition: str | None) -> 
     return text
 
 
+def _source(name: str) -> dict:
+    """The pinned source block of a set: a conversion set's, or an ``eui_reference`` set's (a
+    ``price_band`` set cites several sources and has no single document to pin)."""
+    if name in ef.factor_sets():
+        return ef.get_factor_set(name).source
+    ref = ef.get_reference_set(name)
+    if "source" not in ref.doc:
+        sys.exit(f"{name} is a {ref.kind} set with no single pinned source document")
+    return ref.doc["source"]
+
+
 def docs_text(current: str) -> str:
     """docs/ENERGY-FACTORS.md with its generated block rebuilt from every bundled set."""
     body = "\n".join(ef.reference_markdown(n) for n in ef.factor_sets())
@@ -104,7 +115,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     status = 0
     if a.validate is not None:
-        files = a.validate or [set_path(n) for n in ef.factor_sets()]
+        files = a.validate or [set_path(n) for n in ef.factor_sets(None)]
         for f in files:
             with open(f, encoding="utf-8") as fh:
                 problems = ef.validate_factor_set(json.load(fh))
@@ -113,11 +124,11 @@ def main(argv=None) -> int:
                 print(f"  {p}")
             status |= bool(problems)
     for name in filter(None, (a.check, a.pin)):
-        fs = ef.get_factor_set(name)
-        got = source_sha256(fs.source["url"], a.local)
-        same = got == fs.source["sha256"]
+        src = _source(name)
+        got = source_sha256(src["url"], a.local)
+        same = got == src["sha256"]
         verdict = "(unchanged)" if same else "(CHANGED: re-transcribe and bump the edition)"
-        print(f"{name}: pinned {fs.source['sha256']}\n{' ' * len(name)}  source {got}  {verdict}")
+        print(f"{name}: pinned {src['sha256']}\n{' ' * len(name)}  source {got}  {verdict}")
         if a.pin:
             path = set_path(name)
             with open(path, encoding="utf-8") as fh:

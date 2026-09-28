@@ -2106,6 +2106,9 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         )
         if "benchmark" in rep:
             report.benchmark = _benchmark(rep["benchmark"], prep.units)
+            sf = _benchmark_scale_finding(rep["benchmark"])  # 0.92 (#71)
+            if sf is not None:
+                findings.append(sf)
         report.add_findings(findings, magnitude_key=rep.get("magnitude_key"))
         if rep.get("out_text"):
             with open(_path(base_dir, rep["out_text"]), "w") as fh:
@@ -2163,6 +2166,25 @@ def _benchmark(b: dict, units) -> Benchmark:
     if units is not None:
         site, peer, unit = round(site * k, 1), round(peer * k, 1), units.eui
     return Benchmark(site, peer, unit=unit)
+
+
+def _benchmark_scale_finding(b: dict):
+    """0.92 (#71): a ``unit_scale`` Finding when the benchmark's stated ``site_eui`` is implausible
+    as given (x1 ruled out: a hard EUI bound no building crosses), else ``None``. The optional
+    ``property_type`` names the ENERGY STAR type (camber.energy_factors) for the report's own
+    reference; the benchmark itself is never changed."""
+    from .unit_scale import check_eui
+
+    try:
+        chk = check_eui(
+            float(b["site_eui"]),
+            b.get("unit") or "kBtu/ft2/yr",
+            property_type=b.get("property_type"),
+            label="benchmark site EUI",
+        )
+    except (TypeError, ValueError):
+        return None
+    return chk.finding("benchmark") if chk.implausible else None
 
 
 _VENTILATION_KEYS = frozenset(

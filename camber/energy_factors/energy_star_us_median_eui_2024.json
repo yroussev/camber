@@ -1,0 +1,96 @@
+{
+  "schema": "camber.energy_factors/1",
+  "name": "energy_star_us_median_eui_2024",
+  "kind": "eui_reference",
+  "output_unit": "kBtu/ft2/yr",
+  "source": {
+    "title": "ENERGY STAR Portfolio Manager Technical Reference: U.S. Energy Use Intensity by Property Type",
+    "publisher": "U.S. Environmental Protection Agency, ENERGY STAR",
+    "url": "https://portfoliomanager.energystar.gov/pdf/reference/US%20National%20Median%20Table.pdf",
+    "edition": "2024-08",
+    "retrieved": "2026-09-28",
+    "sha256": "5e5dfab808000ba27425ce02afac49cf18ffd6686ba518ee524ecb320029870a",
+    "terms": "A work of the U.S. Government (EPA), not subject to copyright in the United States (17 U.S.C. 105). The national median site and source EUIs are transcribed as printed; ENERGY STAR is a registered mark of the EPA and its use here implies no endorsement.",
+    "figures": {
+      "entries": "U.S. National Median Reference Values for All Portfolio Manager Property Types (pages 2-6)"
+    },
+    "footnotes": {
+      "median": "The national median: half of the peer buildings use more energy, half use less. The reference data are mostly CBECS 2018; hospitals, medical offices, senior living, convenience stores and vehicle dealerships use industry surveys, multifamily a Fannie Mae survey.",
+      "na": "Printed N/A (no reference data): parking, manufacturing/industrial plants and single-family homes. Data centers are printed as a PUE (1.82), not an EUI; water and wastewater plants as energy per flow. None of these has a kBtu/ft2 median here."
+    }
+  },
+  "policy": {
+    "note": "CAMBER screening policy, not part of the source and not a standard: the factors and bounds below turn one national median into a deliberately wide plausibility window for detecting a 1000x unit-prefix error. They are not a benchmark and say nothing about efficiency.",
+    "total": {
+      "plausible_low_factor": 8,
+      "plausible_high_factor": 6,
+      "implausible_low_factor": 60,
+      "implausible_high_factor": 25
+    },
+    "single_fuel": {
+      "plausible_high_factor": 6,
+      "implausible_high_factor": 25
+    },
+    "hard": {
+      "electricity": {"implausible_below": 0.1, "implausible_above": 10000},
+      "district_chilled_water": {"implausible_above": 10000},
+      "thermal": {"implausible_above": 3000},
+      "total": {"implausible_below": 0.3, "implausible_above": 10000}
+    },
+    "generic_plausible": {
+      "electricity": [1, 5000],
+      "district_chilled_water": [0, 5000],
+      "thermal": [0, 1500],
+      "total": [5, 5000]
+    },
+    "basis": "The hard bounds hold for any building: 10,000 kBtu/ft2/yr of electricity is a continuous 330 W/ft2 over the gross floor area, above any data centre; 3,000 kBtu/ft2/yr of a heating fuel is a continuous 340 Btu/h/ft2, several times a laboratory's. A correct meter lies inside them, and the same meter read 1000x too high lies outside for any real EUI above 3 (thermal) or 10 (electricity) kBtu/ft2/yr."
+  },
+  "property_types": [
+    {"key": "bank_branch", "name": "Bank Branch", "broad_category": "Banking/Financial Services", "site_eui": 88.3, "site_eui_text": "88.3", "source_eui": 209.9, "source_eui_text": "209.9", "reference_data": "CBECS - Bank/Financial", "aliases": ["bank"]},
+    {"key": "financial_office", "name": "Financial Office", "broad_category": "Banking/Financial Services", "site_eui": 52.9, "site_eui_text": "52.9", "source_eui": 116.4, "source_eui_text": "116.4", "reference_data": "CBECS - Office & Bank/Financial", "aliases": []},
+    {"key": "adult_education", "name": "Adult Education", "broad_category": "Education", "site_eui": 52.4, "site_eui_text": "52.4", "source_eui": 110.4, "source_eui_text": "110.4", "reference_data": "CBECS - Education", "aliases": ["education", "vocational_school", "other_education", "classroom", "academic"]},
+    {"key": "college_university", "name": "College/University", "broad_category": "Education", "site_eui": 84.3, "site_eui_text": "84.3", "source_eui": 180.6, "source_eui_text": "180.6", "reference_data": "CBECS - College/University", "aliases": ["college", "university", "college_classroom"]},
+    {"key": "k12_school", "name": "K-12 School", "broad_category": "Education", "site_eui": 48.5, "site_eui_text": "48.5", "source_eui": 104.4, "source_eui_text": "104.4", "reference_data": "CBECS - Elementary/Middle & High School", "aliases": ["k_12_school", "school", "primary_secondary_classroom"]},
+    {"key": "preschool_daycare", "name": "Pre-school/Daycare", "broad_category": "Education", "site_eui": 64.8, "site_eui_text": "64.8", "source_eui": 131.5, "source_eui_text": "131.5", "reference_data": "CBECS - Preschool", "aliases": ["daycare", "preschool"]},
+    {"key": "social_meeting_hall", "name": "Social/Meeting Hall", "broad_category": "Entertainment/Public Assembly", "site_eui": 56.1, "site_eui_text": "56.1", "source_eui": 109.6, "source_eui_text": "109.6", "reference_data": "CBECS - Social/Meeting", "aliases": ["convention_center", "community_center", "conference_center"]},
+    {"key": "public_assembly", "name": "Movie Theater, Museum, Performing Arts, Stadium, Other - Entertainment/Public Assembly", "broad_category": "Entertainment/Public Assembly", "site_eui": 56.2, "site_eui_text": "56.2", "source_eui": 112.0, "source_eui_text": "112.0", "reference_data": "CBECS - Public Assembly", "aliases": ["entertainment_public_assembly", "museum", "movie_theater", "performing_arts", "stadium", "transportation_terminal", "theater"]},
+    {"key": "recreation", "name": "Recreation", "broad_category": "Entertainment/Public Assembly", "site_eui": 50.8, "site_eui_text": "50.8", "source_eui": 112.0, "source_eui_text": "112.0", "reference_data": "CBECS - Recreation", "aliases": ["fitness_center", "gymnasium", "swimming_pool", "ice_rink", "other_recreation"]},
+    {"key": "bar_nightclub", "name": "Bar/Nightclub", "broad_category": "Food Sales & Service", "site_eui": 130.7, "site_eui_text": "130.7", "source_eui": 297.0, "source_eui_text": "297.0", "reference_data": "CBECS - Bar/Pub/Lounge", "aliases": []},
+    {"key": "convenience_store", "name": "Convenience Store", "broad_category": "Food Sales & Service", "site_eui": 350.9, "site_eui_text": "350.9", "source_eui": 883.5, "source_eui_text": "883.5", "reference_data": "Industry Survey", "aliases": []},
+    {"key": "fast_food_restaurant", "name": "Fast Food Restaurant", "broad_category": "Food Sales & Service", "site_eui": 402.7, "site_eui_text": "402.7", "source_eui": 886.4, "source_eui_text": "886.4", "reference_data": "CBECS - Fast Food", "aliases": ["fast_food"]},
+    {"key": "restaurant", "name": "Restaurant", "broad_category": "Food Sales & Service", "site_eui": 325.6, "site_eui_text": "325.6", "source_eui": 573.7, "source_eui_text": "573.7", "reference_data": "CBECS - Restaurant/Cafeteria", "aliases": ["other_restaurant_bar", "food_sales_and_service", "cafeteria"]},
+    {"key": "supermarket", "name": "Supermarket/Grocery Store", "broad_category": "Food Sales & Service", "site_eui": 196.0, "site_eui_text": "196.0", "source_eui": 444.0, "source_eui_text": "444.0", "reference_data": "CBECS - Grocery Store/Food Market", "aliases": ["grocery_store", "supermarket_grocery_store"]},
+    {"key": "food_sales", "name": "Food Sales", "broad_category": "Food Sales & Service", "site_eui": 231.4, "site_eui_text": "231.4", "source_eui": 592.6, "source_eui_text": "592.6", "reference_data": "CBECS - Food Sales", "aliases": []},
+    {"key": "food_service", "name": "Food Service", "broad_category": "Food Sales & Service", "site_eui": 270.3, "site_eui_text": "270.3", "source_eui": 527.7, "source_eui_text": "527.7", "reference_data": "CBECS - Food Service", "aliases": []},
+    {"key": "outpatient_surgical", "name": "Ambulatory Surgical Center, Outpatient Rehabilitation/Physical Therapy", "broad_category": "Healthcare", "site_eui": 62.0, "site_eui_text": "62.0", "source_eui": 138.3, "source_eui_text": "138.3", "reference_data": "CBECS - Outpatient Healthcare", "aliases": ["ambulatory_surgical_center", "outpatient_rehabilitation"]},
+    {"key": "hospital", "name": "Hospital (General Medical & Surgical)", "broad_category": "Healthcare", "site_eui": 234.3, "site_eui_text": "234.3", "source_eui": 426.9, "source_eui_text": "426.9", "reference_data": "Industry Survey", "aliases": ["general_hospital", "healthcare", "patient_care"]},
+    {"key": "specialty_hospital", "name": "Other/Specialty Hospital", "broad_category": "Healthcare", "site_eui": 206.7, "site_eui_text": "206.7", "source_eui": 433.9, "source_eui_text": "433.9", "reference_data": "CBECS - Inpatient Healthcare", "aliases": []},
+    {"key": "medical_office", "name": "Medical Office", "broad_category": "Healthcare", "site_eui": 97.7, "site_eui_text": "97.7", "source_eui": 232.8, "source_eui_text": "232.8", "reference_data": "Industry Survey", "aliases": []},
+    {"key": "senior_living", "name": "Residential Care Facility, Senior Living Community", "broad_category": "Healthcare", "site_eui": 99.0, "site_eui_text": "99.0", "source_eui": 213.2, "source_eui_text": "213.2", "reference_data": "Industry Survey", "aliases": ["residential_care_facility", "senior_living_community"]},
+    {"key": "clinic", "name": "Urgent Care/Clinic/Other Outpatient, Veterinary Office", "broad_category": "Healthcare", "site_eui": 64.5, "site_eui_text": "64.5", "source_eui": 145.8, "source_eui_text": "145.8", "reference_data": "CBECS - Clinic/Outpatient", "aliases": ["urgent_care", "veterinary_office", "outpatient"]},
+    {"key": "residence_hall", "name": "Residence Hall/Dormitory, Barracks", "broad_category": "Lodging/Residential", "site_eui": 57.9, "site_eui_text": "57.9", "source_eui": 107.5, "source_eui_text": "107.5", "reference_data": "CBECS - Dormitory", "aliases": ["dormitory", "residence_hall_dormitory", "barracks"]},
+    {"key": "hotel", "name": "Hotel", "broad_category": "Lodging/Residential", "site_eui": 63.0, "site_eui_text": "63.0", "source_eui": 146.7, "source_eui_text": "146.7", "reference_data": "CBECS - Hotel & Motel/Inn", "aliases": ["motel"]},
+    {"key": "multifamily", "name": "Multifamily Housing", "broad_category": "Lodging/Residential", "site_eui": 59.6, "site_eui_text": "59.6", "source_eui": 118.1, "source_eui_text": "118.1", "reference_data": "Fannie Mae Industry Survey", "aliases": ["multifamily_housing", "housing", "apartment"]},
+    {"key": "prison", "name": "Prison/Incarceration", "broad_category": "Lodging/Residential", "site_eui": 69.9, "site_eui_text": "69.9", "source_eui": 156.4, "source_eui_text": "156.4", "reference_data": "CBECS - Public Order and Safety", "aliases": ["prison_incarceration"]},
+    {"key": "other_lodging", "name": "Other - Lodging/Residential", "broad_category": "Lodging/Residential", "site_eui": 63.6, "site_eui_text": "63.6", "source_eui": 143.6, "source_eui_text": "143.6", "reference_data": "CBECS - Lodging", "aliases": ["lodging_residential", "lodging", "other_lodging_residential"]},
+    {"key": "office", "name": "Office", "broad_category": "Office", "site_eui": 52.9, "site_eui_text": "52.9", "source_eui": 116.4, "source_eui_text": "116.4", "reference_data": "CBECS - Office & Bank/Financial", "aliases": []},
+    {"key": "courthouse", "name": "Courthouse", "broad_category": "Public Services", "site_eui": 101.2, "site_eui_text": "101.2", "source_eui": 211.4, "source_eui_text": "211.4", "reference_data": "CBECS - Courthouse", "aliases": []},
+    {"key": "fire_police_station", "name": "Fire Station, Police Station", "broad_category": "Public Services", "site_eui": 63.5, "site_eui_text": "63.5", "source_eui": 124.9, "source_eui_text": "124.9", "reference_data": "CBECS - Fire Station/Police Station", "aliases": ["fire_station", "police_station"]},
+    {"key": "library", "name": "Library", "broad_category": "Public Services", "site_eui": 71.6, "site_eui_text": "71.6", "source_eui": 143.6, "source_eui_text": "143.6", "reference_data": "CBECS - Library", "aliases": []},
+    {"key": "service", "name": "Mailing Center/Post Office, Personal Services, Repair Services, Other - Services", "broad_category": "Services", "site_eui": 47.9, "site_eui_text": "47.9", "source_eui": 96.9, "source_eui_text": "96.9", "reference_data": "CBECS - Service", "aliases": ["services", "post_office", "mailing_center", "repair_services", "personal_services", "maintenance_repair_shop"]},
+    {"key": "worship", "name": "Worship Facility", "broad_category": "Religious Worship", "site_eui": 30.5, "site_eui_text": "30.5", "source_eui": 58.4, "source_eui_text": "58.4", "reference_data": "CBECS - Religious Worship", "aliases": ["worship_facility", "religious_worship"]},
+    {"key": "enclosed_mall", "name": "Enclosed Mall", "broad_category": "Retail", "site_eui": 65.7, "site_eui_text": "65.7", "source_eui": 170.7, "source_eui_text": "170.7", "reference_data": "CBECS - Enclosed Mall", "aliases": []},
+    {"key": "strip_mall", "name": "Lifestyle Center, Strip Mall", "broad_category": "Retail", "site_eui": 103.5, "site_eui_text": "103.5", "source_eui": 228.8, "source_eui_text": "228.8", "reference_data": "CBECS - Strip Shopping Mall", "aliases": ["lifestyle_center"]},
+    {"key": "other_mall", "name": "Other - Mall", "broad_category": "Retail", "site_eui": 101.6, "site_eui_text": "101.6", "source_eui": 225.3, "source_eui_text": "225.3", "reference_data": "CBECS - Enclosed Mall and Strip Shopping Mall", "aliases": ["mall"]},
+    {"key": "retail_store", "name": "Retail Store, Wholesale Club/Supercenter", "broad_category": "Retail", "site_eui": 51.4, "site_eui_text": "51.4", "source_eui": 120.0, "source_eui_text": "120.0", "reference_data": "CBECS - Retail Store", "aliases": ["retail", "wholesale_club", "supercenter"]},
+    {"key": "vehicle_dealership", "name": "Vehicle Dealership", "broad_category": "Retail", "site_eui": 71.9, "site_eui_text": "71.9", "source_eui": 138.2, "source_eui_text": "138.2", "reference_data": "Industry Survey", "aliases": []},
+    {"key": "laboratory", "name": "Laboratory", "broad_category": "Technology/Science", "site_eui": 115.3, "site_eui_text": "115.3", "source_eui": 318.2, "source_eui_text": "318.2", "reference_data": "CBECS - Laboratory", "aliases": ["technology_science", "college_laboratory", "research", "lab"]},
+    {"key": "self_storage", "name": "Self-Storage Facility", "broad_category": "Warehouse/Storage", "site_eui": 20.2, "site_eui_text": "20.2", "source_eui": 47.8, "source_eui_text": "47.8", "reference_data": "CBECS - Non-refrigerated Warehouse", "aliases": []},
+    {"key": "warehouse", "name": "Distribution Center, Non-Refrigerated Warehouse", "broad_category": "Warehouse/Storage", "site_eui": 22.7, "site_eui_text": "22.7", "source_eui": 52.9, "source_eui_text": "52.9", "reference_data": "CBECS - Non-refrigerated Warehouse & Distribution Center", "aliases": ["warehouse_storage", "distribution_center", "non_refrigerated_warehouse"]},
+    {"key": "refrigerated_warehouse", "name": "Refrigerated Warehouse", "broad_category": "Warehouse/Storage", "site_eui": 84.1, "site_eui_text": "84.1", "source_eui": 235.6, "source_eui_text": "235.6", "reference_data": "CBECS - Refrigerated Warehouses", "aliases": []},
+    {"key": "other", "name": "Other, Mixed Use Property, Other - Public Services, Other - Technology/Science, Other - Utility, Energy/Power Station", "broad_category": "Other", "site_eui": 40.1, "site_eui_text": "40.1", "source_eui": 89.3, "source_eui_text": "89.3", "reference_data": "CBECS - Other", "aliases": ["mixed_use", "mixed_use_property", "other_public_services", "public_services", "utility", "other_utility", "energy_power_station", "other_technology_science"]},
+    {"key": "data_center", "name": "Data Center", "broad_category": "Technology/Science", "site_eui": null, "site_eui_text": "N/A", "source_eui": null, "source_eui_text": "N/A", "reference_data": "EPA - Data Center", "aliases": [], "note": "Printed as a PUE (1.82), not an EUI: only the generic hard bounds apply."},
+    {"key": "parking", "name": "Parking", "broad_category": "Parking", "site_eui": null, "site_eui_text": "N/A", "source_eui": null, "source_eui_text": "N/A", "reference_data": "None Available", "aliases": ["parking_garage"]},
+    {"key": "manufacturing", "name": "Manufacturing/Industrial Plant", "broad_category": "Manufacturing/Industrial", "site_eui": null, "site_eui_text": "N/A", "source_eui": null, "source_eui_text": "N/A", "reference_data": "None Available", "aliases": ["manufacturing_industrial", "industrial"]}
+  ]
+}

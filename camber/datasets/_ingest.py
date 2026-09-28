@@ -789,6 +789,51 @@ def _bdg2_buildings(meta: pd.DataFrame, sub: dict, headers: dict) -> dict:
     return out
 
 
+# 0.92 (#71): the BDG2 meters whose quantities the unit-scale check judges, and their fuels
+_SCALE_FUELS = {
+    "electricity": "electricity",
+    "chilledwater": "district_chilled_water",
+    "steam": "district_steam",
+    "hotwater": "district_hot_water",
+    "gas": "natural_gas",
+}
+
+
+def meter_scale_warning(
+    series: pd.Series,
+    *,
+    label: str,
+    meter: str,
+    unit: str = "kWh",
+    area_ft2=None,
+    property_type=None,
+    oat=None,
+):
+    """0.92 (#71): a warning when a meter series' quantities are implausible at x1 (a ~1000x unit
+    error; :func:`camber.unit_scale.check_series`), else ``None``. The data are never rescaled."""
+    from ..unit_scale import check_series
+
+    fuel = _SCALE_FUELS.get(meter)
+    if fuel is None:
+        return None
+    try:
+        area = float(area_ft2) if area_ft2 is not None else None
+        chk = check_series(
+            series,
+            unit=unit,
+            fuel=fuel,
+            area=area if area is not None and area > 0 else None,
+            property_type=property_type if isinstance(property_type, str) else None,
+            oat=oat,
+            label=label,
+        )
+    except (ValueError, TypeError):
+        return None
+    if not chk.implausible:
+        return None
+    return f"{label}: unit scale: {chk.explanation}"
+
+
 def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:
     spec = entry.ingest
     sub = entry.subset(subset)
@@ -822,13 +867,20 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
         df = pd.read_csv(path, usecols=cols, parse_dates=["timestamp"]).set_index("timestamp")
         series[m] = df
     tz = meta.set_index("building_id")["timezone"].to_dict()
+    mi = meta.set_index("building_id")
+    sqft = mi["sqft"].to_dict() if "sqft" in mi.columns else {}
+    usage = mi["primaryspaceusage"].to_dict() if "primaryspaceusage" in mi.columns else {}
+    munits = spec.get("meter_units") or {}
+    warns: list = []
     for site, buildings in chosen.items():
         fid = f"{spec['facility']}-{site.lower()}"
         rows = 0
         n_eq = 0
         w = weather[weather["site_id"] == site].set_index("timestamp")["airTemperature"]
+        oat_f = None
         if not w.empty:
             oat = convert_series(w.sort_index(), wunits.get("oat", "degC"))
+            oat_f = oat
             wf = _resample(pd.DataFrame({Role.OAT: oat}), rule)
             rows += st.write_role_frame(wf, facility_id=fid, equip="weather", equip_class="WEATHER")
             n_eq += 1
@@ -840,6 +892,17 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
                 if s.empty:
                     continue
                 role = Role(roles[m]) if m in roles else default_role
+                warn = meter_scale_warning(  # 0.92 (#71): quantity plausibility, never a rescale
+                    s,
+                    label=f"{fid}/{b}__{m}",
+                    meter=m,
+                    unit=munits.get(m, "kWh"),
+                    area_ft2=sqft.get(b),
+                    property_type=usage.get(b),
+                    oat=oat_f,
+                )
+                if warn:
+                    warns.append(warn)
                 frame = _resample(pd.DataFrame({role: s}), rule)
                 rows += st.write_role_frame(
                     frame, facility_id=fid, equip=f"{b}__{m}", equip_class=f"{m.upper()}_METER"
@@ -852,7 +915,7 @@ def _ingest_bdg2(entry, subset, inputs, root, staging, progress, corrections=Tru
             "meters": meters,
         }
         out[fid] = (f"{entry.title} -- site {site}", rows, n_eq, extra)
-    return out, "", []
+    return out, "", warns
 
 
 def _ingest_per_point(entry, subset, inputs, root, staging, progress, corrections=True) -> tuple:

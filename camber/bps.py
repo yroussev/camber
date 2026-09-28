@@ -36,6 +36,7 @@ __all__ = [
     "site_eui_units",
     "assess_eui",
     "emissions_intensity",
+    "site_eui_plausibility",
 ]
 
 
@@ -182,6 +183,80 @@ def site_eui_units(
     )
     per_area = kwh / float(area)  # kWh per area_unit per year
     return per_area * eui_factor(f"kWh/{area_unit}/yr", us.eui)
+
+
+# the unit each EUI_FACTORS_KBTU fuel is stated in, and the camber.energy_factors meter type
+_LEGACY_UNITS = {
+    "electricity": ("kWh", "electricity"),
+    "natural_gas": ("therm", "natural_gas"),
+    "propane": ("gal", "propane"),
+    "fuel_oil": ("gal", "fuel_oil_2"),
+    "district_chw": ("ton-hour", "district_chilled_water"),
+}
+
+
+def site_eui_plausibility(
+    energy_by_fuel: dict,
+    area: float,
+    *,
+    units: dict | None = None,
+    area_unit: str = "ft2",
+    property_type: str | None = None,
+    cost_by_fuel: dict | None = None,
+    meter_types: dict | None = None,
+    heat_content: dict | None = None,
+    enthalpy: dict | None = None,
+) -> dict:
+    """Unit-scale plausibility of each fuel's annual amount behind an EUI (provisional, 0.92, #71):
+    ``{fuel: camber.unit_scale.UnitScaleCheck}``.
+
+    Each fuel is judged as one year-long bill at x0.001, x1 and x1000 -- its EUI and the
+    building's total EUI (the other fuels as given) against the ENERGY STAR median for
+    ``property_type`` and CAMBER's hard bounds, and, with ``cost_by_fuel`` (annual $), its implied
+    price against the bundled bands. ``units`` maps fuels to units (default: the units of
+    :data:`EUI_FACTORS_KBTU`, kWh / therm / gal / ton-hour); ``meter_types`` names a fuel's
+    :mod:`camber.energy_factors` meter type when its key is not one. Nothing is corrected: a check
+    whose ``implausible`` is true says the amount is ~1000x off as given.
+    """
+    import pandas as pd
+
+    from .unit_scale import check_bills, kbtu_per_unit
+
+    units = dict(units or {})
+    mts = dict(meter_types or {})
+    for f in energy_by_fuel:
+        if f not in units and f in _LEGACY_UNITS:
+            units[f] = _LEGACY_UNITS[f][0]
+        if f not in mts and f in _LEGACY_UNITS:
+            mts[f] = _LEGACY_UNITS[f][1]
+    missing = [f for f in energy_by_fuel if f not in units]
+    if missing:
+        raise ValueError(f"no unit given for fuel(s) {missing}")
+    hc, en = heat_content or {}, enthalpy or {}
+    kbtu = {
+        f: float(v)
+        * kbtu_per_unit(units[f], mts.get(f, f), heat_content=hc.get(f), enthalpy=en.get(f))[0]
+        for f, v in energy_by_fuel.items()
+    }
+    start = pd.Timestamp("2001-01-01")  # a notional 365-day year
+    out = {}
+    for f, v in energy_by_fuel.items():
+        row = {"start": start, "end": start + pd.Timedelta(days=365), "quantity": float(v)}
+        if cost_by_fuel and cost_by_fuel.get(f) is not None:
+            row["cost"] = float(cost_by_fuel[f])
+        out[f] = check_bills(
+            pd.DataFrame([row]),
+            unit=units[f],
+            fuel=mts.get(f, f),
+            area=area,
+            area_unit=area_unit,
+            property_type=property_type,
+            other_site_kbtu_per_year=math.fsum(k for g, k in kbtu.items() if g != f),
+            heat_content=hc.get(f),
+            enthalpy=en.get(f),
+            label=f,
+        )
+    return out
 
 
 def assess_eui(

@@ -54,6 +54,10 @@ __all__ = [
     "factor_for",
     "to_kbtu",
     "reference_markdown",
+    "ReferenceSet",
+    "PRICE_BAND_METER_TYPES",
+    "load_reference_set",
+    "get_reference_set",
 ]
 
 #: The schema tag every factor-set file carries.
@@ -313,10 +317,16 @@ def validate_factor_set(doc: Mapping) -> list:
     that the multiplier equals heat content x unit size within the printed precision. A row the
     source prints inconsistently must carry ``consistency.status == "source_discrepancy"``; a row
     marked so that is in fact consistent is also a problem (a stale flag).
+
+    A set of ``kind`` ``"price_band"`` or ``"eui_reference"`` (0.92, #71: the screening references
+    of :mod:`camber.unit_scale`) is checked against its own schema instead
+    (:func:`_validate_price_band`, :func:`_validate_eui_reference`).
     """
     p: list = []
     if not isinstance(doc, Mapping):
         return ["a factor set must be a JSON object"]
+    if doc.get("kind") in _REFERENCE_KINDS:
+        return _REFERENCE_KINDS[doc["kind"]](doc)
     if doc.get("schema") != SCHEMA:
         p.append(f"schema must be {SCHEMA!r}, got {doc.get('schema')!r}")
     for k in ("name", "kind", "output_unit"):
@@ -505,30 +515,315 @@ def load_factor_set(doc: Mapping) -> FactorSet:
 
 
 @lru_cache(maxsize=1)
-def _registry() -> dict:
-    out: dict = {}
+def _all_sets() -> tuple:
+    """``(conversion sets, reference sets)``: every bundled JSON file, validated, by name."""
+    conv: dict = {}
+    refs: dict = {}
     for res in sorted(resources.files(__name__).iterdir(), key=lambda r: r.name):
         if not res.name.endswith(".json"):
             continue
         doc = json.loads(res.read_text(encoding="utf-8"))
-        fs = load_factor_set(doc)
+        fs: FactorSet | ReferenceSet
+        if doc.get("kind") in _REFERENCE_KINDS:
+            fs = load_reference_set(doc)
+            refs[fs.name] = fs
+        else:
+            fs = load_factor_set(doc)
+            conv[fs.name] = fs
         if fs.name != res.name[: -len(".json")]:
             raise ValueError(f"{res.name}: name {fs.name!r} must match the file name")
-        out[fs.name] = fs
-    return out
+    return conv, refs
 
 
-def factor_sets() -> list:
-    """The names of the bundled factor sets, sorted."""
-    return sorted(_registry())
+def _registry() -> dict:
+    return _all_sets()[0]
+
+
+def factor_sets(kind: str | None = "energy_conversion") -> list:
+    """The names of the bundled factor sets of ``kind``, sorted.
+
+    ``kind`` defaults to ``"energy_conversion"`` (the sets :func:`get_factor_set` returns, as
+    before 0.92); ``"price_band"`` and ``"eui_reference"`` name the screening references of
+    :mod:`camber.unit_scale` (:func:`get_reference_set`), and ``None`` lists every set.
+    """
+    conv, refs = _all_sets()
+    names = list(conv) + list(refs)
+    if kind is None:
+        return sorted(names)
+    kinds = {**{n: "energy_conversion" for n in conv}, **{n: r.kind for n, r in refs.items()}}
+    return sorted(n for n in names if kinds[n] == kind)
 
 
 def get_factor_set(name: str) -> FactorSet:
     """The bundled factor set ``name``; ``ValueError`` naming the known sets otherwise."""
     reg = _registry()
     if name not in reg:
+        refs = _all_sets()[1]
+        if name in refs:
+            raise ValueError(
+                f"{name!r} is a {refs[name].kind} set, not an energy conversion; use "
+                "get_reference_set()"
+            )
         raise ValueError(f"unknown factor set {name!r}; known: {', '.join(sorted(reg))}")
     return reg[name]
+
+
+# --------------------------------------------------------------------------- reference sets (#71)
+
+
+@dataclass(frozen=True)
+class ReferenceSet:
+    """A bundled screening reference (provisional, 0.92, #71): a ``"price_band"`` set (implied
+    $/MMBtu bands by meter type) or an ``"eui_reference"`` set (site EUI medians by property type
+    with CAMBER's plausibility policy). ``doc`` is the validated JSON document."""
+
+    name: str
+    kind: str
+    output_unit: str
+    doc: dict = field(repr=False)
+
+    def citation(self) -> str:
+        """The set's source(s) in one line."""
+        if self.kind == "eui_reference":
+            s = self.doc["source"]
+            return (
+                f"{s['title']} ({s['publisher']}, {s['edition']}); {s['url']}; retrieved "
+                f"{s['retrieved']}, sha256 {s['sha256'][:12]}"
+            )
+        return "; ".join(f"{s['title']} ({s['publisher']})" for s in self.doc["sources"])
+
+    # ---- price bands
+    def band(self, meter_type: str) -> dict | None:
+        """The price band (``plausible``, ``implausible_below``, ``implausible_above``) of a
+        meter type (a :mod:`camber.energy_factors` key or a band's own ``meter_type``), or
+        ``None`` when the set has none."""
+        if self.kind != "price_band":
+            raise ValueError(f"{self.name} is a {self.kind} set, not a price_band set")
+        for b in self.doc["bands"]:
+            if b["meter_type"] == meter_type:
+                return dict(b)
+        return None
+
+    # ---- EUI references
+    def property_type(self, name: str | None) -> dict | None:
+        """The property-type row for ``name`` (its key, printed name or an alias; case, spaces and
+        punctuation ignored), or ``None`` for an unknown or missing type."""
+        if self.kind != "eui_reference":
+            raise ValueError(f"{self.name} is a {self.kind} set, not an eui_reference set")
+        if name is None or not str(name).strip():
+            return None
+        want = _mt_norm(name)
+        for pt in self.doc["property_types"]:
+            names = [pt["key"], pt["name"], *(pt.get("aliases") or [])]
+            if want in {_mt_norm(a) for a in names}:
+                return dict(pt)
+        return None
+
+    @property
+    def policy(self) -> dict:
+        """The set's screening policy block (CAMBER policy, not the source's)."""
+        return dict(self.doc.get("policy") or {})
+
+
+def load_reference_set(doc: Mapping) -> ReferenceSet:
+    """A :class:`ReferenceSet` from a parsed ``price_band`` or ``eui_reference`` document;
+    ``ValueError`` listing every problem."""
+    problems = validate_factor_set(doc)
+    if problems:
+        raise ValueError(
+            f"factor set {doc.get('name') if isinstance(doc, Mapping) else '?'!r} is invalid:\n  "
+            + "\n  ".join(problems)
+        )
+    return ReferenceSet(
+        name=doc["name"],
+        kind=doc["kind"],
+        output_unit=doc["output_unit"],
+        doc=json.loads(json.dumps(doc)),
+    )
+
+
+def get_reference_set(name: str) -> ReferenceSet:
+    """The bundled ``price_band`` or ``eui_reference`` set ``name`` (provisional, 0.92, #71)."""
+    refs = _all_sets()[1]
+    if name not in refs:
+        raise ValueError(f"unknown reference set {name!r}; known: {', '.join(sorted(refs))}")
+    return refs[name]
+
+
+def _pos(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and x > 0
+
+
+def _nonneg(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and x >= 0
+
+
+def _validate_head(doc: Mapping, kind: str, unit: str) -> list:
+    p: list = []
+    if doc.get("schema") != SCHEMA:
+        p.append(f"schema must be {SCHEMA!r}, got {doc.get('schema')!r}")
+    if not isinstance(doc.get("name"), str) or not re.fullmatch(r"[a-z0-9_]+", doc["name"]):
+        p.append("'name' must be lower_snake_case")
+    if doc.get("output_unit") != unit:
+        p.append(f"a {kind} set's output_unit is {unit!r}")
+    return p
+
+
+def _validate_price_band(doc: Mapping) -> list:
+    """Problems with a ``price_band`` set: sources (https URL, retrieval date), and per band a
+    plausible ``[low, high]`` inside ``implausible_below`` / ``implausible_above`` wide enough
+    apart that a 1000x reading of an in-band price is always outside them (the set's invariant),
+    known meter types, known source ids."""
+    p = _validate_head(doc, "price_band", "USD/MMBtu")
+    if not isinstance(doc.get("policy"), str) or "policy" not in doc["policy"].lower():
+        p.append("'policy' must say, in words, that the bands are CAMBER screening policy")
+    srcs = doc.get("sources")
+    if not isinstance(srcs, list) or not srcs:
+        return p + ["'sources' must be a non-empty list"]
+    ids = set()
+    for s in srcs:
+        if not isinstance(s, Mapping):
+            p.append("each source must be an object")
+            continue
+        for k in ("id", "title", "publisher", "url", "retrieved", "observed"):
+            if not isinstance(s.get(k), str) or not s.get(k):
+                p.append(f"source {s.get('id')!r}: {k} must be a non-empty string")
+        if not str(s.get("url", "")).startswith("https://"):
+            p.append(f"source {s.get('id')!r}: url must be https")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(s.get("retrieved", ""))):
+            p.append(f"source {s.get('id')!r}: retrieved must be YYYY-MM-DD")
+        for k in ("sha256", "companion_sha256"):
+            if k in s and not re.fullmatch(r"[0-9a-f]{64}", str(s[k])):
+                p.append(f"source {s.get('id')!r}: {k} must be 64 lowercase hex digits")
+        ids.add(s.get("id"))
+    bands = doc.get("bands")
+    if not isinstance(bands, list) or not bands:
+        return p + ["'bands' must be a non-empty list"]
+    seen = set()
+    for b in bands:
+        mt = b.get("meter_type") if isinstance(b, Mapping) else None
+        if mt not in PRICE_BAND_METER_TYPES:
+            p.append(f"band meter_type {mt!r} must be one of {sorted(PRICE_BAND_METER_TYPES)}")
+            continue
+        if mt in seen:
+            p.append(f"{mt}: duplicate band")
+        seen.add(mt)
+        pl, lo, hi = b.get("plausible"), b.get("implausible_below"), b.get("implausible_above")
+        if not (isinstance(pl, list) and len(pl) == 2 and all(_pos(x) for x in pl)):
+            p.append(f"{mt}: plausible must be [low, high], both positive")
+            continue
+        if not (_pos(lo) and _pos(hi)):
+            p.append(f"{mt}: implausible_below and implausible_above must be positive")
+            continue
+        if not lo < pl[0] < pl[1] < hi:
+            p.append(f"{mt}: needs implausible_below < plausible low < high < implausible_above")
+        if not (pl[1] / 1000.0 < lo and pl[0] * 1000.0 > hi):
+            p.append(
+                f"{mt}: breaks the invariant (plausible high / 1000 < implausible_below and "
+                "plausible low x 1000 > implausible_above)"
+            )
+        for sid in b.get("sources") or []:
+            if sid not in ids:
+                p.append(f"{mt}: unknown source {sid!r}")
+        if not isinstance(b.get("basis"), str) or not b["basis"]:
+            p.append(f"{mt}: basis must be a non-empty string")
+    return p
+
+
+def _validate_eui_reference(doc: Mapping) -> list:
+    """Problems with an ``eui_reference`` set: the pinned source block (as a conversion set's),
+    property types with unique keys and aliases whose printed texts equal their numbers, and the
+    policy factors and bounds (positive, correctly ordered)."""
+    p = _validate_head(doc, "eui_reference", "kBtu/ft2/yr")
+    src = doc.get("source")
+    if not isinstance(src, Mapping):
+        return p + ["'source' must be an object"]
+    for k in ("title", "publisher", "url", "edition", "retrieved", "sha256", "terms"):
+        if not isinstance(src.get(k), str) or not src.get(k):
+            p.append(f"source.{k} must be a non-empty string")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(src.get("sha256", ""))):
+        p.append("source.sha256 must be 64 lowercase hex digits")
+    if not str(src.get("url", "")).startswith("https://"):
+        p.append("source.url must be https")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(src.get("retrieved", ""))):
+        p.append("source.retrieved must be YYYY-MM-DD")
+    pol = doc.get("policy")
+    if not isinstance(pol, Mapping) or "policy" not in str(pol.get("note", "")).lower():
+        return p + ["'policy' must be an object whose note says it is CAMBER screening policy"]
+    tot, one = pol.get("total") or {}, pol.get("single_fuel") or {}
+    need = ("plausible_low_factor", "plausible_high_factor", "implausible_low_factor")
+    if not all(_pos(tot.get(k)) for k in (*need, "implausible_high_factor")):
+        p.append("policy.total needs four positive factors")
+    elif not (
+        tot["implausible_low_factor"] > tot["plausible_low_factor"] >= 1
+        and tot["implausible_high_factor"] > tot["plausible_high_factor"] >= 1
+    ):
+        p.append("policy.total: the implausible factors must exceed the plausible ones (>= 1)")
+    if not (
+        _pos(one.get("plausible_high_factor"))
+        and _pos(one.get("implausible_high_factor"))
+        and one["implausible_high_factor"] > one["plausible_high_factor"]
+    ):
+        p.append("policy.single_fuel needs plausible_high_factor < implausible_high_factor")
+    for grp, lim in (pol.get("hard") or {}).items():
+        if grp not in _EUI_GROUPS:
+            p.append(f"policy.hard: unknown group {grp!r}")
+        if (
+            not isinstance(lim, Mapping)
+            or not lim
+            or not all(
+                k in ("implausible_below", "implausible_above") and _pos(v) for k, v in lim.items()
+            )
+        ):
+            p.append(f"policy.hard.{grp}: implausible_below / implausible_above, positive")
+    for grp, rng in (pol.get("generic_plausible") or {}).items():
+        if grp not in _EUI_GROUPS:
+            p.append(f"policy.generic_plausible: unknown group {grp!r}")
+        if not (isinstance(rng, list) and len(rng) == 2 and all(_nonneg(x) for x in rng)):
+            p.append(f"policy.generic_plausible.{grp} must be [low, high]")
+        elif not rng[0] < rng[1]:
+            p.append(f"policy.generic_plausible.{grp}: low must be below high")
+    pts = doc.get("property_types")
+    if not isinstance(pts, list) or not pts:
+        return p + ["'property_types' must be a non-empty list"]
+    names: dict = {}
+    for pt in pts:
+        key = pt.get("key") if isinstance(pt, Mapping) else None
+        if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9_]+", key):
+            p.append(f"property type key {key!r} must be lower_snake_case")
+            continue
+        for alias in [key, *(pt.get("aliases") or [])]:
+            a = _mt_norm(alias)
+            if a in names and names[a] != key:
+                p.append(f"property type alias {alias!r} names both {names[a]} and {key}")
+            names[a] = key
+        for k in ("site_eui", "source_eui"):
+            v, t = pt.get(k), pt.get(f"{k}_text")
+            if v is None:
+                if t != "N/A":
+                    p.append(f"{key}: a missing {k} is printed 'N/A'")
+            elif not (_pos(v) and isinstance(t, str) and _TEXT_NUM.match(t) and _num(t) == v):
+                p.append(f"{key}: {k} {v!r} does not equal its text {t!r}")
+    return p
+
+
+#: The meter types a price band may name (camber.energy_factors keys; all fuel oils share one).
+PRICE_BAND_METER_TYPES = frozenset(
+    {
+        "electricity",
+        "natural_gas",
+        "district_steam",
+        "district_hot_water",
+        "district_chilled_water",
+        "fuel_oil",
+        "propane",
+    }
+)
+_EUI_GROUPS = frozenset({"electricity", "district_chilled_water", "thermal", "total"})
+_REFERENCE_KINDS: dict = {
+    "price_band": _validate_price_band,
+    "eui_reference": _validate_eui_reference,
+}
 
 
 # --------------------------------------------------------------------------- lookups

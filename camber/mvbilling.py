@@ -39,6 +39,7 @@ __all__ = [
     "billing_units",
     "billing_conversion",
     "billing_findings",
+    "billing_scale_check",
 ]
 
 _KNOWN = {
@@ -70,6 +71,28 @@ _BILL_KEYS = {"file", "start", "end", "energy", "estimated", "units", "end_inclu
 _BILL_KEYS |= {"merge_estimated", "units_column"}
 _BILL_KEYS |= {"heat_content", "enthalpy"}  # 0.92 (#69): gas volumes and steam mass
 _BILL_KEYS |= {"meter_type"}  # 0.92: the fuel a units.factor_set looks up (camber.energy_factors)
+_BILL_KEYS |= {"scale_check", "scale_override"}  # 0.92 (#71): unit-scale plausibility
+_SCALE_KEYS = {
+    "enabled",
+    "fuel",
+    "area",
+    "area_unit",
+    "property_type",
+    "cost",
+    "demand",
+    "read_start",
+    "read_end",
+    "multiplier",
+    "tariff",
+    "price_source",
+    "state",
+    "eia_cache_dir",
+    "eia_offline",
+    "on_implausible",
+    "other_site_kbtu_per_year",
+}
+# bills-file columns the check reads when present (the scale_check block may rename them)
+_SCALE_COLUMNS = ("cost", "demand", "read_start", "read_end", "multiplier")
 
 
 def _spec(entry: dict) -> dict:
@@ -293,7 +316,117 @@ def billing_findings(entry: dict, prep, *, base_dir: str = ".") -> list:
         for f in out:
             f.metrics.update(extra.get("metrics") or {})
         _add_caveats(out, list(extra.get("caveats") or []))
+    if box.get("scale_finding") is not None:  # 0.92 (#71): quantities implausible at x1
+        out = [box["scale_finding"], *out]
     return out
+
+
+def _scale_spec(spec: dict) -> dict:
+    sc = spec.get("scale_check")
+    if sc is None:
+        return {}
+    if sc is False:
+        return {"enabled": False}
+    if not isinstance(sc, dict):
+        raise ValueError("mv.bills.scale_check must be an object (or false)")
+    extra = set(sc) - _SCALE_KEYS
+    if extra:
+        raise ValueError(f"mv.bills.scale_check: unknown key(s) {sorted(extra)}")
+    if sc.get("on_implausible", "decline") not in ("decline", "warn"):
+        raise ValueError('mv.bills.scale_check.on_implausible must be "decline" or "warn"')
+    return sc
+
+
+def _scale_tariff(sc: dict, base_dir: str):
+    t = sc.get("tariff")
+    if t is None:
+        return None, None
+    if not isinstance(t, dict):
+        raise ValueError("mv.bills.scale_check.tariff must be an object")
+    if "urdb_file" in t:
+        import json
+
+        from .config import _path
+
+        with open(_path(base_dir, t["urdb_file"]), encoding="utf-8") as fh:
+            return None, json.load(fh)
+    if "urdb_label" in t:  # opt-in network fetch (OPENEI_API_KEY); only the rate label is sent
+        from .interop.openei import fetch_urdb_rate
+
+        return None, fetch_urdb_rate(str(t["urdb_label"]))
+    from .tariff import Tariff
+
+    try:
+        return Tariff(**t), None
+    except TypeError as e:
+        raise ValueError(f"mv.bills.scale_check.tariff: {e}") from None
+
+
+def billing_scale_check(entry: dict, bills, *, base_dir: str = ".", oat=None):
+    """The unit-scale plausibility check of a billing entry (provisional, 0.92, #71), or ``None``
+    when it cannot run (no unit, or a unit it cannot screen without ``scale_check.fuel``).
+
+    Reads the bills file's rows as billed (estimated reads included) with the optional ``cost``,
+    ``demand``, ``read_start``, ``read_end`` and ``multiplier`` columns (renamed by the
+    ``bills.scale_check`` block), plus its ``area``, ``property_type``, ``tariff`` and price
+    options; see :func:`camber.unit_scale.check_bills`. ``bills.scale_override`` has already been
+    applied to the quantities the check sees. An explicit ``scale_check`` block turns a problem
+    into a ``ValueError``; without one the check is skipped quietly.
+    """
+    from .config import _path
+    from .unit_scale import check_bills
+
+    spec = _spec(entry)
+    sc = _scale_spec(spec)
+    if sc.get("enabled", True) is False:
+        return None
+    explicit = bool(sc)
+    unit = bills.units
+    if not unit:
+        if explicit:
+            raise ValueError("mv.bills.scale_check needs the bills' unit (bills.units)")
+        return None
+    df = pd.read_csv(_path(base_dir, spec["file"]), encoding="utf-8-sig")
+    cols = {"start": spec.get("start", "start"), "end": spec.get("end", "end")}
+    cols["quantity"] = spec.get("energy", "energy")
+    for c in _SCALE_COLUMNS:
+        name = sc.get(c, c)
+        if name in df.columns:
+            cols[c] = name
+        elif c in sc:
+            raise ValueError(f"mv.bills.scale_check.{c}: the bills file has no column {name!r}")
+    frame = pd.DataFrame({k: df[v] for k, v in cols.items()})
+    frame["quantity"] = pd.to_numeric(frame["quantity"], errors="coerce")
+    ov = spec.get("scale_override")
+    tariff, urdb = _scale_tariff(sc, base_dir)
+    try:
+        return check_bills(
+            frame,
+            unit=str(unit),
+            fuel=sc.get("fuel", spec.get("meter_type")),
+            area=sc.get("area"),
+            area_unit=sc.get("area_unit", "ft2"),
+            property_type=sc.get("property_type"),
+            oat=oat,
+            tariff=tariff,
+            urdb=urdb,
+            price_source=sc.get("price_source"),
+            state=sc.get("state"),
+            eia_cache_dir=(
+                None if sc.get("eia_cache_dir") is None else _path(base_dir, sc["eia_cache_dir"])
+            ),
+            eia_offline=bool(sc.get("eia_offline", False)),
+            other_site_kbtu_per_year=sc.get("other_site_kbtu_per_year"),
+            heat_content=spec.get("heat_content"),
+            enthalpy=spec.get("enthalpy"),
+            scale_override=ov,
+            label=billing_label(entry),
+            end_inclusive=bool(spec.get("end_inclusive", True)),
+        )
+    except ValueError as e:
+        if explicit or ov is not None:
+            raise ValueError(f"mv.bills.scale_check: {e}") from None
+        return None
 
 
 def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
@@ -342,9 +475,34 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     )
     if not len(bills):
         return _declined(label, "the bills file has no bills", reporting)
+    ov = _spec(entry).get("scale_override")
+    if ov is not None:  # 0.92 (#71): an explicit, recorded correction -- never an automatic one
+        from .unit_scale import parse_scale_override
+
+        try:
+            ov = parse_scale_override(ov)
+        except ValueError as e:
+            raise ValueError(f"mv.bills.{e}") from None
+        assert ov is not None
+        bills.frame = bills.frame.assign(energy=bills.frame["energy"] * ov["factor"])
+        box["extra"]["metrics"]["scale_override"] = dict(ov)
+        box["extra"]["caveats"].append(
+            f"bills.scale_override: every billed quantity multiplied by {ov['factor']:g} "
+            f"({ov['reason']})"
+        )
     f = bills.frame
     window = (f["start"].min(), f["end"].max() - pd.Timedelta(days=1))
     oat, oat_source = billing_oat(entry, prep, base_dir=base_dir, window=window)
+    chk = billing_scale_check(entry, bills, base_dir=base_dir, oat=oat)  # 0.92 (#71)
+    if chk is not None and chk.implausible:
+        box["scale_finding"] = chk.finding(label)
+        if _scale_spec(_spec(entry)).get("on_implausible", "decline") == "decline":
+            return _declined(
+                label,
+                "the billed quantities are implausible as given (unit_scale finding); set "
+                'bills.scale_override with a reason, or scale_check.on_implausible "warn"',
+                reporting,
+            )
     if oat is None:
         return _declined(label, oat_source, reporting)
     oat = pd.Series(oat).dropna()
