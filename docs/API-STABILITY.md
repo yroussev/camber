@@ -311,6 +311,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     a date changes only to follow its official source;
   - the config keys `mv[].holiday_calendar` and `mv[].break_calendar`, and the `"break_day"`
     driver; `mandv._mvform.with_base_dir` (private module).
+- **Energy-units follow-ups** (0.93; #70), all additive and provisional:
+  - `energy_units.VOLUME_FLOW_UNITS`, `quantity_of_rate` and the `volume_flow` unit kind; the
+    `mv[]` keys `heat_content` and `meter_type` for a trended gas volume flow;
+  - the trailing `MeterChain.units` and the `units` key of its `as_dict` under a unit system;
+  - `build_fleet_report(eui_unit=, units=)` and the trailing `FleetReport.eui_unit`;
+  - `carbon.factor_per` and per-unit factor specs in `carbon.emissions(factors=)`.
 <!-- /093-mv -->
 
 ## Deprecated

@@ -116,8 +116,21 @@ Gas meter: avoided energy 554,023 kBtu (16.3%) ± 85,632 kBtu at 90% over 365 re
   a unit system, for example `"units": "kW"` (or `Btu/h`, `kBtu/h`, `MBH`, `tons`). The daily
   energy is its hourly integral: kWh, Btu, kBtu or ton-hours. An entry without `units` is an
   error once a system is set.
+- **Trended gas by volume** (0.93). A gas meter trended as a volume flow names it:
+  `"units": "cfh"` (or `CCF/h`, `Mcf/h`, `m3/h`). The daily value is then a volume (ft3, CCF,
+  Mcf or m3), and under a unit system it converts with `mv[].heat_content`
+  (`"1037 Btu/ft3"`), or opt-in with the `units.factor_set` heat content of `mv[].meter_type`
+  (default `natural_gas`). With neither, the run stops: there is no default. A caveat names the
+  heat content used, and a factor set also adds the `energy_factor` metric. Without a system the
+  fits and savings stay in the meter's volume, as before. The meter's flow maps to the entry's
+  `role` (by default `energy_rate`).
+- **The chain report** (0.93). `camber mv report` follows `units.system` too. Its page, its JSON
+  (`units` on each meter) and its CUSUM give energy in kBtu or kWh, the models stay in the
+  meter's unit, and the entry's `units` is required under a system, as on the run path.
 - **Billing entries.** The bills' unit comes from `bills.units` or the file's `units` column, and
-  more than one unit in the column is an error. Under a unit system the unit must parse.
+  more than one unit in the column is an error. Spellings of one unit (`kWh`, `kwh`,
+  `kilowatt-hours`) count as one unit since 0.93, reported by its canonical name; a spelling
+  that does not parse is compared ignoring case. Under a unit system the unit must parse.
   `bills.heat_content` is required for gas billed by volume (Mcf, CCF, m3), and `bills.enthalpy`
   for steam billed by mass. Both are validated whenever they are given. Opt-in, a
   `units.factor_set` supplies them instead (see
@@ -155,6 +168,13 @@ In a config, `report.benchmark` takes an optional `unit` (the unit its EUIs are 
 `kBtu/ft2/yr` by default). Under a unit system both EUIs are converted to the system's EUI unit,
 and the audit report labels them with it.
 
+The fleet report (0.93) takes `build_fleet_report(..., eui_unit="kBtu/ft2/yr", units=None)`:
+`eui_unit` states the unit the buildings' EUIs and the peer median are given in, and `units`
+(`"ip"`, `"si"` or a `UnitSystem`) reports them in that system's unit. Percentiles and the
+percentage against the median do not change. `FleetReport.eui_unit` labels the text and HTML, and
+the agent context's fleet facts name the same unit. `camber fleet` passes the configs' shared unit
+system; configs that disagree keep kBtu/ft2/yr, with a note.
+
 ### Cost and carbon
 
 Per-unit prices and emission factors convert with `convert_rate`. For example,
@@ -169,6 +189,13 @@ A config `price` block also accepts a rate in any unit:
 
 This is converted to the `electricity_per_kwh` / `gas_per_therm` the cost estimators use. The
 plain `electricity_per_kwh` / `gas_per_therm` keys are read as before.
+
+Emission factors have the same per-unit form (0.93). A factor passed to
+`carbon.emissions(..., factors=)` may be `{"rate": 53.06, "per": "MMBtu"}` (with `heat_content` for
+a factor per gas volume). `carbon.factor_per` converts it to the unit the fuel key names:
+`natural_gas_therm` gives 5.306 kg CO2e/therm. A key that is not an energy unit (`fuel_oil_gal`)
+takes a factor only in its own unit. No greenhouse-gas factor set is bundled (see
+[Not converted](#not-converted)).
 `fault_economics.annotate_costs(..., units="ip" | "si")` adds `waste_energy` (both fuels' site
 energy) and `energy_unit` beside the existing `waste_kwh` / `waste_therms`.
 
@@ -475,13 +502,15 @@ no network or a cache miss, the check falls back to the bundled bands and says s
       no single factor fits the site (`fox-hot-water-scale` in the catalog, annotated).
       The four electricity flags are meters that stopped reading or read a near-zero constant.
 
-## Not converted (0.92)
+## Not converted
 
-- Factor sets apply only to config billing entries and `camber.energy_factors` itself, not to
-  SEP, EUI or price conversions, which still take an explicit heat content.
-
+- Factor sets apply only to config billing entries, trended gas meters (0.93) and
+  `camber.energy_factors` itself, not to SEP, EUI or price conversions, which still take an
+  explicit heat content.
 - Temperatures, pressures, flows, and every rule's own metrics.
-- The versioned-baseline chain report (`camber mv report`).
-- The fleet report's peer-median EUI and the agent context, which stay in kBtu/ft2/yr.
-- A trended gas meter metered by volume flow (cfh). Only power rates are accepted for trended
-  meters.
+- **Greenhouse-gas factor sets** (a follow-up). A `camber.energy_factors` kind for emission
+  factors, such as EIA's CO2 coefficients per fuel and EPA eGRID's subregion output rates, was
+  considered for 0.93 and deferred. eGRID is a yearly edition of per-subregion tables, and a site
+  needs its subregion, which CAMBER does not yet record. Pinning that honestly (edition, sha256,
+  the choice of subregion, and location-based against market-based reporting) is its own
+  change. Until then, factors are given per unit to `carbon.emissions`, as above.

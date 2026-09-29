@@ -53,6 +53,7 @@ class FleetReport:
     fleet_top_rules: list = field(default_factory=list)  # [(rule, n_buildings)]
     total_annual_cost_usd: float | None = None  # fleet-wide recoverable waste ($)
     cost_estimated: bool = False  # costs were estimated (a price was given), costed or not
+    eui_unit: str = "kBtu/ft2/yr"  # 0.93 (#70): the unit of every EUI here (kWh/m2/yr in SI)
 
     def worst_by_faults(self):
         """Buildings ordered by actionable-fault burden (faults, then warnings)."""
@@ -73,7 +74,7 @@ class FleetReport:
         """Render the fleet rollup as plain text."""
         L = [f"Fleet summary -- {len(self.buildings)} buildings"]
         if self.peer_median_eui:
-            L.append(f"Peer-median EUI: {self.peer_median_eui:g} kBtu/ft2/yr")
+            L.append(f"Peer-median EUI: {self.peer_median_eui:g} {self.eui_unit}")
         if self.total_annual_cost_usd is not None:
             L.append(
                 f"Estimated recoverable waste: ${self.total_annual_cost_usd:,.0f}/yr fleet-wide"
@@ -110,9 +111,8 @@ class FleetReport:
         e = _h.escape
         parts = [f"<h1>Fleet summary &mdash; {len(self.buildings)} buildings</h1>"]
         if self.peer_median_eui:
-            parts.append(
-                f"<p><b>Peer-median EUI:</b> {self.peer_median_eui:g} kBtu/ft&sup2;/yr</p>"
-            )
+            unit = _h.escape(self.eui_unit).replace("2/", "&sup2;/")
+            parts.append(f"<p><b>Peer-median EUI:</b> {self.peer_median_eui:g} {unit}</p>")
         if self.total_annual_cost_usd is not None:
             parts.append(
                 f"<p><b>Estimated recoverable waste:</b> "
@@ -176,7 +176,15 @@ def _building_cost(b, price, loads, cost_params):
 
 
 def build_fleet_report(
-    buildings, *, peer_median_eui=None, top_n=5, price=None, loads=None, cost_params=None
+    buildings,
+    *,
+    peer_median_eui=None,
+    top_n=5,
+    price=None,
+    loads=None,
+    cost_params=None,
+    eui_unit: str = "kBtu/ft2/yr",
+    units=None,
 ) -> FleetReport:
     """Roll per-building results into a :class:`FleetReport`.
 
@@ -192,7 +200,25 @@ def build_fleet_report(
     {equip: EquipmentLoad}}`` of equipment sizing; ``cost_params`` overrides cost
     assumptions), and the fleet total is reported. A building's precomputed
     ``annual_cost_usd`` always wins over an estimate.
+
+    ``eui_unit`` (0.93, #70) is the unit the buildings' ``eui`` and ``peer_median_eui`` are given
+    in (``kBtu/ft2/yr`` by default). ``units`` -- a :class:`~camber.energy_units.UnitSystem`, or
+    ``"ip"`` / ``"si"`` -- reports them in that system's EUI unit (kBtu/ft2/yr or kWh/m2/yr),
+    converted exactly; without it they are reported as given, as before.
     """
+    from ..energy_units import UnitSystem, eui_factor
+
+    if units is not None:
+        target = (UnitSystem.of(units) if isinstance(units, str) else units).eui
+        k = eui_factor(eui_unit, target)
+        if k != 1.0:
+            buildings = [
+                {**b, "eui": None if b.get("eui") is None else b["eui"] * k} for b in buildings
+            ]
+            peer_median_eui = None if peer_median_eui is None else peer_median_eui * k
+        eui_unit = target
+    else:
+        eui_factor(eui_unit, "kBtu/ft2/yr")  # validated
     euis = sorted(b["eui"] for b in buildings if b.get("eui") is not None)
     fleet_median = euis[len(euis) // 2] if euis else None
     median = peer_median_eui if peer_median_eui is not None else fleet_median
@@ -246,4 +272,5 @@ def build_fleet_report(
         fleet_top_rules=rule_buildings.most_common(top_n),
         total_annual_cost_usd=total,
         cost_estimated=price is not None or any_cost,
+        eui_unit=eui_unit,
     )

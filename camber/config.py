@@ -1222,7 +1222,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     min_days = int(entry.get("min_days", 60))
     adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
-    conv = _mv_trended_units(entry, getattr(prep, "units", None))  # 0.92 (#69)
+    conv, conv_extra = _mv_trended_conversion(entry, getattr(prep, "units", None))  # #69, #70
     out = []
 
     def declined(equip, why):
@@ -1375,6 +1375,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
         _add_caveats(out[n_before + 1 :], base_caveats)  # they rest on the same baseline
+    if conv_extra["caveats"] or conv_extra["metrics"]:  # 0.93 (#70): a gas volume's heat content
+        for f in out:
+            f.metrics.update(conv_extra["metrics"])
+        _add_caveats(out, conv_extra["caveats"])
     return _mv_apply_units(out, conv)
 
 
@@ -1412,25 +1416,86 @@ _MV_SENS_KEYS = ("savings", "abs_uncertainty", "adjusted_savings", "adjusted_abs
 def _mv_trended_units(entry: dict, units) -> tuple | None:
     """``(factor, reported unit, meter energy unit, system)`` for a trended ``mv`` entry, or
     ``None`` without a config ``units`` block. The entry's ``units`` names the metered rate (kW,
-    Btu/h, kBtu/h, MBH, tons); its hourly integral is the meter's energy unit."""
+    Btu/h, kBtu/h, MBH, tons); its hourly integral is the meter's energy unit. A gas meter's
+    volume flow (cfh, m3/h) integrates to a volume (0.93, #70), converted with the entry's
+    ``heat_content`` or the config's ``units.factor_set`` (:func:`_mv_trended_conversion`)."""
+    return _mv_trended_conversion(entry, units)[0]
+
+
+def _mv_trended_conversion(entry: dict, units) -> tuple:
+    """``(conv, extra)``: :func:`_mv_trended_units`' tuple (or ``None``) and ``extra`` =
+    ``{"metrics": {...}, "caveats": [...]}`` recording a factor set's use (0.93, #70).
+
+    ``mv[].units`` is a power (kW, Btu/h, ...) or a gas volume flow (``cfh``, ``CCF/h``,
+    ``Mcf/h``, ``m3/h``). A volume flow's daily integral is a volume (ft3, m3, ...): under a unit
+    system it converts with ``mv[].heat_content`` (e.g. ``"1037 Btu/ft3"``), else with the
+    ``units.factor_set`` heat content of ``mv[].meter_type`` (default ``natural_gas``); neither is
+    an error, never a default. Without a unit system the fits and savings stay in the meter's
+    unit, as before, and ``units`` / ``heat_content`` are only validated.
+    """
+    from .energy_units import parse_heat_content, quantity_of_rate
+
+    extra: dict = {"metrics": {}, "caveats": []}
+    rate, hc, mtype = entry.get("units"), entry.get("heat_content"), entry.get("meter_type")
+    kind = qty = None
+    if rate is not None:
+        try:
+            kind, qty = quantity_of_rate(rate)
+        except ValueError as e:
+            if units is None:
+                raise
+            raise ValueError(f"mv.units: {e} (a trended meter's units are its rate)") from None
+    if hc is not None:
+        try:
+            if parse_heat_content(hc)[1] != "volume":
+                raise ValueError(f"{hc!r} is per mass; a gas meter's heat content is per volume")
+        except ValueError as e:
+            raise ValueError(f"mv.heat_content: {e}") from None
+    if (hc is not None or mtype is not None) and kind != "volume":
+        key = "heat_content" if hc is not None else "meter_type"
+        raise ValueError(
+            f"mv.{key} is for a gas meter trended as a volume flow: give mv.units as cfh, "
+            "CCF/h, Mcf/h or m3/h"
+        )
+    if mtype is not None and getattr(units, "factor_set", None) is None:
+        raise ValueError("mv.meter_type is read only with a units.factor_set")
     if units is None:
-        if entry.get("units") is not None:  # validated even when nothing is converted
-            from .energy_units import energy_unit_of_rate
-
-            energy_unit_of_rate(entry["units"])
-        return None
-    from .energy_units import energy_unit_of_rate
-
-    if entry.get("units") is None:
+        return None, extra
+    if rate is None:
         raise ValueError(
             f"units.system is {units.system!r}, but mv entry {entry.get('class')!r} does not name "
-            'its meter\'s rate unit: add "units": "kW" (or Btu/h, kBtu/h, MBH, tons)'
+            'its meter\'s rate unit: add "units": "kW" (or Btu/h, kBtu/h, MBH, tons; cfh or m3/h '
+            "for gas metered by volume)"
         )
-    try:
-        meter = energy_unit_of_rate(entry["units"])
-    except ValueError as e:
-        raise ValueError(f"mv.units: {e} (a trended meter's units are its rate)") from None
-    return units.energy_factor(meter), units.energy, meter, units.system
+    assert qty is not None  # a rate was given and parsed above
+    if kind == "energy":
+        return (units.energy_factor(qty), units.energy, qty, units.system), extra
+    if hc is not None:
+        k = units.energy_factor(qty, heat_content=hc)
+        extra["caveats"].append(f"Gas volume ({qty}) converted with heat content {hc}.")
+    elif units.factor_set is not None:
+        from .energy_factors import factor_for
+        from .energy_units import energy_factor
+
+        try:
+            c = factor_for(
+                qty, mtype or "natural_gas", factor_set=units.factor_set, region=units.region
+            )
+        except ValueError as e:
+            raise ValueError(f"mv.units: {e}") from None
+        k = c.multiplier * energy_factor("kBtu", units.energy)
+        extra["metrics"]["energy_factor"] = c.as_dict()
+        extra["caveats"] += [f"Converted with {c.describe()}.", *c.caveats]
+    else:
+        raise ValueError(
+            f"mv.units {rate!r} is a gas volume flow: give mv.heat_content (e.g. "
+            "'1037 Btu/ft3') or a units.factor_set; there is no default"
+        )
+    if qty == "Mcf" and hc is not None:
+        from .energy_factors import _m_caveat
+
+        extra["caveats"].append(_m_caveat(rate, units.factor_set))
+    return (k, units.energy, qty, units.system), extra
 
 
 def _scale(d: dict, keys, k: float, *, digits: int | None = 2) -> None:

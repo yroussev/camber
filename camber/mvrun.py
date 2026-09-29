@@ -870,24 +870,82 @@ class MeterChain:
     cusum: pd.DataFrame  # date, version, projected, actual (reported days only)
     triggers: list
     caveats: list = field(default_factory=list)
+    #: 0.93 (#70): ``{"factor", "energy_unit", "meter_unit", "unit_system"}`` under a config
+    #: ``units`` block, else ``None``. The results stay in the meter's unit (the fits are there);
+    #: :meth:`as_dict`, the report page and the CUSUM frame give energy in ``energy_unit``.
+    units: dict | None = None
 
     def as_dict(self) -> dict:
-        """JSON-safe summary (the per-day CUSUM frame stays out)."""
+        """JSON-safe summary (the per-day CUSUM frame stays out). Under a unit system (``units``)
+        every energy figure is in the reported unit and the dict carries ``units``."""
         from .mandv.rebaseline import _json_safe
 
-        return _json_safe(
-            {
-                "equip": self.equip,
-                "kind": self.kind,
-                "versions": self.versions,
-                "segments": self.segments,
-                "links": [ln.as_dict() for ln in self.links],
-                "chain": None if self.chain is None else self.chain.as_dict(),
-                "adjusted": [None if a is None else a.as_dict() for a in self.adjusted],
-                "triggers": [t.as_dict() for t in self.triggers],
-                "caveats": list(self.caveats),
-            }
-        )
+        k = None if self.units is None else self.units["factor"]
+        d = {
+            "equip": self.equip,
+            "kind": self.kind,
+            "versions": self.versions,
+            "segments": self.segments,
+            "links": [_in_units(ln.as_dict(), k) for ln in self.links],
+            "chain": None if self.chain is None else _in_units(self.chain.as_dict(), k),
+            "adjusted": [
+                None if a is None else _in_units(a.as_dict(), k, adjusted=True)
+                for a in self.adjusted
+            ],
+            "triggers": [t.as_dict() for t in self.triggers],
+            "caveats": list(self.caveats),
+        }
+        if self.units is not None:
+            d["units"] = dict(self.units)
+        return _json_safe(d)
+
+
+# energy figures of a MethodResult / AdjustedResult dict (0.93, #70)
+_RESULT_ENERGY = ("savings", "projected", "measured", "abs_uncertainty")
+_ADJUSTED_ENERGY = (
+    "baseline",
+    "reporting",
+    "unadjusted_savings",
+    "unadjusted_abs_uncertainty",
+    "adjusted_baseline",
+    "adjusted_reporting",
+    "savings",
+    "abs_uncertainty",
+)
+
+
+def _in_units(d: dict, k: float | None, *, adjusted: bool = False) -> dict:
+    """A result dict with its energy figures multiplied by ``k`` (unchanged for ``None``);
+    variance terms by ``k**2``. Percentages, SEnPI and coefficients are unit-free."""
+    if k is None:
+        return d
+    from .config import (
+        _MV_ADJ_LINK_KEYS,
+        _MV_LEDGER_KEYS,
+        _MV_LINK_KEYS,
+        _MV_VARIANCE_KEYS,
+        _scale,
+    )
+
+    _scale(d, _ADJUSTED_ENERGY if adjusted else _RESULT_ENERGY, k, digits=None)
+    if isinstance(d.get("sep_terms"), dict):
+        _scale(d["sep_terms"], list(d["sep_terms"]), k, digits=None)
+    if isinstance(d.get("uncertainty_terms"), dict):
+        _scale(d["uncertainty_terms"], _MV_VARIANCE_KEYS, k * k, digits=None)
+    for key, keys in (
+        ("links", _MV_ADJ_LINK_KEYS if adjusted else _MV_LINK_KEYS),
+        ("ledger", _MV_LEDGER_KEYS),
+        ("waterfall", ("value",)),
+    ):
+        for r in d.get(key) or []:
+            if not isinstance(r, dict):
+                continue
+            _scale(r, keys, k, digits=None)
+            if isinstance(r.get("sep_terms"), dict):
+                _scale(r["sep_terms"], list(r["sep_terms"]), k, digits=None)
+            if isinstance(r.get("uncertainty_terms"), dict):
+                _scale(r["uncertainty_terms"], _MV_VARIANCE_KEYS, k * k, digits=None)
+    return d
 
 
 def _version_row(rec) -> dict:
@@ -919,12 +977,19 @@ def chained_report(
     :func:`~camber.mandv.methods.sequential_chain` (each link dated from the store, so its ledger
     can be dated without row indexes). Returns ``{"facility_id", "skipped_state", "meters":
     [MeterChain, ...]}``.
+
+    Under a config ``units`` block (0.93, #70) each meter's energy is reported in the system's unit
+    (kBtu or kWh): :attr:`MeterChain.units` names it, and the entry's ``units`` (its metered rate,
+    or a gas volume flow with its heat content) is required, as on the run path.
     """
+    from .config import _mv_trended_conversion
+    from .energy_units import UnitSystem
     from .mandv import _mvform
     from .mandv.methods import forecast_savings, sequential_chain
     from .mandv.rebaseline import event_phrase, first_block
     from .mandv.stats import fit_stats
 
+    system = UnitSystem.from_config(config)  # 0.93 (#70): the report follows units.system
     plan = _plan("report", config, base_dir, store_path)
     out: dict = {
         "facility_id": plan.ctx.facility_id,
@@ -939,6 +1004,7 @@ def chained_report(
         vs = plan.store.versions(site, ms.equip, ms.kind)
         if not vs:
             continue
+        conv, conv_extra = _mv_trended_conversion(ms.entry, system)
         end = _day(as_of) if as_of is not None else _day(ms.daily.index.max())
         rp = ms.entry.get("reporting_period")
         if rp:
@@ -1032,6 +1098,13 @@ def chained_report(
             if frames
             else pd.DataFrame(columns=["version", "projected", "actual"])
         )
+        units = None
+        if conv is not None:
+            k, unit, meter, sys_name = conv
+            units = {"factor": k, "energy_unit": unit, "meter_unit": meter, "unit_system": sys_name}
+            if frames:
+                cus = cus.assign(projected=cus["projected"] * k, actual=cus["actual"] * k)
+            caveats += [c for c in conv_extra["caveats"] if c not in caveats]
         out["meters"].append(
             MeterChain(
                 ms.equip,
@@ -1044,6 +1117,7 @@ def chained_report(
                 cus,
                 trig_all,
                 caveats,
+                units,
             )
         )
     return out

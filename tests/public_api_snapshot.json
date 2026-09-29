@@ -136,7 +136,8 @@
   "camber.carbon": [
     "DEFAULT_FACTORS",
     "Emissions",
-    "emissions"
+    "emissions",
+    "factor_per"
   ],
   "camber.carbon_hourly": [
     "HourlyEmissions",
@@ -537,6 +538,7 @@
     "SYSTEMS",
     "Unit",
     "UnitSystem",
+    "VOLUME_FLOW_UNITS",
     "VOLUME_UNITS",
     "convert",
     "convert_eui",
@@ -549,6 +551,7 @@
     "parse_heat_content",
     "parse_unit",
     "power_factor",
+    "quantity_of_rate",
     "to_kwh"
   ],
   "camber.eval": [

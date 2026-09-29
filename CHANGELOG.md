@@ -30,6 +30,17 @@ All notable changes to CAMBER are documented here. The format follows
   COFACTOR school models worse; as break days 15 of 16 schools met daily G14 acceptance (13
   without). The `cofactor-drammen` template now uses `"holiday_calendar": "NO"`, with identical
   results.
+- **Energy-units follow-ups (#70).** The chain report `camber mv report` follows
+  `units.system`: its page, JSON (`units` per meter) and CUSUM give energy in kBtu or kWh
+  (`MeterChain.units`). Trended gas meters measured as a volume flow (`"units": "cfh"`, `CCF/h`,
+  `Mcf/h`, `m3/h`) convert with `mv[].heat_content` or a `units.factor_set`
+  (`mv[].meter_type`), with no default (`energy_units.VOLUME_FLOW_UNITS`,
+  `quantity_of_rate`). The fleet report takes `eui_unit=` / `units=` and labels its EUIs
+  (`FleetReport.eui_unit`), `camber fleet` passes the configs' shared system, and the agent
+  context's fleet facts name the unit. Carbon factors may be given per any unit
+  (`{"rate", "per"}`), converted through `convert_rate` (`carbon.factor_per`). In a bills file,
+  spellings of one unit (`kWh` / `kwh`) are one unit, not mixed units. A greenhouse-gas factor
+  set (eGRID / EIA) is documented as a follow-up. Every default output is unchanged.
 
 ### Fixed
 - A catalog entry whose `timezone` is a prose description of its clock (BDG2, Valladolid) is no

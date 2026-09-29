@@ -3,6 +3,8 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from camber.report.fleet import BuildingSummary, build_fleet_report  # noqa: E402
@@ -132,3 +134,34 @@ def test_precomputed_cost_wins_over_estimate():
     fleet = [{"site": "A", "eui": 90.0, "findings": [f], "annual_cost_usd": 999.0}]
     r = build_fleet_report(fleet, price=EnergyPrice())
     assert r.buildings[0].annual_cost_usd == 999.0  # precomputed value wins
+
+
+def test_fleet_eui_follows_the_unit_system():
+    """0.93 (#70): the peer-median EUI and each building's EUI in kWh/m2/yr under SI."""
+    from camber.agent.context import facts_from_fleet
+    from camber.energy_units import eui_factor
+
+    ip = build_fleet_report(_fleet(), peer_median_eui=90.0)
+    assert ip.eui_unit == "kBtu/ft2/yr" and "Peer-median EUI: 90 kBtu/ft2/yr" in ip.to_text()
+    assert "eui_unit" not in facts_from_fleet(ip)[0].data  # the default facts are unchanged
+    si = build_fleet_report(_fleet(), peer_median_eui=90.0, units="si")
+    k = eui_factor("kBtu/ft2/yr", "kWh/m2/yr")
+    assert si.eui_unit == "kWh/m2/yr" and si.peer_median_eui == pytest.approx(90.0 * k)
+    assert f"{90.0 * k:g} kWh/m2/yr" in si.to_text() and "kWh/m&sup2;/yr" in si.to_html()
+    by = {b.site: b for b in si.buildings}
+    for b in ip.buildings:
+        if b.eui is not None:
+            assert by[b.site].eui == pytest.approx(b.eui * k)
+            assert by[b.site].eui_percentile == b.eui_percentile
+            assert by[b.site].pct_vs_median == b.pct_vs_median
+    facts = facts_from_fleet(si)
+    assert "kWh/m2/yr" in facts[0].text and facts[0].data["eui_unit"] == "kWh/m2/yr"
+    assert all("kBtu" not in f.text for f in facts)
+    same = build_fleet_report(_fleet(), peer_median_eui=90.0, units="ip")
+    assert same.peer_median_eui == 90.0 and same.to_text() == ip.to_text()
+    given_si = build_fleet_report(
+        [{"site": "A", "eui": 250.0, "findings": []}], eui_unit="kWh/m2/yr", units="si"
+    )
+    assert given_si.buildings[0].eui == 250.0
+    with pytest.raises(ValueError):
+        build_fleet_report(_fleet(), eui_unit="kBtu/furlong")

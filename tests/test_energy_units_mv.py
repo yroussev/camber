@@ -205,3 +205,100 @@ def test_trended_mv_entry_must_name_its_rate_unit_under_a_system():
         _mv_trended_units({"class": "Meter", "units": "kWh"}, us)
     with pytest.raises(ValueError):
         _mv_trended_units({"class": "Meter", "units": "kWh"}, None)
+
+
+# --------------------------------------------------------------------------- trended gas volume
+
+
+def _gas_store(tmp_path, *, scale=1.0):
+    """A trended gas meter in cfh (x ``scale``) on a store, with its outdoor temperature."""
+    import json
+
+    from camber.model.roles import Role
+    from camber.portfolio import Portfolio
+
+    ws = str(tmp_path / "ws")
+    pf = Portfolio.init(ws)
+    pf.add_facility("Gas site", facility_id="g1", reason="test", activate=True)
+    rng = np.random.default_rng(5)
+    idx = pd.date_range("2021-01-01", "2022-12-31 23:00", freq="1h")
+    T = 52 - 24 * np.cos(2 * np.pi * (idx.dayofyear - 15) / 365.25) + rng.normal(0, 3, len(idx))
+    cfh = 200 + 12.0 * np.maximum(0, 60 - T) + rng.normal(0, 20, len(idx))
+    cfh = np.where(idx >= "2022-01-01", cfh * 0.9, cfh)
+    frame = pd.DataFrame({Role.ENERGY_RATE: cfh * scale, Role.OAT: T}, index=idx)
+    pf.store.write_role_frame(frame, facility_id="g1", equip="gas", equip_class="GAS_METER")
+    cfg = {
+        "source": {"kind": "store", "store": os.path.join(ws, "store"), "facility_id": "g1"},
+        "equipment": [{"class": "GAS_METER"}],
+        "mv": [
+            {
+                "class": "GAS_METER",
+                "period": ["2021-01-01", "2021-12-31"],
+                "reporting_period": ["2022-01-01", "2022-12-31"],
+                "method": "forecast",
+            }
+        ],
+    }
+    return json.loads(json.dumps(cfg))
+
+
+def _gas_saving(cfg, system=None, **entry):
+    c = {**cfg, "mv": [{**cfg["mv"][0], **entry}]}
+    if system:
+        c["units"] = system
+    return next(f for f in run_config(c).findings if f.rule == "mv_savings")
+
+
+def test_trended_gas_volume_flow_converts_with_its_heat_content(tmp_path):
+    cfg = _gas_store(tmp_path)
+    raw = _gas_saving(cfg, None, units="cfh", heat_content="1037 Btu/ft3")
+    assert "energy_unit" not in raw.metrics  # no system: ft3, exactly as before
+    ip = _gas_saving(cfg, {"system": "ip"}, units="cfh", heat_content="1037 Btu/ft3")
+    si = _gas_saving(cfg, {"system": "si"}, units="cfh", heat_content="1037 Btu/ft3")
+    assert ip.metrics["meter_unit"] == "ft3" and ip.metrics["energy_unit"] == "kBtu"
+    assert ip.metrics["avoided_energy"] == pytest.approx(
+        raw.metrics["avoided_energy"] * 1.037, 1e-4
+    )
+    k = eu.energy_factor("kBtu", "kWh")
+    assert si.metrics["avoided_energy"] == pytest.approx(ip.metrics["avoided_energy"] * k, 1e-4)
+    assert any("1037 Btu/ft3" in c for c in ip.caveats)
+    assert ip.metrics["savings_pct"] == raw.metrics["savings_pct"]
+
+
+def test_trended_gas_in_m3h_matches_cfh(tmp_path):
+    ft3 = _gas_store(tmp_path / "a")
+    m3 = _gas_store(tmp_path / "b", scale=0.3048**3)  # the same gas, metered in m3/h
+    a = _gas_saving(ft3, {"system": "si"}, units="cfh", heat_content="1037 Btu/ft3")
+    b = _gas_saving(m3, {"system": "si"}, units="m3/h", heat_content="1037 Btu/ft3")
+    assert b.metrics["meter_unit"] == "m3"
+    assert b.metrics["avoided_energy"] == pytest.approx(a.metrics["avoided_energy"], rel=1e-6)
+
+
+def test_trended_gas_from_a_factor_set(tmp_path):
+    cfg = _gas_store(tmp_path)
+    system = {"system": "ip", "factor_set": "energy_star_thermal_2015", "region": "US"}
+    got = _gas_saving(cfg, system, units="cfh")
+    assert got.metrics["energy_factor"]["meter_type"] == "natural_gas"
+    raw = _gas_saving(cfg, None, units="cfh")
+    assert got.metrics["avoided_energy"] == pytest.approx(
+        raw.metrics["avoided_energy"] * 1.026, 1e-4
+    )
+    assert any("energy_star_thermal_2015" in c for c in got.caveats)
+
+
+@pytest.mark.parametrize(
+    "units,entry,msg",
+    [
+        ({"system": "ip"}, {"units": "cfh"}, "gas volume flow: give mv.heat_content"),
+        (None, {"units": "kW", "heat_content": "1037 Btu/ft3"}, "for a gas meter"),
+        (None, {"units": "cfh", "heat_content": "1000 Btu/lb"}, "per mass"),
+        (None, {"units": "cfh", "meter_type": "natural_gas"}, "only with a units.factor_set"),
+        ({"system": "si"}, {"units": "kWh"}, "a trended meter's units are its rate"),
+    ],
+)
+def test_trended_gas_refusals(units, entry, msg):
+    from camber.config import _mv_trended_conversion
+
+    us = None if units is None else eu.UnitSystem.from_config({"units": units})
+    with pytest.raises(ValueError, match=msg):
+        _mv_trended_conversion({"class": "M", **entry}, us)
