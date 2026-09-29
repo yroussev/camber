@@ -80,6 +80,17 @@ ROLE_TO_223 = {
     Role.SUPERHEAT_TEMP: ("Temperature", "Refrigerant"),
     Role.DISCHARGE_PRESSURE: ("Pressure", "Refrigerant"),
     Role.SUCTION_PRESSURE: ("Pressure", "Refrigerant"),
+    # --- 0.93 (#39): refrigerant line temperatures / pressures ---
+    Role.LIQUID_LINE_TEMP: ("Temperature", "Refrigerant"),
+    Role.SUCTION_LINE_TEMP: ("Temperature", "Refrigerant"),
+    Role.DISCHARGE_LINE_TEMP: ("Temperature", "Refrigerant"),
+    Role.LIQUID_LINE_PRESSURE: ("Pressure", "Refrigerant"),
+    Role.DISCHARGE_SUPERHEAT_TEMP: ("Temperature", "Refrigerant"),
+    Role.RETURN_AIR_DEWPOINT_TEMP: ("DewPointTemperature", "Air"),
+    Role.SOURCE_LOOP_SUPPLY_TEMP: ("Temperature", "Water"),
+    Role.SOURCE_LOOP_RETURN_TEMP: ("Temperature", "Water"),
+    Role.SOURCE_LOOP_DIFF_PRESS: ("Pressure", "Water"),
+    Role.SOURCE_LOOP_PUMP_SPEED: ("DimensionlessRatio", "Water"),
 }
 
 # Roles intentionally NOT in ROLE_TO_223: binary/enumerated status & command signals carry no QUDT

@@ -4,11 +4,21 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.93.0] — Unreleased
 
-**0.93: hardening from real data.**
+<!-- 0.93 is stacked on 0.92, whose entry is the "## Unreleased" block below. The 0.92 release
+stamps that block; this one gets its date when 0.93 is released. -->
 
-<!-- 0.93 rules1 (#42, #43, #44) -->
+**0.93: hardening from real data, and the refrigerant cluster (#6, #37-#44, #68, #70).** Real-data
+fixes to setback, leaking valves, simultaneous heating and cooling (dehumidification with
+reheat), DCV verification and CO2 over-ventilation (economizer hours); a VAV rule for a zone the
+box cannot heat; daylight-saving day lengths, holiday calendars and a break-day driver for M&V,
+and the energy-units follow-ups; an R-410A (and R-134a, R-22, R-32, CO2) saturation curve that
+turns refrigerant pressures and line temperatures into subcooling, superheat and approach; DX /
+heat-pump charge and indoor-airflow rules scored on the NIST heat-pump FDD data; the
+discharge-superheat drift detector deferred in #6; and operating-mode, capacity, same-room and
+source-loop rules for water-source heat pumps trended with three points.
+
 ### Added
 - **A VAV rule for a zone the box cannot heat (#44).** `rules.reheat_capacity_rule.
   ReheatCapacityShortfall` (`reheat_capacity_shortfall`, built-in, terminal boxes only) flags a
@@ -20,13 +30,106 @@ All notable changes to CAMBER are documented here. The format follows
   either the rule declines. With `airflow` and `airflow_sp` the finding says whether the box was
   short of air or of heat; the summary also reports the under-heated time with reheat to spare. On
   `lbnl-b59`, zone 051 faults (35.8 % of occupied hours, median 2.9 F below its setpoint) and
-  nine more terminals warn. The rule is in that dataset's run template. Its `faultlab` scenario
-  waits in `PENDING_SCENARIOS` for sign-off; registering the rule moves the synthetic
-  `coverage.n_single` from 39 to 40.
-- **`Role.HEAT_COIL_LEAVING_TEMP` / `Role.COOL_COIL_LEAVING_TEMP`** (`heat_coil_leaving_temp`,
-  `cool_coil_leaving_temp`): an AHU's coil leaving-air temperatures (G36's HCLT / CCLT), with
-  sensor-health bounds and 223P hints (#42). The `irish-ahu` mapping maps `HCALTemp` / `CCALTemp`
-  to them, and their 0.00 C outage readings are blanked like the other temperatures.
+  nine more terminals warn. The rule is in that dataset's run template, and its `faultlab` scenario
+  is a gated synthetic key (see Benchmarks).
+- **Coil leaving-air roles (#41, #42).** `Role.HEAT_COIL_LEAVING_TEMP` /
+  `Role.COOL_COIL_LEAVING_TEMP` (`heat_coil_leaving_temp`, `cool_coil_leaving_temp`): the air
+  straight after an air handler's own heating / cooling coil (G36's HCLT / CCLT), upstream of a
+  draw-through supply fan and, for the cooling coil, of any post-heat coil. One definition each,
+  shared by `leaking_valve` (#42) and `simultaneous_heat_cool` (#41), with sensor-health bounds,
+  flatline and fan-gated trust, the AHU equipment template and 223P hints. The `irish-ahu` mapping
+  maps `HCALTemp` / `CCALTemp` to them (their 0.00 C outage readings are blanked like the other
+  temperatures); the `nuig-ahu101` mapping maps TE_101_3 to the cooling-coil one (the dataset
+  needs a re-ingest to pick it up).
+- **`co2_ventilation_system`** (`rules.iaq_rule.CO2VentilationSystem`), a fleet rule, built in:
+  each CO2 zone is joined to its serving air handler (served-by topology, else the naming
+  heuristic; one economizing unit with no grouping takes every zone) and judged by
+  `co2_ventilation` with that unit's economizer-mode hours left out (#38). One finding, a
+  `per_zone` breakdown; category `ventilation`; roles-only applicability.
+- **`iaq.economizer_mode_mask`** (provisional): where an economizer brings in outdoor air beyond
+  the ventilation minimum -- a trended economizer command, else the OAT below the high limit
+  (75 F) with the OA damper more than 5 points above its minimum or the unit on ~100 % outside air
+  (`freecooling.integrated_economizer_mask`). An OAT alone excludes nothing (#38).
+- `DemandControlledVentilation` / `DcvSystemVerification` parameters `full_outdoor_air` and
+  `stratify_hour`; `assess_dcv(stratify_hour=True)`; `DcvResult.lift_basis` and
+  `demand_lift_pooled`; `analyze_ahu(simul_classes=...)` and `AHUResult.simul_class_pct`;
+  `SimultaneousHeatCool` parameters `dehumidification`, `reheat_lift_f`, `dewpoint_margin_f`,
+  `humid_rh_pct`, `fault_pct`, `warn_pct`; `CO2Ventilation` parameters `exclude_economizer`,
+  `oa_damper_min_pct`, `econ_high_limit_f`; `CO2VentilationResult.econ_hours_pct`,
+  `over_vent_econ_pct` and `over_vent_all_pct`.
+
+- **Daylight-saving day lengths in daily M&V (#68).** With the site's zone known
+  (`source.timezone`, or a catalog store's `local_timezone`), a daily `mv` day is as long as its
+  clock: the autumn fall-back day sums 25 hours of energy (the repeated hour, which a naive index
+  holds once, counts for both passes) and weights that hour twice in its mean temperature; the
+  spring-forward day has 23. `mandv.intervalfit.daily_energy_vs_temp` and `rate_to_energy` take
+  `timezone=`; `repeated_hour_weights` is new. Only fall-back days change, and nothing changes
+  without a zone. On `cofactor-drammen` the fall-back days now match the publisher's
+  fixed-offset data exactly (they were 3-5 % short).
+- **Holiday calendars for the occupied-day driver (#68).** `mv[].holiday_calendar` takes a
+  country code for bundled public holidays, `"US"` (federal, observed, 2011-2030), `"NO"` (Norway,
+  2000-2040) or `"ES-<community>"` (Spain per autonomous community, 2016-2026). It can also take
+  `{"country", "subdivision", "files", "dates"}` to add calendar CSV files (`date`, or
+  `start`/`end` ranges) and single dates. Each bundled file cites its sources (5 U.S.C. 6103 /
+  E.O. 11582 checked against OPM; the Norwegian statutes; the annual BOE resolutions), and
+  `scripts/calendars_refresh.py` rebuilds them. The new module `camber.calendars`
+  (`HolidayCalendar`, `public_holidays`, `load_calendar_csv`, `register_calendar` for any other
+  source, e.g. the `holidays` package, which CAMBER does not depend on) serves them. A day outside
+  a calendar's coverage is left out, never treated as holiday-free. The new driver `"break_day"`
+  with `mv[].break_calendar` gives school breaks their own coefficient. As holidays they made the
+  COFACTOR school models worse; as break days 15 of 16 schools met daily G14 acceptance (13
+  without). The `cofactor-drammen` template now uses `"holiday_calendar": "NO"`, with identical
+  results.
+- **Energy-units follow-ups (#70).** The chain report `camber mv report` follows
+  `units.system`: its page, JSON (`units` per meter) and CUSUM give energy in kBtu or kWh
+  (`MeterChain.units`). Trended gas meters measured as a volume flow (`"units": "cfh"`, `CCF/h`,
+  `Mcf/h`, `m3/h`) convert with `mv[].heat_content` or a `units.factor_set`
+  (`mv[].meter_type`), with no default (`energy_units.VOLUME_FLOW_UNITS`,
+  `quantity_of_rate`). The fleet report takes `eui_unit=` / `units=` and labels its EUIs
+  (`FleetReport.eui_unit`), `camber fleet` passes the configs' shared system, and the agent
+  context's fleet facts name the unit. Carbon factors may be given per any unit
+  (`{"rate", "per"}`), converted through `convert_rate` (`carbon.factor_per`). In a bills file,
+  spellings of one unit (`kWh` / `kwh`) are one unit, not mixed units. A greenhouse-gas factor
+  set (eGRID / EIA) is documented as a follow-up. Every default output is unchanged.
+
+- **Refrigerant properties (#39).** `camber.refrigerant`: `saturation_temp` / `saturation_pressure`
+  (bubble and dew) for R-410A (Lemmon 2003), R-744 (Span & Wagner 1996), R-134a, R-22 and R-32
+  (CoolProp's published ancillary fits to the reference equations of state; credited in NOTICE),
+  gauge or absolute, psi / kPa / bar / MPa, degF / degC / K. No new dependency: the Wagner-form
+  correlations are evaluated directly. R-410A matches the NIST REFPROP saturation temperatures
+  published in the NIST heat-pump data within 0.011 degF (bubble) and 0.007 degF (dew); CoolProp
+  is an optional cross-check in the tests only. Transforms `subcooling`, `superheat`,
+  `discharge_superheat`, `condenser_approach`, `evaporator_approach`; NaN (a decline) above the
+  critical pressure -- a transcritical CO2 gas cooler -- below the valid range or below vacuum;
+  `is_supercritical`. See docs/REFRIGERANT.md.
+- **Derived refrigerant roles.** New roles `liquid_line_temp`, `suction_line_temp`,
+  `discharge_line_temp`, `liquid_line_pressure`, `discharge_superheat_temp`. A config equipment
+  entry's `"refrigerant": "R-410A"` (or `EquipRef` / `StoreEquipRef.refrigerant`) makes `resolve`
+  derive subcooling, superheat, discharge superheat and both approaches wherever a rule asks for
+  them (`refrigerant.derive_refrigerant_roles`; a controller-reported value is kept).
+- **DX / heat-pump refrigerant charge and indoor airflow (#40).** `dx_refrigerant_charge`
+  (subcooling; superheat as corroboration, or `metric="superheat"` for a fixed orifice) and
+  `dx_indoor_airflow` (evaporator temperature split matched on return air and the new
+  `return_air_dewpoint_temp`, or return RH), built-in: manufacturer targets (`targets`, per
+  equipment by glob), universal limits without one, or a frozen fault-free baseline at matched
+  outdoor / return-air conditions (`analyze_periods`; the new `dx` drift family,
+  `dxdrift.diagnose_dx_drift`). A narrowed split with lost subcooling is reported as a capacity
+  (charge) symptom, not high airflow. On `nist-heatpump-fdd`, leave-one-file-out: charge TPR 91%
+  [83-95] at 8% [4-15] of fault-free files; airflow 22% [14-31] at 2% [1-8] (18/44 at 15%+
+  airflow reduction).
+- **Discharge-superheat drift (#6).** `rules.dx_discharge_superheat_rule.DischargeSuperheatDrift`
+  (`discharge_superheat_drift`, in the `dx` drift family): two-sided frozen-baseline drift with
+  the family's CUSUM, normalized on OAT and return air (DX) or tons (a water-cooled chiller);
+  discharge superheat is mapped or derived from a discharge pressure and discharge-line temperature.
+  On the NIST data it catches 32% [23-41] of charge-fault files at 6% [2-12] of fault-free ones:
+  the weaker signal on TXV units, as #6 anticipated.
+- **Water-source heat pumps with three points (#40).** `rules.heatpump_ops_rule.infer_hp_mode`
+  (mode from discharge air against the zone) and the built-in `hp_mode_vs_need`,
+  `hp_capacity_shortfall` (capacity vs control verdict) and `hp_room_imbalance` (fleet: units in
+  one room that fight or split the work unevenly). `source_loop_deltat`: a heat-pump loop pumped
+  with next to no temperature difference. New roles `source_loop_supply_temp`,
+  `source_loop_return_temp`, `source_loop_diff_press`, `source_loop_pump_speed`; new equipment
+  families `dx` and `source_loop`.
 
 ### Changed
 - **`night_weekend_setback` tells a fan holding the setback from a missing one (#43).** When the
@@ -57,33 +160,6 @@ All notable changes to CAMBER are documented here. The format follows
   2.6 F above the cooling coil's leaving air before the date, so most of the old signature was
   downstream of the coils. The whole record reads ok. The LBNL SDAHU benchmark runs keep their
   verdicts; the 10 % leak run is still missed.
-<!-- 0.93 rules2 (#41, #37, #38) -- integrator: merge with the other 0.93 blocks -->
-
-**0.93 (rules2): real-data hardening of the ventilation and heat/cool rules (#37, #38, #41).**
-
-### Added
-- **`Role.COOL_COIL_LEAVING_TEMP`** (`cool_coil_leaving_temp`): the air leaving an air handler's
-  cooling coil, upstream of any post-heat coil (#41). Wired into sensor health (bounds, flatline,
-  fan-gated), the AHU equipment template and the 223P export. The `nuig-ahu101` mapping now maps
-  TE_101_3 to it (the dataset needs a re-ingest to pick it up).
-- **`co2_ventilation_system`** (`rules.iaq_rule.CO2VentilationSystem`), a fleet rule, built in:
-  each CO2 zone is joined to its serving air handler (served-by topology, else the naming
-  heuristic; one economizing unit with no grouping takes every zone) and judged by
-  `co2_ventilation` with that unit's economizer-mode hours left out (#38). One finding, a
-  `per_zone` breakdown; category `ventilation`; roles-only applicability.
-- **`iaq.economizer_mode_mask`** (provisional): where an economizer brings in outdoor air beyond
-  the ventilation minimum -- a trended economizer command, else the OAT below the high limit
-  (75 F) with the OA damper more than 5 points above its minimum or the unit on ~100 % outside air
-  (`freecooling.integrated_economizer_mask`). An OAT alone excludes nothing (#38).
-- `DemandControlledVentilation` / `DcvSystemVerification` parameters `full_outdoor_air` and
-  `stratify_hour`; `assess_dcv(stratify_hour=True)`; `DcvResult.lift_basis` and
-  `demand_lift_pooled`; `analyze_ahu(simul_classes=...)` and `AHUResult.simul_class_pct`;
-  `SimultaneousHeatCool` parameters `dehumidification`, `reheat_lift_f`, `dewpoint_margin_f`,
-  `humid_rh_pct`, `fault_pct`, `warn_pct`; `CO2Ventilation` parameters `exclude_economizer`,
-  `oa_damper_min_pct`, `econ_high_limit_f`; `CO2VentilationResult.econ_hours_pct`,
-  `over_vent_econ_pct` and `over_vent_all_pct`.
-
-### Changed
 - **`simultaneous_heat_cool` tells dehumidification with reheat from coil fighting (#41).** A
   both-open interval with the fan running, the cooling coil leaving at least 2 F below the supply
   air (the heat is added after the coil) and at or within 2 F of the entering dew point (outdoor
@@ -125,46 +201,34 @@ All notable changes to CAMBER are documented here. The format follows
   `lbnl-b59` template now runs `co2_ventilation_system`: 57-71 % of occupied hours are economizer
   mode and set apart, and the zones still sit within 150 ppm of outdoor in 99-100 % of the
   remaining minimum-damper hours -- over-ventilated at the minimum, not only while economizing.
-<!-- 093-mv (#68, #70): M&V days and calendars, energy-units follow-ups -->
-### Added
-- **Daylight-saving day lengths in daily M&V (#68).** With the site's zone known
-  (`source.timezone`, or a catalog store's `local_timezone`), a daily `mv` day is as long as its
-  clock: the autumn fall-back day sums 25 hours of energy (the repeated hour, which a naive index
-  holds once, counts for both passes) and weights that hour twice in its mean temperature; the
-  spring-forward day has 23. `mandv.intervalfit.daily_energy_vs_temp` and `rate_to_energy` take
-  `timezone=`; `repeated_hour_weights` is new. Only fall-back days change, and nothing changes
-  without a zone. On `cofactor-drammen` the fall-back days now match the publisher's
-  fixed-offset data exactly (they were 3-5 % short).
-- **Holiday calendars for the occupied-day driver (#68).** `mv[].holiday_calendar` takes a
-  country code for bundled public holidays, `"US"` (federal, observed, 2011-2030), `"NO"` (Norway,
-  2000-2040) or `"ES-<community>"` (Spain per autonomous community, 2016-2026). It can also take
-  `{"country", "subdivision", "files", "dates"}` to add calendar CSV files (`date`, or
-  `start`/`end` ranges) and single dates. Each bundled file cites its sources (5 U.S.C. 6103 /
-  E.O. 11582 checked against OPM; the Norwegian statutes; the annual BOE resolutions), and
-  `scripts/calendars_refresh.py` rebuilds them. The new module `camber.calendars`
-  (`HolidayCalendar`, `public_holidays`, `load_calendar_csv`, `register_calendar` for any other
-  source, e.g. the `holidays` package, which CAMBER does not depend on) serves them. A day outside
-  a calendar's coverage is left out, never treated as holiday-free. The new driver `"break_day"`
-  with `mv[].break_calendar` gives school breaks their own coefficient. As holidays they made the
-  COFACTOR school models worse; as break days 15 of 16 schools met daily G14 acceptance (13
-  without). The `cofactor-drammen` template now uses `"holiday_calendar": "NO"`, with identical
-  results.
-- **Energy-units follow-ups (#70).** The chain report `camber mv report` follows
-  `units.system`: its page, JSON (`units` per meter) and CUSUM give energy in kBtu or kWh
-  (`MeterChain.units`). Trended gas meters measured as a volume flow (`"units": "cfh"`, `CCF/h`,
-  `Mcf/h`, `m3/h`) convert with `mv[].heat_content` or a `units.factor_set`
-  (`mv[].meter_type`), with no default (`energy_units.VOLUME_FLOW_UNITS`,
-  `quantity_of_rate`). The fleet report takes `eui_unit=` / `units=` and labels its EUIs
-  (`FleetReport.eui_unit`), `camber fleet` passes the configs' shared system, and the agent
-  context's fleet facts name the unit. Carbon factors may be given per any unit
-  (`{"rate", "per"}`), converted through `convert_rate` (`carbon.factor_per`). In a bills file,
-  spellings of one unit (`kWh` / `kwh`) are one unit, not mixed units. A greenhouse-gas factor
-  set (eGRID / EIA) is documented as a follow-up. Every default output is unchanged.
+- **`nist-ibal`** maps its liquid- and suction-line RTDs to `liquid_line_temp` /
+  `suction_line_temp` and its run template names R-410A, so the whole refrigerant-side chiller
+  drift family runs. Specificity: 0 of 36 monthly detector-windows (April-September 2025 against a
+  January-March baseline) raised a magnitude alarm; 2 provisional CUSUM prompts at severity ok.
+  New data issue `refrigerant-pressure-below-vacuum` (a dead transducer reading -70 psig).
+- **`nist-heatpump-fdd`** runs `dx_refrigerant_charge` (target mode) and declares it as the scored
+  detector for the charge-fault runs. Its mapping now carries discharge superheat, the raw line
+  temperatures and pressures and the indoor inlet dew point.
 
 ### Fixed
 - A catalog entry whose `timezone` is a prose description of its clock (BDG2, Valladolid) is no
   longer taken as the site's zone by a store source (it failed a `shared_oat` file read).
-<!-- /093-mv -->
+- **`nist-heatpump-fdd` suction pressure.** The 16 SEER unit's `1710_ODSuctPort_psia` is a copy of
+  the discharge pressure; `suction_pressure` now maps the vapour service valve pressure
+  (`1701_ODVapSV_psia`), the one NIST itself used for that unit. New data issues
+  `suction-port-pressure-copies-discharge` and `fault-free-points-not-steady-cooling`.
+
+### Benchmarks
+- **Synthetic baseline refreshed with the maintainer's sign-off.** The faultlab scenarios of the
+  six new single-equipment rules moved from `faultlab.PENDING_SCENARIOS` (now empty) into the
+  gated `SCENARIOS`: `reheat_capacity_shortfall` (#44), `dx_refrigerant_charge`,
+  `dx_indoor_airflow`, `hp_mode_vs_need`, `hp_capacity_shortfall` and `source_loop_deltat` (#40).
+  The synthetic baseline gains their `.tpr` (1.0) and `.fpr` (0.0) keys, and `coverage.n_scored`
+  / `coverage.n_single` move from 39 / 39 to 45 / 45 (the other new rules are fleet or drift
+  rules: `co2_ventilation_system`, `hp_room_imbalance`, `discharge_superheat_drift`). Every other
+  gated key is byte-identical, as are the fleet, LBNL, BDG2 and BDG2 savings baselines. See
+  docs/VALIDATION.md.
+
 
 ## Unreleased
 

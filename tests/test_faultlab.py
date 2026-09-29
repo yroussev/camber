@@ -43,8 +43,9 @@ def test_coverage_partitions_the_registry():
     assert len(cov["scored"]) + len(cov["fixture_only"]) + len(cov["fleet"]) == len(reg.names())
     # 0.6: the whole single-equipment suite is accuracy-scored — no fixture-only rules remain,
     # except rules whose scenarios wait (PENDING_SCENARIOS) for sign-off as gated keys: none after
-    # 0.92, when condenser_bypass_leak (#15) was promoted (n_single 39, n_scored 39); 0.93 adds
-    # reheat_capacity_shortfall (#44), pending (n_single 40, n_scored 39)
+    # 0.92, when condenser_bypass_leak (#15) was promoted (n_single 39, n_scored 39), and none after
+    # 0.93, when reheat_capacity_shortfall (#44) and the five single-equipment DX / heat-pump rules
+    # (#40) were promoted (n_single 45, n_scored 45)
     assert cov["fixture_only"] == sorted(faultlab.PENDING_SCENARIOS)
     assert len(cov["scored"]) + len(faultlab.PENDING_SCENARIOS) == cov["n_single"]
     assert "condenser_bypass_leak" in faultlab.SCENARIOS

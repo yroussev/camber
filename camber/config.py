@@ -99,6 +99,10 @@ the folder-source file marker and is ignored here); ``shared_oat`` may name a st
 role (``{"equip": "weather", "role": "oat"}``) or a CSV ``file`` as before; optional ``start`` /
 ``end`` bound every read. Any ``equipment`` entry (store or folder source) may add ``"equip":
 [names]`` to keep only the named equipment -- e.g. one scenario of a multi-scenario dataset.
+It may also name the equipment's ``"refrigerant"`` (``"R-410A"``, ``"R-134a"``, ``"R-22"``,
+``"R-32"``, ``"R-744"``; provisional, 0.93): the saturation-referenced roles (subcooling,
+superheat, discharge superheat, the approaches) are then derived from its refrigerant pressures and
+line temperatures wherever a rule asks for them (:mod:`camber.refrigerant`).
 The facility's provenance (dataset, licence, citation) recorded at ingest is attached to the
 report as ``AuditReport.data_sources``. A facility whose lifecycle state is not
 ``active`` (suspended, provisioning, ...; see :mod:`camber.portfolio`) is skipped with a warning --
@@ -505,7 +509,7 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
             end=end,
             include_inactive=True,  # the lifecycle check was made once, above
         )
-        found = _only_named(found, eq)
+        found = _with_refrigerant(_only_named(found, eq), eq)
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 
@@ -605,7 +609,7 @@ def _prepare_sources(config: dict, base_dir: str) -> _Prepared:
             found = discover_terminals(folders, marker_measure=marker)
         else:
             found = discover(folders, eq["class"], marker_measure=marker)
-        found = _only_named(found, eq)
+        found = _with_refrigerant(_only_named(found, eq), eq)
         if tzkw["timezone"] or tzkw["strict_timezone"]:
             found = [dataclasses.replace(r, **tzkw) for r in found]
         refs += found
@@ -617,6 +621,26 @@ def _prepare_sources(config: dict, base_dir: str) -> _Prepared:
     out = _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
     out.timezone = tzkw["timezone"]
     return out
+
+
+# --- 0.93 (#39) refrigerant-derivation block (093-refrig) ---------------------------------
+def _with_refrigerant(found: list, entry: dict) -> list:
+    """Tag refs with an ``equipment`` entry's ``"refrigerant"`` (validated; 0.93, #39).
+
+    A tagged equipment's saturation-referenced roles (subcooling, superheat, discharge superheat,
+    approaches) are derived at resolve time from its refrigerant pressures and line temperatures
+    (:func:`camber.refrigerant.derive_refrigerant_roles`). An unknown refrigerant fails the run.
+    """
+    fluid = entry.get("refrigerant")
+    if not fluid:
+        return found
+    from .refrigerant import normalize_refrigerant
+
+    name = normalize_refrigerant(fluid)
+    return [dataclasses.replace(r, refrigerant=name) for r in found]
+
+
+# --- end 0.93 (#39) block ----------------------------------------------------------------------
 
 
 def _only_named(found: list, entry: dict) -> list:

@@ -23,6 +23,7 @@ nav:
   - Ecosystem: ECOSYSTEM.md
   - Analytics:
       - Packaged / DX FDD: FDD-DX.md
+      - Refrigerant properties: REFRIGERANT.md  # 093-refrig
       - Chiller drift & calibration: CHILLER-DRIFT.md
       - Pump / hydronic drift: PUMP-DRIFT.md
       - "Plant detectors: boiler, tower, bypass": PLANT-DETECTORS.md  # 092-plant

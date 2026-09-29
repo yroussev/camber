@@ -77,6 +77,17 @@ RULE_EQUIP_CLASSES: dict = {
     "boiler_short_cycle": _HW,
     "hw_plant_deltat": _HW,
     "hw_pump_dp_reset": ("hw_plant", "pump"),
+    # --- 0.93 (#40) DX / heat-pump block (093-refrig)
+    # subcooling means a refrigerant circuit; an RTU (air_handler family) has one too
+    "dx_refrigerant_charge": ("heat_pump", "dx", "air_handler"),
+    # the coil temperature split reads airflow only on a DX coil (a chilled-water AHU's split
+    # follows its valve), so no air_handler here: class an RTU's DX section DX or HEAT_PUMP
+    "dx_indoor_airflow": ("heat_pump", "dx"),
+    "hp_mode_vs_need": ("heat_pump",),
+    "hp_capacity_shortfall": ("heat_pump",),
+    "hp_room_imbalance": ("heat_pump",),
+    "source_loop_deltat": ("source_loop",),
+    # --- end 0.93 (#40) block
 }
 
 #: Built-in rules that stay roles-only, so the classification above is complete.

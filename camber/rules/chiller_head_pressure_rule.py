@@ -9,8 +9,9 @@ its own detector for two reasons:
 1. **It is directly instrumented and directly actionable.** Many chillers publish a discharge
    pressure but not a computed condenser approach; the head-pressure trend is then the only
    load-normalized read on the high side. :attr:`camber.model.roles.Role.DISCHARGE_PRESSURE` is a
-   *raw* pressure, not a saturation temperature -- CAMBER models no refrigerant saturation curve, so
-   the pressure is trended in its own right rather than converted.
+   *raw* pressure, not a saturation temperature, and it is trended in its own right rather than
+   converted (with a named refrigerant, :mod:`camber.refrigerant` also turns it into a condensing
+   temperature for the subcooling and approach detectors).
 2. **It is one-sided, like approach.** The fault modes that matter -- tube fouling / scale,
    non-condensables in the circuit, a fouled or air-bound condenser, reduced CW flow -- all *raise*
    head pressure. A falling head pressure is not a high-side fault, so the detector alarms only on a

@@ -142,11 +142,11 @@ def test_evidence_masks_the_shortfall():
     assert rule.evidence("VAV-1", _box().drop(columns=[Role.HEAT_VALVE])) is None
 
 
-def test_pending_faultlab_scenario_scores_clean():
-    # held in PENDING_SCENARIOS until the maintainer signs it off as gated synthetic keys
-    assert "reheat_capacity_shortfall" in faultlab.PENDING_SCENARIOS
-    assert "reheat_capacity_shortfall" not in faultlab.SCENARIOS
-    sc = {"reheat_capacity_shortfall": faultlab.PENDING_SCENARIOS["reheat_capacity_shortfall"]}
+def test_faultlab_scenario_scores_clean():
+    # promoted from PENDING_SCENARIOS to the gated SCENARIOS at the 0.93 sign-off
+    assert "reheat_capacity_shortfall" in faultlab.SCENARIOS
+    assert "reheat_capacity_shortfall" not in faultlab.PENDING_SCENARIOS
+    sc = {"reheat_capacity_shortfall": faultlab.SCENARIOS["reheat_capacity_shortfall"]}
     recs = faultlab.labeled_records(scenarios=sc)
     rep = benchmark(recs, faultlab.targets(sc))
     c = rep.per_detector["reheat_capacity_shortfall"]

@@ -6753,7 +6753,14 @@
    "kind": "lab",
    "labeled_faults": true,
    "labels": {
-    "targets": {},
+    "targets": {
+     "dx_refrigerant_charge": [
+      "undercharge",
+      "overcharge",
+      "indoor_airflow_low+undercharge",
+      "indoor_airflow_high+undercharge"
+     ]
+    },
     "fault_types": {
      "undercharge": "refrigerant undercharge (UC/OC < 100% of the nominal charge)",
      "overcharge": "refrigerant overcharge (UC/OC > 100%)",
@@ -6835,6 +6842,7 @@
     "units": {
      "discharge_pressure": "psia",
      "suction_pressure": "psia",
+     "liquid_line_pressure": "psia",
      "power": "W"
     },
     "quirks": [
@@ -7811,12 +7819,14 @@
     "derived": []
    },
    "suggested_analyses": {
-    "rules": [],
+    "rules": [
+     "dx_refrigerant_charge"
+    ],
     "config_template": "nist-heatpump-fdd.json"
    },
    "known_issues": [
     "Steady-state laboratory test points, not a time series: the store's clock is synthetic (1 minute per test point), so rate, schedule and drift-over-time readings mean nothing here.",
-    "No CAMBER rule fits a residential heat pump's refrigerant circuit yet: the refrigerant-side drift detectors are chiller rules that need a chilled-water load. The entry carries the labelled data for inspection and for future heat-pump / discharge-superheat detectors (GitHub issue #6).",
+    "The run template scores dx_refrigerant_charge (0.93) against a target subcooling per unit taken from the fault-free runs (8.6 F, 14 SEER; 9.7 F, 16 SEER), so the fault-free runs are scored in-sample; the frozen-baseline detectors (charge, indoor airflow, discharge superheat) compare a unit with its own fault-free period and cannot be run across separate test runs by a config -- their leave-one-file-out scores are in docs/FDD-DX.md.",
     "Three groups of files carry fault levels that contradict their names and measurements, and two files are marked JUNK by the publisher; they are ingested but excluded from scoring (see the data issues)."
    ],
    "data_issues": [
@@ -7921,6 +7931,40 @@
      },
      "handling": "none",
      "handling_note": "No run selects it (its Filename cell reads 'Filename'), so it is never ingested."
+    },
+    {
+     "id": "suction-port-pressure-copies-discharge",
+     "title": "The 16 SEER unit's suction-port pressure column repeats the discharge pressure",
+     "columns": [
+      "1710_ODSuctPort_psia",
+      "CompDisch_psia",
+      "1701_ODVapSV_psia"
+     ],
+     "evidence": "On all 4,085 16 SEER rows 1710_ODSuctPort_psia equals CompDisch_psia exactly (256-507 psia), and the publisher's own CompSuct_Tsat_F is the R-410A dew temperature at 1701_ODVapSV_psia (median difference 0.002 F), not at the suction port (60 F off). On the 14 SEER unit the suction-port column is a real suction pressure (about 2.5% below the vapour service valve) and CompSuct_Tsat_F follows it (0.003 F).",
+     "contradicts": {
+      "document": "Description of data, column list: 1710_ODSuctPort_psia is the compressor suction-port pressure",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "annotate",
+     "handling_note": "CAMBER maps suction_pressure to the vapour service valve pressure (1701_ODVapSV_psia) for both units -- the pressure NIST itself used for the 16 SEER unit -- and ignores the suction-port column. Until 0.93 the mapping used the suction-port column, so a 16 SEER suction pressure read as the discharge pressure."
+    },
+    {
+     "id": "fault-free-points-not-steady-cooling",
+     "title": "Four fault-free 14 SEER files do not look like steady, fully charged cooling",
+     "columns": [
+      "CompSuct_Suph_F",
+      "CompSuct_Tsat_F",
+      "CompDisch_Suph_F",
+      "ODLiqSV_Tsub_F",
+      "Filename"
+     ],
+     "evidence": "Goodman14SEER_NFTests-LONG-COOL-161212b and -161213a (16 and 20 rows, long line set) run a suction superheat of -16.3 and -19.8 F and a discharge superheat of 13-18 F with the evaporator at 65-66 F; every other fault-free row runs 7-34 F of suction and 35-88 F of discharge superheat, and 99% of them evaporate below 61 F. Goodman14SEER_NFTests-160315a and -160315b (2 and 4 rows, short line set) have no liquid subcooling (median 0.0 and -0.2 F) where the other short-line-set fault-free files median 8.8 F.",
+     "contradicts": {
+      "document": "Description of data, 'Label Definitions': NF = 1 marks a fault-free test at the nominal charge and airflow",
+      "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published and scored as fault-free, so they count against CAMBER's false-positive rate: in the leave-one-file-out scoring the charge detector fires on the two no-subcooling files and the discharge-superheat detector on the two negative-superheat files."
     }
    ]
   },
@@ -8057,7 +8101,7 @@
    "known_issues": [
     "A lab chiller driven by experiments: the store holds experiment hours only, and each experiment's control code stages, resets and cycles the plant.",
     "No refrigerant-side fault is documented in these windows (the logged refrigerant leak and recharges of 2021-2023 predate the refrigerant sensors), so the data measure the false-alarm rate of the refrigerant detectors, not their detection.",
-    "The refrigerant pressures are raw psig; subcooling, superheat and approach need an R-410A saturation curve CAMBER does not model, so those detectors decline.",
+    "The refrigerant pressures are raw psig and the refrigerant RTDs are line temperatures; the run template names the refrigerant (R-410A), so CAMBER derives subcooling, superheat and the condenser / evaporator approaches with its saturation curve (0.93) and the whole refrigerant-side chiller drift family runs.",
     "Pinned to two fixed portal exports (verified byte-identical across repeated downloads on 2026-09-27); the portal database is live and a later correction would fail the pin loudly."
    ],
    "data_issues": [
@@ -8134,6 +8178,21 @@
      },
      "handling": "annotate",
      "handling_note": "Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings."
+    },
+    {
+     "id": "refrigerant-pressure-below-vacuum",
+     "title": "Refrigerant pressures read below a perfect vacuum",
+     "columns": [
+      "ch1_p_dis",
+      "ch1_p_suc"
+     ],
+     "evidence": "In the full export 1,198 discharge-pressure samples (median -70.2 psig, on 3 days: 2025-02-05, 2025-08-21, 2025-09-17) and 1,396 suction-pressure samples (median -32.8 psig, on 7 days from 2025-01-28 to 2025-09-17) sit below -14.7 psig, i.e. below zero absolute pressure, which no gauge reading can reach; each channel holds one fixed value there, the signature of an unpowered or disconnected transducer. The default export has none.",
+     "contradicts": {
+      "document": "Record description: measured sensor data (pressures reported in psi; gauge readings, see the mapping)",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. CAMBER's saturation transform has no temperature for a pressure below vacuum, so derived subcooling, superheat and approach decline on those samples (NaN) instead of taking an extrapolated value, and the pressure roles' physical bounds (-15 psig) flag them in sensor health."
     }
    ]
   },

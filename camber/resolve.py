@@ -71,6 +71,11 @@ class EquipRef:
     # stamps in its files are converted to that wall clock. None keeps the clock as written.
     timezone: str | None = None
     strict_timezone: bool = False  # refuse offset-bearing stamps when no timezone is set
+    # 0.93 (#39): the refrigerant (``"R-410A"`` ...; config equipment ``"refrigerant"``). When set,
+    # resolve() derives the saturation-referenced roles (subcooling, superheat, discharge superheat,
+    # approaches) a caller asks for from the refrigerant pressures and line temperatures
+    # (camber.refrigerant.derive_refrigerant_roles). None: no derivation.
+    refrigerant: str | None = None
 
     def all_equips(self) -> tuple:
         """Primary token then any extras, in search order."""
@@ -97,6 +102,7 @@ class StoreEquipRef:
     store_root: str
     start: str | None = None
     end: str | None = None
+    refrigerant: str | None = None  # 0.93 (#39): as :attr:`EquipRef.refrigerant`
 
     def all_equips(self) -> tuple:
         """The one equipment token (parity with :meth:`EquipRef.all_equips`)."""
@@ -331,6 +337,8 @@ def _resolve_store(ref: StoreEquipRef, roles, resample: str | None) -> pd.DataFr
     full = _store_frame(ref)
     if full.empty:
         return pd.DataFrame()
+    if ref.refrigerant:
+        full = _derive_refrigerant(full, ref.refrigerant, roles)
     want = [r for r in dict.fromkeys(roles) if r in full.columns]
     if not want:
         return pd.DataFrame()
@@ -347,6 +355,16 @@ def _resolve_store(ref: StoreEquipRef, roles, resample: str | None) -> pd.DataFr
     if full.attrs:
         out.attrs.update(full.attrs)  # dataset provenance (camber._provenance)
     return out
+
+
+def _derive_refrigerant(frame: pd.DataFrame, fluid: str, roles) -> pd.DataFrame:
+    """``frame`` plus any requested saturation-referenced role it lacks but can derive (#39)."""
+    from .refrigerant import DERIVED_ROLES, derive_refrigerant_roles
+
+    wanted = [r for r in roles if r in DERIVED_ROLES and r not in frame.columns]
+    if not wanted:
+        return frame
+    return derive_refrigerant_roles(frame, fluid, roles=wanted)
 
 
 def _candidate_tokens(folder: str, equip: str):
@@ -387,6 +405,11 @@ def resolve(
     if mapping is None:
         raise ValueError("a folder-backed EquipRef needs a MappingProvider")
     tz, strict_tz = equip_ref.timezone, equip_ref.strict_timezone
+    asked = list(dict.fromkeys(roles))
+    if equip_ref.refrigerant:
+        from .refrigerant import derivation_inputs
+
+        roles = asked + [r for r in derivation_inputs(asked) if r not in asked]
     cols = {}
     for full_equip in equip_ref.all_equips():
         for folder in equip_ref.all_folders():
@@ -416,7 +439,12 @@ def resolve(
     if not cols:
         return pd.DataFrame()
     # normalize valve/damper/speed columns to percent (no-op on 0-100 sources)
-    return normalize_percent_frame(pd.concat(cols, axis=1))
+    frame = normalize_percent_frame(pd.concat(cols, axis=1))
+    if equip_ref.refrigerant:
+        # derived from the resampled bin means; the inputs only the derivation asked for go again
+        frame = _derive_refrigerant(frame, equip_ref.refrigerant, asked)
+        frame = frame[[c for c in frame.columns if c in asked]]
+    return frame
 
 
 def occupied(frame: pd.DataFrame, *, start_hour: int = 7, end_hour: int = 18):
