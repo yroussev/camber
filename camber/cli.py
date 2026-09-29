@@ -1744,6 +1744,7 @@ def _cmd_edge_bucket_rules(args) -> int:
         facilities=facilities,
         prefix=args.prefix or "",
         container=args.container,
+        layout=args.layout,
     )
     doc = json.dumps(out["document"], indent=2)
     if args.out:
@@ -2783,6 +2784,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--facility", action="append", help="emit per-facility rules for this id (repeatable)"
     )
     ebr.add_argument("--prefix", help="the landing's key prefix in the bucket")
+    ebr.add_argument(
+        "--layout",
+        choices=["store", "workspace"],
+        default="store",
+        help="what --prefix is the root of: the store (as the forwarder lands it; default) or a "
+        "mirror of the whole workspace",
+    )
     ebr.add_argument("--container", help="Azure container name (required for azure)")
     ebr.add_argument("--out", help="write the rules JSON to this file")
     ebr.add_argument("--json", action="store_true", help="print only the rules JSON")

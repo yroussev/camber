@@ -15,17 +15,33 @@ with the provider's tool (see docs/EDGE-DEPLOY.md).
       "legal_holds": {"<facility_id>": {...}},                       # optional
     }
 
-A bare defaults dict (data classes at the top level) and the ``_portfolio.json`` shape
-(``{"retention": {"defaults", "overrides"}, "legal_holds"}``) are accepted too. A ``<rule>`` is one
-of ``{"keep_days": n}``, ``{"keep_months": n}``, ``{"keep_years": n}`` or ``{"keep": "indefinite"
-| "forever" | "equipment_life" | "legal_hold"}`` (no expiry); other keys (``keep_versions``,
-``keep_last``) are not expressible as an object age and are ignored here.
+A bare defaults dict (data classes at the top level), the ``_portfolio.json`` shape
+(``{"retention": {"defaults", "overrides"}, "legal_holds"}``) and the policy document of
+``Portfolio.retention_policy()`` / ``camber retention show --json`` (``"schema":
+"camber.retention/1"``, see ``camber.portfolio.RETENTION_SCHEMA``) are accepted too.
 
-**Bucket data classes** and where they live under the landing prefix (override with
-``class_prefixes``): ``raw_trends`` at ``facility_id=<id>/``, ``hourly_rollups`` at
-``rollups/1h/facility_id=<id>/``, ``daily_rollups`` at ``rollups/1d/facility_id=<id>/``. The other
-classes (findings, baselines, reports, the audit log) are not bucket objects and get no rule;
-neither does the ``_quarantine/`` prefix (kept until released or discarded).
+A ``<rule>`` is one of ``{"keep_days": n}``, ``{"keep_months": n}``, ``{"keep_years": n}`` or
+``{"keep": "indefinite" | "forever" | "equipment_life" | "legal_hold"}`` (no expiry); other keys
+(``keep_versions``, ``keep_last``) are not expressible as an object age and are ignored here.
+
+**Bucket data classes** and where they live under the landing prefix. The prefixes come from the
+workspace layout -- each class's ``location`` pattern in the retention policy document
+(``store/facility_id={facility_id}/...``, ``rollups/hourly/facility_id={facility_id}/...``,
+``rollups/daily/facility_id={facility_id}/...``) -- in one of two ``layout`` s:
+
+* ``"store"`` (the default): the landing prefix is the **store root**, as the edge forwarder writes
+  it. ``raw_trends`` at ``facility_id=<id>/``, ``hourly_rollups`` at
+  ``rollups/hourly/facility_id=<id>/``, ``daily_rollups`` at ``rollups/daily/facility_id=<id>/``
+  (the workspace's rollup directories, if mirrored to the bucket, sit under the store prefix).
+* ``"workspace"``: the prefix mirrors the **whole workspace** (``aws s3 sync <workspace> ...``):
+  ``store/facility_id=<id>/``, ``rollups/hourly/...``, ``rollups/daily/...`` verbatim.
+
+``class_prefixes`` overrides them. A policy document's own ``location`` patterns are used when
+given one; otherwise :data:`BUCKET_CLASSES` (the same derivation from ``camber.portfolio``'s
+classes, pinned by a test). The prefix covers both the ``year=/month=`` keys and the legacy
+year-only keys under it. The other classes (findings, baselines, reports, the audit log) are not
+bucket objects and get no rule; neither does the ``_quarantine/`` prefix (kept until released or
+discarded).
 
 **Ages are conservative:** a month counts as 31 days and a year as 366, so a bucket rule never
 expires an object before the policy would. Object age is counted from the upload, not from the
@@ -48,17 +64,25 @@ __all__ = [
     "DAYS_PER_MONTH",
     "DAYS_PER_YEAR",
     "rule_days",
+    "LAYOUTS",
+    "class_prefixes_from_policy",
     "normalize_policy",
     "policy_from_portfolio",
     "bucket_lifecycle_rules",
 ]
 
 PROVIDERS = ("s3", "gcs", "azure")
+# Store-layout prefixes per bucket class: camber.portfolio's CLASSES[...]["location"] up to the
+# facility_id= segment, with the store directory stripped (tests pin the equality).
 BUCKET_CLASSES: dict = {
     "raw_trends": "",
-    "hourly_rollups": "rollups/1h/",
-    "daily_rollups": "rollups/1d/",
+    "hourly_rollups": "rollups/hourly/",
+    "daily_rollups": "rollups/daily/",
 }
+LAYOUTS = ("store", "workspace")
+_STORE_DIR = "store/"  # the workspace's store directory in the policy's location patterns
+_FID_SEGMENT = "facility_id={facility_id}"
+POLICY_DOC_SCHEMA = "camber.retention/1"
 DAYS_PER_MONTH = 31
 DAYS_PER_YEAR = 366
 _NO_EXPIRY = ("indefinite", "forever", "equipment_life", "legal_hold")
@@ -96,11 +120,56 @@ def rule_days(rule) -> int | None:
     )
 
 
+def _is_document(policy) -> bool:
+    return isinstance(policy, dict) and policy.get("schema") == POLICY_DOC_SCHEMA
+
+
+def class_prefixes_from_policy(policy=None, *, layout: str = "store") -> dict:
+    """``{bucket class: key prefix}`` from a policy document's ``classes[].location`` patterns.
+
+    ``policy`` is a ``camber.retention/1`` document (``Portfolio.retention_policy()``); without
+    one (or for a class it does not locate) the pinned :data:`BUCKET_CLASSES` are used. In the
+    ``"store"`` layout the store directory (the head of ``raw_trends``' location) is stripped; in
+    ``"workspace"`` the heads are kept verbatim.
+    """
+    if layout not in LAYOUTS:
+        raise ValueError(f"unknown layout {layout!r} (known: {', '.join(LAYOUTS)})")
+    heads = {c: (_STORE_DIR if c == "raw_trends" else p) for c, p in BUCKET_CLASSES.items()}
+    classes = (policy or {}).get("classes") if _is_document(policy) else None
+    for cls in BUCKET_CLASSES:
+        loc = ((classes or {}).get(cls) or {}).get("location")
+        if isinstance(loc, str) and _FID_SEGMENT in loc:
+            heads[cls] = loc.split(_FID_SEGMENT, 1)[0]
+    if layout == "workspace":
+        return heads
+    store = heads["raw_trends"]
+    return {c: (h[len(store) :] if store and h.startswith(store) else h) for c, h in heads.items()}
+
+
 def normalize_policy(policy: dict) -> dict:
     """``{"defaults", "overrides", "legal_holds"}`` from any accepted policy shape (a copy)."""
     if not isinstance(policy, dict):
         raise ValueError("the retention policy must be a JSON object")
     p = copy.deepcopy(policy)
+    if _is_document(p):  # Portfolio.retention_policy() / camber retention show --json
+        strip = ("source", "min_age_days")
+        overrides: dict = {}
+        for fid, fac in (p.get("facilities") or {}).items():
+            own = {
+                c: {k: v for k, v in r.items() if k not in strip}
+                for c, r in ((fac or {}).get("rules") or {}).items()
+                if isinstance(r, dict) and r.get("source") == "facility"
+            }
+            if own:
+                overrides[fid] = own
+        return {
+            "defaults": {
+                c: {k: v for k, v in r.items() if k not in strip}
+                for c, r in (p.get("defaults") or {}).items()
+            },
+            "overrides": overrides,
+            "legal_holds": {fid: {} for fid in p.get("legal_holds") or ()},
+        }
     if "retention" in p and isinstance(p["retention"], dict):  # the _portfolio.json shape
         ret = p["retention"]
         return {
@@ -152,6 +221,7 @@ def bucket_lifecycle_rules(
     prefix: str = "",
     container=None,
     class_prefixes=None,
+    layout: str = "store",
 ) -> dict:
     """The provider's lifecycle document for ``policy``, plus a plan and notes (text only).
 
@@ -159,15 +229,18 @@ def bucket_lifecycle_rules(
     prefix filters start with the container name). ``prefix`` is the landing's key prefix (the
     sink's ``prefix``). ``facilities`` lists the facility ids to emit per-facility rules for;
     without it one bucket-wide rule per data class is emitted, which is refused when the policy
-    has overrides or legal holds. Returns ``{"provider", "document", "plan", "notes",
-    "apply_with"}``; ``document`` is the JSON to hand to the provider's tool.
+    has overrides or legal holds. ``layout`` (``"store"`` / ``"workspace"``) says what
+    ``prefix`` is the root of; the class prefixes come from a policy document's locations when
+    ``policy`` is one (see :func:`class_prefixes_from_policy`), and ``class_prefixes`` overrides
+    them. Returns ``{"provider", "document", "plan", "notes", "apply_with"}``; ``document`` is
+    the JSON to hand to the provider's tool.
     """
     if provider not in PROVIDERS:
         raise ValueError(f"unknown provider {provider!r} (known: {', '.join(PROVIDERS)})")
     if provider == "azure" and not container:
         raise ValueError("Azure rules need the container name (prefix filters start with it)")
     pol = normalize_policy(policy)
-    classes = dict(BUCKET_CLASSES)
+    classes = class_prefixes_from_policy(policy, layout=layout)
     classes.update(class_prefixes or {})
     notes = []
     for cls in sorted(set(pol["defaults"]) - set(classes)):

@@ -310,10 +310,15 @@ The policy file schema:
 
 A rule is `keep_days`, `keep_months` or `keep_years` (a positive whole number), or
 `keep: indefinite | forever | equipment_life | legal_hold` (no expiry). A bare defaults object
-and the `_portfolio.json` shape are accepted too. Bucket data classes and their prefixes under
-`--prefix`: `raw_trends` at `facility_id=<id>/`, `hourly_rollups` at `rollups/1h/facility_id=<id>/`
-and `daily_rollups` at `rollups/1d/facility_id=<id>/`. Other classes (findings, baselines, reports,
-the audit log) are not bucket objects, and `_quarantine/` gets no rule.
+and the `_portfolio.json` shape are accepted too, and so is the policy document of
+`camber retention show --json` (what `--workspace` reads). Bucket data classes and their prefixes
+come from each class's `location` in that document. With `--layout store` (the default), `--prefix`
+is the store root, where the forwarder lands: `raw_trends` at `facility_id=<id>/`,
+`hourly_rollups` at `rollups/hourly/facility_id=<id>/` and `daily_rollups` at
+`rollups/daily/facility_id=<id>/`. With `--layout workspace`, `--prefix` mirrors the whole
+workspace, so raw trends are at `store/facility_id=<id>/`. A facility prefix covers both the
+`year=/month=` keys and legacy year-only keys. Other classes (findings, baselines, reports, the
+audit log) are not bucket objects, and `_quarantine/` gets no rule.
 
 - **Conservative ages:** a month counts as 31 days and a year as 366, so a rule never expires an
   object before the policy would. Providers count age from the upload, not the data's timestamps,

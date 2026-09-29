@@ -47,7 +47,7 @@ def test_bucket_wide_s3_rules_from_the_default_policy():
     out = bucket_lifecycle_rules(DEFAULT_POLICY, provider="s3", prefix="lake/")
     rules = out["document"]["Rules"]
     by_prefix = {r["Filter"]["Prefix"]: r["Expiration"]["Days"] for r in rules}
-    assert by_prefix == {"lake/facility_id=": 775, "lake/rollups/1h/facility_id=": 2562}
+    assert by_prefix == {"lake/facility_id=": 775, "lake/rollups/hourly/facility_id=": 2562}
     assert all(r["Status"] == "Enabled" and len(r["ID"]) <= 255 for r in rules)
     notes = " ".join(out["notes"])
     assert "daily_rollups: kept indefinite" in notes and "findings: not stored" in notes
@@ -180,3 +180,63 @@ def test_cli_bucket_rules(tmp_path, capsys, monkeypatch):
          "lake", "--json"]
     )  # fmt: skip
     assert rc == 0 and json.loads(capsys.readouterr().out)["rules"]
+
+
+# ---- integration (0.95): the bucket prefixes are the workspace's real rollup layout ----------
+
+
+def test_bucket_classes_match_the_retention_locations():
+    """The pinned store-layout prefixes are camber.portfolio's CLASSES locations, store dir cut."""
+    from camber.portfolio._retention import CLASSES
+
+    heads = {
+        c: CLASSES[c]["location"].split("facility_id={facility_id}")[0] for c in br.BUCKET_CLASSES
+    }
+    assert heads == {
+        "raw_trends": "store/",
+        "hourly_rollups": "rollups/hourly/",
+        "daily_rollups": "rollups/daily/",
+    }
+    assert br.class_prefixes_from_policy() == br.BUCKET_CLASSES
+    assert br.class_prefixes_from_policy(layout="workspace") == heads
+    with pytest.raises(ValueError):
+        br.class_prefixes_from_policy(layout="bucket")
+
+
+def test_prefixes_derive_from_a_policy_documents_locations(tmp_path):
+    pf = Portfolio.init(tmp_path / "ws")
+    doc = pf.retention_policy()
+    assert br.class_prefixes_from_policy(doc) == br.BUCKET_CLASSES
+    moved = json.loads(json.dumps(doc))  # a document whose layout differs is followed, not assumed
+    moved["classes"]["hourly_rollups"]["location"] = "agg/h/facility_id={facility_id}/year={year}/"
+    assert br.class_prefixes_from_policy(moved)["hourly_rollups"] == "agg/h/"
+    out = bucket_lifecycle_rules(doc, provider="s3", prefix="ws", layout="workspace")
+    got = {r["Filter"]["Prefix"] for r in out["document"]["Rules"]}
+    assert got == {"ws/store/facility_id=", "ws/rollups/hourly/facility_id="}
+
+
+def test_rule_prefixes_cover_the_rollups_retention_writes(tmp_path):
+    """Run `retention apply` for real, then check every rollup file sits under an emitted prefix."""
+    import pandas as pd
+
+    pf = Portfolio.init(tmp_path / "ws")
+    pf.add_facility("North Annex", facility_id=A, reason="test")
+    ts = pd.date_range("2020-01-01", periods=24 * 40, freq="h")
+    long = pd.DataFrame(
+        {"ts": ts, "equip": "ahu1", "equip_class": "ahu", "role": "sat", "value": 55.0}
+    )
+    pf.store.write_long(long, facility_id=A)
+    pf.apply_retention(apply=True, reason="test", now="2023-06-01")
+    doc = pf.retention_policy()
+    out = bucket_lifecycle_rules(doc, provider="s3", facilities=[A], prefix="", layout="workspace")
+    prefixes = [r["Filter"]["Prefix"] for r in out["document"]["Rules"]]
+    written = []
+    for dirpath, _dirs, files in os.walk(os.path.join(pf.root, "rollups")):
+        for f in files:
+            if f.endswith(".parquet"):
+                written.append(
+                    os.path.relpath(os.path.join(dirpath, f), pf.root).replace(os.sep, "/")
+                )
+    hourly = [k for k in written if k.startswith("rollups/hourly/")]
+    assert hourly and all("/month=" in k for k in hourly)
+    assert all(any(k.startswith(p) for p in prefixes) for k in hourly)
