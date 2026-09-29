@@ -228,9 +228,22 @@ camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [
 - A facility that is not `active` (suspended, provisioning) is skipped, with a message.
 - **Billing entries (0.94, #72)** are meters too, named by the entry's `name` (`--equip NAME`),
   with the store kind `mv_bills`. Their version keeps the bills, the weather basis and the
-  degree-day bases (`base_f: "auto"` selects them at freeze). `rebaseline` needs `--period` for
-  bills and records any change of bases. `report` adds the bases, the avoided cost and the
-  calendarized months. See [MANDV.md](MANDV.md#versioned-billing-baselines-provisional-094-72).
+  degree-day bases (`base_f: "auto"` selects them at freeze). `rebaseline` records any change of
+  bases. `report` adds the bases, the avoided cost and the calendarized months. See
+  [MANDV.md](MANDV.md#versioned-billing-baselines-provisional-094-72).
+<!-- 095-mv -->
+- **Billing entries, 0.95 (#74).**
+  - `propose` searches a new window of whole bills for a rebaseline-class trigger, as it does
+    for days. The window covers a full service year, and the latest one that meets every rule
+    wins. Its `window` in `--json` also has `n_bills` and the model's `bases`.
+  - So `rebaseline` no longer needs `--period` for bills. Without it, the window is searched as
+    `propose` does; `--from-proposal` freezes the proposed model exactly. `--period` still names
+    a window by hand, under the same rules.
+  - `"rebaseline": {"bill_steps": "scan"}` opts a billing entry into a step test on its bills
+    (trigger T1), and `propose` / `run` report what it finds. Declared events stay the
+    recommended way to record a change. See
+    [MANDV.md](MANDV.md#step-changes-on-bills-provisional-095-74).
+<!-- /095-mv -->
 
 **Energy units (provisional, 0.92).** A top-level `"units": {"system": "ip" | "si"}` reports M&V
 energy in kBtu or kWh. The fits stay in the meter's unit, and the findings carry `energy_unit` and

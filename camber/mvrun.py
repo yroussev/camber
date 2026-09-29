@@ -503,7 +503,8 @@ def plan_rebaseline(
     triggers it answers (``trigger_ids``, default all of them): start at least ``settle_days``
     after the latest, overlap no ECM installation window, miss at most ``max_missing_frac``, give a
     valid model and cover the expected conditions. No such trigger means no rebaseline: declare
-    the change in ``mv[].rebaseline.events`` (T2) first.
+    the change in ``mv[].rebaseline.events`` (T2) first. A billing meter's window, when not given,
+    is a run of whole bills from :func:`~camber.mandv.billwindow.new_bill_window` (0.95, #74).
     """
     from .mandv.rebaseline import (
         _install_windows,
@@ -530,7 +531,7 @@ def plan_rebaseline(
                 {"baseline": label, "why": "nothing frozen yet: `camber mv freeze`"}
             )
             continue
-        trig, pol, _ev, _sf = _assess(ms, plan.store, site, rec, as_of=as_of)
+        trig, pol, evs, _sf = _assess(ms, plan.store, site, rec, as_of=as_of)
         live = [t for t in trig if not t.resolved and t.outcome == "rebaseline"]
         if trigger_ids:
             want = set(trigger_ids)
@@ -566,15 +567,18 @@ def plan_rebaseline(
             continue
         anchor = window_anchor(trig, live)
         daily = ms.daily if as_of is None else ms.daily.loc[: _day(as_of) + pd.Timedelta(hours=23)]
-        if ms.billing and (from_proposal is not None or period is None):  # 0.94 (#72)
-            plan.refused.append(
-                {
-                    "baseline": label,
-                    "why": "a billing baseline is rebaselined over a window you name: pass "
-                    "--period START END (bills wholly inside it are fitted)",
-                }
-            )
-            continue
+        if ms.billing and from_proposal is None and period is None:  # 0.95 (#74): searched
+            prop = _bill_window(ms, pol, evs, anchor, as_of)
+            if not prop.ok:
+                plan.refused.append(
+                    {
+                        "baseline": label,
+                        "why": prop.declined_reason,
+                        "days_needed": prop.days_needed,
+                    }
+                )
+                continue
+            period = prop.window
         if from_proposal is not None:
             win = from_proposal.get("window") or {}
             period = win.get("window")
@@ -744,14 +748,17 @@ def _refit_stats(model, fit: dict) -> dict:
 
     sub = fit["sub"]
     T, y = _mvform.design_rows(sub, model), sub["energy"].to_numpy(float)
+    d = _mvform.row_days(sub)  # 0.95 (#74): a billing proposal, weighted by days
+    kw = {} if d is None else {"weights": d}
     st = fit_stats(
         y,
         model.predict(T),
         _mvform.n_params(model),
-        cv_rmse_max=cv_rmse_max_for("daily"),
+        cv_rmse_max=cv_rmse_max_for("daily" if d is None else "monthly"),
         time_index=sub.index,
+        **kw,
     )
-    tests = model_regression_tests(model, T, y, time_index=sub.index)
+    tests = model_regression_tests(model, T, y, time_index=sub.index, **kw)
     return {
         **fit,
         "model": model,
@@ -971,37 +978,84 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
 
 def _billing_proposal(ms: MeterSeries, store, site, rec, as_of):
     """A billing meter's :class:`~camber.mandv.rebaseline.RebaselineProposal`: its triggers and
-    outcome. A rebaseline window over bills is named by the operator (``--period``), so a
-    rebaseline-class trigger is proposed as ``declined`` with that instruction (0.94, #72)."""
-    from .mandv.rebaseline import _PROPOSAL_NOTE, RebaselineProposal, _nra_spec
+    outcome. A rebaseline-class trigger gets a window of whole bills from
+    :func:`~camber.mandv.billwindow.new_bill_window` (0.95, #74; before, the operator named it)."""
+    from .mandv.billwindow import RANKING
+    from .mandv.rebaseline import _PROPOSAL_NOTE, RebaselineProposal, _nra_spec, window_anchor
 
-    trig, _pol, _e, _s = _assess(ms, store, site, rec, as_of=as_of)
+    trig, pol, events, _s = _assess(ms, store, site, rec, as_of=as_of)
     rows = _frame_of(ms, rec)
     last = _ds(as_of) if as_of is not None else (_ds(rows["end"].max() - pd.Timedelta(days=1)))
     live = [t for t in trig if not t.resolved]
     rb = [t for t in live if t.outcome == "rebaseline"]
     nra = [t for t in live if t.outcome.startswith("nra_")]
-    caveats = [
-        _PROPOSAL_NOTE,
-        "bills: trigger T1 (step detection) needs at least two segments of min_segment_days "
-        "rows, which bills rarely have; declare changes in mv.rebaseline.events (T2)",
-    ]
+    caveats = [_PROPOSAL_NOTE]
+    if pol.bill_steps is None:
+        caveats.append(
+            "bills: trigger T1 (step detection) needs at least two segments of min_segment_days "
+            "rows, which bills rarely have; declare changes in mv.rebaseline.events (T2)"
+        )
+    else:  # 0.95 (#74)
+        caveats.append(
+            f"bills: trigger T1 is the bill step {pol.bill_steps.describe()}; it tests a stretch "
+            f"once {2 * pol.bill_steps.min_run} bills follow the baseline, an ECM or a declared "
+            "event, and declared events (T2) remain the recommended way to record a change"
+        )
     specs = [_nra_spec(t) for t in nra]
-    if rb:
+    if any(t.id == "T6" for t in rb) and len(rb) == sum(t.id == "T6" for t in rb):
+        caveats.append(
+            "T6 is advisory: savings are not declined, but BPA 2024 §3.1.8 rebaselines once a "
+            "new ECM has 12 months of post-ECM data"
+        )
+    if not rb:
+        return RebaselineProposal(
+            "nra" if nra else "none", last, trig, nra_specs=specs, caveats=caveats
+        )
+    anchor = window_anchor(trig, rb)
+    win = _bill_window(ms, pol, events, anchor, as_of)
+    if nra:
+        caveats.append(
+            f"{len(nra)} NRA-class trigger(s) before the rebaseline are absorbed by it if the new "
+            "window starts after them; record them with `camber mv adjust` otherwise"
+        )
+    caveats.append(f"the window search over bills: {RANKING} (at most 12 windows fitted)")
+    if not win.ok:
+        caveats.append(
+            "`camber mv rebaseline --period START END` names a window by hand; it must meet the "
+            "same rules"
+        )
         return RebaselineProposal(
             "declined",
             last,
             trig,
+            window=win,
             nra_specs=specs,
-            declined_reason=(
-                "a rebaseline is called for; name the new window of whole bills with "
-                "`camber mv rebaseline --period START END` (at least a year of bills, "
-                "starting after the settle days)"
-            ),
+            declined_reason=win.declined_reason,
+            days_needed=win.days_needed,
             caveats=caveats,
         )
     return RebaselineProposal(
-        "nra" if nra else "none", last, trig, nra_specs=specs, caveats=caveats
+        "rebaseline", last, trig, window=win, nra_specs=specs, caveats=caveats
+    )
+
+
+def _bill_window(ms: MeterSeries, pol, events, anchor, as_of):
+    """The new-baseline window of whole bills after ``anchor`` (0.95, #74): each candidate is
+    fitted as ``camber mv rebaseline --period`` would fit it (``auto`` bases selected afresh)."""
+    from .mandv.billwindow import new_bill_window
+    from .mandv.rebaseline import event_phrase
+    from .mvbilling import billing_fit_version
+
+    frame = ms.daily if as_of is None else ms.daily.loc[: _day(as_of) + pd.Timedelta(hours=23)]
+    return new_bill_window(
+        frame,
+        after=anchor.date,
+        fit=lambda p: billing_fit_version(ms, p),
+        policy=pol,
+        as_of=as_of,
+        min_bills=int(ms.entry.get("min_bills", 9)),
+        events=events,
+        event=event_phrase(anchor),
     )
 
 

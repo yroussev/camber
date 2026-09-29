@@ -4,6 +4,79 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.95.0] — Unreleased
+
+<!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when
+0.95 is released. -->
+
+<!-- 095-mv -->
+**Bill-based M&V follow-ups (#74).** A billing meter's rebaseline window is now searched, as a
+daily meter's is, so `camber mv rebaseline` no longer needs `--period` for bills. An opt-in step
+test built for bills gives trigger T1 a calibrated false-alarm rate. And the degree-day model at
+bases selected from the bills is a candidate in the SEP method proposal.
+
+### Added
+- **Rebaseline windows of whole bills (#74).** `camber mv propose` answers a rebaseline-class
+  trigger on a billing meter with a window, from `camber.mandv.billwindow.new_bill_window`
+  (provisional).
+  - Candidates are the shortest runs of whole bills covering a full service year
+    (`min_baseline_days`), ending at each bill from the latest backwards.
+  - A window starts `settle_days` after the trigger, avoids ECM installation windows and declared
+    events, holds `min_bills`, and leaves at most `max_missing_frac` of its days unserved (the
+    freeze rule). Its model must be valid under `require_validity` and must not be a `severe`
+    extrapolation of the bills seen. `auto` bases are selected on each candidate.
+  - Ranking is the daily path's: the latest qualifying window wins. At most 12 fits, stepping
+    back one bill after a failure. The proposal states the ranking. Its `window` adds `n_bills`,
+    `bases`, `ranking` and `tried`.
+  - `camber mv rebaseline` without `--period` uses the search. `--from-proposal` freezes the
+    proposed model exactly (statistics weighted by days, at the monthly G14 thresholds).
+    `--period` still works.
+- **A step test on bills, opt-in (#74).** `"rebaseline": {"bill_steps": "scan"}` on a billing
+  entry makes trigger T1 a scan of the two-sample t of the bills' deviation from the frozen
+  projection (`camber.mandv.billsteps`, provisional). Each bill is weighted by its projected
+  energy, at least 6 bills are needed each side, and the variance is inflated by the
+  bias-corrected lag-1 ρ. The series is cut at ECM installation windows and declared events.
+  - The threshold 3.75 is calibrated by simulation to a **5% false-alarm rate per meter over 36
+    bills**, looked at after every bill (4.8% pooled; 1 to 13% by cell). The simulation used an
+    office and a heating-only gas meter, bills of 28 to 35 days, baselines of 12 or 24 bills, and
+    a monthly CV(RMSE) of 3 to 13%, with 300 seeds a cell.
+  - Detection: 20% steps 61 to 100%, 10% steps 21 to 99%, 5% steps 3 to 62%, with a median delay
+    of 5 to 10 bills.
+  - The daily PELT on bills, for comparison, raised false alarms on 13 to 22% of meters with 6
+    bills a segment, and on 49 to 62% with 3. The other candidates were two CUSUM forms.
+  - With strongly persistent residuals the false-alarm rate rose to 22%. Declared events remain
+    the recommended path, and the docs say so.
+- **The degree-day model in `method: "auto"` (#74).** With `base_f: "auto"`, `select_method`
+  offers the degree-day model at the selected bases in every period (the same bases throughout,
+  counted in `p`).
+  - The criterion is unchanged: SEP validity (§6.4.1), then adjusted R² with every fitted
+    parameter counted.
+  - The `mv_method_proposal` finding states it (`model_criterion`, a caveat) and names the
+    candidate (`degree_day_candidate`).
+  - Standard conditions pair the baseline model with a reporting model of the same form.
+  - The adjusted sensitivity rows follow the same models.
+  - `select_method(degree_day=False)` leaves it out.
+- **Validation (#74).** `tests/test_mv_billing_followups.py` covers:
+  - the window search's rules (settle days, ECM windows, events, `min_bills`, gaps, stepping
+    back) and the propose / rebaseline paths;
+  - the scan's calibration on independent noise, its detection and dating of a 20% step, the
+    opt-in, and ECMs and declared events not detected again;
+  - the degree-day candidate in the proposal.
+
+### Changed
+- Nothing for existing configs. A byte-identity harness compared the findings of billing entries
+  (numeric and `auto` bases, every method, adjustments, versioned runs, `mv report`) and of a
+  daily workspace (`propose`, dry-run `rebaseline`, `report`) before and after: they were
+  identical. The exceptions are the intended ones:
+  - a billing meter's `propose` / `rebaseline` with a rebaseline-class trigger (a window instead
+    of a decline);
+  - `method: "auto"` on a billing entry with selected bases: the proposal gains the degree-day
+    candidate, and the 0.94 caveat "ranks the change-point models only" is gone.
+
+  `RebaselinePolicy.as_dict()`, stored in rebaseline provenance, carries `bill_steps` only when
+  it is set.
+<!-- /095-mv -->
+
 ## [0.94.0] — Unreleased
 
 <!-- 0.94 is stacked on 0.93 and 0.92 (both unreleased, below). This entry gets its date when 0.94

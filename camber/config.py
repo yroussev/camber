@@ -1159,25 +1159,35 @@ def _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats) -> None:
     The models are refitted exactly as :func:`~camber.mandv.methods.select_method` ranked them
     (same windows, kinds and order), so the ledger is applied to the same results."""
     from .mandv import _mvform
-    from .mandv.methods import _rank_models, _slice_days
+    from .mandv.methods import _dd_rows, _dd_spec, _is_dd, _rank_models, _slice_days
 
     kinds = ("2P", "3PC", "3PH", "4P", "5P")
     dcol = "days" if "days" in daily.columns else None  # 0.92 (#64): bills, as select_method ranked
+    ddspec = _dd_spec(daily, dcol, None)  # 0.95 (#74): bills at selected bases, as ranked there
 
-    def best(win):
+    def ranked(win):
         T, y, idx, dd = _slice_days(daily, win, "oat", "energy", dcol)
         sub = daily.loc[idx]
-        c = _rank_models(T, y, idx, kinds, dd) if len(y) > 5 else []
+        extra = None if ddspec is None else {**ddspec, "rows": _dd_rows(daily, idx, ddspec)}
+        return (_rank_models(T, y, idx, kinds, dd, dd=extra) if len(y) > 5 else []), sub
+
+    def best(win):
+        c, sub = ranked(win)
         return (c[0].model if c else None), sub
 
     mb, db = best(base_w)
     mr, dr = best(rep_w)
+    if ddspec is not None and mb is not None and mr is not None and _is_dd(mb) != _is_dd(mr):
+        # standard conditions use the reporting model of the baseline model's form
+        mr_sc = next((c.model for c in ranked(rep_w)[0] if _is_dd(c.model) == _is_dd(mb)), None)
+    else:
+        mr_sc = mr
     di = mi = None
     if prop.intermediate_period:
         mi, di = best(prop.intermediate_period)
 
-    def cols(d):
-        return _mvform.ledger_rows(d, None)
+    def cols(d, model=None):  # 0.95 (#74): a degree-day model's rows are its degree days
+        return _mvform.ledger_rows(d, model if _is_dd(model) else None)
 
     for row in prop.sensitivity:
         res = prop.results.get(row["method"])
@@ -1185,29 +1195,28 @@ def _mv_sensitivity_adjusted(ctx, prop, daily, base_w, rep_w, caveats) -> None:
         if res is None or res.declined:
             continue
         if name == "forecast":
-            rows = {**cols(dr), "model": mb}
+            rows = {**cols(dr, mb), "model": mb}
             fits = {"baseline": (db, mb), "reporting": (dr, mb)}
         elif name == "backcast":
-            rows = {**cols(db), "model": mr, "reporting_index": dr.index}
+            rows = {**cols(db, mr), "model": mr, "reporting_index": dr.index}
             fits = {"baseline": (db, mr), "reporting": (dr, mr)}
         elif name == "chaining":
             assert di is not None and mi is not None  # a chaining result names its window
             rows = {
                 "links": [
-                    {**cols(db), "model": mi, "reporting_index": di.index},
-                    {**cols(dr), "model": mi},
+                    {**cols(db, mi), "model": mi, "reporting_index": di.index},
+                    {**cols(dr, mi), "model": mi},
                 ]
             }
             fits = {"baseline": (db, mi), "reporting": (dr, mi)}
         else:
             import numpy as np
 
-            rows = {
-                "drivers": np.asarray(ctx["entry"]["normal_year"], dtype=float),
-                "model": mb,
-                "reporting_index": dr.index,
-            }
-            fits = {"baseline": (db, mb), "reporting": (dr, mr)}
+            drivers = np.asarray(ctx["entry"]["normal_year"], dtype=float)
+            if _is_dd(mb):  # 0.95 (#74): a degree-day model reads degree days at its bases
+                drivers = mb.rows_from_temps(drivers)
+            rows = {"drivers": drivers, "model": mb, "reporting_index": dr.index}
+            fits = {"baseline": (db, mb), "reporting": (dr, mr_sc)}
         adj, err = _mv_apply_ledger(ctx, res, rows, fits)
         if err is not None:
             row["adjustments_refused"] = err

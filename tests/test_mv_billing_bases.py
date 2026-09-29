@@ -374,7 +374,10 @@ def test_auto_bases_with_other_methods(tmp_path):
         assert s.metrics["savings_pct"] == pytest.approx(0.1, abs=0.03), kw
     res = run_config(_cfg(base_f="auto", method="auto"), base_dir=str(tmp_path))
     (p,) = _find(res, "mv_method_proposal")
-    assert any("change-point models only" in c for c in p.caveats)
+    # 0.95 (#74): the degree-day model at the selected bases is a candidate, criterion stated
+    assert p.metrics["degree_day_candidate"]["kind"] == "DD-HC"
+    assert "adjusted R²" in p.metrics["model_criterion"]
+    assert any(c.startswith("candidate models:") and "§6.4.1" in c for c in p.caveats)
 
 
 def test_low_r2_is_a_caveat_and_flat_bases_are_warned(tmp_path):
@@ -441,13 +444,16 @@ def test_versioned_billing_baselines(tmp_path, capsys):
     assert s.metrics["reporting_period"][1] == "2021-12-31" and s.metrics["avoided_cost"] > 0
     assert any(f.rule == "mv_trigger" and f.metrics["id"] == "T2" for f in fs)
 
-    # propose: a rebaseline over bills is the operator's window
+    # propose: 0.95 (#74) searches a window of whole bills after the event
     pj = str(tmp_path / "prop.json")
     rc, out = _mv(["mv", "propose", path, "--json", pj], capsys)
-    assert "proposal: declined" in out and "--period" in out
+    assert "proposal: rebaseline" in out and "new window" in out
+    win = json.load(open(pj))["meters"][0]["rebaseline"]["window"]
+    assert win["window"][0] >= "2022-01-31" and win["window"][1] == "2023-06-30"
+    assert win["n_bills"] >= 9 and win["bases"]["dd_kind"] == "DD-HC"
     rc, out = _mv(["mv", "rebaseline", path, "--equip", "Elec", "--by", "ana", "--reason", "wing"],
                   capsys)  # fmt: skip
-    assert "pass --period" in out
+    assert f"window {win['window'][0]}..{win['window'][1]}" in out and "dry run" in out
 
     # adjust: an engineering NRA on v1
     spec = str(tmp_path / "adj.json")
