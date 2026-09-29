@@ -280,12 +280,16 @@ camber facility bundles  <id> [--verify]                          # list (and re
   only if they are unchanged since CAMBER wrote them. Other external artifacts (a fault or
   baseline store at a path a config chose, which could be shared) are bundled but left in place,
   and the plan lists them. The registry entry stays, marked `archived` with the bundle id.
+  Uploads the edge landing quarantined after the facility stopped accepting data
+  (`quarantine/facility_id=<id>/`) are not in the bundle and are kept: restore the facility,
+  then `camber edge quarantine release` them, or discard them. An archived facility refuses store
+  writes, even if an edge object PUT into the store recreates its partition.
 - **Restore** (`offboarding`/`archived` -> `active`). From `offboarding` it only changes the
   state. From `archived` it verifies the bundle (the one archive recorded, or `--bundle ID`),
   puts every tree back, re-hashes every restored file against the manifest, and only then marks
   the facility `active`. External report files come back only where their path is free.
-- **Purge** (`archived` -> `purged`) deletes the bundles and anything left of the facility, and
-  its retention override. What remains is the tombstone in `store/_tombstones.json` (id,
+- **Purge** (`archived` -> `purged`) deletes the bundles and anything left of the facility,
+  including its quarantined edge uploads, and its retention override. What remains is the tombstone in `store/_tombstones.json` (id,
   registered and display names, `state: purged`, `purged_at`, reason) and the audit log. The id
   is never reused. Purge accepts only the typed id (`--confirm <id>`, or typing it at the prompt),
   never `--yes`.

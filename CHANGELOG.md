@@ -189,6 +189,12 @@ retention policy.
   disk.
 - The store read caches (the per-facility fragment index and the resolve frame cache) now notice
   writes into month directories.
+- **An archived facility accepted store writes again once an edge object recreated its
+  partition.** The archived check ran after the "partition exists" fast path, so an upload PUT
+  straight into a store-as-bucket reopened the facility. It now runs first.
+- **Purge left a facility's quarantined edge uploads behind.** Purge now deletes
+  `quarantine/facility_id=<id>/` with the rest (crash-safe, finished by `Portfolio.recover`, which
+  also sweeps `quarantine/`). Archive keeps them: they are not in the bundle.
 - **Migrating a year a second time could destroy rows migrated the first time.** Year-only files
   that land after a migration (an older edge forwarder) are migrated again. The second run reused
   the first run's `part-legacy0-0` name and wrote through the stage's hard link to that file,

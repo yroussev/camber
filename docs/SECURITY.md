@@ -195,7 +195,8 @@ CAMBER deletes facility data only through audited admin commands, and only after
 
 - **Offboarding** exports a verified bundle (`archive/<fid>/`, every file with its sha256) before
   anything else, and deletes nothing. **Archiving** deletes the hot data only after the bundle is
-  verified against the current data; **purging** deletes the bundles too, leaving the tombstone
+  verified against the current data; **purging** deletes the bundles and the facility's
+  quarantined edge uploads too, leaving the tombstone
   (id, names, dates, reason) and the audit log. A purge cannot be undone. Take a copy of the
   bundle first if the data must outlive it (a bundle is a plain directory).
 - Every deleting command is a dry run unless `--apply`, needs `--reason` and a confirmation

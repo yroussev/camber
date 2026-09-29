@@ -36,7 +36,7 @@ _RESERVED_AUDIT = ("facility.", "portfolio.", "retention.")
 
 PORTFOLIO_FILE = "_portfolio.json"
 SCHEMA_VERSION = 1
-RESERVED_DIRS = ("rollups", "state", "archive")
+RESERVED_DIRS = ("rollups", "state", "archive", "quarantine")
 
 # The agreed retention defaults, by data class, enforced by `camber retention apply` (0.95; see
 # ._retention). Precedence: legal hold > facility override > portfolio default.

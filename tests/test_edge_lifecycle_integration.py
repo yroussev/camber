@@ -209,3 +209,135 @@ def test_a_legacy_part_resent_after_migration_is_a_quarantined_duplicate(pf, tmp
     other = _part("2024-02-10", 5, 3.0)
     _put(inbox, _edge_key(A, other, 2024), other)
     assert land(pf, inbox)["objects"][0]["to"] == "store"
+
+
+# ---------------------------------------------------------------- 5. the real lifecycle states
+
+
+def test_offboard_archive_purge_end_to_end_with_the_edge_landing(pf, tmp_path):
+    """No stub registry: offboard, archive and purge a facility and land uploads at each step."""
+    import time
+
+    from camber.edge.landing import reconcile
+    from camber.edge.quarantine import land, list_quarantine, quarantine_reconciled, release
+
+    past, later = time.time() - 3600, time.time() + 120
+    history = {}
+    for month in (3, 4):  # landed while active: the facility's history
+        p = _part(f"2024-{month:02d}-01", 24)
+        history[_edge_key(A, p, 2024, month)] = p
+        _put(pf.store_root, _edge_key(A, p, 2024, month), p, mtime=past)
+    rows = len(pf.store.read_long(facility_id=A))
+    assert rows == 48
+
+    # -- offboard: late uploads are quarantined, the history is left alone
+    pf.offboard(A, reason="contract ended", apply=True)
+    assert pf.facility(A)["state"] == "offboarding"
+    late = _part("2024-05-01", 24, 9.0)
+    k_late = _edge_key(A, late, 2024, 5)
+    _put(tmp_path / "in1", k_late, late)
+    rep = land(pf, tmp_path / "in1", apply=True, reason="sweep")
+    assert [(r["category"], r["state"], r["to"]) for r in rep["objects"]] == [
+        ("inactive", "offboarding", "quarantine")
+    ]
+    late2 = _part("2024-05-02", 24, 9.0)
+    k_late2 = _edge_key(A, late2, 2024, 5)
+    _put(pf.store_root, k_late2, late2, mtime=later)  # PUT straight into a store-as-bucket
+    rec = reconcile(pf)
+    actions = {r["key"]: r["action"] for r in rec["objects"]}
+    assert actions[k_late2] == "quarantine"
+    assert all(actions[k] is None for k in history)  # history: reported, never moved
+    assert all("history" in r["detail"] for r in rec["objects"] if r["key"] in history)
+    quarantine_reconciled(pf, reason="late uploads")
+    assert len(pf.store.read_long(facility_id=A)) == rows
+    assert all(os.path.isfile(os.path.join(pf.store_root, *k.split("/"))) for k in history)
+    assert {r["key"] for r in list_quarantine(pf, facility_id=A)} == {k_late, k_late2}
+    refused = release(pf, facility_id=A)["refused"]
+    assert len(refused) == 2 and all("offboarding" in r["why"] for r in refused)
+
+    # -- archive: the hot data goes (quarantine kept); reconcile and land still report correctly
+    pf.archive(A, reason="grace over", apply=True, skip_grace=True)
+    assert pf.facility(A)["state"] == "archived"
+    assert pf.store.partitions(facility_id=A) == []
+    rec = reconcile(pf)
+    assert rec["objects_scanned"] == 0 and A not in rec["facilities"]
+    again = _part("2024-06-01", 24, 7.0)
+    k_again = _edge_key(A, again, 2024, 6)
+    _put(tmp_path / "in2", k_again, again)
+    rec = reconcile(pf, landing=tmp_path / "in2")
+    assert rec["facilities"][A] == {"state": "archived", "inactive": 1}
+    assert rec["objects"][0]["action"] == "quarantine"
+    assert land(pf, tmp_path / "in2", apply=True, reason="sweep")["counts"]["quarantine"] == 1
+    # the archived store refuses writes, even once an object PUT into the store recreates the
+    # facility's partition (the guard is checked before its partition fast path)
+    long = pd.read_parquet(io.BytesIO(again))
+    with pytest.raises(ValueError, match="archived"):
+        pf.store.write_long(long, facility_id=A)
+    _put(pf.store_root, k_again, again, mtime=later)
+    with pytest.raises(ValueError, match="archived"):
+        pf.store.write_long(long, facility_id=A)
+    assert reconcile(pf)["to_quarantine"] == 1
+    quarantine_reconciled(pf, reason="late upload")
+    assert len(list_quarantine(pf, facility_id=A)) == 3
+
+    # -- purge: the tombstone stays, the quarantined uploads go with everything else
+    plan = pf.purge(A, reason="retention period over")
+    assert os.path.join(pf.root, "quarantine", f"facility_id={A}") in plan["deletes"]
+    pf.purge(A, reason="retention period over", apply=True, confirm=A)
+    assert A in pf.registry.tombstones()
+    assert list_quarantine(pf, facility_id=A) == []
+    ghost = _part("2024-07-01", 24, 5.0)
+    k_ghost = _edge_key(A, ghost, 2024, 7)
+    _put(tmp_path / "in3", k_ghost, ghost)
+    row = reconcile(pf, landing=tmp_path / "in3")["objects"][0]
+    assert row["category"] == "unknown_facility" and "tombstoned" in row["detail"]
+    rep = land(pf, tmp_path / "in3", apply=True, reason="sweep")
+    assert rep["objects"][0]["to"] == "quarantine"
+    assert [r["key"] for r in list_quarantine(pf, facility_id=A)] == [k_ghost]
+    with pytest.raises(ValueError):
+        pf.store.write_long(long, facility_id=A)
+    from camber.edge.landing import route_key
+
+    assert route_key(pf, k_ghost) == "_quarantine/" + k_ghost
+
+
+def test_the_quarantine_dir_is_the_one_purge_deletes():
+    from camber.edge.quarantine import QUARANTINE_DIR
+    from camber.portfolio import _cascade
+
+    assert _cascade.QUARANTINE_DIR == QUARANTINE_DIR
+
+
+def test_a_crash_mid_purge_of_the_quarantine_is_finished_by_recover(pf, tmp_path, monkeypatch):
+    from camber.edge.quarantine import land, list_quarantine
+    from camber.store import _swap
+
+    pf.offboard(A, reason="r", apply=True)
+    p = _part("2024-05-01", 24)
+    _put(tmp_path / "in", _edge_key(A, p, 2024, 5), p)
+    land(pf, tmp_path / "in", apply=True, reason="sweep")
+    pf.archive(A, reason="r", apply=True, skip_grace=True)
+    real = _swap._rm
+    qtree = os.path.join(pf.root, "quarantine")
+
+    def crash(path):
+        if os.path.dirname(path) == qtree:
+            raise KeyboardInterrupt("power cut while removing the quarantine tree")
+        return real(path)
+
+    monkeypatch.setattr(_swap, "_rm", crash)
+    with pytest.raises(KeyboardInterrupt):
+        pf.purge(A, reason="r", apply=True, confirm=A)
+    monkeypatch.setattr(_swap, "_rm", real)
+    assert list_quarantine(pf) == []  # the _trash-* leftover is not listed as an upload
+    assert any(n.startswith("_trash-") for n in os.listdir(qtree))
+    done = pf.recover()
+    assert not os.listdir(qtree) and any(d["action"] == "purge_finished" for d in done)
+
+
+def test_edge_state_names_are_the_lifecycles_states():
+    from camber.edge.landing import ACCEPTING_STATES, NON_ACCEPTING_STATES
+    from camber.portfolio import STATES
+
+    assert set(ACCEPTING_STATES) | set(NON_ACCEPTING_STATES) == set(STATES)
+    assert not set(ACCEPTING_STATES) & set(NON_ACCEPTING_STATES)

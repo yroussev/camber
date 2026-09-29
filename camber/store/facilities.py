@@ -203,16 +203,19 @@ class FacilityRegistry:
             and facility_id in self.tombstones()
         ):
             self._check_new(facility_id, {})  # raises the tombstone error
-        parts = _partition_ids(self.root)
-        if facility_id in parts:
-            return  # the common, cheap case (an archived facility has no partition left)
         raw = self._raw()
+        # Checked before the partition fast path: an archived facility normally has no partition
+        # left, but an edge object PUT straight into a store-as-bucket after the archive creates
+        # one again, and that must not reopen the facility to writes.
         if (raw.get(facility_id) or {}).get("state") == "archived":
             raise ValueError(
                 f"facility {facility_id!r} is archived: its data lives in its export bundle, so "
                 "new data would never be in the bundle. Restore it first (`camber facility "
                 "restore`)."
             )
+        parts = _partition_ids(self.root)
+        if facility_id in parts:
+            return  # the common, cheap case
         if facility_id not in raw:
             self._check_new(facility_id, raw)
 

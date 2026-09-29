@@ -75,6 +75,16 @@ def _preflight(pf, facility_id: str, action: str) -> tuple:
     return cur, new
 
 
+# The edge landing's quarantine (camber.edge.quarantine.QUARANTINE_DIR; a test pins the two):
+# uploads that arrived after the facility stopped accepting data. Archive keeps them (they are
+# not in the bundle; restore then release them); purge deletes them with everything else.
+QUARANTINE_DIR = "quarantine"
+
+
+def _quarantine_tree(pf, facility_id: str) -> str:
+    return os.path.join(pf.root, QUARANTINE_DIR, f"facility_id={facility_id}")
+
+
 def _hot_trees(pf, facility_id: str) -> list:
     """The directories archive/purge delete: store and rollup partitions, ``state/<fid>/``."""
     part = f"facility_id={facility_id}"
@@ -358,7 +368,11 @@ def purge(
             "facility_id": facility_id,
             "from_state": cur,
             "to_state": new,
-            "deletes": [t for t in _hot_trees(pf, facility_id) if os.path.exists(t)]
+            "deletes": [
+                t
+                for t in _hot_trees(pf, facility_id) + [_quarantine_tree(pf, facility_id)]
+                if os.path.exists(t)
+            ]
             + [archive_dir(pf.root, facility_id)],
             "bundles": [b["bundle_id"] for b in bundles],
             "dry_run": not apply,
@@ -397,7 +411,10 @@ def purge(
 
 
 def _finish_purge(pf, facility_id: str) -> None:
-    for tree in _hot_trees(pf, facility_id) + [archive_dir(pf.root, facility_id)]:
+    for tree in _hot_trees(pf, facility_id) + [
+        archive_dir(pf.root, facility_id),
+        _quarantine_tree(pf, facility_id),
+    ]:
         _swap.discard(tree)
     pf.store._invalidate_catalog()
     from ..resolve import clear_store_cache
@@ -427,6 +444,7 @@ def recover(pf) -> list:
         os.path.join(pf.root, ROLLUPS_DIR),
         os.path.join(pf.root, "state"),
         os.path.join(pf.root, "archive"),
+        os.path.join(pf.root, QUARANTINE_DIR),
     ):
         done += _swap.recover_tree(base, max_depth=5 if base != pf.store_root else 3)
     reg = pf.registry

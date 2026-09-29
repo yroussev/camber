@@ -31,7 +31,9 @@ Each object falls in one category:
     Storing it again would count its rows twice, so it is quarantined (then discarded).
 
 Lifecycle state is read **only** through the :mod:`camber.portfolio` API (``Portfolio.facilities``
-and the registry's tombstones), so the states a later release adds are handled by name.
+and the registry's tombstones). A purged facility is tombstoned, not a registry state, so its
+uploads read as ``unknown_facility`` (a retired id); a state this CAMBER does not know fails
+closed as ``inactive``.
 
 Reconciliation is **read-only** by default. Its sources: the workspace store (objects that landed
 straight into it), a local landing directory (an inbox or a mounted/synced bucket), or a key
@@ -63,8 +65,8 @@ __all__ = [
 
 # States whose uploads land in the store; every other state (known or not) is quarantined.
 ACCEPTING_STATES = ("provisioning", "active")
-# The non-accepting states by name. offboarding / archived / purged arrive with the lifecycle
-# cascade (#18 steps 3-4); they are matched by name so no code change is needed when they do.
+# The non-accepting states of camber.portfolio.STATES (a test pins the two). "purged" never shows
+# as a registry state (the id is tombstoned) but is listed for completeness.
 NON_ACCEPTING_STATES = ("suspended", "offboarding", "archived", "purged")
 # The bucket-side quarantine prefix a presigned-URL broker routes non-accepted uploads to. A
 # leading underscore keeps Hive / pyarrow dataset discovery from ever reading it as data.

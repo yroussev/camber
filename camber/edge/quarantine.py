@@ -192,7 +192,9 @@ def list_quarantine(portfolio, *, facility_id=None) -> list:
     rows: dict = {}
     if not os.path.isdir(root):
         return []
-    for dirpath, _dirs, files in os.walk(root):
+    for dirpath, dirs, files in os.walk(root):
+        # _trash-* / _swap-* leftovers of an interrupted purge (Portfolio.recover removes them)
+        dirs[:] = [d for d in dirs if not d.startswith(("_", "."))]
         for f in files:
             path = os.path.join(dirpath, f)
             rel = os.path.relpath(path, root).replace(os.sep, "/")
