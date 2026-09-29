@@ -173,6 +173,21 @@ A single-writer lock (`_lock`) serializes admin changes. `camber serve` stays GE
 *shows* each facility's lifecycle state but cannot change it. Real roles arrive with the
 multi-tenant roadmap item. See [PORTFOLIO.md](PORTFOLIO.md).
 
+<!-- 095-edge (#18 step 5) -->
+**Edge landing and devices (0.95).** The same admin model covers the central edge commands:
+`camber edge land`, `reconcile --apply` and `quarantine release | discard` are audited with the OS
+user, host and a mandatory reason, take the workspace lock, and are dry runs without `--apply`.
+`discard` deletes data, so it also needs `--yes` or the typed facility id, and a legal hold
+refuses it. Uploads for a facility that is not `active` or `provisioning` (or is unknown, or whose
+content fails the hash in its key) never enter the store; they wait in `quarantine/` with a record
+of why. On a device, `camber edge decommission` refuses to retire while any batch is
+unacknowledged unless `--force` is given with a reason, and a forced retirement keeps the payloads
+on disk. The device's receipt names the OS user who ran it. `camber edge bucket-rules` only prints
+JSON: CAMBER never calls a cloud API to change a bucket, and the admin applies the rules with
+the provider's own tool and credentials. See
+[EDGE-DEPLOY.md](EDGE-DEPLOY.md#9-lifecycle-reconciliation-quarantine-decommissioning).
+<!-- /095-edge -->
+
 ### 9. What CAMBER sends to weather and price services
 
 A few features fetch public reference data. They are all opt-in, and nothing is fetched unless a

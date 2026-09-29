@@ -4,6 +4,52 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.95.0] — Unreleased
+
+<!-- 095-edge (#18 step 5): the integrator merges this block with the 095-mv and 095-lifecycle
+blocks. -->
+
+**Edge lifecycle (#18 step 5).** What lands in the cloud now follows the portfolio's facility
+registry. Uploads from a facility that has left never enter the store. A device can be retired
+without losing data. The bucket's own lifecycle rules can be generated from the retention policy.
+
+### Added
+- **Central reconciliation (#18).** `camber edge reconcile` (provisional,
+  `camber.edge.landing`) classifies landed objects against the registry as `ok`, `orphaned`,
+  `unknown_facility`, `unregistered`, `inactive` or `quarantined`. It reads the workspace store, a
+  local landing directory, or a key listing exported from S3, GCS or Azure. It is read-only by
+  default and never calls a cloud API. In the store, an inactive facility's objects that landed
+  before its state change are history and are only reported.
+- **Quarantine (#18).** Uploads for a facility that is `suspended`, `offboarding`, `archived`,
+  `purged` or unknown, and objects whose content fails the hash in their name, go to
+  `<workspace>/quarantine/` with a record of why, not into the store. The routes are
+  `camber edge land <inbox>`, `camber edge reconcile --apply`, or `route_key()` for a
+  presigned-URL broker, which routes to the bucket's `_quarantine/` prefix.
+  `camber edge quarantine list | release | discard` are dry runs by default. They take the lock
+  and are audited with a reason. `discard` needs `--yes` or the typed facility id, and a legal
+  hold refuses it.
+- **Edge decommissioning (#18).** `camber edge decommission` flushes the spool, waits for the
+  landing to acknowledge every batch, then retires the device. The spool refuses new batches from
+  then on. The retirement is recorded as an audit line and an `edge_devices.<device_id>` note on
+  the facility's registry entry, directly or later with `camber edge record-retirement`. It
+  refuses while data is unacknowledged unless `--force` is given with a reason. A forced
+  retirement keeps the payloads on disk, and a legal hold refuses it.
+- **Spool journal compaction (#18).** `camber edge compact` / `Spool.compact()` rewrite the
+  append-only journal to the pending batches. The rewrite is verified before an atomic swap, so a
+  crash never drops an unacknowledged batch, and sequence numbers are never reused.
+- **Bucket lifecycle rules (#18).** `camber edge bucket-rules --provider s3|gcs|azure`
+  (`camber.edge.bucket_rules`) emits lifecycle JSON from a retention-policy dict or the
+  workspace's policy. Ages are conservative, and facility overrides and legal holds produce
+  per-facility rules. It is text only: the admin applies the rules.
+- `EdgeConfig.device_id` (config `device_id`, env `CAMBER_EDGE_DEVICE_ID`).
+
+### Changed
+- Spool journal writes now take the spool's single-writer lock (`<spool>/_lock`), and an append
+  after a torn last line starts a fresh line. Before, the next record could be glued onto the
+  torn line and lost with it. Spool contents and forwarding are otherwise unchanged.
+- `camber edge status` adds a `RETIRED` line for a decommissioned device. `edge run` and
+  `send-once` refuse a retired spool, and the forwarder daemon stops on one.
+
 ## [0.94.0] — Unreleased
 
 <!-- 0.94 is stacked on 0.93 and 0.92 (both unreleased, below). This entry gets its date when 0.94

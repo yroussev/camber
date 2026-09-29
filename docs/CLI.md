@@ -17,6 +17,8 @@ camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-c
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
+camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder (device)
+camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing (central)
 ```
 
 `camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
@@ -352,6 +354,48 @@ config names no path, and every file the run writes is listed in the facility's 
 drift freeze` then needs `--reason`, and `freeze` / `accept` take the lock and are audited.
 Renaming the facility changes none of it. See
 [PORTFOLIO.md](PORTFOLIO.md#per-facility-state).
+
+<!-- 095-edge (#18 step 5) -->
+## Edge lifecycle (provisional, 0.95)
+
+The edge forwarder's device commands (`run`, `send-once`, `status`, `selftest`) are described in
+[EDGE-DEPLOY.md](EDGE-DEPLOY.md). 0.95 adds commands for the device's end of life and for the
+central side, where uploads land (see
+[EDGE-DEPLOY.md](EDGE-DEPLOY.md#9-lifecycle-reconciliation-quarantine-decommissioning)):
+
+```
+# on the edge device
+camber edge compact <edge.json> [--dry-run] [--json]          # shrink the spool journal (loss-free)
+camber edge decommission <edge.json> [--device ID] [--wait S]  # dry run: what would be flushed
+camber edge decommission <edge.json> --apply (--yes | --confirm FACILITY_ID) --reason R
+                         [--force] [--workspace W] [--json]    # flush, wait for acks, retire
+
+# central, in the portfolio workspace (--workspace, else $CAMBER_PORTFOLIO, else the current dir)
+camber edge reconcile [--landing DIR | --keys LISTING] [--prefix P] [--json]   # read-only
+camber edge reconcile [--landing DIR] --apply --reason R       # quarantine what it flags
+camber edge land <inbox> [--apply --reason R] [--json]        # route uploads: store or quarantine
+camber edge quarantine list [--facility ID] [--json]
+camber edge quarantine release (--facility ID | --key K...) [--apply] --reason R
+camber edge quarantine discard (--facility ID | --key K...) [--apply] (--yes | --confirm ID) --reason R
+camber edge record-retirement <retired.json> --reason R       # a device's receipt, recorded centrally
+camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]... [--prefix P]
+                         [--container C] [--out rules.json] [--json]   # text only, no cloud call
+```
+
+- **Dry runs by default.** `land`, `reconcile --apply`, `quarantine release|discard` and
+  `decommission` change nothing without `--apply`, which also needs `--reason` (audited with the
+  OS user and host). `discard` and `decommission` also need `--yes` or the typed facility id
+  (`--confirm`). Each takes the portfolio lock (and, on the device, the spool lock).
+- **Legal holds** refuse `quarantine discard` and a forced `decommission`.
+- **Exit codes:** 0 on success or a dry run; 1 for a refusal (a busy lock, a missing reason or
+  confirmation, an unacknowledged spool without `--force`, every selected object refused).
+- `decommission` without a reachable workspace retires the device and tells you to copy the spool's
+  `retired.json` to the portfolio host for `record-retirement`. A decommissioned device's `edge run`
+  and `send-once` exit 1, and `edge status` shows `RETIRED`.
+- `bucket-rules` reads the workspace's retention policy (or `--policy FILE`) and prints the provider
+  lifecycle JSON with a summary; `--out` writes the JSON; `--json` prints only the JSON. Applying
+  it (with the provider's own tool) replaces the bucket's lifecycle configuration.
+<!-- /095-edge -->
 
 ## Weather privacy audit
 

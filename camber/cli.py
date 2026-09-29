@@ -15,6 +15,8 @@ Subcommands:
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
     camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
+    camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder
+    camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
