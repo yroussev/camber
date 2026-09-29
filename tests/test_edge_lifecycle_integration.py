@@ -431,3 +431,146 @@ def test_a_crash_before_the_prune_then_a_late_part_never_double_counts(pf, tmp_p
     assert _rollup_n(pf, "hourly", A, 2026, 6) == 288  # the first rollup replaced, not added to
     assert _rollup_n(pf, "daily", A, 2026, 6) == 288
     assert not pf.store.partitions(facility_id=A)
+
+
+# ---------------------------------------------------------------- recover vs the spool lock
+
+
+_HOLD = """
+import sys, time
+sys.path.insert(0, {repo!r})
+from camber.portfolio._lock import portfolio_lock
+with portfolio_lock({root!r}, timeout=5):
+    open({ready!r}, "w").close()
+    time.sleep(30)
+"""
+
+
+def _hold_lock_in_child(root, tmp_path):
+    """Hold ``<root>/_lock`` in another process (the spool and the portfolio share the lock
+    implementation, each on its own directory) until the returned process is killed."""
+    import subprocess
+    import time
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ready = str(tmp_path / f"ready-{abs(hash(str(root)))}")
+    code = _HOLD.format(repo=repo, root=str(root), ready=ready)
+    proc = subprocess.Popen([sys.executable, "-c", code])
+    deadline = time.monotonic() + 20
+    while not os.path.exists(ready):
+        assert proc.poll() is None and time.monotonic() < deadline, "the child never took the lock"
+        time.sleep(0.02)
+    return proc
+
+
+def test_recover_and_the_spool_lock_are_independent(pf, tmp_path):
+    """Lock order: the spool lock and the portfolio lock are never held together. A device's
+    spool lock blocks neither Portfolio.recover() nor any portfolio command, and a held portfolio
+    lock blocks no spool operation."""
+    from camber.edge.spool import Spool
+    from camber.portfolio import PortfolioLocked
+
+    sp = Spool(str(tmp_path / "spool"), lock_timeout=0.0)
+    sp.enqueue(_edge_key(A, b"x", 2024, 5), b"x", content_type="x")
+    child = _hold_lock_in_child(sp.root, tmp_path)
+    try:
+        with pytest.raises(PortfolioLocked):
+            sp.compact()  # the spool is locked by the child ...
+        assert isinstance(pf.recover(), list)  # ... and recovery does not wait on it
+    finally:
+        child.kill()
+        child.wait()
+    child = _hold_lock_in_child(pf.root, tmp_path)
+    try:
+        with pytest.raises(PortfolioLocked):
+            pf.recover()
+        assert sp.compact() is not None and sp.depth()[0] == 1  # spool work goes on
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_decommission_releases_the_spool_lock_before_taking_the_portfolio_lock(
+    pf, tmp_path, monkeypatch
+):
+    from camber.edge.decommission import decommission
+    from camber.edge.spool import Spool
+    from camber.portfolio import _lock
+
+    sp = Spool(str(tmp_path / "spool"))
+    sp.enqueue(_edge_key(A, b"x", 2024, 5), b"x", content_type="x")
+
+    class Sink:
+        def put(self, key, data, *, content_type="", metadata=None):
+            return {"ok": True}
+
+    seen = []
+    real = Portfolio.lock
+
+    def watched(self, **kw):
+        seen.append(_lock.probe(sp.root))  # non-None while this process holds the spool lock
+        return real(self, **kw)
+
+    monkeypatch.setattr(Portfolio, "lock", watched)
+    res = decommission(
+        sp, Sink(), facility_id=A, device_id="gw-1", reason="swap", apply=True, yes=True,
+        portfolio=pf, wait=0,
+    )  # fmt: skip
+    assert res.retired and res.registry_noted == "recorded"
+    assert seen and all(h is None for h in seen)
+    # recovery leaves the retirement marker and the registry note alone
+    pf.recover()
+    assert sp.retirement()["device_id"] == "gw-1"
+    assert pf.facility(A)["edge_devices"]["gw-1"]["state"] == "retired"
+
+
+# ---------------------------------------------------------------- #74 billing baselines in bundles
+
+
+def test_billing_baselines_round_trip_through_export_and_restore_bundles(pf, tmp_path, capsys):
+    """A bill-based M&V baseline (#74) frozen in a workspace survives offboard -> archive ->
+    restore byte for byte, is in every bundle, and is what the run path reads afterwards."""
+    import importlib.util
+    import json
+
+    from camber.cli import main
+    from camber.config import load_config, run_mv_config
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    spec = importlib.util.spec_from_file_location(
+        "_bills", os.path.join(here, "test_mv_billing_bases.py")
+    )
+    bills = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bills)
+
+    cdir = tmp_path / "cfg"
+    cdir.mkdir()
+    bills._write(cdir, save=0.1, save_from="2021-01-01", years=("2019-01-02", "2021-12-31"))
+    cfg = bills._cfg(base_f="auto")
+    cfg.update(workspace=pf.root, facility_id=A)
+    path = str(cdir / "cfg.json")
+    json.dump(cfg, open(path, "w"))
+    assert main(["mv", "freeze", path, "--reason", "initial", "--by", "ana", "--apply"]) == 0
+    capsys.readouterr()
+    mvfile = os.path.join(pf.state_dir(A), "mv_baselines.json")
+    before = open(mvfile, "rb").read()
+    doc = json.loads(before)
+    assert doc["mv_baselines"][0]["provenance"]["billing"]["bills"]  # a billing baseline
+
+    manual = pf.export(A, reason="pre-offboard copy")
+    pf.offboard(A, reason="contract ended", apply=True)
+    pf.archive(A, reason="grace over", apply=True, skip_grace=True)
+    assert not os.path.exists(mvfile)
+    for b in pf.bundles(A, verify=True):
+        assert b["verify"]["ok"], b
+        man = json.load(open(os.path.join(b["path"], "manifest.json")))
+        files = json.dumps(man)
+        assert "mv_baselines.json" in files, b["bundle_id"]
+    assert manual
+
+    pf.restore(A, reason="contract renewed", apply=True)
+    assert pf.facility(A)["state"] == "active"
+    assert open(mvfile, "rb").read() == before
+    fs = run_mv_config(load_config(path), base_dir=str(cdir))
+    (base,) = [f for f in fs if f.rule == "mv_baseline"]
+    assert base.metrics["baseline_version"] == "v1" and base.metrics["billing"]
