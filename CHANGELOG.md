@@ -6,6 +6,24 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
+<!-- 093-mv (#68, #70): M&V days and calendars, energy-units follow-ups -->
+### Added
+- **Daylight-saving day lengths in daily M&V (#68).** With the site's zone known
+  (`source.timezone`, or a catalog store's `local_timezone`), a daily `mv` day is as long as its
+  clock: the autumn fall-back day sums 25 hours of energy (the repeated hour, which a naive index
+  holds once, counts for both passes) and weights that hour twice in its mean temperature; the
+  spring-forward day has 23. `mandv.intervalfit.daily_energy_vs_temp` and `rate_to_energy` take
+  `timezone=`; `repeated_hour_weights` is new. Only fall-back days change, and nothing changes
+  without a zone. On `cofactor-drammen` the fall-back days now match the publisher's
+  fixed-offset data exactly (they were 3-5 % short).
+
+### Fixed
+- A catalog entry whose `timezone` is a prose description of its clock (BDG2, Valladolid) is no
+  longer taken as the site's zone by a store source (it failed a `shared_oat` file read).
+<!-- /093-mv -->
+
+## Unreleased
+
 **0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69, #71).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
 plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the

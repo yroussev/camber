@@ -115,6 +115,8 @@ a :class:`~camber.tsparse.TimezoneWarning` says so; ``"strict_timezone": true`` 
 instead. A store source is already on the site's wall clock (``camber datasets ingest`` converts
 with the catalog entry's ``local_timezone``); there ``timezone`` defaults to that zone and applies
 only to a ``shared_oat`` CSV file, and a ``timezone`` that disagrees with the catalog warns.
+Either way the zone also sets the length of a daily ``mv`` day (0.93, #68): the autumn fall-back
+day sums 25 hours of energy, the spring-forward day 23 (see docs/MANDV.md).
 
 **Facility identity and the portfolio workspace.** Every run has a ``facility_id``: a store
 source's ``source.facility_id``; for a folder source the optional top-level ``"facility_id"``,
@@ -379,6 +381,7 @@ class _Prepared:
     ctx: _FacilityCtx | None = None
     mv_store: object = None  # the facility's MVBaselineStore, opened read-only (#21 phase 21d)
     units: object = None  # 0.92 (#69): the config's reporting UnitSystem, or None (meter units)
+    timezone: str | None = None  # 0.93 (#68): the site's IANA zone, when known (DST day lengths)
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -415,7 +418,15 @@ def _catalog_timezone(meta: dict) -> str | None:
         entry = _get_dataset(did)
     except Exception:  # an unknown / retired id, or a catalog that fails to load
         return None
-    return (entry.ingest or {}).get("local_timezone") or entry.timezone or None
+    tz = (entry.ingest or {}).get("local_timezone") or entry.timezone or None
+    # 0.93 (#68): only an IANA zone -- an entry's ``timezone`` is often a prose description of
+    # its clock (e.g. "naive timestamps on one uniform hourly grid ..."), not a zone
+    from .tsparse import check_timezone
+
+    try:
+        return check_timezone(tz)
+    except ValueError:
+        return None
 
 
 def _site_timezone(source: dict, meta: dict | None = None) -> dict:
@@ -517,9 +528,11 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
 
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
     prov = _provenance(meta, fid)
-    return _Prepared(
+    out = _Prepared(
         site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else [], ctx
     )
+    out.timezone = tzkw["timezone"]
+    return out
 
 
 def _prepare_bare(config: dict, base_dir: str) -> _Prepared:
@@ -601,7 +614,9 @@ def _prepare_sources(config: dict, base_dir: str) -> _Prepared:
     # Optional sensor-health gate: a rule whose required inputs aren't trusted declines
     # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
-    return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
+    out = _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
+    out.timezone = tzkw["timezone"]
+    return out
 
 
 def _only_named(found: list, entry: dict) -> list:
@@ -811,10 +826,10 @@ def _mv_frame(ctx: dict, win, entry: dict | None = None):
     """The context's rows over ``win``: daily from the resolved frame, or bills (0.92, #64)."""
     if ctx.get("slice") is not None:
         return ctx["slice"](win)
-    return _mv_daily(ctx["full"], ctx["role"], win, entry)
+    return _mv_daily(ctx["full"], ctx["role"], win, entry, timezone=ctx.get("timezone"))
 
 
-def _mv_daily(full, role, win, entry: dict | None = None):
+def _mv_daily(full, role, win, entry: dict | None = None, *, timezone: str | None = None):
     """Daily energy vs temperature over ``win``, with the entry's driver columns (if any)."""
     frame = full.loc[win[0] : win[1]]
     e, t = frame[role].dropna(), frame[Role.OAT].dropna()
@@ -823,7 +838,7 @@ def _mv_daily(full, role, win, entry: dict | None = None):
 
     if not (len(e) and len(t)):
         return None
-    daily = daily_energy_vs_temp(e, t)
+    daily = daily_energy_vs_temp(e, t, timezone=timezone)
     return _mvform.add_drivers(daily, entry, frame) if entry is not None else daily
 
 
@@ -1246,7 +1261,9 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             )
             continue
         frame = full.loc[period[0] : period[1]] if period else full
-        daily = daily_energy_vs_temp(frame[role].dropna(), frame[Role.OAT].dropna())
+        daily = daily_energy_vs_temp(
+            frame[role].dropna(), frame[Role.OAT].dropna(), timezone=prep.timezone
+        )
         daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
             declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
@@ -1313,6 +1330,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             "period": period,
             "reporting": reporting,
             "full": full,
+            "timezone": prep.timezone,
             "role": role,
             "daily": daily,
             "model": model,
@@ -1327,7 +1345,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             continue
         rframe = full.loc[reporting[0] : reporting[1]]
         r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
-        daily_r = daily_energy_vs_temp(r_e, r_t) if len(r_e) and len(r_t) else None
+        daily_r = (
+            daily_energy_vs_temp(r_e, r_t, timezone=prep.timezone)
+            if len(r_e) and len(r_t)
+            else None
+        )
         if daily_r is not None:
             daily_r = _mvform.add_drivers(daily_r, entry, rframe)
         if daily_r is None or daily_r.empty:
@@ -1574,7 +1596,9 @@ def _mv_versioned_findings(
 
     store = prep.mv_store
     out: list = []
-    daily_all = daily_energy_vs_temp(full[role].dropna(), full[Role.OAT].dropna())
+    daily_all = daily_energy_vs_temp(
+        full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
+    )
     daily_all = _mvform.add_drivers(daily_all, entry, full)
     reporting = _mv_window(entry, "reporting_period")
     if reporting is None:
@@ -1733,6 +1757,7 @@ def _mv_versioned_findings(
         "period": [rec.period_start, rec.period_end],
         "reporting": win_r,
         "full": full,
+        "timezone": prep.timezone,
         "role": role,
         "daily": daily,
         "model": model,

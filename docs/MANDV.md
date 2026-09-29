@@ -845,6 +845,29 @@ energy follows occupancy more than weather (weekday/weekend) may never fit a val
 change-point model. CAMBER then says so (T4, declined windows) rather than rebaselining onto an
 invalid model.
 
+## Daylight-saving days (provisional, 0.93)
+
+CAMBER's series are naive wall-clock time, so a daylight-saving change leaves two marks on a
+daily M&V frame. The spring-forward day has 23 hours: its skipped hour holds no sample, and the
+day's energy was always summed over 23. The autumn fall-back day has 25, but its repeated hour
+fits in one naive stamp. The store's hourly resample averages that hour's two readings, and a
+trend export often keeps only the first, so the day came out with 24 hours of energy, one short.
+
+When the site's zone is known, `mandv.intervalfit.daily_energy_vs_temp(..., timezone=)` counts a
+sample in the repeated hour for both passes of the clock (`repeated_hour_weights`). The day then
+sums 25 hours of energy, and its mean temperature weights that hour twice. The weight lands only
+on the fall-back days, so every other day is bit for bit what it was. An export that kept both
+readings under one stamp is averaged first, so both count. The zone comes from `source.timezone`,
+or, for a store facility ingested from the catalog, from the entry's `local_timezone` (for
+example `cofactor-drammen`, Europe/Oslo). Every daily `mv` path takes it: the plain run, each
+declared method, the ledger and the versioned baselines of `camber mv`. A source with no zone
+keeps the historical days. Hourly frames are not changed.
+
+On the COFACTOR import meters (hourly, stored on the Oslo clock) the fall-back days now match
+the publisher's fixed-offset data exactly, where they were 3 to 5 % short. The spring-forward days
+were already right. The same holds for a US series in America/Los_Angeles (the `lbnl-b59`
+whole-building electricity, published in UTC).
+
 ## Change-point + driver models
 
 When energy also follows a continuously varying driver — occupancy, production, operating hours,

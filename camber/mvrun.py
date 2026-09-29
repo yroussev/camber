@@ -177,7 +177,9 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
                 continue
             if any(r not in full.columns for r in extra):
                 continue
-            daily = daily_energy_vs_temp(full[role].dropna(), full[Role.OAT].dropna())
+            daily = daily_energy_vs_temp(
+                full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
+            )
             daily = _mvform.add_drivers(daily, entry, full)
             out.append(MeterSeries(k, entry, ref.equip, role.value, mv_kind(role), daily))
     return out

@@ -1108,7 +1108,8 @@
     "degree_days",
     "energy_vs_degree_days",
     "hourly_energy_vs_temp",
-    "rate_to_energy"
+    "rate_to_energy",
+    "repeated_hour_weights"
   ],
   "camber.mandv.methods": [
     "ChainLink",

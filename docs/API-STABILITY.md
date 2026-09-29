@@ -300,6 +300,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     property_type`, the `unit_scale` finding (and `scale_override` metric),
     `mvbilling.billing_scale_check`, `bps.site_eui_plausibility`, and
     `datasets._ingest.meter_scale_warning` with the BDG2 ingest warnings.
+<!-- 093-mv (#68, #70) -->
+- **M&V days and holiday calendars** (0.93; #68), all additive and provisional:
+  - `mandv.intervalfit.repeated_hour_weights` and the keyword-only `timezone=` of
+    `daily_energy_vs_temp` and `rate_to_energy`; a source's `timezone` (or a catalog store's
+    `local_timezone`) now also sets daily `mv` day lengths.
+<!-- /093-mv -->
 
 ## Deprecated
 
