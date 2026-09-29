@@ -595,10 +595,36 @@ SCENARIOS: dict = {
 # Scenarios for new rules whose tpr/fpr are NOT yet gated synthetic keys. They are scored by the
 # tests (and reported for sign-off) but kept out of SCENARIOS, which the gated synthetic benchmark
 # reads with strict_new: moving one into SCENARIOS adds baseline keys, a maintainer decision. Empty
-# since 0.92, when condenser_bypass_leak (#15) was signed off and promoted.
+# after 0.92, when condenser_bypass_leak (#15) was signed off and promoted; 0.93 adds
+# reheat_capacity_shortfall (#44).
+
+
+# 0.93 rules1 (#44): pending sign-off
+def _reheat_capacity(idx, *, faulty):
+    """A VAV box through a heating season, occupied weekdays 07-18, heating setpoint 70 F.
+
+    Faulty: the reheat valve is pinned at 100 % and the zone still sits 3 F below its setpoint
+    (the box is out of heating). Clean: the valve modulates (60 %) and the zone holds 70 F.
+    """
+    occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    n = len(idx)
+    return pd.DataFrame(
+        {
+            Role.SPACE_TEMP: np.where(occ, 67.0 if faulty else 70.0, 64.0),
+            Role.HEAT_SP: np.where(occ, 70.0, 60.0),
+            Role.HEAT_VALVE: np.where(occ, 100.0 if faulty else 60.0, 0.0),
+            Role.OCCUPANCY: occ.astype(float),
+            Role.AIRFLOW: np.full(n, 400.0),
+            Role.AIRFLOW_SP: np.full(n, 400.0),
+        },
+        index=idx,
+    )
+
 
 #: Scenarios pending sign-off as gated synthetic keys (see the note above).
-PENDING_SCENARIOS: dict = {}
+PENDING_SCENARIOS: dict = {
+    "reheat_capacity_shortfall": _reheat_capacity,  # 0.93 rules1 (#44)
+}
 
 
 # --------------------------------------------------------------------------- harness

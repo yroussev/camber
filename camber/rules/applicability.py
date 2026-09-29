@@ -59,6 +59,8 @@ RULE_EQUIP_CLASSES: dict = {
     "sat_cohort_starvation": _TERMINAL,
     "static_cohort_starvation": _TERMINAL,
     "zones_heat_cool_census": ("terminal", "fan_coil"),
+    # --- 0.93 rules1 (#44): a box out of reheat below its heating setpoint (heat pumps: #40)
+    "reheat_capacity_shortfall": _TERMINAL,
     # --- chilled-water plant
     "chw_plant_reset": _CHW,
     "chw_supply_tracking": _CHW,

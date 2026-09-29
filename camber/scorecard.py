@@ -106,6 +106,8 @@ RULE_CATEGORY = {
     "boiler_efficiency_drift": "maintenance",  # 0.92 (#13)
     "cooling_tower_fan_effort_drift": "maintenance",  # 0.92 (#14)
     "condenser_bypass_leak": "energy",  # 0.92 (#15): warmer condenser water, higher kW/ton
+    # --- 0.93 rules1 (#44)
+    "reheat_capacity_shortfall": "comfort",  # a cold zone the box cannot heat any further
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")

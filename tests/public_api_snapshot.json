@@ -1867,6 +1867,10 @@
     "POWER_WARN_SIGMA",
     "PumpPowerDrift"
   ],
+  "camber.rules.reheat_capacity_rule": [
+    "AIRFLOW_SHORT_RATIO",
+    "ReheatCapacityShortfall"
+  ],
   "camber.rules.reheat_min_rule": [
     "ReheatMinimization"
   ],

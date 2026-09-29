@@ -37,6 +37,7 @@ from .leakvalve_rule import LeakingValve
 from .oafraction_rule import OutdoorAirFraction
 from .overcooling_rule import OvercoolingMinFlow
 from .overcooling_severity_rule import OvercoolingSeverity
+from .reheat_capacity_rule import ReheatCapacityShortfall  # 0.93 rules1 (#44)
 from .reheat_min_rule import ReheatMinimization
 from .reheat_rule import ReheatPenalty
 from .reset_effectiveness_rule import ResetEffectiveness
@@ -97,6 +98,8 @@ RULE_CLASSES: list[type] = [
     DcvSystemVerification,
     G36AFDD,
     CondenserBypassLeak,  # 0.92 (#15)
+    # --- 0.93 rules1
+    ReheatCapacityShortfall,  # 0.93 (#44)
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

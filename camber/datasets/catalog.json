@@ -5301,7 +5301,8 @@
    "suggested_analyses": {
     "rules": [
      "dcv_system_verification",
-     "unmet_setpoint_hours"
+     "unmet_setpoint_hours",
+     "reheat_capacity_shortfall"
     ],
     "config_template": "lbnl-b59.json"
    },
