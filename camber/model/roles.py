@@ -187,7 +187,6 @@ class Role(str, Enum):
     ENERGY_RATE = "energy_rate"  # thermal energy rate (BTU meter)
 
 
-
 # Roles whose source points are text/event-based status or command signals
 # (e.g. "Off"/"Running", "STOP"/"START") rather than numeric trends. The resolve
 # layer loads these via load_status (text -> 0/1 step series), not the numeric
