@@ -390,6 +390,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     in an `mv` entry's `oat` and in `report.rcx.oat_reference`; the audit file
     `weather_audit.ndjson` and its record fields; the CLI `camber weather audit` and
     `camber facility private`, and `camber facility add --private`.
+<!-- 095-lifecycle (#18 steps 3-4) -->
+- **Portfolio lifecycle, offboarding to purge** (added in 0.95, provisional, #18 step 3):
+  `Portfolio.offboard`, `archive`, `restore`, `purge` (each `apply=False` by default; `purge`
+  needs `confirm=` equal to the facility id), `Portfolio.export`, `bundles` and `recover`;
+  `Portfolio.transition` now runs `offboard` / `archive` / `restore`. On disk: the export bundle
+  layout under `archive/<fid>/<bundle_id>/` with `manifest.json` (`"schema": "camber.bundle/1"`)
+  and `manifest.sha256`; the registry fields `offboarding` and `archive`; the tombstone fields
+  `purged_at` and `purge_pending`; the `_swap-*` / `_trash-*` crash-recovery names; the audit
+  actions `facility.offboard|archive|restore|purge|export` and `portfolio.recover`. CLI:
+  `camber facility offboard|archive|restore|purge|export|bundles`.
+<!-- /095-lifecycle -->
 
 ## Deprecated
 

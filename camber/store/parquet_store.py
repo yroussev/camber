@@ -392,9 +392,9 @@ class ParquetStore:
         (inclusive). Any argument left None is unconstrained. ``columns`` restricts the
         columns read from Parquet (projection) -- pass only what you need at scale.
         """
+        empty_cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _FACILITY, _YEAR]
         if not os.path.isdir(self.root):
-            cols = columns or [_TS, _EQUIP, _CLASS, _ROLE, _VALUE, _FACILITY, _YEAR]
-            return pd.DataFrame(columns=cols)
+            return pd.DataFrame(columns=empty_cols)
         dataset = None
         if equips is not None:
             equips = list(equips)
@@ -402,6 +402,8 @@ class ParquetStore:
                 dataset = self._facility_dataset(facility_id, equips)
         if dataset is None:
             dataset = self._dataset()
+            if _FACILITY not in dataset.schema.names:  # no partition left (every facility dropped)
+                return pd.DataFrame(columns=empty_cols)
         filt = self._build_filter(
             facility_id=facility_id, equips=equips, roles=roles, start=start, end=end
         )

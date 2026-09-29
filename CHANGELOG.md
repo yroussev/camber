@@ -4,6 +4,46 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.95.0] — Unreleased
+
+<!-- 0.95 is stacked on 0.94 (unreleased, below). Three branches add to this entry; each keeps its
+own marked block for the integrator. -->
+
+<!-- 095-lifecycle (#18 steps 3-4): begin -->
+**Portfolio lifecycle: offboarding, archiving, restoring and purging (#18 step 3).** A facility
+now leaves a portfolio in audited, reversible steps, and nothing is deleted without a verified
+copy.
+
+### Added
+- **`camber facility offboard | archive | restore | purge`** (and `Portfolio.offboard`,
+  `archive`, `restore`, `purge`; provisional).
+  - `offboard` writes a verified export bundle, then starts a 30-day reversible grace period.
+  - `archive`, after the grace period (or with `--skip-grace`, audited), deletes the hot data:
+    store and rollup partitions, `state/<fid>/`, and unchanged external report files. It keeps
+    the bundle, re-exporting first if anything changed during the grace period.
+  - `restore` brings an offboarding or archived facility back; from a bundle it re-verifies every
+    checksum after the copy.
+  - `purge` deletes everything but the tombstone and the audit record; the id is never reused.
+  - Each is a dry run unless `--apply`, needs `--reason` and a confirmation (`--yes` or the typed
+    id; `purge` only the typed id), takes the portfolio lock and is audited with the OS user. A
+    legal hold blocks `archive` and `purge`.
+- **Export bundles** under `archive/<fid>/<bundle_id>/`: raw partitions, rollups, the whole
+  `state/<fid>/` (fault history, drift baselines, M&V and bill-based M&V baselines, the #73
+  weather audit log, reports, the manifest), external artifacts, the registry entry, catalog keys
+  and retention override, with a sha256 manifest and a checksum of the manifest itself.
+  `camber facility export` makes one on demand; `camber facility bundles --verify` re-hashes
+  them.
+- **Crash safety.** Trees are replaced through a fsynced `_swap-*` stage and deleted through one
+  atomic rename to `_trash-*`. Every lifecycle command first finishes or rolls back whatever a
+  crash left (`Portfolio.recover`, audited as `portfolio.recover`). Tests cover a crash at each
+  step, including a killed child process.
+
+### Changed
+- An **archived** facility refuses store writes (its data lives in its bundle).
+- `ParquetStore.read_long` on a store with no partitions left returns an empty frame instead of
+  raising.
+<!-- 095-lifecycle (#18 steps 3-4): end -->
+
 ## [0.94.0] — Unreleased
 
 <!-- 0.94 is stacked on 0.93 and 0.92 (both unreleased, below). This entry gets its date when 0.94

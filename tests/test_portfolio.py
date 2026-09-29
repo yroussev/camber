@@ -407,8 +407,8 @@ def test_add_transition_rename_and_audit(tmp_path):
     assert pf.transition(fid, "suspend", reason="contract paused")["to_state"] == "suspended"
     assert pf.facilities(state="suspended").keys() == {fid}
     assert pf.transition(fid, "resume", reason="contract resumed")["to_state"] == "active"
-    with pytest.raises(NotImplementedError, match="later release"):
-        pf.transition(fid, "offboard", reason="leaving")
+    with pytest.raises(LifecycleError, match="allowed from active"):
+        pf.transition(fid, "archive", reason="too early")
     assert pf.registry.state(fid) == "active"  # a refused action changes nothing
     r = pf.rename(fid, "North Campus (Bldg 2)", reason="owner's naming")
     assert r["display_name"] == "North Campus (Bldg 2)" and r["name"] == "North Campus"
@@ -446,7 +446,7 @@ def test_legal_hold_blocks_deleting_actions_in_the_workspace(tmp_path):
     json.dump(doc, open(p, "w"))
     with pytest.raises(LifecycleError, match="legal hold"):
         pf.transition(fid, "purge", reason="cleanup")
-    with pytest.raises(NotImplementedError):  # a non-deleting action is not blocked by the hold
+    with pytest.raises(FileNotFoundError, match="no bundle"):  # restore is not blocked by a hold
         pf.transition(fid, "restore", reason="back")
 
 

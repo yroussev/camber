@@ -28,6 +28,8 @@ from ._lock import LOCK_FILE, describe_holder, portfolio_lock, probe, read_holde
 from ._state import SiteResolver, read_manifest, state_dir
 from ._states import IMPLEMENTED, STATES, LifecycleError, transition
 
+_CASCADE = ("offboard", "restore", "archive", "purge")
+
 PORTFOLIO_FILE = "_portfolio.json"
 SCHEMA_VERSION = 1
 RESERVED_DIRS = ("rollups", "state", "archive")
@@ -338,23 +340,36 @@ class Portfolio:
         )
 
     def transition(self, facility_id: str, action: str, *, reason: str) -> dict:
-        """Apply a lifecycle ``action`` (``activate``/``suspend``/``resume``) to a facility.
+        """Apply a lifecycle ``action`` to a facility and return
+        ``{"facility_id", "from_state", "to_state"}``.
 
-        Returns ``{"facility_id", "from_state", "to_state"}``. Raises
-        :class:`~camber.portfolio.LifecycleError` for a transition the state machine refuses and
-        ``NotImplementedError`` for an action this release does not carry out yet (offboard,
-        restore, archive, purge).
+        ``activate``/``suspend``/``resume`` change the state only. ``offboard``, ``restore`` and
+        ``archive`` run the full cascade (:meth:`offboard`, :meth:`restore`, :meth:`archive` with
+        ``apply=True``). ``purge`` is refused here: it needs the typed facility id, so call
+        :meth:`purge` with ``confirm=``. Raises :class:`~camber.portfolio.LifecycleError` for a
+        transition the state machine refuses (including a deleting one under a legal hold).
         """
         _need_reason(reason)
+        if action in _CASCADE:
+            cur = self.facility(facility_id).get("state", "active")
+            transition(cur, action, legal_hold=facility_id in self.legal_holds())
+            if action == "purge":
+                raise LifecycleError(
+                    "purge is irreversible and needs the typed facility id: call "
+                    f"Portfolio.purge({facility_id!r}, confirm={facility_id!r}, apply=True, ...)"
+                )
+            r = getattr(self, action)(facility_id, reason=reason, apply=True)
+            return {
+                "facility_id": facility_id,
+                "from_state": r["from_state"],
+                "to_state": r["to_state"],
+            }
         with self.lock():
             cur = self.facility(facility_id).get("state", "active")  # KeyError if unknown
             held = facility_id in self.legal_holds()
             new = transition(cur, action, legal_hold=held)  # validates before anything changes
-            if action not in IMPLEMENTED:
-                raise NotImplementedError(
-                    f"`{action}` is defined by the lifecycle but available in a later release "
-                    "(it needs export bundles and the deletion cascade); see docs/PORTFOLIO.md"
-                )
+            if action not in IMPLEMENTED:  # pragma: no cover - every action is implemented
+                raise NotImplementedError(f"`{action}` is not implemented")
             self._ensure_registered(facility_id)
             reg = self.registry
             reg._update(facility_id, {"state": new, "state_changed_at": _utc_now()})
@@ -413,6 +428,118 @@ class Portfolio:
             )
         return self.facility(facility_id)
 
+    # ------------------------------------------------------------------ offboard .. purge (0.95)
+
+    def offboard(self, facility_id: str, *, reason: str, apply: bool = False, now=None) -> dict:
+        """Start the reversible offboarding grace period (active/suspended -> offboarding).
+
+        Exports a verified bundle to ``archive/<fid>/`` first, then records the state with its
+        grace deadline (``offboarding_grace_days``, default 30). ``apply=False`` (the default)
+        returns the plan and changes nothing. Provisional (0.95).
+        """
+        from ._cascade import offboard
+
+        _need_reason(reason)
+        return offboard(self, facility_id, reason=reason, apply=apply, now=now)
+
+    def archive(
+        self,
+        facility_id: str,
+        *,
+        reason: str,
+        apply: bool = False,
+        now=None,
+        skip_grace: bool = False,
+    ) -> dict:
+        """Delete the facility's hot data, keeping its verified bundle (offboarding -> archived).
+
+        Refused under a legal hold and, unless ``skip_grace``, before the grace period ends. The
+        latest bundle is reused only if it still matches the hot data and verifies; otherwise a
+        new one is exported first. Provisional (0.95).
+        """
+        from ._cascade import archive
+
+        _need_reason(reason)
+        return archive(
+            self, facility_id, reason=reason, apply=apply, now=now, skip_grace=skip_grace
+        )
+
+    def restore(
+        self, facility_id: str, *, reason: str, apply: bool = False, bundle=None, now=None
+    ) -> dict:
+        """Return an offboarding or archived facility to ``active``.
+
+        From ``archived`` the bundle (the one archive recorded, or ``bundle=`` id) is verified,
+        its content swapped back in and re-hashed. Provisional (0.95).
+        """
+        from ._cascade import restore
+
+        _need_reason(reason)
+        return restore(self, facility_id, reason=reason, apply=apply, bundle=bundle, now=now)
+
+    def purge(
+        self, facility_id: str, *, reason: str, apply: bool = False, confirm=None, now=None
+    ) -> dict:
+        """Delete everything of an archived facility but its tombstone and audit record.
+
+        ``apply=True`` needs ``confirm`` equal to the facility id (the typed confirmation). The id
+        stays tombstoned: it is never reused. Refused under a legal hold. Provisional (0.95).
+        """
+        from ._cascade import purge
+
+        _need_reason(reason)
+        return purge(self, facility_id, reason=reason, apply=apply, confirm=confirm, now=now)
+
+    def export(self, facility_id: str, *, reason: str, now=None) -> dict:
+        """Write a verified export bundle of the facility now, changing nothing else (audited)."""
+        from ._bundle import export_bundle
+
+        _need_reason(reason)
+        with self.lock():
+            self.facility(facility_id)
+            man = export_bundle(self, facility_id, kind="manual", reason=reason, now=now)
+            st = self.facility(facility_id).get("state")
+            self._audit(
+                "facility.export",
+                facility_id=facility_id,
+                from_state=st,
+                to_state=st,
+                reason=reason,
+                details={"bundle": man["bundle_id"], "counts": man["counts"]},
+            )
+        return man
+
+    def bundles(self, facility_id: str, *, verify: bool = False) -> list:
+        """The facility's export bundles, oldest first (``verify=True`` re-hashes each one)."""
+        from ._bundle import list_bundles, verify_bundle
+
+        out = list_bundles(self.root, facility_id)
+        if verify:
+            for b in out:
+                b["verify"] = verify_bundle(b["path"])
+        return out
+
+    def recover(self) -> list:
+        """Finish or roll back work a crash interrupted (lifecycle commands run this first)."""
+        from ._cascade import recover
+
+        with self.lock():
+            return recover(self)
+
+    def _drop_policy_entries(self, facility_id: str) -> None:
+        """Remove a facility's retention override and hold from ``_portfolio.json`` (purge)."""
+        doc = self._doc()
+        changed = False
+        ov = (doc.get("retention") or {}).get("overrides") or {}
+        if facility_id in ov:
+            del ov[facility_id]
+            changed = True
+        if facility_id in (doc.get("legal_holds") or {}):
+            del doc["legal_holds"][facility_id]
+            changed = True
+        if changed:
+            _write_json(os.path.join(self.root, PORTFOLIO_FILE), doc)
+
     # ------------------------------------------------------------------ per-facility state
 
     def state_dir(self, facility_id: str) -> str:
@@ -465,6 +592,7 @@ class Portfolio:
         holder = read_holder(self.root)
         locked = probe(self.root)
         tomb = self.registry.tombstones()
+        counts["purged"] += sum(1 for t in tomb.values() if (t or {}).get("state") == "purged")
         return {
             "root": self.root,
             "store": self.store_root,

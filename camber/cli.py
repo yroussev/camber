@@ -14,7 +14,8 @@ Subcommands:
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
-    camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
+    camber facility add|list|show|rename|activate|suspend|resume|     # facility lifecycle
+                    offboard|restore|archive|purge|export|bundles
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -820,7 +821,11 @@ def _cmd_datasets_score(args) -> int:
 # admin command is refused with the holder's pid@host) and require --reason, which is audited with
 # the OS user. Until CAMBER has authentication, write access to the workspace is admin.
 
-_LATER = {"offboard", "restore", "archive", "purge"}
+# ----- 0.95 (#18 steps 3-4): offboard / restore / archive / purge, retention, store partitions.
+# Destructive commands are dry runs unless --apply; --apply then needs a confirmation (--yes, or
+# the typed facility id: --confirm ID or an interactive prompt; purge accepts only the typed id).
+
+_CASCADE = ("offboard", "restore", "archive", "purge")
 
 
 # --------------------------------------------------------------------------- weather audit (0.94)
@@ -1096,6 +1101,7 @@ def _cmd_facility_show(args) -> int:
         "retention": pf.effective_retention(args.id),
         "state_dir": pf.state_dir(args.id),
         "manifest": pf.manifest(args.id),
+        "bundles": pf.bundles(args.id),
         "audit": pf.audit_log(facility_id=args.id),
     }
     if args.json:
@@ -1110,6 +1116,13 @@ def _cmd_facility_show(args) -> int:
     if info.get("private"):
         print(f"{'private':17s}: yes (weather requests default to offline)")
     print(f"{'allowed actions':17s}: {', '.join(info['allowed_actions']) or 'none'}")
+    if info.get("offboarding"):
+        print(f"{'grace ends':17s}: {info['offboarding'].get('grace_until')}")
+    if info.get("archive"):
+        a = info["archive"]
+        print(f"{'archived':17s}: {a.get('archived_at')} (bundle {a.get('bundle')})")
+    for b in info["bundles"]:
+        print(f"{'bundle':17s}: {b['bundle_id']} ({b.get('kind')})")
     print("retention:")
     for cls, r in info["retention"].items():
         rule = ", ".join(f"{k}={v}" for k, v in r["rule"].items())
@@ -1148,16 +1161,134 @@ def _cmd_facility_private(args) -> int:
 
 @_pf_errors
 def _cmd_facility_transition(args) -> int:
-    if args.facility_cmd in _LATER:
-        print(
-            f"error: `camber facility {args.facility_cmd}` is available in a later release "
-            "(it needs export bundles and the deletion cascade); see docs/PORTFOLIO.md",
-            file=sys.stderr,
-        )
-        return 2
     r = _portfolio(args).transition(args.id, args.facility_cmd, reason=args.reason)
     print(f"{r['facility_id']}: {r['from_state']} -> {r['to_state']}")
     return 0
+
+
+def _confirmed(args, what: str, *, typed_only: bool = False) -> None:
+    """Raise ``ValueError`` unless ``--apply`` is confirmed (``--yes``, ``--confirm ID`` or a
+    typed answer on an interactive terminal). ``typed_only`` refuses ``--yes`` (purge)."""
+    typed = getattr(args, "confirm", None)
+    if typed is not None:
+        if typed != what:
+            raise ValueError(f"--confirm {typed!r} does not match {what!r}; nothing changed")
+        return
+    if getattr(args, "yes", False) and not typed_only:
+        return
+    if sys.stdin is not None and sys.stdin.isatty():
+        answer = input(f"type {what} to confirm (anything else aborts): ").strip()
+        if answer == what:
+            return
+        raise ValueError("confirmation did not match; nothing changed")
+    need = f"--confirm {what}" if typed_only else f"--yes (or --confirm {what})"
+    extra = " (--yes is not enough for an irreversible purge)" if typed_only else ""
+    raise ValueError(f"--apply needs confirmation: pass {need}{extra}")
+
+
+def _need_apply_reason(args) -> str:
+    if args.apply and not (args.reason or "").strip():
+        raise ValueError("--apply needs --reason (every portfolio change is audited)")
+    return args.reason if (args.reason or "").strip() else "(dry run)"
+
+
+def _print_cascade(r: dict) -> None:
+    head = "dry run -- nothing changed" if r.get("dry_run") else "done"
+    print(f"{r['action']} {r['facility_id']}: {r['from_state']} -> {r['to_state']}  ({head})")
+    if r.get("grace_until"):
+        print(f"  grace period ends : {r['grace_until']}")
+    if r.get("skip_grace"):
+        print("  grace period      : skipped (--skip-grace, audited)")
+    exp = r.get("export")
+    if exp:
+        print(
+            f"  footprint         : {exp['files']} file(s), {exp['bytes']} B, "
+            f"{exp['store_rows']} stored row(s)"
+        )
+    if r.get("bundle"):
+        print(f"  bundle            : {r['bundle']}")
+    elif r["action"] in ("offboard", "archive") and r.get("dry_run"):
+        print("  bundle            : a new verified export bundle is written first")
+    if r.get("counts"):
+        c = r["counts"]
+        print(f"  bundle holds      : {c['files']} file(s), {c['store_rows']} stored row(s)")
+    for path in r.get("deletes") or []:
+        print(f"  deletes           : {path}")
+    ext = r.get("deletes_external")
+    if isinstance(ext, list):
+        for path in ext:
+            print(f"  deletes (report)  : {path}")
+    for k in r.get("kept_external") or []:
+        print(f"  kept in place     : {k['path']} ({k['kind']}; may be shared)")
+    for b in r.get("bundles") or []:
+        print(f"  deletes bundle    : {b}")
+    if r.get("restored"):
+        rs = r["restored"]
+        print(
+            f"  restored          : {rs['store']} store, {rs['rollups']} rollup, {rs['state']} "
+            f"state, {rs['external']} external file(s); checksums verified"
+        )
+        for p in rs.get("external_skipped") or []:
+            print(f"  not restored      : {p} (the path is taken)")
+
+
+@_pf_errors
+def _cmd_facility_cascade(args) -> int:
+    verb = args.facility_cmd
+    pf = _portfolio(args)
+    reason = _need_apply_reason(args)
+    kw: dict = {}
+    if verb == "archive":
+        kw["skip_grace"] = args.skip_grace
+    if verb == "restore" and args.bundle:
+        kw["bundle"] = args.bundle
+    if args.apply:
+        pf.facility(args.id)  # an unknown id fails before any prompt
+        _confirmed(args, args.id, typed_only=verb == "purge")
+        if verb == "purge":
+            kw["confirm"] = args.id
+    r = getattr(pf, verb)(args.id, reason=reason, apply=args.apply, **kw)
+    if args.json:
+        print(json.dumps(r, indent=2, default=str))
+    else:
+        _print_cascade(r)
+        if r.get("dry_run"):
+            conf = f"--confirm {args.id}" if verb == "purge" else "--yes"
+            print(f"\nre-run with --apply --reason ... {conf} to carry it out")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_export(args) -> int:
+    man = _portfolio(args).export(args.id, reason=args.reason)
+    c = man["counts"]
+    print(
+        f"exported {args.id} -> archive/{args.id}/{man['bundle_id']} ({c['files']} file(s), "
+        f"{c['store_rows']} stored row(s), sha256 manifest verified)"
+    )
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_bundles(args) -> int:
+    rows = _portfolio(args).bundles(args.id, verify=args.verify)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    bad = 0
+    for b in rows:
+        c = b.get("counts") or {}
+        ver = ""
+        if "verify" in b:
+            ok = b["verify"]["ok"]
+            bad += 0 if ok else 1
+            ver = "  verified" if ok else "  FAILED: " + "; ".join(b["verify"]["problems"][:3])
+        print(
+            f"{b['bundle_id']:32s} {b.get('kind') or '?':9s} {c.get('files', '?')} file(s), "
+            f"{c.get('store_rows', '?')} row(s){ver}"
+        )
+    print(f"\n{len(rows)} bundle(s).")
+    return 1 if bad else 0
 
 
 # --------------------------------------------------------------------------- drift subcommands
@@ -2238,7 +2369,9 @@ def _build_parser() -> argparse.ArgumentParser:
     pfm.set_defaults(func=_cmd_portfolio_migrate)
 
     pfc = sub.add_parser(
-        "facility", help="facility lifecycle: add, list, show, rename, suspend, resume, activate"
+        "facility",
+        help="facility lifecycle: add, list, show, rename, activate, suspend, resume, offboard, "
+        "restore, archive, purge, export, bundles",
     )
     fcsub = pfc.add_subparsers(dest="facility_cmd", required=True)
     fca = fcsub.add_parser("add", help="register a new facility (provisioning unless --activate)")
@@ -2283,16 +2416,52 @@ def _build_parser() -> argparse.ArgumentParser:
         ("activate", "provisioning -> active"),
         ("suspend", "active -> suspended (analyses skip it)"),
         ("resume", "suspended -> active"),
-        ("offboard", "(later release) start the reversible offboarding grace period"),
-        ("restore", "(later release) offboarding/archived -> active"),
-        ("archive", "(later release) delete hot data, keep the export bundle"),
-        ("purge", "(later release) delete everything but the tombstone and audit"),
     ):
         fct = fcsub.add_parser(verb, help=text)
         _ws(fct)
         fct.add_argument("id")
-        fct.add_argument("--reason", required=verb not in _LATER, help="why (audited)")
+        fct.add_argument("--reason", required=True, help="why (audited)")
         fct.set_defaults(func=_cmd_facility_transition)
+    for verb, text in (
+        ("offboard", "export a bundle, then start the reversible 30-day grace period"),
+        ("restore", "offboarding/archived -> active (from the verified bundle when archived)"),
+        ("archive", "after the grace period: delete hot data, keep the verified bundle"),
+        ("purge", "archived -> purged: delete everything but the tombstone and audit record"),
+    ):
+        fct = fcsub.add_parser(verb, help=f"{text} (dry run unless --apply)")
+        _ws(fct)
+        fct.add_argument("id")
+        mode = fct.add_mutually_exclusive_group()
+        mode.add_argument("--dry-run", action="store_true", help="show the plan only (default)")
+        mode.add_argument("--apply", action="store_true", help="carry it out (needs --reason)")
+        fct.add_argument("--reason", help="why (audited; required with --apply)")
+        if verb != "purge":
+            fct.add_argument("--yes", action="store_true", help="confirm --apply without a prompt")
+        fct.add_argument(
+            "--confirm", metavar="ID", help="confirm --apply by typing the facility id"
+        )
+        if verb == "archive":
+            fct.add_argument(
+                "--skip-grace",
+                dest="skip_grace",
+                action="store_true",
+                help="archive before the grace period ends (audited)",
+            )
+        if verb == "restore":
+            fct.add_argument("--bundle", help="restore this bundle id (default: the archived one)")
+        fct.add_argument("--json", action="store_true")
+        fct.set_defaults(func=_cmd_facility_cascade)
+    fce = fcsub.add_parser("export", help="write a verified export bundle now (changes nothing)")
+    _ws(fce)
+    fce.add_argument("id")
+    fce.add_argument("--reason", required=True, help="why (audited)")
+    fce.set_defaults(func=_cmd_facility_export)
+    fcb = fcsub.add_parser("bundles", help="a facility's export bundles (--verify re-hashes them)")
+    _ws(fcb)
+    fcb.add_argument("id")
+    fcb.add_argument("--verify", action="store_true", help="re-check every checksum")
+    fcb.add_argument("--json", action="store_true")
+    fcb.set_defaults(func=_cmd_facility_bundles)
     return ap
 
 
