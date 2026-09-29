@@ -12,8 +12,10 @@ caller can keep its roles-only behaviour for unknown classes instead of guessing
 Families: ``air_handler`` (AHU, RTU, DOAS, MAU), ``terminal`` (VAV, CAV, FCAV boxes),
 ``fan_coil`` (FCU), ``heat_pump`` (packaged / water-source / ground-source heat pumps, VRF),
 ``chw_plant`` (chillers and chilled-water plants), ``hw_plant`` (boilers and hot-water plants),
-``cooling_tower`` (towers and condenser-water plants), ``pump``, ``meter``, ``weather`` and
-``refrigeration``.
+``cooling_tower`` (towers and condenser-water plants), ``pump``, ``meter``, ``weather``,
+``refrigeration``, and since 0.93 ``dx`` (split / packaged DX air conditioners and condensing
+units that are not heat pumps) and ``source_loop`` (a water-source / ground-source heat-pump
+loop).
 """
 
 from __future__ import annotations
@@ -56,6 +58,18 @@ EQUIP_FAMILIES: dict = {
     "meter": ("METER", "ELECMETER", "ELECTRICMETER", "UTILITYMETER", "BTUMETER"),
     "weather": ("WEATHER", "WX", "WEATHERSTATION"),
     "refrigeration": ("REFRIGCIRCUIT", "REFRIGERATION", "REFRIG"),
+    # 0.93 (#40): a DX refrigerant circuit that is not a heat pump (split or packaged AC,
+    # condensing unit), and a heat-pump source loop (water-source / ground-source loop plant)
+    "dx": ("DX", "DXUNIT", "SPLITSYSTEM", "SPLITAC", "CONDENSINGUNIT", "ACCU", "DXAC"),
+    "source_loop": (
+        "SOURCELOOP",
+        "GEOLOOP",
+        "GROUNDLOOP",
+        "GEOTHERMALLOOP",
+        "CONDENSERLOOP",
+        "HEATPUMPLOOP",
+        "HPLOOP",
+    ),
 }
 
 _ALIAS = {}

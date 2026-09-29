@@ -90,7 +90,7 @@ def test_faultlab_scenario_scores_clean():
     rep = benchmark(recs, faultlab.targets(sc))
     c = rep.per_detector["condenser_bypass_leak"]
     assert c.true_positive_rate == 1.0 and c.false_positive_rate == 0.0
-    assert not faultlab.PENDING_SCENARIOS
+    assert "condenser_bypass_leak" not in faultlab.PENDING_SCENARIOS
 
 
 def test_brick_bypass_valve_and_condenser_temperatures():

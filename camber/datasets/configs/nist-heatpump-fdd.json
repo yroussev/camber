@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for nist-heatpump-fdd: deliberately NO rules. The data are residential split heat pumps in a laboratory, one row per steady-state test point on a synthetic clock, and CAMBER has no detector that fits that equipment: the refrigerant-side drift family (subcooling, superheat, head / suction pressure, approach) is written for water-cooled chillers and needs a chilled-water load (flow and supply / return temperatures) this equipment does not have, and every time-based rule would read the synthetic clock as time. Mapping air-side temperatures or airflow onto chilled-water roles to make those rules run would misrepresent the equipment, so the template runs nothing and a `camber run` on it reports no findings. Use the ingested store to inspect the labelled fault signatures (e.g. subcooling 8.2 F fault-free vs 2.7 F at 80% charge and 18.5 F at 110.6% on the 14 SEER unit, long line set) and as validation data for a future heat-pump refrigerant-side or discharge-superheat detector (GitHub issue #6).",
+  "_comment": "Run template for nist-heatpump-fdd: residential split heat pumps in a laboratory, one row per steady-state test point on a synthetic clock, so only a rule that reads the level of a steady point fits. It runs dx_refrigerant_charge (0.93) in target mode: each unit's cooling-mode median liquid subcooling against a target subcooling with the usual +/-3 F charging tolerance. The targets stand in for the nameplate charging targets, which the data do not publish: they are the fault-free runs' median subcooling per unit (8.6 F on the 14 SEER unit, 9.7 F on the 16 SEER unit), so the four fault-free runs are scored in-sample. min_samples is 1 because each row is already an averaged test point. `camber datasets score nist-heatpump-fdd` scores the charge detector against the charge-fault runs; the indoor-airflow detector compares a unit with its own fault-free period (the dx drift family) and cannot run across separate test runs from a config -- see docs/FDD-DX.md for its leave-one-file-out score. Every time-based rule would read the synthetic clock as time, so none is run.",
   "source": {
     "kind": "store",
     "store": "",
@@ -11,7 +11,22 @@
       "marker_role": "subcooling_temp"
     }
   ],
-  "rules": [],
+  "rules": [
+    {
+      "name": "dx_refrigerant_charge",
+      "params": {
+        "targets": {
+          "HP_SEER14__*": {
+            "subcooling_f": 8.6
+          },
+          "HP_SEER16__*": {
+            "subcooling_f": 9.7
+          }
+        },
+        "min_samples": 1
+      }
+    }
+  ],
   "report": {
     "level": 2
   }

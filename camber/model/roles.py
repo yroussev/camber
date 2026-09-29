@@ -160,6 +160,19 @@ class Role(str, Enum):
     # Compressor discharge superheat (discharge-line temp - dew temp at discharge pressure), degF:
     # a *difference*, mapped where a controller publishes it or derived as above (issue #6).
     DISCHARGE_SUPERHEAT_TEMP = "discharge_superheat_temp"
+    # 0.93 (#40): the return (coil-entering) air dew point, degF -- the latent load a DX coil's
+    # temperature split depends on (dx_indoor_airflow). Where only return RH is trended, the rule
+    # computes it from RH and the return-air temperature.
+    RETURN_AIR_DEWPOINT_TEMP = "return_air_dewpoint_temp"
+
+    # --- 0.93 (#40): a water-source / ground-source heat-pump (condenser) loop ---
+    # Generic source-loop points, kept apart from the chilled-water and cooling-tower roles whose
+    # rules would misread a heat-pump loop. Supply = the water the loop sends to the heat pumps;
+    # return = what comes back from them.
+    SOURCE_LOOP_SUPPLY_TEMP = "source_loop_supply_temp"  # degF
+    SOURCE_LOOP_RETURN_TEMP = "source_loop_return_temp"  # degF
+    SOURCE_LOOP_DIFF_PRESS = "source_loop_diff_press"  # loop differential pressure, psi
+    SOURCE_LOOP_PUMP_SPEED = "source_loop_pump_speed"  # loop pump speed (%)
 
     # --- energy / power ---
     POWER = "power"  # electric power (kW)
@@ -259,6 +272,11 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.DISCHARGE_LINE_TEMP: "refrig discharge temp sensor",
     Role.LIQUID_LINE_PRESSURE: "refrig liquid pressure sensor",
     Role.DISCHARGE_SUPERHEAT_TEMP: "refrig discharge superheat temp sensor",
+    Role.RETURN_AIR_DEWPOINT_TEMP: "return air dewPoint sensor",
+    Role.SOURCE_LOOP_SUPPLY_TEMP: "loop water supply temp sensor",
+    Role.SOURCE_LOOP_RETURN_TEMP: "loop water return temp sensor",
+    Role.SOURCE_LOOP_DIFF_PRESS: "loop water delta pressure sensor",
+    Role.SOURCE_LOOP_PUMP_SPEED: "loop pump speed cmd",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

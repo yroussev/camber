@@ -106,6 +106,14 @@ RULE_CATEGORY = {
     "boiler_efficiency_drift": "maintenance",  # 0.92 (#13)
     "cooling_tower_fan_effort_drift": "maintenance",  # 0.92 (#14)
     "condenser_bypass_leak": "energy",  # 0.92 (#15): warmer condenser water, higher kW/ton
+    # --- 0.93 (#40) DX / heat-pump block (093-refrig)
+    "dx_refrigerant_charge": "maintenance",
+    "dx_indoor_airflow": "maintenance",
+    "hp_mode_vs_need": "comfort",  # the wrong mode drives the room further from its band
+    "hp_capacity_shortfall": "comfort",
+    "hp_room_imbalance": "energy",  # two units fighting in one room
+    "source_loop_deltat": "energy",  # pump energy spent moving water, not heat
+    # --- end 0.93 block
 }
 
 CATEGORIES = ("energy", "comfort", "ventilation", "maintenance")

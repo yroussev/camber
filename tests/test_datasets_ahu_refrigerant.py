@@ -559,7 +559,8 @@ def test_heat_pump_entry_labels_exclusions_and_no_rules():
     assert len(names) == len(set(names)) == 294  # every test file in exactly one run
     assert {r["label"] for r in runs} - {""} <= set(e.labels["fault_types"])
     assert e.ingest["units"]["discharge_pressure"] == "psia"
-    assert json.loads(package_text("configs", "nist-heatpump-fdd.json"))["rules"] == []
+    rules = json.loads(package_text("configs", "nist-heatpump-fdd.json"))["rules"]
+    assert [r["name"] for r in rules] == ["dx_refrigerant_charge"]
 
 
 def test_ibal_entry_is_manual_pinned_and_gauge():

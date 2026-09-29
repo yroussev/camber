@@ -459,6 +459,10 @@
     "positive_from_severity",
     "sweep"
   ],
+  "camber.dxdrift": [
+    "DX_DETECTORS",
+    "diagnose_dx_drift"
+  ],
   "camber.edge": [
     "AzureBlobSink",
     "BatchResult",
@@ -1756,6 +1760,28 @@
     "STATIC_WARN_INWC",
     "STATIC_WARN_SIGMA"
   ],
+  "camber.rules.dx_airflow_rule": [
+    "AIRFLOW_FAULT_F",
+    "AIRFLOW_FAULT_SIGMA",
+    "AIRFLOW_WARN_F",
+    "AIRFLOW_WARN_SIGMA",
+    "DXIndoorAirflow",
+    "MAX_SPLIT_F",
+    "MIN_SPLIT_F",
+    "TARGET_TOLERANCE_F",
+    "TEMP_SPLIT",
+    "return_dewpoint_f"
+  ],
+  "camber.rules.dx_charge_rule": [
+    "CHARGE_FAULT_F",
+    "CHARGE_FAULT_SIGMA",
+    "CHARGE_WARN_F",
+    "CHARGE_WARN_SIGMA",
+    "DXRefrigerantCharge",
+    "MAX_SUBCOOLING_F",
+    "MIN_SUBCOOLING_F",
+    "TARGET_TOLERANCE_F"
+  ],
   "camber.rules.economizer_damper_rule": [
     "DAMPER_PLAUSIBLE",
     "DENOM_MIN_F",
@@ -1800,6 +1826,17 @@
     "G36AFDD",
     "MIN_APPLICABLE_HOURS",
     "WARN_PCT"
+  ],
+  "camber.rules.heatpump_ops_rule": [
+    "BAND_TOL_F",
+    "COOL_DROP_F",
+    "DEFAULT_COOL_SP_F",
+    "DEFAULT_HEAT_SP_F",
+    "HEAT_RISE_F",
+    "HPCapacityShortfall",
+    "HPModeVsNeed",
+    "HPRoomImbalance",
+    "infer_hp_mode"
   ],
   "camber.rules.heatpump_rule": [
     "HeatPumpDefrost"
@@ -1912,6 +1949,9 @@
   ],
   "camber.rules.simul_hc": [
     "SimultaneousHeatCool"
+  ],
+  "camber.rules.source_loop_rule": [
+    "SourceLoopDeltaT"
   ],
   "camber.rules.static_rule": [
     "DamperCensus"

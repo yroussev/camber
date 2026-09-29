@@ -8,7 +8,9 @@ All notable changes to CAMBER are documented here. The format follows
 
 **0.93 refrigerant cluster (#39, #40, #6).** An R-410A (and R-134a, R-22, R-32, CO2) saturation
 curve that turns refrigerant pressures and line temperatures into subcooling, superheat and
-approach.
+approach; DX / heat-pump charge and indoor-airflow rules scored on the NIST heat-pump FDD data;
+and operating-mode, capacity, same-room and source-loop rules for water-source heat pumps trended
+with three points.
 
 ### Added
 - **Refrigerant properties (#39).** `camber.refrigerant`: `saturation_temp` / `saturation_pressure`
@@ -26,6 +28,25 @@ approach.
   entry's `"refrigerant": "R-410A"` (or `EquipRef` / `StoreEquipRef.refrigerant`) makes `resolve`
   derive subcooling, superheat, discharge superheat and both approaches wherever a rule asks for
   them (`refrigerant.derive_refrigerant_roles`; a controller-reported value is kept).
+- **DX / heat-pump refrigerant charge and indoor airflow (#40).** `dx_refrigerant_charge`
+  (subcooling; superheat as corroboration, or `metric="superheat"` for a fixed orifice) and
+  `dx_indoor_airflow` (evaporator temperature split matched on return air and the new
+  `return_air_dewpoint_temp`, or return RH), built-in: manufacturer targets (`targets`, per
+  equipment by glob), universal limits without one, or a frozen fault-free baseline at matched
+  outdoor / return-air conditions (`analyze_periods`; the new `dx` drift family,
+  `dxdrift.diagnose_dx_drift`). A narrowed split with lost subcooling is reported as a capacity
+  (charge) symptom, not high airflow. On `nist-heatpump-fdd`, leave-one-file-out: charge TPR 91%
+  [83-95] at 8% [4-15] of fault-free files; airflow 22% [14-31] at 2% [1-8] (18/44 at 15%+
+  airflow reduction).
+- **Water-source heat pumps with three points (#40).** `rules.heatpump_ops_rule.infer_hp_mode`
+  (mode from discharge air against the zone) and the built-in `hp_mode_vs_need`,
+  `hp_capacity_shortfall` (capacity vs control verdict) and `hp_room_imbalance` (fleet: units in
+  one room that fight or split the work unevenly). `source_loop_deltat`: a heat-pump loop pumped
+  with next to no temperature difference. New roles `source_loop_supply_temp`,
+  `source_loop_return_temp`, `source_loop_diff_press`, `source_loop_pump_speed`; new equipment
+  families `dx` and `source_loop`.
+- **Pending scenarios.** Faultlab scenarios for the five new single-equipment rules sit in
+  `faultlab.PENDING_SCENARIOS` until signed off as gated synthetic keys.
 
 ### Changed
 - **`nist-ibal`** maps its liquid- and suction-line RTDs to `liquid_line_temp` /
@@ -33,6 +54,15 @@ approach.
   drift family runs. Specificity: 0 of 36 monthly detector-windows (April-September 2025 against a
   January-March baseline) raised a magnitude alarm; 2 provisional CUSUM prompts at severity ok.
   New data issue `refrigerant-pressure-below-vacuum` (a dead transducer reading -70 psig).
+- **`nist-heatpump-fdd`** runs `dx_refrigerant_charge` (target mode) and declares it as the scored
+  detector for the charge-fault runs. Its mapping now carries discharge superheat, the raw line
+  temperatures and pressures and the indoor inlet dew point.
+
+### Fixed
+- **`nist-heatpump-fdd` suction pressure.** The 16 SEER unit's `1710_ODSuctPort_psia` is a copy of
+  the discharge pressure; `suction_pressure` now maps the vapour service valve pressure
+  (`1701_ODVapSV_psia`), the one NIST itself used for that unit. New data issues
+  `suction-port-pressure-copies-discharge` and `fault-free-points-not-steady-cooling`.
 
 ## Unreleased
 
