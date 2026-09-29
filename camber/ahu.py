@@ -16,6 +16,7 @@ economizer command, supports these checks:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
 import pandas as pd
@@ -60,6 +61,9 @@ class AHUResult:
     econ_missed_pct: float  # of opportunity, damper stayed shut while cooling
     coverage_start: str
     coverage_end: str
+    # 0.93 (#41): % of the considered (occupied) intervals with both valves open AND in each named
+    # class passed as ``simul_classes`` -- None when no classes were passed
+    simul_class_pct: dict | None = None
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -82,7 +86,14 @@ def _populated(df, col):
 
 
 def analyze_ahu(
-    df, equip, *, valve_thr=5.0, econ_high_limit_f=70.0, damper_min_open=20.0, occupied_only=True
+    df,
+    equip,
+    *,
+    valve_thr=5.0,
+    econ_high_limit_f=70.0,
+    damper_min_open=20.0,
+    occupied_only=True,
+    simul_classes: Mapping[str, pd.Series] | None = None,
 ):
     """Compute AHU H/C + economizer metrics. ``df`` columns are measure names.
 
@@ -98,6 +109,10 @@ def analyze_ahu(
     The economizer-opportunity test also requires OA cooler than return air by a small
     margin (oa < ra - 2.0 F); the 2F guard avoids flagging when OA and RA are
     effectively equal (no useful free cooling, within sensor tolerance).
+
+    ``simul_classes`` (0.93, #41) names boolean Series on ``df``'s index -- e.g. the intervals
+    that read as dehumidification with reheat; ``simul_class_pct`` then gives, per name, the % of
+    considered intervals with both valves open *and* that class (missing samples count False).
     """
     if "CHW_Valve" not in df.columns or "HHW_Valve" not in df.columns:
         return None
@@ -141,6 +156,13 @@ def analyze_ahu(
     else:
         opp_pct = missed_pct = 0.0
 
+    class_pct = None
+    if simul_classes is not None:
+        class_pct = {
+            name: _pct(simul & m.reindex(work.index).fillna(False).astype(bool), n)
+            for name, m in simul_classes.items()
+        }
+
     return AHUResult(
         equip=equip,
         n_intervals=n_all,
@@ -153,4 +175,5 @@ def analyze_ahu(
         econ_missed_pct=missed_pct,
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
+        simul_class_pct=class_pct,
     )

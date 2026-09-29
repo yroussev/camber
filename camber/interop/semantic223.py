@@ -78,6 +78,8 @@ ROLE_TO_223 = {
     Role.SUPERHEAT_TEMP: ("Temperature", "Refrigerant"),
     Role.DISCHARGE_PRESSURE: ("Pressure", "Refrigerant"),
     Role.SUCTION_PRESSURE: ("Pressure", "Refrigerant"),
+    # --- 0.93 (#41) ---
+    Role.COOL_COIL_LEAVING_TEMP: ("Temperature", "Air"),
 }
 
 # Roles intentionally NOT in ROLE_TO_223: binary/enumerated status & command signals carry no QUDT

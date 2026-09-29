@@ -120,6 +120,7 @@ _TEMPLATE_LIST = (
         required=frozenset({Role.SUPPLY_AIR_TEMP, Role.HEAT_VALVE, Role.COOL_VALVE}),
         optional=frozenset(
             {
+                Role.COOL_COIL_LEAVING_TEMP,  # 0.93 (#41)
                 Role.MIXED_AIR_TEMP,
                 Role.RETURN_AIR_TEMP,
                 Role.OA_DAMPER,

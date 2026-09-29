@@ -6342,7 +6342,8 @@
      "supply_air_temp_sp": "degC",
      "return_air_temp": "degC",
      "space_temp": "degC",
-     "oat": "degC"
+     "oat": "degC",
+     "cool_coil_leaving_temp": "degC"
     },
     "quirks": [
      {
@@ -6379,6 +6380,7 @@
        "NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_Temp_D19_477": "NUIG_sensors/NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_Temp_D19_477",
        "NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481": "NUIG_sensors/NUIG_AHU101_Ctrls_Lecture_Theatre_3_Avg_CO2_D26_481",
        "NUIG_AHU101_Ctrls_HE_101_1_Return_Duct_Humidity_D13_458": "NUIG_sensors/NUIG_AHU101_Ctrls_HE_101_1_Return_Duct_Humidity_D13_458",
+       "NUIG_AHU101_Ctrls_TE_101_3_Cooling_Off_Coil_Temp_D5_478": "NUIG_sensors/NUIG_AHU101_Ctrls_TE_101_3_Cooling_Off_Coil_Temp_D5_478",
        "NUIG_AspectGroup_Weather_Current_Temperature_8841": "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Temperature_8841",
        "NUIG_AspectGroup_Weather_Current_Humidity_8840": "NUIG_sensors/NUIG_AspectGroup_Weather_Current_Humidity_8840"
       },
@@ -6460,7 +6462,7 @@
       "citation": "Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555"
      },
      "handling": "none",
-     "handling_note": "Not mapped. Neither cooling-coil leaving temperature is mapped (the supply-duct sensor is the supply air temperature)."
+     "handling_note": "TE_102_2 is not mapped. Since 0.93 TE_101_3, the cooling-coil leaving temperature that does track AHU101, is mapped as cool_coil_leaving_temp; the supply-duct sensor stays the supply air temperature."
     },
     {
      "id": "riser-valve-point-empty",

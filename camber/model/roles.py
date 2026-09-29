@@ -154,6 +154,14 @@ class Role(str, Enum):
     POWER = "power"  # electric power (kW)
     ENERGY_RATE = "energy_rate"  # thermal energy rate (BTU meter)
 
+    # --- 0.93 (#41): air leaving the cooling coil ---
+    # The air temperature straight after an air handler's cooling coil, upstream of any post-heat
+    # (reheat) coil -- distinct from SUPPLY_AIR_TEMP, which is downstream of every coil. With it, a
+    # heating valve open while the cooling coil runs can be read as dehumidification with reheat
+    # (the coil cooling air to or below its dew point, the reheat coil warming it back) rather than
+    # coil-against-coil fighting.
+    COOL_COIL_LEAVING_TEMP = "cool_coil_leaving_temp"
+
 
 # Roles whose source points are text/event-based status or command signals
 # (e.g. "Off"/"Running", "STOP"/"START") rather than numeric trends. The resolve
@@ -245,4 +253,6 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.SUCTION_PRESSURE: "suction refrig pressure sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
+    # 0.93 (#41)
+    Role.COOL_COIL_LEAVING_TEMP: "cooling coil leaving air temp sensor",
 }
