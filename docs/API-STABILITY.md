@@ -223,7 +223,7 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     and may be retuned; `camber.plantdrift` (`PlantDriftDiagnosis`, `diagnose_boiler_drift`,
     `diagnose_tower_drift`) and the `boiler` / `tower` drift families;
   - `camber.faultlab.PENDING_SCENARIOS` (scenarios awaiting sign-off as gated synthetic keys;
-    empty in 0.92, `reheat_capacity_shortfall` in 0.93).
+    empty in 0.92 and again in 0.93, whose six new scenarios were signed off and promoted).
 - **Air-side correctness** (0.92; #16, #17, #65, #67), all additive and provisional:
   - system-level ASHRAE 62.1 VRP (#17): in `camber.ventilation`, `VentZone`,
     `SystemVrpRequirement`, `SystemVrpResult`, `system_outdoor_air`, `simplified_ev`,
@@ -320,7 +320,35 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - `camber.rules.reheat_capacity_rule.ReheatCapacityShortfall`
     (`reheat_capacity_shortfall`, built-in, terminal boxes only; #44), its parameters, metrics
     and `AIRFLOW_SHORT_RATIO`. Its thresholds are screening-grade and may be retuned; its
-    `faultlab` scenario waits in `PENDING_SCENARIOS` for sign-off.
+    `faultlab` scenario is a gated synthetic key since the 0.93 sign-off.
+- **Ventilation and heat/cool hardening** (0.93; #37, #38, #41), all additive and provisional:
+  - `camber.iaq.economizer_mode_mask` and `DEFAULT_ECON_HIGH_LIMIT_F`;
+    `camber.rules.iaq_rule.CO2VentilationSystem` (`co2_ventilation_system`, built-in fleet rule);
+    the `CO2Ventilation` parameters `exclude_economizer`, `oa_damper_min_pct`,
+    `econ_high_limit_f` and the trailing `CO2VentilationResult` fields `econ_hours_pct`,
+    `over_vent_econ_pct`, `over_vent_all_pct` (#38);
+  - the `DemandControlledVentilation` / `DcvSystemVerification` parameters `full_outdoor_air` and
+    `stratify_hour`, `assess_dcv(stratify_hour=)`, the trailing `DcvResult` fields `lift_basis`
+    and `demand_lift_pooled`, and the `oa_segments` metric (#37);
+  - the `SimultaneousHeatCool` parameters `dehumidification`, `reheat_lift_f`,
+    `dewpoint_margin_f`, `humid_rh_pct`, `fault_pct`, `warn_pct`; `analyze_ahu(simul_classes=)`
+    and the trailing `AHUResult.simul_class_pct` (#41). `cool_coil_leaving_temp` is the same role
+    as #42's.
+- **Refrigerant properties and DX / heat-pump rules** (0.93; #39, #40, #6), all additive and
+  provisional:
+  - the module `camber.refrigerant` (saturation curves, the pressure-to-subcooling / superheat /
+    approach transforms, `derive_refrigerant_roles`), the config / `EquipRef` / `StoreEquipRef`
+    key `refrigerant`, and the roles `liquid_line_temp`, `suction_line_temp`,
+    `discharge_line_temp`, `liquid_line_pressure`, `discharge_superheat_temp`,
+    `return_air_dewpoint_temp`, `source_loop_supply_temp`, `source_loop_return_temp`,
+    `source_loop_diff_press`, `source_loop_pump_speed`. A fit's coefficients may be refined
+    against the reference equations of state;
+  - the rules `dx_refrigerant_charge`, `dx_indoor_airflow`, `hp_mode_vs_need`,
+    `hp_capacity_shortfall`, `hp_room_imbalance` (fleet), `source_loop_deltat` and
+    `discharge_superheat_drift` (modules `camber.rules.dx_charge_rule`, `dx_airflow_rule`,
+    `heatpump_ops_rule`, `source_loop_rule`, `dx_discharge_superheat_rule`), their threshold
+    constants (screening-grade, may be retuned), `camber.dxdrift` (`DX_DETECTORS`,
+    `diagnose_dx_drift`) and the `dx` / `source_loop` equipment and drift families.
 <!-- 093-mv (#68, #70) -->
 - **M&V days and holiday calendars** (0.93; #68), all additive and provisional:
   - `mandv.intervalfit.repeated_hour_weights` and the keyword-only `timezone=` of

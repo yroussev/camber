@@ -285,7 +285,7 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage (0.92): **all 39 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+Current coverage (0.93): **all 45 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
 their injected faults) — the fixture-only list is empty; the fleet rules are scored separately. A
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This
@@ -314,6 +314,25 @@ held in `faultlab.PENDING_SCENARIOS` until the sign-off and is now in `SCENARIOS
 `condenser_bypass_leak.tpr` 1.0 and `condenser_bypass_leak.fpr` 0.0; `coverage.n_scored` and
 `coverage.n_single` went from 38 to 39. Every other synthetic key is byte-identical to 0.91.0, and
 the fleet, LBNL, BDG2 and BDG2 savings baselines did not move.
+
+**Baseline refresh, 0.93 (maintainer sign-off).** Refreshed for 0.93 to add the six new
+single-equipment rules, whose `faultlab` scenarios were held in `faultlab.PENDING_SCENARIOS` (now
+empty) until the sign-off and are now in `SCENARIOS`: `reheat_capacity_shortfall` (#44: a VAV box
+with its reheat pinned at 100 % and the zone 3 °F below its 70 °F setpoint), and from #40
+`dx_refrigerant_charge` (a running split system with 0.8 °F of liquid subcooling),
+`dx_indoor_airflow` (a 32 °F evaporator split), `hp_mode_vs_need` (a water-to-air heat pump
+cooling a 64 °F room every morning), `hp_capacity_shortfall` (heating all occupied day with the
+room still at 64 °F) and `source_loop_deltat` (a ground loop pumped around the clock with ~0.2 °F
+across it). New keys: each rule's `.tpr` 1.0 and `.fpr` 0.0 (12 keys); `coverage.n_scored` and
+`coverage.n_single` went from 39 to 45. The other new 0.93 rules are not single-equipment rules
+with a scenario: `co2_ventilation_system` and `hp_room_imbalance` are fleet rules and
+`discharge_superheat_drift` is a drift detector. Every other synthetic key is byte-identical to
+the 0.92 baseline, and the fleet, LBNL, BDG2 and BDG2 savings baselines did not move. The
+harness's cross-fire diagnostic (reported, not gated) shows three co-detections on the new faulty
+frames: `unmet_setpoint_hours` on the reheat scenario (the zone is below its setpoint),
+`supply_air_reset` on the DX-airflow one (44 °F supply air) and `hp_capacity_shortfall` on the
+heat-pump mode one (it calls the cold room with the unit cooling a *control* problem, which is
+what it is).
 
 ## M&V accuracy — real-data acceptance on BDG2
 

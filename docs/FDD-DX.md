@@ -167,6 +167,10 @@ condition is 80% of the time with a 90th percentile below a quarter of it. That 
 overpumping: constant speed, no differential-pressure reset, or heat-pump isolation valves left
 open.
 
-The faultlab scenarios for the five new single-equipment rules sit in
-`faultlab.PENDING_SCENARIOS` until they are signed off as gated synthetic keys.
+The faultlab scenarios for the five new single-equipment rules (`dx_refrigerant_charge`,
+`dx_indoor_airflow`, `hp_mode_vs_need`, `hp_capacity_shortfall`, `source_loop_deltat`) were signed
+off as gated synthetic keys for 0.93 (see VALIDATION.md). `hp_mode_vs_need` and
+`hp_capacity_shortfall` decline equipment with a heating or cooling valve and no compressor or
+reversing-valve signal: that is a hydronic coil unit, and on a terminal box with no recorded class
+the out-of-reheat case belongs to `reheat_capacity_shortfall`.
 <!-- end 0.93 block -->
