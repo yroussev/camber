@@ -16,6 +16,20 @@ All notable changes to CAMBER are documented here. The format follows
   `timezone=`; `repeated_hour_weights` is new. Only fall-back days change, and nothing changes
   without a zone. On `cofactor-drammen` the fall-back days now match the publisher's
   fixed-offset data exactly (they were 3-5 % short).
+- **Holiday calendars for the occupied-day driver (#68).** `mv[].holiday_calendar` takes a
+  country code for bundled public holidays, `"US"` (federal, observed, 2011-2030), `"NO"` (Norway,
+  2000-2040) or `"ES-<community>"` (Spain per autonomous community, 2016-2026). It can also take
+  `{"country", "subdivision", "files", "dates"}` to add calendar CSV files (`date`, or
+  `start`/`end` ranges) and single dates. Each bundled file cites its sources (5 U.S.C. 6103 /
+  E.O. 11582 checked against OPM; the Norwegian statutes; the annual BOE resolutions), and
+  `scripts/calendars_refresh.py` rebuilds them. The new module `camber.calendars`
+  (`HolidayCalendar`, `public_holidays`, `load_calendar_csv`, `register_calendar` for any other
+  source, e.g. the `holidays` package, which CAMBER does not depend on) serves them. A day outside
+  a calendar's coverage is left out, never treated as holiday-free. The new driver `"break_day"`
+  with `mv[].break_calendar` gives school breaks their own coefficient. As holidays they made the
+  COFACTOR school models worse; as break days 15 of 16 schools met daily G14 acceptance (13
+  without). The `cofactor-drammen` template now uses `"holiday_calendar": "NO"`, with identical
+  results.
 
 ### Fixed
 - A catalog entry whose `timezone` is a prose description of its clock (BDG2, Valladolid) is no

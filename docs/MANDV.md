@@ -887,7 +887,8 @@ instead of the temperature-only change-point model. `mv[].drivers` lists the dri
 
 - `"weekday"` — 1 Monday to Friday, 0 at the weekend;
 - `"occupied_day"` — 1 on `mv[].occupied_weekdays` (default Monday to Friday) except the dates in
-  `mv[].holidays`;
+  `mv[].holidays` and the days of `mv[].holiday_calendar` (0.93, below);
+- `"break_day"` — 1 on an occupied day that falls in `mv[].break_calendar` (0.93, below);
 - the name of any mapped numeric role, e.g. `"occupancy"`: its daily mean. A day without it is
   left out, and a meter without the role mapped is declined, naming it.
 
@@ -896,6 +897,54 @@ instead of the temperature-only change-point model. `mv[].drivers` lists the dri
  "holidays": ["2019-07-04", "2019-12-25"], "method": "forecast",
  "period": ["2018-01-01", "2018-12-31"], "reporting_period": ["2019-01-01", "2019-12-31"]}
 ```
+
+### Holiday calendars and break days (provisional, 0.93)
+
+`mv[].holidays` lists dates by hand. `mv[].holiday_calendar` supplies them from a calendar instead
+(`camber.calendars`), and the two combine:
+
+- a country code for the **bundled public holidays**: `"US"` (federal, observed dates, 2011-2030),
+  `"NO"` (Norway's helligdager and 1 and 17 May, 2000-2040) or `"ES-<community>"` (Spain's labour
+  holidays per autonomous community, ISO 3166-2:ES codes such as `ES-CL` for Castilla y León,
+  2016-2026). Spain needs the community, because its holidays differ by region. Each file names
+  its sources: 5 U.S.C. 6103 and Executive Order 11582 checked against every year OPM tabulates,
+  the Norwegian statutes (LOV-1995-02-24-12 § 2, LOV-1947-04-26-1 § 1), and the annual BOE
+  resolutions with their corrections. `scripts/calendars_refresh.py` rebuilds them;
+- `{"country": "ES", "subdivision": "CL", "files": ["local.csv"], "dates": ["2018-09-08"]}` adds
+  **CSV files** and single dates. A file has a `date` column (one day per row) or `start` and
+  `end` columns (an inclusive range per row), an optional `name`, and `#` comment lines. Relative
+  paths resolve against the config's folder. Local holidays, a site's closures or a university's
+  academic calendar go here;
+- `camber.calendars.register_calendar(code, provider)` plugs in any other source, for example a
+  wrapper around the third-party `holidays` package. CAMBER does not depend on it.
+
+A day in a year the bundled calendar does not cover is left out of the model, as a day without a
+driver's data is. It is never treated as a day with no holidays.
+
+Some days are neither a working day nor a weekend. During a school's term break, staff, cleaning
+and after-school care keep part of the building running. The **`"break_day"`** driver is 1 on an
+occupied weekday (not a holiday) that falls in `mv[].break_calendar` (the same spec form), so the
+break gets its own coefficient:
+
+```json
+{"class": "ELECTRICITY_METER", "role": "power", "model": "cp_driver",
+ "drivers": ["occupied_day", "break_day"], "holiday_calendar": "NO",
+ "break_calendar": {"files": ["school_breaks_2019_2020.csv"]},
+ "period": ["2019-08-01", "2020-02-29"]}
+```
+
+Counting break days as holidays does worse than leaving them out. On the COFACTOR electricity
+meters (August 2019 to February 2020, Drammen's published 2019-20 school calendar) that pushed the
+schools' median CV(RMSE) up by 1.5 points, and the kindergartens', which stay open, up by 5.4. As
+a `break_day` driver the schools' median fell by 1.2 points, and 15 of 16 met daily G14
+acceptance instead of 13. Norway's public holidays alone lowered the median CV(RMSE) by 0.9 to
+2.4 points for schools, kindergartens and offices in 2018; nursing homes, open every day, did not
+move. On the Valladolid buildings (2016), the publisher's academic-calendar flag, written as a CSV
+of dates, worked best as a break calendar next to the `ES-CL` holidays. CV(RMSE) came to 15.6 %
+and 20.8 %, against 16.3 % and 28.8 % with the holidays alone, and 17.9 % and 31.0 % with a plain
+weekday driver. The bundled Castilla y León calendar agrees with the publisher's flag on 43 of the
+44 weekday holidays of 2016-2019. The exception is Monday 24 April 2017, Castilla y León's day
+moved off a Sunday, which the publisher did not flag.
 
 An occupancy-driven building often fails validity with the temperature-only form: the weekly
 cycle is left in the residuals as noise, and autocorrelated noise at that. The driver form models

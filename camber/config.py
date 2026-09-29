@@ -2099,6 +2099,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             findings += billing_findings(entry, prep, base_dir=base_dir)
             ran.append(f"mv:bills:{billing_label(entry)}")
             continue
+        entry = _mvform_base(entry, base_dir)  # 0.93 (#68): calendar files beside the config
         findings += _mv_findings(entry, refs_by_class.get(entry["class"], []), prep)
         ran.append(f"mv:{entry['class']}")
 
@@ -2462,8 +2463,15 @@ def run_mv_config(config: dict, *, base_dir: str = ".", prepared=None) -> list:
 
             out += billing_findings(entry, prep, base_dir=base_dir)
             continue
+        entry = _mvform_base(entry, base_dir)
         out += _mv_findings(entry, prep.refs_by_class.get(entry["class"], []), prep)
     return out
+
+
+def _mvform_base(entry: dict, base_dir: str) -> dict:
+    from .mandv._mvform import with_base_dir
+
+    return with_base_dir(entry, base_dir)
 
 
 def load_config(path: str) -> dict:

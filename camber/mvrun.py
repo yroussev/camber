@@ -165,6 +165,7 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
     for k, entry in enumerate(config.get("mv") or []):
         if entry.get("bills") is not None:  # billing entries are not versioned (0.92)
             continue
+        entry = _mvform.with_base_dir(entry, base_dir)  # 0.93 (#68): calendar files
         role = Role(entry.get("role", Role.ENERGY_RATE.value))
         extra = _mvform.driver_roles(entry)
         for ref in prep.refs_by_class.get(entry["class"], []):

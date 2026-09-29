@@ -304,7 +304,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 - **M&V days and holiday calendars** (0.93; #68), all additive and provisional:
   - `mandv.intervalfit.repeated_hour_weights` and the keyword-only `timezone=` of
     `daily_energy_vs_temp` and `rate_to_energy`; a source's `timezone` (or a catalog store's
-    `local_timezone`) now also sets daily `mv` day lengths.
+    `local_timezone`) now also sets daily `mv` day lengths;
+  - the package `camber.calendars` (`HolidayCalendar`, `public_holidays`, `calendar_info`,
+    `load_calendar_csv`, `register_calendar`, `registered`, `bundled`, `SCHEMA`), its JSON schema
+    (`camber.calendars/1`) and bundled files, and the CSV calendar format. Bundled years may grow;
+    a date changes only to follow its official source;
+  - the config keys `mv[].holiday_calendar` and `mv[].break_calendar`, and the `"break_day"`
+    driver; `mandv._mvform.with_base_dir` (private module).
 <!-- /093-mv -->
 
 ## Deprecated

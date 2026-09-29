@@ -123,6 +123,16 @@
     "site_eui_plausibility",
     "site_eui_units"
   ],
+  "camber.calendars": [
+    "HolidayCalendar",
+    "SCHEMA",
+    "bundled",
+    "calendar_info",
+    "load_calendar_csv",
+    "public_holidays",
+    "register_calendar",
+    "registered"
+  ],
   "camber.carbon": [
     "DEFAULT_FACTORS",
     "Emissions",
