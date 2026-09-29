@@ -1342,6 +1342,89 @@ def _cmd_edge_quarantine(args) -> int:
     return 1 if rep["refused"] and not rep["planned"] else 0
 
 
+def _cmd_edge_decommission(args) -> int:
+    """Flush the spool, wait for acks, retire the device (dry run unless --apply)."""
+    import dataclasses
+
+    from .edge.config import build_forwarder, load_config
+    from .edge.decommission import decommission
+    from .portfolio import Portfolio, PortfolioLocked, find_workspace
+
+    cfg = load_config(args.config)
+    fwd = build_forwarder(cfg, source=_NoSource())
+    ws = find_workspace(args.workspace)
+    if args.workspace and ws is None:
+        print(f"error: {args.workspace} is not a portfolio workspace", file=sys.stderr)
+        return 1
+    try:
+        res = decommission(
+            fwd.spool,
+            fwd.sink,
+            facility_id=cfg.facility_id,
+            device_id=args.device or cfg.device_id,
+            reason=args.reason,
+            apply=args.apply,
+            yes=args.yes,
+            confirm=args.confirm,
+            force=args.force,
+            wait=args.wait,
+            portfolio=Portfolio(ws) if ws else None,
+        )
+    except (ValueError, PortfolioLocked) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(dataclasses.asdict(res), indent=2, default=str))
+        return 1 if res.refused and not res.dry_run else 0
+    head = "dry run; --apply to act" if res.dry_run else "applied"
+    print(
+        f"edge decommission ({head}) facility '{res.facility_id}' device '{res.device_id}': "
+        f"{res.pending_before} batch(es) pending, {res.forwarded} flushed, "
+        f"{res.pending_after} unacknowledged"
+    )
+    if res.refused:
+        print(f"  {'would refuse' if res.dry_run else 'REFUSED'}: {res.refused}")
+        return 0 if res.dry_run else 1
+    if res.dry_run:
+        print("  would retire the device (spool takes no new batches) and note it in the registry")
+        return 0
+    word = "already retired" if res.already_retired else "retired"
+    print(
+        f"  {word} at {(res.receipt or {}).get('retired_at')}" + (" (FORCED)" if res.forced else "")
+    )
+    for u in res.unacknowledged:
+        print(f"  unacknowledged, kept on disk: {u['key']} ({u['bytes']} bytes)")
+    if res.registry_noted:
+        print(f"  registry: {res.registry_noted}")
+    else:
+        print(
+            "  no portfolio workspace here: copy the spool's retired.json to the portfolio host "
+            "and run `camber edge record-retirement retired.json --reason R`"
+        )
+    return 0
+
+
+class _NoSource:
+    """A source placeholder: decommissioning never reads the BAS, it only flushes the spool."""
+
+    def point_names(self):
+        return []
+
+    def load_points(self, names, resample=None):
+        return None
+
+
+@_pf_errors
+def _cmd_edge_record_retirement(args) -> int:
+    from .edge.decommission import record_retirement
+
+    with open(args.receipt, encoding="utf-8") as fh:
+        receipt = json.load(fh)
+    r = record_retirement(_portfolio(args), receipt, reason=args.reason)
+    print(f"{r['facility_id']}: device {r['device_id']} retirement {r['noted']}")
+    return 0
+
+
 # --------------------------------------------------------------------------- drift subcommands
 #
 # The baseline store is written by exactly two verbs -- `freeze` (create a missing reference) and
@@ -2308,6 +2391,34 @@ def _build_parser() -> argparse.ArgumentParser:
             eqv.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the id")
         eqv.add_argument("--json", action="store_true")
         eqv.set_defaults(func=_cmd_edge_quarantine, yes=False, confirm=None)
+    edc = edsub.add_parser(
+        "decommission",
+        help="flush the spool, wait for acks, retire the device (dry run unless --apply)",
+    )
+    edc.add_argument("config")
+    edc.add_argument("--device", help="device id (default: config device_id, else the node name)")
+    _edge_ws(edc)
+    edc.add_argument(
+        "--wait", type=float, default=60.0, help="seconds to keep flushing for acks (default 60)"
+    )
+    edc.add_argument("--apply", action="store_true", help="act (default: a dry run)")
+    edc.add_argument("--yes", action="store_true", help="confirm the retirement")
+    edc.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the facility id")
+    edc.add_argument(
+        "--force",
+        action="store_true",
+        help="retire even with unacknowledged batches (kept on disk; refused under a legal hold)",
+    )
+    edc.add_argument("--reason", help="why (audited; required with --apply or --force)")
+    edc.add_argument("--json", action="store_true")
+    edc.set_defaults(func=_cmd_edge_decommission)
+    err = edsub.add_parser(
+        "record-retirement", help="central: record a device's retirement receipt (retired.json)"
+    )
+    _edge_ws(err)
+    err.add_argument("receipt", help="the retired.json a decommissioned device wrote")
+    err.add_argument("--reason", required=True, help="why (audited)")
+    err.set_defaults(func=_cmd_edge_record_retirement)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"

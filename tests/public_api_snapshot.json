@@ -497,6 +497,12 @@
     "build_forwarder",
     "load_config"
   ],
+  "camber.edge.decommission": [
+    "DecommissionResult",
+    "decommission",
+    "default_device_id",
+    "record_retirement"
+  ],
   "camber.edge.forwarder": [
     "BatchResult",
     "Forwarder"
