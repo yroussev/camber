@@ -1444,6 +1444,24 @@
     "load_point",
     "load_status"
   ],
+  "camber.refrigerant": [
+    "DERIVED_ROLES",
+    "REFRIGERANTS",
+    "Refrigerant",
+    "STANDARD_ATM_PSIA",
+    "condenser_approach",
+    "derivation_inputs",
+    "derive_refrigerant_roles",
+    "discharge_superheat",
+    "evaporator_approach",
+    "get_refrigerant",
+    "is_supercritical",
+    "normalize_refrigerant",
+    "saturation_pressure",
+    "saturation_temp",
+    "subcooling",
+    "superheat"
+  ],
   "camber.reheat": [
     "BOX_MEASURES",
     "ReheatResult",

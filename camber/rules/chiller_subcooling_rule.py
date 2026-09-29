@@ -15,11 +15,12 @@ of the approach rule:
    suits approach would silently miss half the fault space, so this rule scores the **magnitude**
    of the drift and reports its sign.
 2. **It is instrumentation-gated.** :attr:`camber.model.roles.Role.SUBCOOLING_TEMP` is a
-   controller-reported difference, like the approach roles: CAMBER has no refrigerant saturation
-   temperature or pressure role, so subcooling cannot be derived from a liquid-line temperature and
-   must be mapped directly. Many chillers do not publish it. The role is therefore **optional** and
-   the rule *declines with a caveat* when it is absent, rather than being silently skipped -- a
-   chiller missing from a charge report must not read as a chiller with good charge.
+   difference, like the approach roles: mapped directly where the chiller publishes it, or (0.93)
+   derived from the liquid-line (else discharge) pressure and the liquid-line temperature when the
+   equipment's refrigerant is named (:mod:`camber.refrigerant`). Many chillers offer neither. The
+   role is therefore **optional** and the rule *declines with a caveat* when it is absent, rather
+   than being silently skipped -- a chiller missing from a charge report must not read as a chiller
+   with good charge.
 
 Everything else is the machinery the approach detectors already use: the same metric-neutral
 load-normalized fit (:func:`camber.chillerbaseline.fit_load_baseline`), the same
@@ -211,9 +212,9 @@ class ChillerSubcoolingDrift:
                 metrics={"declined": True, "reason": "subcooling_not_mapped"},
                 summary=f"{equip}: declined -- no subcooling point mapped for this chiller",
                 caveats=[
-                    "could not evaluate refrigerant charge: subcooling is a directly-reported "
-                    "point and this chiller does not publish one; it cannot be derived from the "
-                    "approach temperatures"
+                    "could not evaluate refrigerant charge: this chiller does not publish "
+                    "subcooling and none could be derived (it needs a liquid-line or discharge "
+                    "pressure, the liquid-line temperature and the equipment's refrigerant)"
                 ],
             )
 

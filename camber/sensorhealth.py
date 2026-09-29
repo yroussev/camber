@@ -126,6 +126,15 @@ PHYSICAL_BOUNDS: dict = {
     # higher). These bounds only reject sensor dropouts / sentinel codes (9999, 32767, 65535).
     Role.DISCHARGE_PRESSURE: (-15.0, 2000.0),
     Role.SUCTION_PRESSURE: (-15.0, 1000.0),
+    # 0.93 (#39): refrigerant line temperatures / liquid pressure / discharge superheat. The line
+    # temperatures span a low-temperature rack's suction (-40 degF and below) to a discharge line
+    # well past 200 degF; discharge superheat runs ~20-100 degF on a healthy compressor and past
+    # 150 degF on a starved one. Again only sentinels and dead channels fall outside.
+    Role.LIQUID_LINE_TEMP: (-60.0, 200.0),
+    Role.SUCTION_LINE_TEMP: (-80.0, 150.0),
+    Role.DISCHARGE_LINE_TEMP: (-40.0, 350.0),
+    Role.LIQUID_LINE_PRESSURE: (-15.0, 2000.0),
+    Role.DISCHARGE_SUPERHEAT_TEMP: (-20.0, 250.0),
     # hydronic flow (gpm) — same wide bound as the chilled-water flow role
     Role.HW_FLOW: (-1.0, 1e6),
     # pump differential head (psi) — wide; only rejects dropouts / impossible values

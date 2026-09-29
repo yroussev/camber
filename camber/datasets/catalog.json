@@ -8050,7 +8050,7 @@
    "known_issues": [
     "A lab chiller driven by experiments: the store holds experiment hours only, and each experiment's control code stages, resets and cycles the plant.",
     "No refrigerant-side fault is documented in these windows (the logged refrigerant leak and recharges of 2021-2023 predate the refrigerant sensors), so the data measure the false-alarm rate of the refrigerant detectors, not their detection.",
-    "The refrigerant pressures are raw psig; subcooling, superheat and approach need an R-410A saturation curve CAMBER does not model, so those detectors decline.",
+    "The refrigerant pressures are raw psig and the refrigerant RTDs are line temperatures; the run template names the refrigerant (R-410A), so CAMBER derives subcooling, superheat and the condenser / evaporator approaches with its saturation curve (0.93) and the whole refrigerant-side chiller drift family runs.",
     "Pinned to two fixed portal exports (verified byte-identical across repeated downloads on 2026-09-27); the portal database is live and a later correction would fail the pin loudly."
    ],
    "data_issues": [
@@ -8127,6 +8127,21 @@
      },
      "handling": "annotate",
      "handling_note": "Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings."
+    },
+    {
+     "id": "refrigerant-pressure-below-vacuum",
+     "title": "Refrigerant pressures read below a perfect vacuum",
+     "columns": [
+      "ch1_p_dis",
+      "ch1_p_suc"
+     ],
+     "evidence": "In the full export 1,198 discharge-pressure samples (median -70.2 psig, on 3 days: 2025-02-05, 2025-08-21, 2025-09-17) and 1,396 suction-pressure samples (median -32.8 psig, on 7 days from 2025-01-28 to 2025-09-17) sit below -14.7 psig, i.e. below zero absolute pressure, which no gauge reading can reach; each channel holds one fixed value there, the signature of an unpowered or disconnected transducer. The default export has none.",
+     "contradicts": {
+      "document": "Record description: measured sensor data (pressures reported in psi; gauge readings, see the mapping)",
+      "citation": "NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published. CAMBER's saturation transform has no temperature for a pressure below vacuum, so derived subcooling, superheat and approach decline on those samples (NaN) instead of taking an extrapolated value, and the pressure roles' physical bounds (-15 psig) flag them in sensor health."
     }
    ]
   },

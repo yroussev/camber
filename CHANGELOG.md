@@ -6,6 +6,36 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
+**0.93 refrigerant cluster (#39, #40, #6).** An R-410A (and R-134a, R-22, R-32, CO2) saturation
+curve that turns refrigerant pressures and line temperatures into subcooling, superheat and
+approach.
+
+### Added
+- **Refrigerant properties (#39).** `camber.refrigerant`: `saturation_temp` / `saturation_pressure`
+  (bubble and dew) for R-410A (Lemmon 2003), R-744 (Span & Wagner 1996), R-134a, R-22 and R-32
+  (CoolProp's published ancillary fits to the reference equations of state; credited in NOTICE),
+  gauge or absolute, psi / kPa / bar / MPa, degF / degC / K. No new dependency: the Wagner-form
+  correlations are evaluated directly. R-410A matches the NIST REFPROP saturation temperatures
+  published in the NIST heat-pump data within 0.011 degF (bubble) and 0.007 degF (dew); CoolProp
+  is an optional cross-check in the tests only. Transforms `subcooling`, `superheat`,
+  `discharge_superheat`, `condenser_approach`, `evaporator_approach`; NaN (a decline) above the
+  critical pressure -- a transcritical CO2 gas cooler -- below the valid range or below vacuum;
+  `is_supercritical`. See docs/REFRIGERANT.md.
+- **Derived refrigerant roles.** New roles `liquid_line_temp`, `suction_line_temp`,
+  `discharge_line_temp`, `liquid_line_pressure`, `discharge_superheat_temp`. A config equipment
+  entry's `"refrigerant": "R-410A"` (or `EquipRef` / `StoreEquipRef.refrigerant`) makes `resolve`
+  derive subcooling, superheat, discharge superheat and both approaches wherever a rule asks for
+  them (`refrigerant.derive_refrigerant_roles`; a controller-reported value is kept).
+
+### Changed
+- **`nist-ibal`** maps its liquid- and suction-line RTDs to `liquid_line_temp` /
+  `suction_line_temp` and its run template names R-410A, so the whole refrigerant-side chiller
+  drift family runs. Specificity: 0 of 36 monthly detector-windows (April-September 2025 against a
+  January-March baseline) raised a magnitude alarm; 2 provisional CUSUM prompts at severity ok.
+  New data issue `refrigerant-pressure-below-vacuum` (a dead transducer reading -70 psig).
+
+## Unreleased
+
 **0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69, #71).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
 plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the

@@ -125,30 +125,41 @@ class Role(str, Enum):
         "evap_approach_temp"  # evaporator approach (CHW leaving - refrigerant), degF
     )
     # Liquid-line subcooling (condensing temp - liquid line temp), degF. Like the approach roles
-    # this is a controller-reported *difference*, not a raw temperature: CAMBER models no
-    # refrigerant saturation curve (the discharge/suction pressure roles below are raw pressures,
-    # not saturation temperatures), so subcooling cannot be derived from a liquid-line temperature
-    # alone and must be mapped directly where the chiller publishes it.
+    # this is a *difference*, not a raw temperature: mapped directly where the chiller publishes
+    # it, or (0.93, #39) derived by camber.refrigerant from the liquid-line (else discharge)
+    # pressure and the liquid-line temperature when the equipment's refrigerant is named.
     SUBCOOLING_TEMP = "subcooling_temp"
     # Suction superheat (suction temp - evaporator saturation temp), degF. The evaporator-side
-    # counterpart to SUBCOOLING_TEMP: also a controller-reported *difference* (for the same reason —
-    # no saturation curve is modelled, so it can't be derived from a suction temperature and the
-    # suction-pressure role together) and mapped directly where the chiller publishes it. Low
-    # superheat = the evaporator is overfed (liquid-floodback risk); high superheat = it is starved
-    # (underfeed / undercharge / restriction).
+    # counterpart to SUBCOOLING_TEMP: a *difference*, mapped directly or derived the same way from
+    # the suction pressure and suction-line temperature. Low superheat = the evaporator is overfed
+    # (liquid-floodback risk); high superheat = it is starved (underfeed / undercharge /
+    # restriction).
     SUPERHEAT_TEMP = "superheat_temp"
     # Discharge (head / condensing) refrigerant pressure, psig — the high-side pressure. Climbs as
     # the condenser loses its ability to reject heat: tube fouling / scale, non-condensables in the
-    # circuit, high entering condenser-water temperature, or reduced CW flow. A *raw* pressure, not
-    # a saturation temperature — CAMBER models no refrigerant saturation curve, so it is neither
-    # converted to a condensing temperature nor used to derive subcooling; it is trended in its own
-    # right (see camber.rules.chiller_head_pressure_rule).
+    # circuit, high entering condenser-water temperature, or reduced CW flow. A *raw* pressure,
+    # trended in its own right (see camber.rules.chiller_head_pressure_rule) and, with a named
+    # refrigerant, the saturation reference for subcooling, discharge superheat and the condenser
+    # approach (camber.refrigerant).
     DISCHARGE_PRESSURE = "discharge_pressure"
     # Suction (evaporating) refrigerant pressure, psig — the low-side pressure, and the evaporator
     # counterpart to DISCHARGE_PRESSURE. Optional enriching context for the head-pressure detector
     # (the condensing-over-suction *lift*, which helps separate a genuine high-side fault from an
     # ambient-/load-driven rise). Also a raw pressure, mapped directly where the chiller reports it.
     SUCTION_PRESSURE = "suction_pressure"
+    # --- 0.93 (#39): refrigerant line temperatures and pressures (raw readings) ---
+    # With the equipment's refrigerant named (a run config's equipment ``"refrigerant"``),
+    # camber.refrigerant turns these into the saturation-referenced differences above:
+    # subcooling from the liquid-line pressure (or, failing that, the discharge pressure) and the
+    # liquid-line temperature, superheat from the suction pressure and suction-line temperature,
+    # discharge superheat from the discharge pressure and discharge-line temperature.
+    LIQUID_LINE_TEMP = "liquid_line_temp"  # refrigerant liquid-line temperature, degF
+    SUCTION_LINE_TEMP = "suction_line_temp"  # refrigerant suction-line temperature, degF
+    DISCHARGE_LINE_TEMP = "discharge_line_temp"  # compressor discharge-line temperature, degF
+    LIQUID_LINE_PRESSURE = "liquid_line_pressure"  # liquid-line refrigerant pressure, psig
+    # Compressor discharge superheat (discharge-line temp - dew temp at discharge pressure), degF:
+    # a *difference*, mapped where a controller publishes it or derived as above (issue #6).
+    DISCHARGE_SUPERHEAT_TEMP = "discharge_superheat_temp"
 
     # --- energy / power ---
     POWER = "power"  # electric power (kW)
@@ -243,6 +254,11 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.SUPERHEAT_TEMP: "refrig superheat temp sensor",
     Role.DISCHARGE_PRESSURE: "discharge refrig pressure sensor",
     Role.SUCTION_PRESSURE: "suction refrig pressure sensor",
+    Role.LIQUID_LINE_TEMP: "refrig liquid temp sensor",
+    Role.SUCTION_LINE_TEMP: "refrig suction temp sensor",
+    Role.DISCHARGE_LINE_TEMP: "refrig discharge temp sensor",
+    Role.LIQUID_LINE_PRESSURE: "refrig liquid pressure sensor",
+    Role.DISCHARGE_SUPERHEAT_TEMP: "refrig discharge superheat temp sensor",
     Role.POWER: "elec power sensor",
     Role.ENERGY_RATE: "thermal energy sensor",
 }

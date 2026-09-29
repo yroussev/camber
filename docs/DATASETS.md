@@ -966,6 +966,14 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Record description: 'Each of the sensors/actuators has associated metadata' (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings.
 
+#### Refrigerant pressures read below a perfect vacuum
+
+- **Issue:** `refrigerant-pressure-below-vacuum`
+- **Columns:** `ch1_p_dis`, `ch1_p_suc`
+- **Evidence:** In the full export 1,198 discharge-pressure samples (median -70.2 psig, on 3 days: 2025-02-05, 2025-08-21, 2025-09-17) and 1,396 suction-pressure samples (median -32.8 psig, on 7 days from 2025-01-28 to 2025-09-17) sit below -14.7 psig, i.e. below zero absolute pressure, which no gauge reading can reach; each channel holds one fixed value there, the signature of an unpowered or disconnected transducer. The default export has none.
+- **Contradicts:** Record description: measured sensor data (pressures reported in psi; gauge readings, see the mapping) (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. CAMBER's saturation transform has no temperature for a pressure below vacuum, so derived subcooling, superheat and approach decline on those samples (NaN) instead of taking an extrapolated value, and the pressure roles' physical bounds (-15 psig) flag them in sensor health.
+
 ### `robod`: ROBOD: room-level occupancy and building operation (Singapore, 5 rooms)
 
 #### Indoor CO2 reads below outdoor CO2 and is clipped at 400 ppm
