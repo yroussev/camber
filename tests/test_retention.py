@@ -119,12 +119,44 @@ def test_legacy_year_partitions_read_mixed_and_migrate_losslessly(tmp_path):
     assert any(p["legacy"] for p in st.partitions())
     r = st.migrate_partitions(apply=True)
     assert r["applied"] and not any(p["legacy"] for p in st.partitions())
-    assert sorted(os.listdir(os.path.join(root, "facility_id=old", "year=2025"))) == ["month=1"]
+    ydir = os.path.join(root, "facility_id=old", "year=2025")
+    assert sorted(os.listdir(ydir)) == ["_migrated.json", "month=1"]
+    legacy_name = next(iter(st.migrated_files("old", 2025)))
+    assert legacy_name.endswith(".parquet") and st.migrated_files("old", 1999) == {}
     pd.testing.assert_frame_equal(_sorted(st.read_long(facility_id="old")), before)
     again = st.migrate_partitions(apply=True)
     assert again["partitions"] == [] and not again["applied"]  # idempotent
     st.write_role_frame(_frame("2025-01-20", 24), facility_id="old", equip="AHU_3")
     assert len(st.read_long(facility_id="old")) == len(before) + 48
+
+
+def test_migrating_a_year_again_never_overwrites_the_rows_it_migrated_before(tmp_path):
+    """Year-only files landing after a migration (an older edge forwarder) migrate again safely.
+
+    The stage holds hard links to the year's month files; the second migration used to reuse the
+    first one's ``part-legacy0-0`` name and write through the link, truncating the original.
+    """
+    import pyarrow.parquet as pq
+
+    root = str(tmp_path / "s")
+    st = ParquetStore(root)
+    ydir = os.path.join(root, "facility_id=old", "year=2024")
+    os.makedirs(ydir)
+
+    def legacy(name, value):
+        df = role_frame_to_long(_frame("2024-03-01", 10) * 0 + value, equip="AHU_1")
+        pq.write_table(pa.Table.from_pandas(df, preserve_index=False), os.path.join(ydir, name))
+
+    legacy("part-aaaaaaaaaaaaaaaa.parquet", 1.0)
+    st.migrate_partitions(apply=True)
+    legacy("part-bbbbbbbbbbbbbbbb.parquet", 2.0)
+    st.migrate_partitions(apply=True)
+    got = st.read_long(facility_id="old")
+    assert len(got) == 40 and sorted(got["value"].unique()) == [1.0, 2.0]
+    assert set(st.migrated_files("old", 2024)) == {
+        "part-aaaaaaaaaaaaaaaa.parquet",
+        "part-bbbbbbbbbbbbbbbb.parquet",
+    }
 
 
 def test_a_crash_mid_migration_leaves_the_data_readable_and_rerun_finishes(tmp_path, monkeypatch):

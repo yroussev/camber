@@ -182,6 +182,13 @@ retention policy.
   disk.
 - The store read caches (the per-facility fragment index and the resolve frame cache) now notice
   writes into month directories.
+- **Migrating a year a second time could destroy rows migrated the first time.** Year-only files
+  that land after a migration (an older edge forwarder) are migrated again. The second run reused
+  the first run's `part-legacy0-0` name and wrote through the stage's hard link to that file,
+  truncating it, then refused with "nothing was changed". Migrated parts are now named by the
+  source file's content and written to a temporary name first. Each migrated year also records
+  its source files and their sha256 in `year=Y/_migrated.json`
+  (`ParquetStore.migrated_files`), so the edge landing recognises a re-sent legacy upload.
 
 ## [0.94.0] — Unreleased
 

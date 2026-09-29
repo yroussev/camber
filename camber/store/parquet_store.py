@@ -60,6 +60,12 @@ _PART_RE = re.compile(r"^part-(\d+)-\d+\.parquet$")
 # paths, so this file is invisible to reads.
 _CATALOG = "_catalog.json"
 
+# Written into a year directory by migrate_partitions (0.95): the legacy part files it split into
+# month partitions, by original name, with their sha256. The edge landing reads it so a year-only
+# upload an older forwarder re-sends after the migration is recognised as data already in the
+# store, not appended twice. Leading "_" keeps it out of dataset discovery.
+_MIGRATED = "_migrated.json"
+
 
 # Per-facility fragment index (#35): which part files hold which equipment, so a one-equipment read
 # opens only that equipment's files instead of every file of the facility. Keyed on (root,
@@ -69,6 +75,16 @@ _CATALOG = "_catalog.json"
 _FRAG_INDEX_MAX = 16
 _FRAG_INDEX: OrderedDict = OrderedDict()
 _FRAG_LOCK = threading.Lock()
+
+
+def _sha256_file(path: str) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _partition_signature(fdir: str) -> tuple:
@@ -799,6 +815,20 @@ class ParquetStore:
                 )
             return report
 
+    def migrated_files(self, facility_id: str, year: int) -> dict:
+        """``{legacy part name: sha256}`` of the year-only files ``migrate_partitions`` split into
+        month partitions in ``facility_id``'s ``year=Y`` (``{}`` when none). Provisional (0.95)."""
+        path = os.path.join(
+            self.root, f"{_FACILITY}={facility_id}", f"{_YEAR}={int(year)}", _MIGRATED
+        )
+        try:
+            with open(path, encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            return {}
+        files = doc.get("files") if isinstance(doc, dict) else None
+        return dict(files) if isinstance(files, dict) else {}
+
     @staticmethod
     def _migrate_year(ypath: str, legacy_rows: int) -> None:
         """Rebuild one ``year=Y`` directory with its legacy files split into month partitions."""
@@ -811,6 +841,12 @@ class ParquetStore:
         names = sorted(os.listdir(ypath))
         written = 0
         before_months = 0
+        migrated: dict = {}
+        try:  # an earlier migration of this year (legacy files landed again since)
+            with open(os.path.join(ypath, _MIGRATED), encoding="utf-8") as fh:
+                migrated.update((json.load(fh) or {}).get("files") or {})
+        except (OSError, ValueError, AttributeError):
+            pass
         for md in names:  # carry the existing month partitions over (hard links where possible)
             src = os.path.join(ypath, md)
             if not md.startswith(f"{_MONTH}=") or not os.path.isdir(src):
@@ -829,7 +865,9 @@ class ParquetStore:
                     if f.endswith(".parquet"):
                         before_months += int(pq.ParquetFile(a).metadata.num_rows)
         for k, n in enumerate(n for n in names if n.endswith(".parquet")):
+            src_sha = _sha256_file(os.path.join(ypath, n))
             table = pq.read_table(os.path.join(ypath, n))
+            migrated[n] = src_sha
             if table.num_rows == 0:
                 continue
             ts = table.column(_TS)
@@ -838,8 +876,19 @@ class ParquetStore:
                 part = table.filter(pc.equal(months, mo))
                 mdir = os.path.join(stage, f"{_MONTH}={int(mo)}")
                 os.makedirs(mdir, exist_ok=True)
-                pq.write_table(part, os.path.join(mdir, f"part-legacy{k}-0.parquet"))
+                # Named by the source's content (unique across repeated migrations of one year),
+                # and written to a temp name then renamed: the stage holds hard links to the
+                # carried-over month files, and writing onto one would truncate the original.
+                dst = os.path.join(mdir, f"part-legacy-{src_sha[:16]}-{k}.parquet")
+                while os.path.exists(dst):  # pragma: no cover - identical content twice
+                    dst = dst[: -len(".parquet")] + "x.parquet"
+                pq.write_table(part, dst + ".tmp")
+                os.replace(dst + ".tmp", dst)
                 written += part.num_rows
+        if migrated:
+            with open(os.path.join(stage, _MIGRATED), "w", encoding="utf-8") as fh:
+                json.dump({"schema": 1, "files": dict(sorted(migrated.items()))}, fh, indent=1)
+                fh.write("\n")
         after = int(ds.dataset(stage, format="parquet").count_rows()) if os.listdir(stage) else 0
         if written != legacy_rows or after != legacy_rows + before_months:
             _swap.recover(ypath)  # pragma: no cover - discard the stage; nothing was changed
