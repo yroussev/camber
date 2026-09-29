@@ -82,7 +82,7 @@ BUCKET_CLASSES: dict = {
 LAYOUTS = ("store", "workspace")
 _STORE_DIR = "store/"  # the workspace's store directory in the policy's location patterns
 _FID_SEGMENT = "facility_id={facility_id}"
-POLICY_DOC_SCHEMA = "camber.retention/1"
+_POLICY_DOC_SCHEMA = "camber.retention/1"
 DAYS_PER_MONTH = 31
 DAYS_PER_YEAR = 366
 _NO_EXPIRY = ("indefinite", "forever", "equipment_life", "legal_hold")
@@ -121,7 +121,7 @@ def rule_days(rule) -> int | None:
 
 
 def _is_document(policy) -> bool:
-    return isinstance(policy, dict) and policy.get("schema") == POLICY_DOC_SCHEMA
+    return isinstance(policy, dict) and policy.get("schema") == _POLICY_DOC_SCHEMA
 
 
 def class_prefixes_from_policy(policy=None, *, layout: str = "store") -> dict:
