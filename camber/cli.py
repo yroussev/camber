@@ -18,6 +18,8 @@ Subcommands:
                     offboard|restore|archive|purge|export|bundles
     camber retention show|set|override|hold|release|apply             # retention policy (0.95)
     camber store migrate-partitions STORE [--apply --yes]             # year= -> year=/month=
+    camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder
+    camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -390,11 +392,26 @@ def _cmd_bacnet_discover(args) -> int:  # pragma: no cover - drives a live BACne
     return 0
 
 
+def _edge_retired(fwd) -> bool:
+    """0.95 (#18): refuse to forward from a decommissioned device's spool (prints why)."""
+    retired = fwd.spool.retirement()
+    if retired is None:
+        return False
+    print(
+        f"error: this edge device was decommissioned at {retired.get('retired_at', '?')} "
+        f"(spool {fwd.spool.root}); it no longer forwards",
+        file=sys.stderr,
+    )
+    return True
+
+
 def _cmd_edge_run(args) -> int:
     from .edge.config import build_forwarder, load_config
 
     cfg = load_config(args.config)
     fwd = build_forwarder(cfg)
+    if _edge_retired(fwd):
+        return 1
     print(f"edge: forwarding facility '{cfg.facility_id}' every {cfg.interval:.0f}s (one-way)")
     fwd.run(cfg.interval)
     return 0
@@ -405,6 +422,8 @@ def _cmd_edge_send_once(args) -> int:
 
     cfg = load_config(args.config)
     fwd = build_forwarder(cfg)
+    if _edge_retired(fwd):
+        return 1
     res = fwd.poll_once()
     print(
         f"edge: facility '{res.facility_id}' rows={res.rows} parts={res.spooled} "
@@ -418,8 +437,53 @@ def _cmd_edge_status(args) -> int:
     from .edge.spool import Spool
 
     cfg = load_config(args.config)
-    count, nbytes = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes).depth()
+    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes)
+    count, nbytes = spool.depth()
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
+    retired = spool.retirement()  # 0.95 (#18): shown only for a decommissioned device
+    if retired is not None:
+        print(
+            f"  RETIRED at {retired.get('retired_at', '?')} (device "
+            f"{retired.get('device_id', '?')}); `edge run` / `send-once` refuse this spool"
+        )
+    return 0
+
+
+# ---- 0.95 edge lifecycle (#18 step 5): compaction ------------------------------------------------
+def _cmd_edge_compact(args) -> int:
+    """Rewrite the spool journal to its pending batches (crash-safe; never drops one)."""
+    from .edge.config import load_config
+    from .edge.spool import Spool
+    from .portfolio import PortfolioLocked
+
+    cfg = load_config(args.config)
+    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes, lock_timeout=args.lock_timeout)
+    try:
+        res = spool.compact(dry_run=args.dry_run)
+    except PortfolioLocked as e:
+        print(f"error: spool is busy: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        import dataclasses
+
+        print(json.dumps(dataclasses.asdict(res), indent=2))
+        return 0
+    verb = "would compact" if args.dry_run else "compacted"
+    print(
+        f"edge spool '{cfg.spool_dir}': {verb} journal {res.records_before} -> "
+        f"{res.records_after} record(s), {res.bytes_before} -> {res.bytes_after} bytes; "
+        f"{res.pending} batch(es) still pending (none dropped)"
+    )
+    if res.torn:
+        print(f"  dropped {res.torn} torn journal line(s) (a crash mid-append)")
+    if res.missing_payloads:
+        print(f"  {len(res.missing_payloads)} committed batch(es) already delivered (payload gone)")
+    for label, files in (("orphan payload", res.orphan_payloads), ("tmp file", res.tmp_files)):
+        if files:
+            print(
+                f"  {len(files)} {label}(s) with no journal record (an enqueue interrupted before "
+                f"its commit); kept, inspect by hand: {', '.join(files[:5])}"
+            )
     return 0
 
 
@@ -1470,6 +1534,249 @@ def _cmd_store_migrate_partitions(args) -> int:
     return 0
 
 
+# ---- 0.95 edge lifecycle (#18 step 5): central reconciliation -----------------------------------
+def _edge_ws(p) -> None:
+    p.add_argument(
+        "--workspace",
+        help="portfolio workspace root (default: $CAMBER_PORTFOLIO, else the current dir)",
+    )
+
+
+def _print_reconcile(rep: dict, limit: int) -> None:
+    src = rep["source"]
+    print(
+        f"edge reconcile ({'read-only' if rep.get('read_only') else 'applied'}) {src['kind']} "
+        f"{src['path']}: {rep['objects_scanned']} object(s) scanned"
+    )
+    print("  " + "  ".join(f"{k} {v}" for k, v in rep["counts"].items()))
+    rows = rep["objects"]
+    for r in rows[:limit]:
+        who = r["facility_id"] or "-"
+        act = f"  -> {r['action']}" if r.get("action") else ""
+        print(f"  {r['category']:16s} {who:28s} {r['key']}  ({r['detail']}){act}")
+    if len(rows) > limit:
+        print(f"  ... {len(rows) - limit} more (use --json or --limit)")
+
+
+@_pf_errors
+def _cmd_edge_reconcile(args) -> int:
+    from .edge.landing import reconcile
+
+    pf = _portfolio(args)
+    if args.apply:
+        from .edge.quarantine import quarantine_reconciled
+
+        if args.keys:
+            raise ValueError(
+                "--apply works on the workspace store or a local --landing directory; CAMBER "
+                "never moves cloud objects (route uploads with a broker, see docs/EDGE-DEPLOY.md)"
+            )
+        rep = quarantine_reconciled(pf, landing=args.landing, reason=args.reason)
+    else:
+        rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    _print_reconcile(rep, args.limit)
+    if args.apply:
+        print(f"  quarantined {rep['quarantined']} object(s) (audited)")
+    elif rep["to_quarantine"]:
+        hint = "" if args.keys else " (--apply --reason R to move them)"
+        print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_land(args) -> int:
+    from .edge.quarantine import land
+
+    rep = land(_portfolio(args), args.inbox, apply=args.apply, reason=args.reason)
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    c = rep["counts"]
+    head = "applied" if rep["applied"] else "dry run; --apply --reason R to move"
+    print(
+        f"edge land ({head}) {rep['inbox']}: {c['store']} to the store, "
+        f"{c['quarantine']} to quarantine, {c['inbox']} left in the inbox"
+    )
+    for r in rep["objects"][: args.limit]:
+        if r["to"] != "store":
+            print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_quarantine(args) -> int:
+    from .edge import quarantine as q
+
+    pf = _portfolio(args)
+    if args.q_cmd == "list":
+        rows = q.list_quarantine(pf, facility_id=args.facility)
+        if args.json:
+            print(json.dumps(rows, indent=2, default=str))
+            return 0
+        if not rows:
+            print("quarantine is empty")
+            return 0
+        for r in rows:
+            print(
+                f"{r['status']:10s} {str(r.get('facility_id') or '-'):28s} "
+                f"{str(r.get('category') or '-'):16s} {r['key']}  "
+                f"({r.get('quarantined_at') or '?'}: {r.get('detail') or ''})"
+            )
+        print(f"{len(rows)} object(s) in quarantine")
+        return 0
+    if args.q_cmd == "release":
+        rep = q.release(
+            pf, facility_id=args.facility, keys=args.key, reason=args.reason, apply=args.apply
+        )
+    else:
+        rep = q.discard(
+            pf,
+            facility_id=args.facility,
+            keys=args.key,
+            reason=args.reason,
+            apply=args.apply,
+            yes=args.yes,
+            confirm=args.confirm,
+        )
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    verb = {"release": "released", "discard": "discarded"}[args.q_cmd]
+    head = verb if rep["applied"] else f"would be {verb} (dry run; --apply)"
+    print(f"{len(rep['planned'])} object(s) {head}")
+    for k in rep["planned"]:
+        print(f"  {k}")
+    for r in rep["refused"]:
+        print(f"  refused {r['key']}: {r['why']}")
+    return 1 if rep["refused"] and not rep["planned"] else 0
+
+
+def _cmd_edge_decommission(args) -> int:
+    """Flush the spool, wait for acks, retire the device (dry run unless --apply)."""
+    import dataclasses
+
+    from .edge.config import build_forwarder, load_config
+    from .edge.decommission import decommission
+    from .portfolio import Portfolio, PortfolioLocked, find_workspace
+
+    cfg = load_config(args.config)
+    fwd = build_forwarder(cfg, source=_NoSource())
+    ws = find_workspace(args.workspace)
+    if args.workspace and ws is None:
+        print(f"error: {args.workspace} is not a portfolio workspace", file=sys.stderr)
+        return 1
+    try:
+        res = decommission(
+            fwd.spool,
+            fwd.sink,
+            facility_id=cfg.facility_id,
+            device_id=args.device or cfg.device_id,
+            reason=args.reason,
+            apply=args.apply,
+            yes=args.yes,
+            confirm=args.confirm,
+            force=args.force,
+            wait=args.wait,
+            portfolio=Portfolio(ws) if ws else None,
+        )
+    except (ValueError, PortfolioLocked) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(dataclasses.asdict(res), indent=2, default=str))
+        return 1 if res.refused and not res.dry_run else 0
+    head = "dry run; --apply to act" if res.dry_run else "applied"
+    print(
+        f"edge decommission ({head}) facility '{res.facility_id}' device '{res.device_id}': "
+        f"{res.pending_before} batch(es) pending, {res.forwarded} flushed, "
+        f"{res.pending_after} unacknowledged"
+    )
+    if res.refused:
+        print(f"  {'would refuse' if res.dry_run else 'REFUSED'}: {res.refused}")
+        return 0 if res.dry_run else 1
+    if res.dry_run:
+        print("  would retire the device (spool takes no new batches) and note it in the registry")
+        return 0
+    word = "already retired" if res.already_retired else "retired"
+    print(
+        f"  {word} at {(res.receipt or {}).get('retired_at')}" + (" (FORCED)" if res.forced else "")
+    )
+    for u in res.unacknowledged:
+        print(f"  unacknowledged, kept on disk: {u['key']} ({u['bytes']} bytes)")
+    if res.registry_noted:
+        print(f"  registry: {res.registry_noted}")
+    else:
+        print(
+            "  no portfolio workspace here: copy the spool's retired.json to the portfolio host "
+            "and run `camber edge record-retirement retired.json --reason R`"
+        )
+    return 0
+
+
+class _NoSource:
+    """A source placeholder: decommissioning never reads the BAS, it only flushes the spool."""
+
+    def point_names(self):
+        return []
+
+    def load_points(self, names, resample=None):
+        return None
+
+
+@_pf_errors
+def _cmd_edge_bucket_rules(args) -> int:
+    """Print (or write) provider lifecycle JSON from a retention policy. Never calls a cloud API."""
+    from .edge.bucket_rules import bucket_lifecycle_rules, policy_from_portfolio
+
+    facilities = list(args.facility or []) or None
+    if args.policy:
+        with open(args.policy, encoding="utf-8") as fh:
+            policy = json.load(fh)
+    else:
+        policy, facs = policy_from_portfolio(_portfolio(args))
+        facilities = facilities or facs
+    out = bucket_lifecycle_rules(
+        policy,
+        provider=args.provider,
+        facilities=facilities,
+        prefix=args.prefix or "",
+        container=args.container,
+    )
+    doc = json.dumps(out["document"], indent=2)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(doc + "\n")
+    if args.json:
+        print(doc)
+        return 0
+    print(f"# {args.provider} lifecycle rules (dry run: nothing was sent to any cloud)")
+    for row in out["plan"]:
+        n = len(row["prefixes"])
+        print(f"#   {row['class']}: delete after {row['days']} days ({n} prefix(es))")
+    for note in out["notes"]:
+        print(f"#   note: {note}")
+    print(f"# review, then apply yourself: {out['apply_with']}")
+    if args.out:
+        print(f"# wrote {args.out}")
+    else:
+        print(doc)
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_record_retirement(args) -> int:
+    from .edge.decommission import record_retirement
+
+    with open(args.receipt, encoding="utf-8") as fh:
+        receipt = json.load(fh)
+    r = record_retirement(_portfolio(args), receipt, reason=args.reason)
+    print(f"{r['facility_id']}: device {r['device_id']} retirement {r['noted']}")
+    return 0
+
+
 # --------------------------------------------------------------------------- drift subcommands
 #
 # The baseline store is written by exactly two verbs -- `freeze` (create a missing reference) and
@@ -2374,6 +2681,112 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     esf.add_argument("config")
     esf.set_defaults(func=_cmd_edge_selftest)
+    # ---- 0.95 edge lifecycle (#18 step 5) ----
+    ecp = edsub.add_parser(
+        "compact", help="rewrite the spool journal to its pending batches (crash-safe)"
+    )
+    ecp.add_argument("config")
+    ecp.add_argument("--dry-run", action="store_true", help="report only; change nothing")
+    ecp.add_argument(
+        "--lock-timeout", type=float, default=30.0, help="seconds to wait for a busy spool"
+    )
+    ecp.add_argument("--json", action="store_true")
+    ecp.set_defaults(func=_cmd_edge_compact)
+    erc = edsub.add_parser(
+        "reconcile",
+        help="central: check landed objects against the facility registry (read-only)",
+    )
+    _edge_ws(erc)
+    esrc = erc.add_mutually_exclusive_group()
+    esrc.add_argument("--landing", help="a local landing directory (default: the workspace store)")
+    esrc.add_argument(
+        "--keys", help="a cloud key listing (s3api / gcloud / az JSON, or one key per line)"
+    )
+    erc.add_argument("--prefix", help="the sink's key prefix to strip from listed keys")
+    erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    erc.add_argument(
+        "--apply", action="store_true", help="quarantine the flagged objects (needs --reason)"
+    )
+    erc.add_argument("--reason", help="why (audited; required with --apply)")
+    erc.add_argument("--json", action="store_true")
+    erc.set_defaults(func=_cmd_edge_reconcile)
+    eld = edsub.add_parser(
+        "land", help="central: route a landing inbox into the store or quarantine (dry run)"
+    )
+    _edge_ws(eld)
+    eld.add_argument("inbox", help="the landing directory edge uploads arrive in")
+    eld.add_argument("--apply", action="store_true", help="move the objects (needs --reason)")
+    eld.add_argument("--reason", help="why (audited; required with --apply)")
+    eld.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    eld.add_argument("--json", action="store_true")
+    eld.set_defaults(func=_cmd_edge_land)
+    eqr = edsub.add_parser(
+        "quarantine", help="central: list, release or discard quarantined uploads"
+    )
+    eqsub = eqr.add_subparsers(dest="q_cmd", required=True)
+    eql = eqsub.add_parser("list", help="quarantined objects with their reason and status")
+    _edge_ws(eql)
+    eql.add_argument("--facility", help="only this facility_id")
+    eql.add_argument("--json", action="store_true")
+    eql.set_defaults(func=_cmd_edge_quarantine)
+    for verb, text in (
+        ("release", "move quarantined objects into the store (the facility must accept data)"),
+        ("discard", "delete quarantined objects (destructive: --apply and --yes/--confirm ID)"),
+    ):
+        eqv = eqsub.add_parser(verb, help=text)
+        _edge_ws(eqv)
+        eqv.add_argument("--facility", help="every quarantined object of this facility_id")
+        eqv.add_argument("--key", action="append", help="one quarantined key (repeatable)")
+        eqv.add_argument("--apply", action="store_true", help="act (default: a dry run)")
+        eqv.add_argument("--reason", help="why (audited; required with --apply)")
+        if verb == "discard":
+            eqv.add_argument("--yes", action="store_true", help="confirm the deletion")
+            eqv.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the id")
+        eqv.add_argument("--json", action="store_true")
+        eqv.set_defaults(func=_cmd_edge_quarantine, yes=False, confirm=None)
+    edc = edsub.add_parser(
+        "decommission",
+        help="flush the spool, wait for acks, retire the device (dry run unless --apply)",
+    )
+    edc.add_argument("config")
+    edc.add_argument("--device", help="device id (default: config device_id, else the node name)")
+    _edge_ws(edc)
+    edc.add_argument(
+        "--wait", type=float, default=60.0, help="seconds to keep flushing for acks (default 60)"
+    )
+    edc.add_argument("--apply", action="store_true", help="act (default: a dry run)")
+    edc.add_argument("--yes", action="store_true", help="confirm the retirement")
+    edc.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the facility id")
+    edc.add_argument(
+        "--force",
+        action="store_true",
+        help="retire even with unacknowledged batches (kept on disk; refused under a legal hold)",
+    )
+    edc.add_argument("--reason", help="why (audited; required with --apply or --force)")
+    edc.add_argument("--json", action="store_true")
+    edc.set_defaults(func=_cmd_edge_decommission)
+    err = edsub.add_parser(
+        "record-retirement", help="central: record a device's retirement receipt (retired.json)"
+    )
+    _edge_ws(err)
+    err.add_argument("receipt", help="the retired.json a decommissioned device wrote")
+    err.add_argument("--reason", required=True, help="why (audited)")
+    err.set_defaults(func=_cmd_edge_record_retirement)
+    ebr = edsub.add_parser(
+        "bucket-rules",
+        help="emit S3 / GCS / Azure lifecycle JSON from the retention policy (text only)",
+    )
+    ebr.add_argument("--provider", required=True, choices=["s3", "gcs", "azure"])
+    _edge_ws(ebr)
+    ebr.add_argument("--policy", help="a policy JSON file instead of the workspace's policy")
+    ebr.add_argument(
+        "--facility", action="append", help="emit per-facility rules for this id (repeatable)"
+    )
+    ebr.add_argument("--prefix", help="the landing's key prefix in the bucket")
+    ebr.add_argument("--container", help="Azure container name (required for azure)")
+    ebr.add_argument("--out", help="write the rules JSON to this file")
+    ebr.add_argument("--json", action="store_true", help="print only the rules JSON")
+    ebr.set_defaults(func=_cmd_edge_bucket_rules)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"

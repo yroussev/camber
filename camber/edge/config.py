@@ -83,6 +83,7 @@ class EdgeConfig:
     spool_max_bytes: int = _DEFAULT_MAX_BYTES
     quality: bool = True
     wire_format: str = "parquet"
+    device_id: str | None = None  # 0.95 (#18): names the device in its retirement record
 
 
 def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
@@ -113,6 +114,7 @@ def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
         spool_max_bytes=int(raw.get("spool_max_bytes", _DEFAULT_MAX_BYTES)),
         quality=bool(raw.get("quality", True)),
         wire_format=environ.get("CAMBER_EDGE_WIRE_FORMAT") or raw.get("wire_format", "parquet"),
+        device_id=environ.get("CAMBER_EDGE_DEVICE_ID") or raw.get("device_id"),
     )
 
 

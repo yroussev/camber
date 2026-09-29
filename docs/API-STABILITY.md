@@ -425,6 +425,28 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   changed additively:** `ParquetStore` now writes `year=/month=` partitions and still reads
   year-only ones; a full `read_long` returns a `month` column alongside `year`.
 <!-- /095-lifecycle -->
+<!-- 095-edge (#18 step 5) -->
+- **Edge lifecycle** (0.95; #18 step 5), all additive and provisional:
+  - the modules `camber.edge.landing` (`ACCEPTING_STATES`, `NON_ACCEPTING_STATES`,
+    `QUARANTINE_PREFIX`, `CATEGORIES`, `LandedKey`, `parse_landed_key`, `facility_status`,
+    `route_key`, `read_key_listing`, `reconcile`), `camber.edge.quarantine` (`QUARANTINE_DIR`,
+    `RECORD_SUFFIX`, `quarantine_root`, `list_quarantine`, `land`, `quarantine_reconciled`,
+    `release`, `discard`), `camber.edge.decommission` (`DecommissionResult`,
+    `default_device_id`, `decommission`, `record_retirement`) and `camber.edge.bucket_rules`
+    (`PROVIDERS`, `BUCKET_CLASSES`, `DAYS_PER_MONTH`, `DAYS_PER_YEAR`, `rule_days`,
+    `normalize_policy`, `policy_from_portfolio`, `bucket_lifecycle_rules`);
+  - in `camber.edge.spool`: `Spool.compact`, `Spool.lock`, `Spool.retire`, `Spool.retirement`,
+    `Spool(lock_timeout=)`, `CompactResult` and `SpoolRetired` (also exported from
+    `camber.edge`); the journal record `op: "mark"` and the optional `attempts` field of an
+    `enqueue` record; the spool files `_lock` and `retired.json`;
+  - `EdgeConfig.device_id` (config key `device_id`, env `CAMBER_EDGE_DEVICE_ID`);
+  - the workspace directory `quarantine/` and its `*.quarantine.json` records; the registry field
+    `edge_devices`; the audit actions `edge.land`, `edge.reconcile.quarantine`,
+    `edge.quarantine.release`, `edge.quarantine.discard` and `edge.decommission`;
+  - the bucket-rules input schema and the reconciliation report's JSON keys;
+  - the CLI `camber edge compact | decommission | reconcile | land | quarantine |
+    record-retirement | bucket-rules`.
+<!-- /095-edge -->
 
 ## Deprecated
 

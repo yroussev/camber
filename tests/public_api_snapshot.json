@@ -477,6 +477,7 @@
   "camber.edge": [
     "AzureBlobSink",
     "BatchResult",
+    "CompactResult",
     "DrainResult",
     "EdgeConfig",
     "Forwarder",
@@ -486,18 +487,57 @@
     "Sink",
     "Spool",
     "SpoolEntry",
+    "SpoolRetired",
     "build_forwarder",
     "collect_sink",
     "load_config"
+  ],
+  "camber.edge.bucket_rules": [
+    "BUCKET_CLASSES",
+    "DAYS_PER_MONTH",
+    "DAYS_PER_YEAR",
+    "PROVIDERS",
+    "bucket_lifecycle_rules",
+    "normalize_policy",
+    "policy_from_portfolio",
+    "rule_days"
   ],
   "camber.edge.config": [
     "EdgeConfig",
     "build_forwarder",
     "load_config"
   ],
+  "camber.edge.decommission": [
+    "DecommissionResult",
+    "decommission",
+    "default_device_id",
+    "record_retirement"
+  ],
   "camber.edge.forwarder": [
     "BatchResult",
     "Forwarder"
+  ],
+  "camber.edge.landing": [
+    "ACCEPTING_STATES",
+    "CATEGORIES",
+    "LandedKey",
+    "NON_ACCEPTING_STATES",
+    "QUARANTINE_PREFIX",
+    "facility_status",
+    "parse_landed_key",
+    "read_key_listing",
+    "reconcile",
+    "route_key"
+  ],
+  "camber.edge.quarantine": [
+    "QUARANTINE_DIR",
+    "RECORD_SUFFIX",
+    "discard",
+    "land",
+    "list_quarantine",
+    "quarantine_reconciled",
+    "quarantine_root",
+    "release"
   ],
   "camber.edge.sink": [
     "AzureBlobSink",
@@ -508,9 +548,11 @@
     "collect_sink"
   ],
   "camber.edge.spool": [
+    "CompactResult",
     "DrainResult",
     "Spool",
-    "SpoolEntry"
+    "SpoolEntry",
+    "SpoolRetired"
   ],
   "camber.energy_factors": [
     "Conversion",

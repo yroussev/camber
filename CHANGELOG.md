@@ -9,11 +9,18 @@ All notable changes to CAMBER are documented here. The format follows
 <!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when
 0.95 is released. -->
 
-<!-- 095-mv -->
-**Bill-based M&V follow-ups (#74).** A billing meter's rebaseline window is now searched, as a
-daily meter's is, so `camber mv rebaseline` no longer needs `--period` for bills. An opt-in step
-test built for bills gives trigger T1 a calibrated false-alarm rate. And the degree-day model at
-bases selected from the bills is a candidate in the SEP method proposal.
+**0.95: bill-based M&V follow-ups (#74) and the portfolio lifecycle from offboarding to the edge
+(#18 steps 3–5).** A billing meter's rebaseline window is now searched, as a daily meter's is, so
+`camber mv rebaseline` no longer needs `--period` for bills; an opt-in step test built for bills
+gives trigger T1 a calibrated false-alarm rate; and the degree-day model at bases selected from the
+bills is a candidate in the SEP method proposal. A facility now leaves a portfolio in audited,
+reversible steps (offboard, archive, restore, purge), and nothing is deleted without a verified
+export bundle. The agreed retention defaults are enforced by `camber retention apply`, which rolls
+raw data up, verifies the rollup, and only then prunes; the store writes month partitions so
+retention works month by month. At the edge, what lands in the cloud follows the facility
+registry: uploads from a facility that has left are quarantined instead of stored, a device can
+be retired without losing data, and the bucket's own lifecycle rules are generated from the
+retention policy.
 
 ### Added
 - **Rebaseline windows of whole bills (#74).** `camber mv propose` answers a rebaseline-class
@@ -62,33 +69,6 @@ bases selected from the bills is a candidate in the SEP method proposal.
   - the scan's calibration on independent noise, its detection and dating of a 20% step, the
     opt-in, and ECMs and declared events not detected again;
   - the degree-day candidate in the proposal.
-
-### Changed
-- Nothing for existing configs. A byte-identity harness compared the findings of billing entries
-  (numeric and `auto` bases, every method, adjustments, versioned runs, `mv report`) and of a
-  daily workspace (`propose`, dry-run `rebaseline`, `report`) before and after: they were
-  identical. The exceptions are the intended ones:
-  - a billing meter's `propose` / `rebaseline` with a rebaseline-class trigger (a window instead
-    of a decline);
-  - `method: "auto"` on a billing entry with selected bases: the proposal gains the degree-day
-    candidate, and the 0.94 caveat "ranks the change-point models only" is gone.
-
-  `RebaselinePolicy.as_dict()`, stored in rebaseline provenance, carries `bill_steps` only when
-  it is set.
-<!-- /095-mv -->
-<!-- 0.95 is stacked on 0.94 (unreleased, below). Three branches add to this entry; each keeps its
-own marked block for the integrator. -->
-
-<!-- 095-lifecycle (#18 steps 3-4): begin -->
-**Portfolio lifecycle: offboarding, archiving, restoring and purging (#18 step 3).** A facility
-now leaves a portfolio in audited, reversible steps, and nothing is deleted without a verified
-copy.
-
-**Retention (#18 step 4).** The agreed retention defaults are now enforced by `camber retention
-apply`, which rolls raw data up, verifies the rollup, and only then prunes. The store writes
-month partitions, so retention works month by month.
-
-### Added
 - **`camber facility offboard | archive | restore | purge`** (and `Portfolio.offboard`,
   `archive`, `restore`, `purge`; provisional).
   - `offboard` writes a verified export bundle, then starts a 30-day reversible grace period.
@@ -134,8 +114,47 @@ month partitions, so retention works month by month.
 - **`camber store migrate-partitions`** (`ParquetStore.migrate_partitions`): converts year-only
   partitions to `year=/month=`, a dry run unless `--apply --yes`, crash-safe and idempotent.
   `ParquetStore.partitions()` and `drop_partition()` list and delete single partitions.
+- **Central reconciliation (#18).** `camber edge reconcile` (provisional,
+  `camber.edge.landing`) classifies landed objects against the registry as `ok`, `orphaned`,
+  `unknown_facility`, `unregistered`, `inactive` or `quarantined`. It reads the workspace store, a
+  local landing directory, or a key listing exported from S3, GCS or Azure. It is read-only by
+  default and never calls a cloud API. In the store, an inactive facility's objects that landed
+  before its state change are history and are only reported.
+- **Quarantine (#18).** Uploads for a facility that is `suspended`, `offboarding`, `archived`,
+  `purged` or unknown, and objects whose content fails the hash in their name, go to
+  `<workspace>/quarantine/` with a record of why, not into the store. The routes are
+  `camber edge land <inbox>`, `camber edge reconcile --apply`, or `route_key()` for a
+  presigned-URL broker, which routes to the bucket's `_quarantine/` prefix.
+  `camber edge quarantine list | release | discard` are dry runs by default. They take the lock
+  and are audited with a reason. `discard` needs `--yes` or the typed facility id, and a legal
+  hold refuses it.
+- **Edge decommissioning (#18).** `camber edge decommission` flushes the spool, waits for the
+  landing to acknowledge every batch, then retires the device. The spool refuses new batches from
+  then on. The retirement is recorded as an audit line and an `edge_devices.<device_id>` note on
+  the facility's registry entry, directly or later with `camber edge record-retirement`. It
+  refuses while data is unacknowledged unless `--force` is given with a reason. A forced
+  retirement keeps the payloads on disk, and a legal hold refuses it.
+- **Spool journal compaction (#18).** `camber edge compact` / `Spool.compact()` rewrite the
+  append-only journal to the pending batches. The rewrite is verified before an atomic swap, so a
+  crash never drops an unacknowledged batch, and sequence numbers are never reused.
+- **Bucket lifecycle rules (#18).** `camber edge bucket-rules --provider s3|gcs|azure`
+  (`camber.edge.bucket_rules`) emits lifecycle JSON from a retention-policy dict or the
+  workspace's policy. Ages are conservative, and facility overrides and legal holds produce
+  per-facility rules. It is text only: the admin applies the rules.
+- `EdgeConfig.device_id` (config `device_id`, env `CAMBER_EDGE_DEVICE_ID`).
 
 ### Changed
+- **Bill-based M&V (#74): nothing changes for existing configs.** A byte-identity harness
+  compared the findings of billing entries (numeric and `auto` bases, every method, adjustments,
+  versioned runs, `mv report`) and of a daily workspace (`propose`, dry-run `rebaseline`, `report`) before and after: they were
+  identical. The exceptions are the intended ones:
+  - a billing meter's `propose` / `rebaseline` with a rebaseline-class trigger (a window instead
+    of a decline);
+  - `method: "auto"` on a billing entry with selected bases: the proposal gains the degree-day
+    candidate, and the 0.94 caveat "ranks the change-point models only" is gone.
+
+  `RebaselinePolicy.as_dict()`, stored in rebaseline provenance, carries `bill_steps` only when
+  it is set.
 - **`ParquetStore` writes `year=/month=` partitions** (was `year=`). Year-only and mixed stores
   are read unchanged, and range reads also skip month directories. A full `read_long` now
   returns a `month` column.
@@ -144,6 +163,11 @@ month partitions, so retention works month by month.
   raising.
 - `ParquetStore.prune` and `drop_facility` delete through one atomic rename, then removal, so a
   crash never leaves a half-deleted partition visible.
+- Spool journal writes now take the spool's single-writer lock (`<spool>/_lock`), and an append
+  after a torn last line starts a fresh line. Before, the next record could be glued onto the
+  torn line and lost with it. Spool contents and forwarding are otherwise unchanged.
+- `camber edge status` adds a `RETIRED` line for a decommissioned device. `edge run` and
+  `send-once` refuse a retired spool, and the forwarder daemon stops on one.
 
 ### Fixed
 - **A write after `ParquetStore.prune` could overwrite live data.** The part-file counter was the
@@ -152,7 +176,6 @@ month partitions, so retention works month by month.
   disk.
 - The store read caches (the per-facility fragment index and the resolve frame cache) now notice
   writes into month directories.
-<!-- 095-lifecycle (#18 steps 3-4): end -->
 
 ## [0.94.0] — Unreleased
 
