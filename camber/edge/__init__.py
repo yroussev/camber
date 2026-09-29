@@ -21,7 +21,7 @@ from .sink import (
     Sink,
     collect_sink,
 )
-from .spool import DrainResult, Spool, SpoolEntry
+from .spool import CompactResult, DrainResult, Spool, SpoolEntry, SpoolRetired
 
 __all__ = [
     "Sink",
@@ -33,6 +33,8 @@ __all__ = [
     "Spool",
     "SpoolEntry",
     "DrainResult",
+    "CompactResult",
+    "SpoolRetired",
     "Forwarder",
     "BatchResult",
     "EdgeConfig",

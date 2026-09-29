@@ -477,6 +477,7 @@
   "camber.edge": [
     "AzureBlobSink",
     "BatchResult",
+    "CompactResult",
     "DrainResult",
     "EdgeConfig",
     "Forwarder",
@@ -486,6 +487,7 @@
     "Sink",
     "Spool",
     "SpoolEntry",
+    "SpoolRetired",
     "build_forwarder",
     "collect_sink",
     "load_config"
@@ -508,9 +510,11 @@
     "collect_sink"
   ],
   "camber.edge.spool": [
+    "CompactResult",
     "DrainResult",
     "Spool",
-    "SpoolEntry"
+    "SpoolEntry",
+    "SpoolRetired"
   ],
   "camber.energy_factors": [
     "Conversion",

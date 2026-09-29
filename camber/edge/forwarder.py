@@ -217,11 +217,16 @@ class Forwarder:
         """Daemon loop: ``poll_once`` then sleep ``interval`` s (``iterations`` bounds tests)."""
         import time
 
+        from .spool import SpoolRetired
+
         sleep = _sleep or time.sleep
         i = 0
         while iterations is None or i < iterations:
             try:
                 self.poll_once()
+            except SpoolRetired:  # a decommissioned device stops; it never retries forever
+                _LOG.error("edge.forward spool retired (device decommissioned); stopping")
+                raise
             except Exception:  # a poll failure must not kill the daemon; log and continue
                 _LOG.exception("edge.forward poll_once failed; will retry next interval")
             i += 1

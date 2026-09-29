@@ -387,11 +387,26 @@ def _cmd_bacnet_discover(args) -> int:  # pragma: no cover - drives a live BACne
     return 0
 
 
+def _edge_retired(fwd) -> bool:
+    """0.95 (#18): refuse to forward from a decommissioned device's spool (prints why)."""
+    retired = fwd.spool.retirement()
+    if retired is None:
+        return False
+    print(
+        f"error: this edge device was decommissioned at {retired.get('retired_at', '?')} "
+        f"(spool {fwd.spool.root}); it no longer forwards",
+        file=sys.stderr,
+    )
+    return True
+
+
 def _cmd_edge_run(args) -> int:
     from .edge.config import build_forwarder, load_config
 
     cfg = load_config(args.config)
     fwd = build_forwarder(cfg)
+    if _edge_retired(fwd):
+        return 1
     print(f"edge: forwarding facility '{cfg.facility_id}' every {cfg.interval:.0f}s (one-way)")
     fwd.run(cfg.interval)
     return 0
@@ -402,6 +417,8 @@ def _cmd_edge_send_once(args) -> int:
 
     cfg = load_config(args.config)
     fwd = build_forwarder(cfg)
+    if _edge_retired(fwd):
+        return 1
     res = fwd.poll_once()
     print(
         f"edge: facility '{res.facility_id}' rows={res.rows} parts={res.spooled} "
@@ -415,8 +432,53 @@ def _cmd_edge_status(args) -> int:
     from .edge.spool import Spool
 
     cfg = load_config(args.config)
-    count, nbytes = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes).depth()
+    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes)
+    count, nbytes = spool.depth()
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
+    retired = spool.retirement()  # 0.95 (#18): shown only for a decommissioned device
+    if retired is not None:
+        print(
+            f"  RETIRED at {retired.get('retired_at', '?')} (device "
+            f"{retired.get('device_id', '?')}); `edge run` / `send-once` refuse this spool"
+        )
+    return 0
+
+
+# ---- 0.95 edge lifecycle (#18 step 5): compaction ------------------------------------------------
+def _cmd_edge_compact(args) -> int:
+    """Rewrite the spool journal to its pending batches (crash-safe; never drops one)."""
+    from .edge.config import load_config
+    from .edge.spool import Spool
+    from .portfolio import PortfolioLocked
+
+    cfg = load_config(args.config)
+    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes, lock_timeout=args.lock_timeout)
+    try:
+        res = spool.compact(dry_run=args.dry_run)
+    except PortfolioLocked as e:
+        print(f"error: spool is busy: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        import dataclasses
+
+        print(json.dumps(dataclasses.asdict(res), indent=2))
+        return 0
+    verb = "would compact" if args.dry_run else "compacted"
+    print(
+        f"edge spool '{cfg.spool_dir}': {verb} journal {res.records_before} -> "
+        f"{res.records_after} record(s), {res.bytes_before} -> {res.bytes_after} bytes; "
+        f"{res.pending} batch(es) still pending (none dropped)"
+    )
+    if res.torn:
+        print(f"  dropped {res.torn} torn journal line(s) (a crash mid-append)")
+    if res.missing_payloads:
+        print(f"  {len(res.missing_payloads)} committed batch(es) already delivered (payload gone)")
+    for label, files in (("orphan payload", res.orphan_payloads), ("tmp file", res.tmp_files)):
+        if files:
+            print(
+                f"  {len(files)} {label}(s) with no journal record (an enqueue interrupted before "
+                f"its commit); kept, inspect by hand: {', '.join(files[:5])}"
+            )
     return 0
 
 
@@ -2063,6 +2125,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     esf.add_argument("config")
     esf.set_defaults(func=_cmd_edge_selftest)
+    # ---- 0.95 edge lifecycle (#18 step 5) ----
+    ecp = edsub.add_parser(
+        "compact", help="rewrite the spool journal to its pending batches (crash-safe)"
+    )
+    ecp.add_argument("config")
+    ecp.add_argument("--dry-run", action="store_true", help="report only; change nothing")
+    ecp.add_argument(
+        "--lock-timeout", type=float, default=30.0, help="seconds to wait for a busy spool"
+    )
+    ecp.add_argument("--json", action="store_true")
+    ecp.set_defaults(func=_cmd_edge_compact)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"
