@@ -76,6 +76,83 @@ bases selected from the bills is a candidate in the SEP method proposal.
   `RebaselinePolicy.as_dict()`, stored in rebaseline provenance, carries `bill_steps` only when
   it is set.
 <!-- /095-mv -->
+<!-- 0.95 is stacked on 0.94 (unreleased, below). Three branches add to this entry; each keeps its
+own marked block for the integrator. -->
+
+<!-- 095-lifecycle (#18 steps 3-4): begin -->
+**Portfolio lifecycle: offboarding, archiving, restoring and purging (#18 step 3).** A facility
+now leaves a portfolio in audited, reversible steps, and nothing is deleted without a verified
+copy.
+
+**Retention (#18 step 4).** The agreed retention defaults are now enforced by `camber retention
+apply`, which rolls raw data up, verifies the rollup, and only then prunes. The store writes
+month partitions, so retention works month by month.
+
+### Added
+- **`camber facility offboard | archive | restore | purge`** (and `Portfolio.offboard`,
+  `archive`, `restore`, `purge`; provisional).
+  - `offboard` writes a verified export bundle, then starts a 30-day reversible grace period.
+  - `archive`, after the grace period (or with `--skip-grace`, audited), deletes the hot data:
+    store and rollup partitions, `state/<fid>/`, and unchanged external report files. It keeps
+    the bundle, re-exporting first if anything changed during the grace period.
+  - `restore` brings an offboarding or archived facility back; from a bundle it re-verifies every
+    checksum after the copy.
+  - `purge` deletes everything but the tombstone and the audit record; the id is never reused.
+  - Each is a dry run unless `--apply`, needs `--reason` and a confirmation (`--yes` or the typed
+    id; `purge` only the typed id), takes the portfolio lock and is audited with the OS user. A
+    legal hold blocks `archive` and `purge`.
+- **Export bundles** under `archive/<fid>/<bundle_id>/`: raw partitions, rollups, the whole
+  `state/<fid>/` (fault history, drift baselines, M&V and bill-based M&V baselines, the #73
+  weather audit log, reports, the manifest), external artifacts, the registry entry, catalog keys
+  and retention override, with a sha256 manifest and a checksum of the manifest itself.
+  `camber facility export` makes one on demand; `camber facility bundles --verify` re-hashes
+  them.
+- **Crash safety.** Trees are replaced through a fsynced `_swap-*` stage and deleted through one
+  atomic rename to `_trash-*`. Every lifecycle command first finishes or rolls back whatever a
+  crash left (`Portfolio.recover`, audited as `portfolio.recover`). Tests cover a crash at each
+  step, including a killed child process.
+
+- **`camber retention show | set | override | hold | release | apply`** (and
+  `Portfolio.set_retention`, `set_retention_override`, `hold`, `release_hold`,
+  `apply_retention`, `retention_policy`; provisional). Defaults: raw trends 25 months, hourly
+  rollups 7 years, daily rollups indefinite, findings 7 years, drift baselines for the life of
+  the equipment with the last 10 versions, M&V (and bill-based M&V) baselines every version,
+  reports the last 12 per facility, the weather audit log while the facility exists, the audit
+  log never. Precedence: legal hold > facility override > portfolio default.
+  - `apply` rolls expired raw month partitions up into `rollups/hourly/` and `rollups/daily/`
+    (mean and count per bucket), verifies that the counts add up to the raw rows, and only then
+    prunes. It also trims closed faults, drift baseline history and old reports, and archives
+    offboarding facilities whose grace period has ended.
+  - It is a dry run unless `--apply --reason R --yes`, takes the lock (`--wait S`; exit 75 when
+    held), recovers interrupted work first, audits each facility before acting, and is
+    idempotent, so it is safe from cron.
+- **The policy as a documented JSON document** (`camber retention show --json`,
+  `Portfolio.retention_policy()`), described by the JSON Schema
+  `camber.portfolio.RETENTION_SCHEMA`: each class's storage location, the effective rule per
+  facility with its source, a conservative `min_age_days` for object-store lifecycle rules, and
+  the legal holds.
+- **`camber store migrate-partitions`** (`ParquetStore.migrate_partitions`): converts year-only
+  partitions to `year=/month=`, a dry run unless `--apply --yes`, crash-safe and idempotent.
+  `ParquetStore.partitions()` and `drop_partition()` list and delete single partitions.
+
+### Changed
+- **`ParquetStore` writes `year=/month=` partitions** (was `year=`). Year-only and mixed stores
+  are read unchanged, and range reads also skip month directories. A full `read_long` now
+  returns a `month` column.
+- An **archived** facility refuses store writes (its data lives in its bundle).
+- `ParquetStore.read_long` on a store with no partitions left returns an empty frame instead of
+  raising.
+- `ParquetStore.prune` and `drop_facility` delete through one atomic rename, then removal, so a
+  crash never leaves a half-deleted partition visible.
+
+### Fixed
+- **A write after `ParquetStore.prune` could overwrite live data.** The part-file counter was the
+  number of files left, so after a prune a new write could reuse the name of an existing file in
+  the same partition and replace it. The counter is now one past the highest part number on
+  disk.
+- The store read caches (the per-facility fragment index and the resolve frame cache) now notice
+  writes into month directories.
+<!-- 095-lifecycle (#18 steps 3-4): end -->
 
 ## [0.94.0] — Unreleased
 

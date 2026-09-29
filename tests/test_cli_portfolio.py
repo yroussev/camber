@@ -59,9 +59,10 @@ def test_cli_portfolio_and_facility_flow(tmp_path, capsys, monkeypatch):
         assert rc == 0 and want in out
     rc, out, _ = _cli(capsys, "facility", "rename", fid, "Test Bldg", "--reason", "rebrand")
     assert rc == 0 and "'Test Bldg'" in out
-    for verb in ("offboard", "restore", "archive", "purge"):
-        rc, _, err = _cli(capsys, "facility", verb, fid)
-        assert rc == 2 and "available in a later release" in err
+    rc, out, _ = _cli(capsys, "facility", "offboard", fid)  # a dry run by default
+    assert rc == 0 and "dry run -- nothing changed" in out and "--apply" in out
+    rc, _, err = _cli(capsys, "facility", "archive", fid)
+    assert rc == 1 and "cannot archive a facility that is active" in err
     rc, out, _ = _cli(capsys, "facility", "list")
     assert rc == 0 and fid in out and "Test Bldg" in out and "2 facilities" in out
     rc, out, _ = _cli(capsys, "facility", "list", "--state", "active", "--json")

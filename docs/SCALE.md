@@ -8,9 +8,9 @@ the one cost that does grow with portfolio size.
 ```mermaid
 flowchart TD
   q["query (facility_id, start/end, roles)"] --> flt["_build_filter"]
-  flt -- facility_id + year bounds --> prune["partition pruning"]
+  flt -- facility_id + year/month bounds --> prune["partition pruning"]
   flt -- needed columns --> proj["column projection"]
-  prune --> part["facility_id=.../year=... partitions"]
+  prune --> part["facility_id=.../year=.../month=... partitions"]
   proj --> part
   part --> pivot["fast-path pivot"]
   pivot --> frame["role-named frame (flat per-equip read)"]
@@ -22,15 +22,21 @@ flowchart TD
 
 ## Layout
 
-One tidy long-form dataset, hive-partitioned by `facility_id` then `year`:
+One tidy long-form dataset, hive-partitioned by `facility_id`, then `year`, then `month` (since
+0.95):
 
 ```
-<root>/facility_id=fox-lodge-9f3a1c/year=2024/part-*.parquet
+<root>/facility_id=fox-lodge-9f3a1c/year=2024/month=7/part-*.parquet
 <root>/_facilities.json     {"fox-lodge-9f3a1c": {"name": "Fox Lodge", ...}}
 ```
 
-A query for one facility reads only that facility's directory; a query for one year reads only
-that year's subdirectory.
+A query for one facility reads only that facility's directory; a query for one month reads only
+that month's subdirectory. Stores written before 0.95 have `year=` partitions only
+(`year=2024/part-*.parquet`). They are read unchanged, a store may hold both layouts (a legacy
+file reads with `month` null and is never skipped by a month bound), and `camber store
+migrate-partitions STORE` converts them (a dry run unless `--apply --yes`; crash-safe and
+idempotent). Month partitions are what month-level retention prunes: see
+[PORTFOLIO.md](PORTFOLIO.md#retention).
 
 ## Facility identity (why an id, not a name)
 
@@ -57,9 +63,9 @@ case is refused. See [PORTFOLIO.md](PORTFOLIO.md).
 
 1. **Partition pruning on `site` and `year`.** Filters on `site` skip other buildings'
    directories. Crucially, a `start`/`end` time range is translated into bounds on the `year`
-   *partition* field as well as the `ts` data column (`_build_filter`), so a one-month query
-   across a multi-year store opens only the relevant year partition(s) instead of scanning every
-   year. Proven in `tests/test_store_scale.py` via `dataset.get_fragments(filter=…)`.
+   and `month` *partition* fields as well as the `ts` data column (`_build_filter`), so a
+   one-month query across a multi-year store opens only the relevant month partition(s) instead
+   of scanning every year. Proven in `tests/test_store_scale.py` via `dataset.get_fragments(filter=…)`.
 
 2. **Column projection.** Reads pull only the columns they need from Parquet. `points()`
    (catalog enumeration) projects just `site`/`equip`/`role` and never reads the `ts`/`value`

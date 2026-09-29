@@ -403,6 +403,28 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     entries with `base_f: "auto"`); the `n_bills`, `bases`, `ranking` and `tried` keys of a
     billing meter's rebaseline `window` in `camber mv propose --json`.
 <!-- /095-mv -->
+<!-- 095-lifecycle (#18 steps 3-4) -->
+- **Portfolio lifecycle, offboarding to purge** (added in 0.95, provisional, #18 step 3):
+  `Portfolio.offboard`, `archive`, `restore`, `purge` (each `apply=False` by default; `purge`
+  needs `confirm=` equal to the facility id), `Portfolio.export`, `bundles` and `recover`;
+  `Portfolio.transition` now runs `offboard` / `archive` / `restore`. On disk: the export bundle
+  layout under `archive/<fid>/<bundle_id>/` with `manifest.json` (`"schema": "camber.bundle/1"`)
+  and `manifest.sha256`; the registry fields `offboarding` and `archive`; the tombstone fields
+  `purged_at` and `purge_pending`; the `_swap-*` / `_trash-*` crash-recovery names; the audit
+  actions `facility.offboard|archive|restore|purge|export` and `portfolio.recover`. CLI:
+  `camber facility offboard|archive|restore|purge|export|bundles`.
+- **Retention and month partitions** (added in 0.95, provisional, #18 step 4):
+  `camber.portfolio.RETENTION_SCHEMA` and the policy document it describes
+  (`"schema": "camber.retention/1"`, from `Portfolio.retention_policy()`), `Portfolio.set_retention`,
+  `set_retention_override`, `hold`, `release_hold`, `apply_retention`; the data class
+  `weather_audit` in `DEFAULT_POLICY`; the rollup stores `rollups/hourly|daily/` (columns `value`
+  and `n`); `ParquetStore.partitions`, `drop_partition` and `migrate_partitions`; the audit
+  actions `retention.set|override|hold|release|apply|incomplete` and
+  `store.migrate_partitions`. CLI: `camber retention show|set|override|hold|release|apply` and
+  `camber store migrate-partitions` (exit code 75 when the lock is held). **Stable surface
+  changed additively:** `ParquetStore` now writes `year=/month=` partitions and still reads
+  year-only ones; a full `read_long` returns a `month` column alongside `year`.
+<!-- /095-lifecycle -->
 
 ## Deprecated
 
