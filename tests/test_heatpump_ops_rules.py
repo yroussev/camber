@@ -171,3 +171,24 @@ def test_source_loop_running_gate_and_decline():
     assert off.severity == "info" and off.metrics["declined"]
     no_status = SourceLoopDeltaT().analyze("GEO", _loop(-0.1))
     assert any("every sample is treated as pumping" in c for c in no_status.caveats)
+
+
+def test_hp_rules_leave_an_unclassed_reheat_box_to_reheat_capacity():
+    # 0.93 integration: a VAV box out of reheat, with its discharge air mapped and no class
+    # recorded, is reported once -- by reheat_capacity_shortfall, not also as a heat pump
+    import numpy as np
+
+    from camber import faultlab
+    from camber.model.roles import Role
+    from camber.rules.builtin import builtin_registry
+
+    reg = builtin_registry()
+    f = faultlab.SCENARIOS["reheat_capacity_shortfall"](faultlab._idx(21), faulty=True)
+    f[Role.SUPPLY_AIR_TEMP] = np.where(f[Role.HEAT_VALVE] > 0, 60 + 0.35 * f[Role.HEAT_VALVE], 60.0)
+    assert reg.get("reheat_capacity_shortfall").analyze("VAV-1", f).severity == "fault"
+    for name in ("hp_capacity_shortfall", "hp_mode_vs_need"):
+        fd = reg.get(name).analyze("VAV-1", f)
+        assert fd.severity == "info" and fd.metrics["declined"], name
+    # a heat pump with a supplemental heating valve still runs once a compressor is mapped
+    f[Role.COMPRESSOR_STATUS] = 1.0
+    assert reg.get("hp_capacity_shortfall").analyze("HP-1", f).severity == "fault"

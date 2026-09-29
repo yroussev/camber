@@ -134,6 +134,9 @@ class _HPBase:
         Role.OCCUPANCY,
         Role.COMPRESSOR_STATUS,
         Role.REVERSING_VALVE_CMD,
+        # read only to tell a hydronic coil unit from a heat pump (``_coil_unit``)
+        Role.HEAT_VALVE,
+        Role.COOL_VALVE,
     )
 
     def __init__(
@@ -160,6 +163,28 @@ class _HPBase:
         cold = zat < hsp - self.band_tol_f
         hot = zat > csp + self.band_tol_f
         return mode, zat, cold, hot, valid
+
+    def _coil_unit(self, frame: pd.DataFrame) -> str | None:
+        """Why ``frame`` reads as a coil unit rather than a heat pump, or ``None``.
+
+        0.93 integration: a mapped heating or cooling *valve* with no compressor status and no
+        reversing-valve command is a hydronic coil -- a terminal box's reheat, a fan coil, an air
+        handler -- not a heat pump. On equipment with no recorded class the class gate cannot
+        tell, and a VAV box out of reheat would otherwise be reported twice, here and by
+        ``reheat_capacity_shortfall``. A heat pump with a supplemental heating valve still runs
+        when a compressor or reversing-valve signal is mapped.
+        """
+        if Role.COMPRESSOR_STATUS in frame.columns or Role.REVERSING_VALVE_CMD in frame.columns:
+            return None
+        valves = [r for r in (Role.HEAT_VALVE, Role.COOL_VALVE) if r in frame.columns]
+        if not valves:
+            return None
+        names = " / ".join(r.value for r in valves)
+        return (
+            f"{names} mapped with no compressor or reversing-valve signal: a hydronic coil unit "
+            "(terminal box, fan coil, air handler), not a heat pump -- reheat_capacity_shortfall "
+            "judges a box's reheat"
+        )
 
     def _declined(self, equip, why) -> Finding:
         return Finding(
@@ -194,6 +219,9 @@ class HPModeVsNeed(_HPBase):
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Hours (and share of occupied running time) spent in the mode the room does not need."""
+        coil = self._coil_unit(frame)
+        if coil:
+            return self._declined(equip, coil)
         caveats: list = []
         mode, _zat, cold, hot, valid = self._prep(frame, caveats)
         if int(valid.sum()) == 0:
@@ -277,6 +305,9 @@ class HPCapacityShortfall(_HPBase):
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Share of occupied time outside the band, and how often the unit was working then."""
+        coil = self._coil_unit(frame)
+        if coil:
+            return self._declined(equip, coil)
         caveats: list = []
         mode, _zat, cold, hot, valid = self._prep(frame, caveats)
         if int(valid.sum()) == 0:
