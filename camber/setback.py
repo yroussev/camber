@@ -20,6 +20,32 @@ resolution alike.
 Headline metric: fraction of unoccupied hours the fan is running. A well-scheduled
 AHU is near 0%; continuous operation is ~100%. We also report the occupied-vs-
 unoccupied run ratio so a partial/ineffective setback is visible.
+
+**A fan cycling to hold a setback is a working setback (0.93, #43).** A unit scheduled off at
+night still has to come on when a zone falls to its unoccupied heating setpoint (or rises to its
+cooling set-up). Runtime alone cannot tell that apart from a missing setback: in a cold week the
+fan may cycle on for half of every night hour. When the runtime test fails, the zone temperature
+decides. The setback counts as held when both of these are true:
+
+* the fan *cycles* during unoccupied hours: in the unoccupied clock hours in which it runs, its
+  mean duty is below ``max_hold_duty`` (default 90 %). A fan that runs the whole night is not
+  holding a setback, whatever the zone does; and
+* the zone sits at setback, not at occupied comfort, while the fan runs unoccupied: its median
+  lies at least ``min_setback_depth_f`` (default 3 F) below (heating) or above (cooling) the
+  occupied reference -- the occupied setpoint when it is trended, otherwise the zone's own occupied
+  median. With a known unoccupied setpoint (a trended ``HeatSP``/``CoolSP`` read in unoccupied
+  hours, or a configured ``unoccupied_heat_sp_f``/``unoccupied_cool_sp_f``), a zone on the setback
+  side of the midpoint between the reference and that setpoint also counts, and the two setpoints
+  must be at least ``min_setback_depth_f`` apart: a trended setpoint that never sets back vetoes
+  the test. The cooling side always needs a known unoccupied setpoint: a zone warmer at night
+  while the fan runs can be a unit heating it at night rather than one holding a set-up.
+
+The duty is read within each clock hour, so it needs a sub-hourly status (or the duty-resampled
+series :func:`camber.realio.load_status` produces); a fan that runs whole hours or whole nights
+is not cycling, whatever the zone does.
+
+The zone temperature is ``ZoneTemp`` when mapped on the unit. Otherwise the return-air
+temperature stands in, read only while the fan runs; the result says which one was used.
 """
 
 from __future__ import annotations
@@ -36,7 +62,15 @@ __all__ = [
     "analyze_setback",
 ]
 
-SETBACK_MEASURES = ["SupplyFanStatus", "SupplyFanSpeed", "Occupancy"]
+SETBACK_MEASURES = [
+    "SupplyFanStatus",
+    "SupplyFanSpeed",
+    "Occupancy",
+    "ZoneTemp",
+    "ReturnAir",
+    "HeatSP",
+    "CoolSP",
+]
 
 
 @dataclass
@@ -55,6 +89,18 @@ class SetbackResult:
     unoccupied_to_occupied_ratio: float | None = None
     # the absolute unoccupied-runtime floor the verdict used (%); provisional
     min_unoccupied_run_pct: float | None = None
+    # --- 0.93 (#43): the held-setback test (provisional) ---
+    # "runtime" (the fan-runtime verdict decided) or "held_setback" (the fan ran unoccupied, but
+    # cycled to hold the zone at setback)
+    setback_basis: str = "runtime"
+    # mean fan duty (%) in the unoccupied clock hours in which the fan ran; None if it never ran
+    unoccupied_duty_when_running_pct: float | None = None
+    zone_temp_source: str | None = None  # "ZoneTemp" | "ReturnAir" | None (no zone signal)
+    zone_temp_unoccupied_f: float | None = None  # median while the fan runs unoccupied
+    zone_temp_occupied_f: float | None = None  # median while the fan runs occupied
+    unoccupied_heat_sp_f: float | None = None  # the unoccupied heating setpoint used (data/config)
+    unoccupied_cool_sp_f: float | None = None  # the unoccupied cooling setpoint used (data/config)
+    held_side: str | None = None  # "heating" | "cooling" when the setback was held
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -76,6 +122,46 @@ def _running(work: pd.DataFrame, speed_thr: float):
     return None
 
 
+def _median(s) -> float | None:
+    s = pd.Series(s).dropna()
+    return round(float(s.median()), 2) if len(s) else None
+
+
+def _hourly_duty_when_running(run: pd.Series, unocc: pd.Series) -> float | None:
+    """Mean duty (0..1) over the unoccupied clock hours in which the fan ran at all."""
+    r = run.where(unocc)
+    if not isinstance(r.index, pd.DatetimeIndex) or r.notna().sum() == 0:
+        return None
+    hourly = r.resample("1h").mean().dropna()
+    active = hourly[hourly > 0.05]  # a stray minute or two is not "running this hour"
+    return float(active.mean()) if len(active) else None
+
+
+def _held_side(
+    zone_un, zone_occ, *, occ_sp, unocc_sp, depth, heating: bool
+) -> tuple[bool, float | None]:
+    """Is the zone at setback on one side (heating: colder; cooling: warmer)?
+
+    Returns ``(held, unocc_sp_used)``. The occupied reference is the occupied setpoint, else the
+    zone's occupied median. The zone is held at setback when it sits ``depth`` or more beyond that
+    reference. With an unoccupied setpoint, the setpoints must themselves be ``depth`` apart (a
+    trended setpoint with no setback in it vetoes the test), and a zone on the setback side of the
+    midpoint between reference and setpoint also counts: a return-air or averaged zone signal sits
+    above the coldest zone, the one the fan cycles to hold.
+    """
+    sign = 1.0 if heating else -1.0  # heating: setback is colder (reference - zone > 0)
+    ref = occ_sp if occ_sp is not None else zone_occ
+    if zone_un is None or ref is None:
+        return False, unocc_sp
+    deep = sign * (ref - zone_un) >= depth
+    if unocc_sp is not None:
+        if sign * (ref - unocc_sp) < depth:
+            return False, unocc_sp  # no real setback between the two setpoints
+        mid = (ref + unocc_sp) / 2.0
+        return bool(deep or sign * (mid - zone_un) >= 0.0), unocc_sp
+    return bool(deep), None
+
+
 def analyze_setback(
     df: pd.DataFrame,
     equip: str,
@@ -86,6 +172,10 @@ def analyze_setback(
     end_hour: float = 18,
     occupied_days=(0, 1, 2, 3, 4),
     min_unoccupied_run_pct: float = 5.0,
+    unoccupied_heat_sp_f: float | None = None,
+    unoccupied_cool_sp_f: float | None = None,
+    min_setback_depth_f: float = 3.0,
+    max_hold_duty: float = 0.9,
 ) -> SetbackResult | None:
     """Detect missing night/weekend setback for one AHU.
 
@@ -96,6 +186,12 @@ def analyze_setback(
     that ran a few scattered hours is not "missing" its setback. ``speed_thr``
     is the run deadband when only fan speed is available. A populated ``Occupancy`` column
     replaces the ``start_hour``/``end_hour``/``occupied_days`` schedule.
+
+    When the runtime test fails, the held-setback test (module docstring) can still find the
+    setback effective: the fan cycles (``max_hold_duty``, a 0..1 fraction) to hold the zone
+    (``ZoneTemp``, else ``ReturnAir``) at its unoccupied setpoint -- ``HeatSP``/``CoolSP`` in
+    unoccupied hours, else ``unoccupied_heat_sp_f``/``unoccupied_cool_sp_f`` -- or, with no
+    setpoint, at least ``min_setback_depth_f`` beyond its occupied temperature.
     """
     run = _running(df, speed_thr)
     if run is None:
@@ -122,6 +218,53 @@ def analyze_setback(
     effective = un_run < floor or ratio_ok
     ratio = round(un_run / occ_run, 3) if occ_run > 0 else None
 
+    # --- 0.93 (#43): the held-setback test, only when the runtime test failed
+    basis, side = "runtime", None
+    duty = _hourly_duty_when_running(run, unocc)
+    src = next(
+        (c for c in ("ZoneTemp", "ReturnAir") if c in df.columns and df[c].notna().any()), None
+    )
+    z_un = z_occ = None
+    heat_un_sp = unoccupied_heat_sp_f
+    cool_un_sp = unoccupied_cool_sp_f
+    if src is not None:
+        zone = df[src].astype(float)
+        # read while the fan runs: return air only reads the zones when the fan ran most of the
+        # sample; a zone sensor reads the space whenever the fan ran at all
+        running = run > (0.05 if src == "ZoneTemp" else 0.5)
+        z_un = _median(zone[unocc & running])
+        z_occ = _median(zone[occ & running])
+    if not effective and src is not None and duty is not None and duty < max_hold_duty:
+        sides = []
+        for col, cfg_sp, heating in (
+            ("HeatSP", unoccupied_heat_sp_f, True),
+            ("CoolSP", unoccupied_cool_sp_f, False),
+        ):
+            sp = df[col].astype(float) if col in df.columns else None
+            occ_sp = _median(sp[occ]) if sp is not None else None
+            un_sp = _median(sp[unocc]) if sp is not None else None
+            un_sp = un_sp if un_sp is not None else cfg_sp
+            if not heating and un_sp is None:
+                # a zone warmer at night with the fan running may be a unit heating it at night,
+                # not one holding a cooling set-up: the cooling side needs a known setpoint
+                continue
+            held, used = _held_side(
+                z_un,
+                z_occ,
+                occ_sp=occ_sp,
+                unocc_sp=un_sp,
+                depth=min_setback_depth_f,
+                heating=heating,
+            )
+            if heating:
+                heat_un_sp = used
+            else:
+                cool_un_sp = used
+            if held:
+                sides.append("heating" if heating else "cooling")
+        if sides:
+            effective, basis, side = True, "held_setback", sides[0]
+
     return SetbackResult(
         equip=equip,
         n_occupied=n_occ,
@@ -133,4 +276,12 @@ def analyze_setback(
         coverage_end=str(df.index.max()),
         unoccupied_to_occupied_ratio=ratio,
         min_unoccupied_run_pct=floor,
+        setback_basis=basis,
+        unoccupied_duty_when_running_pct=round(100.0 * duty, 1) if duty is not None else None,
+        zone_temp_source=src,
+        zone_temp_unoccupied_f=z_un,
+        zone_temp_occupied_f=z_occ,
+        unoccupied_heat_sp_f=heat_un_sp,
+        unoccupied_cool_sp_f=cool_un_sp,
+        held_side=side,
     )
