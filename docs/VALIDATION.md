@@ -198,6 +198,47 @@ Caveats, stated because the intervals are wide:
   cohort-starvation censuses run per test day as context.
 
 
+<!-- 0.93 rules1 (#42, #43, #44) -->
+### 0.93 air-side checks on real, unlabelled data (setback, leaking valve, reheat capacity)
+
+Three rules changed or added in 0.93 were checked on the open catalog data that showed the problem.
+None of these sets labels the fault, so these are before/after readings, not rates.
+
+**`night_weekend_setback` on `ornl-frp-ops` (#43).** The catalog template (occupied 07-22 every day,
+the tests' own schedule, with the descriptor's 15.6 / 29.4 °C unoccupied setpoints) at 1-minute
+resolution:
+
+| Test | Unoccupied fan runtime | 0.92 verdict | 0.93 verdict |
+|---|---:|---|---|
+| Heating baseline (24/7 by design) | 100 % | MISSING | MISSING |
+| Heating setback | 56 % | MISSING | **effective (fan cycling to hold)**: 71 % duty in the night hours it runs, return air 63.0 °F vs 67.3 °F occupied, against a 60.1 °F setback |
+| Pre-heat (on 10:00-05:00 by design) | 100 % | MISSING | MISSING |
+| Cooling baseline (24/7) | 100 % | MISSING | MISSING |
+| Cooling setback | 6.3 % | effective | effective |
+| Free float, heating and cooling | 0 % | effective (floor) | effective (floor) |
+
+The verdicts are the same at 1-minute, 15-minute and hourly resampling. The RTU has no zone
+temperature, so the return air read while the fan runs stands in for the zones (the finding says
+so). `ornl-frp-vav`'s rooftop units, whose fans are off at night, are unchanged.
+
+**`leaking_valve` on `irish-ahu` and `lbnl-sdahu` (#42).** On the Irish AHU the supply-air check read
+a heating-leak signature in 34 % of both-valves-closed hours before the documented 2022-05-01 valve
+replacement (fault) and 0.2 % after. Most of that sits downstream of the coils: the supply air reads
+2.6 °F above the cooling coil's leaving air in the median closed hour before the date and -0.7 °F
+after. With the coils' own leaving-air temperatures mapped, the heating coil rises more than 3 °F
+above the mixed air in 11 % of closed hours before the replacement (warn; mostly the cold 2020/21
+100 %-outdoor-air winter) and 0 % after (ok); the whole record reads ok. On the LBNL single-duct AHU
+the scored runs keep their verdicts (fault-free and the damper runs quiet), and the one leak run
+(`coi_leakage_010`) is still missed: with the fan running and the valve commanded shut, its supply
+air sits a median 0.1 °F below the mixed air against +1.0 °F on the fault-free run. That is a 1 °F
+shift, well inside the 3 °F threshold.
+
+**`reheat_capacity_shortfall` on `lbnl-b59` (#44).** Of the 35 underfloor terminals with a heating
+setpoint and a reheat valve, zone 051 (RTU01) sits more than 1.5 °F below its 72 °F setpoint with
+its valve at 90 % or more in 35.8 % of occupied hours (1,586 h over three years, median 2.9 °F
+below): a fault. Nine more read warn at 5-18 %, and 25 read ok. On `ornl-frp-vav` the rule declines:
+its electric reheat is logged as energy, not as a valve or command.
+
 ### Multi-zone fleet + reset validation (generated — `camber.fleetlab`)
 
 The rogue-zone census, cohort-starvation, and reset-effectiveness detectors need something no
