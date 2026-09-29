@@ -139,8 +139,10 @@ retention policy.
   crash never drops an unacknowledged batch, and sequence numbers are never reused.
 - **Bucket lifecycle rules (#18).** `camber edge bucket-rules --provider s3|gcs|azure`
   (`camber.edge.bucket_rules`) emits lifecycle JSON from a retention-policy dict or the
-  workspace's policy. Ages are conservative, and facility overrides and legal holds produce
-  per-facility rules. It is text only: the admin applies the rules.
+  workspace's policy document (`Portfolio.retention_policy()`), whose `location` patterns give
+  the prefixes (`rollups/hourly/`, `rollups/daily/`; `--layout store|workspace`). Ages are
+  conservative, and facility overrides and legal holds produce per-facility rules; a held
+  facility gets no expiry rule. It is text only: the admin applies the rules.
 - `EdgeConfig.device_id` (config `device_id`, env `CAMBER_EDGE_DEVICE_ID`).
 
 ### Changed

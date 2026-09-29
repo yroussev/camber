@@ -434,7 +434,8 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `release`, `discard`), `camber.edge.decommission` (`DecommissionResult`,
     `default_device_id`, `decommission`, `record_retirement`) and `camber.edge.bucket_rules`
     (`PROVIDERS`, `BUCKET_CLASSES`, `DAYS_PER_MONTH`, `DAYS_PER_YEAR`, `rule_days`,
-    `normalize_policy`, `policy_from_portfolio`, `bucket_lifecycle_rules`);
+    `normalize_policy`, `policy_from_portfolio`, `bucket_lifecycle_rules` and its `layout=`,
+    `LAYOUTS`, `class_prefixes_from_policy`);
   - in `camber.edge.spool`: `Spool.compact`, `Spool.lock`, `Spool.retire`, `Spool.retirement`,
     `Spool(lock_timeout=)`, `CompactResult` and `SpoolRetired` (also exported from
     `camber.edge`); the journal record `op: "mark"` and the optional `attempts` field of an

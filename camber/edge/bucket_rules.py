@@ -7,7 +7,7 @@ longer keeps. This module turns a policy dict into the lifecycle JSON of each pr
 **it only emits text; it never calls a cloud API.** The admin reviews the rules and applies them
 with the provider's tool (see docs/EDGE-DEPLOY.md).
 
-**Input schema** (a plain dict; :func:`policy_from_portfolio` builds it from a workspace)::
+**Input schema** (a plain dict)::
 
     {
       "defaults":    {"<data class>": <rule>, ...},        # e.g. camber.portfolio.DEFAULT_POLICY
@@ -187,22 +187,16 @@ def normalize_policy(policy: dict) -> dict:
 
 
 def policy_from_portfolio(portfolio) -> tuple:
-    """``(policy dict, facility ids)`` read from a workspace through the portfolio API.
+    """``(policy document, facility ids)`` read from a workspace through the portfolio API.
 
-    Uses ``Portfolio.policy()``, ``legal_holds()``, ``effective_retention()`` and
-    ``facilities()`` only, so the precedence (legal hold > facility override > default) is the
-    portfolio's own.
+    The document is ``Portfolio.retention_policy()`` (``"schema": "camber.retention/1"``, see
+    ``camber.portfolio.RETENTION_SCHEMA``): the defaults, each facility's effective rules with
+    their source, the legal holds and each class's ``location``. The precedence (legal hold >
+    facility override > default) is therefore the portfolio's own, and
+    :func:`bucket_lifecycle_rules` takes the class prefixes from the locations.
     """
-    defaults = portfolio.policy()
-    holds = portfolio.legal_holds()
-    facs = sorted(portfolio.facilities())
-    overrides: dict = {}
-    for fid in facs:
-        eff = portfolio.effective_retention(fid)
-        own = {c: v["rule"] for c, v in eff.items() if v.get("source") == "facility"}
-        if own:
-            overrides[fid] = own
-    return {"defaults": defaults, "overrides": overrides, "legal_holds": holds}, facs
+    doc = portfolio.retention_policy()
+    return doc, sorted(doc.get("facilities") or {})
 
 
 def _join(*parts: str) -> str:

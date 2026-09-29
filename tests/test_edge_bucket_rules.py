@@ -152,8 +152,10 @@ def test_policy_from_portfolio_uses_the_portfolio_api(tmp_path):
     doc["retention"]["overrides"] = {B: {"raw_trends": {"keep_months": 12}}}
     doc["legal_holds"] = {A: {"reason": "litigation"}}
     json.dump(doc, open(p, "w"))
-    pol, facs = policy_from_portfolio(pf)
-    assert facs == [B, A] or facs == sorted([A, B])
+    doc_out, facs = policy_from_portfolio(pf)
+    assert doc_out["schema"] == "camber.retention/1"
+    assert facs == sorted([A, B])
+    pol = normalize_policy(doc_out)
     assert pol["overrides"] == {B: {"raw_trends": {"keep_months": 12}}}
     assert A in pol["legal_holds"] and pol["defaults"]["raw_trends"] == {"keep_months": 25}
     out = bucket_lifecycle_rules(pol, provider="s3", facilities=facs)
@@ -240,3 +242,34 @@ def test_rule_prefixes_cover_the_rollups_retention_writes(tmp_path):
     hourly = [k for k in written if k.startswith("rollups/hourly/")]
     assert hourly and all("/month=" in k for k in hourly)
     assert all(any(k.startswith(p) for p in prefixes) for k in hourly)
+
+
+def test_rules_follow_a_real_portfolios_override_and_legal_hold(tmp_path):
+    """Set the override and the hold through the public API; a held facility gets no rule."""
+    pf = Portfolio.init(tmp_path / "ws")
+    for name, fid in (("North", A), ("East", B), ("South", C)):
+        pf.add_facility(name, facility_id=fid, reason="t", activate=True)
+    pf.set_retention_override(B, "raw_trends", {"keep_months": 36}, reason="contract")
+    pf.set_retention_override(C, "hourly_rollups", {"keep_years": 10}, reason="contract")
+    pf.hold(A, reason="litigation")
+    pol, facs = policy_from_portfolio(pf)
+    assert facs == sorted([A, B, C])
+    out = bucket_lifecycle_rules(pol, provider="s3", facilities=facs)
+    days = {r["Filter"]["Prefix"]: r["Expiration"]["Days"] for r in out["document"]["Rules"]}
+    assert days == {
+        f"facility_id={B}/": 36 * 31,
+        f"facility_id={C}/": 25 * 31,
+        f"rollups/hourly/facility_id={B}/": 7 * 366,
+        f"rollups/hourly/facility_id={C}/": 10 * 366,
+    }
+    assert not any(A in p for p in days)  # held: no expiry rule for any class
+    assert any(f"{A}: legal hold" in n for n in out["notes"])
+    # without the facility list the override / hold cannot be expressed bucket-wide
+    with pytest.raises(ValueError, match="facility overrides or legal holds"):
+        bucket_lifecycle_rules(pol, provider="s3")
+    # releasing the hold brings the default rule back
+    pf.release_hold(A, reason="settled")
+    pol, facs = policy_from_portfolio(pf)
+    out = bucket_lifecycle_rules(pol, provider="gcs", facilities=facs)
+    raw = [r for r in out["document"]["rule"] if r["condition"]["age"] == 25 * 31]
+    assert raw and f"facility_id={A}/" in raw[0]["condition"]["matchesPrefix"]
