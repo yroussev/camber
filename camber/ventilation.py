@@ -277,6 +277,11 @@ class DcvResult:
     raised_when_vacant_pct: float | None = None  # presence/count: % vacant samples with OA raised
     below_floor_pct: float | None = None  # % samples OA below the floor (needs oa_floor)
     excess_at_low_demand_pct: float | None = None  # % low-demand samples OA above the floor
+    # 0.93 (#37): how the CO₂ lift was taken -- "hour_of_day" (within each hour, the verdict's
+    # statistic when enough same-hour pairs exist) or "pooled" (across hours); the pooled lift is
+    # kept alongside as a diagnostic. None on a verdict that never reached the lift.
+    lift_basis: str | None = None
+    demand_lift_pooled: float | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -309,6 +314,24 @@ def _pct(mask) -> float:
     return round(100.0 * float(np.mean(mask)), 1) if len(mask) else 0.0
 
 
+def _hour_of_day_lift(index, d, raised, at_floor, agg, *, min_pairs: int = 3) -> tuple:
+    """Demand lift (raised minus floor) taken within each hour of day and averaged.
+
+    Strata are (weekend?, hour): a weekday-only time clock is also a schedule. A stratum counts
+    when it holds at least ``min_pairs`` raised *and* at-floor samples, weighted by the smaller
+    of the two. Returns ``(lift, weight)``; ``(nan, 0.0)`` when no stratum counts.
+    """
+    slot = (index.dayofweek.to_numpy() >= 5) * 24 + index.hour.to_numpy()
+    num = wt = 0.0
+    for h in np.unique(slot):
+        r, f = raised & (slot == h), at_floor & (slot == h)
+        k = min(int(r.sum()), int(f.sum()))
+        if k >= min_pairs:
+            num += float(agg(d[r]) - agg(d[f])) * k
+            wt += k
+    return (num / wt if wt else float("nan")), wt
+
+
 def assess_dcv(
     oa_signal: pd.Series,
     demand_signal: pd.Series,
@@ -331,6 +354,7 @@ def assess_dcv(
     closed_frac: float = 0.02,
     demand_kind: str = "auto",
     min_lift_people: float = 1.0,
+    stratify_hour: bool = True,
 ) -> DcvResult:
     """Verify DCV: is outdoor air raised when -- and only when -- ventilation demand is high?
 
@@ -364,7 +388,12 @@ def assess_dcv(
       the clock, and so does a time-clock valve or a thermal load, so only OA that is higher on
       busier days *at the same hour* is responding to occupancy. OA that is never both raised
       and at its floor within one hour of day reads **insufficient**
-      (``reason="schedule_confounded"``).
+      (``reason="schedule_confounded"``). Since 0.93 (#37) the CO₂ lift is taken the same way
+      (``stratify_hour``, on by default): a valve that follows a clock *and* CO₂ mixes the two
+      in a pooled lift -- its clock-driven morning opening at low CO₂ drags the raised median down
+      -- so only CO₂ that is higher when OA is raised *at the same hour* is DCV response. Where
+      too few same-hour pairs exist the pooled lift decides, as before, and ``lift_basis`` says
+      which was used (``demand_lift_pooled`` is always reported).
       ``raised_when_vacant_pct`` reports how often OA was raised with the space empty -- a DCV
       that is not holding its floor when vacant (it may also be doing thermal duty).
     - **uncorrelated** -- OA modulates, but not with demand.
@@ -515,7 +544,7 @@ def assess_dcv(
     # verdict: a supply damper can also be doing thermal duty)
     vacant = d <= 0.0 if kind in ("presence", "count") else np.zeros(n, dtype=bool)
     raised_vacant = _pct(raised[vacant]) if _enough(vacant) else None
-    common = dict(
+    common: dict = dict(
         correlation=round(corr, 3) if np.isfinite(corr) else float("nan"),
         modulation=round(modulation, 3),
         co2_breach_at_min_pct=breach,
@@ -541,21 +570,24 @@ def assess_dcv(
         # WITHIN each hour of day (weekdays and weekends apart) and averaged: only OA that is
         # higher on busier days at the same hour is responding to occupancy.
         agg = np.mean if kind == "presence" else np.median
-        # stratum = (weekend?, hour): a weekday-only time clock is also a schedule
-        slot = (df.index.dayofweek.to_numpy() >= 5) * 24 + df.index.hour.to_numpy()
-        num = wt = 0.0
-        for h in np.unique(slot):
-            r, f = raised & (slot == h), at_floor & (slot == h)
-            k = min(int(r.sum()), int(f.sum()))
-            if k >= 3:
-                num += float(agg(d[r]) - agg(d[f])) * k
-                wt += k
+        lift, wt = _hour_of_day_lift(df.index, d, raised, at_floor, agg)
         if wt < min_bin:
             return _result("insufficient", reason="schedule_confounded", **common)
-        lift = num / wt
         ok = lift >= (min_lift_occupancy if kind == "presence" else min_lift_people)
+        common["lift_basis"] = "hour_of_day"
     else:
-        lift = float(np.median(d[raised]) - np.median(d[at_floor]))
+        pooled = float(np.median(d[raised]) - np.median(d[at_floor]))
+        common["demand_lift_pooled"] = round(pooled, 1)
+        # 0.93 (#37): within the hour of day where enough same-hour pairs exist
+        hour_lift, wt = (
+            _hour_of_day_lift(df.index, d, raised, at_floor, np.median)
+            if stratify_hour
+            else (float("nan"), 0.0)
+        )
+        if wt >= min_bin:
+            lift, common["lift_basis"] = hour_lift, "hour_of_day"
+        else:
+            lift, common["lift_basis"] = pooled, "pooled"
         ok = lift >= min_lift_ppm
     common["demand_lift"] = round(lift, 3 if kind == "presence" else 1)
     return _result("functioning" if ok else "uncorrelated", **common)

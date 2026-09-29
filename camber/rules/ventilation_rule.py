@@ -47,6 +47,9 @@ _DCV_CONTEXT = (
     Role.ECON_CMD,
     Role.OAT,
     Role.HEAT_VALVE,
+    # 0.93 (#37): the ventilation proxies of a declared 100 % outdoor-air unit
+    Role.AIRFLOW,
+    Role.SUPPLY_FAN_SPEED,
 )
 
 _ECON_CAVEAT = {
@@ -78,11 +81,42 @@ _REASON = {
 }
 
 
-def _oa_role(frame: pd.DataFrame):
-    if Role.OA_AIRFLOW in frame.columns:
-        return Role.OA_AIRFLOW
-    if Role.OA_DAMPER in frame.columns:
-        return Role.OA_DAMPER
+# ============================================================================ 0.93 (#37)
+#: On a 100 % outdoor-air unit (no return air, no economizer damper) every cfm the fan moves is
+#: outdoor air, so the supply airflow -- or, failing that, the supply fan speed -- is the
+#: ventilation signal. Used only when the rule is told the unit is 100 % OA.
+_FULL_OA_PROXIES = (Role.AIRFLOW, Role.SUPPLY_FAN_SPEED)
+
+_FULL_OA_CAVEAT = {
+    Role.AIRFLOW: (
+        "100% outdoor-air unit: OA judged from the supply airflow (all of it is outdoor air); "
+        "no economizer applies, but the fan may also speed up for cooling"
+    ),
+    Role.SUPPLY_FAN_SPEED: (
+        "100% outdoor-air unit: OA judged from the supply fan speed, a proxy for its airflow "
+        "(all of it is outdoor air) -- not a measured flow; no economizer applies, but the fan "
+        "may also speed up for cooling"
+    ),
+}
+
+_SIGNAL_LABEL = {
+    Role.OA_AIRFLOW: "OA flow",
+    Role.OA_DAMPER: "OA damper",
+    Role.AIRFLOW: "supply airflow",
+    Role.SUPPLY_FAN_SPEED: "supply fan speed",
+}
+
+
+def _oa_candidates(full_outdoor_air: bool = False) -> tuple:
+    """Ventilation signals, best first: OA flow, the OA damper, then (on a declared 100 % OA
+    unit only) the supply airflow and the supply fan speed."""
+    return (Role.OA_AIRFLOW, Role.OA_DAMPER) + (_FULL_OA_PROXIES if full_outdoor_air else ())
+
+
+def _oa_role(frame: pd.DataFrame, full_outdoor_air: bool = False):
+    for role in _oa_candidates(full_outdoor_air):
+        if role in frame.columns:
+            return role
     return None
 
 
@@ -94,8 +128,12 @@ class DemandControlledVentilation:
     ``ECON_CMD``, else inferred from ``OAT`` + ``HEAT_VALVE``. Flags a **static** OA signal (fixed
     OA / DCV not functioning) or one that modulates but not with demand; ``fault`` when CO₂ breaches
     ``co2_setpoint`` while OA sits at its minimum, or OA falls below ``oa_floor_cfm``. Uses OA
-    airflow if present, else OA-damper position. Frames without an OA signal (a VAV zone's CO₂)
-    return ``None``: :class:`DcvSystemVerification` joins those to their air handler.
+    airflow where it is trended and the OA-damper position where it is not (0.93, #37: each
+    signal judges its own samples, listed in ``metrics["oa_segments"]``); with
+    ``full_outdoor_air=True`` (a 100 % outdoor-air unit) the supply airflow and then the supply
+    fan speed follow as proxies. The CO₂ lift is taken within the hour of day
+    (``stratify_hour``) when enough same-hour samples exist. Frames without an OA signal (a VAV
+    zone's CO₂) return ``None``: :class:`DcvSystemVerification` joins those to their air handler.
     """
 
     name = "dcv_verification"
@@ -123,6 +161,8 @@ class DemandControlledVentilation:
         occupied_days=(0, 1, 2, 3, 4),
         unventilated_co2_ppm: float | None = None,
         unventilated_fault_hours: float = 4.0,
+        full_outdoor_air: bool = False,
+        stratify_hour: bool = True,
     ):
         self.min_corr = min_corr
         self.min_modulation = min_modulation
@@ -142,6 +182,9 @@ class DemandControlledVentilation:
         self.occupied_days = tuple(occupied_days)
         self.unventilated_co2_ppm = unventilated_co2_ppm
         self.unventilated_fault_hours = unventilated_fault_hours
+        # 0.93 (#37)
+        self.full_outdoor_air = bool(full_outdoor_air)
+        self.stratify_hour = bool(stratify_hour)
 
     def _occupied(self, frame: pd.DataFrame) -> pd.Series:
         """Occupied samples: a trended ``OCCUPANCY`` point is the truth when present (it
@@ -172,43 +215,151 @@ class DemandControlledVentilation:
             return self.oa_floor_cfm.get(equip)
         return self.oa_floor_cfm
 
+    # ------------------------------------------------------------------ 0.93 (#37) OA proxies
+    def _oa_segments(self, frame: pd.DataFrame) -> list:
+        """``[(role, mask), ...]`` -- which ventilation signal judges which samples.
+
+        The best signal judges every sample it covers; a lesser one only the samples the better
+        ones miss. So an air handler whose OA flow is masked for a period (a failed or imputed
+        flow station) is judged there on its OA damper, and on its flow everywhere else.
+        """
+        segs: list = []
+        covered = pd.Series(False, index=frame.index)
+        for role in _oa_candidates(self.full_outdoor_air):
+            if role not in frame.columns:
+                continue
+            ok = frame[role].notna() & ~covered
+            if not ok.any():
+                continue
+            segs.append((role, ok))
+            covered = covered | ok
+        if not segs:  # every candidate column is empty: judge the best one (too few samples)
+            role = _oa_role(frame, self.full_outdoor_air)
+            if role is not None:
+                segs.append((role, pd.Series(True, index=frame.index)))
+        return segs
+
     def _judge(self, equip: str, frame: pd.DataFrame, demand: pd.Series) -> Finding:
-        """Evaluate one OA source against a demand series; shared by both DCV rules."""
+        """Evaluate one OA source against a demand series; shared by both DCV rules.
+
+        0.93 (#37): judged per OA signal segment (:meth:`_oa_segments`). The first segment with a
+        verdict leads the finding (its metrics are the finding's); every judged segment is listed
+        in ``metrics["oa_segments"]`` and the worst severity wins.
+        """
         if not frame.index.is_unique:
             frame = frame[~frame.index.duplicated(keep="last")]
             demand = demand[~demand.index.duplicated(keep="last")]
-        oa_role = _oa_role(frame)
+        demand = demand[~demand.index.duplicated(keep="last")].reindex(frame.index)
+        segs = self._oa_segments(frame)
+        occupied = (
+            self._occupied(frame) if self.occupied_only else pd.Series(True, index=frame.index)
+        )
+        parts = []
+        for i, (role, seg) in enumerate(segs):
+            # a fallback segment with too few occupied samples to judge is not worth a line
+            if i > 0 and int((seg & occupied & demand.notna()).sum()) < self.min_samples:
+                continue
+            parts.append(self._judge_segment(equip, frame, demand, role, seg, fallback=i > 0))
+        if len(parts) > 1:
+            lead = next((p for p in parts if p["metrics"]["status"] != "insufficient"), parts[0])
+        else:
+            lead = parts[0]
+        severity = max((p["severity"] for p in parts), key=_SEVERITY_RANK.__getitem__)
+        metrics = dict(lead["metrics"])
+        caveats = list(lead["caveats"])
+        msg = lead["msg"]
+        if len(parts) > 1:
+            metrics["oa_segments"] = [
+                {
+                    "oa_signal": p["metrics"]["oa_signal"],
+                    "severity": p["severity"],
+                    "summary": p["msg"],
+                    **{
+                        k: p["metrics"][k]
+                        for k in ("status", "reason", "demand_lift", "n", "start", "end")
+                    },
+                }
+                for p in parts
+            ]
+            for p in parts:
+                if p is lead:
+                    continue
+                caveats.extend(c for c in p["caveats"] if c not in caveats)
+                msg += f"; {p['label']}: {p['msg']}"
+        return Finding(
+            rule=self.name,
+            equip=equip,
+            severity=severity,
+            metrics=metrics,
+            caveats=caveats,
+            summary=f"{equip}: {msg}",
+        )
+
+    def _judge_segment(
+        self,
+        equip: str,
+        frame: pd.DataFrame,
+        demand: pd.Series,
+        oa_role,
+        segment: pd.Series,
+        *,
+        fallback: bool = False,
+    ) -> dict:
+        """One OA signal's DCV judgement over the samples ``segment`` selects."""
         caveats: list = []
         idx = frame.index
-        demand = demand[~demand.index.duplicated(keep="last")].reindex(idx)
         occupied = self._occupied(frame) if self.occupied_only else pd.Series(True, index=idx)
+        occupied = occupied & segment.reindex(idx, fill_value=False)
         mask = occupied
         fan_on = None
         if Role.SUPPLY_FAN_STATUS in frame.columns:
             # an hourly mean below 1 is a partial-hour fan transition -- its OA mean is diluted
             fan_on = frame[Role.SUPPLY_FAN_STATUS].reindex(idx).fillna(0) > 0.95
             mask = mask & fan_on
-        econ, econ_basis = economizer_active_mask(
-            idx,
-            econ_cmd=frame.get(Role.ECON_CMD),
-            oat=frame.get(Role.OAT),
-            heat_valve=frame.get(Role.HEAT_VALVE),
-            high_limit_f=self.econ_high_limit_f,
-        )
+        full_oa = oa_role in _FULL_OA_PROXIES
+        if full_oa:
+            # a 100 % outdoor-air unit has no economizer damper: its OA is its airflow
+            econ, econ_basis = None, "full_outdoor_air"
+            caveats.append(_FULL_OA_CAVEAT[oa_role])
+        else:
+            econ, econ_basis = economizer_active_mask(
+                idx,
+                econ_cmd=frame.get(Role.ECON_CMD),
+                oat=frame.get(Role.OAT),
+                heat_valve=frame.get(Role.HEAT_VALVE),
+                high_limit_f=self.econ_high_limit_f,
+            )
         if econ_basis in _ECON_CAVEAT:
             caveats.append(_ECON_CAVEAT[econ_basis])
 
+        # the span the segment can judge: occupied samples with demand, else the whole segment
+        span = occupied & demand.notna()
+        seg_idx = (
+            idx[span.to_numpy()]
+            if span.any()
+            else idx[segment.reindex(idx, fill_value=False).to_numpy()]
+        )
+        start = str(seg_idx.min().date()) if len(seg_idx) else None
+        end = str(seg_idx.max().date()) if len(seg_idx) else None
+        label = _SIGNAL_LABEL.get(oa_role, oa_role.value)
+        if fallback:
+            label = f"{label} where the better OA signal is missing ({start} to {end})"
+
         floor = self._floor_for(equip)
-        if floor is not None and oa_role is not Role.OA_AIRFLOW:
+        if floor is not None and oa_role not in (Role.OA_AIRFLOW, Role.AIRFLOW):
             caveats.append(
-                "OA floor not checked: it is in cfm and only OA-damper position is trended"
+                f"OA floor not checked on the {_SIGNAL_LABEL.get(oa_role, oa_role.value)}: it is "
+                "in cfm and this signal is not a flow"
             )
             floor = None
         if oa_role is Role.OA_DAMPER:
-            caveats.append("OA judged from damper position, not measured OA flow")
+            caveats.append(
+                "OA judged from damper position, not measured OA flow"
+                + (f" ({start} to {end}, where OA flow is missing)" if fallback else "")
+            )
 
         res = assess_dcv(
-            frame[oa_role],
+            frame[oa_role].where(segment.reindex(idx, fill_value=False)),
             demand,
             occupied_mask=mask,
             min_corr=self.min_corr,
@@ -221,6 +372,7 @@ class DemandControlledVentilation:
             min_lift_ppm=self.min_lift_ppm,
             oa_floor=floor,
             min_samples=self.min_samples,
+            stratify_hour=self.stratify_hour,
         )
 
         # Occupied, CO₂ high, and nothing ventilating: the fan off or the OA damper shut. The
@@ -246,12 +398,18 @@ class DemandControlledVentilation:
             not_evaluated.append("CO₂-above-setpoint at minimum OA (no co2_setpoint)")
         if res.below_floor_pct is None:
             not_evaluated.append("OA below the Ra·Az floor (no oa_floor_cfm)")
-        if not_evaluated:
+        if not_evaluated and not fallback:
             caveats.append("not evaluated: " + "; ".join(not_evaluated))
         if res.closed_pct is not None and res.closed_pct >= 5.0:
             caveats.append(
                 f"OA was closed on {res.closed_pct:.0f}% of occupied samples (warm-up, fan "
                 "transitions or a damper fault); those samples were excluded"
+            )
+        if res.lift_basis == "pooled" and res.status in ("functioning", "uncorrelated"):
+            caveats.append(
+                "OA was rarely both raised and at its floor within the same hour of day, so the "
+                "CO₂ lift is pooled across hours: a valve that follows a time clock cannot be "
+                "told apart from one that follows CO₂"
             )
 
         if res.status == "insufficient":
@@ -260,7 +418,7 @@ class DemandControlledVentilation:
             msg = _MSG[res.status]
             if res.status == "functioning":
                 severity = "ok"
-            elif res.status == "uncorrelated" and not res.econ_excluded:
+            elif res.status == "uncorrelated" and not res.econ_excluded and not full_oa:
                 severity = "info"  # the economizer may be what moves OA -- not a DCV verdict
             else:
                 severity = "warn"
@@ -300,6 +458,8 @@ class DemandControlledVentilation:
             "status": res.status,
             "reason": res.reason,
             "demand_lift": res.demand_lift,
+            "demand_lift_pooled": res.demand_lift_pooled,
+            "lift_basis": res.lift_basis,
             "modulation": res.modulation,
             "correlation": res.correlation,
             "demand_span": res.demand_span,
@@ -314,18 +474,19 @@ class DemandControlledVentilation:
             "unventilated_high_co2_pct": unvent,
             "unventilated_high_co2_hours": unvent_h,
             "n": res.n,
+            "start": start,
+            "end": end,
         }
-        return Finding(
-            rule=self.name,
-            equip=equip,
-            severity=severity,
-            metrics=metrics,
-            caveats=caveats,
-            summary=f"{equip}: {msg}",
-        )
+        return {
+            "severity": severity,
+            "msg": msg,
+            "metrics": metrics,
+            "caveats": caveats,
+            "label": label,
+        }
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding | None:
-        if _oa_role(frame) is None:
+        if _oa_role(frame, self.full_outdoor_air) is None:
             return None  # a zone's CO₂ -- judged against its air handler by DcvSystemVerification
         f = self._judge(equip, frame, frame[Role.CO2])
         f.caveats.insert(
@@ -391,11 +552,16 @@ class DcvSystemVerification:
         return co2, None
 
     def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
+        full = self._judge_rule.full_outdoor_air
         sources = {
-            e: fr for e, fr in frames.items() if _oa_role(fr) is not None and Role.CO2 not in fr
+            e: fr
+            for e, fr in frames.items()
+            if _oa_role(fr, full) is not None and Role.CO2 not in fr
         }
         zones = {
-            e: fr for e, fr in frames.items() if Role.CO2 in fr.columns and _oa_role(fr) is None
+            e: fr
+            for e, fr in frames.items()
+            if Role.CO2 in fr.columns and _oa_role(fr, full) is None
         }
         base = {"n_oa_sources": len(sources), "n_zones_with_co2": len(zones)}
         if not zones or not sources:

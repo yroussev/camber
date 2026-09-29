@@ -810,7 +810,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `NUIG_AHU101_Ctrls_TE_102_2_Cooling_Off_Coil_Temp_D6_459`
 - **Evidence:** With the supply fan running, TE_101_3 (the other 'air after cooling coil' point) correlates 0.92 with the supply-duct temperature while TE_102_2 correlates 0.31, and TE_102_2 has the same median with the fan on and off (20.63 vs 20.64 C) where TE_101_3 moves 19.0 vs 15.9 C. Its tag names unit 102.
 - **Contradicts:** Variables workbook: both TE_101_3 and TE_102_2 described as 'AHU101 air temperature after cooling coil' (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
-- **Handling: none** -- described only. Not mapped. Neither cooling-coil leaving temperature is mapped (the supply-duct sensor is the supply air temperature).
+- **Handling: none** -- described only. TE_102_2 is not mapped. Since 0.93 TE_101_3, the cooling-coil leaving temperature that does track AHU101, is mapped as cool_coil_leaving_temp; the supply-duct sensor stays the supply air temperature.
 
 #### One listed point file is empty
 

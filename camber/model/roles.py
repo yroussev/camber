@@ -29,9 +29,12 @@ class Role(str, Enum):
     MIXED_AIR_TEMP = "mixed_air_temp"  # at a terminal box: the entering primary (AHU supply) air
     RETURN_AIR_TEMP = "return_air_temp"
     SPACE_TEMP = "space_temp"
-    # --- 0.93 (#42): coil leaving-air temperatures (an AHU's own coil sensors, upstream of a
-    # draw-through supply fan). The leak check prefers them to the supply air, which carries the
-    # fan's heat; G36's HCLT / CCLT.
+    # --- 0.93 (#41, #42): coil leaving-air temperatures -- the air straight after an air handler's
+    # own heating / cooling coil, upstream of a draw-through supply fan and (for the cooling coil)
+    # of any post-heat (reheat) coil; G36's HCLT / CCLT. Distinct from SUPPLY_AIR_TEMP, which is
+    # downstream of every coil and carries the fan's heat. leaking_valve prefers them to the supply
+    # air (#42); simultaneous_heat_cool uses the cooling-coil one to tell dehumidification with
+    # reheat (coil at or below the dew point, reheat warming the air back) from coil fighting (#41).
     HEAT_COIL_LEAVING_TEMP = "heat_coil_leaving_temp"  # air leaving the heating coil
     COOL_COIL_LEAVING_TEMP = "cool_coil_leaving_temp"  # air leaving the cooling coil
 
@@ -160,6 +163,7 @@ class Role(str, Enum):
     ENERGY_RATE = "energy_rate"  # thermal energy rate (BTU meter)
 
 
+
 # Roles whose source points are text/event-based status or command signals
 # (e.g. "Off"/"Running", "STOP"/"START") rather than numeric trends. The resolve
 # layer loads these via load_status (text -> 0/1 step series), not the numeric
@@ -189,7 +193,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.RETURN_AIR_TEMP: "return air temp sensor",
     Role.SPACE_TEMP: "zone air temp sensor",
     Role.HEAT_COIL_LEAVING_TEMP: "heating coil leaving air temp sensor",  # 0.93 (#42)
-    Role.COOL_COIL_LEAVING_TEMP: "cooling coil leaving air temp sensor",  # 0.93 (#42)
+    Role.COOL_COIL_LEAVING_TEMP: "cooling coil leaving air temp sensor",  # 0.93 (#41, #42)
     Role.COOL_SP: "zone air temp cooling sp",
     Role.HEAT_SP: "zone air temp heating sp",
     Role.SUPPLY_AIR_TEMP_SP: "discharge air temp sp",

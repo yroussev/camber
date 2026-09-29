@@ -32,7 +32,7 @@ from .heatpump_rule import HeatPumpDefrost
 from .hunting_rule import ControlHunting
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
-from .iaq_rule import CO2Ventilation
+from .iaq_rule import CO2Ventilation, CO2VentilationSystem  # 0.93 (#38): + the fleet twin
 from .leakvalve_rule import LeakingValve
 from .oafraction_rule import OutdoorAirFraction
 from .overcooling_rule import OvercoolingMinFlow
@@ -100,6 +100,8 @@ RULE_CLASSES: list[type] = [
     CondenserBypassLeak,  # 0.92 (#15)
     # --- 0.93 rules1
     ReheatCapacityShortfall,  # 0.93 (#44)
+    # --- 0.93 rules2 (#38)
+    CO2VentilationSystem,
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

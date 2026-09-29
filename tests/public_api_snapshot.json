@@ -676,7 +676,9 @@
   ],
   "camber.iaq": [
     "CO2VentilationResult",
-    "analyze_co2_ventilation"
+    "DEFAULT_ECON_HIGH_LIMIT_F",
+    "analyze_co2_ventilation",
+    "economizer_mode_mask"
   ],
   "camber.ingest": [
     "BacnetClientConfig",
@@ -1798,7 +1800,8 @@
     "HWPumpDPReset"
   ],
   "camber.rules.iaq_rule": [
-    "CO2Ventilation"
+    "CO2Ventilation",
+    "CO2VentilationSystem"
   ],
   "camber.rules.leakvalve_rule": [
     "LeakingValve"

@@ -71,6 +71,7 @@ RULE_CATEGORY = {
     "co2_ventilation": "ventilation",
     "dcv_verification": "ventilation",
     "dcv_system_verification": "ventilation",
+    "co2_ventilation_system": "ventilation",  # 0.93 rules2 (#38)
     # maintenance / controls
     "leaking_valve": "maintenance",
     "control_hunting": "maintenance",

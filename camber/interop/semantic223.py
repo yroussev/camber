@@ -28,7 +28,7 @@ ROLE_TO_223 = {
     Role.SUPPLY_AIR_TEMP_SP: ("Temperature", "Air"),
     Role.SPACE_TEMP: ("Temperature", "Air"),
     Role.HEAT_COIL_LEAVING_TEMP: ("Temperature", "Air"),  # 0.93 (#42)
-    Role.COOL_COIL_LEAVING_TEMP: ("Temperature", "Air"),  # 0.93 (#42)
+    Role.COOL_COIL_LEAVING_TEMP: ("Temperature", "Air"),  # 0.93 (#41, #42)
     Role.AIRFLOW: ("VolumeFlowRate", "Air"),
     Role.OA_AIRFLOW: ("VolumeFlowRate", "Air"),
     Role.AIRFLOW_SP: ("VolumeFlowRate", "Air"),

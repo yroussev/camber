@@ -88,6 +88,8 @@ ROLES_SUFFICE: tuple = (
     "control_hunting",  # any modulating valve or damper
     "dcv_system_verification",  # groups zones to air handlers itself (served-by topology)
     "dcv_verification",  # declines without an OA signal; valid wherever CO2 and OA meet
+    # 0.93 rules2 (#38): groups zones to air handlers itself (served-by topology)
+    "co2_ventilation_system",
     "filter_fouling",  # any filtered fan unit
     "heatpump_defrost",  # a reversing-valve command already means a heat pump
     "night_weekend_setback",  # any fan unit
