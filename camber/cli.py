@@ -1222,6 +1222,45 @@ def _cmd_facility_transition(args) -> int:
     return 0
 
 
+# ---- 0.95 edge lifecycle (#18 step 5): central reconciliation -----------------------------------
+def _edge_ws(p) -> None:
+    p.add_argument(
+        "--workspace",
+        help="portfolio workspace root (default: $CAMBER_PORTFOLIO, else the current dir)",
+    )
+
+
+def _print_reconcile(rep: dict, limit: int) -> None:
+    src = rep["source"]
+    print(
+        f"edge reconcile ({'read-only' if rep.get('read_only') else 'applied'}) {src['kind']} "
+        f"{src['path']}: {rep['objects_scanned']} object(s) scanned"
+    )
+    print("  " + "  ".join(f"{k} {v}" for k, v in rep["counts"].items()))
+    rows = rep["objects"]
+    for r in rows[:limit]:
+        who = r["facility_id"] or "-"
+        act = f"  -> {r['action']}" if r.get("action") else ""
+        print(f"  {r['category']:16s} {who:28s} {r['key']}  ({r['detail']}){act}")
+    if len(rows) > limit:
+        print(f"  ... {len(rows) - limit} more (use --json or --limit)")
+
+
+@_pf_errors
+def _cmd_edge_reconcile(args) -> int:
+    from .edge.landing import reconcile
+
+    pf = _portfolio(args)
+    rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    _print_reconcile(rep, args.limit)
+    if rep["to_quarantine"]:
+        print(f"  {rep['to_quarantine']} object(s) should be quarantined")
+    return 0
+
+
 # --------------------------------------------------------------------------- drift subcommands
 #
 # The baseline store is written by exactly two verbs -- `freeze` (create a missing reference) and
@@ -2136,6 +2175,20 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ecp.add_argument("--json", action="store_true")
     ecp.set_defaults(func=_cmd_edge_compact)
+    erc = edsub.add_parser(
+        "reconcile",
+        help="central: check landed objects against the facility registry (read-only)",
+    )
+    _edge_ws(erc)
+    esrc = erc.add_mutually_exclusive_group()
+    esrc.add_argument("--landing", help="a local landing directory (default: the workspace store)")
+    esrc.add_argument(
+        "--keys", help="a cloud key listing (s3api / gcloud / az JSON, or one key per line)"
+    )
+    erc.add_argument("--prefix", help="the sink's key prefix to strip from listed keys")
+    erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    erc.add_argument("--json", action="store_true")
+    erc.set_defaults(func=_cmd_edge_reconcile)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"
