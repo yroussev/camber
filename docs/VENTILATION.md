@@ -249,6 +249,18 @@ than a CO₂ one: a supply that rises with occupants' heat gain in a 100% outdoo
 genuinely ventilates more per person, and occupancy data alone cannot say whether a thermostat
 or a DCV loop did it.
 
+**CO₂ demand is judged within the hour of day too** (0.93, #37; `stratify_hour=True`). A valve
+that opens on a morning clock *and* on CO₂ mixes the two in a pooled comparison: its clock-driven
+opening at low morning CO₂ drags the raised-valve median down, and a working CO₂ response reads
+"uncorrelated" -- or reads "functioning" on a second sensor, depending on which one you trust
+(an office room in the B4B data did both). Within each hour of day (weekdays and weekends apart)
+the clock cancels, so the lift is the per-hour median difference, averaged over the hours that
+hold at least three raised and three at-floor samples. Where fewer than `min_bin` such pairs
+exist the pooled lift decides, as before; `lift_basis` says which was used and
+`demand_lift_pooled` is always reported. A pooled verdict carries a caveat, because a valve on a
+pure time clock never has both states within one hour and so cannot be told apart from one that
+follows CO₂.
+
 Sub-checks, each `None` when it cannot be evaluated:
 
 - `co2_breach_at_min_pct` (needs `co2_setpoint`) — share of judged samples with CO₂ above setpoint
@@ -280,6 +292,7 @@ Sub-checks, each `None` when it cannot be evaluated:
 | `oa_floor`, `floor_tol` | `None`, `0.10` | floor for the floor sub-checks |
 | `min_samples`, `min_bin` | `24`, `6` | sample gates for the verdict and each bin |
 | `closed_frac` | `0.02` | OA at or below this share of its p95 is "closed" |
+| `stratify_hour` | `True` | take the CO₂ lift within the hour of day (0.93); `False` = pooled |
 | `min_corr` | — | **deprecated** (0.82), ignored; warns |
 
 ## Rules
@@ -304,6 +317,16 @@ Sub-checks, each `None` when it cannot be evaluated:
   this a lecture theatre at its CO₂ sensor's full scale with the fan off read "not judged".
   CAMBER temperatures are °F: when the economizer is inferred from OAT and nearly every sample is
   excluded, the finding says an OAT in °C would do that.
+
+  **Which OA signal (0.93, #37).** The best signal judges every sample it covers, a lesser one only
+  the samples the better ones miss: `OA_AIRFLOW`, then `OA_DAMPER`. An air handler whose flow
+  station is masked for a period is judged there on its damper position and on its flow
+  elsewhere; `metrics["oa_segments"]` lists each signal's verdict and date span, the first
+  segment with a verdict leads the finding, and the worst severity wins. With
+  `full_outdoor_air=True` (a 100 % outdoor-air unit: no return air, no economizer damper, every
+  cfm the fan moves is outdoor air) the supply `AIRFLOW` and then the `SUPPLY_FAN_SPEED` follow
+  as proxies; no economizer exclusion applies (`economizer_basis="full_outdoor_air"`), and the
+  finding says the fan may also speed up for cooling.
 - **`dcv_system_verification`** (`DcvSystemVerification`) — the fleet twin, **auto-registered**.
   Most buildings put CO₂ on the zones and OA on the air handler, so no single frame has both. This
   groups zones to their serving air handler through the served-by topology — each zone's
@@ -314,6 +337,22 @@ Sub-checks, each `None` when it cannot be evaluated:
   air handler as above. With no usable grouping and exactly one OA source, all zones join it, with
   a caveat; with several, unattributed zones are declined rather than guessed. One finding, with a
   `per_ahu` breakdown.
+- **`co2_ventilation`** (`CO2Ventilation`) — CO₂ adequacy: under-ventilated when CO₂ rises more
+  than 700 ppm above outdoor, over-ventilated when it stays within 150 ppm (`warn` at 60 % of
+  occupied hours). Since 0.93 (#38) an economizer's outdoor air is not over-ventilation: the
+  economizer-mode hours (`iaq.economizer_mode_mask` — a trended `ECON_CMD`; else the `OAT` below
+  the 75 °F high limit **and** the OA damper more than 5 points above its minimum, or the unit on
+  ~100 % outside air by `freecooling.integrated_economizer_mask`) are left out of
+  `over_vent_pct` and reported apart (`econ_hours_pct`, `over_vent_econ_pct`,
+  `over_vent_all_pct`); with fewer than 10 hours left, over-ventilation is not judged. An OAT alone
+  excludes nothing (a 100 % outdoor-air unit has no economizer). Under-ventilation is judged on
+  every occupied hour. Flags: `exclude_economizer`, `oa_damper_min_pct` (default: the damper's
+  5th percentile while open), `econ_high_limit_f`.
+- **`co2_ventilation_system`** (`CO2VentilationSystem`, 0.93) — the fleet twin: a zone frame
+  carries CO₂ but not the damper, so each CO₂ zone is joined to its serving air handler (served-by
+  topology, else the naming heuristic; one economizing unit and no grouping: every zone joins it)
+  and judged with that unit's economizer-mode hours excluded. A zone no unit can be attributed to
+  is judged without the exclusion, with a caveat. One finding with a `per_zone` breakdown.
 - **`ventilation_system_62_1`** (`VentilationSystemVRP`, 0.92) — the system-level VRP above; runs
   from the config's `ventilation` section.
 - **`ventilation_rate_62_1`** (`VentilationRateProcedure`) — needs the zone's design inputs, so
@@ -338,9 +377,9 @@ warm-up closures and a fan schedule — and, since 0.82.0, against open real-bui
 |---|---|
 | Lab room running a known DCV law, 3 + 6 L/s per person (Zenodo 10.5281/zenodo.18299691, CC BY) | `functioning` on CO₂ (lift 392 ppm), on the occupant count and on the controller's own occupancy estimate. The CO₂ mass balance closes at 5.3–5.8 mL/s per person, close to the 5.0 mL/s (0.0105 cfm) the simulator assumes for a sedentary adult |
 | Three office rooms, camera counts + VAV damper (data descriptor doi:10.1038/s41597-019-0274-4, CC0) | `functioning` on counts in all three (lift 2–20 people within the hour); on CO₂ one room, the other two never reached the engage level |
-| Office building with no DCV, 4 rooftop units, 11 CO₂ zones, Brick model (Dryad 10.7941/D1N33Q) | `insufficient` on every unit — never a false `functioning` (specificity); all 11 zones attributed through the Brick air handler → VAV → zone chain; the 2020 wildfire damper closure is a below-floor `fault` on the two units that fell under the 62.1 requirement and not on the two that stayed above it |
-| Lecture theatre, fan speed + two CO₂ sensors (Zenodo 10.5281/zenodo.3406555, CDLA-Permissive) | `fault`: 110 occupied hours with the fan off and CO₂ at the sensor's 2000 ppm full scale |
-| Rooms with a schedule-driven ventilation valve (github energietransitie/b4b-windesheim, CC BY) | not `functioning` on presence once the lift is taken within the hour — a time clock is not DCV |
+| Office building with no DCV, 4 rooftop units, 11 CO₂ zones, Brick model (Dryad 10.7941/D1N33Q) | `insufficient` on every unit — never a false `functioning` (specificity); all 11 zones attributed through the Brick air handler → VAV → zone chain; the 2020 wildfire damper closure is a below-floor `fault` on the two units that fell under the 62.1 requirement and not on the two that stayed above it. Since 0.93 the months before the OA-flow record (Aug 2019 – Mar 2020) are judged on the damper position: `insufficient` too, zone CO₂ never varying 150 ppm. `co2_ventilation_system`: 57–71 % of occupied hours are economizer mode and set apart; the zones stay within 150 ppm of outdoor in 99–100 % of the remaining minimum-damper hours — over-ventilated at the minimum, not only while economizing |
+| Lecture theatre, fan speed + two CO₂ sensors (Zenodo 10.5281/zenodo.3406555, CDLA-Permissive) | `fault`: 110 occupied hours with the fan off and CO₂ at the sensor's 2000 ppm full scale. Since 0.93 the unit (100 % outdoor air) is judged on its fan speed: `insufficient` on the fan-on hours (CO₂ never varies enough), and the fan-off hours at full-scale CO₂ remain a `fault` |
+| Rooms with a schedule-driven ventilation valve (github energietransitie/b4b-windesheim, CC BY) | not `functioning` on presence once the lift is taken within the hour — a time clock is not DCV. On CO₂ (0.93, within the hour): one room reads `functioning` on both its sensors, where the pooled lift read "uncorrelated" on one; the other stays sensor-dependent (`functioning` on its desk sensor, a 12 ppm same-hour lift on the BMS sensor) |
 
 - Without `ECON_CMD` the economizer state is inferred, and the OAT-only fallback discards all mild
   weather — expect `insufficient` more often. That is the honest answer, not a defect.

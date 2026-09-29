@@ -6,6 +6,77 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
+<!-- 0.93 rules2 (#41, #37, #38) -- integrator: merge with the other 0.93 blocks -->
+
+**0.93 (rules2): real-data hardening of the ventilation and heat/cool rules (#37, #38, #41).**
+
+### Added
+- **`Role.COOL_COIL_LEAVING_TEMP`** (`cool_coil_leaving_temp`): the air leaving an air handler's
+  cooling coil, upstream of any post-heat coil (#41). Wired into sensor health (bounds, flatline,
+  fan-gated), the AHU equipment template and the 223P export. The `nuig-ahu101` mapping now maps
+  TE_101_3 to it (the dataset needs a re-ingest to pick it up).
+- **`co2_ventilation_system`** (`rules.iaq_rule.CO2VentilationSystem`), a fleet rule, built in:
+  each CO2 zone is joined to its serving air handler (served-by topology, else the naming
+  heuristic; one economizing unit with no grouping takes every zone) and judged by
+  `co2_ventilation` with that unit's economizer-mode hours left out (#38). One finding, a
+  `per_zone` breakdown; category `ventilation`; roles-only applicability.
+- **`iaq.economizer_mode_mask`** (provisional): where an economizer brings in outdoor air beyond
+  the ventilation minimum -- a trended economizer command, else the OAT below the high limit
+  (75 F) with the OA damper more than 5 points above its minimum or the unit on ~100 % outside air
+  (`freecooling.integrated_economizer_mask`). An OAT alone excludes nothing (#38).
+- `DemandControlledVentilation` / `DcvSystemVerification` parameters `full_outdoor_air` and
+  `stratify_hour`; `assess_dcv(stratify_hour=True)`; `DcvResult.lift_basis` and
+  `demand_lift_pooled`; `analyze_ahu(simul_classes=...)` and `AHUResult.simul_class_pct`;
+  `SimultaneousHeatCool` parameters `dehumidification`, `reheat_lift_f`, `dewpoint_margin_f`,
+  `humid_rh_pct`, `fault_pct`, `warn_pct`; `CO2Ventilation` parameters `exclude_economizer`,
+  `oa_damper_min_pct`, `econ_high_limit_f`; `CO2VentilationResult.econ_hours_pct`,
+  `over_vent_econ_pct` and `over_vent_all_pct`.
+
+### Changed
+- **`simultaneous_heat_cool` tells dehumidification with reheat from coil fighting (#41).** A
+  both-open interval with the fan running, the cooling coil leaving at least 2 F below the supply
+  air (the heat is added after the coil) and at or within 2 F of the entering dew point (outdoor
+  and return dew points from temperature + RH, the lower of the two; else a return humidity of
+  55 % or more) is dehumidification with reheat: reported (`dehum_reheat_pct`), not counted. A
+  coil leaving above the entering dew point is dry, and the reheat after it still counts.
+  Partial evidence (reheat after the coil but no humidity, or high humidity but no coil-leaving
+  temperature) is `dehum_possible_pct`: a caveat that caps the finding at `warn`, never a fault.
+  `dehumidification=true` declares the sequence (reheat after the coil suffices unless a dew point
+  shows the coil dry); `false` counts every both-open interval as before. The severity is judged
+  on `unexplained_hc_pct`. Units with none of these signals are judged exactly as before, with a
+  caveat when they trip. On `nuig-ahu101` (13.3 % of occupied hours both open) 5.2 % now reads as
+  dehumidification with reheat (June-July, the coil held at ~12 C below the outdoor dew point) and
+  8.1 % stays unexplained (winter hours with the fan stopped, and summer hours with the coil held
+  at ~12 C while the entering air is drier): still a fault, now for the part that is one.
+- **DCV verification compares CO2 within the hour of day (#37).** `assess_dcv` takes the CO2 lift
+  (CO2 when OA is raised minus CO2 at its floor) within each hour of day, weekdays and weekends
+  apart, as it already did for occupancy, whenever enough same-hour pairs exist; else the pooled
+  lift decides, with a caveat that a time clock cannot then be told from CO2 response. A valve
+  that follows a clock and CO2 no longer reads "uncorrelated" because its clock-driven morning
+  opening drags the pooled lift down: on `b4b-windesheim` room 917810 now reads "functioning" on
+  both of its sensors (pooled: "uncorrelated" on one); room 999169 stays sensor-dependent.
+  `finnish-dcv`'s DCV-law test still reads "functioning" (lift 332 ppm); its two training sets of
+  undocumented mixed strategies both read "uncorrelated" (training 1 was "functioning" pooled).
+- **DCV falls back to the OA damper where OA flow is missing, and to fan speed on a 100 %
+  outdoor-air unit (#37).** The best OA signal judges the samples it covers and a lesser one the
+  rest (`metrics["oa_segments"]`, each with its verdict and date span; worst severity wins). On
+  `lbnl-b59` the months before the OA-flow record (Aug 2019 - Mar 2020) are now judged on the
+  damper: "not judged -- demand never varied", like the flow period (no DCV; zone CO2 within ~150
+  ppm of outdoor). `full_outdoor_air=true` adds the supply airflow, then the supply fan speed, as
+  proxies with no economizer exclusion; the `nuig-ahu101` template now runs `dcv_verification`
+  on the fan speed ("not judged" on fan-on hours; the occupied fan-off hours at full-scale CO2 are
+  the fault they were designed to catch).
+- **`co2_ventilation` leaves economizer-mode hours out of over-ventilation (#38).** Where the
+  equipment carries an economizer command, or an OAT with an OA damper or mixed/return
+  temperatures, `over_vent_pct` is judged on the other occupied hours (not judged below 10) and
+  the economizer hours are reported apart; a zone with no such evidence that reads over-ventilated
+  says the air handler's economizer may be the cause and points to `co2_ventilation_system`. The
+  `lbnl-b59` template now runs `co2_ventilation_system`: 57-71 % of occupied hours are economizer
+  mode and set apart, and the zones still sit within 150 ppm of outdoor in 99-100 % of the
+  remaining minimum-damper hours -- over-ventilated at the minimum, not only while economizing.
+
+## Unreleased
+
 **0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69, #71).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
 plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the

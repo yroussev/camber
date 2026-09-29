@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for nuig-ahu101: a real 100% outdoor-air handler (thermal wheel, frost / cooling / post-heat coils, fixed-step supply fan 0/40/60%) serving one lecture theatre. Hourly resample of the 15-minute store. Only rules that fit that design: supply-air temperature against the BMS's own calculated setpoint (fan-gated), simultaneous heating and cooling on the post-heat and cooling valves, room CO2 against the default occupied schedule, and the fan's night / weekend setback. Left out on purpose: outdoor_air_fraction, economizer_high_limit, leaking_valve and free_cooling_missed need a mixed-air temperature or an economizing damper this unit does not have; dcv_verification needs an outdoor-air flow or damper signal (the OA flow follows the fan speed, which is not an OA measurement); the SAT-reset rules judge a multi-zone VAV reset, not this single-zone cascade. Normal-operation note: simultaneous_heat_cool trips on this unit (both valves > 5% in 13% of fan-on minutes, 78% of them in June-July, with the cooling coil leaving at ~12 C and the post-heat valve at 100%): that is the signature of dehumidification with reheat, which the published data neither confirms nor rules out -- a question for the site, not a verified fault.",
+  "_comment": "Run template for nuig-ahu101: a real 100% outdoor-air handler (thermal wheel, frost / cooling / post-heat coils, fixed-step supply fan 0/40/60%) serving one lecture theatre. Hourly resample of the 15-minute store. Only rules that fit that design: supply-air temperature against the BMS's own calculated setpoint (fan-gated), simultaneous heating and cooling on the post-heat and cooling valves, room CO2 against the default occupied schedule, DCV with the supply fan speed as the ventilation proxy (full_outdoor_air: every cfm the fan moves is outdoor air; since 0.93), and the fan's night / weekend setback. Left out on purpose: outdoor_air_fraction, economizer_high_limit, leaking_valve and free_cooling_missed need a mixed-air temperature or an economizing damper this unit does not have; the SAT-reset rules judge a multi-zone VAV reset, not this single-zone cascade. Dehumidification note: both valves are open in about 13% of occupied hours, most of them in June-July with the cooling coil leaving at ~12 C and the post-heat valve at 100%. Since 0.93 simultaneous_heat_cool reads the cooling-coil leaving temperature (TE_101_3) against the outdoor and return dew points and counts only the hours that are not dehumidification with reheat: the hours where the coil leaves at or below the entering dew point are set apart; the rest (a coil held at ~12 C while the entering air is drier, so the reheat serves no dehumidification, and winter hours with the fan stopped) still count. The published data does not declare a dehumidification sequence, so the template leaves `dehumidification` undeclared. dcv_verification reads 'not judged' on the fan-on hours (CO2 never varies enough with the fan running) and flags the occupied hours with CO2 at the sensor's full scale and the fan stopped.",
   "source": {
     "kind": "store",
     "store": "",
@@ -16,6 +16,12 @@
     "supply_air_control",
     "simultaneous_heat_cool",
     "co2_ventilation",
+    {
+      "name": "dcv_verification",
+      "params": {
+        "full_outdoor_air": true
+      }
+    },
     "night_weekend_setback"
   ],
   "report": {
