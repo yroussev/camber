@@ -174,6 +174,13 @@ retention policy.
   torn line and lost with it. Spool contents and forwarding are otherwise unchanged.
 - `camber edge status` adds a `RETIRED` line for a decommissioned device. `edge run` and
   `send-once` refuse a retired spool, and the forwarder daemon stops on one.
+- **The edge forwarder writes `year=/month=` keys**
+  (`facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet`, one part per month), matching
+  the store's layout, so retention prunes month by month without splitting an edge part. The
+  batch manifest gains `month`. Year-only keys from older forwarders are still accepted and read,
+  and `camber store migrate-partitions` converts them. A year-only part re-sent after its year
+  was migrated is recognised by name and sha256 and quarantined as a `duplicate` (a new
+  reconciliation category) instead of being stored twice; `release` refuses it.
 
 ### Fixed
 - **A write after `ParquetStore.prune` could overwrite live data.** The part-file counter was the

@@ -7,9 +7,14 @@ spool lock, and M&V billing baselines through export and restore bundles.
 """
 
 import ast
+import hashlib
+import io
 import os
 import sys
 
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,6 +25,39 @@ A, B = "north-annex-1a2b3c", "east-wing-4d5e6f"
 EDGE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "camber", "edge"
 )
+
+
+def _part(start: str, hours: int, value: float = 1.0) -> bytes:
+    """A Parquet part as the edge forwarder serializes it (the long shape, no partitions)."""
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range(start, periods=hours, freq="h"),
+            "equip": "AHU_1",
+            "equip_class": "ahu",
+            "role": "supply_air_temp",
+            "value": float(value),
+        }
+    )
+    buf = io.BytesIO()
+    pq.write_table(pa.Table.from_pandas(df, preserve_index=False), buf)
+    return buf.getvalue()
+
+
+def _edge_key(fid: str, payload: bytes, year: int, month=None) -> str:
+    """The forwarder's key: year=/month= since 0.95; ``month=None`` is a pre-0.95 year-only key."""
+    part = f"part-{hashlib.sha256(payload).hexdigest()[:16]}.parquet"
+    mid = f"year={year}/" + (f"month={month}/" if month is not None else "")
+    return f"facility_id={fid}/{mid}{part}"
+
+
+def _put(root, key: str, payload: bytes, mtime=None) -> str:
+    path = os.path.join(os.fspath(root), *key.split("/"))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as fh:
+        fh.write(payload)
+    if mtime is not None:
+        os.utime(path, (mtime, mtime))
+    return path
 
 
 @pytest.fixture
@@ -106,3 +144,68 @@ def test_record_retirement_uses_the_public_note(pf):
     assert acts.count("edge.decommission") == 1
     other = {**receipt, "facility_id": "gone-aaaaaa"}
     assert record_retirement(pf, other, reason="swap")["noted"].startswith("audit only")
+
+
+# ---------------------------------------------------------------- 4. month keys, legacy keys kept
+
+
+def test_land_stores_month_and_legacy_keys_and_the_store_reads_both(pf, tmp_path):
+    from camber.edge.landing import parse_landed_key, reconcile
+    from camber.edge.quarantine import land
+
+    inbox = tmp_path / "inbox"
+    new = _part("2024-03-01", 48, 1.0)
+    old = _part("2024-01-01", 24 * 40, 2.0)  # a year-only part spanning Jan and Feb
+    k_new, k_old = _edge_key(A, new, 2024, 3), _edge_key(A, old, 2024)
+    _put(inbox, k_new, new)
+    _put(inbox, k_old, old)
+    assert parse_landed_key(k_new)[0].month == 3 and parse_landed_key(k_old)[0].month is None
+    rep = land(pf, inbox, apply=True, reason="sweep")
+    assert rep["counts"]["store"] == 2
+    got = pf.store.read_long(facility_id=A)
+    assert len(got) == 48 + 24 * 40
+    assert {p["legacy"] for p in pf.store.partitions(facility_id=A)} == {True, False}
+    assert reconcile(pf)["counts"]["ok"] == 2  # both layouts reconcile as ok
+
+    # migrate-partitions converts the edge's legacy part and leaves its month keys alone
+    pf.store.migrate_partitions(apply=True, reason="0.95 layout")
+    parts = pf.store.partitions(facility_id=A)
+    assert not any(p["legacy"] for p in parts) and {p["month"] for p in parts} == {1, 2, 3}
+    assert os.path.isfile(os.path.join(pf.store_root, *k_new.split("/")))
+    assert len(pf.store.read_long(facility_id=A)) == 48 + 24 * 40
+    assert reconcile(pf)["counts"]["ok"] == 3  # the migrated legacy file is now two month parts
+
+
+def test_a_legacy_part_resent_after_migration_is_a_quarantined_duplicate(pf, tmp_path):
+    from camber.edge.landing import reconcile
+    from camber.edge.quarantine import discard, land, quarantine_reconciled, release
+
+    old = _part("2024-01-01", 24 * 40, 2.0)
+    k_old = _edge_key(A, old, 2024)
+    _put(pf.store_root, k_old, old)  # landed straight into the store by an older forwarder
+    pf.store.migrate_partitions(apply=True, reason="0.95 layout")
+    rows = len(pf.store.read_long(facility_id=A))
+    assert rows == 24 * 40
+
+    # the old forwarder re-sends it (its ack was lost): through an inbox ...
+    inbox = tmp_path / "inbox"
+    _put(inbox, k_old, old)
+    rep = land(pf, inbox, apply=True, reason="sweep")
+    assert [r["category"] for r in rep["objects"]] == ["duplicate"]
+    assert rep["counts"] == {"store": 0, "quarantine": 1, "inbox": 0}
+    assert len(pf.store.read_long(facility_id=A)) == rows  # not counted twice
+    refused = release(pf, facility_id=A)["refused"]
+    assert refused and "already holds these rows" in refused[0]["why"]
+
+    # ... or straight into the store: reconciliation flags it and --apply moves it out
+    _put(pf.store_root, k_old, old)
+    assert len(pf.store.read_long(facility_id=A)) == 2 * rows
+    rec = reconcile(pf)
+    assert rec["counts"]["duplicate"] == 1 and rec["to_quarantine"] == 1
+    discard(pf, facility_id=A, apply=True, yes=True, reason="duplicate of migrated rows")
+    quarantine_reconciled(pf, reason="dedupe")
+    assert len(pf.store.read_long(facility_id=A)) == rows
+    # a different part under a legacy key is new data, not a duplicate
+    other = _part("2024-02-10", 5, 3.0)
+    _put(inbox, _edge_key(A, other, 2024), other)
+    assert land(pf, inbox)["objects"][0]["to"] == "store"

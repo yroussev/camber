@@ -1,7 +1,9 @@
 """The cloud-landing side of the edge: reconcile landed objects against the portfolio registry.
 
 **Provisional (0.95, #18 step 5).** Edge devices land Parquet parts at
-``facility_id=<id>/year=<yyyy>/[month=<mm>/]part-<sha16>.parquet`` (see docs/EDGE-DEPLOY.md). This
+``facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet`` (forwarders before 0.95 wrote
+the year-only ``facility_id=<id>/year=<yyyy>/part-<sha16>.parquet``, still accepted; see
+docs/EDGE-DEPLOY.md). This
 module is the central counterpart: it classifies every landed object against the portfolio's
 facility registry, so nothing lands silently for a facility that has left, was never registered,
 or cannot be addressed at all.
@@ -23,6 +25,10 @@ Each object falls in one category:
     ``archived`` or ``purged`` (or any state this CAMBER does not know, failing closed).
 ``quarantined``
     (key listings only) an object under the bucket's ``_quarantine/`` prefix.
+``duplicate``
+    a year-only object whose name and content ``camber store migrate-partitions`` already moved
+    into month partitions (see ``ParquetStore.migrated_files``): an older forwarder re-sent it.
+    Storing it again would count its rows twice, so it is quarantined (then discarded).
 
 Lifecycle state is read **only** through the :mod:`camber.portfolio` API (``Portfolio.facilities``
 and the registry's tombstones), so the states a later release adds are handled by name.
@@ -48,6 +54,7 @@ __all__ = [
     "CATEGORIES",
     "LandedKey",
     "parse_landed_key",
+    "already_migrated",
     "facility_status",
     "route_key",
     "read_key_listing",
@@ -62,7 +69,15 @@ NON_ACCEPTING_STATES = ("suspended", "offboarding", "archived", "purged")
 # The bucket-side quarantine prefix a presigned-URL broker routes non-accepted uploads to. A
 # leading underscore keeps Hive / pyarrow dataset discovery from ever reading it as data.
 QUARANTINE_PREFIX = "_quarantine/"
-CATEGORIES = ("ok", "orphaned", "unknown_facility", "unregistered", "inactive", "quarantined")
+CATEGORIES = (
+    "ok",
+    "orphaned",
+    "unknown_facility",
+    "unregistered",
+    "inactive",
+    "quarantined",
+    "duplicate",
+)
 
 _EXTS = ("parquet", "ndjson")
 _PART_RE = re.compile(r"^part-([0-9a-f]{16})\.(parquet|ndjson)$")
@@ -120,6 +135,26 @@ def parse_landed_key(key: str):
         ),
         None,
     )
+
+
+def already_migrated(store_root: str, lk: LandedKey, path: str) -> bool:
+    """True when ``path`` (the object at year-only key ``lk``) is a legacy part the store already
+    migrated into month partitions: same name, same sha256 (see ``ParquetStore.migrated_files``).
+    Month keys are never migrated, so they are never duplicates of a migration."""
+    if lk.month is not None:
+        return False
+    from ..store import ParquetStore
+
+    sha = ParquetStore(store_root).migrated_files(lk.facility_id, lk.year).get(lk.name)
+    if not sha or not os.path.isfile(path):
+        return False
+    import hashlib
+
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest() == sha
 
 
 # ---------------------------------------------------------------------- the registry adapter
@@ -317,7 +352,7 @@ def _int_or_none(v):
 # ---------------------------------------------------------------------- classification
 
 
-def _classify(reg: _Registry, key: str, mtime, *, source: str) -> dict:
+def _classify(reg: _Registry, key: str, mtime, *, source: str, base=None, store_root=None) -> dict:
     """One object's row: key, facility, category, state, detail and the suggested action."""
     row: dict = {
         "key": key,
@@ -342,6 +377,15 @@ def _classify(reg: _Registry, key: str, mtime, *, source: str) -> dict:
         return row
     st = reg.status(lk.facility_id)
     row.update(facility_id=lk.facility_id, state=st["state"], detail=st["detail"])
+    if base is not None and store_root is not None:
+        if already_migrated(store_root, lk, os.path.join(base, *key.split("/"))):
+            row.update(
+                category="duplicate",
+                detail="a year-only part the store already migrated to month partitions "
+                "(re-sent by an older forwarder); storing it again would double its rows",
+                action="quarantine",
+            )
+            return row
     if st["status"] == "ok":
         return row
     row["category"] = st["status"]
@@ -399,7 +443,14 @@ def reconcile(portfolio, *, landing=None, keys=None, prefix: str = "") -> dict:
     for key, mtime, size in items:
         if kind == "keys" and key.startswith(("_", ".")) and not key.startswith(QUARANTINE_PREFIX):
             continue  # registry / marker files at the bucket root
-        row = _classify(reg, key, mtime, source=kind)
+        row = _classify(
+            reg,
+            key,
+            mtime,
+            source=kind,
+            base=None if kind == "keys" else source["path"],
+            store_root=portfolio.store_root,
+        )
         row["bytes"] = size
         n_bytes += size or 0
         counts[row["category"]] += 1

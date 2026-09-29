@@ -17,7 +17,7 @@ document is written for the IT / network-security team that must approve the edg
   BAS / historian  ───(read-only)──▶  EDGE (Pi / Windows) ──── HTTPS 443, outbound-only ───▶  object store
    (control zone)                       camber.edge                (single allowlisted host)      │
                                      read → map → quality                                         ▼
-                                     → Parquet → spool → PUT                         ParquetStore (facility_id=/year=)
+                                     → Parquet → spool → PUT                         ParquetStore (facility_id=/year=/month=)
                                                                                                   │
                                                                                           existing ReadAPI + FDD/M&V
 ```
@@ -27,7 +27,7 @@ document is written for the IT / network-security team that must approve the edg
 ```mermaid
 flowchart LR
   bas["BAS / historian (control zone)"] -- "read-only" --> edge["camber.edge Forwarder (IT / DMZ): read, map, quality-gate, Parquet, spool"]
-  edge -- "HTTPS 443 (outbound only, single allowlisted host)" --> obj["Cloud object store (facility_id= / year=)"]
+  edge -- "HTTPS 443 (outbound only, single allowlisted host)" --> obj["Cloud object store (facility_id= / year= / month=)"]
   obj -- "Hive layout, no transform" --> ps["ParquetStore"]
   ps -- "read_long / read_role_frame" --> api["ReadAPI + FDD / M&V"]
   obj -- "no inbound conduit; edge never listens" --x edge
@@ -46,15 +46,22 @@ flowchart LR
 
 ## 2. Data flow & landing format
 
-Each `poll_once` produces one Parquet part per `year=`, written **directly into the store's Hive
+Each `poll_once` produces one Parquet part per `year=/month=` partition, written **directly into
+the store's Hive
 layout** so the cloud reads it with the existing `ParquetStore.read_long` / `read_role_frame` /
 `ReadAPI` and **no transform**:
 
 - **Long schema** (the store's native shape): `[ts, equip, equip_class, role, value]`; NaNs dropped
-  (observations, not a dense grid). `facility_id` and `year` are encoded in the **object key path**,
-  not the file (standard Hive partitioning).
-- **Object key**: `facility_id=<id>/year=<yyyy>/part-<sha16>.parquet`, where `<sha16>` is the first
-  16 hex of the batch content SHA-256. Re-sending identical content lands the same key → **idempotent**.
+  (observations, not a dense grid). `facility_id`, `year` and `month` are encoded in the **object
+  key path**, not the file (standard Hive partitioning).
+- **Object key**: `facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet`, where `<sha16>` is
+  the first 16 hex of the batch content SHA-256. Re-sending identical content lands the same key →
+  **idempotent**. Month keys match the store's layout since 0.95, so retention prunes month by
+  month without splitting an edge part. Forwarders before 0.95 wrote year-only keys
+  (`facility_id=<id>/year=<yyyy>/part-<sha16>.parquet`); the landing still accepts and reads them,
+  and `camber store migrate-partitions` converts them. If an older forwarder re-sends a year-only
+  part after its year was migrated, the landing recognises it (same name and sha256 as recorded by
+  the migration) and quarantines it as a `duplicate` instead of storing its rows twice.
 - **Per-batch manifest** (sink metadata): facility, window, rows, roles, equips, quality summary,
   full `content_sha256`, `schema_version` — for cloud-side reconciliation and audit.
 - **NDJSON** (`wire_format="ndjson"`) is a documented compatibility fallback for endpoints that can't
@@ -176,7 +183,7 @@ and pushes, then exits — nothing stays resident and nothing listens.
 Each delivery emits one `camber.edge` record; ship these to your SIEM:
 
 ```
-INFO camber.edge edge.sink.put host=lake.example.org key=facility_id=fox-lodge-9f3a1c/year=2024/part-1a2b3c4d5e6f7a8b.parquet bytes=48213 sha256=<64hex> status=200 ok=True
+INFO camber.edge edge.sink.put host=lake.example.org key=facility_id=fox-lodge-9f3a1c/year=2024/month=7/part-1a2b3c4d5e6f7a8b.parquet bytes=48213 sha256=<64hex> status=200 ok=True
 INFO camber.edge edge.forward facility=fox-lodge-9f3a1c rows=2160 parts=1 forwarded=1 spool_remaining=0
 ```
 
@@ -198,8 +205,9 @@ INFO camber.edge edge.forward facility=fox-lodge-9f3a1c rows=2160 parts=1 forwar
 portfolio's facility registry ([PORTFOLIO.md](PORTFOLIO.md)), retire devices without losing data,
 and keep the bucket's retention in line with the policy. Lifecycle state is read only through
 `camber.portfolio`. A facility **accepts** uploads when it is `provisioning` or `active`; any other
-state (`suspended`, `offboarding`, `archived`, `purged`, or a state this CAMBER does not know)
-does not.
+state (`suspended`, `offboarding`, `archived`, or a state this CAMBER does not know) does not. A
+purged facility's id is tombstoned, so its uploads read as `unknown_facility` (a retired id) and
+are quarantined too. An archived facility's hot data is already gone, and its store refuses writes.
 
 ### Reconciliation (central, read-only by default)
 
@@ -213,6 +221,7 @@ does not.
 | `unregistered` | store data with no registry entry (a pre-portfolio store; reads as active) | reported only |
 | `inactive` | a facility that does not accept data | quarantined if it landed after the state change |
 | `quarantined` | under the bucket's `_quarantine/` prefix (key listings) | - |
+| `duplicate` | a year-only part the store already migrated to month partitions (re-sent by an older forwarder) | quarantined |
 
 It reads the workspace store (the default), a local landing directory (`--landing`, e.g. an inbox
 or a mounted bucket) or a key listing exported from the cloud (`--keys`: the JSON of
@@ -241,7 +250,8 @@ Uploads never enter the store for a facility that does not accept data:
 `camber edge quarantine list` shows each object with its status: `held`, or `incomplete` (a
 record whose object is missing, left by an interrupted run), or `unrecorded`. `release` moves
 objects into the store once the facility accepts data again (resume or restore it first). It
-refuses a hash mismatch or a store key that already holds different content. `discard` deletes
+refuses a hash mismatch, a `duplicate` of already-migrated rows, or a store key that already
+holds different content. `discard` deletes
 objects: it needs `--yes` or `--confirm <facility_id>`, and a legal hold refuses it. Every change
 is audited per facility with a `begin` and a `done` record. Records are written before objects
 move, and objects are moved before their source is removed, so re-running any interrupted command

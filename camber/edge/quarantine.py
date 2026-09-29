@@ -5,8 +5,12 @@ unknown to the registry, or whose content does not match the hash in its name) n
 store. It goes to the workspace's ``quarantine/`` directory under its original key, beside a
 ``<key>.quarantine.json`` record of why, when, the facility state and the content sha256::
 
-    <workspace>/quarantine/facility_id=<id>/year=<yyyy>/part-<sha16>.parquet
-    <workspace>/quarantine/facility_id=<id>/year=<yyyy>/part-<sha16>.parquet.quarantine.json
+    <workspace>/quarantine/facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet
+    <workspace>/quarantine/facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet.quarantine.json
+
+(or the year-only key an older forwarder wrote). A year-only upload whose name and content the
+store already migrated into month partitions (``camber store migrate-partitions``) is a
+``duplicate``: it is quarantined, never stored twice, and cannot be released.
 
 A bucket that a presigned-URL broker routes with :func:`camber.edge.landing.route_key` holds the
 same thing under its ``_quarantine/`` prefix.
@@ -37,7 +41,14 @@ import json
 import os
 import shutil
 
-from .landing import QUARANTINE_PREFIX, _Registry, _walk, parse_landed_key, reconcile
+from .landing import (
+    QUARANTINE_PREFIX,
+    _Registry,
+    _walk,
+    already_migrated,
+    parse_landed_key,
+    reconcile,
+)
 
 __all__ = [
     "QUARANTINE_DIR",
@@ -275,6 +286,13 @@ def land(portfolio, inbox, *, apply: bool = False, reason=None) -> dict:
                     detail="content sha256 does not match the part-<sha16> in its name",
                     to="quarantine",
                 )
+            elif already_migrated(portfolio.store_root, lk, src):
+                row.update(
+                    category="duplicate",
+                    detail="a year-only part the store already migrated to month partitions "
+                    "(re-sent by an older forwarder); storing it again would double its rows",
+                    to="quarantine",
+                )
             elif st["status"] in ("ok", "unregistered"):
                 row["category"] = st["status"]
                 if lk.ext != "parquet":
@@ -404,6 +422,13 @@ def release(portfolio, *, facility_id=None, keys=None, reason=None, apply: bool 
                 why = "the object is missing (an interrupted move); discard the record"
             elif r.get("category") == "hash_mismatch":
                 why = "content failed the hash check; discard it"
+            elif r.get("category") == "duplicate" or (
+                (lk := parse_landed_key(r["key"])[0]) is not None
+                and already_migrated(portfolio.store_root, lk, _path(qroot, r["key"]))
+            ):
+                why = (
+                    "the store already holds these rows (migrated to month partitions); discard it"
+                )
             elif st["status"] not in ("ok", "unregistered"):
                 why = f"{st['detail']}; resume or restore the facility first"
             else:

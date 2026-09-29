@@ -419,7 +419,8 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   (`"schema": "camber.retention/1"`, from `Portfolio.retention_policy()`), `Portfolio.set_retention`,
   `set_retention_override`, `hold`, `release_hold`, `apply_retention`; the data class
   `weather_audit` in `DEFAULT_POLICY`; the rollup stores `rollups/hourly|daily/` (columns `value`
-  and `n`); `ParquetStore.partitions`, `drop_partition` and `migrate_partitions`; the audit
+  and `n`); `ParquetStore.partitions`, `drop_partition`, `migrate_partitions` and `migrated_files` (the
+  `year=Y/_migrated.json` record); the audit
   actions `retention.set|override|hold|release|apply|incomplete` and
   `store.migrate_partitions`. CLI: `camber retention show|set|override|hold|release|apply` and
   `camber store migrate-partitions` (exit code 75 when the lock is held). **Stable surface
@@ -429,7 +430,8 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 <!-- 095-edge (#18 step 5) -->
 - **Edge lifecycle** (0.95; #18 step 5), all additive and provisional:
   - the modules `camber.edge.landing` (`ACCEPTING_STATES`, `NON_ACCEPTING_STATES`,
-    `QUARANTINE_PREFIX`, `CATEGORIES`, `LandedKey`, `parse_landed_key`, `facility_status`,
+    `QUARANTINE_PREFIX`, `CATEGORIES` (with `duplicate`), `LandedKey`, `parse_landed_key`,
+    `already_migrated`, `facility_status`,
     `route_key`, `read_key_listing`, `reconcile`), `camber.edge.quarantine` (`QUARANTINE_DIR`,
     `RECORD_SUFFIX`, `quarantine_root`, `list_quarantine`, `land`, `quarantine_reconciled`,
     `release`, `discard`), `camber.edge.decommission` (`DecommissionResult`,
@@ -441,7 +443,8 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `Spool(lock_timeout=)`, `CompactResult` and `SpoolRetired` (also exported from
     `camber.edge`); the journal record `op: "mark"` and the optional `attempts` field of an
     `enqueue` record; the spool files `_lock` and `retired.json`;
-  - `EdgeConfig.device_id` (config key `device_id`, env `CAMBER_EDGE_DEVICE_ID`);
+  - `EdgeConfig.device_id` (config key `device_id`, env `CAMBER_EDGE_DEVICE_ID`); the forwarder's
+    `year=/month=` object keys and the `month` field of its batch manifest;
   - the workspace directory `quarantine/` and its `*.quarantine.json` records; the registry field
     `edge_devices`; the audit actions `edge.land`, `edge.reconcile.quarantine`,
     `edge.quarantine.release`, `edge.quarantine.discard` and `edge.decommission`;
