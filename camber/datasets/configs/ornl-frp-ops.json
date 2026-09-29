@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for ornl-frp-ops: the rooftop unit of each scenario (RTU__<scenario>, class AHU) at 1-minute resolution. compressor_short_cycle counts DX compressor-1 starts (status derived from its power above 200 W); night_weekend_setback judges the supply fan (status from its power) against the tests' own schedule, occupied 07:00-22:00 every day (descriptor Tables 3-4). There are no fault labels; the verdicts describe the test designs. Expected: short-cycling in every test with the unit running (178 / 131 / 176 starts a day in the heating baseline / setback / pre-heat tests -- a DX compressor cooling a minimum-flow building in winter, with reheat -- and 57 / 25 in the cooling baseline / setback), none in free float; setback 'MISSING' in the baseline (24/7 by design) and pre-heat tests (on 10:00-05:00 by design), 'effective' in the cooling setback test, and 'MISSING/weak' in the heating setback test, whose fan cycles on for 46-85% of each night hour to hold the 15.6 C setback: a runtime-only rule cannot tell a held setback from none. The VAV boxes and the G36 fleet rules are not in the template: the dataset has no zone setpoint, damper, airflow setpoint, SAT setpoint or static pressure, so sat/static_rogue_zone_census, cohort starvation, reset effectiveness, zones_heat_cool_census, reheat_penalty, unmet_setpoint_hours and supply_air_control all decline.",
+  "_comment": "Run template for ornl-frp-ops: the rooftop unit of each scenario (RTU__<scenario>, class AHU) at 1-minute resolution. compressor_short_cycle counts DX compressor-1 starts (status derived from its power above 200 W); night_weekend_setback judges the supply fan (status from its power) against the tests' own schedule, occupied 07:00-22:00 every day (descriptor Tables 3-4). There are no fault labels; the verdicts describe the test designs. Expected: short-cycling in every test with the unit running (178 / 131 / 176 starts a day in the heating baseline / setback / pre-heat tests -- a DX compressor cooling a minimum-flow building in winter, with reheat -- and 57 / 25 in the cooling baseline / setback), none in free float; setback 'MISSING' in the baseline (24/7 by design) and pre-heat tests (on 10:00-05:00 by design), 'effective' in the cooling setback test, and, since 0.93 (#43), 'effective (fan cycling to hold)' in the heating setback test, whose fan cycles on for 46-85% of each night hour to hold the 15.6 C (60.1 F) setback: runtime alone cannot tell a held setback from none, so the rule reads the return air while the fan runs (63 F, against 67 F occupied; there is no zone temperature on the RTU) against the descriptor's unoccupied setpoints, 15.6 / 29.4 C = 60.1 / 84.9 F (Table 3). The fan's mean duty in the night hours it runs is 71%; the baseline and pre-heat tests run it 100% of those hours, so they stay 'MISSING'. The VAV boxes and the G36 fleet rules are not in the template: the dataset has no zone setpoint, damper, airflow setpoint, SAT setpoint or static pressure, so sat/static_rogue_zone_census, cohort starvation, reset effectiveness, zones_heat_cool_census, reheat_penalty, unmet_setpoint_hours and supply_air_control all decline.",
   "source": {
     "kind": "store",
     "store": "",
@@ -27,7 +27,9 @@
           4,
           5,
           6
-        ]
+        ],
+        "unoccupied_heat_sp_f": 60.1,
+        "unoccupied_cool_sp_f": 84.9
       }
     }
   ],

@@ -223,7 +223,7 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     and may be retuned; `camber.plantdrift` (`PlantDriftDiagnosis`, `diagnose_boiler_drift`,
     `diagnose_tower_drift`) and the `boiler` / `tower` drift families;
   - `camber.faultlab.PENDING_SCENARIOS` (scenarios awaiting sign-off as gated synthetic keys;
-    empty in 0.92).
+    empty in 0.92, `reheat_capacity_shortfall` in 0.93).
 - **Air-side correctness** (0.92; #16, #17, #65, #67), all additive and provisional:
   - system-level ASHRAE 62.1 VRP (#17): in `camber.ventilation`, `VentZone`,
     `SystemVrpRequirement`, `SystemVrpResult`, `system_outdoor_air`, `simplified_ev`,
@@ -300,6 +300,27 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     property_type`, the `unit_scale` finding (and `scale_override` metric),
     `mvbilling.billing_scale_check`, `bps.site_eui_plausibility`, and
     `datasets._ingest.meter_scale_warning` with the BDG2 ingest warnings.
+<!-- 0.93 rules1 (#42, #43, #44) -->
+- **Setback, leaking valve and reheat capacity** (0.93; #42, #43, #44), all additive and
+  provisional:
+  - `night_weekend_setback`'s held-setback test (#43): the constructor parameters
+    `unoccupied_heat_sp_f`, `unoccupied_cool_sp_f`, `min_setback_depth_f` and
+    `max_hold_duty_pct`; the same keywords on `camber.setback.analyze_setback` (`max_hold_duty` as
+    a 0..1 fraction there); the trailing `SetbackResult` fields (`setback_basis`,
+    `unoccupied_duty_when_running_pct`, `zone_temp_source`, `zone_temp_unoccupied_f`,
+    `zone_temp_occupied_f`, `unoccupied_heat_sp_f`, `unoccupied_cool_sp_f`, `held_side`) and the
+    matching finding metrics. The hold thresholds may be retuned;
+  - `leaking_valve`'s constructor (#42): `fan_heat_f` (default 2 F, G36's ΔT_SF),
+    `delta_thr_f`, `valve_closed_thr`, `coil_sensor_fan_heat`; the `coil_sensor_fan_heat` and
+    `fan_speed_thr` keywords of `camber.leakvalve.analyze_leak_valves`, whose `fan_heat_f` default
+    moved from 1 F to 2 F and is now an allowance on the heating side only; the trailing
+    `LeakValveResult` fields (`fan_heat_f`, `fan_gated`, `hw_basis`, `chw_basis`,
+    `hw_median_delta_f`, `chw_median_delta_f`) and the matching finding metrics;
+  - the roles `heat_coil_leaving_temp` and `cool_coil_leaving_temp` (#42);
+  - `camber.rules.reheat_capacity_rule.ReheatCapacityShortfall`
+    (`reheat_capacity_shortfall`, built-in, terminal boxes only; #44), its parameters, metrics
+    and `AIRFLOW_SHORT_RATIO`. Its thresholds are screening-grade and may be retuned; its
+    `faultlab` scenario waits in `PENDING_SCENARIOS` for sign-off.
 
 ## Deprecated
 

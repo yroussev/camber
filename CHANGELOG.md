@@ -6,6 +6,60 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## Unreleased
 
+**0.93: hardening from real data.**
+
+<!-- 0.93 rules1 (#42, #43, #44) -->
+### Added
+- **A VAV rule for a zone the box cannot heat (#44).** `rules.reheat_capacity_rule.
+  ReheatCapacityShortfall` (`reheat_capacity_shortfall`, built-in, terminal boxes only) flags a
+  zone more than 1.5 F below its heating setpoint while its reheat valve is at or above 90 %: the
+  box has run out of heating, so it is a capacity or airflow problem, not a tuning one. It judges
+  occupied samples, leaving out morning recovery, `warmup` and fan-off samples. It warns at 5 %
+  and faults at 20 % of them, once 10 hours have accumulated (screening-grade). The setpoint comes
+  from `heat_sp`, else from the config's `heat_sp_f` (one value, or `{equip: degF}`); without
+  either the rule declines. With `airflow` and `airflow_sp` the finding says whether the box was
+  short of air or of heat; the summary also reports the under-heated time with reheat to spare. On
+  `lbnl-b59`, zone 051 faults (35.8 % of occupied hours, median 2.9 F below its setpoint) and
+  nine more terminals warn. The rule is in that dataset's run template. Its `faultlab` scenario
+  waits in `PENDING_SCENARIOS` for sign-off; registering the rule moves the synthetic
+  `coverage.n_single` from 39 to 40.
+- **`Role.HEAT_COIL_LEAVING_TEMP` / `Role.COOL_COIL_LEAVING_TEMP`** (`heat_coil_leaving_temp`,
+  `cool_coil_leaving_temp`): an AHU's coil leaving-air temperatures (G36's HCLT / CCLT), with
+  sensor-health bounds and 223P hints (#42). The `irish-ahu` mapping maps `HCALTemp` / `CCALTemp`
+  to them, and their 0.00 C outage readings are blanked like the other temperatures.
+
+### Changed
+- **`night_weekend_setback` tells a fan holding the setback from a missing one (#43).** When the
+  runtime test fails, a fan that cycles (mean duty below 90 % in the unoccupied hours it runs)
+  while the zone sits at setback now reads "effective (fan cycling to hold)" (`ok`,
+  `setback_basis="held_setback"`). The zone signal is `space_temp`, else the return air while the
+  fan runs. The setback is judged against the trended `heat_sp` / `cool_sp` in unoccupied hours,
+  else the new `unoccupied_heat_sp_f` / `unoccupied_cool_sp_f`, else (heating side only) a zone at
+  least `min_setback_depth_f` (3 F) below its occupied temperature. A trended setpoint that never
+  sets back vetoes the test. A fan that runs through every unoccupied hour is still "MISSING", and the
+  5 % absolute runtime floor (#57) still decides first. With no zone signal, the runtime verdict
+  now carries a caveat that it cannot tell the two apart. On `ornl-frp-ops`, the heating setback
+  test (the fan cycles 46-85 % of each night hour to hold 15.6 C) moves from MISSING to effective.
+  The baseline and pre-heat tests, which run the fan through the night by design, stay MISSING.
+  The template now carries the descriptor's unoccupied setpoints.
+- **`leaking_valve` allows for fan heat and prefers the coils' own sensors (#42).** New
+  constructor parameters: `fan_heat_f` (the supply fan's temperature rise, default 2 F, G36's
+  ΔT_SF, `fdd_g36.G36Thresholds.dT_sf`), `delta_thr_f`, `valve_closed_thr` and
+  `coil_sensor_fan_heat`. Fan heat is now an allowance, not an offset: a heating leak must rise
+  more than `fan_heat_f` + 3 F above the mixed air, while a cooling leak gets no credit for it
+  (supply more than 3 F below the mixed air). Until 0.93 a fixed 1 F was subtracted on both sides.
+  A mapped fan status or speed now limits the check to fan-on samples. A coil with its own
+  leaving-air sensor is judged on it (against the mixed air) instead of the supply air downstream
+  of the fan; set `coil_sensor_fan_heat=True` on a blow-through unit. New metrics: `fan_heat_f`,
+  `fan_gated`, `hw_basis` / `chw_basis`, `hw_median_delta_f` / `chw_median_delta_f`. On
+  `irish-ahu` the 34 % heating-leak signature before the 2022-05-01 valve replacement (0.2 %
+  after) falls to 11 % on the heating coil's own leaving air (0 % after). The supply air sat
+  2.6 F above the cooling coil's leaving air before the date, so most of the old signature was
+  downstream of the coils. The whole record reads ok. The LBNL SDAHU benchmark runs keep their
+  verdicts; the 10 % leak run is still missed.
+
+## Unreleased
+
 **0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69, #71).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a
 plant run gate and cross-sensor physics in sensor trust, the system-level ASHRAE 62.1 VRP, the

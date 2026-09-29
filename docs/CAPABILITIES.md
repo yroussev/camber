@@ -112,6 +112,27 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
     setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**.
     `overcooling_min_flow` declines without `AIRFLOW` + `AIRFLOW_SP` (it can't test "at minimum").
+  - *Held setback* (0.93, #43). A unit scheduled off at night still cycles on to hold its
+    zones at the setback temperature, so `night_weekend_setback` no longer reads runtime alone:
+    when the runtime test fails, a fan that *cycles* (mean duty below `max_hold_duty_pct`, 90 %,
+    in the unoccupied hours it runs) while the zone sits at setback reads "effective (fan cycling
+    to hold)". The zone is `space_temp`, else the return air while the fan runs; the setback is
+    the trended `heat_sp` / `cool_sp` in unoccupied hours, else the configured
+    `unoccupied_heat_sp_f` / `unoccupied_cool_sp_f`, else (heating only) a zone
+    `min_setback_depth_f` (3 °F) below its occupied temperature. A fan running every unoccupied hour stays "MISSING", and the
+    5 % runtime floor (#57) still decides first.
+  - *Leaking valves and fan heat* (0.93, #42). `leaking_valve` allows for the supply fan's heat
+    (`fan_heat_f`, default 2 °F, G36's ΔT_SF) before calling a heating leak, gives a cooling leak
+    no credit for it, judges fan-on samples only when a fan signal is mapped, and judges each coil
+    on its own leaving-air sensor (`heat_coil_leaving_temp` / `cool_coil_leaving_temp`) when
+    one is trended rather than on the supply air downstream of the fan
+    (`coil_sensor_fan_heat=True` on a blow-through unit).
+  - *Out of reheat* (0.93, #44). `reheat_capacity_shortfall` (terminal boxes only) flags a zone
+    more than `tol_f` (1.5 °F) below its heating setpoint while its reheat valve is at or above
+    `reheat_saturated_pct` (90 %) -- a capacity or airflow problem, not tuning. Occupied samples,
+    less morning recovery, warm-up and fan-off samples; warn at 5 %, fault at 20 % of them, after
+    10 h. The setpoint is `heat_sp`, else the config's `heat_sp_f` (one value, or per box); with
+    `airflow` + `airflow_sp` the finding says whether the box was short of air or of heat.
   - *Status duty.* Event-logged status points are resampled to their time-weighted duty
     (`camber.realio.load_status(how="duty")`), so a runtime verdict such as setback does not change
     with the resample interval; `how="any"` keeps the old "on at any moment" bins.

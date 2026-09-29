@@ -138,6 +138,9 @@ PHYSICAL_BOUNDS: dict = {
     # 0.92 (#15): condenser water entering the chillers, and the tower-bypass valve
     Role.COND_ENTERING_WATER_TEMP: (40.0, 120.0),
     Role.CW_BYPASS_VALVE: (-2.0, 102.0),
+    # 0.93 (#42): coil leaving-air temperatures (bounds of the supply air they feed)
+    Role.HEAT_COIL_LEAVING_TEMP: (20.0, 160.0),
+    Role.COOL_COIL_LEAVING_TEMP: (20.0, 140.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -158,6 +161,8 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.CW_SUPPLY_TEMP,
         Role.CW_RETURN_TEMP,
         Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
+        Role.HEAT_COIL_LEAVING_TEMP,  # 0.93 (#42)
+        Role.COOL_COIL_LEAVING_TEMP,  # 0.93 (#42)
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
@@ -454,6 +459,8 @@ STUCK_HOURS: dict = {
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
             Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
+            Role.HEAT_COIL_LEAVING_TEMP,  # 0.93 (#42)
+            Role.COOL_COIL_LEAVING_TEMP,  # 0.93 (#42)
             Role.OUTDOOR_RH,
             Role.AIRFLOW,
             Role.CHW_FLOW,
