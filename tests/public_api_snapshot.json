@@ -492,6 +492,16 @@
     "collect_sink",
     "load_config"
   ],
+  "camber.edge.bucket_rules": [
+    "BUCKET_CLASSES",
+    "DAYS_PER_MONTH",
+    "DAYS_PER_YEAR",
+    "PROVIDERS",
+    "bucket_lifecycle_rules",
+    "normalize_policy",
+    "policy_from_portfolio",
+    "rule_days"
+  ],
   "camber.edge.config": [
     "EdgeConfig",
     "build_forwarder",

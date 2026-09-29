@@ -1415,6 +1415,46 @@ class _NoSource:
 
 
 @_pf_errors
+def _cmd_edge_bucket_rules(args) -> int:
+    """Print (or write) provider lifecycle JSON from a retention policy. Never calls a cloud API."""
+    from .edge.bucket_rules import bucket_lifecycle_rules, policy_from_portfolio
+
+    facilities = list(args.facility or []) or None
+    if args.policy:
+        with open(args.policy, encoding="utf-8") as fh:
+            policy = json.load(fh)
+    else:
+        policy, facs = policy_from_portfolio(_portfolio(args))
+        facilities = facilities or facs
+    out = bucket_lifecycle_rules(
+        policy,
+        provider=args.provider,
+        facilities=facilities,
+        prefix=args.prefix or "",
+        container=args.container,
+    )
+    doc = json.dumps(out["document"], indent=2)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(doc + "\n")
+    if args.json:
+        print(doc)
+        return 0
+    print(f"# {args.provider} lifecycle rules (dry run: nothing was sent to any cloud)")
+    for row in out["plan"]:
+        n = len(row["prefixes"])
+        print(f"#   {row['class']}: delete after {row['days']} days ({n} prefix(es))")
+    for note in out["notes"]:
+        print(f"#   note: {note}")
+    print(f"# review, then apply yourself: {out['apply_with']}")
+    if args.out:
+        print(f"# wrote {args.out}")
+    else:
+        print(doc)
+    return 0
+
+
+@_pf_errors
 def _cmd_edge_record_retirement(args) -> int:
     from .edge.decommission import record_retirement
 
@@ -2419,6 +2459,21 @@ def _build_parser() -> argparse.ArgumentParser:
     err.add_argument("receipt", help="the retired.json a decommissioned device wrote")
     err.add_argument("--reason", required=True, help="why (audited)")
     err.set_defaults(func=_cmd_edge_record_retirement)
+    ebr = edsub.add_parser(
+        "bucket-rules",
+        help="emit S3 / GCS / Azure lifecycle JSON from the retention policy (text only)",
+    )
+    ebr.add_argument("--provider", required=True, choices=["s3", "gcs", "azure"])
+    _edge_ws(ebr)
+    ebr.add_argument("--policy", help="a policy JSON file instead of the workspace's policy")
+    ebr.add_argument(
+        "--facility", action="append", help="emit per-facility rules for this id (repeatable)"
+    )
+    ebr.add_argument("--prefix", help="the landing's key prefix in the bucket")
+    ebr.add_argument("--container", help="Azure container name (required for azure)")
+    ebr.add_argument("--out", help="write the rules JSON to this file")
+    ebr.add_argument("--json", action="store_true", help="print only the rules JSON")
+    ebr.set_defaults(func=_cmd_edge_bucket_rules)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"
