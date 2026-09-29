@@ -574,6 +574,7 @@ pf.store.migrate_partitions(apply=True, reason="0.95 partitions")
 3. ~~**Offboard, archive, restore and purge.**~~ Shipped in 0.95: see
    [Offboarding, archiving and purging](#offboarding-archiving-and-purging).
 4. ~~**Retention.**~~ Shipped in 0.95: see [Retention](#retention).
-5. **Edge and cloud.** Reconciliation of landed objects against the registry, quarantine of
-   uploads for non-active facilities, edge decommission, and bucket lifecycle rules generated
-   from the policy.
+5. ~~**Edge and cloud.**~~ Shipped in 0.95: reconciliation of landed objects against the
+   registry, quarantine of uploads for facilities that do not accept data, edge decommissioning,
+   and bucket lifecycle rules generated from the policy. See
+   [EDGE-DEPLOY.md](EDGE-DEPLOY.md#9-lifecycle-reconciliation-quarantine-decommissioning).

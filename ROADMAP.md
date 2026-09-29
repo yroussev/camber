@@ -305,9 +305,23 @@ Version numbers are given only where a release is already planned.
   - **0.94** — bill-based M&V (#72): versioned billing baselines, calendarization, cost, and
     statistically selected degree-day bases; weather for non-public sites with privacy guardrails
     (#73).
-  - **0.95** — bill-based M&V follow-ups (#74) and portfolio lifecycle steps 3–5 (#18): offboard /
-    archive / restore / purge with export bundles; month partitions and `camber retention apply`;
-    edge reconciliation, quarantine and decommissioning.
+  - **0.95 — bill-based M&V follow-ups and the portfolio lifecycle, steps 3–5** (integrated,
+    stacked on 0.94; `CHANGELOG.md`, `[0.95.0]`, unreleased). Closes #74 and #18:
+    - [x] #74 a searched rebaseline window of whole bills, an opt-in bill step test for trigger T1
+      (calibrated to a 5% false-alarm rate per meter over 36 bills), and the degree-day model at
+      the selected bases as a candidate in the SEP method proposal;
+    - [x] #18 step 3: `camber facility offboard | archive | restore | purge` with verified export
+      bundles, crash-safe swaps and `Portfolio.recover`;
+    - [x] #18 step 4: `year=/month=` store partitions with `camber store migrate-partitions`, and
+      `camber retention show | set | override | hold | release | apply` (roll up, verify, then
+      prune; legal hold > facility override > default);
+    - [x] #18 step 5: edge reconciliation, quarantine, device decommissioning, spool compaction
+      and bucket lifecycle rules generated from the retention policy document;
+    - [x] integration: the edge forwarder writes `year=/month=` keys (legacy keys still read),
+      edge uses public audited `Portfolio.audit` / `note_edge_device`, and end-to-end tests
+      drive the real offboard / archive / purge transitions. Fixes found on the way: repeated
+      partition migration, late uploads into rolled-up months, archived-write refusal, and purge
+      of quarantined uploads.
   - **0.96** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only); the
     BTS catalog entry (#75) and a time-series point-type suggester evaluated on it (#45); the
     fault-lifecycle cross-site fix (#76).
