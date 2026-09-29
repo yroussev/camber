@@ -256,20 +256,32 @@ def _cmd_ask(args) -> int:
 def _cmd_fleet(args) -> int:
     import glob as _glob
 
-    from .config import run_config_file
+    from .config import load_config, run_config_file
+    from .energy_units import UnitSystem
     from .report.fleet import build_fleet_report
 
     paths = sorted(_glob.glob(args.glob))
     if not paths:
         print(f"no config files matched: {args.glob}", file=sys.stderr)
         return 2
-    buildings = []
+    buildings, systems = [], set()
     for p in paths:
         res = run_config_file(p)
+        us = UnitSystem.from_config(load_config(p))  # 0.93 (#70): the fleet's unit system
+        systems.add(None if us is None else us.system)
         buildings.append(
             {"site": res.site or os.path.basename(p), "eui": None, "findings": res.findings}
         )
-    fr = build_fleet_report(buildings)
+    units = None
+    if len(systems) == 1:
+        units = next(iter(systems))
+    elif systems - {None}:
+        print(
+            f"the configs name different unit systems {sorted(map(str, systems))}; the fleet "
+            "report keeps kBtu/ft2/yr",
+            file=sys.stderr,
+        )
+    fr = build_fleet_report(buildings, units=units)
     print(fr.to_text())
     if args.out:
         open(args.out, "w").write(fr.to_html())
@@ -1681,7 +1693,8 @@ def _cmd_mv_report(args) -> int:
             "no reported segment"
             if ch is None
             else (
-                f"{ch.method} savings {ch.savings:,.0f}"
+                f"{ch.method} savings {ch.savings * (m.units or {}).get('factor', 1.0):,.0f}"
+                + (f" {m.units['energy_unit']}" if m.units else "")
                 if ch.savings is not None
                 else f"{ch.method} declined"
             )

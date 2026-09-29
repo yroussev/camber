@@ -321,6 +321,24 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     (`reheat_capacity_shortfall`, built-in, terminal boxes only; #44), its parameters, metrics
     and `AIRFLOW_SHORT_RATIO`. Its thresholds are screening-grade and may be retuned; its
     `faultlab` scenario waits in `PENDING_SCENARIOS` for sign-off.
+<!-- 093-mv (#68, #70) -->
+- **M&V days and holiday calendars** (0.93; #68), all additive and provisional:
+  - `mandv.intervalfit.repeated_hour_weights` and the keyword-only `timezone=` of
+    `daily_energy_vs_temp` and `rate_to_energy`; a source's `timezone` (or a catalog store's
+    `local_timezone`) now also sets daily `mv` day lengths;
+  - the package `camber.calendars` (`HolidayCalendar`, `public_holidays`, `calendar_info`,
+    `load_calendar_csv`, `register_calendar`, `registered`, `bundled`, `SCHEMA`), its JSON schema
+    (`camber.calendars/1`) and bundled files, and the CSV calendar format. Bundled years may grow;
+    a date changes only to follow its official source;
+  - the config keys `mv[].holiday_calendar` and `mv[].break_calendar`, and the `"break_day"`
+    driver; `mandv._mvform.with_base_dir` (private module).
+- **Energy-units follow-ups** (0.93; #70), all additive and provisional:
+  - `energy_units.VOLUME_FLOW_UNITS`, `quantity_of_rate` and the `volume_flow` unit kind; the
+    `mv[]` keys `heat_content` and `meter_type` for a trended gas volume flow;
+  - the trailing `MeterChain.units` and the `units` key of its `as_dict` under a unit system;
+  - `build_fleet_report(eui_unit=, units=)` and the trailing `FleetReport.eui_unit`;
+  - `carbon.factor_per` and per-unit factor specs in `carbon.emissions(factors=)`.
+<!-- /093-mv -->
 
 ## Deprecated
 

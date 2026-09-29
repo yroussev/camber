@@ -152,19 +152,18 @@ class BillingSeries:
         The columns are named by ``start``, ``end`` and ``energy``; ``estimated`` names an optional
         estimated-read flag (``true``/``false``, ``yes``/``no``, ``1``/``0``, ``E``/``A`` -- a
         missing column means every read is actual). ``units`` names the energy unit; without it a
-        ``units_column`` holding one value is used, and more than one unit in that column is an
-        error. ``end_inclusive`` is as in :meth:`from_frame`. Raises ``ValueError`` on a missing
-        column or an unreadable date or flag.
+        ``units_column`` holding one unit is used, and more than one unit in that column is an
+        error. Spellings of one unit (``kWh`` / ``kwh`` / ``kilowatt-hours``) are one unit (0.93,
+        #70): the column's unit is then the canonical name. ``end_inclusive`` is as in
+        :meth:`from_frame`. Raises ``ValueError`` on a missing column or an unreadable date or
+        flag.
         """
         df = pd.read_csv(path, encoding="utf-8-sig")
         missing = [c for c in (start, end, energy) if c not in df.columns]
         if missing:
             raise ValueError(f"bills file has no column(s) {missing}; it has {list(df.columns)}")
         if units is None and units_column in df.columns:
-            found = sorted({str(u).strip() for u in df[units_column].dropna()})
-            if len(found) > 1:
-                raise ValueError(f"bills file mixes energy units {found}; convert to one first")
-            units = found[0] if found else None
+            units = _one_unit(df[units_column])
         flag = None
         if estimated and estimated in df.columns:
             flag = "_estimated"
@@ -479,3 +478,29 @@ def as_billing_series(energy) -> BillingSeries:
     if isinstance(energy, BillingSeries):
         return energy
     return BillingSeries.from_reads(pd.Series(energy).dropna())
+
+
+def _one_unit(column) -> str | None:
+    """The one unit a bills file's ``units`` column names, or ``None`` when it is empty.
+
+    Spellings of the same unit count as one (0.93, #70): each distinct spelling is parsed
+    (:func:`camber.energy_units.parse_unit`), and one that does not parse is compared ignoring case
+    and spacing. A single spelling is returned as written, several spellings of one unit as the
+    canonical name; two different units raise ``ValueError``.
+    """
+    from ..energy_units import _norm, parse_unit
+
+    found = sorted({str(u).strip() for u in column.dropna()})
+    if len(found) <= 1:
+        return found[0] if found else None
+    keys: dict = {}
+    for u in found:
+        try:
+            k = parse_unit(u).name
+        except ValueError:
+            k = "?" + _norm(u)
+        keys.setdefault(k, []).append(u)
+    if len(keys) > 1:
+        raise ValueError(f"bills file mixes energy units {found}; convert to one first")
+    (k,) = keys
+    return k if not k.startswith("?") else found[0]

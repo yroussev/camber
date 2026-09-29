@@ -67,6 +67,7 @@ __all__ = [
     "ENERGY_UNITS",
     "POWER_UNITS",
     "VOLUME_UNITS",
+    "VOLUME_FLOW_UNITS",
     "MASS_UNITS",
     "SYSTEMS",
     "Unit",
@@ -79,6 +80,7 @@ __all__ = [
     "convert_power",
     "power_factor",
     "energy_unit_of_rate",
+    "quantity_of_rate",
     "convert_eui",
     "eui_factor",
     "convert_rate",
@@ -135,6 +137,10 @@ _RATE_ENERGY = {
 _FT3_PER_M3 = 1.0 / 0.3048**3
 #: cubic feet per one unit.
 VOLUME_UNITS: dict = {"ft3": 1.0, "CCF": 100.0, "Mcf": 1000.0, "m3": _FT3_PER_M3}
+#: cubic feet per hour per one unit (a trended gas meter's volume flow; 0.93, #70).
+VOLUME_FLOW_UNITS: dict = {"cfh": 1.0, "CCF/h": 100.0, "Mcf/h": 1000.0, "m3/h": _FT3_PER_M3}
+# a volume flow integrated over one hour, as a volume
+_RATE_VOLUME = {"cfh": "ft3", "CCF/h": "CCF", "Mcf/h": "Mcf", "m3/h": "m3"}
 _LB_KG = 0.45359237  # exact
 #: pounds (mass) per one unit.
 MASS_UNITS: dict = {"lb": 1.0, "klb": 1000.0, "kg": 1.0 / _LB_KG}
@@ -169,6 +175,12 @@ _ALIASES = {
         "Mcf": ("mcf", "mscf"),
         "m3": ("m3", "cubicmeter", "cubicmeters", "cubicmetre", "cubicmetres", "sm3"),
     },
+    "volume_flow": {
+        "cfh": ("cfh", "scfh", "ft3/h", "cf/h", "cuft/h", "scf/h", "cubicfeet/h"),
+        "CCF/h": ("ccf/h", "ccfh", "hcf/h"),
+        "Mcf/h": ("mcf/h", "mcfh", "mscf/h"),
+        "m3/h": ("m3/h", "m3h", "sm3/h", "cubicmeters/h", "cubicmetres/h"),
+    },
     "mass": {
         "lb": ("lb", "lbs", "pound", "pounds", "lbm"),
         "klb": ("klb", "klbs", "kpound", "kpounds", "thousandpounds"),
@@ -194,8 +206,8 @@ _AMBIGUOUS = {
 
 @dataclass(frozen=True)
 class Unit:
-    """A parsed unit: its ``kind`` (``energy``, ``power``, ``volume`` or ``mass``), canonical
-    ``name``, and ``scale`` (kWh, kW, ft3 or lb per one unit)."""
+    """A parsed unit: its ``kind`` (``energy``, ``power``, ``volume``, ``volume_flow`` or ``mass``),
+    canonical ``name``, and ``scale`` (kWh, kW, ft3, ft3/h or lb per one unit)."""
 
     kind: str
     name: str
@@ -240,7 +252,12 @@ def parse_unit(text: str, *, kind: str | tuple | None = None) -> Unit:
     if len(hits) > 1:  # pragma: no cover - the alias table has no cross-kind duplicates
         raise ValueError(f"{text!r} is ambiguous: {hits}")
     k, name = hits[0]
-    table = {"energy": ENERGY_UNITS, "power": POWER_UNITS, "volume": VOLUME_UNITS}
+    table = {
+        "energy": ENERGY_UNITS,
+        "power": POWER_UNITS,
+        "volume": VOLUME_UNITS,
+        "volume_flow": VOLUME_FLOW_UNITS,
+    }
     scale = table.get(k, MASS_UNITS)[name]
     return Unit(kind=k, name=name, scale=scale)
 
@@ -250,6 +267,7 @@ def _known(kinds) -> str:
         "energy": ENERGY_UNITS,
         "power": POWER_UNITS,
         "volume": VOLUME_UNITS,
+        "volume_flow": VOLUME_FLOW_UNITS,
         "mass": MASS_UNITS,
     }
     names = [n for k, t in tables.items() if kinds is None or k in kinds for n in t]
@@ -365,6 +383,16 @@ def energy_unit_of_rate(unit) -> str:
     """The energy unit a power ``unit`` integrates to over an hour (``kW`` -> ``kWh``, ``Btu/h``
     -> ``Btu``, ``MBH`` -> ``kBtu``, ``tons`` -> ``ton-hour``)."""
     return _RATE_ENERGY[parse_unit(unit, kind="power").name]
+
+
+def quantity_of_rate(unit) -> tuple:
+    """``(kind, unit)`` a trended rate integrates to over an hour (0.93, #70): ``("energy",
+    "kWh")`` for ``kW`` (as :func:`energy_unit_of_rate`), ``("volume", "ft3")`` for a gas meter's
+    ``cfh``, ``("volume", "m3")`` for ``m3/h``. A volume needs a heat content to become energy."""
+    u = parse_unit(unit, kind=("power", "volume_flow"))
+    if u.kind == "power":
+        return "energy", _RATE_ENERGY[u.name]
+    return "volume", _RATE_VOLUME[u.name]
 
 
 _AREA = {"ft2": 1.0, "m2": 1.0 / 0.3048**2}  # ft2 per unit (1 ft = 0.3048 m, exact)

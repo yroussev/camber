@@ -125,6 +125,46 @@ All notable changes to CAMBER are documented here. The format follows
   `lbnl-b59` template now runs `co2_ventilation_system`: 57-71 % of occupied hours are economizer
   mode and set apart, and the zones still sit within 150 ppm of outdoor in 99-100 % of the
   remaining minimum-damper hours -- over-ventilated at the minimum, not only while economizing.
+<!-- 093-mv (#68, #70): M&V days and calendars, energy-units follow-ups -->
+### Added
+- **Daylight-saving day lengths in daily M&V (#68).** With the site's zone known
+  (`source.timezone`, or a catalog store's `local_timezone`), a daily `mv` day is as long as its
+  clock: the autumn fall-back day sums 25 hours of energy (the repeated hour, which a naive index
+  holds once, counts for both passes) and weights that hour twice in its mean temperature; the
+  spring-forward day has 23. `mandv.intervalfit.daily_energy_vs_temp` and `rate_to_energy` take
+  `timezone=`; `repeated_hour_weights` is new. Only fall-back days change, and nothing changes
+  without a zone. On `cofactor-drammen` the fall-back days now match the publisher's
+  fixed-offset data exactly (they were 3-5 % short).
+- **Holiday calendars for the occupied-day driver (#68).** `mv[].holiday_calendar` takes a
+  country code for bundled public holidays, `"US"` (federal, observed, 2011-2030), `"NO"` (Norway,
+  2000-2040) or `"ES-<community>"` (Spain per autonomous community, 2016-2026). It can also take
+  `{"country", "subdivision", "files", "dates"}` to add calendar CSV files (`date`, or
+  `start`/`end` ranges) and single dates. Each bundled file cites its sources (5 U.S.C. 6103 /
+  E.O. 11582 checked against OPM; the Norwegian statutes; the annual BOE resolutions), and
+  `scripts/calendars_refresh.py` rebuilds them. The new module `camber.calendars`
+  (`HolidayCalendar`, `public_holidays`, `load_calendar_csv`, `register_calendar` for any other
+  source, e.g. the `holidays` package, which CAMBER does not depend on) serves them. A day outside
+  a calendar's coverage is left out, never treated as holiday-free. The new driver `"break_day"`
+  with `mv[].break_calendar` gives school breaks their own coefficient. As holidays they made the
+  COFACTOR school models worse; as break days 15 of 16 schools met daily G14 acceptance (13
+  without). The `cofactor-drammen` template now uses `"holiday_calendar": "NO"`, with identical
+  results.
+- **Energy-units follow-ups (#70).** The chain report `camber mv report` follows
+  `units.system`: its page, JSON (`units` per meter) and CUSUM give energy in kBtu or kWh
+  (`MeterChain.units`). Trended gas meters measured as a volume flow (`"units": "cfh"`, `CCF/h`,
+  `Mcf/h`, `m3/h`) convert with `mv[].heat_content` or a `units.factor_set`
+  (`mv[].meter_type`), with no default (`energy_units.VOLUME_FLOW_UNITS`,
+  `quantity_of_rate`). The fleet report takes `eui_unit=` / `units=` and labels its EUIs
+  (`FleetReport.eui_unit`), `camber fleet` passes the configs' shared system, and the agent
+  context's fleet facts name the unit. Carbon factors may be given per any unit
+  (`{"rate", "per"}`), converted through `convert_rate` (`carbon.factor_per`). In a bills file,
+  spellings of one unit (`kWh` / `kwh`) are one unit, not mixed units. A greenhouse-gas factor
+  set (eGRID / EIA) is documented as a follow-up. Every default output is unchanged.
+
+### Fixed
+- A catalog entry whose `timezone` is a prose description of its clock (BDG2, Valladolid) is no
+  longer taken as the site's zone by a store source (it failed a `shared_oat` file read).
+<!-- /093-mv -->
 
 ## Unreleased
 

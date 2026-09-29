@@ -123,10 +123,21 @@
     "site_eui_plausibility",
     "site_eui_units"
   ],
+  "camber.calendars": [
+    "HolidayCalendar",
+    "SCHEMA",
+    "bundled",
+    "calendar_info",
+    "load_calendar_csv",
+    "public_holidays",
+    "register_calendar",
+    "registered"
+  ],
   "camber.carbon": [
     "DEFAULT_FACTORS",
     "Emissions",
-    "emissions"
+    "emissions",
+    "factor_per"
   ],
   "camber.carbon_hourly": [
     "HourlyEmissions",
@@ -527,6 +538,7 @@
     "SYSTEMS",
     "Unit",
     "UnitSystem",
+    "VOLUME_FLOW_UNITS",
     "VOLUME_UNITS",
     "convert",
     "convert_eui",
@@ -539,6 +551,7 @@
     "parse_heat_content",
     "parse_unit",
     "power_factor",
+    "quantity_of_rate",
     "to_kwh"
   ],
   "camber.eval": [
@@ -1110,7 +1123,8 @@
     "degree_days",
     "energy_vs_degree_days",
     "hourly_energy_vs_temp",
-    "rate_to_energy"
+    "rate_to_energy",
+    "repeated_hour_weights"
   ],
   "camber.mandv.methods": [
     "ChainLink",

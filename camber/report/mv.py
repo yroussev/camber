@@ -65,6 +65,7 @@ def _chart(m) -> str:
             gaps=gaps,
             ax=ax,
             title=f"{m.equip}: chained CUSUM across baseline versions",
+            **({} if getattr(m, "units", None) is None else {"units": m.units["energy_unit"]}),
         )
         img = fig_to_base64(fig)
     except Exception:  # noqa: BLE001 - an unrenderable chart must not lose the page
@@ -75,7 +76,18 @@ def _chart(m) -> str:
 
 
 def _meter(m, charts: bool) -> str:
+    u = getattr(m, "units", None)  # 0.93 (#70): energy in the config's unit system
+    k = 1.0 if u is None else u["factor"]
+
+    def en(x):  # an energy figure, in the reported unit
+        return _num(None if x is None else x * k)
+
     parts = [f"<h2>{_e(m.equip)} — {_e(m.kind)}</h2>"]
+    if u is not None:
+        parts.append(
+            f"<p>Energy in {_e(u['energy_unit'])} ({_e(u['unit_system']).upper()}); the models "
+            f"are fitted in the meter's {_e(u['meter_unit'])}.</p>"
+        )
     parts.append("<h3>Baseline versions</h3>")
     parts.append(
         _table(
@@ -134,23 +146,24 @@ def _meter(m, charts: bool) -> str:
                 _e(seg["version"]),
                 _e(f"{seg['period'][0]} .. {seg['period'][1]}")
                 + (" (partial)" if seg.get("partial") else ""),
-                _e(_num(ln.savings)) if not ln.declined else _e(f"declined: {ln.declined_reason}"),
-                _e(_num(ln.abs_uncertainty)),
+                _e(en(ln.savings)) if not ln.declined else _e(f"declined: {ln.declined_reason}"),
+                _e(en(ln.abs_uncertainty)),
                 _e(_num(ln.enpi, "{:.3f}")),
-                _e(_num(None if adj is None else adj.savings)),
+                _e(en(None if adj is None else adj.savings)),
                 _e((ln.coverage or {}).get("tier")),
             ]
         )
+    unit = "" if u is None else f" ({u['energy_unit']})"
     parts.append("<h3>Reported segments</h3>")
     parts.append(
         _table(
             [
                 "Version",
                 "Reported days",
-                "Savings",
-                "± (90%)",
+                f"Savings{unit}",
+                f"± (90%){unit}",
                 "SEnPI",
-                "Adjusted savings",
+                f"Adjusted savings{unit}",
                 "Coverage",
             ],
             rows,
@@ -160,8 +173,8 @@ def _meter(m, charts: bool) -> str:
     if ch is not None:
         ext = " (CAMBER extension: sequential chain)" if ch.method == "sequential_chain" else ""
         parts.append(
-            f"<p><strong>Chained result{_e(ext)}:</strong> savings {_e(_num(ch.savings))} "
-            f"± {_e(_num(ch.abs_uncertainty))} at {ch.confidence:.0%}; SEnPI "
+            f"<p><strong>Chained result{_e(ext)}:</strong> savings {_e(en(ch.savings))}{_e(unit)} "
+            f"± {_e(en(ch.abs_uncertainty))} at {ch.confidence:.0%}; SEnPI "
             f"{_e(_num(ch.enpi, '{:.3f}'))}; baseline version(s) {_e(ch.baseline_version)}.</p>"
         )
     if charts:

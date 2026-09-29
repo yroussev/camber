@@ -301,6 +301,11 @@ def facts_from_mapping(review_result, *, ids: _IdGen | None = None) -> list:
     return out
 
 
+def _eui_unit(fleet_report) -> str:
+    """The fleet report's EUI unit (0.93, #70: kWh/m2/yr under SI; kBtu/ft2/yr before)."""
+    return getattr(fleet_report, "eui_unit", None) or "kBtu/ft2/yr"
+
+
 def facts_from_fleet(fleet_report, *, ids: _IdGen | None = None) -> list:
     """Portfolio facts from a :class:`report.FleetReport`: a fleet-summary fact + one per building.
 
@@ -314,7 +319,7 @@ def facts_from_fleet(fleet_report, *, ids: _IdGen | None = None) -> list:
     buildings = getattr(fr, "buildings", []) or []
     parts = [f"Fleet of {len(buildings)} buildings"]
     if getattr(fr, "peer_median_eui", None):
-        parts.append(f"peer-median EUI {fr.peer_median_eui:g} kBtu/ft2/yr")
+        parts.append(f"peer-median EUI {fr.peer_median_eui:g} {_eui_unit(fr)}")
     if getattr(fr, "total_annual_cost_usd", None) is not None:
         parts.append(f"estimated recoverable waste ${fr.total_annual_cost_usd:,.0f}/yr fleet-wide")
     out = [
@@ -327,13 +332,15 @@ def facts_from_fleet(fleet_report, *, ids: _IdGen | None = None) -> list:
                 "n_buildings": len(buildings),
                 "peer_median_eui": getattr(fr, "peer_median_eui", None),
                 "total_annual_cost_usd": getattr(fr, "total_annual_cost_usd", None),
+                # the unit only when it is not the historical one (default output unchanged)
+                **({} if _eui_unit(fr) == "kBtu/ft2/yr" else {"eui_unit": _eui_unit(fr)}),
             },
         )
     ]
     for b in buildings:
         bits = [f"{b.site}:"]
         if b.eui is not None:
-            bits.append(f"EUI {b.eui:g} kBtu/ft2/yr")
+            bits.append(f"EUI {b.eui:g} {_eui_unit(fr)}")
         if b.pct_vs_median is not None:
             bits.append(f"{b.pct_vs_median:+.0f}% vs peer median")
         bits.append(f"{b.n_fault} faults, {b.n_warn} warnings")
