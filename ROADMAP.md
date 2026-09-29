@@ -302,12 +302,16 @@ Version numbers are given only where a release is already planned.
       the `dx` / `source_loop` families;
     - [x] #6 the discharge-superheat drift detector;
     - the synthetic baseline refreshed for the six new single-equipment rules with sign-off.
-  - **Next** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only),
-    moved out of 0.93.
-  - **0.94** — education: worked exercises and learning docs on the catalog datasets.
-- **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
-  bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and
-  decommissioning.
+  - **0.94** — bill-based M&V (#72): versioned billing baselines, calendarization, cost, and
+    statistically selected degree-day bases; weather for non-public sites with privacy guardrails
+    (#73).
+  - **0.95** — bill-based M&V follow-ups (#74) and portfolio lifecycle steps 3–5 (#18): offboard /
+    archive / restore / purge with export bundles; month partitions and `camber retention apply`;
+    edge reconciliation, quarantine and decommissioning.
+  - **0.96** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only); the
+    BTS catalog entry (#75) and a time-series point-type suggester evaluated on it (#45); the
+    fault-lifecycle cross-site fix (#76).
+  - **0.97** — education: worked exercises and learning docs on the catalog datasets.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'
