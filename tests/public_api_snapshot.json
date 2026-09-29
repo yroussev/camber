@@ -1782,6 +1782,13 @@
     "MIN_SUBCOOLING_F",
     "TARGET_TOLERANCE_F"
   ],
+  "camber.rules.dx_discharge_superheat_rule": [
+    "DSH_FAULT_F",
+    "DSH_FAULT_SIGMA",
+    "DSH_WARN_F",
+    "DSH_WARN_SIGMA",
+    "DischargeSuperheatDrift"
+  ],
   "camber.rules.economizer_damper_rule": [
     "DAMPER_PLAUSIBLE",
     "DENOM_MIN_F",

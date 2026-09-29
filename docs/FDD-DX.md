@@ -65,10 +65,10 @@ requires a reversing-valve command; `DOAS` requires outdoor-air flow.
 Every rule returns `info` (not a false fault) when its required role is absent, is registered in
 `camber.rules.builtin`, and runs unchanged across any building once its points are mapped.
 
-<!-- 0.93 (#40) block (093-refrig) -->
+<!-- 0.93 (#40, #6) block (093-refrig) -->
 ## Refrigerant-side DX and heat-pump rules (0.93)
 
-*Provisional (GitHub issue #40).* Two detectors read a DX unit's or heat pump's refrigerant
+*Provisional (GitHub issues #40 and #6).* Three detectors read a DX unit's or heat pump's refrigerant
 circuit and indoor coil. Each has two modes:
 
 - **Target mode** (`analyze`, the ordinary `camber run`): the unit's median in cooling operation is
@@ -87,6 +87,7 @@ derived from pressures and line temperatures (see [Refrigerant properties](REFRI
 |---|---|---|
 | `dx_refrigerant_charge` (built-in) | liquid subcooling; superheat as corroboration (`metric="superheat"` for a fixed-orifice unit) | `undercharge`, `overcharge` |
 | `dx_indoor_airflow` (built-in) | evaporator temperature split, return minus supply, matched on return air and the return dew point (`return_air_dewpoint_temp`, or computed from return RH) | `airflow_low`, `airflow_high`; a narrowed split with subcooling down is reported as `capacity_low` (charge), not high airflow |
+| `discharge_superheat_drift` (`dx` family, #6) | discharge superheat, two-sided, plus the family's CUSUM for a sustained shift | rose: starved compressor (low charge, restriction); fell: liquid reaching it (overcharge, floodback) |
 
 Without targets the universal limits are 2-25 °F of subcooling (below 2 °F the valve is fed flash
 gas) and an 8-28 °F split. The magnitude floors are screening-grade and were characterized on the
@@ -109,6 +110,7 @@ itself out** (baseline mode, one averaged row per test point). The rates are Wil
 |---|---|---|---|---|
 | `dx_refrigerant_charge` | under- / overcharge (incl. doubles) | 86/95 = 91% [83-95] | 7/90 = 8% [4-15] | 34/84 = 40% |
 | `dx_indoor_airflow` | low / high indoor airflow (incl. doubles) | 20/93 = 22% [14-31] | 2/90 = 2% [1-8] | 2/86 = 2% |
+| `discharge_superheat_drift` | under- / overcharge | 30/95 = 32% [23-41] | 5/90 = 6% [2-12] | 27/84 = 32% |
 
 What the numbers say:
 
@@ -123,6 +125,10 @@ What the numbers say:
   (0/22) and on increased airflow (2/27) the split change sits inside the fault-free scatter. Most
   of the labelled airflow tests are double faults with undercharge or condenser blockage, which pull
   the split the other way. It almost never fires on a non-airflow fault (2%).
+- **Discharge superheat (#6).** Weaker than subcooling on these TXV units, confirming #6's original
+  finding that it is the less sensitive signal. Undercharge raises it (30/79 files); overcharge
+  barely moves it (0/16). Two of its five fault-free false alarms are the two files that run
+  with negative suction superheat (`fault-free-points-not-steady-cooling`).
 
 All seven charge false alarms are on the 14 SEER unit. Three are files with essentially no
 subcooling: the two 2016-03-15 files in that data issue, and a two-point long-line-set file at

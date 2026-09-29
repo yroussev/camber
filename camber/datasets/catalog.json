@@ -7819,7 +7819,7 @@
    },
    "known_issues": [
     "Steady-state laboratory test points, not a time series: the store's clock is synthetic (1 minute per test point), so rate, schedule and drift-over-time readings mean nothing here.",
-    "The run template scores dx_refrigerant_charge (0.93) against a target subcooling per unit taken from the fault-free runs (8.6 F, 14 SEER; 9.7 F, 16 SEER), so the fault-free runs are scored in-sample; the frozen-baseline detectors (charge, indoor airflow) compare a unit with its own fault-free period and cannot be run across separate test runs by a config -- their leave-one-file-out scores are in docs/FDD-DX.md.",
+    "The run template scores dx_refrigerant_charge (0.93) against a target subcooling per unit taken from the fault-free runs (8.6 F, 14 SEER; 9.7 F, 16 SEER), so the fault-free runs are scored in-sample; the frozen-baseline detectors (charge, indoor airflow, discharge superheat) compare a unit with its own fault-free period and cannot be run across separate test runs by a config -- their leave-one-file-out scores are in docs/FDD-DX.md.",
     "Three groups of files carry fault levels that contradict their names and measurements, and two files are marked JUNK by the publisher; they are ingested but excluded from scoring (see the data issues)."
    ],
    "data_issues": [
@@ -7957,7 +7957,7 @@
       "citation": "NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132"
      },
      "handling": "annotate",
-     "handling_note": "Left as published and scored as fault-free, so they count against CAMBER's false-positive rate: in the leave-one-file-out scoring the charge detector fires on the two no-subcooling files."
+     "handling_note": "Left as published and scored as fault-free, so they count against CAMBER's false-positive rate: in the leave-one-file-out scoring the charge detector fires on the two no-subcooling files and the discharge-superheat detector on the two negative-superheat files."
     }
    ]
   },

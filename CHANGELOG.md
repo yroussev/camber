@@ -9,7 +9,7 @@ All notable changes to CAMBER are documented here. The format follows
 **0.93 refrigerant cluster (#39, #40, #6).** An R-410A (and R-134a, R-22, R-32, CO2) saturation
 curve that turns refrigerant pressures and line temperatures into subcooling, superheat and
 approach; DX / heat-pump charge and indoor-airflow rules scored on the NIST heat-pump FDD data;
-and operating-mode, capacity, same-room and source-loop rules for water-source heat pumps trended
+the discharge-superheat drift detector deferred in #6; and operating-mode, capacity, same-room and source-loop rules for water-source heat pumps trended
 with three points.
 
 ### Added
@@ -38,6 +38,12 @@ with three points.
   (charge) symptom, not high airflow. On `nist-heatpump-fdd`, leave-one-file-out: charge TPR 91%
   [83-95] at 8% [4-15] of fault-free files; airflow 22% [14-31] at 2% [1-8] (18/44 at 15%+
   airflow reduction).
+- **Discharge-superheat drift (#6).** `rules.dx_discharge_superheat_rule.DischargeSuperheatDrift`
+  (`discharge_superheat_drift`, in the `dx` drift family): two-sided frozen-baseline drift with
+  the family's CUSUM, normalized on OAT and return air (DX) or tons (a water-cooled chiller);
+  discharge superheat is mapped or derived from a discharge pressure and discharge-line temperature.
+  On the NIST data it catches 32% [23-41] of charge-fault files at 6% [2-12] of fault-free ones:
+  the weaker signal on TXV units, as #6 anticipated.
 - **Water-source heat pumps with three points (#40).** `rules.heatpump_ops_rule.infer_hp_mode`
   (mode from discharge air against the zone) and the built-in `hp_mode_vs_need`,
   `hp_capacity_shortfall` (capacity vs control verdict) and `hp_room_imbalance` (fleet: units in

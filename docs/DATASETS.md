@@ -938,7 +938,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `CompSuct_Suph_F`, `CompSuct_Tsat_F`, `CompDisch_Suph_F`, `ODLiqSV_Tsub_F`, `Filename`
 - **Evidence:** Goodman14SEER_NFTests-LONG-COOL-161212b and -161213a (16 and 20 rows, long line set) run a suction superheat of -16.3 and -19.8 F and a discharge superheat of 13-18 F with the evaporator at 65-66 F; every other fault-free row runs 7-34 F of suction and 35-88 F of discharge superheat, and 99% of them evaporate below 61 F. Goodman14SEER_NFTests-160315a and -160315b (2 and 4 rows, short line set) have no liquid subcooling (median 0.0 and -0.2 F) where the other short-line-set fault-free files median 8.8 F.
 - **Contradicts:** Description of data, 'Label Definitions': NF = 1 marks a fault-free test at the nominal charge and airflow (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
-- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and scored as fault-free, so they count against CAMBER's false-positive rate: in the leave-one-file-out scoring the charge detector fires on the two no-subcooling files.
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and scored as fault-free, so they count against CAMBER's false-positive rate: in the leave-one-file-out scoring the charge detector fires on the two no-subcooling files and the discharge-superheat detector on the two negative-superheat files.
 
 ### `nist-ibal`: NIST IBAL lab chiller with refrigerant pressures (real, unlabelled)
 

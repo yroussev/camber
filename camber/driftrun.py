@@ -196,16 +196,18 @@ def _tower_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_ala
     return [CoolingTowerApproachDrift(store, **kw), CoolingTowerFanEffortDrift(store, **kw)]
 
 
-# --- 0.93 (#40) dx family (093-refrig) --- -------------------------------------------------
+# --- 0.93 (#40, #6) dx family (093-refrig) -------------------------------------------------
 def _dx_rules(store, *, site, run_id, freeze_if_missing, coils, sustained_alarm):
     # DX / heat-pump refrigerant side, each at matched outdoor / return-air conditions
     from .rules.dx_airflow_rule import DXIndoorAirflow
     from .rules.dx_charge_rule import DXRefrigerantCharge
+    from .rules.dx_discharge_superheat_rule import DischargeSuperheatDrift
 
     kw = {"site": site, "run_id": run_id, "freeze_if_missing": freeze_if_missing}
     return [
         DXRefrigerantCharge(store, **kw),
         DXIndoorAirflow(store, **kw),
+        DischargeSuperheatDrift(store, **kw),
     ]
 
 
@@ -249,7 +251,7 @@ DRIFT_FAMILIES: dict = {
     ),
     # 0.92 (#14)
     "tower": DriftFamily("tower", "Cooling-tower drift", _tower_rules, diagnose_tower_drift),
-    # 0.93 (#40)
+    # 0.93 (#40, #6)
     "dx": DriftFamily("dx", "DX / heat-pump refrigerant-side drift", _dx_rules, diagnose_dx_drift),
 }
 

@@ -1,14 +1,16 @@
 """The ``dx`` drift family: DX / heat-pump refrigerant-side detectors and their roll-up (0.93).
 
-Two frozen-baseline detectors compare a DX unit or heat pump with its own fault-free period at
+Three frozen-baseline detectors compare a DX unit or heat pump with its own fault-free period at
 matched conditions (outdoor-air and return-air temperature):
 
 * :class:`~camber.rules.dx_charge_rule.DXRefrigerantCharge` -- liquid subcooling (charge; #40),
 * :class:`~camber.rules.dx_airflow_rule.DXIndoorAirflow` -- the evaporator temperature split
-  (indoor airflow; #40).
+  (indoor airflow; #40),
+* :class:`~camber.rules.dx_discharge_superheat_rule.DischargeSuperheatDrift` -- compressor
+  discharge superheat (#6).
 
 :func:`diagnose_dx_drift` rolls one unit's findings into a verdict whose **locus** names what the
-worst detection points at: ``refrigerant_circuit`` (charge) or
+worst detection points at: ``refrigerant_circuit`` (charge, discharge superheat) or
 ``indoor_airflow``; ``steady`` when every detector that ran is quiet. Equipment on which every
 detector declined never reaches the roll-up (:mod:`camber.driftrun` lists it as unevaluated).
 
@@ -25,6 +27,7 @@ __all__ = ["DX_DETECTORS", "diagnose_dx_drift"]
 DX_DETECTORS: tuple = (
     "dx_refrigerant_charge",
     "dx_indoor_airflow",
+    "discharge_superheat_drift",
 )
 
 _RANK = {"ok": 0, "info": 0, "warn": 1, "fault": 2}
