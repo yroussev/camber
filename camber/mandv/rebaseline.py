@@ -149,6 +149,7 @@ def mv_kind(role) -> str:
 
 def mv_model_from_dict(d: dict):
     """Rebuild any M&V model from its ``as_dict`` payload, dispatching on its ``"type"``."""
+    from .basetemp import BillingDegreeDayModel
     from .degreeday import DegreeDayModel
     from .models import ChangePointModel
     from .multivariable import ChangePointDriverModel
@@ -159,6 +160,7 @@ def mv_model_from_dict(d: dict):
         "ChangePointDriverModel": ChangePointDriverModel,
         "TOWTModel": TOWTModel,
         "DegreeDayModel": DegreeDayModel,
+        "BillingDegreeDayModel": BillingDegreeDayModel,  # 0.94 (#72)
     }
     typ = types.get(str((d or {}).get("type")))
     if typ is None:
@@ -174,16 +176,22 @@ class _AnyMVModel:
 MV_MODEL_TYPES = {"*": _AnyMVModel}
 
 
-def fit_frame_sha256(daily: pd.DataFrame, columns=("oat", "energy")) -> str:
+def fit_frame_sha256(daily: pd.DataFrame, columns=None) -> str:
     """sha256 of a fit frame: one ``date,value,...`` line per row at full float precision.
 
     Recomputing it over the same window later tells whether the data under a frozen baseline has
     changed since (a re-ingest, a correction) -- a stored model is then no longer reproducible.
     The driver columns of a change-point + driver entry (``drv:...``) are hashed after
-    ``columns``; a frame without them hashes exactly as before.
+    ``columns``; a frame without them hashes exactly as before. ``columns`` defaults to
+    ``("oat", "energy")``, and for a bills frame (a ``days`` column; 0.94, #72) to
+    ``("oat", "energy", "days", "hdd", "cdd")``.
     """
     from ._mvform import driver_columns
 
+    if columns is None:
+        columns = ("oat", "energy")
+        if "days" in daily.columns:  # 0.94 (#72): a bills frame also hashes its days and HDD/CDD
+            columns = ("oat", "energy", "days", "hdd", "cdd")
     h = hashlib.sha256()
     cols = [c for c in columns if c in daily.columns] + driver_columns(daily)
     for ts, row in zip(daily.index, daily[cols].itertuples(index=False)):

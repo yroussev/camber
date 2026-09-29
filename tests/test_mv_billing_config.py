@@ -175,11 +175,14 @@ def test_billing_entry_config_errors(tmp_path):
             run_config(_cfg(**bad), base_dir=str(tmp_path))
 
 
-def test_versioned_verbs_skip_billing_entries(tmp_path):
+def test_versioned_verbs_list_billing_entries(tmp_path):
+    # 0.94 (#72): billing entries are versioned; their meter's rows are the bills
     from camber.mvrun import meter_series
 
     _write(tmp_path)
-    assert meter_series(_cfg(), base_dir=str(tmp_path)) == []
+    (ms,) = meter_series(_cfg(), base_dir=str(tmp_path))
+    assert ms.billing and ms.equip == "Gas meter" and ms.kind == "mv_bills"
+    assert {"days", "start", "end", "hdd"} <= set(ms.daily.columns)
 
 
 # ------------------------------------------------------------------------ BillingSeries additions

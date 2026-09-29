@@ -16,6 +16,12 @@ centres and Open-Meteo points rounded to 0.1°; `offline` sends nothing. A facil
 private defaults to `offline`. Every request to a weather or price service is audited, and
 `camber weather audit` shows exactly what was sent.
 
+**Bill-based M&V (#72).** Pre/post M&V from utility bills alone: versioned billing baselines
+through `camber mv freeze | rebaseline | adjust | report`, Portfolio Manager calendarization,
+billed cost and avoided cost, and degree-day bases chosen from the bills (`base_f: "auto"`, with
+separate heating and cooling bases, degree days built from each day, a selection profile with
+ranges and a flat-profile warning, and R² / adjusted R² beside CV(RMSE) and NMBE).
+
 ### Added
 - **Weather privacy modes (#73).** `camber.weather_privacy` (provisional) adds the modes
   `"public"` (the behaviour before 0.94, still the default), `"coarse"` and `"offline"`. Set them
@@ -56,6 +62,73 @@ private defaults to `offline`. Every request to a weather or price service is au
   `urdb_file`.
 - Docs: a SECURITY.md section on what CAMBER sends to weather and price services and what it
   never sends; privacy modes in WEATHER.md; `camber weather audit` in CLI.md.
+- **Degree-day bases chosen from the bills (#72).** `"base_f": "auto"` on a billing `mv` entry
+  searches a heating base and a cooling base separately. The search lives in
+  `camber.mandv.basetemp` (provisional: `select_bases`, `BaseSearch`, `BillingDegreeDayModel`,
+  `bill_degree_days`, `fit_bill_degree_day`, `compare_models`).
+  - Candidate degree days come from each day's temperatures (hourly when sub-daily) summed over
+    each bill's service days, not from the bill's mean temperature.
+  - `DD-H`, `DD-C` and `DD-HC` are fitted by days-weighted least squares, with the bases counted
+    as parameters (`p` = 3 or 5).
+  - The degree-day model at the selected bases competes with the change-point models by BIC.
+  - A slope of the wrong sign is refused.
+  - `base_search` sets the ranges and step (or `grid: "data"`), the likelihood-ratio
+    `tolerance` of a base's range (3.84), `flat_share`, `fixed_f` (65), `kinds` and `r2_min`.
+
+  The `mv_baseline` finding carries:
+  - `base_selection`: a profile row per candidate base with SSE, R², adjusted R², CV(RMSE),
+    NMBE and BIC, plus each base's range and `flat` / `at_edge` caveats;
+  - `heating_base_f` / `cooling_base_f`, `adj_r2` and `n_params`;
+  - `model_comparison`: every change-point kind, the fitted-base model and the fixed-65 °F model,
+    each with R², adjusted R², CV(RMSE), NMBE, BIC, and `mismatch` where R² and CV(RMSE) / NMBE
+    disagree;
+  - `fixed_base`.
+
+  One set of bases feeds `hdd_total` / `cdd_total`, the reporting rows, the standard-conditions
+  projection and every refit. An R² under 0.50 is a caveat, not a refusal, under `validity:
+  "g14"`. 0.50 is the SEP 50001 M&V Protocol 2019 Ed. 2 §6.4.1 threshold, verified against the
+  public DOE document.
+- **Calendarization (#72).** `BillingSeries.calendarize()` / `mandv.billing.calendarize()`
+  (provisional) prorate each bill's energy and cost per day into calendar months, the ENERGY STAR
+  Portfolio Manager method (Technical Reference, *Thermal Energy Conversions*, Figure 1 step 3).
+  - Months are flagged complete or estimated, and carry HDD / CDD from the same daily series.
+  - Gaps and overlaps are listed. Beyond `max_gap_days` (0) the totals are withheld, as Portfolio
+    Manager withholds metrics.
+  - `annual()` and `total()` give calendar totals.
+  - A config entry's `"calendarize": true` adds `calendarized` to its `mv_baseline` finding.
+  - Models are still fitted on the billing periods.
+- **Billed and avoided cost (#72).** `bills.cost` names the cost column (`BillingSeries` carries
+  it as `frame["cost"]`, and merged estimated reads sum it).
+  - The baseline finding reports `billed_cost` and `unit_cost` (the implied $/unit per bill, the
+    quantity #71's scale check screens).
+  - `"avoided_cost": "bills"` prices a forecast saving at each reporting bill's own rate;
+    `{"rate": r}` uses a stated rate.
+- **Versioned billing baselines (#72).** `camber mv freeze | rebaseline | adjust | propose | report
+  | list | run` handle billing entries, keyed `(facility, name, "mv_bills")`, with the #48
+  reason, lock and audit rules.
+  - The frozen record stores the model (including `BillingDegreeDayModel`), the bills (start, end,
+    days, energy, estimated, cost), the unit, the weather basis and the bases with their selection
+    profile.
+  - The run path and `mv report` measure against the in-force version at its own bases.
+  - A rebaseline names its window (`--period`) and, under `auto`, selects the bases afresh. A
+    change of bases is recorded as `bases_changed`.
+  - `mv report` shows each version's bases, the avoided cost per link and the calendarized months.
+- **Validation (#72).** `tests/test_mv_billing_bases.py` covers:
+  - synthetic buildings with heating / cooling bases of 58 / 68 °F, recovered within one 1 °F
+    step. A scratch run over 40 seeds recovered them in 40 at low noise and 37 at moderate noise,
+    with the truth inside both ranges in 38;
+  - a flat profile, which is flagged;
+  - degree days built from each day against those from the bill mean on shoulder-month bills
+    (per-day RMSE about 1.7 against 5.0, better on 40 of 40 seeds);
+  - bills of 28 to 35 days from a mid-month start with an estimated read, and a known 12% saving.
+
+  `examples/bdg2/billing_agreement.py` (not gated) re-expresses the BDG2 daily meters as 28 to 35
+  day bills with a 10% injected saving. On electricity meters whose daily model has CV(RMSE) ≤ 30%
+  (886), the billing saving (`auto`) was within 1 / 2 / 5 percentage points of the daily path's
+  on 67 / 85 / 98% of meters. The median difference was 0.0 points, and the saving was inside the
+  daily 90% band on 97%. On chilled water (172 meters) the figures were 58 / 82 / 98%, a median of
+  0.1 points and 98%. The mean differences are dominated by a few meters whose projection is near
+  zero, so medians and shares are the figures to read.
 
 ### Changed
 - Nothing by default. With no `weather` block and no private flag, every request is the same URL
@@ -64,6 +137,16 @@ private defaults to `offline`. Every request to a weather or price service is au
 - The RCx report's `oat_reference` with `"fetch": "nasa_power"` goes through
   `oat_reference_auto` (POWER alone, as before) when a privacy policy or an audit log applies, so
   it honours `cache_dir` / `offline` there.
+- Billing entries (#72): with a numeric `base_f` (or none), and no new keys, every finding is
+  byte-identical. Additions:
+  - a stored `mv_bills` version is now used by the run path. Before, a same-named stored version
+    was ignored with a caveat;
+  - `fit_frame_sha256` also hashes `days`, `hdd` and `cdd` for a bills frame, while daily frames
+    hash as before;
+  - `BillingSeries.energy_vs_temp` takes `heating_base_f` / `cooling_base_f` and records its bases
+    in `attrs`;
+  - `mvrun.MeterSeries` gains `bills` / `oat` / `oat_source`;
+  - `MeterChain` gains `billing`.
 
 ## [0.93.0] — Unreleased
 

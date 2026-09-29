@@ -321,6 +321,8 @@ def _design(spec: tuple, D: np.ndarray) -> np.ndarray:
         from .multivariable import _cpd_design
 
         return _cpd_design(spec[1], spec[2], D)
+    if kind == "bdd":  # a degree-day model on bills (camber.mandv.basetemp): [1, dd per day]
+        return np.hstack([np.ones((len(D), 1)), D])
     if kind == "dd":
         from .degreeday import degree_days
 

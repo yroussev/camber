@@ -226,6 +226,11 @@ camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [
   `adjust` records accepted NRA / static-factor entries on the live version after the
   confounding guard and SEP's evidence rule.
 - A facility that is not `active` (suspended, provisioning) is skipped, with a message.
+- **Billing entries (0.94, #72)** are meters too, named by the entry's `name` (`--equip NAME`),
+  with the store kind `mv_bills`. Their version keeps the bills, the weather basis and the
+  degree-day bases (`base_f: "auto"` selects them at freeze). `rebaseline` needs `--period` for
+  bills and records any change of bases. `report` adds the bases, the avoided cost and the
+  calendarized months. See [MANDV.md](MANDV.md#versioned-billing-baselines-provisional-094-72).
 
 **Energy units (provisional, 0.92).** A top-level `"units": {"system": "ip" | "si"}` reports M&V
 energy in kBtu or kWh. The fits stay in the meter's unit, and the findings carry `energy_unit` and

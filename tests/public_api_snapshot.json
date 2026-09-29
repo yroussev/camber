@@ -1078,9 +1078,23 @@
     "nra_from_isolation",
     "propose_adjustments"
   ],
+  "camber.mandv.basetemp": [
+    "BaseSearch",
+    "BaseSelection",
+    "BillingDegreeDayModel",
+    "DD_KINDS",
+    "bill_degree_days",
+    "compare_models",
+    "fit_bill_degree_day",
+    "frame_rows",
+    "rows_at_bases",
+    "select_bases"
+  ],
   "camber.mandv.billing": [
     "BillingSeries",
+    "Calendarized",
     "as_billing_series",
+    "calendarize",
     "daily_weather",
     "is_billing_like"
   ],
@@ -1341,13 +1355,22 @@
     "Topology"
   ],
   "camber.mvbilling": [
+    "BILLS_KIND",
+    "base_spec",
+    "bases_changed",
     "billing_conversion",
     "billing_findings",
+    "billing_fit_version",
+    "billing_frame",
     "billing_label",
+    "billing_meter",
     "billing_oat",
     "billing_scale_check",
     "billing_units",
-    "load_bills"
+    "fit_billing_baseline",
+    "frame_for",
+    "load_bills",
+    "slice_bills"
   ],
   "camber.mvrun": [
     "MVPlan",

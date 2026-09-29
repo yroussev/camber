@@ -197,11 +197,89 @@ def _meter(m, charts: bool) -> str:
                 ],
             )
         )
+    if getattr(m, "billing", None):  # 0.94 (#72): bases, avoided cost, calendarized months
+        parts.append(_billing_section(m.billing, en, unit))
     cav = list(m.caveats) + ([] if ch is None else list(ch.caveats))
     if live:
         cav.insert(0, f"{len(live)} unresolved trigger(s): see `camber mv propose`")
     if cav:
         parts.append("<h3>Caveats</h3><ul>" + "".join(f"<li>{_e(c)}</li>" for c in cav) + "</ul>")
+    return "".join(parts)
+
+
+def _billing_section(b: dict, en, unit: str) -> str:
+    """A billing meter's degree-day bases, avoided cost and calendarized months (0.94, #72)."""
+    parts = ["<h3>Bills</h3>"]
+    parts.append(
+        _table(
+            ["Version", "Base setting", "Heating base (F)", "Cooling base (F)", "Degree-day kind"],
+            [
+                [
+                    _e(r["version"]),
+                    _e(r.get("base_f")),
+                    _e(_num(r.get("heating_base_f"), "{:g}")),
+                    _e(_num(r.get("cooling_base_f"), "{:g}")),
+                    _e(r.get("dd_kind") or "–"),
+                ]
+                for r in b.get("bases") or []
+            ],
+        )
+    )
+    if b.get("avoided_cost"):
+        parts.append(
+            _table(
+                ["Version", "Avoided cost", "Rate"],
+                [
+                    [
+                        _e(c["version"]),
+                        _e(_num(c.get("avoided_cost"), "{:,.2f}")),
+                        _e(c.get("rate_basis") or c.get("why")),
+                    ]
+                    for c in b["avoided_cost"]
+                ],
+            )  # fmt: skip
+        )
+    cal = b.get("calendarized") or {}
+    if cal.get("months"):
+        parts.append(
+            "<h3>Calendarized months</h3><p>Each bill's energy per day prorated to calendar "
+            "months (ENERGY STAR Portfolio Manager method); an output view, never fitted.</p>"
+        )
+        if cal.get("declined_reason"):
+            parts.append(f"<p><strong>Totals withheld:</strong> {_e(cal['declined_reason'])}</p>")
+        parts.append(
+            _table(
+                ["Month", f"Energy{unit}", "Days covered", "Complete", "Estimated", "HDD", "CDD"],
+                [
+                    [
+                        _e(r["month"]),
+                        _e(en(r.get("energy"))),
+                        _e(f"{r['days_covered']}/{r['days_in_month']}"),
+                        "yes" if r.get("complete") else "no",
+                        "yes" if r.get("estimated") else "",
+                        _e(_num(r.get("hdd"))),
+                        _e(_num(r.get("cdd"))),
+                    ]
+                    for r in cal["months"]
+                ],
+            )
+        )
+        if cal.get("annual"):
+            parts.append(
+                _table(
+                    ["Year", f"Energy{unit}", "Cost", "HDD", "CDD"],
+                    [
+                        [
+                            _e(a["year"]),
+                            _e(en(a.get("energy"))),
+                            _e(_num(a.get("cost"), "{:,.2f}")),
+                            _e(_num(a.get("hdd"))),
+                            _e(_num(a.get("cdd"))),
+                        ]
+                        for a in cal["annual"]
+                    ],
+                )
+            )
     return "".join(parts)
 
 

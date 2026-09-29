@@ -111,6 +111,9 @@ def design_names(model) -> tuple:
         return tuple(cols)
     if spec[0] == "affine":
         return ("intercept",) + tuple(rec.names)
+    if spec[0] == "bdd":  # 0.94 (#72): camber.mandv.basetemp.BillingDegreeDayModel
+        legs = {"DD-H": ("heating_slope",), "DD-C": ("cooling_slope",)}
+        return ("base",) + legs.get(spec[1], ("heating_slope", "cooling_slope"))
     if spec[0] == "cpd":
         from .models import _coef_names
 
@@ -201,7 +204,7 @@ def _beta(model):
         vals = {"base": inner.base, "heating_slope": inner.heating_slope}
         vals["cooling_slope"] = inner.cooling_slope
         return np.array([float(vals[nm]) for nm in names])
-    if kind == "affine":
+    if kind in ("affine", "bdd"):
         return np.array([float(inner.intercept), *map(float, inner.coef)])
     if kind == "cpd":
         return inner._beta()

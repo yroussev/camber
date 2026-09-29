@@ -1039,7 +1039,8 @@ config with no `equipment` needs no `source`:
   (an airport code or a city) instead of coordinates, and it follows the config's weather privacy
   (`"weather"`; a private facility defaults to `offline`, see
   [WEATHER.md](WEATHER.md#privacy-weather-for-non-public-sites-provisional-094)). Without it, the
-  config's `shared_oat` is used. `base_f` (65) sets the degree-day base. A bill whose days are less than `min_coverage`
+  config's `shared_oat` is used. `base_f` (65) sets the degree-day base, or `"auto"` chooses
+  separate heating and cooling bases from the bills (0.94; see below). A bill whose days are less than `min_coverage`
   (0.9) covered by temperature data is dropped and counted (`bills_dropped`).
 - **Baseline.** Energy per day against the bill's mean temperature, fitted with the best
   change-point model weighted by days. It is judged at the G14 **monthly** thresholds (CV(RMSE)
@@ -1059,15 +1060,176 @@ config with no `equipment` needs no `source`:
   `bills.heat_content`, such as `"10.37 therm/Mcf"`; there is no default. Without `units` nothing
   is converted. See [UNITS.md](UNITS.md).
 
-**Not supported for bills (0.92):**
+**Not supported for bills:**
 - `model: "cp_driver"`: bills carry no daily driver values.
-- Versioned baselines: `camber mv freeze` / `rebaseline` / `adjust` skip billing entries. The 21d
-  store keys meters by equipment and fits daily windows. A stored version with the entry's name is
-  ignored, with a caveat.
 - `interval`.
 
 With only 12 to 36 bills, rho is often not estimable, and the band is then unadjusted, with a
 caveat.
+
+### Degree-day bases chosen from the bills (provisional, 0.94, #72)
+
+The 65 °F convention rarely matches a building. Internal gains, setpoints and the envelope set its
+balance points, and heating and cooling usually balance at different temperatures. The
+change-point models already find a balance point from the data. Before 0.94, though, the reported
+`hdd_total` / `cdd_total` always used the fixed `base_f`, so they could contradict the model's own
+change point. `"base_f": "auto"` chooses the bases from the baseline bills, and one set of bases
+is used everywhere afterwards.
+
+```json
+{"bills": {"file": "gas_bills.csv", "energy": "therms"}, "name": "Gas meter",
+ "period": ["2019-01-01", "2021-12-31"], "reporting_period": ["2023-01-01", "2023-12-31"],
+ "method": "forecast", "base_f": "auto",
+ "base_search": {"heating": [40, 70], "cooling": [50, 80], "step": 1}}
+```
+
+**Degree days from each day, not from the bill's mean.** For every candidate base, each day's
+degree days come from that day's temperatures and are summed over the bill's service days. The
+day's temperatures are its hourly values when the series is sub-daily, and its daily mean
+otherwise. Degree days computed from a 30-day bill's *mean* temperature undercount the swing
+days. A shoulder-month bill whose mean sits above the base still has cold days below it.
+
+On synthetic buildings with known bases (58 / 68 °F, daily noise), the same regression at the true
+bases was compared on shoulder-month bills (a mean within 8 °F of a base). With degree days built
+from each day, the per-day RMSE was about 1.7. With degree days from the bill mean it was about
+5.0. The daily-built model was better on every one of 40 seeds (`tests/test_mv_billing_bases.py`
+and a scratch run).
+
+**The search** (`camber.mandv.basetemp.select_bases`) tries three degree-day kinds:
+- `DD-H`: `E/day = b + a·HDD/day`, heating only;
+- `DD-C`: `E/day = b + c·CDD/day`, cooling only;
+- `DD-HC`: `E/day = b + a·HDD/day + c·CDD/day`, with the heating base no higher than the cooling
+  base.
+
+Each kind searches its own grid by least squares weighted by the bills' days. `base_search` sets:
+- `heating` / `cooling` (°F ranges) and `step`;
+- `grid: "data"`: both ranges become the 5th to 95th percentile of the baseline's daily mean
+  temperatures;
+- `tolerance`, `flat_share`, `fixed_f`, `kinds` and `r2_min` (described below).
+
+A fitted base is a parameter. `DD-H` / `DD-C` have `p = 3` and `DD-HC` has `p = 5`, the way a
+change-point model counts its change points. BIC, the `n − p` of CV(RMSE), adjusted R² and the
+regression tests all use these full counts. The tests are flagged as conditional on the bases.
+
+**Choosing.** Within a kind the bases with the least weighted SSE win. For a fixed parameter count
+that is also the highest R² and the lowest CV(RMSE), so R² is reported but adds no selection signal.
+Across kinds, and against the change-point models, the choice is BIC with the full parameter
+counts, exactly as `best_model` ranks change-point kinds. The degree-day model at the selected
+bases is one more candidate; a change-point model can still win. These are the inverse models of
+ASHRAE RP-1050 and ASHRAE Guideline 14-2014 (its whole-building regression and inverse-model
+provisions). The paywalled text was not consulted, and no section number is claimed here
+(unverified).
+
+**How the base was chosen** (`mv_baseline.metrics.base_selection`):
+- `profiles.heating` / `profiles.cooling`: for every candidate base, the weighted SSE, R²,
+  adjusted R², CV(RMSE), NMBE and BIC of the best fit at that base. For `DD-HC` the other leg's
+  base is profiled out, and `other_base_f` says where it landed.
+- `heating_range` / `cooling_range`: the candidates within `tolerance` of the best,
+  `n·ln(SSE/SSE_min) ≤ 3.84`. That is the profile-likelihood interval at 95% (χ², one degree of
+  freedom). It is approximate, because the SSE is not smooth in a base. On synthetic buildings the
+  true base fell inside both ranges in 38 of 40 runs at moderate noise.
+- `flat`: a range covering `flat_share` (half) of the grid or more means the bills do not pin the
+  base down, and a caveat says so. A base on the edge of the grid is a caveat too (`at_edge`).
+- `candidates`: each kind's best fit, or why it was refused. A slope of the wrong (negative) sign
+  is refused at that base, and a kind with no logical fit on its grid is refused.
+
+**One base everywhere.**
+- The frame is rebuilt at the selected bases. `hdd_total` / `cdd_total`, the calendarized months,
+  the reporting-period rows, the standard-conditions (normal-year) projection and the SEP refits
+  all use those bases. A leg the selected kind lacks keeps `fixed_f` (65 °F).
+- A reporting- or intermediate-period refit (backcast, chaining, standard conditions) uses the
+  baseline's bases. For standard conditions it uses the baseline's model form too, so that one
+  normal year can drive both models.
+- A frozen billing baseline stores its bases, and a rebaseline that moves them records
+  `bases_changed` (see below).
+
+**Both results side by side.** `model_comparison` has one row for each of:
+- the five change-point kinds;
+- the degree-day model at the fitted bases;
+- the same kind at `fixed_f`.
+
+Each row has `p`, R², adjusted R², CV(RMSE), NMBE, BIC and the G14 verdict, and `selected` marks
+the chosen model. A row whose R² and CV(RMSE) / NMBE disagree carries `mismatch`: a high R² with a
+CV(RMSE) or NMBE that fails, or a low R² with a CV(RMSE) that passes (a flat load that weather
+barely moves). `fixed_base` repeats the fixed-base totals and fits.
+
+**R² thresholds.** The SEP 50001 M&V Protocol (2019 Edition 2, dated October 2023, §6.4.1; the
+same in the 2019 first edition) requires R² ≥ 0.50 for a valid adjustment model. This was checked
+against the public DOE document. Under `validity: "sep"` / `"both"` that test is part of the SEP
+verdict, as before. Under `"g14"` an R² below `base_search.r2_min` (default 0.50) is a caveat:
+"weather explains little of the variation". It is not a refusal. Guideline 14's acceptance
+criteria stay CV(RMSE) and NMBE, as `cv_rmse_max_for` applies them (the section number is not
+verified against the paywalled standard).
+
+**Evidence on real meters** (BDG2, `examples/bdg2/billing_agreement.py`, not gated). The daily
+meters were re-expressed as 28 to 35 day bills and a 10% saving injected in 2017. Savings on the
+billing path (fixed 65 °F and `auto`) were compared with the daily path. The figures are in the
+0.94 CHANGELOG entry.
+
+### Calendarization (provisional, 0.94, #72)
+
+`BillingSeries.calendarize(temp=None, heating_base_f=65, cooling_base_f=65, max_gap_days=0)`
+prorates bills into calendar months the ENERGY STAR Portfolio Manager way (*Technical Reference:
+Thermal Energy Conversions*, Figure 1 step 3). Each bill's energy (and cost) is divided by its days,
+and each day goes to its month. A bill from January 15 to February 14 splits by its days in each.
+
+- A month is **complete** when every day, the first and the last included, is served by exactly
+  one bill.
+- **Gaps** (unserved days) and **overlaps** (days served twice; a plain table may overlap, a
+  `BillingSeries` may not) are listed. Portfolio Manager computes no metric across either, so any
+  gap or overlap longer than `max_gap_days` sets `declined_reason`, and `annual()` / `total()`
+  are withheld.
+- Months touched by an estimated read, or by a merged run of them, are flagged `estimated`.
+- With a temperature series, each month gets its mean temperature and HDD / CDD from the same
+  daily series the bills are paired with.
+
+The calendarized months are an output view: models are fitted on the bills' own periods, and a
+month is never fed back into a fit. In a config, `"calendarize": true` (or
+`{"max_gap_days": n}`) adds `calendarized` to the `mv_baseline` finding, at the entry's bases.
+`camber mv report` always shows the months of a billing meter.
+
+### Cost (provisional, 0.94, #72)
+
+`bills.cost` names a column of each bill's billed cost. Without it no cost is read, so an existing
+bills file with a `cost` column, which the #71 scale check reads on its own, changes nothing. With
+it:
+- the `mv_baseline` finding carries `billed_cost` and `unit_cost` (blended, minimum, median and
+  maximum cost per billed unit). This is the same implied $/unit that the unit-scale check
+  screens;
+- `"avoided_cost": "bills"` prices a forecast's saving at each reporting bill's own rate (billed
+  cost ÷ billed energy). Other methods use the blended reporting rate;
+- `{"rate": 0.14}` states a rate per billed unit.
+
+`avoided_cost`, `avoided_cost_rate`, `avoided_cost_basis` and `avoided_cost_uncertainty` (the
+energy band times the rate) go on the `mv_savings` finding.
+
+### Versioned billing baselines (provisional, 0.94, #72)
+
+`camber mv freeze | rebaseline | adjust | propose | report | list | run` now handle billing
+entries, with the same `--reason`, `--apply`, workspace lock and audit rules as trended meters
+(#48). A billing baseline is keyed `(facility, name, "mv_bills")`.
+
+- **freeze.** Fits the entry's `period`: the bills wholly inside it, `auto` bases selected there.
+  The length rule reads the bills' own span, so a bill straddling the period's edge is not a gap.
+  The record's `provenance.billing` keeps:
+  - the bills (start, end, days, energy, estimated flag and cost), the unit and the merged
+    estimated reads;
+  - the weather basis (source, `min_coverage`, how the degree days were built);
+  - the bases and the full selection profile.
+
+  The fit-frame sha256 also hashes the bills' days and degree days.
+- **run / report.** Measure the reporting bills against the in-force version at **its** bases,
+  never re-selected. Triggers work as for a trended meter: T2 (declared events), T3, T4 and T5.
+  T1's step detection needs two segments of `min_segment_days` rows, which bills rarely have, so
+  declare changes in `mv[].rebaseline.events`. A blocking trigger cuts the saving at its date.
+  `mv report` chains the versions. Its CUSUM rows are bills (energy per bill). It adds each
+  version's bases, the avoided cost per link and the calendarized months.
+- **rebaseline.** Bills need an explicit `--period`: the proposal does not search windows of
+  bills. `auto` bases are selected afresh on the new window. A change of bases is recorded as
+  `bases_changed` (from → to) in the provenance, shown in the change row and audited with the
+  operator's reason.
+- **adjust.** Records ledger entries as for a trended meter. An indicator is estimated on the
+  bills, weighted by their days.
 
 ## Cross-checking against eemeter
 
