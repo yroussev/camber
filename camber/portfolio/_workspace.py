@@ -16,6 +16,7 @@ These directories are created lazily, the first time something is written there.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import datetime as _dt
 import json
@@ -29,6 +30,9 @@ from ._state import SiteResolver, read_manifest, state_dir
 from ._states import IMPLEMENTED, STATES, LifecycleError, transition
 
 _CASCADE = ("offboard", "restore", "archive", "purge")
+_UNSET = object()
+# audit namespaces written only by the portfolio's own methods (see Portfolio.audit)
+_RESERVED_AUDIT = ("facility.", "portfolio.", "retention.")
 
 PORTFOLIO_FILE = "_portfolio.json"
 SCHEMA_VERSION = 1
@@ -217,6 +221,89 @@ class Portfolio:
     def audit_log(self, *, facility_id=None) -> list:
         """Audit records, oldest first (optionally for one facility)."""
         return read_audit(self.root, facility_id=facility_id)
+
+    def audit(
+        self,
+        action: str,
+        *,
+        reason: str,
+        facility_id=None,
+        state=_UNSET,
+        details=None,
+    ) -> dict:
+        """Append one audit record for an admin action taken outside the portfolio module.
+
+        For callers such as the edge landing (``edge.land``, ``edge.quarantine.*``): the record
+        carries the OS user, host, ``reason`` (required) and ``details``, with the facility's
+        lifecycle ``state`` as both from- and to-state (looked up when not given; ``None`` for an
+        unknown or tombstoned id). ``action`` must be a dotted name (``area.verb``) outside the
+        namespaces the portfolio writes itself (``facility.``, ``portfolio.``, ``retention.``),
+        so those records always come from the lifecycle code. The line is fsynced before this
+        returns. Callers that change data hold :meth:`lock` around the change. Provisional (0.95).
+        """
+        _need_reason(reason)
+        if not isinstance(action, str) or "." not in action or not action.strip() == action:
+            raise ValueError(f"an audit action is a dotted name like 'edge.land', got {action!r}")
+        if action.startswith(_RESERVED_AUDIT):
+            raise ValueError(
+                f"{action!r} is in a namespace only the portfolio's own methods write "
+                f"({', '.join(_RESERVED_AUDIT)})"
+            )
+        if state is _UNSET:
+            state = None
+            if facility_id is not None:
+                with contextlib.suppress(KeyError):
+                    state = self.facility(facility_id).get("state")
+        return self._audit(
+            action,
+            facility_id=facility_id,
+            from_state=state,
+            to_state=state,
+            reason=reason,
+            details=details,
+        )
+
+    def note_edge_device(
+        self,
+        facility_id: str,
+        device_id: str,
+        note: dict,
+        *,
+        reason: str,
+        action: str = "edge.device",
+    ) -> dict:
+        """Record an edge device's note under the facility's registry entry (audited).
+
+        Sets ``edge_devices.<device_id>`` = ``note`` (replacing any earlier note for that device,
+        keeping the other devices'). Under the lock, the audit record (``action``, with the device
+        and the note in its details) is written *before* the registry, so a crash between them is
+        repaired by noting again. The facility must be registered (``KeyError`` otherwise).
+        Returns the facility's entry. Provisional (0.95).
+        """
+        _need_reason(reason)
+        if not isinstance(device_id, str) or not device_id.strip():
+            raise ValueError("a device id is required")
+        if not isinstance(note, dict):
+            raise ValueError("the device note must be a JSON object")
+        with self.lock():
+            reg = self.registry
+            entry = reg.get(facility_id)
+            if not entry:
+                raise KeyError(f"facility {facility_id!r} is not registered")
+            devices = dict(entry.get("edge_devices") or {})
+            self.audit(
+                action,
+                reason=reason,
+                facility_id=facility_id,
+                state=entry.get("state"),
+                details={
+                    "device_id": device_id,
+                    **{k: v for k, v in note.items() if k != "reason"},
+                },
+            )
+            devices[device_id] = dict(note)
+            reg._update(facility_id, {"edge_devices": devices})
+        return self.facility(facility_id)
 
     # ------------------------------------------------------------------ policy
 

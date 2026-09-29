@@ -405,8 +405,9 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
 <!-- /095-mv -->
 <!-- 095-lifecycle (#18 steps 3-4) -->
 - **Portfolio lifecycle, offboarding to purge** (added in 0.95, provisional, #18 step 3):
-  `Portfolio.offboard`, `archive`, `restore`, `purge` (each `apply=False` by default; `purge`
-  needs `confirm=` equal to the facility id), `Portfolio.export`, `bundles` and `recover`;
+  `Portfolio.audit` and `Portfolio.note_edge_device` (the public audit and edge-device note
+  used by `camber.edge`), `Portfolio.offboard`, `archive`, `restore`, `purge` (each
+  `apply=False` by default; `purge` needs `confirm=` equal to the facility id), `Portfolio.export`, `bundles` and `recover`;
   `Portfolio.transition` now runs `offboard` / `archive` / `restore`. On disk: the export bundle
   layout under `archive/<fid>/<bundle_id>/` with `manifest.json` (`"schema": "camber.bundle/1"`)
   and `manifest.sha256`; the registry fields `offboarding` and `archive`; the tombstone fields

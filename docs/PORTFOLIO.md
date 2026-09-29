@@ -364,7 +364,15 @@ The tests simulate a crash at each of these points, including a child process ki
   `facility.activate|suspend|resume`, `facility.rename`, `facility.migrate`, `facility.remove`
   (tombstoned), `facility.reclaim`, `facility.export`,
   `facility.offboard|archive|restore|purge`, `retention.set|override|hold|release|apply`,
-  `retention.incomplete`, `store.migrate_partitions`, `drift.freeze`, `drift.accept`.
+  `retention.incomplete`, `store.migrate_partitions`, `drift.freeze`, `drift.accept`, and the
+  edge landing's `edge.land`, `edge.reconcile.quarantine`, `edge.quarantine.release|discard`,
+  `edge.decommission` and `edge.device` (see [EDGE-DEPLOY.md](EDGE-DEPLOY.md)).
+- Code outside the lifecycle writes its records through `Portfolio.audit(action, reason=...)`,
+  which fills in the facility's state and refuses the `facility.`, `portfolio.` and `retention.`
+  namespaces (only the lifecycle's own methods write those). `Portfolio.note_edge_device(fid,
+  device_id, note, reason=...)` records an edge device's note under the facility's registry
+  entry (`edge_devices.<device_id>`), audited before the registry is changed. Both are
+  provisional (0.95).
 - Routine analysis runs are not audited. A run that folds faults or writes reports updates the
   facility's manifest, not the audit log.
 

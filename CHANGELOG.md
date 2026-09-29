@@ -144,6 +144,10 @@ retention policy.
   conservative, and facility overrides and legal holds produce per-facility rules; a held
   facility gets no expiry rule. It is text only: the admin applies the rules.
 - `EdgeConfig.device_id` (config `device_id`, env `CAMBER_EDGE_DEVICE_ID`).
+- **`Portfolio.audit` and `Portfolio.note_edge_device`** (provisional): the public, audited way
+  for code outside the lifecycle (the edge landing) to write an audit record or an
+  `edge_devices.<device_id>` registry note. `audit` refuses the lifecycle's own namespaces
+  (`facility.`, `portfolio.`, `retention.`); the note is audited before the registry changes.
 
 ### Changed
 - **Bill-based M&V (#74): nothing changes for existing configs.** A byte-identity harness

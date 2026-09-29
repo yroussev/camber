@@ -212,22 +212,15 @@ def record_retirement(portfolio, receipt: dict, *, reason) -> dict:
         devices = dict(entry.get("edge_devices") or {}) if entry else {}
         if entry and (devices.get(dev) or {}).get("retired_at") == note["retired_at"]:
             return {"noted": "already recorded", "facility_id": fid, "device_id": dev}
-        from ..portfolio._audit import append_audit, audit_record
-
-        state = entry.get("state") if entry else None
-        append_audit(
-            portfolio.root,
-            audit_record(
-                "edge.decommission",
-                facility_id=fid,
-                from_state=state,
-                to_state=state,
-                reason=reason,
-                details={"device_id": dev, **{k: v for k, v in note.items() if k != "reason"}},
-            ),
-        )
         if not entry:
+            portfolio.audit(
+                "edge.decommission",
+                reason=reason,
+                facility_id=fid,
+                state=None,
+                details={"device_id": dev, **{k: v for k, v in note.items() if k != "reason"}},
+            )
             return {"noted": "audit only (no registry entry)", "facility_id": fid, "device_id": dev}
-        devices[dev] = note
-        portfolio.registry._update(fid, {"edge_devices": devices})
+        # audited (edge.decommission) before the registry note, under the same lock
+        portfolio.note_edge_device(fid, dev, note, reason=reason, action="edge.decommission")
     return {"noted": "recorded", "facility_id": fid, "device_id": dev}

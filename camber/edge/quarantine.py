@@ -68,18 +68,9 @@ def _need_reason(reason) -> str:
 
 
 def _audit(portfolio, action: str, *, facility_id=None, state=None, reason=None, details=None):
-    from ..portfolio._audit import append_audit, audit_record
-
-    return append_audit(
-        portfolio.root,
-        audit_record(
-            action,
-            facility_id=facility_id,
-            from_state=state,
-            to_state=state,
-            reason=reason,
-            details=details,
-        ),
+    """One audit line through the public ``Portfolio.audit`` (the facility's state as given)."""
+    return portfolio.audit(
+        action, reason=reason, facility_id=facility_id, state=state, details=details
     )
 
 
