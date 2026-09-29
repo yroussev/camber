@@ -92,6 +92,11 @@ Registry v2 entries add `state`, `created_at`, `state_changed_at`, `display_name
 facility it creates (a store write with `name=`, a dataset ingest) starts `active`, and
 `register()` cannot change the lifecycle fields.
 
+Since 0.94 an entry may also carry `private: true` (`camber facility add --private`, or `camber
+facility private <id> --reason R`; audited as `facility.private`). A private facility's weather and
+price requests default to `offline`, and it can opt in to `coarse` but never to `public`. The field
+is written only when set. See [WEATHER.md](WEATHER.md#private-facilities).
+
 ## Lifecycle states
 
 ```

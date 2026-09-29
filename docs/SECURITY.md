@@ -173,6 +173,47 @@ A single-writer lock (`_lock`) serializes admin changes. `camber serve` stays GE
 *shows* each facility's lifecycle state but cannot change it. Real roles arrive with the
 multi-tenant roadmap item. See [PORTFOLIO.md](PORTFOLIO.md).
 
+### 9. What CAMBER sends to weather and price services
+
+A few features fetch public reference data. They are all opt-in, and nothing is fetched unless a
+config or a call asks for it. Each request is one of these (0.94, #73):
+
+| Service | Request | Carries | Under `coarse` | Under `offline` |
+|---|---|---|---|---|
+| NOAA ISD catalogue | `GET www.ncei.noaa.gov/.../isd-history.csv` | nothing (a fixed URL) | the same | not sent |
+| NOAA ISD data | `GET .../isd-lite/<year>/<usaf>-<wban>-<year>.gz` | a station id and a year | the same: the station is chosen locally | not sent |
+| NASA POWER | `GET power.larc.nasa.gov/api/temporal/hourly/point?...` | a latitude, a longitude, dates, the variable | the POWER grid-cell centre (0.5° × 0.625°) | not sent |
+| Open-Meteo | `GET archive-api.open-meteo.com/v1/archive?...` | a latitude, a longitude, dates, the variable | rounded to `precision_deg` (0.1°, about 11 km) | not sent |
+| OpenStreetMap Nominatim | `GET nominatim.openstreetmap.org/search?q=...` | the address you geocode (only when you call `geocode`) | **refused** | **refused** |
+| EIA API v2 | `GET api.eia.gov/v2/...` | a U.S. state code, months, the fuel's route, your API key | the same (a state is already coarse) | cache only |
+| OpenEI URDB | `GET api.openei.org/utility_rates?...` | a rate label and your API key | the same | **refused** (use the rate JSON as a file) |
+| Dataset catalog | `GET` of a pinned publisher URL | the file's URL from the bundled catalog | not affected | not affected |
+
+**Never sent**, in any mode:
+
+- addresses (unless you call `geocode` yourself), building or site names, facility ids;
+- account numbers, meter ids, user names or email addresses;
+- any part of the energy, trend or billing data.
+
+The only identifier that leaves is an API key you configured for EIA or OpenEI, which those
+services require. It identifies the key holder to that service. It is never written to a cache key
+or to the audit log. Requests use Python's default `User-Agent`, except Nominatim and the dataset
+fetcher, which send a fixed `camber-toolkit` string, and EIA, which gets `camber`. None of them
+names the user or the site.
+
+**Before 0.94**, NASA POWER and Open-Meteo requests carried the coordinates as configured, often to
+five decimals. The ISD blend already snapped POWER to its cell. **Since 0.94**, a facility marked
+private sends nothing until the user opts in to `coarse`. Under `coarse`, every request passes one
+coarsening function and a send-time check that refuses anything finer than the policy (see
+[WEATHER.md](WEATHER.md#privacy-weather-for-non-public-sites-provisional-094)). Every request,
+cache hits included, is logged to `state/<facility_id>/weather_audit.ndjson` in a workspace, or
+next to the cache outside one. `camber weather audit` prints the log.
+
+Some outbound connections go only to endpoints the user configures, and they carry the user's own
+data by design. They are outside this table: Haystack ingest (`ingest.haystack`), the edge
+forwarder's push sink, and ticket webhooks (`integrate.tickets`). Point them only at systems you
+control.
+
 ## References
 
 - NIST SP 800-82r3 — Guide to OT Security — https://csrc.nist.gov/News/2023/nist-publishes-sp-800-82-revision-3

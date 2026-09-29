@@ -312,11 +312,12 @@ camber portfolio audit [--facility ID] [--json]        # who did what, when, and
 camber portfolio migrate [FILE...] [--config CFG]... [--map "SITE=ID"]... [--json]   # dry run
 camber portfolio migrate ... --apply --reason R        # re-key site-keyed state to facility_id
 
-camber facility add <name> [--id ID] [--owner O] [--tag T]... [--activate] --reason R
+camber facility add <name> [--id ID] [--owner O] [--tag T]... [--activate] [--private] --reason R
 camber facility list [--state S] [--json]
 camber facility show <id> [--json]                     # record, retention, state manifest, audit
 camber facility rename <id> "<new display name>" --reason R
 camber facility activate|suspend|resume <id> --reason R
+camber facility private <id> [--off] --reason R         # weather requests default to offline
 ```
 
 Every command except `init` and `adopt` takes `--workspace PATH`, else `$CAMBER_PORTFOLIO`, else
@@ -346,6 +347,25 @@ config names no path, and every file the run writes is listed in the facility's 
 drift freeze` then needs `--reason`, and `freeze` / `accept` take the lock and are audited.
 Renaming the facility changes none of it. See
 [PORTFOLIO.md](PORTFOLIO.md#per-facility-state).
+
+## Weather privacy audit
+
+`camber weather audit` prints what CAMBER sent to weather and price services (NOAA ISD, NASA POWER,
+Open-Meteo, EIA, OpenEI URDB): one line per request with the time, the service, the privacy mode,
+whether it was sent or served locally from the cache, and the URL as sent (API keys redacted).
+See [WEATHER.md](WEATHER.md#privacy-weather-for-non-public-sites-provisional-094).
+
+```
+camber weather audit [--facility ID] [--since YYYY-MM-DD] [--json]   # in a workspace
+camber weather audit --cache-dir DIR                                  # the log next to a cache
+camber weather audit --file weather_audit.ndjson
+```
+
+`--facility` reads `state/<facility_id>/weather_audit.ndjson` in the workspace (`--workspace`,
+else `$CAMBER_PORTFOLIO`, else the current directory), and exits 1 outside one. Without it, a
+workspace's logs are merged. Outside a workspace, the default weather cache's log is read.
+`camber facility private <id> --reason R` marks a facility private, so its weather requests default
+to `offline`; `--off` clears the flag. Both changes are audited.
 
 ## Backward compatibility
 

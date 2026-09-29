@@ -386,6 +386,7 @@ class _Prepared:
     mv_store: object = None  # the facility's MVBaselineStore, opened read-only (#21 phase 21d)
     units: object = None  # 0.92 (#69): the config's reporting UnitSystem, or None (meter units)
     timezone: str | None = None  # 0.93 (#68): the site's IANA zone, when known (DST day lengths)
+    weather: object = None  # 0.94 (#73): the config's WeatherContext (privacy guardrails)
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -565,6 +566,9 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     units = UnitSystem.from_config(config)  # 0.92 (#69): a bad units block fails up front
     prep = _prepare_sources(config, base_dir)
     prep.units = units
+    from .weather_privacy import weather_context
+
+    prep.weather = weather_context(config, base_dir, ctx=prep.ctx)  # 0.94 (#73)
     return prep
 
 

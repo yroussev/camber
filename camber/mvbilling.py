@@ -139,6 +139,11 @@ def billing_oat(entry: dict, prep, *, base_dir: str = ".", window=None):
     ``oat.fetch`` (``"auto"`` for ISD with the NASA POWER and Open-Meteo fallbacks, or one of
     ``"isd"``, ``"nasa_power"``, ``"open_meteo"``; with ``latitude``, ``longitude``, ``tz`` and
     optionally ``cache_dir`` / ``offline``) over ``window``; the config's ``shared_oat``.
+
+    0.94 (#73): the fetch follows the config's weather privacy (``oat.weather`` overrides the
+    config's ``weather``; a private facility defaults to ``offline``), may name a ``place``
+    (an airport code or a city) instead of coordinates, and is audited. An offline cache miss
+    returns ``(None, why)`` with how to supply a file.
     """
     from .config import _path
     from .model.roles import Role
@@ -159,21 +164,48 @@ def billing_oat(entry: dict, prep, *, base_dir: str = ".", window=None):
         if window is None:
             return None, "no bill dates to fetch weather for"
         cache = spec.get("cache_dir")
-        s = oat_reference_auto(
-            spec["latitude"],
-            spec["longitude"],
-            window[0],
-            window[1],
-            source=str(spec["fetch"]),
-            tz=spec.get("tz", "UTC"),
-            cache_dir=None if cache is None else _path(base_dir, cache),
-            offline=bool(spec.get("offline", False)),
-        )
-        return s, f"fetched ({spec['fetch']})"
+        cache = None if cache is None else _path(base_dir, cache)
+        guard = _weather_guard(prep, spec.get("weather"), cache, "M&V billing weather")
+        try:
+            s = oat_reference_auto(
+                spec.get("latitude"),
+                spec.get("longitude"),
+                window[0],
+                window[1],
+                source=str(spec["fetch"]),
+                tz=spec.get("tz", "UTC"),
+                cache_dir=cache,
+                offline=bool(spec.get("offline", False)),
+                **({"place": spec["place"]} if spec.get("place") else {}),
+                **guard,
+            )
+        except LookupError as e:  # WeatherCacheMiss: offline, nothing cached
+            if guard.get("privacy") is not None and guard["privacy"].offline:
+                return None, f"no outdoor temperature: {e}"
+            raise
+        pol = guard.get("privacy")
+        mode = f", privacy {pol.privacy}" if pol is not None else ""
+        return s, f"fetched ({spec['fetch']}{mode})"
     shared = getattr(prep, "shared", None) or {}
     if Role.OAT in shared:
         return shared[Role.OAT], "shared_oat"
     return None, "no outdoor temperature (mv.oat or shared_oat)"
+
+
+def _weather_guard(prep, spec_weather, cache_dir, purpose: str) -> dict:
+    """The ``privacy`` / ``audit`` / ``purpose`` / ``place`` keywords of one fetch (0.94, #73);
+    empty for a public fetch with nowhere to audit -- the pre-0.94 call exactly."""
+    from .weather_privacy import WeatherContext
+
+    wctx = getattr(prep, "weather", None) or WeatherContext()
+    pol = wctx.policy(spec_weather)
+    audit = wctx.audit(pol, cache_dir)
+    out: dict = {}
+    if pol.privacy != "public":
+        out["privacy"] = pol
+    if audit is not None:
+        out.update(audit=audit, purpose=purpose)
+    return out
 
 
 def _declined(label: str, why: str, reporting) -> list:
@@ -337,7 +369,7 @@ def _scale_spec(spec: dict) -> dict:
     return sc
 
 
-def _scale_tariff(sc: dict, base_dir: str):
+def _scale_tariff(sc: dict, base_dir: str, guard: dict | None = None):
     t = sc.get("tariff")
     if t is None:
         return None, None
@@ -353,7 +385,7 @@ def _scale_tariff(sc: dict, base_dir: str):
     if "urdb_label" in t:  # opt-in network fetch (OPENEI_API_KEY); only the rate label is sent
         from .interop.openei import fetch_urdb_rate
 
-        return None, fetch_urdb_rate(str(t["urdb_label"]))
+        return None, fetch_urdb_rate(str(t["urdb_label"]), **(guard or {}))
     from .tariff import Tariff
 
     try:
@@ -362,7 +394,7 @@ def _scale_tariff(sc: dict, base_dir: str):
         raise ValueError(f"mv.bills.scale_check.tariff: {e}") from None
 
 
-def billing_scale_check(entry: dict, bills, *, base_dir: str = ".", oat=None):
+def billing_scale_check(entry: dict, bills, *, base_dir: str = ".", oat=None, prep=None):
     """The unit-scale plausibility check of a billing entry (provisional, 0.92, #71), or ``None``
     when it cannot run (no unit, or a unit it cannot screen without ``scale_check.fuel``).
 
@@ -371,7 +403,8 @@ def billing_scale_check(entry: dict, bills, *, base_dir: str = ".", oat=None):
     ``bills.scale_check`` block), plus its ``area``, ``property_type``, ``tariff`` and price
     options; see :func:`camber.unit_scale.check_bills`. ``bills.scale_override`` has already been
     applied to the quantities the check sees. An explicit ``scale_check`` block turns a problem
-    into a ``ValueError``; without one the check is skipped quietly.
+    into a ``ValueError``; without one the check is skipped quietly. ``prep`` (0.94) carries the
+    config's weather privacy, which the EIA and URDB requests follow and are audited under.
     """
     from .config import _path
     from .unit_scale import check_bills
@@ -398,7 +431,20 @@ def billing_scale_check(entry: dict, bills, *, base_dir: str = ".", oat=None):
     frame = pd.DataFrame({k: df[v] for k, v in cols.items()})
     frame["quantity"] = pd.to_numeric(frame["quantity"], errors="coerce")
     ov = spec.get("scale_override")
-    tariff, urdb = _scale_tariff(sc, base_dir)
+    guard: dict = {}
+    t_spec = sc.get("tariff")
+    urdb_fetch = isinstance(t_spec, dict) and "urdb_label" in t_spec
+    if prep is not None and (sc.get("price_source") == "eia" or urdb_fetch):
+        cache = sc.get("eia_cache_dir")
+        guard = _weather_guard(
+            prep, None, None if cache is None else _path(base_dir, cache), "unit-scale check"
+        )
+    from .weather_privacy import PrivacyViolation
+
+    try:
+        tariff, urdb = _scale_tariff(sc, base_dir, guard)
+    except PrivacyViolation as e:
+        raise ValueError(f"mv.bills.scale_check.tariff: {e}") from None
     try:
         return check_bills(
             frame,
@@ -422,6 +468,7 @@ def billing_scale_check(entry: dict, bills, *, base_dir: str = ".", oat=None):
             scale_override=ov,
             label=billing_label(entry),
             end_inclusive=bool(spec.get("end_inclusive", True)),
+            **{k: v for k, v in guard.items() if k in ("privacy", "audit")},
         )
     except ValueError as e:
         if explicit or ov is not None:
@@ -493,7 +540,7 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     f = bills.frame
     window = (f["start"].min(), f["end"].max() - pd.Timedelta(days=1))
     oat, oat_source = billing_oat(entry, prep, base_dir=base_dir, window=window)
-    chk = billing_scale_check(entry, bills, base_dir=base_dir, oat=oat)  # 0.92 (#71)
+    chk = billing_scale_check(entry, bills, base_dir=base_dir, oat=oat, prep=prep)  # 0.92 (#71)
     if chk is not None and chk.implausible:
         box["scale_finding"] = chk.finding(label)
         if _scale_spec(_spec(entry)).get("on_implausible", "decline") == "decline":

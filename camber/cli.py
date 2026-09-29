@@ -823,6 +823,57 @@ def _cmd_datasets_score(args) -> int:
 _LATER = {"offboard", "restore", "archive", "purge"}
 
 
+# --------------------------------------------------------------------------- weather audit (0.94)
+
+
+def _cmd_weather_audit(args) -> int:
+    """Print what CAMBER sent to weather and price services (docs/WEATHER.md#privacy)."""
+    import glob
+
+    from .portfolio import find_workspace
+    from .portfolio._state import state_dir
+    from .weather_privacy import AUDIT_FILE, default_weather_dir, read_weather_audit
+
+    paths: list = []
+    if args.file:
+        paths.append(args.file)
+    if args.cache_dir:
+        paths.append(os.path.join(args.cache_dir, AUDIT_FILE))
+    ws = find_workspace(args.workspace)
+    if args.facility:
+        if ws is None:
+            print(
+                "error: --facility reads state/<facility_id>/ in a portfolio workspace: pass "
+                "--workspace PATH or set CAMBER_PORTFOLIO",
+                file=sys.stderr,
+            )
+            return 1
+        paths.append(os.path.join(state_dir(ws, args.facility), AUDIT_FILE))
+    elif ws is not None and not paths:
+        paths += sorted(glob.glob(os.path.join(ws, "state", "*", AUDIT_FILE)))
+    if not paths:
+        paths.append(os.path.join(default_weather_dir(), AUDIT_FILE))
+    rows = read_weather_audit(paths, since=args.since, facility_id=args.facility)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    for r in rows:
+        who = f" [{r['facility_id']}]" if r.get("facility_id") else ""
+        sent = "SENT " if r.get("sent") else "local"
+        err = f"  ! {r['error']}" if r.get("error") else ""
+        print(
+            f"{r.get('ts', '?')}  {r.get('service', '?'):10s} {r.get('privacy', '?'):7s} "
+            f"{sent} {r.get('cache', '?'):4s}{who}  {r.get('url', '')}"
+            f"  ({r.get('purpose') or '-'}){err}"
+        )
+    n_sent = sum(1 for r in rows if r.get("sent"))
+    print(
+        f"\n{len(rows)} request(s), {n_sent} sent, {len(rows) - n_sent} served locally; "
+        f"from {', '.join(paths)}"
+    )
+    return 0
+
+
 def _pf_errors(fn):
     """Print lifecycle / lock / lookup errors as ``error: ...`` with exit code 1 (2 = later)."""
 
@@ -1005,9 +1056,12 @@ def _cmd_facility_add(args) -> int:
         owner=args.owner,
         tags=args.tag or (),
         activate=args.activate,
+        **({"private": True} if getattr(args, "private", False) else {}),
     )
     fid = e["facility_id"]
     print(f"added {fid} ({e['display_name']}) -- {e['state']}")
+    if e.get("private"):
+        print("private: weather requests default to offline (docs/WEATHER.md#privacy)")
     if e["state"] == "provisioning":
         print(f"next: camber facility activate {fid} --reason ...")
     return 0
@@ -1053,6 +1107,8 @@ def _cmd_facility_show(args) -> int:
     print(f"{'tags':17s}: {', '.join(info.get('portfolio') or []) or '-'}")
     print(f"{'has data':17s}: {'yes' if info['has_data'] else 'no'}")
     print(f"{'legal hold':17s}: {'yes' if info['legal_hold'] else 'no'}")
+    if info.get("private"):
+        print(f"{'private':17s}: yes (weather requests default to offline)")
     print(f"{'allowed actions':17s}: {', '.join(info['allowed_actions']) or 'none'}")
     print("retention:")
     for cls, r in info["retention"].items():
@@ -1077,6 +1133,16 @@ def _cmd_facility_show(args) -> int:
 def _cmd_facility_rename(args) -> int:
     e = _portfolio(args).rename(args.id, args.display_name, reason=args.reason)
     print(f"{args.id}: display name is now {e['display_name']!r}")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_private(args) -> int:
+    e = _portfolio(args).set_private(args.id, not args.off, reason=args.reason)
+    if e.get("private"):
+        print(f"{args.id}: private -- weather requests default to offline")
+    else:
+        print(f"{args.id}: not private -- weather requests follow the config")
     return 0
 
 
@@ -1998,6 +2064,24 @@ def _build_parser() -> argparse.ArgumentParser:
     esf.add_argument("config")
     esf.set_defaults(func=_cmd_edge_selftest)
 
+    pwx = sub.add_parser(
+        "weather", help="weather privacy: what was sent to weather and price services"
+    )
+    wxsub = pwx.add_subparsers(dest="weather_cmd", required=True)
+    wxa = wxsub.add_parser(
+        "audit", help="the log of outbound weather / price requests (URL, cache hit, purpose)"
+    )
+    wxa.add_argument(
+        "--workspace",
+        help="portfolio workspace root (default: $CAMBER_PORTFOLIO, else the current dir)",
+    )
+    wxa.add_argument("--facility", help="only this facility_id (its state/<id>/ log)")
+    wxa.add_argument("--since", help="only records at or after this date (YYYY-MM-DD)")
+    wxa.add_argument("--cache-dir", help="read the log next to this weather cache")
+    wxa.add_argument("--file", help="read this audit file")
+    wxa.add_argument("--json", action="store_true")
+    wxa.set_defaults(func=_cmd_weather_audit)
+
     pds = sub.add_parser(
         "datasets", help="open dataset catalog: fetch, verify, ingest and score (docs/DATASETS.md)"
     )
@@ -2164,6 +2248,11 @@ def _build_parser() -> argparse.ArgumentParser:
     fca.add_argument("--owner", help="owner (free text)")
     fca.add_argument("--tag", action="append", help="portfolio tag (repeatable)")
     fca.add_argument("--activate", action="store_true", help="start active, not provisioning")
+    fca.add_argument(
+        "--private",
+        action="store_true",
+        help="mark it private: weather requests default to offline (docs/WEATHER.md)",
+    )
     fca.add_argument("--reason", required=True, help="why (audited)")
     fca.set_defaults(func=_cmd_facility_add)
     fcl = fcsub.add_parser("list", help="facilities with their lifecycle state")
@@ -2182,6 +2271,14 @@ def _build_parser() -> argparse.ArgumentParser:
     fcr.add_argument("display_name")
     fcr.add_argument("--reason", required=True, help="why (audited)")
     fcr.set_defaults(func=_cmd_facility_rename)
+    fcp = fcsub.add_parser(
+        "private", help="mark a facility private (weather requests default to offline)"
+    )
+    _ws(fcp)
+    fcp.add_argument("id")
+    fcp.add_argument("--off", action="store_true", help="clear the flag")
+    fcp.add_argument("--reason", required=True, help="why (audited)")
+    fcp.set_defaults(func=_cmd_facility_private)
     for verb, text in (
         ("activate", "provisioning -> active"),
         ("suspend", "active -> suspended (analyses skip it)"),

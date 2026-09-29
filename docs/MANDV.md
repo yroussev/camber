@@ -1035,8 +1035,11 @@ config with no `equipment` needs no `source`:
   as billed and flagged.
 - **Temperature.** The entry's `oat` is `{"file": ..., "timezone": ...}`, or an opt-in fetch
   `{"fetch": "auto" | "isd" | "nasa_power" | "open_meteo", "latitude", "longitude", "tz",
-  "cache_dir", "offline"}` (see [WEATHER.md](WEATHER.md)). Without it, the config's `shared_oat` is
-  used. `base_f` (65) sets the degree-day base. A bill whose days are less than `min_coverage`
+  "cache_dir", "offline"}` (see [WEATHER.md](WEATHER.md)). Since 0.94 a fetch may name a `"place"`
+  (an airport code or a city) instead of coordinates, and it follows the config's weather privacy
+  (`"weather"`; a private facility defaults to `offline`, see
+  [WEATHER.md](WEATHER.md#privacy-weather-for-non-public-sites-provisional-094)). Without it, the
+  config's `shared_oat` is used. `base_f` (65) sets the degree-day base. A bill whose days are less than `min_coverage`
   (0.9) covered by temperature data is dropped and counted (`bills_dropped`).
 - **Baseline.** Energy per day against the bill's mean temperature, fitted with the best
   change-point model weighted by days. It is judged at the G14 **monthly** thresholds (CV(RMSE)

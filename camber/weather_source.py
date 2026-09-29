@@ -40,12 +40,24 @@ import io
 import json
 import math
 import os
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 
 import pandas as pd
 
 from .mandv.weather import c_to_f
+from .weather_privacy import (
+    OFFLINE_HELP,
+    POWER_GRID,
+    WeatherPolicy,
+    coarsen,
+    coarsening_note,
+    default_weather_dir,
+    grid_snap,
+    guarded_transport,
+    resolve_city,
+)
 
 __all__ = [
     "FILL_VALUE",
@@ -80,6 +92,9 @@ __all__ = [
     "fetch_open_meteo",
     "oat_reference_open_meteo",
     "oat_reference_auto",
+    # provisional (0.94, #73): privacy guardrails -- a station file URL and local place names
+    "isd_url",
+    "resolve_place",
 ]
 
 _BASE_URL = "https://power.larc.nasa.gov/api/temporal/hourly/point"
@@ -87,7 +102,7 @@ FILL_VALUE = -999.0  # NASA POWER hourly missing sentinel (values <= this are dr
 _PARAM_COL = {"T2M": "oat_f", "RH2M": "rh_pct"}  # NASA parameter -> output column
 # The POWER meteorology grid (MERRA-2 / GEOS-IT native): 0.5° latitude x 0.625° longitude, with
 # cell centres on multiples of the step. Provisional.
-POWER_GRID_DEG = (0.5, 0.625)
+POWER_GRID_DEG = POWER_GRID
 _POWER_HOURLY_START = pd.Timestamp("2001-01-01")  # first day the hourly point API serves
 
 # OpenStreetMap Nominatim geocoding (free, keyless). Its usage policy requires a descriptive
@@ -118,15 +133,20 @@ def nasa_power_url(
     parameters: Sequence[str] = ("T2M",),
     community: str = "RE",
     time_standard: str = "UTC",
+    privacy=None,
 ) -> str:
     """Build the NASA POWER hourly point-query URL (pure — the testable half, no I/O).
 
     ``parameters`` are NASA POWER codes (``T2M`` = 2 m air temp °C, ``RH2M`` = 2 m rel. humidity %);
     ``start``/``end`` accept ``YYYYMMDD``/``YYYY-MM-DD`` strings or date/datetime objects.
     ``time_standard`` is sent explicitly: the service's own default is ``LST`` (local *solar*
-    time), and this module parses the hour keys as UTC.
+    time), and this module parses the hour keys as UTC. The coordinates pass through
+    :func:`camber.weather_privacy.coarsen`: with ``privacy`` ``"coarse"`` / ``"offline"``
+    (0.94) the URL carries the POWER grid-cell centre; ``None`` / ``"public"`` leaves them as given.
     """
     from urllib.parse import urlencode
+
+    latitude, longitude = coarsen("nasa_power", latitude, longitude, privacy)
 
     query = urlencode(
         {
@@ -150,11 +170,7 @@ def power_grid_cell(latitude, longitude) -> tuple[float, float]:
     a stable per-cell key: every point in one ~55 km cell maps to the same centre, and requesting
     the centre reads the same cell the raw point would.
     """
-    dlat, dlon = POWER_GRID_DEG
-    return (
-        round(round(float(latitude) / dlat) * dlat, 6),
-        round(round(float(longitude) / dlon) * dlon, 6),
-    )
+    return grid_snap(latitude, longitude, *POWER_GRID_DEG)
 
 
 def nasa_power_transport(*, timeout: float = 30.0) -> Callable[[str], dict]:
@@ -275,9 +291,13 @@ def _year_chunks(start, end) -> list[tuple[str, str]]:
     return out
 
 
-def _fetch_one(latitude, longitude, start, end, *, parameters, transport, tz) -> pd.DataFrame:
+def _fetch_one(
+    latitude, longitude, start, end, *, parameters, transport, tz, privacy=None
+) -> pd.DataFrame:
     """Fetch a single ≤1-year window; raise :class:`_NoData` on a valid-but-empty block."""
-    payload = transport(nasa_power_url(latitude, longitude, start, end, parameters=parameters))
+    payload = transport(
+        nasa_power_url(latitude, longitude, start, end, parameters=parameters, privacy=privacy)
+    )
     try:
         param_block = payload["properties"]["parameter"]
     except (KeyError, TypeError) as e:
@@ -317,6 +337,7 @@ def fetch_nasa_power(
     tz: str = "UTC",
     timeout: float = 30.0,
     snap_to_cell: bool = False,
+    privacy=None,
 ) -> pd.DataFrame:
     """Fetch hourly NASA POWER weather as a DataFrame (``oat_f`` in °F; ``rh_pct`` when requested).
 
@@ -326,6 +347,8 @@ def fetch_nasa_power(
     in the cell. The result's ``attrs`` carry ``power_cell`` (requested and cell coordinates) and
     ``power_coverage_end`` (the last hour holding a real value: POWER lags real time by days to
     weeks and returns its not-yet-available trailing hours as fill, which become NaN here).
+    ``privacy`` (0.94, provisional) ``"coarse"`` / ``"offline"`` always requests the cell centre
+    (see :mod:`camber.weather_privacy`), whatever ``snap_to_cell`` says.
 
     Multi-year windows work transparently: the request is split into calendar-year chunks (NASA
     POWER caps a single hourly request at ~1 year), one transport call per year, concatenated into a
@@ -336,12 +359,23 @@ def fetch_nasa_power(
     for a parameter across *every* chunk raises ``ValueError``. numpy/pandas + stdlib.
     """
     transport = transport or nasa_power_transport(timeout=timeout)
-    qlat, qlon = power_grid_cell(latitude, longitude) if snap_to_cell else (latitude, longitude)
+    pol = WeatherPolicy.coerce(privacy)
+    snap = snap_to_cell or (pol is not None and pol.coarse)
+    qlat, qlon = power_grid_cell(latitude, longitude) if snap else (latitude, longitude)
     frames = []
     for cs, ce in _year_chunks(start, end):
         try:
             frames.append(
-                _fetch_one(qlat, qlon, cs, ce, parameters=parameters, transport=transport, tz=tz)
+                _fetch_one(
+                    qlat,
+                    qlon,
+                    cs,
+                    ce,
+                    parameters=parameters,
+                    transport=transport,
+                    tz=tz,
+                    privacy=pol,
+                )
             )
         except _NoData:
             continue  # a covered-but-empty year (e.g. running into an undefined range) — skip it
@@ -359,9 +393,11 @@ def fetch_nasa_power(
         "requested_longitude": float(longitude),
         "latitude": float(qlat),
         "longitude": float(qlon),
-        "snapped": bool(snap_to_cell),
+        "snapped": bool(snap),
         "resolution_deg": list(POWER_GRID_DEG),
     }
+    if pol is not None:
+        frame.attrs["power_cell"]["privacy"] = pol.privacy
     return frame
 
 
@@ -374,15 +410,24 @@ def oat_reference(
     transport: Callable[[str], dict] | None = None,
     tz: str = "UTC",
     timeout: float = 30.0,
+    privacy=None,
 ) -> pd.Series:
     """Fetch just the outdoor-air-temperature reference series (°F, NaNs dropped, ``name="oat_f"``).
 
     The exact shape `sensordrift.compare_to_reference` and `mandv.weather.monthly_normals` consume
     — so a fetched series drops in wherever a `load_epw` series would. Pass the site IANA ``tz`` to
     get a naive-local index that inner-joins to a BAS sensor trend (see the module docstring).
+    ``privacy`` (0.94) as in :func:`fetch_nasa_power`.
     """
     df = fetch_nasa_power(
-        latitude, longitude, start, end, transport=transport, tz=tz, timeout=timeout
+        latitude,
+        longitude,
+        start,
+        end,
+        transport=transport,
+        tz=tz,
+        timeout=timeout,
+        **({} if privacy is None else {"privacy": privacy}),
     )
     return df["oat_f"].dropna()
 
@@ -409,9 +454,23 @@ class GeoResult:
         return asdict(self)
 
 
-def nominatim_url(address, *, limit: int = 1) -> str:
-    """Build the Nominatim search URL (pure — the testable half; URL-encodes the address)."""
+def nominatim_url(address, *, limit: int = 1, privacy=None) -> str:
+    """Build the Nominatim search URL (pure — the testable half; URL-encodes the address).
+
+    Geocoding sends the address itself, so with ``privacy`` ``"coarse"`` / ``"offline"`` (0.94)
+    it is refused (:class:`~camber.weather_privacy.PrivacyViolation`): name a city or an airport
+    code, resolved locally by :func:`resolve_place`, instead.
+    """
     from urllib.parse import urlencode
+
+    from .weather_privacy import PrivacyViolation
+
+    pol = WeatherPolicy.coerce(privacy)
+    if pol is not None and pol.coarse:
+        raise PrivacyViolation(
+            f"privacy {pol.privacy!r}: geocoding would send the address; give coordinates, a "
+            "city or an airport code (resolve_place, local) instead"
+        )
 
     query = urlencode({"q": address, "format": "json", "limit": limit})
     return f"{_NOMINATIM_URL}?{query}"
@@ -443,6 +502,7 @@ def geocode(
     limit: int = 1,
     user_agent: str = _DEFAULT_USER_AGENT,
     timeout: float = 30.0,
+    privacy=None,
 ) -> GeoResult:
     """Geocode an address / place name to coordinates via OpenStreetMap Nominatim (free, keyless).
 
@@ -450,9 +510,11 @@ def geocode(
     Illinois, United States") lets you confirm it before fetching weather. Inject a ``transport``
     (canned JSON) to run offline, or wrap :func:`nominatim_transport` with :func:`cached_transport`.
     Raises ``ValueError`` on no match or a malformed row. stdlib ``urllib``/``json`` only.
+    ``privacy`` ``"coarse"`` / ``"offline"`` refuses before anything is sent (0.94).
     """
+    url = nominatim_url(address, limit=limit, privacy=privacy)
     transport = transport or nominatim_transport(user_agent=user_agent, timeout=timeout)
-    rows = transport(nominatim_url(address, limit=limit))
+    rows = transport(url)
     if not rows:
         raise ValueError(f"no geocoding match for {address!r}")
     top = rows[0]
@@ -517,10 +579,14 @@ class IsdStation:
     longitude: float
     begin: str  # YYYYMMDD (first day of record)
     end: str  # YYYYMMDD (last day of record)
+    icao: str = ""  # the airport code, when the station is one (0.94, provisional)
 
     def as_dict(self) -> dict:
-        """Return the station as a plain dict."""
-        return asdict(self)
+        """Return the station as a plain dict (``icao`` only when the station has one)."""
+        d = asdict(self)
+        if not d["icao"]:
+            del d["icao"]
+        return d
 
 
 def isd_transport(*, timeout: float = 30.0) -> Callable[[str], bytes]:
@@ -652,6 +718,7 @@ def isd_stations(
                     longitude=float(lon),
                     begin=(row.get("BEGIN") or "").strip(),
                     end=(row.get("END") or "").strip(),
+                    icao=(row.get("ICAO") or "").strip().upper(),
                 )
             )
         except ValueError:
@@ -691,6 +758,62 @@ def isd_nearest_station(
     return min(
         covering, key=lambda st: _haversine_km(latitude, longitude, st.latitude, st.longitude)
     )
+
+
+def isd_url(usaf, wban, year) -> str:
+    """The ISD-Lite file URL of one station-year (pure; provisional, 0.94).
+
+    It carries the station id and the year only -- never the site's coordinates: the station is
+    chosen locally from the catalogue (:func:`isd_nearest_station`, :func:`resolve_place`).
+    """
+    return f"{_ISD_DATA_BASE}/{int(year)}/{usaf}-{wban}-{int(year)}.gz"
+
+
+def _place_code(text: str) -> str | None:
+    """``"station"`` for ``USAF-WBAN``, ``"airport"`` for an ICAO code in capitals, else None."""
+    text = str(text).strip()
+    if re.fullmatch(r"[0-9A-Z]{6}-\d{5}", text.upper()):
+        return "station"
+    # an airport code is written in capitals ("KORD"); "Rome" is a city
+    if re.fullmatch(r"[A-Z][A-Z0-9]{3}", text):
+        return "airport"
+    return None
+
+
+def resolve_place(place, *, stations=None) -> dict:
+    """A location named without coordinates, resolved **locally** (provisional, 0.94).
+
+    ``place`` is an airport ICAO code (``"KORD"``) or an ISD station id (``"725300-94846"``),
+    looked up in ``stations`` (the ISD catalogue, :func:`isd_stations`; its download carries
+    nothing site-specific), or a city in :data:`camber.weather_privacy.CITY_TABLE`
+    (``"Chicago, IL"``). Returns ``{"latitude", "longitude", "kind", "label"}`` plus the
+    ``station`` (as a dict) for an airport or station. Nothing is geocoded over the network;
+    ``ValueError`` when the place is unknown (or a code is given without ``stations``).
+    """
+    text = str(place).strip()
+    code = text.upper()
+    kind = _place_code(text)
+    is_station = kind == "station"
+    if kind:
+        if stations is None:
+            raise ValueError(f"{text!r} is a station or airport code: the ISD catalogue is needed")
+        if is_station:
+            hits = [s for s in stations if f"{s.usaf}-{s.wban}" == code]
+        else:
+            hits = [s for s in stations if s.icao == code]
+        if hits:
+            st = max(hits, key=lambda s: s.end or "")
+            return {
+                "latitude": st.latitude,
+                "longitude": st.longitude,
+                "kind": "station" if is_station else "airport",
+                "label": f"{code} ({st.name}, ISD {st.usaf}-{st.wban})",
+                "station": st.as_dict(),
+            }
+        kind = "ISD station" if is_station else "airport with ICAO code"
+        raise ValueError(f"no {kind} {text!r} in the ISD catalogue")
+    key, lat, lon = resolve_city(text)
+    return {"latitude": lat, "longitude": lon, "kind": "city", "label": key}
 
 
 def isd_catalog_end(stations) -> str | None:
@@ -774,7 +897,7 @@ def fetch_isd(
     missing: list[int] = []
     for year in range(s.year, e.year + 1):
         try:
-            raw = transport(f"{_ISD_DATA_BASE}/{year}/{usaf}-{wban}-{year}.gz")
+            raw = transport(isd_url(usaf, wban, year))
         except Exception as exc:
             if on_missing_year == "raise" or _not_found_code(exc) is None:
                 raise
@@ -872,13 +995,19 @@ _OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 _OPEN_METEO_START = pd.Timestamp("1940-01-01")  # the archive's first day
 
 
-def open_meteo_url(latitude, longitude, start, end, *, models: str | None = None) -> str:
+def open_meteo_url(
+    latitude, longitude, start, end, *, models: str | None = None, privacy=None
+) -> str:
     """Build the Open-Meteo historical-weather URL for hourly 2 m temperature in °F, UTC (pure).
 
     Provisional (0.92). ``start`` / ``end`` accept ``YYYYMMDD`` / ``YYYY-MM-DD`` strings or dates;
-    ``models`` selects a reanalysis (the service default, ``best_match``, when ``None``).
+    ``models`` selects a reanalysis (the service default, ``best_match``, when ``None``). The
+    coordinates pass through :func:`camber.weather_privacy.coarsen`: with ``privacy``
+    ``"coarse"`` / ``"offline"`` (0.94) they are rounded to its ``precision_deg`` (default 0.1°).
     """
     from urllib.parse import urlencode
+
+    latitude, longitude = coarsen("open_meteo", latitude, longitude, privacy)
 
     def iso(d):
         t = _yyyymmdd(d)
@@ -934,6 +1063,7 @@ def fetch_open_meteo(
     tz: str = "UTC",
     timeout: float = 30.0,
     models: str | None = None,
+    privacy=None,
 ) -> pd.DataFrame:
     """Fetch hourly Open-Meteo reanalysis temperature as a frame (``oat_f``, °F). Provisional.
 
@@ -943,12 +1073,14 @@ def fetch_open_meteo(
     ``attrs`` carry ``open_meteo_cell`` (requested and grid-point coordinates, elevation, model)
     and ``open_meteo_coverage_end`` (the last hour holding a value). A payload not in UTC, or in an
     unknown temperature unit, is refused; a window with no values raises ``ValueError``.
+    ``privacy`` (0.94) rounds the request coordinates (see :func:`open_meteo_url`).
     """
     transport = transport or open_meteo_transport(timeout=timeout)
+    pol = WeatherPolicy.coerce(privacy)
     frames = []
     meta: dict = {}
     for cs, ce in _year_chunks(start, end):
-        payload = transport(open_meteo_url(latitude, longitude, cs, ce, models=models))
+        payload = transport(open_meteo_url(latitude, longitude, cs, ce, models=models, privacy=pol))
         try:
             hourly = payload["hourly"]
             times, vals = hourly["time"], hourly["temperature_2m"]
@@ -988,6 +1120,11 @@ def fetch_open_meteo(
         **meta,
         "models": models or "best_match",
     }
+    if pol is not None:
+        qlat, qlon = coarsen("open_meteo", latitude, longitude, pol)
+        frame.attrs["open_meteo_cell"].update(
+            privacy=pol.privacy, sent_latitude=float(qlat), sent_longitude=float(qlon)
+        )
     return frame
 
 
@@ -1000,10 +1137,18 @@ def oat_reference_open_meteo(
     transport: Callable[[str], dict] | None = None,
     tz: str = "UTC",
     timeout: float = 30.0,
+    privacy=None,
 ) -> pd.Series:
     """The Open-Meteo °F OAT series (NaNs dropped, ``name="oat_f"``). Provisional (0.92)."""
     df = fetch_open_meteo(
-        latitude, longitude, start, end, transport=transport, tz=tz, timeout=timeout
+        latitude,
+        longitude,
+        start,
+        end,
+        transport=transport,
+        tz=tz,
+        timeout=timeout,
+        **({} if privacy is None else {"privacy": privacy}),
     )
     s = df["oat_f"].dropna()
     s.name = "oat_f"
@@ -1206,6 +1351,9 @@ def oat_reference_blended(
     meteo_transport: Callable[[str], dict] | None = None,
     diurnal: bool = True,
     station_offsets: bool = True,
+    privacy=None,
+    audit=None,
+    purpose: str = "weather",
 ) -> pd.Series:
     """°F OAT for a window: nearest ISD station, gaps from the next ones, the rest from reanalysis.
 
@@ -1244,6 +1392,15 @@ def oat_reference_blended(
     (a gridded response with an unpublished tail is not cached; a missing ISD file is remembered);
     ``offline=True`` reads only that cache and raises :class:`WeatherCacheMiss` on a miss.
     ``clock`` (tz-aware UTC ``now``) is injectable for tests.
+
+    **Privacy** (0.94, provisional; :mod:`camber.weather_privacy`). ``privacy`` ``"coarse"``
+    keeps the station choice local (ISD requests carry a station id and a year, never
+    coordinates), sends NASA POWER its grid-cell centre and Open-Meteo the point rounded to
+    ``precision_deg``, and checks every URL before it leaves; ``"offline"`` sends nothing and
+    reads only the cache. Both cache under :func:`~camber.weather_privacy.default_weather_dir`
+    when no ``cache_dir`` is given. ``audit`` (a :class:`~camber.weather_privacy.WeatherAudit`)
+    logs every request, cache hits included, under ``purpose``. With ``privacy`` given,
+    ``weather_provenance["privacy"]`` records the mode and the coarsening of each source.
     """
     import warnings
 
@@ -1258,24 +1415,46 @@ def oat_reference_blended(
     if e < s:
         raise ValueError(f"end {end!r} is before start {start!r}")
 
-    t_isd = transport or isd_transport(timeout=timeout)
-    t_cat = catalog_transport or t_isd
-    t_pow = power_transport or nasa_power_transport(timeout=timeout)
-    t_om = meteo_transport or open_meteo_transport(timeout=timeout)
-    if cache_dir is not None:
-        t_isd = cached_bytes_transport(t_isd, os.path.join(cache_dir, "isd"), offline=offline)
-        t_cat = cached_bytes_transport(
-            t_cat, os.path.join(cache_dir, "isd"), ttl=_dt.timedelta(days=7), offline=offline
+    pol = WeatherPolicy.coerce(privacy)
+    if pol is not None and pol.coarse and cache_dir is None:
+        cache_dir = default_weather_dir()
+    if pol is not None and pol.offline:
+        offline = True
+    n_logged = len(audit.records) if audit is not None else 0
+    raw_isd = transport or isd_transport(timeout=timeout)
+    raw_cat = catalog_transport or raw_isd
+    raw_pow = power_transport or nasa_power_transport(timeout=timeout)
+    raw_om = meteo_transport or open_meteo_transport(timeout=timeout)
+    cached = cache_dir is not None
+
+    def _wire(service, net, cache):
+        return guarded_transport(
+            service, net, policy=pol, audit=audit, purpose=purpose, cache=cache if cached else None
         )
-        t_pow = cached_transport(
-            t_pow, os.path.join(cache_dir, "power"), offline=offline, should_cache=_power_complete
-        )
-        t_om = cached_transport(
-            t_om,
-            os.path.join(cache_dir, "open_meteo"),
-            offline=offline,
-            should_cache=_open_meteo_complete,
-        )
+
+    def _sub(name):
+        return os.path.join(str(cache_dir), name)
+
+    t_isd = _wire("isd", raw_isd, lambda t: cached_bytes_transport(t, _sub("isd"), offline=offline))
+    t_cat = _wire(
+        "isd",
+        raw_cat,
+        lambda t: cached_bytes_transport(
+            t, _sub("isd"), ttl=_dt.timedelta(days=7), offline=offline
+        ),
+    )
+    t_pow = _wire(
+        "nasa_power",
+        raw_pow,
+        lambda t: cached_transport(t, _sub("power"), offline=offline, should_cache=_power_complete),
+    )
+    t_om = _wire(
+        "open_meteo",
+        raw_om,
+        lambda t: cached_transport(
+            t, _sub("open_meteo"), offline=offline, should_cache=_open_meteo_complete
+        ),
+    )
 
     cat = stations if stations is not None else isd_stations(transport=t_cat, timeout=timeout)
     last = isd_catalog_end(cat)
@@ -1438,13 +1617,16 @@ def oat_reference_blended(
                         transport=t_pow,
                         tz="UTC",
                         snap_to_cell=True,
+                        privacy=pol,
                     )
                     info.update(
                         cell=pw.attrs.get("power_cell"),
                         coverage_end=pw.attrs.get("power_coverage_end"),
                     )
                 else:
-                    pw = fetch_open_meteo(latitude, longitude, p_start, p_end, transport=t_om)
+                    pw = fetch_open_meteo(
+                        latitude, longitude, p_start, p_end, transport=t_om, privacy=pol
+                    )
                     info.update(
                         cell=pw.attrs.get("open_meteo_cell"),
                         coverage_end=pw.attrs.get("open_meteo_coverage_end"),
@@ -1542,10 +1724,30 @@ def oat_reference_blended(
         "fallbacks": fb_info,
         "caveats": caveats,
     }
+    if pol is not None:
+        srcs = ["isd", *(str(i["source"]) for i in fb_info)]
+        out.attrs["weather_provenance"]["privacy"] = _privacy_record(
+            pol, srcs, audit, n_logged, cache_dir
+        )
     out.attrs["caveats"] = list(caveats)
     if ref is not None:
         out.attrs["isd_station"] = ref.as_dict()
     return out
+
+
+def _privacy_record(pol, services, audit, n_logged: int, cache_dir) -> dict:
+    """What the requests of one fetch carried, for provenance (0.94)."""
+    rec: dict = {
+        **pol.as_dict(),
+        "coarsening": {s: coarsening_note(s, pol) for s in dict.fromkeys(services)},
+        "cache": "on" if cache_dir is not None else "off",
+    }
+    if audit is not None:
+        mine = audit.records[n_logged:]
+        rec["requests_sent"] = sum(1 for r in mine if r.get("sent"))
+        rec["cache_hits"] = sum(1 for r in mine if r.get("cache") == "hit")
+        rec["audit_log"] = os.path.basename(audit.path)
+    return rec
 
 
 def oat_reference_auto(
@@ -1558,6 +1760,10 @@ def oat_reference_auto(
     tz: str = "UTC",
     cache_dir: str | None = None,
     offline: bool = False,
+    privacy=None,
+    audit=None,
+    purpose: str = "weather",
+    place=None,
     **kwargs,
 ) -> pd.Series:
     """°F OAT reference from a named source -- what a config's ``fetch`` key selects. Provisional.
@@ -1570,35 +1776,100 @@ def oat_reference_auto(
     ``offline`` cache the requests as in :func:`oat_reference_blended`; ``kwargs`` go to the
     underlying function (transports, ``clock`` ...). The series' ``attrs["weather_source"]``
     names the source used.
+
+    ``privacy`` / ``audit`` / ``purpose`` (0.94, provisional) apply the guardrails of
+    :mod:`camber.weather_privacy` to every source (see :func:`oat_reference_blended`); under
+    ``"offline"`` a cache miss raises :class:`WeatherCacheMiss` saying how to supply a file.
+    ``attrs["weather_privacy"]`` then records the mode and the coarsening applied. ``place``
+    (0.94) names the location instead of ``latitude`` / ``longitude`` (pass ``None`` for both):
+    an airport ICAO code or ISD station id (from the ISD catalogue) or a bundled city, resolved
+    locally by :func:`resolve_place` and recorded on ``attrs["weather_place"]``.
     """
-    if source in ("auto", "isd"):
-        fb = ("nasa_power", "open_meteo") if source == "auto" else ()
-        s = oat_reference_blended(
-            latitude,
-            longitude,
-            start,
-            end,
-            tz=tz,
-            cache_dir=cache_dir,
-            offline=offline,
-            fallbacks=kwargs.pop("fallbacks", fb),
-            **kwargs,
-        )
-    elif source in ("nasa_power", "open_meteo"):
-        t = kwargs.pop("transport", None)
-        if t is None:
-            t = nasa_power_transport() if source == "nasa_power" else open_meteo_transport()
-        if cache_dir is not None:
-            complete = _power_complete if source == "nasa_power" else _open_meteo_complete
-            sub = "power" if source == "nasa_power" else "open_meteo"
-            t = cached_transport(
-                t, os.path.join(cache_dir, sub), offline=offline, should_cache=complete
-            )
-        fn = oat_reference if source == "nasa_power" else oat_reference_open_meteo
-        s = fn(latitude, longitude, start, end, transport=t, tz=tz, **kwargs)
-    else:
+    if source not in ("auto", "isd", "nasa_power", "open_meteo"):
         raise ValueError(
             f"unknown weather source {source!r}; use auto, isd, nasa_power or open_meteo"
         )
+    pol = WeatherPolicy.coerce(privacy)
+    if pol is not None and pol.coarse and cache_dir is None:
+        cache_dir = default_weather_dir()
+    if pol is not None and pol.offline:
+        offline = True
+    guard = {} if pol is None and audit is None else {"privacy": pol, "audit": audit}
+    n_logged = len(audit.records) if audit is not None else 0
+    place_info = None
+    try:
+        if place is not None:
+            stations = kwargs.get("stations")
+            if _place_code(place) and stations is None:
+                cat_net = kwargs.pop("catalog_transport", None)
+                if cat_net is None:
+                    cat_net = kwargs.get("transport") if source in ("auto", "isd") else None
+                cat_cache = None
+                if cache_dir is not None:
+                    cdir = os.path.join(cache_dir, "isd")
+
+                    def cat_cache(inner):
+                        return cached_bytes_transport(
+                            inner, cdir, ttl=_dt.timedelta(days=7), offline=offline
+                        )
+
+                t_cat = guarded_transport(
+                    "isd",
+                    cat_net or isd_transport(),
+                    policy=pol,
+                    audit=audit,
+                    purpose=purpose,
+                    cache=cat_cache,
+                )
+                stations = isd_stations(transport=t_cat)
+                if source in ("auto", "isd"):
+                    kwargs["stations"] = stations
+            place_info = resolve_place(place, stations=stations)
+            latitude, longitude = place_info["latitude"], place_info["longitude"]
+        if latitude is None or longitude is None:
+            raise ValueError("give latitude and longitude, or a place")
+        if source in ("auto", "isd"):
+            fb = ("nasa_power", "open_meteo") if source == "auto" else ()
+            s = oat_reference_blended(
+                latitude,
+                longitude,
+                start,
+                end,
+                tz=tz,
+                cache_dir=cache_dir,
+                offline=offline,
+                fallbacks=kwargs.pop("fallbacks", fb),
+                **({**guard, "purpose": purpose} if guard else {}),
+                **kwargs,
+            )
+        else:
+            t = kwargs.pop("transport", None)
+            if t is None:
+                t = nasa_power_transport() if source == "nasa_power" else open_meteo_transport()
+            complete = _power_complete if source == "nasa_power" else _open_meteo_complete
+            sub = "power" if source == "nasa_power" else "open_meteo"
+            cache = None
+            if cache_dir is not None:
+                cdir = os.path.join(cache_dir, sub)
+
+                def cache(inner):
+                    return cached_transport(inner, cdir, offline=offline, should_cache=complete)
+
+            t = guarded_transport(source, t, policy=pol, audit=audit, purpose=purpose, cache=cache)
+            fn = oat_reference if source == "nasa_power" else oat_reference_open_meteo
+            extra: dict = {} if pol is None else {"privacy": pol}
+            s = fn(latitude, longitude, start, end, transport=t, tz=tz, **extra, **kwargs)
+    except WeatherCacheMiss as exc:
+        if pol is not None and pol.offline:
+            raise WeatherCacheMiss(f"{exc}. {OFFLINE_HELP}") from None
+        raise
     s.attrs["weather_source"] = source
+    if place_info is not None:
+        s.attrs["weather_place"] = place_info
+    if pol is not None:
+        used = [source] if source in FALLBACKS else ["isd"]
+        prov = s.attrs.get("weather_provenance") or {}
+        s.attrs["weather_privacy"] = prov.get("privacy") or _privacy_record(
+            pol, used, audit, n_logged, cache_dir
+        )
     return s

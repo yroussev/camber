@@ -295,11 +295,14 @@ class Portfolio:
         tags=(),
         notes=None,
         activate: bool = False,
+        private: bool = False,
     ) -> dict:
         """Register a new facility (``provisioning``, or ``active`` with ``activate=True``).
 
         ``facility_id`` defaults to :func:`~camber.store.make_facility_id` of ``name``. Refused if
-        the id is already registered, tombstoned, or a case-variant of a known id.
+        the id is already registered, tombstoned, or a case-variant of a known id. ``private``
+        (0.94, provisional) marks it private: its weather requests default to ``offline`` (see
+        :mod:`camber.weather_privacy`).
         """
         _need_reason(reason)
         fid = require_facility_id(facility_id or make_facility_id(name))
@@ -308,6 +311,8 @@ class Portfolio:
             if fid in reg.all():
                 raise ValueError(f"facility {fid!r} is already registered")
             meta = {"owner": owner, "portfolio": sorted(set(tags or ())), "notes": notes}
+            if private:
+                meta["private"] = True
             reg._create(
                 fid,
                 name,
@@ -382,6 +387,29 @@ class Portfolio:
                 to_state=old.get("state"),
                 reason=reason,
                 details={"from": old.get("display_name"), "to": display_name},
+            )
+        return self.facility(facility_id)
+
+    def set_private(self, facility_id: str, private: bool = True, *, reason: str) -> dict:
+        """Mark a facility private (or not); audited (provisional, 0.94, #73).
+
+        A private facility's weather requests default to ``offline`` and can never be
+        ``public``; a config may opt it in to ``coarse`` (see :mod:`camber.weather_privacy`).
+        The flag lives in the registry so it holds for every config of the facility.
+        """
+        _need_reason(reason)
+        with self.lock():
+            self._ensure_registered(facility_id)
+            reg = self.registry
+            old = reg.get(facility_id)
+            reg._update(facility_id, {"private": bool(private)})
+            self._audit(
+                "facility.private",
+                facility_id=facility_id,
+                from_state=old.get("state"),
+                to_state=old.get("state"),
+                reason=reason,
+                details={"from": bool(old.get("private", False)), "to": bool(private)},
             )
         return self.facility(facility_id)
 
