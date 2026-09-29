@@ -197,6 +197,15 @@ CAMBER deletes facility data only through audited admin commands, and only after
   own controls (encrypted volumes, snapshot expiry) where erasure must be guaranteed.
 - A crash mid-deletion leaves `_trash-*` or `_swap-*` entries, which the next command finishes or
   rolls back. Readers never see a half-deleted partition.
+- **Retention** (`camber retention apply`) deletes by the policy in `_portfolio.json`: raw trends
+  after 25 months, hourly rollups after 7 years, closed faults after 7 years, superseded drift
+  baseline versions beyond 10, reports beyond the last 12, by default. It deletes a raw partition
+  only after its hourly and daily rollups are written and verified against the raw row count. It
+  is a dry run unless `--apply` with `--reason` and `--yes`, takes the lock, audits each facility
+  before acting, and skips facilities under a legal hold. Precedence: legal hold > facility
+  override > portfolio default. The audit log is never deleted, and its rule cannot be changed.
+  Shortening a rule is itself audited (`retention.set`, `retention.override`), and anyone with
+  write access to the workspace can change the policy: protect it like the rest of the root.
 <!-- /095-lifecycle -->
 
 ### 9. What CAMBER sends to weather and price services

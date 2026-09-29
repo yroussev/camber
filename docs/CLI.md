@@ -17,6 +17,8 @@ camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-c
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
+camber retention show|set|override|hold|release|apply  # retention policy (0.95)
+camber store migrate-partitions STORE [--apply --yes]   # year= -> year=/month= partitions
 ```
 
 `camber serve` starts the stdlib read-only HTTP API and the **live web dashboard** at
@@ -329,6 +331,14 @@ camber facility restore <id> [--apply --reason R --yes|--confirm ID] [--bundle B
 camber facility purge <id> [--apply --reason R --confirm ID]   # typed id only; irreversible
 camber facility export <id> --reason R                  # a verified bundle now; nothing else changes
 camber facility bundles <id> [--verify] [--json]        # list / re-hash export bundles
+
+camber retention show [--facility ID] [--json]          # 0.95: policy, overrides, holds
+camber retention set CLASS KEY=VALUE... --reason R      # e.g. set raw_trends keep_months=36
+camber retention override ID CLASS (KEY=VALUE... | --clear) --reason R
+camber retention hold|release ID --reason R              # legal hold
+camber retention apply [--facility ID] [--now DATE] [--json]            # dry run: the plan
+camber retention apply --apply --reason R --yes [--wait S]              # roll up, verify, prune
+camber store migrate-partitions STORE [--apply --yes] [--reason R]      # year= -> year=/month=
 ```
 
 Every command except `init` and `adopt` takes `--workspace PATH`, else `$CAMBER_PORTFOLIO`, else
@@ -348,6 +358,15 @@ period; `archive` (after it, or with `--skip-grace`) deletes the hot data and ke
 `restore` brings a facility back, re-verifying every checksum; `purge` leaves only the tombstone
 and the audit record. A legal hold refuses `archive` and `purge`. See
 [PORTFOLIO.md](PORTFOLIO.md#offboarding-archiving-and-purging).
+
+`retention apply` (0.95) enforces the retention policy: it rolls raw month partitions up into
+hourly and daily rollups, verifies the rollups against the raw row count, and only then prunes;
+it also trims old closed faults, drift baseline history and old reports, and archives offboarding
+facilities whose grace period has ended. It is a dry run unless `--apply --reason R --yes`, skips
+facilities under a legal hold, is idempotent, and is safe from cron: exit code 0 (done or nothing
+to do), 1 (a verification kept data), 75 (the lock is held; retry next run). `store
+migrate-partitions` converts a pre-0.95 year-only store to month partitions. See
+[PORTFOLIO.md](PORTFOLIO.md#retention).
 
 Analyses skip facilities that are not active. A store-backed `camber run` on a suspended facility
 warns and finds no equipment unless the config source sets `"include_inactive": true`.

@@ -1435,6 +1435,7 @@
     "LifecycleError",
     "Portfolio",
     "PortfolioLocked",
+    "RETENTION_SCHEMA",
     "STATES",
     "TRANSITIONS",
     "allowed_actions",

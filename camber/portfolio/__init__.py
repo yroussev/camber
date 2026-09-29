@@ -16,6 +16,7 @@ minor release.
 from __future__ import annotations
 
 from ._lock import PortfolioLocked
+from ._retention import RETENTION_SCHEMA
 from ._states import DELETING, STATES, TRANSITIONS, LifecycleError, allowed_actions, transition
 from ._workspace import DEFAULT_POLICY, Portfolio, find_workspace, is_workspace
 
@@ -27,6 +28,7 @@ __all__ = [
     "TRANSITIONS",
     "DELETING",
     "DEFAULT_POLICY",
+    "RETENTION_SCHEMA",
     "allowed_actions",
     "transition",
     "find_workspace",

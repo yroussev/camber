@@ -7,11 +7,11 @@
       _audit.ndjson     append-only audit log (see ._audit)
       _lock             single-writer advisory lock (see ._lock)
       store/            the ParquetStore root (+ registry v2, tombstones, _workspace.json marker)
-      rollups/          reserved: downsampled stores (created by a later release)
-      state/<fid>/      faults, drift and M&V baselines, migrated originals, sha256 manifest
-      archive/<fid>/    reserved: export bundles
+      rollups/<freq>/   hourly / daily rollup stores (written by retention apply, 0.95)
+      state/<fid>/      faults, drift and M&V baselines, weather audit, migrated originals, manifest
+      archive/<fid>/    export bundles with a sha256 manifest (0.95)
 
-The reserved directories are created lazily by the releases that use them.
+These directories are created lazily, the first time something is written there.
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ PORTFOLIO_FILE = "_portfolio.json"
 SCHEMA_VERSION = 1
 RESERVED_DIRS = ("rollups", "state", "archive")
 
-# The agreed retention defaults, by data class. Stored now; *enforced* by a later release
-# (`camber retention apply`). Precedence: legal hold > facility override > portfolio default.
+# The agreed retention defaults, by data class, enforced by `camber retention apply` (0.95; see
+# ._retention). Precedence: legal hold > facility override > portfolio default.
 DEFAULT_POLICY: dict = {
     "raw_trends": {"keep_months": 25},
     "hourly_rollups": {"keep_years": 7},
@@ -45,6 +45,9 @@ DEFAULT_POLICY: dict = {
     # past reported savings depend on superseded M&V baselines, so every version is kept
     "mv_baselines": {"keep": "indefinite", "keep_versions": "all"},
     "reports": {"keep_last": 12},
+    # 0.95: the #73 log of requests to weather / price services -- a privacy record, kept while
+    # the facility exists (it goes with the facility's archive and purge)
+    "weather_audit": {"keep": "forever"},
     "audit": {"keep": "forever"},
 }
 OFFBOARDING_GRACE_DAYS = 30
@@ -246,6 +249,125 @@ class Portfolio:
             else:
                 out[cls] = {"rule": dict(rule), "source": "default"}
         return out
+
+    # ------------------------------------------------------------------ retention (0.95)
+
+    def _write_doc(self, doc: dict) -> None:
+        _write_json(os.path.join(self.root, PORTFOLIO_FILE), doc)
+
+    def set_retention(self, data_class: str, rule: dict, *, reason: str) -> dict:
+        """Change the portfolio default rule of one data class (validated, audited).
+
+        ``rule`` is merged into the current rule: an age key (``keep_months``/``keep_years``)
+        replaces the other age keys. Returns the new rule. Provisional (0.95).
+        """
+        from ._retention import merge_rule
+
+        _need_reason(reason)
+        with self.lock():
+            doc = self._doc()
+            old = self.policy().get(data_class, {})
+            new = merge_rule(data_class, old, rule)
+            doc.setdefault("retention", {}).setdefault("defaults", {})[data_class] = new
+            self._write_doc(doc)
+            self._audit(
+                "retention.set",
+                reason=reason,
+                details={"class": data_class, "from": old, "to": new},
+            )
+        return new
+
+    def set_retention_override(
+        self, facility_id: str, data_class: str, rule=None, *, reason: str
+    ) -> dict:
+        """Set (``rule``) or clear (``rule=None``) one facility's override of a data class.
+
+        Returns the facility's effective retention. Audited. Provisional (0.95).
+        """
+        from ._retention import check_class, merge_rule
+
+        _need_reason(reason)
+        with self.lock():
+            self.facility(facility_id)
+            doc = self._doc()
+            ovs = doc.setdefault("retention", {}).setdefault("overrides", {})
+            cur = dict((ovs.get(facility_id) or {}).get(data_class) or {})
+            if rule is None:
+                check_class(data_class)
+                (ovs.get(facility_id) or {}).pop(data_class, None)
+                if facility_id in ovs and not ovs[facility_id]:
+                    del ovs[facility_id]
+                new = None
+            else:
+                base = cur or self.policy().get(data_class, {})
+                new = merge_rule(data_class, base, rule)
+                ovs.setdefault(facility_id, {})[data_class] = new
+            self._write_doc(doc)
+            self._audit(
+                "retention.override",
+                facility_id=facility_id,
+                reason=reason,
+                details={"class": data_class, "from": cur or None, "to": new},
+            )
+        return self.effective_retention(facility_id)
+
+    def hold(self, facility_id: str, *, reason: str) -> dict:
+        """Place a legal hold: nothing of the facility is deleted until it is released."""
+        _need_reason(reason)
+        with self.lock():
+            st = self.facility(facility_id).get("state")
+            doc = self._doc()
+            holds = doc.setdefault("legal_holds", {})
+            if facility_id in holds:
+                return dict(holds[facility_id])
+            from ._audit import _actor
+
+            holds[facility_id] = {"since": _utc_now(), "by": _actor(), "reason": reason}
+            self._write_doc(doc)
+            self._audit(
+                "retention.hold", facility_id=facility_id, from_state=st, to_state=st, reason=reason
+            )
+            return dict(holds[facility_id])
+
+    def release_hold(self, facility_id: str, *, reason: str) -> bool:
+        """Release a legal hold; returns whether there was one. Audited."""
+        _need_reason(reason)
+        with self.lock():
+            doc = self._doc()
+            holds = doc.get("legal_holds") or {}
+            if facility_id not in holds:
+                return False
+            rec = holds.pop(facility_id)
+            self._write_doc(doc)
+            self._audit(
+                "retention.release",
+                facility_id=facility_id,
+                reason=reason,
+                details={"hold": rec},
+            )
+            return True
+
+    def retention_policy(self, *, now=None) -> dict:
+        """The policy as a JSON-ready document (schema: ``camber.portfolio.RETENTION_SCHEMA``)."""
+        from ._retention import policy_document
+
+        return policy_document(self, now=now)
+
+    def apply_retention(
+        self, *, apply: bool = False, facility_id=None, now=None, reason=None
+    ) -> dict:
+        """Roll up, verify, then prune by the retention policy (``camber retention apply``).
+
+        A dry run (the default) returns the plan. ``apply=True`` needs a ``reason``, takes the
+        lock, recovers interrupted work first, and is idempotent. Provisional (0.95).
+        """
+        from ._retention import apply as _apply
+        from ._retention import plan as _plan
+
+        if not apply:
+            return _plan(self, facility_id=facility_id, now=now)
+        _need_reason(reason)
+        return _apply(self, facility_id=facility_id, now=now, reason=str(reason))
 
     # ------------------------------------------------------------------ facilities
 

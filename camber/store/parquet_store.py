@@ -1,15 +1,18 @@
 """A Parquet-backed time-series store keyed to the semantic entity model.
 
-Layout: one tidy (long-form) dataset, hive-partitioned by ``facility_id`` and ``year``,
-so a portfolio of buildings lives under one root and a query touches only the
+Layout: one tidy (long-form) dataset, hive-partitioned by ``facility_id``, ``year`` and
+``month``, so a portfolio of buildings lives under one root and a query touches only the
 partitions it needs::
 
-    <root>/facility_id=fox-lodge-9f3a1c/year=2024/part-*.parquet
+    <root>/facility_id=fox-lodge-9f3a1c/year=2024/month=7/part-*.parquet
 
-Each row is ``(ts, equip, equip_class, role, value)`` plus the ``facility_id``/``year``
-partition keys. The ``facility_id`` is a stable, path-safe identifier (see
-:mod:`camber.store.facilities`); a facility's human display name and metadata live in a
-sibling ``_facilities.json`` registry, decoupled from the storage identity so a rename
+Stores written before 0.95 are partitioned by year only (``year=2024/part-*.parquet``); they are
+read unchanged, a store may mix both layouts, and :meth:`ParquetStore.migrate_partitions` converts
+the year-only partitions (month partitions are what date-level retention prunes; see
+docs/PORTFOLIO.md). Each row is ``(ts, equip, equip_class, role, value)`` plus the
+``facility_id``/``year``/``month`` partition keys. The ``facility_id`` is a stable, path-safe
+identifier (see :mod:`camber.store.facilities`); a facility's human display name and metadata live
+in a sibling ``_facilities.json`` registry, decoupled from the storage identity so a rename
 never orphans history and two same-named facilities never collide. Storing by *role* (the
 vendor-neutral meaning, see :mod:`camber.model.roles`) rather than the raw vendor token
 means a query reads the same column name on any building.
@@ -27,9 +30,10 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
+import re
 import threading
 from collections import OrderedDict
+from contextlib import nullcontext as _nullcontext
 from dataclasses import dataclass
 
 import pandas as pd
@@ -48,6 +52,8 @@ _CLASS = "equip_class"
 _ROLE = "role"
 _FACILITY = "facility_id"
 _YEAR = "year"
+_MONTH = "month"
+_PART_RE = re.compile(r"^part-(\d+)-\d+\.parquet$")
 
 # A cached catalog of distinct (facility_id, equip, role) keys, written alongside the dataset so
 # points() needn't rescan every partition. Arrow's dataset discovery ignores leading-"_"
@@ -66,13 +72,22 @@ _FRAG_LOCK = threading.Lock()
 
 
 def _partition_signature(fdir: str) -> tuple:
-    """mtimes and file counts of a facility partition and its year dirs (changes on any write)."""
+    """mtimes and file counts of a facility partition, its year dirs and their month dirs (changes
+    on any write, prune or drop, whichever layout the partition uses)."""
     try:
         sig: list = [os.stat(fdir).st_mtime_ns]
         for d in sorted(os.listdir(fdir)):
             p = os.path.join(fdir, d)
             sig.append((d, os.stat(p).st_mtime_ns))
-            sig.append(len(os.listdir(p)) if os.path.isdir(p) else 0)
+            if not os.path.isdir(p):
+                sig.append(0)
+                continue
+            names = sorted(os.listdir(p))
+            sig.append(len(names))
+            for m in names:
+                if m.startswith(f"{_MONTH}="):
+                    mp = os.path.join(p, m)
+                    sig.append((m, os.stat(mp).st_mtime_ns, len(os.listdir(mp))))
         return tuple(sig)
     except OSError:
         return ()
@@ -155,8 +170,9 @@ class ParquetStore:
         ``facility_id`` must be a path-safe id (see :func:`camber.store.require_facility_id`);
         an unsafe id raises rather than silently corrupting the layout. Pass ``name=`` (and any
         keyword metadata) to record the facility's display name in the registry. Partitions by
-        ``facility_id``/``year``; each call writes new part files (a per-call basename counter
-        avoids clobbering prior writes), so repeated calls accumulate. Returns rows written.
+        ``facility_id``/``year``/``month`` (0.95; year only before); each call writes new part
+        files (a per-call basename counter avoids clobbering prior writes), so repeated calls
+        accumulate. Returns rows written.
         """
         require_facility_id(facility_id)
         reg = self._registry()
@@ -169,13 +185,14 @@ class ParquetStore:
         df[_TS] = pd.to_datetime(df[_TS])
         df[_FACILITY] = facility_id
         df[_YEAR] = df[_TS].dt.year.astype("int32")
+        df[_MONTH] = df[_TS].dt.month.astype("int32")
         table = pa.Table.from_pandas(df, preserve_index=False)
         seq = self._next_seq(facility_id)
         ds.write_dataset(
             table,
             self.root,
             format="parquet",
-            partitioning=[_FACILITY, _YEAR],
+            partitioning=[_FACILITY, _YEAR, _MONTH],
             partitioning_flavor="hive",
             existing_data_behavior="overwrite_or_ignore",
             basename_template=f"part-{seq}-{{i}}.parquet",
@@ -216,12 +233,24 @@ class ParquetStore:
         return self._registry().all()
 
     def _next_seq(self, facility_id: str) -> int:
-        """Monotonic per-facility write counter, derived from existing part files."""
+        """Monotonic per-facility write counter, derived from existing part files.
+
+        One past the highest ``part-<seq>-<i>`` number on disk (and at least the file count), so a
+        prune that removes files can never make a later write reuse -- and overwrite -- the name of
+        a file that is still there.
+        """
         sdir = os.path.join(self.root, f"{_FACILITY}={facility_id}")
         n = 0
-        for _dirpath, _dirs, files in os.walk(sdir):
-            n += sum(1 for f in files if f.endswith(".parquet"))
-        return n
+        top = -1
+        for _dirpath, dirs, files in os.walk(sdir):
+            dirs[:] = [d for d in dirs if not d.startswith(("_", "."))]
+            for f in files:
+                if f.endswith(".parquet"):
+                    n += 1
+                    m = _PART_RE.match(f)
+                    if m:
+                        top = max(top, int(m.group(1)))
+        return max(n, top + 1)
 
     # --------------------------------------------------------------- catalog cache
     def _catalog_path(self) -> str:
@@ -353,12 +382,17 @@ class ParquetStore:
         return ds.FileSystemDataset(keep, schema=schema, format=fmt, filesystem=fs)
 
     @staticmethod
-    def _build_filter(*, facility_id=None, equips=None, roles=None, start=None, end=None):
-        """Assemble a pyarrow dataset filter, pruning ``year`` partitions from the ts range.
+    def _build_filter(
+        *, facility_id=None, equips=None, roles=None, start=None, end=None, months=False
+    ):
+        """Assemble a pyarrow dataset filter, pruning ``year`` (and ``month``) partitions from the
+        ts range.
 
         Translating ``start``/``end`` into bounds on the ``year`` *partition* field (not just
         the ``ts`` data column) lets pyarrow skip whole year directories, so a one-month query
-        across a multi-year store opens only the relevant year(s).
+        across a multi-year store opens only the relevant year(s). With ``months`` (the dataset
+        has month partitions) the bounds also skip month directories; a legacy year-only file
+        (``month`` null) is never skipped by them.
         """
         filt = None
 
@@ -376,10 +410,16 @@ class ParquetStore:
             ts = pd.Timestamp(start)
             _and(ds.field(_TS) >= ts)
             _and(ds.field(_YEAR) >= int(ts.year))  # partition prune
+            if months:
+                mo = ds.field(_MONTH)
+                _and((ds.field(_YEAR) > int(ts.year)) | mo.is_null() | (mo >= int(ts.month)))
         if end is not None:
             ts = pd.Timestamp(end)
             _and(ds.field(_TS) <= ts)
             _and(ds.field(_YEAR) <= int(ts.year))  # partition prune
+            if months:
+                mo = ds.field(_MONTH)
+                _and((ds.field(_YEAR) < int(ts.year)) | mo.is_null() | (mo <= int(ts.month)))
         return filt
 
     def read_long(
@@ -405,7 +445,12 @@ class ParquetStore:
             if _FACILITY not in dataset.schema.names:  # no partition left (every facility dropped)
                 return pd.DataFrame(columns=empty_cols)
         filt = self._build_filter(
-            facility_id=facility_id, equips=equips, roles=roles, start=start, end=end
+            facility_id=facility_id,
+            equips=equips,
+            roles=roles,
+            start=start,
+            end=end,
+            months=_MONTH in dataset.schema.names,
         )
         table = dataset.to_table(filter=filt, columns=columns)
         df = table.to_pandas()
@@ -569,9 +614,13 @@ class ParquetStore:
     def prune(self, *, before_year: int, facility_id=None) -> int:
         """Delete year partitions older than ``before_year`` (retention policy).
 
-        Removes ``facility_id=*/year=Y`` directories with Y < ``before_year``. Returns the
-        number of year partitions removed.
+        Removes ``facility_id=*/year=Y`` directories with Y < ``before_year``, each by one atomic
+        rename before removal (a crash never leaves a half-deleted year visible). Returns the
+        number of year partitions removed. Month-level, policy-driven retention is
+        ``camber retention apply`` (:mod:`camber.portfolio`).
         """
+        from . import _swap
+
         if not os.path.isdir(self.root):
             return 0
         removed = 0
@@ -592,11 +641,213 @@ class ParquetStore:
                 except ValueError:
                     continue
                 if yr < before_year:
-                    shutil.rmtree(os.path.join(spath, yd))
+                    _swap.discard(os.path.join(spath, yd))
                     removed += 1
         if removed:
             self._invalidate_catalog()  # next points() rebuilds from the remaining data
         return removed
+
+    # ------------------------------------------------------- partitions (0.95)
+    def partitions(self, *, facility_id=None) -> list:
+        """Every stored partition: ``[{facility_id, year, month, path, files, rows, legacy}]``.
+
+        ``month`` is ``None`` and ``legacy`` is ``True`` for a pre-0.95 year-only partition (part
+        files directly under ``year=Y/``); a year directory holding both is listed twice. ``rows``
+        comes from the Parquet footers (no data is read). Sorted by facility, year, month.
+        """
+        import pyarrow.parquet as pq
+
+        def _rows(files):
+            n = 0
+            for f in files:
+                try:
+                    n += int(pq.ParquetFile(f).metadata.num_rows)
+                except Exception:  # noqa: BLE001 - an unreadable file counts no rows
+                    continue
+            return n
+
+        out = []
+        fids = [facility_id] if facility_id is not None else self.facilities()
+        for fid in fids:
+            fdir = os.path.join(self.root, f"{_FACILITY}={fid}")
+            if not os.path.isdir(fdir):
+                continue
+            for yd in sorted(os.listdir(fdir)):
+                ypath = os.path.join(fdir, yd)
+                if not yd.startswith(f"{_YEAR}=") or not os.path.isdir(ypath):
+                    continue
+                try:
+                    year = int(yd.split("=", 1)[1])
+                except ValueError:
+                    continue
+                names = sorted(os.listdir(ypath))
+                legacy = [os.path.join(ypath, n) for n in names if n.endswith(".parquet")]
+                if legacy:
+                    out.append(
+                        {
+                            "facility_id": fid,
+                            "year": year,
+                            "month": None,
+                            "path": ypath,
+                            "files": len(legacy),
+                            "rows": _rows(legacy),
+                            "legacy": True,
+                        }
+                    )
+                for md in names:
+                    mpath = os.path.join(ypath, md)
+                    if not md.startswith(f"{_MONTH}=") or not os.path.isdir(mpath):
+                        continue
+                    try:
+                        month = int(md.split("=", 1)[1])
+                    except ValueError:
+                        continue
+                    files = [
+                        os.path.join(mpath, n)
+                        for n in sorted(os.listdir(mpath))
+                        if n.endswith(".parquet") and not n.startswith(("_", "."))
+                    ]
+                    out.append(
+                        {
+                            "facility_id": fid,
+                            "year": year,
+                            "month": month,
+                            "path": mpath,
+                            "files": len(files),
+                            "rows": _rows(files),
+                            "legacy": False,
+                        }
+                    )
+        out.sort(key=lambda p: (p["facility_id"], p["year"], p["month"] or 0, p["legacy"]))
+        return out
+
+    def drop_partition(self, facility_id: str, year: int, month=None) -> int:
+        """Delete one partition crash-safely; returns the rows it held (0 if absent).
+
+        ``month=None`` deletes the whole ``year=Y`` directory (every month in it, and any legacy
+        files); otherwise only ``year=Y/month=M``. A low-level primitive with no policy: retention
+        (``camber retention apply``) decides what to drop and rolls it up first.
+        """
+        from . import _swap
+
+        require_facility_id(facility_id)
+        path = os.path.join(self.root, f"{_FACILITY}={facility_id}", f"{_YEAR}={int(year)}")
+        if month is not None:
+            path = os.path.join(path, f"{_MONTH}={int(month)}")
+        if not os.path.isdir(path):
+            return 0
+        try:
+            rows = int(ds.dataset(path, format="parquet").count_rows())
+        except (pa.ArrowInvalid, OSError):  # pragma: no cover - unreadable partition
+            rows = 0
+        _swap.discard(path)
+        self._invalidate_catalog()
+        from ..resolve import clear_store_cache
+
+        clear_store_cache(self.root, facility_id)
+        return rows
+
+    def migrate_partitions(self, *, apply: bool = False, reason=None) -> dict:
+        """Convert pre-0.95 year-only partitions to ``year=/month=`` partitions.
+
+        A dry run (the default) lists each year partition holding legacy files with its rows.
+        ``apply=True`` rebuilds each such year directory in a staging directory -- the legacy rows
+        split by month, the year's existing month partitions carried over -- checks that the rows
+        add up, and swaps it in (crash-safe: an interrupted migration leaves each year either as it
+        was or fully migrated, and re-running finishes it). Row order within a month is kept.
+        Inside a portfolio workspace ``apply`` takes the lock and is audited
+        (``store.migrate_partitions``) and needs a ``reason``. Idempotent. Returns
+        ``{"store", "partitions": [...], "rows", "dry_run", "applied"}``.
+        """
+        from . import _swap
+
+        reg = self._registry()
+        ws = reg._workspace()
+        if apply and ws is not None and not (isinstance(reason, str) and reason.strip()):
+            raise ValueError("a reason is required inside a portfolio workspace (it is audited)")
+        with reg._locked() if apply else _nullcontext():
+            if apply:
+                _swap.recover_tree(self.root, max_depth=3)
+            todo = [p for p in self.partitions() if p["legacy"]]
+            report = {
+                "store": os.path.abspath(self.root),
+                "partitions": [
+                    {k: p[k] for k in ("facility_id", "year", "files", "rows")} for p in todo
+                ],
+                "rows": sum(p["rows"] for p in todo),
+                "dry_run": not apply,
+                "applied": False,
+            }
+            if not apply or not todo:
+                return report
+            for p in todo:
+                self._migrate_year(p["path"], p["rows"])
+                from ..resolve import clear_store_cache
+
+                clear_store_cache(self.root, p["facility_id"])
+            self._invalidate_catalog()
+            report["applied"] = True
+            if ws is not None:
+                reg._audit(
+                    "store.migrate_partitions",
+                    reason=reason,
+                    details={
+                        "store": os.path.relpath(os.path.abspath(self.root), ws),
+                        "partitions": len(todo),
+                        "rows": report["rows"],
+                    },
+                )
+            return report
+
+    @staticmethod
+    def _migrate_year(ypath: str, legacy_rows: int) -> None:
+        """Rebuild one ``year=Y`` directory with its legacy files split into month partitions."""
+        import pyarrow.compute as pc
+        import pyarrow.parquet as pq
+
+        from . import _swap
+
+        stage = _swap.staging(ypath)
+        names = sorted(os.listdir(ypath))
+        written = 0
+        before_months = 0
+        for md in names:  # carry the existing month partitions over (hard links where possible)
+            src = os.path.join(ypath, md)
+            if not md.startswith(f"{_MONTH}=") or not os.path.isdir(src):
+                continue
+            for dirpath, _dirs, files in os.walk(src):
+                rel = os.path.relpath(dirpath, ypath)
+                os.makedirs(os.path.join(stage, rel), exist_ok=True)
+                for f in files:
+                    a, b = os.path.join(dirpath, f), os.path.join(stage, rel, f)
+                    try:
+                        os.link(a, b)
+                    except OSError:  # pragma: no cover - no hard links (some filesystems)
+                        import shutil
+
+                        shutil.copy2(a, b)
+                    if f.endswith(".parquet"):
+                        before_months += int(pq.ParquetFile(a).metadata.num_rows)
+        for k, n in enumerate(n for n in names if n.endswith(".parquet")):
+            table = pq.read_table(os.path.join(ypath, n))
+            if table.num_rows == 0:
+                continue
+            ts = table.column(_TS)
+            months = pc.month(ts)
+            for mo in sorted(set(months.to_pylist())):
+                part = table.filter(pc.equal(months, mo))
+                mdir = os.path.join(stage, f"{_MONTH}={int(mo)}")
+                os.makedirs(mdir, exist_ok=True)
+                pq.write_table(part, os.path.join(mdir, f"part-legacy{k}-0.parquet"))
+                written += part.num_rows
+        after = int(ds.dataset(stage, format="parquet").count_rows()) if os.listdir(stage) else 0
+        if written != legacy_rows or after != legacy_rows + before_months:
+            _swap.recover(ypath)  # pragma: no cover - discard the stage; nothing was changed
+            raise OSError(  # pragma: no cover
+                f"partition migration of {ypath} does not add up ({written} of {legacy_rows} "
+                "legacy rows); nothing was changed"
+            )
+        _swap.commit(ypath)
 
     def drop_facility(self, facility_id: str, *, forget: bool = False) -> int:
         """Hard-delete every stored row of ``facility_id``; returns the number of rows removed.
@@ -620,7 +871,9 @@ class ParquetStore:
                 rows = int(ds.dataset(fdir, format="parquet").count_rows())
             except (pa.ArrowInvalid, OSError):  # pragma: no cover - unreadable partition
                 rows = 0
-            shutil.rmtree(fdir)
+            from . import _swap
+
+            _swap.discard(fdir)  # one atomic rename, then removal: never half-deleted
             self._invalidate_catalog()
         if forget:  # tombstones the id: a forgotten facility id is never reused
             self._registry()._forget(

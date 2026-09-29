@@ -400,6 +400,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `purged_at` and `purge_pending`; the `_swap-*` / `_trash-*` crash-recovery names; the audit
   actions `facility.offboard|archive|restore|purge|export` and `portfolio.recover`. CLI:
   `camber facility offboard|archive|restore|purge|export|bundles`.
+- **Retention and month partitions** (added in 0.95, provisional, #18 step 4):
+  `camber.portfolio.RETENTION_SCHEMA` and the policy document it describes
+  (`"schema": "camber.retention/1"`, from `Portfolio.retention_policy()`), `Portfolio.set_retention`,
+  `set_retention_override`, `hold`, `release_hold`, `apply_retention`; the data class
+  `weather_audit` in `DEFAULT_POLICY`; the rollup stores `rollups/hourly|daily/` (columns `value`
+  and `n`); `ParquetStore.partitions`, `drop_partition` and `migrate_partitions`; the audit
+  actions `retention.set|override|hold|release|apply|incomplete` and
+  `store.migrate_partitions`. CLI: `camber retention show|set|override|hold|release|apply` and
+  `camber store migrate-partitions` (exit code 75 when the lock is held). **Stable surface
+  changed additively:** `ParquetStore` now writes `year=/month=` partitions and still reads
+  year-only ones; a full `read_long` returns a `month` column alongside `year`.
 <!-- /095-lifecycle -->
 
 ## Deprecated
