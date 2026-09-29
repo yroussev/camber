@@ -513,6 +513,16 @@
     "reconcile",
     "route_key"
   ],
+  "camber.edge.quarantine": [
+    "QUARANTINE_DIR",
+    "RECORD_SUFFIX",
+    "discard",
+    "land",
+    "list_quarantine",
+    "quarantine_reconciled",
+    "quarantine_root",
+    "release"
+  ],
   "camber.edge.sink": [
     "AzureBlobSink",
     "GcsSink",

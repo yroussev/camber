@@ -1251,14 +1251,95 @@ def _cmd_edge_reconcile(args) -> int:
     from .edge.landing import reconcile
 
     pf = _portfolio(args)
-    rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
+    if args.apply:
+        from .edge.quarantine import quarantine_reconciled
+
+        if args.keys:
+            raise ValueError(
+                "--apply works on the workspace store or a local --landing directory; CAMBER "
+                "never moves cloud objects (route uploads with a broker, see docs/EDGE-DEPLOY.md)"
+            )
+        rep = quarantine_reconciled(pf, landing=args.landing, reason=args.reason)
+    else:
+        rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
     if args.json:
         print(json.dumps(rep, indent=2, default=str))
         return 0
     _print_reconcile(rep, args.limit)
-    if rep["to_quarantine"]:
-        print(f"  {rep['to_quarantine']} object(s) should be quarantined")
+    if args.apply:
+        print(f"  quarantined {rep['quarantined']} object(s) (audited)")
+    elif rep["to_quarantine"]:
+        hint = "" if args.keys else " (--apply --reason R to move them)"
+        print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
     return 0
+
+
+@_pf_errors
+def _cmd_edge_land(args) -> int:
+    from .edge.quarantine import land
+
+    rep = land(_portfolio(args), args.inbox, apply=args.apply, reason=args.reason)
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    c = rep["counts"]
+    head = "applied" if rep["applied"] else "dry run; --apply --reason R to move"
+    print(
+        f"edge land ({head}) {rep['inbox']}: {c['store']} to the store, "
+        f"{c['quarantine']} to quarantine, {c['inbox']} left in the inbox"
+    )
+    for r in rep["objects"][: args.limit]:
+        if r["to"] != "store":
+            print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_quarantine(args) -> int:
+    from .edge import quarantine as q
+
+    pf = _portfolio(args)
+    if args.q_cmd == "list":
+        rows = q.list_quarantine(pf, facility_id=args.facility)
+        if args.json:
+            print(json.dumps(rows, indent=2, default=str))
+            return 0
+        if not rows:
+            print("quarantine is empty")
+            return 0
+        for r in rows:
+            print(
+                f"{r['status']:10s} {str(r.get('facility_id') or '-'):28s} "
+                f"{str(r.get('category') or '-'):16s} {r['key']}  "
+                f"({r.get('quarantined_at') or '?'}: {r.get('detail') or ''})"
+            )
+        print(f"{len(rows)} object(s) in quarantine")
+        return 0
+    if args.q_cmd == "release":
+        rep = q.release(
+            pf, facility_id=args.facility, keys=args.key, reason=args.reason, apply=args.apply
+        )
+    else:
+        rep = q.discard(
+            pf,
+            facility_id=args.facility,
+            keys=args.key,
+            reason=args.reason,
+            apply=args.apply,
+            yes=args.yes,
+            confirm=args.confirm,
+        )
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    verb = {"release": "released", "discard": "discarded"}[args.q_cmd]
+    head = verb if rep["applied"] else f"would be {verb} (dry run; --apply)"
+    print(f"{len(rep['planned'])} object(s) {head}")
+    for k in rep["planned"]:
+        print(f"  {k}")
+    for r in rep["refused"]:
+        print(f"  refused {r['key']}: {r['why']}")
+    return 1 if rep["refused"] and not rep["planned"] else 0
 
 
 # --------------------------------------------------------------------------- drift subcommands
@@ -2187,8 +2268,46 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     erc.add_argument("--prefix", help="the sink's key prefix to strip from listed keys")
     erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    erc.add_argument(
+        "--apply", action="store_true", help="quarantine the flagged objects (needs --reason)"
+    )
+    erc.add_argument("--reason", help="why (audited; required with --apply)")
     erc.add_argument("--json", action="store_true")
     erc.set_defaults(func=_cmd_edge_reconcile)
+    eld = edsub.add_parser(
+        "land", help="central: route a landing inbox into the store or quarantine (dry run)"
+    )
+    _edge_ws(eld)
+    eld.add_argument("inbox", help="the landing directory edge uploads arrive in")
+    eld.add_argument("--apply", action="store_true", help="move the objects (needs --reason)")
+    eld.add_argument("--reason", help="why (audited; required with --apply)")
+    eld.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    eld.add_argument("--json", action="store_true")
+    eld.set_defaults(func=_cmd_edge_land)
+    eqr = edsub.add_parser(
+        "quarantine", help="central: list, release or discard quarantined uploads"
+    )
+    eqsub = eqr.add_subparsers(dest="q_cmd", required=True)
+    eql = eqsub.add_parser("list", help="quarantined objects with their reason and status")
+    _edge_ws(eql)
+    eql.add_argument("--facility", help="only this facility_id")
+    eql.add_argument("--json", action="store_true")
+    eql.set_defaults(func=_cmd_edge_quarantine)
+    for verb, text in (
+        ("release", "move quarantined objects into the store (the facility must accept data)"),
+        ("discard", "delete quarantined objects (destructive: --apply and --yes/--confirm ID)"),
+    ):
+        eqv = eqsub.add_parser(verb, help=text)
+        _edge_ws(eqv)
+        eqv.add_argument("--facility", help="every quarantined object of this facility_id")
+        eqv.add_argument("--key", action="append", help="one quarantined key (repeatable)")
+        eqv.add_argument("--apply", action="store_true", help="act (default: a dry run)")
+        eqv.add_argument("--reason", help="why (audited; required with --apply)")
+        if verb == "discard":
+            eqv.add_argument("--yes", action="store_true", help="confirm the deletion")
+            eqv.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the id")
+        eqv.add_argument("--json", action="store_true")
+        eqv.set_defaults(func=_cmd_edge_quarantine, yes=False, confirm=None)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"
