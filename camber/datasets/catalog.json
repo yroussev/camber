@@ -6545,7 +6545,9 @@
      "supply_air_temp": "degC",
      "mixed_air_temp": "degC",
      "return_air_temp": "degC",
-     "oat": "degC"
+     "oat": "degC",
+     "heat_coil_leaving_temp": "degC",
+     "cool_coil_leaving_temp": "degC"
     },
     "quirks": [
      {
@@ -6566,10 +6568,12 @@
        "RaTemp",
        "MaTemp",
        "DaTemp",
-       "OaTemp"
+       "OaTemp",
+       "HCALTemp",
+       "CCALTemp"
       ],
       "eq": 0,
-      "note": "Exact 0.00 C readings are BMS outages logged as zeros (return and supply air read 0.00 together in 3,230 rows on 57 days); they are blanked.",
+      "note": "Exact 0.00 C readings are BMS outages logged as zeros (return and supply air read 0.00 together in 3,230 rows on 57 days; the coil leaving-air temperatures in 3,087); they are blanked.",
       "issue": "outages-logged-as-zero"
      },
      {

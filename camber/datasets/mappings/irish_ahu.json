@@ -1,5 +1,5 @@
 {
-  "_comment": "Irish industrial-facility AHU (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208; data doi:10.17632/8x62ntvrg7.2, CC-BY-4.0) point -> CAMBER Role mapping. One mixing-box AHU (outdoor / return / exhaust dampers, heating and cooling coils, supply and return fans) serving two reheat zones, 15-minute BMS export with Project-Haystack-style names. Mapped: the AHU's own temperatures, OA damper and coil valves. oat is the unit's OWN outdoor sensor (OaTemp, the whole span), not the nearby weather station (OaTemp_WS, only from 2020-06): the mixing arithmetic needs the air actually entering the unit; OaTemp reads a median 1.25 C warmer than the station with a mid-afternoon peak (2.2 C at 15 h) -- see the data issue. DaTemp is the supply air leaving the unit (after the supply fan). NOT mapped: HCALTemp / CCALTemp (coil leaving temperatures: no role), EaDmprPos (a copy of OaDmprPos in 99.8% of rows) and RaDmprPos, the fan 'power' columns (documented in kWh per 15-minute row, never cross-checked), and the zone points (ZoneTemp_1 carries a +489 / -509 offset for 2.5 years; the zones are separate equipment). All temperatures are degC in the source; damper and valve signals are 0-100%.",
+  "_comment": "Irish industrial-facility AHU (Ahern, O'Sullivan & Bruton 2023, Data in Brief 48:109208, doi:10.1016/j.dib.2023.109208; data doi:10.17632/8x62ntvrg7.2, CC-BY-4.0) point -> CAMBER Role mapping. One mixing-box AHU (outdoor / return / exhaust dampers, heating and cooling coils, supply and return fans) serving two reheat zones, 15-minute BMS export with Project-Haystack-style names. Mapped: the AHU's own temperatures, OA damper and coil valves. oat is the unit's OWN outdoor sensor (OaTemp, the whole span), not the nearby weather station (OaTemp_WS, only from 2020-06): the mixing arithmetic needs the air actually entering the unit; OaTemp reads a median 1.25 C warmer than the station with a mid-afternoon peak (2.2 C at 15 h) -- see the data issue. DaTemp is the supply air leaving the unit (after the supply fan). HCALTemp / CCALTemp are the heating and cooling coils' leaving-air temperatures (mapped since 0.93, #42: leaking_valve judges each coil on its own leaving air rather than on DaTemp, which sits downstream of the supply fan and reads 2.6 F above CCALTemp in the median of both-valves-closed hours before the 2022-05-01 valve replacement, -0.7 F after). NOT mapped: EaDmprPos (a copy of OaDmprPos in 99.8% of rows) and RaDmprPos, the fan 'power' columns (documented in kWh per 15-minute row, never cross-checked), and the zone points (ZoneTemp_1 carries a +489 / -509 offset for 2.5 years; the zones are separate equipment). All temperatures are degC in the source; damper and valve signals are 0-100%.",
   "aliases": {
     "DaTemp": "supply_air_temp",
     "MaTemp": "mixed_air_temp",
@@ -7,6 +7,8 @@
     "OaTemp": "oat",
     "OaDmprPos": "oa_damper",
     "HWVlvPos": "heat_valve",
-    "ChWVlvPos": "cool_valve"
+    "ChWVlvPos": "cool_valve",
+    "HCALTemp": "heat_coil_leaving_temp",
+    "CCALTemp": "cool_coil_leaving_temp"
   }
 }
