@@ -279,8 +279,11 @@ camber edge decommission /etc/camber/edge.json --apply --confirm fox-lodge-9f3a1
    `camber edge record-retirement retired.json --reason R`. Recording is idempotent.
 
 The device id is the config's `device_id` (or `CAMBER_EDGE_DEVICE_ID`, or `--device`), else the
-machine's node name. The spool lock is held throughout, so a running forwarder cannot enqueue
-mid-way. A re-run after a crash continues where the last run stopped: acks are journalled one by
+machine's node name. The spool lock is held through steps 1–3, so a running forwarder cannot
+enqueue mid-way. It is released before step 4 takes the portfolio lock (through
+`Portfolio.note_edge_device`): the two locks are never held together, so a device's spool lock
+never blocks `Portfolio.recover()` or any portfolio command, and a held portfolio lock never
+blocks the spool. `recover()` does not touch `retired.json` or the registry note. A re-run after a crash continues where the last run stopped: acks are journalled one by
 one, and an already-retired spool skips straight to the central note.
 
 ### Spool journal compaction

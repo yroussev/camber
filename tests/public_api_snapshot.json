@@ -496,8 +496,10 @@
     "BUCKET_CLASSES",
     "DAYS_PER_MONTH",
     "DAYS_PER_YEAR",
+    "LAYOUTS",
     "PROVIDERS",
     "bucket_lifecycle_rules",
+    "class_prefixes_from_policy",
     "normalize_policy",
     "policy_from_portfolio",
     "rule_days"
@@ -523,6 +525,7 @@
     "LandedKey",
     "NON_ACCEPTING_STATES",
     "QUARANTINE_PREFIX",
+    "already_migrated",
     "facility_status",
     "parse_landed_key",
     "read_key_listing",
