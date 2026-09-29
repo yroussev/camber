@@ -34,6 +34,11 @@ optionally, its units and an estimated-read flag -- and runs the same M&V flow o
 * ``calendarize`` adds the Portfolio Manager calendar-month view; ``bills.cost`` carries the billed
   cost, and ``avoided_cost`` prices the saving at each bill's own rate or a stated one.
 
+**0.95 (#74).** A rebaseline window of whole bills is searched
+(:mod:`camber.mandv.billwindow`), ``rebaseline.bill_steps`` opts in to a step test on bills
+(:mod:`camber.mandv.billsteps`), and with selected bases the SEP method proposal offers the
+degree-day model too (the finding states its criterion).
+
 Not supported for billing entries: the change-point + driver form (``model: cp_driver``) and
 ``interval`` other than daily. See docs/MANDV.md, "Billing data".
 """
@@ -1008,8 +1013,7 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     }
     if method == "auto":
         out.append(_mv_proposal_finding(ctx))
-        if auto:
-            notes = notes + [_PROPOSAL_CP_ONLY]
+        _proposal_criterion(out[-1], frame)  # 0.95 (#74): the degree-day model is a candidate
         _add_caveats(out[1:], notes)
         return out
     rep = cut(reporting)
@@ -1034,10 +1038,20 @@ def _billing_findings(entry: dict, prep, *, base_dir: str, box: dict) -> list:
     return out
 
 
-_PROPOSAL_CP_ONLY = (
-    "the SEP method proposal ranks the change-point models only; the degree-day model at the "
-    "selected bases is not among its candidates"
-)
+def _proposal_criterion(fnd, frame) -> None:
+    """State the SEP proposal's model criterion on its finding (0.95, #74): with bases selected
+    from the bills, the degree-day model at them is a candidate beside the change-point kinds."""
+    kind = frame.attrs.get("dd_kind")
+    if not kind or fnd.metrics.get("declined_reason") == "no usable days":
+        return
+    fnd.metrics["model_criterion"] = (
+        "SEP validity (§6.4.1), then adjusted R² with every fitted parameter counted"
+    )
+    fnd.metrics["degree_day_candidate"] = {
+        "kind": kind,
+        "heating_base_f": frame.attrs.get("heating_base_f") if kind != "DD-C" else None,
+        "cooling_base_f": frame.attrs.get("cooling_base_f") if kind != "DD-H" else None,
+    }
 
 
 def _check_cost_spec(entry: dict) -> None:
@@ -1171,6 +1185,8 @@ def _billing_versioned(
             f.metrics["billing"] = True
             if f.rule == "mv_savings":
                 _billing_cost(entry, bills, cut, model, f)
+            elif not f.metrics.get("declined"):
+                _proposal_criterion(f, fitted["frame"])  # 0.95 (#74)
     if out and out[0].rule == "mv_baseline" and not out[0].metrics.get("declined"):
         sub = cut([rec.period_start, rec.period_end])
         if sub is not None:

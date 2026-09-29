@@ -390,6 +390,19 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     in an `mv` entry's `oat` and in `report.rcx.oat_reference`; the audit file
     `weather_audit.ndjson` and its record fields; the CLI `camber weather audit` and
     `camber facility private`, and `camber facility add --private`.
+<!-- 095-mv -->
+- **Bill-based M&V follow-ups** (0.95; #74), all additive and provisional:
+  - the modules `camber.mandv.billwindow` (`BillWindow`, `RANKING`, `new_bill_window`) and
+    `camber.mandv.billsteps` (`BillStepRule`, `scan_statistic`, `bill_steps`,
+    `DEFAULT_MIN_RUN`, `DEFAULT_THRESHOLD`);
+  - the trailing `RebaselinePolicy.bill_steps` field (in `as_dict` only when set) and the config
+    key `mv[].rebaseline.bill_steps`;
+  - the keyword-only `degree_day=` of `mandv.methods.select_method`, and the `heating_base_f` /
+    `cooling_base_f` / `p` keys of a degree-day model's summary in its `models`;
+  - the `mv_method_proposal` metrics `model_criterion` and `degree_day_candidate` (billing
+    entries with `base_f: "auto"`); the `n_bills`, `bases`, `ranking` and `tried` keys of a
+    billing meter's rebaseline `window` in `camber mv propose --json`.
+<!-- /095-mv -->
 
 ## Deprecated
 

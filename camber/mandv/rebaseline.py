@@ -30,6 +30,10 @@ T5    the achievement period exceeds 36 months                       SEP 2019 Ed
 T6    a new ECM with at least 12 months of post-ECM data             BPA 2024 §3.1.8
 ====  ===========================================================  =====================
 
+On a billing meter T1 is, opt-in, the step scan of :mod:`camber.mandv.billsteps`
+(``rebaseline.bill_steps``; 0.95, #74), and :mod:`camber.mandv.billwindow` searches its new window
+of whole bills.
+
 **Outcomes** follow the BPA *Regression for M&V Reference Guide* (2024) taxonomy: a static change
 is an engineering or sub-meter non-routine adjustment (NRA), a minor process change an indicator
 NRA, and a major process change a **rebaseline, then a chain** that keeps cumulative reporting
@@ -489,6 +493,7 @@ _POLICY_KEYS = (
     "ecm_gap_days",
     "events",
     "static_factors",
+    "bill_steps",  # 0.95 (#74): the opt-in step test on bills (camber.mandv.billsteps)
 )
 
 
@@ -515,6 +520,9 @@ class RebaselinePolicy:
     ecm_gap_days: int = 365
     detect: bool = True
     min_segment_days: int = 28
+    #: 0.95 (#74): the step test on a billing meter (a :class:`~camber.mandv.billsteps.
+    #: BillStepRule`), opt-in; ``None`` keeps T1 as before (and out of :meth:`as_dict`)
+    bill_steps: Any = None
 
     def __post_init__(self):
         check_validity(self.require_validity)
@@ -577,12 +585,20 @@ class RebaselinePolicy:
         validity = rb.get("require_validity", entry.get("validity", "g14"))
         if validity not in VALIDITY:
             raise ValueError(f"mv.validity must be one of {VALIDITY}, got {validity!r}")
+        if rb.get("bill_steps") is not None:  # 0.95 (#74)
+            from .billsteps import BillStepRule
+
+            kw["bill_steps"] = BillStepRule.from_spec(rb["bill_steps"])
         return cls(schedule=sched, require_validity=validity, **kw)
 
     def as_dict(self) -> dict:
-        """Return as a plain JSON-safe dict."""
+        """Return as a plain JSON-safe dict (``bill_steps`` only when set)."""
         d = asdict(self)
         d["schedule"] = self.schedule.as_dict()
+        if self.bill_steps is None:
+            d.pop("bill_steps", None)
+        else:
+            d["bill_steps"] = self.bill_steps.as_dict()
         return d
 
 
@@ -852,7 +868,15 @@ def assess_triggers(
     # T1 -- detected, material, unexplained steps in the reporting period
     step_caveat = None
     steps: list = []
-    if pol.detect and len(since) >= 2 * pol.min_segment_days:
+    bill_rule = pol.bill_steps if ("days" in daily.columns and "start" in daily.columns) else None
+    if pol.detect and bill_rule is not None:  # 0.95 (#74): the opt-in scan on bills
+        from .billsteps import bill_steps
+
+        try:
+            steps = bill_steps(since, model, bill_rule, schedule=sched, events=events)
+        except (ValueError, np.linalg.LinAlgError) as e:
+            step_caveat = f"bill step scan not run: {e}"
+    elif pol.detect and len(since) >= 2 * pol.min_segment_days:
         try:
             steps = _savings_steps(since, model, pol)
         except (ValueError, np.linalg.LinAlgError) as e:
@@ -874,14 +898,20 @@ def assess_triggers(
             if st["z"] is not None
             else f"step of {st['delta']:+.4g} per day ({st['delta_rel']:+.0%})"
         )
+        basis = "PELT on the reporting days' deviation from the frozen baseline projection"
+        ev_keys: tuple = ("delta", "se", "z", "delta_rel")
+        if bill_rule is not None:  # 0.95 (#74)
+            detail += f" over {st['n_before']} + {st['n_after']} bills"
+            basis = bill_rule.describe()
+            ev_keys += ("n_before", "n_after", "detail")
         out.append(
             _t(
                 "T1",
                 st["date"],
                 detail,
                 "rebaseline" if major else "nra_indicator",
-                "PELT on the reporting days' deviation from the frozen baseline projection",
-                evidence={k: st[k] for k in ("delta", "se", "z", "delta_rel")},
+                basis,
+                evidence={k: st[k] for k in ev_keys},
             )
         )
 

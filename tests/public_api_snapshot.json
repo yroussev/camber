@@ -1098,6 +1098,18 @@
     "daily_weather",
     "is_billing_like"
   ],
+  "camber.mandv.billsteps": [
+    "BillStepRule",
+    "DEFAULT_MIN_RUN",
+    "DEFAULT_THRESHOLD",
+    "bill_steps",
+    "scan_statistic"
+  ],
+  "camber.mandv.billwindow": [
+    "BillWindow",
+    "RANKING",
+    "new_bill_window"
+  ],
   "camber.mandv.caltrack": [
     "HourlyNMECResult",
     "NMECResult",

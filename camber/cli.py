@@ -1711,6 +1711,7 @@ def _cmd_mv_propose(args) -> int:
                 print(
                     f"  new window {w['window'][0]}..{w['window'][1]} ({w['model_kind']}, "
                     f"{w['missing_frac']:.0%} missing, coverage {w['coverage_tier']})"
+                    + (f", {w['n_bills']} bills" if w.get("n_bills") else "")  # 0.95 (#74)
                 )
             elif rb["outcome"] == "declined":
                 print(f"  declined: {rb['declined_reason']}")
