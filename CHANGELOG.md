@@ -192,6 +192,12 @@ retention policy.
 - **An archived facility accepted store writes again once an edge object recreated its
   partition.** The archived check ran after the "partition exists" fast path, so an upload PUT
   straight into a store-as-bucket reopened the facility. It now runs first.
+- **A late upload into an already rolled-up month replaced that month's rollup.** Retention
+  replaced the whole rollup partition with the rollup of whatever raw rows were left, so raw
+  rows landing in a month after it was rolled up and pruned (an edge backlog, a backfill; likely
+  with a short `raw_trends` override) wiped the month's earlier rollup. Each rollup part now
+  records the raw files it covers: a run replaces only the parts whose raw files are all still
+  there and keeps the rest, so re-runs never double-count and late rows add to the month.
 - **Purge left a facility's quarantined edge uploads behind.** Purge now deletes
   `quarantine/facility_id=<id>/` with the rest (crash-safe, finished by `Portfolio.recover`, which
   also sweeps `quarantine/`). Archive keeps them: they are not in the bundle.

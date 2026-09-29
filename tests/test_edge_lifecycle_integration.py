@@ -341,3 +341,93 @@ def test_edge_state_names_are_the_lifecycles_states():
 
     assert set(ACCEPTING_STATES) | set(NON_ACCEPTING_STATES) == set(STATES)
     assert not set(ACCEPTING_STATES) & set(NON_ACCEPTING_STATES)
+
+
+# ---------------------------------------------------------------- retention on edge-landed objects
+
+
+def _rollup_n(pf, freq, fid, year, month) -> int:
+    """The raw-row count a rollup month partition stands for (the sum of its ``n``)."""
+    import pyarrow.dataset as pads
+
+    path = os.path.join(
+        pf.root, "rollups", freq, f"facility_id={fid}", f"year={year}", f"month={month}"
+    )
+    if not os.path.isdir(path):
+        return 0
+    return int(sum(pads.dataset(path, format="parquet").to_table().column("n").to_pylist()))
+
+
+def test_retention_rolls_up_verifies_and_prunes_edge_month_keys(pf, tmp_path):
+    from camber.edge.landing import reconcile
+    from camber.edge.quarantine import land
+
+    inbox = tmp_path / "in"
+    march, april = _part("2024-03-01", 24 * 3, 1.0), _part("2024-04-01", 24 * 2, 3.0)
+    legacy = _part("2023-06-01", 24, 2.0)  # an older forwarder's year-only part
+    for p, y, m in ((march, 2024, 3), (april, 2024, 4), (legacy, 2023, None)):
+        _put(inbox, _edge_key(A, p, y, m), p)
+    land(pf, inbox, apply=True, reason="sweep")
+    raw = pf.apply_retention(now="2026-09-01")["facilities"][A]["raw"]  # the dry-run plan
+    assert {(r["year"], r["month"], r["legacy"]) for r in raw} == {
+        (2023, None, True),
+        (2024, 3, False),
+        (2024, 4, False),
+    }
+    pf.apply_retention(apply=True, reason="monthly", now="2026-09-01")
+    assert pf.store.partitions(facility_id=A) == []  # raw pruned, only after the rollups verified
+    assert _rollup_n(pf, "hourly", A, 2024, 3) == 72 and _rollup_n(pf, "daily", A, 2024, 3) == 72
+    assert _rollup_n(pf, "hourly", A, 2024, 4) == 48 and _rollup_n(pf, "hourly", A, 2023, 6) == 24
+    assert reconcile(pf)["objects_scanned"] == 0
+    assert pf.audit_log(facility_id=A)[-1]["action"] == "retention.apply"
+
+
+def test_a_late_edge_part_in_a_rolled_up_month_adds_to_its_rollup(pf, tmp_path):
+    """A backlog uploaded after its month was rolled up and pruned must not replace the rollup."""
+    from camber.edge.quarantine import land
+
+    pf.set_retention_override(A, "raw_trends", {"keep_months": 1}, reason="small site")
+    first = _part("2026-06-01", 24 * 10, 1.0)
+    _put(tmp_path / "a", _edge_key(A, first, 2026, 6), first)
+    land(pf, tmp_path / "a", apply=True, reason="sweep")
+    pf.apply_retention(apply=True, reason="monthly", now="2026-08-15")
+    assert _rollup_n(pf, "hourly", A, 2026, 6) == 240 and not pf.store.partitions(facility_id=A)
+
+    late = _part("2026-06-20", 24 * 2, 5.0)  # a device back online after weeks
+    _put(tmp_path / "b", _edge_key(A, late, 2026, 6), late)
+    land(pf, tmp_path / "b", apply=True, reason="sweep")
+    pf.apply_retention(apply=True, reason="monthly", now="2026-08-16")
+    assert _rollup_n(pf, "hourly", A, 2026, 6) == 240 + 48
+    assert _rollup_n(pf, "daily", A, 2026, 6) == 240 + 48
+    assert not pf.store.partitions(facility_id=A)
+    # idempotent: another run changes nothing
+    pf.apply_retention(apply=True, reason="monthly", now="2026-08-17")
+    assert _rollup_n(pf, "hourly", A, 2026, 6) == 288
+
+
+def test_a_crash_before_the_prune_then_a_late_part_never_double_counts(pf, tmp_path, monkeypatch):
+    from camber.edge.quarantine import land
+    from camber.store import ParquetStore
+
+    pf.set_retention_override(A, "raw_trends", {"keep_months": 1}, reason="small site")
+    first = _part("2026-06-01", 24 * 10, 1.0)
+    _put(tmp_path / "a", _edge_key(A, first, 2026, 6), first)
+    land(pf, tmp_path / "a", apply=True, reason="sweep")
+    real = ParquetStore.drop_partition
+
+    def crash(self, *a, **k):
+        raise KeyboardInterrupt("power cut after the rollup, before the prune")
+
+    monkeypatch.setattr(ParquetStore, "drop_partition", crash)
+    with pytest.raises(KeyboardInterrupt):
+        pf.apply_retention(apply=True, reason="monthly", now="2026-08-15")
+    monkeypatch.setattr(ParquetStore, "drop_partition", real)
+    assert _rollup_n(pf, "hourly", A, 2026, 6) == 240  # rolled up, raw still there
+    late = _part("2026-06-20", 24 * 2, 5.0)  # lands before the re-run
+    _put(tmp_path / "b", _edge_key(A, late, 2026, 6), late)
+    land(pf, tmp_path / "b", apply=True, reason="sweep")
+    r = pf.apply_retention(apply=True, reason="monthly", now="2026-08-16")
+    assert r["problems"] == []
+    assert _rollup_n(pf, "hourly", A, 2026, 6) == 288  # the first rollup replaced, not added to
+    assert _rollup_n(pf, "daily", A, 2026, 6) == 288
+    assert not pf.store.partitions(facility_id=A)

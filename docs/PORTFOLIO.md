@@ -446,11 +446,14 @@ Rule keys: `keep_months` / `keep_years` (whole numbers >= 1), `keep` (`indefinit
 1. **Roll up, verify, prune.** Each raw month partition older than the `raw_trends` rule (a
    partition goes only once *all* of it is older, so at least 25 months stay) is rolled up into
    `rollups/hourly/` and `rollups/daily/`: the mean and the count (`n`) of the raw values per
-   bucket, per equipment and role. Each rollup partition is written crash-safely (it replaces any
-   earlier one, so a re-run never duplicates), read back, and its counts must add up to the raw
-   row count. Only then is the raw partition deleted; a mismatch keeps it, is reported, and is
+   bucket, per equipment and role. Each rollup part is written crash-safely, records the raw
+   files it was built from, and is read back; its counts must add up to the raw row count. A
+   re-run over the same raw files replaces its own part (so it never duplicates), while parts
+   built from raw rows already pruned are kept: a late upload into a month that was already
+   rolled up (an edge device's backlog, a backfill) adds to that month's rollup instead of
+   replacing it. Only then is the raw partition deleted; a mismatch keeps it, is reported, and is
    audited as `retention.incomplete` (exit code 1). So does a write that lands in the partition
-   while it is being rolled up (a late backfill): the next run rolls it up again. An hourly partition older than
+   while it is being rolled up: the next run rolls it up again. An hourly partition older than
    `hourly_rollups` goes once the daily rollup covers it (rebuilt from the hourly one,
    count-weighted, if it does not).
 2. **State.** Old closed faults, drift baseline history beyond `keep_versions`, reports beyond

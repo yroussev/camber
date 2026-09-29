@@ -447,10 +447,9 @@ def test_hourly_rollups_expire_into_daily(tmp_path):
     pf.apply_retention(apply=True, now=NOW, reason="nightly")
     daily_n = ParquetStore(os.path.join(pf.root, "rollups", "daily")).read_long()["n"].sum()
     # seven years on, the hourly rollups of 2023-06.. expire; the daily ones stay
-    os.remove(
-        os.path.join(pf.root, "rollups", "daily", f"facility_id={fid}", "year=2023", "month=6",
-                     "part-0-0.parquet")
-    )  # fmt: skip
+    june = os.path.join(pf.root, "rollups", "daily", f"facility_id={fid}", "year=2023", "month=6")
+    for f in os.listdir(june):
+        os.remove(os.path.join(june, f))
     later = "2031-01-15"
     pf.set_retention("raw_trends", {"keep": "indefinite"}, reason="freeze raw for the test")
     fp = pf.apply_retention(now=later)["facilities"][fid]
@@ -555,8 +554,8 @@ def test_a_failed_verification_keeps_the_raw_partition(tmp_path, monkeypatch, ca
     pf, fid = _ws(tmp_path)
     real = _ret._write_rollup
 
-    def short(root, f, y, m, frame):
-        got = real(root, f, y, m, frame)
+    def short(root, f, y, m, frame, **kw):
+        got = real(root, f, y, m, frame, **kw)
         return {**got, "n": got["n"] - 1} if (y, m) == (2023, 7) else got
 
     monkeypatch.setattr(_ret, "_write_rollup", short)
@@ -635,7 +634,7 @@ def test_cli_retention_reports_problems_and_legacy(tmp_path, capsys, monkeypatch
     monkeypatch.setenv("CAMBER_PORTFOLIO", pf.root)
     rc, out, _ = _cli(capsys, "retention", "apply", "--now", NOW)
     assert rc == 0 and "migrate-partitions" in out
-    monkeypatch.setattr(_ret, "_write_rollup", lambda *a: {"rows": 0, "n": -1})
+    monkeypatch.setattr(_ret, "_write_rollup", lambda *a, **k: {"rows": 0, "n": -1})
     rc, out, _ = _cli(capsys, "retention", "apply", "--now", NOW, "--apply", "--reason", "x",
                       "--confirm", "apply")  # fmt: skip
     assert rc == 1 and "raw partition kept" in out

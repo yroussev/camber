@@ -356,19 +356,66 @@ def _rollup(df: pd.DataFrame, freq: str, *, weighted: bool = False) -> pd.DataFr
     return g[cols].sort_values(["ts", "equip", "role"]).reset_index(drop=True)
 
 
-def _write_rollup(root: str, fid: str, year: int, month: int, frame: pd.DataFrame) -> dict:
-    """Replace one rollup month partition (crash-safe) and verify it by reading it back."""
+_COVERS_KEY = b"camber.rollup.covers"
+
+
+def _covers_of(path: str):
+    """The raw files a rollup part was built from (its Parquet metadata), else ``None``."""
+    import pyarrow.parquet as pq
+
+    try:
+        meta = pq.read_schema(path).metadata or {}
+        raw = meta.get(_COVERS_KEY)
+        return set(json.loads(raw)) if raw is not None else None
+    except (OSError, ValueError):  # pragma: no cover - an unreadable part is replaced
+        return None
+
+
+def _write_rollup(
+    root: str, fid: str, year: int, month: int, frame: pd.DataFrame, *, covers=None
+) -> dict:
+    """Write one rollup month partition (crash-safe) and verify the new part by reading it back.
+
+    ``covers`` names the raw files (relative to the facility's store partition) the frame was
+    built from. The part is named by them and records them, and the partition keeps every other
+    part built from raw files that are *not* all among them -- rows whose raw data was pruned
+    after an earlier rollup -- so a late upload into an already rolled-up month adds to its
+    rollup instead of replacing it, and re-running over the same raw files replaces its own part
+    (idempotent). ``covers=None`` replaces the whole partition (a rollup derived from a complete
+    source, such as daily from hourly).
+    """
+    import hashlib
+
     import pyarrow as pa
     import pyarrow.parquet as pq
 
     target = _part_path(root, fid, year, month)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     stage = _swap.staging(target)
-    pq.write_table(
-        pa.Table.from_pandas(frame, preserve_index=False), os.path.join(stage, "part-0-0.parquet")
-    )
+    name = "part-0-0.parquet"
+    table = pa.Table.from_pandas(frame, preserve_index=False)
+    if covers is not None:
+        cset = sorted(set(covers))
+        name = f"part-{hashlib.sha256(chr(10).join(cset).encode()).hexdigest()[:16]}.parquet"
+        table = table.replace_schema_metadata(
+            {**(table.schema.metadata or {}), _COVERS_KEY: json.dumps(cset).encode()}
+        )
+        if os.path.isdir(target):
+            for n in sorted(os.listdir(target)):
+                src = os.path.join(target, n)
+                if not n.endswith(".parquet") or n == name:
+                    continue
+                old = _covers_of(src)
+                if old is not None and not old <= set(cset):  # history of pruned raw rows
+                    try:
+                        os.link(src, os.path.join(stage, n))
+                    except OSError:  # pragma: no cover - no hard links on this filesystem
+                        import shutil
+
+                        shutil.copy2(src, os.path.join(stage, n))
+    pq.write_table(table, os.path.join(stage, name))
     _swap.commit(target)
-    back = _read_dir(target)
+    back = pq.read_table(os.path.join(target, name)).to_pandas()
     return {"rows": int(len(back)), "n": int(back["n"].sum()) if len(back) else 0}
 
 
@@ -594,6 +641,8 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
     fdir = os.path.join(store.root, f"facility_id={fid}", f"year={p['year']}")
     src = fdir if p["legacy"] else os.path.join(fdir, f"month={p['month']}")
     snap = _snapshot(src, legacy=p["legacy"])
+    rel = f"year={p['year']}" if p["legacy"] else f"year={p['year']}/month={p['month']}"
+    covers = [f"{rel}/{name}" for name, _size, _mtime in snap]
     if p["legacy"]:
         raw = _read_legacy(fdir) if os.path.isdir(fdir) else pd.DataFrame()
     else:
@@ -612,7 +661,7 @@ def _apply_raw(pf, fid: str, p: dict, eff_cut: dict, problems: list) -> None:
             if c is not None and _month_end(y, m) <= c:
                 continue  # this rollup would be expired at once: skip it
             root = os.path.join(pf.root, ROLLUPS_DIR, freq)
-            got = _write_rollup(root, fid, y, m, _rollup(chunk, freq))
+            got = _write_rollup(root, fid, y, m, _rollup(chunk, freq), covers=covers)
             if got["n"] != want:
                 problems.append(
                     f"{fid} {y}-{m:02d}: {freq} rollup holds {got['n']} of {want} raw rows; "
