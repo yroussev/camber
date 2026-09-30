@@ -94,6 +94,10 @@ nav:
       - Grounded explanation & Q&A: AGENT.md
   - Platform:
       - CLI: CLI.md
+      # BEGIN 098-thresholds (#90)
+      - Rule thresholds: THRESHOLDS.md
+      - Tuning thresholds with your own data: TUNING.md
+      # END 098-thresholds (#90)
       - Open datasets: DATASETS.md
       - Portfolio lifecycle: PORTFOLIO.md
       - Time handling & DST: TIME-HANDLING.md

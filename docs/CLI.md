@@ -15,6 +15,7 @@ camber validate [--html d.html] [--json d.json] [--full]         # validation cr
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
@@ -61,6 +62,37 @@ constructor for the run — e.g. a high-outside-air building setting its design 
 "rules": ["simultaneous_heat_cool",
           {"name": "economizer_high_limit", "params": {"high_limit_f": 75, "min_damper": 0.45}}]
 ```
+
+<!-- BEGIN 098-thresholds (#90) -->
+### YAML configs and tunable thresholds (provisional, 0.98)
+
+**YAML.** Every command that takes a config (`run`, `report`, `explain`, `ask`, `fleet`, `drift`,
+`mv`, `python -m camber.config`, the portfolio migration and the edge forwarder's config) also
+reads a `.yaml` / `.yml` file. YAML needs the optional extra, `pip install
+'camber-toolkit[yaml]'` (PyYAML); without it the command stops with an error that says so. JSON
+stays the dependency-free default, and the two formats are equivalent: a YAML config and the JSON
+config that says the same thing give identical results. YAML's point is comments, so a calibration
+note can sit beside its value. The loader reads values the way JSON does: `2018-07-01` and `07:00`
+stay strings, `no` / `on` stay strings, and only `true` / `false` are booleans.
+
+**`camber rules params`.** Every numeric, flag or enumerated constructor parameter of every
+built-in rule, including the extra instances (`cohort_airflow`, `sat_reset_effectiveness`, ...),
+is documented in `camber/rules/param_docs.py`:
+
+```
+camber rules params                     # every rule: default, unit, range, basis, how to calibrate
+camber rules params leaking_valve       # one rule, plus a ready-to-paste JSON config snippet
+camber rules params leaking_valve --yaml   # the snippet as YAML, each note a comment
+camber rules params --json              # machine-readable: {"rules": [...], "config": {...}}
+```
+
+Defaults are read from the rule constructors, never copied, and every parameter is settable from a
+config's `params`. The extra instances are tunable too; their identity arguments (the cohort
+role, the reset kind) are fixed. A rule entry may also carry a `basis` map (`{"fan_heat_f":
+"calibrated on ..."}`), which is copied into each of its findings as `metrics["param_basis"]`.
+[THRESHOLDS.md](THRESHOLDS.md) is the generated reference and [TUNING.md](TUNING.md) is the
+calibration guide.
+<!-- END 098-thresholds (#90) -->
 
 ## Report layouts
 
@@ -274,13 +306,18 @@ camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-
                         [--from-dir DIR] [--accept-noncommercial]
 camber datasets status [--dir D] [--store DIR] [--json]
 camber datasets remove <id> [--dir D] [--store DIR --purge-store]
-camber datasets config <id> --store DIR [--out cfg.json] [--facility ID] [--exercise EX]
+camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
+                        [--facility ID] [--exercise EX]
 camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 ```
 
 `config --exercise <exercise-id>` (0.97) writes a [workbook](workbook/index.md) exercise's tuned
 template instead of the dataset's own; the template names the dataset it was tuned for, and any
 other dataset is refused.
+
+`config --format yaml` (0.98) writes the template as YAML, with its `_comment` notes turned into
+comments; `--out` with a `.yaml` / `.yml` suffix picks YAML too. Writing YAML needs no extra;
+running the YAML config needs the `[yaml]` extra.
 
 `list` shows each entry's licence **tier** (`open` / `research-only`) and marks manual downloads.
 `fetch --all` takes the open tier only; research-only (NC/ND) datasets also need `--licence all`

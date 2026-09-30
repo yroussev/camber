@@ -393,12 +393,14 @@ def build_config(
     facility_id: str | None = None,
     out: str | None = None,
     exercise: str | None = None,
+    format: str = "json",
 ) -> dict:
     """The entry's run-config template, pointed at ``store`` (and written to ``out`` if given).
 
     The facility defaults to the entry's; for a multi-facility dataset (BDG2: one per site) it
     defaults to the first one ingested into ``store``. ``exercise`` (0.97, #79) takes a workbook
     exercise's tuned template (``configs/exercises/<exercise>.json``) instead of the dataset's.
+    ``format`` (0.98, #90): ``"json"`` or ``"yaml"`` for the file written to ``out``.
     """
     if exercise:
         cfg = exercise_config(entry, exercise)
@@ -414,10 +416,17 @@ def build_config(
         default = entry.ingest.get("facility")
         fid = default if default in have or not have else have[0]
     cfg["source"] = {**cfg.get("source", {}), "kind": "store", "store": root, "facility_id": fid}
+    if format not in ("json", "yaml"):
+        raise ValueError(f"format must be 'json' or 'yaml', not {format!r}")
     if out:
         with open(out, "w", encoding="utf-8") as fh:
-            json.dump(cfg, fh, indent=2)
-            fh.write("\n")
+            if format == "yaml":  # 0.98 (#90): the notes become comments; no extra needed
+                from .._yaml import dump_yaml
+
+                fh.write(dump_yaml(cfg))
+            else:
+                json.dump(cfg, fh, indent=2)
+                fh.write("\n")
     return cfg
 
 

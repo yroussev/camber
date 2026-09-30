@@ -120,18 +120,26 @@ RULE_CLASSES: list[type] = [
 # auto-constructed from RULE_CLASSES). Cohort-deviation fleet rules for the common roles.
 from ..model.roles import Role  # noqa: E402
 
+# name -> (class, the constructor arguments that make the instance what it is). 0.98 (#90): a
+# config can tune these too -- make_rule() rebuilds the instance with its identity arguments plus
+# the overrides.
+_EXTRA_SPECS: dict = {
+    "cohort_airflow": (CohortDeviation, {"role": Role.AIRFLOW, "name": "cohort_airflow"}),
+    "cohort_space_temp": (
+        CohortDeviation,
+        {"role": Role.SPACE_TEMP, "name": "cohort_space_temp"},
+    ),
+    "sat_reset_effectiveness": (ResetEffectiveness, {"reset": "sat"}),
+    "static_reset_effectiveness": (ResetEffectiveness, {"reset": "static"}),
+    "sat_rogue_zone_census": (RogueZoneCensus, {"reset": "sat"}),
+    "static_rogue_zone_census": (RogueZoneCensus, {"reset": "static"}),
+    "sat_cohort_starvation": (CohortStarvation, {"reset": "sat"}),
+    "static_cohort_starvation": (CohortStarvation, {"reset": "static"}),
+}
+
 
 def _extra_instances():
-    return [
-        CohortDeviation(Role.AIRFLOW, name="cohort_airflow"),
-        CohortDeviation(Role.SPACE_TEMP, name="cohort_space_temp"),
-        ResetEffectiveness(reset="sat"),
-        ResetEffectiveness(reset="static"),
-        RogueZoneCensus(reset="sat"),
-        RogueZoneCensus(reset="static"),
-        CohortStarvation(reset="sat"),
-        CohortStarvation(reset="static"),
-    ]
+    return [cls(**kw) for cls, kw in _EXTRA_SPECS.values()]
 
 
 def is_fleet(rule) -> bool:
@@ -159,18 +167,38 @@ def _class_by_name() -> dict:
     return {cls().name: cls for cls in RULE_CLASSES}
 
 
+def rule_factories() -> dict:
+    """Every built-in rule name -> ``(class, fixed constructor arguments)`` (0.98, #90).
+
+    The fixed arguments are empty for the auto-registered :data:`RULE_CLASSES`; for the extra
+    instances they are the identity arguments (the cohort role, the reset kind) that
+    :func:`make_rule` keeps when it applies a config's overrides.
+    """
+    out: dict = {name: (cls, {}) for name, cls in _class_by_name().items()}
+    out.update({name: (cls, dict(kw)) for name, (cls, kw) in _EXTRA_SPECS.items()})
+    return out
+
+
 def make_rule(name: str, **params):
     """Construct a built-in rule by ``name``, overriding its constructor defaults with ``params``.
 
     Enables per-rule tuning from a config (e.g. a building whose design minimum outside air
-    isn't the rule's default). Only the auto-registered :data:`RULE_CLASSES` are constructible
-    this way. Raises ``KeyError`` for an unknown name and ``TypeError`` (naming the rule) for an
-    invalid parameter.
+    isn't the rule's default). Every built-in rule is constructible this way: since 0.98 (#90)
+    that includes the extra instances (``cohort_airflow``, ``sat_reset_effectiveness``, ...),
+    whose identity arguments (the role, the reset kind) cannot be overridden. Raises
+    ``KeyError`` for an unknown name and ``TypeError`` (naming the rule) for an invalid
+    parameter. ``camber rules params`` lists every rule's tunable parameters.
     """
-    classes = _class_by_name()
-    if name not in classes:
+    factories = rule_factories()
+    if name not in factories:
         raise KeyError(name)
+    cls, fixed = factories[name]
+    clash = sorted(set(fixed) & set(params))
+    if clash:
+        raise TypeError(
+            f"invalid params for rule {name!r}: {', '.join(clash)} is fixed for this rule"
+        )
     try:
-        return classes[name](**params)
+        return cls(**fixed, **params)
     except TypeError as e:
         raise TypeError(f"invalid params for rule {name!r}: {e}") from e

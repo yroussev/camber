@@ -108,6 +108,18 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 | [Economizer][pnnl-guide-economizer], [Ch. 9][pnnl-retuning-ch9], [Ch. 10][pnnl-retuning-ch10] | [`capstone`: the RCx report, a walk-down list, a re-tuning plan, verification](capstone.md) | `lbnl-sdahu`, `ornl-frp-ops` |
 <!-- END workbook-practice (#83) -->
 
+<!-- BEGIN workbook-going-further (#90) -->
+## Going further: tune the thresholds yourself
+
+Several exercises tune a rule to its dataset's unit, such as a design minimum outside air or a
+fixed high limit. When you apply the same rules to your own building, re-tune them the same way.
+`camber rules params RULE` shows each threshold's default, where the default comes from, and how
+to calibrate it. [Tuning thresholds with your own data](../TUNING.md) walks through calibrating
+on a known-good period, keeping the scoring data separate from the calibration data, and
+recording the calibration in a YAML config comment. Its worked examples use the catalog datasets
+from these exercises.
+<!-- END workbook-going-further (#90) -->
+
 ## For instructors
 
 The [instructor page](instructor.md) holds the answer keys, discussion points and common

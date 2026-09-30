@@ -53,6 +53,10 @@ brick = ["rdflib>=6"]   # robust Brick/RDF parsing (camber.interop.brick backend
 # only when a workbook is read). Legacy .xls (xlrd) is deliberately not included: no catalog entry
 # needs one -- see docs/DATASETS.md.
 xlsx = ["openpyxl>=3.1"]
+# YAML run configs (0.98, #90): `camber run site.yaml` etc. read .yaml / .yml through PyYAML (MIT),
+# imported lazily by camber._yaml; JSON configs need nothing. Writing YAML (`camber datasets config
+# --format yaml`, `camber rules params --yaml`) needs no extra either.
+yaml = ["pyyaml>=6"]
 # a maintained Haystack client to wire via camber.ingest.haystack.client_transport;
 # phable is modern but needs Python >= 3.11, pyhaystack covers older Pythons.
 haystack = [
