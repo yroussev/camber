@@ -748,7 +748,8 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
   holds its setpoint, the valve reads shut, and the chillers get the hot water. Only a sensor
   downstream of the mixing point sees it.
 - The simulated bypass runs drive the condenser loop to temperatures a real chiller would trip
-  on. Discuss what a real plant would show instead (high-pressure trips, alarms).
+  on (the catalog's [data issue](../DATASETS.md#the-condenser-bypass-runs-are-fixed-physically-implausible-bypasses-and-the-two-75-runs-are-one-case)). Discuss what a real plant would show instead
+  (high-pressure trips, alarms).
 
 **Common mistakes**
 
@@ -756,7 +757,9 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
   run's.
 - Reading `info` (declined) on the bypass runs as `ok`.
 - Treating the bypassed-fraction estimate as the leak size: in these runs it does not follow the
-  severities in the file names.
+  severities in the file names (it is fixed at 0.92, 0.97 and 0.99 for the 25, 50 and 75 % runs).
+- Counting the two 75 % runs as two detections: in both the valve command reads zero all year and
+  the condenser side is the same data, so they are one case.
 - Lowering the design approach until the fouled tower is flagged, and not checking what else
   gets flagged with it.
 

@@ -4,6 +4,48 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.98.0] — Unreleased
+
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+<!-- 098-refs-catalog (#89) -->
+### Changed
+- **More rules link to the PNNL Re-tuning material (#89).** `RULE_REFERENCES` maps 48 rules, up
+  from 35, each checked against the guide's own headings. `sat_rogue_zone_census` links the
+  discharge-air-temperature guide, whose reset section bases a zone-driven reset on the zones
+  served, setting aside the warmest and coolest. `static_rogue_zone_census`,
+  `static_cohort_starvation` and `damper_census` link the static-pressure guide, whose "too high
+  or too low" section reads the box damper positions. `sat_cohort_starvation` maps to
+  chapters 5 and 7; `reheat_capacity_shortfall`, `cohort_airflow` and `cohort_space_temp` to
+  chapter 7.
+  `condenser_bypass_leak`, `chiller_approach_fouling`, `chiller_staging_fleet`,
+  `cooling_tower_fan_effort_drift` and `boiler_efficiency_drift` map to chapter 8. The G36
+  reset-effectiveness rules, `filter_fouling`, `g36_afdd`, the DX and heat-pump rules and the other
+  drift detectors stay unmapped, with the reason in a comment and in `docs/REFERENCES.md`.
+  Reports gain "Learn more" links for these findings; no finding changes.
+- **`lbnl-chiller` data issue `condenser-bypass-runs-implausible` (#89, annotate).** The five
+  condenser-bypass runs hold a fixed bypass all year (0.917 / 0.967 / 0.988 of the condenser flow
+  for 25 / 50 / 75), drive the condenser loop to 118-162 °F at p90 / maximum, and the two 75 % runs
+  are the same data with the valve command at 0.0 in every row. The runs stay as published and
+  scored. The ingest is unchanged, so every `content_hash` is too. The `plant-cooling-tower`
+  workbook caveats and instructor notes now say "both 75 % runs" and link the issue.
+- **`rbc-g36-ahu`: the stale `leaking_valve` note is corrected.** The rule has gated on a mapped
+  fan status since 0.93 (#42). The catalog note and the template comment now say so, and say that
+  the template still leaves the rule out until it is re-checked on these baselines.
+
+### Documentation
+- **`docs/DATASETS.md`: "Running the workbook answer checks on local files" (#89).** Covers
+  `CAMBER_WORKBOOK_FROM_DIR`, the `<dir>/<dataset-id>/` layout, symlinking a checkout's differently
+  named files, the manual `lbnl-b59` files (`Building_59.zip`, `README_Dryad_Bldg59.txt`) and the
+  per-dataset file list, which a test keeps in step with the harness and the catalog.
+
+### Fixed
+- **`tests/test_references.py` sees instance-named rules.** `_rule_names()` now includes
+  `builtin.rule_names()`, so a mapping for `cohort_airflow` or the census and starvation rules no
+  longer fails the "every mapped rule exists" check.
+<!-- /098-refs-catalog -->
+
 ## [0.97.0] — Unreleased
 
 <!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is
