@@ -920,8 +920,8 @@ def _cmd_lab(args) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     where = f"workspace {app.portfolio.root}" if app.portfolio is not None else f"store {store}"
-    print(f"camber lab: {where}; dataset cache {app.data_dir}")
-    print(f"open http://127.0.0.1:{app.port}/lab  (loopback only; Ctrl-C to stop)")
+    print(f"camber lab: {where}; dataset cache {app.data_dir}", flush=True)
+    print(f"open http://127.0.0.1:{app.port}/lab  (loopback only; Ctrl-C to stop)", flush=True)
     try:  # pragma: no cover - blocking server loop
         httpd.serve_forever()
     except KeyboardInterrupt:  # pragma: no cover
