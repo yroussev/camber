@@ -81,7 +81,7 @@ benchmark moves.
     files are pinned (size and SHA-256) from real downloads with `scripts/datasets_refresh.py`.
   - `default` is the three sites' metadata and Brick models plus site B's streams (1.5 GB,
     38 MB once ingested); `full` is all three sites (19 GB, 1.1 GB once ingested).
-  - Eight data issues, each with evidence: UTC timestamps, undocumented units, 125 listed streams
+  - Nine data issues, each with evidence: UTC timestamps, undocumented units, 125 listed streams
     without a file, site C running outside the documented period, week-long whole-site outages,
     site C's zero dropouts (masked by a `fix` quirk; `--no-corrections` keeps them), placeholder
     and 32-bit overflow values, site C's negative airflows and mixed pressure scales, and 136 site
