@@ -64,6 +64,28 @@ outputs are unchanged, and no gated benchmark moves.
     the catalog links `lbnl-ddahu`, `irish-ahu` and `ornl-frp-ops` to their exercises.
 <!-- /097-air -->
 <!-- 097-zone (#81) -->
+- **Workbook: terminal units and ventilation (#81).** Five exercises for PNNL chapter 7 and the
+  zone heating and cooling and minimum outdoor-air guides, each with an instructor key pinned by
+  offline stand-in tests and `-m network` tests on the real data:
+  - `zone-reheat-overcooling` (`lbnl-fpu`): a high minimum airflow that overcools and reheats,
+    against a stuck damper that floods the box (`airflow_tracking`, `reheat_penalty`,
+    `overcooling_min_flow`); the south-zone box is the one under test.
+  - `zone-bad-box` (`ornl-frp-vav`): the one box with a flat damper among ten, the SAT rogue-zone
+    census, the rooftop unit's airflow and static following the stuck box, and why a comfort rule
+    scores poorly as a stuck-damper detector (TPR 33 %, FPR 100 % on the published labels).
+  - `zone-reheat-saturated` (`lbnl-fpu`, `ornl-frp-vav`): a zone below its heating setpoint with
+    the reheat demand saturated (`reheat_capacity_shortfall`), a heating shortfall rather than
+    overcooling; and a real building whose electric reheat is not trended, where no reheat verdict
+    is possible.
+  - `zone-dcv` (`finnish-dcv`, `b4b-windesheim`, `sdu-ou44`): a documented DCV law, a verdict
+    that depends on which CO₂ sensor you trust, and the honest "not judged".
+  - `zone-min-oa` (`lbnl-b59`): the system-level 62.1 Ventilation Rate Procedure with stated
+    assumptions (public sources only), measured OA several times the requirement, and CO₂ and
+    DCV as second opinions.
+  - Four exercise config templates (`zone-reheat-overcooling`, `zone-reheat-saturated`,
+    `zone-reheat-saturated--ornl-frp-vav`, `zone-min-oa`); the catalog entries `lbnl-fpu`,
+    `ornl-frp-vav`, `finnish-dcv`, `b4b-windesheim`, `sdu-ou44` and `lbnl-b59` link their
+    exercise.
 <!-- /097-zone -->
 <!-- 097-plant (#82) -->
 <!-- /097-plant -->

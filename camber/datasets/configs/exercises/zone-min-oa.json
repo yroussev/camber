@@ -1,0 +1,72 @@
+{
+  "_comment": "Workbook exercise zone-min-oa (docs/workbook/zone-min-oa.md): the lbnl-b59 template's system DCV and CO2 checks plus the system-level 62.1 Ventilation Rate Procedure (ventilation_system_62_1, run from the ventilation section). The data publish no per-zone areas or populations, so each rooftop unit gets ONE lumped zone standing for its share of the building, every input marked assumed (severity is then capped at warn): the two 2,325 m2 office floors (50,052 ft2) split evenly over the four RTUs, 12,513 ft2 each -- the same assumption as the template's oa_floor_cfm 750 = 0.06 cfm/ft2 x 12,513 ft2 -- and the office default occupant density of 5 people per 1,000 ft2, 63 people each (both unverified; the office rates Rp 5 cfm/person and Ra 0.06 cfm/ft2 come from CAMBER's OA_RATES_62_1 table, see docs/VENTILATION.md for its public sources). No system population is given, so occupant diversity D = 1 and the simplified Ev = 0.75: the largest requirement the method gives. Measured OA is each RTU's flow station, masked before 2020-04-10 (data issue oa-flow-gap-filled). dcv_system_verification keeps the template's 750 cfm floor; co2_ventilation_system is the template's. Not run: unmet_setpoint_hours and reheat_capacity_shortfall (terminal rules, not ventilation), and outdoor_air_fraction (no trustworthy unit minimum; see the template's comment). Hourly resample (three years of 1-minute data).",
+  "_dataset": "lbnl-b59",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-b59"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "supply_air_temp"
+    },
+    {
+      "class": "VAV",
+      "marker_role": "co2"
+    }
+  ],
+  "rules": [
+    {
+      "name": "dcv_system_verification",
+      "params": {
+        "oa_floor_cfm": 750.0
+      }
+    },
+    "co2_ventilation_system"
+  ],
+  "ventilation": {
+    "zones": [
+      {
+        "zone": "RTU01_floor_share",
+        "system": "RTU01",
+        "area_sqft": 12513,
+        "population": 63,
+        "space_type": "office",
+        "area_assumed": true,
+        "population_assumed": true
+      },
+      {
+        "zone": "RTU02_floor_share",
+        "system": "RTU02",
+        "area_sqft": 12513,
+        "population": 63,
+        "space_type": "office",
+        "area_assumed": true,
+        "population_assumed": true
+      },
+      {
+        "zone": "RTU03_floor_share",
+        "system": "RTU03",
+        "area_sqft": 12513,
+        "population": 63,
+        "space_type": "office",
+        "area_assumed": true,
+        "population_assumed": true
+      },
+      {
+        "zone": "RTU04_floor_share",
+        "system": "RTU04",
+        "area_sqft": 12513,
+        "population": 63,
+        "space_type": "office",
+        "area_assumed": true,
+        "population_assumed": true
+      }
+    ]
+  },
+  "report": {
+    "level": 2
+  }
+}

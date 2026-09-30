@@ -1,0 +1,36 @@
+{
+  "_comment": "Workbook exercise zone-reheat-saturated (docs/workbook/zone-reheat-saturated.md), ornl-frp-vav part: the ten VAV boxes of set 3's fault-free day only (RTU_VAV_<room>__d3_fault_free), so every cold room found is a real building's normal operation, not a test fault. Same rules as the lbnl-fpu part: reheat_capacity_shortfall, overcooling_severity and unmet_setpoint_hours, at their defaults, with the building's own thermostat schedule and occupancy flag (Table 3 of the data descriptor: 21/24 C occupied 7 a.m.-10 p.m.; the occupancy point replaces the rules' default schedule). The boxes' reheat is electric and published as energy per minute, not a valve or command, so it is not mapped (see mappings/ornl_frp_vav.json): reheat_capacity_shortfall, which needs a reheat valve, cannot judge any box -- the exercise's point. 15-minute resample (one day of 1-minute data).",
+  "_dataset": "ornl-frp-vav",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-ornl-frp-vav"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp",
+      "equip": [
+        "RTU_VAV_102__d3_fault_free",
+        "RTU_VAV_103__d3_fault_free",
+        "RTU_VAV_104__d3_fault_free",
+        "RTU_VAV_105__d3_fault_free",
+        "RTU_VAV_106__d3_fault_free",
+        "RTU_VAV_202__d3_fault_free",
+        "RTU_VAV_203__d3_fault_free",
+        "RTU_VAV_204__d3_fault_free",
+        "RTU_VAV_205__d3_fault_free",
+        "RTU_VAV_206__d3_fault_free"
+      ]
+    }
+  ],
+  "rules": [
+    "reheat_capacity_shortfall",
+    "overcooling_severity",
+    "unmet_setpoint_hours"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -67,6 +67,11 @@ nav:
       # END workbook-air (#80)
       #
       # BEGIN workbook-zone (#81)
+      - "Terminal units: reheat penalty and overcooling": workbook/zone-reheat-overcooling.md
+      - "Terminal units: one bad box in a fleet": workbook/zone-bad-box.md
+      - "Terminal units: reheat maxed out": workbook/zone-reheat-saturated.md
+      - "Terminal units: DCV and occupancy": workbook/zone-dcv.md
+      - "Terminal units: minimum OA and 62.1": workbook/zone-min-oa.md
       # END workbook-zone (#81)
       #
       # BEGIN workbook-plant (#82)

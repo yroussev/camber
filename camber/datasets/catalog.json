@@ -2512,7 +2512,8 @@
      "airflow_tracking",
      "unmet_setpoint_hours"
     ],
-    "config_template": "lbnl-fpu.json"
+    "config_template": "lbnl-fpu.json",
+    "exercise": "workbook/zone-reheat-overcooling.md"
    },
    "known_issues": [
     "Faults are imposed on the SOUTH zone box (_S columns); the other zones stay healthy (see the data issues).",
@@ -5306,7 +5307,8 @@
      "unmet_setpoint_hours",
      "reheat_capacity_shortfall"
     ],
-    "config_template": "lbnl-b59.json"
+    "config_template": "lbnl-b59.json",
+    "exercise": "workbook/zone-min-oa.md"
    },
    "known_issues": [
     "Licence: Dryad lists the data as CC0-1.0, but the metadata JSON inside the archive states CC BY 4.0 (DataGovernance/Sharing/License) and the data descriptor is CC BY 4.0. The catalog applies the stricter CC-BY-4.0 and asks for attribution.",
@@ -5953,7 +5955,8 @@
     "rules": [
      "dcv_verification"
     ],
-    "config_template": "finnish-dcv.json"
+    "config_template": "finnish-dcv.json",
+    "exercise": "workbook/zone-dcv.md"
    },
    "known_issues": [
     "The ventilation test controlled the airflow on the ML occupant estimate, not the ground-truth count; the two agree in 74.7% of test minutes. CAMBER maps the ground-truth count as occupancy.",
@@ -6180,7 +6183,8 @@
      "dcv_verification",
      "co2_ventilation"
     ],
-    "config_template": "b4b-windesheim.json"
+    "config_template": "b4b-windesheim.json",
+    "exercise": "workbook/zone-dcv.md"
    },
    "known_issues": [
     "The valve fraction is a position (0.20 at the valve's mechanical minimum, 1.00 open) of a constant-pressure system, not a measured flow; the DCV rule judges OA from it with a caveat. Rooms 917810 and 999169 have a maximum flow of 240 m3/h (room metadata), so 0.20 is about 48 m3/h.",
@@ -8646,7 +8650,8 @@
     "rules": [
      "dcv_verification"
     ],
-    "config_template": "sdu-ou44.json"
+    "config_template": "sdu-ou44.json",
+    "exercise": "workbook/zone-dcv.md"
    },
    "known_issues": [
     "The publisher anonymised the dates (a random DayId per day, plus year, month and a workday flag): the 44 days are not consecutive and their order is random, so the store uses a synthetic day clock (see timezone) and the entry is contiguous: false -- the template runs no drift, setback or other schedule rule.",
@@ -11174,7 +11179,8 @@
      "sat_rogue_zone_census",
      "sat_cohort_starvation"
     ],
-    "config_template": "ornl-frp-vav.json"
+    "config_template": "ornl-frp-vav.json",
+    "exercise": "workbook/zone-bad-box.md"
    },
    "known_issues": [
     "The Sci Data article is licensed CC BY-NC-ND 4.0; the dataset itself is published CC BY 4.0 on its repository (every version), and the data licence is what applies.",
