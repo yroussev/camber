@@ -452,6 +452,33 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the CLI `camber edge compact | decommission | reconcile | land | quarantine |
     record-retirement | bucket-rules`.
 <!-- /095-edge -->
+<!-- 096-lab (#77) -->
+- **`camber.lab`** (added in 0.96, provisional, #77) -- the loopback-only catalog UI: `LabApp`,
+  `LabError`, `dispatch_lab`, `make_lab_server`, `serve_lab`, `Job`, `JobQueue`, `JobCancelled`,
+  and the constants `LAB_HOST`, `DEFAULT_PORT`, `BODY_LIMIT` and `TOKEN_HEADER`; the HTTP routes
+  `GET /lab`, `/lab/catalog`, `/lab/jobs[/<id>]`, `/lab/reports/<fid>` and
+  `POST /lab/jobs/fetch|ingest`, `/lab/jobs/<id>/cancel`, with their JSON bodies; the audit
+  actions `lab.fetch`, `lab.acknowledge` and `lab.ingest`; and the `camber lab` command. The page's
+  markup and the catalog-view JSON may change with the exercises. Also additive: the internal
+  `via=` of `camber.datasets._ops.fetch_dataset` (the ledger records `"lab fetch"`), and the
+  `/ui?facility_id=` deep link of the live viewer. `camber serve` and `camber.api.server.dispatch`
+  are unchanged and stay GET-only.
+<!-- /096-lab -->
+<!-- 096-report (#78) -->
+- **`camber.references`** (added in 0.96, provisional, #78) -- the linked-reference registry:
+  `Reference`, `REFERENCES`, `RULE_REFERENCES`, the kind constants (`GUIDE`, `TRAINING`,
+  `TOOL_GUIDE`, `REPORT`, `PROJECT`, `RELATED_TOOL`, `KINDS`), `reference`, `references_for`,
+  `reference_ids_for`, `references_for_findings`, `reference_urls`, `links_html` and
+  `links_text`. Reference ids are stable; titles, the rule map and `verified_on` dates are data
+  and change as the publisher moves documents. Also additive and provisional in 0.96:
+  `Recommendation.references` (and the `references` key of `action_plan_rows` rows and of each
+  RCx issue in `RcxReport.to_dict()`), the `DEFAULT_PARAMS` keys `dcv_*`, `chw_low_dt_warn_pct`
+  and `pump_near_*_warn_pct`, `AuditReport.title` / `is_std211()` / `display_title()` /
+  `to_html_document()`, `camber.report.audit.html_document` and `REPORT_CSS`, the config keys
+  `report.title` and `report.ecms`, the RCx section id `reading`, and
+  `camber.api.ui.role_units`. The **text** of recommendations and report titles is presentation,
+  not API: it follows the finding's cause and may be reworded.
+<!-- /096-report -->
 
 ## Deprecated
 

@@ -177,7 +177,8 @@ def test_no_g36_advice_without_a_declared_g36_sequence(tmp_path, captured):
 def test_g36_advice_when_the_class_declares_a_g36_sequence(tmp_path, captured):
     run = _run_with(tmp_path, _stuck_damper_g36(), soo=[{"class": "AHU", "library": "g36_ahu"}])
     html = build_rcx_report(run).to_html()
-    assert "Apply G36 reheat minimization" in html
+    # 0.96 (#78): reheat above the minimum airflow gets the dual-maximum advice
+    assert "Implement the dual-maximum heating sequence" in html
     assert "no ASHRAE Guideline 36 sequence is declared" not in html
 
 

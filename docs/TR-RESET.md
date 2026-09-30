@@ -243,3 +243,14 @@ engine (`oat_sat_setpoint`, `tr_step` / `tr_simulate`, `cooling_sat_requests` /
 **cohort starvation** for SAT and static (is a whole AHU cohort starved by an upstream fault?). The
 census family scopes per air handler automatically via the served-by [topology](TOPOLOGY.md) —
 semantic (from a Brick/Haystack model) or a naming heuristic `run_fleet` auto-builds.
+
+## Further reading
+
+The PNNL Building Re-tuning guides behind these checks (links only; see [References](REFERENCES.md)):
+[AHU Static Pressure Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_84187.pdf) (`static_pressure_reset`),
+[AHU Discharge-Air Temperature Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_84186.pdf) (`supply_air_reset`,
+`supply_air_reset_compliance`, `supply_air_control`),
+[Central Utility Plant Cooling Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_89198.pdf) and
+[Central Utility Plant Heating Control](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_89222.pdf) (the CHW / HW loop and pump
+differential-pressure resets), and training chapters [5](https://www.pnnl.gov/sites/default/files/media/file/ch5_air_handling.pdf) and
+[8](https://www.pnnl.gov/sites/default/files/media/file/ch8_central_plant.pdf).

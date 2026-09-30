@@ -143,6 +143,10 @@ The ``report`` section selects the report: ``"layout": "audit"`` (the default St
 ``"rcx": {"top_n", "week", "paper", "chart_format", "sections", "price", "loads", "occupancy",
 "oat_reference", "sequence", "notes"}`` (``camber report CONFIG --layout rcx``). ``report.loads``
 (``{equip: {"heating_capacity_kbtuh": ...}}``) sizes equipment for the existing cost estimators.
+The audit is titled as an ASHRAE Std-211 audit only when it carries the Std-211 inputs -- a
+``benchmark`` and, at Level 2 and above, an ECM table (``"ecms": [{"name", "finding",
+"affected_system", "est_savings", ...}]``, the fields of :class:`camber.report.audit.ECM`); else it
+is a "Building analytics report". ``"title"`` sets the title explicitly (0.96, #78).
 
 **Served-by topology** (provisional, 0.91; #61). ``"topology": {"parents": {"VAV-101": "AHU-1",
 "AHU-1": ["CH-1", "CH-2"]}, "csv": ["vav_to_ahu.csv"]}`` declares which equipment serves which --
@@ -187,7 +191,7 @@ from .driftrun import DRIFT_FAMILIES, family_names, refit_baselines, run_drift
 from .model.mapping import MappingProvider
 from .model.roles import Role
 from .realio import load_point
-from .report.audit import AuditReport, Benchmark
+from .report.audit import ECM, AuditReport, Benchmark, html_document
 from .report.drift import drift_report_html
 from .resolve import (
     StoreEquipRef,
@@ -2265,7 +2269,10 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             level=rep.get("level", 2),
             climate_zone=rep.get("climate_zone", ""),
             data_sources=list(prep.data_sources),
+            title=str(rep.get("title") or ""),  # 0.96 (#78)
         )
+        for ecm in rep.get("ecms") or []:  # 0.96 (#78): the Std-211 ECM table, from the config
+            report.add_ecm(ECM(**ecm))
         if "benchmark" in rep:
             report.benchmark = _benchmark(rep["benchmark"], prep.units)
             sf = _benchmark_scale_finding(rep["benchmark"])  # 0.92 (#71)
@@ -2288,7 +2295,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 # the audit body already carries the data-source block; don't repeat it
                 body += "\n" + drift_report_html(drift, standalone=False)
             with open(_path(base_dir, rep["out_html"]), "w") as fh:
-                fh.write("<html><body>\n" + body + "\n</body></html>\n")
+                fh.write(html_document(body, title=report.display_title()))
             outputs[_path(base_dir, rep["out_html"])] = "report"
     if outputs:
         _record_outputs(prep.ctx, outputs)

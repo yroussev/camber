@@ -13,6 +13,7 @@ Subcommands:
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+    camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
     camber facility add|list|show|rename|activate|suspend|resume|     # facility lifecycle
                     offboard|restore|archive|purge|export|bundles
@@ -154,7 +155,7 @@ def _audit_html(res, cfg, base) -> str:
             building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
         )
         report.add_findings(res.findings)
-    return report.to_html(recommend=True)
+    return report.to_html_document(recommend=True)
 
 
 def _plugin_report(layout: str, res):
@@ -884,6 +885,56 @@ def _cmd_datasets_score(args) -> int:
         )
     for r in res["records"]:
         print(f"  {r['equip']:36s} truth={r['truth'] or 'fault-free':14s} fired={r['fired']}")
+    return 0
+
+
+# --------------------------------------------------------------------------- lab (0.96, #77)
+#
+# `camber lab`: the loopback-only catalog UI (camber.lab). It binds 127.0.0.1 only -- there is no
+# --host. A workspace (--workspace, $CAMBER_PORTFOLIO, the current dir, or a --store that belongs
+# to one) makes dataset facilities follow the lifecycle; otherwise a plain store (default
+# ./lab_store).
+
+
+def _lab_target(args):
+    """``(store, workspace)`` for `camber lab` -- exactly one is set."""
+    from .portfolio import find_workspace
+    from .store.facilities import _workspace_of_store
+
+    if args.store and args.workspace:
+        raise ValueError("pass --workspace or --store, not both")
+    if args.store:
+        ws = _workspace_of_store(os.path.abspath(args.store))
+        return (None, ws) if ws else (args.store, None)
+    ws = find_workspace(args.workspace)
+    if args.workspace and ws is None:
+        raise FileNotFoundError(
+            f"{args.workspace} is not a portfolio workspace (create one with "
+            "`camber portfolio init <root>`, or pass --store for a plain store)"
+        )
+    return (None, ws) if ws else ("lab_store", None)
+
+
+def _cmd_lab(args) -> int:
+    from .lab import LabApp, make_lab_server
+
+    try:
+        store, ws = _lab_target(args)
+        app = LabApp(store=store, workspace=ws, data_dir=args.dir)
+        httpd = make_lab_server(app, port=args.port)
+    except (ValueError, FileNotFoundError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    where = f"workspace {app.portfolio.root}" if app.portfolio is not None else f"store {store}"
+    print(f"camber lab: {where}; dataset cache {app.data_dir}", flush=True)
+    print(f"open http://127.0.0.1:{app.port}/lab  (loopback only; Ctrl-C to stop)", flush=True)
+    try:  # pragma: no cover - blocking server loop
+        httpd.serve_forever()
+    except KeyboardInterrupt:  # pragma: no cover
+        pass
+    finally:
+        httpd.server_close()
+        app.close()
     return 0
 
 
@@ -2919,6 +2970,24 @@ def _build_parser() -> argparse.ArgumentParser:
     dsk.add_argument("--facility")
     dsk.add_argument("--json", action="store_true")
     dsk.set_defaults(func=_cmd_datasets_score)
+
+    # ----- lab (0.96, #77)
+    plab = sub.add_parser(
+        "lab",
+        help="local catalog UI: fetch, ingest, trends, reports (127.0.0.1 only; docs/DATASETS.md)",
+    )
+    plab.add_argument(
+        "--workspace",
+        help="portfolio workspace root (default: $CAMBER_PORTFOLIO, else the current dir if it "
+        "is one); dataset facilities then follow the lifecycle and are audited",
+    )
+    plab.add_argument("--store", help="plain ParquetStore directory (default: ./lab_store)")
+    plab.add_argument(
+        "--dir", help="dataset cache directory (default: $CAMBER_DATA_DIR or ~/.cache)"
+    )
+    plab.add_argument("--port", type=int, default=8765, help="port on 127.0.0.1 (default 8765)")
+    plab.set_defaults(func=_cmd_lab)
+    # ----- /lab
 
     def _ws(p):
         p.add_argument(

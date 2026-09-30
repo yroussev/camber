@@ -140,6 +140,34 @@ def test_shipped_catalog_is_checkable_offline():
     assert rows and all(r["status"] == "error" for r in rows)  # every URL probed, none reached
 
 
+def test_linked_references_are_checked_and_a_404_is_drift(tmp_path):
+    # 0.96 (#78): the PNNL Re-tuning URLs of camber.references ride the weekly check
+    from camber.references import reference_urls
+
+    mod = _mod()
+    urls = reference_urls()
+
+    class _Gone(_Opener):
+        def open(self, req, timeout=None):
+            if req.full_url == urls[0]:
+                raise urllib.error.HTTPError(req.full_url, 404, "gone", {}, None)
+            return super().open(req, timeout)
+
+    rows = mod.check_references(opener=_Gone({u: ({"Content-Length": "1"}, b"") for u in urls}))
+    assert [r["url"] for r in rows] == urls
+    assert rows[0]["status"] == "drift" and "HTTP 404" in rows[0]["detail"]
+    assert all(r["status"] == "ok" for r in rows[1:])
+    cat = tmp_path / "c.json"
+    cat.write_text(json.dumps(_cat()))
+    out = tmp_path / "rows.json"
+    mod.main(["--catalog", str(cat), "--json", str(out)], opener=_Opener({}))
+    assert any(r["dataset"] == "(references)" for r in json.loads(out.read_text()))
+    mod.main(["--catalog", str(cat), "--json", str(out), "--no-references"], opener=_Opener({}))
+    assert not any(r["dataset"] == "(references)" for r in json.loads(out.read_text()))
+    mod.main(["--catalog", str(cat), "--json", str(out), "t"], opener=_Opener({}))
+    assert not any(r["dataset"] == "(references)" for r in json.loads(out.read_text()))
+
+
 # --------------------------------------------------------------------------- network (opt-in)
 
 

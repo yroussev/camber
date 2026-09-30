@@ -59,5 +59,29 @@ position, actuator and linkage, the min-OA setpoint against design, and the outd
 Excess OA and `economizer_high_limit` get lockout advice at the rule's configured high limit, and
 `free_cooling_missed` gets "enable economizer free cooling".
 
+**Every recommender follows the cause (0.96, #78).** Advice is keyed to the reason a finding
+fired, read from its metrics, never only to its rule name:
+
+| Rule | Cause (metric) | Action |
+|---|---|---|
+| `dcv_verification`, `dcv_system_verification` | DCV works, OA above its floor at low demand (`status: functioning`, `excess_at_low_demand_pct`) | Lower the minimum outdoor air at low demand (to the Ra·Az floor) |
+| | OA static / not following demand (`status`) | Enable / repair DCV; tie outdoor air to demand |
+| | under-ventilation (`below_floor_pct`, `co2_breach_at_min_pct`, `unventilated_high_co2_hours`) | Restore the OA floor; make OA respond to high CO₂; restore ventilation while occupied |
+| `chw_plant_reset` | low loop ΔT (`low_deltaT_pct`) / flat CHWST (`chwst_reset_present`) | Fix low loop ΔT / reset the CHW supply temperature |
+| `chw_pump_dp_reset`, `hw_pump_dp_reset` | at the VFD minimum / near full with a reset / near full without | Right-size the pump / find the valve driving the reset / reset the DP setpoint |
+| `supply_air_reset` | the setpoint already resets (`sp_behaviour`) / SAT rises with load (`reset_direction`) | Widen the reset range / check cooling capacity |
+| `cooling_tower_approach` | wide approach at full fan (`effort_gated`) | Restore tower capacity (fill, distribution, flow) |
+| `reheat_minimization_g36` | reheat above the minimum airflow | Implement the dual-maximum heating sequence |
+| `overcooling_min_flow`, `overcooling_severity` | at minimum flow / depth below setpoint | Lower min flow or raise SAT (never a higher cooling setpoint) |
+
+The dispatch thresholds mirror the rules' defaults (`DEFAULT_PARAMS`: `dcv_*`, `chw_low_dt_warn_pct`,
+`pump_near_*_warn_pct`); a finding's severity and metrics are never changed. The DCV system rule
+reads the cause from the air handler that set its severity (`metrics["per_ahu"]`).
+
+**Learn more.** Each `Recommendation` carries `references`: the ids of the
+[PNNL Re-tuning guides](REFERENCES.md) behind it, most specific first (an under-ventilation
+`outdoor_air_fraction` finding points at the minimum-OA guide, excess OA at the economizer guide).
+Reports turn them into links.
+
 Pairs with `camber.fault_economics` (what a fault is worth) and `camber.soo` (conformance to the
 intended sequence).

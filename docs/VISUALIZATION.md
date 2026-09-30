@@ -318,6 +318,17 @@ CDN, no external asset** (a strict `Content-Security-Policy` header is sent on t
 decision and adds no auth (see [SECURITY.md](SECURITY.md)). The remaining nice-to-have is a live
 **carpet/heatmap** panel; the live multitrend + selectors + cross-panel linking + polling ship now.
 
+**Units, axes and a legend (0.96, #78).** Series of different scales no longer share one axis
+(where CO₂ in ppm flattened a temperature or an airflow). The ticked series are drawn in **one
+panel per unit**, each with a labelled y axis, on a shared time axis labelled in UTC (the stored
+clock); a setpoint shares its measurement's panel. The unit of each role comes from
+`camber.api.ui.role_units()` (the store holds IP units: °F, cfm, inH₂O, %, ppm, kW, gpm, psig); a
+role with no unit the viewer can state (an occupant count, a status) gets its own panel. A legend
+names each series with its unit and range, hovering shows every series' value at that time (none
+inside a data gap), gaps in the data break the line, and **Normalised (0–1)** overlays every
+series on one panel for comparing shapes. Still vanilla JS under the same CSP, with no external
+asset.
+
 ## Scope
 
 The static builders remain the dependency-light, self-contained artifact for reports and offline

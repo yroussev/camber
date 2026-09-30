@@ -123,8 +123,9 @@ class RcxOptions:
     ``week`` is a :data:`WEEK_MODES` value (``"auto"`` means ``"evidence"``; ``"oat-range"`` is
     accepted for ``"oat_range"``; a bare ``YYYY-MM-DD`` means ``fixed:``). ``chart_format="svg"``
     renders line charts as SVG (dense scatters stay PNG). ``sections`` lists the section ids to
-    include (default: all). ``price`` / ``loads`` feed the existing cost estimators
-    (:class:`~camber.fault_economics.EnergyPrice`, ``{equip: EquipmentLoad}``). ``occupancy``
+    include (default: all; 0.96 adds ``"reading"``, the linked further-reading list). ``price`` /
+    ``loads`` feed the existing cost estimators (:class:`~camber.fault_economics.EnergyPrice`,
+    ``{equip: EquipmentLoad}``). ``occupancy``
     overrides the assumed schedule (``{"start_hour", "end_hour", "days"}``) where no occupancy
     point is trended. ``oat_reference`` compares the BAS OAT to a reference: ``{"csv": path}``
     (offline, default) or ``{"fetch": SOURCE, "latitude", "longitude", "tz"}`` (opt-in network;
@@ -886,6 +887,7 @@ def _issue_dict(i) -> dict:
         "confidence": i.confidence,
         "confidence_components": dict(i.confidence_components),
         "why": list(i.why),
+        "references": _issue_refs(i),  # 0.96 (#78): linked reference ids (camber.references)
     }
 
 
@@ -1479,6 +1481,10 @@ def build_rcx_report(
                 sections.append(sec)
     if want("issues"):
         sections += [_sec_issue(S, iss) for iss in issues]
+    if want("reading"):  # 0.96 (#78): linked PNNL Re-tuning guides for this report's issues
+        sec = _sec_reading(issues)
+        if sec is not None:
+            sections.append(sec)
     if want("appendix"):
         sections += _sec_appendices(S)
 
@@ -2293,7 +2299,8 @@ def _sec_issue(S, iss) -> dict:
 
     ctx = S["ctx"]
     root = iss.root
-    title, action, suggested = _advice(S, iss, recommend(root, frame=ctx.frame(iss.equip)))
+    rec = recommend(root, frame=ctx.frame(iss.equip))
+    title, action, suggested = _advice(S, iss, rec)
     blocks: list = []
     if iss.conditional:
         blocks.append(
@@ -2382,6 +2389,9 @@ def _sec_issue(S, iss) -> dict:
         blocks.append(_p(f"Recommended action: {action}"))
         if suggested:
             blocks.append(_p(f"Suggested: {suggested}"))
+        refs = _issue_refs(iss, rec)
+        if refs:  # 0.96 (#78): "Learn more" links to the guide behind this finding
+            blocks.append({"kind": "links", "lead": "Learn more:", "refs": refs})
     else:
         blocks.append(_p("Recommended action: engineer to specify (no packaged recommendation)."))
     blocks.append(_p(f"Confidence {iss.confidence} — why we believe this:"))
@@ -2420,6 +2430,42 @@ def _sec_issue(S, iss) -> dict:
     sec = _section(f"issue-{iss.key}", f"Issue {iss.rank}: {title}", blocks, kind="issue")
     sec["slot"] = f"issue:{iss.key}"
     return sec
+
+
+def _issue_refs(iss, rec=None) -> list:
+    """Reference ids for an issue: its recommendation's (cause-specific) first, then those of the
+    issue's rules, deduplicated."""
+    from ..references import reference_ids_for
+
+    out = list(getattr(rec, "references", None) or [])
+    for rule in [getattr(iss.root, "rule", "")] + list(getattr(iss, "rules", None) or []):
+        for rid in reference_ids_for(rule):
+            if rid not in out:
+                out.append(rid)
+    return out
+
+
+def _sec_reading(issues) -> dict | None:
+    """ "Further reading": the linked PNNL Re-tuning guides and chapters relevant to this report's
+    issues only (none -> no section). Link only: nothing from them is reproduced."""
+    from ..references import GUIDE, REFERENCES
+
+    ids: list = []
+    for iss in issues:
+        for rid in _issue_refs(iss):
+            if rid not in ids:
+                ids.append(rid)
+    if not ids:
+        return None
+    ids.sort(key=lambda r: 0 if REFERENCES[r].kind == GUIDE else 1)  # guides before chapters
+    blocks = [
+        _p(
+            "Free guides from PNNL's Building Re-tuning program that cover the issues in this "
+            "report (links to the publisher; nothing from them is reproduced here):"
+        ),
+        {"kind": "links", "refs": ids, "list": True},
+    ]
+    return _section("reading", "Further reading", blocks, slot=False)
 
 
 def _ai_prose(issue, client) -> str:
@@ -2584,6 +2630,8 @@ aside.note{border:1px dashed var(--accent);padding:8px 10px;margin:10px 0;backgr
 aside.note .who{font-size:11.5px;color:var(--muted);font-weight:600}
 nav.toc{border:1px solid var(--rule);padding:8px 14px;margin:12px 0;font-size:13px}
 nav.toc ol{margin:4px 0;padding-left:20px}
+.refs{font-size:12.5px}.refmeta{color:var(--muted);font-size:12px}
+@media print{ul.refs a::after{content:" <" attr(href) ">";font-size:10px;color:var(--muted)}}
 .meta{color:var(--muted)}
 table.nc-wrap,table.nc-wrap>tbody,table.nc-wrap>tbody>tr,table.nc-wrap>tbody>tr>td{display:block;
 border:0;padding:0;margin:0;width:auto}
@@ -2672,6 +2720,19 @@ def _block_html(b: dict) -> str:
         return f"<table{css}><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
     if k == "note":
         return _note_html(b["notes"], slot=b.get("slot", ""), show_slot=b.get("show_slot", False))
+    if k == "links":
+        from ..references import REFERENCES, links_html
+
+        if b.get("list"):
+            items = [
+                f"<li>{links_html([r])} <span class='refmeta'>({_esc(REFERENCES[r].label())})"
+                "</span></li>"
+                for r in b["refs"]
+                if r in REFERENCES
+            ]
+            return "<ul class='refs'>" + "".join(items) + "</ul>"
+        links = links_html(b["refs"])
+        return f"<p class='refs'>{_esc(b.get('lead', ''))} {links}</p>" if links else ""
     if k == "html":
         return b["html"]
     return ""

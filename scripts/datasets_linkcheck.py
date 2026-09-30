@@ -4,12 +4,19 @@
     python scripts/datasets_linkcheck.py lbnl-sdahu bdg2      # some entries
     python scripts/datasets_linkcheck.py --json out.json      # also a machine-readable result
     python scripts/datasets_linkcheck.py --strict             # exit 1 on drift (default: exit 0)
+    python scripts/datasets_linkcheck.py --no-references      # the catalog only
 
 For every file URL of every entry it issues a HEAD request (falling back to a one-byte ranged GET
 when a host refuses HEAD) and compares the served size and ETag with the catalog's pins. Where an
 entry sets ``licence_check`` it also fetches that page and checks that the licence it states still
 matches (``expect``, a case-insensitive substring; ``json_path`` walks a JSON API response first).
 Manual-download entries (``manual: true``) are checked only for their landing page.
+
+It also checks the linked references of :mod:`camber.references` (0.96, #78: the PNNL Building
+Re-tuning guides, chapters and tool guides the reports link to): each URL must still answer. A
+404 / 410 is reported as drift (the publisher moved the document: re-find it and update the
+registry and its ``verified_on``). ``--no-references`` skips them; naming dataset ids skips them
+unless ``--references`` is given.
 
 **Non-blocking by design.** A publisher host being slow or down for a day is not a CAMBER defect,
 so the check never fails CI unless ``--strict`` is given; the ``datasets-linkcheck`` workflow
@@ -35,6 +42,7 @@ sys.path.insert(0, REPO)
 
 from camber.datasets._catalog import load_catalog_data  # noqa: E402
 from camber.datasets._fetch import USER_AGENT, https_opener, require_https  # noqa: E402
+from camber.references import REFERENCES, reference_urls  # noqa: E402
 
 OK, DRIFT, ERROR = "ok", "drift", "error"
 
@@ -148,6 +156,28 @@ def run(data: dict, ids=None, *, opener=None, timeout: float = 30.0) -> list:
     return rows
 
 
+def check_references(*, opener=None, timeout: float = 30.0) -> list:
+    """One row per linked reference URL (:func:`camber.references.reference_urls`)."""
+    by_url = {r.url: r for r in REFERENCES.values()}
+    rows = []
+    for url in reference_urls():
+        ref = by_url[url]
+        row = {"dataset": "(references)", "file": ref.id, "url": url}
+        try:
+            got = probe(url, opener=opener, timeout=timeout)
+            row.update(status=OK, detail=f"HTTP {got['status']} via {got['method']}")
+        except urllib.error.HTTPError as e:
+            gone = e.code in (404, 410)
+            row.update(
+                status=DRIFT if gone else ERROR,
+                detail=f"HTTP {e.code}" + (" (moved? update camber/references.py)" if gone else ""),
+            )
+        except Exception as e:  # noqa: BLE001 - report and keep going (non-blocking)
+            row.update(status=ERROR, detail=f"{type(e).__name__}: {e}")
+        rows.append(row)
+    return rows
+
+
 def markdown(rows: list) -> str:
     """The report: a summary line, then every drift / error row, then the ok count."""
     n = {s: sum(1 for r in rows if r["status"] == s) for s in (OK, DRIFT, ERROR)}
@@ -181,6 +211,15 @@ def main(argv=None, *, opener=None) -> int:
     ap.add_argument("--timeout", type=float, default=30.0)
     ap.add_argument("--strict", action="store_true", help="exit 1 when anything drifted")
     ap.add_argument("--catalog", help="catalog JSON (default: the packaged one)")
+    refs = ap.add_mutually_exclusive_group()
+    refs.add_argument(
+        "--references",
+        dest="refs",
+        action="store_true",
+        default=None,
+        help="also check the linked references (the default unless dataset ids are named)",
+    )
+    refs.add_argument("--no-references", dest="refs", action="store_false")
     args = ap.parse_args(argv)
     if args.catalog:
         with open(args.catalog, encoding="utf-8") as fh:
@@ -188,6 +227,8 @@ def main(argv=None, *, opener=None) -> int:
     else:
         data = load_catalog_data()
     rows = run(data, set(args.ids) or None, opener=opener, timeout=args.timeout)
+    if args.refs if args.refs is not None else not args.ids:
+        rows += check_references(opener=opener, timeout=args.timeout)
     report = markdown(rows)
     print(report)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

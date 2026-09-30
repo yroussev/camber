@@ -395,3 +395,11 @@ warm-up closures and a fan schedule — and, since 0.82.0, against open real-bui
 This verifies the *rate* from trends; it is not a substitute for a stamped 62.1 ventilation
 calculation. The Table 6.1 defaults are a convenience — confirm the zone's category and design
 population against the project's mechanical schedule.
+
+## Further reading
+
+PNNL's [AHU Minimum Outdoor-Air Operation](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_88958.pdf) guide (PNNL-SA-88958) backs the
+DCV, CO₂ and 62.1 rules, and training [chapter 5](https://www.pnnl.gov/sites/default/files/media/file/ch5_air_handling.pdf) covers the air
+handler (links only; see [References](REFERENCES.md)). When a DCV finding fires, its advisory
+action follows the cause: a working DCV whose outdoor air stays above its floor at low demand is
+told to lower that floor, not to "enable DCV" (see [ASO](ASO.md)).
