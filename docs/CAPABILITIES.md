@@ -113,7 +113,11 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     costed), and a shut valve with a ≥ 10 °F rise on a quarter of its samples is caveated.
   - *Not overcooling.* `overcooling_severity` excludes morning recovery (`WARMUP`, else the first
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
-    setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**.
+    setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**. The
+    shortfall grade is the lesser of its depth tier and its share tier (0.98, #85:
+    `shortfall_share_pct`, warn from 5 %, fault from 20 % of occupied samples at least `warn`
+    deep), so a few deep cold hours a year grade `info`; `share_pct` applies the same gate to the
+    overcooling tiers (off by default).
     `overcooling_min_flow` declines without `AIRFLOW` + `AIRFLOW_SP` (it can't test "at minimum").
   - *Held setback* (0.93, #43). A unit scheduled off at night still cycles on to hold its
     zones at the setback temperature, so `night_weekend_setback` no longer reads runtime alone:

@@ -1490,6 +1490,7 @@
     "analyze_overcooling"
   ],
   "camber.overcooling_severity": [
+    "DEFAULT_SHORTFALL_SHARE_PCT",
     "DEFAULT_TIERS",
     "OvercoolSeverityResult",
     "analyze_overcooling_severity",

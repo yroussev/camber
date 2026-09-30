@@ -13,6 +13,9 @@ ranked/headline fault totals.
 Morning recovery from setback is excluded (``WARMUP`` when mapped, else the first
 ``recovery_hours`` of each occupied block), and a space below setpoint with its reheat
 valve (``HEAT_VALVE``) saturated is reported as a **heating shortfall**, not overcooling.
+The shortfall grade is the lesser of its depth tier and its share tier (0.98, #85:
+``shortfall_share_pct``, warn from 5 %, fault from 20 % of samples); ``share_pct`` applies the
+same gate to the overcooling tiers when set (off by default).
 Occupancy: a trended ``OCCUPANCY`` point replaces the ``start_hour``/``end_hour``/
 ``occupied_days`` schedule. Samples with the fan trended off (``SUPPLY_FAN_STATUS`` /
 ``SUPPLY_FAN_SPEED``) are free-floating, not overcooled, and are excluded.
@@ -23,7 +26,11 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
-from ..overcooling_severity import DEFAULT_TIERS, analyze_overcooling_severity
+from ..overcooling_severity import (
+    DEFAULT_SHORTFALL_SHARE_PCT,
+    DEFAULT_TIERS,
+    analyze_overcooling_severity,
+)
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -65,6 +72,8 @@ class OvercoolingSeverity:
         occupied_days=(0, 1, 2, 3, 4),
         recovery_hours: float = 2.0,
         reheat_saturated_pct: float = 90.0,
+        shortfall_share_pct: dict | None = DEFAULT_SHORTFALL_SHARE_PCT,
+        share_pct: dict | None = None,
     ):
         self.tiers = tiers
         self.window_min = window_min
@@ -74,6 +83,8 @@ class OvercoolingSeverity:
         self.occupied_days = tuple(occupied_days)
         self.recovery_hours = recovery_hours
         self.reheat_saturated_pct = reheat_saturated_pct
+        self.shortfall_share_pct = _share_gate(shortfall_share_pct, "shortfall_share_pct")
+        self.share_pct = _share_gate(share_pct, "share_pct")
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the severity diagnostic on an equipment role-frame; return a Finding."""
@@ -90,6 +101,8 @@ class OvercoolingSeverity:
             occupied_days=self.occupied_days,
             recovery_hours=self.recovery_hours,
             reheat_saturated_pct=self.reheat_saturated_pct,
+            shortfall_share_pct=self.shortfall_share_pct,
+            share_pct=self.share_pct,
         )
         if res is None:
             return Finding(
@@ -120,7 +133,19 @@ class OvercoolingSeverity:
             )
             if severity == "ok":
                 severity = "info"
-        elif not res.reheat_evaluated and severity in ("warn", "fault"):
+        if res.reheat_evaluated and _rank(shortfall) < _rank(res.shortfall_depth_severity):
+            caveats.append(
+                f"heating shortfall {res.shortfall_depth_severity}-deep but graded {shortfall} by "
+                f"its share: {short_pct:g}% of occupied samples"
+                + _gate_text(self.shortfall_share_pct, "shortfall_share_pct")
+            )
+        if _rank(res.severity) < _rank(res.depth_severity):
+            caveats.append(
+                f"overcooling {res.depth_severity}-deep but graded {res.severity} by its share: "
+                f"{res.tier_pct.get('warn'):g}% of occupied samples"
+                + _gate_text(self.share_pct, "share_pct")
+            )
+        if not res.reheat_evaluated and severity in ("warn", "fault"):
             caveats.append(
                 "no reheat valve: a sub-setpoint space with its reheat at full output (a heating "
                 "shortfall) cannot be told apart from overcooling"
@@ -147,6 +172,9 @@ class OvercoolingSeverity:
                 "n_considered": res.n_considered,
                 "shortfall_severity": shortfall if res.reheat_evaluated else None,
                 "shortfall_warn_pct": short_pct if res.reheat_evaluated else None,
+                "shortfall_depth_severity": (
+                    res.shortfall_depth_severity if res.reheat_evaluated else None
+                ),
                 "n_recovery_excluded": res.n_recovery_excluded,
                 "n_fan_off_excluded": res.n_fan_off_excluded,
             },
@@ -164,3 +192,28 @@ class OvercoolingSeverity:
             ),
             caveats=caveats,
         )
+
+
+_ORDER = ("ok", "info", "warn", "fault")
+
+
+def _rank(tier: str) -> int:
+    return _ORDER.index(tier) if tier in _ORDER else 0
+
+
+def _gate_text(gate: dict | None, name: str) -> str:
+    g = gate or {}
+    return f" (warn from {g.get('warn', 0):g}%, fault from {g.get('fault', 0):g}%: {name})"
+
+
+def _share_gate(gate: dict | None, name: str) -> dict | None:
+    """Validate a {"warn": %, "fault": %} share gate (None switches it off)."""
+    if gate is None:
+        return None
+    try:
+        warn, fault = float(gate["warn"]), float(gate["fault"])
+    except (KeyError, TypeError, ValueError) as e:
+        raise ValueError(f'{name} must be {{"warn": %, "fault": %}} or null, got {gate!r}') from e
+    if not 0.0 <= warn <= fault <= 100.0:
+        raise ValueError(f"{name} needs 0 <= warn <= fault <= 100, got {gate!r}")
+    return {"warn": warn, "fault": fault}

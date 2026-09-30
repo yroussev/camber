@@ -56,6 +56,11 @@ What is *not* overcooling (both found labelled as overcooling on real buildings)
     as hard as the box can -- it is *under-heated*, not overcooled. Those samples are
     scored separately (``shortfall_*``) and never count toward the overcooling tiers.
     Without a reheat valve the two cannot be told apart (``reheat_evaluated=False``).
+    The shortfall grade weighs **share as well as depth** (0.98, #85): it is the lesser of
+    the depth tier and a share tier set by the share of considered samples in a sustained
+    shortfall at least ``warn`` deep (``shortfall_share_pct``, default warn from 5 %, fault
+    from 20 %). A deep but rare shortfall -- a few cold hours a year -- grades ``info``.
+    ``share_pct`` applies the same gate to the overcooling tiers; it is off by default.
   - **HVAC off.** A space drifting cold while its terminal/air-handler fan is off
     (``FanStatus`` <= 0.5 or ``FanSpeed`` <= 5 %, when trended) is free-floating, not
     being overcooled; those samples are excluded (``n_fan_off_excluded``).
@@ -74,6 +79,7 @@ import pandas as pd
 from .schedules import effective_occupied_mask
 
 __all__ = [
+    "DEFAULT_SHORTFALL_SHARE_PCT",
     "DEFAULT_TIERS",
     "OvercoolSeverityResult",
     "infer_interval",
@@ -84,6 +90,26 @@ __all__ = [
 DEFAULT_TIERS: dict = {"info": 1.0, "warn": 2.0, "fault": 3.0}
 # Tier ordering, mildest -> worst (info is informational only).
 _TIER_ORDER = ("info", "warn", "fault")
+# Share gate for the heating-shortfall grade (0.98, #85): % of considered samples in a
+# sustained shortfall at least ``warn`` deep. Below ``warn`` the grade is at most info.
+DEFAULT_SHORTFALL_SHARE_PCT: dict = {"warn": 5.0, "fault": 20.0}
+
+
+def _share_tier(share: float, gate: dict) -> str:
+    """The tier a share of samples earns under ``gate`` ({"warn": %, "fault": %})."""
+    if share >= float(gate["fault"]):
+        return "fault"
+    if share >= float(gate["warn"]):
+        return "warn"
+    return "info"
+
+
+def _gated(depth_tier: str, share: float, gate: dict | None) -> str:
+    """The lesser of the depth tier and the share tier (``gate`` None: depth alone)."""
+    if gate is None or depth_tier == "ok":
+        return depth_tier
+    share_tier = _share_tier(share, gate)
+    return min(depth_tier, share_tier, key=_TIER_ORDER.index)
 
 
 @dataclass
@@ -108,6 +134,8 @@ class OvercoolSeverityResult:
     shortfall_tier_pct: dict | None = None  # tier -> % considered samples, sustained, reheat maxed
     shortfall_severity: str = "ok"  # worst sustained heating-shortfall tier
     n_fan_off_excluded: int = 0  # samples dropped because the fan was trended off
+    depth_severity: str = "ok"  # overcooling tier by depth alone (before any share gate)
+    shortfall_depth_severity: str = "ok"  # shortfall tier by depth alone (before the share gate)
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -198,6 +226,8 @@ def analyze_overcooling_severity(
     occupied_days=(0, 1, 2, 3, 4),
     recovery_hours: float = 2.0,
     reheat_saturated_pct: float = 90.0,
+    shortfall_share_pct: dict | None = DEFAULT_SHORTFALL_SHARE_PCT,
+    share_pct: dict | None = None,
 ) -> OvercoolSeverityResult | None:
     """Score overcooling severity (depth x duration) for one zone.
 
@@ -207,6 +237,11 @@ def analyze_overcooling_severity(
     separate a heating shortfall from overcooling. Returns ``None`` if the required
     columns or any usable samples are missing. See the module docstring for tier,
     persistence, recovery/shortfall, and reference-setpoint semantics.
+
+    ``shortfall_share_pct`` ({"warn": %, "fault": %}, default 5/20) caps the shortfall grade
+    by the share of samples in a sustained shortfall at least ``warn`` deep; ``None`` grades
+    by depth alone (the pre-0.98 behaviour). ``share_pct`` does the same for the overcooling
+    tiers and defaults to ``None`` (depth alone).
     """
     tiers = dict(tiers) if tiers else dict(DEFAULT_TIERS)
     if "SpaceTemp" not in df.columns or "ActCoolSP" not in df.columns:
@@ -297,6 +332,10 @@ def analyze_overcooling_severity(
         if s_cnt:
             shortfall_severity = tier
 
+    depth_severity, shortfall_depth_severity = severity, shortfall_severity
+    severity = _gated(severity, tier_pct["warn"], share_pct)
+    shortfall_severity = _gated(shortfall_severity, shortfall_pct["warn"], shortfall_share_pct)
+
     return OvercoolSeverityResult(
         equip=equip,
         n_considered=n,
@@ -316,4 +355,6 @@ def analyze_overcooling_severity(
         reheat_evaluated=bool(reheat_evaluated),
         shortfall_tier_pct=shortfall_pct if reheat_evaluated else None,
         shortfall_severity=shortfall_severity,
+        depth_severity=depth_severity,
+        shortfall_depth_severity=shortfall_depth_severity,
     )

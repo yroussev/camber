@@ -14,7 +14,7 @@ released. Each branch adds its bullets only inside its own marked block below. -
 release makes the rule runners say which checks did not run and why, lets an M&V refusal say
 how much more data it needs, gates two air-side rules on trended occupancy, grades a zone's
 heating shortfall on how often it happens as well as how deep it goes, links more rules to the
-PNNL re-tuning material, and documents every tunable threshold with its basis and a way to
+PNNL re-tuning material, documents every tunable threshold with its basis and a way to
 calibrate it, and reads run configs from YAML as well as JSON.
 
 ### Added
@@ -94,6 +94,31 @@ calibrate it, and reads run configs from YAML as well as JSON.
   rewritten) and the `air-economizer` instructor key (the stale sentence about the catalog note
   removed) updated; `capstone` re-verified.
 <!-- /098-air-gates -->
+<!-- 098-terminal-ventilation -->
+- **`overcooling_severity` grades a heating shortfall on share as well as depth (#85).** The
+  shortfall grade was the deepest tier sustained for an hour, so a few cold hours a year with the
+  reheat saturated read `fault`. It is now the lesser of the depth tier and a share tier set by
+  the share of occupied samples in a sustained shortfall at least `warn` deep (new
+  `shortfall_share_pct`, default `{"warn": 5, "fault": 20}`; below 5 % a shortfall is `info`).
+  **Intended default change:** on `lbnl-fpu` the fully open damper
+  (`PFPU__VAVDMPRStuck_100pct`) goes from shortfall `fault` to `info` (fault-deep, but 0.81 % of
+  samples) and its finding from `info` to `ok`; the stuck-shut reheat valve stays a shortfall `fault`
+  (29.9 %). New metric `shortfall_depth_severity` keeps the depth-only grade, and a caveat says
+  when the share lowered it. `shortfall_share_pct=None` restores the old grading. The same gate
+  is available for the overcooling tiers as `share_pct`, off by default (no overcooling verdict
+  changes). Workbook `zone-reheat-saturated`: answers 3 and 5 updated, and the new grade pinned.
+<!-- /098-terminal-ventilation -->
+
+### Fixed
+<!-- 098-terminal-ventilation -->
+- **`docs/VENTILATION.md` overstated the `lbnl-b59` wildfire result (#85).** It said the 2020
+  smoke mode was a below-floor `fault` on two rooftop units. Re-measured on the default subset
+  (which holds the whole OA-flow record, April–December 2020): all four units are below the
+  750 cfm floor in 2.0–4.2 % of occupied hours, `info` under the 10 % fault share, and those hours
+  are fan-off days in October and December. In the smoke-mode weeks (2020-08-24 to 09-06) the
+  dampers sat at their 10 % minimum and the units still took in 1,130–3,625 cfm, 0–0.9 % below
+  the floor. The page, `docs/VALIDATION.md` and the `zone-min-oa` caveat now say so.
+<!-- /098-terminal-ventilation -->
 
 ## [0.97.0] — Unreleased
 
