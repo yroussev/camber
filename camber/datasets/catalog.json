@@ -2907,7 +2907,8 @@
      "chiller_efficiency",
      "cooling_tower_approach"
     ],
-    "config_template": "lbnl-chiller.json"
+    "config_template": "lbnl-chiller.json",
+    "exercise": "workbook/plant-chiller-efficiency.md"
    },
    "known_issues": [
     "Two label swaps in the export (outdoor wet/dry-bulb; secondary-loop supply/return) are fixed at ingest; see the data issues.",
@@ -3254,7 +3255,8 @@
     "rules": [
      "hw_pump_dp_reset"
     ],
-    "config_template": "lbnl-boiler.json"
+    "config_template": "lbnl-boiler.json",
+    "exercise": "workbook/plant-boiler.md"
    },
    "known_issues": [
     "The boiler status points are enables (see the data issues); boiler_status is not mapped.",

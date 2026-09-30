@@ -1,0 +1,29 @@
+{
+  "_comment": "Workbook exercise plant-cooling-tower (docs/workbook/plant-cooling-tower.md): the heat-rejection side of the lbnl-chiller plant (tower 1 and the condenser loop). cooling_tower_approach keeps the dataset template's 8.1 F design approach, calibrated from the fault-free run's median approach at high fan (the simulated tower's design curve is not published; see configs/lbnl-chiller.json), and its default 90% fan-effort gate, so the approach is judged only when the tower works at its limit. condenser_water_reset (default 0.3 F-per-F slope) asks whether the condenser-water supply follows the wet-bulb. condenser_bypass_leak (default 2 F warn / 5 F fault) compares the water entering the chillers with the water leaving the tower while the bypass valve is commanded shut. chiller_efficiency is left to the plant-chiller-efficiency exercise.",
+  "_dataset": "lbnl-chiller",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-chiller"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "CHW_PLANT",
+      "marker_role": "power"
+    }
+  ],
+  "rules": [
+    {
+      "name": "cooling_tower_approach",
+      "params": {
+        "design_approach_f": 8.1
+      }
+    },
+    "condenser_water_reset",
+    "condenser_bypass_leak"
+  ],
+  "report": {
+    "level": 2
+  }
+}
