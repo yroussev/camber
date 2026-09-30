@@ -135,6 +135,19 @@ outputs are unchanged, and no gated benchmark moves.
     `data-energy-charting`, `valladolid-uva` and `cofactor-drammen` to `mv-baselines`.
 <!-- /097-practice -->
 
+### Fixed
+<!-- 097-integration -->
+- **Workbook network tests (test harness only).** `pytest -m network` now ingests each run's
+  `subset`: the plant exercises that need `full` get their own sibling store, so the default and
+  full ingests of `lbnl-chiller` no longer replace each other. A dataset already in the store is
+  ingested again when its subset or mapping has changed (for example the new `lbnl-chiller` pump
+  roles). A manual download (`lbnl-b59`) whose files are neither in `CAMBER_WORKBOOK_FROM_DIR`
+  nor in the cache is skipped, with a message listing the files to download, instead of failing
+  on a fetch. The harness docstring lists the files `CAMBER_WORKBOOK_FROM_DIR` needs for each
+  dataset, and a test keeps that list in step with the catalog.
+- **Workbook index.** The status note says that all 19 exercises are written.
+<!-- /097-integration -->
+
 ## [0.96.0] — Unreleased
 
 <!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is

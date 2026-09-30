@@ -5,9 +5,10 @@ A hands-on course in building re-tuning, run on open data with CAMBER. It follow
 chapter or a guide there, then open a real or simulated building in [`camber lab`](../DATASETS.md#the-lab-camber-lab)
 and find the problems it teaches you to look for.
 
-> **Status (0.97, provisional).** This is the workbook's framework and its first worked example,
-> [Economizer: a stuck outdoor-air damper and missed free cooling](air-economizer.md). The other
-> exercises in the map below are planned for the same release.
+> **Status (0.97, provisional).** All 19 exercises in the map below are written: five on the air
+> side, five on terminal units and ventilation, five on the central plant, and four on data
+> quality, M&V and the capstone. Start with the worked example,
+> [Economizer: a stuck outdoor-air damper and missed free cooling](air-economizer.md).
 
 ## How it works
 
