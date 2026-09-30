@@ -11,6 +11,13 @@ from ..model.roles import Role
 from ..staticpressure import damper_census
 from .base import Finding
 
+_LEGACY = {
+    Role.DAMPER: "Damper",
+    Role.OCCUPANCY: "Occupancy",
+    Role.WARMUP: "WarmUp",
+    Role.COOLDOWN: "CoolDown",
+}
+
 
 class DamperCensus:
     """Fleet census of VAV damper positions to infer mis-set duct static pressure
@@ -18,7 +25,22 @@ class DamperCensus:
 
     name = "damper_census"
     roles_required = (Role.DAMPER,)
-    roles_optional = (Role.WARMUP, Role.COOLDOWN)
+    #: a trended occupancy point replaces the assumed weekday schedule (0.98, #84); warm-up /
+    #: cool-down flags drop prep-mode samples
+    roles_optional = (Role.OCCUPANCY, Role.WARMUP, Role.COOLDOWN)
+
+    #: ``occupancy_gate`` values: ``"trended"`` judges each box's occupied samples from its own
+    #: trended occupancy point, else the assumed weekday 07-18 schedule; ``"schedule"`` always
+    #: uses the schedule (the pre-0.98 behaviour); ``"off"`` judges every sample.
+    OCCUPANCY_GATES = ("trended", "schedule", "off")
+
+    def __init__(self, *, occupancy_gate: str = "trended"):
+        if occupancy_gate not in self.OCCUPANCY_GATES:
+            raise ValueError(
+                f"damper_census: occupancy_gate must be one of {self.OCCUPANCY_GATES}, "
+                f"got {occupancy_gate!r}"
+            )
+        self.occupancy_gate = occupancy_gate
 
     def analyze_fleet(self, frames: dict, *, topology=None) -> Finding:
         """Run the diagnostic across the fleet's role-frames; return one aggregate Finding."""
@@ -29,8 +51,12 @@ class DamperCensus:
                 severity="info",
                 summary="no boxes with damper points",
             )
-        legacy = {e: f.rename(columns={Role.DAMPER: "Damper"}) for e, f in frames.items()}
-        res = damper_census(legacy)
+        legacy = {e: f.rename(columns=_LEGACY) for e, f in frames.items()}
+        res = damper_census(
+            legacy,
+            occupied_only=self.occupancy_gate != "off",
+            use_trended_occupancy=self.occupancy_gate == "trended",
+        )
         if res is None:
             return Finding(
                 rule=self.name, equip="<fleet>", severity="info", summary="no damper data"
@@ -52,6 +78,7 @@ class DamperCensus:
                 "pct_boxes_low": res.pct_boxes_low,
                 "pct_boxes_high": res.pct_boxes_high,
                 "pct_boxes_in_band": res.pct_boxes_in_band,
+                "occupancy_gate": res.occupancy_gate,
             },
             summary=(
                 f"fleet: median damper {res.median_damper_pct:.0f}%; "

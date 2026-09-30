@@ -85,3 +85,67 @@ def test_evidence_recommendation_and_registration():
     ev = finding_evidence(SupplyAirControl(), "AHU-2", frame)
     assert ev is not None and ev.renderer == "multitrend"
     assert recommend(f) is not None and "supply_air_control" in rule_names()
+
+
+# --- 0.98 (#84): the occupancy gate ----------------------------------------------------------
+
+
+def _cycling_frame(with_occ=True):
+    """Occupied 07-19: SAT on setpoint. Unoccupied: the fan cycles on with SAT 8 F warm."""
+    idx = pd.date_range("2024-07-01", periods=240, freq="1h")
+    occ = pd.Series(((idx.hour >= 7) & (idx.hour < 19)).astype(float), index=idx)
+    sat = pd.Series(np.where(occ > 0, 55.0, 63.0), index=idx)
+    df = _frame(sat)
+    if with_occ:
+        df[Role.OCCUPANCY] = occ
+    return df
+
+
+def test_occupancy_gate_trended_judges_occupied_hours_only():
+    assert Role.OCCUPANCY in SupplyAirControl.roles_optional
+    f = SupplyAirControl().analyze("AHU-1", _cycling_frame())
+    assert f.severity == "ok" and f.metrics["too_warm_pct"] == 0.0
+    assert f.metrics["occupancy_gate"] == "trended occupancy"
+    assert f.metrics["n_running"] == 120
+    assert "occupied running hours" in f.summary
+    # "off" is the pre-0.98 behaviour: the unoccupied cycling counts as too warm
+    off = SupplyAirControl(occupancy_gate="off").analyze("AHU-1", _cycling_frame())
+    assert off.severity == "fault" and off.metrics["too_warm_pct"] == 50.0
+    assert off.metrics["occupancy_gate"] == "off"
+
+
+def test_occupancy_gate_trended_has_no_schedule_fallback():
+    f = SupplyAirControl().analyze("AHU-1", _cycling_frame(with_occ=False))
+    assert f.metrics["occupancy_gate"] == "none trended (fan-on hours only)"
+    assert f.metrics["n_running"] == 240 and f.severity == "fault"
+    # "schedule" falls back to the assumed weekday 07-18 window
+    s = SupplyAirControl(occupancy_gate="schedule").analyze("AHU-1", _cycling_frame(False))
+    assert s.metrics["occupancy_gate"] == "assumed schedule (weekdays 07-18)"
+    assert s.metrics["n_running"] < 240
+
+
+def test_occupancy_gate_all_null_occupancy_is_not_trended():
+    df = _cycling_frame()
+    df[Role.OCCUPANCY] = np.nan
+    f = SupplyAirControl().analyze("AHU-1", df)
+    assert f.metrics["occupancy_gate"] == "none trended (fan-on hours only)"
+
+
+def test_occupancy_gate_evidence_mask_matches_the_finding():
+    df = _cycling_frame()
+    ev = SupplyAirControl().evidence("AHU-1", df)
+    assert not ev.mask.any()  # the unoccupied warm hours are not shaded as violations
+    ev_off = SupplyAirControl(occupancy_gate="off").evidence("AHU-1", df)
+    assert int(ev_off.mask.sum()) == 120
+
+
+def test_occupancy_gate_rejects_unknown_values():
+    with pytest.raises(ValueError, match="occupancy_gate"):
+        SupplyAirControl(occupancy_gate="weekdays")
+
+
+def test_occupancy_gate_no_occupied_running_hours():
+    df = _cycling_frame()
+    df[Role.OCCUPANCY] = 0.0
+    f = SupplyAirControl().analyze("AHU-1", df)
+    assert f.severity == "info" and f.metrics["occupancy_gate"] == "trended occupancy"

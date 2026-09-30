@@ -94,7 +94,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     the DCV rules) take a
     trended `OCCUPANCY` point as the truth — it *replaces* the schedule — and otherwise use
     `start_hour` / `end_hour` / `occupied_days` (default Mon–Fri 07–18, a generic office
-    assumption; `camber.schedules.effective_occupied_mask`).
+    assumption; `camber.schedules.effective_occupied_mask`). Since 0.98 `damper_census` reads
+    each box's trended occupancy the same way (schedule fallback), and `supply_air_control` gates
+    its fan-on hours on a trended occupancy point when one exists, with no schedule fallback
+    (`occupancy_gate`); both report which gate applied in an `occupancy_gate` metric.
   - *Fan-on only.* `outdoor_air_fraction` judges fan-on samples by default (`fan_gate=True`: fan
     status, else fan speed, else airflow — `camber.schedules.fan_on_mask`): with the fan stopped
     the mixing-box temperatures read still air, not a mix. A unit with no fan signal is judged
@@ -156,8 +159,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   (percent of stroke; data gaps are not counted as calm time). A trend too coarse to show the warn
   rate (15-min data can show at most 4 reversals/hr) is declined with a caveat, never called
   stable. Flags: `warn_per_hr`, `fault_per_hr`, `deadband`, `gap_factor`. `supply_air_control`: flags supply-air temperature
-  that fails to *track its setpoint* (control/capacity fault; running hours only). Flags: `tol_F`,
-  `warn_pct`, `fault_pct`. `airflow_tracking`: flags measured VAV airflow that fails to track its
+  that fails to *track its setpoint* (control/capacity fault; fan-on hours only, and since 0.98
+  only occupied ones when the unit trends occupancy). Flags: `tol_F`, `warn_pct`, `fault_pct`,
+  `occupancy_gate` (`"trended"` default, `"schedule"`, `"off"`). `airflow_tracking`: flags measured VAV airflow that fails to track its
   setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
   `tol_frac`, `warn_pct`, `fault_pct`.
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on

@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 
-from .schedules import occupied_mask
+from .schedules import effective_occupied_mask, occupied_mask
 
 __all__ = [
     "DamperCensusResult",
@@ -45,10 +45,23 @@ class DamperCensusResult:
     verdict: str
     coverage_start: str
     coverage_end: str
+    #: which samples were judged: ``"trended occupancy"`` (every box read its own trended
+    #: occupancy point), ``"assumed schedule (weekdays 07-18)"`` (none did), ``"mixed"`` (some
+    #: boxes each way) or ``"off"`` (``occupied_only=False``: every sample). Added 0.98 (#84).
+    occupancy_gate: str = "assumed schedule (weekdays 07-18)"
 
     def as_dict(self):
         """Return the result as a plain dict."""
         return asdict(self)
+
+
+#: the occupancy-gate labels (shared with the rules that report which samples they judged)
+_OCC_TRENDED = "trended occupancy"
+_OCC_SCHEDULE = "assumed schedule (weekdays 07-18)"
+
+
+def _flag(df: pd.DataFrame, col: str):
+    return df[col] if col in df.columns else None
 
 
 def damper_census(
@@ -57,6 +70,7 @@ def damper_census(
     low_band: float = 50.0,
     high_band: float = 90.0,
     occupied_only: bool = True,
+    use_trended_occupancy: bool = True,
 ) -> DamperCensusResult | None:
     """Aggregate VAV damper positions across many boxes.
 
@@ -64,16 +78,32 @@ def damper_census(
     judgment (PNNL guidance ~50-75% healthy): a box whose *median occupied* damper
     is below ``low_band`` is "throttling" (suggests static too high); at/above
     ``high_band`` is "starved" (static too low).
+
+    Occupied samples (``occupied_only``): a box's own trended ``'Occupancy'`` column, when it has
+    any non-null value and ``use_trended_occupancy`` is on, replaces the assumed weekday 07-18
+    schedule (so a trended weekend or evening occupancy is judged, 0.98 #84); otherwise the
+    schedule applies. ``'WarmUp'`` / ``'CoolDown'`` flags, when present, drop prep-mode samples
+    either way. The result's ``occupancy_gate`` says which applied.
     """
     box_medians = []
     n_int = 0
     start = end = None
+    gates: set = set()
     for _equip, df in box_frames.items():
         if "Damper" not in df.columns:
             continue
         s = df["Damper"]
         if occupied_only:
-            s = s[occupied_mask(s.index)]
+            occ = _flag(df, "Occupancy") if use_trended_occupancy else None
+            trended = occ is not None and occ.notna().any()
+            gates.add(_OCC_TRENDED if trended else _OCC_SCHEDULE)
+            mask = effective_occupied_mask(
+                s.index,
+                occ=occ if trended else None,
+                warmup=_flag(df, "WarmUp"),
+                cooldown=_flag(df, "CoolDown"),
+            )
+            s = s[mask.to_numpy(dtype=bool)]
         s = s.dropna()
         if s.empty:
             continue
@@ -108,6 +138,9 @@ def damper_census(
         verdict=verdict,
         coverage_start=str(start),
         coverage_end=str(end),
+        occupancy_gate=(
+            "off" if not occupied_only else gates.pop() if len(gates) == 1 else "mixed"
+        ),
     )
 
 

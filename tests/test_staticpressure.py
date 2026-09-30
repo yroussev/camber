@@ -79,3 +79,71 @@ def test_fleet_rule_protocol_and_severity():
     f = rule.analyze_fleet(frames)
     assert f.severity == "fault"
     assert f.metrics["pct_boxes_low"] >= 60
+
+
+# --- 0.98 (#84): the census reads each box's trended occupancy ------------------------------
+
+
+def _weekend_boxes(damper_occ=30.0, damper_unocc=100.0, with_occ=True):
+    """Boxes on a Saturday-Sunday: occupied 08-20 (trended), throttled when occupied, wide open
+    otherwise -- the assumed weekday schedule finds no occupied sample at all."""
+    idx = pd.date_range("2025-07-12", periods=48, freq="1h")  # Saturday
+    occ = ((idx.hour >= 8) & (idx.hour < 20)).astype(float)
+    frames = {}
+    for i in range(4):
+        cols = {"Damper": np.where(occ > 0, damper_occ + i, damper_unocc)}
+        if with_occ:
+            cols["Occupancy"] = occ
+        frames[f"VAV_{i}"] = pd.DataFrame(cols, index=idx)
+    return frames
+
+
+def test_census_uses_trended_occupancy_on_a_weekend():
+    res = damper_census(_weekend_boxes())
+    assert res is not None and res.occupancy_gate == "trended occupancy"
+    assert res.median_damper_pct == 31.5 and res.pct_boxes_low == 100.0
+    # the pre-0.98 behaviour: the weekday schedule finds nothing on a weekend
+    assert damper_census(_weekend_boxes(), use_trended_occupancy=False) is None
+
+
+def test_census_falls_back_to_the_schedule_and_reports_mixed():
+    assert damper_census(_weekend_boxes(with_occ=False)) is None  # schedule: no weekday hours
+    boxes = _boxes([10, 20, 30])  # schedule boxes (weekdays)
+    boxes["VAV_occ"] = pd.DataFrame(
+        {"Damper": np.full(len(boxes["VAV_0"]), 15.0), "Occupancy": 1.0},
+        index=boxes["VAV_0"].index,
+    )
+    assert damper_census(_boxes([10, 20])).occupancy_gate == "assumed schedule (weekdays 07-18)"
+    assert damper_census(boxes).occupancy_gate == "mixed"
+    assert damper_census(boxes, occupied_only=False).occupancy_gate == "off"
+    # an all-null occupancy point is not a trended one
+    empty = _boxes([10, 20])
+    for f in empty.values():
+        f["Occupancy"] = np.nan
+    assert damper_census(empty).occupancy_gate == "assumed schedule (weekdays 07-18)"
+
+
+def test_census_drops_warmup_and_cooldown():
+    idx = _idx(24 * 7)
+    warm = ((idx.hour >= 7) & (idx.hour < 9)).astype(float)
+    df = pd.DataFrame({"Damper": np.where(warm > 0, 100.0, 20.0), "WarmUp": warm}, index=idx)
+    assert damper_census({"VAV_0": df}).median_damper_pct == 20.0
+
+
+def test_fleet_rule_occupancy_gate_param():
+    frames = {
+        e: f.rename(columns={"Damper": Role.DAMPER, "Occupancy": Role.OCCUPANCY})
+        for e, f in _weekend_boxes().items()
+    }
+    assert Role.OCCUPANCY in DamperCensus.roles_optional
+    f = DamperCensus().analyze_fleet(frames)
+    assert f.severity == "fault" and f.metrics["occupancy_gate"] == "trended occupancy"
+    assert DamperCensus(occupancy_gate="schedule").analyze_fleet(frames).summary == "no damper data"
+    off = DamperCensus(occupancy_gate="off").analyze_fleet(frames)
+    assert off.metrics["occupancy_gate"] == "off"
+    try:
+        DamperCensus(occupancy_gate="weekday")
+    except ValueError as e:
+        assert "occupancy_gate" in str(e)
+    else:
+        raise AssertionError("an unknown occupancy_gate was accepted")
