@@ -3637,7 +3637,8 @@
    },
    "suggested_analyses": {
     "rules": [],
-    "config_template": "bdg2.json"
+    "config_template": "bdg2.json",
+    "exercise": "workbook/data-energy-charting.md"
    },
    "known_issues": [
     "Licence is CC-BY-SA 4.0 (the repository LICENSE): analysis and commercial use are fine; a redistributed adaptation of the data must keep the same licence.",
@@ -5681,7 +5682,8 @@
    },
    "suggested_analyses": {
     "rules": [],
-    "config_template": "valladolid-uva.json"
+    "config_template": "valladolid-uva.json",
+    "exercise": "workbook/mv-baselines.md"
    },
    "known_issues": [
     "Licence: CC BY 4.0 on the Mendeley Data record (data_licence 'Creative Commons Attribution 4.0 International'); attribution required.",
@@ -6402,7 +6404,8 @@
    },
    "suggested_analyses": {
     "rules": [],
-    "config_template": "nuig-ahu101.json"
+    "config_template": "nuig-ahu101.json",
+    "exercise": "workbook/data-trend-quality.md"
    },
    "known_issues": [
     "Real, unlabelled data: findings are hypotheses to check, not scored detections.",
@@ -19151,7 +19154,8 @@
    },
    "suggested_analyses": {
     "rules": [],
-    "config_template": "cofactor-drammen.json"
+    "config_template": "cofactor-drammen.json",
+    "exercise": "workbook/mv-baselines.md"
    },
    "known_issues": [
     "Licence is CC-BY-4.0 (the Zenodo record): analysis and commercial use are fine with attribution to the data descriptor.",

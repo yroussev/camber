@@ -101,10 +101,10 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 
 | PNNL reading | Exercise | Datasets |
 |---|---|---|
-| [Ch. 3][pnnl-retuning-ch3], [Ch. 4][pnnl-retuning-ch4], [Trending Requirements][pnnl-trending-requirements] | `data-trend-quality`: are the trends good enough? (planned) | `lbnl-b59`, `irish-ahu`, `nuig-ahu101` |
-| [Ch. 4][pnnl-retuning-ch4] | `data-energy-charting`: load profiles and weather dependence (planned) | `bdg2`, `valladolid-uva` |
-| [Ch. 4][pnnl-retuning-ch4], [Ch. 10][pnnl-retuning-ch10] | `mv-baselines`: change-point baselines and M&V (planned) | `valladolid-uva`, `cofactor-drammen` |
-| [Ch. 9][pnnl-retuning-ch9], [Ch. 10][pnnl-retuning-ch10] | `capstone`: the RCx report, a walk-down list, a re-tuning plan, verification (planned) | `lbnl-sdahu`, `ornl-frp-ops` |
+| [Ch. 3][pnnl-retuning-ch3], [Ch. 4][pnnl-retuning-ch4], [Trending Requirements][pnnl-trending-requirements] | [`data-trend-quality`: are the trends good enough?](data-trend-quality.md) | `lbnl-b59`, `irish-ahu`, `nuig-ahu101` |
+| [Ch. 4][pnnl-retuning-ch4], [Occupancy Scheduling][pnnl-guide-occupancy-scheduling] | [`data-energy-charting`: load profiles and weather dependence](data-energy-charting.md) | `bdg2`, `valladolid-uva` |
+| [Ch. 4][pnnl-retuning-ch4], [Ch. 10][pnnl-retuning-ch10] | [`mv-baselines`: change-point baselines and M&V](mv-baselines.md) | `valladolid-uva`, `cofactor-drammen`, `bdg2` (synthetic bills) |
+| [Economizer][pnnl-guide-economizer], [Ch. 9][pnnl-retuning-ch9], [Ch. 10][pnnl-retuning-ch10] | [`capstone`: the RCx report, a walk-down list, a re-tuning plan, verification](capstone.md) | `lbnl-sdahu`, `ornl-frp-ops` |
 <!-- END workbook-practice (#83) -->
 
 ## For instructors

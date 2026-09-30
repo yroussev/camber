@@ -83,6 +83,10 @@ nav:
       # END workbook-plant (#82)
       #
       # BEGIN workbook-practice (#83)
+      - "Practice: are the trends good enough?": workbook/data-trend-quality.md
+      - "Practice: energy charting": workbook/data-energy-charting.md
+      - "Practice: change-point baselines and M&V": workbook/mv-baselines.md
+      - "Practice: capstone": workbook/capstone.md
       # END workbook-practice (#83)
       - Instructor guide: workbook/instructor.md
   - AI-assist:
