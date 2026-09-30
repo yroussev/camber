@@ -10,7 +10,6 @@ in config" is a tested invariant, not documentation. Mirrors the env-var config 
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 
@@ -87,13 +86,14 @@ class EdgeConfig:
 
 
 def load_config(path: str | None = None, *, environ=None) -> EdgeConfig:
-    """Load the JSON config (rejecting secrets) and overlay ``CAMBER_EDGE_*`` env vars."""
+    """Load the JSON (or YAML) config (rejecting secrets) and overlay ``CAMBER_EDGE_*`` env vars."""
     environ = os.environ if environ is None else environ
     path = path or environ.get("CAMBER_EDGE_CONFIG")
     raw: dict = {}
     if path:
-        with open(path, encoding="utf-8") as fh:
-            raw = json.load(fh)
+        from .._yaml import read_config_file  # 0.98 (#90): .yaml / .yml too (the [yaml] extra)
+
+        raw = read_config_file(path)
         _scan_secrets(raw)
 
     facility_id = environ.get("CAMBER_EDGE_FACILITY_ID") or raw.get("facility_id")

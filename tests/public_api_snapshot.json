@@ -1776,6 +1776,7 @@
     "builtin_registry",
     "is_fleet",
     "make_rule",
+    "rule_factories",
     "rule_names"
   ],
   "camber.rules.chiller_approach_rule": [
@@ -2047,6 +2048,22 @@
   ],
   "camber.rules.overcooling_severity_rule": [
     "OvercoolingSeverity"
+  ],
+  "camber.rules.param_docs": [
+    "BASIS_KINDS",
+    "DELEGATES",
+    "EXEMPT",
+    "FIXED",
+    "PARAM_DOCS",
+    "ParamDoc",
+    "RuleParam",
+    "config_snippet",
+    "describe",
+    "documented_rules",
+    "json_value",
+    "render_text",
+    "rule_params",
+    "snippet_yaml"
   ],
   "camber.rules.pump_flow_rule": [
     "DP_CONFOUND",

@@ -115,8 +115,9 @@ def _classify(src: _Source, want=None) -> None:
 def _config_sources(pf, cfg_path: str, resolver) -> tuple:
     """(sources, problem-or-None, fid) for the state files and reports a config names."""
     cfg_path = os.path.abspath(cfg_path)
-    with open(cfg_path, encoding="utf-8") as fh:
-        cfg = json.load(fh)
+    from .._yaml import read_config_file  # 0.98 (#90): a YAML run config too
+
+    cfg = read_config_file(cfg_path)
     base = os.path.dirname(cfg_path)
     source = cfg.get("source") or {}
     site = str(cfg.get("site") or "")

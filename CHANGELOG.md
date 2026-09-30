@@ -4,6 +4,50 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.98.0] — Unreleased
+
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+**0.98: hardening from the workbook (#84, #85, #86, #87, #88, #89, #90).**
+
+### Added
+<!-- 098-thresholds (#90) -->
+- **Tunable thresholds, documented (#90, provisional).** `camber/rules/param_docs.py` documents
+  every numeric, flag and enumerated constructor parameter of every built-in rule, including the
+  extra instances. Each entry gives the unit, a sensible range, the basis of the default
+  (`standard: ...` only where the code cites a section, `public source: ...`, `CAMBER judgment` or
+  `calibrated on ...`) and how to calibrate it from your own data. Defaults are read from the
+  constructors, never copied. `FIXED` lists thresholds that are still hard-coded, and a test fails
+  on any undocumented or stale parameter.
+- **`camber rules params [RULE] [--json|--yaml]`.** Prints each parameter with its default,
+  basis and calibration hint, plus a ready-to-paste config snippet. The YAML snippet carries each
+  note as a comment beside its value.
+- **Every built-in rule is tunable from a config.** `make_rule` and a config's `params` now also
+  cover the extra instances (`cohort_airflow`, `cohort_space_temp`, `sat_/static_reset_effectiveness`,
+  `sat_/static_rogue_zone_census`, `sat_/static_cohort_starvation`); their identity arguments
+  (the cohort role, the reset kind) stay fixed. `rule_factories()` lists them.
+- **YAML run configs (the `[yaml]` extra, `pyyaml>=6`).** `camber run`, `report`, `explain`,
+  `ask`, `fleet`, `drift`, `mv`, `python -m camber.config`, the portfolio migration and the edge
+  config read `.yaml` / `.yml`. Without PyYAML the command stops with an error that names the
+  extra. The loader types values as JSON does (dates, `07:00`, `no` / `on` and `012` stay
+  strings), so equivalent JSON and YAML configs give identical results, as a test asserts. JSON
+  stays the dependency-free default.
+- **`camber datasets config --format yaml`** (and `--out *.yaml`) writes a template as YAML, with
+  its `_comment` notes turned into comments; `config_template(..., format=)`. Writing YAML needs
+  no extra.
+- **Calibration provenance in findings.** A rule entry may carry a `basis` map
+  (`{"fan_heat_f": "calibrated on ..."}`), which each finding of the rule records as
+  `metrics["param_basis"]` = `{param: {"value", "basis"}}`. A misspelt parameter name is an
+  error. Existing configs are unaffected.
+- **Docs.** `docs/THRESHOLDS.md` is generated from the registry by `scripts/thresholds_doc.py`
+  (`--check` is a test). The new guide `docs/TUNING.md`, "Tuning thresholds with your own data",
+  covers calibrating on a known-good period, avoiding circular calibration, recording provenance
+  in config comments and re-checking against labelled data. Its worked examples use
+  `lbnl-sdahu` and `nist-heatpump-fdd`. Also updated: CLI.md, API-STABILITY (provisional), the
+  mkdocs nav, the README, and a "going further" pointer in the workbook index.
+<!-- /098-thresholds -->
+
 ## [0.97.0] — Unreleased
 
 <!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is

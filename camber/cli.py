@@ -3,6 +3,7 @@
 Subcommands:
 
     camber run     <config.json> [--out DIR]        # run a config, print/write findings
+                                                     # (a .yaml / .yml config needs [yaml])
     camber report  <config.json> --out site.html    # run + write an HTML audit report
                    [--layout audit|rcx|<plugin>]    # rcx: the printable RCx layout
     camber explain <config.json> [--no-strict]      # grounded plain-language explanation of
@@ -13,6 +14,7 @@ Subcommands:
     camber validate [--html d.html] [--json d.json] [--full]         # validation dossier
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+    camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
     camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (0.96)
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
     camber facility add|list|show|rename|activate|suspend|resume|     # facility lifecycle
@@ -849,16 +851,51 @@ def _cmd_datasets_remove(args) -> int:
     return 0
 
 
+def _cmd_rules_params(args) -> int:
+    """0.98 (#90): every tunable rule parameter with its default, basis and calibration."""
+    from .rules import param_docs as pd
+
+    known = pd.documented_rules()
+    if args.rule and args.rule not in known:
+        print(
+            f"error: unknown rule {args.rule!r} (camber rules params lists them)", file=sys.stderr
+        )
+        return 2
+    rules = [args.rule] if args.rule else known
+    if args.format == "json":
+        doc = {"rules": [pd.describe(r) for r in rules], "config": pd.config_snippet(rules)}
+        print(json.dumps(doc, indent=2, ensure_ascii=False))
+        return 0
+    if args.format == "yaml":
+        print(pd.snippet_yaml(rules), end="")
+        return 0
+    print(pd.render_text(rules))
+    print("Ready-to-paste config (keep only the params you change; --yaml adds the notes):")
+    print(json.dumps(pd.config_snippet(rules), indent=2, ensure_ascii=False))
+    return 0
+
+
 @_ds_errors
 def _cmd_datasets_config(args) -> int:
     from . import datasets as ds
+    from ._yaml import is_yaml_path
 
+    fmt = args.format or ("yaml" if args.out and is_yaml_path(args.out) else "json")
     cfg = ds.config_template(
-        args.id, args.store, facility_id=args.facility, out=args.out, exercise=args.exercise
+        args.id,
+        args.store,
+        facility_id=args.facility,
+        out=args.out,
+        exercise=args.exercise,
+        format=fmt,
     )
     if args.out:
         print(f"wrote {args.out} (facility {cfg['source']['facility_id']})")
         print(f"next: camber report {args.out} --out report.html")
+    elif fmt == "yaml":
+        from ._yaml import dump_yaml
+
+        print(dump_yaml(cfg), end="")
     else:
         print(json.dumps(cfg, indent=2))
     return 0
@@ -2461,7 +2498,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("run", help="run a config and print/write findings")
-    pr.add_argument("config")
+    pr.add_argument("config", help="a .json config, or .yaml / .yml (the [yaml] extra)")
     pr.add_argument("--out", help="output dir for findings.json")
     pr.set_defaults(func=_cmd_run)
 
@@ -2507,7 +2544,9 @@ def _build_parser() -> argparse.ArgumentParser:
     pa.set_defaults(func=_cmd_ask)
 
     pf = sub.add_parser("fleet", help="portfolio rollup across configs + optional triage")
-    pf.add_argument("glob", help="glob of config .json files, e.g. 'sites/*/config.json'")
+    pf.add_argument(
+        "glob", help="glob of config .json (or .yaml) files, e.g. 'sites/*/config.json'"
+    )
     pf.add_argument("--ask", help="a portfolio question to answer (grounded)")
     pf.add_argument("--out", help="output fleet .html path")
     pf.add_argument("--llm-cmd", dest="llm_cmd")
@@ -2963,13 +3002,40 @@ def _build_parser() -> argparse.ArgumentParser:
     dsc = dssub.add_parser("config", help="write a ready-to-run config for an ingested dataset")
     dsc.add_argument("id")
     dsc.add_argument("--store", required=True)
-    dsc.add_argument("--out", help="config JSON to write (default: print it)")
+    dsc.add_argument("--out", help="config file to write (default: print it)")
+    dsc.add_argument(
+        "--format",
+        choices=("json", "yaml"),
+        help="json (default) or yaml, whose comments carry the template's notes; "
+        "defaults to the --out suffix (.yaml / .yml)",
+    )
     dsc.add_argument("--facility", help="facility id (multi-facility datasets such as bdg2)")
     dsc.add_argument(
         "--exercise",
         help="a workbook exercise's tuned template instead of the dataset's (docs/workbook/)",
     )
     dsc.set_defaults(func=_cmd_datasets_config)
+
+    # ---- 0.98 (#90): camber rules params
+    prl = sub.add_parser("rules", help="rule reference: tunable parameters (rules params)")
+    rlsub = prl.add_subparsers(dest="rules_cmd", required=True)
+    rlp = rlsub.add_parser(
+        "params",
+        help="each rule's tunable parameters: default, basis, calibration, config snippet",
+    )
+    rlp.add_argument("rule", nargs="?", help="one rule (default: every built-in rule)")
+    rlf = rlp.add_mutually_exclusive_group()
+    rlf.add_argument(
+        "--json", dest="format", action="store_const", const="json", help="machine-readable"
+    )
+    rlf.add_argument(
+        "--yaml",
+        dest="format",
+        action="store_const",
+        const="yaml",
+        help="a YAML config snippet with each parameter's basis and calibration as comments",
+    )
+    rlp.set_defaults(func=_cmd_rules_params, format="text")
 
     dsk = dssub.add_parser("score", help="score findings against the ingested fault labels")
     dsk.add_argument("id")
@@ -3249,7 +3315,13 @@ def main(argv=None):
     """CLI entry point: parse args and dispatch to the requested subcommand."""
     _ensure_utf8_streams()
     args = _build_parser().parse_args(argv)
-    return args.func(args)
+    from ._yaml import MissingYamlExtra
+
+    try:
+        return args.func(args)
+    except MissingYamlExtra as e:  # 0.98 (#90): a .yaml config without the [yaml] extra
+        print(f"error: {e}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

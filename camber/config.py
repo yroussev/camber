@@ -2142,6 +2142,28 @@ def _drift_families(spec: dict, refs_by_class: dict) -> list:
     return out
 
 
+def _param_basis(name: str, params: dict, basis) -> dict | None:
+    """A rule entry's ``"basis"`` ({param: where its value came from}) as finding metrics.
+
+    0.98 (#90): a template that sets a calibrated value (``"params": {"fan_heat_f": 1.0}``) can
+    say where it came from (``"basis": {"fan_heat_f": "calibrated on lbnl-sdahu fault_free"}``);
+    each finding of the rule then records ``metrics["param_basis"]`` =
+    ``{param: {"value": ..., "basis": ...}}``. A basis for a parameter the entry does not set
+    records the rule's default. Unknown parameters raise ``ValueError`` (fail fast on a typo).
+    """
+    if not basis:
+        return None
+    if not isinstance(basis, dict):
+        raise ValueError(f"rule {name!r}: 'basis' must map parameter names to text")
+    from .rules.param_docs import rule_params
+
+    defaults = {rp.name: rp.default for rp in rule_params(name)}
+    unknown = sorted(set(basis) - set(defaults) - set(params))
+    if unknown:
+        raise ValueError(f"rule {name!r}: 'basis' names unknown parameter(s) {', '.join(unknown)}")
+    return {k: {"value": params.get(k, defaults.get(k)), "basis": str(v)} for k, v in basis.items()}
+
+
 def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     """Execute a config dict: discover equipment, run the named rules, build a report.
 
@@ -2162,7 +2184,8 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         )
 
     reg = builtin_registry()
-    findings, ran = [], []
+    findings: list = []
+    ran: list = []
     # 0.92 (#17): the "ventilation" section configures the system-level 62.1 VRP rule
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
@@ -2170,14 +2193,17 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     for entry in config.get("rules", []):
         # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
         # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
+        basis = None
         if isinstance(entry, dict):
             name = entry["name"]
             params = entry.get("params") or {}
             if params:
                 reg.register(make_rule(name, **params))  # override the default instance
+            basis = _param_basis(name, params, entry.get("basis"))
         else:
             name = entry
         rule = reg.get(name)  # KeyError on unknown name
+        n_before = len(findings)
         if is_fleet(rule):
             f = reg.run_fleet(
                 name,
@@ -2194,6 +2220,9 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             findings += reg.run(
                 name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
             )
+        if basis:  # 0.98 (#90): a calibrated value's provenance travels with its findings
+            for f in findings[n_before:]:
+                f.metrics = {**(f.metrics or {}), "param_basis": basis}
         ran.append(name)
     # 0.92 (#17): a configured ventilation section runs even when "rules" omits the rule
     if vent_rule is not None and vent_rule.name not in ran:
@@ -2618,9 +2647,15 @@ def _mvform_base(entry: dict, base_dir: str) -> dict:
 
 
 def load_config(path: str) -> dict:
-    """Load a JSON config file into a dict."""
-    with open(path) as fh:
-        return json.load(fh)
+    """Load a run config file into a dict: JSON, or YAML for a ``.yaml`` / ``.yml`` path.
+
+    0.98 (#90): YAML is an optional, equivalent format (the ``[yaml]`` extra, PyYAML) so that
+    calibration notes can live as comments beside the values; a missing PyYAML raises an
+    ``ImportError`` that says how to install it. JSON needs nothing.
+    """
+    from ._yaml import read_config_file
+
+    return read_config_file(path)
 
 
 def run_config_file(path: str) -> RunResult:
@@ -2632,8 +2667,13 @@ if __name__ == "__main__":  # pragma: no cover
     import sys
 
     if len(sys.argv) < 2:
-        raise SystemExit("usage: python -m camber.config <config.json>")
-    res = run_config_file(sys.argv[1])
+        raise SystemExit("usage: python -m camber.config <config.json|config.yaml>")
+    from ._yaml import MissingYamlExtra
+
+    try:
+        res = run_config_file(sys.argv[1])
+    except MissingYamlExtra as e:  # a .yaml config without the [yaml] extra
+        raise SystemExit(f"error: {e}") from None
     print(
         f"{res.site}: {res.equipment} equipment, {len(res.findings)} findings "
         f"from {len(res.rules_run)} rules"

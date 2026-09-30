@@ -503,6 +503,19 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   recorded, and the viewer's **UTC** toggle. The count units in `camber.api.ui.role_units`
   (`occupancy` persons, request and stage roles) are display data and may be extended.
 <!-- /096-integration -->
+<!-- 098-thresholds (#90) -->
+- **Tunable thresholds and YAML configs** (0.98; #90), all additive and provisional:
+  `camber.rules.param_docs` (`PARAM_DOCS`, `ParamDoc`, `BASIS_KINDS`, `EXEMPT`, `DELEGATES`,
+  `FIXED`, `RuleParam`, `rule_params`, `documented_rules`, `describe`, `config_snippet`,
+  `snippet_yaml`, `render_text`, `json_value`); `camber.rules.builtin.rule_factories` and
+  `make_rule` accepting the extra instances (`cohort_airflow`, `sat_reset_effectiveness`, ...);
+  the `camber rules params [RULE] [--json|--yaml]` command and its JSON shape; the `format=`
+  keyword of `camber.datasets.config_template` and `camber datasets config --format json|yaml`;
+  a rule entry's `basis` map and the `param_basis` finding metric it adds; `.yaml` / `.yml` run
+  configs through `camber.config.load_config` (the `[yaml]` extra) and the loader's JSON-like
+  typing. Entry texts (basis, calibration hints, ranges) are documentation and may change in any
+  release; defaults are the rules' and follow the rules.
+<!-- /098-thresholds -->
 
 ## Deprecated
 
