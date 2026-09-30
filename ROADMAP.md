@@ -337,10 +337,23 @@ Version numbers are given only where a release is already planned.
       Re-tuning references;
     - [x] integration: the trend viewer shows site time labelled with the facility's zone (a UTC
       toggle; UTC when no zone is recorded) and count units (`occupancy` in persons).
-  - **0.97 — next: the PNNL re-tuning workbook** (#79–#83): the workbook framework (curriculum
-    map, exercise template, instructor keys, answer-key tests, catalog exercise links, #79), then
-    the air side (#80), terminal units and ventilation (#81), the central plant (#82), and data
-    quality, energy charting, M&V and the capstone (#83), worked on the catalog datasets.
+  - **0.97 — the PNNL re-tuning workbook** (integrated, stacked on 0.96; `CHANGELOG.md`,
+    `[0.97.0]`, unreleased). Closes #79, #80, #81, #82 and #83: 19 exercises, each with a page,
+    an instructor key and an answer-key test on a synthetic stand-in (offline) and on the real
+    catalog data (`-m network`):
+    - [x] #79 the framework: curriculum map, exercise template, instructor page, answer-key
+      harness, PNNL links from the reference registry, catalog `exercise` links served offline by
+      `camber lab`, exercise config templates, and the worked example `air-economizer`;
+    - [x] #80 the air side: supply-air reset, static pressure, heating and cooling, the
+      economizer on a real unlabelled unit, and scheduling;
+    - [x] #81 terminal units and ventilation: reheat and overcooling, one bad box, saturated
+      reheat, DCV, and minimum outdoor air with the 62.1 system procedure;
+    - [x] #82 the central plant: chiller efficiency, the cooling tower, chilled-water reset and
+      pumping, the boiler plant, and sensor faults against equipment faults (plus the
+      `lbnl-chiller` pump and DP roles);
+    - [x] #83 data quality, energy charting, M&V baselines and the capstone;
+    - [x] integration: the network tests ingest each run's subset into its own store, skip a
+      manual dataset without local files, and list the files `CAMBER_WORKBOOK_FROM_DIR` needs.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'
