@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.96.0] — Unreleased
+
+<!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is
+released. -->
+
+### Fixed
+<!-- 096-faults (#76) -->
+- **A site's fault run no longer resolves other sites' faults (#76).** In the legacy, site-keyed
+  path (no `facility_id`), `FaultLifecycle.update(..., auto_resolve_absent=True)` resolved every
+  open fault in the store file, including other sites' faults and facility-keyed faults. The
+  `absent` list had the same error without `auto_resolve_absent`.
+  - A run now covers only the records whose fingerprint is keyed by its `site`. The fingerprint
+    decides, not the stored label. `site=""` is its own scope, and `aliases` never widen it.
+    Facility-id runs are unchanged.
+  - A site-keyed record whose site cannot be told is never auto-resolved. This covers records
+    whose fingerprint matches neither the run's `site` nor their own stored label, such as
+    hand-edited records or records with no stored `site`, which now load with `""` instead of
+    failing. Such records are listed under a new `unscoped` key in the result, present only when
+    non-empty, and `camber run` prints a line for them.
+  - The same fix reaches config runs that share a `faults.store`.
+  - The in-memory `rules.triage.FaultRegister` shared the flaw across sites and facilities, and
+    now resolves only faults keyed like the run.
+  - Outputs for single-site stores and facility-id runs are byte-identical. See
+    docs/FAULT-LIFECYCLE.md, "Which faults a run can close".
+
 ## [0.95.0] — Unreleased
 
 <!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when

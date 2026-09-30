@@ -105,6 +105,12 @@ def _cmd_run(args) -> int:
             f"faults: {len(f['new'])} new, {len(f['ongoing'])} ongoing, "
             f"{len(f['reopened'])} reopened, {len(f['absent'])} absent -> {f['store']}"
         )
+        # ---- 0.96 (#76): site-keyed faults whose site can't be told are never auto-resolved
+        if f.get("unscoped"):
+            print(
+                f"faults: {len(f['unscoped'])} open fault(s) of unknown site left untouched "
+                "(never auto-resolved; see docs/FAULT-LIFECYCLE.md)"
+            )
     return 0
 
 

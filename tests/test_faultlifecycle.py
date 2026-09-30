@@ -118,3 +118,204 @@ def test_unknown_fingerprint_raises():
         raise AssertionError("expected KeyError")
     except KeyError:
         pass
+
+
+# --------------------------------------------------------------------------- #76: run scope
+# In the legacy, site-keyed path (no facility_id) a run only reports -- and auto-resolves -- the
+# faults keyed by its own ``site``; other sites' and facility-keyed records in the same file are
+# left alone, and a record whose site can't be told is reported under ``unscoped``, never resolved.
+
+import json  # noqa: E402
+import warnings  # noqa: E402
+
+import pytest  # noqa: E402
+
+from camber.integrate.tickets import fingerprint  # noqa: E402
+from camber.rules.triage import FaultRegister  # noqa: E402
+
+
+def _leak(equip):
+    return _f("leaking_valve", equip, "warn")
+
+
+def _two_sites():
+    lc = FaultLifecycle()
+    lc.update([_leak("AHU-1")], run_id="r1", site="site-x")
+    lc.update([_leak("AHU-9")], run_id="r1", site="site-y")
+    return (
+        lc,
+        fingerprint("site-x", "AHU-1", "leaking_valve"),
+        fingerprint("site-y", "AHU-9", "leaking_valve"),
+    )
+
+
+def test_auto_resolve_leaves_other_sites_faults_open_issue_76():
+    lc, _x, y = _two_sites()
+    out = lc.update([_leak("AHU-1")], run_id="r2", site="site-x", auto_resolve_absent=True)
+    assert out["resolved"] == [] and out["absent"] == [] and "unscoped" not in out
+    assert lc.get(y).status == "open" and lc.get(y).notes == []
+
+
+def test_absent_is_scoped_to_the_run_site_without_auto_resolve():
+    lc, x, y = _two_sites()
+    lc.update([_leak("AHU-2")], run_id="r1", site="site-x")
+    x2 = fingerprint("site-x", "AHU-2", "leaking_valve")
+    out = lc.update([_leak("AHU-1")], run_id="r2", site="site-x")
+    assert out["absent"] == [x2] and y not in out["absent"]
+    out = lc.update([], run_id="r3", site="site-x", auto_resolve_absent=True)
+    assert out["resolved"] == sorted([x, x2])
+    assert [r.fingerprint for r in lc.open_faults()] == [y]
+
+
+def test_empty_site_is_its_own_scope():
+    lc, x, y = _two_sites()
+    lc.update([_leak("AHU-5")], run_id="r1", site="")
+    e = fingerprint("", "AHU-5", "leaking_valve")
+    out = lc.update([], run_id="r2", site="", auto_resolve_absent=True)
+    assert out["resolved"] == [e] and "unscoped" not in out
+    assert lc.get(x).status == lc.get(y).status == "open"
+    # and a named site's run never touches the "" record's siblings
+    lc.update([_leak("AHU-5")], run_id="r3", site="")
+    assert lc.update([], run_id="r4", site="site-y")["absent"] == [y]
+
+
+def test_mixed_file_leaves_facility_keyed_records_to_their_facility(tmp_path):
+    lc, x, y = _two_sites()
+    lc.update([_leak("AHU-7")], run_id="r1", site="Facility One", facility_id="fac-1")
+    f1 = fingerprint("fac-1", "AHU-7", "leaking_valve")
+    p = str(tmp_path / "faults.json")
+    lc.save(p)
+    unbound = FaultLifecycle.load(p)
+    out = unbound.update([], run_id="r2", site="site-x", auto_resolve_absent=True)
+    assert out["resolved"] == [x] and "unscoped" not in out
+    assert unbound.get(f1).status == "open" and unbound.get(y).status == "open"
+    # the facility-bound run still owns exactly its own records (unchanged since 0.86)
+    bound = FaultLifecycle.load(p, facility_id="fac-1", legacy_sites=())
+    out = bound.update([], run_id="r2", site="Facility One", auto_resolve_absent=True)
+    assert out == {"new": [], "ongoing": [], "reopened": [], "absent": [], "resolved": [f1]}
+    assert bound.get(x).status == "open" and bound.get(y).status == "open"
+
+
+def test_aliased_record_is_scoped_by_its_current_key():
+    """A merged/adopted record keeps the old site-keyed fingerprint as an alias; that alias does
+    not make it the unbound site-x run's fault (the run can never 'see' it by the alias)."""
+    lc = FaultLifecycle()
+    lc.update([_leak("AHU-1")], run_id="r1", site="site-x")
+    with pytest.warns(DeprecationWarning):
+        lc._adopt_legacy("fac-1", ("site-x",))
+    old = fingerprint("site-x", "AHU-1", "leaking_valve")
+    rec = lc.get(old)
+    assert rec.facility_id == "fac-1" and rec.aliases == [old]
+    out = lc.update([], run_id="r2", site="site-x", auto_resolve_absent=True)
+    assert out["resolved"] == [] and "unscoped" not in out and rec.status == "open"
+
+
+def test_relabelled_record_follows_its_fingerprint():
+    """The fingerprint is the identity; a hand-edited ``site`` label doesn't move the fault."""
+    lc, x, _y = _two_sites()
+    lc.get(x).site = "Site X (renamed label)"
+    out = lc.update([], run_id="r2", site="site-x", auto_resolve_absent=True)
+    assert out["resolved"] == [x]
+
+
+def _write(path, recs):
+    open(path, "w").write(json.dumps({"faults": recs}))
+
+
+def test_record_without_a_site_is_reported_never_resolved(tmp_path):
+    """A record with no stored ``site`` (or one whose fingerprint matches no label) can't be
+    placed: every unbound run lists it under ``unscoped`` and none auto-resolves it."""
+    p = str(tmp_path / "faults.json")
+    fx = fingerprint("site-x", "AHU-1", "leaking_valve")
+    fq = fingerprint("somewhere", "AHU-3", "leaking_valve")
+    base = {"rule": "leaking_valve", "severity": "warn", "status": "open", "first_seen": "r0",
+            "last_seen": "r0", "occurrences": 1}  # fmt: skip
+    _write(p, [
+        {**base, "fingerprint": fx, "site": "site-x", "equip": "AHU-1"},
+        {**base, "fingerprint": fq, "equip": "AHU-3"},  # no "site" key at all
+        {**base, "fingerprint": "0123456789ab", "site": "site-x", "equip": "AHU-4"},  # edited
+    ])  # fmt: skip
+    lc = FaultLifecycle.load(p)
+    assert lc.get(fq).site == ""
+    for site in ("site-x", "", "site-z"):
+        out = lc.update([], run_id="r1", site=site, auto_resolve_absent=True)
+        assert out["unscoped"] == sorted([fq, "0123456789ab"])
+    assert lc.get(fx).status == "resolved"  # resolved by the site-x run only
+    assert lc.get(fq).status == lc.get("0123456789ab").status == "open"
+    assert lc.update([], run_id="r2", site="site-x")["unscoped"] == sorted([fq, "0123456789ab"])
+    lc.resolve(fq, "r3")  # a hand resolve clears it from the report
+    assert lc.update([], run_id="r4", site="site-x")["unscoped"] == ["0123456789ab"]
+
+
+def test_siteless_record_keyed_by_empty_site_is_in_the_empty_scope(tmp_path):
+    p = str(tmp_path / "faults.json")
+    fe = fingerprint("", "AHU-1", "leaking_valve")
+    _write(p, [{"fingerprint": fe, "equip": "AHU-1", "rule": "leaking_valve",
+                "severity": "warn", "status": "open"}])  # fmt: skip
+    lc = FaultLifecycle.load(p)
+    assert lc.update([], run_id="r1", site="site-x", auto_resolve_absent=True)["resolved"] == []
+    assert lc.update([], run_id="r1", site="", auto_resolve_absent=True)["resolved"] == [fe]
+
+
+def test_unscoped_is_absent_from_bound_runs(tmp_path):
+    p = str(tmp_path / "faults.json")
+    _write(p, [{"fingerprint": "0123456789ab", "equip": "AHU-4", "rule": "leaking_valve",
+                "severity": "warn", "status": "open"}])  # fmt: skip
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # nothing to adopt, so no deprecation warning either
+        lc = FaultLifecycle.load(p, facility_id="fac-1", legacy_sites=())
+        out = lc.update([], run_id="r1", site="site-x", auto_resolve_absent=True)
+    assert "unscoped" not in out and lc.get("0123456789ab").status == "open"
+
+
+def test_config_runs_sharing_a_store_keep_other_sites_open(tmp_path):
+    """The config ``faults`` section (unbound outside a workspace) shares the fix."""
+    import _rcx_fixture as rfx
+
+    from camber.config import run_config
+
+    rfx.make_store(tmp_path)
+    store = str(tmp_path / "faults.json")
+    lc = FaultLifecycle.load(store)
+    lc.update([_leak("AHU-9")], run_id="r0", site="site-y")
+    lc.save()
+    y = fingerprint("site-y", "AHU-9", "leaking_valve")
+    cfg = rfx.config()
+    cfg["faults"] = {"store": "faults.json", "run_id": "r1", "auto_resolve_absent": True}
+    res = run_config(cfg, base_dir=str(tmp_path))
+    assert y not in res.faults["resolved"] and "unscoped" not in res.faults
+    assert FaultLifecycle.load(store).get(y).status == "open"
+
+
+def test_fault_register_resolves_only_its_own_key():
+    reg = FaultRegister()
+    reg.update([_leak("AHU-1")], site="site-x", run_id=1)
+    reg.update([_leak("AHU-9")], site="site-y", run_id=1)
+    reg.update([_leak("AHU-7")], site="site-x", facility_id="fac-1", run_id=1)
+    out = reg.update([], site="site-x", run_id=2)
+    assert out["resolved"] == [fingerprint("site-x", "AHU-1", "leaking_valve")]
+    assert set(reg.open_faults()) == {
+        fingerprint("site-y", "AHU-9", "leaking_valve"),
+        fingerprint("fac-1", "AHU-7", "leaking_valve"),
+    }
+    out = reg.update([], site="site-x", facility_id="fac-1", run_id=3)
+    assert out["resolved"] == [fingerprint("fac-1", "AHU-7", "leaking_valve")]
+
+
+def test_cli_run_prints_unscoped_count(tmp_path, capsys):
+    import _rcx_fixture as rfx
+
+    from camber.cli import main
+
+    rfx.make_store(tmp_path)
+    _write(str(tmp_path / "faults.json"), [
+        {"fingerprint": "0123456789ab", "equip": "AHU-4", "rule": "leaking_valve",
+         "severity": "warn", "status": "open"},
+    ])  # fmt: skip
+    cfg = rfx.config()
+    cfg["faults"] = {"store": "faults.json", "run_id": "r1", "auto_resolve_absent": True}
+    path = tmp_path / "cfg.json"
+    path.write_text(json.dumps(cfg))
+    assert main(["run", str(path)]) == 0
+    assert "faults: 1 open fault(s) of unknown site left untouched" in capsys.readouterr().out
+    assert FaultLifecycle.load(str(tmp_path / "faults.json")).get("0123456789ab").status == "open"
