@@ -1,0 +1,34 @@
+{
+  "_comment": "Workbook exercise air-static-pressure (docs/workbook/air-static-pressure.md), ornl-frp-vav part: the VAV damper census over the ten boxes of the default subset's fault-free day (d3_fault_free, a Thursday) -- one air handler's zones on one day, not the stuck-damper days, where the box under test would skew the census. `camber datasets config ornl-frp-vav --exercise air-static-pressure--ornl-frp-vav --store DIR --out cfg.json` fills in the store path. damper_census takes each box's median damper opening over occupied hours (CAMBER's assumed weekday 07-18 schedule; the rule does not read the trended occupancy) and calls static too high when most boxes throttle below 50 % open, too low when a quarter or more sit at 90 % or above -- the rule's default bands, not tuned. The RTU's duct static is trended but its setpoint is not (the tests fix it at 249 Pa, descriptor Methods), so static_pressure_reset is not run.",
+  "_dataset": "ornl-frp-vav",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-ornl-frp-vav"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "space_temp",
+      "equip": [
+        "RTU_VAV_102__d3_fault_free",
+        "RTU_VAV_103__d3_fault_free",
+        "RTU_VAV_104__d3_fault_free",
+        "RTU_VAV_105__d3_fault_free",
+        "RTU_VAV_106__d3_fault_free",
+        "RTU_VAV_202__d3_fault_free",
+        "RTU_VAV_203__d3_fault_free",
+        "RTU_VAV_204__d3_fault_free",
+        "RTU_VAV_205__d3_fault_free",
+        "RTU_VAV_206__d3_fault_free"
+      ]
+    }
+  ],
+  "rules": [
+    "damper_census"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -1,6 +1,6 @@
 """Answer key: workbook exercise ``air-economizer`` (docs/workbook/air-economizer.md).
 
-The worked example of the framework (#79); #80 owns and extends it (e.g. the irish-ahu part).
+The worked example of the framework (#79); #80 extended it with the irish-ahu part.
 
 Real-data figures were recorded from::
 
@@ -9,14 +9,21 @@ Real-data figures were recorded from::
     camber datasets config lbnl-sdahu --exercise air-economizer --store lab_store --out econ.json
     camber run econ.json --out econ_out
     camber datasets score lbnl-sdahu --store lab_store --findings econ_out/findings.json
+    camber datasets fetch irish-ahu
+    camber datasets ingest irish-ahu --store lab_store
+    camber datasets config irish-ahu --store lab_store --out irish.json
+    camber run irish.json --out irish_out
 
-(CAMBER 0.97.0-dev, lbnl-sdahu default subset, 2026-09-29.)
+(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29.) The irish-ahu period
+figures (53% / 45%) come from the same config with ``source.start`` / ``source.end`` set to
+2017-06-01 .. 2020-03-01 and 2020-08-01 .. 2021-12-01 (see ``_irish_by_period``).
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from _air_standins import irish
 from _workbook import (
     BOTH,
     REAL,
@@ -30,6 +37,7 @@ from _workbook import (
     write_standin,
 )
 
+from camber.config import run_config
 from camber.model.roles import Role
 
 # the stuck position's OA fraction, as measured on the real runs (median, fan on, cooling weather)
@@ -96,6 +104,9 @@ def standin(store) -> None:
         **{f"AHU__{k}": ("AHU", _ahu(idx, v)) for k, v in _STUCK_OAF.items()},
     }
     write_standin(store, "lbnl-sdahu", frames, labels=_LABELS)
+    # ds-irish-ahu: a real unit's economizer, held at 100 % outdoor air for a day and a half of a
+    # warm spell (a documented operating decision, not a fault of the controls)
+    write_standin(store, "irish-ahu", {"AHU__ahu": ("AHU", irish(idx, full_oa=(24.0, 25.65)))})
 
 
 def _stuck_closed_miss_more(ctx) -> None:
@@ -110,13 +121,33 @@ def _stuck_closed_miss_more(ctx) -> None:
         assert got >= 2 * ref, f"{eq} missed {got}% vs fault-free {ref}% (expected >= 2x)"
 
 
+def _excess_oa(ctx, start: str, end: str) -> float:
+    cfg = ctx.config("irish")
+    cfg["source"].update({"start": start, "end": end})
+    res = run_config(cfg, base_dir=ctx.store)
+    f = next(f for f in res.findings if f.rule == "outdoor_air_fraction" and f.equip == "AHU__ahu")
+    return float(f.metrics["excess_oa_pct"])
+
+
+def _irish_by_period(ctx) -> None:
+    """The Irish unit's excess outdoor air is not only the documented COVID-19 100 % OA period:
+    the years before it (2017-06 to 2020-02) show more of it than the period itself."""
+    before = _excess_oa(ctx, "2017-06-01", "2020-03-01")
+    covid = _excess_oa(ctx, "2020-08-01", "2021-12-01")
+    assert abs(before - 53.3) <= 0.5, f"2017-06..2020-02 excess OA {before}% (pinned 53%)"
+    assert abs(covid - 44.8) <= 0.5, f"2020-08..2021-11 excess OA {covid}% (pinned 45%)"
+
+
 EXERCISE = Exercise(
     id="air-economizer",
     title="Economizer: a stuck outdoor-air damper and missed free cooling",
     issue=80,
     references=("pnnl-guide-economizer", "pnnl-retuning-ch6", "pnnl-guide-min-oa"),
-    datasets=("lbnl-sdahu",),
-    runs=(Run(dataset="lbnl-sdahu", config="air-economizer"),),
+    datasets=("lbnl-sdahu", "irish-ahu"),
+    runs=(
+        Run(dataset="lbnl-sdahu", config="air-economizer"),
+        Run(dataset="irish-ahu", name="irish"),
+    ),
     commands=(
         "camber datasets fetch lbnl-sdahu",
         "camber datasets ingest lbnl-sdahu --store lab_store",
@@ -124,6 +155,10 @@ EXERCISE = Exercise(
         "--out econ.json",
         "camber run econ.json --out econ_out",
         "camber datasets score lbnl-sdahu --store lab_store --findings econ_out/findings.json",
+        "camber datasets fetch irish-ahu",
+        "camber datasets ingest irish-ahu --store lab_store",
+        "camber datasets config irish-ahu --store lab_store --out irish.json",
+        "camber run irish.json --out irish_out",
     ),
     expect=(
         # stuck open: too much outdoor air in cooling weather, and above the high limit
@@ -172,6 +207,42 @@ EXERCISE = Exercise(
         # the label score: outdoor_air_fraction finds 2 of the 4 stuck dampers, no false alarm
         Score("outdoor_air_fraction", tpr=0.5, fpr=0.0, quote="TPR 50%", on=BOTH),
         Score(None, tpr=0.4, fpr=0.0, quote="TPR 40%"),
+        # irish-ahu: a real unit, unlabelled -- excess OA in warm weather, economizer not locked
+        # out above the high limit, and little mechanical cooling in free-cooling weather
+        Finding("outdoor_air_fraction", "AHU__ahu", severity=("warn",), run="irish"),
+        Metric(
+            "outdoor_air_fraction",
+            "AHU__ahu",
+            "excess_oa_pct",
+            42.4,
+            0.5,
+            run="irish",
+            on=REAL,
+            quote="42%",
+        ),
+        Finding("economizer_high_limit", "AHU__ahu", severity=("warn",), run="irish"),
+        Metric(
+            "economizer_high_limit",
+            "AHU__ahu",
+            "not_locked_out_pct",
+            20.6,
+            0.5,
+            run="irish",
+            on=REAL,
+            quote="21%",
+        ),
+        Finding("free_cooling_missed", "AHU__ahu", severity=("ok",), run="irish"),
+        Metric(
+            "free_cooling_missed",
+            "AHU__ahu",
+            "missed_pct",
+            8.0,
+            0.1,
+            run="irish",
+            on=REAL,
+            quote="8.0%",
+        ),
+        Check("irish excess OA by period", _irish_by_period, on=REAL, quote="53%"),
     ),
     standin=standin,
 )

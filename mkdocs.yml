@@ -59,7 +59,11 @@ nav:
   - Re-tuning workbook:
       - Overview and curriculum map: workbook/index.md
       # BEGIN workbook-air (#80)
+      - "Air side: supply-air temperature reset": workbook/air-sat-reset.md
+      - "Air side: duct static pressure": workbook/air-static-pressure.md
+      - "Air side: heating, cooling and a leaking valve": workbook/air-heat-cool.md
       - "Air side: economizer and a stuck OA damper": workbook/air-economizer.md
+      - "Air side: scheduling and setback": workbook/air-scheduling.md
       # END workbook-air (#80)
       #
       # BEGIN workbook-zone (#81)

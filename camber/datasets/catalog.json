@@ -1766,7 +1766,8 @@
     "rules": [
      "outdoor_air_fraction"
     ],
-    "config_template": "lbnl-ddahu.json"
+    "config_template": "lbnl-ddahu.json",
+    "exercise": "workbook/air-sat-reset.md"
    },
    "known_issues": [
     "Each run's CSV is ~300 MB uncompressed; the full subset extracts ~17 GB.",
@@ -6612,7 +6613,8 @@
    },
    "suggested_analyses": {
     "rules": [],
-    "config_template": "irish-ahu.json"
+    "config_template": "irish-ahu.json",
+    "exercise": "workbook/air-economizer.md"
    },
    "known_issues": [
     "Real, unlabelled data: findings are hypotheses to check, not scored detections.",
@@ -9899,7 +9901,8 @@
      "compressor_short_cycle",
      "night_weekend_setback"
     ],
-    "config_template": "ornl-frp-ops.json"
+    "config_template": "ornl-frp-ops.json",
+    "exercise": "workbook/air-scheduling.md"
    },
    "known_issues": [
     "Not a fault dataset: the scenarios are operating schedules on an unoccupied building with no internal gains, so no finding is scored. It is also distinct from ORNL's multi-zone VAV fault datasets of the same building, which carry a non-commercial licence.",

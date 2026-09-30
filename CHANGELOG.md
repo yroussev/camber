@@ -45,6 +45,23 @@ outputs are unchanged, and no gated benchmark moves.
     cooling (`free_cooling_missed`), and the label score is read against the published labels.
 <!-- /097-framework -->
 <!-- 097-air (#80) -->
+- **Workbook: the air side (#80).** Five exercises following PNNL re-tuning chapters 5 and 6 and
+  the AHU guides, each with an instructor key pinned by the answer-key tests:
+  - `air-sat-reset` (`lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu`): is the supply-air temperature
+    reset, which way should it move with the outdoor air, how far below the Guideline 36 target
+    does it sit, and does the unit hold its setpoint.
+  - `air-static-pressure` (`lbnl-sdahu`, `ornl-frp-vav`): a flat duct static setpoint, and a
+    damper census over one real test day's ten boxes.
+  - `air-heat-cool` (`lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu`): the published 10 % cooling-valve
+    leak (which `leaking_valve`'s 3 °F margin misses; the exercise teaches the comparison with
+    the fault-free run), both valves open on a dual-duct unit by design, and a real unit's coils.
+  - `air-economizer` gains an `irish-ahu` part: the economizer rules on a real, unlabelled unit
+    with a documented 100 % outdoor-air period, split by period.
+  - `air-scheduling` (`ornl-frp-ops`): a 24/7 baseline against a night setback held by fan
+    cycling, compressor short-cycling, and the supply fan's night energy.
+  - Exercise configs `air-sat-reset`, `air-sat-reset--lbnl-ddahu`, `air-sat-reset--irish-ahu`,
+    `air-static-pressure`, `air-static-pressure--ornl-frp-vav` and `air-heat-cool--lbnl-ddahu`;
+    the catalog links `lbnl-ddahu`, `irish-ahu` and `ornl-frp-ops` to their exercises.
 <!-- /097-air -->
 <!-- 097-zone (#81) -->
 <!-- /097-zone -->
