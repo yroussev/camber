@@ -1616,6 +1616,9 @@ def _sec_cover(S) -> dict:
         ["Rules run", str(len(getattr(run, "rules_run", []) or []))],
         ["Findings", str(len(S["findings"]))],
     ]
+    n_skip = len(_skip_rows(run))  # 0.98 (#88): only when the Appendix A table is non-empty
+    if n_skip:
+        rows.append(["Checks not evaluated", f"{n_skip} (missing inputs; see Appendix A)"])
     if ctx.config.get("source"):
         src = ctx.config["source"]
         rows.append(["Data source", str(src.get("kind") or "per-point CSV folders")])
@@ -2200,9 +2203,31 @@ def _sec_mv(S) -> dict | None:
                 ]
             )
         blocks.append(_table(["Meter", "Result", "Model", "R²", "CV(RMSE)", "Summary"], rows))
+    blocks += _mv_data_needed(S["findings"])
     if not blocks:
         return None
     return _section("mv", "M&V and drift", blocks)
+
+
+def _mv_data_needed(findings) -> list:
+    """0.98 (#88): a "Data needed" paragraph per meter whose M&V declined for too little baseline
+    data (``metrics["data_needed"]``, see :mod:`camber.mandv.sufficiency`)."""
+    seen: list = []
+    for f in findings:
+        m = f.metrics or {}
+        need = m.get("data_needed")
+        if not (str(f.rule).startswith("mv_") and m.get("declined") and isinstance(need, dict)):
+            continue
+        key = (f.equip, need.get("text"))
+        if need.get("text") and key not in seen:
+            seen.append(key)
+    return [
+        _p(
+            f"Data needed ({equip}): {text}. Extend the baseline period, or collect more data "
+            "before this meter's M&V can be fitted."
+        )
+        for equip, text in seen
+    ]
 
 
 # ---- G36 advice only where a G36 sequence is declared (#32)
@@ -2473,6 +2498,38 @@ def _ai_prose(issue, client) -> str:
     return ""
 
 
+_SKIP_EQUIP_CAP = 6  # equipment named per "Checks not evaluated" row before "and N more"
+
+
+def _skip_rows(run) -> list:
+    """0.98 (#88): Appendix A's "Checks not evaluated" rows from ``run.rules_skipped``.
+
+    One row per (rule, missing set) over the ``missing_inputs`` / ``no_data`` records, in first-seen
+    order; the equipment cell names up to :data:`_SKIP_EQUIP_CAP` units, then "and N more". A
+    ``no_verdict`` record (the rule ran and returned nothing) is not a missing input and is left
+    out of the table.
+    """
+    groups: dict = {}
+    for sk in getattr(run, "rules_skipped", None) or []:
+        if getattr(sk, "reason", "") not in ("missing_inputs", "no_data"):
+            continue
+        key = (sk.rule, tuple(sk.missing) if sk.missing else ("no data",))
+        groups.setdefault(key, [])
+        if sk.equip and sk.equip not in groups[key]:
+            groups[key].append(sk.equip)
+    rows = []
+    for (rule, missing), equips in groups.items():
+        if not equips:
+            where = "none of the equipment carries these inputs"
+        elif len(equips) > _SKIP_EQUIP_CAP:
+            more = len(equips) - _SKIP_EQUIP_CAP
+            where = ", ".join(equips[:_SKIP_EQUIP_CAP]) + f" and {more} more"
+        else:
+            where = ", ".join(equips)
+        rows.append([rule, ", ".join(missing), where])
+    return rows
+
+
 def _sec_appendices(S) -> list:
     ctx, o = S["ctx"], S["o"]
     run = ctx.run
@@ -2491,6 +2548,16 @@ def _sec_appendices(S) -> list:
     if rows:
         blocks.append(_p("Checks that declined to reach a verdict:"))
         blocks.append(_table(["Rule", "Equipment", "Why"], rows))
+    skip_rows = _skip_rows(run)
+    if skip_rows:
+        blocks.append(
+            _p(
+                "Checks not evaluated (missing inputs): configured rules that could not run "
+                "because a required input is not mapped or has no data. Map the named points "
+                "to evaluate them."
+            )
+        )
+        blocks.append(_table(["Rule", "Missing", "Equipment"], skip_rows))
     miss = []
     for f in S["findings"]:
         mo = (f.metrics or {}).get("_missing_optional")

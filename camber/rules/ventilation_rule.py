@@ -489,12 +489,27 @@ class DemandControlledVentilation:
         if _oa_role(frame, self.full_outdoor_air) is None:
             return None  # a zone's CO₂ -- judged against its air handler by DcvSystemVerification
         f = self._judge(equip, frame, frame[Role.CO2])
-        f.caveats.insert(
-            0,
-            "CO₂ on an OA-carrying unit is typically return-air CO₂, which averages the zones and "
-            "dilutes the critical one",
-        )
+        if _return_air_co2_likely(frame):
+            f.caveats.insert(
+                0,
+                "CO₂ on an OA-carrying unit is typically return-air CO₂, which averages the zones "
+                "and dilutes the critical one",
+            )
         return f
+
+
+def _return_air_co2_likely(frame: pd.DataFrame) -> bool:
+    """0.98 (#85): whether the unit's CO₂ is plausibly a return-air reading.
+
+    True for an air handler, and whenever the equipment class is unknown (absent from
+    ``frame.attrs["camber_equip_class"]``, as on a direct API call, or unrecognised), so the
+    return-air caveat is dropped only where the class says otherwise: a terminal or fan coil's CO₂
+    is its room's.
+    """
+    from ..model.equipclass import equip_family
+
+    fam = equip_family(getattr(frame, "attrs", {}).get("camber_equip_class"))
+    return fam is None or fam == "air_handler"
 
 
 class DcvSystemVerification:

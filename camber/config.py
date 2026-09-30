@@ -201,7 +201,7 @@ from .resolve import (
     discover_terminals,
     resolve,
 )
-from .rules.base import _merge_shared
+from .rules.base import _merge_shared, _with_class
 from .rules.builtin import builtin_registry, is_fleet, make_rule
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
@@ -250,6 +250,10 @@ class RunResult:
     # its provenance (source file(s), edge count, ids that named no discovered equipment).
     topology: object | None = None
     topology_source: dict | None = None
+    # -- 0.98 (#88): configured rules that applied but produced nothing, as
+    # :class:`camber.rules.base.RuleSkip` records (missing inputs, no data, no verdict). Kept out of
+    # ``findings`` (and so out of findings.json) on purpose; the RCx report lists them.
+    rules_skipped: list = field(default_factory=list)
 
 
 def _path(base: str, p: str) -> str:
@@ -660,15 +664,18 @@ def _only_named(found: list, entry: dict) -> list:
     return [r for r in found if r.equip in names]
 
 
-def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline"):
+def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline", need: dict | None = None):
     from .rules.base import Finding
 
     what = "M&V savings" if rule == "mv_savings" else "M&V baseline"
+    metrics: dict = {"declined": True, "declined_reason": why}
+    if need is not None:  # 0.98 (#88): what data would carry the fit (camber.mandv.sufficiency)
+        metrics["data_needed"] = dict(need)
     return Finding(
         rule=rule,
         equip=equip,
         severity="info",
-        metrics={"declined": True, "declined_reason": why},
+        metrics=metrics,
         summary=f"{equip}: {what} declined -- {why}",
         caveats=[f"{what} not {'computed' if rule == 'mv_savings' else 'fitted'}: {why}"],
     )
@@ -1271,10 +1278,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     conv, conv_extra = _mv_trended_conversion(entry, getattr(prep, "units", None))  # #69, #70
     out = []
 
-    def declined(equip, why):
-        out.append(_mv_declined(equip, why))
+    def declined(equip, why, need=None):
+        out.append(_mv_declined(equip, why, need=need))
         if reporting is not None:
-            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings"))
+            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings", need=need))
 
     for ref in refs:
         full = resolve(ref, prep.mapping, (role, Role.OAT, *extra_roles), resample="1h")
@@ -1312,7 +1319,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         )
         daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
-            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
+            from .mandv.sufficiency import baseline_need
+
+            need = baseline_need("daily", len(daily), min_n=min_days)
+            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})", need)
             continue
         if _mvform.driver_columns(daily):
             model = _mvform.fit(daily)
@@ -2142,6 +2152,15 @@ def _drift_families(spec: dict, refs_by_class: dict) -> list:
     return out
 
 
+def _rule_level_skip(rule):
+    """0.98 (#88): the :class:`RuleSkip` for a configured rule that produced nothing anywhere and
+    recorded no per-equipment skip (no equipment carried any of its inputs)."""
+    from .rules.base import RuleSkip, _missing_labels
+
+    missing = _missing_labels(rule, ())
+    return RuleSkip(rule.name, "", "", missing, "missing_inputs" if missing else "no_verdict")
+
+
 def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     """Execute a config dict: discover equipment, run the named rules, build a report.
 
@@ -2163,6 +2182,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     reg = builtin_registry()
     findings, ran = [], []
+    skipped: list = []  # 0.98 (#88): RuleSkip records from the rule runners
     # 0.92 (#17): the "ventilation" section configures the system-level 62.1 VRP rule
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
@@ -2178,6 +2198,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         else:
             name = entry
         rule = reg.get(name)  # KeyError on unknown name
+        n_skip = len(skipped)
         if is_fleet(rule):
             f = reg.run_fleet(
                 name,
@@ -2187,13 +2208,23 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 shared=shared,
                 min_trust=min_trust,
                 topology=topology,
+                skipped=skipped,
             )
             if f is not None:
                 findings.append(f)
         else:
-            findings += reg.run(
-                name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
+            got = reg.run(
+                name,
+                refs,
+                mapping,
+                resample=resample,
+                shared=shared,
+                min_trust=min_trust,
+                skipped=skipped,
             )
+            findings += got
+            if not got and len(skipped) == n_skip:
+                skipped.append(_rule_level_skip(rule))
         ran.append(name)
     # 0.92 (#17): a configured ventilation section runs even when "rules" omits the rule
     if vent_rule is not None and vent_rule.name not in ran:
@@ -2205,6 +2236,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             shared=shared,
             min_trust=min_trust,
             topology=topology,
+            skipped=skipped,
         )
         if f is not None:
             findings.append(f)
@@ -2319,6 +2351,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         base_dir=base_dir,
         topology=topology,
         topology_source=topology_source,
+        rules_skipped=skipped,
     )
 
 
@@ -2410,7 +2443,7 @@ def _frame_resolver(prep: _Prepared) -> Callable:
         if key not in cache:
             want = tuple(Role) if roles is None else tuple(roles)
             frame = resolve(ref, prep.mapping, want, resample=prep.resample)
-            cache[key] = _merge_shared(frame, prep.shared)
+            cache[key] = _with_class(_merge_shared(frame, prep.shared), ref)  # 0.98 (#85)
         return cache[key]
 
     return frame_for

@@ -565,9 +565,10 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 - Clock versus demand: a valve on a time clock correlates with occupancy because people also
   follow the clock. Taking the lift within the hour of day is what separates the two. Ask the
   class to predict what a pooled comparison would say for room 999169.
-- The per-finding caveat about return-air CO₂ is written for air handlers. Here each "unit" is a
-  room with its own sensor, so the caveat does not apply. Reading caveats critically is part of
-  the job.
+- Return-air CO₂ averages the zones an air handler serves and dilutes the critical one, so a DCV
+  verdict judged on an air handler's CO₂ carries a caveat saying so. Here each "unit" is a room
+  (equipment class `VAV`) with its own sensor, and CAMBER leaves the caveat off. Ask the class
+  what would change if the same data were mapped to one air handler instead.
 
 **Common mistakes**
 
@@ -1149,9 +1150,10 @@ the drift baselines are frozen.
    cycling at night. The measure did not fix the short cycling: 178 compressor starts a day
    before and 131 after, both far above the rule's limit. A second issue for the plan.
 7. *M&V.* CAMBER refuses: an hourly baseline needs at least 1440 hours and the baseline test has
-   168. A defensible measurement needs a longer baseline covering the reporting weather (months,
-   not a week), or an IPMVP Option B isolation measurement of the unit's own energy, set up
-   before the change.
+   168. The refusal says what is missing: its `need` puts the gap at 1,272 more hours (about 53
+   days of data). A defensible measurement needs a longer baseline covering the reporting weather
+   (months, not a week), or an IPMVP Option B isolation measurement of the unit's own energy, set
+   up before the change.
 
 **Discussion points**
 

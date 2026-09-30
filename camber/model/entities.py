@@ -367,29 +367,57 @@ class Runnable:
     can_run: bool
     missing_required: frozenset  # required roles not present (blocks the run)
     missing_optional: frozenset  # optional roles not present (degrades only)
+    # 0.98 (#86): ``roles_any_of`` groups with no member present (each blocks the run); a tuple of
+    # role tuples in the rule's declared order. Empty for a rule that declares no groups.
+    missing_any_of: tuple = ()
+
+
+def roles_any_of(rule) -> tuple:
+    """A rule's ``roles_any_of`` groups as a tuple of role tuples (``()`` when it declares none).
+
+    ``roles_any_of`` is an optional, provisional rule attribute: each group is satisfied when
+    **at least one** of its roles is present (a boiler that proves it is firing from a run status
+    *or* from its gas input). A group blocks the run exactly as a missing required role does.
+    Empty groups are ignored.
+    """
+    return tuple(tuple(g) for g in (getattr(rule, "roles_any_of", ()) or ()) if tuple(g))
+
+
+def missing_inputs(rule, present) -> tuple:
+    """``(missing_required, missing_any_of)`` for ``rule`` given the ``present`` roles.
+
+    The single test of "can this rule run on these roles": ``missing_required`` lists the
+    ``roles_required`` not present, in declared order; ``missing_any_of`` lists the
+    ``roles_any_of`` groups none of whose roles is present. The rule can run iff both are
+    empty. ``present`` is any container supporting ``in`` (a set of roles, a frame's columns).
+    """
+    req = [r for r in getattr(rule, "roles_required", ()) if r not in present]
+    groups = [g for g in roles_any_of(rule) if not any(r in present for r in g)]
+    return req, groups
 
 
 def runnable_rules(present_roles, rules) -> list:
     """For each rule, decide whether the present roles satisfy its requirements.
 
     ``rules`` is any iterable of rule objects exposing ``name`` /
-    ``roles_required`` (and optionally ``roles_optional``) -- duck-typed so this
-    module needs no dependency on the rules package. Returns one
+    ``roles_required`` (and optionally ``roles_optional`` and ``roles_any_of``, see
+    :func:`missing_inputs`) -- duck-typed so this module needs no dependency on the rules
+    package. Returns one
     :class:`Runnable` per rule, in input order. This is the engine-side answer to
     "which analytics can this building's instrumentation support?"
     """
     present = frozenset(present_roles)
     out = []
     for r in rules:
-        required = frozenset(getattr(r, "roles_required", ()))
         optional = frozenset(getattr(r, "roles_optional", ()))
-        miss_req = required - present
+        miss_req, miss_any = missing_inputs(r, present)
         out.append(
             Runnable(
                 rule=getattr(r, "name", r.__class__.__name__),
-                can_run=not miss_req,
-                missing_required=miss_req,
+                can_run=not miss_req and not miss_any,
+                missing_required=frozenset(miss_req),
                 missing_optional=optional - present,
+                missing_any_of=tuple(miss_any),
             )
         )
     return out

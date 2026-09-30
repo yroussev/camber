@@ -225,6 +225,20 @@ def _ou44_verdicts(ctx) -> None:
     _status(ctx, "ou44", "ROOM3", "insufficient", "demand_below_engage")
 
 
+def _no_return_air_caveat(ctx) -> None:
+    """0.98 (#85): each "unit" is a room (class VAV) with its own CO2 sensor, so the return-air
+    CO2 caveat, written for air handlers, is not attached."""
+    seen = 0
+    for run in ("finnish", "b4b", "ou44"):
+        for f in ctx.findings(run):
+            if f.rule != "dcv_verification":
+                continue
+            seen += 1
+            bad = [c for c in f.caveats if "return-air CO" in c]
+            assert not bad, f"{run} {f.equip}: {bad}"
+    assert seen, "no dcv_verification findings"
+
+
 EXERCISE = Exercise(
     id="zone-dcv",
     title="Ventilation: is outdoor air following occupancy (DCV)?",
@@ -330,6 +344,7 @@ EXERCISE = Exercise(
         ),
         # functioning, and "not judged"
         Check("sdu-ou44 verdicts", _ou44_verdicts),
+        Check("rooms carry no return-air CO2 caveat", _no_return_air_caveat),
         Finding("dcv_verification", "ROOM1", severity=("ok",), run="ou44"),
         Metric(
             "dcv_verification",

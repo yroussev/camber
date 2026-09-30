@@ -1350,6 +1350,10 @@
     "regression_tests",
     "sep_validity"
   ],
+  "camber.mandv.sufficiency": [
+    "InsufficientBaseline",
+    "baseline_need"
+  ],
   "camber.mandv.towt": [
     "TOWTAtIndex",
     "TOWTModel",
@@ -1421,6 +1425,8 @@
     "Space",
     "TEMPLATES",
     "completeness",
+    "missing_inputs",
+    "roles_any_of",
     "runnable_rules",
     "template_for"
   ],
@@ -1753,7 +1759,8 @@
     "FleetRule",
     "PeriodRule",
     "Registry",
-    "Rule"
+    "Rule",
+    "RuleSkip"
   ],
   "camber.rules.boiler_efficiency_rule": [
     "BTU_PER_KWH",

@@ -42,6 +42,7 @@ flowchart LR
 | Baseline covers the reporting conditions | `mandv.coverage.assess_coverage` → `Coverage` (tier, shares outside, distance beyond) |
 | Extrapolation disclosure / refusal | `SavingsResult.coverage`, `.caveats`, `.declined`, `.declined_reason` |
 | Uncertainty widening for extrapolation | `SavingsResult.fsu_extrapolation_factor` (`k`, below) |
+| Data sufficiency: what a refused baseline needs | `mandv.sufficiency.InsufficientBaseline` (a `ValueError`) → `.need`: required, available, shortfall, unit, days to collect; the config's daily decline carries it as `metrics["data_needed"]` (0.98) |
 
 ## Method correspondence
 

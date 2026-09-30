@@ -4,6 +4,53 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.98.0] — Unreleased
+
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is released.
+Each branch adds its bullets only inside its own marked block below. -->
+
+<!-- 098-core (#85, #86, #88) -->
+- **`roles_any_of` (#86 item 4a, provisional).** A rule may declare `roles_any_of`, a tuple of
+  role groups of which each needs at least one role present (a run status *or* a gas input). The
+  runners load every role of a group, skip the equipment when a group has none, and include the
+  present group roles in the sensor-health gate. `camber.model.entities.missing_inputs` is the
+  one test shared by the runners and `runnable_rules`, and `Runnable.missing_any_of` names the
+  unmet groups. No built-in rule declares groups yet, so default outputs are unchanged.
+- **Rules that did not run are listed (#88 item 3, #86 item 4b).** `Registry.run`, `run_periods`
+  and `run_fleet` take an optional `skipped=` list and append a `RuleSkip` (rule, equipment,
+  class, missing inputs, reason `missing_inputs` / `no_data` / `no_verdict`) for each equipment
+  a rule applies to but produced nothing on. A skip is recorded only when the rule applies: its
+  declared classes match the equipment's, or at least one of its inputs is present (a chiller
+  rule on an air handler is not applicable, not skipped). The default (`None`) records nothing,
+  so the benchmarks and faultlab are untouched. `run_config` collects them in
+  `RunResult.rules_skipped`, adding a rule-level record when a configured rule found none of its
+  inputs on any equipment; they stay out of `findings` (and `findings.json`, so `datasets score`
+  decline counts do not move).
+  - **RCx report.** Appendix A gains a "Checks not evaluated (missing inputs)" table (rule,
+    missing inputs, equipment: one row per rule and missing set, six units named, then "and N
+    more"), and the cover a "Checks not evaluated" row, both only when there is something to
+    list. `no_verdict` records are kept for later use but not listed.
+- **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
+  4).** The rule runners (and a run's lazy `frame_for`) set
+  `frame.attrs["camber_equip_class"]` to the equipment's class. `dcv_verification` keeps its
+  "typically return-air CO₂" caveat on air handlers and on equipment of absent or unrecognised
+  class (direct API calls are unchanged), and drops it on terminals and fan coils, whose CO₂ is
+  the room's own: the finnish-dcv, b4b-windesheim and sdu-ou44 rooms (class `VAV`) lose it. Only
+  that caveat changes; severities and metrics do not. Workbook `zone-dcv` pins the caveat absent
+  and its instructor discussion point is rewritten.
+- **An M&V refusal says what data is needed (#88 item 4).** New `camber.mandv.sufficiency`:
+  `baseline_need(interval, n_have, min_n=...)` returns the required, available and missing
+  amount, its unit, the calendar days it takes to collect, and a one-line text ("1,440 baseline
+  hours needed, 168 available: 1,272 more hours (about 53 days of data)").
+  `caltrack_savings` and `caltrack_savings_hourly` raise `InsufficientBaseline`, a `ValueError`
+  whose message is byte-identical to before, with the gap on `.need`: too few days or hours,
+  missing hour-of-week bins, or thinly observed bins. The config's daily M&V decline for too few
+  days adds `metrics["data_needed"]` to its `mv_baseline` and `mv_savings` findings
+  (`declined_reason` and `summary` unchanged), and the RCx "M&V and drift" section prints a
+  "Data needed" paragraph per meter. Hourly M&V has no config path, so its need is reported
+  through the exception only. Workbook `capstone` pins the one-week refusal's need at 1,272 hours.
+<!-- /098-core -->
+
 ## [0.97.0] — Unreleased
 
 <!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is
