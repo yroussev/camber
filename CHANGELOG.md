@@ -4,6 +4,28 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.98.0] — Unreleased
+
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+<!-- 098-terminal-ventilation (#85 items 5, 6) -->
+### Changed
+- **`overcooling_severity` grades a heating shortfall on share as well as depth (#85).** The
+  shortfall grade was the deepest tier sustained for an hour, so a few cold hours a year with the
+  reheat saturated read `fault`. It is now the lesser of the depth tier and a share tier set by
+  the share of occupied samples in a sustained shortfall at least `warn` deep (new
+  `shortfall_share_pct`, default `{"warn": 5, "fault": 20}`; below 5 % a shortfall is `info`).
+  **Intended default change:** on `lbnl-fpu` the fully open damper
+  (`PFPU__VAVDMPRStuck_100pct`) goes from shortfall `fault` to `info` (fault-deep, but 0.81 % of
+  samples) and its finding from `info` to `ok`; the stuck-shut reheat valve stays a shortfall `fault`
+  (29.9 %). New metric `shortfall_depth_severity` keeps the depth-only grade, and a caveat says
+  when the share lowered it. `shortfall_share_pct=None` restores the old grading. The same gate
+  is available for the overcooling tiers as `share_pct`, off by default (no overcooling verdict
+  changes). Workbook `zone-reheat-saturated`: answers 3 and 5 updated, and the new grade pinned.
+
+<!-- /098-terminal-ventilation -->
+
 ## [0.97.0] — Unreleased
 
 <!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is

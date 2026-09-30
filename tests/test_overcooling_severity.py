@@ -293,3 +293,92 @@ def test_space_free_floating_with_the_fan_off_is_not_overcooling():
     assert got.severity == "ok" and got.metrics["n_fan_off_excluded"] > 0
     f[Role.SUPPLY_FAN_SPEED] = 40.0
     assert OvercoolingSeverity().analyze("VAV", f).severity == "fault"
+
+
+# --------------------------------------------------------------------------- #
+# Share gate (0.98, #85): a deep but rare shortfall is not a fault
+# --------------------------------------------------------------------------- #
+
+
+def _shortfall_zone(cold_days):
+    """A zone 5 degF below its heating setpoint 13-15 h with the reheat saturated, on the given
+    (0-based) days of a 14-day record; 20 % valve and in band otherwise. One such afternoon is
+    about 2 % of the ~90 occupied hours (07-18 less the 2 h recovery, ten weekdays)."""
+    idx, f = _zone()
+    h = idx.hour + idx.minute / 60.0
+    day = (idx - idx[0]).days
+    cold = np.isin(day, cold_days) & (h >= 13) & (h < 15)
+    f.loc[cold, Role.SPACE_TEMP] = 65.0
+    f[Role.HEAT_VALVE] = np.where(cold, 97.0, 20.0)
+    return f
+
+
+def test_a_brief_deep_shortfall_grades_info_by_share():
+    # one cold afternoon in ten occupied days: deep, but under the 5 % warn share
+    f = _shortfall_zone([0])
+    got = OvercoolingSeverity().analyze("VAV", f)
+    share = got.metrics["shortfall_warn_pct"]
+    assert 0 < share < 5.0, share
+    assert got.metrics["shortfall_depth_severity"] == "fault"
+    assert got.metrics["shortfall_severity"] == "info"
+    assert got.severity == "ok", got.summary  # an info shortfall does not raise the finding
+    assert "heating shortfall" not in got.summary
+    assert any("graded info by its share" in c for c in got.caveats), got.caveats
+    # switching the gate off restores the depth-only grade (pre-0.98)
+    old = OvercoolingSeverity(shortfall_share_pct=None).analyze("VAV", f)
+    assert old.metrics["shortfall_severity"] == "fault" and old.severity == "info"
+
+
+def test_share_tier_caps_depth_tier():
+    # three afternoons of ten occupied days: a warn-sized share of a fault-deep shortfall
+    f = _shortfall_zone([0, 1, 2])
+    got = OvercoolingSeverity().analyze("VAV", f)
+    assert 5.0 <= got.metrics["shortfall_warn_pct"] < 20.0, got.metrics
+    assert got.metrics["shortfall_severity"] == "warn"
+    assert got.metrics["shortfall_depth_severity"] == "fault"
+    # every weekday afternoon clears the fault share, so depth decides again
+    every = _shortfall_zone([0, 1, 2, 3, 4, 7, 8, 9, 10, 11])
+    assert OvercoolingSeverity().analyze("VAV", every).metrics["shortfall_severity"] == "fault"
+    # a shallow (info-deep) shortfall stays info whatever its share
+    shallow = every.copy()
+    shallow[Role.SPACE_TEMP] = np.where(shallow[Role.HEAT_VALVE] > 90, 68.5, 72.0)
+    got = OvercoolingSeverity().analyze("VAV", shallow)
+    assert got.metrics["shortfall_severity"] == "info"
+    assert got.metrics["shortfall_depth_severity"] == "info"
+
+
+def test_overcooling_share_gate_is_opt_in():
+    # one cold afternoon with the reheat barely open is overcooling: fault by depth by default
+    f = _shortfall_zone([0])
+    f[Role.HEAT_VALVE] = 10.0
+    assert OvercoolingSeverity().analyze("VAV", f).severity == "fault"
+    got = OvercoolingSeverity(share_pct={"warn": 5, "fault": 20}).analyze("VAV", f)
+    assert got.severity == "info", got.summary
+    assert any("overcooling fault-deep but graded info" in c for c in got.caveats)
+    r = analyze_overcooling_severity(
+        f.rename(
+            columns={
+                Role.SPACE_TEMP: "SpaceTemp",
+                Role.COOL_SP: "ActCoolSP",
+                Role.HEAT_SP: "ActHeatSP",
+                Role.HEAT_VALVE: "HWValve",
+            }
+        ),
+        "VAV",
+        share_pct={"warn": 1.0, "fault": 20.0},
+    )
+    assert r.depth_severity == "fault" and r.severity == "warn"
+
+
+def test_share_gate_validation():
+    import pytest
+
+    for bad in ({"warn": 5}, {"warn": 30, "fault": 20}, {"warn": -1, "fault": 5}, "5"):
+        with pytest.raises(ValueError):
+            OvercoolingSeverity(shortfall_share_pct=bad)
+    with pytest.raises(ValueError):
+        OvercoolingSeverity(share_pct={"fault": 5})
+    assert OvercoolingSeverity(share_pct={"warn": "2", "fault": 10}).share_pct == {
+        "warn": 2.0,
+        "fault": 10.0,
+    }

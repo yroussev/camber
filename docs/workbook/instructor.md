@@ -453,8 +453,8 @@ commands on the [exercise page](zone-bad-box.md#setup).
 
 ### `zone-reheat-saturated`: a zone below setpoint with its reheat maxed out
 
-Figures from the real `lbnl-fpu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev, with the
-commands on the [exercise page](zone-reheat-saturated.md#setup).
+Figures from the real `lbnl-fpu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev (answer 5
+re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-saturated.md#setup).
 
 **Answer key**
 
@@ -469,7 +469,8 @@ commands on the [exercise page](zone-reheat-saturated.md#setup).
 3. *The other two rules.* `unmet_setpoint_hours` is a **fault**, with the zone too cold in 37% of
    occupied hours. It counts the complaint but not the cause. `overcooling_severity` reports no
    overcooling (`info`). It sets the cold, reheat-saturated samples apart as a heating shortfall,
-   graded `fault`, in 30% of occupied samples. "Overcooled" would send you to the cooling side
+   graded `fault` on both depth and share: 30% of occupied samples, well over the 20 % a fault
+   needs. "Overcooled" would send you to the cooling side
    (minimum airflow, supply-air temperature), when the zone is cold because heat cannot get in.
 4. *Why does the valve read fully open?* The mapped signal is the controller's reheat demand,
    not the valve's position. The controller keeps asking for full heat because the zone stays
@@ -480,7 +481,9 @@ commands on the [exercise page](zone-reheat-saturated.md#setup).
    demand, and check the hot-water supply to the coil.
 5. *Heat to spare.* The fault-free run, the leaking valve and the half-open damper have no
    saturated shortfall at all. The fully open damper has a little (under 2 % of samples, `ok`):
-   in a few cold hours its extra cold air outruns the reheat.
+   in a few cold hours its extra cold air outruns the reheat. `overcooling_severity` grades that
+   shortfall `info`: it is deep enough for a fault, but only 0.8% of occupied samples, under the
+   5 % a warning needs. Before 0.98 it graded the depth alone and called it a `fault`.
 6. *ORNL, fault-free day.* Several rooms are too cold on a normal day. Room 102 is below its
    heating setpoint in 33% of occupied hours (`unmet_setpoint_hours` **fault**), and rooms 104,
    105, 106, 204 and 206 are too cold for part of the day too. `overcooling_severity` rates room 104 a

@@ -105,7 +105,8 @@ limits itself to the fault-free day with an `"equip"` list.
 - **Findings.** `reheat_capacity_shortfall` reports `shortfall_pct`, `shortfall_hours`,
   `median_deficit_f`, `airflow_to_sp_ratio`, `discharge_temp_f` and `likely_cause`;
   `overcooling_severity` reports its depth tiers, `max_depth_f` and, separately,
-  `shortfall_severity`; `unmet_setpoint_hours` reports `too_cold_pct`.
+  `shortfall_severity`, graded on both depth and share of samples (`shortfall_depth_severity`
+  is the depth alone); `unmet_setpoint_hours` reports `too_cold_pct`.
 - **What is missing is also an answer.** A rule that needs a signal the data do not have
   produces no finding for that box.
 - **Report.** `camber report rh.json --out rh.html` shows the same findings with evidence charts.

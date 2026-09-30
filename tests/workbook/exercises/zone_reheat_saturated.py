@@ -12,7 +12,8 @@ Real-data figures were recorded from::
         --store lab_store --out rh_ornl.json
     camber run rh_ornl.json --out rh_ornl_out
 
-(CAMBER 0.97.0-dev, lbnl-fpu and ornl-frp-vav default subsets, 2026-09-29.)
+(CAMBER 0.97.0-dev, lbnl-fpu and ornl-frp-vav default subsets, 2026-09-29; the fully open
+damper's shortfall grade re-checked on 0.98.0-dev, 2026-09-30.)
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from _zone_standins import fpu_standin, ornl_rooms, ornl_standin
 
 FF = "PFPU__fault_free"
 D50 = "PFPU__VAVDMPRStuck_50pct"
+D100 = "PFPU__VAVDMPRStuck_100pct"
 VSTUCK = "PFPU__ReheatVLVStuck_0pct"
 LEAK = "PFPU__ReheatVLVLeak_50pctMaxFlow"
 COLD_ROOM = "RTU_VAV_102__d3_fault_free"
@@ -50,6 +52,15 @@ def _shortfall_not_overcooling(ctx) -> None:
     assert f is not None, f"no overcooling_severity finding on {VSTUCK}"
     assert f.severity in ("ok", "info"), f"overcooling severity {f.severity}"
     assert f.metrics.get("shortfall_severity") in ("warn", "fault"), f.metrics
+
+
+def _brief_shortfall_is_info(ctx) -> None:
+    """The fully open damper's saturated shortfall is fault-deep but brief: the 0.98 share gate
+    (#85) grades it info, where the depth alone graded it fault."""
+    f = ctx.finding("overcooling_severity", D100, "fpu")
+    assert f is not None, f"no overcooling_severity finding on {D100}"
+    assert f.metrics.get("shortfall_severity") == "info", f.metrics
+    assert f.metrics.get("shortfall_depth_severity") == "fault", f.metrics
 
 
 def _no_valve_no_verdict(ctx) -> None:
@@ -149,7 +160,18 @@ EXERCISE = Exercise(
             on=REAL,
             quote="30%",
         ),
-        # the other runs have heat to spare
+        # the other runs have heat to spare; the fully open damper's brief shortfall is info
+        Check("a brief shortfall grades info", _brief_shortfall_is_info, on=REAL),
+        Metric(
+            "overcooling_severity",
+            D100,
+            "shortfall_warn_pct",
+            0.81,
+            0.05,
+            run="fpu",
+            on=REAL,
+            quote="0.8%",
+        ),
         Finding("reheat_capacity_shortfall", FF, present=False, run="fpu"),
         Finding("reheat_capacity_shortfall", LEAK, present=False, run="fpu"),
         Finding("reheat_capacity_shortfall", D50, present=False, run="fpu"),
