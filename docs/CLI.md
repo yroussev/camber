@@ -64,7 +64,9 @@ constructor for the run — e.g. a high-outside-air building setting its design 
 
 ## Report layouts
 
-`camber report` writes the Std-211 **audit** report by default. `--layout rcx` writes the printable
+`camber report` writes the **audit** report by default. It is titled as an ASHRAE Std-211 audit
+only when the config gives the Std-211 inputs (`report.benchmark`, and at Level 2 `report.ecms`);
+otherwise "Building analytics report" (0.96, #78; `report.title` sets one). `--layout rcx` writes the printable
 [RCx report](RCX-REPORT.md) instead. Without the flag, the config's `report.layout` decides, and
 any other name is looked up in the `camber.reports` [plugin](PLUGINS.md) group.
 

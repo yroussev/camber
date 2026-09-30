@@ -50,7 +50,8 @@ camber lab --store lab_store          # then open http://127.0.0.1:8765/lab
 **The catalog table.** Each dataset shows its kind, its licence **tier** (a green *open* badge,
 or a red *research-only* one), its download size and its estimated size once ingested. It also
 shows what is already fetched or ingested. Filter by licence tier, kind, labelled faults or
-ingested, and search by id, title or what the dataset teaches. Pick a subset (`default` or
+ingested, and search by id, title or what the dataset teaches (each row's *what it teaches*
+list is collapsed until you open it, or until your search matches it; 0.96, #78). Pick a subset (`default` or
 `full`) and tick datasets. The page adds up what they need and compares it with the free space
 on the cache's disk and the store's disk; **Fetch & ingest** is disabled while the selection
 does not fit.
@@ -68,7 +69,8 @@ Every fetch asks again. An ingest of data already fetched with an acknowledgemen
 **Trends and reports.** An ingested dataset's row links to:
 
 - **trends**: the live trend viewer (`/ui?facility_id=ds-<id>`, served unchanged from
-  `camber serve`);
+  `camber serve`; one panel per unit with axes, a legend and a normalised view, see
+  [the live web UI](VISUALIZATION.md#live-web-ui-072));
 - **report**: the audit report of the dataset's config template, built on demand and cached until
   the data changes. It carries the dataset's *Data source & licence* block and, for
   research-only data, the non-commercial / do-not-redistribute banner;

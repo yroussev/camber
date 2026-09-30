@@ -464,6 +464,21 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `/ui?facility_id=` deep link of the live viewer. `camber serve` and `camber.api.server.dispatch`
   are unchanged and stay GET-only.
 <!-- /096-lab -->
+<!-- 096-report (#78) -->
+- **`camber.references`** (added in 0.96, provisional, #78) -- the linked-reference registry:
+  `Reference`, `REFERENCES`, `RULE_REFERENCES`, the kind constants (`GUIDE`, `TRAINING`,
+  `TOOL_GUIDE`, `REPORT`, `PROJECT`, `RELATED_TOOL`, `KINDS`), `reference`, `references_for`,
+  `reference_ids_for`, `references_for_findings`, `reference_urls`, `links_html` and
+  `links_text`. Reference ids are stable; titles, the rule map and `verified_on` dates are data
+  and change as the publisher moves documents. Also additive and provisional in 0.96:
+  `Recommendation.references` (and the `references` key of `action_plan_rows` rows and of each
+  RCx issue in `RcxReport.to_dict()`), the `DEFAULT_PARAMS` keys `dcv_*`, `chw_low_dt_warn_pct`
+  and `pump_near_*_warn_pct`, `AuditReport.title` / `is_std211()` / `display_title()` /
+  `to_html_document()`, `camber.report.audit.html_document` and `REPORT_CSS`, the config keys
+  `report.title` and `report.ecms`, the RCx section id `reading`, and
+  `camber.api.ui.role_units`. The **text** of recommendations and report titles is presentation,
+  not API: it follows the finding's cause and may be reworded.
+<!-- /096-report -->
 
 ## Deprecated
 

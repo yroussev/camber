@@ -101,14 +101,18 @@ def action_plan_rows(items) -> list:
                 "action": rec.title if rec else "",
                 "suggested": rec.suggested if rec else "",
                 "standard": rec.standard if rec else "",
+                "references": list(rec.references) if rec else [],
             }
         )
     return rows
 
 
 def action_plan_html(items) -> str:
-    """A self-contained HTML table of the action plan (no external assets)."""
+    """A self-contained HTML table of the action plan (no external assets). The Cite column adds
+    "Learn more" links to the linked references (:mod:`camber.references`) of each action."""
     import html as _html
+
+    from .references import links_html
 
     if not items:
         return "<p>No actionable findings.</p>"
@@ -126,6 +130,12 @@ def action_plan_html(items) -> str:
             f"<td>{cost}</td>"
             f"<td>{_html.escape(rec.title if rec else '')}</td>"
             f"<td>{_html.escape(rec.suggested if rec else '')}</td>"
-            f"<td>{_html.escape(rec.standard if rec else '')}</td></tr>"
+            f"<td>{_html.escape(rec.standard if rec else '')}{_learn_more(rec, links_html)}</td>"
+            "</tr>"
         )
     return "<table border='1' cellpadding='5' cellspacing='0'>" + "".join(rows) + "</table>"
+
+
+def _learn_more(rec, links_html) -> str:
+    links = links_html(getattr(rec, "references", None) or ()) if rec is not None else ""
+    return f"<div class='camber-refs'>Learn more: {links}</div>" if links else ""

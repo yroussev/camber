@@ -55,8 +55,11 @@ def test_html_report_well_formed_and_escaped():
 
 def test_empty_report_renders():
     r = AuditReport(building="Empty", level=1)
-    assert "Level 1" in r.to_text()
-    assert "<h1>" in r.to_html()
+    # 0.96 (#78): no benchmark -> not a Std-211 audit; a neutral title, no empty ECM section
+    assert r.to_text().startswith("Building analytics report -- Empty")
+    assert "Energy Conservation Measures" not in r.to_text()
+    h = r.to_html()
+    assert "<h1>" in h and "Std-211" not in h and "Energy Conservation Measures" not in h
 
 
 class _F:

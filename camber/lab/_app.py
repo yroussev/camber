@@ -212,6 +212,15 @@ class LabApp:
                 "data_dir": _free_bytes(self.data_dir),
                 "store": _free_bytes(self.store.root),
             },
+            # 0.96 (#78): what the page shows -- home-relative (~/...) and shortened; the full
+            # paths above stay in the JSON and the startup log
+            "display": {
+                "store": display_path(self.store.root),
+                "workspace": (
+                    display_path(self.portfolio.root) if self.portfolio is not None else None
+                ),
+                "data_dir": display_path(self.data_dir),
+            },
             "busy": self.jobs.busy(),
             "datasets": rows,
         }
@@ -484,7 +493,24 @@ class LabApp:
                 building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
             )
             report.add_findings(res.findings)
-        return report.to_html(recommend=True)
+        return report.to_html_document(recommend=True)
+
+
+def display_path(path, *, home: str | None = None, limit: int = 48) -> str:
+    """``path`` for display in the lab page: under the home directory as ``~/...``; a path still
+    longer than ``limit`` characters shortened to ``.../<parent>/<name>``. The full path is kept
+    for the logs (the startup line) and the JSON."""
+    if not path:
+        return ""
+    p = os.path.abspath(str(path))
+    home = os.path.abspath(home or os.path.expanduser("~"))
+    if p == home or p.startswith(home.rstrip(os.sep) + os.sep):
+        p = "~" + p[len(home) :]
+    if len(p) > limit:
+        parts = [x for x in p.split(os.sep) if x]
+        if len(parts) > 2:
+            p = "…" + os.sep + os.sep.join(parts[-2:])
+    return p
 
 
 def _refusal(entry, action: str) -> str:

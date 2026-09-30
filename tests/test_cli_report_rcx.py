@@ -44,7 +44,10 @@ def test_cli_report_layout_rcx_end_to_end(tmp_path, capsys):
     del cfg["report"]["layout"]
     path.write_text(json.dumps(cfg))
     assert main(["report", str(path), "--out", str(out)]) == 0
-    assert "Std-211" in out.read_text()
+    # the audit layout; titled neutrally (0.96, #78) as the config gives no benchmark / ECMs
+    audit = out.read_text()
+    assert "Building analytics report" in audit and "Retro-commissioning" not in audit
+    assert audit.startswith("<!doctype html>") and "name='viewport'" in audit
 
 
 def test_cli_unknown_layout_and_plugin_layout(tmp_path, capsys, monkeypatch):

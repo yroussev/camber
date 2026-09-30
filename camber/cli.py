@@ -149,7 +149,7 @@ def _audit_html(res, cfg, base) -> str:
             building=res.site, level=2, data_sources=data_sources(cfg, base_dir=base)
         )
         report.add_findings(res.findings)
-    return report.to_html(recommend=True)
+    return report.to_html_document(recommend=True)
 
 
 def _plugin_report(layout: str, res):

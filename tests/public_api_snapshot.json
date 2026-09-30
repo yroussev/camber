@@ -99,7 +99,8 @@
     "serve"
   ],
   "camber.api.ui": [
-    "live_dashboard_html"
+    "live_dashboard_html",
+    "role_units"
   ],
   "camber.aso": [
     "DEFAULT_PARAMS",
@@ -1559,6 +1560,25 @@
     "load_point",
     "load_status"
   ],
+  "camber.references": [
+    "GUIDE",
+    "KINDS",
+    "PROJECT",
+    "REFERENCES",
+    "RELATED_TOOL",
+    "REPORT",
+    "RULE_REFERENCES",
+    "Reference",
+    "TOOL_GUIDE",
+    "TRAINING",
+    "links_html",
+    "links_text",
+    "reference",
+    "reference_ids_for",
+    "reference_urls",
+    "references_for",
+    "references_for_findings"
+  ],
   "camber.refrigerant": [
     "DERIVED_ROLES",
     "REFRIGERANTS",
@@ -1617,10 +1637,12 @@
     "AuditReport",
     "Benchmark",
     "ECM",
+    "REPORT_CSS",
     "RESEARCH_ONLY_BANNER",
     "SHARE_ALIKE_NOTE",
     "data_sources_html",
-    "data_sources_text"
+    "data_sources_text",
+    "html_document"
   ],
   "camber.report.chiller": [
     "chiller_diagnosis_table"

@@ -39,6 +39,16 @@ flowchart TD
 | **Psychrometrics** | [PsychroLib](https://github.com/psychrometrics/psychrolib) | MIT ✓ | ASHRAE psychrometric properties (humidity ratio, enthalpy, wet-bulb) | Optional; back any psychrometric needs (e.g. App-C solar-MRT comfort, latent loads). |
 | **Controls / agents** | [Eclipse VOLTTRON](https://github.com/eclipse-volttron) | Apache-2.0 ✓ | BACnet/Modbus drivers, historians, an agent platform | **Interoperate, don't vendor** — read its historian via our SQL adapter / its telemetry via MQTT; study its driver framework. Too heavy (ZMQ/gevent) to import. See note 9 below. |
 
+### Related tool: ECAM
+
+[ECAM](https://latticeenergyworks.com/services/technology-market-assessment/) (Energy Charting and
+Metrics) is an Excel-based charting and M&V tool for interval and trend data, now listed by
+Lattice Energy Works. PNNL's Building Re-tuning program uses it for whole-building interval-data
+analysis ([Interval Data Analysis with ECAM, PNNL-20495](https://www.pnnl.gov/sites/default/files/media/file/pnnl_20495.pdf)).
+It is a related tool, not a dependency: CAMBER neither ships nor wraps it, and its own load
+profiles, carpet plots and change-point M&V cover the same ground in Python. See
+[References](REFERENCES.md) for the Re-tuning material CAMBER links to.
+
 ## The strategy: optional extras, not forks
 
 - **Core stays zero-dep.** Today's `camber/` runs on numpy/pandas/pyarrow/

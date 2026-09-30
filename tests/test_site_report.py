@@ -1,6 +1,7 @@
 """Tests for the one-shot site report (camber.report.site)."""
 
 import os
+import re
 import sys
 
 import matplotlib
@@ -87,7 +88,14 @@ def test_report_is_self_contained():
     html = build_site_report(_df(), findings=_findings(), rules=[SimultaneousHeatCool()])
     # images inlined as data URIs; no external http(s) asset references
     assert "data:image/png;base64," in html
-    assert "http://" not in html and "https://" not in html
+    assert "http://" not in html
+    assert not re.search(r"(src|srcset)=['\"]https?:", html) and "<link" not in html
+    # 0.96 (#78): the only https URLs are the "Learn more" links to the linked references
+    from camber.references import REFERENCES
+
+    urls = {r.url for r in REFERENCES.values()}
+    assert set(re.findall(r"href='(https://[^']+)'", html)) <= urls
+    assert html.count("https://") == len(re.findall(r"href='https://", html))
 
 
 def test_scorecard_grade_reflects_faults():

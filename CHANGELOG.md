@@ -43,6 +43,57 @@ released. -->
 - `camber serve` stays GET-only (regression test), and default outputs are unchanged.
 <!-- /096-lab -->
 
+<!-- 096-report (#78) -->
+### Fixed
+- **Recommended actions follow the cause, not the rule (#78).** A `dcv_verification` finding
+  whose DCV works but whose outdoor air stays above its floor at low demand was told to
+  "Enable / repair demand-controlled ventilation"; it is now told to **lower the minimum outdoor
+  air at low demand** (to the area-based Ra·Az floor). Under-ventilation causes get "restore the
+  OA floor", "make OA respond to high CO₂" or "restore ventilation while occupied", never "cuts
+  over-ventilation". `dcv_system_verification` reads the cause from the air handler that set its
+  severity. An audit of every recommender fixed the same pattern in `chw_plant_reset` (low loop
+  ΔT vs a flat CHWST), `chw_pump_dp_reset` / `hw_pump_dp_reset` (pinned at the VFD minimum, or a
+  reset already present), `supply_air_reset` (a setpoint that already resets; SAT rising with
+  load), `cooling_tower_approach` (wide at full fan), `reheat_minimization_g36` (the dual-maximum
+  sequence) and the overcooling rules (no "raise the cooling setpoint" for a box at minimum).
+  Finding severities and metrics are unchanged; only the advisory text and target change.
+- **Audit report title and scope (#78).** A report built from trend data alone (a dataset, one
+  room) was titled "ASHRAE Std-211 Level 2 Audit". It is now a **"Building analytics report"**
+  unless it carries the Std-211 inputs (an EUI benchmark, plus an ECM table at Level 2 and
+  above); `report.title` sets a title and `report.ecms` supplies the ECM table from a config.
+  Empty sections (the ECM table) are left out, in HTML and text. The report carries minimal
+  scoped styling (no external asset; light and dark), wide tables scroll inside the page at phone
+  width, and `camber report`, the config's `out_html` and the lab write a full HTML document
+  (charset, viewport, title).
+- **Trend viewer (`/ui`) (#78).** Series of different scales shared one unlabelled axis, so CO₂ in
+  ppm flattened temperature and airflow. The viewer now draws one panel per unit with a labelled y
+  axis, a shared time axis (UTC), a legend with each series' unit and range, a hover readout,
+  line breaks at data gaps and a **Normalised (0–1)** toggle; one request per ticked role. Units
+  come from `camber.api.ui.role_units()` (IP, as stored). Still vanilla JS, same CSP, no CDN.
+- **Lab page (#78).** The header shows the workspace, store and cache home-relative (`~/…`) and
+  shortened; full paths stay in the startup log and the JSON (new `display` block). Each
+  dataset's *what it teaches* list is collapsed by default.
+
+### Added
+- **Linked PNNL Building Re-tuning references (#78, provisional).** `camber.references` is a
+  registry of the nine guides to re-tuning measures, the ten training chapters, *Trending
+  Requirements for Re-tuning*, the ECAM interval-data guide, the large-office savings report and
+  the project pages: id, title, publisher, document number, URL, kind and `verified_on`
+  (2026-09-29). `RULE_REFERENCES` maps 35 rules to them, checked against each guide's section
+  headings; a rule no guide clearly covers maps to a training chapter or stays unmapped.
+  - Reports: the audit findings table and the Recommended actions table get **Learn more**
+    links; each RCx issue page ends its action with them, and the RCx report adds a short
+    **Further reading** section (id `reading`) listing only the guides relevant to its issues.
+  - Text and JSON carry the ids: `learn more: <ids>` in the text audit,
+    `Recommendation.references`, the action-plan rows' `references`, each RCx issue's
+    `references`.
+  - **Link only**: no PNNL text, figure or PDF is copied into the repository or a report.
+    `scripts/datasets_linkcheck.py` now also checks every reference URL weekly (a 404 / 410 is
+    drift; `--no-references` skips them).
+  - Docs: a [references page](docs/REFERENCES.md), links from the rule pages (ventilation,
+    economizer, reset), and ECAM as a related tool in the ecosystem page.
+<!-- /096-report -->
+
 ## [0.95.0] — Unreleased
 
 <!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when

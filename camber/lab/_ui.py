@@ -49,6 +49,8 @@ td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .title{font-weight:600}.id{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;
 color:var(--muted)}
 .teach{font-size:12px;color:var(--muted);margin-top:2px}
+.teach summary{cursor:pointer;width:max-content;max-width:100%}
+.teach ul{margin:4px 0 2px;padding-left:18px}
 .badge{display:inline-block;border-radius:10px;padding:1px 8px;font-size:12px;white-space:nowrap;
 background:var(--chip)}
 .badge.open{color:var(--ok)}.badge.ro{color:var(--bad);font-weight:600}
@@ -133,8 +135,15 @@ function render(){
     c0.appendChild(cb);tr.appendChild(c0);
     var c1=el('td');c1.appendChild(el('div',{'class':'title'},d.title));
     c1.appendChild(el('div',{'class':'id'},d.id+(d.equipment?' · '+d.equipment:'')));
-    if(d.teaches&&d.teaches.length)c1.appendChild(el('div',{'class':'teach'},
-      'teaches: '+d.teaches.join('; ')));
+    if(d.teaches&&d.teaches.length){
+      // collapsed by default (the list is long); opened when the search matches its text
+      var det=el('details',{'class':'teach'});
+      det.appendChild(el('summary',null,'what it teaches ('+d.teaches.length+')'));
+      var ul=el('ul');d.teaches.forEach(function(t){ul.appendChild(el('li',null,t));});
+      det.appendChild(ul);
+      var q=$('q').value.trim().toLowerCase();
+      if(q&&d.teaches.join(' ').toLowerCase().indexOf(q)>=0)det.open=true;
+      c1.appendChild(det);}
     tr.appendChild(c1);
     tr.appendChild(el('td',{'class':'hide-sm'},d.kind+(d.labeled_faults?' · labelled':'')));
     var c3=el('td',{'data-label':'Licence'});
@@ -268,8 +277,9 @@ function pollJobs(){
 
 function loadCatalog(){
   return getJSON('/lab/catalog').then(function(d){data=d;
-    $('where').textContent=(d.mode==='workspace'?'workspace '+d.workspace:'store '+d.store)+
-      ' · cache '+d.data_dir;
+    var dp=d.display||{};
+    $('where').textContent=(d.mode==='workspace'?'workspace '+dp.workspace:'store '+dp.store)+
+      ' · cache '+dp.data_dir;
     var subs={};d.datasets.forEach(function(x){Object.keys(x.subsets||{}).forEach(
       function(s){subs[s]=1;});});
     var sel=$('subset');if(!sel.options.length)Object.keys(subs).sort().forEach(function(s){
