@@ -1,0 +1,23 @@
+{
+  "_comment": "Workbook exercise plant-chw-reset-pumping (docs/workbook/plant-chw-reset-pumping.md): the chilled-water distribution side of the lbnl-chiller plant. chw_plant_reset regresses chiller 1's leaving-water temperature on the outdoor dry-bulb over its running, occupied hours (the run gate is the chiller's power: its status point is an enable, see the data issues) and reports the loop delta-T against the rule's fixed 8 F design minimum, which has no parameter. chw_pump_dp_reset reads the secondary loop's lead pump speed (CWL_SEC_PM_SPD_1) and its DP setpoint (CWL_SEC_DPSPT), both mapped since 0.97; its near-full (90%) and near-minimum (25%) bands are fixed in the rule. Neither rule needs a calibrated ceiling, so there are no params.",
+  "_dataset": "lbnl-chiller",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-chiller"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "CHW_PLANT",
+      "marker_role": "power"
+    }
+  ],
+  "rules": [
+    "chw_plant_reset",
+    "chw_pump_dp_reset"
+  ],
+  "report": {
+    "level": 2
+  }
+}

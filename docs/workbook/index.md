@@ -89,11 +89,11 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 
 | PNNL reading | Exercise | Datasets |
 |---|---|---|
-| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | `plant-chiller-efficiency`: chiller efficiency and fouling (planned) | `lbnl-chiller` |
-| [Ch. 8][pnnl-retuning-ch8] | `plant-cooling-tower`: approach and fan effort, tower fouling (planned) | `lbnl-chiller` |
-| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | `plant-chw-reset-pumping`: chilled-water reset and pumping (planned) | `lbnl-chiller` |
-| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | `plant-boiler`: hot-water reset, short cycling, summer lockout (planned) | `lbnl-boiler` |
-| [Ch. 8][pnnl-retuning-ch8] | `plant-sensor-vs-equipment`: sensor faults vs equipment faults (planned) | `lbnl-chiller` |
+| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | [`plant-chiller-efficiency`: chiller efficiency, a calibrated ceiling and fouling](plant-chiller-efficiency.md) | `lbnl-chiller` |
+| [Ch. 8][pnnl-retuning-ch8] | [`plant-cooling-tower`: approach, fan effort and a leaking tower bypass](plant-cooling-tower.md) | `lbnl-chiller` |
+| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Cooling Control][pnnl-guide-plant-cooling] | [`plant-chw-reset-pumping`: chilled-water reset, low delta-T and pumping](plant-chw-reset-pumping.md) | `lbnl-chiller` |
+| [Ch. 8][pnnl-retuning-ch8], [Central Utility Plant Heating Control][pnnl-guide-plant-heating] | [`plant-boiler`: hot-water reset, summer lockout, pumping and a fouling gap](plant-boiler.md) | `lbnl-boiler` |
+| [Ch. 8][pnnl-retuning-ch8] | [`plant-sensor-vs-equipment`: sensor faults vs equipment faults](plant-sensor-vs-equipment.md) | `lbnl-chiller` |
 <!-- END workbook-plant (#82) -->
 
 <!-- BEGIN workbook-practice (#83) -->

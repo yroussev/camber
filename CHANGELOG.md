@@ -49,6 +49,26 @@ outputs are unchanged, and no gated benchmark moves.
 <!-- 097-zone (#81) -->
 <!-- /097-zone -->
 <!-- 097-plant (#82) -->
+- **Workbook: the central plant (#82).** Five exercises on the open LBNL plant datasets, each with
+  a page, an instructor key, a tuned config and a synthetic stand-in:
+  - `plant-chiller-efficiency` (`lbnl-chiller`): a generic kW/ton ceiling flags the healthy plant;
+    the ceiling calibrated from the fault-free run finds the severe chiller fouling and the tower
+    bypass, and the label score shows its false alarms.
+  - `plant-cooling-tower` (`lbnl-chiller`): a controlled tower hides fouling in fan effort rather
+    than approach; condenser-water reset; `condenser_bypass_leak` on the stuck bypass.
+  - `plant-chw-reset-pumping` (`lbnl-chiller`): chilled-water reset, a low delta-T that is a
+    property of the constant-flow primary loop, a flat DP setpoint, and a VFD floor above the pump
+    rule's fixed near-minimum band.
+  - `plant-boiler` (`lbnl-boiler`): why the lockout, short-cycle and delta-T rules stay silent on
+    a plant whose boiler status is an enable, a pump that runs all year, and boiler fouling that no
+    point-in-time rule sees.
+  - `plant-sensor-vs-equipment` (`lbnl-chiller`): where each sensor bias shows up (kW/ton, the
+    secondary pump, a sensor-offset attribution) and why the score counts it as a negative.
+  - The `lbnl-chiller` and `lbnl-boiler` catalog entries link their exercise.
+- **`lbnl-chiller` mapping (#82).** The secondary loop's lead pump speed and its DP and DP
+  setpoint now map to `chw_pump_speed`, `chw_diff_press` and `chw_diff_press_sp`, so
+  `chw_pump_dp_reset` can run on the plant. Re-ingest (`--force`) to pick them up. The dataset
+  template's rules do not read them, so its findings are unchanged.
 <!-- /097-plant -->
 <!-- 097-practice (#83) -->
 <!-- /097-practice -->

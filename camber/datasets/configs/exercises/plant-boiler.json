@@ -1,0 +1,25 @@
+{
+  "_comment": "Workbook exercise plant-boiler (docs/workbook/plant-boiler.md): the four point-in-time hot-water plant rules on the lbnl-boiler plant. hw_pump_dp_reset (the dataset template's one rule; fixed near-full / near-minimum bands) reads pump 1's speed and the loop DP setpoint. boiler_summer_lockout (default 65 F lockout), boiler_short_cycle (default 6 starts a day) and hw_plant_deltat all need a boiler run status (boiler_status), which this plant does not have: BOI_STA_1 is the boiler enable, 1 all year, and is deliberately left unmapped (see the data issues). They are listed anyway, on purpose: the exercise asks why CAMBER prints nothing for them. Boiler fouling needs the boiler drift family (boiler_efficiency_drift, a baseline-vs-current comparison of one boiler), which a per-run dataset cannot feed through a config.",
+  "_dataset": "lbnl-boiler",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-boiler"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "HW_PLANT",
+      "marker_role": "hw_supply_temp"
+    }
+  ],
+  "rules": [
+    "hw_pump_dp_reset",
+    "boiler_summer_lockout",
+    "boiler_short_cycle",
+    "hw_plant_deltat"
+  ],
+  "report": {
+    "level": 2
+  }
+}

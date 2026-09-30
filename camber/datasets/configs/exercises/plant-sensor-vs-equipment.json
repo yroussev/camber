@@ -1,0 +1,35 @@
+{
+  "_comment": "Workbook exercise plant-sensor-vs-equipment (docs/workbook/plant-sensor-vs-equipment.md): the physical plant rules run over the lbnl-chiller sensor-bias runs, to see where a lying sensor shows up. chiller_efficiency (1.44 kW/ton) and cooling_tower_approach (8.1 F) keep the dataset template's ceilings, calibrated from the fault-free run, so `camber datasets score` scores the two declared detectors exactly as the template does. condenser_bypass_leak (defaults) separates a leaking tower bypass from an offset between the tower leaving-water and condenser entering-water sensors. chw_pump_dp_reset (fixed bands) reads the secondary pump speed, which is where a biased loop DP sensor shows.",
+  "_dataset": "lbnl-chiller",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-chiller"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "CHW_PLANT",
+      "marker_role": "power"
+    }
+  ],
+  "rules": [
+    {
+      "name": "chiller_efficiency",
+      "params": {
+        "design_kw_per_ton": 1.44
+      }
+    },
+    {
+      "name": "cooling_tower_approach",
+      "params": {
+        "design_approach_f": 8.1
+      }
+    },
+    "condenser_bypass_leak",
+    "chw_pump_dp_reset"
+  ],
+  "report": {
+    "level": 2
+  }
+}
