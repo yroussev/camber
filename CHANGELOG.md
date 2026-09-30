@@ -16,6 +16,20 @@ Each branch adds its bullets only inside its own marked block below. -->
   present group roles in the sensor-health gate. `camber.model.entities.missing_inputs` is the
   one test shared by the runners and `runnable_rules`, and `Runnable.missing_any_of` names the
   unmet groups. No built-in rule declares groups yet, so default outputs are unchanged.
+- **Rules that did not run are listed (#88 item 3, #86 item 4b).** `Registry.run`, `run_periods`
+  and `run_fleet` take an optional `skipped=` list and append a `RuleSkip` (rule, equipment,
+  class, missing inputs, reason `missing_inputs` / `no_data` / `no_verdict`) for each equipment
+  a rule applies to but produced nothing on. A skip is recorded only when the rule applies: its
+  declared classes match the equipment's, or at least one of its inputs is present (a chiller
+  rule on an air handler is not applicable, not skipped). The default (`None`) records nothing,
+  so the benchmarks and faultlab are untouched. `run_config` collects them in
+  `RunResult.rules_skipped`, adding a rule-level record when a configured rule found none of its
+  inputs on any equipment; they stay out of `findings` (and `findings.json`, so `datasets score`
+  decline counts do not move).
+  - **RCx report.** Appendix A gains a "Checks not evaluated (missing inputs)" table (rule,
+    missing inputs, equipment: one row per rule and missing set, six units named, then "and N
+    more"), and the cover a "Checks not evaluated" row, both only when there is something to
+    list. `no_verdict` records are kept for later use but not listed.
 <!-- /098-core -->
 
 ## [0.97.0] — Unreleased

@@ -1755,7 +1755,8 @@
     "FleetRule",
     "PeriodRule",
     "Registry",
-    "Rule"
+    "Rule",
+    "RuleSkip"
   ],
   "camber.rules.boiler_efficiency_rule": [
     "BTU_PER_KWH",

@@ -250,6 +250,10 @@ class RunResult:
     # its provenance (source file(s), edge count, ids that named no discovered equipment).
     topology: object | None = None
     topology_source: dict | None = None
+    # -- 0.98 (#88): configured rules that applied but produced nothing, as
+    # :class:`camber.rules.base.RuleSkip` records (missing inputs, no data, no verdict). Kept out of
+    # ``findings`` (and so out of findings.json) on purpose; the RCx report lists them.
+    rules_skipped: list = field(default_factory=list)
 
 
 def _path(base: str, p: str) -> str:
@@ -2142,6 +2146,15 @@ def _drift_families(spec: dict, refs_by_class: dict) -> list:
     return out
 
 
+def _rule_level_skip(rule):
+    """0.98 (#88): the :class:`RuleSkip` for a configured rule that produced nothing anywhere and
+    recorded no per-equipment skip (no equipment carried any of its inputs)."""
+    from .rules.base import RuleSkip, _missing_labels
+
+    missing = _missing_labels(rule, ())
+    return RuleSkip(rule.name, "", "", missing, "missing_inputs" if missing else "no_verdict")
+
+
 def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     """Execute a config dict: discover equipment, run the named rules, build a report.
 
@@ -2163,6 +2176,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
 
     reg = builtin_registry()
     findings, ran = [], []
+    skipped: list = []  # 0.98 (#88): RuleSkip records from the rule runners
     # 0.92 (#17): the "ventilation" section configures the system-level 62.1 VRP rule
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
@@ -2178,6 +2192,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         else:
             name = entry
         rule = reg.get(name)  # KeyError on unknown name
+        n_skip = len(skipped)
         if is_fleet(rule):
             f = reg.run_fleet(
                 name,
@@ -2187,13 +2202,23 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 shared=shared,
                 min_trust=min_trust,
                 topology=topology,
+                skipped=skipped,
             )
             if f is not None:
                 findings.append(f)
         else:
-            findings += reg.run(
-                name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
+            got = reg.run(
+                name,
+                refs,
+                mapping,
+                resample=resample,
+                shared=shared,
+                min_trust=min_trust,
+                skipped=skipped,
             )
+            findings += got
+            if not got and len(skipped) == n_skip:
+                skipped.append(_rule_level_skip(rule))
         ran.append(name)
     # 0.92 (#17): a configured ventilation section runs even when "rules" omits the rule
     if vent_rule is not None and vent_rule.name not in ran:
@@ -2205,6 +2230,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             shared=shared,
             min_trust=min_trust,
             topology=topology,
+            skipped=skipped,
         )
         if f is not None:
             findings.append(f)
@@ -2319,6 +2345,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         base_dir=base_dir,
         topology=topology,
         topology_source=topology_source,
+        rules_skipped=skipped,
     )
 
 
