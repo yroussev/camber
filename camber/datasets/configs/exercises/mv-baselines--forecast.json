@@ -1,0 +1,46 @@
+{
+  "_comment": "Workbook exercise mv-baselines (docs/workbook/mv-baselines.md), part 1a: an SEP forecast, the 2018 baseline model projected onto 2019. Three cofactor-drammen main meters (ElImp): two schools, b6400 (3,958 m2) and b6404 (6,570 m2), and a nursing home, b6410 (3,327 m2), building categories from the publisher's file headers. Each meter's own outdoor temperature (the oat role stored on the meter) drives a daily change-point + occupied-day model (Monday to Friday except Norway's public holidays, the bundled NO calendar), as in the dataset template; validity 'both' reports the G14 acceptance and the SEP 50001 section 6.4.1 validity side by side. No energy measure is documented in these years, so a saving here is a change nobody has explained.",
+  "_dataset": "cofactor-drammen",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-cofactor-drammen"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "ELECTRICITY_METER",
+      "equip": [
+        "b6400_ElImp",
+        "b6404_ElImp",
+        "b6410_ElImp"
+      ]
+    }
+  ],
+  "rules": [],
+  "mv": [
+    {
+      "class": "ELECTRICITY_METER",
+      "role": "power",
+      "period": [
+        "2018-01-01",
+        "2018-12-31"
+      ],
+      "reporting_period": [
+        "2019-01-01",
+        "2019-12-31"
+      ],
+      "method": "forecast",
+      "validity": "both",
+      "interval": "daily",
+      "model": "cp_driver",
+      "drivers": [
+        "occupied_day"
+      ],
+      "holiday_calendar": "NO"
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

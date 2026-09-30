@@ -1,0 +1,62 @@
+{
+  "_comment": "Workbook exercise mv-baselines (docs/workbook/mv-baselines.md), part 3: SEP chaining through 2019 onto 2020, with the spring 2020 school and kindergarten closure (12 March to 11 May 2020, the dataset's covid-19-closures-2020 data issue) as a non-routine adjustment: an indicator estimated on the 2020 days against the intermediate model (fit_period 'reporting'). The evidence and approval fields are filled because validity 'both' (SEP section 5.3.2) requires them; the approver 'workbook' marks it as a teaching example. Three cofactor-drammen main meters (ElImp): two schools, b6400 (3,958 m2) and b6404 (6,570 m2), and a nursing home, b6410 (3,327 m2), building categories from the publisher's file headers. Each meter's own outdoor temperature (the oat role stored on the meter) drives a daily change-point + occupied-day model (Monday to Friday except Norway's public holidays, the bundled NO calendar), as in the dataset template; validity 'both' reports the G14 acceptance and the SEP 50001 section 6.4.1 validity side by side. No energy measure is documented in these years, so a saving here is a change nobody has explained.",
+  "_dataset": "cofactor-drammen",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-cofactor-drammen"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "ELECTRICITY_METER",
+      "equip": [
+        "b6400_ElImp",
+        "b6404_ElImp",
+        "b6410_ElImp"
+      ]
+    }
+  ],
+  "rules": [],
+  "mv": [
+    {
+      "class": "ELECTRICITY_METER",
+      "role": "power",
+      "period": [
+        "2018-01-01",
+        "2018-12-31"
+      ],
+      "reporting_period": [
+        "2020-01-01",
+        "2020-12-31"
+      ],
+      "method": "chaining",
+      "validity": "both",
+      "interval": "daily",
+      "model": "cp_driver",
+      "drivers": [
+        "occupied_day"
+      ],
+      "holiday_calendar": "NO",
+      "intermediate_period": [
+        "2019-01-01",
+        "2019-12-31"
+      ],
+      "adjustments": [
+        {
+          "kind": "nra",
+          "method": "indicator",
+          "start": "2020-03-12",
+          "end": "2020-05-11",
+          "fit_period": "reporting",
+          "reason": "COVID-19 school and kindergarten closure",
+          "evidence": "national closure from 12 March 2020, staged reopening to 11 May 2020 (dataset data issue covid-19-closures-2020)",
+          "approved_by": "workbook"
+        }
+      ]
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

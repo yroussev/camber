@@ -51,6 +51,29 @@ outputs are unchanged, and no gated benchmark moves.
 <!-- 097-plant (#82) -->
 <!-- /097-plant -->
 <!-- 097-practice (#83) -->
+- **Workbook: data quality, energy charting, M&V and the capstone (#83, provisional).** Four
+  exercises, each with its page, instructor key and answer-key test (stand-in offline, real data
+  under `-m network`):
+  - **`data-trend-quality`** (`nuig-ahu101`, `lbnl-b59`, `irish-ahu`): the core points each unit
+    trends, then the sensor-health layer on real faults -- a copied return-air point, mixed-air
+    sensors that fail the flow balance, room CO2 clipped at full scale, a meter held over two
+    weekends, a gap-filled CO2 stretch -- and an "untrusted" supply air that is a well-controlled
+    sensor.
+  - **`data-energy-charting`** (`bdg2`, `valladolid-uva`): weekday and weekend profiles,
+    out-of-hours base load, load factor and the daily change-point baselines as the
+    weather-dependence chart.
+  - **`mv-baselines`** (`cofactor-drammen`, `valladolid-uva`, `bdg2`): G14 acceptance and SEP
+    50001 §6.4.1 validity, forecast against backcast, SEP chaining, a chain across the spring 2020
+    school closure with a non-routine adjustment, and bill-only M&V on synthetic bills cut from
+    an open meter (days-weighted fit, bases chosen from the bills, calendarized). Four exercise
+    configs: `mv-baselines`, `mv-baselines--forecast`, `--backcast` and `--covid`.
+  - **`capstone`** (`lbnl-sdahu`, `ornl-frp-ops`): the RCx report on the fault-onset splice, a
+    walk-down checklist built from its recommended actions, conditional issues and default
+    assumptions, a re-tuning plan, verification by drift (a first-half baseline scored on the
+    second half), and a before-and-after scheduling test where hourly M&V is refused for lack of
+    baseline data. Exercise config `capstone`.
+  - Catalog `exercise` links: `nuig-ahu101` to `data-trend-quality`, `bdg2` to
+    `data-energy-charting`, `valladolid-uva` and `cofactor-drammen` to `mv-baselines`.
 <!-- /097-practice -->
 
 ## [0.96.0] — Unreleased
