@@ -91,7 +91,8 @@ class RoleSuggestion:
     token: str
     role: str  # a Role enum value (always validated via Role(value))
     confidence: float  # 0..1
-    basis: str  # ngram | edit_distance | initials | unit | range_fit | ml | llm | combined
+    # ngram | edit_distance | initials | unit | range_fit | timeseries | ml | llm | combined
+    basis: str
     rationale: str  # deterministic, human-readable why
 
     def as_dict(self) -> dict:
@@ -327,13 +328,40 @@ def _string_score(words, role: Role) -> tuple[float, str]:
 
 
 class FeatureSuggester:
-    """Dependency-light role suggester from a tag's string, unit, and data range-fit."""
+    """Dependency-light role suggester from a tag's string, unit, and data range-fit.
 
-    def __init__(self, mapping: MappingProvider | None = None, *, vocab=tuple(Role)):
+    0.96 (#45): with ``use_timeseries=True`` it also reads what the data says
+    (:mod:`camber.mapping_timeseries`: level, cadence, change-of-value pattern, binary values,
+    daily / weekly periodicity, the response to outdoor air, setpoint-like steps) and blends that
+    with the name so that an informative name still dominates. ``oat`` is an outdoor-air series
+    of the site (the weather-response features); ``model`` a fitted
+    :class:`~camber.mapping_timeseries.ProfileModel` used instead of the hand-written role
+    templates. Without ``use_timeseries`` the suggestions are exactly those of earlier releases.
+    """
+
+    def __init__(
+        self,
+        mapping: MappingProvider | None = None,
+        *,
+        vocab=tuple(Role),
+        use_timeseries: bool = False,
+        oat=None,
+        model=None,
+    ):
         self.mapping = mapping
         self.vocab = tuple(vocab)
+        self.use_timeseries = bool(use_timeseries)
+        self.oat = oat
+        self.model = model
 
-    def suggest(self, token: str, *, series=None, unit=None, k: int = 3) -> list:
+    def suggest(
+        self, token: str, *, series=None, unit=None, k: int = 3, oat=None, profile=None
+    ) -> list:
+        """Ranked suggestions for ``token``. ``oat`` (a site outdoor-air series) and ``profile``
+        (a precomputed :class:`~camber.mapping_timeseries.SeriesProfile`) apply only with
+        ``use_timeseries``."""
+        if self.use_timeseries:
+            return self._suggest_ts(token, series=series, unit=unit, k=k, oat=oat, profile=profile)
         words = _tag_tokens(token)
         u = _norm_unit(unit)
         unit_roles = ROLE_UNIT.get(u, frozenset())
@@ -361,6 +389,67 @@ class FeatureSuggester:
             if s <= 0.0:
                 continue
             rationale = self._rationale(token, role, u, bases, lex)
+            scored.append(
+                RoleSuggestion(
+                    token=token,
+                    role=role.value,
+                    confidence=round(s, 4),
+                    basis="combined" if len(bases) > 1 else bases[0],
+                    rationale=rationale,
+                )
+            )
+        scored.sort(key=lambda x: -x.confidence)
+        return scored[:k]
+
+    def _suggest_ts(self, token, *, series, unit, k, oat, profile) -> list:
+        """The time-series-aware path (``use_timeseries=True``; see :mod:`.mapping_timeseries`)."""
+        from .mapping_timeseries import blend, profile_series, template_scores
+
+        words = _tag_tokens(token)
+        u = _norm_unit(unit)
+        unit_roles = ROLE_UNIT.get(u, frozenset())
+        if profile is None and series is not None:
+            profile = profile_series(series, oat=oat if oat is not None else self.oat)
+        ts: dict = {}
+        if profile is not None:
+            if self.model is not None:
+                ts = {r: (p, f"a fitted profile model gives p={p:.2f}") for r, p in
+                      self.model.scores(profile).items() if r in self.vocab}  # fmt: skip
+            else:
+                ts = template_scores(profile, unit, vocab=self.vocab)
+        lexical = {role: _string_score(words, role) for role in self.vocab}
+        best_lex = max((s for s, _ in lexical.values()), default=0.0)
+        scored = []
+        for role in self.vocab:
+            s, basis = lexical[role]
+            lex = s
+            bases = [basis] if s > 0 else []
+            if unit_roles:
+                if role in unit_roles:
+                    s = max(s, 0.25) + 0.05
+                    bases.append("unit")
+                else:
+                    s *= 0.4
+            t_score, t_note = ts.get(role, (0.0, ""))
+            if t_score > 0:
+                s = blend(s, t_score, best_lex)
+                bases.append("timeseries")
+            # the physical-range gate needs a declared unit here: without one the templates
+            # already judged the level in every plausible unit (a C series is not an F one)
+            if s > 0.0 and series is not None and u and role in PHYSICAL_BOUNDS:
+                rv = range_violation_frac(_in_bound_units(series, role, u), role)
+                if rv == rv:
+                    if rv > 0.1:
+                        s *= 1.0 - min(rv, 1.0)
+                    else:
+                        s += 0.03
+                        bases.append("range_fit")
+            s = min(1.0, s)
+            if s <= 0.0:
+                continue
+            rationale = self._rationale(token, role, u, bases, lex)
+            if t_note:
+                rationale = f"{rationale}; {t_note}" if "weak match" not in rationale else t_note
             scored.append(
                 RoleSuggestion(
                     token=token,

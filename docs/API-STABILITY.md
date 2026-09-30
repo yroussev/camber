@@ -462,6 +462,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `streams_by_status`, `streams_mapped`, `streams_ingested`, `mapped_without_file`,
   `duplicate_roles_split`, `unmapped_classes`; the equipment ids `<class>_<id prefix>` and
   `<equip>-<n>`.
+- **Time-series point-role evidence** (0.96; #45), additive and provisional: the module
+  `camber.mapping_timeseries` (`SeriesProfile`, `profile_series`, `RoleTemplate`,
+  `ROLE_TEMPLATES`, `UNIT_SCALES`, `template_scores`, `ProfileModel`, `PROFILE_FEATURES`, `blend`,
+  `INFORMATIVE_NAME`, `TS_WEIGHT_UNINFORMATIVE`, `TS_WEIGHT_INFORMATIVE`); the keyword-only
+  `use_timeseries=`, `oat=` and `model=` of `FeatureSuggester` and `oat=` / `profile=` of
+  `FeatureSuggester.suggest`; the `RoleSuggestion.basis` value `timeseries`. The template
+  contents and the blend weights may be retuned in a minor release.
 <!-- /096-bts -->
 
 ## Deprecated

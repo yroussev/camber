@@ -515,6 +515,28 @@ temperature in place of the station series, Building 2's 2018 chain reads 0.829 
 Building 1's 1.002 ± 0.049. Building 1's forecast moves from 1.066 to 1.028, so on that building the
 forecast depends on the weather source and the chain does not.
 
+<!-- 096-bts (#45) -->
+## Point-role suggestion — real buildings with anonymised names (`bts`, CC-BY-4.0)
+
+`examples/bts_suggester/evaluate.py` asks the role suggester to recover the CAMBER role of the 903
+points of BTS (Prabowo et al., NeurIPS 2024 Datasets and Benchmarks,
+doi:10.48550/arXiv.2406.08990; three Australian buildings) whose Brick class maps cleanly,
+leave-one-building-out, with names and with the names hidden:
+
+| method | names | top-1 % | top-3 % |
+|---|---|---|---|
+| name only (0.95 default) | anonymised | 0.0 | 0.0 |
+| data only, role templates | anonymised | 48.0 | 65.2 |
+| data only, fitted on the other two buildings | anonymised | 38.4 | 58.8 |
+| name only (0.95 default) | Brick class as the name | 93.0 | 97.2 |
+| name + data (`use_timeseries=True`) | Brick class as the name | 95.2 | 99.9 |
+
+The data never displaced a role the name had placed first. The template rows are optimistic (the
+templates were adjusted while looking at these results); the fitted rows are the out-of-sample
+reference. Per-role results, confusions and caveats: [MAPPING-ASSIST.md](MAPPING-ASSIST.md). Not a
+gated benchmark.
+<!-- /096-bts -->
+
 ## Cross-validation vs an independent implementation
 
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the

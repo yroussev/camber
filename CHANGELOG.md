@@ -34,6 +34,25 @@ released. -->
   counted per class in the provenance. Series pickles are read with a restricted unpickler that
   resolves only numpy's array globals, straight from the verified zip. Quirks run per stream (a
   quirk's `runs` names sites).
+- **Time-series evidence for point-role suggestion (#45).** `FeatureSuggester(use_timeseries=True)`
+  also reads what a point's data says, for exports whose names are anonymised
+  (`camber.mapping_timeseries`, provisional, numpy and pandas only):
+  - `profile_series` / `SeriesProfile`: value quantiles, cadence and the change-of-value pattern,
+    binary and two-level values, plateaus at the series' extremes, step-like movement, daily and
+    weekly periodicity, and the correlation with a site outdoor-air series (`oat=`);
+  - `ROLE_TEMPLATES` / `template_scores`: 45 hand-written role templates scored in every plausible
+    unit when none is declared;
+  - `ProfileModel`: an optional numpy Gaussian class model fitted on other buildings' labelled
+    points (`model=`);
+  - `blend`: the data's weight falls from 0.8 to 0.1 as the name becomes informative, so a clear
+    name still dominates. `suggest()` also takes `oat=` and a precomputed `profile=`; the basis
+    `timeseries` is new.
+  - Evaluated on BTS (`examples/bts_suggester`, leave one building out; not a gated benchmark):
+    with the names hidden, the name-only suggester places 0 % of 903 points and the data alone
+    48.0 % top-1 / 65.2 % top-3 (templates; the fitted model 38.4 / 58.8); with the Brick class
+    as the name, adding the data moves top-1 from 93.0 to 95.2 % and never displaces a role the
+    name placed first. Results and caveats in docs/MAPPING-ASSIST.md and docs/VALIDATION.md.
+  - Opt-in: without `use_timeseries=True` the suggestions are byte-identical to 0.95.
 <!-- /096-bts -->
 
 ## [0.95.0] — Unreleased

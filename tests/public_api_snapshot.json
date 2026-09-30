@@ -1364,6 +1364,20 @@
     "score_mapping",
     "score_token"
   ],
+  "camber.mapping_timeseries": [
+    "INFORMATIVE_NAME",
+    "PROFILE_FEATURES",
+    "ProfileModel",
+    "ROLE_TEMPLATES",
+    "RoleTemplate",
+    "SeriesProfile",
+    "TS_WEIGHT_INFORMATIVE",
+    "TS_WEIGHT_UNINFORMATIVE",
+    "UNIT_SCALES",
+    "blend",
+    "profile_series",
+    "template_scores"
+  ],
   "camber.model": [
     "Completeness",
     "Equip",
