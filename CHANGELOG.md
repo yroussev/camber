@@ -4,6 +4,45 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.96.0] — Unreleased
+
+<!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is
+released. -->
+
+### Added
+<!-- 096-lab (#77) -->
+- **`camber lab`: a loopback-only local UI for the dataset catalog (#77, provisional).**
+  `camber lab [--workspace W | --store S] [--dir D] [--port 8765]` serves a catalog page at
+  `http://127.0.0.1:8765/lab`.
+  - **The page.** It is vanilla JS: no framework, no CDN, everything inline. Datasets carry
+    licence badges; the table has filters, and shows download and store sizes against the free
+    disk. **Fetch & ingest** runs as a job, one at a time on a single worker thread, with
+    progress and cancel. Rows link to the trend viewer (`/ui?facility_id=ds-<id>`, a new deep
+    link), an on-demand audit report, and the publisher.
+  - **Research-only datasets.** A dialog asks the user to accept the terms and type the dataset
+    id. The acceptance is recorded in the existing `acknowledgements.json` ledger
+    (`via: "lab fetch"`), and research-only reports carry the non-commercial banner.
+  - **Workspaces.** In a portfolio workspace, a dataset's `ds-<id>` facility is registered
+    `provisioning`, ingested under the single-writer lock, and then activated. Every fetch,
+    acknowledgement and ingest is audited (`lab.*`). Suspended, offboarding and archived dataset
+    facilities are not re-ingested. Without a workspace the lab uses a plain store, as the
+    `camber datasets` commands do.
+  - **API.** `camber.lab`: `LabApp`, `dispatch_lab` (pure routing; the read routes `/ui`,
+    `/facilities`, `/points` and `/history` are delegated unchanged to
+    `camber.api.server.dispatch`), `make_lab_server`, `serve_lab`, `JobQueue`.
+- **Lab security** (docs/SECURITY.md §11):
+  - It binds 127.0.0.1 only; any other bind address is refused.
+  - A Host and Origin allowlist (against DNS rebinding) and a `Sec-Fetch-Site` check.
+  - A per-run CSRF token compared with `hmac.compare_digest`.
+  - JSON only (415), a 16 KiB body cap (413), unknown fields refused, catalog ids only.
+  - A hash-pinned CSP on the page, and sandboxed reports.
+  - A static test proves `camber.lab` and `camber.datasets` reach no BACnet, Modbus, OPC-UA,
+    MQTT, OpenADR or edge module.
+
+### Unchanged
+- `camber serve` stays GET-only (regression test), and default outputs are unchanged.
+<!-- /096-lab -->
+
 ## [0.95.0] — Unreleased
 
 <!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when

@@ -73,13 +73,15 @@ def fetch_dataset(
     progress: Callable[[str, int, int | None], None] | None = None,
     opener=None,
     timeout: float = 60.0,
+    via: str = "fetch",
 ) -> FetchResult:
     """Download and verify a subset of ``entry``'s files into the cache.
 
     A research-only (NC/ND) entry raises ``PermissionError`` unless ``accept_noncommercial`` is
     true; an acceptance is appended to the ``acknowledgements.json`` ledger and recorded in the
     manifest. There is deliberately no environment-variable bypass. ``progress(name, done, total)``
-    reports each file's bytes.
+    reports each file's bytes. ``via`` names the action in the ledger record (``"lab fetch"`` when
+    the acknowledgement was given in ``camber lab``'s modal).
     """
     sname = subset or "default"
     files = entry.subset_files(sname)
@@ -96,7 +98,7 @@ def fetch_dataset(
     root = _paths.data_dir(data_dir)
     check_disk(_paths.downloads_dir(root, entry.id), _pending_bytes(root, entry, files))
     if entry.research_only:  # recorded before the first byte is downloaded
-        _licence.acknowledge(root, entry, subset=sname, via="fetch")
+        _licence.acknowledge(root, entry, subset=sname, via=via)
     res = FetchResult(
         dataset_id=entry.id,
         subset=sname,

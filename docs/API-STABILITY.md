@@ -452,6 +452,18 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the CLI `camber edge compact | decommission | reconcile | land | quarantine |
     record-retirement | bucket-rules`.
 <!-- /095-edge -->
+<!-- 096-lab (#77) -->
+- **`camber.lab`** (added in 0.96, provisional, #77) -- the loopback-only catalog UI: `LabApp`,
+  `LabError`, `dispatch_lab`, `make_lab_server`, `serve_lab`, `Job`, `JobQueue`, `JobCancelled`,
+  and the constants `LAB_HOST`, `DEFAULT_PORT`, `BODY_LIMIT` and `TOKEN_HEADER`; the HTTP routes
+  `GET /lab`, `/lab/catalog`, `/lab/jobs[/<id>]`, `/lab/reports/<fid>` and
+  `POST /lab/jobs/fetch|ingest`, `/lab/jobs/<id>/cancel`, with their JSON bodies; the audit
+  actions `lab.fetch`, `lab.acknowledge` and `lab.ingest`; and the `camber lab` command. The page's
+  markup and the catalog-view JSON may change with the exercises. Also additive: the internal
+  `via=` of `camber.datasets._ops.fetch_dataset` (the ledger records `"lab fetch"`), and the
+  `/ui?facility_id=` deep link of the live viewer. `camber serve` and `camber.api.server.dispatch`
+  are unchanged and stay GET-only.
+<!-- /096-lab -->
 
 ## Deprecated
 

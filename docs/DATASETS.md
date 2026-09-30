@@ -12,7 +12,7 @@ every file; `camber datasets fetch` downloads the files from the publisher onto 
 
 > **Status:** 0.86 shipped the first seven entries and the command-line workflow; 0.89 adds the
 > research-only tier, manual-download entries, Excel workbooks (the `xlsx` extra), Brick-grouped
-> ingest, the real-building source layouts below and 14 more entries. A local catalog UI (`camber lab`) and worked exercises follow in later releases. The
+> ingest, the real-building source layouts below and 14 more entries. 0.96 adds the local catalog UI, [`camber lab`](#the-lab-camber-lab); worked exercises follow in a later release. The
 > Python API (`camber.datasets`) is **provisional** -- see [API-STABILITY.md](API-STABILITY.md).
 
 ## Quick start
@@ -37,6 +37,63 @@ datasets.ingest("lbnl-sdahu", "lab_store")
 datasets.config_template("lbnl-sdahu", "lab_store", out="sdahu.json")
 print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 ```
+
+<!-- 096-lab (#77) -->
+## The lab (`camber lab`)
+
+`camber lab` is the same workflow in a browser, for learning and teaching:
+
+```
+camber lab --store lab_store          # then open http://127.0.0.1:8765/lab
+```
+
+**The catalog table.** Each dataset shows its kind, its licence **tier** (a green *open* badge,
+or a red *research-only* one), its download size and its estimated size once ingested. It also
+shows what is already fetched or ingested. Filter by licence tier, kind, labelled faults or
+ingested, and search by id, title or what the dataset teaches. Pick a subset (`default` or
+`full`) and tick datasets. The page adds up what they need and compares it with the free space
+on the cache's disk and the store's disk; **Fetch & ingest** is disabled while the selection
+does not fit.
+
+**Jobs.** A fetch (and the ingest that follows it) runs as a job on a single background worker,
+one job at a time, with a progress bar, a log line and a **Cancel** button. A cancelled download
+keeps its partial file, so the next fetch resumes it. A cancelled ingest leaves the store as it
+was. When a job finishes, the page shows the dataset's citation. Please cite it.
+
+**Research-only datasets.** Selecting one opens a dialog that states the licence terms. You tick
+*I accept* and **type the dataset id**; only then is the fetch queued. The acceptance is recorded
+in `acknowledgements.json`, exactly like `--accept-noncommercial` (with `via: "lab fetch"`).
+Every fetch asks again. An ingest of data already fetched with an acknowledgement does not.
+
+**Trends and reports.** An ingested dataset's row links to:
+
+- **trends**: the live trend viewer (`/ui?facility_id=ds-<id>`, served unchanged from
+  `camber serve`);
+- **report**: the audit report of the dataset's config template, built on demand and cached until
+  the data changes. It carries the dataset's *Data source & licence* block and, for
+  research-only data, the non-commercial / do-not-redistribute banner;
+- **publisher**: the publisher's landing page;
+- **exercise**: an exercise, when the entry names one.
+
+**With a portfolio workspace** (`camber lab --workspace W`, or `$CAMBER_PORTFOLIO`), a dataset's
+facility goes through the [lifecycle](PORTFOLIO.md):
+
+1. Its first ingest registers `ds-<id>` as `provisioning`. The ingest runs under the workspace's
+   single-writer lock, and the facility is activated afterwards.
+2. Every fetch, acknowledgement and ingest appends a `lab.fetch`, `lab.acknowledge` or
+   `lab.ingest` line to the audit log. `camber portfolio audit` shows them next to the
+   `facility.add` and `facility.activate` lines.
+3. Retention, offboarding and archiving then apply to it as to any facility. A suspended,
+   offboarding or archived dataset facility is not re-ingested: resume or restore it first.
+
+Without a workspace, the lab writes to a plain store (`--store`, default `./lab_store`).
+
+**Security.** The lab binds `127.0.0.1` only, and it answers only requests addressed to
+`127.0.0.1` or `localhost`. It accepts writes only from its own page, which sends a per-run token
+with each one. The only writes it accepts are queueing or cancelling a job for **catalog ids**.
+The full list is in [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096). From
+Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
+<!-- /096-lab -->
 
 ## The catalog
 

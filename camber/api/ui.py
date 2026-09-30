@@ -65,6 +65,10 @@ _APP_JS = r"""
       clear(facSel);(d.facilities||[]).forEach(function(f){
         var nm=f.display_name||f.name||f.facility_id;
         opt(facSel,f.facility_id,nm+(f.state&&f.state!=='active'?' ['+f.state+']':''));});
+      // deep link: /ui?facility_id=<fid> preselects that facility (camber lab links here)
+      var want=new URLSearchParams(location.search).get('facility_id');
+      if(want)Array.prototype.forEach.call(facSel.options,function(o){
+        if(o.value===want)facSel.value=want;});
       if(facSel.options.length)return loadPoints();
     });
   }

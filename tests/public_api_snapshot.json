@@ -1063,6 +1063,20 @@
     "add_oat_band",
     "load_csv"
   ],
+  "camber.lab": [
+    "BODY_LIMIT",
+    "DEFAULT_PORT",
+    "Job",
+    "JobCancelled",
+    "JobQueue",
+    "LAB_HOST",
+    "LabApp",
+    "LabError",
+    "TOKEN_HEADER",
+    "dispatch_lab",
+    "make_lab_server",
+    "serve_lab"
+  ],
   "camber.leakvalve": [
     "LeakValveResult",
     "analyze_leak_valves"

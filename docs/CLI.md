@@ -15,6 +15,7 @@ camber validate [--html d.html] [--json d.json] [--full]         # validation cr
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (127.0.0.1)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
@@ -319,6 +320,38 @@ method (`forecast`, `backcast`, `chaining`, `standard_conditions`, or `auto` for
 only), and an `"adjustments": [...]` ledger then restates that method's saving for non-routine
 events and static factors, guarded by `ecm_dates` / `settle_days`; `"validity"` (`g14`, `sep` or
 `both`) governs both (see [MANDV.md](MANDV.md#the-mv-flow-method-then-adjustments-then-result)).
+
+<!-- 096-lab (#77) -->
+### The local catalog UI: `camber lab` (provisional, 0.96)
+
+```
+camber lab [--workspace W | --store S] [--dir D] [--port 8765]
+```
+
+This starts a local web page at `http://127.0.0.1:8765/lab` for the same catalog. From it you
+can:
+
+- filter the datasets by licence tier, kind, labels, or what you have ingested;
+- tick one or more, compare the download and store sizes with the free disk, and press **Fetch &
+  ingest**;
+- follow each job's progress, and cancel it;
+- open the **trends** (the live viewer at `/ui?facility_id=ds-<id>`), the **report** (the
+  dataset's config template, run on demand), or the publisher's page.
+
+A research-only dataset opens a dialog: tick the terms and type the dataset id to acknowledge
+them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
+
+- **Where the data goes.** `--workspace` (else `$CAMBER_PORTFOLIO`, else the current directory if
+  it is a workspace, or a `--store` that belongs to one) makes each dataset a `ds-<id>` facility
+  that follows the lifecycle (see [DATASETS.md](DATASETS.md#the-lab-camber-lab)). Otherwise the
+  lab writes to a plain store (`--store`, default `./lab_store`).
+- **The cache.** `--dir` is the dataset cache, as for `camber datasets`.
+- **Security.** The server binds `127.0.0.1` only; there is no `--host`. It accepts writes only
+  with a per-run token, from its own origin, as JSON of at most 16 KiB (see
+  [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).
+- **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
+  next fetch resumes it.
+<!-- /096-lab -->
 
 ## Portfolio and facility lifecycle
 
