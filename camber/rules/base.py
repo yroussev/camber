@@ -33,6 +33,7 @@ from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
+from ..model.entities import missing_inputs, roles_any_of
 from ..model.mapping import MappingProvider
 from ..resolve import resolve
 from ..sensorhealth import untrusted_roles
@@ -69,6 +70,14 @@ class Rule(Protocol):
     enrich it (e.g. OAT enables the high-OAT reheat indicator) and are loaded when
     present but never block the rule. Rules may omit ``roles_optional`` (treated
     as empty) -- the runner reads it via ``getattr``.
+
+    0.98 (#86): a rule may also declare ``roles_any_of`` (optional, provisional), a tuple of role
+    groups of which each needs **at least one** role present -- e.g.
+    ``((Role.BOILER_STATUS, Role.GAS_INPUT_RATE),)`` for "a run status or a gas input". Every role
+    in a group is loaded when present; a group with none present blocks the rule like a missing
+    required role
+    (:func:`camber.model.entities.missing_inputs` is the one test the runners and
+    :func:`camber.model.entities.runnable_rules` share).
     """
 
     name: str
@@ -124,8 +133,25 @@ class PeriodRule(Protocol):
 
 
 def _roles_to_load(rule) -> tuple:
-    """Required + optional roles a rule wants resolved (optional may be absent)."""
-    return tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
+    """Required + optional (+ any-of) roles a rule wants resolved (only required must exist)."""
+    load = tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
+    extra = [r for g in roles_any_of(rule) for r in g if r not in load]
+    return load + tuple(dict.fromkeys(extra)) if extra else load
+
+
+def _gate_roles(rule, frame: pd.DataFrame) -> tuple:
+    """The roles the sensor-health gate judges: required, plus the any-of roles present."""
+    req = tuple(rule.roles_required)
+    extra = [r for g in roles_any_of(rule) for r in g if r in frame.columns and r not in req]
+    return req + tuple(dict.fromkeys(extra)) if extra else req
+
+
+def _cannot_run(rule, frame: pd.DataFrame) -> bool:
+    """True when the resolved frame is empty or lacks a required role or an any-of group."""
+    if frame.empty:
+        return True
+    req, groups = missing_inputs(rule, frame.columns)
+    return bool(req or groups)
 
 
 def _missing_optional(rule, frame: pd.DataFrame) -> list:
@@ -321,6 +347,9 @@ class Registry:
         required roles scores below it on the resolved frame, the rule **declines to
         fire** and instead records an ``info`` finding naming the untrusted input -- so
         a fault that is really a sensor problem isn't reported as an equipment fault.
+
+        ``roles_any_of`` groups (0.98) gate like required roles: each needs one role present, and
+        the present ones join the sensor-health gate.
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
@@ -328,14 +357,14 @@ class Registry:
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
             frame = _merge_shared(frame, shared)
-            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+            if _cannot_run(rule, frame):
                 continue
             declined = _class_declined(rule, ref)
             if declined is not None:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
+                bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
                 if bad:
                     out.append(
                         Finding(
@@ -393,14 +422,14 @@ class Registry:
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
             frame = _merge_shared(frame, shared)
-            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+            if _cannot_run(rule, frame):
                 continue
             declined = _class_declined(rule, ref)
             if declined is not None:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
+                bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
                 if bad:
                     out.append(
                         Finding(
@@ -478,10 +507,10 @@ class Registry:
                 continue
             frame = resolve(ref, mapping, load, resample=resample)
             frame = _merge_shared(frame, shared)
-            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+            if _cannot_run(rule, frame):
                 continue
             if min_trust is not None and untrusted_roles(
-                frame, rule.roles_required, min_trust=min_trust
+                frame, _gate_roles(rule, frame), min_trust=min_trust
             ):
                 continue
             frames[ref.equip] = frame

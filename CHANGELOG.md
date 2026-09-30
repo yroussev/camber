@@ -4,6 +4,20 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.98.0] — Unreleased
+
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is released.
+Each branch adds its bullets only inside its own marked block below. -->
+
+<!-- 098-core (#85, #86, #88) -->
+- **`roles_any_of` (#86 item 4a, provisional).** A rule may declare `roles_any_of`, a tuple of
+  role groups of which each needs at least one role present (a run status *or* a gas input). The
+  runners load every role of a group, skip the equipment when a group has none, and include the
+  present group roles in the sensor-health gate. `camber.model.entities.missing_inputs` is the
+  one test shared by the runners and `runnable_rules`, and `Runnable.missing_any_of` names the
+  unmet groups. No built-in rule declares groups yet, so default outputs are unchanged.
+<!-- /098-core -->
+
 ## [0.97.0] — Unreleased
 
 <!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is
