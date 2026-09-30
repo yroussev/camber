@@ -317,13 +317,32 @@ def test_role_units_cover_the_common_roles():
     assert u["co2"] == "ppm" and u["outdoor_co2"] == "ppm" and u["space_temp"] == "°F"
     assert u["oa_airflow"] == "cfm" and u["cool_valve"] == "%" and u["duct_static"] == "inH₂O"
     assert u["supply_air_temp_sp"] == "°F" and u["cool_sp"] == "°F"
-    assert "occupancy" not in u  # a count / state: its own panel, no invented unit
+    # 0.96: counts carry their count unit; states and commands stay unitless (own panel)
+    assert u["occupancy"] == "persons"
+    assert u["sat_reset_requests"] == u["static_pressure_requests"] == "requests"
+    assert u["compressor_stage"] == u["heat_stage"] == "stage"
+    assert u["supply_air_humidity"] == "%RH" and u["filter_diff_press"] == "inH₂O"
+    for state in ("supply_fan_status", "pump_status", "econ_cmd", "warmup"):
+        assert state not in u, state
+
+
+def test_role_units_leave_the_suggester_unit_table_alone():
+    from camber.mapping_assist import ROLE_UNIT
+    from camber.model.roles import Role
+
+    assert not any(Role.OCCUPANCY in roles for roles in ROLE_UNIT.values())
+    assert "persons" not in ROLE_UNIT
 
 
 def test_trend_viewer_has_legend_units_axes_and_a_normalised_toggle():
     h = live_dashboard_html()
-    for token in ("id='legend'", "id='norm'", "id='tip'", "time (UTC)", "niceTicks", '"co2"'):
+    for token in ("id='legend'", "id='norm'", "id='tip'", "'time ('", "niceTicks", '"co2"'):
         assert token in h, token
+    # 0.96: site time when /facilities reports a zone, labelled with it; a UTC box converts;
+    # hover labels follow the same rule; no zone keeps UTC
+    for token in ("id='utc'", "f.timezone", "timeZone:TZ", "zoneName()", "'UTC'", "wallToUtc"):
+        assert token in h, token
+    assert "' UTC'" not in h  # the hover label is no longer hard-coded
     assert "<script src" not in h and "https://" not in h and h.count("http://") == 1
     js = h[h.rindex("<script>") :]
     assert "__UNITS__" not in js and "innerHTML" not in js and "eval(" not in js

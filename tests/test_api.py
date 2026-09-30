@@ -93,3 +93,29 @@ def test_http_server_round_trip(tmp_path):
     finally:
         httpd.shutdown()
         t.join(timeout=5)
+
+
+# --- 0.96: the facility's site zone (trend viewer time axis) ---------------- #
+
+
+def test_facilities_report_a_known_timezone_only(tmp_path):
+    from camber.api.read import _facility_timezone
+    from camber.store.facilities import FacilityRegistry
+
+    st = _store(tmp_path)
+    idx = pd.date_range("2024-01-01", periods=3, freq="1h")
+    frame = pd.DataFrame({Role.HEAT_VALVE: range(3)}, index=idx)
+    for fid in ("T", "D", "B"):
+        st.write_role_frame(frame, facility_id=fid, equip="AHU_1", equip_class="AHU", name=fid)
+    reg = FacilityRegistry(st.root)
+    reg.register("T", timezone="America/Chicago")  # a registry zone
+    reg.register("D", dataset={"dataset_id": "bts", "local_timezone": "Australia/Sydney"})
+    reg.register("B", timezone="not a zone")  # ignored, never guessed
+    rows = {f["facility_id"]: f for f in ReadAPI(st).facilities()["facilities"]}
+    assert "timezone" not in rows["S"] and "timezone" not in rows["B"]  # unchanged output
+    assert rows["T"]["timezone"] == "America/Chicago"
+    assert rows["D"]["timezone"] == "Australia/Sydney"
+    # a dataset facility whose block names no zone falls back to its catalog entry's zone
+    assert _facility_timezone({"dataset": {"dataset_id": "lbnl-b59"}}) == "America/Los_Angeles"
+    assert _facility_timezone({"dataset": {"dataset_id": "no-such-dataset"}}) is None
+    assert _facility_timezone({}) is None

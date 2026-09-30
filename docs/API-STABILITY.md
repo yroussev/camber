@@ -497,6 +497,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `FeatureSuggester.suggest`; the `RoleSuggestion.basis` value `timeseries`. The template
   contents and the blend weights may be retuned in a minor release.
 <!-- /096-bts -->
+<!-- 096-integration -->
+- **The trend viewer's site time** (0.96), additive and provisional: the `timezone` key of a
+  `/facilities` row (and of `ReadAPI.facilities()`), present only when the facility's zone is
+  recorded, and the viewer's **UTC** toggle. The count units in `camber.api.ui.role_units`
+  (`occupancy` persons, request and stage roles) are display data and may be extended.
+<!-- /096-integration -->
 
 ## Deprecated
 

@@ -177,6 +177,16 @@ benchmark moves.
   shortened; full paths stay in the startup log and the JSON (new `display` block). Each
   dataset's *what it teaches* list is collapsed by default.
 <!-- /096-report -->
+<!-- 096-integration -->
+- **Trend viewer: site time and count units.** The time axis and the hover readout show the
+  site's wall clock labelled with its zone (e.g. `time (Australia/Sydney)`) when the facility's
+  zone is recorded, with a **UTC** box to convert; without a zone they read UTC as before. The
+  zone reaches the page as a new `timezone` key on `/facilities` rows, present only when known (a
+  registry `timezone`, or the zone a catalog dataset was ingested into). `occupancy` now reads
+  persons instead of "no unit", the G36 request roles requests, and stage roles stage; the
+  humidity, filter pressure drop, pump head and source-loop roles get their documented units. The
+  mapping suggester's unit table (`ROLE_UNIT`) is unchanged.
+<!-- /096-integration -->
 
 ### Unchanged
 <!-- 096-lab (#77) -->

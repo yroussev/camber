@@ -25,6 +25,22 @@ __all__ = ["live_dashboard_html", "role_units"]
 # 0.96 (#78): the store holds IP units (camber.datasets._units converts at ingest), so each role's
 # display unit follows from its physical kind. The first bucket of camber.mapping_assist.ROLE_UNIT
 # that lists a role names its unit; a role no bucket lists is unitless here and gets its own panel.
+# Counts and the few measured roles no ROLE_UNIT bucket lists (their unit is fixed by the role's
+# definition in camber.model.roles) are named here; ROLE_UNIT itself, which drives the mapping
+# suggester, is unchanged.
+_ROLE_LABEL = {
+    "occupancy": "persons",  # a head count; an occupied flag reads as 0 / 1 persons
+    "sat_reset_requests": "requests",
+    "static_pressure_requests": "requests",
+    "compressor_stage": "stage",
+    "heat_stage": "stage",
+    "supply_air_humidity": "%RH",
+    "return_air_humidity": "%RH",
+    "filter_diff_press": "inH₂O",
+    "pump_head": "psi",
+    "source_loop_diff_press": "psi",
+    "source_loop_pump_speed": "%",
+}
 _UNIT_LABEL = (
     ("degf", "°F"),
     ("percent", "%"),
@@ -42,12 +58,14 @@ def role_units() -> dict:
     """``{role slug: display unit}`` for the roles with a known unit in the store (IP units).
 
     Built from :data:`camber.mapping_assist.ROLE_UNIT`; any other CO₂ role reads ppm, any other
-    ``*_temp`` role °F, and a setpoint (``*_sp``) its measurement's unit. A role not listed has no
-    unit the viewer can state (a count, a status, a mode) and is drawn on its own panel.
+    ``*_temp`` role °F, and a setpoint (``*_sp``) its measurement's unit. Counts carry their count
+    unit (``occupancy`` reads persons, the G36 request roles requests, stage roles stage). A role
+    not listed has no unit the viewer can state (a status, a mode, a command) and is drawn on its
+    own panel.
     """
     from ..mapping_assist import ROLE_UNIT
 
-    out: dict = {}
+    out: dict = dict(_ROLE_LABEL)
     for token, label in _UNIT_LABEL:
         for role in ROLE_UNIT.get(token, ()):
             out.setdefault(role.value, label)
@@ -102,6 +120,8 @@ _CONTROLS_HTML = (
     "</div><div class='controls'>"
     "<label title='Scale every series to 0-1 on one panel'><input type='checkbox' id='norm'> "
     "Normalised (0–1)</label>"
+    "<label id='utcbox' hidden title='Show the time axis in UTC instead of site time'>"
+    "<input type='checkbox' id='utc'> UTC</label>"
     "<label><input type='checkbox' id='live' checked> Live</label>"
     "<label>every <input type='number' id='interval' value='15' min='2' "
     "style='width:3.2em'> s</label>"
@@ -122,8 +142,9 @@ _APP_JS = r"""
   var legend=document.getElementById('legend'),tip=document.getElementById('tip');
   var updated=document.getElementById('updated'),liveBox=document.getElementById('live');
   var normBox=document.getElementById('norm');
+  var utcBox=document.getElementById('utc'),utcLbl=document.getElementById('utcbox');
   var intBox=document.getElementById('interval'),readout=document.getElementById('readout');
-  var timer=null,allRoles=[],last=null,geo=null;
+  var timer=null,allRoles=[],last=null,geo=null,FTZ={},TZ=null,fmtZ=null,offC={};
 
   function j(url){return fetch(url).then(function(r){return r.json();});}
   function opt(sel,v,t){var o=document.createElement('option');o.value=v;o.textContent=t;
@@ -139,6 +160,21 @@ _APP_JS = r"""
   // store timestamps: an offset-less ISO string is the stored wall clock, read as UTC
   function tms(ts){return Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(ts)?ts:ts+'Z');}
   function pad(n){return (n<10?'0':'')+n;}
+  // The store holds the site's naive wall clock. With a known site zone the axis shows it as
+  // site time (labelled with the zone) and the UTC box converts; without one it reads as UTC.
+  function setZone(){TZ=FTZ[facSel.value]||null;fmtZ=null;offC={};
+    if(TZ){try{fmtZ=new Intl.DateTimeFormat('en-US',{timeZone:TZ,hourCycle:'h23',
+      year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',
+      second:'numeric'});}catch(e){TZ=null;}}
+    utcLbl.hidden=!TZ;}
+  function zoneName(){return TZ&&!utcBox.checked?TZ:'UTC';}
+  // the zone's UTC offset (ms) at instant u, cached per hour
+  function offMs(u){var k=Math.floor(u/36e5);if(offC[k]!=null)return offC[k];var o={};
+    fmtZ.formatToParts(new Date(u)).forEach(function(q){o[q.type]=q.value;});
+    var s=Math.floor(u/1000)*1000;
+    return offC[k]=Date.UTC(+o.year,+o.month-1,+o.day,+o.hour%24,+o.minute,+o.second)-s;}
+  function wallToUtc(w){return w-offMs(w-offMs(w));}
+  function disp(w){return TZ&&utcBox.checked?wallToUtc(w):w;}
   // a time label at the tick step's resolution: hours under a day, days under a year
   function fmtT(ms,step){var d=new Date(ms);
     var md=pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
@@ -166,7 +202,7 @@ _APP_JS = r"""
   function loadFacilities(){
     return j('/facilities').then(function(d){
       clear(facSel);(d.facilities||[]).forEach(function(f){
-        var nm=f.display_name||f.name||f.facility_id;
+        var nm=f.display_name||f.name||f.facility_id;FTZ[f.facility_id]=f.timezone||null;
         opt(facSel,f.facility_id,nm+(f.state&&f.state!=='active'?' ['+f.state+']':''));});
       // deep link: /ui?facility_id=<fid> preselects that facility (camber lab links here)
       var want=new URLSearchParams(location.search).get('facility_id');
@@ -176,6 +212,7 @@ _APP_JS = r"""
     });
   }
   function loadPoints(){
+    setZone();
     return j('/points?facility_id='+encodeURIComponent(facSel.value)).then(function(d){
       var eqs=[],seenE={},seenR={};allRoles=[];
       (d.points||[]).forEach(function(p){
@@ -204,7 +241,7 @@ _APP_JS = r"""
       var series=[],n=0;
       roles.forEach(function(r,i){
         var pts=(parts[i].history||[]).filter(function(h){return h.value!=null;})
-          .map(function(h){return {ts:h.ts,t:tms(h.ts),v:h.value};})
+          .map(function(h){var w=tms(h.ts);return {ts:h.ts,w:w,t:disp(w),v:h.value};})
           .sort(function(a,b){return a.t-b.t;});
         n+=pts.length;if(pts.length)series.push({role:r,unit:unitOf(r),pts:pts});
       });
@@ -284,7 +321,7 @@ _APP_JS = r"""
     var yb=gs.length*(PH+GAP)+GAP-GAP;
     xt.forEach(function(t){svg.appendChild(mk('text',{x:X(t),y:yb+16,'text-anchor':'middle'},
       fmtT(t,xt.step)));});
-    svg.appendChild(mk('text',{x:W-R,y:yb+28,'text-anchor':'end'},'time (UTC)'));
+    svg.appendChild(mk('text',{x:W-R,y:yb+28,'text-anchor':'end'},'time ('+zoneName()+')'));
     geo={W:W,H:H,L:L,R:R,t0:t0,t1:t1,X:X,top:GAP,bot:yb,span:span};
   }
   function pxOf(e){var b=svg.getBoundingClientRect();return (e.clientX-b.left)*geo.W/b.width;}
@@ -300,7 +337,7 @@ _APP_JS = r"""
     hair.setAttribute('x1',x);hair.setAttribute('x2',x);hair.setAttribute('y1',geo.top);
     hair.setAttribute('y2',geo.bot);svg.appendChild(hair);
     clear(tip);var head=document.createElement('div');head.className='t';
-    head.textContent=fmtT(t)+' UTC';tip.appendChild(head);
+    head.textContent=fmtT(t)+' '+zoneName();tip.appendChild(head);
     last.forEach(function(s){var p=nearest(s.pts,t),row=document.createElement('div');
       var sw=document.createElement('span');sw.className='sw';sw.style.cssText=
         'display:inline-block;width:10px;height:3px;margin-right:6px;vertical-align:middle;background:'
@@ -341,6 +378,9 @@ _APP_JS = r"""
   facSel.addEventListener('change',loadPoints);
   eqSel.addEventListener('change',draw);
   normBox.addEventListener('change',render);
+  utcBox.addEventListener('change',function(){(last||[]).forEach(function(s){
+    s.pts.forEach(function(p){p.t=disp(p.w);});
+    s.pts.sort(function(a,b){return a.t-b.t;});});render();});
   intBox.addEventListener('change',reschedule);
   document.getElementById('refresh').addEventListener('click',draw);
   loadFacilities().then(reschedule);
@@ -355,7 +395,9 @@ def live_dashboard_html() -> str:
     the theme (`camber.report.dashboard._STYLE`) and the `window.CAMBER` cross-panel selection bus.
     Served at ``GET /ui`` by :class:`camber.api.server.ReadAPIHandler`. 0.96 (#78): the ticked
     series are drawn in one panel per unit (:func:`role_units`; each with a labelled y axis), on a
-    shared, labelled time axis, with a legend, a hover readout, and a normalised (0-1) toggle.
+    shared, labelled time axis, with a legend, a hover readout, and a normalised (0-1) toggle. The
+    time axis and the hover readout show site time, labelled with the facility's zone, when
+    ``/facilities`` reports a ``timezone`` (a UTC box converts); otherwise UTC.
     """
     style = _STYLE + LINK_STYLE + _UI_STYLE
     units = json.dumps(role_units(), ensure_ascii=False).replace("<", "\\u003c")
