@@ -1,0 +1,22 @@
+{
+  "_comment": "Workbook exercise air-static-pressure (docs/workbook/air-static-pressure.md), lbnl-sdahu part: the duct static-pressure setpoint rule only. `camber datasets config lbnl-sdahu --exercise air-static-pressure --store DIR --out cfg.json` fills in the store path. static_pressure_reset reads the trended setpoint SA_SPSPT (duct_static_sp) on fan-on samples (the derived SF_ON) and asks whether it moves repeatedly and with the supply airflow (SA_CFM, after the catalog's divide-by-60 fix), as a trim-and-respond reset would. Only the fault-free run (and the fault-free part of the spliced onset run) has a real setpoint: in every faulted run SA_SPSPT is a -400.25 placeholder that the catalog masks, so the rule has nothing to judge there. Nothing is tuned: the 0.15 in. w.c. minimum range and the moving-day test are the rule's defaults.",
+  "_dataset": "lbnl-sdahu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-sdahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "static_pressure_reset"
+  ],
+  "report": {
+    "level": 2
+  }
+}

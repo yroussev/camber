@@ -65,11 +65,11 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 
 | PNNL reading | Exercise | Datasets |
 |---|---|---|
-| [Ch. 5][pnnl-retuning-ch5], [AHU Discharge-Air Temperature Control][pnnl-guide-discharge-air-temp] | `air-sat-reset`: supply-air temperature reset (planned) | `lbnl-sdahu`, `lbnl-ddahu` |
-| [Ch. 5][pnnl-retuning-ch5], [AHU Static Pressure Control][pnnl-guide-static-pressure] | `air-static-pressure`: static pressure reset and the damper census (planned) | `lbnl-sdahu`, `lbnl-ddahu` |
-| [Ch. 5][pnnl-retuning-ch5], [AHU Heating and Cooling Control][pnnl-guide-ahu-heat-cool] | `air-heat-cool`: simultaneous heating and cooling, a leaking valve (planned) | `lbnl-sdahu` |
-| [Ch. 6][pnnl-retuning-ch6], [Air-Side Economizer Operation][pnnl-guide-economizer] | [`air-economizer`: a stuck outdoor-air damper and missed free cooling](air-economizer.md) | `lbnl-sdahu`; `irish-ahu` (planned) |
-| [Ch. 5][pnnl-retuning-ch5], [Occupancy Scheduling][pnnl-guide-occupancy-scheduling] | `air-scheduling`: 24/7 operation, setback and after-hours load (planned) | `ornl-frp-ops`, `bdg2` |
+| [Ch. 5][pnnl-retuning-ch5], [AHU Discharge-Air Temperature Control][pnnl-guide-discharge-air-temp] | [`air-sat-reset`: supply-air temperature reset](air-sat-reset.md) | `lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu` |
+| [Ch. 5][pnnl-retuning-ch5], [AHU Static Pressure Control][pnnl-guide-static-pressure] | [`air-static-pressure`: a fixed static setpoint and the damper census](air-static-pressure.md) | `lbnl-sdahu`, `ornl-frp-vav` |
+| [Ch. 5][pnnl-retuning-ch5], [AHU Heating and Cooling Control][pnnl-guide-ahu-heat-cool] | [`air-heat-cool`: a leaking valve, and coils that fight](air-heat-cool.md) | `lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu` |
+| [Ch. 6][pnnl-retuning-ch6], [Air-Side Economizer Operation][pnnl-guide-economizer] | [`air-economizer`: a stuck outdoor-air damper and missed free cooling](air-economizer.md) | `lbnl-sdahu`, `irish-ahu` |
+| [Ch. 5][pnnl-retuning-ch5], [Occupancy Scheduling][pnnl-guide-occupancy-scheduling] | [`air-scheduling`: 24/7 operation, night setback and after-hours fan energy](air-scheduling.md) | `ornl-frp-ops` |
 <!-- END workbook-air (#80) -->
 
 <!-- BEGIN workbook-zone (#81) -->
