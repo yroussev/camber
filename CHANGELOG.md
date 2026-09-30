@@ -9,25 +9,18 @@ All notable changes to CAMBER are documented here. The format follows
 <!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is
 released. -->
 
-### Fixed
-<!-- 096-faults (#76) -->
-- **A site's fault run no longer resolves other sites' faults (#76).** In the legacy, site-keyed
-  path (no `facility_id`), `FaultLifecycle.update(..., auto_resolve_absent=True)` resolved every
-  open fault in the store file, including other sites' faults and facility-keyed faults. The
-  `absent` list had the same error without `auto_resolve_absent`.
-  - A run now covers only the records whose fingerprint is keyed by its `site`. The fingerprint
-    decides, not the stored label. `site=""` is its own scope, and `aliases` never widen it.
-    Facility-id runs are unchanged.
-  - A site-keyed record whose site cannot be told is never auto-resolved. This covers records
-    whose fingerprint matches neither the run's `site` nor their own stored label, such as
-    hand-edited records or records with no stored `site`, which now load with `""` instead of
-    failing. Such records are listed under a new `unscoped` key in the result, present only when
-    non-empty, and `camber run` prints a line for them.
-  - The same fix reaches config runs that share a `faults.store`.
-  - The in-memory `rules.triage.FaultRegister` shared the flaw across sites and facilities, and
-    now resolves only faults keyed like the run.
-  - Outputs for single-site stores and facility-id runs are byte-identical. See
-    docs/FAULT-LIFECYCLE.md, "Which faults a run can close".
+**0.96: a local catalog UI, a real-building dataset for point mapping, report fixes, and a
+fault-lifecycle scoping fix (#75, #45, #76, #77, #78).** `camber lab` serves the dataset catalog
+as a loopback-only page with fetch and ingest jobs, licence gates and workspace registration
+(#77). The catalog gains BTS, three real buildings with about 20,000 Brick-labelled BMS points,
+and a `brick_streams` adapter to ingest it (#75); the point-role suggester can now read a point's
+data as well as its name, and is evaluated on BTS and on real published point names (#45).
+Recommended actions follow each finding's cause, trend-only reports are no longer titled as
+Std-211 audits, the trend viewer draws one panel per unit, and reports link to the PNNL Building
+Re-tuning guides (#78). A site-keyed fault run no longer resolves other sites' faults (#76).
+Default outputs are unchanged apart from the report text and titles noted below, and no gated
+benchmark moves.
+
 ### Added
 <!-- 096-lab (#77) -->
 - **`camber lab`: a loopback-only local UI for the dataset catalog (#77, provisional).**
@@ -58,12 +51,103 @@ released. -->
   - A static test proves `camber.lab` and `camber.datasets` reach no BACnet, Modbus, OPC-UA,
     MQTT, OpenADR or edge module.
 
-### Unchanged
-- `camber serve` stays GET-only (regression test), and default outputs are unchanged.
 <!-- /096-lab -->
-
 <!-- 096-report (#78) -->
+- **Linked PNNL Building Re-tuning references (#78, provisional).** `camber.references` is a
+  registry of the nine guides to re-tuning measures, the ten training chapters, *Trending
+  Requirements for Re-tuning*, the ECAM interval-data guide, the large-office savings report and
+  the project pages: id, title, publisher, document number, URL, kind and `verified_on`
+  (2026-09-29). `RULE_REFERENCES` maps 35 rules to them, checked against each guide's section
+  headings; a rule no guide clearly covers maps to a training chapter or stays unmapped.
+  - Reports: the audit findings table and the Recommended actions table get **Learn more**
+    links; each RCx issue page ends its action with them, and the RCx report adds a short
+    **Further reading** section (id `reading`) listing only the guides relevant to its issues.
+  - Text and JSON carry the ids: `learn more: <ids>` in the text audit,
+    `Recommendation.references`, the action-plan rows' `references`, each RCx issue's
+    `references`.
+  - **Link only**: no PNNL text, figure or PDF is copied into the repository or a report.
+    `scripts/datasets_linkcheck.py` now also checks every reference URL weekly (a 404 / 410 is
+    drift; `--no-references` skips them).
+  - Docs: a [references page](docs/REFERENCES.md), links from the rule pages (ventilation,
+    economizer, reset), and ECAM as a related tool in the ecosystem page.
+<!-- /096-report -->
+<!-- 096-bts (#75, #45) -->
+- **The `bts` catalog entry (#75).** BTS, the Building TimeSeries dataset (Prabowo et al.,
+  NeurIPS 2024 Datasets and Benchmarks; CC BY 4.0, open tier): three real Australian buildings,
+  about 20,000 Brick-labelled BMS points over 2021-2023, the data behind the Brick by Brick 2024
+  challenge. It is the evaluation set of the time-series role suggester (#45).
+  - Fetched from the data archive, never the MIT-licensed repository snippet; the MIT (code and
+    snippet) versus CC BY 4.0 (data) split is recorded in the entry's known issues. All nine
+    files are pinned (size and SHA-256) from real downloads with `scripts/datasets_refresh.py`.
+  - `default` is the three sites' metadata and Brick models plus site B's streams (1.5 GB,
+    38 MB once ingested); `full` is all three sites (19 GB, 1.1 GB once ingested).
+  - Eight data issues, each with evidence: UTC timestamps, undocumented units, 125 listed streams
+    without a file, site C running outside the documented period, week-long whole-site outages,
+    site C's zero dropouts (masked by a `fix` quirk; `--no-corrections` keeps them), placeholder
+    and 32-bit overflow values, site C's negative airflows and mixed pressure scales, and 136 site
+    C points that keep a non-anonymised second stream id.
+- **The `brick_streams` ingest adapter (#75).** Per-site Brick models whose points name their
+  series through a literal (`senaps:stream_id`), a stream index and a zip of series files: one
+  facility per site, roles from the Brick class, equipment from the `isPointOf` owner or the
+  first containing entity whose class `equip_classes` maps (named `<class>_<id prefix>`), UTC
+  instants moved to each site's wall clock, sample-and-hold resampling. A second point with the
+  same role on one owner becomes equipment `<equip>-2`, never averaged; unmapped points are
+  counted per class in the provenance. Series pickles are read with a restricted unpickler that
+  resolves only numpy's array globals, straight from the verified zip. Quirks run per stream (a
+  quirk's `runs` names sites).
+- **Time-series evidence for point-role suggestion (#45).** `FeatureSuggester(use_timeseries=True)`
+  also reads what a point's data says, for exports whose names are anonymised
+  (`camber.mapping_timeseries`, provisional, numpy and pandas only):
+  - `profile_series` / `SeriesProfile`: value quantiles, cadence and the change-of-value pattern,
+    binary and two-level values, plateaus at the series' extremes, step-like movement, daily and
+    weekly periodicity, and the correlation with a site outdoor-air series (`oat=`);
+  - `ROLE_TEMPLATES` / `template_scores`: 45 hand-written role templates scored in every plausible
+    unit when none is declared;
+  - `ProfileModel`: an optional numpy Gaussian class model fitted on other buildings' labelled
+    points (`model=`);
+  - `blend`: the data's weight falls from 0.8 to 0.1 as the name becomes informative, so a clear
+    name still dominates. `suggest()` also takes `oat=` and a precomputed `profile=`; the basis
+    `timeseries` is new.
+  - Evaluated in `examples/suggester_eval` (none of it a gated benchmark):
+    - **Real BMS point names** (`real_names.py`): every mapped point of seven open
+      real-building catalog datasets, scored by its published name against the catalog
+      mapping (hand-curated by CAMBER). Pooled over 422 points, the name alone reaches 82.5 %
+      top-1 and the name plus the data 83.9 % top-1 / 89.1 % top-3. Excluding `irish-ahu` and
+      `lbnl-b59`, whose names the tokenizer was written against (129 points), the figures are
+      52.7 % and 58.1 % top-1, and 53.5 % and 72.9 % top-3. The data helped 11 points and hurt
+      5, all of the losses on weather-station points and one valve. The LBNL simulated FDD sets
+      are reported apart: 48.6 → 56.9 % top-1 over 72 points.
+    - **BTS with the names hidden** (`bts.py`, leave one building out): the name-only suggester
+      places 0 % of 903 points; the data alone places 48.0 % top-1 / 65.2 % top-3 with the
+      templates, and 38.4 / 58.8 with the fitted model. With **Brick-class labels used as names
+      (an upper bound, not real-world naming)**, adding the data moves top-1 from 93.0 to 95.2 %.
+    - **Synthetic vendor-style names** (`messy_names.py`, five seeded styles, labelled
+      synthetic): 25-88 % top-1 from the name alone, 52-91 % with the data.
+    - Results and caveats in docs/MAPPING-ASSIST.md and docs/VALIDATION.md.
+  - Opt-in: without `use_timeseries=True` the suggestions are byte-identical to 0.95.
+<!-- /096-bts -->
+
 ### Fixed
+<!-- 096-faults (#76) -->
+- **A site's fault run no longer resolves other sites' faults (#76).** In the legacy, site-keyed
+  path (no `facility_id`), `FaultLifecycle.update(..., auto_resolve_absent=True)` resolved every
+  open fault in the store file, including other sites' faults and facility-keyed faults. The
+  `absent` list had the same error without `auto_resolve_absent`.
+  - A run now covers only the records whose fingerprint is keyed by its `site`. The fingerprint
+    decides, not the stored label. `site=""` is its own scope, and `aliases` never widen it.
+    Facility-id runs are unchanged.
+  - A site-keyed record whose site cannot be told is never auto-resolved. This covers records
+    whose fingerprint matches neither the run's `site` nor their own stored label, such as
+    hand-edited records or records with no stored `site`, which now load with `""` instead of
+    failing. Such records are listed under a new `unscoped` key in the result, present only when
+    non-empty, and `camber run` prints a line for them.
+  - The same fix reaches config runs that share a `faults.store`.
+  - The in-memory `rules.triage.FaultRegister` shared the flaw across sites and facilities, and
+    now resolves only faults keyed like the run.
+  - Outputs for single-site stores and facility-id runs are byte-identical. See
+    docs/FAULT-LIFECYCLE.md, "Which faults a run can close".
+<!-- /096-faults -->
+<!-- 096-report (#78) -->
 - **Recommended actions follow the cause, not the rule (#78).** A `dcv_verification` finding
   whose DCV works but whose outdoor air stays above its floor at low demand was told to
   "Enable / repair demand-controlled ventilation"; it is now told to **lower the minimum outdoor
@@ -92,26 +176,12 @@ released. -->
 - **Lab page (#78).** The header shows the workspace, store and cache home-relative (`~/…`) and
   shortened; full paths stay in the startup log and the JSON (new `display` block). Each
   dataset's *what it teaches* list is collapsed by default.
-
-### Added
-- **Linked PNNL Building Re-tuning references (#78, provisional).** `camber.references` is a
-  registry of the nine guides to re-tuning measures, the ten training chapters, *Trending
-  Requirements for Re-tuning*, the ECAM interval-data guide, the large-office savings report and
-  the project pages: id, title, publisher, document number, URL, kind and `verified_on`
-  (2026-09-29). `RULE_REFERENCES` maps 35 rules to them, checked against each guide's section
-  headings; a rule no guide clearly covers maps to a training chapter or stays unmapped.
-  - Reports: the audit findings table and the Recommended actions table get **Learn more**
-    links; each RCx issue page ends its action with them, and the RCx report adds a short
-    **Further reading** section (id `reading`) listing only the guides relevant to its issues.
-  - Text and JSON carry the ids: `learn more: <ids>` in the text audit,
-    `Recommendation.references`, the action-plan rows' `references`, each RCx issue's
-    `references`.
-  - **Link only**: no PNNL text, figure or PDF is copied into the repository or a report.
-    `scripts/datasets_linkcheck.py` now also checks every reference URL weekly (a 404 / 410 is
-    drift; `--no-references` skips them).
-  - Docs: a [references page](docs/REFERENCES.md), links from the rule pages (ventilation,
-    economizer, reset), and ECAM as a related tool in the ecosystem page.
 <!-- /096-report -->
+
+### Unchanged
+<!-- 096-lab (#77) -->
+- `camber serve` stays GET-only (regression test), and default outputs are unchanged.
+<!-- /096-lab -->
 
 ## [0.95.0] — Unreleased
 

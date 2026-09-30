@@ -479,6 +479,24 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `camber.api.ui.role_units`. The **text** of recommendations and report titles is presentation,
   not API: it follows the finding's cause and may be reworded.
 <!-- /096-report -->
+<!-- 096-bts (#75) -->
+- **The `bts` catalog entry and the `brick_streams` adapter** (0.96; #75), additive and
+  provisional: the catalog id `bts` and its facilities `ds-bts-a|b|c`; the ingest keys of
+  `"adapter": "brick_streams"` (`sites` with `model` / `index` / `series` / `source_timezone` /
+  `local_timezone`, `index.id` / `index.class`, `stream_predicate`, `series_format:
+  "bts_pickle"`, `equip_classes`, `site_equip`, `hold`) and a subset's `groups` of site keys; the
+  provenance keys `site`, `streams_listed`, `series_files`, `streams_without_file`,
+  `streams_by_status`, `streams_mapped`, `streams_ingested`, `mapped_without_file`,
+  `duplicate_roles_split`, `unmapped_classes`; the equipment ids `<class>_<id prefix>` and
+  `<equip>-<n>`.
+- **Time-series point-role evidence** (0.96; #45), additive and provisional: the module
+  `camber.mapping_timeseries` (`SeriesProfile`, `profile_series`, `RoleTemplate`,
+  `ROLE_TEMPLATES`, `UNIT_SCALES`, `template_scores`, `ProfileModel`, `PROFILE_FEATURES`, `blend`,
+  `INFORMATIVE_NAME`, `TS_WEIGHT_UNINFORMATIVE`, `TS_WEIGHT_INFORMATIVE`); the keyword-only
+  `use_timeseries=`, `oat=` and `model=` of `FeatureSuggester` and `oat=` / `profile=` of
+  `FeatureSuggester.suggest`; the `RoleSuggestion.basis` value `timeseries`. The template
+  contents and the blend weights may be retuned in a minor release.
+<!-- /096-bts -->
 
 ## Deprecated
 

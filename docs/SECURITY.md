@@ -135,6 +135,14 @@ building networks. Its guarantees:
 - **Workbooks**: `.xlsx` files are parsed only with the optional `xlsx` extra (`openpyxl`,
   imported lazily when a workbook is read), and only after the file has passed its pin check.
   Legacy `.xls` (`xlrd`) is not part of the extra.
+<!-- 096-bts (#75) -->
+- **Pickled series (`bts`)**: one publisher ships its series as Python pickles of numpy arrays.
+  A pickle can run code while loading, so these files are read only after their archive passed
+  its pin check, and only through a restricted unpickler that resolves numpy's array globals
+  (`ndarray`, `dtype`, `_reconstruct`, `_frombuffer`) and refuses every other global; the result
+  must be a name, a datetime array and a numeric array. Members are read from the verified zip in
+  memory (nothing is extracted), and archiver by-products (`__MACOSX/`, `._*`) are skipped.
+<!-- /096-bts -->
 - **Link check**: `scripts/datasets_linkcheck.py` (weekly, advisory, CI only) sends `HEAD` /
   one-byte ranged `GET` requests to the catalog's own HTTPS URLs and licence pages; it downloads
   no data, and its workflow has a read-only token.

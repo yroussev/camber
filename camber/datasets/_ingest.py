@@ -28,7 +28,8 @@ file's ``equipment`` map (``"mapping"``) -- and its ``target`` names the equipme
 only one(s) carrying its label (the rest is recorded as unscored ``context``). Tables several runs
 share are parsed once (:class:`._readers.TableReader`). The entry's ``clock`` (elapsed, or a
 synthetic day / row clock) and ``source_timezone`` / ``local_timezone`` say how rows get their
-wall-clock time. The ``per_point`` adapter (:mod:`._perpoint`) ingests one series file per sensor.
+wall-clock time. The ``per_point`` adapter (:mod:`._perpoint`) ingests one series file per sensor;
+the ``brick_streams`` adapter (:mod:`._brickstreams`) one series per Brick point of a site model.
 
 **Corrections.** ``fix`` quirks correct problems in the published data (each is a described data
 issue on the catalog entry). ``corrections=False`` (``camber datasets ingest --no-corrections``)
@@ -933,7 +934,20 @@ def _ingest_per_point(entry, subset, inputs, root, staging, progress, correction
     return ingest_per_point(entry, subset, inputs, root, staging, progress, extract)
 
 
-_ADAPTERS: dict = {"wide_csv": _ingest_wide, "bdg2": _ingest_bdg2, "per_point": _ingest_per_point}
+def _ingest_brick_streams(entry, subset, inputs, root, staging, progress, corrections=True):
+    """0.96 (#75): per-site Brick models whose points name their series (see
+    :mod:`._brickstreams`)."""
+    from ._brickstreams import ingest_brick_streams
+
+    return ingest_brick_streams(entry, subset, inputs, root, staging, progress, corrections)
+
+
+_ADAPTERS: dict = {
+    "wide_csv": _ingest_wide,
+    "bdg2": _ingest_bdg2,
+    "per_point": _ingest_per_point,
+    "brick_streams": _ingest_brick_streams,
+}
 
 
 # --------------------------------------------------------------------------- entry point
