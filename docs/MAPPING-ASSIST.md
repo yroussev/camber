@@ -124,59 +124,220 @@ exactly the suggestions of 0.95 (checked on 3,948 token × series × unit cases,
 tests). With it, the physical-range gate runs only when a unit is declared -- without one the
 templates already judged the level in every plausible unit.
 
-### Time-series evidence on BTS
+### Evaluation
+
+Three evaluations, none of them gated benchmarks. Scripts and details are in
+[examples/suggester_eval](https://github.com/yroussev/camber/tree/main/examples/suggester_eval).
+
+1. **Real point names** on open catalog datasets: the honest real-world figures.
+2. **BTS with the names hidden**: what the data alone recovers.
+3. **Synthetic vendor-style names**: tolerance to naming conventions. These figures are
+   synthetic and never mixed with the real ones.
+
+#### Real point names (open catalog datasets)
+
+`real_names.py` scores every point of each dataset below by its **published BMS name**.
+
+- **Labels.** The ground truth is the dataset's catalog mapping: the role CAMBER assigned to each
+  published point name when the dataset was catalogued. CAMBER hand-curated these mappings from
+  the publisher's documentation and the data. For the `lbnl-b59` rooftop units (16 points), the
+  label is the publisher's own Brick class, with CAMBER's overrides.
+- **Which points are scored.** Only mapped points are scored. Columns CAMBER derives at ingest
+  are skipped, because they are not published names. A point repeated across scenario or fault
+  runs is scored once.
+- **Leakage.** The 0.9x name tokenizer was written against the `irish-ahu` point list, whose 16
+  names are a unit test. Its noise words (`fbk`, `tn`) and a range-check test come from
+  `lbnl-b59` names. The lexical figures for those two datasets are therefore in-sample, and the
+  **"excluding in-sample names"** rows are the out-of-sample reference.
+- **Name variety.** `lbnl-b59` contributes 284 points but only 24 name patterns (for example,
+  `zone_<n>_temp` appears 51 times), so it dominates the pooled real figure. The mean over
+  datasets counts every dataset once.
+
+| dataset | points (distinct names) | name only top-1 / top-3 % | data only top-1 / top-3 % | name + data top-1 / top-3 % |
+|---|---|---|---|---|
+| `lbnl-b59` (in-sample names) | 284 (284) | 96.1 / 96.5 | 37.0 / 52.5 | 95.8 / 96.8 |
+| `irish-ahu` (in-sample names) | 9 (9) | 77.8 / 77.8 | 33.3 / 66.7 | 77.8 / 77.8 |
+| `nuig-ahu101` | 13 (13) | 76.9 / 84.6 | 23.1 / 38.5 | 61.5 / 92.3 |
+| `robod` | 46 (11) | 60.9 / 60.9 | 45.7 / 56.5 | 60.9 / 78.3 |
+| `b4b-windesheim` | 13 (6) | 61.5 / 61.5 | 76.9 / 92.3 | 84.6 / 84.6 |
+| `sdu-ou44` | 9 (9) | 66.7 / 66.7 | 66.7 / 66.7 | 66.7 / 66.7 |
+| `ornl-frp-ops` | 48 (48) | 33.3 / 33.3 | 33.3 / 56.2 | 45.8 / 60.4 |
+| **real buildings, pooled** | **422** | **82.5 / 82.9** | **38.9 / 54.7** | **83.9 / 89.1** |
+| real buildings, mean over 7 datasets | | 67.6 | 45.1 | 70.4 |
+| **real, excluding in-sample names, pooled** | **129** | **52.7 / 53.5** | **43.4 / 58.9** | **58.1 / 72.9** |
+| real, excluding in-sample names, mean over 5 datasets | | 59.9 | 49.1 | 63.9 |
+
+The LBNL simulated FDD sets are reported apart, because their names are systematic and
+simulation-style (`SA_TEMP`, `CHL_SW_TEMP_1`, `HWL_DPSPT`):
+
+| dataset (simulated) | points | name only top-1 / top-3 % | data only top-1 / top-3 % | name + data top-1 / top-3 % |
+|---|---|---|---|---|
+| `lbnl-sdahu` | 12 | 58.3 / 66.7 | 50.0 / 58.3 | 75.0 / 83.3 |
+| `lbnl-fcu` | 12 | 50.0 / 58.3 | 25.0 / 33.3 | 66.7 / 75.0 |
+| `lbnl-ddahu` | 10 | 60.0 / 80.0 | 20.0 / 30.0 | 80.0 / 80.0 |
+| `lbnl-fpu` | 18 | 66.7 / 66.7 | 33.3 / 61.1 | 66.7 / 66.7 |
+| `lbnl-chiller` | 11 | 9.1 / 27.3 | 0.0 / 9.1 | 9.1 / 27.3 |
+| `lbnl-boiler` | 9 | 33.3 / 44.4 | 0.0 / 11.1 | 33.3 / 66.7 |
+| **simulated, pooled** | **72** | **48.6 / 58.3** | **23.6 / 37.5** | **56.9 / 66.7** |
+
+**Where the data helps and hurts the name.** Adding the data (`use_timeseries=True`) changed the
+top-1 result of 16 real-building points: it helped 11 and hurt 5. On the simulated sets it
+helped 6 and hurt none.
+
+- **Helped:**
+  - Room temperatures whose names never say "zone" or "room" (`..._Lecture_Theatre_3_Avg_Temp`,
+    `bms_temp_in__degC` in three rooms). The name alone reads these as outdoor air.
+  - Six of the ten `ornl-frp-ops` VAV discharge temperatures (`T_VAV_103`), which the name alone
+    cannot place at all.
+  - `lbnl-b59`'s `hp_hws_temp`, which the name alone reads as a supply-air temperature.
+  - On the simulated sets, cooling valves the name read as heating valves (`CHWC_VLV_DM`),
+    unplaced FCU valves, a supply-air setpoint (`SA_TEMPSPT`) and a cold-deck temperature
+    (`CSA_TEMP`).
+- **Hurt:**
+  - Weather-station points, twice: a correctly named outdoor temperature became `wetbulb_temp`,
+    and an outdoor humidity became `supply_air_humidity` (`nuig-ahu101`, and `lbnl-b59`'s
+    `air_temp_set_1` / `relative_humidity_set_1`). The site's outdoor reference used for the
+    weather features is a different sensor, so the point does not look "outdoor" enough.
+  - `nuig-ahu101`'s main heating valve became a cooling valve.
+
+**Common confusions.**
+
+- **Name only:**
+  - Unknown abbreviations give no suggestion at all: `AF_` (airflow) and `WH_` (power) in
+    `ornl-frp-ops`, `PM_STA` (pump status), `occupant_presence`, `SAF_Enable`.
+  - A temperature without a location defaults to outdoor air. Examples: `air_temperature`, and
+    the simulated plant's `CHL_SW_TEMP` / `HWL_SW_TEMP` (`SW` / `RW` for supply and return water
+    are not in the vocabulary).
+  - A setpoint without "cool" or "heat" becomes `supply_air_temp_sp` (`temp_setpoint`).
+  - Water flows become `airflow`, and pump or tower-fan speeds become `supply_fan_speed`.
+  - A generic valve or VAV signal (`vav_room_1`, `bms_valve_frac`) goes to the wrong actuator.
+- **Data only:**
+  - Fan speeds and valves read as dampers or filter pressure drops.
+  - Zone cooling setpoints read as duct-static setpoints, and heating setpoints as supply-air
+    setpoints.
+  - Airflows read as filter pressure drops, and return-air temperatures as zone temperatures.
+
+**Reading it.**
+
+- **Real naming is much harder than the Brick-class upper bound.** Out of sample, the name alone
+  places 53 % of real points first, not 93 %.
+- **The data is a modest net gain on real names:** pooled top-1 rises from 52.7 to 58.1 % and
+  top-3 from 53.5 to 72.9 %. The largest gain is on names the tokenizer cannot read at all.
+- **Where a name is informative, the data rarely matters.** On `lbnl-b59` top-1 moves by
+  -0.3 points.
+- **The data costs weather-station points.** That is the one systematic loss.
+- **Many misses are vocabulary gaps, not data problems** (`AF`, `WH`, `SW` / `RW`, `STA`,
+  "presence"). Extending the abbreviation table is a separate, name-side change, left for a
+  later release so these figures stay a clean baseline.
+
+**Attribution** (as each catalog entry requires; `camber datasets info <id>` gives the full
+record):
+
+- `lbnl-b59`: Luo et al. (2022), *Scientific Data* 9:156, doi:10.1038/s41597-022-01257-x, CC BY
+  4.0.
+- `irish-ahu`: Ahern, O'Sullivan & Bruton (2023), Mendeley Data doi:10.17632/8x62ntvrg7.2 and
+  *Data in Brief* 48:109208, CC BY 4.0.
+- `nuig-ahu101`: Messervey et al. (2019), HIT2GAP, Zenodo doi:10.5281/zenodo.3406555, CDLA
+  Permissive 1.0.
+- `robod`: Tekler et al. (2022), *Building Simulation* 15(12):2127-2137,
+  doi:10.1007/s12273-022-0925-9, CC BY 4.0.
+- `b4b-windesheim`: ter Hofte, van Ravenzwaaij & Nijboer (2023), Brains4Buildings2022 dataset,
+  CC BY 4.0.
+- `sdu-ou44`: Schwee et al. (2019), *Scientific Data* 6:287, doi:10.1038/s41597-019-0274-4, CC0.
+- `ornl-frp-ops`: Yoon, Jung, Im & Gehl (2022), *Scientific Data* 9:775,
+  doi:10.1038/s41597-022-01858-6, CC BY 4.0.
+- `lbnl-*` simulated sets: Granderson et al. (2022), LBNL Fault Detection and Diagnostics
+  Datasets, doi:10.25984/1881324, CC BY 4.0.
+
+#### BTS: anonymised names
 
 Evaluated on **BTS** (Prabowo et al., NeurIPS 2024 Datasets and Benchmarks,
-doi:10.48550/arXiv.2406.08990; CC BY 4.0; catalog id `bts`): three real Australian buildings,
-903 points with data whose Brick class maps cleanly to a CAMBER role. Script and details:
-[examples/bts_suggester](https://github.com/yroussev/camber/tree/main/examples/bts_suggester).
-BTS has no BMS point names, so the *named* rows use the Brick class text as the name (an
-upper-bound stand-in for a well-named point) and the *anonymised* rows the published UUID.
+doi:10.48550/arXiv.2406.08990; CC BY 4.0; catalog id `bts`). BTS covers three real Australian
+buildings; 903 points have data and a Brick class that maps cleanly to a CAMBER role (`bts.py`).
+
+- **Anonymised rows** use the published UUID. They are the honest BTS figures.
+- **Brick-class rows** use the Brick class text as the name. BTS publishes no BMS point names,
+  and that text is effectively the label, so these rows are *Brick-class labels used as names:
+  an upper bound, not real-world naming*. They show only whether the data spoils a good name.
+  For real names, see the section above.
+
+**Upper-bound rows are marked (Brick-class labels used as names, not real-world naming); the
+anonymised rows are the honest BTS figures.**
 
 | method | names | top-1 % | top-3 % | macro top-1 % | site A | site B | site C |
 |---|---|---|---|---|---|---|---|
-| lexical (0.95 default) | named | 93.0 | 97.2 | 81.7 | 92.3 | 84.4 | 94.3 |
 | lexical (0.95 default) | anonymised | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 |
 | time series, templates | none | 48.0 | 65.2 | 22.6 | 61.5 | 71.9 | 33.8 |
 | time series, fitted (leave one building out) | none | 38.4 | 58.8 | 11.1 | 58.9 | 9.4 | 21.8 |
-| combined, templates | named | 95.2 | 99.9 | 85.2 | 96.6 | 84.4 | 94.7 |
 | combined, templates | anonymised | 48.0 | 65.2 | 22.6 | 61.5 | 71.9 | 33.8 |
-| combined, fitted | named | 95.1 | 97.2 | 85.0 | 96.4 | 84.4 | 94.7 |
 | combined, fitted | anonymised | 38.4 | 58.8 | 11.1 | 58.9 | 9.4 | 21.8 |
+| lexical (0.95 default) | Brick-class labels used as names (upper bound, not real-world naming) | 93.0 | 97.2 | 81.7 | 92.3 | 84.4 | 94.3 |
+| combined, templates | Brick-class labels used as names (upper bound, not real-world naming) | 95.2 | 99.9 | 85.2 | 96.6 | 84.4 | 94.7 |
+| combined, fitted | Brick-class labels used as names (upper bound, not real-world naming) | 95.1 | 97.2 | 85.0 | 96.4 | 84.4 | 94.7 |
 
 *Site columns are top-1 on each held-out building (A 416 points, B 32, C 455). Macro top-1
 averages the 27 roles equally; 294 of the 903 points are zone temperatures.*
 
 What it shows, and what it does not:
 
-- **Anonymised names:** the name-only suggester has nothing to go on (0 %); the data alone puts
-  the right role first for 48 % of the points and in the top 3 for 65 %. It is strong where the
-  physics is distinctive -- zone temperatures (92 % top-1), heating valves (100 %), filter
-  pressure drops (91 %), outdoor air (75 %), CO2 (56 %) -- and weak where roles share a level and
-  a behaviour: discharge-air temperatures read as zone temperatures (58 of 116), supply-air
-  temperature setpoints as zone cooling setpoints (40 of 88), duct static pressures and airflows
-  as filter pressure drops. Chilled- and hot-water temperatures, humidities and pump statuses are
-  rarely placed first.
-- **Informative names still dominate:** with the Brick class as the name, adding the data moves
-  top-1 from 93.0 to 95.2 % and top-3 from 97.2 to 99.9 %; no point that the name placed first
-  lost its place (the gains are pump statuses the name alone gave to the boiler).
-- **The fitted model does not beat the templates across buildings.** Trained on two buildings and
-  tested on the third, the numpy model reaches 38 % top-1 (a random forest on the same features,
-  tried in a scratch run, reached 32-34 %): each building has its own units, sequences and sensor
-  quality, and three buildings are too few to learn that variety. No `[ml]` backend is added for
-  this reason.
-- **Caveats.** The templates were adjusted while looking at these results (five physical changes:
-  fan-gated pressures judged on their 95th percentile, a preference for typical temperature levels,
-  the weight on narrow bands, the prevalence priors, and the plateau/movement signature of
-  commands), so the template rows are optimistic for BTS; the fitted rows are the out-of-sample
-  reference. Site C's data is the dirtiest of the three (zero dropouts, sentinels, negative
-  airflows; see the entry's data issues) and scores lowest. BTS units are undocumented; no unit
-  was passed to the suggester.
+- **Anonymised names:**
+  - The name-only suggester has nothing to go on (0 %). The data alone puts the right role
+    first for 48 % of the points and in the top 3 for 65 %.
+  - It is strong where the physics is distinctive: zone temperatures (92 % top-1), heating
+    valves (100 %), filter pressure drops (91 %), outdoor air (75 %) and CO2 (56 %).
+  - It is weak where roles share a level and a behaviour. Discharge-air temperatures read as
+    zone temperatures (58 of 116), supply-air temperature setpoints as zone cooling setpoints
+    (40 of 88), and duct static pressures and airflows as filter pressure drops.
+  - Chilled- and hot-water temperatures, humidities and pump statuses are rarely placed first.
+- **Brick-class labels as names (upper bound):** adding the data moves top-1 from 93.0 to 95.2 %
+  and top-3 from 97.2 to 99.9 %. No point that the name placed first lost its place; the gains
+  are pump statuses the name alone gave to the boiler. On real names the gain and the losses
+  are different (see above).
+- **The fitted model does not beat the templates across buildings.**
+  - Trained on two buildings and tested on the third, the numpy model reaches 38 % top-1. A
+    random forest on the same features, tried in a scratch run, reached 32-34 %.
+  - Each building has its own units, sequences and sensor quality, and three buildings are too
+    few to learn that variety.
+  - No `[ml]` backend is added for this reason.
+- **Caveats:**
+  - The templates were adjusted while looking at these results, with five physical changes:
+    - fan-gated pressures judged on their 95th percentile;
+    - a preference for typical temperature levels;
+    - the weight on narrow bands;
+    - the prevalence priors;
+    - the plateau/movement signature of commands.
+
+    The template rows are therefore optimistic for BTS, and the fitted rows are the
+    out-of-sample reference.
+  - Site C's data is the dirtiest of the three (zero dropouts, sentinels, negative airflows;
+    see the entry's data issues) and scores lowest.
+  - BTS units are undocumented, so no unit was passed to the suggester.
+
+#### Synthetic vendor-style names (BTS points)
+
+`messy_names.py` turns each of the 903 BTS points' Brick classes into a vendor-style name, using
+a seeded generator in five styles. Each style uses abbreviations, an equipment prefix and
+number, and separators. The generator's abbreviation tables were written once and not tuned to
+the scores. **These names are synthetic, not real-world naming.**
+
+| naming style (synthetic) | points | name only top-1 / top-3 % | name + data top-1 / top-3 % |
+|---|---|---|---|
+| `AHU1_SAT` (upper-case, run together) | 903 | 25.1 / 27.0 | 51.8 / 68.4 |
+| `VAV-2-14 DA-T` (dashes and a space) | 903 | 57.4 / 69.9 | 74.0 / 84.7 |
+| `B2.L3.FCU07.RmTmp` (dotted, camelCase) | 903 | 67.9 / 76.2 | 77.6 / 87.5 |
+| `ahu_03_supply_temp` (snake case, long words) | 903 | 87.9 / 97.5 | 90.9 / 98.3 |
+| `201-AHU3:SA-TMP` (object id prefix) | 903 | 56.7 / 69.7 | 74.0 / 84.6 |
+
+- Run-together upper-case names (`SUPTMPSTPT`) defeat the tokenizer: the name alone places a
+  quarter of them. Single-letter forms (`T` for temperature) are also not recognised.
+- On these names the data adds 3 to 27 points of top-1, the most where the name is least
+  readable.
+- Long-word names come close to the Brick-class upper bound.
 
 **Proposal (not made):** `review_unmapped(..., series_by_token=...)` could switch the time-series
-path on by default whenever series are given, since it never lowers a clearly named point's rank
-on this evaluation. It would change existing callers' output, so it is left for a maintainer
-decision. The BTS numbers are **not** a gated benchmark.
+path on by default whenever series are given. It would change existing callers' output, and on
+real names it costs weather-station points, so it is left for a maintainer decision. None of
+these numbers is a gated benchmark.
 
 ## Review the unmapped tags — `review_unmapped`
 

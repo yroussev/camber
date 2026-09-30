@@ -47,11 +47,22 @@ released. -->
   - `blend`: the data's weight falls from 0.8 to 0.1 as the name becomes informative, so a clear
     name still dominates. `suggest()` also takes `oat=` and a precomputed `profile=`; the basis
     `timeseries` is new.
-  - Evaluated on BTS (`examples/bts_suggester`, leave one building out; not a gated benchmark):
-    with the names hidden, the name-only suggester places 0 % of 903 points and the data alone
-    48.0 % top-1 / 65.2 % top-3 (templates; the fitted model 38.4 / 58.8); with the Brick class
-    as the name, adding the data moves top-1 from 93.0 to 95.2 % and never displaces a role the
-    name placed first. Results and caveats in docs/MAPPING-ASSIST.md and docs/VALIDATION.md.
+  - Evaluated in `examples/suggester_eval` (none of it a gated benchmark):
+    - **Real BMS point names** (`real_names.py`): every mapped point of seven open
+      real-building catalog datasets, scored by its published name against the catalog
+      mapping (hand-curated by CAMBER). Pooled over 422 points, the name alone reaches 82.5 %
+      top-1 and the name plus the data 83.9 % top-1 / 89.1 % top-3. Excluding `irish-ahu` and
+      `lbnl-b59`, whose names the tokenizer was written against (129 points), the figures are
+      52.7 % and 58.1 % top-1, and 53.5 % and 72.9 % top-3. The data helped 11 points and hurt
+      5, all of the losses on weather-station points and one valve. The LBNL simulated FDD sets
+      are reported apart: 48.6 → 56.9 % top-1 over 72 points.
+    - **BTS with the names hidden** (`bts.py`, leave one building out): the name-only suggester
+      places 0 % of 903 points; the data alone places 48.0 % top-1 / 65.2 % top-3 with the
+      templates, and 38.4 / 58.8 with the fitted model. With **Brick-class labels used as names
+      (an upper bound, not real-world naming)**, adding the data moves top-1 from 93.0 to 95.2 %.
+    - **Synthetic vendor-style names** (`messy_names.py`, five seeded styles, labelled
+      synthetic): 25-88 % top-1 from the name alone, 52-91 % with the data.
+    - Results and caveats in docs/MAPPING-ASSIST.md and docs/VALIDATION.md.
   - Opt-in: without `use_timeseries=True` the suggestions are byte-identical to 0.95.
 <!-- /096-bts -->
 

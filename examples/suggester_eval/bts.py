@@ -13,15 +13,17 @@ of them with data (A 416, B 32, C 455). This script asks the suggester to recove
 * **combined** -- the name and the data (``FeatureSuggester(use_timeseries=True)``), with the
   templates or with the fitted model.
 
-Each is run with two kinds of name. BTS has no BMS point names (its ids are UUIDs), so the
-**named** run uses the Brick class text as the name (``Zone_Air_Temperature_Sensor``): an
-upper-bound stand-in for a well-named point, which shows whether the data spoils a good name.
-The **anonymised** run uses the published stream id, as a suggester would see an anonymised
-export. Results are top-1 / top-3 accuracy per role and overall, per held-out building and
-pooled, plus the most frequent top-1 confusions.
+Each is run with two kinds of name. The **anonymised** run uses the published stream id, as a
+suggester would see an anonymised export: these are the honest BTS figures. BTS has no BMS point
+names (its ids are UUIDs), so the **named** run uses the Brick class text as the name
+(``Zone_Air_Temperature_Sensor``). That text is effectively the label: those rows are
+*Brick-class labels used as names* -- an upper bound, not real-world naming (for real point names
+see ``real_names.py``); they show only whether the data spoils a good name.
+Results are top-1 / top-3 accuracy per role and overall, per held-out building and pooled, plus
+the most frequent top-1 confusions.
 
     camber datasets fetch bts --subset full          # ~19 GB from the publisher, verified
-    python examples/bts_suggester/evaluate.py        # profiles cached; results in --out
+    python examples/suggester_eval/bts.py        # profiles cached; results in --out
 
 ``--files DIR`` reads the published files from a directory instead of the catalog cache.
 Profiles are cached (``--out``/profiles.json), so a re-run only re-scores.
@@ -48,7 +50,7 @@ from camber.mapping_assist import FeatureSuggester  # noqa: E402
 from camber.mapping_timeseries import ProfileModel, SeriesProfile, profile_series  # noqa: E402
 from camber.model.roles import Role  # noqa: E402
 
-DEFAULT_OUT = os.path.join(HERE, "..", "_data", "bts_suggester")
+DEFAULT_OUT = os.path.join(HERE, "..", "_data", "suggester_eval", "bts")
 MIN_SAMPLES = 96 * 7  # a week of 15-minute bins with data
 
 
@@ -227,8 +229,19 @@ def evaluate(records, sites) -> dict:
     }
 
 
+#: how the printed tables label each kind of name
+NAMING_LABEL = {
+    "named": "Brick-class labels used as names (upper bound, not real-world naming)",
+    "anonymised": "anonymised (published stream id)",
+    "none": "none (data only)",
+}
+
+
 def table(results: dict) -> str:
     lines = [
+        "BTS: 'named' rows use Brick-class labels as names -- an upper bound, "
+        "not real-world naming",
+        "",
         "| method | names | top-1 % | top-3 % | macro top-1 % | "
         + " | ".join(f"{s} top-1" for s in next(iter(results.values()))["by_site"])
         + " |",
@@ -238,7 +251,8 @@ def table(results: dict) -> str:
         method, naming = key.split("/")
         sites = " | ".join(str(v["top1"]) for v in r["by_site"].values())
         lines.append(
-            f"| {method} | {naming} | {r['top1']} | {r['top3']} | {r['macro_top1']} | {sites} |"
+            f"| {method} | {NAMING_LABEL.get(naming, naming)} | {r['top1']} | {r['top3']} | "
+            f"{r['macro_top1']} | {sites} |"
         )
     return "\n".join(lines)
 
