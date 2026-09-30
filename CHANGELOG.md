@@ -4,6 +4,55 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.97.0] — Unreleased
+
+<!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+**0.97: the PNNL re-tuning workbook (#79, #80, #81, #82, #83).** A hands-on course that follows
+PNNL's free Building Re-tuning training, run on the open dataset catalog in `camber lab`. Default
+outputs are unchanged, and no gated benchmark moves.
+
+### Added
+<!-- 097-framework (#79) -->
+- **The workbook framework (#79, provisional).** `docs/workbook/` holds a curriculum map from the
+  PNNL chapters and guides to exercises and datasets (`index.md`), an exercise page template
+  (`_template.md`: goal, Learn more, datasets and licence, setup in the lab and on the CLI,
+  steps, questions, what CAMBER shows, caveats, going further) and an instructor page with a
+  section per exercise (answer key, discussion points, common mistakes). The docs site has a new
+  *Re-tuning workbook* section, and the README a "Learn re-tuning with CAMBER" section.
+  - **Answer keys pinned by tests.** Each exercise declares its datasets, configs, CLI commands and
+    expected answers (a finding present or absent on given equipment, a metric within a
+    tolerance, a label score, or a free-form check) in `tests/workbook/exercises/<id>.py`, with a
+    synthetic stand-in shaped like each dataset. The offline tests run the exercise's configs on
+    the stand-in every time; `pytest -m network` runs them on the real catalog data. A stale
+    answer fails and names the exercise, and the instructor page must quote every pinned figure.
+  - **Reference links from the registry.** Workbook pages link PNNL only through reference-style
+    Markdown links labelled with `camber.references` ids; `scripts/workbook_refs.py` prints the
+    definitions and `--check` (also a test) rejects an unknown id, a URL that differs from the
+    registry's, or a PNNL link made any other way. No mkdocs plugin is needed.
+  - **Catalog `exercise` field.** `suggested_analyses.exercise` is validated: a docs-relative
+    workbook page (`workbook/<id>.md`, optionally `#<anchor>`) or an https URL. `camber datasets
+    info` prints its published URL. `camber lab` serves a relative link offline from the local
+    docs tree (`/lab/docs/workbook/<id>.md`, a script-free reading copy; `--docs DIR`, by default
+    the checkout's `docs/`), and links the published docs site otherwise.
+  - **Exercise config templates.** `camber/datasets/configs/exercises/<id>.json` (package data)
+    holds a tuned config per exercise where the dataset's default doesn't fit;
+    `camber datasets config <dataset> --exercise <id>` (and
+    `datasets.config_template(..., exercise=)`) writes it.
+  - **Worked example: `air-economizer`** on `lbnl-sdahu`: a damper stuck open is found by
+    `outdoor_air_fraction` and `economizer_high_limit`, one stuck near minimum only as missed free
+    cooling (`free_cooling_missed`), and the label score is read against the published labels.
+<!-- /097-framework -->
+<!-- 097-air (#80) -->
+<!-- /097-air -->
+<!-- 097-zone (#81) -->
+<!-- /097-zone -->
+<!-- 097-plant (#82) -->
+<!-- /097-plant -->
+<!-- 097-practice (#83) -->
+<!-- /097-practice -->
+
 ## [0.96.0] — Unreleased
 
 <!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is

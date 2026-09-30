@@ -1,0 +1,41 @@
+{
+  "_comment": "Workbook exercise air-economizer (docs/workbook/air-economizer.md): the lbnl-sdahu config template with the economizer rules only. `camber datasets config lbnl-sdahu --exercise air-economizer --store DIR --out cfg.json` fills in the store path. The unit's own design minimum OA (a 1.6% OA fraction at its fixed 10% minimum damper position) and its fixed 60 F dry-bulb high limit are the dataset template's (see configs/lbnl-sdahu.json); free_cooling_missed is added for the stuck-closed dampers, and leaking_valve is left to the air-heat-cool exercise.",
+  "_dataset": "lbnl-sdahu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-sdahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    {
+      "name": "outdoor_air_fraction",
+      "params": {
+        "min_oa_pct": 1.6
+      }
+    },
+    {
+      "name": "economizer_high_limit",
+      "params": {
+        "high_limit_f": 60.0,
+        "min_oa_pct": 1.6,
+        "differential": false
+      }
+    },
+    {
+      "name": "free_cooling_missed",
+      "params": {
+        "high_limit_f": 60.0
+      }
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

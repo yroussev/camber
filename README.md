@@ -184,6 +184,26 @@ docker run --rm -it camber bash      # interactive shell
 
 Mount a building's CSV export at `/data` to run analytics on real trends.
 
+## Learn re-tuning with CAMBER
+
+The **[re-tuning workbook](docs/workbook/index.md)**
+([on the site](https://yroussev.github.io/camber/workbook/)) is a hands-on course that follows
+PNNL's free *Building Re-tuning* training. Each exercise pairs a PNNL chapter or guide, linked
+and never copied, with an open dataset from the catalog: read the guide, open the building in
+`camber lab`, and find the faults it teaches you to look for, with the steps given both in the
+lab and on the command line.
+
+```
+camber lab                     # open http://127.0.0.1:8765/lab, Fetch & ingest lbnl-sdahu
+camber datasets config lbnl-sdahu --exercise air-economizer --store lab_store --out econ.json
+camber run econ.json
+```
+
+A separate instructor page holds the answer keys. Every answer on it is pinned by the test suite,
+on synthetic stand-ins and (with `pytest -m network`) on the real data, so the workbook cannot
+silently drift from what CAMBER reports. The first worked example is
+[a stuck outdoor-air damper](docs/workbook/air-economizer.md); the curriculum map lists the rest.
+
 ## Public datasets
 
 The toolkit is data-agnostic. Two open sources are wired as runnable examples

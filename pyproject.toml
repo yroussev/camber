@@ -121,7 +121,7 @@ include = ["camber*"]
 camber = ["py.typed"]
 # The open dataset catalog (camber.datasets): catalog + mappings + run templates. JSON, and never
 # under a "data/" directory (.gitignore ignores those).
-"camber.datasets" = ["catalog.json", "mappings/*.json", "configs/*.json"]
+"camber.datasets" = ["catalog.json", "mappings/*.json", "configs/*.json", "configs/exercises/*.json"]
 # Energy conversion factor sets (camber.energy_factors): one JSON file per published set.
 "camber.energy_factors" = ["*.json"]
 # Public-holiday calendars (camber.calendars, 0.93): one JSON file per country, citing its source.

@@ -15,7 +15,7 @@ camber validate [--html d.html] [--json d.json] [--full]         # validation cr
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
-camber lab     [--workspace W | --store S] [--dir D] [--port P]   # local catalog UI (127.0.0.1)
+camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
 camber retention show|set|override|hold|release|apply  # retention policy (0.95)
@@ -274,9 +274,13 @@ camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-
                         [--from-dir DIR] [--accept-noncommercial]
 camber datasets status [--dir D] [--store DIR] [--json]
 camber datasets remove <id> [--dir D] [--store DIR --purge-store]
-camber datasets config <id> --store DIR [--out cfg.json] [--facility ID]
+camber datasets config <id> --store DIR [--out cfg.json] [--facility ID] [--exercise EX]
 camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 ```
+
+`config --exercise <exercise-id>` (0.97) writes a [workbook](workbook/index.md) exercise's tuned
+template instead of the dataset's own; the template names the dataset it was tuned for, and any
+other dataset is refused.
 
 `list` shows each entry's licence **tier** (`open` / `research-only`) and marks manual downloads.
 `fetch --all` takes the open tier only; research-only (NC/ND) datasets also need `--licence all`
@@ -327,7 +331,7 @@ events and static factors, guarded by `ecm_dates` / `settle_days`; `"validity"` 
 ### The local catalog UI: `camber lab` (provisional, 0.96)
 
 ```
-camber lab [--workspace W | --store S] [--dir D] [--port 8765]
+camber lab [--workspace W | --store S] [--dir D] [--port 8765] [--docs DIR]
 ```
 
 This starts a local web page at `http://127.0.0.1:8765/lab` for the same catalog. From it you
@@ -348,6 +352,10 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   that follows the lifecycle (see [DATASETS.md](DATASETS.md#the-lab-camber-lab)). Otherwise the
   lab writes to a plain store (`--store`, default `./lab_store`).
 - **The cache.** `--dir` is the dataset cache, as for `camber datasets`.
+- **Exercise links (0.97).** A dataset used by the [re-tuning workbook](workbook/index.md) has an
+  **exercise** link. In a source checkout the lab serves the page itself from `docs/workbook/`
+  (at `/lab/docs/workbook/<id>.md`), so it opens offline; `--docs DIR` points at another docs
+  tree. Without one, the link goes to the published docs site.
 - **Security.** The server binds `127.0.0.1` only; there is no `--host`. It accepts writes only
   with a per-run token, from its own origin, as JSON of at most 16 KiB (see
   [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).

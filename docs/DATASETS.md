@@ -12,7 +12,7 @@ every file; `camber datasets fetch` downloads the files from the publisher onto 
 
 > **Status:** 0.86 shipped the first seven entries and the command-line workflow; 0.89 adds the
 > research-only tier, manual-download entries, Excel workbooks (the `xlsx` extra), Brick-grouped
-> ingest, the real-building source layouts below and 14 more entries. 0.96 adds the local catalog UI, [`camber lab`](#the-lab-camber-lab); worked exercises follow in a later release. The
+> ingest, the real-building source layouts below and 14 more entries. 0.96 adds the local catalog UI, [`camber lab`](#the-lab-camber-lab); 0.97 adds the [re-tuning workbook](workbook/index.md), exercises run on these datasets. The
 > Python API (`camber.datasets`) is **provisional** -- see [API-STABILITY.md](API-STABILITY.md).
 
 ## Quick start
@@ -75,7 +75,8 @@ Every fetch asks again. An ingest of data already fetched with an acknowledgemen
   the data changes. It carries the dataset's *Data source & licence* block and, for
   research-only data, the non-commercial / do-not-redistribute banner;
 - **publisher**: the publisher's landing page;
-- **exercise**: an exercise, when the entry names one.
+- **exercise**: the dataset's [workbook](workbook/index.md) exercise, when the entry names one
+  (served offline by the lab from a source checkout, else linked on the docs site).
 
 **With a portfolio workspace** (`camber lab --workspace W`, or `$CAMBER_PORTFOLIO`), a dataset's
 facility goes through the [lifecycle](PORTFOLIO.md):
@@ -128,6 +129,19 @@ Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
+
+<!-- 097-framework (#79) -->
+**Workbook exercises (0.97, provisional).** An entry used by the
+[re-tuning workbook](workbook/index.md) names its exercise in `suggested_analyses.exercise`:
+either a page of the docs, as its path under `docs/` (`workbook/<exercise-id>.md`, optionally
+with `#<anchor>`), or an https URL. The catalog check rejects anything else. `camber datasets
+info <id>` prints the published URL, and the [lab](#the-lab-camber-lab) links it: to its own
+offline copy of the page when it runs from a source checkout (or `--docs DIR`), else to the docs
+site. Where the dataset's default config does not fit an exercise, the exercise ships its own
+template in `camber/datasets/configs/exercises/<exercise-id>.json`, which names the dataset it
+was tuned for (`"_dataset"`) and is written the usual way:
+`camber datasets config <id> --exercise <exercise-id> --store DIR --out cfg.json`.
+<!-- /097-framework -->
 
 Every entry has a `default` subset (small enough to try -- small in **bytes**: at most 100 MB once
 ingested, whatever its run count, since a real building's runs are its equipment) and a `full`

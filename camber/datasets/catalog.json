@@ -355,7 +355,8 @@
      "leaking_valve",
      "economizer_high_limit"
     ],
-    "config_template": "lbnl-sdahu.json"
+    "config_template": "lbnl-sdahu.json",
+    "exercise": "workbook/air-economizer.md"
    },
    "known_issues": [
     "Valve and damper signals are 0-1 fractions; they are rescaled to percent.",

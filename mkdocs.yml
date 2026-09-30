@@ -54,6 +54,23 @@ nav:
       - Site report: SITE-REPORT.md
       - RCx report: RCX-REPORT.md
       - "References: PNNL Re-tuning": REFERENCES.md  # 096-report (#78)
+  # 0.97 (#79-#83): the PNNL re-tuning workbook. Content branches add their pages ONLY between
+  # their own BEGIN/END markers below (see docs/workbook/index.md).
+  - Re-tuning workbook:
+      - Overview and curriculum map: workbook/index.md
+      # BEGIN workbook-air (#80)
+      - "Air side: economizer and a stuck OA damper": workbook/air-economizer.md
+      # END workbook-air (#80)
+      #
+      # BEGIN workbook-zone (#81)
+      # END workbook-zone (#81)
+      #
+      # BEGIN workbook-plant (#82)
+      # END workbook-plant (#82)
+      #
+      # BEGIN workbook-practice (#83)
+      # END workbook-practice (#83)
+      - Instructor guide: workbook/instructor.md
   - AI-assist:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md
@@ -80,6 +97,7 @@ nav:
 exclude_docs: |
   dev/
   proposals/
+  workbook/_template.md
 markdown_extensions:
   - admonition
   - tables
