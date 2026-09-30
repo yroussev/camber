@@ -123,7 +123,7 @@ given, occupant diversity D is 1. Read the config's `_comment` before you read t
   they are not design data.
 - The outdoor-air flow before 2020-04-10 is the publisher's gap fill, masked at ingest; the
   verdicts come from April–December 2020, which includes the 2020 shelter-in-place period and
-  wildfire smoke-mode damper closures.
+  the wildfire smoke mode (dampers held at their 10 % minimum, 2020-08-24 to 09-06).
 - The flow stations' accuracy is not published. They read above the unit's supply flow in a few
   percent of hours.
 - The zone-to-unit grouping comes from the Brick model, which disagrees with the data

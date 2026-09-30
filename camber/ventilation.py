@@ -440,7 +440,7 @@ def assess_dcv(
     # The floor sub-checks run on EVERY occupied sample, before the economizer and closed-damper
     # exclusions: an economizer only ever raises OA, and a closed damper while occupied is the most
     # below-floor OA can be -- excluding either would hide exactly the under-ventilation the floor
-    # exists to catch (a wildfire damper closure read as "not judged").
+    # exists to catch (OA held below the floor read as "not judged").
     below_floor = None
     if oa_floor is not None and len(df):
         fl_all = (

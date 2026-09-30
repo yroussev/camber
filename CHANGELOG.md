@@ -24,6 +24,14 @@ released. Each branch adds its bullets only inside its own marked block below. -
   is available for the overcooling tiers as `share_pct`, off by default (no overcooling verdict
   changes). Workbook `zone-reheat-saturated`: answers 3 and 5 updated, and the new grade pinned.
 
+### Fixed
+- **`docs/VENTILATION.md` overstated the `lbnl-b59` wildfire result (#85).** It said the 2020
+  smoke mode was a below-floor `fault` on two rooftop units. Re-measured on the default subset
+  (which holds the whole OA-flow record, April–December 2020): all four units are below the
+  750 cfm floor in 2.0–4.2 % of occupied hours, `info` under the 10 % fault share, and those hours
+  are fan-off days in October and December. In the smoke-mode weeks (2020-08-24 to 09-06) the
+  dampers sat at their 10 % minimum and the units still took in 1,130–3,625 cfm, 0–0.9 % below
+  the floor. The page, `docs/VALIDATION.md` and the `zone-min-oa` caveat now say so.
 <!-- /098-terminal-ventilation -->
 
 ## [0.97.0] — Unreleased
