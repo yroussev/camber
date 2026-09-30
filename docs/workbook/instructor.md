@@ -1150,9 +1150,10 @@ the drift baselines are frozen.
    cycling at night. The measure did not fix the short cycling: 178 compressor starts a day
    before and 131 after, both far above the rule's limit. A second issue for the plan.
 7. *M&V.* CAMBER refuses: an hourly baseline needs at least 1440 hours and the baseline test has
-   168. A defensible measurement needs a longer baseline covering the reporting weather (months,
-   not a week), or an IPMVP Option B isolation measurement of the unit's own energy, set up
-   before the change.
+   168. The refusal says what is missing: its `need` puts the gap at 1,272 more hours (about 53
+   days of data). A defensible measurement needs a longer baseline covering the reporting weather
+   (months, not a week), or an IPMVP Option B isolation measurement of the unit's own energy, set
+   up before the change.
 
 **Discussion points**
 

@@ -31,6 +31,7 @@ from .intervalfit import daily_energy_vs_temp, hourly_energy_vs_temp
 from .models import N_PARAMS, best_model
 from .nonroutine import residual_outliers
 from .stats import SavingsResult, avoided_energy_savings, cv_rmse_max_for, fit_stats
+from .sufficiency import InsufficientBaseline, baseline_need
 from .towt import TOWTAtIndex, fit_towt, hour_of_week
 
 
@@ -87,12 +88,18 @@ def caltrack_savings(
     extrapolation declines the saving by default. A baseline shorter than 365 days carries a
     caveat, since it cannot span a full weather year. (CalTRACK itself prescribes no extrapolation
     test; this is a CAMBER policy.)
+
+    A baseline under ``min_days`` raises :class:`camber.mandv.sufficiency.InsufficientBaseline`
+    (a ``ValueError``, message unchanged) whose ``.need`` says how much more data is needed.
     """
     base = daily_energy_vs_temp(
         baseline_energy, baseline_temp, rate_is_energy_rate=rate_is_energy_rate
     )
     if len(base) < min_days:
-        raise ValueError(f"need >= {min_days} baseline days, got {len(base)}")
+        raise InsufficientBaseline(
+            f"need >= {min_days} baseline days, got {len(base)}",
+            baseline_need("daily", len(base), min_n=min_days),
+        )
 
     excluded = 0
     if exclude_non_routine:
@@ -225,12 +232,19 @@ def caltrack_savings_hourly(
     (:func:`camber.mandv.coverage.towt_coverage`); a severe extrapolation declines by default. TOWT
     holds its temperature response flat beyond the fitted range, so it is flagged but never
     widened. The unseen hour-of-week check below still raises, as before.
+
+    A baseline under ``min_hours``, missing hour-of-week bins, or with bins under
+    ``min_obs_per_bin`` raises :class:`camber.mandv.sufficiency.InsufficientBaseline` (a
+    ``ValueError``, message unchanged) whose ``.need`` says how much more data is needed.
     """
     base = hourly_energy_vs_temp(
         baseline_energy, baseline_temp, rate_is_energy_rate=rate_is_energy_rate
     )
     if len(base) < min_hours:
-        raise ValueError(f"need >= {min_hours} baseline hours, got {len(base)}")
+        raise InsufficientBaseline(
+            f"need >= {min_hours} baseline hours, got {len(base)}",
+            baseline_need("hourly", len(base), min_n=min_hours),
+        )
     _require_bin_coverage(base.index, min_obs_per_bin)
 
     excluded = 0
@@ -305,13 +319,22 @@ def _require_bin_coverage(index, min_obs_per_bin: int) -> None:
     tow = hour_of_week(pd.DatetimeIndex(index))
     present, counts = np.unique(tow, return_counts=True)
     if len(present) < 168:
-        raise ValueError(
+        raise InsufficientBaseline(
             f"baseline covers only {len(present)} of 168 hour-of-week bins; a TOWT baseline "
-            "cannot project onto the hours it never saw"
+            "cannot project onto the hours it never saw",
+            baseline_need("hourly", len(present), min_n=168, unit="hour-of-week bins"),
         )
     thin = int((counts < min_obs_per_bin).sum())
     if thin:
-        raise ValueError(
+        # each further week of data adds one observation to every bin
+        raise InsufficientBaseline(
             f"{thin} hour-of-week bin(s) have fewer than {min_obs_per_bin} observations; "
-            "each bin is a fitted level, so a thinly-observed one carries no information"
+            "each bin is a fitted level, so a thinly-observed one carries no information",
+            baseline_need(
+                "hourly",
+                int(counts.min()),
+                min_n=min_obs_per_bin,
+                unit="observations per hour-of-week bin",
+                days_per_unit=7.0,
+            ),
         )

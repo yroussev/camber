@@ -38,6 +38,17 @@ Each branch adds its bullets only inside its own marked block below. -->
   the room's own: the finnish-dcv, b4b-windesheim and sdu-ou44 rooms (class `VAV`) lose it. Only
   that caveat changes; severities and metrics do not. Workbook `zone-dcv` pins the caveat absent
   and its instructor discussion point is rewritten.
+- **An M&V refusal says what data is needed (#88 item 4).** New `camber.mandv.sufficiency`:
+  `baseline_need(interval, n_have, min_n=...)` returns the required, available and missing
+  amount, its unit, the calendar days it takes to collect, and a one-line text ("1,440 baseline
+  hours needed, 168 available: 1,272 more hours (about 53 days of data)").
+  `caltrack_savings` and `caltrack_savings_hourly` raise `InsufficientBaseline`, a `ValueError`
+  whose message is byte-identical to before, with the gap on `.need`: too few days or hours,
+  missing hour-of-week bins, or thinly observed bins. The config's daily M&V decline for too few
+  days adds `metrics["data_needed"]` to its `mv_baseline` and `mv_savings` findings
+  (`declined_reason` and `summary` unchanged), and the RCx "M&V and drift" section prints a
+  "Data needed" paragraph per meter. Hourly M&V has no config path, so its need is reported
+  through the exception only. Workbook `capstone` pins the one-week refusal's need at 1,272 hours.
 <!-- /098-core -->
 
 ## [0.97.0] — Unreleased

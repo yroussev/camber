@@ -2203,9 +2203,31 @@ def _sec_mv(S) -> dict | None:
                 ]
             )
         blocks.append(_table(["Meter", "Result", "Model", "R²", "CV(RMSE)", "Summary"], rows))
+    blocks += _mv_data_needed(S["findings"])
     if not blocks:
         return None
     return _section("mv", "M&V and drift", blocks)
+
+
+def _mv_data_needed(findings) -> list:
+    """0.98 (#88): a "Data needed" paragraph per meter whose M&V declined for too little baseline
+    data (``metrics["data_needed"]``, see :mod:`camber.mandv.sufficiency`)."""
+    seen: list = []
+    for f in findings:
+        m = f.metrics or {}
+        need = m.get("data_needed")
+        if not (str(f.rule).startswith("mv_") and m.get("declined") and isinstance(need, dict)):
+            continue
+        key = (f.equip, need.get("text"))
+        if need.get("text") and key not in seen:
+            seen.append(key)
+    return [
+        _p(
+            f"Data needed ({equip}): {text}. Extend the baseline period, or collect more data "
+            "before this meter's M&V can be fitted."
+        )
+        for equip, text in seen
+    ]
 
 
 # ---- G36 advice only where a G36 sequence is declared (#32)

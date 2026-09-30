@@ -148,7 +148,8 @@ caltrack_savings_hourly(
 - **ORNL findings**: `night_weekend_setback` (fan runtime and, when the fan cycles, the held
   setback temperature) and `compressor_short_cycle` (`starts_per_day`, `runtime_pct`).
 - **M&V**: `caltrack_savings_hourly` either returns a saving with its band or refuses, saying
-  why.
+  why. A refusal for too little baseline data also says what data is needed: the exception's
+  `need` attribute (`e.need["text"]`) gives the hours required, available and still missing.
 
 ## Caveats
 

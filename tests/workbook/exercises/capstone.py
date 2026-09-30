@@ -16,7 +16,8 @@ Real-data figures were recorded from::
 and the M&V attempt in Python shown on the page (``caltrack_savings_hourly`` on the RTU's
 power, baseline test against setback test).
 
-(CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29.)
+(CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
+refusal's data need, 0.98.0-dev, 2026-09-30.)
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from _workbook import REAL, Check, Exercise, Finding, Metric, Run, write_standin
 
 from camber.config import run_config, run_drift_config
 from camber.mandv.caltrack import caltrack_savings_hourly
+from camber.mandv.sufficiency import InsufficientBaseline
 from camber.model.roles import Role
 from camber.report import build_rcx_report
 from camber.store import ParquetStore
@@ -115,12 +117,27 @@ def _mv_refused(ctx) -> None:
     try:
         caltrack_savings_hourly(base, b_oat, rep, r_oat)
     except ValueError as e:
-        msg = str(e)
+        msg, err = str(e), e
     else:
         raise AssertionError("caltrack_savings_hourly accepted a one-week baseline")
     assert "need >= 1440 baseline hours" in msg, msg
     if ctx.mode == REAL:
         assert msg.endswith("got 168"), msg
+    ctx.__dict__.setdefault("_capstone", {})["mv_error"] = err
+
+
+def _mv_need(ctx) -> None:
+    """Step 5 (0.98, #88): the refusal says what data is needed -- 1,272 more hours."""
+    err = ctx.__dict__.get("_capstone", {}).get("mv_error")
+    if err is None:
+        _mv_refused(ctx)
+        err = ctx.__dict__["_capstone"]["mv_error"]
+    assert isinstance(err, InsufficientBaseline), type(err)
+    need = err.need
+    assert (need["interval"], need["unit"], need["required"]) == ("hourly", "hours", 1440), need
+    assert need["shortfall"] == need["required"] - need["have"] > 0, need
+    if ctx.mode == REAL:
+        assert (need["have"], need["shortfall"], need["days_short"]) == (168, 1272, 53), need
 
 
 # --------------------------------------------------------------------------- the stand-in
@@ -293,6 +310,7 @@ EXERCISE = Exercise(
             quote="131",
         ),
         Check("M&V on a one-week test is refused", _mv_refused, quote="168"),
+        Check("the refusal says what data is needed", _mv_need, quote="1,272"),
     ),
     standin=standin,
 )

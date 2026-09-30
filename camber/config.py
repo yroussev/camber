@@ -664,15 +664,18 @@ def _only_named(found: list, entry: dict) -> list:
     return [r for r in found if r.equip in names]
 
 
-def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline"):
+def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline", need: dict | None = None):
     from .rules.base import Finding
 
     what = "M&V savings" if rule == "mv_savings" else "M&V baseline"
+    metrics: dict = {"declined": True, "declined_reason": why}
+    if need is not None:  # 0.98 (#88): what data would carry the fit (camber.mandv.sufficiency)
+        metrics["data_needed"] = dict(need)
     return Finding(
         rule=rule,
         equip=equip,
         severity="info",
-        metrics={"declined": True, "declined_reason": why},
+        metrics=metrics,
         summary=f"{equip}: {what} declined -- {why}",
         caveats=[f"{what} not {'computed' if rule == 'mv_savings' else 'fitted'}: {why}"],
     )
@@ -1275,10 +1278,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     conv, conv_extra = _mv_trended_conversion(entry, getattr(prep, "units", None))  # #69, #70
     out = []
 
-    def declined(equip, why):
-        out.append(_mv_declined(equip, why))
+    def declined(equip, why, need=None):
+        out.append(_mv_declined(equip, why, need=need))
         if reporting is not None:
-            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings"))
+            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings", need=need))
 
     for ref in refs:
         full = resolve(ref, prep.mapping, (role, Role.OAT, *extra_roles), resample="1h")
@@ -1316,7 +1319,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         )
         daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
-            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
+            from .mandv.sufficiency import baseline_need
+
+            need = baseline_need("daily", len(daily), min_n=min_days)
+            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})", need)
             continue
         if _mvform.driver_columns(daily):
             model = _mvform.fit(daily)

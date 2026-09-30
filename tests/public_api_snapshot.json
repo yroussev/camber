@@ -1350,6 +1350,10 @@
     "regression_tests",
     "sep_validity"
   ],
+  "camber.mandv.sufficiency": [
+    "InsufficientBaseline",
+    "baseline_need"
+  ],
   "camber.mandv.towt": [
     "TOWTAtIndex",
     "TOWTModel",
