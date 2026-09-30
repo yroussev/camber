@@ -77,11 +77,11 @@ they name the page (`<id>.md`) and the tuned config (`--exercise <id>`).
 
 | PNNL reading | Exercise | Datasets |
 |---|---|---|
-| [Ch. 7][pnnl-retuning-ch7], [Zone Heating and Cooling Control][pnnl-guide-zone-heat-cool] | `zone-reheat-overcooling`: reheat penalty and overcooling (planned) | `lbnl-fpu` |
-| [Ch. 7][pnnl-retuning-ch7] | `zone-bad-box`: one bad box in a fleet (planned) | `ornl-frp-vav` |
-| [Ch. 7][pnnl-retuning-ch7], [Zone Heating and Cooling Control][pnnl-guide-zone-heat-cool] | `zone-reheat-saturated`: a zone below setpoint with its reheat maxed out (planned) | `lbnl-fpu`, `ornl-frp-vav` |
-| [Ch. 5][pnnl-retuning-ch5], [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa] | `zone-dcv`: is outdoor air following occupancy? (planned) | `finnish-dcv`, `b4b-windesheim`, `sdu-ou44` |
-| [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa] | `zone-min-oa`: minimum outdoor air and 62.1 system ventilation (planned) | `lbnl-b59` |
+| [Ch. 7][pnnl-retuning-ch7], [Zone Heating and Cooling Control][pnnl-guide-zone-heat-cool] | [`zone-reheat-overcooling`: reheat penalty and overcooling](zone-reheat-overcooling.md) | `lbnl-fpu` |
+| [Ch. 7][pnnl-retuning-ch7] | [`zone-bad-box`: one bad box in a fleet](zone-bad-box.md) | `ornl-frp-vav` |
+| [Ch. 7][pnnl-retuning-ch7], [Zone Heating and Cooling Control][pnnl-guide-zone-heat-cool] | [`zone-reheat-saturated`: a zone below setpoint with its reheat maxed out](zone-reheat-saturated.md) | `lbnl-fpu`, `ornl-frp-vav` |
+| [Ch. 5][pnnl-retuning-ch5], [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa] | [`zone-dcv`: is outdoor air following occupancy?](zone-dcv.md) | `finnish-dcv`, `b4b-windesheim`, `sdu-ou44` |
+| [Ch. 5][pnnl-retuning-ch5], [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa] | [`zone-min-oa`: minimum outdoor air and 62.1 system ventilation](zone-min-oa.md) | `lbnl-b59` |
 <!-- END workbook-zone (#81) -->
 
 <!-- BEGIN workbook-plant (#82) -->
