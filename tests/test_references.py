@@ -29,8 +29,11 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _rule_names() -> set:
-    """Every rule name defined in camber.rules (classes with a string ``name``)."""
-    names = set()
+    """Every rule name defined in camber.rules: classes with a string ``name`` plus the built-in
+    registry's names, which include the instance-named rules (cohort, census, starvation)."""
+    from camber.rules import builtin
+
+    names = set(builtin.rule_names())
     for mod in pkgutil.iter_modules(camber.rules.__path__):
         m = importlib.import_module(f"camber.rules.{mod.name}")
         for _n, obj in inspect.getmembers(m, inspect.isclass):
@@ -80,6 +83,30 @@ def test_every_mapped_rule_exists_and_every_mapped_id_resolves():
         rec = recommend(Finding(rule=rule, equip="E", severity="warn", summary=""))
         if rec is not None:
             assert all(i in R.REFERENCES for i in rec.references), rule
+
+
+def test_instance_named_rules_are_seen_and_mapped():
+    """#89: the instance-named rules count as rules, and the 0.98 mappings are in place."""
+    known = _rule_names()
+    for rule in ("cohort_airflow", "sat_rogue_zone_census", "static_cohort_starvation"):
+        assert rule in known, rule
+    assert R.reference_ids_for("sat_rogue_zone_census") == [
+        "pnnl-guide-discharge-air-temp",
+        "pnnl-retuning-ch7",
+    ]
+    assert R.reference_ids_for("static_rogue_zone_census")[0] == "pnnl-guide-static-pressure"
+    for rule in ("condenser_bypass_leak", "chiller_staging_fleet", "boiler_efficiency_drift"):
+        assert R.reference_ids_for(rule) == ["pnnl-retuning-ch8"], rule
+    # deliberately unmapped (see the comment in RULE_REFERENCES)
+    for rule in ("sat_reset_effectiveness", "static_reset_effectiveness", "g36_afdd"):
+        assert R.reference_ids_for(rule) == [], rule
+
+
+def test_references_doc_lists_every_mapped_rule():
+    with open(os.path.join(_ROOT, "docs", "REFERENCES.md"), encoding="utf-8") as fh:
+        doc = fh.read()
+    for rule in R.RULE_REFERENCES:
+        assert f"`{rule}`" in doc, rule
 
 
 def test_helpers_and_link_policy():

@@ -108,10 +108,12 @@ the tower while the bypass valve is commanded shut.
   cool weather the approach is the controller's choice, which is why the rule judges only hours
   at high fan.
 - The simulated bypass runs drive the condenser loop far hotter than a real chiller would
-  tolerate before tripping, and in the stuck run the valve command reads zero all year. Read the size of the
-  difference as a simulation artefact; the direction is what matters.
+  tolerate before tripping, and in both 75 % runs the valve command reads zero all year. Read the
+  size of the difference as a simulation artefact; the direction is what matters.
 - The bypass runs' estimated bypassed fraction does not follow the severities in their file
-  names; do not read it as the leak size.
+  names; do not read it as the leak size. The two 75 % runs (leaking and stuck) are the same data,
+  so they are one case counted twice. The catalog records all of this as a
+  [data issue](../DATASETS.md#the-condenser-bypass-runs-are-fixed-physically-implausible-bypasses-and-the-two-75-runs-are-one-case).
 
 ## Going further
 

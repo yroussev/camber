@@ -332,12 +332,29 @@ def test_a_manual_dataset_without_local_files_is_skipped_not_fetched(tmp_path, m
     assert calls == [("lbnl-b59", root, {"subset": "default", "from_dir": str(local)})]
 
 
+def _datasets_md_file_list() -> dict:
+    """The per-dataset file list of docs/DATASETS.md's "Running the workbook answer checks on
+    local files" subsection (#89)."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "docs")
+    with open(os.path.join(path, "DATASETS.md"), encoding="utf-8") as fh:
+        text = fh.read()
+    head = "### Running the workbook answer checks on local files"
+    assert head in text, "DATASETS.md lost its workbook local-files subsection"
+    section = text.split(head, 1)[1].split("\n## ", 1)[0].split("\n### ", 1)[0]
+    assert "CAMBER_WORKBOOK_FROM_DIR" in section and "<dir>/<dataset-id>/" in section
+    return {
+        m.group(1): re.findall(r"`([^`]+)`", m.group(2))
+        for m in re.finditer(r"^- `([a-z0-9-]+)`(?: \(manual\))?: (.+)$", section, re.M)
+    }
+
+
 def test_the_from_dir_file_list_matches_the_catalog():
     doc = re.sub(r"\s+", " ", __doc__)
     listed = {
         m.group(1): re.findall(r"``([^`]+)``", m.group(2))
         for m in re.finditer(r"- ``([a-z0-9-]+)``(?: \(manual\))?: (.*?)(?= - ``| The small)", doc)
     }
+    assert _datasets_md_file_list() == listed  # the user docs list the same files
     want: dict = {}
     for ex in EXERCISES:
         for did, subset in exercise_subsets(ex).items():

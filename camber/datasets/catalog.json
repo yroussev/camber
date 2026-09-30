@@ -2990,6 +2990,31 @@
      },
      "handling": "annotate",
      "handling_note": "Ingested and scored as chiller_fouling, marked undocumented; the severity is read from the file name by analogy with the tower-fouling runs (heat-transfer coefficient x 0.65 / 0.95), which the inventory does not confirm."
+    },
+    {
+     "id": "condenser-bypass-runs-implausible",
+     "title": "The condenser-bypass runs are fixed, physically implausible bypasses, and the two 75% runs are one case",
+     "columns": [
+      "CDWL_SW_TEMP",
+      "CDWL_RW_TEMP",
+      "TWV_CTRL",
+      "CT_FLOW_1",
+      "CDWL_CW_FLOW"
+     ],
+     "runs": [
+      "bypass_leakage_025",
+      "bypass_leakage_050",
+      "bypass_leakage_075",
+      "bypass_stuck_050",
+      "bypass_stuck_075"
+     ],
+     "evidence": "Over the minutes a chiller runs, the condenser-loop supply temperature CDWL_SW_TEMP has a p90 of 118.8 / 133.8 / 140.2 F and a maximum of 141.9 / 155.6 / 162.4 F in the 025 / 050 / 075 leakage runs, and is above 100 F in 29.5% / 41.1% / 51.1% of those minutes (the stuck runs give the same p90 and maximum as the leakage run of the same severity); the fault-free run never exceeds 85.8 F. The share of condenser flow that bypasses the towers, 1 - (CT_FLOW_1 + CT_FLOW_2 + CT_FLOW_3) / CDWL_CW_FLOW, is fixed all year at 0.917 / 0.967 / 0.988 (the fault-free run modulates it, p10 0.005 to p90 0.969), and the share estimated from the mixing temperatures equals it to 0.001, so the 25 / 50 / 75 in the file names are not bypassed-flow fractions. The valve command TWV_CTRL reads 0.0 in every one of the 525,540 rows of both bypass_leakage_075 and bypass_stuck_075, and those two runs agree to within 0.0005 F on the condenser-loop temperatures and exactly on the condenser and tower flows.",
+     "contradicts": {
+      "document": "Chiller-plant inventory Tables 3-4 and Granderson et al. 2023 Table 7 (condenser-water three-way valve leakage at 25%, 50% and 75%, imposed by raising the valve's minimum position, and stuck at 50% and 75%, a fixed position: listed as separate, graded fault cases)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published and still scored: every bypass run raises chiller lift, so all five remain chiller_efficiency positives. Read the file-name severity as the imposed valve setting, not the leak size; treat bypass_leakage_075 and bypass_stuck_075 as one case counted twice; and read the 100-160 F condenser water as a simulation artefact (a real water-cooled chiller would trip on high head pressure well before it): the direction of each finding is meaningful, its size is not."
     }
    ]
   },
@@ -17173,7 +17198,7 @@
       "citation": "Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y"
      },
      "handling": "annotate",
-     "handling_note": "Left as published; coil and mixing rules must judge fan-on samples only (leaking_valve is declined in the template because it does not gate on the fan)."
+     "handling_note": "Left as published; coil and mixing rules must judge fan-on samples only. leaking_valve has done so since 0.93 (#42) when a fan status or speed is mapped, as it is here; the template still leaves it out, because it has not been re-checked on these baselines since."
     }
    ]
   },
