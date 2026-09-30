@@ -298,3 +298,37 @@ def test_skip_rows_group_and_cap():
         ["q", "no data", "Z"],
     ]
     assert _skip_rows(SimpleNamespace()) == []
+
+
+# --------------------------------------------------------------------------- class on frames (#85)
+
+
+def test_runners_put_the_equipment_class_on_the_frame(frames):
+    frames["B1"] = _frame(Role.HW_SUPPLY_TEMP, Role.BOILER_STATUS)
+    frames["B2"] = _frame(Role.HW_SUPPLY_TEMP, Role.BOILER_STATUS)
+    reg = Registry()
+    rule = reg.register(_Rule())
+    reg.run(rule.name, [_Ref("B1", "Boiler"), _Ref("B2")], None)
+    assert rule.seen["B1"].attrs["camber_equip_class"] == "Boiler"
+    assert rule.seen["B2"].attrs["camber_equip_class"] == ""
+
+
+def test_dcv_return_air_caveat_follows_the_class():
+    from test_dcv import _sim
+
+    from camber.rules.ventilation_rule import DemandControlledVentilation
+
+    rule = DemandControlledVentilation()
+
+    def caveat(cls):
+        fr = _sim(control="proportional")
+        if cls is not None:
+            fr.attrs["camber_equip_class"] = cls
+        return any("return-air CO₂" in c for c in rule.analyze("U", fr).caveats)
+
+    assert caveat(None)  # a direct API call: unchanged
+    assert caveat("")  # class unknown
+    assert caveat("AHU") and caveat("RTU")
+    assert caveat("Mystery")  # unrecognised: kept
+    assert not caveat("VAV")
+    assert not caveat("FCU")

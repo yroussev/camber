@@ -30,6 +30,14 @@ Each branch adds its bullets only inside its own marked block below. -->
     missing inputs, equipment: one row per rule and missing set, six units named, then "and N
     more"), and the cover a "Checks not evaluated" row, both only when there is something to
     list. `no_verdict` records are kept for later use but not listed.
+- **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
+  4).** The rule runners (and a run's lazy `frame_for`) set
+  `frame.attrs["camber_equip_class"]` to the equipment's class. `dcv_verification` keeps its
+  "typically return-air CO₂" caveat on air handlers and on equipment of absent or unrecognised
+  class (direct API calls are unchanged), and drops it on terminals and fan coils, whose CO₂ is
+  the room's own: the finnish-dcv, b4b-windesheim and sdu-ou44 rooms (class `VAV`) lose it. Only
+  that caveat changes; severities and metrics do not. Workbook `zone-dcv` pins the caveat absent
+  and its instructor discussion point is rewritten.
 <!-- /098-core -->
 
 ## [0.97.0] — Unreleased

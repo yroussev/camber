@@ -384,7 +384,9 @@ warm-up closures and a fan schedule — and, since 0.82.0, against open real-bui
 - Without `ECON_CMD` the economizer state is inferred, and the OAT-only fallback discards all mild
   weather — expect `insufficient` more often. That is the honest answer, not a defect.
 - Damper position is not OA flow; the floor sub-checks need `OA_AIRFLOW` in cfm.
-- Return-air CO₂ averages the zones and dilutes the critical one.
+- Return-air CO₂ averages the zones and dilutes the critical one. `dcv_verification` attaches
+  this caveat to air handlers and to equipment of unknown class, not to terminals or fan coils,
+  whose CO₂ is the room's own (0.98).
 - A fixed OA damper on a variable-speed supply fan moves OA flow with fan speed, and fan speed
   tends to follow occupancy through cooling load — that can mimic DCV. Not detected.
 - The fleet rule's `max` aggregation follows the worst trusted zone sensor; the plausibility, stuck

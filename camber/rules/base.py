@@ -154,6 +154,15 @@ def _cannot_run(rule, frame: pd.DataFrame) -> bool:
     return bool(req or groups)
 
 
+def _with_class(frame, ref):
+    """0.98 (#85): record the equipment's class on the role frame (``attrs["camber_equip_class"]``)
+    so a rule can tailor its wording to the class without a new parameter. Rules must treat an
+    absent or empty value as "class unknown"."""
+    if frame is not None:
+        frame.attrs["camber_equip_class"] = str(getattr(ref, "equip_class", "") or "")
+    return frame
+
+
 @dataclass
 class RuleSkip:
     """A rule that applied to an equipment but produced no Finding there (0.98, #88).
@@ -427,7 +436,7 @@ class Registry:
         out: list[Finding] = []
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
-            frame = _merge_shared(frame, shared)
+            frame = _with_class(_merge_shared(frame, shared), ref)
             if _cannot_run(rule, frame):
                 _record_skip(skipped, rule, ref, frame)
                 continue
@@ -498,7 +507,7 @@ class Registry:
         out: list[Finding] = []
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
-            frame = _merge_shared(frame, shared)
+            frame = _with_class(_merge_shared(frame, shared), ref)
             if _cannot_run(rule, frame):
                 _record_skip(skipped, rule, ref, frame)
                 continue
@@ -591,7 +600,7 @@ class Registry:
                 other_class[ref.equip] = str(ref.equip_class)
                 continue
             frame = resolve(ref, mapping, load, resample=resample)
-            frame = _merge_shared(frame, shared)
+            frame = _with_class(_merge_shared(frame, shared), ref)
             if _cannot_run(rule, frame):
                 _record_skip(skipped, rule, ref, frame)
                 continue

@@ -565,9 +565,10 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 - Clock versus demand: a valve on a time clock correlates with occupancy because people also
   follow the clock. Taking the lift within the hour of day is what separates the two. Ask the
   class to predict what a pooled comparison would say for room 999169.
-- The per-finding caveat about return-air CO₂ is written for air handlers. Here each "unit" is a
-  room with its own sensor, so the caveat does not apply. Reading caveats critically is part of
-  the job.
+- Return-air CO₂ averages the zones an air handler serves and dilutes the critical one, so a DCV
+  verdict judged on an air handler's CO₂ carries a caveat saying so. Here each "unit" is a room
+  (equipment class `VAV`) with its own sensor, and CAMBER leaves the caveat off. Ask the class
+  what would change if the same data were mapped to one air handler instead.
 
 **Common mistakes**
 

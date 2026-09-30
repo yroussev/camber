@@ -201,7 +201,7 @@ from .resolve import (
     discover_terminals,
     resolve,
 )
-from .rules.base import _merge_shared
+from .rules.base import _merge_shared, _with_class
 from .rules.builtin import builtin_registry, is_fleet, make_rule
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
@@ -2437,7 +2437,7 @@ def _frame_resolver(prep: _Prepared) -> Callable:
         if key not in cache:
             want = tuple(Role) if roles is None else tuple(roles)
             frame = resolve(ref, prep.mapping, want, resample=prep.resample)
-            cache[key] = _merge_shared(frame, prep.shared)
+            cache[key] = _with_class(_merge_shared(frame, prep.shared), ref)  # 0.98 (#85)
         return cache[key]
 
     return frame_for
