@@ -158,13 +158,16 @@ class CHWPlantReset:
 class CHWSupplyTracking:
     """Flags chilled-water supply temperature held above its setpoint while the plant runs.
 
-    Judged on running samples only: the chiller's status / command (``compressor_status``) when
-    mapped, the first interval after each start left out as pull-down. Reports the share of
-    running time with CHWST more than ``above_f`` above the trended setpoint, and the loop deltaT
-    (overall and during those hours: a wide deltaT while short of setpoint points at load beyond
-    capacity, a narrow one at flow or control). ``warn`` at ``warn_pct``, ``fault`` at
-    ``fault_pct`` of running time. Without a run status the plant is taken as running when CHWST
-    sits in 38-58F; the rule then caveats that and never goes beyond ``warn``.
+    Judged on running samples only, the first ``settle_intervals`` after each start left out as
+    pull-down. Running comes from the chiller's status / command (``compressor_status``) when
+    mapped; else (0.92, #66) from its ``power`` above a tenth of its own 95th-percentile draw,
+    with a caveat; else the plant is taken as running when CHWST sits in 38-58F, which is
+    caveated and never goes beyond ``warn``. A chiller that never ran in the window, or with fewer
+    than ``min_running`` judged samples, is ``info`` and not judged. Reports the share of running
+    time with CHWST more than ``above_f`` above the trended setpoint, and the loop deltaT (overall
+    and during those hours: a wide deltaT while short of setpoint points at load beyond capacity,
+    a narrow one at flow or control). ``warn`` at ``warn_pct``, ``fault`` at ``fault_pct`` of
+    running time.
 
     ``above_f`` defaults to 3F: outside a healthy loop's ~1F control band plus ~0.5F sensor
     accuracy and hourly staging transients (see :func:`camber.chwplant.analyze_chw_tracking`).

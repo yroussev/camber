@@ -12,7 +12,11 @@ keyed by rule name and then parameter name. An entry records:
   ``"calibrated on <dataset/run>"`` when it was fitted to data;
 - ``calibrate`` -- how to re-tune it from your own data;
 - ``range`` -- a sensible range: ``(low, high)`` for a number, the allowed values for a choice
-  (``("mean", "median")``) and ``(False, True)`` for a flag;
+  (``("mean", "median")``) and ``(False, True)`` for a flag. A **dict-valued** parameter (a tier
+  map such as ``{"warn": 5.0, "fault": 20.0}``) gives the range of **each value**, and its unit
+  ends with the keys (``"%..., per key ('warn', 'fault')"``); the note states any order between
+  the keys (``warn <= fault``). ``camber rules params`` and ``docs/THRESHOLDS.md`` print such a
+  range as "each value: low to high";
 - ``note`` (optional) -- what a ``None`` default means, or how the parameter interacts with others.
 
 **Defaults are never copied here.** They are read from the rule constructors
@@ -122,7 +126,9 @@ DELEGATES: dict[str, str] = {}
 #: is not yet tunable. Every rule with no constructor parameter has an entry.
 FIXED: dict[str, str] = {}
 
-#: Entries for parameters a not-yet-merged 0.98 branch adds (see the sibling-branch blocks below).
+#: Entries for parameters a not-yet-merged branch adds: rule_params() uses one only once the
+#: constructor has the parameter; at integration each moves into PARAM_DOCS. Empty after 0.98
+#: wave 1 (its entries now live in the rule blocks below).
 _PENDING: dict[str, dict[str, ParamDoc]] = {}
 
 
@@ -292,6 +298,30 @@ PARAM_DOCS["supply_air_control"] = {
         "begin at the site.",
         (10.0, 60.0),
         "Must be at or above warn_pct.",
+    ),
+    "occupancy_gate": _P(
+        "choice",
+        "CAMBER judgment (#84): on the fault-free lbnl-sdahu unit, 78 % of the fan-on hours more "
+        "than 2 F too warm were unoccupied fan cycling (damper shut, warm return air), which "
+        "graded a healthy unit warn at 12.1 %; gated on its trended occupancy (SYS_CTL) it reads "
+        "ok at 2.97 %. PNNL's discharge-air guide asks whether the unit meets its setpoint while "
+        "it serves the building, i.e. in occupied operation.",
+        "Keep 'trended' when the unit trends an occupied/unoccupied (or occupied-mode) point. "
+        "To see what the gate removes, run once with 'off' and compare too_warm_pct / "
+        "too_cold_pct and n_running: a large drop that sits in night or weekend hours is "
+        "unoccupied cycling, not a control fault. Use 'schedule' only when no occupancy is "
+        "trended AND you know the unit follows a weekday office schedule; then set the "
+        "building's own hours on a rule that takes them, since this one uses the generic "
+        "Mon-Fri 07-18 window.",
+        ("trended", "schedule", "off"),
+        "'trended' (default): fan-on samples AND the trended occupancy when the unit trends one "
+        "(any non-null value); with none trended, fan-on samples only (no schedule fallback, so "
+        "a unit that runs evenings or weekends on purpose keeps those hours). 'schedule': the "
+        "trended occupancy if present, else the assumed weekday 07-18 schedule. 'off': fan-on "
+        "samples only (the pre-0.98 behaviour). The gate lives in the running mask, so the "
+        "evidence chart and the triage violation mask judge the same samples. The finding's "
+        "occupancy_gate metric reports 'trended occupancy', 'assumed schedule (weekdays "
+        "07-18)', 'none trended (fan-on hours only)' or 'off'.",
     ),
 }
 
@@ -677,7 +707,7 @@ PARAM_DOCS["overcooling_severity"] = {
     **_SCHEDULE,
     **_ZONE_REHEAT_SAT,
     "tiers": _P(
-        "°F below the reference setpoint",
+        "°F below the reference setpoint, per key ('info', 'warn', 'fault')",
         "CAMBER judgment: info 1 / warn 2 / fault 3 °F below the reference, described in code as "
         "Std-55-aligned (no section cited)",
         "Look at max_depth_f and median_depth_f on zones occupants do not complain about; set "
@@ -711,6 +741,33 @@ PARAM_DOCS["overcooling_severity"] = {
         "morning (median across healthy zones) and use that. Used only when no WARMUP point is "
         "mapped.",
         (0.0, 4.0),
+    ),
+    "shortfall_share_pct": _P(
+        "% of considered (occupied, fan-on) samples, per key ('warn', 'fault')",
+        "CAMBER judgment: the same 5 % / 20 % warn / fault shares reheat_capacity_shortfall uses; "
+        "a heating shortfall a few hours a year is a weather extreme, not a capacity fault (#85: "
+        "a stuck-open damper's 0.81 % shortfall graded fault on depth alone)",
+        "Run the rule on a period you know the zone was comfortable and look at "
+        "shortfall_warn_pct (the share of samples in a sustained shortfall at least the warn "
+        "depth deep) across your zones: set 'warn' above the healthy zones' spread (their p95) "
+        "and 'fault' where a zone's cold hours become a standing complaint. "
+        "shortfall_depth_severity shows the depth-only grade for comparison.",
+        (0, 100),
+        "The shortfall grade is the lesser of the depth tier and the share tier (share below "
+        "'warn' -> info). None grades by depth alone (the pre-0.98 behaviour). Each key's range "
+        "is 0-100 with warn <= fault.",
+    ),
+    "share_pct": _P(
+        "% of considered (occupied, fan-on) samples, per key ('warn', 'fault')",
+        "CAMBER judgment: opt-in; overcooling stays graded by depth x duration alone by default "
+        "so existing verdicts don't move",
+        "Set it when brief deep overcooling (a few cold mornings) should not rate warn/fault: "
+        "look at warn_pct on zones you consider fine and set 'warn' above their spread; "
+        "{'warn': 5, 'fault': 20} mirrors the shortfall gate.",
+        (0, 100),
+        "None (default) = depth alone. When set, the overcooling grade is the lesser of the depth "
+        "tier and the share tier from warn_pct (share below 'warn' -> info). The no-heating-"
+        "setpoint cap (fault -> warn) still applies after it.",
     ),
 }
 
@@ -866,11 +923,35 @@ PARAM_DOCS["unmet_setpoint_hours"] = {
     ),
 }
 
+PARAM_DOCS["damper_census"] = {
+    "occupancy_gate": _P(
+        "choice",
+        "CAMBER judgment (#84): the census takes each box's median damper over occupied hours; "
+        "an assumed weekday schedule returned 'no damper data' on the ornl-frp-vav weekend test "
+        "days although every box trends the tests' 07:00-22:00 every-day occupancy. With the "
+        "trended occupancy those days get a census (d3_stuck_000 36.8 %, d3_stuck_060 40.3 %, "
+        "d3_stuck_100 41.8 % fleet median) and the fault-free day moves 39.3 -> 38.7 % (same "
+        "verdict).",
+        "Keep 'trended' when the boxes (or their zones) trend occupancy. Run once with "
+        "'schedule' and compare median_damper_pct: a large difference means the building's "
+        "real hours differ from the weekday office window, and the trended result is the one "
+        "to trust. Use 'off' only for a 24/7 space whose boxes never shut off: night shut-off "
+        "samples pull every median down toward 'throttling'.",
+        ("trended", "schedule", "off"),
+        "'trended' (default): each box's occupied samples from its own trended occupancy "
+        "point (any non-null value), else the assumed weekday 07-18 schedule. 'schedule': "
+        "always the schedule (the pre-0.98 behaviour). 'off': every sample. Trended warm-up / "
+        "cool-down flags drop prep-mode samples under 'trended' and 'schedule'. The finding's "
+        "occupancy_gate metric (and DamperCensusResult.occupancy_gate) reports 'trended "
+        "occupancy', 'assumed schedule (weekdays 07-18)', 'mixed' (some boxes each way) or "
+        "'off'.",
+    ),
+}
 FIXED["damper_census"] = (
     "a box is throttling when its median occupied damper is < 50 % and starved when >= 90 %; "
     "fault when >= 60 % of boxes throttle or >= 25 % are starved, warn when < 50 % of boxes lie "
-    "in band; occupied hours are the weekday 07:00-18:00 schedule; fixed in code "
-    "(camber/rules/static_rule.py, camber/staticpressure.py), not yet a constructor parameter"
+    "in band; the schedule fallback is the weekday 07:00-18:00 window; fixed in code "
+    "(camber/rules/static_rule.py, camber/staticpressure.py), not yet constructor parameters"
 )
 
 _ZONE_COHORT = {
@@ -1618,8 +1699,8 @@ PARAM_DOCS["condenser_bypass_leak"] = {
 PARAM_DOCS["compressor_short_cycle"] = {
     "max_starts_per_day": _P(
         "compressor starts per day (off-to-on transitions over the trend's span)",
-        "CAMBER judgment: a generous ceiling for a DX compressor with a minimum off-time of "
-        "about 5 min (the rule module's comment)",
+        "CAMBER judgment: a screening ceiling of about one start every 2 h; it is not derived "
+        "from a DX minimum off-time (a ~5 min timer alone would permit ~12 starts an hour)",
         "Take the manufacturer's minimum on/off timers and the unit's staging hysteresis; better, "
         "count the starts per day in a known-good week of similar weather and set the ceiling "
         "somewhat above its highest day. Calibrating on the period you are scoring would hide a "
@@ -1645,8 +1726,8 @@ PARAM_DOCS["compressor_staging"] = {
 PARAM_DOCS["heatpump_defrost"] = {
     "max_reversals_per_day": _P(
         "reversing-valve transitions per day",
-        "CAMBER judgment: defrost at most about once an hour in cold weather (the rule module's "
-        "comment), so 24 a day is a generous ceiling",
+        "CAMBER judgment: a screening ceiling of about 12 defrosts a day (two transitions each); "
+        "defrost at worst about once an hour in cold weather would reach ~48 transitions a day",
         "Read the defrost-control interval (time- or demand-based) from the unit's manual, or "
         "count the reversals per day in a known-good cold spell and set the ceiling above that. "
         "Each defrost counts two transitions (into cooling and back), so allow for that.",
@@ -2068,95 +2149,6 @@ del _rule, _knob
 
 # ==== end fixed-in-code notes ====
 
-# ==== begin 0.98 sibling-branch blocks (added at integration) ====
-# Entries sent by the wave-1 sibling branches for parameters their branch adds. They sit in
-# _PENDING until that branch merges: rule_params() uses an entry only once the constructor has the
-# parameter. At integration, move each block into PARAM_DOCS (the stale-entry test then guards it).
-
-# ---- 098-air-gates (#84 items 2, 3)
-_PENDING["supply_air_control"] = {
-    "occupancy_gate": _P(
-        "choice: 'trended' | 'schedule' | 'off'",
-        "CAMBER judgment (#84): on the fault-free lbnl-sdahu unit, 78 % of the fan-on hours more "
-        "than 2 F too warm were unoccupied fan cycling (damper shut, warm return air), which "
-        "graded a healthy unit warn at 12.1 %; gated on its trended occupancy (SYS_CTL) it reads "
-        "ok at 2.97 %. PNNL's discharge-air guide asks whether the unit meets its setpoint while "
-        "it serves the building, i.e. in occupied operation.",
-        "Keep 'trended' when the unit trends an occupied/unoccupied (or occupied-mode) point. "
-        "To see what the gate removes, run once with 'off' and compare too_warm_pct / "
-        "too_cold_pct and n_running: a large drop that sits in night or weekend hours is "
-        "unoccupied cycling, not a control fault. Use 'schedule' only when no occupancy is "
-        "trended AND you know the unit follows a weekday office schedule; then set the "
-        "building's own hours on a rule that takes them, since this one uses the generic "
-        "Mon-Fri 07-18 window.",
-        ("trended", "schedule", "off"),
-        "'trended' (default): fan-on samples AND the trended occupancy when the unit trends one "
-        "(any non-null value); with none trended, fan-on samples only (no schedule fallback, so "
-        "a unit that runs evenings or weekends on purpose keeps those hours). 'schedule': the "
-        "trended occupancy if present, else the assumed weekday 07-18 schedule. 'off': fan-on "
-        "samples only (the pre-0.98 behaviour). The gate lives in the running mask, so the "
-        "evidence chart and the triage violation mask judge the same samples. The finding's "
-        "occupancy_gate metric reports 'trended occupancy', 'assumed schedule (weekdays "
-        "07-18)', 'none trended (fan-on hours only)' or 'off'.",
-    ),
-}
-_PENDING["damper_census"] = {
-    "occupancy_gate": _P(
-        "choice: 'trended' | 'schedule' | 'off'",
-        "CAMBER judgment (#84): the census takes each box's median damper over occupied hours; "
-        "an assumed weekday schedule returned 'no damper data' on the ornl-frp-vav weekend test "
-        "days although every box trends the tests' 07:00-22:00 every-day occupancy. With the "
-        "trended occupancy those days get a census (d3_stuck_000 36.8 %, d3_stuck_060 40.3 %, "
-        "d3_stuck_100 41.8 % fleet median) and the fault-free day moves 39.3 -> 38.7 % (same "
-        "verdict).",
-        "Keep 'trended' when the boxes (or their zones) trend occupancy. Run once with "
-        "'schedule' and compare median_damper_pct: a large difference means the building's "
-        "real hours differ from the weekday office window, and the trended result is the one "
-        "to trust. Use 'off' only for a 24/7 space whose boxes never shut off: night shut-off "
-        "samples pull every median down toward 'throttling'.",
-        ("trended", "schedule", "off"),
-        "'trended' (default): each box's occupied samples from its own trended occupancy "
-        "point (any non-null value), else the assumed weekday 07-18 schedule. 'schedule': "
-        "always the schedule (the pre-0.98 behaviour). 'off': every sample. Trended warm-up / "
-        "cool-down flags drop prep-mode samples under 'trended' and 'schedule'. The finding's "
-        "occupancy_gate metric (and DamperCensusResult.occupancy_gate) reports 'trended "
-        "occupancy', 'assumed schedule (weekdays 07-18)', 'mixed' (some boxes each way) or "
-        "'off'.",
-    ),
-}
-
-# ---- 098-terminal-ventilation (#85 item 5)
-_PENDING["overcooling_severity"] = {
-    "shortfall_share_pct": _P(
-        "% of considered (occupied, fan-on) samples, per tier: {'warn': %, 'fault': %}",
-        "CAMBER judgment: the same 5 % / 20 % warn / fault shares reheat_capacity_shortfall uses; "
-        "a heating shortfall a few hours a year is a weather extreme, not a capacity fault (#85: "
-        "a stuck-open damper's 0.81 % shortfall graded fault on depth alone)",
-        "Run the rule on a period you know the zone was comfortable and look at "
-        "shortfall_warn_pct (the share of samples in a sustained shortfall at least the warn "
-        "depth deep) across your zones: set 'warn' above the healthy zones' spread (their p95) "
-        "and 'fault' where a zone's cold hours become a standing complaint. "
-        "shortfall_depth_severity shows the depth-only grade for comparison.",
-        (0, 100),
-        "The shortfall grade is the lesser of the depth tier and the share tier (share below "
-        "'warn' -> info). None grades by depth alone (the pre-0.98 behaviour). Each key's range "
-        "is 0-100 with warn <= fault.",
-    ),
-    "share_pct": _P(
-        "% of considered (occupied, fan-on) samples, per tier: {'warn': %, 'fault': %}",
-        "CAMBER judgment: opt-in; overcooling stays graded by depth x duration alone by default "
-        "so existing verdicts don't move",
-        "Set it when brief deep overcooling (a few cold mornings) should not rate warn/fault: "
-        "look at warn_pct on zones you consider fine and set 'warn' above their spread; "
-        "{'warn': 5, 'fault': 20} mirrors the shortfall gate.",
-        (0, 100),
-        "None (default) = depth alone. When set, the overcooling grade is the lesser of the depth "
-        "tier and the share tier from warn_pct (share below 'warn' -> info). The no-heating-"
-        "setpoint cap (fault -> warn) still applies after it.",
-    ),
-}
-# ==== end 0.98 sibling-branch blocks ====
-
 
 # --------------------------------------------------------------------------- introspection
 
@@ -2288,10 +2280,16 @@ def config_snippet(rules: list[str]) -> dict:
     return {"rules": entries}
 
 
-def _fmt_range(r: tuple) -> str:
+def _per_key(unit: str, default=None) -> bool:
+    """True for a dict-valued (tier map) parameter, whose range applies to each value."""
+    return isinstance(default, dict) or "per key" in unit
+
+
+def _fmt_range(r: tuple, default=None, unit: str = "") -> str:
     if all(isinstance(v, (str, bool)) for v in r):
         return "one of " + ", ".join(json_value(v) for v in r)
-    return f"{r[0]} to {r[-1]}"
+    each = "each value: " if _per_key(unit, default) else ""
+    return f"{each}{r[0]} to {r[-1]}"
 
 
 def json_value(v) -> str:
@@ -2312,7 +2310,8 @@ def snippet_yaml(rules: list[str]) -> str:
             d = rp.doc
             if d is None:
                 continue
-            text = f"{d.unit}; {_fmt_range(d.range)}. Basis: {d.basis}. Calibrate: {d.calibrate}"
+            rng = _fmt_range(d.range, rp.default, d.unit)
+            text = f"{d.unit}; {rng}. Basis: {d.basis}. Calibrate: {d.calibrate}"
             if d.note:
                 text += f" Note: {d.note}"
             notes[("rules", i, "params", rp.name)] = text
@@ -2349,7 +2348,7 @@ def render_text(rules: list[str], width: int = 100) -> str:
             if "passed_to" in p:
                 lines += field("passed through to", p["passed_to"])
             if "range" in p:
-                lines += field("range", _fmt_range(tuple(p["range"])))
+                lines += field("range", _fmt_range(tuple(p["range"]), p["default"], p["unit"]))
                 lines += field("basis", p["basis"])
                 lines += field("calibrate", p["calibrate"])
             if p.get("note"):

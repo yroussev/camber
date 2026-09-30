@@ -67,6 +67,10 @@ The optional `basis` map copies that provenance into each finding of the rule
 - `CAMBER judgment` -- an engineering choice, usually screening-grade: re-tune it first;
 - `calibrated on ...` -- fitted to the named dataset or run.
 
+**Tier maps.** A parameter whose value is a dict of tiers (`{"warn": 5.0, "fault": 20.0}`) names
+its keys in the unit column, and its range applies to each value ("each value: 0 to 100"); the
+calibration note says how the keys must be ordered.
+
 **Fixed in code** lists thresholds that are not constructor parameters yet, so you can see what
 you cannot tune from a config today.
 
@@ -78,10 +82,11 @@ def _cell(text) -> str:
     return str(text).replace("|", "\\|").replace("\n", " ")
 
 
-def _range(r: tuple) -> str:
+def _range(r: tuple, default=None, unit: str = "") -> str:
     if all(isinstance(v, (str, bool)) for v in r):
         return ", ".join(f"`{pd.json_value(v)}`" for v in r)
-    return f"{r[0]} to {r[-1]}"
+    each = "each value: " if pd._per_key(unit, default) else ""  # a tier map: the range per key
+    return f"{each}{r[0]} to {r[-1]}"
 
 
 def render_markdown() -> str:
@@ -114,7 +119,7 @@ def render_markdown() -> str:
                 d = rp.doc
                 out.append(
                     f"| `{rp.name}` | `{pd.json_value(rp.default)}` | {_cell(d.unit)} | "
-                    f"{_cell(_range(d.range))} | {_cell(d.basis)} |"
+                    f"{_cell(_range(d.range, rp.default, d.unit))} | {_cell(d.basis)} |"
                 )
             out.append("")
             out.append("How to calibrate:\n")

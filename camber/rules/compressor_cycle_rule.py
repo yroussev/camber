@@ -26,7 +26,9 @@ class CompressorShortCycle:
     roles_optional = ()
 
     def __init__(self, max_starts_per_day: float = 12.0):
-        # DX min-off-time is typically ~5 min -> ~12 starts/day is a generous ceiling.
+        # Not derived from the DX minimum off-time: a ~5 min timer alone would permit ~12 starts
+        # an HOUR. 12 starts a day (about one every 2 h, averaged over the trend span including
+        # idle days) is a CAMBER screening ceiling.
         self.max_starts_per_day = max_starts_per_day
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:

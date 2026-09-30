@@ -191,6 +191,24 @@ calibrate it, and reads run configs from YAML as well as JSON.
   `builtin.rule_names()`, so a mapping for `cohort_airflow` or the census and starvation rules no
   longer fails the "every mapped rule exists" check.
 <!-- /098-refs-catalog -->
+<!-- 098-w1-integration -->
+- **Stale rule docstrings and comments corrected (text only, no behaviour change).** The
+  `supply_air_reset_compliance` module described the SAT reset as a positive slope against OAT
+  (it is negative since 0.92); `dcv_verification` said a trended occupancy is AND-ed with the
+  schedule (it replaces it); the rogue-zone census said the fleet runner carries no topology (it
+  auto-builds a naming one, which takes precedence over `groups`); `chw_supply_tracking` left out
+  the chiller-power run gate added in 0.92; and the `compressor_short_cycle` / `heatpump_defrost`
+  default comments got their arithmetic wrong (a 5 min timer allows about 12 starts an *hour*;
+  hourly defrost is about 48 reversing-valve transitions a day), so 12 and 24 a day are screening
+  ceilings, not generous ones. The `camber rules params` basis text for those two says so.
+- **Parameter registry: the `occupancy_gate` and share-gate entries.** `supply_air_control` and
+  `damper_census` `occupancy_gate`, and `overcooling_severity` `shortfall_share_pct` and
+  `share_pct`, are documented in `camber/rules/param_docs.py` and `docs/THRESHOLDS.md`. A
+  dict-valued tier map names its keys in its unit and gives the range of each value ("each value:
+  0 to 100"); `overcooling_severity` `tiers` follows the same convention, and a test checks every
+  tier map's default values against the range. The `damper_census` fixed-in-code note no longer
+  says occupied hours are always the weekday schedule.
+<!-- /098-w1-integration -->
 
 ## [0.97.0] — Unreleased
 

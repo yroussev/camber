@@ -41,6 +41,10 @@ The optional `basis` map copies that provenance into each finding of the rule
 - `CAMBER judgment` -- an engineering choice, usually screening-grade: re-tune it first;
 - `calibrated on ...` -- fitted to the named dataset or run.
 
+**Tier maps.** A parameter whose value is a dict of tiers (`{"warn": 5.0, "fault": 20.0}`) names
+its keys in the unit column, and its range applies to each value ("each value: 0 to 100"); the
+calibration note says how the keys must be ordered.
+
 **Fixed in code** lists thresholds that are not constructor parameters yet, so you can see what
 you cannot tune from a config today.
 
@@ -70,7 +74,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`condenser_water_reset`](#condenser_water_reset) | 1 |  |
 | [`control_hunting`](#control_hunting) | 4 |  |
 | [`cooling_tower_approach`](#cooling_tower_approach) | 4 |  |
-| [`damper_census`](#damper_census) | 0 | yes |
+| [`damper_census`](#damper_census) | 1 | yes |
 | [`dcv_system_verification`](#dcv_system_verification) | 23 (passed to `dcv_verification`) | yes |
 | [`dcv_verification`](#dcv_verification) | 19 |  |
 | [`dx_indoor_airflow`](#dx_indoor_airflow) | 11 |  |
@@ -89,7 +93,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`night_weekend_setback`](#night_weekend_setback) | 8 |  |
 | [`outdoor_air_fraction`](#outdoor_air_fraction) | 5 |  |
 | [`overcooling_min_flow`](#overcooling_min_flow) | 3 |  |
-| [`overcooling_severity`](#overcooling_severity) | 8 |  |
+| [`overcooling_severity`](#overcooling_severity) | 10 |  |
 | [`reheat_capacity_shortfall`](#reheat_capacity_shortfall) | 10 |  |
 | [`reheat_minimization_g36`](#reheat_minimization_g36) | 2 | yes |
 | [`reheat_penalty`](#reheat_penalty) | 3 |  |
@@ -102,7 +106,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`static_pressure_reset`](#static_pressure_reset) | 2 |  |
 | [`static_reset_effectiveness`](#static_reset_effectiveness) | 7 |  |
 | [`static_rogue_zone_census`](#static_rogue_zone_census) | 5 |  |
-| [`supply_air_control`](#supply_air_control) | 3 |  |
+| [`supply_air_control`](#supply_air_control) | 4 |  |
 | [`supply_air_reset`](#supply_air_reset) | 1 |  |
 | [`supply_air_reset_compliance`](#supply_air_reset_compliance) | 10 |  |
 | [`unmet_setpoint_hours`](#unmet_setpoint_hours) | 5 |  |
@@ -270,7 +274,7 @@ How to calibrate:
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `max_starts_per_day` | `12.0` | compressor starts per day (off-to-on transitions over the trend's span) | 6.0 to 72.0 | CAMBER judgment: a generous ceiling for a DX compressor with a minimum off-time of about 5 min (the rule module's comment) |
+| `max_starts_per_day` | `12.0` | compressor starts per day (off-to-on transitions over the trend's span) | 6.0 to 72.0 | CAMBER judgment: a screening ceiling of about one start every 2 h; it is not derived from a DX minimum off-time (a ~5 min timer alone would permit ~12 starts an hour) |
 
 How to calibrate:
 
@@ -350,9 +354,15 @@ How to calibrate:
 
 ## damper_census
 
-No tunable parameters.
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `occupancy_gate` | `"trended"` | choice | `"trended"`, `"schedule"`, `"off"` | CAMBER judgment (#84): the census takes each box's median damper over occupied hours; an assumed weekday schedule returned 'no damper data' on the ornl-frp-vav weekend test days although every box trends the tests' 07:00-22:00 every-day occupancy. With the trended occupancy those days get a census (d3_stuck_000 36.8 %, d3_stuck_060 40.3 %, d3_stuck_100 41.8 % fleet median) and the fault-free day moves 39.3 -> 38.7 % (same verdict). |
 
-Fixed in code: a box is throttling when its median occupied damper is < 50 % and starved when >= 90 %; fault when >= 60 % of boxes throttle or >= 25 % are starved, warn when < 50 % of boxes lie in band; occupied hours are the weekday 07:00-18:00 schedule; fixed in code (camber/rules/static_rule.py, camber/staticpressure.py), not yet a constructor parameter
+How to calibrate:
+
+- `occupancy_gate`: Keep 'trended' when the boxes (or their zones) trend occupancy. Run once with 'schedule' and compare median_damper_pct: a large difference means the building's real hours differ from the weekday office window, and the trended result is the one to trust. Use 'off' only for a 24/7 space whose boxes never shut off: night shut-off samples pull every median down toward 'throttling'. *Note:* 'trended' (default): each box's occupied samples from its own trended occupancy point (any non-null value), else the assumed weekday 07-18 schedule. 'schedule': always the schedule (the pre-0.98 behaviour). 'off': every sample. Trended warm-up / cool-down flags drop prep-mode samples under 'trended' and 'schedule'. The finding's occupancy_gate metric (and DamperCensusResult.occupancy_gate) reports 'trended occupancy', 'assumed schedule (weekdays 07-18)', 'mixed' (some boxes each way) or 'off'.
+
+Fixed in code: a box is throttling when its median occupied damper is < 50 % and starved when >= 90 %; fault when >= 60 % of boxes throttle or >= 25 % are starved, warn when < 50 % of boxes lie in band; the schedule fallback is the weekday 07:00-18:00 window; fixed in code (camber/rules/static_rule.py, camber/staticpressure.py), not yet constructor parameters
 
 ## dcv_system_verification
 
@@ -578,7 +588,7 @@ How to calibrate:
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `max_reversals_per_day` | `24.0` | reversing-valve transitions per day | 12.0 to 96.0 | CAMBER judgment: defrost at most about once an hour in cold weather (the rule module's comment), so 24 a day is a generous ceiling |
+| `max_reversals_per_day` | `24.0` | reversing-valve transitions per day | 12.0 to 96.0 | CAMBER judgment: a screening ceiling of about 12 defrosts a day (two transitions each); defrost at worst about once an hour in cold weather would reach ~48 transitions a day |
 
 How to calibrate:
 
@@ -760,7 +770,7 @@ How to calibrate:
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `tiers` | `null` | °F below the reference setpoint | 0.5 to 6.0 | CAMBER judgment: info 1 / warn 2 / fault 3 °F below the reference, described in code as Std-55-aligned (no section cited) |
+| `tiers` | `null` | °F below the reference setpoint, per key ('info', 'warn', 'fault') | each value: 0.5 to 6.0 | CAMBER judgment: info 1 / warn 2 / fault 3 °F below the reference, described in code as Std-55-aligned (no section cited) |
 | `window_min` | `60.0` | min | 15.0 to 240.0 | CAMBER judgment: an excursion must persist an hour to count |
 | `relative_to_deadband` | `true` | flag | `false`, `true` | CAMBER judgment: a space inside the heating-cooling deadband is operating as designed |
 | `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
@@ -768,6 +778,8 @@ How to calibrate:
 | `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
 | `recovery_hours` | `2.0` | h | 0.0 to 4.0 | CAMBER judgment: morning recovery from setback is not overcooling |
 | `reheat_saturated_pct` | `90.0` | % valve open | 75.0 to 100.0 | CAMBER judgment: a valve at or above 90 % is treated as fully open (heating maxed out) |
+| `shortfall_share_pct` | `{"warn": 5.0, "fault": 20.0}` | % of considered (occupied, fan-on) samples, per key ('warn', 'fault') | each value: 0 to 100 | CAMBER judgment: the same 5 % / 20 % warn / fault shares reheat_capacity_shortfall uses; a heating shortfall a few hours a year is a weather extreme, not a capacity fault (#85: a stuck-open damper's 0.81 % shortfall graded fault on depth alone) |
+| `share_pct` | `null` | % of considered (occupied, fan-on) samples, per key ('warn', 'fault') | each value: 0 to 100 | CAMBER judgment: opt-in; overcooling stays graded by depth x duration alone by default so existing verdicts don't move |
 
 How to calibrate:
 
@@ -779,6 +791,8 @@ How to calibrate:
 - `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
 - `recovery_hours`: Measure how long zones take to reach setpoint after occupied mode starts on a cold morning (median across healthy zones) and use that. Used only when no WARMUP point is mapped.
 - `reheat_saturated_pct`: Read the reheat valve command in known cold, fully-heating hours on healthy boxes; set this just below the level those valves actually reach (some controllers top out at 95-98 %, not 100 %). *Note:* Shared by overcooling_severity (sets these samples aside as a heating shortfall) and reheat_capacity_shortfall (reports them as its finding); keep the two equal.
+- `shortfall_share_pct`: Run the rule on a period you know the zone was comfortable and look at shortfall_warn_pct (the share of samples in a sustained shortfall at least the warn depth deep) across your zones: set 'warn' above the healthy zones' spread (their p95) and 'fault' where a zone's cold hours become a standing complaint. shortfall_depth_severity shows the depth-only grade for comparison. *Note:* The shortfall grade is the lesser of the depth tier and the share tier (share below 'warn' -> info). None grades by depth alone (the pre-0.98 behaviour). Each key's range is 0-100 with warn <= fault.
+- `share_pct`: Set it when brief deep overcooling (a few cold mornings) should not rate warn/fault: look at warn_pct on zones you consider fine and set 'warn' above their spread; {'warn': 5, 'fault': 20} mirrors the shortfall gate. *Note:* None (default) = depth alone. When set, the overcooling grade is the lesser of the depth tier and the share tier from warn_pct (share below 'warn' -> info). The no-heating-setpoint cap (fault -> warn) still applies after it.
 
 ## reheat_capacity_shortfall
 
@@ -1015,12 +1029,14 @@ Not thresholds: `groups` (explicit zone -> air-handler membership ({zone: ahu} o
 | `tol_F` | `2.0` | °F | 0.5 to 5.0 | CAMBER judgment: the ±2 °F band a tuned discharge-air loop holds |
 | `warn_pct` | `10.0` | % of fan-on running samples | 2.0 to 30.0 | CAMBER judgment |
 | `fault_pct` | `25.0` | % of fan-on running samples | 10.0 to 60.0 | CAMBER judgment |
+| `occupancy_gate` | `"trended"` | choice | `"trended"`, `"schedule"`, `"off"` | CAMBER judgment (#84): on the fault-free lbnl-sdahu unit, 78 % of the fan-on hours more than 2 F too warm were unoccupied fan cycling (damper shut, warm return air), which graded a healthy unit warn at 12.1 %; gated on its trended occupancy (SYS_CTL) it reads ok at 2.97 %. PNNL's discharge-air guide asks whether the unit meets its setpoint while it serves the building, i.e. in occupied operation. |
 
 How to calibrate:
 
 - `tol_F`: On a known-good period take the 95th percentile of |SAT - setpoint| over fan-on hours (mean_abs_dev_F is the finding's summary of it) and set the tolerance just above it.
 - `warn_pct`: Read off_setpoint_pct on units known to control well and set the warn level above their spread; tuning it on the unit under test is circular.
 - `fault_pct`: Set it well above warn_pct, at the off_setpoint_pct where comfort or reheat complaints begin at the site. *Note:* Must be at or above warn_pct.
+- `occupancy_gate`: Keep 'trended' when the unit trends an occupied/unoccupied (or occupied-mode) point. To see what the gate removes, run once with 'off' and compare too_warm_pct / too_cold_pct and n_running: a large drop that sits in night or weekend hours is unoccupied cycling, not a control fault. Use 'schedule' only when no occupancy is trended AND you know the unit follows a weekday office schedule; then set the building's own hours on a rule that takes them, since this one uses the generic Mon-Fri 07-18 window. *Note:* 'trended' (default): fan-on samples AND the trended occupancy when the unit trends one (any non-null value); with none trended, fan-on samples only (no schedule fallback, so a unit that runs evenings or weekends on purpose keeps those hours). 'schedule': the trended occupancy if present, else the assumed weekday 07-18 schedule. 'off': fan-on samples only (the pre-0.98 behaviour). The gate lives in the running mask, so the evidence chart and the triage violation mask judge the same samples. The finding's occupancy_gate metric reports 'trended occupancy', 'assumed schedule (weekdays 07-18)', 'none trended (fan-on hours only)' or 'off'.
 
 ## supply_air_reset
 

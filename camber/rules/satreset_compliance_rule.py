@@ -1,12 +1,13 @@
 """Rule: supply-air-temperature reset **compliance** with the G36 OAT target.
 
 Complementary to :class:`camber.rules.satreset_rule.SupplyAirReset`. That rule asks the *shape*
-question -- does supply air get reset **upward at all** as cooling load drops (a positive slope)?
-This rule asks the *target* question -- is supply air held **colder than the specific ASHRAE
-Guideline-36 §5.16.2.2.b OAT→SAT map** would command? The two are complementary: a plant can have a
-healthy reset slope yet still sit below the G36 target (and vice-versa). Supply air held colder than
-the reset target sustains terminal reheat and wastes energy, so a persistent below-target gap is a
-**reheat/energy opportunity** (a warn, not a hard fault).
+question -- does supply air get reset **upward at all** as cooling load drops, i.e. fall as OAT
+rises (a *negative* slope against OAT, since 0.92 / #65)? This rule asks the *target* question -- is
+supply air held **colder than the specific ASHRAE Guideline-36 §5.16.2.2.b OAT→SAT map** would
+command? The two are complementary: a plant can have a healthy reset slope yet still sit below the
+G36 target (and vice-versa). Supply air held colder than the reset target sustains terminal reheat
+and wastes energy, so a persistent below-target gap is a **reheat/energy opportunity** (a warn, not
+a hard fault).
 
 It compares supply air to the OAT-**computed** target (via
 :func:`camber.g36_reset.oat_sat_setpoint`), **not** to a mapped ``SUPPLY_AIR_TEMP_SP`` -- so it

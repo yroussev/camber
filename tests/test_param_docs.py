@@ -69,6 +69,11 @@ def test_entries_are_well_formed(rule):
         elif isinstance(default, (int, float)) and not d.is_choice:
             lo, hi = d.range[0], d.range[-1]
             assert lo <= default <= hi, f"{where}: default {default} outside {d.range}"
+        elif isinstance(default, dict):  # a tier map: the range is per value
+            assert not d.is_choice and "per key" in d.unit, f"{where}: name the keys in the unit"
+            lo, hi = d.range[0], d.range[-1]
+            for k, v in default.items():
+                assert lo <= v <= hi, f"{where}[{k!r}]: default {v} outside {d.range}"
 
 
 def test_defaults_are_read_from_the_constructors():
@@ -152,6 +157,21 @@ def test_thresholds_doc_is_current():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.main(["--check"]) == 0, "run: python scripts/thresholds_doc.py"
+
+
+def test_wave1_sibling_params_are_documented():
+    """0.98 wave 1: the air-gates and terminal-ventilation parameters moved into PARAM_DOCS."""
+    for rule, name in (
+        ("supply_air_control", "occupancy_gate"),
+        ("damper_census", "occupancy_gate"),
+        ("overcooling_severity", "shortfall_share_pct"),
+        ("overcooling_severity", "share_pct"),
+    ):
+        assert name in pd.PARAM_DOCS[rule] and name not in pd._PENDING.get(rule, {})
+    ss = {rp.name: rp for rp in pd.rule_params("overcooling_severity")}["shortfall_share_pct"]
+    assert pd._fmt_range(ss.doc.range, ss.default, ss.doc.unit) == "each value: 0 to 100"
+    sp = {rp.name: rp for rp in pd.rule_params("overcooling_severity")}["share_pct"]
+    assert pd._fmt_range(sp.doc.range, sp.default, sp.doc.unit) == "each value: 0 to 100"
 
 
 def test_pending_sibling_entries_are_well_formed():

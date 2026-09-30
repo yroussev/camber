@@ -123,17 +123,18 @@ def _oa_role(frame: pd.DataFrame, full_outdoor_air: bool = False):
 class DemandControlledVentilation:
     """Verifies DCV: outdoor air should rise when CO₂ (ventilation demand) rises.
 
-    Judged only on occupied samples (the schedule, AND-ed with a trended ``OCCUPANCY`` point,
-    minus ``WARMUP``/``COOLDOWN``) with the supply fan running and the economizer inactive -- from
-    ``ECON_CMD``, else inferred from ``OAT`` + ``HEAT_VALVE``. Flags a **static** OA signal (fixed
-    OA / DCV not functioning) or one that modulates but not with demand; ``fault`` when CO₂ breaches
-    ``co2_setpoint`` while OA sits at its minimum, or OA falls below ``oa_floor_cfm``. Uses OA
-    airflow where it is trended and the OA-damper position where it is not (0.93, #37: each
+    Judged only on occupied samples (a trended ``OCCUPANCY`` point when one is mapped, which
+    *replaces* the ``start_hour``/``end_hour``/``occupied_days`` schedule; else that schedule; minus
+    ``WARMUP``/``COOLDOWN`` either way) with the supply fan running and the economizer inactive --
+    from ``ECON_CMD``, else inferred from ``OAT`` + ``HEAT_VALVE``. Flags a **static** OA signal
+    (fixed OA / DCV not functioning) or one that modulates but not with demand; ``fault`` when CO₂
+    breaches ``co2_setpoint`` while OA sits at its minimum, or OA falls below ``oa_floor_cfm``. Uses
+    OA airflow where it is trended and the OA-damper position where it is not (0.93, #37: each
     signal judges its own samples, listed in ``metrics["oa_segments"]``); with
-    ``full_outdoor_air=True`` (a 100 % outdoor-air unit) the supply airflow and then the supply
-    fan speed follow as proxies. The CO₂ lift is taken within the hour of day
-    (``stratify_hour``) when enough same-hour samples exist. Frames without an OA signal (a VAV
-    zone's CO₂) return ``None``: :class:`DcvSystemVerification` joins those to their air handler.
+    ``full_outdoor_air=True`` (a 100 % outdoor-air unit) the supply airflow and then the supply fan
+    speed follow as proxies. The CO₂ lift is taken within the hour of day (``stratify_hour``) when
+    enough same-hour samples exist. Frames without an OA signal (a VAV zone's CO₂) return ``None``:
+    :class:`DcvSystemVerification` joins those to their air handler.
     """
 
     name = "dcv_verification"
