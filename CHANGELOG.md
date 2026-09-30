@@ -6,10 +6,19 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.98.0] — Unreleased
 
-<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is released.
-Each branch adds its bullets only inside its own marked block below. -->
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is
+released. Each branch adds its bullets only inside its own marked block below. -->
 
-<!-- 098-core (#85, #86, #88) -->
+**0.98: hardening from the workbook (#84, #85, #86, #87, #88, #89, #90).** Working through the
+0.97 workbook on real data showed where CAMBER's answers were wrong, silent or hard to tune. This
+release makes the rule runners say which checks did not run and why, lets an M&V refusal say
+how much more data it needs, gates two air-side rules on trended occupancy, grades a zone's
+heating shortfall on how often it happens as well as how deep it goes, links more rules to the
+PNNL re-tuning material, and documents every tunable threshold with its basis and a way to
+calibrate it, and reads run configs from YAML as well as JSON.
+
+### Added
+<!-- 098-core -->
 - **`roles_any_of` (#86 item 4a, provisional).** A rule may declare `roles_any_of`, a tuple of
   role groups of which each needs at least one role present (a run status *or* a gas input). The
   runners load every role of a group, skip the equipment when a group has none, and include the
@@ -30,14 +39,6 @@ Each branch adds its bullets only inside its own marked block below. -->
     missing inputs, equipment: one row per rule and missing set, six units named, then "and N
     more"), and the cover a "Checks not evaluated" row, both only when there is something to
     list. `no_verdict` records are kept for later use but not listed.
-- **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
-  4).** The rule runners (and a run's lazy `frame_for`) set
-  `frame.attrs["camber_equip_class"]` to the equipment's class. `dcv_verification` keeps its
-  "typically return-air CO₂" caveat on air handlers and on equipment of absent or unrecognised
-  class (direct API calls are unchanged), and drops it on terminals and fan coils, whose CO₂ is
-  the room's own: the finnish-dcv, b4b-windesheim and sdu-ou44 rooms (class `VAV`) lose it. Only
-  that caveat changes; severities and metrics do not. Workbook `zone-dcv` pins the caveat absent
-  and its instructor discussion point is rewritten.
 - **An M&V refusal says what data is needed (#88 item 4).** New `camber.mandv.sufficiency`:
   `baseline_need(interval, n_have, min_n=...)` returns the required, available and missing
   amount, its unit, the calendar days it takes to collect, and a one-line text ("1,440 baseline
@@ -50,6 +51,49 @@ Each branch adds its bullets only inside its own marked block below. -->
   "Data needed" paragraph per meter. Hourly M&V has no config path, so its need is reported
   through the exception only. Workbook `capstone` pins the one-week refusal's need at 1,272 hours.
 <!-- /098-core -->
+
+### Changed
+<!-- 098-core -->
+- **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
+  4).** The rule runners (and a run's lazy `frame_for`) set
+  `frame.attrs["camber_equip_class"]` to the equipment's class. `dcv_verification` keeps its
+  "typically return-air CO₂" caveat on air handlers and on equipment of absent or unrecognised
+  class (direct API calls are unchanged), and drops it on terminals and fan coils, whose CO₂ is
+  the room's own: the finnish-dcv, b4b-windesheim and sdu-ou44 rooms (class `VAV`) lose it. Only
+  that caveat changes; severities and metrics do not. Workbook `zone-dcv` pins the caveat absent
+  and its instructor discussion point is rewritten.
+<!-- /098-core -->
+<!-- 098-air-gates -->
+- **`damper_census` reads trended occupancy (#84).** Each box's occupied hours now come from its
+  own trended occupancy point when it has any non-null value, and from the assumed weekday
+  07:00-18:00 schedule only when it has none; trended warm-up / cool-down flags drop prep-mode
+  samples (the rule declared them but never read them). A weekend test day now gets a census
+  instead of "no damper data". New rule param `occupancy_gate` (`"trended"` default,
+  `"schedule"` for the old behaviour, `"off"` for every sample), new `occupancy_gate` metric and
+  `DamperCensusResult.occupancy_gate` field (`trended occupancy` / the assumed schedule / `mixed`
+  / `off`), and `damper_census(..., use_trended_occupancy=True)`. **Intended default change:**
+  on `ornl-frp-vav` the fault-free day's census median moves 39.3 -> 38.7 % (still a fault, all
+  10 boxes low), and the weekend days `d3_stuck_000`, `d3_stuck_060` and `d3_stuck_100`, which
+  returned "no damper data", now read 36.8 % / 40.3 % / 41.8 %.
+- **`supply_air_control` gates on trended occupancy (#84).** New param `occupancy_gate`:
+  `"trended"` (default) judges only fan-on samples that the unit's trended occupancy marks
+  occupied, and keeps the fan-only gate when no occupancy is trended (no assumed-schedule
+  fallback); `"schedule"` falls back to the weekday 07-18 schedule; `"off"` is the pre-0.98
+  fan-only gate. The gate sits in the running mask, so the finding, its evidence chart and the
+  triage violation mask judge the same samples. New `occupancy_gate` metric; the summary says
+  "occupied running hours" when gated. **Intended default change:** the fault-free `lbnl-sdahu`
+  unit goes from a warn at 12.1 % too warm (78 % of those hours were unoccupied fan cycling) to
+  ok at 2.97 %; `AHU__damper_stuck_075` stays a fault, too cold 32.6 -> 31.2 %; the capstone's
+  RCx report loses the fault-free control's `supply_air_control` issue (6 issues, was 7).
+- **`irish-ahu` template comment corrected (#84).** The excess outdoor air is not "mostly the
+  COVID-19 period": 53 % of the cooling-weather hours before it (2017-06 to 2020-02) against
+  45 % during it (2020-08 to 2021-11).
+- **Workbook.** `air-sat-reset` (fault-free unit ok at 3 %, the stuck damper 31 %, question 5
+  recast around the gate, with a pinned check that `occupancy_gate: "off"` restores the 12 %
+  warn), `air-static-pressure` (census median 38.7 %, the weekend caveat and common mistake
+  rewritten) and the `air-economizer` instructor key (the stale sentence about the catalog note
+  removed) updated; `capstone` re-verified.
+<!-- /098-air-gates -->
 
 ## [0.97.0] — Unreleased
 

@@ -21,7 +21,7 @@ Each exercise's section has the same parts: **Answer key**, **Discussion points*
 ### `air-sat-reset`: Supply-air temperature reset
 
 Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](air-sat-reset.md#setup).
+0.98.0-dev, with the commands on the [exercise page](air-sat-reset.md#setup).
 
 **Answer key**
 
@@ -46,13 +46,15 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
    asking for the setpoint. A negative slope can also be a fixed setpoint that the coil only just
    holds in hot weather.
 4. *Which run fails to hold its setpoint?* `AHU__damper_stuck_075`: `supply_air_control` is a
-   **fault**, too cold in 33% of its running hours. With the damper stuck at 75 % the unit takes
+   **fault**, too cold in 31% of its occupied running hours. With the damper stuck at 75 % the unit takes
    in cold outdoor air it cannot shut out, and it has no heating coil to warm it back up.
-5. *The fault-free unit's too-warm hours?* `supply_air_control` is a **warn** on
-   `AHU__fault_free`: 12% of its running hours are more than 2 °F above the setpoint. 78% of
-   those hours are unoccupied: the fan cycling in the simulation's unoccupied mode, with the
-   damper shut and warm return air. That is not an occupied-control fault; the rule does not
-   separate unoccupied cycling from occupied control.
+5. *The fault-free unit's too-warm hours?* `supply_air_control` is **ok** on `AHU__fault_free`:
+   3% of its occupied running hours are more than 2 °F above the setpoint
+   (`occupancy_gate: trended occupancy`). Counting every fan-on hour instead, 78% of the
+   too-warm hours are unoccupied: the fan cycling in the simulation's unoccupied mode, with the
+   damper shut and warm return air. That is not an occupied-control fault, which is why the rule
+   judges only occupied hours when the unit trends occupancy. With `occupancy_gate: "off"` the
+   same unit reads a **warn** at 12%, the verdict CAMBER gave before 0.98.
 
 **Discussion points**
 
@@ -82,7 +84,7 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 ### `air-static-pressure`: Static pressure reset and the damper census
 
-Figures from the real `lbnl-sdahu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev, with
+Figures from the real `lbnl-sdahu` and `ornl-frp-vav` default subsets, CAMBER 0.98.0-dev, with
 the commands on the [exercise page](air-static-pressure.md#setup).
 
 **Answer key**
@@ -96,7 +98,8 @@ the commands on the [exercise page](air-static-pressure.md#setup).
    setpoint. Only the fault-free run, and the fault-free part of the spliced onset run, carry the
    real setpoint.
 3. *What does the census say?* `damper_census` is a **fault**: on the fault-free day all 10 boxes
-   have a median damper opening below 50 % (a fleet median of 39%), none is near fully open:
+   have a median damper opening below 50 % (a fleet median of 39%) over the hours the boxes'
+   own trended occupancy marks occupied, none is near fully open:
    "static likely too high". The proposal is a trim-and-respond static reset: lower the setpoint
    while no box asks for more air, raise it when one does, so that the most-open box ends up
    nearly fully open.
@@ -121,8 +124,10 @@ the commands on the [exercise page](air-static-pressure.md#setup).
 
 - Reading "no finding" on the faulted runs as "no problem". The rule had nothing to judge.
 - Pooling boxes from different test days or different air handlers into one census.
-- Running the census on a weekend test day and reading "no damper data" as an empty building:
-  the rule's occupied hours follow CAMBER's assumed weekday schedule.
+- Assuming the census judges an office schedule. Since 0.98 each box's occupied hours come from
+  its own trended occupancy point, so a weekend test day gets a census too (the tests ran
+  07:00-22:00 every day); only a box with no occupancy trended falls back to CAMBER's assumed
+  weekday 07:00-18:00 schedule, and the finding's `occupancy_gate` says which applied.
 
 [pnnl-guide-static-pressure]: https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_84187.pdf "Building Re-Tuning Training Guide: AHU Static Pressure Control (PNNL-SA-84187)"
 
@@ -222,8 +227,6 @@ Figures from the real `lbnl-sdahu` default subset, CAMBER 0.97.0-dev, with the c
    years before it (2017-06 to 2020-02) show excess outdoor air in 53% of the cooling-weather
    hours, a **fault** on their own, against 45% in the documented 100 % outdoor-air period
    (2020-08 to 2021-11). Cooling weather is rare in Ireland, so each period has few such hours.
-   The catalog's own note on this unit reads the warning as mostly the COVID period; the
-   period split does not bear that out.
 
 **Discussion points**
 

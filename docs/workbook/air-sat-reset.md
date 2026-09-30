@@ -72,7 +72,9 @@ Each config runs the supply-air rules only:
   is 70 °F or warmer outside, rising to 65 °F at 60 °F and below)? None of these units documents a
   reset of its own, so the standard target is the yardstick.
 - `supply_air_control` (single-duct unit only) asks whether the supply air stays within 2 °F of
-  its setpoint while the fan runs.
+  its setpoint while the fan runs in occupied hours. Its `occupancy_gate` (default `"trended"`)
+  reads the unit's own trended occupancy point when there is one; a unit without one is judged
+  on every fan-on hour.
 
 ## Steps
 
@@ -85,7 +87,10 @@ Each config runs the supply-air rules only:
    moved).
 4. **Target.** Read `supply_air_reset_compliance`: `pct_below_g36_target` and `mean_gap_f`.
 5. **Holding the setpoint.** Read `supply_air_control` on the single-duct runs: the share of
-   running hours too warm and too cold.
+   occupied running hours too warm and too cold, and `occupancy_gate` (which hours it judged).
+   Then set `"occupancy_gate": "off"` on the rule in `sat.json` (a rule entry becomes
+   `{"name": "supply_air_control", "params": {"occupancy_gate": "off"}}`), run it again and
+   compare the fault-free unit.
 
 ## Questions
 
@@ -97,15 +102,17 @@ Each config runs the supply-air rules only:
    warms, and is that the direction a cooling supply-air reset should move?
 4. Which single-duct run fails to hold its supply-air setpoint, in which direction, and why can
    that unit not correct it?
-5. The fault-free single-duct unit also shows some too-warm running hours. When do they happen,
-   and are they a control fault?
+5. The fault-free single-duct unit's supply air also runs more than 2 °F above its setpoint in
+   some fan-on hours, yet `supply_air_control` reads it as healthy. When do those hours happen,
+   what changes when the rule counts every fan-on hour, and are they a control fault?
 
 ## What CAMBER shows
 
 - **Findings.** `camber run` prints one line per finding; `*_out/findings.json` holds every
   metric: `reset_direction`, `slope_per_F`, `sp_behaviour` and `sp_range_f` for
   `supply_air_reset`; `pct_below_g36_target`, `mean_gap_f` and `tracks_target` for
-  `supply_air_reset_compliance`; `too_warm_pct` and `too_cold_pct` for `supply_air_control`.
+  `supply_air_reset_compliance`; `too_warm_pct`, `too_cold_pct` and `occupancy_gate` for
+  `supply_air_control`.
 - **Caveats.** A reset inferred from the supply air alone, with no setpoint trended, carries a
   caveat that asks for the setpoint: read it.
 - **Report.** `camber report sat.json --out sat.html` shows the same findings with evidence

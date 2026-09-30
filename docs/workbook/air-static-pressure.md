@@ -74,8 +74,8 @@ camber run census.json --out census_out
 3. **The setpoint.** Read `static_pressure_reset` on `AHU__fault_free`: `sp_range_inwc`,
    `sp_median_inwc` and `sp_behaviour`. Then look for the same rule on a faulted run such as
    `AHU__damper_stuck_075`.
-4. **The census.** Read `damper_census`: `n_boxes`, `median_damper_pct`, `pct_boxes_low` and
-   `pct_boxes_high`, and the verdict line.
+4. **The census.** Read `damper_census`: `n_boxes`, `median_damper_pct`, `pct_boxes_low`,
+   `pct_boxes_high` and `occupancy_gate`, and the verdict line.
 
 ## Questions
 
@@ -104,16 +104,18 @@ camber run census.json --out census_out
   controlled, and the publisher advises treating the other rooms' data as supplementary (see
   `camber datasets info ornl-frp-vav`). Read the census as a screening signal for this day, not a
   verdict on the building's design.
-- `damper_census` judges occupied hours by CAMBER's assumed weekday 07:00-18:00 schedule, not the
-  trended occupancy: the config picks the fault-free day, a Thursday. On a weekend test day the
-  rule finds no occupied samples.
+- `damper_census` judges each box's occupied hours from the box's own trended occupancy point (the
+  tests ran 07:00-22:00 every day), so a weekend test day gets a census too. A box with no
+  occupancy trended falls back to CAMBER's assumed weekday 07:00-18:00 schedule; the finding's
+  `occupancy_gate` says which applied (`trended occupancy`, the assumed schedule, or `mixed`).
 - The census pools the boxes you give it. Mixing boxes from different air handlers, or different
   test days, mixes different static pressures.
 
 ## Going further
 
-- Point the census at a stuck-damper day on a weekday, for example the boxes of `d3_stuck_080`
-  (edit the `equip` list in `census.json`), and compare it with the fault-free day.
+- Point the census at a stuck-damper day, for example the boxes of `d3_stuck_080`, or of
+  `d3_stuck_000`, a weekend day (edit the `equip` list in `census.json`), and compare it with the
+  fault-free day.
 - `camber datasets info ornl-frp-vav` describes five test days in other subsets where the static
   collapsed; fetch the `full` subset and run the census on one of them.
 - The exercise `air-sat-reset` looks at the other reset an air handler should have.
