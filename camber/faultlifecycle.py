@@ -19,6 +19,15 @@ site-keyed scheme through a **deprecated compatibility path**: records whose ``s
 the facility's known names are re-keyed to the facility id on the fly (their old fingerprint is
 kept in ``aliases``, so a ticket or a script holding it still resolves). ``camber portfolio
 migrate`` does the same once, on disk. See docs/PORTFOLIO.md.
+
+**Scope of a run (0.96, #76).** :meth:`FaultLifecycle.update` only ever reports -- and, with
+``auto_resolve_absent``, resolves -- faults that belong to the run's own key. Bound to a
+facility, that is the records whose ``facility_id`` is the facility's. Unbound (the legacy,
+site-keyed path) it is the records whose *fingerprint* is keyed by the run's ``site`` (so a file
+shared by several sites, or by site- and facility-keyed records, never has one site's run close
+another's faults). A site-keyed record whose key cannot be told -- its fingerprint matches
+neither the run's ``site`` nor its own stored ``site`` label (a hand-edited or pre-``site``
+record) -- is never auto-resolved; the run lists it under ``unscoped`` instead.
 """
 
 from __future__ import annotations
@@ -71,7 +80,9 @@ class FaultRecord:
     def from_dict(cls, d: dict) -> FaultRecord:
         """Rebuild a record; unknown keys (from a newer CAMBER) are ignored."""
         known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in d.items() if k in known})
+        # a record without a stored ``site`` label loads with "" (its scope is then told from the
+        # fingerprint alone -- see _legacy_scope)
+        return cls(**{"site": "", **{k: v for k, v in d.items() if k in known}})
 
 
 def _warn_legacy(n: int, what: str) -> None:
@@ -82,6 +93,24 @@ def _warn_legacy(n: int, what: str) -> None:
         use="`camber portfolio migrate` to re-key them to facility_id once, on disk",
         stacklevel=4,
     )
+
+
+def _legacy_scope(r: FaultRecord, site) -> str:
+    """Whether a record belongs to an unbound (site-keyed) run for ``site`` (0.96, #76).
+
+    ``"in"`` when its fingerprint is keyed by ``site`` (the identity :meth:`FaultLifecycle.update`
+    matches findings by; the stored ``site`` is only a label), ``"other"`` when it is
+    facility-keyed or keyed by its own, different ``site`` label, and ``"unknown"`` when the
+    fingerprint matches neither -- such a record's site cannot be told, so it is never
+    auto-resolved. ``aliases`` are earlier identities and never widen the scope.
+    """
+    if r.facility_id:
+        return "other"
+    if r.fingerprint == fingerprint(site, r.equip, r.rule):
+        return "in"
+    if isinstance(r.site, str) and r.fingerprint == fingerprint(r.site, r.equip, r.rule):
+        return "other"
+    return "unknown"
 
 
 def _merge_faults(keep: FaultRecord, other: FaultRecord) -> FaultRecord:
@@ -206,7 +235,11 @@ class FaultLifecycle:
 
         With a ``facility_id`` (here or bound at :meth:`load`) fingerprints are keyed by it and
         ``site`` is only the display label stored on new records; ``absent`` then covers that
-        facility's faults only. Without one, the key is ``site`` (the pre-0.86 behaviour).
+        facility's faults only. Without one, the key is ``site`` (the pre-0.86 behaviour) and
+        ``absent`` covers only the open records whose fingerprint is keyed by ``site`` (0.96,
+        #76: before, it also swept other sites' and facility-keyed records in the same file).
+        Open site-keyed records whose site cannot be told are never auto-resolved; they are
+        listed under an extra ``unscoped`` key, present only when there is one.
         """
         rid = str(run_id)
         fid = facility_id or self.facility_id
@@ -245,11 +278,19 @@ class FaultLifecycle:
                     reopened.append(fp)
                 else:
                     ongoing.append(fp)
-        absent = [
-            fp
-            for fp, r in self._recs.items()
-            if fp not in seen and r.status in OPEN_STATUSES and (not fid or r.facility_id == fid)
-        ]
+        absent, unscoped = [], []
+        for fp, r in self._recs.items():
+            if fp in seen or r.status not in OPEN_STATUSES:
+                continue
+            if fid:
+                if r.facility_id == fid:
+                    absent.append(fp)
+                continue
+            scope = _legacy_scope(r, site)
+            if scope == "in":
+                absent.append(fp)
+            elif scope == "unknown":
+                unscoped.append(fp)
         resolved = []
         if auto_resolve_absent:
             for fp in absent:
@@ -258,13 +299,16 @@ class FaultLifecycle:
                 self._recs[fp].notes.append(f"{rid}: auto-resolved (absent)")
                 resolved.append(fp)
             absent = []
-        return {
+        out = {
             "new": sorted(new),
             "ongoing": sorted(ongoing),
             "reopened": sorted(reopened),
             "absent": sorted(absent),
             "resolved": sorted(resolved),
         }
+        if unscoped:
+            out["unscoped"] = sorted(unscoped)
+        return out
 
     # ----------------------------------------------------------------- workflow ops
     def _get(self, fp: str) -> FaultRecord:

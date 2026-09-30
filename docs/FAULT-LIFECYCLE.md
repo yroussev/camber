@@ -49,6 +49,30 @@ lc.save()
 - Open faults **absent** from the run are returned as close candidates — or set
   `auto_resolve_absent=True` to resolve them at `run_id`.
 
+### Which faults a run can close
+
+A run only reports, and with `auto_resolve_absent` only resolves, the faults that share its key.
+One store file can hold several sites (or site-keyed and facility-keyed records side by side),
+and a run for one of them never looked at the others.
+
+- **With a `facility_id`** (the portfolio `state/<facility_id>/faults.json` path), `absent` covers
+  the records whose `facility_id` is that facility.
+- **Without one** (the legacy, site-keyed path), `absent` covers the site-keyed records whose
+  **fingerprint** is `sha1(site, equip, rule)` for the run's `site`. The fingerprint decides, not
+  the stored `site` label. Facility-keyed records and other sites' records are left alone.
+  `site=""` is a key like any other: it matches only records written with `site=""`. `aliases`
+  (earlier, merged fingerprints) never widen the scope.
+- **Unknown site.** A site-keyed record whose fingerprint matches neither the run's `site` nor its
+  own stored `site` label cannot be placed: a hand-edited record, or one with no stored `site`
+  (it loads with `""`). Such a record is **never auto-resolved**. While it is open, every unbound
+  run lists it under an extra `res["unscoped"]` key, which is present only when non-empty. The CLI
+  prints a line for it too. Resolve it by hand (`lc.resolve(fp, ...)`), or re-key the file with
+  `camber portfolio migrate`.
+
+Before 0.96 (#76), the unbound path treated every open record in the file as absent. A run with
+`auto_resolve_absent=True` for one site therefore resolved every other site's open faults. The
+in-memory `rules.triage.FaultRegister` had the same flaw and is scoped the same way.
+
 ## Workflow
 
 ```python

@@ -95,17 +95,24 @@ class FaultRegister:
     ) -> dict:
         """Fold in one run; return ``{"new":[...], "ongoing":[...], "resolved":[...]}``
         as lists of fingerprints. ``facility_id`` keys the fingerprints by the facility (stable
-        across renames) instead of ``site``."""
+        across renames) instead of ``site``. Only faults keyed like this run (the same
+        ``facility_id``, or without one the same ``site``) can be ``resolved`` by it; a register
+        shared by several sites or facilities leaves the others' faults open (0.96, #76)."""
+        key = facility_id or site
         now = {}
         for f in findings:
             if _attr(f, "severity", "info") in actionable:
-                fp = fingerprint(facility_id or site, _attr(f, "equip", ""), _attr(f, "rule", ""))
+                fp = fingerprint(key, _attr(f, "equip", ""), _attr(f, "rule", ""))
                 now[fp] = {
                     "site": site,
                     "equip": _attr(f, "equip", ""),
                     "rule": _attr(f, "rule", ""),
                 }
-        prev = set(self._open)
+        prev = {
+            fp
+            for fp, o in self._open.items()
+            if fp == fingerprint(key, o.get("equip", ""), o.get("rule", ""))
+        }
         cur = set(now)
         new, ongoing, resolved = cur - prev, cur & prev, prev - cur
         for fp in new:
