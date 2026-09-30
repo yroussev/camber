@@ -65,6 +65,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 | `rbc-g36-ahu` | AHU + 5 VAV zones, G36 and rule-based control, 414 runs | simulated | yes | CC-BY-4.0 (**research-only**: see [Licences](#licences)) | 8 runs |
 | `at-30bldg-sensors` | 1,832 raw sensors, 30 buildings, 23 months | real | no | CC-BY-NC-SA-4.0 (research-only) | 3 buildings |
 | `cofactor-drammen` | 45 Norwegian public buildings (schools, kindergartens, nursing homes, offices): hourly electricity import, sub-meters and district heat, 4 years | real | no | CC-BY-4.0 | every building's import meters (48 meters) |
+| `bts` | BTS: 3 Australian buildings, ~20,000 Brick-labelled BMS streams, 2021-2023 (0.96) | real | no | CC-BY-4.0 | the metadata and Brick models of all 3 sites + site B's streams (1.5 GB) |
 
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
@@ -195,6 +196,19 @@ Measured datasets rarely come as one wide table per scenario. Each layout has on
   same one-point reader. Change-of-value logs are resampled **sample-and-hold** (`"hold":
   "8h5min"`: an empty bin holds the last sample while it is at most that old). The subset's
   `groups` pick the buildings.
+- **One series per Brick point** -- `"adapter": "brick_streams"` (`bts`, 0.96): each site
+  (`"sites": {key: {"model", "index", "series", "source_timezone", "local_timezone"}}`) ships a
+  Brick model whose points name their series through a literal (`senaps:stream_id`), an index
+  table of stream ids and Brick classes, and a zip of numbered series files. Every site becomes a
+  facility `ds-<id>-<site>`; each point's role comes from its Brick class, its equipment from its
+  `isPointOf` owner or the first containing entity whose class `equip_classes` maps (named
+  `<class>_<id prefix>`, since the ids are anonymised), else the site equipment (`site_equip`).
+  Unmapped and ambiguous points are counted per class in the provenance, never guessed; a second
+  point with the same role on the same owner becomes its own equipment `<equip>-2`, `-3`, ... (counted, never averaged). Series files are
+  pickles of numpy arrays, read with a restricted unpickler that resolves only numpy's array
+  globals (a pickle can otherwise run code); only each member's first bytes are read to find its
+  stream, and nothing is extracted to disk. Samples are resampled sample-and-hold (`"hold"`).
+  The subset's `groups` pick the sites.
 - **Clocks.** `timestamp_format` pins the parse (a strftime format, or `"ISO8601"` for stamps
   that mix precisions). A source without a wall-clock column declares a `clock`: `{"kind":
   "elapsed", "unit": "s", "origin": "2025-01-01"}` counts from a stated origin (`rbc-g36-ahu`'s
@@ -1448,6 +1462,80 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** The pv field of building_6397 is '238:46:00', a spreadsheet time value. Table 2's format is location:kWp:kW (e.g. 'Roof:3:3'), so a size of about 238 kWp with a 46 kW inverter was probably intended; the building's ElPV peaks at 32.75 kWh/h.
 - **Contradicts:** Data descriptor, Table 2 (pv: 'Location, size (kWp) and inverter capacity (kW)') (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
 - **Handling: none** -- described only. Metadata only; CAMBER does not ingest the header block.
+
+### `bts`: BTS Building TimeSeries: three Australian buildings, Brick-labelled, three years
+
+#### Timestamps are UTC instants, not local time
+
+- **Issue:** `timestamps-are-utc`
+- **Columns:** `timestamps (every series file)`
+- **Evidence:** The metadata stamps end in 'Z' and the series arrays are naive datetime64; the daily outdoor-air temperature peak falls at 03-04 UTC and the trough at 19 UTC at all three sites (13-15 h and 05-06 h local), so the clock is UTC and was not shifted when the identifiers were anonymised.
+- **Contradicts:** Data card, Data Fields: t is a 'Numpy array of Timestamp' (no time zone stated) (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. Declared per site as source_timezone UTC and moved to the site's wall clock (A and B Australia/Sydney, C Australia/Melbourne); a DST fall-back hour keeps both readings.
+
+#### No unit on any HVAC point
+
+- **Issue:** `units-undocumented`
+- **Columns:** `value (temperature, pressure, flow and humidity points)`
+- **Evidence:** The Brick models carry hasUnit on 1,798 (A), 121 (B) and 1,230 (C) points, all electrical (kW, V, A, kVA, kWh, Hz) or PERCENT/DEG; none on a temperature, pressure or flow point. Levels: zone temperatures have a median of 22.2 C (A), supply static pressures 319 Pa and their setpoints 270-315 Pa (A), filter pressure drops 42-213 Pa (A).
+- **Contradicts:** Data card, Data Fields: v is a 'Numpy array of Float', 'Field Value' (no unit) (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. CAMBER declares degC for temperatures, Pa for duct static and filter pressure, kPa for chilled-water differential pressure and L/s for air and water flows, from these levels, and converts to IP; the flows and site C's pressures are the least certain (see the other issues and the ingest warnings).
+
+#### Streams listed with samples have no series file
+
+- **Issue:** `streams-without-series`
+- **Columns:** `StreamID (Site_B_metadata.csv, Site_A_metadata.csv)`
+- **Evidence:** The data card counts 14,547 timeseries; the three archives hold 14,422 series files. The 125 missing are site B's 121 streams (listed with 17,321,764 samples in the metadata count column, mostly Point, Mode_Command, Temperature_Parameter and Reset_Command) and site A's 4 streams the README names as intentionally missing. A further 25 (A) and 5,093 of 10,440 (C) listed streams have a count of 0 and no file.
+- **Contradicts:** Data card, Summary statistics: Number of Timeseries 14 547; metadata files: count per StreamID (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. Counted on each facility (streams_without_file, mapped_without_file); nothing is ingested for them.
+
+#### Site C's series run outside the documented period
+
+- **Issue:** `site-c-outside-documented-period`
+- **Columns:** `timestamps (site C)`
+- **Evidence:** 427 of the 455 mapped site C streams with a file have samples before 2021-01-01 (from May 2020; the metadata first_t goes back to 2017-06-23 on 4,792 rows) and 440 have samples after 2023-12-31 (to 2024-01-18); sites A and B stay within 2021-2023.
+- **Contradicts:** Data card, Summary statistics: Start Date 01-01-2021, three-year period (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested as published; clip site C to 2021-2023 to compare the three sites over one period.
+
+#### Every stream of a site is silent for weeks at a time
+
+- **Issue:** `shared-outages`
+- **Columns:** `timestamps (all streams of site B; site A, site C)`
+- **Evidence:** Site B: fewer than 5% of streams log anything on 2021-05-14/15, 2023-06-30 to 07-07, 2023-07-10 to 08-13 (35 days), 2023-10-10 to 10-16 and 2023-10-25 to 11-19 (26 days): 78 days. Site A: one day (2022-03-09). Site C: 2021-02-23 to 25 and 2021-08-31, plus 38 days on which only 5-50% of streams log.
+- **Contradicts:** Data card, Summary statistics: Duration 1 112 days, over a three-year period (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as gaps: the sample-and-hold resample carries a value for at most 1 hour.
+
+#### Site C's temperatures, humidities and CO2 drop to exactly 0
+
+- **Issue:** `site-c-zero-dropouts`
+- **Columns:** `value (site C temperature, humidity and CO2 streams)`
+- **Evidence:** 12.5% of all samples of site C's mapped temperature streams are exactly 0.0; 229 of its 230 temperature streams have more than 1% zeros; the zeros come one sample at a time (median run 1 sample, 449,068 runs) between normal readings, and on 115 days more than half the temperature streams read 0. Site A has 0.6% (two dead streams), site B none (every temperature stream's 5th percentile is above 7 C). CO2 and humidity streams at site C have a 5th percentile of exactly 0 as well.
+- **Contradicts:** Data card, Data Fields: v is the 'Field Value' of the point (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: fix** -- corrected at ingest (skipped by `--no-corrections`). Masked to missing at ingest for site C only (quirk mask eq 0), before the 15-minute resample; --no-corrections keeps them.
+
+#### Placeholder and overflow values in some streams
+
+- **Issue:** `sentinel-and-overflow-values`
+- **Columns:** `value (site A hot-water flow; site C outdoor air, chilled-water return, supply-air setpoint)`
+- **Evidence:** Site A's 4 hot-water flow streams sit at 4,294,967.3 (2^32 / 1000) or 1,193,046.5 (2^32 / 3600): an unsigned 32-bit -1 scaled, not a flow. Site C: one outdoor-air stream reads 2000 for 35% of its samples (another 1105.8), a chilled-water return 137,300, a supply-air setpoint 500 for 38% of its samples. Site A's 6 outdoor CO2 streams are 0.0 throughout.
+- **Contradicts:** Data card, Data Fields: v is the 'Field Value' of the point (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left in place for the sensor-health checks (range violation, trust); leave these streams out of statistics.
+
+#### Site C's airflows are mostly negative and its duct static pressures mix scales
+
+- **Issue:** `site-c-airflow-sign-and-scale`
+- **Columns:** `value (site C Discharge_Air_Flow_Sensor, Discharge_Air_Flow_Setpoint, Supply_Air_Static_Pressure_Sensor)`
+- **Evidence:** 45 of 58 discharge airflow streams have a negative 5th percentile, 19 a negative median and 23 never rise above 0; 37 of 38 airflow setpoints hold -50 throughout. Of 18 supply static pressure streams, 14 stay below 30 at their 95th percentile and 4 reach 190-292, the level of site C's own static pressure setpoints (190-290) and of site A's sensors in Pa.
+- **Contradicts:** Brick v1.2.1 Discharge_Air_Flow_Sensor / Supply_Air_Static_Pressure_Sensor (a flow and a positive duct pressure) (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: annotate** -- left as published and recorded in the provenance. Ingested as published (L/s and Pa declared for the entry); the airflow rules and ingest warnings flag them. Do not compare site C's airflows or static pressures with sites A and B.
+
+#### Some site C points keep a second, non-anonymised stream id
+
+- **Issue:** `non-anonymised-stream-ids`
+- **Columns:** `senaps:stream_id (Site_C.ttl)`
+- **Evidence:** 136 of site C's points carry two stream-id literals: the UUID the metadata lists and a second one that is a BMS object path rather than a UUID; sites A and B have one UUID per point.
+- **Contradicts:** Data card, Collection: identifiers for both the point and the timeseries were anonymised by generating UUIDs (Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990)
+- **Handling: none** -- described only. CAMBER matches points only through the ids the metadata index lists; the second literal is never read into a store or a report.
 
 <!-- END data-issues -->
 

@@ -452,6 +452,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the CLI `camber edge compact | decommission | reconcile | land | quarantine |
     record-retirement | bucket-rules`.
 <!-- /095-edge -->
+<!-- 096-bts (#75) -->
+- **The `bts` catalog entry and the `brick_streams` adapter** (0.96; #75), additive and
+  provisional: the catalog id `bts` and its facilities `ds-bts-a|b|c`; the ingest keys of
+  `"adapter": "brick_streams"` (`sites` with `model` / `index` / `series` / `source_timezone` /
+  `local_timezone`, `index.id` / `index.class`, `stream_predicate`, `series_format:
+  "bts_pickle"`, `equip_classes`, `site_equip`, `hold`) and a subset's `groups` of site keys; the
+  provenance keys `site`, `streams_listed`, `series_files`, `streams_without_file`,
+  `streams_by_status`, `streams_mapped`, `streams_ingested`, `mapped_without_file`,
+  `duplicate_roles_split`, `unmapped_classes`; the equipment ids `<class>_<id prefix>` and
+  `<equip>-<n>`.
+<!-- /096-bts -->
 
 ## Deprecated
 

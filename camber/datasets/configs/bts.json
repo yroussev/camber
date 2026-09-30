@@ -1,0 +1,30 @@
+{
+  "_comment": "Run template for bts (CC BY 4.0: cite Prabowo et al., NeurIPS 2024 Datasets and Benchmarks and the dataset record, catalog id bts). One facility per site (`camber datasets config bts --facility ds-bts-a` picks one; default: the first ingested, site B for the default subset). Points are grouped into equipment by their Brick owner, and only points whose Brick class maps cleanly to a CAMBER role are ingested, so most equipment carries one to four roles: site B's air handlers have discharge-air temperature, outdoor-air damper position, filter pressure drop and outdoor-air temperature, but no valve, fan status or setpoint. No fault rule runs by default: every rule needs a fan status or a valve that the mapped points do not provide, and the data has no fault labels. Use the RCx report's sensor-health section (range violations, flatlines, gaps and trust per point); the three sites are also the evaluation set of the time-series point-role suggester (examples/bts_suggester).",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-bts-b"
+  },
+  "resample": "15min",
+  "equipment": [
+    {
+      "class": "AHU"
+    },
+    {
+      "class": "FCU"
+    },
+    {
+      "class": "VAV"
+    },
+    {
+      "class": "ZONE"
+    },
+    {
+      "class": "SITE"
+    }
+  ],
+  "rules": [],
+  "report": {
+    "level": 2
+  }
+}

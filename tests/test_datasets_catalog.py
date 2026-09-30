@@ -91,6 +91,8 @@ def test_shipped_catalog_is_valid_and_matches_no_encumbered_pattern():
         "at-30bldg-sensors",
         # 0.92 intake: meter data
         "cofactor-drammen",
+        # 0.96 (#75): Brick-labelled real buildings, the role-suggester evaluation set
+        "bts",
     ]
 
 
@@ -178,7 +180,7 @@ def test_entry_helpers():
 
 
 def test_catalog_filters_and_get():
-    assert len(datasets.catalog()) == 23
+    assert len(datasets.catalog()) == 24
     assert [e.id for e in datasets.catalog(kind="real")] == [
         "bdg2",
         "lbnl-b59",
@@ -192,6 +194,7 @@ def test_catalog_filters_and_get():
         "ornl-frp-vav",
         "at-30bldg-sensors",
         "cofactor-drammen",
+        "bts",
     ]
     assert [e.id for e in datasets.catalog(kind="lab")] == [
         "finnish-dcv",
@@ -200,7 +203,7 @@ def test_catalog_filters_and_get():
         "ornl-supermarket-fdd",
     ]
     assert "bdg2" not in [e.id for e in datasets.catalog(labeled=True)]
-    assert len(datasets.catalog(labeled=False)) == 13
+    assert len(datasets.catalog(labeled=False)) == 14
     assert len(datasets.catalog(labeled=True)) == 10
     # the open tier: research-only entries (an NC/ND licence, or a stated access_reason) are out
     commercial = datasets.catalog(licence="commercial")
@@ -208,7 +211,7 @@ def test_catalog_filters_and_get():
         "rbc-g36-ahu",  # CC BY, held research-only for its stated access_reason
         "at-30bldg-sensors",  # CC-BY-NC-SA
     ]
-    assert len(commercial) == 21 and all(not e.research_only for e in commercial)
+    assert len(commercial) == 22 and all(not e.research_only for e in commercial)
     with pytest.raises(ValueError):
         datasets.catalog(licence="free")
     with pytest.raises(KeyError, match="known"):

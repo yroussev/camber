@@ -4,6 +4,38 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.96.0] — Unreleased
+
+<!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is
+released. -->
+
+### Added
+<!-- 096-bts (#75) -->
+- **The `bts` catalog entry (#75).** BTS, the Building TimeSeries dataset (Prabowo et al.,
+  NeurIPS 2024 Datasets and Benchmarks; CC BY 4.0, open tier): three real Australian buildings,
+  about 20,000 Brick-labelled BMS points over 2021-2023, the data behind the Brick by Brick 2024
+  challenge. It is the evaluation set of the time-series role suggester (#45).
+  - Fetched from the data archive, never the MIT-licensed repository snippet; the MIT (code and
+    snippet) versus CC BY 4.0 (data) split is recorded in the entry's known issues. All nine
+    files are pinned (size and SHA-256) from real downloads with `scripts/datasets_refresh.py`.
+  - `default` is the three sites' metadata and Brick models plus site B's streams (1.5 GB,
+    38 MB once ingested); `full` is all three sites (19 GB, 1.1 GB once ingested).
+  - Eight data issues, each with evidence: UTC timestamps, undocumented units, 125 listed streams
+    without a file, site C running outside the documented period, week-long whole-site outages,
+    site C's zero dropouts (masked by a `fix` quirk; `--no-corrections` keeps them), placeholder
+    and 32-bit overflow values, site C's negative airflows and mixed pressure scales, and 136 site
+    C points that keep a non-anonymised second stream id.
+- **The `brick_streams` ingest adapter (#75).** Per-site Brick models whose points name their
+  series through a literal (`senaps:stream_id`), a stream index and a zip of series files: one
+  facility per site, roles from the Brick class, equipment from the `isPointOf` owner or the
+  first containing entity whose class `equip_classes` maps (named `<class>_<id prefix>`), UTC
+  instants moved to each site's wall clock, sample-and-hold resampling. A second point with the
+  same role on one owner becomes equipment `<equip>-2`, never averaged; unmapped points are
+  counted per class in the provenance. Series pickles are read with a restricted unpickler that
+  resolves only numpy's array globals, straight from the verified zip. Quirks run per stream (a
+  quirk's `runs` names sites).
+<!-- /096-bts -->
+
 ## [0.95.0] — Unreleased
 
 <!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when
