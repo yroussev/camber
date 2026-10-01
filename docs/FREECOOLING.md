@@ -33,6 +33,11 @@ is summed; `recover_frac` is the share an economizer could offset; `price_per_kw
 values it. Without power the result is hours-only; without a price the energy is reported and savings
 is NaN — nothing is fabricated. Pairs with `camber.fault_economics` (fault → dollars).
 
+`high_limit_f` defaults to `DEFAULT_FREE_COOLING_HIGH_LIMIT_F`, 60 °F, the same value the
+`free_cooling_missed` rule uses (0.98, #91; the library used 65 °F before). It is a conservative
+screen. Pass the unit's own dry-bulb high limit for a climate-appropriate count: see
+[TUNING.md](TUNING.md#a-climate-dependent-default-the-free-cooling-high-limit-free_cooling_missed).
+
 ## Further reading
 
 PNNL's [Air-Side Economizer Operation](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_86706.pdf) guide (PNNL-SA-86706) and training

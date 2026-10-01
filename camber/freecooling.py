@@ -20,6 +20,7 @@ import pandas as pd
 from .timegrid import interval_hours
 
 __all__ = [
+    "DEFAULT_FREE_COOLING_HIGH_LIMIT_F",
     "ECON_DAMPER_MIN_PCT",
     "ECON_MIN_DELTA_F",
     "ECON_OAF_MIN_PCT",
@@ -27,6 +28,15 @@ __all__ = [
     "free_cooling_opportunity",
     "integrated_economizer_mask",
 ]
+
+#: Outdoor-air dry-bulb (°F) below which free cooling counts as *available* (0.98, #91). One value
+#: for :func:`free_cooling_opportunity` and the ``free_cooling_missed`` rule. 60 °F is CAMBER's
+#: deliberately conservative screening default: below it nearly every economizer sequence in any
+#: climate should be cooling with outside air, so a missed hour is clearly missed. Economizer
+#: guidance sets the dry-bulb high limit by climate (higher in dry climates, lower in humid ones);
+#: pass the unit's own high limit to count more weather as free-cooling weather. See
+#: ``docs/TUNING.md``.
+DEFAULT_FREE_COOLING_HIGH_LIMIT_F = 60.0
 
 # --- #63: shared "already on (nearly) 100 % outside air" test -------------------------------
 #: OA-damper signal (%) at or above which the unit counts as on full outside air. A 0-1 signal is
@@ -63,7 +73,7 @@ def free_cooling_opportunity(
     cooling_signal,
     *,
     cooling_kw=None,
-    high_limit_f: float = 65.0,
+    high_limit_f: float = DEFAULT_FREE_COOLING_HIGH_LIMIT_F,
     active_thresh: float = 0.05,
     recover_frac: float = 0.7,
     price_per_kwh: float | None = None,
@@ -74,7 +84,9 @@ def free_cooling_opportunity(
     (a cooling-valve fraction or chiller power — ``> active_thresh`` counts as on), aligned to
     ``oat``.
     Free cooling is *available* when OAT is below ``high_limit_f`` and *missed* when it's available
-    yet mechanical cooling runs. With ``cooling_kw`` (the mechanical cooling power aligned to
+    yet mechanical cooling runs. ``high_limit_f`` defaults to
+    :data:`DEFAULT_FREE_COOLING_HIGH_LIMIT_F` (60 °F, the same as the ``free_cooling_missed`` rule;
+    it was 65 °F before 0.98). With ``cooling_kw`` (the mechanical cooling power aligned to
     ``oat``)
     the missed-hours energy is summed; ``recover_frac`` is the fraction an economizer could offset,
     and ``price_per_kwh`` values it.

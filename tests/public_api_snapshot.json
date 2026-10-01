@@ -703,6 +703,7 @@
     "seasonal_forecast"
   ],
   "camber.freecooling": [
+    "DEFAULT_FREE_COOLING_HIGH_LIMIT_F",
     "ECON_DAMPER_MIN_PCT",
     "ECON_MIN_DELTA_F",
     "ECON_OAF_MIN_PCT",

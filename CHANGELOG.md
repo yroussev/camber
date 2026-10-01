@@ -394,6 +394,16 @@ calibrate it, and reads run configs from YAML as well as JSON.
   rejected (see docs/SENSOR-HEALTH.md). The workbook exercise `data-trend-quality` answers 4, 6
   and 7 are rewritten.
 <!-- /098-sensor-health -->
+<!-- 098-followups -->
+- **One free-cooling high limit, 60 °F (#91).** `camber.freecooling.free_cooling_opportunity`
+  defaulted `high_limit_f` to 65 °F while the `free_cooling_missed` rule used 60 °F. Both now read
+  one constant, `DEFAULT_FREE_COOLING_HIGH_LIMIT_F` (60 °F), CAMBER's deliberately conservative
+  screening default. Only a direct library call with no `high_limit_f` changes (it counts fewer
+  free-cooling hours). Rule findings and reports are unchanged (the RCx economizer page passes
+  `economizer_high_limit`'s value and prints it), and so are the synthetic and fleet benchmarks.
+  `docs/TUNING.md` gains guidance on a climate-appropriate dry-bulb high limit (the unit's
+  sequence, the energy code's high limit for the climate zone, or the trends).
+<!-- /098-followups -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

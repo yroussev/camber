@@ -562,7 +562,7 @@ How to calibrate:
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `high_limit_f` | `60.0` | °F | 45.0 to 75.0 | CAMBER judgment |
+| `high_limit_f` | `60.0` | °F (outdoor air dry-bulb) | 45.0 to 75.0 | CAMBER judgment: a deliberately conservative screening default. Below 60 °F an economizer should be cooling with outside air in any climate, so a missed hour is clearly missed. Economizer guidance sets the dry-bulb high limit by climate (ASHRAE 90.1 §6.5.1.1.3, its high-limit table by climate zone; the PNNL economizer guide, reference pnnl-guide-economizer), higher in dry climates and lower in humid ones |
 | `active` | `5.0` | % of valve stroke (cooling valve) | 1.0 to 20.0 | CAMBER judgment: a valve parked at a few percent is not mechanical cooling running |
 | `warn_pct` | `10.0` | % of free-cooling samples | 2.0 to 30.0 | CAMBER judgment |
 | `fault_pct` | `25.0` | % of free-cooling samples | 10.0 to 60.0 | CAMBER judgment |
@@ -574,7 +574,7 @@ How to calibrate:
 
 How to calibrate:
 
-- `high_limit_f`: Set it to the economizer high limit of the unit's sequence (or a few degrees below, so only clearly cool weather counts as free-cooling weather). *Note:* camber.freecooling.free_cooling_opportunity defaults to 65 °F; this rule to 60 °F.
+- `high_limit_f`: Set it to the dry-bulb high limit programmed in the unit's economizer sequence, or to the energy code's high limit for the site's climate zone (a few degrees below it, so only clearly cool weather counts). From trends, take the highest OAT at which the OA damper still opens fully over a summer of known-good operation. See docs/TUNING.md. *Note:* camber.freecooling.free_cooling_opportunity uses the same default (DEFAULT_FREE_COOLING_HIGH_LIMIT_F, 60 °F; 65 °F before 0.98). The RCx report's economizer page passes economizer_high_limit's high_limit_f to it instead, and states that value. A higher value counts more hours as free-cooling weather.
 - `active`: Set it just above the cooling-valve position seen with cooling off on a known-good period (its 95th percentile when the chiller or compressor is off).
 - `warn_pct`: Read missed_pct on units whose economizers are known to work; set the warn level above their spread.
 - `fault_pct`: Set it well above warn_pct. *Note:* Must be at or above warn_pct.

@@ -444,14 +444,25 @@ PARAM_DOCS["economizer_high_limit"] = {
 }
 
 PARAM_DOCS["free_cooling_missed"] = {
+    # ---- begin 098-followups (#91): one free-cooling high limit ----
     "high_limit_f": _P(
-        "°F",
-        "CAMBER judgment",
-        "Set it to the economizer high limit of the unit's sequence (or a few degrees below, so "
-        "only clearly cool weather counts as free-cooling weather).",
+        "°F (outdoor air dry-bulb)",
+        "CAMBER judgment: a deliberately conservative screening default. Below 60 °F an "
+        "economizer should be cooling with outside air in any climate, so a missed hour is "
+        "clearly missed. Economizer guidance sets the dry-bulb high limit by climate (ASHRAE 90.1 "
+        "§6.5.1.1.3, its high-limit table by climate zone; the PNNL economizer guide, reference "
+        "pnnl-guide-economizer), higher in dry climates and lower in humid ones",
+        "Set it to the dry-bulb high limit programmed in the unit's economizer sequence, or to "
+        "the energy code's high limit for the site's climate zone (a few degrees below it, so "
+        "only clearly cool weather counts). From trends, take the highest OAT at which the OA "
+        "damper still opens fully over a summer of known-good operation. See docs/TUNING.md.",
         (45.0, 75.0),
-        "camber.freecooling.free_cooling_opportunity defaults to 65 °F; this rule to 60 °F.",
+        "camber.freecooling.free_cooling_opportunity uses the same default "
+        "(DEFAULT_FREE_COOLING_HIGH_LIMIT_F, 60 °F; 65 °F before 0.98). The RCx report's "
+        "economizer page passes economizer_high_limit's high_limit_f to it instead, and states "
+        "that value. A higher value counts more hours as free-cooling weather.",
     ),
+    # ---- end 098-followups (#91) ----
     "active": _P(
         "% of valve stroke (cooling valve)",
         "CAMBER judgment: a valve parked at a few percent is not mechanical cooling running",
