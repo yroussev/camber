@@ -128,6 +128,28 @@ calibrate it, and reads run configs from YAML as well as JSON.
   `fan_heat_f`. The default `None` changes nothing; the two `lbnl-fpu` exercise configs set
   `"auto"`, with its basis.
 <!-- /098-terminal-reheat -->
+<!-- 098-rcx-cause -->
+- **Why free cooling was missed (#88 item 2).** `free_cooling_missed` records the cause as
+  additive metrics; its severity and `missed_pct` do not change. `missed_cause` is
+  `damper_not_delivering` when, on missed hours with a usable temperature balance
+  (|OAT - RAT| >= 5 °F), the OA damper was commanded at least 90 % open while the measured
+  OA fraction stayed below 80 %, on at least 20 % of those hours and 24 h. It is
+  `economizer_not_commanded` when a damper command is trended but stayed below open, and
+  `undetermined` otherwise. The rule also reports `commanded_open_pct`, `commanded_open_hours`,
+  `commanded_open_oaf_median_pct` and `missed_damper_cmd_median_pct`. The new parameters
+  (`cmd_open_pct`, `oaf_open_pct`, `stuck_min_share_pct`, `stuck_min_hours`,
+  `stuck_low_oaf_pct`) are documented in `docs/THRESHOLDS.md`. Measured on real data: the four
+  lbnl-sdahu stuck-damper runs read `damper_not_delivering` (40-87 % of those hours) and the
+  fault-free and valve-leak runs 0 %; on lbnl-ddahu the damper stuck closed reads 95 % and the
+  fault-free run 0 %.
+- **`Recommendation.cause` (#88 item 2, provisional).** Every recommender names the finding's
+  cause in a short phrase built from the metrics it reads, e.g. "Outdoor-air damper not
+  modulating (stuck low)" or "Hot-water pump pinned at its minimum speed". `title` stays the
+  action. `free_cooling_missed` with `damper_not_delivering` gets a new recommendation, "Repair
+  the outdoor-air damper or actuator", linked to the PNNL economizer guide and Re-tuning ch. 6.
+  "Stuck low" or "stuck part open" follows `commanded_open_oaf_median_pct` against
+  `stuck_low_oaf_pct` (default mirrored in `DEFAULT_PARAMS["econ_stuck_low_oaf_pct"]`).
+<!-- /098-rcx-cause -->
 
 ### Changed
 <!-- 098-core -->
@@ -327,6 +349,15 @@ calibrate it, and reads run configs from YAML as well as JSON.
   questions, going-further steps and instructor key are rewritten around the calibrated fan heat
   and its circularity.
 <!-- /098-air-leak -->
+<!-- 098-rcx-cause -->
+- **RCx issue headings name the cause, not the remedy (#88 item 2).** An issue page is headed
+  "Issue N: {cause}", and the executive summary's Issue column shows the cause. The action
+  paragraph reads "Recommended action — {title}: {action}", so the action titles stay in the
+  report. `RcxReport.to_dict()` issues gain `title` and `cause`. The RCx golden file changes
+  (intended). Workbook `capstone`: the top issue is now headed "Outdoor-air damper not
+  modulating (stuck low)", with a damper repair as its action. The answer key and the page
+  questions are updated.
+<!-- /098-rcx-cause -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

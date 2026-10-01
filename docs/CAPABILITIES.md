@@ -186,7 +186,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   `free_cooling_missed` (mechanical cooling — cooling valve above `active` %, default 5 % — ran while
   OAT was cool enough for free; durations in hours; hours already on ~100 % outside air are an
   integrated economizer, not missed — the RCx economizer page's test, shared as
-  `camber.freecooling.integrated_economizer_mask`), `static_pressure_reset` (duct-static setpoint
+  `camber.freecooling.integrated_economizer_mask`; 0.98 records why: `missed_cause` tells a
+  damper commanded open that did not deliver outside air from an economizer never commanded
+  open), `static_pressure_reset` (duct-static setpoint
   that doesn't trim with demand; a one-time step is reported as a step, not a reset — see
   `camber.setpoint_reset`). Flags: `high_limit_f`, `min_oa_pct`, `min_damper`, `differential`,
   `active`, `min_range_inwc`.

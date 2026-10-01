@@ -1183,19 +1183,24 @@ synthetic, cut from the open BDG2 meters.
 
 ### `capstone`: RCx report, walk-down, re-tuning plan and verification
 
-Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev, with
-the commands on the [exercise page](capstone.md#setup). The RCx report is the one written before
-the drift baselines are frozen.
+Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev (the
+top issue's cause and the M&V data need: 0.98.0-dev), with the commands on the
+[exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
+are frozen.
 
 **Answer key**
 
-1. *The top issue.* Rank 1 is "Enable economizer free cooling" on
-   `AHU__onset_damper_stuck_025`, a **fault**. Its action asks you to check the economizer
-   enable logic and high-limit setting, then **verify the OA damper modulates open** when free
-   cooling is available. The data cannot separate a stuck damper from wrong logic here: the
-   dataset maps the damper to the controller's command, which keeps modulating, so only the
-   temperatures show that less outdoor air arrives. The report's title says "enable", the
-   likely cause is mechanical: that is what the walk-down is for.
+1. *The top issue.* Rank 1 is headed "Outdoor-air damper not modulating (stuck low)", on
+   `AHU__onset_damper_stuck_025`, a **fault**. The heading names the cause; the recommended
+   action is "Repair the outdoor-air damper or actuator": stroke the damper from the BAS and
+   watch the blades, the linkage and the actuator before changing any economizer logic. The
+   finding tells the two causes apart by setting the command against the temperatures. On 40%
+   of the missed free-cooling hours with a usable temperature balance (673 h), the damper was
+   commanded at least 90 % open, yet the outdoor-air fraction from the mixed-air temperature
+   stayed near 4 % (`missed_cause: damper_not_delivering`, `commanded_open_pct` 40.3). On the
+   fault-free control, the damper was commanded low on every missed hour
+   (`economizer_not_commanded`, 0 %). "Stuck low" is inferred from the mixed-air temperature, and
+   a badly placed mixed-air sensor reads the same way. That is why the walk-down confirms it.
 2. *Missed free cooling.* The onset unit ran mechanical cooling in 30% of the free-cooling hours
    (outdoor air below 60 °F), against 17% for the fault-free control. A damper stuck at 25 %
    admits about as much outdoor air in cooling weather as the unit's small design minimum, so the
@@ -1237,8 +1242,9 @@ the drift baselines are frozen.
 
 **Discussion points**
 
-- The RCx report ranks issues; it does not decide causes. Map each item on the checklist to the
-  walk-down chapter's advice on what to observe, and to the economizer guide's two questions.
+- The RCx report ranks issues and names the likely cause from the trends; it does not prove
+  it. Map each item on the checklist to the walk-down chapter's advice on what to observe, and
+  to the economizer guide's two questions.
 - Verification is planned before the change: decide the check, the window and the pass mark in
   the re-tuning plan, then run it.
 - Drift and M&V answer different questions: "did the equipment go back to how it was?" and "how
@@ -1248,8 +1254,10 @@ the drift baselines are frozen.
 
 - Freezing the drift baselines before writing the RCx report, so the report already contains the
   drift verdict.
-- Taking the report's "Enable economizer free cooling" literally and reprogramming instead of
-  inspecting the damper.
+- Reprogramming the economizer on a damper-cause issue: the command already opens, so the fix is
+  mechanical.
+- Ordering a new actuator on the heading alone: "stuck low" comes from the mixed-air
+  temperature, so stroke the damper and check the mixed-air sensor first.
 - Treating the conditional static-reset issue as a confirmed fault.
 - Comparing the two RTU tests' energy directly as a saving: different winters, a week each, no
   weather normalization.

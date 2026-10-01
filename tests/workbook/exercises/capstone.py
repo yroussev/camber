@@ -17,7 +17,7 @@ and the M&V attempt in Python shown on the page (``caltrack_savings_hourly`` on 
 power, baseline test against setback test).
 
 (CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
-refusal's data need, 0.98.0-dev, 2026-09-30.)
+refusal's data need and the top issue's cause, 0.98.0-dev, 2026-09-30.)
 """
 
 from __future__ import annotations
@@ -58,13 +58,33 @@ def _rcx(ctx):
 
 
 def _rcx_ranking(ctx) -> None:
-    """Step 1: the top issue is the onset unit's economizer chain, at fault severity; its
-    recommended action asks for an on-site check of the damper."""
+    """Step 1: the top issue is the onset unit's economizer chain, at fault severity. Its heading
+    names the cause (0.98, #88): the damper was commanded open and outside air did not arrive, so
+    the recommended action is a damper repair, not "enable the economizer"."""
     rep = _rcx(ctx)
     top = rep.to_dict()["issues"][0]
     assert top["equip"] == ONSET and top["severity"] == "fault", top
     assert "free_cooling_missed" in top["rules"] and top["chain"] == "econ", top
-    assert "verify the OA damper modulates open" in rep.to_html()
+    assert top["cause"] == "Outdoor-air damper not modulating (stuck low)", top
+    assert top["title"] == "Repair the outdoor-air damper or actuator", top
+    html = rep.to_html()
+    assert "Issue 1: Outdoor-air damper not modulating (stuck low)" in html
+    assert "Recommended action — Repair the outdoor-air damper or actuator" in html
+
+
+def _missed_cause(ctx) -> None:
+    """Step 1 (0.98, #88): the finding separates the causes. On the onset unit the damper was
+    commanded open while the outdoor-air fraction stayed near its stuck value; the control's
+    missed hours (real data) all had the damper commanded low."""
+    m = ctx.finding("free_cooling_missed", ONSET).metrics
+    assert m["missed_cause"] == "damper_not_delivering", m
+    assert m["commanded_open_oaf_median_pct"] < m["stuck_low_oaf_pct"], m
+    if ctx.mode == REAL:
+        assert (m["commanded_open_pct"], m["commanded_open_hours"]) == (40.3, 673.0), m
+        assert m["commanded_open_oaf_median_pct"] == 4.4, m
+        free = ctx.finding("free_cooling_missed", FREE).metrics
+        assert free["missed_cause"] == "economizer_not_commanded", free
+        assert free["commanded_open_pct"] == 0.0, free
 
 
 def _rcx_conditional(ctx) -> None:
@@ -279,7 +299,8 @@ EXERCISE = Exercise(
         Finding("outdoor_air_fraction", ONSET, present=False),
         Metric("free_cooling_missed", ONSET, "missed_pct", 30.0, 0.5, on=REAL, quote="30%"),
         Metric("free_cooling_missed", FREE, "missed_pct", 17.0, 0.5, on=REAL, quote="17%"),
-        Check("RCx: the top issue and its on-site check", _rcx_ranking),
+        Check("RCx: the top issue names its cause", _rcx_ranking, quote="stuck low"),
+        Check("why free cooling was missed", _missed_cause, quote="40%"),
         Check("RCx: the conditional issue", _rcx_conditional, quote="trust 0.40"),
         # step 4: verification by drift
         Check("drift localizes the onset to the outdoor-air path", _drift, quote="-83"),

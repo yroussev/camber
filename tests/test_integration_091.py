@@ -115,7 +115,8 @@ def test_rcx_issue_page_names_the_plant_upstream_and_advises_it_first():
     banners = [b["text"] for b in sec["blocks"] if b.get("kind") == "banner"]
     assert any(t.startswith("Upstream cause: plant short of setpoint") for t in banners)
     text = " ".join(str(b) for b in sec["blocks"])
-    assert "Recommended action: Check the chilled-water plant first" in text
+    # 0.98 (#88): "Recommended action — {title}: {action}"
+    assert ": Check the chilled-water plant first" in text and "Recommended action — " in text
     # the plant page lists what it may explain; no plant-first advice on the plant itself
     psec = _sec_issue(S, p)
     ptext = " ".join(str(b) for b in psec["blocks"])

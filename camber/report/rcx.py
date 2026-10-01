@@ -868,9 +868,15 @@ class RcxReport:
 
 
 def _issue_dict(i) -> dict:
+    from ..aso import recommend
+
+    rec = recommend(i.root)
     return {
         "key": i.key,
         "rank": i.rank,
+        # 0.98 (#88): the packaged action's title and the finding's cause (the issue heading)
+        "title": rec.title if rec is not None else _humanize(getattr(i.root, "rule", "")),
+        "cause": rec.cause if rec is not None else "",
         "equip": i.equip,
         "severity": i.severity,
         "rules": i.rules,
@@ -1662,7 +1668,9 @@ def _sec_summary(S) -> dict:
         )
     rows = []
     for iss in issues[: max(int(o.top_n), 0)]:
-        title, action, _sug = _advice(S, iss, recommend(iss.root))
+        rec = recommend(iss.root)
+        title, action, _sug = _advice(S, iss, rec)
+        title = _heading(rec, title)  # 0.98 (#88): the Issue column names the cause
         action = action[:1].upper() + action[1:] if action else ""
         action = action or "Engineer to specify (no packaged action)."
         cost = _fmt_usd(iss.cost) if iss.cost is not None else _cut(iss.cost_basis_note, 60)
@@ -2294,6 +2302,13 @@ def _plant_first(iss) -> str:
     )
 
 
+def _heading(rec, title: str) -> str:
+    """An issue's heading: the finding's cause when the recommendation names one (0.98, #88), else
+    the action title."""
+    cause = getattr(rec, "cause", "") if rec is not None else ""
+    return cause or title
+
+
 def _packaged_advice(S, iss, rec) -> tuple:
     """:func:`_advice` before the upstream-cause step: the packaged advice, G36-qualified."""
     rule = getattr(iss.root, "rule", "")
@@ -2414,7 +2429,8 @@ def _sec_issue(S, iss) -> dict:
         )
     blocks.append(_table(["Role", "Rule", "Severity", "Estimate $/yr", "Finding"], mrows))
     if action:
-        blocks.append(_p(f"Recommended action: {action}"))
+        # 0.98 (#88): the heading names the cause; the action paragraph keeps the action's title
+        blocks.append(_p(f"Recommended action — {title}: {action}"))
         if suggested:
             blocks.append(_p(f"Suggested: {suggested}"))
         refs = _issue_refs(iss, rec)
@@ -2455,7 +2471,9 @@ def _sec_issue(S, iss) -> dict:
     ai = _ai_prose(iss, None)
     if ai:
         blocks.append(_p(ai))
-    sec = _section(f"issue-{iss.key}", f"Issue {iss.rank}: {title}", blocks, kind="issue")
+    sec = _section(
+        f"issue-{iss.key}", f"Issue {iss.rank}: {_heading(rec, title)}", blocks, kind="issue"
+    )
     sec["slot"] = f"issue:{iss.key}"
     return sec
 

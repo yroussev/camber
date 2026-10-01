@@ -474,6 +474,56 @@ PARAM_DOCS["free_cooling_missed"] = {
         "Must be at or above warn_pct.",
     ),
 }
+# ---- begin 098-rcx-cause (#88): why free cooling was missed (additive metrics, no severity) ----
+PARAM_DOCS["free_cooling_missed"].update(
+    {
+        "cmd_open_pct": _P(
+            "% of damper stroke (OA damper command)",
+            "CAMBER judgment: the full-outside-air damper test (ECON_DAMPER_MIN_PCT, 90 %); an "
+            "economizer damper at full open commonly reads a few percent short",
+            "Read the OA-damper command on a known-good unit's free-cooling hours at full "
+            "economizer; set it a few percent below the value it holds there.",
+            (50.0, 100.0),
+            "Only the missed_cause metrics use it; severity does not.",
+        ),
+        "oaf_open_pct": _P(
+            "% outdoor-air fraction (temperature balance)",
+            "CAMBER judgment: the full-outside-air OA-fraction test (ECON_OAF_MIN_PCT, 80 %); "
+            "sensor error and mixing-box stratification keep a true 100 % OA unit from reading 100",
+            "Compute (RAT - MAT) / (RAT - OAT) on a known-good unit's full-economizer hours with "
+            "|OAT - RAT| >= 5 °F; set it below their low percentile.",
+            (50.0, 100.0),
+            "Samples with |OAT - RAT| < 5 °F are not judged (the balance is ill-conditioned).",
+        ),
+        "stuck_min_share_pct": _P(
+            "% of missed, well-conditioned free-cooling samples",
+            "CAMBER judgment, checked on lbnl-sdahu (stuck-damper runs 40-87 %, fault-free and "
+            "valve-leak runs 0 %) and lbnl-ddahu (stuck-closed run 95 %, fault-free 0 %)",
+            "Read commanded_open_pct on units whose dampers are known to work: set it well above "
+            "their value (usually 0 %) and below that of a unit with a known stuck damper.",
+            (5.0, 60.0),
+            "Below it, with a damper command trended, missed_cause is economizer_not_commanded.",
+        ),
+        "stuck_min_hours": _P(
+            "hours",
+            "CAMBER judgment: one day of evidence before naming a mechanical cause",
+            "Raise it for long windows or noisy mixed-air sensors; one day is the floor for an "
+            "hourly trend.",
+            (6.0, 168.0),
+            "With the share met on fewer hours, missed_cause is undetermined.",
+        ),
+        "stuck_low_oaf_pct": _P(
+            "% outdoor-air fraction",
+            "CAMBER judgment: below 30 % the damper delivers about its minimum-OA share or less",
+            "Set it just above the unit's design minimum OA fraction plus a margin; a damper "
+            "delivering less while commanded open reads 'stuck low', more reads 'stuck part open'.",
+            (5.0, 60.0),
+            "Recorded on the finding; the recommendation reads it (aso DEFAULT_PARAMS "
+            "econ_stuck_low_oaf_pct mirrors the default).",
+        ),
+    }
+)
+# ---- end 098-rcx-cause ----
 
 PARAM_DOCS["leaking_valve"] = {
     "fan_heat_f": _P(
