@@ -1,0 +1,80 @@
+{
+ "schema": "mv_vectors/1",
+ "implementation": "example: CAMBER's own outputs, one monthly fit forced to its runner-up kind",
+ "results": {
+  "bdg2_hog_office_napoleon_elec": {
+   "daily": {
+    "kind": "2P",
+    "n_params": 2,
+    "base": 3109.588,
+    "slopes_dEdT": [
+     0.1532161
+    ],
+    "r2": 0.0001,
+    "cvrmse_pct": 12.49,
+    "nmbe_pct": 0.0,
+    "pass_calsim": true,
+    "pass_baseline": false,
+    "savings_total": {
+     "raw": 14021.9,
+     "injected": 126391.6
+    }
+   }
+  },
+  "syn_3ph_58": {
+   "monthly": {
+    "kind": "3PH",
+    "n_params": 3,
+    "change_points": [
+     61.39314
+    ],
+    "base": 401.1109,
+    "slopes_dEdT": [
+     -12.68356,
+     0.0
+    ],
+    "y": "totals",
+    "predictions": [
+     23303.45,
+     19624.17,
+     18309.94,
+     12845.0,
+     12434.44,
+     12033.33,
+     12434.44,
+     12434.44,
+     12033.33,
+     14287.6,
+     17696.46,
+     21663.85
+    ],
+    "savings_total": {
+     "raw": 737.9168,
+     "injected": 19664.28
+    }
+   }
+  }
+ },
+ "bills": {
+  "bills_syn_dd_hc_55_68": {
+   "kind": "DD-HC",
+   "heating_base_f": 53.0,
+   "cooling_base_f": 71.0,
+   "r2": 0.9991,
+   "cvrmse_pct": 0.63,
+   "savings_total": {
+    "raw": 553.0,
+    "injected": 13732.72
+   },
+   "avoided_cost": {
+    "raw": 69.85,
+    "injected": 1754.91
+   },
+   "calendarized": {
+    "2020-12": 8585.657,
+    "2021-01": 15266.49,
+    "2021-02": 12790.11
+   }
+  }
+ }
+}
