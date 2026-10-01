@@ -167,6 +167,49 @@ calibrate it, and reads run configs from YAML as well as JSON.
   fan status since 0.93 (#42). The catalog note and the template comment now say so, and say that
   the template still leaves the rule out until it is re-checked on these baselines.
 <!-- /098-refs-catalog -->
+<!-- 098-plant-chw -->
+- **`chw_plant_reset` checks the reset's sign and recognises constant-flow plants (#86 item 2).**
+  New params `design_deltaT_min_f` (8 °F, was fixed), `expected_reset_sign` (`"negative"`
+  default: an outdoor-air reset lowers CHWST as OAT rises; `"positive"`, or `"any"` for the old
+  either-way test), `flow_mode` (`"auto"` default, `"constant"`, `"variable"`) and
+  `constant_flow_cv` (0.05). A clear slope the wrong way is no longer a reset:
+  `chwst_reset_present` is false, the new `chwst_reset_direction` metric reads `reverse`
+  (`expected` / `flat` otherwise), a caveat says so, and the finding warns. `Role.CHW_FLOW` is
+  now an optional input: with `flow_mode="auto"`, a flow whose coefficient of variation over the
+  running hours is at most `constant_flow_cv` (on at least 24 hours) marks a constant-flow plant,
+  whose low loop delta-T is reported but left out of severity, with a caveat. New metrics
+  `flow_mode` (`constant` / `variable` / `unknown`), `flow_cv` and `design_deltaT_min_f`;
+  `CHWPlantResult` gains trailing `flow_cv` / `n_flow`. The recommender gives no "fix low ΔT"
+  advice on a constant-flow plant and has a new branch for a reversed reset, "Find why the
+  chilled-water supply warms in hot weather". **Intended default change** on `lbnl-chiller`
+  (chiller 1's flow varies by at most 0.11 % on every run): the fault-free plant goes `fault` ->
+  `ok` (delta-T median 6.4 °F, 80.1 % of hours below 8 °F, now not judged), and so do the other
+  18 non-bypass runs (the chiller-bias runs' `fault`/`warn` were never this rule's to raise); the
+  five tower-bypass runs go `fault` -> `warn`, their CHWST rising with OAT at +0.57 to +0.95 °F/°F.
+- **The pump rules learn the VFD floor (#86 item 3).** `chw_pump_dp_reset` and
+  `hw_pump_dp_reset` take `near_min_pct` (a number, or `"auto"`) and `floor_tol_pct` (1.0).
+  `"auto"`, the chilled-water default, learns the pump's minimum speed from a plateau in its
+  running speeds (`camber.chwpump.learn_vfd_floor`: the 2nd percentile, accepted when >= 10 %
+  of running samples sit within `floor_tol_pct` of it and the 90th percentile is >= 20 points
+  above it) and counts speeds at or below `max(25, floor + floor_tol_pct)` as near the minimum;
+  with no plateau it falls back to 25. The hot-water rule keeps the fixed 25 % band by default.
+  New metrics `vfd_floor_pct`, `near_min_band_pct` and `near_min_source` (`learned` / `default`
+  / `fixed`) on both rules; the summary names the band. **Intended default change** on
+  `lbnl-chiller`: the secondary pump's floor is learned at 34.5 %, so the fault-free run counts
+  31.3 % of hours near minimum (was 0), and the two high-reading chiller-sensor-bias runs, where
+  the pump idles at its floor 68 % of the time, go `ok` -> `warn`. No other severity moves.
+- **Parameter registry: keyword-or-number ranges.** A parameter that takes a keyword or a number
+  lists the keywords first and ends with the numeric range (`("auto", 10.0, 60.0)`), printed as
+  '"auto", or 10.0 to 60.0' by `camber rules params` and `docs/THRESHOLDS.md`.
+  `chw_plant_reset`, `chw_pump_dp_reset` and `hw_pump_dp_reset` move from fixed-in-code notes to
+  documented tunables.
+- **Workbook.** `plant-chw-reset-pumping`: the healthy plant's `chw_plant_reset` is pinned `ok`
+  with the constant-flow check, the stuck bypass `warn` with a reversed reset (+0.76 °F/°F), and
+  the learned floor (34.5 %, 31.3 % of fault-free hours; the chiller-bias run a `warn` at 68.6 %);
+  the page's setup, steps, questions and caveats and the instructor key (answers 1, 2, 4 and 5,
+  discussion, mistakes) are rewritten. `plant-sensor-vs-equipment`: answer 2 notes the
+  high-reading runs' pump now warns at its floor.
+<!-- /098-plant-chw -->
 
 ### Documentation
 <!-- 098-refs-catalog -->
@@ -209,6 +252,14 @@ calibrate it, and reads run configs from YAML as well as JSON.
   tier map's default values against the range. The `damper_census` fixed-in-code note no longer
   says occupied hours are always the weekday schedule.
 <!-- /098-w1-integration -->
+<!-- 098-plant-chw -->
+- **The synthetic healthy chilled-water reset ran the wrong way (S2).** `faultlab`'s clean
+  `chw_plant_reset` scenario raised CHWST as OAT rose (`42 + 0.30 x (OAT - 55)`); a healthy
+  outdoor-air reset lowers it. It is now `clip(52 - 0.30 x (OAT - 55), 42, 52)`. The synthetic
+  benchmark's metrics JSON is byte-identical before and after (sha256 `a0d5c8fb...`); without the
+  fix the new sign check would have raised `chw_plant_reset.fpr` 0 -> 1. A test fixture in
+  `tests/test_optional_role_honesty.py` had the same wrong-way "working reset" and is corrected.
+<!-- /098-plant-chw -->
 
 ## [0.97.0] — Unreleased
 

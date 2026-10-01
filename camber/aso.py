@@ -427,6 +427,34 @@ def _rec_chw_plant(f, frame, P):
     low = float(low) if isinstance(low, (int, float)) and low == low else 0.0
     reset = m.get("chwst_reset_present")
     low_dt = low >= float(P["chw_low_dt_warn_pct"]) or (reset is not False and low > 0.0)
+    # ---- begin 098-plant-chw (#86 item 2): constant flow, reversed reset ----
+    # A constant-primary-flow plant has a low loop deltaT at part load by design: no "fix low
+    # deltaT" advice for it. A supply temperature that rises with the outdoor temperature is not
+    # a flat reset and gets its own advice.
+    if m.get("flow_mode") == "constant":
+        low_dt = False
+    if not low_dt and m.get("chwst_reset_direction") == "reverse":
+        slope = m.get("chwst_slope_per_F")
+        seen = f" ({slope:+.2f}°F per °F)" if isinstance(slope, (int, float)) else ""
+        return _rec(
+            f,
+            title="Find why the chilled-water supply warms in hot weather",
+            action=(
+                f"The chilled-water supply temperature rises as it gets warmer outside{seen}, the "
+                "opposite of a reset. Either the plant cannot hold its supply temperature at "
+                "high load (check whether it reaches its setpoint, the chillers' capacity and "
+                "the condenser side: tower, condenser-water bypass, entering water "
+                "temperature), or the reset schedule runs the wrong way. Fix the cause before "
+                "tuning a reset."
+            ),
+            parameter="CHW plant capacity / CHW supply temperature reset direction",
+            suggested="supply temperature held in hot weather; any reset lowers it as load rises",
+            expected_effect="Coils get the chilled water they need at peak load.",
+            confidence="medium",
+            standard="PNNL Re-tuning Ch.8 (chilled-water plant)",
+            caveats=["A warm chilled-water supply sensor reading high mimics this."],
+        )
+    # ---- end 098-plant-chw ----
     if low_dt:
         also = (
             " The supply temperature is also flat: once deltaT recovers, reset it on load."

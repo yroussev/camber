@@ -86,7 +86,8 @@ def _range(r: tuple, default=None, unit: str = "") -> str:
     if all(isinstance(v, (str, bool)) for v in r):
         return ", ".join(f"`{pd.json_value(v)}`" for v in r)
     each = "each value: " if pd._per_key(unit, default) else ""  # a tier map: the range per key
-    return f"{each}{r[0]} to {r[-1]}"
+    words = "".join(f"`{pd.json_value(v)}`, or " for v in pd._keywords(r))  # keyword or number
+    return f"{words}{each}{r[-2] if words else r[0]} to {r[-1]}"
 
 
 def render_markdown() -> str:

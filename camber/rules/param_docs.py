@@ -16,7 +16,9 @@ keyed by rule name and then parameter name. An entry records:
   map such as ``{"warn": 5.0, "fault": 20.0}``) gives the range of **each value**, and its unit
   ends with the keys (``"%..., per key ('warn', 'fault')"``); the note states any order between
   the keys (``warn <= fault``). ``camber rules params`` and ``docs/THRESHOLDS.md`` print such a
-  range as "each value: low to high";
+  range as "each value: low to high". A parameter that takes **a keyword or a number** (0.98,
+  #86: ``near_min_pct="auto"`` or ``25.0``) lists the keywords first and ends with the numeric
+  ``low, high``: ``("auto", 25.0, 60.0)``, printed as '"auto", or 25.0 to 60.0';
 - ``note`` (optional) -- what a ``None`` default means, or how the parameter interacts with others.
 
 **Defaults are never copied here.** They are read from the rule constructors
@@ -1460,21 +1462,117 @@ PARAM_DOCS["hw_plant_deltat"] = {
     ),
 }
 
-FIXED["hw_pump_dp_reset"] = (
-    "fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; "
-    "warn at >= 30 % near full, or near minimum (<= 25 % speed) for >= 50 %; running means speed "
-    "> 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no "
-    "reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py), not yet a "
-    "constructor parameter"
+# ---- begin 098-plant-chw (#86 items 2 and 3): chw_plant_reset, chw/hw_pump_dp_reset ----
+
+_NEAR_MIN_PCT_CALIBRATE = (
+    "Read the drive's minimum speed from the VFD parameters (or the sequence of operations) and "
+    "set this a point or two above it; or plot a histogram of the running speed and find the "
+    'pile-up at the bottom. "auto" learns it: the 2nd percentile of the running speed counts '
+    "as the floor when >= 10 % of running samples sit within floor_tol_pct of it and the 90th "
+    "percentile is >= 20 points above it (else the band falls back to 25 %)."
+)
+_NEAR_MIN_PCT_NOTE = (
+    'The band used is max(25, learned floor + floor_tol_pct) under "auto", else the number '
+    "given. Severity is fixed in code: warn when >= 50 % of running time is at or below the "
+    "band. The metrics vfd_floor_pct, near_min_band_pct and near_min_source say what was used."
+)
+_FLOOR_TOL = _P(
+    "% speed",
+    "CAMBER judgment: a VFD parked at its minimum reads within about a point of it",
+    "Look at the spread of the speed readings while the pump sits at its minimum (trend "
+    "resolution and rounding); set this just wider than that spread.",
+    (0.1, 5.0),
+    'Used only when near_min_pct is "auto".',
 )
 
-FIXED["chw_plant_reset"] = (
-    "fault when >= 50 % of running hours have loop delta-T below 8 °F (the PNNL Re-tuning Ch.8 "
-    "low-delta-T threshold, per camber/chwplant.py); warn at >= 20 %, or when CHWST vs OAT is "
-    "flat (|slope| < 0.05 °F/°F); occupied hours only; without a run status or power, running "
-    "means CHWST in 38-58 °F; CHWST <= 46 °F is reported as held low (metric only); fixed in code "
-    "(camber/rules/chwplant_rule.py, camber/chwplant.py), not yet a constructor parameter"
+PARAM_DOCS["hw_pump_dp_reset"] = {
+    "near_min_pct": _P(
+        '% speed, or "auto"',
+        "CAMBER judgment: 25 % is a common VFD minimum; hot-water pumps keep the fixed band by "
+        'default (0.98, #86), with "auto" as an opt-in',
+        _NEAR_MIN_PCT_CALIBRATE,
+        ("auto", 10.0, 60.0),
+        _NEAR_MIN_PCT_NOTE,
+    ),
+    "floor_tol_pct": _FLOOR_TOL,
+}
+
+FIXED["hw_pump_dp_reset"] = (
+    "fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; "
+    "warn at >= 30 % near full, or near minimum (at or below near_min_pct) for >= 50 %; running "
+    "means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts "
+    "as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py)"
 )
+
+PARAM_DOCS["chw_plant_reset"] = {
+    "design_deltaT_min_f": _P(
+        "°F",
+        "public source: PNNL Building Re-tuning Ch.8 (the low-delta-T threshold, ~8 °F)",
+        "Read the loop's design delta-T from the chiller or coil schedules and set this a little "
+        "below it; or take the 10th percentile of the loop delta-T over a known-good, loaded "
+        "cooling season. Do not tune it on the period you score.",
+        (3.0, 20.0),
+        "Severity is fixed in code: warn when >= 20 % of running hours sit below this, fault at "
+        ">= 50 %; not judged on a constant-flow plant (see flow_mode).",
+    ),
+    "expected_reset_sign": _P(
+        "choice",
+        "CAMBER judgment: an outdoor-air CHWST reset lowers the supply temperature as OAT "
+        "rises, a negative slope on OAT",
+        'Read the reset schedule in the sequence of operations. "positive" fits a plant whose '
+        'supply is deliberately raised in hot weather; "any" accepts either direction (the '
+        "pre-0.98 behaviour).",
+        ("negative", "positive", "any"),
+        'A clear slope the other way is reported as chwst_reset_direction "reverse", counts as '
+        "no reset, and warns.",
+    ),
+    "flow_mode": _P(
+        "choice",
+        "CAMBER judgment: a constant-primary-flow plant has a low loop delta-T at part load by "
+        "design, so delta-T is judged only on variable flow",
+        'Declare "constant" or "variable" from the plant\'s pumping design; "auto" reads the '
+        "mapped CHW flow (chw_flow) over the running hours and needs >= 24 of them.",
+        ("auto", "constant", "variable"),
+        'Without a flow point, "auto" reports flow_mode "unknown" and judges delta-T.',
+    ),
+    "constant_flow_cv": _P(
+        "fraction (std / mean)",
+        "CAMBER judgment: a constant-speed primary pump varies well under 5 %; the lbnl-chiller "
+        "plant's chiller-1 flow varies <= 0.11 % on every run, a variable-flow loop by tens of %",
+        "Compute the coefficient of variation of the CHW flow over the running hours of a known "
+        "period; a constant-flow plant sits near zero, a variable-flow one well above this.",
+        (0.01, 0.2),
+        'Used only when flow_mode is "auto".',
+    ),
+}
+
+FIXED["chw_plant_reset"] = (
+    "warn when CHWST vs OAT is flat (|slope| < 0.05 °F/°F) or reversed; occupied hours only; "
+    "without a run status or power, running means CHWST in 38-58 °F; CHWST <= 46 °F is reported "
+    "as held low (metric only); fixed in code (camber/rules/chwplant_rule.py, camber/chwplant.py)"
+)
+
+PARAM_DOCS["chw_pump_dp_reset"] = {
+    "near_min_pct": _P(
+        '% speed, or "auto"',
+        "CAMBER judgment: learn the drive's own minimum (0.98, #86); a fixed 25 % missed the "
+        "lbnl-chiller secondary pump, whose floor is 34.5 %",
+        _NEAR_MIN_PCT_CALIBRATE,
+        ("auto", 10.0, 60.0),
+        _NEAR_MIN_PCT_NOTE,
+    ),
+    "floor_tol_pct": _FLOOR_TOL,
+}
+
+FIXED["chw_pump_dp_reset"] = (
+    "fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; "
+    "warn at >= 30 % near full, or near minimum (at or below the near_min_pct band) for >= 50 %; "
+    "running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own "
+    "units) counts as flat (no reset, reported but not in severity); fixed in code "
+    "(camber/rules/chwpump_rule.py, camber/chwpump.py)"
+)
+
+# ---- end 098-plant-chw ----
 
 PARAM_DOCS["chw_supply_tracking"] = {
     "above_f": _P(
@@ -1517,14 +1615,6 @@ PARAM_DOCS["chw_supply_tracking"] = {
         (6, 500),
     ),
 }
-
-FIXED["chw_pump_dp_reset"] = (
-    "fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; "
-    "warn at >= 30 % near full, or near minimum (<= 25 % speed) for >= 50 %; running means speed "
-    "> 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no "
-    "reset, reported but not in severity); fixed in code (camber/rules/chwpump_rule.py, "
-    "camber/chwpump.py), not yet a constructor parameter"
-)
 
 PARAM_DOCS["chiller_efficiency"] = {
     "design_kw_per_ton": _P(
@@ -2285,11 +2375,19 @@ def _per_key(unit: str, default=None) -> bool:
     return isinstance(default, dict) or "per key" in unit
 
 
+def _keywords(r: tuple) -> tuple:
+    """The leading keywords of a keyword-or-number range (``("auto", 25.0, 60.0)`` -> "auto")."""
+    if all(isinstance(v, (str, bool)) for v in r):
+        return ()
+    return tuple(v for v in r if isinstance(v, str))
+
+
 def _fmt_range(r: tuple, default=None, unit: str = "") -> str:
     if all(isinstance(v, (str, bool)) for v in r):
         return "one of " + ", ".join(json_value(v) for v in r)
     each = "each value: " if _per_key(unit, default) else ""
-    return f"{each}{r[0]} to {r[-1]}"
+    words = "".join(f"{json_value(v)}, or " for v in _keywords(r))
+    return f"{words}{each}{r[-2] if words else r[0]} to {r[-1]}"
 
 
 def json_value(v) -> str:

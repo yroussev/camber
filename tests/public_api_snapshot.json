@@ -334,7 +334,8 @@
   "camber.chwpump": [
     "CHWPumpResult",
     "analyze_chw_pump",
-    "analyze_pump"
+    "analyze_pump",
+    "learn_vfd_floor"
   ],
   "camber.cli": [
     "main"
