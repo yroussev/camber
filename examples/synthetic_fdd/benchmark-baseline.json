@@ -1,4 +1,6 @@
 {
+  "actuator_stuck.fpr": 0.0,
+  "actuator_stuck.tpr": 1.0,
   "airflow_tracking.fpr": 0.0,
   "airflow_tracking.tpr": 1.0,
   "boiler_short_cycle.fpr": 0.0,
@@ -31,8 +33,8 @@
   "control_hunting.tpr": 1.0,
   "cooling_tower_approach.fpr": 0.0,
   "cooling_tower_approach.tpr": 1.0,
-  "coverage.n_scored": 45,
-  "coverage.n_single": 45,
+  "coverage.n_scored": 46,
+  "coverage.n_single": 46,
   "dcv_verification.fpr": 0.0,
   "dcv_verification.tpr": 1.0,
   "dx_indoor_airflow.fpr": 0.0,
