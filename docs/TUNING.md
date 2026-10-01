@@ -70,6 +70,28 @@ The findings help. Most rules report the statistic their threshold is compared w
 `median_delta_f` for `leaking_valve`, `simultaneous_hc_pct` for `simultaneous_heat_cool`), so a
 run on the known-good period at the default settings shows where normal sits.
 
+### Drift references
+
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
+The drift detectors take the same idea one step further: "normal" is a fitted model of the
+equipment, not a single threshold. Usually that model is the unit's own baseline, frozen once with
+`camber drift freeze`. When the known-good data is somewhere else, declare it as the family's
+`reference` instead ([how](CLI.md#a-declared-reference)):
+
+- **A known-good period of the same unit**, `{"period": [start, end]}`: a post-commissioning
+  season, the weeks after a repair. The current window then starts where that period ends, so
+  the two never overlap.
+- **A unit known to be healthy**, `{"equip": ID}`: a labelled dataset's fault-free run, or a
+  sister unit of the same design and sequence. This is the "split by unit" of the next section,
+  so it is sound only when the units are alike.
+
+A declared reference is re-fitted on every run and never stored, and the reference unit declines
+(`is_reference`) rather than scoring itself. Record why it is known to be good in the config's
+`_comment`, as for any calibrated value. The `lbnl-chiller` and `lbnl-boiler` templates score
+`cooling_tower_fan_effort_drift` and `boiler_efficiency_drift` against `PLANT__fault_free` this
+way ([PLANT-DETECTORS](PLANT-DETECTORS.md#validation)).
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
+
 ## 3. Avoid circular calibration
 
 **If you calibrate on a period and then score on the same period, the score is not evidence.**

@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise plant-cooling-tower (docs/workbook/plant-cooling-tower.md): the heat-rejection side of the lbnl-chiller plant (tower 1 and the condenser loop). cooling_tower_approach keeps the dataset template's 8.1 F design approach, calibrated from the fault-free run's median approach at high fan (the simulated tower's design curve is not published; see configs/lbnl-chiller.json), and its default 90% fan-effort gate, so the approach is judged only when the tower works at its limit. condenser_water_reset (default 0.3 F-per-F slope) asks whether the condenser-water supply follows the wet-bulb. condenser_bypass_leak (default 2 F warn / 5 F fault) compares the water entering the chillers with the water leaving the tower while the bypass valve is commanded shut. chiller_efficiency is left to the plant-chiller-efficiency exercise.",
+  "_comment": "Workbook exercise plant-cooling-tower (docs/workbook/plant-cooling-tower.md): the heat-rejection side of the lbnl-chiller plant (tower 1 and the condenser loop). cooling_tower_approach keeps the dataset template's 8.1 F design approach, calibrated from the fault-free run's median approach at high fan (the simulated tower's design curve is not published; see configs/lbnl-chiller.json), and its default 90% fan-effort gate, so the approach is judged only when the tower works at its limit. condenser_water_reset (default 0.3 F-per-F slope) asks whether the condenser-water supply follows the wet-bulb. condenser_bypass_leak (default 2 F warn / 5 F fault) compares the water entering the chillers with the water leaving the tower while the bypass valve is commanded shut. chiller_efficiency is left to the plant-chiller-efficiency exercise. The tower drift family scores every run against the declared reference PLANT__fault_free (drift.families[].reference), re-read on every run and never stored: cooling_tower_fan_effort_drift reads the fan effort at matched condenser range and wet-bulb, which is where a controlled tower's fouling shows (it holds its approach). Measured on the full subset: tower fouling 065 +17.8 and 080 +10.9 fan %-points (fault), 095 +3.3 (under the 5-point floor, ok); 0 of the 20 other runs fire, and the +1 / +2 F tower-sensor-bias runs are reported as sensor offsets (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 21.",
   "_dataset": "lbnl-chiller",
   "source": {
     "kind": "store",
@@ -25,5 +25,16 @@
   ],
   "report": {
     "level": 2
+  },
+  "drift": {
+    "families": [
+      {
+        "class": "CHW_PLANT",
+        "family": "tower",
+        "reference": {
+          "equip": "PLANT__fault_free"
+        }
+      }
+    ]
   }
 }

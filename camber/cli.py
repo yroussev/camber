@@ -1941,10 +1941,15 @@ def _state_audit(ctx, action: str, *, reason: str, details: dict) -> None:
 def _print_drift(result) -> None:
     rank = {"fault": 0, "warn": 1, "info": 2, "ok": 3}
     for fam in result.families:
-        print(
-            f"\n{fam.label} — {fam.equip_class}  (baseline {tuple(fam.baseline)} "
-            f"vs current {tuple(fam.current)})"
+        ref = getattr(fam, "reference", None)
+        against = (
+            f"reference {ref['equip']} {tuple(fam.baseline)}"
+            if ref and ref.get("equip")
+            else f"known-good period {tuple(fam.baseline)}"
+            if ref
+            else f"baseline {tuple(fam.baseline)}"
         )
+        print(f"\n{fam.label} — {fam.equip_class}  ({against} vs current {tuple(fam.current)})")
         if not fam.diagnoses:
             print("  no equipment produced a verdict")
         for d in sorted(fam.diagnoses, key=lambda x: rank.get(x.severity, 9)):
@@ -2014,6 +2019,21 @@ def _cmd_drift_freeze(args) -> int:
     from .portfolio import PortfolioLocked
 
     cfg, base = _drift_load(args)
+    # 0.98 (#86, S4): a declared reference is re-read on every run; there is nothing to freeze
+    declared = [
+        f"{e.get('class')}:{e.get('family')}"
+        for e in (cfg.get("drift") or {}).get("families", [])
+        if e.get("reference") is not None
+    ]
+    if declared:
+        print(
+            "error: `drift freeze` refuses families that declare a reference ("
+            + ", ".join(declared)
+            + "): a declared reference is fitted in memory on every run and never frozen. "
+            "Remove the reference from those families to freeze a stored baseline.",
+            file=sys.stderr,
+        )
+        return 1
     ctx = _drift_ctx(cfg, base)
     reason = (args.reason or "").strip()
     if ctx.workspace and not args.dry_run and not reason:

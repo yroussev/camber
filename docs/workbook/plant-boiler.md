@@ -61,6 +61,10 @@ dataset template's one rule), `boiler_summer_lockout`, `boiler_short_cycle` and
 `hw_plant_deltat`, all with their defaults. Read its `_comment`: the last three are listed on
 purpose.
 
+Its `drift` section adds the boiler drift family with a **declared reference**:
+`boiler_efficiency_drift` scores every run's gas input per unit of heat delivered against
+`PLANT__fault_free`, fitted in memory on each run and never stored.
+
 ## Steps
 
 1. **Look before you judge.** In the trend viewer, open `PLANT__fault_free` and plot the loop
@@ -73,10 +77,12 @@ purpose.
    `median_speed_pct`, `pct_running_near_full`, `pct_running_near_min`, `dp_sp_reset_present` and
    `n_running`.
 5. **Fouling.** Find every finding on `PLANT__boiler_foul_065`, and compare its gas input with
-   the fault-free run's in the trend viewer.
+   the fault-free run's in the trend viewer. Then read `boiler_efficiency_drift` for the three
+   boiler-fouling runs and the two hot-water temperature biases (`PLANT__hot_water_temp_bias_2`,
+   `_4`): `ratio_drift_rel`, `gas_rise_at_matched_oat`, `attribution` and the summary.
 6. **The DP sensor.** Compare `median_speed_pct` for the two ±20 % loop DP sensor biases with the
    fault-free run's, and plot the loop DP against its setpoint for one of them.
-7. **Score.** Run `camber datasets score` and read the overall detection rate.
+7. **Score.** Run `camber datasets score` and read the rates for `boiler_efficiency_drift`.
 
 ## Questions
 
@@ -84,10 +90,11 @@ purpose.
 2. Is the hot-water supply temperature reset, and is the boiler shut down in summer? What can
    CAMBER say about each on this plant, and what does the trend viewer show you?
 3. What does `hw_pump_dp_reset` find on the fault-free plant, and what does its `ok` leave out?
-4. Does anything in this config see the worst boiler fouling? Where does it show, and what kind
-   of CAMBER analysis would catch it?
+4. Does any point-in-time rule see the worst boiler fouling? Where does it show? What does
+   `boiler_efficiency_drift`, scored against the declared reference, find on the three foulings
+   and on the hot-water temperature biases?
 5. What does a loop DP sensor that reads 20 % high or low do to the pump, and to the DP reading
-   itself? What does the label score say overall?
+   itself? What does the label score say for `boiler_efficiency_drift`?
 
 ## What CAMBER shows
 
@@ -96,8 +103,13 @@ purpose.
 - **Metrics.** For `hw_pump_dp_reset`: the median speed, the shares near full (90 % or more) and
   near minimum (25 % or less), the median DP setpoint, whether it is reset, and `n_running` (the
   hours the pump ran).
-- **Score.** `camber datasets score` prints the overall detection rate and which rules fired on
-  each labelled run (this entry declares no per-detector targets).
+- **Drift.** `boiler_efficiency_drift` reports `ratio_drift_rel` (the change in gas input per
+  unit of heat delivered, as a fraction), `gas_rise_at_matched_oat`, `attribution` and
+  `baseline_source`. The declared reference itself declines as `is_reference`: it is the
+  yardstick, not a result.
+- **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
+  intervals, for the entry's one declared detector, `boiler_efficiency_drift` (target: boiler
+  fouling).
 
 ## Caveats
 
@@ -112,10 +124,11 @@ purpose.
 
 ## Going further
 
-- CAMBER's `boiler_efficiency_drift` rule reads fouling as gas input per unit of heat delivered,
-  against a frozen baseline of the same boiler (`camber drift`). On this dataset each fault is its
-  own year-long run, so there is no before-and-after on one boiler to compare; on a real plant,
-  freeze a baseline in a clean season and compare later seasons with it.
+- Here `boiler_efficiency_drift` compares each run with another boiler (the fault-free run),
+  because each fault is its own year-long run. On a real plant, compare a boiler with itself:
+  declare a clean season as the reference (`"reference": {"period": [start, end]}`), or freeze a
+  baseline with `camber drift freeze` and compare later seasons with it (see
+  [the CLI guide](../CLI.md#a-declared-reference)).
 - Compare this plant with [the chilled-water side](plant-chw-reset-pumping.md): the same three
   questions, answered from different points.
 - See [the sensor exercise](plant-sensor-vs-equipment.md) for why a sensor bias is scored as a

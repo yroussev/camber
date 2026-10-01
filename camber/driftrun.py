@@ -36,6 +36,16 @@ why. The re-fit reuses each rule's *own* fit -- run the suite against a scratch 
 harvest what it froze -- rather than a second copy of the fitting logic that could drift out of sync
 with the detector it is meant to feed.
 
+**A declared reference is scored against, never kept** (0.98, #86, S4). A family entry may name
+a ``reference`` instead of relying on the frozen store: another equipment known to be healthy
+(``{"equip": "PLANT__fault_free"}``, e.g. a labelled dataset's fault-free run, or a sister unit)
+or a known-good ``period`` of the same equipment. :func:`run_drift` then fits each detector's
+baseline on the reference in a scratch in-memory store that is **never saved** -- the reference is
+re-read from the data on every run, so nothing is minted and nothing can quietly move. Every such
+Finding carries ``baseline_source`` (``"reference:<equip>"`` or ``"period:<start>..<end>"``) and a
+caveat saying what it was compared with; the reference equipment itself declines with
+``reason="is_reference"`` (it is the yardstick, not a scored unit).
+
 **Freezing is a verb, not a setting.** Every drift rule defaults ``freeze_if_missing=True`` and
 writes the reference inline, so a scheduled run would quietly mint baselines from whatever window
 the config happened to label "baseline". :func:`run_drift` defaults it to ``False`` and never saves;
@@ -316,6 +326,9 @@ class DriftFamilyResult:
     # {(equip, rule_name): Evidence} when run_drift was asked for it. Deliberately absent from
     # as_dict(): an Evidence carries a prepared DataFrame, which is not JSON.
     evidence: dict = field(default_factory=dict)
+    # 0.98 (#86, S4): the declared reference the baselines were fitted on ({"equip": ...} and/or
+    # {"period": [start, end]}), or None when they came from the frozen store.
+    reference: dict | None = None
 
     def as_dict(self) -> dict:
         """A JSON-friendly view (diagnoses and findings flattened to plain dicts)."""
@@ -329,6 +342,7 @@ class DriftFamilyResult:
             "findings": [f.as_dict() for f in self.findings],
             "unevaluated": list(self.unevaluated),
             "plant": None if self.plant is None else self.plant.as_dict(),
+            "reference": None if self.reference is None else dict(self.reference),
         }
 
 
@@ -375,6 +389,196 @@ def _run_one(rule, refs, mapping, **kw) -> list:
     reg = Registry()
     reg.register(rule)
     return reg.run_periods(rule.name, refs, mapping, **kw)
+
+
+# --- 0.98 (#86, S4) declared reference (098-plant-reference) ------------------------------------
+
+
+def _reference_source(reference: dict) -> str:
+    """The ``baseline_source`` label of a declared reference: ``"reference:<equip>"`` (with
+    ``@<start>..<end>`` when it also names a period) or ``"period:<start>..<end>"``."""
+    per = reference.get("period")
+    span = "" if per is None else f"{per[0] or ''}..{per[1] or ''}"
+    if reference.get("equip"):
+        return f"reference:{reference['equip']}" + (f"@{span}" if span else "")
+    return f"period:{span}"
+
+
+def _reference_caveat(reference: dict) -> str:
+    if reference.get("equip"):
+        return (
+            f"baseline fitted on the declared reference {reference['equip']} (another equipment, "
+            "re-read on every run and never persisted): drift here means this unit differs from "
+            "the reference, which is a fault only if the reference is healthy and the two are alike"
+        )
+    per = reference.get("period") or (None, None)
+    return (
+        f"baseline fitted on the declared known-good period {per[0]}..{per[1]} of this "
+        "equipment (re-read on every run and never persisted)"
+    )
+
+
+def _tag_reference(findings, reference: dict) -> None:
+    """Stamp each Finding with where its baseline came from (metric + caveat), in place."""
+    src, cav = _reference_source(reference), _reference_caveat(reference)
+    # the detectors word their summaries for a frozen store; say what the baseline really was
+    against = (
+        f"vs the reference {reference['equip']}"
+        if reference.get("equip")
+        else "vs the known-good period"
+    )
+    for f in findings:
+        if f.metrics is None:
+            f.metrics = {}
+        f.metrics["baseline_source"] = src
+        if isinstance(f.summary, str):
+            for said in ("vs its frozen baseline", "vs frozen baseline"):
+                f.summary = f.summary.replace(said, against)
+        if cav not in f.caveats:
+            f.caveats.append(cav)
+
+
+def _ref_decline(rule, equip: str, reason: str, why: str, caveat: str | None = None) -> Finding:
+    return Finding(
+        rule=rule.name,
+        equip=equip,
+        severity="info",
+        metrics={"declined": True, "reason": reason},
+        summary=f"{equip}: declined -- {why}",
+        caveats=[caveat or f"could not evaluate drift: {why}"],
+    )
+
+
+def _run_one_reference(
+    rule, refs, ref_equip, mapping, *, ref_window, current, resample, shared, min_trust
+) -> list:
+    """Score each of ``refs`` against the declared reference equipment ``ref_equip``.
+
+    The reference is resolved **once** (with the same shared-point merge and trust gate a target
+    gets) and sliced to ``ref_window``; every other equipment is resolved, gated and sliced to
+    ``current`` exactly as :meth:`~camber.rules.base.Registry.run_periods` would, then handed to
+    ``rule.analyze_periods(equip, reference_frame, current_frame)``. ``rule`` must hold a scratch
+    store with freezing on: it fits each target's baseline from the reference frame there. The
+    reference equipment itself declines (``reason="is_reference"``), and a reference that cannot
+    serve (missing inputs, untrusted, empty window) declines every target with the reason, rather
+    than leaving them silently unscored.
+    """
+    from .rules.base import (
+        _cannot_run,
+        _class_declined,
+        _gate_roles,
+        _merge_shared,
+        _missing_optional,
+        _note_missing_optional,
+        _note_unrecognised,
+        _roles_to_load,
+        _slice_period,
+        _with_class,
+    )
+    from .sensorhealth import untrusted_roles
+
+    load = _roles_to_load(rule)
+    name = ref_equip.equip
+    ref_frame = _with_class(
+        _merge_shared(resolve(ref_equip, mapping, load, resample=resample), shared), ref_equip
+    )
+    problem = None  # (reason, why) when the reference cannot serve this detector
+    ref_slice = None
+    if ref_frame is None or _cannot_run(rule, ref_frame):
+        problem = ("reference_missing_inputs", f"the reference {name} lacks this detector's inputs")
+    else:
+        bad = (
+            untrusted_roles(ref_frame, _gate_roles(rule, ref_frame), min_trust=min_trust)
+            if min_trust is not None
+            else []
+        )
+        if bad:
+            problem = (
+                "reference_untrusted",
+                f"the reference {name} has untrusted input(s): " + ", ".join(r.value for r in bad),
+            )
+        else:
+            ref_slice = _slice_period(ref_frame, ref_window, label="reference")
+            if ref_slice.empty:
+                problem = ("empty_reference", f"the reference {name} has no data in its window")
+
+    out: list = []
+    for ref in refs:
+        if ref.equip == name:
+            out.append(
+                _ref_decline(
+                    rule,
+                    name,
+                    "is_reference",
+                    "the declared reference (the yardstick the others are scored against)",
+                    caveat=f"{name} is the declared drift reference, so it is not scored",
+                )
+            )
+            continue
+        frame = _with_class(
+            _merge_shared(resolve(ref, mapping, load, resample=resample), shared), ref
+        )
+        if _cannot_run(rule, frame):
+            continue
+        declined = _class_declined(rule, ref)
+        if declined is not None:
+            out.append(declined)
+            continue
+        if problem is not None:
+            out.append(_ref_decline(rule, ref.equip, problem[0], problem[1]))
+            continue
+        if min_trust is not None:
+            bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
+            if bad:
+                out.append(
+                    Finding(
+                        rule=rule.name,
+                        equip=ref.equip,
+                        severity="info",
+                        metrics={
+                            "declined": True,
+                            "min_trust": min_trust,
+                            "untrusted_roles": [r.value for r in bad],
+                        },
+                        summary=(
+                            f"{ref.equip}: declined -- untrusted input(s): "
+                            + ", ".join(r.value for r in bad)
+                        ),
+                    )
+                )
+                continue
+        cur = _slice_period(frame, current, label="current")
+        if cur.empty:
+            out.append(
+                Finding(
+                    rule=rule.name,
+                    equip=ref.equip,
+                    severity="info",
+                    metrics={"declined": True, "empty_periods": ["current"]},
+                    summary=f"{ref.equip}: declined -- no data in the current period",
+                    caveats=["could not evaluate drift: current window has no rows"],
+                )
+            )
+            continue
+        f = rule.analyze_periods(ref.equip, ref_slice, cur)
+        if f is None:
+            continue
+        _note_missing_optional(f, _missing_optional(rule, frame))
+        _note_unrecognised(f, rule, ref)
+        out.append(f)
+    return out
+
+
+def _find_equip(refs_by_class: dict, equip: str):
+    """The discovered :class:`~camber.resolve.EquipRef` named ``equip`` (any class), or None."""
+    for refs in refs_by_class.values():
+        for ref in refs:
+            if ref.equip == equip:
+                return ref
+    return None
+
+
+# --- end 0.98 declared reference ------------------------------------------------------------------
 
 
 def _declined(finding) -> bool:
@@ -447,6 +651,15 @@ def run_drift(
     ``plant`` / ``sustained_alarm`` / per-family ``baseline`` / ``current`` overrides. ``baseline``
     and ``current`` are the default ``(start, end)`` windows.
 
+    An entry may also declare a ``reference`` (0.98, #86, S4): ``{"equip": "<name>"}`` (another
+    discovered equipment known to be healthy, optionally with a ``"period"`` slicing it) or
+    ``{"period": [start, end]}`` (a known-good window of the same equipment). Its detectors then
+    fit on the reference in a scratch in-memory store that is never saved -- ``store`` is not read
+    for it and may be ``None`` when every entry declares one -- and the windows default to
+    ``(None, None)`` (a period reference's current window to everything after it). See
+    :func:`_reference_windows`. Combining a reference with ``freeze_if_missing`` is a
+    ``ValueError``: a declared reference is never frozen.
+
     ``freeze_if_missing`` defaults to **False**: a run that scores drift must not also create the
     reference it scores against. Pass ``True`` only from an explicit freeze command, and save the
     store yourself afterwards.
@@ -464,21 +677,62 @@ def run_drift(
         fam_name = entry["family"]
         fam = DRIFT_FAMILIES[fam_name]
         refs = list(refs_by_class.get(cls, []))
-        base_win = tuple(entry.get("baseline") or baseline)
-        cur_win = tuple(entry.get("current") or current)
+        reference = entry.get("reference") or None
+        ref_equip = None
+        fam_store, fam_freeze = store, freeze_if_missing
+        if reference is not None:
+            # 0.98 (#86, S4): fit on the declared reference in a scratch store, never saved
+            if freeze_if_missing:
+                raise ValueError(
+                    f"drift family {cls}:{fam_name} declares a reference; a declared reference "
+                    "is re-read on every run and is never frozen (remove it to freeze a baseline)"
+                )
+            from .store.modelstore import BaselineStore
+
+            fam_store, fam_freeze = BaselineStore(), True
+            base_win, cur_win = _reference_windows(entry, reference, baseline, current)
+            if reference.get("equip"):
+                ref_equip = _find_equip(refs_by_class, reference["equip"])
+                if ref_equip is None:
+                    raise ValueError(
+                        f"drift reference equip {reference['equip']!r} was not discovered"
+                    )
+        else:
+            if (entry.get("baseline") or baseline) is None or (
+                entry.get("current") or current
+            ) is None:
+                raise ValueError(
+                    f"drift family {cls}:{fam_name} needs explicit baseline and current windows "
+                    "(or a declared reference)"
+                )
+            base_win = tuple(entry.get("baseline") or baseline)
+            cur_win = tuple(entry.get("current") or current)
 
         suite = build_drift_suite(
             fam_name,
-            store,
+            fam_store,
             site=site,
             run_id=run_id,
-            freeze_if_missing=freeze_if_missing,
+            freeze_if_missing=fam_freeze,
             coils=tuple(entry.get("coils") or ("cooling",)),
             sustained_alarm=bool(entry.get("sustained_alarm")),
         )
 
         findings: list = []
         for rule in suite:
+            if ref_equip is not None:
+                findings += _run_one_reference(
+                    rule,
+                    refs,
+                    ref_equip,
+                    mapping,
+                    ref_window=base_win,
+                    current=cur_win,
+                    resample=resample,
+                    shared=shared,
+                    min_trust=min_trust,
+                )
+                continue
             findings += _run_one(
                 rule,
                 refs,
@@ -489,6 +743,8 @@ def run_drift(
                 shared=shared,
                 min_trust=min_trust,
             )
+        if reference is not None:
+            _tag_reference(findings, reference)
 
         by_equip: dict = {}
         for f in findings:
@@ -503,10 +759,13 @@ def run_drift(
         unevaluated: list = []
         for eq, fs in by_equip.items():
             if all(_declined(f) for f in fs):
+                is_ref = ref_equip is not None and eq == ref_equip.equip
                 unevaluated.append(
                     {
                         "equip": eq,
-                        "reason": "every detector declined",
+                        "reason": (
+                            "is the declared reference" if is_ref else "every detector declined"
+                        ),
                         "declined": sorted({f.rule for f in fs}),
                         "roles_required": needed,
                     }
@@ -566,9 +825,28 @@ def run_drift(
                 unevaluated=unevaluated,
                 plant=plant,
                 evidence=ev_map,
+                reference=None if reference is None else dict(reference),
             )
         )
     return out
+
+
+def _reference_windows(entry: dict, reference: dict, baseline, current) -> tuple:
+    """``(reference window, current window)`` for a family that declares a ``reference``.
+
+    With a reference **equipment** the reference is sliced to its own ``period`` (else the entry's
+    or the section's ``baseline``, else its whole history) and the scored units to ``current``
+    (else their whole history). With only a known-good **period** of the same equipment, the
+    current window defaults to everything from the end of that period on.
+    """
+    per = reference.get("period")
+    cur = entry.get("current") or current
+    if reference.get("equip"):
+        win = per or entry.get("baseline") or baseline or (None, None)
+        return tuple(win), tuple(cur or (None, None))
+    if per is None:  # validated upstream: a reference names an equip, a period, or both
+        raise ValueError(f"a drift reference needs an 'equip' or a 'period', got {reference!r}")
+    return tuple(per), tuple(cur or (per[1], None))
 
 
 # ------------------------------------------------------------------ moving a frozen reference

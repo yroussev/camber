@@ -66,11 +66,14 @@ def _unevaluated_table(rows) -> str:
         return ""
     out = ["<tr><th>Equip</th><th>Family</th><th>Roles the family needed</th></tr>"]
     for r in rows:
+        needed = ", ".join(r.get("roles_required", []) or [])
+        if r.get("reason") == "is the declared reference":  # 0.98: the yardstick, not a unit
+            needed = "— (the declared reference: the others are scored against it)"
         out.append(
             "<tr>"
             f"<td>{_html.escape(str(r.get('equip', '')))}</td>"
             f"<td>{_html.escape(str(r.get('family', '')))}</td>"
-            f"<td>{_html.escape(', '.join(r.get('roles_required', []) or []))}</td>"
+            f"<td>{_html.escape(needed)}</td>"
             "</tr>"
         )
     return (
@@ -161,6 +164,17 @@ def drift_report_html(
         diagnoses = list(getattr(fam, "diagnoses", []) or [])
 
         window = f"baseline {tuple(base)} vs current {tuple(cur)}"
+        ref = getattr(fam, "reference", None)  # 0.98 (#86, S4): a declared, never-stored reference
+        if ref and ref.get("equip"):
+            window = (
+                f"baseline: the declared reference {ref['equip']} {tuple(base)} vs current "
+                f"{tuple(cur)} — fitted in memory on every run, never stored"
+            )
+        elif ref:
+            window = (
+                f"baseline: the declared known-good period {tuple(base)} vs current "
+                f"{tuple(cur)} — fitted in memory on every run, never stored"
+            )
         body.append(f"<h2>{_html.escape(label)} — {_html.escape(cls)}</h2>")
         body.append(f"<p>{_html.escape(window)}</p>")
 

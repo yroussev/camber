@@ -86,6 +86,29 @@ calibrate it, and reads run configs from YAML as well as JSON.
   `lbnl-sdahu` and `nist-heatpump-fdd`. Also updated: CLI.md, API-STABILITY (provisional), the
   mkdocs nav, the README, and a "going further" pointer in the workbook index.
 <!-- /098-thresholds -->
+<!-- 098-plant-reference -->
+- **A declared, never-stored drift reference (#86 items 1 and 5, decision S4; provisional).** A
+  `drift.families[]` entry may carry `"reference": {"equip": ID}` (score every other unit of the
+  class against a named healthy one, optionally with its own `"period"`) or
+  `"reference": {"period": [start, end]}` (a known-good window of the same unit). The reference is
+  fitted in a scratch in-memory store on every run and never saved, so a run still cannot mint
+  its own baseline. Findings carry `metrics["baseline_source"]` (`reference:<equip>` or
+  `period:<start>..<end>`) and a caveat, and their summaries read "vs the reference ..." instead
+  of "vs frozen baseline". The reference unit declines as `is_reference`; a reference that cannot
+  serve a detector declines every target (`reference_missing_inputs`, `reference_untrusted`,
+  `empty_reference`). A section whose families all declare a reference needs no `store` and no
+  windows. `DriftFamilyResult.reference` is new (also in `as_dict`); the drift report and
+  `camber drift run` name the reference. Nothing changes for configs without one.
+- **The LBNL plant templates score the plant drift detectors.** `lbnl-chiller.json` and
+  `lbnl-boiler.json` (and the `plant-cooling-tower` / `plant-boiler` exercise configs) declare
+  `PLANT__fault_free` as the reference for the `tower` and `boiler` families, and the catalog
+  declares `cooling_tower_fan_effort_drift: [tower_fouling]` and
+  `boiler_efficiency_drift: [boiler_fouling]` as scored targets. Through `camber run` the verdicts
+  match `examples/lbnl_fdd/plant_detectors.py` run by run: tower fan effort 2/3 (fouling 065 and
+  080 at +17.8 / +10.9 fan %-points; 095 at +3.3 is under the floor), boiler efficiency 3/3
+  (+53.7 / +24.9 / +5.1 %; 095 clears the 5 % warn floor by 0.1 point), no false alarm on the
+  20 / 13 other runs. The scorer counts the reference run as a correct negative (0/21, 0/14).
+<!-- /098-plant-reference -->
 
 ### Changed
 <!-- 098-core -->
@@ -167,6 +190,19 @@ calibrate it, and reads run configs from YAML as well as JSON.
   fan status since 0.93 (#42). The catalog note and the template comment now say so, and say that
   the template still leaves the rule out until it is re-checked on these baselines.
 <!-- /098-refs-catalog -->
+<!-- 098-plant-reference -->
+- **`camber drift freeze` refuses a config whose families declare a reference** (exit 1, naming
+  them), and `drift accept` / `drift_refit` leave those families out: there is nothing stored to
+  freeze or move. The config docstring's "a run never mints its own baseline" now states the S4
+  exception. Docs: CLI.md ("A declared reference"), TUNING.md ("Drift references"),
+  PLANT-DETECTORS.md and VALIDATION.md.
+- **Workbook.** `plant-cooling-tower` pins the fan-effort findings and
+  `cooling_tower_fan_effort_drift` TPR 67% (step 6, question 6, the instructor's answer 6 and a
+  discussion point on the bypass runs, where the matched-load model extrapolates).
+  `plant-boiler`: the point-in-time rules still miss the fouling, but `boiler_efficiency_drift`
+  catches all three (TPR 100%, replacing the overall TPR 0 % answer); page steps 5 and 7,
+  questions 4 and 5 and instructor answers 4 and 5 rewritten.
+<!-- /098-plant-reference -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

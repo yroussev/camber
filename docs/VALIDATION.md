@@ -158,6 +158,19 @@ The chiller-plant mapping gained `CDWL_SW_TEMP` -> `cond_entering_water_temp` an
 carry the evidence. The simulated RBC/G36 collection's plant faults were also run locally as a
 research check; as for every research-only set, its numbers are not published.
 
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
+**The same numbers through a config (0.98).** The table above comes from the example script,
+which freezes each drift baseline from the fault-free year by hand. Since 0.98 a drift family can
+declare that run as its reference (`drift.families[].reference`, fitted in memory on every run and
+never stored; see [the CLI guide](CLI.md#a-declared-reference)), so the `lbnl-chiller` and
+`lbnl-boiler` templates score `cooling_tower_fan_effort_drift` and `boiler_efficiency_drift` with
+a plain `camber run`. The verdicts match the script on every run (checked by
+`tests/test_drift_reference_098.py` when the data is present), and the two rules are now the
+entries' declared targets for `camber datasets score`: TPR 2/3 and 3/3, no false alarm. The
+fault-free run declines as the reference, but the scorer still counts it as a correct negative,
+so its FPR denominators are the 21 and 14 above.
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
+
 ### Real labelled multi-zone VAV cohort — ORNL FRP (`ornl-frp-vav`, CC-BY-4.0)
 
 CAMBER's **first result on real, labelled, multi-zone VAV data** (0.89): the ORNL Flexible Research

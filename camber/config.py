@@ -90,6 +90,17 @@ strictly read-only toward the baseline store: a config-driven run never creates 
 reference, because a run that mints the baseline it scores against is circular. Creating one is
 ``camber drift freeze``; moving one is ``camber drift accept`` (see :mod:`camber.cli`).
 
+A family may instead **declare** its reference (0.98, #86, approved decision S4):
+``{"class": "CHW_PLANT", "family": "tower", "reference": {"equip": "PLANT__fault_free"}}`` scores
+every other equipment of the class against a named healthy one (a labelled dataset's fault-free
+run, a sister unit), and ``"reference": {"period": [start, end]}`` against a known-good window of
+the same equipment. That is allowed because nothing is minted: the reference's baseline is fitted
+in a scratch in-memory store on every run and **never persisted**, the reference is named in the
+config for anyone to audit, each Finding records it (``baseline_source``) with a caveat, and the
+reference equipment itself declines (``reason="is_reference"``). Such a family needs no store and
+no windows (they default to the whole history; a period reference's current window to everything
+after it), and ``camber drift freeze`` refuses it.
+
 **Store-backed source.** ``"source": {"kind": "store", "store": "lab_store", "facility_id":
 "ds-lbnl-sdahu"}`` reads equipment from a :class:`~camber.store.ParquetStore` (e.g. one filled by
 ``camber datasets ingest``) instead of per-point CSV folders. The store already holds role-named
@@ -2148,8 +2159,54 @@ def _drift_families(spec: dict, refs_by_class: dict) -> list:
             if key in e:
                 win = _drift_window(e, key)
                 e[key] = win
+        if e.get("reference") is not None:
+            e["reference"] = _drift_reference(e["reference"], f"{cls}:{fam}", refs_by_class)
         out.append(e)
     return out
+
+
+# --- 0.98 (#86, S4) declared drift reference (098-plant-reference) ------------------------------
+_REFERENCE_KEYS = ("equip", "period")
+
+
+def _drift_reference(ref, where: str, refs_by_class: dict) -> dict:
+    """Validate one ``drift.families[].reference``: ``{"equip": name}`` (a discovered equipment,
+    optionally with a ``"period"``) or ``{"period": [start, end]}`` (a known-good window of the
+    same equipment)."""
+    if not isinstance(ref, dict) or not ref:
+        raise ValueError(
+            f"drift family {where}: reference must be an object naming an 'equip' and/or a "
+            f"'period', got {ref!r}"
+        )
+    unknown = sorted(set(ref) - set(_REFERENCE_KEYS))
+    if unknown:
+        raise ValueError(
+            f"drift family {where}: unknown reference key(s) {unknown} "
+            f"(known: {list(_REFERENCE_KEYS)})"
+        )
+    out: dict = {}
+    if ref.get("period") is not None:
+        out["period"] = _drift_window(ref, "period")
+    equip = ref.get("equip")
+    if equip is not None:
+        known = sorted(r.equip for refs in refs_by_class.values() for r in refs)
+        if not isinstance(equip, str) or equip not in known:
+            raise ValueError(
+                f"drift family {where}: reference equip {equip!r} was not discovered "
+                f"(discovered: {known[:12]}{' ...' if len(known) > 12 else ''})"
+            )
+        out["equip"] = equip
+    if not out:
+        raise ValueError(f"drift family {where}: reference names neither an 'equip' nor a 'period'")
+    return out
+
+
+def _all_reference(fams: list) -> bool:
+    """True when every drift family declares a reference (no frozen store is then read)."""
+    return bool(fams) and all(e.get("reference") for e in fams)
+
+
+# --- end 0.98 declared drift reference -----------------------------------------------------------
 
 
 def _rule_level_skip(rule):
@@ -2571,13 +2628,17 @@ def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str =
     Returns ``{(equip, kind): fitted model}`` merged across the families, ready for
     :func:`camber.driftrun.accept_new_normal_from_periods`. ``period`` defaults to the config's
     ``drift.current`` window -- accepting a new normal means "what it is doing *now* is the
-    reference". Nothing is written: the fits come from a scratch store.
+    reference". Nothing is written: the fits come from a scratch store. Families that declare a
+    ``reference`` (0.98) have no frozen baseline to move and are left out.
     """
     dspec = config.get("drift")
     if dspec is None:
         return {}
     prep = _prepare(config, base_dir)
     fams = _drift_families(dspec, prep.refs_by_class)
+    fams = [e for e in fams if not e.get("reference")]  # 0.98: a declared reference is never kept
+    if not fams:
+        return {}
     win = tuple(period) if period else _drift_window(dspec, "current")
     out: dict = {}
     for entry in fams:
@@ -2616,6 +2677,11 @@ def run_drift_config(
     responsibility to save afterwards -- only ``camber drift freeze`` passes ``True``, so an
     ordinary run can never mint the baseline it is scoring against.
 
+    A family that declares a ``reference`` (0.98, #86, S4) needs no store: its baselines are fitted
+    on the reference in a scratch store that is never saved, and when every family declares one
+    neither a store nor the ``baseline`` / ``current`` windows are required. ``freeze_if_missing``
+    with such a family is a ``ValueError`` (``camber drift freeze`` refuses it).
+
     ``evidence`` additionally builds each rule's pattern-J chart spec (see
     :func:`camber.driftrun.run_drift`). Pass ``store`` to own the
     :class:`~camber.store.modelstore.BaselineStore` yourself -- the freeze path needs the mutated
@@ -2625,20 +2691,30 @@ def run_drift_config(
     dspec = config.get("drift")
     if dspec is None:
         return None
-    drift_store_path(config, base_dir=base_dir)  # fail fast when no store can be named
+    # 0.98 (#86, S4): families that all declare a reference read no frozen store at all
+    declares_ref = [e for e in dspec.get("families", []) if e.get("reference") is not None]
+    if freeze_if_missing and declares_ref:
+        raise ValueError(
+            "drift freeze refuses families that declare a reference ("
+            + ", ".join(f"{e.get('class')}:{e.get('family')}" for e in declares_ref)
+            + "): a declared reference is re-read on every run and never frozen"
+        )
+    only_ref = bool(declares_ref) and len(declares_ref) == len(dspec.get("families", []))
+    if not only_ref:
+        drift_store_path(config, base_dir=base_dir)  # fail fast when no store can be named
     prep = prepared if prepared is not None else _prepare(config, base_dir)
     fams = _drift_families(dspec, prep.refs_by_class)
     if not fams:
         return None
-    if store is None:
+    if store is None and not _all_reference(fams):
         store, _p, _c = _baseline_store(config, base_dir=base_dir, ctx=prep.ctx)
     return run_drift(
         prep.refs_by_class,
         prep.mapping,
         store=store,
         families=fams,
-        baseline=_drift_window(dspec, "baseline"),
-        current=_drift_window(dspec, "current"),
+        baseline=_drift_window(dspec, "baseline", required=not only_ref),
+        current=_drift_window(dspec, "current", required=not only_ref),
         site=prep.site,
         run_id=run_id if run_id is not None else dspec.get("run_id", ""),
         resample=prep.resample,
