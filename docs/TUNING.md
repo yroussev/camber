@@ -214,6 +214,38 @@ With no labels, the procedure is the same, only slower:
 4. Judge the following months. When a finding is confirmed or dismissed on site, record it. Those
    records are your labels for the next round of tuning.
 
+### A climate-dependent default: the free-cooling high limit (`free_cooling_missed`)
+
+`free_cooling_missed` counts an hour as free-cooling weather when the outdoor air is below
+`high_limit_f`. The default, 60 °F, is CAMBER's deliberately conservative screening value. Below
+it, an economizer should be cooling with outside air in nearly any climate, so an hour of
+mechanical cooling there is clearly a missed hour. The library function
+`camber.freecooling.free_cooling_opportunity` uses the same default
+(`DEFAULT_FREE_COOLING_HIGH_LIMIT_F`). Before 0.98 it used 65 °F, so a direct call with no
+`high_limit_f` now counts fewer hours. The rule and the reports are unchanged: the RCx report's
+economizer page passes `economizer_high_limit`'s `high_limit_f` and prints the value it used.
+
+The right value for a building is the dry-bulb high limit its economizer is designed to run to,
+and that depends on climate:
+
+- **Read the sequence first.** If the unit's economizer sequence states a fixed dry-bulb high
+  limit, use it, or a degree or two below it so that only clearly cool weather counts.
+- **Otherwise use the energy code for the site's climate zone.** ASHRAE 90.1 (§6.5.1.1.3) tabulates
+  the fixed dry-bulb high limit by climate zone. Dry climates, where outdoor air stays useful up
+  to a higher dry-bulb, get a higher limit. Humid climates get a lower one, because warm humid air
+  adds latent load. The PNNL *Air-Side Economizer Operation* guide (reference
+  `pnnl-guide-economizer`, see [REFERENCES.md](REFERENCES.md)) covers the same check from the
+  re-tuning side.
+- **Or read it from the trends.** Over a summer of known-good operation, the highest OAT at which
+  the OA damper still opens fully is the high limit the unit actually runs.
+- **Keep it at or below the unit's real limit.** A `high_limit_f` above the high limit the
+  economizer is programmed with counts hours when the economizer is correctly locked out as
+  "missed", and the rule then reports a working unit as a fault.
+
+`economizer_high_limit` has its own `high_limit_f` (65 °F), which is the other side of the same
+setpoint: it checks that the damper closes *above* the limit. On a tuned site, set both from the
+same sequence value.
+
 ## See also
 
 - [THRESHOLDS.md](THRESHOLDS.md): every parameter, its basis and calibration hint (generated).

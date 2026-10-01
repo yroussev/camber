@@ -646,7 +646,7 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 
 ### `zone-min-oa`: minimum outdoor air and 62.1 system ventilation
 
-Figures from the real `lbnl-b59` default subset, CAMBER 0.97.0-dev, with the commands on the
+Figures from the real `lbnl-b59` default subset, CAMBER 0.98.0-dev, with the commands on the
 [exercise page](zone-min-oa.md#setup). The 62.1 procedure follows the public sources listed in
 [VENTILATION.md](../VENTILATION.md#system-level-vrp-multiple-zone-systems) (the free 62.1-2016
 Addendum f and secondary sources); no standard text is quoted here.
@@ -672,7 +672,11 @@ Addendum f and secondary sources); no standard text is quoted here.
 5. *DCV.* "DCV not judged" on all four units: the zones' CO₂ never varies enough to test whether
    outdoor air follows it (reason `no_demand_variation`). This building has no DCV, and CAMBER
    does not call it functioning. The specificity lesson: a checker that never refuses would have
-   given it a verdict.
+   given it a verdict. The finding also says "supply fan off while scheduled occupied", for
+   41, 82, 40 and 40 h by unit: the October and December 2020 days when the fans did not run
+   although the schedule says occupied (speed feedback a few percent). Those hours are the whole 2.0–4.2 % below the
+   750 cfm floor, so `below_floor_pct`, the shortfall with the fan running, is 0.0–0.1 % and the
+   grade stays `info` (since 0.98). The 2020 smoke-mode weeks are not among them.
 6. *How wrong would the inputs have to be?* To read "adequate" (a ratio of 1.5 or less), Vot
    would have to be about 2.6 to 3.5 times larger. That means roughly three times the assumed
    population or floor area. Neither is plausible for this office. Giving a system population

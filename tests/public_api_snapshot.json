@@ -384,7 +384,8 @@
     "run_config",
     "run_config_file",
     "run_drift_config",
-    "run_mv_config"
+    "run_mv_config",
+    "site_elevation_ft"
   ],
   "camber.coolingtower": [
     "CoolingTowerResult",
@@ -704,6 +705,7 @@
     "seasonal_forecast"
   ],
   "camber.freecooling": [
+    "DEFAULT_FREE_COOLING_HIGH_LIMIT_F",
     "ECON_DAMPER_MIN_PCT",
     "ECON_MIN_DELTA_F",
     "ECON_OAF_MIN_PCT",

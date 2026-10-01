@@ -28,6 +28,12 @@ mapping, which equipment to discover, which rules to run, and what report to wri
       "report": {"level": 2, "climate_zone": "CA CZ15", "out_text": "audit.txt"}
     }
 
+The optional top-level ``site_elevation_ft`` (0.98, #92) is the site's elevation in feet. Every rule
+and drift detector that derives a wet-bulb from OAT + RH takes it as its ``elevation_ft`` (unless
+its own params set ``elevation_ft`` or ``pressure_psia``): ``cooling_tower_approach``,
+``condenser_water_reset``, ``cooling_tower_approach_drift`` and
+``cooling_tower_fan_effort_drift``. See :func:`site_elevation_ft`.
+
 The optional ``soo`` section evaluates Sequence-of-Operations conformance per
 equipment class -- either a packaged library sequence (``library``: ``g36_ahu`` /
 ``g36_plant``) or a JSON clause spec (``spec``) -- merging the per-clause Findings into
@@ -213,7 +219,7 @@ from .resolve import (
     resolve,
 )
 from .rules.base import _merge_shared, _with_class
-from .rules.builtin import builtin_registry, is_fleet, make_rule
+from .rules.builtin import builtin_registry, is_fleet, make_rule, rule_factories
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
 from .store.modelstore import BaselineStore
@@ -221,6 +227,7 @@ from .store.modelstore import BaselineStore
 __all__ = [
     "RunResult",
     "run_config",
+    "site_elevation_ft",
     "run_drift_config",
     "run_mv_config",
     "drift_store_path",
@@ -2218,6 +2225,52 @@ def _rule_level_skip(rule):
     return RuleSkip(rule.name, "", "", missing, "missing_inputs" if missing else "no_verdict")
 
 
+# --- 0.98 (#92, 098-followups): the site elevation for a derived wet-bulb ----------------------
+#: The rules that take the config's ``site_elevation_ft``: every built-in rule whose constructor
+#: has an ``elevation_ft`` parameter (it derives a wet-bulb from OAT + RH). The drift detectors
+#: get it through :func:`camber.driftrun.run_drift`.
+_SITE_ELEVATION_KEY = "site_elevation_ft"
+
+
+def site_elevation_ft(config: dict) -> float | None:
+    """The config's ``site_elevation_ft`` (ft above sea level), validated; ``None`` when absent.
+
+    One key for the site: it feeds every rule and drift detector that derives a wet-bulb from OAT
+    + RH (``cooling_tower_approach``, ``condenser_water_reset``, ``cooling_tower_approach_drift``,
+    ``cooling_tower_fan_effort_drift``). A rule's own ``elevation_ft`` or ``pressure_psia`` param
+    wins over it. Raises ``ValueError`` on a non-number or a value outside -1,500 to 15,000 ft.
+    """
+    v = config.get(_SITE_ELEVATION_KEY)
+    if v is None:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+        raise ValueError(f"{_SITE_ELEVATION_KEY} must be a number of feet, got {v!r}")
+    if not -1500.0 <= float(v) <= 15000.0:
+        raise ValueError(
+            f"{_SITE_ELEVATION_KEY} {v!r} is outside -1,500 to 15,000 ft (give feet, not metres)"
+        )
+    return float(v)
+
+
+def _with_site_elevation(name: str, params: dict, elevation_ft: float | None) -> dict:
+    """``params`` plus ``elevation_ft`` when the rule takes one and sets neither it nor a
+    measured ``pressure_psia`` itself."""
+    if elevation_ft is None or "elevation_ft" in params or "pressure_psia" in params:
+        return params
+    fac = rule_factories().get(name)
+    if fac is None:
+        return params
+    import inspect
+
+    try:
+        sig = inspect.signature(fac[0])
+    except (TypeError, ValueError):  # pragma: no cover - builtin classes always have one
+        return params
+    if "elevation_ft" not in sig.parameters:
+        return params
+    return {**params, "elevation_ft": elevation_ft}
+
+
 def _param_basis(name: str, params: dict, basis) -> dict | None:
     """A rule entry's ``"basis"`` ({param: where its value came from}) as finding metrics.
 
@@ -2267,6 +2320,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
         reg.register(vent_rule)
+    site_elev = site_elevation_ft(config)  # 0.98 (#92)
     for entry in config.get("rules", []):
         # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
         # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
@@ -2274,11 +2328,13 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         if isinstance(entry, dict):
             name = entry["name"]
             params = entry.get("params") or {}
-            if params:
-                reg.register(make_rule(name, **params))  # override the default instance
             basis = _param_basis(name, params, entry.get("basis"))
         else:
-            name = entry
+            name, params = entry, {}
+        # 0.98 (#92): the site elevation reaches every rule that derives a wet-bulb
+        params = _with_site_elevation(name, params, site_elev)
+        if params:
+            reg.register(make_rule(name, **params))  # override the default instance
         rule = reg.get(name)  # KeyError on unknown name
         n_skip = len(skipped)
         n_before = len(findings)
@@ -2655,6 +2711,7 @@ def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str =
                 min_trust=prep.min_trust,
                 coils=tuple(entry.get("coils") or ("cooling",)),
                 sustained_alarm=bool(entry.get("sustained_alarm")),
+                elevation_ft=site_elevation_ft(config),
             )
         )
     return out
@@ -2722,6 +2779,7 @@ def run_drift_config(
         min_trust=prep.min_trust,
         freeze_if_missing=freeze_if_missing,
         evidence=evidence,
+        elevation_ft=site_elevation_ft(config),
     )
 
 

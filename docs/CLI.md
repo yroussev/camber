@@ -94,6 +94,23 @@ role, the reset kind) are fixed. A rule entry may also carry a `basis` map (`{"f
 calibration guide.
 <!-- END 098-thresholds (#90) -->
 
+<!-- BEGIN 098-followups (#92) -->
+**Site elevation (`site_elevation_ft`).** A rule that derives the wet-bulb from outdoor air
+temperature and RH assumes sea-level pressure unless it knows the site's elevation. One top-level
+config key sets it for the site, in feet above sea level:
+
+```json
+{"site": "Plant", "site_elevation_ft": 5280, "rules": ["cooling_tower_approach", "condenser_water_reset"]}
+```
+
+It reaches `cooling_tower_approach` and `condenser_water_reset` (as their `elevation_ft`) and,
+through the `drift` section, `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`.
+A rule's own `elevation_ft` or `pressure_psia` param wins over it, and a measured wet-bulb point
+ignores it. Without it a derived wet-bulb is caveated as sea-level. Set it before freezing a
+drift baseline: a baseline frozen at one elevation and scored at another shifts by the wet-bulb
+difference (about 2.6 °F at 1,600 m in hot, dry air).
+<!-- END 098-followups (#92) -->
+
 ## Report layouts
 
 `camber report` writes the **audit** report by default. It is titled as an ASHRAE Std-211 audit

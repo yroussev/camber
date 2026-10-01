@@ -35,6 +35,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..freecooling import (
+    DEFAULT_FREE_COOLING_HIGH_LIMIT_F,
     ECON_DAMPER_MIN_PCT,
     ECON_MIN_DELTA_F,
     ECON_OAF_MIN_PCT,
@@ -71,7 +72,7 @@ class FreeCoolingMissed:
     def __init__(
         self,
         *,
-        high_limit_f: float = 60.0,
+        high_limit_f: float = DEFAULT_FREE_COOLING_HIGH_LIMIT_F,
         active: float = 5.0,  # cooling-valve % above which mechanical cooling is running
         warn_pct: float = 10.0,
         fault_pct: float = 25.0,

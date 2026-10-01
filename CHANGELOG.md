@@ -462,6 +462,46 @@ calibrate it, and reads run configs from YAML as well as JSON.
   rejected (see docs/SENSOR-HEALTH.md). The workbook exercise `data-trend-quality` answers 4, 6
   and 7 are rewritten.
 <!-- /098-sensor-health -->
+<!-- 098-followups -->
+- **One free-cooling high limit, 60 °F (#91).** `camber.freecooling.free_cooling_opportunity`
+  defaulted `high_limit_f` to 65 °F while the `free_cooling_missed` rule used 60 °F. Both now read
+  one constant, `DEFAULT_FREE_COOLING_HIGH_LIMIT_F` (60 °F), CAMBER's deliberately conservative
+  screening default. Only a direct library call with no `high_limit_f` changes (it counts fewer
+  free-cooling hours). Rule findings and reports are unchanged (the RCx economizer page passes
+  `economizer_high_limit`'s value and prints it), and so are the synthetic and fleet benchmarks.
+  `docs/TUNING.md` gains guidance on a climate-appropriate dry-bulb high limit (the unit's
+  sequence, the energy code's high limit for the climate zone, or the trends).
+- **`condenser_water_reset` takes the site elevation (#92).** `CondenserWaterReset` and
+  `analyze_cw_reset` gain `elevation_ft` and `pressure_psia` (default `None`), passed to
+  `stull_wetbulb_f` when the wet-bulb is derived from OAT + RH. Without either, a derived wet-bulb
+  is now caveated as sea-level, as the cooling-tower rules already did; that caveat is the only
+  change to default output. A new top-level config key, `site_elevation_ft` (feet; validated by
+  `camber.config.site_elevation_ft`), sets the elevation once for the site. It reaches
+  `cooling_tower_approach` and `condenser_water_reset` and, through the `drift` section
+  (`run_drift`, `refit_baselines` and `build_drift_suite` gain `elevation_ft`),
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`. A rule's own `elevation_ft`
+  or `pressure_psia` wins. On a tower that resets 1:1 with the true wet-bulb at 1,600 m in hot,
+  dry air, the sea-level slope reads 0.93 and the corrected one 1.00, so `reset_present` can flip
+  near `reset_slope_flat`. The catalog's plant data trend a measured wet-bulb and do not change.
+  Documented in `docs/CLI.md` and `param_docs`.
+- **`dcv_verification` names fan-off hours and gains an opt-in duration fault (#93).** Occupied
+  hours below `oa_floor_cfm` with the supply fan off (from `SUPPLY_FAN_STATUS`, else
+  `SUPPLY_FAN_SPEED` at or below the new `fan_off_speed_pct`, 5 %) are named in the summary and a
+  caveat ("supply fan off while scheduled occupied"), counted as `fan_off_occupied_pct` /
+  `fan_off_occupied_hours`, and left out of `below_floor_pct`, which is now the shortfall with the
+  fan running. The share fault still reads every below-floor sample (`below_floor_total_pct`, the
+  old `below_floor_pct`), so severity does not move; with no fan signal nothing changes. The new
+  `below_floor_fault_hours` (default `None`, opt-in) faults a contiguous below-floor episode of
+  that many occupied hours whatever its share; the longest episode (`below_floor_longest_h`,
+  `_start`, `_fan_off_h`) is reported either way. `assess_dcv` gains `fan_off_mask` and the
+  matching `DcvResult` fields. The ASO recommender reads a `fan_off_occupied` cause ("Run the
+  supply fan whenever the space is occupied"). On `lbnl-b59` the October and December 2020 days
+  are now named fan-off (41, 82, 40 and 40 h); `below_floor_pct` goes 2.2 / 4.2 / 2.1 / 2.0 % ->
+  0.1 / 0.0 / 0.1 / 0.0 %, severity stays `info`, and the 2020 smoke-mode window stays
+  unflagged. `b4b-windesheim` is unchanged and `finnish-dcv` (no fan signal) gains only the new
+  metrics. `docs/VENTILATION.md`, `docs/VALIDATION.md` and the workbook `zone-min-oa` (caveat,
+  answer 5 and two new checks) are updated.
+<!-- /098-followups -->
 
 <!-- 098-terminal-stuck -->
 - **`ornl-frp-vav` declares `actuator_stuck` as its detector (#89 item 3, #85 item 2).**

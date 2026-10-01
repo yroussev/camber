@@ -102,7 +102,9 @@ against a load-normalized baseline just like the chiller detectors; wet-bulb is 
 derived from outdoor dry-bulb + RH (Stull) when it isn't a BAS point. Stull's fit assumes sea-level
 pressure; pass `elevation_ft` (or a measured `pressure_psia`) to the tower rules and wet-bulb is
 solved psychrometrically at site pressure instead (at 1600 m in hot, dry air the sea-level value
-reads ~2.6 °F high, understating the approach).
+reads ~2.6 °F high, understating the approach). Since 0.98 a config's top-level
+`site_elevation_ft` sets it once for the tower drift detectors, `cooling_tower_approach` and
+`condenser_water_reset` (see [CLI.md](CLI.md#yaml-configs-and-tunable-thresholds-provisional-098)).
 
 **One condenser-loop verdict.** These four condenser-side signals fail *independently* (a scaling
 tube, a throttled valve, a fouled tower, and a rising high-side pressure localize different things) but
