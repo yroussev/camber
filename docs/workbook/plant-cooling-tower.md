@@ -60,7 +60,9 @@ The exercise's config (`--exercise plant-cooling-tower`) runs three rules:
 `cooling_tower_approach`, with the design approach the dataset template calibrates from the
 fault-free run, judged only when the tower fan runs at 90 % or more; `condenser_water_reset`; and
 `condenser_bypass_leak`, which compares the water entering the chillers with the water leaving
-the tower while the bypass valve is commanded shut.
+the tower while the bypass valve is commanded shut. Its `drift` section adds the tower drift
+family with a **declared reference**: `cooling_tower_fan_effort_drift` scores every run's fan
+effort against `PLANT__fault_free`, fitted in memory on each run and never stored.
 
 ## Steps
 
@@ -74,7 +76,11 @@ the tower while the bypass valve is commanded shut.
 4. **Reset.** Read `condenser_water_reset` for the fault-free run: `cws_slope_per_wetbulb`.
 5. **Bypass.** Read `condenser_bypass_leak` for the bypass runs and for the fault-free run, and
    read what `cooling_tower_approach` says about the bypass runs.
-6. **Score.** Run `camber datasets score` and read the rates for `cooling_tower_approach`.
+6. **Fan effort against a reference.** Read `cooling_tower_fan_effort_drift` for the three
+   tower-fouling runs, the fault-free run and the tower-sensor-bias runs
+   (`PLANT__coolingtower_bias_1`, `_2`): `fan_effort_drift_pct`, `attribution` and the summary.
+   Then run `camber datasets score` and read the rates for `cooling_tower_approach` and
+   `cooling_tower_fan_effort_drift`.
 
 ## Questions
 
@@ -85,8 +91,9 @@ the tower while the bypass valve is commanded shut.
 4. Does the condenser-water supply follow the wet-bulb? What slope does CAMBER find?
 5. What does `condenser_bypass_leak` find on the stuck bypass, and why can the approach rule not
    judge the bypass runs at all?
-6. What does the label score give `cooling_tower_approach`, and what would a better detector for
-   a controlled tower measure?
+6. What does the label score give `cooling_tower_approach`? What does
+   `cooling_tower_fan_effort_drift` measure instead, which foulings does it catch against the
+   reference, and what does it say about the fault-free run and the tower-sensor biases?
 
 ## What CAMBER shows
 
@@ -94,9 +101,13 @@ the tower while the bypass valve is commanded shut.
   the metrics: `approach_median_f`, `pct_hours_high_approach` (hours more than 3 °F above the
   design approach), `n_operating` and `n_low_effort_excluded` for `cooling_tower_approach`;
   `cws_slope_per_wetbulb` and `reset_present` for `condenser_water_reset`; `median_diff_f`,
-  `bypass_fraction_est` and `attribution` for `condenser_bypass_leak`.
+  `bypass_fraction_est` and `attribution` for `condenser_bypass_leak`;
+  `fan_effort_drift_pct` (fan %-points at matched condenser range and wet-bulb),
+  `sensor_offset_shift_f`, `attribution` and `baseline_source` for
+  `cooling_tower_fan_effort_drift`.
 - **Declines.** A rule that cannot judge says why in its summary (an `info` finding): for example
-  a tower fan that never reached the effort gate.
+  a tower fan that never reached the effort gate. The declared reference itself declines as
+  `is_reference`: it is the yardstick, not a result.
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
   intervals, for the dataset's declared detectors.
 
@@ -117,10 +128,11 @@ the tower while the bypass valve is commanded shut.
 
 ## Going further
 
-- CAMBER's `cooling_tower_fan_effort_drift` rule measures exactly the effort this exercise reads
-  by hand, against a frozen baseline of the same tower (`camber drift`). On this dataset each
-  fault is its own year-long run, so there is no before-and-after on one tower to compare; on a
-  real plant, freeze a baseline after commissioning and compare each season with it.
+- Here the fan-effort rule compares each run with another tower (the fault-free run), because
+  each fault is its own year-long run. On a real plant, compare a tower with itself: declare a
+  known-good period as the reference (`"reference": {"period": [start, end]}`), or freeze a
+  baseline after commissioning with `camber drift freeze` and compare each season with it (see
+  [the CLI guide](../CLI.md#a-declared-reference)).
 - Try `design_approach_f` lower in `tower.json`: at what value is the fouled tower flagged, and
   what else is flagged with it?
 - Compare the tower-sensor-bias runs (`PLANT__coolingtower_bias_2` ...) with the fouled tower in

@@ -715,8 +715,8 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 
 ### `plant-cooling-tower`: Cooling tower: approach and fan effort
 
-Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the commands on the
-[exercise page](plant-cooling-tower.md#setup).
+Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev (the fan-effort drift:
+CAMBER 0.98.0-dev), with the commands on the [exercise page](plant-cooling-tower.md#setup).
 
 **Answer key**
 
@@ -739,11 +739,17 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
    (`info`) on the bypass runs because the tower fan never reaches 90 % (a peak of 51 % in the
    stuck-75 % run): with the water going around it, the tower has little heat to reject. The
    chiller pays instead ([`plant-chiller-efficiency`](plant-chiller-efficiency.md)).
-6. *Label score.* `cooling_tower_approach` scores TPR 0% and FPR 0 %: it finds none of its four
-   targets (the three tower foulings and the PI mistuning, on which it declines because the fan
-   never reaches 90 %). A detector for a controlled tower should measure the fan effort at
-   matched load and wet-bulb against the tower's own baseline, which is what
-   `cooling_tower_fan_effort_drift` does when a before-and-after exists.
+6. *Label score and fan effort.* `cooling_tower_approach` scores TPR 0% and FPR 0 %: it finds
+   none of its four targets (the three tower foulings and the PI mistuning, on which it declines
+   because the fan never reaches 90 %). `cooling_tower_fan_effort_drift` measures what answer 3
+   read by hand: the fan speed at matched condenser range and wet-bulb, here against the declared
+   reference `PLANT__fault_free`. It is a **fault** on the 65 % and 80 % foulings (+17.8 and
+   +10.9 fan %-points) and `ok` on the 95 % one (+3.3, under its 5-point floor): TPR 67% on its
+   target, tower fouling, and FPR 0 %, with no alarm on the other 20 runs. The fault-free run
+   declines as `is_reference` (it is the yardstick; the scorer still counts it as a correct
+   negative, so the false-positive count reads 0 of 21). The +1 and +2 °F tower-sensor biases also
+   push the fans harder (+29 and +48 points), but the tower's leaving-water reading moved with
+   them (+1.6 and +3.5 °F), so the rule reports a sensor offset (`info`), not fouling.
 
 **Discussion points**
 
@@ -757,6 +763,10 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 - The simulated bypass runs drive the condenser loop to temperatures a real chiller would trip
   on (the catalog's [data issue](../DATASETS.md#the-condenser-bypass-runs-are-fixed-physically-implausible-bypasses-and-the-two-75-runs-are-one-case)). Discuss what a real plant would show instead
   (high-pressure trips, alarms).
+- On the bypass runs `cooling_tower_fan_effort_drift` reads hundreds of fan %-points *below*
+  the reference (about -390 to -470), which no fan can do. The bypassed loop runs condenser
+  ranges the reference never saw, so the matched-load model extrapolates: read it as "not
+  comparable", not as a healthier tower. `condenser_bypass_leak` is the rule for those runs.
 
 **Common mistakes**
 
@@ -769,6 +779,9 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
   the condenser side is the same data, so they are one case.
 - Lowering the design approach until the fouled tower is flagged, and not checking what else
   gets flagged with it.
+- Reading the reference's `info` decline as a missing result, or comparing a real plant's tower
+  with another tower that was never shown to be healthy: a reference is only as good as the
+  evidence that it is clean.
 
 <!-- END plant-cooling-tower -->
 
@@ -837,12 +850,14 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the
 
 ### `plant-boiler`: Boiler plant
 
-Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev (the firing rules: CAMBER
-0.98.0-dev), with the commands on the [exercise page](plant-boiler.md#setup).
+Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev (the firing rules and the
+boiler efficiency drift: CAMBER 0.98.0-dev), with the commands on the
+[exercise page](plant-boiler.md#setup).
 
 **Answer key**
 
-1. *Which rules run.* All four, on every run: 68 findings, 17 per rule, all `ok`.
+1. *Which rules run.* All four point-in-time rules, on every run: 68 findings, 17 per rule, all
+   `ok` (the boiler drift family's findings come on top; see answer 4).
    `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` need to know when the
    boiler fired. The plant's status point is the boiler enable, on all year even while the
    boiler burns no gas, so the catalog leaves it unmapped. The three rules accept either a run
@@ -853,7 +868,8 @@ Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev (the firing r
    CAMBER 0.98 the three rules printed nothing here, and the RCx report listed them under
    "Checks not evaluated"; that table is now gone.
 2. *Reset and summer lockout.* The lockout is judged: the fault-free boiler spends
-   0% of its firing hours above the 65 °F lockout (0.35% on `PLANT__boiler_PI`; occupied hours), so `ok`. The reset is
+   0% of its firing hours above the 65 °F lockout (0.35% on `PLANT__boiler_PI`; occupied hours),
+   so `ok`. The reset is
    judged too, from the supply temperature against the outdoor temperature over firing hours:
    `hws_reset_present` is false on every run (a flat supply), which the rule reports in its
    summary without raising the severity. There is no supply-temperature setpoint to compare
@@ -863,16 +879,24 @@ Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev (the firing r
    speed, none near the 25 % minimum band, so neither riding the curve nor pinned at minimum.
    What the `ok` leaves out: the DP setpoint is flat (`dp_sp_reset_present` false), and the pump
    ran in 8,759 hours, every hour of the year, summer included.
-4. *Fouling.* Nothing fires on `PLANT__boiler_foul_065` (every finding is `ok`). The loop
-   delta-T holds its 36.0 °F median; only 12.2% of firing hours fall below the 20 °F design floor,
-   under the 20 % warn line. Fouling shows as more gas for the same heat, and no point-in-time
-   rule here compares the two.
-   `boiler_efficiency_drift` does, against a frozen baseline of the same boiler; this dataset has
-   no before-and-after on one boiler to feed it through a config.
+4. *Fouling.* No point-in-time rule fires on `PLANT__boiler_foul_065`: the pump and the three
+   gas-read firing rules are all `ok`. The loop delta-T holds its 36.0 °F median; only 12.2% of
+   firing hours fall below the 20 °F design floor, under the 20 % warn line. Fouling shows as more
+   gas for the same heat, and no point-in-time rule here compares the two.
+   `boiler_efficiency_drift` does, against the declared reference `PLANT__fault_free`: gas
+   input per unit of heat delivered is +53.7% on the 65 % fouling and +24.9% on the 80 % one (both
+   **fault**), and +5.1% on the 95 % one (**warn**; it clears the 5 % warn floor by 0.1 point, so
+   a slightly different reference period could miss it). The +2 and +4 °F hot-water temperature
+   biases raise the ratio too (+11 % and +25 %), but the gas at matched outdoor temperature did not
+   rise: the rule reports a heat-metering problem (`info`), not fouling. The fault-free run
+   declines as `is_reference`.
 5. *DP sensor bias.* A DP sensor reading 20 % high makes the pump slow to a median 26.4%, and
    one reading 20 % low speeds it up to 32.4% (29.0% healthy), while the DP reading itself stays
    at its setpoint: the controller holds the lying reading there. The rule stays `ok` on both.
-   Overall, the label score is TPR 0%: nothing in this config detects any of the 16 faults.
+   The label score for `boiler_efficiency_drift` is TPR 100% (3 of 3 foulings) and FPR 0 %:
+   none of the other 13 runs fire (the scorer still counts the reference as a correct negative,
+   so the false-positive count reads 0 of 14). Nothing else in this config detects any of the 16
+   faults.
 
 **Discussion points**
 

@@ -156,8 +156,8 @@ the reference. Both live in a `drift` section of the same config:
 }
 ```
 
-`family` is one of `ahu · chiller · condenser · evaporator · pump · vav`; each `class` must appear in
-the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump)
+`family` is one of `ahu · chiller · condenser · evaporator · pump · vav · boiler · tower · dx`;
+each `class` must appear in the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump)
 adds the cross-pump roll-up; `sustained_alarm` (chiller) appends the opt-in CUSUM alarm rule. A
 family may override `baseline` / `current` — a chiller re-commissioned later has its own reference
 window. Any `trust_gate`, `shared_oat` and `resample` settings apply unchanged.
@@ -204,6 +204,48 @@ window is reported (`could not refit … — leaving it frozen`) rather than ski
 
 There is deliberately no `--reason` on `freeze`: the initial reason string lives inside each
 detector, so the flag would not be honoured.
+
+### A declared reference
+
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
+Sometimes the reference is not this equipment's own past but something known to be healthy: a
+sister unit, or a season you have evidence was clean. A family can **declare** it instead of
+reading a frozen baseline:
+
+```json
+"drift": {
+  "families": [
+    {"class": "CHW_PLANT", "family": "tower",  "reference": {"equip": "PLANT__fault_free"}},
+    {"class": "HW_PLANT",  "family": "boiler", "reference": {"period": ["2025-10-01", "2026-01-31"]}}
+  ]
+}
+```
+
+- `{"equip": ID}` scores every other unit of the class against that unit. `ID` must be one the
+  config discovers. Add `"period": [start, end]` to use only part of its history (else the
+  family's or section's `baseline` window, else all of it); the scored units use `current`, else
+  their whole history.
+- `{"period": [start, end]}` scores each unit against a known-good window of its own history;
+  `current` then defaults to everything from the end of that period on.
+
+The reference is fitted in a scratch in-memory store on **every run and never saved**, so a run
+still cannot mint the baseline it scores against: someone declared the reference, in the config,
+where a reviewer can see it. When every family declares one, the section needs no `store` and no
+windows. Each finding carries `baseline_source` (`reference:<equip>` or `period:<start>..<end>`)
+and a caveat naming the reference, and its summary reads "vs the reference ..." rather than "vs
+frozen baseline". The reference unit itself declines as `is_reference` (it is the yardstick, not
+a result). A reference that cannot serve a detector declines every target with the reason
+(`reference_missing_inputs`, `reference_untrusted`, `empty_reference`) rather than scoring against
+nothing.
+
+`camber drift freeze` refuses a config whose families declare a reference (exit 1): there is
+nothing to freeze. `drift accept` and the re-fit leave those families out. A declared reference
+is only as good as the evidence that it is healthy; on a real plant prefer the unit's own frozen
+baseline, and keep the reference's provenance in the config's `_comment`. The `lbnl-chiller` and
+`lbnl-boiler` templates use `{"equip": "PLANT__fault_free"}`, because each labelled fault there is
+its own year-long run with no before-and-after on one unit (see
+[PLANT-DETECTORS](PLANT-DETECTORS.md) and [TUNING](TUNING.md#drift-references)).
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
 
 ### Untested is not steady
 

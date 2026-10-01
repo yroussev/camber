@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for lbnl-boiler: the hot-water loop differential-pressure reset. The boiler status points are enables, not firing (see the catalog's data issues), so they are left unmapped; since 0.98 the boiler firing rules (boiler_summer_lockout, boiler_short_cycle, hw_plant_deltat) read firing from the gas input instead, and all three are ok on every run. This rule detects none of the 16 faults. Boiler fouling shows as gas input per unit of heat (boiler 1's gas +57% at 065): since 0.92 the gas input maps to gas_input_rate and the boiler drift family (boiler_efficiency_drift, a baseline-vs-current period rule run with drift.families) reads it. There is still no supply-temperature setpoint to compare the loop supply with.",
+  "_comment": "Run template for lbnl-boiler: the hot-water loop differential-pressure reset. The boiler status points are enables, not firing (see the catalog's data issues), so they are left unmapped; since 0.98 the boiler firing rules (boiler_summer_lockout, boiler_short_cycle, hw_plant_deltat) read firing from the gas input instead, and all three are ok on every run. This rule detects none of the 16 faults. Boiler fouling shows as gas input per unit of heat (boiler 1's gas +57% at 065): since 0.92 the gas input maps to gas_input_rate and the boiler drift family (boiler_efficiency_drift) reads it. There is still no supply-temperature setpoint to compare the loop supply with. 0.98 (#86): the boiler drift family scores every run against the declared reference PLANT__fault_free (drift.families[].reference), re-read on every run and never stored: boiler_efficiency_drift reads boiler 1's gas input per unit of heat delivered. Measured on the full subset: boiler fouling 065 / 080 / 095 +54 / +25 / +5.1 % (fault / fault / warn; 095 clears the 5 % warn floor by 0.1 point); 0 of the 13 other runs fire, and the +2 / +4 F hot-water temperature-bias runs are reported as heat-metering problems (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 14.",
   "source": {
     "kind": "store",
     "store": "",
@@ -17,5 +17,16 @@
   ],
   "report": {
     "level": 2
+  },
+  "drift": {
+    "families": [
+      {
+        "class": "HW_PLANT",
+        "family": "boiler",
+        "reference": {
+          "equip": "PLANT__fault_free"
+        }
+      }
+    ]
   }
 }

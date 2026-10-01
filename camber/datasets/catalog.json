@@ -2596,6 +2596,9 @@
      "cooling_tower_approach": [
       "tower_fouling",
       "control"
+     ],
+     "cooling_tower_fan_effort_drift": [
+      "tower_fouling"
      ]
     },
     "fault_types": {
@@ -2905,7 +2908,8 @@
    "suggested_analyses": {
     "rules": [
      "chiller_efficiency",
-     "cooling_tower_approach"
+     "cooling_tower_approach",
+     "cooling_tower_fan_effort_drift"
     ],
     "config_template": "lbnl-chiller.json",
     "exercise": "workbook/plant-chiller-efficiency.md"
@@ -2915,7 +2919,8 @@
     "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
     "Water-side only: the refrigerant-side chiller drift detectors cannot run on it.",
     "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees).",
-    "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning. The sensor-bias runs are negatives for both, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports."
+    "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning; cooling_tower_fan_effort_drift (0.98) sees tower fouling. The sensor-bias runs are negatives for all three, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports.",
+    "A controlled tower holds its approach, so tower fouling shows in fan effort, not approach: since 0.98 (#86) the template's drift section scores cooling_tower_fan_effort_drift against the declared reference PLANT__fault_free (drift.families[].reference, fitted in memory on every run and never stored). It catches fouling 065 and 080 (+17.8 / +10.9 fan %-points at matched load and wet-bulb) and misses 095 (+3.3, under the 5-point floor), with no alarm on the other 20 runs; the +1 / +2 F tower-sensor-bias runs are reported as sensor offsets (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 21."
    ],
    "data_issues": [
     {
@@ -3047,7 +3052,11 @@
    },
    "equipment": "2 boilers, 2 hot-water pumps, 1 loop; boiler/pump 1 mapped",
    "labels": {
-    "targets": {},
+    "targets": {
+     "boiler_efficiency_drift": [
+      "boiler_fouling"
+     ]
+    },
     "fault_types": {
      "boiler_fouling": "boiler heat-exchanger fouling",
      "sensor_bias": "boiler / loop temperature or pressure sensor offset",
@@ -3278,14 +3287,16 @@
    },
    "suggested_analyses": {
     "rules": [
-     "hw_pump_dp_reset"
+     "hw_pump_dp_reset",
+     "boiler_efficiency_drift"
     ],
     "config_template": "lbnl-boiler.json",
     "exercise": "workbook/plant-boiler.md"
    },
    "known_issues": [
     "The boiler status points are enables (see the data issues); boiler_status is not mapped.",
-    "BOI_GAS_CSUM_1 / _2 are the boilers' instantaneous gas input in kW (Table 2), not cumulative counters: 26% of consecutive steps fall and the value is 0 in 50.5% of rows. Since 0.92 (#13) BOI_GAS_CSUM_1 maps to gas_input_rate and the boiler drift family's boiler_efficiency_drift reads the gas-per-heat signature of boiler fouling (boiler 1's annual gas +57% / +26% / +5.5% at 065 / 080 / 095) against the fault-free run (see docs/VALIDATION.md). There is still no supply-temperature-vs-setpoint check (the plant exports no supply-temperature setpoint; Table 1 fixes it at 176 F), and hw_pump_dp_reset, the template's one rule, detects none of the 16 faults.",
+    "BOI_GAS_CSUM_1 / _2 are the boilers' instantaneous gas input in kW (Table 2), not cumulative counters: 26% of consecutive steps fall and the value is 0 in 50.5% of rows. Since 0.92 (#13) BOI_GAS_CSUM_1 maps to gas_input_rate and the boiler drift family's boiler_efficiency_drift reads the gas-per-heat signature of boiler fouling (boiler 1's annual gas +57% / +26% / +5.5% at 065 / 080 / 095) against the fault-free run (see docs/VALIDATION.md). There is still no supply-temperature-vs-setpoint check (the plant exports no supply-temperature setpoint; Table 1 fixes it at 176 F), and hw_pump_dp_reset detects none of the 16 faults.",
+    "Since 0.98 (#86) the template's drift section scores boiler_efficiency_drift against the declared reference PLANT__fault_free (drift.families[].reference, fitted in memory on every run and never stored), and it is the entry's scored target for the three boiler-fouling runs: 3/3 caught (gas per unit heat +54 / +25 / +5.1 %; 095 clears the 5 % warn floor by only 0.1 point), none of the other 13 runs fire, and the +2 / +4 F hot-water temperature-bias runs are reported as heat-metering problems (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 14.",
     "PM_POW_1 / PM_POW_2 are the literal string 'NAN' in the eight runs the inventory's Table 4 marks with an asterisk."
    ],
    "data_issues": [
