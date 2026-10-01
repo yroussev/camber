@@ -89,7 +89,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`hp_room_imbalance`](#hp_room_imbalance) | 9 |  |
 | [`hw_plant_deltat`](#hw_plant_deltat) | 1 |  |
 | [`hw_pump_dp_reset`](#hw_pump_dp_reset) | 2 | yes |
-| [`leaking_valve`](#leaking_valve) | 4 |  |
+| [`leaking_valve`](#leaking_valve) | 8 |  |
 | [`night_weekend_setback`](#night_weekend_setback) | 8 |  |
 | [`outdoor_air_fraction`](#outdoor_air_fraction) | 5 |  |
 | [`overcooling_min_flow`](#overcooling_min_flow) | 3 |  |
@@ -730,6 +730,10 @@ Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 6
 | `delta_thr_f` | `3.0` | °F | 1.0 to 6.0 | public source: PNNL Re-tuning Ch.5 with CAMBER judgment (a coil-side shift beyond noise) |
 | `valve_closed_thr` | `5.0` | % of valve stroke | 0.0 to 15.0 | public source: PNNL Re-tuning Ch.5 with CAMBER judgment (a deadband) |
 | `coil_sensor_fan_heat` | `false` | flag | `false`, `true` | CAMBER judgment: coil sensors sit upstream of a draw-through fan |
+| `measured_fan_heat_f` | `null` | °F | 0.0 to 4.0 | calibrated on the unit's own known-good hours (lbnl-sdahu template: 1.0 from the fault-free run's median supply minus mixed air, 1.06 °F over 1,400 occupied, fan-on, valve-shut hours; in-sample, since that run is also scored) |
+| `cool_delta_thr_f` | `null` | °F | 0.5 to 6.0 | CAMBER judgment: the cooling margin below the fan-heat line; lbnl-sdahu uses 1.0 with its 1.0 °F fan heat, so a leak must take the supply air below the mixed air (fault-free occupied hours below that line: 2.4 %) |
+| `occupied_only` | `false` | flag | `false`, `true` | calibrated on lbnl-sdahu AHU__fault_free: unoccupied fan cycling reads 24.2 % of valve-shut hours below the cooling-leak line, occupied hours 2.4 %; off by default since a leak shows whenever the unit runs |
+| `judge_heating_on_supply_air` | `true` | flag | `false`, `true` | CAMBER judgment: on a single-duct unit the supply air leaves the heating coil |
 
 How to calibrate:
 
@@ -737,6 +741,10 @@ How to calibrate:
 - `delta_thr_f`: With both valves known tight, take the spread (e.g. 95th percentile) of the air shift beyond fan heat (median_delta_f and its per-coil values) and set the threshold above it.
 - `valve_closed_thr`: Set it just above the position the valve commands read when the BAS commands them closed (their 95th percentile on off hours).
 - `coil_sensor_fan_heat`: Set it from the unit's layout: true for a blow-through unit, where the fan sits ahead of the coils and the coil leaving-air sensors see its heat.
+- `measured_fan_heat_f`: On a period known to be leak-free, take the hours with both valves shut and the fan on (occupied hours if occupied_only is set) and use the median supply-air minus mixed-air rise. Calibrate on one period and score on another: a value fitted to a run makes that run's verdict in-sample. *Note:* None = no fan heat credited: a cooling leak must pull the supply air cool_delta_thr_f below the mixed air. When set, a cooling leak is a rise below measured_fan_heat_f - cool_delta_thr_f; applies on the supply-air path (or a coil sensor with coil_sensor_fan_heat), and the cool_shift_f metric reports it.
+- `cool_delta_thr_f`: With measured_fan_heat_f set, read chw_median_delta_f and its spread on known-good valve-shut hours and set the margin so few of them (a few percent) fall below the line measured_fan_heat_f - margin. *Note:* None = delta_thr_f.
+- `occupied_only`: Turn it on when unoccupied fan-on hours (night cycling, morning warm-up) give a fault-free unit a leak signature; compare chw_leak_pct with it on and off on a known-good period. Map an occupancy point where one is trended. *Note:* Reads the trended occupancy (the OCCUPANCY role) when it has values, else assumes weekdays 07-18; the occupancy_gate metric says which.
+- `judge_heating_on_supply_air`: Set it false when the mapped supply air does not pass the heating coil -- a dual-duct unit whose supply_air_temp is the cold deck (lbnl-ddahu false-faults a stuck-damper run otherwise). Map the heating coil's leaving air where it is trended. *Note:* False leaves a heating coil without its own leaving-air sensor unjudged (a caveat says so); a coil with HEAT_COIL_LEAVING_TEMP is judged on it either way.
 
 ## night_weekend_setback
 

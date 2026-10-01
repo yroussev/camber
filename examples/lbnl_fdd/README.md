@@ -54,7 +54,7 @@ refreshed to these in 0.86, #30):
 
 | Family | Overall TPR | FPR | Note |
 |--------|------------:|----:|------|
-| SDAHU  | 40% | 0% | judged on fan-on, occupied samples against the unit's own **1.6%** minimum OA (a 10% damper position): dampers stuck at 75/100% fire; stuck at 10% (the minimum itself) or 25% (4.4% OA) look like normal operation outside economizer weather — their real symptom is the missed economizer, which `economizer_damper_drift` catches 4/4. `leaking_valve` misses the one leak run, a 10% leak (the published 010/025/040/050 "severities" are one file) |
+| SDAHU  | 60% | 0% | judged on fan-on, occupied samples against the unit's own **1.6%** minimum OA (a 10% damper position): dampers stuck at 75/100% fire; stuck at 10% (the minimum itself) or 25% (4.4% OA) look like normal operation outside economizer weather — their real symptom is the missed economizer, which `economizer_damper_drift` catches 4/4. `leaking_valve` catches the one leak run, a 10% leak (the published 010/025/040/050 "severities" are one file), since 0.98 with the template's fan heat of 1.0 °F — **calibrated on the fault-free run, which is also scored here, so that run's 0% FPR is in-sample** (a half-year split holds: `docs/VALIDATION.md`). Without it (0.86–0.97) the leak was missed and the SDAHU TPR read 40% |
 | FCU    | 100% | 0% | incl. the OA-damper leak against the unit's 10% minimum (a 30% damper position measures 10.5% OA) — but that leak gives 15.4% OA against a 15% line: a 0.4-point margin |
 | DDAHU  | 100% | 0% | against the unit's **seasonal** minimum (31.8% OA; 11.9% Jun–Aug). The flat 20% used until 0.86 read the fault-free unit as excess OA (FPR 100%) |
 

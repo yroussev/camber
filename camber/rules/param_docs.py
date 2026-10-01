@@ -505,6 +505,60 @@ PARAM_DOCS["leaking_valve"] = {
         (False, True),
     ),
 }
+# ---- begin 098-air-leak (#84 item 1): measured fan heat, occupancy gate, dual-duct heating ----
+PARAM_DOCS["leaking_valve"].update(
+    {
+        "measured_fan_heat_f": _P(
+            "°F",
+            "calibrated on the unit's own known-good hours (lbnl-sdahu template: 1.0 from the "
+            "fault-free run's median supply minus mixed air, 1.06 °F over 1,400 occupied, fan-on, "
+            "valve-shut hours; in-sample, since that run is also scored)",
+            "On a period known to be leak-free, take the hours with both valves shut and the fan "
+            "on (occupied hours if occupied_only is set) and use the median supply-air minus "
+            "mixed-air rise. Calibrate on one period and score on another: a value fitted to a "
+            "run makes that run's verdict in-sample.",
+            (0.0, 4.0),
+            "None = no fan heat credited: a cooling leak must pull the supply air cool_delta_thr_f "
+            "below the mixed air. When set, a cooling leak is a rise below measured_fan_heat_f - "
+            "cool_delta_thr_f; applies on the supply-air path (or a coil sensor with "
+            "coil_sensor_fan_heat), and the cool_shift_f metric reports it.",
+        ),
+        "cool_delta_thr_f": _P(
+            "°F",
+            "CAMBER judgment: the cooling margin below the fan-heat line; lbnl-sdahu uses 1.0 "
+            "with its 1.0 °F fan heat, so a leak must take the supply air below the mixed air "
+            "(fault-free occupied hours below that line: 2.4 %)",
+            "With measured_fan_heat_f set, read chw_median_delta_f and its spread on known-good "
+            "valve-shut hours and set the margin so few of them (a few percent) fall below the "
+            "line measured_fan_heat_f - margin.",
+            (0.5, 6.0),
+            "None = delta_thr_f.",
+        ),
+        "occupied_only": _P(
+            "flag",
+            "calibrated on lbnl-sdahu AHU__fault_free: unoccupied fan cycling reads 24.2 % of "
+            "valve-shut hours below the cooling-leak line, occupied hours 2.4 %; off by default "
+            "since a leak shows whenever the unit runs",
+            "Turn it on when unoccupied fan-on hours (night cycling, morning warm-up) give a "
+            "fault-free unit a leak signature; compare chw_leak_pct with it on and off on a "
+            "known-good period. Map an occupancy point where one is trended.",
+            (False, True),
+            "Reads the trended occupancy (the OCCUPANCY role) when it has values, else assumes "
+            "weekdays 07-18; the occupancy_gate metric says which.",
+        ),
+        "judge_heating_on_supply_air": _P(
+            "flag",
+            "CAMBER judgment: on a single-duct unit the supply air leaves the heating coil",
+            "Set it false when the mapped supply air does not pass the heating coil -- a dual-duct "
+            "unit whose supply_air_temp is the cold deck (lbnl-ddahu false-faults a stuck-damper "
+            "run otherwise). Map the heating coil's leaving air where it is trended.",
+            (False, True),
+            "False leaves a heating coil without its own leaving-air sensor unjudged (a caveat "
+            "says so); a coil with HEAT_COIL_LEAVING_TEMP is judged on it either way.",
+        ),
+    }
+)
+# ---- end 098-air-leak ----
 
 PARAM_DOCS["filter_fouling"] = {
     "change_dp_inwc": _P(

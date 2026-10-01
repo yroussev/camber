@@ -295,6 +295,38 @@ calibrate it, and reads run configs from YAML as well as JSON.
   reheat-valve drift detector keep reading the demand. Workbook: `zone-reheat-overcooling`
   question 5 and `zone-reheat-saturated` question 4 rewritten, with their instructor keys.
 <!-- /098-terminal-reheat -->
+<!-- 098-air-leak -->
+- **`leaking_valve` can credit a unit's measured fan heat (#84 item 1, provisional).** New opt-in
+  params, all off by default so default outputs are byte-identical: `measured_fan_heat_f` (the
+  unit's own fan rise; a cooling leak on the supply-air path is then a rise below
+  `measured_fan_heat_f - cool_delta_thr_f`), `cool_delta_thr_f` (the cooling margin, default
+  `delta_thr_f`), `occupied_only` (judge occupied samples, from the trended occupancy when
+  mapped, else the weekday 07-18 schedule; `Role.OCCUPANCY` becomes an optional input only on
+  such an instance) and `judge_heating_on_supply_air` (`False` judges a heating leak only on the
+  heating coil's own leaving air). New metrics `cool_shift_f` and `occupancy_gate` appear only
+  when configured, with caveats; `LeakValveResult` gains `cool_shift_f`, `occupancy_gate` and
+  `hw_judged`, and `analyze_leak_valves` the same keywords. Documented in `param_docs.py` and
+  `docs/THRESHOLDS.md`.
+- **The `lbnl-sdahu` template catches the published valve leak.** Its `leaking_valve` entry sets
+  `measured_fan_heat_f: 1.0`, `cool_delta_thr_f: 1.0` and `occupied_only: true`, with a `basis`
+  map. **Intended default change:** `AHU__coi_leakage_010` goes ok -> fault (60.5 % of occupied,
+  fan-on, valve-shut hours below the mixed air, was 0.6 % beyond the 3 °F margin); the fault-free
+  run stays ok at 2.4 % and the damper runs under 2 %. **The 1.0 °F was calibrated on the
+  fault-free run, which is also a scored negative**: its verdict is in-sample, and the template
+  comment, `docs/VALIDATION.md` and `docs/TUNING.md` say so; a half-year split (calibrate on one
+  half, judge the other) keeps the fault-free run ok (2.4 % / 2.7 %) and the leak a fault
+  (54.3 % / 77.2 %). The `lbnl-ddahu` template comment records why the rule is not run there
+  (its mapped supply air is the cold deck; run anyway it false-faults `DDAHU__DMPRStuck_OA_0`).
+- **LBNL benchmark (approved gated move, S1).** `examples/lbnl_fdd/benchmark.py` builds
+  `LeakingValve` from the same template params. SDAHU TPR 0.4 -> 0.6, accuracy 0.5 -> 0.6667,
+  correct diagnosis 0.4 -> 0.6; pooled TPR 0.7 -> 0.8, accuracy 0.7692 -> 0.8462, correct
+  diagnosis 0.7 -> 0.8; FPR unchanged at 0. No other benchmark key moves. The committed baseline
+  is refreshed by the integrator.
+- **Workbook.** `air-heat-cool`: the leak run is now a fault (TPR 100 %, FPR 0 %), the fault-free
+  median rise reads +1.1 °F over occupied hours (was +1.0 °F over all fan-on hours); the page,
+  questions, going-further steps and instructor key are rewritten around the calibrated fan heat
+  and its circularity.
+<!-- /098-air-leak -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

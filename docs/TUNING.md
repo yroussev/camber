@@ -193,12 +193,15 @@ nameplate targets, so the template uses each unit's fault-free median subcooling
 
 ### A known circularity (`lbnl-sdahu`, `leaking_valve`)
 
-`leaking_valve` allows for the supply fan's heat (`fan_heat_f`, 2 °F by default, the ASHRAE
-Guideline 36 initial value). On `lbnl-sdahu`, the fault-free run's median rise from mixed air to
-supply air, with both valves closed and the fan on, is about 1 °F. The 0.98 template calibrates
-`fan_heat_f` to 1.0 °F on that run, and the fault-free run is again a scored negative. The template
-comment and [VALIDATION.md](VALIDATION.md) state the circularity. When you reuse a calibrated
-value from a template, check its note for the same trap.
+`leaking_valve` allows for the supply fan's heat when it judges a heating leak (`fan_heat_f`,
+2 °F by default, the ASHRAE Guideline 36 initial value), but by default credits none to the
+cooling-leak test. On `lbnl-sdahu`, the fault-free run's median rise from mixed air to supply air,
+with both valves closed and the fan on, is about 1 °F, and the published 10 % leak only cancels it.
+The 0.98 template sets `measured_fan_heat_f` to 1.0 °F, calibrated on that run, and the fault-free
+run is again a scored negative: its clean verdict is in-sample. The template comment (and its
+`basis` map) and [VALIDATION.md](VALIDATION.md) state the circularity, and VALIDATION.md gives the
+half-year split (calibrate on one half, judge the other) that shows the value holds. When you reuse
+a calibrated value from a template, check its note for the same trap.
 
 ### Your own building
 
