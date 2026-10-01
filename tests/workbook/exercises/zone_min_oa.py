@@ -133,6 +133,27 @@ def _dcv_reason_real(ctx) -> None:
         assert s["reason"] == "no_demand_variation", f"{rtu}: {s['reason']}"
 
 
+def _fan_off_named(ctx) -> None:
+    """0.98 (#93): below-floor hours with the supply fan off are named and kept out of
+    below_floor_pct (the shortfall with the fan running); the fan is read from its speed."""
+    f = ctx.finding("dcv_system_verification", "<fleet>")
+    for rtu, s in f.metrics["per_ahu"].items():
+        assert s["fan_off_source"] == "fan speed", f"{rtu}: {s['fan_off_source']}"
+        assert s["below_floor_pct"] <= 0.1, f"{rtu}: below_floor_pct {s['below_floor_pct']}"
+        assert s["severity"] == "info", f"{rtu}: {s['severity']}"
+
+
+def _fan_off_hours_real(ctx) -> None:
+    """The fan-off days (October and December 2020), by unit, and the longest episode."""
+    per = ctx.finding("dcv_system_verification", "<fleet>").metrics["per_ahu"]
+    got = {k: v["fan_off_occupied_hours"] for k, v in per.items()}
+    assert got == {"RTU01": 41.0, "RTU02": 82.0, "RTU03": 40.0, "RTU04": 40.0}, got
+    total = {k: v["below_floor_total_pct"] for k, v in per.items()}
+    assert total == {"RTU01": 2.2, "RTU02": 4.2, "RTU03": 2.1, "RTU04": 2.0}, total
+    assert per["RTU02"]["below_floor_longest_h"] == 64.0, per["RTU02"]["below_floor_longest_h"]
+    assert "supply fan off while scheduled occupied" in per["RTU02"]["summary"]
+
+
 def _zones_over_ventilated(ctx) -> None:
     """All 11 CO2 zones read over-ventilated outside economizer hours."""
     f = ctx.finding("co2_ventilation_system", "<fleet>")
@@ -195,6 +216,8 @@ EXERCISE = Exercise(
         Finding("dcv_system_verification", "<fleet>", severity=("info",)),
         Check("DCV not judged on any unit", _dcv_not_judged),
         Check("not judged because demand never varied", _dcv_reason_real, on=REAL),
+        Check("fan-off hours named, not a shortfall", _fan_off_named),
+        Check("fan-off hours by unit", _fan_off_hours_real, on=REAL, quote="41, 82, 40 and 40 h"),
         Finding("co2_ventilation_system", "<fleet>", severity=("warn",)),
         Check("every CO2 zone over-ventilated", _zones_over_ventilated),
         Check("zone CO2 medians", _co2_medians_real, on=REAL, quote="419 to 429 ppm"),

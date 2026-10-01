@@ -75,8 +75,8 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`control_hunting`](#control_hunting) | 4 |  |
 | [`cooling_tower_approach`](#cooling_tower_approach) | 4 |  |
 | [`damper_census`](#damper_census) | 1 | yes |
-| [`dcv_system_verification`](#dcv_system_verification) | 23 (passed to `dcv_verification`) | yes |
-| [`dcv_verification`](#dcv_verification) | 19 |  |
+| [`dcv_system_verification`](#dcv_system_verification) | 25 (passed to `dcv_verification`) | yes |
+| [`dcv_verification`](#dcv_verification) | 21 |  |
 | [`dx_indoor_airflow`](#dx_indoor_airflow) | 11 |  |
 | [`dx_refrigerant_charge`](#dx_refrigerant_charge) | 12 |  |
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
@@ -431,6 +431,8 @@ Fixed in code: a zone needs >= 24 CO2 samples to take part, and >= 24 unoccupied
 | `unventilated_fault_hours` | `4.0` | h (total over the dataset) | 1.0 to 24.0 | CAMBER judgment: an outage is judged by duration, not share of the dataset |
 | `full_outdoor_air` | `false` | flag | `false`, `true` | CAMBER judgment: a site fact, not a threshold (0.93, #37) |
 | `stratify_hour` | `true` | flag | `false`, `true` | CAMBER judgment: a valve on a time clock and CO2 mixes the two in a pooled lift (0.93, #37) |
+| `below_floor_fault_hours` | `null` | h (one contiguous run of occupied samples) | 1.0 to 24.0 | CAMBER judgment: a concentrated outage should not vanish in a long record; 4 h mirrors unventilated_fault_hours (half a working day) |
+| `fan_off_speed_pct` | `5.0` | % supply fan speed | 0.0 to 20.0 | CAMBER judgment: a VFD at a few percent moves essentially no air (the tower rules read 5 % as off too); on lbnl-b59 the fan-off days read 1.2-2.6 % while running hours read far above it |
 
 How to calibrate:
 
@@ -443,7 +445,7 @@ How to calibrate:
 - `econ_high_limit_f`: Set it to the high-limit setpoint in the economizer sequence. Better, map ECON_CMD so the economizer need not be inferred. *Note:* Used only without ECON_CMD: samples with OAT at or below it are treated as possibly economizing and excluded (unless the heating valve is above 5 %). CAMBER temperatures are °F; an OAT trended in °C excludes nearly every sample.
 - `oa_floor_cfm`: Compute Ra·Az for the zones the unit serves from the design documents, or take the design minimum OA from the TAB report. For a multiple-zone system the true intake floor is higher than the sum of Ra·Az, so Ra·Az under-flags (the safe direction). *Note:* None: the below-floor and excess-at-low-demand sub-checks are not evaluated. A number or a mapping {equip: cfm}. Checked only on OA_AIRFLOW or AIRFLOW, not on a damper position or fan speed.
 - `breach_fault_pct`: Raise it if short CO2 excursions at minimum OA are accepted by the sequence (e.g. a slow integral loop). Look at `co2_breach_at_min_pct` on a known-good period and set it above that. *Note:* Needs co2_setpoint; share of samples with CO2 above the setpoint while OA sits at its floor (oa_floor_cfm + 10 %, else within 5 % of its range above its p5).
-- `below_floor_fault_pct`: Look at `below_floor_pct` on a known-good period; set this above it. Keep it low: OA below the 62.1 floor while occupied is an under-ventilation fault. *Note:* Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor.
+- `below_floor_fault_pct`: Look at `below_floor_total_pct` on a known-good period; set this above it. Keep it low: OA below the 62.1 floor while occupied is an under-ventilation fault. *Note:* Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor. The test reads below_floor_total_pct, which includes hours with the supply fan off; since 0.98 (#93) those are also reported apart (fan_off_occupied_pct) and below_floor_pct is the shortfall with the fan running.
 - `excess_warn_pct`: Check `excess_at_low_demand_pct` on a unit whose DCV is known to reach its floor when zones are lightly occupied, and set this above it. *Note:* Needs oa_floor_cfm. Only lifts an otherwise 'ok' verdict to 'warn'.
 - `min_samples`: Raise it for short-interval data (e.g. 96 for a day of 15-minute samples) so the verdict rests on more than a few hours. *Note:* Also gates whether a fallback OA-signal segment gets its own line and whether the unventilated-while-occupied check runs.
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan starts in a typical week of trends. Better still, map the OCCUPANCY point, which replaces the schedule. *Note:* Used only when the equipment frame carries no OCCUPANCY point: a trended OCCUPANCY point replaces the schedule (WARMUP / COOLDOWN are excluded either way). Ignored for the verdict with occupied_only=False. dcv_system_verification also uses it on each zone frame to find the unoccupied hours of its CO2-offset guard.
@@ -453,6 +455,8 @@ How to calibrate:
 - `unventilated_fault_hours`: Set it to how long an occupied space may go without outdoor air before it is a fault; half a working day is a common tolerance. *Note:* Hours are the count of qualifying samples times the median sample step.
 - `full_outdoor_air`: Set it True only for a 100 % outdoor-air unit (no return air, no economizer damper), from the mechanical schedule. *Note:* True: the supply AIRFLOW, then SUPPLY_FAN_SPEED, serve as the OA signal when OA flow and damper are absent, and no economizer exclusion applies.
 - `stratify_hour`: Leave it on. Turn it off only to reproduce pre-0.93 pooled verdicts; the pooled lift is always reported as demand_lift_pooled. *Note:* Falls back to the pooled lift when the same-hour strata hold too few pairs (lift_basis).
+- `below_floor_fault_hours`: Set it to how long an occupied space may stay below its area-based floor before it is a fault. Read below_floor_longest_h on a known-good period and set it well above that. *Note:* None (the default) = off: only the share test (below_floor_fault_pct) faults. A run is consecutive occupied samples below the floor, so it continues across the unoccupied night between two days; it includes hours with the supply fan off, and the finding says so when they make up most of the run. Needs oa_floor_cfm and an OA flow signal.
+- `fan_off_speed_pct`: Take the speed the drive reports with the fan stopped (its 99th percentile on known off hours) and set this just above it, below the lowest running speed. *Note:* Used only without a supply-fan status point and only where the OA floor is checked: an occupied sample below the floor with the fan at or below this speed is counted as fan_off_occupied_pct / _hours, not in below_floor_pct. Severity is unchanged: the share test reads below_floor_total_pct.
 
 Not thresholds: `min_corr` (deprecated since 0.82 and ignored (warns; removal in 1.0): the verdict no longer uses Pearson correlation -- use min_lift_ppm).
 

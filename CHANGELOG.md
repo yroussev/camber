@@ -416,6 +416,23 @@ calibrate it, and reads run configs from YAML as well as JSON.
   dry air, the sea-level slope reads 0.93 and the corrected one 1.00, so `reset_present` can flip
   near `reset_slope_flat`. The catalog's plant data trend a measured wet-bulb and do not change.
   Documented in `docs/CLI.md` and `param_docs`.
+- **`dcv_verification` names fan-off hours and gains an opt-in duration fault (#93).** Occupied
+  hours below `oa_floor_cfm` with the supply fan off (from `SUPPLY_FAN_STATUS`, else
+  `SUPPLY_FAN_SPEED` at or below the new `fan_off_speed_pct`, 5 %) are named in the summary and a
+  caveat ("supply fan off while scheduled occupied"), counted as `fan_off_occupied_pct` /
+  `fan_off_occupied_hours`, and left out of `below_floor_pct`, which is now the shortfall with the
+  fan running. The share fault still reads every below-floor sample (`below_floor_total_pct`, the
+  old `below_floor_pct`), so severity does not move; with no fan signal nothing changes. The new
+  `below_floor_fault_hours` (default `None`, opt-in) faults a contiguous below-floor episode of
+  that many occupied hours whatever its share; the longest episode (`below_floor_longest_h`,
+  `_start`, `_fan_off_h`) is reported either way. `assess_dcv` gains `fan_off_mask` and the
+  matching `DcvResult` fields. The ASO recommender reads a `fan_off_occupied` cause ("Run the
+  supply fan whenever the space is occupied"). On `lbnl-b59` the October and December 2020 days
+  are now named fan-off (41, 82, 40 and 40 h); `below_floor_pct` goes 2.2 / 4.2 / 2.1 / 2.0 % ->
+  0.1 / 0.0 / 0.1 / 0.0 %, severity stays `info`, and the 2020 smoke-mode window stays
+  unflagged. `b4b-windesheim` is unchanged and `finnish-dcv` (no fan signal) gains only the new
+  metrics. `docs/VENTILATION.md`, `docs/VALIDATION.md` and the workbook `zone-min-oa` (caveat,
+  answer 5 and two new checks) are updated.
 <!-- /098-followups -->
 
 ### Documentation

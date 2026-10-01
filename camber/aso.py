@@ -898,7 +898,8 @@ def _num(v) -> float:
 
 def _dcv_causes(m: dict, P, severity: str = "") -> list:
     """The causes of a DCV finding, worst first: ``unventilated``, ``below_floor``,
-    ``co2_high_at_min``, ``static``, ``uncorrelated``, ``excess_at_low_demand``.
+    ``fan_off_occupied`` (0.98, #93: below the floor because the supply fan was off while
+    occupied), ``co2_high_at_min``, ``static``, ``uncorrelated``, ``excess_at_low_demand``.
 
     A cause counts when it clears the rule's default threshold (:data:`DEFAULT_PARAMS`). Only the
     three under-ventilation causes raise a DCV finding to ``fault``, so a ``fault`` with none of
@@ -910,6 +911,10 @@ def _dcv_causes(m: dict, P, severity: str = "") -> list:
             float(P["dcv_unventilated_fault_hours"]),
         ),
         "below_floor": (_num(m.get("below_floor_pct")), float(P["dcv_below_floor_fault_pct"])),
+        "fan_off_occupied": (
+            _num(m.get("fan_off_occupied_pct")),
+            float(P["dcv_below_floor_fault_pct"]),
+        ),
         "co2_high_at_min": (
             _num(m.get("co2_breach_at_min_pct")),
             float(P["dcv_breach_fault_pct"]),
@@ -934,6 +939,7 @@ def _dcv_causes(m: dict, P, severity: str = "") -> list:
 _DCV_ALSO = {
     "unventilated": "occupied hours with high CO₂ and no ventilation (fan off or OA shut)",
     "below_floor": "outdoor air below its floor",
+    "fan_off_occupied": "the supply fan off while the schedule says occupied",
     "co2_high_at_min": "CO₂ above its setpoint while outdoor air sat at minimum",
     "static": "outdoor air that does not modulate with demand",
     "uncorrelated": "outdoor air that modulates, but not with demand",
@@ -989,6 +995,25 @@ def _rec_dcv(f, frame, P):
             confidence="medium",
             standard="ASHRAE 62.1 (minimum outdoor air) / G36 §5.16.4 (minimum OA control)",
             caveats=["A stuck or disconnected damper is a mechanical repair, not a setpoint."],
+        )
+    if lead == "fan_off_occupied":  # 0.98 (#93)
+        h = _num(m.get("fan_off_occupied_hours"))
+        return _rec(
+            f,
+            title="Run the supply fan whenever the space is occupied",
+            cause="Supply fan off while scheduled occupied",
+            action=(
+                f"The supply fan was off while the schedule says occupied{where} for about "
+                f"{h:.0f} h, so no outdoor air reached the space. Check whether the building was "
+                "really occupied then (a holiday or a test missing from the schedule) and, if it "
+                "was, the fan's start command, safeties and alarms." + tail
+            ),
+            parameter="Occupied schedule / fan start",
+            suggested="the fan running, and outdoor air at or above the floor, whenever occupied",
+            expected_effect="Restores ventilation and IAQ in occupied hours.",
+            confidence="medium",
+            standard="ASHRAE 62.1 (minimum outdoor air) / PNNL Re-tuning",
+            caveats=["Correct the schedule instead when the building was empty on those days."],
         )
     if lead == "co2_high_at_min":
         pct = _num(m.get("co2_breach_at_min_pct"))

@@ -1434,10 +1434,13 @@ PARAM_DOCS["dcv_verification"] = {
     "below_floor_fault_pct": _P(
         "% of occupied fan-on samples (before the economizer and closed-OA exclusions)",
         "CAMBER judgment",
-        "Look at `below_floor_pct` on a known-good period; set this above it. Keep it low: OA "
-        "below the 62.1 floor while occupied is an under-ventilation fault.",
+        "Look at `below_floor_total_pct` on a known-good period; set this above it. Keep it "
+        "low: OA below the 62.1 floor while occupied is an under-ventilation fault.",
         (1.0, 50.0),
-        "Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor.",
+        "Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor. The test "
+        "reads below_floor_total_pct, which includes hours with the supply fan off; since 0.98 "
+        "(#93) those are also reported apart (fan_off_occupied_pct) and below_floor_pct is the "
+        "shortfall with the fan running.",
     ),
     "excess_warn_pct": _P(
         "% of low-demand samples (CO2 at or below its p25 and below the engage level)",
@@ -1494,6 +1497,33 @@ PARAM_DOCS["dcv_verification"] = {
         (False, True),
         "Falls back to the pooled lift when the same-hour strata hold too few pairs (lift_basis).",
     ),
+    # ---- begin 098-followups (#93): below-floor duration fault, fan-off hours named ----
+    "below_floor_fault_hours": _P(
+        "h (one contiguous run of occupied samples)",
+        "CAMBER judgment: a concentrated outage should not vanish in a long record; 4 h mirrors "
+        "unventilated_fault_hours (half a working day)",
+        "Set it to how long an occupied space may stay below its area-based floor before it is a "
+        "fault. Read below_floor_longest_h on a known-good period and set it well above that.",
+        (1.0, 24.0),
+        "None (the default) = off: only the share test (below_floor_fault_pct) faults. A run is "
+        "consecutive occupied samples below the floor, so it continues across the unoccupied "
+        "night between two days; it includes hours with the supply fan off, and the finding says "
+        "so when they make up most of the run. Needs oa_floor_cfm and an OA flow signal.",
+    ),
+    "fan_off_speed_pct": _P(
+        "% supply fan speed",
+        "CAMBER judgment: a VFD at a few percent moves essentially no air (the tower rules read "
+        "5 % as off too); on lbnl-b59 the fan-off days read 1.2-2.6 % while running hours read "
+        "far above it",
+        "Take the speed the drive reports with the fan stopped (its 99th percentile on known "
+        "off hours) and set this just above it, below the lowest running speed.",
+        (0.0, 20.0),
+        "Used only without a supply-fan status point and only where the OA floor is checked: an "
+        "occupied sample below the floor with the fan at or below this speed is counted as "
+        "fan_off_occupied_pct / _hours, not in below_floor_pct. Severity is unchanged: the share "
+        "test reads below_floor_total_pct.",
+    ),
+    # ---- end 098-followups (#93) ----
 }
 
 EXEMPT["dcv_verification"] = {
