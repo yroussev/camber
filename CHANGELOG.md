@@ -174,6 +174,24 @@ calibrate it, and reads run configs from YAML as well as JSON.
   more others are reported as "N days follow a fixed schedule" (`scheduled_days`,
   `n_schedule_patterns`) rather than warned on; `repeated_days` keeps only unexplained repeats.
 <!-- /098-sensor-health -->
+<!-- 098-rcx-verify -->
+- **"Verify on site": a generated walk-down checklist in the RCx report (#88 item 1).** New
+  provisional module `camber.walkdown`: `site_checks(issues, *, recommend, rule_of, overrides,
+  trust, skipped, declined)` returns `SiteCheck` items (`issue_key`, `equip`, `kind`, `look_at`,
+  `point`, `confirms`, `refutes`, `references`, plus `rule` and `rank`), ordered sensors,
+  equipment, design values, data. Sensors: each sensor a conditional issue leans on (with its
+  gated trust), a `sensor_drift` issue's sensor, and each input a check declined as untrusted.
+  Equipment: one item per issue from `SITE_CHECKS[rule][cause]`, a template for every rule with a
+  recommender, its cause read from the finding's metrics (`CAUSE_KEYS`: `missed_cause`, the CHW
+  reset direction and flow mode, a pump's inferred VFD floor, the reheat valve divergence, the
+  DCV causes, ...); other rules get a generic item built from their required inputs. Design
+  values: `DESIGN_PARAMS` (site facts such as a minimum outdoor-air fraction, a high limit or an
+  occupancy schedule, never detection thresholds) still at the rule's default. Data: the checks
+  not evaluated for missing inputs. The texts describe what a technician checks on site, in
+  CAMBER's own words; every item links PNNL Re-tuning chapter 9 through the references registry
+  (`camber.references.WALKDOWN_REFERENCES`, not a rule mapping), and nothing from the chapter is
+  reproduced.
+<!-- /098-rcx-verify -->
 
 ### Changed
 <!-- 098-core -->
@@ -382,6 +400,18 @@ calibrate it, and reads run configs from YAML as well as JSON.
   modulating (stuck low)", with a damper repair as its action. The answer key and the page
   questions are updated.
 <!-- /098-rcx-cause -->
+<!-- 098-rcx-verify -->
+- **RCx report: a "Verify on site" section, on by default (#88 item 1).** Section id `verify`
+  (slot `section:verify`, so `--notes-template` writes it), after the issue pages and before
+  Further reading; omitted when it would be empty, or left out with `report.rcx.sections`. A
+  lead paragraph links chapter 9, then one table per kind of item: # (linked to the issue, or A
+  for Appendix A), Equipment, Look at, Point, Confirms, Refutes. Further reading adds chapter 9
+  when the section is present. The RCx golden file changes (intended). Workbook `capstone`: step 2
+  now compares the student's checklist with the generated one, answer 4 of the instructor key
+  points to it, and a new check pins the section's static-setpoint sensor item (trust 0.40) and
+  the onset unit's damper item. The capstone's minimum outdoor air and high limit are site
+  parameters in its config, so the section lists no design values for it; the key now says so.
+<!-- /098-rcx-verify -->
 
 <!-- 098-sensor-health -->
 - **RCx trust table (#87).** A unit with no fan signal is scored per its inferred operating mode in

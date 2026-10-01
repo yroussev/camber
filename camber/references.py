@@ -33,6 +33,7 @@ __all__ = [
     "Reference",
     "REFERENCES",
     "RULE_REFERENCES",
+    "WALKDOWN_REFERENCES",
     "reference",
     "references_for",
     "reference_ids_for",
@@ -337,6 +338,11 @@ RULE_REFERENCES: dict = {
     "boiler_summer_lockout": (_CH8,),
     "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
 }
+
+
+#: The walk-down chapter: every item of the RCx report's "Verify on site" checklist links to it
+#: (0.98, #88; :mod:`camber.walkdown`). A process chapter, so it is not in RULE_REFERENCES.
+WALKDOWN_REFERENCES: tuple = ("pnnl-retuning-ch9",)
 
 
 def reference(rid: str) -> Reference:

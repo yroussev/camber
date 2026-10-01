@@ -33,7 +33,8 @@ headers repeat, and the screen-only table of contents is hidden in print.
 | P6 | Air distribution | Duct static by hour of day (fan-on samples only) and any static-reset findings. Omitted when there is no duct static. |
 | P7 | M&V and drift | The drift report and the `mv_baseline` results, including declines. Omitted when neither ran. |
 | P8+ | One page per issue | Headed by the finding's cause (0.98, #88: "Outdoor-air damper not modulating (stuck low)"), not the remedy; the recommended action keeps its own title ("Recommended action — Repair the outdoor-air damper or actuator: ..."), and the executive summary's Issue column shows the cause. $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
-| — | Further reading | 0.96 (#78): the [PNNL Re-tuning guides and chapters](REFERENCES.md) relevant to this report's issues only, guides first, as links (nothing reproduced). Each issue page also ends its recommended action with **Learn more** links, and `to_dict()` carries each issue's `references` ids. Section id `reading`; no engineer-note slot. |
+| — | Verify on site | 0.98 (#88): the walk-down checklist, after the issue pages ([`camber.walkdown`](#verify-on-site), provisional). A lead paragraph links PNNL Re-tuning chapter 9 (Building Walk Down), then one table per kind of item, in walk-down order: **sensors and setpoints** (each sensor a conditional issue leans on, with its trust; a `sensor_drift` issue's sensor; each input a check declined as untrusted), **equipment and controls** (one item per issue from a per-rule, per-cause template), **design values** the checks assumed (a site fact such as a minimum outdoor-air fraction, a high limit or an occupancy schedule left at the rule's default) and **points the checks lacked** (Appendix A's checks not evaluated). Columns: # (linked to the issue; A for Appendix A), Equipment, Look at, Point, Confirms, Refutes. Section id `verify`, engineer-note slot `section:verify`; on by default, omitted when it would be empty. |
+| — | Further reading | 0.96 (#78): the [PNNL Re-tuning guides and chapters](REFERENCES.md) relevant to this report's issues only, guides first, as links (nothing reproduced), plus chapter 9 when the report has a Verify on site section. Each issue page also ends its recommended action with **Learn more** links, and `to_dict()` carries each issue's `references` ids. Section id `reading`; no engineer-note slot. |
 | A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: fact index (reserved). E: orphaned engineer notes. |
 
 ## Issues: grouping, dollars and hours
@@ -92,6 +93,35 @@ sequence is given as the fix only when the config declares one for the unit: a `
 Otherwise a check that assumes a G36 sequence (a rule named `*_g36` or `g36_*`) gets no packaged
 action ("engineer to specify"), and any other action worded as G36 practice is labelled a G36
 reference, to be checked against the unit's own sequence first.
+
+## Verify on site
+
+`camber.walkdown.site_checks` (provisional, 0.98) builds the checklist from what the report
+already knows; it adds no detector. Each item says what to look at on site, which point to
+compare, and what result would **confirm** the finding (or the flagged problem) and what would
+**refute** it. Every item links PNNL Re-tuning chapter 9 (`WALKDOWN_REFERENCES`); nothing from the
+chapter is reproduced, and the item texts are CAMBER's own.
+
+- **Sensors.** A conditional issue's sensor causes (`Issue.conditional_on`), one item per role,
+  with the gated trust score; a setpoint role asks for the value at the controller and the trend
+  mapping, a sensor role for a reference instrument and the mapping. Sensors come first: a wrong
+  sensor can make any finding that uses it wrong.
+- **Equipment.** `SITE_CHECKS[rule][cause]`, with the cause read from the finding's metrics the
+  way the recommender reads them (`CAUSE_KEYS`): `free_cooling_missed`'s `missed_cause` (a damper
+  that does not deliver is a blades-and-linkage check, an economizer that is never commanded a
+  controller check), `chw_plant_reset`'s reset direction and flow mode, a pump pinned at a VFD
+  floor CAMBER inferred (`near_min_source`), the reheat valve whose position diverges from its
+  demand, and so on. A rule without a template gets a generic item built from its required
+  inputs.
+- **Design values.** `DESIGN_PARAMS` names the site facts a rule assumes (not its detection
+  thresholds). An item is listed when the issue's rule ran with that parameter at its default
+  (not named in the config's `rules[].params`): confirm it against the drawings or the
+  controller, and set it in the config if it differs.
+- **Data.** `RunResult.rules_skipped` (`missing_inputs`, `no_data`), grouped like Appendix A:
+  is the point on the controller but not trended or mapped, or does the equipment not have it?
+
+Duplicates (same kind, equipment and point) are listed once, under the first issue that needs
+them.
 
 ## Confidence
 
@@ -169,7 +199,7 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
   "loads": {"AHU-1": {"heating_capacity_kbtuh": 400, "fan_kw": 15}},
   "rcx": {
     "top_n": 8, "week": "evidence", "paper": "letter", "chart_format": "png",
-    "sections": ["cover", "summary", "data", "week", "economizer", "sat", "air", "mv", "issues", "reading", "appendix"],
+    "sections": ["cover", "summary", "data", "week", "economizer", "sat", "air", "mv", "issues", "verify", "reading", "appendix"],
     "price": {"electricity_per_kwh": 0.14, "gas_per_therm": 1.10},
     "occupancy": {"start_hour": 6, "end_hour": 20, "days": [0, 1, 2, 3, 4, 5]},
     "oat_reference": {"csv": "weather/oat_reference.csv"},
