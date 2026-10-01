@@ -324,10 +324,10 @@ def _read_dir(path: str) -> pd.DataFrame:
 
 def _read_legacy(path: str) -> pd.DataFrame:
     """The legacy part files directly under a year directory."""
-    import pyarrow.parquet as pq
+    from ..store.parquet_store import _read_part_file
 
     files = sorted(f for f in os.listdir(path) if f.endswith(".parquet"))
-    frames = [pq.read_table(os.path.join(path, f)).to_pandas() for f in files]
+    frames = [_read_part_file(os.path.join(path, f)).to_pandas() for f in files]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
@@ -389,6 +389,8 @@ def _write_rollup(
     import pyarrow as pa
     import pyarrow.parquet as pq
 
+    from ..store.parquet_store import _read_part_file
+
     target = _part_path(root, fid, year, month)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     stage = _swap.staging(target)
@@ -415,7 +417,7 @@ def _write_rollup(
                         shutil.copy2(src, os.path.join(stage, n))
     pq.write_table(table, os.path.join(stage, name))
     _swap.commit(target)
-    back = pq.read_table(os.path.join(target, name)).to_pandas()
+    back = _read_part_file(os.path.join(target, name)).to_pandas()
     return {"rows": int(len(back)), "n": int(back["n"].sum()) if len(back) else 0}
 
 

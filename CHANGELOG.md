@@ -669,6 +669,33 @@ are unchanged. Every other benchmark is unchanged.
   The reheat walk-down cause now reads `DEFAULT_PARAMS["reheat_valve_divergence_share"]`, the
   threshold the recommender uses.
 <!-- /098-integration -->
+<!-- 098-pyarrow-compat -->
+- **A store with migrated partitions opens on pyarrow 17-24.** `migrate_partitions` (0.95) read
+  each legacy part file with `pyarrow.parquet.read_table(path)`. On pyarrow 17 through 24 that
+  applies hive partition discovery to a single file's own path, so a part under
+  `facility_id=X/year=Y/` came back with dictionary-typed `facility_id` and `year` columns, and
+  the rewritten month files carried them. The store then refused to open ("Unable to merge: Field
+  facility_id has incompatible types: dictionary<values=string, indices=int32> vs string"). Part
+  files are now read with `ParquetFile(path).read()`, which returns only the stored columns on
+  every pyarrow; the retention rollups' legacy reads use the same helper. On pyarrow 14-16 and 25
+  nothing changes: a migrated store is byte-identical before and after. `_migrate_year` calls
+  `pyarrow.compute` through `call_function`, so mypy passes with pyarrow builds that bundle type
+  stubs (which do not declare the generated compute functions) as well as without them.
+- **A constant meter finds no steps on any BLAS.** `detect_step_changes` round 1 scaled its
+  segmentation by the first-difference noise and fell back to the residual variance, with no
+  rounding floor: a constant meter's exact fit leaves residuals of zero or ~1e-15 depending on the
+  BLAS build (Accelerate gives zero, OpenBLAS does not), and on OpenBLAS round 1 segmented that
+  rounding noise into two zero-size "steps" that the later rounds kept. Round 1 now applies the
+  same rounding floor as the later rounds (falling back to a unit scale below it).
+- **Dependency floors match what works.** `pyproject.toml` now declares `numpy>=1.24.1`,
+  `pandas>=2.2.1` and `pyarrow>=14.0.2` (were 1.24, 2.0 and 14). CAMBER and its tests use pandas
+  2.2 API (`Index.round`, the `"ME"` and `"min"` aliases); pandas 2.2.0 has a `concat` regression
+  that left a SQL source's merged index unsorted; numpy 1.24.0 breaks matplotlib's masked
+  `fill_between` on time axes; pyarrow 14.0.0/14.0.1 emit pandas 2.2's BlockManager
+  `DeprecationWarning` on every store read (14.0.0 also carries CVE-2023-47248). A new CI job,
+  `min-deps`, runs the suite on Python 3.10 with every core floor pinned
+  (`.github/min-deps.txt`; a test keeps it equal to the declared floors).
+<!-- /098-pyarrow-compat -->
 
 ## [0.97.0] — Unreleased
 
