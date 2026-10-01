@@ -713,6 +713,54 @@ are unchanged. Every other benchmark is unchanged.
   compares non-selected candidates' change points within SCHEMA's ±2 °F and everything else
   exactly, and SCHEMA.md says how ties are broken.
 <!-- /098-pyarrow-compat -->
+<!-- 098-fc9 -->
+- **`g36_afdd`: shut valves alone are not free cooling (#94).** The G36 operating-state
+  classifier read every fan-on interval with both coil valves shut as OS#2 (free cooling), even
+  with the outdoor-air damper shut. Following the G36 §5.16.14 operating-state definitions, OS#2
+  now also needs the OA damper open beyond its minimum position plus `oa_damper_tol` (5 points).
+  At or below that, the interval is OS#5, where only the state-independent FC1-FC4 apply. These
+  are deadband hours and unoccupied recirculation runs. OS#5 is used rather than "unclassified"
+  because the definitions place an interval that fits none of OS#1-#4 there, and it keeps FC1-FC4.
+  The minimum position is `oa_damper_min`. By default it is learned as the median damper command
+  over fan-on mechanical-cooling intervals below `econ_damper_open` (the OS#4 position), or taken
+  as 0 % with a caveat when there are fewer than 24 such intervals. A missing damper reading with
+  both valves shut is unclassified. A frame without an OA damper point keeps the valves-only
+  reading and gets a caveat. New finding metrics: `oa_damper_min`, `oa_damper_min_source`,
+  `idle_at_min_oa_hours`, `occupancy_gate` and `unoccupied_hours`. New trailing `G36Result`
+  fields: `oa_damper_min`, `oa_damper_min_source`, `n_idle_at_min_oa` and `n_unoccupied`.
+  `run_g36_afdd` gains `oa_damper_min=`, `oa_damper_tol=` and `occupied=`, and `classify_os`
+  gains `oa_damper_min=` and `oa_damper_tol=`.
+  - **Occupancy.** Unoccupied operation is still evaluated by default, since G36 suspends AFDD
+    only while the AHU is not operating. A new `occupancy_gate` parameter (`"off"` by default, or
+    `"trended"`) limits the evaluation to the occupied hours of a trended occupancy point, with
+    no assumed-schedule fallback. Once OS#2 is fixed it changes no verdict on `lbnl-sdahu` or
+    `lbnl-ddahu`.
+  - **lbnl-sdahu, full subset, at defaults.**
+    - The fault-free run goes from `warn` to `ok`: FC9 drops from 18.65 % to 0 %. All 323 FC9
+      hours were unoccupied hours with the fan at full speed and the damper at 0 %, and those
+      483 hours are now OS#5. The learned minimum is 10 %, the unit's documented fixed minimum.
+    - `onset_damper_stuck_025`: FC9 drops from 11.65 % to 0 % (the same unoccupied pattern). The
+      run stays `fault` on FC10 and FC11.
+    - `damper_stuck_075` and `damper_stuck_100_short` go from `fault` to `ok`. FC8 drops from
+      30.9 % and 26.8 % to 0 %, and FC12 from 8.75 % and 3.98 % to 0 %. Those hours had the damper
+      *commanded* to its 10 % minimum with both valves shut, while the stuck damper let in 68-100 %
+      outdoor air. That is OS#5 by command, so the free-cooling tests no longer apply, and their
+      earlier hits came from hours that were wrongly read as free cooling. The G36 test for this
+      fault is FC6 (outdoor-air fraction vs the minimum). With the template's own `min_oa_pct`
+      1.6, FC6 flags both runs (27.8 % and 28.1 %, `fault`), while the fault-free run reads
+      1.18 %.
+    - `coi_stuck_050`: 7 hours move to OS#5, and FC14 goes from 13.06 % to 12.68 % (still
+      `fault` on FC13).
+    - The other ten runs are unchanged.
+  - **Other datasets.**
+    - `lbnl-ddahu` `DMPRStuck_OA_0`: 186 hours with the damper at or below its learned 28 %
+      minimum (176 of them at 0 %) move to OS#5, and FC8 goes from 16.2 % to 39.7 % (still
+      `fault` on FC10). The fault-free and `DMPRStuck_OA_100` runs are unchanged.
+    - `nuig-ahu101` is unchanged, and `irish-ahu` declines before and after (it has no fan
+      signal).
+  - **Unchanged.** No gated benchmark key moves (the synthetic, fleet, LBNL, BDG2 and BDG2 savings
+    benchmarks are all stable), and no workbook answer changes (no exercise runs `g36_afdd`).
+<!-- /098-fc9 -->
 
 ## [0.97.0] — Unreleased
 

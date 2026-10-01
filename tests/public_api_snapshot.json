@@ -670,6 +670,8 @@
     "G36Result",
     "G36Thresholds",
     "MODE_DELAY_MIN",
+    "OA_DAMPER_TOL",
+    "OA_MIN_LEARN_N",
     "OS_FAULTS",
     "OS_FREECOOL",
     "OS_HEATING",

@@ -201,7 +201,7 @@ fault fires or where:
 - **Camber gates each fault by its G36 operating-state classifier.** We classify
   every interval into an operating state **OS#1–OS#5** from the heating/cooling
   valve commands plus the OA-damper position (`classify_os` →
-  heating / free-cooling / mechanical+economizer / mechanical+min-OA / simultaneous),
+  heating / free-cooling / mechanical+economizer / mechanical+min-OA / none of these),
   and evaluate each FC **only in the operating states G36 §5.16.14.9 lists for it**
   (`OS_FAULTS`). So FC10 ("OAT/MAT should track in 100% economizer"), for example,
   is scored only over the hours the AHU is actually in that economizer state.
@@ -224,6 +224,12 @@ hours — only those in its valid operating states), so Camber's denominators ar
 smaller and its percentages are computed over a stricter, more specific population
 of hours. We consider that the correct, standard-aligned behavior; the
 single-signal framing is broader but less precisely tied to the standard's intent.
+
+> **Since 0.98 (#94)** free cooling (OS#2) also needs the OA damper open beyond its minimum
+> position. An interval with both valves shut at minimum OA is OS#5, where only FC1–FC4 apply.
+> Before 0.98 it was OS#2. The 0.1.5 comparison above used the valves-only reading. To reproduce
+> it, pass `oa_damper_min=-100`. Every damper reading then counts as open, and only intervals
+> with a missing damper reading stay unclassified.
 
 > For cross-tool comparison, `run_g36_afdd(..., comparability=True)` additionally
 > emits a single-signal-gated (input-validity) fault % alongside the default

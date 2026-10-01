@@ -33,6 +33,10 @@ run), ModeDelay after a fan start or a zone-group mode change, AlarmDelay persis
 coil, with the tests of that coil omitted. See the constants below for what was verified in the
 public G36 text.
 
+Free cooling (0.98, #94): OS#2 needs the OA damper open beyond its minimum position, per the
+§5.16.14 operating-state definitions -- both valves shut at minimum OA (a deadband hour, an
+unoccupied recirculation run) is OS#5. See :func:`classify_os` and ``run_g36_afdd(oa_damper_min=)``.
+
 Variable conventions (all temperatures degF here):
   SAT/MAT/RAT/OAT supply/mixed/return/outdoor air temps; SATSP supply-air-temp
   setpoint; HC/CC heating/cooling valve command %; FS supply-fan speed %; DSP/
@@ -66,6 +70,8 @@ __all__ = [
     "AVG_WINDOW_MIN",
     "FC_OMIT_NO_HEATING",
     "FC_OMIT_NO_COOLING",
+    "OA_DAMPER_TOL",
+    "OA_MIN_LEARN_N",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -126,26 +132,55 @@ class G36Thresholds:
     fc14_fan_heat: float | None = None
 
 
-# Operating states. Classification keys off the heating- and cooling-valve
-# commands (G36 Table 5.16.14.2-.4); the OA/return damper distinguishes OS#3 from
-# OS#4. HC>0 AND CC>0 simultaneously is OS#5 (no normal OS applies) -- the
-# simultaneous-heating/cooling signature.
+# Operating states (G36 §5.16.14 operating-state definitions). Classification keys off the heating-
+# and cooling-valve commands and the OA damper command:
+#   OS#1 heating coil active, cooling coil not;
+#   OS#2 both coils inactive with the economizer modulating, i.e. the OA damper open beyond its
+#        minimum position (0.98, #94: shut valves alone are not free cooling);
+#   OS#3 mechanical cooling on 100 % OA (damper at/above ``econ_damper_open``);
+#   OS#4 mechanical cooling on minimum OA;
+#   OS#5 none of #1-#4 applies -- simultaneous heating and cooling, and (0.98) a running fan with
+#        both coils inactive and the OA damper at or below its minimum (deadband, unoccupied
+#        recirculation). Only the state-independent FC#1-#4 apply there.
+# Without an OA damper point OS#2 is read from the valves alone (the pre-0.98 reading), and the
+# result says so in a caveat.
 OS_HEATING = 1
-OS_FREECOOL = 2  # modulating economizer, no mechanical cooling
+OS_FREECOOL = 2  # modulating economizer (damper beyond its minimum), no mechanical cooling
 OS_MECH_ECON = 3  # mechanical + 100% economizer
 OS_MECH_MINOA = 4  # mechanical cooling, minimum OA
-OS_UNKNOWN = 5  # simultaneous heat/cool, dehumidification, or fault
+OS_UNKNOWN = 5  # no other OS applies: simultaneous heat/cool, coils idle at minimum OA, fault
 # Not a G36 state: a valve command is missing (NaN) so the interval cannot be classified. No FC is
 # evaluated there -- reading a NaN valve as "closed" would call the interval free cooling (OS#2)
-# and dilute every OS#2 fault rate with intervals nobody observed.
+# and dilute every OS#2 fault rate with intervals nobody observed. Likewise (0.98) a missing OA
+# damper reading with both coils inactive, when the frame has an OA damper point.
 OS_UNCLASSIFIED = 0
 
+#: OA damper tolerance (percentage points of stroke) above the minimum position before an interval
+#: with both coils inactive counts as economizing (OS#2) -- CAMBER judgment (0.98, #94)
+OA_DAMPER_TOL = 5.0
+#: fan-on intervals of mechanical cooling below ``econ_damper_open`` needed to learn the minimum OA
+#: damper position from the data (0.98, #94); fewer, and the minimum is taken as 0 % (closed)
+OA_MIN_LEARN_N = 24
 
-def classify_os(hc, cc, oa_damper=None, valve_thr=5.0, econ_damper_open=80.0):
+
+def classify_os(
+    hc,
+    cc,
+    oa_damper=None,
+    valve_thr=5.0,
+    econ_damper_open=80.0,
+    oa_damper_min=0.0,
+    oa_damper_tol=OA_DAMPER_TOL,
+):
     """Operating state for one interval from valve commands (+ OA damper).
 
     hc, cc, oa_damper are % (0-100). Returns an int OS code 1-5, or :data:`OS_UNCLASSIFIED` (0)
     when either valve command is missing (``None``/NaN).
+
+    With both coils inactive the interval is OS#2 (free cooling) only when the OA damper is open
+    beyond ``oa_damper_min + oa_damper_tol``; at or below that it is OS#5 (0.98, #94), and a NaN
+    damper reading leaves it unclassified. ``oa_damper=None`` (no damper point) keeps the
+    valves-only reading: OS#2.
     """
     if hc is None or cc is None or hc != hc or cc != cc:  # x != x -> NaN
         return OS_UNCLASSIFIED
@@ -156,7 +191,11 @@ def classify_os(hc, cc, oa_damper=None, valve_thr=5.0, econ_damper_open=80.0):
     if heating:
         return OS_HEATING
     if not cooling:
-        return OS_FREECOOL
+        if oa_damper is None:
+            return OS_FREECOOL
+        if oa_damper != oa_damper:
+            return OS_UNCLASSIFIED
+        return OS_FREECOOL if oa_damper > oa_damper_min + oa_damper_tol else OS_UNKNOWN
     # cooling on: economizer (high OA damper) -> OS#3, else minimum OA -> OS#4
     if oa_damper is not None and oa_damper >= econ_damper_open:
         return OS_MECH_ECON
@@ -299,21 +338,63 @@ _FCS = {
 # guard (``any(... is None) -> return False``). Used by run_g36_afdd; the scalar
 # classify_os / _fc* remain the readable reference (and public API).
 # --------------------------------------------------------------------------- #
-def _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open):
+def _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open, oa_econ=None):
     """Operating state per interval over arrays.
 
     A NaN valve command -> :data:`OS_UNCLASSIFIED` (no FC applies); a NaN OA damper with cooling
-    on -> OS#4 (minimum OA), as in the scalar.
+    on -> OS#4 (minimum OA), as in the scalar. ``oa_econ`` is the OA damper position above which
+    an interval with both coils inactive is economizing (OS#2): at or below it the interval is
+    OS#5, and a NaN damper there is unclassified. ``None`` (no damper point) keeps the valves-only
+    reading.
     """
     missing = np.isnan(hc) | np.isnan(cc)
     heating = hc > valve_thr
     cooling = cc > valve_thr
     oa_open = oa >= econ_damper_open
+    idle = ~heating & ~cooling
+    if oa_econ is None:
+        idle_unclassified = np.zeros(len(hc), dtype=bool)
+        idle_at_min = np.zeros(len(hc), dtype=bool)
+    else:
+        idle_unclassified = idle & np.isnan(oa)
+        with np.errstate(invalid="ignore"):
+            idle_at_min = idle & (oa <= oa_econ)
     return np.select(
-        [missing, heating & cooling, heating, ~cooling, oa_open],
-        [OS_UNCLASSIFIED, OS_UNKNOWN, OS_HEATING, OS_FREECOOL, OS_MECH_ECON],
+        [
+            missing,
+            heating & cooling,
+            heating,
+            idle_unclassified,
+            idle_at_min,
+            ~cooling,
+            oa_open,
+        ],
+        [
+            OS_UNCLASSIFIED,
+            OS_UNKNOWN,
+            OS_HEATING,
+            OS_UNCLASSIFIED,
+            OS_UNKNOWN,
+            OS_FREECOOL,
+            OS_MECH_ECON,
+        ],
         default=OS_MECH_MINOA,
     ).astype(int)
+
+
+def _learn_oa_min(hc, cc, oa, on, valve_thr, econ_damper_open):
+    """``(position, n)``: the OA damper's minimum position learned from the frame.
+
+    The median damper command over fan-on intervals of mechanical cooling with the damper below
+    ``econ_damper_open`` -- the G36 OS#4 position, where the sequence holds the damper at its
+    minimum. ``(None, n)`` with fewer than :data:`OA_MIN_LEARN_N` such intervals.
+    """
+    with np.errstate(invalid="ignore"):
+        sel = on & (cc > valve_thr) & ~(hc > valve_thr) & (oa < econ_damper_open) & ~np.isnan(oa)
+    n = int(sel.sum())
+    if n < OA_MIN_LEARN_N:
+        return None, n
+    return float(np.median(oa[sel])), n
 
 
 def _false(n):
@@ -537,8 +618,20 @@ class G36Result:
     declined: str | None = None
     #: ModeDelay / AlarmDelay / averaging window actually applied, in minutes
     delays: dict = field(default_factory=dict)
+    # --- provisional (0.98, #94) ----------------------------------------------------------------
+    #: the OA damper minimum position (%) OS#2 was judged against; None without an OA damper point
+    oa_damper_min: float | None = None
+    #: where it came from: "caller", "learned (median of N OS#4 intervals)", "assumed 0 % (...)",
+    #: or "" without an OA damper point
+    oa_damper_min_source: str = ""
+    #: fan-on intervals with both coils inactive and the OA damper at or below its minimum (plus the
+    #: tolerance): OS#5, not free cooling
+    n_idle_at_min_oa: int = 0
+    #: fan-on intervals excluded by the caller's ``occupied`` mask (never evaluated)
+    n_unoccupied: int = 0
     #: per-interval masks (``keep_masks=True`` only): ``FC<n>`` reported, ``FC<n>_app`` evaluated
-    #: and applicable, plus ``fan_on``, ``suspended`` and ``os``; indexed like the cleaned frame
+    #: and applicable, plus ``fan_on``, ``suspended``, ``os`` and (0.98) ``evaluable``; indexed like
+    #: the cleaned frame
     masks: pd.DataFrame | None = None
 
     def as_dict(self):
@@ -678,6 +771,9 @@ def run_g36_afdd(
     alarm_delay_min: float = ALARM_DELAY_MIN,
     avg_window_min: float = AVG_WINDOW_MIN,
     keep_masks: bool = False,
+    oa_damper_min: float | None = None,
+    oa_damper_tol: float = OA_DAMPER_TOL,
+    occupied=None,
 ) -> G36Result | None:
     """Run the G36 AFDD fault set over an AHU frame.
 
@@ -706,6 +802,20 @@ def run_g36_afdd(
       temperatures and duct static over fan-on rows; a no-op at 5-minute or coarser data.
 
     Set the delays and the window to 0 to score raw per-interval equations.
+
+    **Free cooling needs an open economizer** (0.98, #94). With both coils inactive an interval is
+    OS#2 only when the OA damper (``OA_Damper``) is open beyond its minimum position plus
+    ``oa_damper_tol`` (default 5 points); at or below it the unit is recirculating at minimum OA
+    (a deadband hour, an unoccupied fan run) and the interval is OS#5, where only FC#1-#4 apply.
+    ``oa_damper_min`` is the minimum position in %; ``None`` learns it as the median damper
+    command over fan-on intervals of mechanical cooling below ``econ_damper_open`` (the OS#4
+    position), or takes 0 % (closed) when there are fewer than :data:`OA_MIN_LEARN_N` of them.
+    Without an ``OA_Damper`` column OS#2 is read from the valves alone, with a caveat.
+
+    **occupied** (0.98, #94): an optional boolean mask (array or Series aligned to ``df``) of the
+    intervals the caller wants evaluated, e.g. a trended occupancy point. Fan-on intervals outside
+    it are never evaluated and are counted in ``n_unoccupied``. G36 itself suspends AFDD only when
+    the AHU is not operating, so the default (``None``) evaluates unoccupied fan operation too.
 
     **Missing coil.** A frame without ``HC`` is an AHU without a heating coil: HC is taken as 0 %
     (explicitly, with a caveat) and the heating-coil tests (:data:`FC_OMIT_NO_HEATING`) are
@@ -787,12 +897,61 @@ def run_g36_afdd(
     mode = df["MODE"].to_numpy() if "MODE" in df.columns else None
     suspended = _mode_suspension(on, df.index, step, mode, float(mode_delay_min))
     evaluable = on & ~suspended
+    n_unocc = 0
+    if occupied is not None:
+        occ_arr = (
+            occupied.reindex(df.index, fill_value=False).to_numpy(dtype=bool)
+            if isinstance(occupied, pd.Series)
+            else np.asarray(occupied, dtype=bool)
+        )
+        if len(occ_arr) != n:
+            raise ValueError(f"occupied has {len(occ_arr)} values for a {n}-row frame")
+        n_unocc = int((evaluable & ~occ_arr).sum())
+        evaluable = evaluable & occ_arr
 
     # operating state per interval (vectorized over the whole frame)
     hc = df["HC"].to_numpy(dtype=float) if has_hc else np.zeros(n)
     cc = df["CC"].to_numpy(dtype=float) if has_cc else np.zeros(n)
-    oa = df["OA_Damper"].to_numpy(dtype=float) if "OA_Damper" in df.columns else np.full(n, np.nan)
-    os_codes = _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open)
+    has_oa = "OA_Damper" in df.columns
+    oa = (
+        pd.to_numeric(df["OA_Damper"], errors="coerce").to_numpy(dtype=float)
+        if has_oa
+        else np.full(n, np.nan)
+    )
+    # OS#2 needs the economizer open beyond its minimum position (0.98, #94)
+    oa_min: float | None = None
+    oa_min_src = ""
+    if has_oa:
+        if oa_damper_min is not None:
+            oa_min, oa_min_src = float(oa_damper_min), "caller"
+        else:
+            learned, n_learn = _learn_oa_min(hc, cc, oa, on, valve_thr, econ_damper_open)
+            if learned is not None:
+                oa_min = learned
+                oa_min_src = f"learned (median of {n_learn} fan-on mechanical-cooling intervals)"
+            else:
+                oa_min = 0.0
+                oa_min_src = (
+                    f"assumed 0 % (closed): only {n_learn} fan-on mechanical-cooling intervals "
+                    "below the economizer threshold to learn it from"
+                )
+                caveats.append(
+                    "OA damper minimum position not learnable from the data: free cooling (OS#2) "
+                    "needs the damper open beyond 0 % (set oa_damper_min to the unit's minimum)"
+                )
+    else:
+        caveats.append(
+            "no OA damper point: free cooling (OS#2) is read from the coil valves alone, so a "
+            "fan-on interval at minimum OA with both coils inactive counts as free cooling"
+        )
+    oa_econ = None if oa_min is None else oa_min + float(oa_damper_tol)
+    os_codes = _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open, oa_econ)
+    if oa_econ is not None:
+        with np.errstate(invalid="ignore"):
+            idle_at_min = on & ~(hc > valve_thr) & ~(cc > valve_thr) & (oa <= oa_econ)
+        n_idle_min = int(idle_at_min.sum())
+    else:
+        n_idle_min = 0
     # dOS: operating-state changes between consecutive fan-on intervals in the trailing 60 min
     os_ser = pd.Series(os_codes, index=df.index)
     prev_on = np.zeros(n, dtype=bool)
@@ -878,7 +1037,7 @@ def run_g36_afdd(
 
     os_on = os_codes[on]
     if masks is not None:
-        masks.update({"fan_on": on, "suspended": suspended, "os": os_codes})
+        masks.update({"fan_on": on, "suspended": suspended, "os": os_codes, "evaluable": evaluable})
     return G36Result(
         equip=equip,
         n_intervals=n,
@@ -897,5 +1056,9 @@ def run_g36_afdd(
         missing_inputs=missing,
         caveats=caveats,
         delays=delays,
+        oa_damper_min=None if oa_min is None else round(oa_min, 2),
+        oa_damper_min_source=oa_min_src,
+        n_idle_at_min_oa=n_idle_min,
+        n_unoccupied=n_unocc,
         masks=None if masks is None else pd.DataFrame(masks, index=df.index),
     )

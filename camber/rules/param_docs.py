@@ -741,6 +741,47 @@ PARAM_DOCS["g36_afdd"] = {
         "percentile on idle hours).",
         (0.0, 15.0),
     ),
+    # ---- begin 098-fc9 (#94): free cooling needs the economizer open beyond its minimum ----
+    "oa_damper_min": _P(
+        "% of damper stroke (OA damper)",
+        "standard: ASHRAE Guideline 36-2021 §5.16.14 (operating-state definitions: free cooling "
+        "is the economizer modulating above its minimum position); the position itself is the "
+        "unit's own, set by its minimum outdoor-air control",
+        "Set it to the minimum position from the unit's sequence or balancing report, or read "
+        "the OA damper command on mechanical-cooling hours with the economizer locked out (its "
+        "median). The finding's oa_damper_min and oa_damper_min_source show what was used.",
+        (0.0, 60.0),
+        "None = learned: the median OA damper command over fan-on hours of mechanical cooling "
+        "below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % "
+        "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %.",
+    ),
+    "oa_damper_tol": _P(
+        "percentage points of damper stroke",
+        "CAMBER judgment (#94): a noise margin above the minimum position; G36 gives no damper "
+        "tolerance. On fault-free lbnl-sdahu the idle economizer hours sit at 47 % or more and "
+        "the minimum at 10 %, so any margin up to 30 points classifies them the same.",
+        "Set it above the scatter of the damper command while it holds its minimum (the spread "
+        "of the command on mechanical-cooling hours at minimum OA); raise it for a G36 unit whose "
+        "minimum position moves with airflow.",
+        (0.0, 20.0),
+    ),
+    "occupancy_gate": _P(
+        "choice",
+        "standard: ASHRAE Guideline 36-2021 §5.16.14 suspends AFDD only while the AHU is not "
+        "operating (and for ModeDelay after a zone-group mode change), so unoccupied operation "
+        "is evaluated by default. On the fault-free lbnl-sdahu run the unoccupied FC9 false "
+        "alarm came from the free-cooling misreading, not from evaluating unoccupied hours: "
+        "with OS#2 fixed, 'trended' changes no verdict on any lbnl-sdahu or lbnl-ddahu run.",
+        "Keep 'off'. Use 'trended' to screen occupied operation only, when the unit trends an "
+        "occupied/unoccupied point and its unoccupied runs (setback, purge) are out of scope.",
+        ("off", "trended"),
+        "'off' (default): every fan-on hour outside ModeDelay. 'trended': only the hours the "
+        "trended occupancy point marks occupied; with none trended, every fan-on hour (no "
+        "assumed-schedule fallback). The finding's occupancy_gate metric reports 'off', "
+        "'trended occupancy' or 'none trended (fan-on hours only)', and unoccupied_hours the "
+        "fan-on hours the gate left out.",
+    ),
+    # ---- end 098-fc9 ----
     "warn_pct": _P(
         "% of an FC's applicable intervals",
         "CAMBER judgment: screening-grade severity, not from G36 (G36 alarms every confirmed "

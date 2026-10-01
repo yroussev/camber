@@ -83,7 +83,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
 | [`filter_fouling`](#filter_fouling) | 1 |  |
 | [`free_cooling_missed`](#free_cooling_missed) | 9 |  |
-| [`g36_afdd`](#g36_afdd) | 11 |  |
+| [`g36_afdd`](#g36_afdd) | 14 |  |
 | [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
 | [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 10 |  |
 | [`hp_mode_vs_need`](#hp_mode_vs_need) | 9 |  |
@@ -657,6 +657,9 @@ How to calibrate:
 | `avg_window_min` | `5.0` | min | 1.0 to 30.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (five-minute rolling averages) |
 | `econ_damper_open` | `80.0` | % of damper stroke (OA damper) | 50.0 to 100.0 | CAMBER judgment: separates G36 OS#3 (mechanical cooling on 100 % OA) from OS#4 |
 | `valve_thr` | `5.0` | % of valve stroke | 0.0 to 15.0 | CAMBER judgment: a noise deadband for 'coil active' |
+| `oa_damper_min` | `null` | % of damper stroke (OA damper) | 0.0 to 60.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (operating-state definitions: free cooling is the economizer modulating above its minimum position); the position itself is the unit's own, set by its minimum outdoor-air control |
+| `oa_damper_tol` | `5.0` | percentage points of damper stroke | 0.0 to 20.0 | CAMBER judgment (#94): a noise margin above the minimum position; G36 gives no damper tolerance. On fault-free lbnl-sdahu the idle economizer hours sit at 47 % or more and the minimum at 10 %, so any margin up to 30 points classifies them the same. |
+| `occupancy_gate` | `"off"` | choice | `"off"`, `"trended"` | standard: ASHRAE Guideline 36-2021 §5.16.14 suspends AFDD only while the AHU is not operating (and for ModeDelay after a zone-group mode change), so unoccupied operation is evaluated by default. On the fault-free lbnl-sdahu run the unoccupied FC9 false alarm came from the free-cooling misreading, not from evaluating unoccupied hours: with OS#2 fixed, 'trended' changes no verdict on any lbnl-sdahu or lbnl-ddahu run. |
 | `warn_pct` | `5.0` | % of an FC's applicable intervals | 1.0 to 30.0 | CAMBER judgment: screening-grade severity, not from G36 (G36 alarms every confirmed fault) |
 | `fault_pct` | `20.0` | % of an FC's applicable intervals | 5.0 to 60.0 | CAMBER judgment: screening-grade severity, not from G36 |
 | `min_applicable_hours` | `24.0` | h | 1.0 to 500.0 | CAMBER judgment: screening-grade, not from G36 |
@@ -671,6 +674,9 @@ How to calibrate:
 - `avg_window_min`: Keep the G36 value; on trends coarser than 5 minutes the window holds a single sample.
 - `econ_damper_open`: Set it just below the position the OA damper holds when the sequence calls for full economizer (its 5th percentile on such hours).
 - `valve_thr`: Set it just above the valve command's reading when commanded closed (its 95th percentile on idle hours).
+- `oa_damper_min`: Set it to the minimum position from the unit's sequence or balancing report, or read the OA damper command on mechanical-cooling hours with the economizer locked out (its median). The finding's oa_damper_min and oa_damper_min_source show what was used. *Note:* None = learned: the median OA damper command over fan-on hours of mechanical cooling below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % (closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %.
+- `oa_damper_tol`: Set it above the scatter of the damper command while it holds its minimum (the spread of the command on mechanical-cooling hours at minimum OA); raise it for a G36 unit whose minimum position moves with airflow.
+- `occupancy_gate`: Keep 'off'. Use 'trended' to screen occupied operation only, when the unit trends an occupied/unoccupied point and its unoccupied runs (setback, purge) are out of scope. *Note:* 'off' (default): every fan-on hour outside ModeDelay. 'trended': only the hours the trended occupancy point marks occupied; with none trended, every fan-on hour (no assumed-schedule fallback). The finding's occupancy_gate metric reports 'off', 'trended occupancy' or 'none trended (fan-on hours only)', and unoccupied_hours the fan-on hours the gate left out.
 - `warn_pct`: Read each FC's pct on units known to be healthy; set the warn level above the spread. Tuning it on the unit under test is circular.
 - `fault_pct`: Set it well above warn_pct. *Note:* Must be at or above warn_pct.
 - `min_applicable_hours`: Raise it for long histories so that a rare operating state with a few hours of applicability cannot set the severity; each FC's applicable_hours shows its base.

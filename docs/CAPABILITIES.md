@@ -253,8 +253,15 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   SAT stand in for the cooling-coil entering and leaving temperatures only on an AHU without a
   heating coil. Otherwise FC14 and FC15 are declined. FC8/FC9 hours that coincide with a
   confirmed FC14 are attributed to FC14, so a passing valve is reported as a leak, not under the
-  free-cooling labels. Parameters: `heating_coil`, `min_oa_pct` (enables FC6),
-  `mode_delay_min`, `alarm_delay_min`, and the screening-grade `warn_pct` / `fault_pct`. Like
+  free-cooling labels. Since 0.98 (#94) free cooling (OS#2) needs the OA damper open beyond its
+  minimum position, not just both valves shut: a fan-on hour at minimum OA with both coils idle (a
+  deadband hour, an unoccupied recirculation run) is OS#5, where only FC1-FC4 apply. The minimum
+  is `oa_damper_min`, learned by default from the unit's mechanical-cooling hours at minimum OA.
+  Unoccupied operation is evaluated, as in G36; `occupancy_gate="trended"` limits the evaluation
+  to a trended occupancy point's occupied hours. Parameters: `heating_coil`, `min_oa_pct`
+  (enables FC6, the test for a damper stuck open at minimum OA), `oa_damper_min`,
+  `oa_damper_tol`, `occupancy_gate`, `mode_delay_min`, `alarm_delay_min`, and the
+  screening-grade `warn_pct` / `fault_pct`. Like
   every air-handler rule it declines a VAV box, heat pump, fan coil or plant
   (`camber.rules.applicability`), and an FC13 it reports is linked to a chilled-water plant short
   of setpoint in the same hours (`chw_supply_tracking`) as the likely upstream cause.
