@@ -136,7 +136,7 @@ How to calibrate:
 
 How to calibrate:
 
-- `max_starts_per_day`: Take the boiler's minimum on/off cycle time from its manual or burner control and divide the day by it with margin; or use the 95th-percentile daily starts of a known-good heating season. Coarse trends undercount starts, so the count is a floor. *Note:* Warn at this many firing starts per day, fault at twice it.
+- `max_starts_per_day`: Take the boiler's minimum on/off cycle time from its manual or burner control and divide the day by it with margin; or use the 95th-percentile daily starts of a known-good heating season. Coarse trends undercount starts, so the count is a floor. *Note:* Warn at this many firing starts per day, fault at twice it. Firing comes from the boiler run status (boiler_status); without one, from the gas input (gas_input_rate) above 5 % of its own 95th percentile (fixed in code), reported as run_source gas with a caveat.
 
 ## boiler_summer_lockout
 
@@ -146,7 +146,7 @@ How to calibrate:
 
 How to calibrate:
 
-- `summer_lockout_oat_f`: Use the heating lockout the building's sequence of operations specifies, or the outdoor temperature above which no zone has called for heat in a known-good year of trends. Set it per climate zone: higher in a hot-desert zone, lower in a cool one. *Note:* Severity is fixed in code: warn when the boiler runs at OAT above this for >= 5 % of its running hours, fault at >= 20 %. Without an OAT point the check is not evaluated.
+- `summer_lockout_oat_f`: Use the heating lockout the building's sequence of operations specifies, or the outdoor temperature above which no zone has called for heat in a known-good year of trends. Set it per climate zone: higher in a hot-desert zone, lower in a cool one. *Note:* Severity is fixed in code: warn when the boiler runs at OAT above this for >= 5 % of its running hours, fault at >= 20 %. Without an OAT point the check is not evaluated. Firing comes from the boiler run status (boiler_status); without one, from the gas input (gas_input_rate) above 5 % of its own 95th percentile (fixed in code), reported as run_source gas with a caveat.
 
 ## chiller_approach_fouling
 
@@ -706,7 +706,7 @@ Not thresholds: `rooms` (a structural mapping {room: [unit, ...]} that declares 
 
 How to calibrate:
 
-- `design_deltaT_min_f`: Read the design supply-minus-return delta-T from the boiler or coil schedules and set this a little below it. A low-temperature (condensing) loop is often designed for a smaller delta-T than a 180 °F loop. *Note:* Severity is fixed in code: warn when >= 20 % of boiler-running hours sit below this, fault at >= 50 %.
+- `design_deltaT_min_f`: Read the design supply-minus-return delta-T from the boiler or coil schedules and set this a little below it. A low-temperature (condensing) loop is often designed for a smaller delta-T than a 180 °F loop. *Note:* Severity is fixed in code: warn when >= 20 % of boiler-running hours sit below this, fault at >= 50 %. Firing comes from the boiler run status (boiler_status); without one, from the gas input (gas_input_rate) above 5 % of its own 95th percentile (fixed in code), reported as run_source gas with a caveat.
 
 ## hw_pump_dp_reset
 

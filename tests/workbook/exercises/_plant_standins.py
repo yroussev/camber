@@ -172,16 +172,20 @@ def boiler_plant(idx: pd.DatetimeIndex, fault: dict) -> pd.DataFrame:
     """One ``PLANT__<run>`` frame of the boiler plant (boiler 1, pump 1, the loop).
 
     Physics: the loop supply is held at a fixed 176 F all year (no reset); the heating load
-    follows the dry-bulb below 65 F, so the loop delta-T and boiler 1's gas input (heat out /
-    0.8, times ``gas_mult`` when the boiler's heat exchanger is fouled) fall to zero in warm
-    weather while pump 1 keeps running around ~29 % speed against a flat DP setpoint. A DP sensor
-    reading ``dp_bias`` high slows the pump (and low speeds it up) while the DP reading itself
-    stays at setpoint. There is no boiler run status: the plant's status point is an enable.
+    follows the dry-bulb below 65 F, so boiler 1's gas input (heat out / 0.8, times ``gas_mult``
+    when the boiler's heat exchanger is fouled) falls to zero in warm weather while pump 1 keeps
+    running around ~29 % speed against a flat DP setpoint. A DP sensor reading ``dp_bias`` high
+    slows the pump (and low speeds it up) while the DP reading itself stays at setpoint. There is
+    no boiler run status: the plant's status point is an enable.
+
+    0.98 (#86 item 4a, 098-plant-boiler): while the boiler fires the loop delta-T is 30-42 F (the
+    real plant's firing-hour median is 36 F), and 0 F when it does not; the gas-input firing
+    fallback now judges it, so it must not sit below the 20 F design floor on a healthy plant.
     """
     oat, _wb, _occ = _weather(idx)
     heat = np.clip((65.0 - oat) / 30.0, 0.0, 1.0)  # fraction of design heating load
     flow = 60.0 + 40.0 * heat
-    dt = 20.0 * heat
+    dt = np.where(heat > 0.02, 30.0 + 12.0 * heat, 0.0)  # 0.98 (#86 item 4a)
     dp_bias = float(fault.get("dp_bias", 0.0))
     speed = (0.29 + 0.08 * heat) * np.sqrt(1.0 - dp_bias)
     gas = 500.0 * flow * dt / 1000.0 * 0.293 / 0.8 * float(fault.get("gas_mult", 1.0))

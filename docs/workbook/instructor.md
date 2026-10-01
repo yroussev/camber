@@ -837,26 +837,36 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the
 
 ### `plant-boiler`: Boiler plant
 
-Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev, with the commands on the
-[exercise page](plant-boiler.md#setup).
+Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev (the firing rules: CAMBER
+0.98.0-dev), with the commands on the [exercise page](plant-boiler.md#setup).
 
 **Answer key**
 
-1. *Which rules run.* Only `hw_pump_dp_reset`: 17 findings, one per run, all `ok`.
-   `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` need a boiler run status
-   (`boiler_status`). The plant's status point is the boiler enable, on all year even while the
-   boiler burns no gas, so the catalog leaves it unmapped and the three rules do not run: no
-   finding at all, which is not the same as `ok`.
-2. *Reset and summer lockout.* CAMBER cannot judge either on this plant: the lockout rule needs
-   the run status, and there is no supply-temperature setpoint. The trend viewer shows the loop
-   supply flat all year (no reset), and boiler 1's gas input falling to nearly zero in warm weather: the
-   boiler stops firing, but the plant stays enabled and pump 1 keeps running.
+1. *Which rules run.* All four, on every run: 68 findings, 17 per rule, all `ok`.
+   `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` need to know when the
+   boiler fired. The plant's status point is the boiler enable, on all year even while the
+   boiler burns no gas, so the catalog leaves it unmapped. The three rules accept either a run
+   status or the boiler's gas input, and here they read firing from boiler 1's gas input (above
+   5 % of its own 95th percentile): each of their findings carries `run_source` `gas` and a caveat
+   that says so. The fault-free boiler fires in 37.8% of the hours, with 0.92 starts a day; the
+   hourly trend hides any firing shorter than an hour, so the start count is a floor. Before
+   CAMBER 0.98 the three rules printed nothing here, and the RCx report listed them under
+   "Checks not evaluated"; that table is now gone.
+2. *Reset and summer lockout.* The lockout is judged: the fault-free boiler spends
+   0% of its firing hours above the 65 °F lockout (0.35% on `PLANT__boiler_PI`; occupied hours), so `ok`. The reset is
+   judged too, from the supply temperature against the outdoor temperature over firing hours:
+   `hws_reset_present` is false on every run (a flat supply), which the rule reports in its
+   summary without raising the severity. There is no supply-temperature setpoint to compare
+   with. The trend viewer shows the same: the loop supply flat all year, and boiler 1's gas input
+   falling to nearly zero in warm weather while the plant stays enabled and pump 1 keeps running.
 3. *Pumping.* `hw_pump_dp_reset` is `ok`: a median speed of 29.0%, almost no hours near full
    speed, none near the 25 % minimum band, so neither riding the curve nor pinned at minimum.
    What the `ok` leaves out: the DP setpoint is flat (`dp_sp_reset_present` false), and the pump
    ran in 8,759 hours, every hour of the year, summer included.
-4. *Fouling.* Nothing fires on `PLANT__boiler_foul_065` (its pump finding is `ok`). Fouling shows
-   as more gas for the same heat, and no point-in-time rule here compares the two.
+4. *Fouling.* Nothing fires on `PLANT__boiler_foul_065` (every finding is `ok`). The loop
+   delta-T holds its 36.0 °F median; only 12.2% of firing hours fall below the 20 °F design floor,
+   under the 20 % warn line. Fouling shows as more gas for the same heat, and no point-in-time
+   rule here compares the two.
    `boiler_efficiency_drift` does, against a frozen baseline of the same boiler; this dataset has
    no before-and-after on one boiler to feed it through a config.
 5. *DP sensor bias.* A DP sensor reading 20 % high makes the pump slow to a median 26.4%, and
@@ -869,14 +879,16 @@ Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev, with the com
 - The heating guide asks the same three questions as the cooling guide (reset, delta-T, DP
   reset), plus a summer shutdown. Which could a technician answer from this plant's trends, and
   which need a point it does not have?
-- An enable is not a run status. Ask what trend you would add on a real plant (burner firing,
-  flame signal, gas valve) before trusting a lockout or short-cycle analysis.
+- An enable is not a run status. The gas input stands in for one here; ask what trend you would
+  add on a real plant (burner firing, flame signal, gas valve) to count short firings the hourly
+  gas trend cannot see.
 - A pump that runs all summer for a boiler that does not fire is a scheduling opportunity even
   though every rule says `ok`.
 
 **Common mistakes**
 
-- Reading the missing lockout and short-cycle findings as "no problem".
+- Reading a short-cycle `ok` from the gas input as proof of long firings: sub-hour cycles are
+  invisible on an hourly trend.
 - Mapping the enable point as the boiler status to make the rules run: every idle hour would
   then count as firing.
 - Reading the pump's `ok` as "nothing to re-tune": the flat DP setpoint and the all-year running

@@ -24,7 +24,8 @@ calibrate it, and reads run configs from YAML as well as JSON.
   runners load every role of a group, skip the equipment when a group has none, and include the
   present group roles in the sensor-health gate. `camber.model.entities.missing_inputs` is the
   one test shared by the runners and `runnable_rules`, and `Runnable.missing_any_of` names the
-  unmet groups. No built-in rule declares groups yet, so default outputs are unchanged.
+  unmet groups. The mechanism alone leaves default outputs unchanged; the first rules to
+  declare groups are the boiler firing rules (see Changed, 098-plant-boiler).
 - **Rules that did not run are listed (#88 item 3, #86 item 4b).** `Registry.run`, `run_periods`
   and `run_fleet` take an optional `skipped=` list and append a `RuleSkip` (rule, equipment,
   class, missing inputs, reason `missing_inputs` / `no_data` / `no_verdict`) for each equipment
@@ -210,6 +211,22 @@ calibrate it, and reads run configs from YAML as well as JSON.
   discussion, mistakes) are rewritten. `plant-sensor-vs-equipment`: answer 2 notes the
   high-reading runs' pump now warns at its floor.
 <!-- /098-plant-chw -->
+<!-- 098-plant-boiler -->
+- **The boiler firing rules run without a boiler run status (#86 item 4a).**
+  `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` now declare
+  `roles_any_of = ((boiler_status, gas_input_rate),)` instead of requiring `boiler_status`. With
+  no run status mapped they read firing from the gas input above 5 % of its own 95th percentile
+  (`camber.schedules.plant_run_mask`); a sample with no gas reading stays missing rather than
+  counting as a stop. Such findings carry the metric `run_source: "gas"` and a caveat that a
+  firing shorter than the resample interval is invisible. A frame that has a run status gives
+  byte-identical findings. On `lbnl-boiler` (hourly) the three rules now give 17 findings each,
+  all `ok`: the fault-free boiler fires 37.8 % of hours with 0.92 starts a day, 0 % of firing
+  hours above the summer lockout, and a 36 °F loop delta-T median (12.2 % of hours below the
+  20 °F floor on the worst fouling run). The three rows leave the RCx report's "Checks not
+  evaluated" table. The online monitor, the default evidence chart, the RCx confidence inputs
+  and the triage sensor-precedence roles now count a rule's `roles_any_of` inputs too. The
+  workbook exercise `plant-boiler` is updated.
+<!-- /098-plant-boiler -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

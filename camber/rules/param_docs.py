@@ -1417,6 +1417,14 @@ PARAM_DOCS["dcv_system_verification"] = {
 # Executed inside camber.rules.param_docs (P, ParamDoc, _SCHEDULE, PARAM_DOCS, EXEMPT, FIXED
 # are in scope).
 
+# 0.98 (#86 item 4a, 098-plant-boiler) begin: the gas-input firing fallback of the three rules
+_GAS_FIRING = (
+    " Firing comes from the boiler run status (boiler_status); without one, from the gas input "
+    "(gas_input_rate) above 5 % of its own 95th percentile (fixed in code), reported as "
+    "run_source gas with a caveat."
+)
+# 0.98 (#86 item 4a, 098-plant-boiler) end
+
 _PLANT_MAX_STARTS = (
     "CAMBER judgment: a generic cycling limit; the right value depends on the manufacturer's "
     "minimum cycle time (the code says to confirm it against the equipment's controls)"
@@ -1432,7 +1440,8 @@ PARAM_DOCS["boiler_summer_lockout"] = {
         "Set it per climate zone: higher in a hot-desert zone, lower in a cool one.",
         (50.0, 80.0),
         "Severity is fixed in code: warn when the boiler runs at OAT above this for >= 5 % of "
-        "its running hours, fault at >= 20 %. Without an OAT point the check is not evaluated.",
+        "its running hours, fault at >= 20 %. Without an OAT point the check is not evaluated."
+        + _GAS_FIRING,  # 0.98 (#86 item 4a, 098-plant-boiler)
     ),
 }
 
@@ -1444,7 +1453,8 @@ PARAM_DOCS["boiler_short_cycle"] = {
         "divide the day by it with margin; or use the 95th-percentile daily starts of a "
         "known-good heating season. Coarse trends undercount starts, so the count is a floor.",
         (2.0, 24.0),
-        "Warn at this many firing starts per day, fault at twice it.",
+        "Warn at this many firing starts per day, fault at twice it."
+        + _GAS_FIRING,  # 0.98 (#86 item 4a, 098-plant-boiler)
     ),
 }
 
@@ -1458,7 +1468,7 @@ PARAM_DOCS["hw_plant_deltat"] = {
         "smaller delta-T than a 180 °F loop.",
         (5.0, 40.0),
         "Severity is fixed in code: warn when >= 20 % of boiler-running hours sit below this, "
-        "fault at >= 50 %.",
+        "fault at >= 50 %." + _GAS_FIRING,  # 0.98 (#86 item 4a, 098-plant-boiler)
     ),
 }
 

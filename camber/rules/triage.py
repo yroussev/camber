@@ -554,10 +554,13 @@ def _rule_roles(rules_map: dict, rule_name: str) -> set:
     rule = rules_map.get(rule_name)
     if rule is None:
         return set()
+    from ..model.entities import roles_any_of  # 0.98 (#86 item 4a): the any-of inputs count too
+
     return {
         _slug(r)
         for r in tuple(getattr(rule, "roles_required", ()))
         + tuple(getattr(rule, "roles_optional", ()))
+        + tuple(r for g in roles_any_of(rule) for r in g)
     }
 
 
