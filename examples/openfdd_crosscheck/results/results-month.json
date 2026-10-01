@@ -1,0 +1,6611 @@
+{
+ "harness": "examples/openfdd_crosscheck",
+ "window": "month",
+ "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
+ "versions": {
+  "camber": "0.91.0 at commit b509bb1 (g36_afdd at its defaults)",
+  "role_map": "1",
+  "profiles": "1",
+  "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
+  "open-fdd pandas": "open-fdd pandas 4.4.9"
+ },
+ "datasets": [
+  {
+   "id": "lbnl-sdahu",
+   "licence": "CC-BY-4.0",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "content_hash": "b51c16ba3fc5314c961de4077e137221b96884017ede89a55e1be84adf1c7b4d",
+   "subset": "full",
+   "n_labelled": 14,
+   "n_fault_free": 1,
+   "fault_types": {
+    "damper": 4,
+    "sensor_bias": 4,
+    "valve_leak": 1,
+    "valve_stuck": 4
+   }
+  },
+  {
+   "id": "lbnl-ddahu",
+   "licence": "CC-BY-4.0",
+   "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
+   "content_hash": "0d74f6bb7f4c04b245bb96ec8c1daec58633f93f1cf6fc38155bd5ee62c80c08",
+   "subset": "default",
+   "n_labelled": 3,
+   "n_fault_free": 1,
+   "fault_types": {
+    "damper": 2
+   }
+  }
+ ],
+ "applied_mappings": {
+  "pandas": {
+   "AHU__coi_bias_2@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_2@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_4@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m2@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_bias_m4@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_leakage_010@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_010@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_025@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_050@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__coi_stuck_075@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_010@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_025@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_075@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__damper_stuck_100_short@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-01": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-02": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-03": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-04": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-05": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-06": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-07": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-08": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-09": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-10": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-11": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "AHU__fault_free@2018-12": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-01": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-02": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-03": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-04": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-05": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-06": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-07": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-08": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-09": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-10": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-11": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_0@2018-12": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-01": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-02": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-03": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-04": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-05": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-06": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-07": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-08": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-09": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-10": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-11": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__DMPRStuck_OA_100@2018-12": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-01": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-02": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-03": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-04": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-05": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-06": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-07": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-08": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-09": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-10": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-11": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ],
+   "DDAHU__fault_free@2018-12": [
+    "fan-cmd <- supply_fan_status (no supply_fan_speed is mapped)"
+   ]
+  }
+ },
+ "not_run": {
+  "open-fdd sql": "not run: the Docker daemon did not answer docker info within 20 s (Docker Desktop needs a restart)"
+ },
+ "scores": {
+  "common": {
+   "pooled": {
+    "camber g36_afdd [camber_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): DSPSP": 151,
+         "declined: missing input(s): DSP": 12,
+         "declined: missing input(s): DSP, DSPSP, FS": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 11,
+       "fp": 0,
+       "tn": 7,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2588
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.3543
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 177,
+         "evaluated on fewer than 24 h": 4
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 199
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 7,
+       "fn": 85,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0761,
+       "tpr_ci": [
+        0.0373,
+        0.1488
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 45,
+         "not applicable: its operating states never occurred": 50
+        }
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 91,
+       "fp": 7,
+       "tn": 5,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0405
+       ],
+       "fpr": 0.5833,
+       "fpr_ci": [
+        0.3195,
+        0.8067
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 41,
+         "not applicable: its operating states never occurred": 19,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 19,
+       "fn": 27,
+       "fp": 0,
+       "tn": 4,
+       "tpr": 0.413,
+       "tpr_ci": [
+        0.2829,
+        0.5566
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 78,
+         "evaluated on fewer than 24 h": 71
+        }
+       }
+      },
+      "FC11": {
+       "tp": 14,
+       "fn": 32,
+       "fp": 0,
+       "tn": 4,
+       "tpr": 0.3043,
+       "tpr_ci": [
+        0.1908,
+        0.4481
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 53,
+         "evaluated on fewer than 24 h": 60,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 6,
+       "fn": 153,
+       "fp": 0,
+       "tn": 15,
+       "tpr": 0.0377,
+       "tpr_ci": [
+        0.0174,
+        0.0799
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2039
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 8,
+         "not applicable: its operating states never occurred": 17
+        }
+       }
+      },
+      "FC13": {
+       "tp": 36,
+       "fn": 100,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2647,
+       "tpr_ci": [
+        0.1978,
+        0.3446
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 12,
+         "evaluated on fewer than 24 h": 3,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 39,
+       "fn": 52,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.4286,
+       "tpr_ci": [
+        0.3318,
+        0.5311
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 41,
+         "not applicable: its operating states never occurred": 19,
+         "declined: MAT/SAT span both coils on an AHU with a heating coil, so they cannot isolate the cooling coil; dedicated coil sensors are needed": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163,
+         "declined: needs heating-coil entering/leaving temperatures; MAT/SAT span the cooling coil as well": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 92,
+      "fn": 83,
+      "fp": 7,
+      "tn": 17,
+      "tpr": 0.5257,
+      "tpr_ci": [
+       0.452,
+       0.5983
+      ],
+      "fpr": 0.2917,
+      "fpr_ci": [
+       0.1491,
+       0.4917
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 26,
+       "fn": 41,
+       "tpr": 0.3881,
+       "tpr_ci": [
+        0.2805,
+        0.5078
+       ]
+      },
+      "sensor_bias": {
+       "tp": 18,
+       "fn": 30,
+       "tpr": 0.375,
+       "tpr_ci": [
+        0.2522,
+        0.5164
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12,
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 199
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163,
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 51,
+       "fn": 124,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.2914,
+       "tpr_ci": [
+        0.2292,
+        0.3627
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 8,
+       "fn": 143,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.053,
+       "tpr_ci": [
+        0.0271,
+        0.1011
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 25,
+       "fn": 150,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.1429,
+       "tpr_ci": [
+        0.0987,
+        0.2024
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 14,
+       "fn": 137,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0927,
+       "tpr_ci": [
+        0.056,
+        0.1496
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 6,
+       "fn": 145,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0397,
+       "tpr_ci": [
+        0.0183,
+        0.084
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 12,
+       "fn": 139,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0795,
+       "tpr_ci": [
+        0.046,
+        0.1338
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 199
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 87,
+      "fn": 88,
+      "fp": 5,
+      "tn": 19,
+      "tpr": 0.4971,
+      "tpr_ci": [
+       0.4239,
+       0.5705
+      ],
+      "fpr": 0.2083,
+      "fpr_ci": [
+       0.0924,
+       0.4047
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 40,
+       "fn": 27,
+       "tpr": 0.597,
+       "tpr_ci": [
+        0.4774,
+        0.7061
+       ]
+      },
+      "sensor_bias": {
+       "tp": 21,
+       "fn": 27,
+       "tpr": 0.4375,
+       "tpr_ci": [
+        0.307,
+        0.5773
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 26,
+       "fn": 22,
+       "tpr": 0.5417,
+       "tpr_ci": [
+        0.4029,
+        0.6742
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12,
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 199
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163,
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 84,
+       "fn": 91,
+       "fp": 8,
+       "tn": 16,
+       "tpr": 0.48,
+       "tpr_ci": [
+        0.4072,
+        0.5537
+       ],
+       "fpr": 0.3333,
+       "fpr_ci": [
+        0.1797,
+        0.5329
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 21,
+       "fn": 130,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1391,
+       "tpr_ci": [
+        0.0928,
+        0.2033
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 33,
+       "fn": 142,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.1886,
+       "tpr_ci": [
+        0.1375,
+        0.253
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 19,
+       "fn": 132,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1258,
+       "tpr_ci": [
+        0.0821,
+        0.1882
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 13,
+       "fn": 138,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0861,
+       "tpr_ci": [
+        0.051,
+        0.1417
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 41,
+       "fn": 110,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2715,
+       "tpr_ci": [
+        0.2069,
+        0.3475
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 199
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 125,
+      "fn": 50,
+      "fp": 9,
+      "tn": 15,
+      "tpr": 0.7143,
+      "tpr_ci": [
+       0.6433,
+       0.7761
+      ],
+      "fpr": 0.375,
+      "fpr_ci": [
+       0.2116,
+       0.5729
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 51,
+       "fn": 16,
+       "tpr": 0.7612,
+       "tpr_ci": [
+        0.6467,
+        0.8473
+       ]
+      },
+      "sensor_bias": {
+       "tp": 39,
+       "fn": 9,
+       "tpr": 0.8125,
+       "tpr_ci": [
+        0.6806,
+        0.8981
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 35,
+       "fn": 13,
+       "tpr": 0.7292,
+       "tpr_ci": [
+        0.59,
+        0.8343
+       ]
+      }
+     }
+    }
+   },
+   "lbnl-sdahu": {
+    "camber g36_afdd [camber_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): DSPSP": 151,
+         "declined: missing input(s): DSP": 12
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 163
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163
+        }
+       }
+      },
+      "FC8": {
+       "tp": 6,
+       "fn": 85,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0659,
+       "tpr_ci": [
+        0.0306,
+        0.1365
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 41,
+         "not applicable: its operating states never occurred": 19
+        }
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 91,
+       "fp": 7,
+       "tn": 5,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0405
+       ],
+       "fpr": 0.5833,
+       "fpr_ci": [
+        0.3195,
+        0.8067
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 41,
+         "not applicable: its operating states never occurred": 19
+        }
+       }
+      },
+      "FC10": {
+       "tp": 19,
+       "fn": 27,
+       "fp": 0,
+       "tn": 4,
+       "tpr": 0.413,
+       "tpr_ci": [
+        0.2829,
+        0.5566
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 53,
+         "evaluated on fewer than 24 h": 60
+        }
+       }
+      },
+      "FC11": {
+       "tp": 14,
+       "fn": 32,
+       "fp": 0,
+       "tn": 4,
+       "tpr": 0.3043,
+       "tpr_ci": [
+        0.1908,
+        0.4481
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 53,
+         "evaluated on fewer than 24 h": 60
+        }
+       }
+      },
+      "FC12": {
+       "tp": 5,
+       "fn": 146,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0331,
+       "tpr_ci": [
+        0.0142,
+        0.0752
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 36,
+       "fn": 100,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2647,
+       "tpr_ci": [
+        0.1978,
+        0.3446
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 12,
+         "evaluated on fewer than 24 h": 3
+        }
+       }
+      },
+      "FC14": {
+       "tp": 39,
+       "fn": 52,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.4286,
+       "tpr_ci": [
+        0.3318,
+        0.5311
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 41,
+         "not applicable: its operating states never occurred": 19
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 91,
+      "fn": 60,
+      "fp": 7,
+      "tn": 5,
+      "tpr": 0.6026,
+      "tpr_ci": [
+       0.523,
+       0.6772
+      ],
+      "fpr": 0.5833,
+      "fpr_ci": [
+       0.3195,
+       0.8067
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 25,
+       "fn": 18,
+       "tpr": 0.5814,
+       "tpr_ci": [
+        0.4333,
+        0.7162
+       ]
+      },
+      "sensor_bias": {
+       "tp": 18,
+       "fn": 30,
+       "tpr": 0.375,
+       "tpr_ci": [
+        0.2522,
+        0.5164
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 163
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC8": {
+       "tp": 47,
+       "fn": 104,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.3113,
+       "tpr_ci": [
+        0.2429,
+        0.389
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 8,
+       "fn": 143,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.053,
+       "tpr_ci": [
+        0.0271,
+        0.1011
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC10": {
+       "tp": 20,
+       "fn": 131,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1325,
+       "tpr_ci": [
+        0.0874,
+        0.1957
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 14,
+       "fn": 137,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0927,
+       "tpr_ci": [
+        0.056,
+        0.1496
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 6,
+       "fn": 145,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0397,
+       "tpr_ci": [
+        0.0183,
+        0.084
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC14": {
+       "tp": 12,
+       "fn": 139,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0795,
+       "tpr_ci": [
+        0.046,
+        0.1338
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 163
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 73,
+      "fn": 78,
+      "fp": 0,
+      "tn": 12,
+      "tpr": 0.4834,
+      "tpr_ci": [
+       0.4051,
+       0.5626
+      ],
+      "fpr": 0.0,
+      "fpr_ci": [
+       0.0,
+       0.2425
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 26,
+       "fn": 17,
+       "tpr": 0.6047,
+       "tpr_ci": [
+        0.4558,
+        0.7363
+       ]
+      },
+      "sensor_bias": {
+       "tp": 21,
+       "fn": 27,
+       "tpr": 0.4375,
+       "tpr_ci": [
+        0.307,
+        0.5773
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 26,
+       "fn": 22,
+       "tpr": 0.5417,
+       "tpr_ci": [
+        0.4029,
+        0.6742
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 163
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC8": {
+       "tp": 72,
+       "fn": 79,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.4768,
+       "tpr_ci": [
+        0.3987,
+        0.5561
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 21,
+       "fn": 130,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1391,
+       "tpr_ci": [
+        0.0928,
+        0.2033
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC10": {
+       "tp": 28,
+       "fn": 123,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1854,
+       "tpr_ci": [
+        0.1315,
+        0.2549
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 19,
+       "fn": 132,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1258,
+       "tpr_ci": [
+        0.0821,
+        0.1882
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 13,
+       "fn": 138,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0861,
+       "tpr_ci": [
+        0.051,
+        0.1417
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC14": {
+       "tp": 41,
+       "fn": 110,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2715,
+       "tpr_ci": [
+        0.2069,
+        0.3475
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 163
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 107,
+      "fn": 44,
+      "fp": 0,
+      "tn": 12,
+      "tpr": 0.7086,
+      "tpr_ci": [
+       0.6317,
+       0.7752
+      ],
+      "fpr": 0.0,
+      "fpr_ci": [
+       0.0,
+       0.2425
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 33,
+       "fn": 10,
+       "tpr": 0.7674,
+       "tpr_ci": [
+        0.6226,
+        0.8685
+       ]
+      },
+      "sensor_bias": {
+       "tp": 39,
+       "fn": 9,
+       "tpr": 0.8125,
+       "tpr_ci": [
+        0.6806,
+        0.8981
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 35,
+       "fn": 13,
+       "tpr": 0.7292,
+       "tpr_ci": [
+        0.59,
+        0.8343
+       ]
+      }
+     }
+    }
+   },
+   "lbnl-ddahu": {
+    "camber g36_afdd [camber_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): DSP, DSPSP, FS": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 11,
+       "fp": 0,
+       "tn": 7,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2588
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.3543
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 14,
+         "evaluated on fewer than 24 h": 4
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 36
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 1,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 4,
+         "not applicable: its operating states never occurred": 31
+        }
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 25,
+         "evaluated on fewer than 24 h": 11
+        }
+       }
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 1,
+       "fn": 7,
+       "fp": 0,
+       "tn": 3,
+       "tpr": 0.125,
+       "tpr_ci": [
+        0.0224,
+        0.4709
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.5615
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "evaluated on fewer than 24 h": 8,
+         "not applicable: its operating states never occurred": 17
+        }
+       }
+      },
+      "FC13": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: MAT/SAT span both coils on an AHU with a heating coil, so they cannot isolate the cooling coil; dedicated coil sensors are needed": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs heating-coil entering/leaving temperatures; MAT/SAT span the cooling coil as well": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 1,
+      "fn": 23,
+      "fp": 0,
+      "tn": 12,
+      "tpr": 0.0417,
+      "tpr_ci": [
+       0.0074,
+       0.2024
+      ],
+      "fpr": 0.0,
+      "fpr_ci": [
+       0.0,
+       0.2425
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 1,
+       "fn": 23,
+       "tpr": 0.0417,
+       "tpr_ci": [
+        0.0074,
+        0.2024
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 36
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 4,
+       "fn": 20,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1667,
+       "tpr_ci": [
+        0.0668,
+        0.3585
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 5,
+       "fn": 19,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 14,
+      "fn": 10,
+      "fp": 5,
+      "tn": 7,
+      "tpr": 0.5833,
+      "tpr_ci": [
+       0.3883,
+       0.7553
+      ],
+      "fpr": 0.4167,
+      "fpr_ci": [
+       0.1933,
+       0.6805
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 14,
+       "fn": 10,
+       "tpr": 0.5833,
+       "tpr_ci": [
+        0.3883,
+        0.7553
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 36
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 12,
+       "fn": 12,
+       "fp": 8,
+       "tn": 4,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.3143,
+        0.6857
+       ],
+       "fpr": 0.6667,
+       "fpr_ci": [
+        0.3906,
+        0.8619
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 5,
+       "fn": 19,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 18,
+      "fn": 6,
+      "fp": 9,
+      "tn": 3,
+      "tpr": 0.75,
+      "tpr_ci": [
+       0.551,
+       0.88
+      ],
+      "fpr": 0.75,
+      "fpr_ci": [
+       0.4677,
+       0.9111
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 18,
+       "fn": 6,
+       "tpr": 0.75,
+       "tpr_ci": [
+        0.551,
+        0.88
+       ]
+      }
+     }
+    }
+   }
+  },
+  "native": {
+   "pooled": {
+    "camber g36_afdd [camber_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): DSPSP": 151,
+         "declined: missing input(s): DSP": 12,
+         "declined: missing input(s): DSP, DSPSP, FS": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 13,
+       "fp": 0,
+       "tn": 9,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2281
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2992
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 177
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 199
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 7,
+       "fn": 129,
+       "fp": 0,
+       "tn": 13,
+       "tpr": 0.0515,
+       "tpr_ci": [
+        0.0252,
+        0.1024
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2281
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 50
+        }
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 132,
+       "fp": 7,
+       "tn": 5,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0283
+       ],
+       "fpr": 0.5833,
+       "fpr_ci": [
+        0.3195,
+        0.8067
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 19,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 19,
+       "fn": 90,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1743,
+       "tpr_ci": [
+        0.1145,
+        0.2563
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 78
+        }
+       }
+      },
+      "FC11": {
+       "tp": 14,
+       "fn": 86,
+       "fp": 0,
+       "tn": 10,
+       "tpr": 0.14,
+       "tpr_ci": [
+        0.0853,
+        0.2214
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2775
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 53,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 6,
+       "fn": 160,
+       "fp": 0,
+       "tn": 16,
+       "tpr": 0.0361,
+       "tpr_ci": [
+        0.0167,
+        0.0766
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.1936
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 17
+        }
+       }
+      },
+      "FC13": {
+       "tp": 36,
+       "fn": 103,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.259,
+       "tpr_ci": [
+        0.1933,
+        0.3376
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 12,
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 39,
+       "fn": 93,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2955,
+       "tpr_ci": [
+        0.2243,
+        0.3782
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 19,
+         "declined: MAT/SAT span both coils on an AHU with a heating coil, so they cannot isolate the cooling coil; dedicated coil sensors are needed": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163,
+         "declined: needs heating-coil entering/leaving temperatures; MAT/SAT span the cooling coil as well": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 92,
+      "fn": 83,
+      "fp": 7,
+      "tn": 17,
+      "tpr": 0.5257,
+      "tpr_ci": [
+       0.452,
+       0.5983
+      ],
+      "fpr": 0.2917,
+      "fpr_ci": [
+       0.1491,
+       0.4917
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 26,
+       "fn": 41,
+       "tpr": 0.3881,
+       "tpr_ci": [
+        0.2805,
+        0.5078
+       ]
+      },
+      "sensor_bias": {
+       "tp": 18,
+       "fn": 30,
+       "tpr": 0.375,
+       "tpr_ci": [
+        0.2522,
+        0.5164
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12,
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 199
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163,
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 143,
+       "fn": 32,
+       "fp": 16,
+       "tn": 8,
+       "tpr": 0.8171,
+       "tpr_ci": [
+        0.7533,
+        0.8674
+       ],
+       "fpr": 0.6667,
+       "fpr_ci": [
+        0.4671,
+        0.8203
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 10,
+       "fn": 141,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0662,
+       "tpr_ci": [
+        0.0364,
+        0.1176
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 46,
+       "fn": 129,
+       "fp": 3,
+       "tn": 21,
+       "tpr": 0.2629,
+       "tpr_ci": [
+        0.2032,
+        0.3327
+       ],
+       "fpr": 0.125,
+       "fpr_ci": [
+        0.0434,
+        0.31
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 18,
+       "fn": 133,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1192,
+       "tpr_ci": [
+        0.0767,
+        0.1806
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 146,
+       "fn": 5,
+       "fp": 12,
+       "tn": 0,
+       "tpr": 0.9669,
+       "tpr_ci": [
+        0.9248,
+        0.9858
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.7575,
+        1.0
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 57,
+       "fn": 94,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.3775,
+       "tpr_ci": [
+        0.3041,
+        0.4569
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 199
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 171,
+      "fn": 4,
+      "fp": 21,
+      "tn": 3,
+      "tpr": 0.9771,
+      "tpr_ci": [
+       0.9427,
+       0.9911
+      ],
+      "fpr": 0.875,
+      "fpr_ci": [
+       0.69,
+       0.9566
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 63,
+       "fn": 4,
+       "tpr": 0.9403,
+       "tpr_ci": [
+        0.8563,
+        0.9765
+       ]
+      },
+      "sensor_bias": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      },
+      "valve_leak": {
+       "tp": 12,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.7575,
+        1.0
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12,
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 19,
+       "fn": 156,
+       "fp": 1,
+       "tn": 23,
+       "tpr": 0.1086,
+       "tpr_ci": [
+        0.0706,
+        0.1633
+       ],
+       "fpr": 0.0417,
+       "fpr_ci": [
+        0.0074,
+        0.2024
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 3,
+       "fn": 172,
+       "fp": 3,
+       "tn": 21,
+       "tpr": 0.0171,
+       "tpr_ci": [
+        0.0058,
+        0.0492
+       ],
+       "fpr": 0.125,
+       "fpr_ci": [
+        0.0434,
+        0.31
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 175,
+       "fp": 0,
+       "tn": 24,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0215
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.138
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 11,
+       "fn": 13,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4583,
+       "tpr_ci": [
+        0.2789,
+        0.6493
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 199
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163,
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 164,
+       "fn": 11,
+       "fp": 21,
+       "tn": 3,
+       "tpr": 0.9371,
+       "tpr_ci": [
+        0.891,
+        0.9645
+       ],
+       "fpr": 0.875,
+       "fpr_ci": [
+        0.69,
+        0.9566
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 109,
+       "fn": 42,
+       "fp": 8,
+       "tn": 4,
+       "tpr": 0.7219,
+       "tpr_ci": [
+        0.6456,
+        0.7871
+       ],
+       "fpr": 0.6667,
+       "fpr_ci": [
+        0.3906,
+        0.8619
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 85,
+       "fn": 90,
+       "fp": 7,
+       "tn": 17,
+       "tpr": 0.4857,
+       "tpr_ci": [
+        0.4128,
+        0.5593
+       ],
+       "fpr": 0.2917,
+       "fpr_ci": [
+        0.1491,
+        0.4917
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 32,
+       "fn": 119,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2119,
+       "tpr_ci": [
+        0.1543,
+        0.2838
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 22,
+       "fn": 153,
+       "fp": 6,
+       "tn": 18,
+       "tpr": 0.1257,
+       "tpr_ci": [
+        0.0845,
+        0.183
+       ],
+       "fpr": 0.25,
+       "fpr_ci": [
+        0.12,
+        0.449
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 148,
+       "fn": 3,
+       "fp": 12,
+       "tn": 0,
+       "tpr": 0.9801,
+       "tpr_ci": [
+        0.9432,
+        0.9932
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.7575,
+        1.0
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 119,
+       "fn": 32,
+       "fp": 11,
+       "tn": 1,
+       "tpr": 0.7881,
+       "tpr_ci": [
+        0.7162,
+        0.8457
+       ],
+       "fpr": 0.9167,
+       "fpr_ci": [
+        0.6461,
+        0.9851
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 199
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 172,
+      "fn": 3,
+      "fp": 22,
+      "tn": 2,
+      "tpr": 0.9829,
+      "tpr_ci": [
+       0.9508,
+       0.9942
+      ],
+      "fpr": 0.9167,
+      "fpr_ci": [
+       0.7415,
+       0.9768
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 64,
+       "fn": 3,
+       "tpr": 0.9552,
+       "tpr_ci": [
+        0.8764,
+        0.9847
+       ]
+      },
+      "sensor_bias": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      },
+      "valve_leak": {
+       "tp": 12,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.7575,
+        1.0
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    }
+   },
+   "lbnl-sdahu": {
+    "camber g36_afdd [camber_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): DSPSP": 151,
+         "declined: missing input(s): DSP": 12
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 163
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163
+        }
+       }
+      },
+      "FC8": {
+       "tp": 6,
+       "fn": 126,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0455,
+       "tpr_ci": [
+        0.021,
+        0.0956
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 19
+        }
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 132,
+       "fp": 7,
+       "tn": 5,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0283
+       ],
+       "fpr": 0.5833,
+       "fpr_ci": [
+        0.3195,
+        0.8067
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 19
+        }
+       }
+      },
+      "FC10": {
+       "tp": 19,
+       "fn": 81,
+       "fp": 0,
+       "tn": 10,
+       "tpr": 0.19,
+       "tpr_ci": [
+        0.1251,
+        0.2778
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2775
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 53
+        }
+       }
+      },
+      "FC11": {
+       "tp": 14,
+       "fn": 86,
+       "fp": 0,
+       "tn": 10,
+       "tpr": 0.14,
+       "tpr_ci": [
+        0.0853,
+        0.2214
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2775
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 53
+        }
+       }
+      },
+      "FC12": {
+       "tp": 5,
+       "fn": 146,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0331,
+       "tpr_ci": [
+        0.0142,
+        0.0752
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 36,
+       "fn": 103,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.259,
+       "tpr_ci": [
+        0.1933,
+        0.3376
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 12
+        }
+       }
+      },
+      "FC14": {
+       "tp": 39,
+       "fn": 93,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2955,
+       "tpr_ci": [
+        0.2243,
+        0.3782
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 19
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "omitted: no heating coil": 163
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 91,
+      "fn": 60,
+      "fp": 7,
+      "tn": 5,
+      "tpr": 0.6026,
+      "tpr_ci": [
+       0.523,
+       0.6772
+      ],
+      "fpr": 0.5833,
+      "fpr_ci": [
+       0.3195,
+       0.8067
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 25,
+       "fn": 18,
+       "tpr": 0.5814,
+       "tpr_ci": [
+        0.4333,
+        0.7162
+       ]
+      },
+      "sensor_bias": {
+       "tp": 18,
+       "fn": 30,
+       "tpr": 0.375,
+       "tpr_ci": [
+        0.2522,
+        0.5164
+       ]
+      },
+      "valve_leak": {
+       "tp": 0,
+       "fn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2425
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 163
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC8": {
+       "tp": 125,
+       "fn": 26,
+       "fp": 7,
+       "tn": 5,
+       "tpr": 0.8278,
+       "tpr_ci": [
+        0.7597,
+        0.8797
+       ],
+       "fpr": 0.5833,
+       "fpr_ci": [
+        0.3195,
+        0.8067
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 10,
+       "fn": 141,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0662,
+       "tpr_ci": [
+        0.0364,
+        0.1176
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC10": {
+       "tp": 39,
+       "fn": 112,
+       "fp": 3,
+       "tn": 9,
+       "tpr": 0.2583,
+       "tpr_ci": [
+        0.1951,
+        0.3335
+       ],
+       "fpr": 0.25,
+       "fpr_ci": [
+        0.0889,
+        0.5323
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 18,
+       "fn": 133,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.1192,
+       "tpr_ci": [
+        0.0767,
+        0.1806
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 146,
+       "fn": 5,
+       "fp": 12,
+       "tn": 0,
+       "tpr": 0.9669,
+       "tpr_ci": [
+        0.9248,
+        0.9858
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.7575,
+        1.0
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC14": {
+       "tp": 57,
+       "fn": 94,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.3775,
+       "tpr_ci": [
+        0.3041,
+        0.4569
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 163
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 151,
+      "fn": 0,
+      "fp": 12,
+      "tn": 0,
+      "tpr": 1.0,
+      "tpr_ci": [
+       0.9752,
+       1.0
+      ],
+      "fpr": 1.0,
+      "fpr_ci": [
+       0.7575,
+       1.0
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 43,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.918,
+        1.0
+       ]
+      },
+      "sensor_bias": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      },
+      "valve_leak": {
+       "tp": 12,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.7575,
+        1.0
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure-sp": 151,
+         "missing roles: duct-static-pressure": 12
+        }
+       }
+      },
+      "FC2": {
+       "tp": 19,
+       "fn": 132,
+       "fp": 1,
+       "tn": 11,
+       "tpr": 0.1258,
+       "tpr_ci": [
+        0.0821,
+        0.1882
+       ],
+       "fpr": 0.0833,
+       "fpr_ci": [
+        0.0149,
+        0.3539
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 3,
+       "fn": 148,
+       "fp": 3,
+       "tn": 9,
+       "tpr": 0.0199,
+       "tpr_ci": [
+        0.0068,
+        0.0568
+       ],
+       "fpr": 0.25,
+       "fpr_ci": [
+        0.0889,
+        0.5323
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 151,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.0248
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 163
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-valve": 163
+        }
+       }
+      },
+      "FC8": {
+       "tp": 145,
+       "fn": 6,
+       "fp": 11,
+       "tn": 1,
+       "tpr": 0.9603,
+       "tpr_ci": [
+        0.916,
+        0.9817
+       ],
+       "fpr": 0.9167,
+       "fpr_ci": [
+        0.6461,
+        0.9851
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 109,
+       "fn": 42,
+       "fp": 8,
+       "tn": 4,
+       "tpr": 0.7219,
+       "tpr_ci": [
+        0.6456,
+        0.7871
+       ],
+       "fpr": 0.6667,
+       "fpr_ci": [
+        0.3906,
+        0.8619
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC10": {
+       "tp": 76,
+       "fn": 75,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.5033,
+       "tpr_ci": [
+        0.4245,
+        0.582
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 32,
+       "fn": 119,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2119,
+       "tpr_ci": [
+        0.1543,
+        0.2838
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC12": {
+       "tp": 14,
+       "fn": 137,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0927,
+       "tpr_ci": [
+        0.056,
+        0.1496
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 148,
+       "fn": 3,
+       "fp": 12,
+       "tn": 0,
+       "tpr": 0.9801,
+       "tpr_ci": [
+        0.9432,
+        0.9932
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.7575,
+        1.0
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC14": {
+       "tp": 119,
+       "fn": 32,
+       "fp": 11,
+       "tn": 1,
+       "tpr": 0.7881,
+       "tpr_ci": [
+        0.7162,
+        0.8457
+       ],
+       "fpr": 0.9167,
+       "fpr_ci": [
+        0.6461,
+        0.9851
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 163
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 151,
+      "fn": 0,
+      "fp": 12,
+      "tn": 0,
+      "tpr": 1.0,
+      "tpr_ci": [
+       0.9752,
+       1.0
+      ],
+      "fpr": 1.0,
+      "fpr_ci": [
+       0.7575,
+       1.0
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 43,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.918,
+        1.0
+       ]
+      },
+      "sensor_bias": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      },
+      "valve_leak": {
+       "tp": 12,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.7575,
+        1.0
+       ]
+      },
+      "valve_stuck": {
+       "tp": 48,
+       "fn": 0,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.9259,
+        1.0
+       ]
+      }
+     }
+    }
+   },
+   "lbnl-ddahu": {
+    "camber g36_afdd [camber_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): DSP, DSPSP, FS": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 13,
+       "fp": 0,
+       "tn": 9,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2281
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2992
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 14
+        }
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 36
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 1,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 31
+        }
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 0,
+       "fn": 9,
+       "fp": 0,
+       "tn": 2,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2992
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 25
+        }
+       }
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 1,
+       "fn": 14,
+       "fp": 0,
+       "tn": 4,
+       "tpr": 0.0667,
+       "tpr_ci": [
+        0.0119,
+        0.2982
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {
+         "not applicable: its operating states never occurred": 17
+        }
+       }
+      },
+      "FC13": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: missing input(s): SATSP": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: MAT/SAT span both coils on an AHU with a heating coil, so they cannot isolate the cooling coil; dedicated coil sensors are needed": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "declined: needs heating-coil entering/leaving temperatures; MAT/SAT span the cooling coil as well": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 1,
+      "fn": 23,
+      "fp": 0,
+      "tn": 12,
+      "tpr": 0.0417,
+      "tpr_ci": [
+       0.0074,
+       0.2024
+      ],
+      "fpr": 0.0,
+      "fpr_ci": [
+       0.0,
+       0.2425
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 1,
+       "fn": 23,
+       "tpr": 0.0417,
+       "tpr_ci": [
+        0.0074,
+        0.2024
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 36
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 18,
+       "fn": 6,
+       "fp": 9,
+       "tn": 3,
+       "tpr": 0.75,
+       "tpr_ci": [
+        0.551,
+        0.88
+       ],
+       "fpr": 0.75,
+       "fpr_ci": [
+        0.4677,
+        0.9111
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 7,
+       "fn": 17,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.2917,
+       "tpr_ci": [
+        0.1491,
+        0.4917
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 20,
+      "fn": 4,
+      "fp": 9,
+      "tn": 3,
+      "tpr": 0.8333,
+      "tpr_ci": [
+       0.6415,
+       0.9332
+      ],
+      "fpr": 0.75,
+      "fpr_ci": [
+       0.4677,
+       0.9111
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 20,
+       "fn": 4,
+       "tpr": 0.8333,
+       "tpr_ci": [
+        0.6415,
+        0.9332
+       ]
+      }
+     }
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: duct-static-pressure, duct-static-pressure-sp": 36
+        }
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 24,
+       "fp": 0,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC5": {
+       "tp": 11,
+       "fn": 13,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4583,
+       "tpr_ci": [
+        0.2789,
+        0.6493
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: vav-total-airflow": 36
+        }
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC8": {
+       "tp": 19,
+       "fn": 5,
+       "fp": 10,
+       "tn": 2,
+       "tpr": 0.7917,
+       "tpr_ci": [
+        0.5953,
+        0.9076
+       ],
+       "fpr": 0.8333,
+       "fpr_ci": [
+        0.552,
+        0.953
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC9": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC10": {
+       "tp": 9,
+       "fn": 15,
+       "fp": 2,
+       "tn": 10,
+       "tpr": 0.375,
+       "tpr_ci": [
+        0.2116,
+        0.5729
+       ],
+       "fpr": 0.1667,
+       "fpr_ci": [
+        0.047,
+        0.448
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC12": {
+       "tp": 8,
+       "fn": 16,
+       "fp": 6,
+       "tn": 6,
+       "tpr": 0.3333,
+       "tpr_ci": [
+        0.1797,
+        0.5329
+       ],
+       "fpr": 0.5,
+       "fpr_ci": [
+        0.2538,
+        0.7462
+       ],
+       "not_evaluated": {
+        "counts_by_reason": {}
+       }
+      },
+      "FC13": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: discharge-air-temp-sp": 36
+        }
+       }
+      },
+      "FC14": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: cooling-coil-entering-temp, cooling-coil-leaving-temp": 36
+        }
+       }
+      },
+      "FC15": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "counts_by_reason": {
+         "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp": 36
+        }
+       }
+      }
+     },
+     "overall": {
+      "tp": 21,
+      "fn": 3,
+      "fp": 10,
+      "tn": 2,
+      "tpr": 0.875,
+      "tpr_ci": [
+       0.69,
+       0.9566
+      ],
+      "fpr": 0.8333,
+      "fpr_ci": [
+       0.552,
+       0.953
+      ],
+      "not_evaluated": 0
+     },
+     "by_fault_type": {
+      "damper": {
+       "tp": 21,
+       "fn": 3,
+       "tpr": 0.875,
+       "tpr_ci": [
+        0.69,
+        0.9566
+       ]
+      }
+     }
+    }
+   }
+  }
+ },
+ "verdicts": "omitted (--omit-verdicts)",
+ "caveats": [
+  "Small samples: each labelled run is one case, so the Wilson intervals are wide; read differences between engines through the intervals, not the point rates.",
+  "Simulated data (LBNL FDD datasets, CC-BY-4.0, fetched from the publisher; never redistributed). Fault labels are per run, not per hour: a run counts as detected when the FC fires anywhere in it, including in seasons where the fault has no symptom.",
+  "Tolerance profiles change tolerances only; ModeDelay, confirm/AlarmDelay windows and the valve/damper thresholds that select operating states stay at each engine's defaults.",
+  "Month windows: each (run, month) is scored as a case. Months of one run are not independent, so the intervals are narrower than the evidence supports.",
+  "lbnl-ddahu is a dual-duct AHU: G36 \u00a75.16.14 is written for single-duct units. The mapping reads the cold-deck discharge as SAT and the hot-deck valve as the heating valve, so 'SAT below MAT while heating' is the design there, not a fault."
+ ]
+}

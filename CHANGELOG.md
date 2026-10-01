@@ -4,6 +4,34 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.99.0] — Unreleased
+
+<!-- 0.99 is stacked on 0.98 (unreleased, below). Each branch adds its bullets only inside its
+own marked block. -->
+
+### Added
+<!-- 099-openfdd-crosscheck -->
+- **G36 cross-check against current open-fdd (#22 item 1).** `examples/openfdd_crosscheck`
+  runs CAMBER's `g36_afdd` and open-fdd's two engines on the same labelled frames, pinned to
+  open-fdd commit `32a6d44` (PyPI 4.4.9). It works through files and processes only: the pandas
+  engine runs in its own venv as a subprocess, and the SQL engine runs as `fdd_cli` in a container
+  with no network and read-only mounts.
+
+  The harness ships:
+  - a versioned role mapping (`role_map.json`);
+  - tolerance profiles (`profiles.json`): open-fdd's defaults, and the G36 Table 5.16.14.7
+    tolerances CAMBER uses;
+  - one normaliser per engine, recording each verdict's denominator;
+  - per-engine, per-FC scoring with Wilson intervals, where "not evaluated" is kept apart from
+    "not detected";
+  - synthetic probes that isolate single engine behaviours.
+
+  Results on `lbnl-sdahu` (full subset) and `lbnl-ddahu` replace the "not yet re-compared"
+  section of `docs/ECOSYSTEM.md`, which now also says where the 0.1.5 comparison no longer
+  applies. The SQL engine is not yet run; it needs Docker. Offline tests run without Docker or
+  open-fdd: `tests/test_openfdd_crosscheck.py`.
+<!-- /099-openfdd-crosscheck -->
+
 ## [0.98.0] — Unreleased
 
 <!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is

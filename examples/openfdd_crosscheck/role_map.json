@@ -1,0 +1,66 @@
+{
+  "_comment": "CAMBER role <-> open-fdd point mapping for the G36 cross-check (#22 item 1). Versioned: bump `version` whenever a row, a scale or a rule id changes, and say why in `changes`. `pandas` is the open-fdd pandas cookbook column name (open_fdd.rules), `sql` the point_role written to columns.csv for the SQL engine (fdd_cli). Percent signals are handed to open-fdd as 0-1 fractions: open-fdd normalises each VALUE (a value above 1 is divided by 100), so a percent signal that dips to 0.5 % would otherwise be read as 50 %. Roles not listed are not passed. AIRFLOW is deliberately unmapped: open-fdd's FC6 compares the OA fraction with a design minimum OA flow (min_cfm_design) that the LBNL inventory does not give, and CAMBER's FC6 is likewise declined without a design minimum OA, so FC6 stays not evaluated in every engine.",
+  "version": "1",
+  "checked_against": {
+    "open_fdd_pypi": "4.4.9",
+    "open_fdd_commit": "32a6d4479abed81f9d6d0ff426260cc8ad8e30e2"
+  },
+  "changes": {
+    "1": "first version"
+  },
+  "roles": [
+    {"camber": "supply_air_temp", "pandas": "discharge-air-temp", "sql": "sat", "scale": "none", "unit": "degF"},
+    {"camber": "supply_air_temp_sp", "pandas": "discharge-air-temp-sp", "sql": "sat_sp", "scale": "none", "unit": "degF"},
+    {"camber": "mixed_air_temp", "pandas": "mixed-air-temp", "sql": "mat", "scale": "none", "unit": "degF"},
+    {"camber": "return_air_temp", "pandas": "return-air-temp", "sql": "rat", "scale": "none", "unit": "degF"},
+    {"camber": "oat", "pandas": "outside-air-temp", "sql": "oa_t", "scale": "none", "unit": "degF"},
+    {"camber": "cool_valve", "pandas": "cooling-valve", "sql": "clg_valve_pct", "scale": "percent_to_fraction", "unit": "0-1"},
+    {"camber": "heat_valve", "pandas": "heating-valve", "sql": "htg_valve_pct", "scale": "percent_to_fraction", "unit": "0-1"},
+    {"camber": "oa_damper", "pandas": "outside-air-damper", "sql": "oa_damper_pct", "scale": "percent_to_fraction", "unit": "0-1"},
+    {"camber": "supply_fan_status", "pandas": "fan-status", "sql": "fan_status", "scale": "none", "unit": "0/1"},
+    {"camber": "supply_fan_speed", "pandas": "fan-cmd", "sql": "fan_cmd", "scale": "percent_to_fraction", "unit": "0-1"},
+    {"camber": "duct_static", "pandas": "duct-static-pressure", "sql": "duct_static", "scale": "none", "unit": "inH2O"},
+    {"camber": "duct_static_sp", "pandas": "duct-static-pressure-sp", "sql": "duct_static_sp", "scale": "none", "unit": "inH2O"}
+  ],
+  "fallbacks": [
+    {
+      "target": {"pandas": "fan-cmd", "sql": "fan_cmd"},
+      "from_camber": "supply_fan_status",
+      "when": "no supply_fan_speed is mapped",
+      "why": "open-fdd's FC2, FC3 and FC5 require a fan command; a 0/1 run status is a valid on/off command (fan_on_min is 0.01)"
+    }
+  ],
+  "substitutions": [
+    {
+      "engine": "pandas",
+      "target": "cooling-coil-entering-temp",
+      "from_camber": "mixed_air_temp",
+      "when": "no heat_valve is mapped (an AHU without a heating coil)",
+      "why": "G36 lets MAT and SAT stand in for the cooling-coil entering and leaving temperatures depending on the AHU configuration; CAMBER's g36_afdd makes the same substitution on a cooling-only AHU, and open-fdd's SQL FC14 falls back to MAT/SAT by itself. Without it the pandas FC14 is not evaluated"
+    },
+    {
+      "engine": "pandas",
+      "target": "cooling-coil-leaving-temp",
+      "from_camber": "supply_air_temp",
+      "when": "no heat_valve is mapped (an AHU without a heating coil)",
+      "why": "as above"
+    }
+  ],
+  "fault_conditions": {
+    "FC1": {"pandas": "FC1", "sql": "FC1"},
+    "FC2": {"pandas": "FC2", "sql": "FC2"},
+    "FC3": {"pandas": "FC3", "sql": "FC3"},
+    "FC4": {"pandas": "FC4", "sql": "FC4"},
+    "FC5": {"pandas": "FC5", "sql": "FC5"},
+    "FC6": {"pandas": "FC6", "sql": "FC6"},
+    "FC7": {"pandas": "FC7", "sql": "FC7"},
+    "FC8": {"pandas": "FC8", "sql": "FC8"},
+    "FC9": {"pandas": "FC9", "sql": "FC9"},
+    "FC10": {"pandas": "FC10", "sql": "FC10"},
+    "FC11": {"pandas": "FC11", "sql": "FC11"},
+    "FC12": {"pandas": "FC12", "sql": "FC12"},
+    "FC13": {"pandas": "FC13", "sql": "FC13-SAT-HIGH"},
+    "FC14": {"pandas": "FC14", "sql": "FC14"},
+    "FC15": {"pandas": "FC15", "sql": "FC15"}
+  }
+}
