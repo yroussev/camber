@@ -64,6 +64,13 @@ def test_templates_are_complete_and_cause_keys_resolve():
     assert all(r in REFERENCES for r in WALKDOWN_REFERENCES)
 
 
+def test_every_dcv_cause_has_its_own_item():
+    from camber.aso import _DCV_ALSO
+
+    for cause in _DCV_ALSO:  # every cause the DCV recommender can lead with
+        assert cause in W.SITE_CHECKS["dcv_verification"], cause
+
+
 def test_design_params_name_real_rule_attributes():
     rule_of = _rule_of()
     for rule, spec in W.DESIGN_PARAMS.items():
@@ -120,6 +127,14 @@ def test_design_params_name_real_rule_attributes():
         ("dcv_verification", {"unventilated_high_co2_hours": 10.0}, "unventilated"),
         ("dcv_verification", {"status": "uncorrelated"}, "uncorrelated"),
         ("simultaneous_heat_cool", {}, "*"),
+        ("dcv_verification", {"fan_off_occupied_pct": 60.0}, "fan_off_occupied"),
+        ("actuator_stuck", {"tier": "contradicted"}, "contradicted"),
+        (
+            "actuator_stuck",
+            {"tier": "unexplained_flat", "roles": {"heat_valve": {"tier": "contradicted"}}},
+            "contradicted",
+        ),  # fmt: skip
+        ("actuator_stuck", {"tier": "unexplained_flat"}, "*"),
     ],
 )
 def test_cause_key_follows_the_metrics(rule, metrics, key):

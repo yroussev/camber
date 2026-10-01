@@ -346,7 +346,7 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage (0.93): **all 45 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+Current coverage (0.98): **all 46 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
 their injected faults) — the fixture-only list is empty; the fleet rules are scored separately. A
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This

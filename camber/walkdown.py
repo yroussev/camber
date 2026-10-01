@@ -441,7 +441,42 @@ _DCV = {
         "economizer, a stuck damper).",
     ),
 }
+_DCV["fan_off_occupied"] = _T(  # 0.98 (#93): below the floor because the fan was off
+    "The supply fan's occupied schedule, its start/stop sequence and any overrides or safeties "
+    "that stop it (a freezestat, a smoke or fire shutdown, a tripped drive), on an occupied visit",
+    "supply fan status vs occupancy (or the schedule)",
+    "The fan is off while the space is scheduled occupied: the schedule, an override or a "
+    "safety trip stops it, so the space gets no outdoor air at all.",
+    "The fan runs whenever the space is occupied: the status point is mis-mapped (it trends the "
+    "command or a drive's 'ready' signal), or the occupancy schedule CAMBER read is wrong.",
+)
 _DCV["*"] = _DCV["static"]
+
+# 0.98 (#85): actuator_stuck -- the tier of the worst flat run picks the item
+_STUCK = {
+    # Tier: contradicted. The flat position contradicts what the zone was demanding.
+    "contradicted": _T(
+        "The terminal's damper (or valve) and actuator: watch the shaft and the position "
+        "indicator while the controller commands it through its range",
+        "damper / heat_valve_position / cool_valve vs the demand that should move it "
+        "(airflow_sp, space_temp vs its setpoint)",
+        "The actuator does not move, or it turns and the shaft or blades do not (slipped "
+        "linkage, seized damper or valve), or it has no power.",
+        "The device strokes fully with the command: the flat trend is the controller holding "
+        "it (check the loop's output limits and mode), or a frozen point (check the "
+        "controller's communication and the trend).",
+    ),
+    # Tier: unexplained_flat (warn). Flat while its driver moves, no direct contradiction.
+    "*": _T(
+        "The terminal's damper (or valve) during a period the trend shows flat, while its "
+        "driver moves: the actuator, the linkage and the controller's output",
+        "damper / valve position vs its driver (the finding's driver)",
+        "The output changes at the controller but the device stays put: a stuck actuator "
+        "or linkage.",
+        "The controller's output is itself constant (a fixed minimum, an override, a manual "
+        "command): release the override, and the device is fine.",
+    ),
+}
 
 #: rule name -> {cause key -> template, or a tuple of templates}; "*" is the rule's default item.
 SITE_CHECKS: dict = {
@@ -581,6 +616,7 @@ SITE_CHECKS: dict = {
     "leaking_valve": _LEAK,
     "dcv_verification": _DCV,
     "dcv_system_verification": _DCV,
+    "actuator_stuck": _STUCK,
 }
 
 #: ``RECOMMENDERS`` rules that deliberately use the generic item (none today).
@@ -619,10 +655,19 @@ def _sat_reset_key(f) -> str:
 
 
 def _reheat_key(f) -> str:
-    from .rules.reheat_rule import _DIVERGE_SHARE
+    from .aso import DEFAULT_PARAMS
 
     share = _m(f).get("valve_divergence_share")
-    return "valve_divergence" if _num(share) >= _DIVERGE_SHARE else "*"
+    thr = _num(DEFAULT_PARAMS["reheat_valve_divergence_share"])
+    return "valve_divergence" if share is not None and _num(share) >= thr else "*"
+
+
+def _stuck_key(f) -> str:
+    m = _m(f)
+    tiers = [m.get("tier")] + [
+        (r or {}).get("tier") for r in (m.get("roles") or {}).values() if isinstance(r, dict)
+    ]
+    return "contradicted" if "contradicted" in tiers else "*"
 
 
 def _chw_plant_key(f) -> str:
@@ -695,6 +740,7 @@ CAUSE_KEYS: dict = {
     "leaking_valve": _leak_key,
     "dcv_verification": _dcv_key,
     "dcv_system_verification": _dcv_key,
+    "actuator_stuck": _stuck_key,
 }
 
 

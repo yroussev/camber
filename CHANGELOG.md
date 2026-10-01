@@ -9,13 +9,33 @@ All notable changes to CAMBER are documented here. The format follows
 <!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is
 released. Each branch adds its bullets only inside its own marked block below. -->
 
-**0.98: hardening from the workbook (#84, #85, #86, #87, #88, #89, #90).** Working through the
-0.97 workbook on real data showed where CAMBER's answers were wrong, silent or hard to tune. This
-release makes the rule runners say which checks did not run and why, lets an M&V refusal say
-how much more data it needs, gates two air-side rules on trended occupancy, grades a zone's
-heating shortfall on how often it happens as well as how deep it goes, links more rules to the
-PNNL re-tuning material, documents every tunable threshold with its basis and a way to
-calibrate it, and reads run configs from YAML as well as JSON.
+**0.98: hardening from the workbook (#84-#93).** Working through the 0.97 workbook on real data
+showed where CAMBER's answers were wrong, silent or hard to tune. On the air side (#84) the damper
+census and `supply_air_control` gate on trended occupancy, and `leaking_valve` can credit a unit's measured
+fan heat. For terminal units and ventilation (#85) a new rule, `actuator_stuck`, finds a box's
+damper or valve stuck against the zone's demand, `reheat_penalty` reads a valve's measured
+position, a heating shortfall is graded on how often it happens as well as how deep it goes, and
+cohort deviation gains opt-in grouping and normalisation. The central plant (#86) checks the
+sign of the chilled-water reset, learns a pump's VFD floor, runs the boiler rules without a run
+status, and accepts a declared drift reference. Sensor health (#87) reads a fan-less unit's
+outliers per operating mode and names clipped readings, stray rows and scheduled status points.
+The RCx report (#88) names each issue's cause, lists the checks that did not run, says what data
+an M&V refusal needs, and ends the issues with a generated "Verify on site" checklist. More
+rules link to the PNNL re-tuning material and `ornl-frp-vav` declares a scored detector (#89).
+Every tunable threshold is documented with its basis and a way to calibrate it, and run configs
+read from YAML as well as JSON (#90). Three follow-ups close small inconsistencies: one 60 °F
+free-cooling high limit (#91), a site elevation for derived wet-bulbs (`site_elevation_ft`, #92),
+and named fan-off hours with an opt-in duration fault in `dcv_verification` (#93).
+
+Four maintainer decisions shape the benchmarks. **S1:** the LBNL benchmark reads the
+`leaking_valve` parameters from the `lbnl-sdahu` template, which moves the SDAHU and pooled
+leaking-valve keys (the fan heat was calibrated on a run that is also a scored negative;
+`docs/VALIDATION.md` states the circularity). **S2:** faultlab's healthy chilled-water reset now
+runs the right way, with no synthetic key moving. **S3:** `actuator_stuck` is a scored synthetic
+scenario (46 scored rules, new `actuator_stuck` TPR/FPR keys). **S4:** drift accepts a declared,
+never-stored reference (another unit or a known-good period). For sensor health, decision (a)
+applies: only units with no fan signal are read per inferred operating mode, and fan-gated units
+are unchanged. Every other benchmark is unchanged.
 
 ### Added
 <!-- 098-core -->
@@ -583,6 +603,14 @@ calibrate it, and reads run configs from YAML as well as JSON.
 - **`reheat_penalty` `fan_heat_f` documents its keyword:** its range is `"auto"`, or 0.0 to 8.0
   (the keyword-or-number convention from `098-plant-chw`).
 <!-- /098-w2-integration -->
+<!-- 098-integration -->
+- **The walk-down covers `actuator_stuck` and the DCV fan-off cause.** `camber.walkdown` gains a
+  `SITE_CHECKS["actuator_stuck"]` entry (a "contradicted" item when any actuator's flat run
+  contradicts the zone's demand, else the unexplained-flat item) and a `fan_off_occupied` item for
+  `dcv_verification` (#93), so every cause the DCV recommender can lead with has its own check.
+  The reheat walk-down cause now reads `DEFAULT_PARAMS["reheat_valve_divergence_share"]`, the
+  threshold the recommender uses.
+<!-- /098-integration -->
 
 ## [0.97.0] — Unreleased
 

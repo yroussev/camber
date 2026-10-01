@@ -45,7 +45,8 @@ def test_coverage_partitions_the_registry():
     # except rules whose scenarios wait (PENDING_SCENARIOS) for sign-off as gated keys: none after
     # 0.92, when condenser_bypass_leak (#15) was promoted (n_single 39, n_scored 39), and none after
     # 0.93, when reheat_capacity_shortfall (#44) and the five single-equipment DX / heat-pump rules
-    # (#40) were promoted (n_single 45, n_scored 45)
+    # (#40) were promoted (n_single 45, n_scored 45), and none after 0.98, when actuator_stuck
+    # (S3) was added as a scored rule (n_single 46, n_scored 46)
     assert cov["fixture_only"] == sorted(faultlab.PENDING_SCENARIOS)
     assert len(cov["scored"]) + len(faultlab.PENDING_SCENARIOS) == cov["n_single"]
     assert "condenser_bypass_leak" in faultlab.SCENARIOS
