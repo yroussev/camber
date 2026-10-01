@@ -61,8 +61,8 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`chiller_efficiency`](#chiller_efficiency) | 1 |  |
 | [`chiller_staging`](#chiller_staging) | 2 |  |
 | [`chiller_staging_fleet`](#chiller_staging_fleet) | 1 |  |
-| [`chw_plant_reset`](#chw_plant_reset) | 0 | yes |
-| [`chw_pump_dp_reset`](#chw_pump_dp_reset) | 0 | yes |
+| [`chw_plant_reset`](#chw_plant_reset) | 4 | yes |
+| [`chw_pump_dp_reset`](#chw_pump_dp_reset) | 2 | yes |
 | [`chw_supply_tracking`](#chw_supply_tracking) | 5 |  |
 | [`co2_ventilation`](#co2_ventilation) | 3 | yes |
 | [`co2_ventilation_system`](#co2_ventilation_system) | 3 (passed to `co2_ventilation`) |  |
@@ -88,7 +88,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`hp_mode_vs_need`](#hp_mode_vs_need) | 9 |  |
 | [`hp_room_imbalance`](#hp_room_imbalance) | 9 |  |
 | [`hw_plant_deltat`](#hw_plant_deltat) | 1 |  |
-| [`hw_pump_dp_reset`](#hw_pump_dp_reset) | 0 | yes |
+| [`hw_pump_dp_reset`](#hw_pump_dp_reset) | 2 | yes |
 | [`leaking_valve`](#leaking_valve) | 4 |  |
 | [`night_weekend_setback`](#night_weekend_setback) | 8 |  |
 | [`outdoor_air_fraction`](#outdoor_air_fraction) | 5 |  |
@@ -194,15 +194,35 @@ How to calibrate:
 
 ## chw_plant_reset
 
-No tunable parameters.
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `design_deltaT_min_f` | `8.0` | °F | 3.0 to 20.0 | public source: PNNL Building Re-tuning Ch.8 (the low-delta-T threshold, ~8 °F) |
+| `expected_reset_sign` | `"negative"` | choice | `"negative"`, `"positive"`, `"any"` | CAMBER judgment: an outdoor-air CHWST reset lowers the supply temperature as OAT rises, a negative slope on OAT |
+| `flow_mode` | `"auto"` | choice | `"auto"`, `"constant"`, `"variable"` | CAMBER judgment: a constant-primary-flow plant has a low loop delta-T at part load by design, so delta-T is judged only on variable flow |
+| `constant_flow_cv` | `0.05` | fraction (std / mean) | 0.01 to 0.2 | CAMBER judgment: a constant-speed primary pump varies well under 5 %; the lbnl-chiller plant's chiller-1 flow varies <= 0.11 % on every run, a variable-flow loop by tens of % |
 
-Fixed in code: fault when >= 50 % of running hours have loop delta-T below 8 °F (the PNNL Re-tuning Ch.8 low-delta-T threshold, per camber/chwplant.py); warn at >= 20 %, or when CHWST vs OAT is flat (|slope| < 0.05 °F/°F); occupied hours only; without a run status or power, running means CHWST in 38-58 °F; CHWST <= 46 °F is reported as held low (metric only); fixed in code (camber/rules/chwplant_rule.py, camber/chwplant.py), not yet a constructor parameter
+How to calibrate:
+
+- `design_deltaT_min_f`: Read the loop's design delta-T from the chiller or coil schedules and set this a little below it; or take the 10th percentile of the loop delta-T over a known-good, loaded cooling season. Do not tune it on the period you score. *Note:* Severity is fixed in code: warn when >= 20 % of running hours sit below this, fault at >= 50 %; not judged on a constant-flow plant (see flow_mode).
+- `expected_reset_sign`: Read the reset schedule in the sequence of operations. "positive" fits a plant whose supply is deliberately raised in hot weather; "any" accepts either direction (the pre-0.98 behaviour). *Note:* A clear slope the other way is reported as chwst_reset_direction "reverse", counts as no reset, and warns.
+- `flow_mode`: Declare "constant" or "variable" from the plant's pumping design; "auto" reads the mapped CHW flow (chw_flow) over the running hours and needs >= 24 of them. *Note:* Without a flow point, "auto" reports flow_mode "unknown" and judges delta-T.
+- `constant_flow_cv`: Compute the coefficient of variation of the CHW flow over the running hours of a known period; a constant-flow plant sits near zero, a variable-flow one well above this. *Note:* Used only when flow_mode is "auto".
+
+Fixed in code: warn when CHWST vs OAT is flat (|slope| < 0.05 °F/°F) or reversed; occupied hours only; without a run status or power, running means CHWST in 38-58 °F; CHWST <= 46 °F is reported as held low (metric only); fixed in code (camber/rules/chwplant_rule.py, camber/chwplant.py)
 
 ## chw_pump_dp_reset
 
-No tunable parameters.
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `near_min_pct` | `"auto"` | % speed, or "auto" | `"auto"`, or 10.0 to 60.0 | CAMBER judgment: learn the drive's own minimum (0.98, #86); a fixed 25 % missed the lbnl-chiller secondary pump, whose floor is 34.5 % |
+| `floor_tol_pct` | `1.0` | % speed | 0.1 to 5.0 | CAMBER judgment: a VFD parked at its minimum reads within about a point of it |
 
-Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (<= 25 % speed) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset, reported but not in severity); fixed in code (camber/rules/chwpump_rule.py, camber/chwpump.py), not yet a constructor parameter
+How to calibrate:
+
+- `near_min_pct`: Read the drive's minimum speed from the VFD parameters (or the sequence of operations) and set this a point or two above it; or plot a histogram of the running speed and find the pile-up at the bottom. "auto" learns it: the 2nd percentile of the running speed counts as the floor when >= 10 % of running samples sit within floor_tol_pct of it and the 90th percentile is >= 20 points above it (else the band falls back to 25 %). *Note:* The band used is max(25, learned floor + floor_tol_pct) under "auto", else the number given. Severity is fixed in code: warn when >= 50 % of running time is at or below the band. The metrics vfd_floor_pct, near_min_band_pct and near_min_source say what was used.
+- `floor_tol_pct`: Look at the spread of the speed readings while the pump sits at its minimum (trend resolution and rounding); set this just wider than that spread. *Note:* Used only when near_min_pct is "auto".
+
+Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below the near_min_pct band) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset, reported but not in severity); fixed in code (camber/rules/chwpump_rule.py, camber/chwpump.py)
 
 ## chw_supply_tracking
 
@@ -690,9 +710,17 @@ How to calibrate:
 
 ## hw_pump_dp_reset
 
-No tunable parameters.
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `near_min_pct` | `25.0` | % speed, or "auto" | `"auto"`, or 10.0 to 60.0 | CAMBER judgment: 25 % is a common VFD minimum; hot-water pumps keep the fixed band by default (0.98, #86), with "auto" as an opt-in |
+| `floor_tol_pct` | `1.0` | % speed | 0.1 to 5.0 | CAMBER judgment: a VFD parked at its minimum reads within about a point of it |
 
-Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (<= 25 % speed) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py), not yet a constructor parameter
+How to calibrate:
+
+- `near_min_pct`: Read the drive's minimum speed from the VFD parameters (or the sequence of operations) and set this a point or two above it; or plot a histogram of the running speed and find the pile-up at the bottom. "auto" learns it: the 2nd percentile of the running speed counts as the floor when >= 10 % of running samples sit within floor_tol_pct of it and the 90th percentile is >= 20 points above it (else the band falls back to 25 %). *Note:* The band used is max(25, learned floor + floor_tol_pct) under "auto", else the number given. Severity is fixed in code: warn when >= 50 % of running time is at or below the band. The metrics vfd_floor_pct, near_min_band_pct and near_min_source say what was used.
+- `floor_tol_pct`: Look at the spread of the speed readings while the pump sits at its minimum (trend resolution and rounding); set this just wider than that spread. *Note:* Used only when near_min_pct is "auto".
+
+Fixed in code: fault when the pump runs near full speed (>= 90 % speed) for >= 60 % of its running time; warn at >= 30 % near full, or near minimum (at or below near_min_pct) for >= 50 %; running means speed > 5 %; a DP setpoint with a standard deviation under 0.5 (its own units) counts as flat (no reset); fixed in code (camber/rules/hwpump_rule.py, camber/chwpump.py)
 
 ## leaking_valve
 

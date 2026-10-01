@@ -190,6 +190,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `chiller_running`, `chw_tracking_mask`, `analyze_chw_plant(running=)` and the trailing
     `CHWPlantResult.run_source` in `camber.chwplant`; the `run_source` metric of
     `chw_plant_reset`. The tracking threshold and severity bands may be retuned;
+  - 0.98 (#86), provisional: `CHWPlantReset(design_deltaT_min_f=, expected_reset_sign=,
+    flow_mode=, constant_flow_cv=)` with the `chwst_reset_direction`, `flow_mode`, `flow_cv` and
+    `design_deltaT_min_f` metrics, and the trailing `CHWPlantResult.flow_cv` / `n_flow`;
+    `CHWPumpDPReset` / `HWPumpDPReset(near_min_pct=, floor_tol_pct=)`,
+    `analyze_chw_pump(near_min_pct="auto", floor_tol_pct=)`, `camber.chwpump.learn_vfd_floor`,
+    the trailing `CHWPumpResult` fields `near_min_band_pct` / `near_min_source` /
+    `vfd_floor_pct` and the pump rules' metrics of the same names;
   - in `camber.rules.triage`: `UpstreamCause`, `PLANT_CAPACITY_RULES`, `SAT_HIGH_RULES`,
     `G36_SAT_HIGH_FCS`, `is_sat_high`, `link_findings(topology=, plant_overlap_min=)`, the trailing `Issue` fields
     `upstream_causes` / `downstream`, and the `scope_equips` metric that scopes a sensor-drift

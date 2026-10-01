@@ -67,7 +67,7 @@ fired, read from its metrics, never only to its rule name:
 | `dcv_verification`, `dcv_system_verification` | DCV works, OA above its floor at low demand (`status: functioning`, `excess_at_low_demand_pct`) | Lower the minimum outdoor air at low demand (to the Ra·Az floor) |
 | | OA static / not following demand (`status`) | Enable / repair DCV; tie outdoor air to demand |
 | | under-ventilation (`below_floor_pct`, `co2_breach_at_min_pct`, `unventilated_high_co2_hours`) | Restore the OA floor; make OA respond to high CO₂; restore ventilation while occupied |
-| `chw_plant_reset` | low loop ΔT (`low_deltaT_pct`) / flat CHWST (`chwst_reset_present`) | Fix low loop ΔT / reset the CHW supply temperature |
+| `chw_plant_reset` | low loop ΔT (`low_deltaT_pct`; not on a constant-flow plant, `flow_mode`) / CHWST rising with OAT (`chwst_reset_direction: reverse`) / flat CHWST (`chwst_reset_present`) | Fix low loop ΔT / find why the chilled-water supply warms in hot weather / reset the CHW supply temperature |
 | `chw_pump_dp_reset`, `hw_pump_dp_reset` | at the VFD minimum / near full with a reset / near full without | Right-size the pump / find the valve driving the reset / reset the DP setpoint |
 | `supply_air_reset` | the setpoint already resets (`sp_behaviour`) / SAT rises with load (`reset_direction`) | Widen the reset range / check cooling capacity |
 | `cooling_tower_approach` | wide approach at full fan (`effort_gated`) | Restore tower capacity (fill, distribution, flow) |

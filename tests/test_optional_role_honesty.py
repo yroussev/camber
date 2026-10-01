@@ -41,7 +41,8 @@ def _chwplant_frame(with_oat=True):
     idx = _hourly(n)
     rng = np.random.default_rng(0)
     oat = pd.Series(60 + 18 * np.sin(np.arange(n) / 12) + rng.normal(0, 1, n), index=idx)
-    chws = 44 + 0.15 * (oat - 60)  # a WORKING reset: CHWST rises materially with OAT
+    # a WORKING reset: CHWST falls materially as OAT rises (0.98, #86: the rule checks the sign)
+    chws = 46 - 0.15 * (oat - 60)
     frame = {Role.CHW_SUPPLY_TEMP: chws, Role.CHW_RETURN_TEMP: chws + 12.0}  # healthy deltaT
     if with_oat:
         frame[Role.OAT] = oat

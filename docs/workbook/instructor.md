@@ -776,38 +776,44 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 
 ### `plant-chw-reset-pumping`: Chilled-water reset and pumping
 
-Figures from the real `lbnl-chiller` default subset, CAMBER 0.97.0-dev, with the commands on the
+Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the commands on the
 [exercise page](plant-chw-reset-pumping.md#setup).
 
 **Answer key**
 
-1. *Reset.* Yes: `chwst_reset_present` is true, with a slope of -0.38 °F of supply per °F of
-   outdoor dry-bulb (median supply 47.6 °F over the running, occupied hours). The supply gets
-   warmer in cool weather and colder in hot weather, which is the right direction. The rule would
-   count a reset in the wrong direction too, so the sign is the learner's check.
-2. *Low delta-T.* `chw_plant_reset` is a **fault** on the healthy plant because chiller 1's loop
-   delta-T has a median of 6.4 °F, and 80.1% of its running hours are below the rule's 8 °F
-   minimum. The primary flow does not follow the load, so the chiller's delta-T is low at part
-   load by design: a property of this plant, and a design question (variable primary flow, a
-   higher supply setpoint in mild weather), not a broken component. The rule has no parameter to
-   calibrate it.
+1. *Reset.* Yes: `chwst_reset_present` is true and `chwst_reset_direction` is `expected`, with a
+   slope of -0.38 °F of supply per °F of outdoor dry-bulb (median supply 47.6 °F over the
+   running, occupied hours). The supply gets warmer in cool weather and colder in hot weather,
+   which is the direction the rule expects (`expected_reset_sign: negative`). A slope the other
+   way would not count as a reset.
+2. *Low delta-T.* Chiller 1's loop delta-T has a median of 6.4 °F, and 80.1% of its running hours
+   are below the rule's 8 °F minimum. Yet `chw_plant_reset` is **ok** on the healthy plant: the
+   rule reads the chiller's flow, finds it constant (`flow_mode: constant`, a coefficient of
+   variation of about 0.1 %), and reports the delta-T without judging it, with a caveat. A
+   constant primary flow does not follow the load, so the chiller's delta-T is low at part load
+   by design: a property of this plant, and a design question (variable primary flow, a higher
+   supply setpoint in mild weather), not a broken component. On a variable-flow plant the same
+   figures would count, against `design_deltaT_min_f` (8 °F unless set from the loop's design).
 3. *DP reset and pumping.* No: the DP setpoint is flat (`dp_sp_reset_present` false, the same
    value all year). The secondary pump runs at a median 84.9% and at 90 % or more in 38.0% of
    its hours: a **warn** for riding the curve.
-4. *VFD minimum.* The pump's floor is 34.5% (the median speed of the chiller-bias run, where the
-   pump idles at its floor for at least half the year; the trend viewer shows the same floor on the
-   fault-free run in winter). The rule counts 0 % of hours near minimum on every run because its
-   near-minimum band stops at 25 %, below this pump's floor. The pump also runs all year, with no
-   cooling load in winter.
+4. *VFD minimum.* The pump's floor is 34.5%: the rule learns it from the speeds
+   (`vfd_floor_pct`, `near_min_source: learned`) and counts 31.3% of the fault-free run's hours
+   at or near it (the band is the floor plus a point, 35.5 %). The pump also runs all year, with
+   no cooling load in winter. On the chiller-bias run the pump idles at its floor (a median of
+   34.5%) for 68.6% of its hours, a **warn** for sitting at the minimum.
 5. *Stuck bypass.* The plant cannot make chilled water: the supply median is 65.0 °F and the
-   delta-T 0.7 °F, and the pump runs at a median 100%. `chw_plant_reset` (a fault) and
-   `chw_pump_dp_reset` (a warn) are both symptoms; the cause is the tower bypass, which only
-   `condenser_bypass_leak` names ([`plant-cooling-tower`](plant-cooling-tower.md)).
+   delta-T 0.7 °F, and the pump runs at a median 100%. The supply warms as the weather warms, a
+   slope of +0.76 °F per °F, the reverse of a reset: `chw_plant_reset` is a **warn** with
+   `chwst_reset_direction: reverse` (its low delta-T is not judged on this constant-flow plant).
+   That warn and `chw_pump_dp_reset` (a warn) are both symptoms; the cause is the tower bypass,
+   which only `condenser_bypass_leak` names ([`plant-cooling-tower`](plant-cooling-tower.md)).
 
 **Discussion points**
 
 - Map the three answers onto the PNNL cooling guide's three questions. The guide's low-delta-T
-  test uses the same 8 °F line; discuss whether it fits a constant-flow primary loop.
+  test uses the same 8 °F line; discuss why it does not fit a constant-flow primary loop, and
+  what the rule does instead.
 - Why does a flat DP setpoint cost energy? Pump power goes roughly with the cube of speed, so the
   hours near full speed dominate the bill.
 - A plant whose pump idles at a floor all winter is a scheduling question: can the loop be shut
@@ -819,9 +825,10 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.97.0-dev, with the
 
 - Fixing the low delta-T by chasing a broken part: nothing is broken; the plant is designed that
   way.
-- Reading "0 % near minimum" as "the pump is never at its minimum".
-- Reading a negative slope as "no reset" (or a positive one as a working reset) without asking
-  which way a chilled-water reset should go.
+- Reading the `ok` on the healthy plant as "the delta-T is fine": it is low, and the rule says
+  why it does not judge it.
+- Reading the bypassed plant's positive slope as a working reset: it is the plant losing its
+  chilled water in hot weather.
 - Blaming the pump for the bypassed plant: it runs flat out because the chilled water is warm.
 
 <!-- END plant-chw-reset-pumping -->
@@ -897,7 +904,9 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 2. *Where the low-reading sensor also shows.* In the secondary pump: `chw_pump_dp_reset` is a
    **fault** on the 2 °C-low run, with the pump at 90 % or more in 82.1% of its hours (a median
    of 100 %). The real chilled water is warmer, so the air handlers' valves open wider and the
-   pump works harder to hold the loop DP.
+   pump works harder to hold the loop DP. The high-reading runs do the opposite: the pump idles
+   at its 34.5 % VFD floor for most of its hours, a warn for sitting at the minimum (0.98 learns
+   the floor; before, the rule's 25 % band missed it).
 3. *Tower sensor vs bypass.* `condenser_bypass_leak` reports both ±2 °C tower-sensor biases as
    `info` with `attribution: sensor_offset`: the water entering the chillers reads -3.1 °F and
    +3.6 °F from the tower's leaving water, and the difference stays the same at every load.

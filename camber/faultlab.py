@@ -352,7 +352,9 @@ def _chw_reset(idx, *, faulty):
         chws = np.full(n, 44.0)  # flat CHWST (no reset) + low deltaT
         chwr = np.full(n, 48.0)  # 4F dT (well below design)
     else:
-        chws = np.clip(42 + 0.30 * (oat - 55), 42, 52)  # clear upward reset with OAT
+        # a healthy reset: CHWST warm (52F) in mild weather, reset DOWN to 42F as OAT rises
+        # (a negative slope on OAT; 0.98, #86 -- until 0.97 this ramp ran the wrong way)
+        chws = np.clip(52 - 0.30 * (oat - 55), 42, 52)
         chwr = chws + 12.0  # healthy 12F dT
     return pd.DataFrame(
         {

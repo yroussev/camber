@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from ..chwpump import analyze_pump
+from ..chwpump import _check_near_min, _floor_note, analyze_pump
 from ..model.roles import Role
 from ..units import normalize_percent
 from .base import Finding
@@ -43,13 +43,20 @@ class HWPumpDPReset:
     roles_required = (Role.HW_PUMP_SPEED,)
     roles_optional = (Role.HW_DIFF_PRESS_SP,)
 
+    def __init__(self, *, near_min_pct: float | str = 25.0, floor_tol_pct: float = 1.0):
+        # 0.98 (#86): fixed at 25 by default; "auto" opts in to the learned VFD floor
+        self.near_min_pct = _check_near_min(near_min_pct)
+        self.floor_tol_pct = float(floor_tol_pct)
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         if "PumpSpeed" in legacy.columns:
             legacy = legacy.assign(PumpSpeed=normalize_percent(legacy["PumpSpeed"]))
-        res = analyze_pump(legacy, equip)
+        res = analyze_pump(
+            legacy, equip, near_min_pct=self.near_min_pct, floor_tol_pct=self.floor_tol_pct
+        )
         if res is None:
             return Finding(
                 rule=self.name,
@@ -87,6 +94,9 @@ class HWPumpDPReset:
                 "median_speed_pct": res.median_speed_pct,
                 "pct_running_near_full": res.pct_running_near_full,
                 "pct_running_near_min": res.pct_running_near_min,
+                "near_min_band_pct": res.near_min_band_pct,
+                "near_min_source": res.near_min_source,
+                "vfd_floor_pct": res.vfd_floor_pct,
                 "median_dp_sp": res.median_dp_sp,
                 "dp_sp_reset_present": res.dp_sp_reset_present,
                 "n_running": res.n_running,
@@ -94,7 +104,8 @@ class HWPumpDPReset:
             summary=(
                 f"{equip}: HW pump median speed {res.median_speed_pct:.0f}%, "
                 f"{res.pct_running_near_full:.0f}% near full / "
-                f"{res.pct_running_near_min:.0f}% near min; {reset_note}"
+                f"{res.pct_running_near_min:.0f}% near min (<= {res.near_min_band_pct:g}%"
+                f"{_floor_note(res)}); {reset_note}"
             ),
             caveats=caveats,
         )

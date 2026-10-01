@@ -65,9 +65,11 @@ def test_entries_are_well_formed(rule):
         if default is None:
             continue
         if isinstance(default, bool) or isinstance(default, str):
-            assert d.is_choice and default in d.range, f"{where}: default {default!r} not listed"
+            # a choice, or a keyword of a keyword-or-number range ("auto", 25.0, 60.0)
+            listed = d.is_choice or default in pd._keywords(d.range)
+            assert listed and default in d.range, f"{where}: default {default!r} not listed"
         elif isinstance(default, (int, float)) and not d.is_choice:
-            lo, hi = d.range[0], d.range[-1]
+            lo, hi = d.range[len(pd._keywords(d.range))], d.range[-1]
             assert lo <= default <= hi, f"{where}: default {default} outside {d.range}"
         elif isinstance(default, dict):  # a tier map: the range is per value
             assert not d.is_choice and "per key" in d.unit, f"{where}: name the keys in the unit"

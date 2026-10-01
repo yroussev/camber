@@ -8,7 +8,9 @@ Real-data figures were recorded from::
     camber run chw.json --out chw_out
 
 (CAMBER 0.97.0-dev, lbnl-chiller default subset, 2026-09-29; the four runs it holds read the same
-in the full subset.)
+in the full subset. Re-recorded for 0.98.0-dev on 2026-09-30 after #86 items 2 and 3: the reset's
+sign is checked, a constant-flow plant's delta-T is not judged, and the pump's VFD floor is
+learned.)
 """  # noqa: E501
 
 from __future__ import annotations
@@ -27,21 +29,46 @@ def standin(store) -> None:
 
 def _reset_present(ctx) -> None:
     """The plant resets its chilled water: warmer in cool weather, colder in hot (a negative
-    slope on the dry-bulb)."""
+    slope on the dry-bulb, the direction the rule expects)."""
     f = ctx.finding("chw_plant_reset", "PLANT__fault_free")
     assert f is not None, "no chw_plant_reset finding on PLANT__fault_free"
     assert f.metrics["chwst_reset_present"] is True, "CHWST reset not found"
+    assert f.metrics["chwst_reset_direction"] == "expected", f.metrics["chwst_reset_direction"]
     assert f.metrics["chwst_slope_per_F"] < -0.1, f"slope {f.metrics['chwst_slope_per_F']}"
 
 
-def _no_dp_reset_no_floor(ctx) -> None:
-    """The DP setpoint is flat (no reset), and the rule counts no hours near the VFD minimum on
-    any run: its 25 % band sits below this pump's floor."""
+def _constant_flow(ctx) -> None:
+    """Chiller 1's primary flow does not follow the load: the rule recognises a constant-flow
+    plant from the flow point and reports its delta-T without judging it."""
+    f = ctx.finding("chw_plant_reset", "PLANT__fault_free")
+    assert f is not None, "no chw_plant_reset finding on PLANT__fault_free"
+    assert f.metrics["flow_mode"] == "constant", f.metrics["flow_mode"]
+    assert f.metrics["flow_cv"] is not None and f.metrics["flow_cv"] <= 0.05, f.metrics["flow_cv"]
+    assert any("constant primary flow" in c for c in f.caveats), f.caveats
+
+
+def _no_dp_reset_floor_learned(ctx) -> None:
+    """The DP setpoint is flat (no reset) on every run, and on the fault-free run the rule learns
+    the pump's VFD floor and counts the hours parked at it."""
     for f in ctx.findings():
         if f.rule != "chw_pump_dp_reset":
             continue
         assert f.metrics["dp_sp_reset_present"] is False, f"{f.equip}: DP reset found"
-        assert f.metrics["pct_running_near_min"] == 0.0, f"{f.equip}: hours near minimum"
+    f = ctx.finding("chw_pump_dp_reset", "PLANT__fault_free")
+    assert f is not None, "no chw_pump_dp_reset finding on PLANT__fault_free"
+    assert f.metrics["near_min_source"] == "learned", f.metrics["near_min_source"]
+    assert f.metrics["near_min_band_pct"] > 25.0, f.metrics["near_min_band_pct"]
+    assert f.metrics["pct_running_near_min"] > 0.0, "no hours near the minimum"
+
+
+def _bypass_reverse_reset(ctx) -> None:
+    """With the tower bypass stuck, the supply warms as the weather warms: the rule reads the
+    reverse of a reset, not a working one."""
+    f = ctx.finding("chw_plant_reset", "PLANT__bypass_stuck_075")
+    assert f is not None, "no chw_plant_reset finding on PLANT__bypass_stuck_075"
+    assert f.metrics["chwst_slope_per_F"] > 0.1, f"slope {f.metrics['chwst_slope_per_F']}"
+    assert f.metrics["chwst_reset_direction"] == "reverse", f.metrics["chwst_reset_direction"]
+    assert f.metrics["chwst_reset_present"] is False
 
 
 def _bypass_cannot_hold_chwst(ctx) -> None:
@@ -81,8 +108,10 @@ EXERCISE = Exercise(
             on=REAL,
             quote="-0.38 °F",
         ),
-        # 2. ... yet the rule faults the healthy plant: its loop delta-T is low
-        Finding("chw_plant_reset", "PLANT__fault_free", severity=("fault",)),
+        # 2. the loop delta-T is low, but by design: a constant-flow primary loop (0.98, #86;
+        # until 0.97 the rule faulted the healthy plant on it)
+        Finding("chw_plant_reset", "PLANT__fault_free", severity=("ok",)),
+        Check("the rule recognises a constant-flow plant", _constant_flow),
         Metric(
             "chw_plant_reset",
             "PLANT__fault_free",
@@ -103,7 +132,7 @@ EXERCISE = Exercise(
         ),
         # 3. the secondary pump rides the curve against a flat DP setpoint
         Finding("chw_pump_dp_reset", "PLANT__fault_free", severity=("warn",)),
-        Check("no DP reset, and nothing counted near the VFD minimum", _no_dp_reset_no_floor),
+        Check("no DP reset; the VFD floor is learned", _no_dp_reset_floor_learned),
         Metric(
             "chw_pump_dp_reset",
             "PLANT__fault_free",
@@ -122,7 +151,26 @@ EXERCISE = Exercise(
             on=REAL,
             quote="84.9%",
         ),
-        # 4. the VFD floor: where the pump idles, the rule's median is the floor itself
+        # 4. the VFD floor: learned from the speeds (0.98, #86), and where the pump idles the
+        # median is the floor itself
+        Metric(
+            "chw_pump_dp_reset",
+            "PLANT__fault_free",
+            "vfd_floor_pct",
+            34.5,
+            0.05,
+            on=REAL,
+            quote="34.5%",
+        ),
+        Metric(
+            "chw_pump_dp_reset",
+            "PLANT__fault_free",
+            "pct_running_near_min",
+            31.3,
+            0.1,
+            on=REAL,
+            quote="31.3%",
+        ),
         Metric(
             "chw_pump_dp_reset",
             "PLANT__chiller_bias_2",
@@ -132,9 +180,29 @@ EXERCISE = Exercise(
             on=REAL,
             quote="34.5%",
         ),
+        Finding("chw_pump_dp_reset", "PLANT__chiller_bias_2", severity=("warn",)),
+        Metric(
+            "chw_pump_dp_reset",
+            "PLANT__chiller_bias_2",
+            "pct_running_near_min",
+            68.6,
+            0.1,
+            on=REAL,
+            quote="68.6%",
+        ),
         # 5. a stuck tower bypass: the plant loses its chilled water and the pump runs flat out
         Check("the bypassed plant cannot hold its CHWST", _bypass_cannot_hold_chwst),
-        Finding("chw_plant_reset", "PLANT__bypass_stuck_075", severity=("fault",)),
+        Finding("chw_plant_reset", "PLANT__bypass_stuck_075", severity=("warn",)),
+        Check("the bypassed plant's supply warms with the weather", _bypass_reverse_reset),
+        Metric(
+            "chw_plant_reset",
+            "PLANT__bypass_stuck_075",
+            "chwst_slope_per_F",
+            0.757,
+            0.005,
+            on=REAL,
+            quote="+0.76 °F",
+        ),
         Metric(
             "chw_plant_reset",
             "PLANT__bypass_stuck_075",
