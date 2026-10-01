@@ -102,14 +102,17 @@ caltrack_savings_hourly(
 1. **Read the report.** Open `cap_rcx.html`. Read the executive summary: every issue's rank,
    equipment, severity, confidence and action. Open each issue page, the data-coverage page and
    Appendix A (declines and data gaps).
-2. **Build the walk-down checklist.** The report has no section called "verify on site"; the
-   items are spread through it. Collect:
+2. **Build the walk-down checklist.** Before you read the report's **Verify on site** section,
+   write your own from the rest of the report. Collect:
    - every recommended action that asks you to check or verify something in the field;
    - every *conditional* issue: the point it depends on is a sensor or setpoint to verify;
    - every confidence line that says the rule used defaults because no site parameter was
      configured: a design value to confirm on site (minimum outdoor air, high limit, setpoints);
    - anything in Appendix A that only a site visit can settle.
-   For each item write what to look at, where, and what result would confirm or clear it.
+   For each item write what to look at, where, and what result would confirm or clear it. Then
+   compare yours with the generated section: sensors first, then equipment, then design values
+   the checks assumed, then points the checks lacked. What did it list that you missed, and what
+   does your list have that a template cannot know?
 3. **Write the re-tuning plan.** For each issue you keep after the walk-down, one line: the
    change, who makes it, what could go wrong, how you will verify it (which CAMBER check, which
    window) and what result counts as done. Order it: sensors first, then the equipment, then
@@ -129,7 +132,8 @@ caltrack_savings_hourly(
    control? Why do the outdoor-air-fraction rules stay quiet on it?
 3. Which issue is *conditional*, on what, and with what trust? What goes on the walk-down list
    for it?
-4. Write your walk-down checklist and your re-tuning plan (steps 2 and 3).
+4. Write your walk-down checklist and your re-tuning plan (steps 2 and 3). How does your
+   checklist compare with the report's **Verify on site** section?
 5. What does drift report for the onset unit and for the control? How would you use the same
    frozen baseline after the damper is repaired?
 6. What do the setback verdicts say before and after the scheduling measure, and did the
@@ -141,7 +145,9 @@ caltrack_savings_hourly(
 
 - **RCx report** (`--layout rcx`): the ranked issues with severity, confidence and "why we
   believe this", cost or "uncosted" with the reason, the recommended action, conditional and
-  dependent notes; data coverage and sensor trust; the economizer page; Appendix A's declines.
+  dependent notes; data coverage and sensor trust; the economizer page; the **Verify on site**
+  walk-down checklist (per issue: what to look at, which point, what would confirm or refute
+  it; linked to PNNL Re-tuning chapter 9); Appendix A's declines.
 - **Findings** (`cap_out/findings.json`): `free_cooling_missed`'s `missed_pct` and why the free
   cooling was missed (`missed_cause`: the damper was commanded open but did not deliver outside
   air, or the economizer never commanded it open; `commanded_open_pct`), the
@@ -176,4 +182,5 @@ caltrack_savings_hourly(
 - Add `report.loads` sizing to `cap.json` (see [RCx report](../RCX-REPORT.md)) and see which
   issues get a cost.
 - Use `camber report cap.json --layout rcx --notes-template notes.json` to write your walk-down
-  findings into the report as engineer's notes.
+  findings into the report as engineer's notes: the `section:verify` slot holds the walk-down's
+  results next to the generated checklist.

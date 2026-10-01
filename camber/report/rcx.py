@@ -124,7 +124,8 @@ class RcxOptions:
     ``week`` is a :data:`WEEK_MODES` value (``"auto"`` means ``"evidence"``; ``"oat-range"`` is
     accepted for ``"oat_range"``; a bare ``YYYY-MM-DD`` means ``fixed:``). ``chart_format="svg"``
     renders line charts as SVG (dense scatters stay PNG). ``sections`` lists the section ids to
-    include (default: all; 0.96 adds ``"reading"``, the linked further-reading list). ``price`` /
+    include (default: all; 0.96 adds ``"reading"``, the linked further-reading list; 0.98 adds
+    ``"verify"``, the "Verify on site" walk-down checklist). ``price`` /
     ``loads`` feed the existing cost estimators (:class:`~camber.fault_economics.EnergyPrice`,
     ``{equip: EquipmentLoad}``). ``occupancy``
     overrides the assumed schedule (``{"start_hour", "end_hour", "days"}``) where no occupancy
@@ -1495,8 +1496,13 @@ def build_rcx_report(
                 sections.append(sec)
     if want("issues"):
         sections += [_sec_issue(S, iss) for iss in issues]
+    verify = _sec_verify(S) if want("verify") else None  # 0.98 (#88): the walk-down checklist
+    if verify is not None:
+        sections.append(verify)
     if want("reading"):  # 0.96 (#78): linked PNNL Re-tuning guides for this report's issues
-        sec = _sec_reading(issues)
+        from ..references import WALKDOWN_REFERENCES
+
+        sec = _sec_reading(issues, extra=WALKDOWN_REFERENCES if verify is not None else ())
         if sec is not None:
             sections.append(sec)
     if want("appendix"):
@@ -2510,9 +2516,10 @@ def _issue_refs(iss, rec=None) -> list:
     return out
 
 
-def _sec_reading(issues) -> dict | None:
+def _sec_reading(issues, extra=()) -> dict | None:
     """ "Further reading": the linked PNNL Re-tuning guides and chapters relevant to this report's
-    issues only (none -> no section). Link only: nothing from them is reproduced."""
+    issues only (none -> no section), plus ``extra`` ids (0.98: the walk-down chapter when the
+    report has a "Verify on site" section). Link only: nothing from them is reproduced."""
     from ..references import GUIDE, REFERENCES
 
     ids: list = []
@@ -2520,6 +2527,9 @@ def _sec_reading(issues) -> dict | None:
         for rid in _issue_refs(iss):
             if rid not in ids:
                 ids.append(rid)
+    for rid in extra:
+        if rid in REFERENCES and rid not in ids:
+            ids.append(rid)
     if not ids:
         return None
     ids.sort(key=lambda r: 0 if REFERENCES[r].kind == GUIDE else 1)  # guides before chapters
@@ -2531,6 +2541,67 @@ def _sec_reading(issues) -> dict | None:
         {"kind": "links", "refs": ids, "list": True},
     ]
     return _section("reading", "Further reading", blocks, slot=False)
+
+
+#: 0.98 (#88): the "Verify on site" tables, one per item kind, in checklist order
+_VERIFY_KINDS = (
+    (
+        "sensor",
+        "Sensors and setpoints first (a wrong sensor can make any finding that uses it wrong):",
+    ),
+    ("equipment", "Equipment and controls:"),
+    ("design_value", "Design values the checks assumed (no site value was configured):"),
+    ("data", "Points the checks lacked (see Appendix A):"),
+)
+
+
+def _sec_verify(S) -> dict | None:
+    """0.98 (#88): "Verify on site", the walk-down checklist (:func:`camber.walkdown.site_checks`)
+    after the issue pages: per issue, what to look at on site, which point to compare, and what
+    result would confirm or refute the finding. Sensors first, then equipment, design values and
+    missing points. No items -> no section."""
+    from ..aso import recommend
+    from ..references import WALKDOWN_REFERENCES
+    from ..walkdown import site_checks
+
+    ctx = S["ctx"]
+    checks = site_checks(
+        S["issues"],
+        recommend=recommend,
+        rule_of=ctx.rule,
+        overrides=ctx.overrides,
+        trust=S["trust_gated"],
+        skipped=getattr(ctx.run, "rules_skipped", None) or (),
+        declined=S["declined"],
+    )
+    if not checks:
+        return None
+    blocks: list = [
+        {
+            "kind": "links",
+            "lead": "A walk-down checklist built from this report, following the building "
+            "walk-down of the PNNL Re-tuning training (linked; nothing from it is reproduced). For "
+            "each item: what to look at on site, which point to compare, and what result would "
+            "confirm or refute the finding. # links to the issue (A: Appendix A).",
+            "refs": list(WALKDOWN_REFERENCES),
+        }
+    ]
+    for kind, lead in _VERIFY_KINDS:
+        rows = []
+        for c in checks:
+            if c.kind != kind:
+                continue
+            anchor = (
+                f"<a href='#issue-{_esc(c.issue_key)}'>{int(c.rank)}</a>"
+                if c.issue_key
+                else "<a href='#appendix-a'>A</a>"
+            )
+            rows.append([anchor, c.equip, c.look_at, c.point, c.confirms, c.refutes])
+        if rows:
+            tbl = _table(["#", "Equipment", "Look at", "Point", "Confirms", "Refutes"], rows)
+            tbl["link_col"] = 0  # the first column carries an internally built anchor
+            blocks += [_p(lead), tbl]
+    return _section("verify", "Verify on site", blocks)
 
 
 def _ai_prose(issue, client) -> str:

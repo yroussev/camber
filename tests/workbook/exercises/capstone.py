@@ -17,7 +17,8 @@ and the M&V attempt in Python shown on the page (``caltrack_savings_hourly`` on 
 power, baseline test against setback test).
 
 (CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
-refusal's data need and the top issue's cause, 0.98.0-dev, 2026-09-30.)
+refusal's data need, the top issue's cause and the "Verify on site" section, 0.98.0-dev,
+2026-09-30.)
 """
 
 from __future__ import annotations
@@ -97,6 +98,33 @@ def _rcx_conditional(ctx) -> None:
     assert "duct_static_sp untrusted" in c["conditional_on"][0], c
     if ctx.mode == REAL:
         assert "(trust 0.40)" in c["conditional_on"][0], c
+
+
+def _rcx_verify(ctx) -> None:
+    """Step 2 (0.98, #88): the generated "Verify on site" section. The static-setpoint point the
+    conditional issue leans on comes first (a sensor item), then the onset unit's damper item,
+    which says what would confirm the stuck damper and what would point at the mixed-air sensor
+    instead. The economizer's minimum and high limit are site parameters in this config, so no
+    design-value item asks to confirm them."""
+    rep = _rcx(ctx)
+    sec = next(s for s in rep.to_dict()["sections"] if s["id"] == "verify")
+    assert sec["title"] == "Verify on site" and sec["slot"] == "section:verify", sec["title"]
+    leads = [b["text"] for b in sec["blocks"] if b["kind"] == "p"]
+    tables = [b["rows"] for b in sec["blocks"] if b["kind"] == "table"]
+    kinds = dict(zip(leads, tables))
+    sensors = next(rows for lead, rows in kinds.items() if lead.startswith("Sensors"))
+    static = [r for r in sensors if r[1] == ONSET and r[3].startswith("duct_static_sp")]
+    assert len(static) == 1 and "setpoint at the controller" in static[0][2], sensors
+    if ctx.mode == REAL:
+        assert static[0][3] == "duct_static_sp (trust 0.40, untrusted)", static
+    equipment = next(rows for lead, rows in kinds.items() if lead.startswith("Equipment"))
+    damper = [r for r in equipment if r[1] == ONSET and r[3].startswith("oa_damper (command)")]
+    assert len(damper) == 1, equipment
+    assert damper[0][0].endswith(">1</a>"), damper  # the top issue's item
+    assert "blades" in damper[0][2] and "mixed-air sensor" in damper[0][5], damper
+    assert not any(lead.startswith("Design values") for lead in leads), leads
+    html = rep.to_html()
+    assert "<h2>Verify on site</h2>" in html and "ch9_building_walkdown.pdf" in html
 
 
 def _drift(ctx) -> None:
@@ -302,6 +330,7 @@ EXERCISE = Exercise(
         Check("RCx: the top issue names its cause", _rcx_ranking, quote="stuck low"),
         Check("why free cooling was missed", _missed_cause, quote="40%"),
         Check("RCx: the conditional issue", _rcx_conditional, quote="trust 0.40"),
+        Check("RCx: the generated walk-down checklist", _rcx_verify, quote="Verify on site"),
         # step 4: verification by drift
         Check("drift localizes the onset to the outdoor-air path", _drift, quote="-83"),
         # step 5: the ORNL scheduling measure, before and after

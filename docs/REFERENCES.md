@@ -7,8 +7,9 @@ registry `camber.references` (provisional, 0.96), which the reports use:
 
 - the audit report's findings table and its **Recommended actions** table carry
   **Learn more** links to the guide behind each finding (plain text: `learn more: <ids>`);
-- the [RCx report](RCX-REPORT.md) adds the links to each issue page and ends with a short
-  **Further reading** section listing only the guides relevant to its issues;
+- the [RCx report](RCX-REPORT.md) adds the links to each issue page, links chapter 9 from its
+  **Verify on site** walk-down checklist, and ends with a short **Further reading** section
+  listing only the guides relevant to its issues;
 - JSON outputs carry the reference ids (`Recommendation.references`, the action-plan rows'
   `references`, and each RCx issue's `references`).
 
@@ -51,7 +52,7 @@ The `pnnl-trending-requirements` guide lists the points to trend before re-tunin
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 9: Building Walk Down](https://www.pnnl.gov/sites/default/files/media/file/ch9_building_walkdown.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 | [Large Commercial Buildings: Re-tuning for Efficiency, chapter 10: Re-Tuning Building Controls and Systems](https://www.pnnl.gov/sites/default/files/media/file/ch10_retuning_building.pdf) | PNNL-SA-85063 | — | 2026-09-29 |
 
-Chapters 1–4 and 9–10 cover the re-tuning process (building personality, initial information, trend collection, the walk-down, re-tuning the building) rather than one fault, so no rule maps to them.
+Chapters 1–4 and 9–10 cover the re-tuning process (building personality, initial information, trend collection, the walk-down, re-tuning the building) rather than one fault, so no rule maps to them. Chapter 9 (Building Walk Down) is linked instead from the RCx report's **Verify on site** section (0.98): every walk-down item carries it (`camber.references.WALKDOWN_REFERENCES`), and the report's Further reading list adds it when that section is present.
 
 ## Other resources
 

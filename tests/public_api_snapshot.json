@@ -1593,6 +1593,7 @@
     "Reference",
     "TOOL_GUIDE",
     "TRAINING",
+    "WALKDOWN_REFERENCES",
     "links_html",
     "links_text",
     "reference",
@@ -2431,6 +2432,18 @@
     "simplified_ev",
     "system_outdoor_air",
     "zones_from_records"
+  ],
+  "camber.walkdown": [
+    "CAUSE_KEYS",
+    "DESIGN_PARAMS",
+    "GENERIC_SITE_CHECK",
+    "KINDS",
+    "SITE_CHECKS",
+    "SiteCheck",
+    "SiteTemplate",
+    "WALKDOWN_REFERENCES",
+    "cause_key",
+    "site_checks"
   ],
   "camber.water": [
     "GAL_PER_CCF",

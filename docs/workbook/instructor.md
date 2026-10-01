@@ -1198,7 +1198,8 @@ synthetic, cut from the open BDG2 meters.
 ### `capstone`: RCx report, walk-down, re-tuning plan and verification
 
 Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev (the
-top issue's cause and the M&V data need: 0.98.0-dev), with the commands on the
+top issue's cause, the M&V data need and the Verify on site section: 0.98.0-dev), with the
+commands on the
 [exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
 are frozen.
 
@@ -1224,15 +1225,23 @@ are frozen.
    placeholder that the ingest masks, so half the year has no setpoint. Walk-down item: read the
    static setpoint at the controller and confirm what the trend is mapped to.
 4. *Walk-down checklist and re-tuning plan* (a model answer; accept any that covers the
-   evidence):
+   evidence). The report's **Verify on site** section is the generated version: its sensor table
+   leads with the onset unit's `duct_static_sp` (trust 0.40, untrusted), then the equipment table
+   puts the onset unit's damper first (look at the blades, linkage and actuator while the BAS
+   strokes it; confirms if the blades stay near one position at a 100 % command; refutes if they
+   travel fully, and then the mixed-air sensor is the suspect), then each unit's supply-air and
+   static-reset logic and the control's economizer enable. It lists no design values: the
+   economizer's minimum outdoor air (1.6 %) and 60 °F high limit are site parameters in this
+   config, not rule defaults. The "rule defaults" confidence lines belong to `supply_air_reset`
+   and `static_pressure_reset`, whose parameters are detection thresholds, not site facts. A
+   student's list should match the generated one and add what a template cannot know:
    - Outdoor-air damper on the onset unit: stroke it from the BAS through its range, watch the
      blades and the linkage, and compare the mixed-air temperature with the command. Expect: the
      blades stay near a quarter open. Confirm the economizer enable logic and the 60 °F high limit
      in the program.
    - Static-pressure setpoint point: confirm the trend mapping and the value at the controller.
-   - Design values the report assumed (its confidence lines say "rule defaults"): the minimum
-     outdoor-air position, the supply-air setpoint and the static setpoint, from the drawings or
-     the controller.
+   - Design values worth confirming anyway, from the drawings or the controller: the minimum
+     outdoor-air position, the supply-air setpoint and the static setpoint.
    - The plan, sensors first: fix the static-setpoint trend; repair the damper actuator or
      linkage; then consider the sequence changes the report suggests (supply-air reset,
      static-pressure reset) as separate measures with their own verification. Verification: the
