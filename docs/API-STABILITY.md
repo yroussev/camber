@@ -516,6 +516,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   typing. Entry texts (basis, calibration hints, ranges) are documentation and may change in any
   release; defaults are the rules' and follow the rules.
 <!-- /098-thresholds -->
+<!-- 098-sensor-health (#87) -->
+- **Sensor-health modes, stray rows, clipping and schedules** (0.98; #87), all additive and
+  provisional: `camber.sensorhealth.clipped_at_limit`; the `mode=` / `mode_source=` keywords of
+  `sensor_trust` and `mode=` of `frame_sensor_health` (and what `"auto"` infers); the
+  `SensorTrust` fields `mode_source`, `mode_outlier_frac`, `main_start`, `main_end`, `n_stray` and
+  `clipped` (and its dict keys); the flags `clipped`, `stray_lead` and `stray_tail`; the `role`
+  argument of `gapfill_signature` and its `scheduled_days` / `n_schedule_patterns` metrics. The
+  thresholds behind them are module constants and may be retuned.
+<!-- /098-sensor-health -->
 
 ## Deprecated
 

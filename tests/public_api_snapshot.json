@@ -2255,6 +2255,7 @@
     "PLANT_SETTLE",
     "STUCK_HOURS",
     "SensorTrust",
+    "clipped_at_limit",
     "co2_outdoor_consistency",
     "copied_signal_consistency",
     "cross_unit_identity",

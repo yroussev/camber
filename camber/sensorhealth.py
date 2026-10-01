@@ -38,7 +38,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .ingest.quality import assess
+from .ingest.quality import _MAD_Z_CUTOFF, _shape_outlier_flags, assess
 from .model.roles import STATUS_ROLES, Role
 from .units import PERCENT_ROLES
 
@@ -64,6 +64,7 @@ __all__ = [
     "cross_unit_identity",
     "co2_outdoor_consistency",
     "percent_scale_suspect",
+    "clipped_at_limit",
 ]
 
 # Plausible physical bounds per role (degF for temps, % for valves/dampers/speeds/RH,
@@ -328,11 +329,28 @@ class SensorTrust:
     # 0.92 (#66): what the plant run gate was read from ("chiller status", ...) when this
     # point was judged on its equipment's running samples only; None when it was not.
     run_gate: str | None = None
+    # ==== begin 098-sensor-health (#87) ====
+    # Provisional (0.98, #87). What the per-mode outlier read split the samples by ("fan on/off
+    # (fan status)", "inferred off-mode ..."), and the outlier share it found; None when the point
+    # was not read per mode (the pooled read stands).
+    mode_source: str | None = None
+    mode_outlier_frac: float | None = None
+    # Stray rows (flag ``stray_lead`` / ``stray_tail``): the point was judged on its main span,
+    # ``main_start`` .. ``main_end``, and ``n_stray`` samples beyond its longest gap were left out.
+    # All three are None when the point has no stray rows.
+    main_start: str | None = None
+    main_end: str | None = None
+    n_stray: int | None = None
+    # A pile-up at a round-number range limit (flag ``clipped``; filled by :func:`frame_checks`):
+    # ``{"side", "limit", "limit_label", "n", "frac", "frac_fan_off"}``, else None.
+    clipped: dict | None = None
+    # ==== end 098-sensor-health (#87) ====
 
     def as_dict(self) -> dict:
         """Return the trust result as a plain dict."""
         d = self.__dict__.copy()
         d["flags"] = list(self.flags)
+        d["clipped"] = None if self.clipped is None else dict(self.clipped)
         d["stuck_intervals"] = [dict(x) for x in self.stuck_intervals]
         d["frame_checks"] = [dict(x) for x in self.frame_checks]
         return d
@@ -631,6 +649,78 @@ def _status_checks(series: pd.Series, role, expected_freq=None):
     return n_changes, flags, cap
 
 
+# ==== begin 098-sensor-health (#87) ====
+
+#: Stray rows (0.98, #87): a point's longest gap between valid samples marks the rows beyond it as
+#: stray when the gap is at least this long ...
+_STRAY_GAP = pd.Timedelta(days=30)
+#: ... and at least this share of the point's own span ...
+_STRAY_GAP_SPAN_FRAC = 0.20
+#: ... and the rows on one side of it are at most this share of the valid samples. A few rows
+#: logged long before (or after) the real record are then left out of the judgement instead of
+#: turning the whole span into "low coverage". Swept over 641 catalog series: only irish-ahu's
+#: early rows qualify.
+_STRAY_SIDE_FRAC = 0.01
+
+
+def _stray_split(series: pd.Series):
+    """``(main series, flag, n_stray)``: ``series`` without stray lead or tail rows.
+
+    ``flag`` is ``"stray_lead"`` / ``"stray_tail"`` (``None`` and ``series`` unchanged when there
+    are none). See :data:`_STRAY_GAP`.
+    """
+    valid = series.dropna().index
+    if len(valid) < 3 or not isinstance(valid, pd.DatetimeIndex):
+        return series, None, 0
+    ts = valid.sort_values()
+    gaps = ts[1:] - ts[:-1]
+    i = int(np.argmax(gaps))
+    gap = gaps[i]
+    span = ts[-1] - ts[0]
+    if gap < _STRAY_GAP or gap < _STRAY_GAP_SPAN_FRAC * span:
+        return series, None, 0
+    n = len(ts)
+    lead, tail = i + 1, n - (i + 1)
+    if lead <= _STRAY_SIDE_FRAC * n:
+        return series.loc[ts[i + 1] :], "stray_lead", lead
+    if tail <= _STRAY_SIDE_FRAC * n:
+        return series.loc[: ts[i]], "stray_tail", tail
+    return series, None, 0
+
+
+#: Roles read per operating mode when a mode is given (0.98, #87): the fan-dependent roles whose
+#: value distribution is legitimately one population per mode (a supply air held tight at setpoint
+#: while running, anywhere between plenum and coil temperature while off). The duty-cycled roles
+#: (airflow, OA flow) already have the two-regime read.
+_MODE_ROLES: frozenset = frozenset(r for r in FAN_GATED_ROLES if r not in _INTERMITTENT_ROLES)
+
+
+def _mode_outlier_frac(series: pd.Series, mode, scale_floor) -> float | None:
+    """The shape-aware outlier share with each operating mode judged on its own samples.
+
+    ``mode`` labels every sample (a fan-on boolean, or ``"on"`` / ``"off"``); a mode with fewer
+    than 24 samples, and samples with no label, keep the pooled (whole-series) read. ``None`` when
+    no mode holds 24 samples -- nothing was read per mode.
+    """
+    s = pd.to_numeric(series, errors="coerce")
+    ok = s.notna().to_numpy()
+    vals = s.to_numpy(dtype="float64")[ok]
+    if len(vals) < 3:
+        return None
+    labels = pd.Series(mode).reindex(s.index)[ok]
+    flags = _shape_outlier_flags(vals, scale_floor, _MAD_Z_CUTOFF)
+    read = False
+    for k in pd.unique(labels.dropna()):
+        sel = (labels == k).to_numpy()
+        if int(sel.sum()) >= _MIN_GATED:
+            flags[sel] = _shape_outlier_flags(vals[sel], scale_floor, _MAD_Z_CUTOFF)
+            read = True
+    return float(flags.mean()) if read else None
+
+
+# ==== end 098-sensor-health (#87) ====
+
+
 def _verdict(trust: float) -> str:
     return "trusted" if trust >= 0.8 else ("suspect" if trust >= 0.5 else "untrusted")
 
@@ -644,6 +734,8 @@ def sensor_trust(
     stuck_hours=None,
     run_gate=None,
     run_gate_source: str | None = None,
+    mode=None,
+    mode_source: str | None = None,
 ) -> SensorTrust:
     """Score one point's trustworthiness from quality stats + physical-range checks.
 
@@ -671,6 +763,19 @@ def sensor_trust(
     it. When the equipment ran for fewer than 24 samples the point is flagged ``not_running`` and
     scored on coverage alone -- there is nothing to judge it on. ``run_gate_source`` names the
     gate in the result's ``run_gate``.
+
+    ``mode`` (provisional, 0.98, #87; a Series labelling each sample's operating mode, e.g. the
+    fan-on mask) reads the outliers of a fan-dependent role (:data:`FAN_GATED_ROLES`, less the
+    duty-cycled airflows) **per mode**: a supply air held tight at setpoint while running and
+    anywhere between plenum and coil temperature while off is two populations, not one population
+    with outliers. A mode with fewer than 24 samples is judged pooled. The score is rebuilt from its
+    parts with the per-mode outlier share; ``mode_outlier_frac`` reports it and ``mode_source`` (the
+    caller's label) names the split. Ignored for other roles and when ``run_gate`` applies.
+
+    Stray rows (0.98, #87): when the point's longest gap is at least 30 days and 20 % of its span,
+    and the rows on one side of it are at most 1 % of its samples, those rows are left out and the
+    point is judged on its main span (flag ``stray_lead`` / ``stray_tail``, with ``main_start``,
+    ``main_end`` and ``n_stray``). ``first_valid`` and ``window_coverage`` keep their meaning.
     """
     intermittent = role in _INTERMITTENT_ROLES
     full = series
@@ -682,6 +787,7 @@ def sensor_trust(
         if lead > 0.05:
             late = True
         series = full.loc[first:]
+    series, stray, n_stray = _stray_split(series)  # 0.98 (#87)
     q = assess(
         series,
         expected_freq,
@@ -724,16 +830,31 @@ def sensor_trust(
             quality = qj.score / qj.coverage if qj.coverage > 0 else 0.0
             trust = q.coverage * quality * (1.0 - rng_pen)
             flat_frac = qj.flatline_frac
+    flat_raw = flat_frac
     if gate is not None and role in FAN_GATED_ROLES:
         gated = _gated_flatline_frac(series, gate)
         if gated is not None:
             # swap the ungated flatline share of the composite score for the gated one
             trust = trust / (1.0 - 0.2 * q.flatline_frac) * (1.0 - 0.2 * gated)
-            flat_frac = round(gated, 4)
+            flat_frac, flat_raw = round(gated, 4), gated
+    # 0.98 (#87): outliers read per operating mode; the score is rebuilt from its parts
+    mode_out = None
+    if mode is not None and role in _MODE_ROLES and plant_g is None and not not_running:
+        mode_out = _mode_outlier_frac(series, mode, _scale_floor(series, role))
+        if mode_out is not None:
+            rng_pen = 0.0 if rng != rng else min(rng * 3.0, 1.0)
+            trust = (
+                q.coverage
+                * (1.0 - min(mode_out * 2.0, 1.0))
+                * (1.0 - 0.2 * flat_raw)
+                * (1.0 - rng_pen)
+            )
 
     flags = []
     if late:
         flags.append("late_start")
+    if stray:
+        flags.append(stray)  # 0.98 (#87): judged on the main span
     if q.coverage < 0.9:
         flags.append("low_coverage")
     if q.n_gaps > 0:
@@ -749,6 +870,8 @@ def sensor_trust(
         # floored at the sensor's precision and two-sided for a skewed operating tail, so a
         # tightly-controlled point or a pump idling then ramping with load isn't a fault
         out_frac = qj.shape_outlier_frac
+    if mode_out is not None:
+        out_frac = mode_out  # 0.98 (#87): each operating mode judged on its own samples
     if not_running:
         flags.append("not_running")  # 0.92 (#66)
     elif out_frac > 0.05:
@@ -802,6 +925,11 @@ def sensor_trust(
         window_coverage=window_cov,
         n_state_changes=n_changes,
         run_gate=run_gate_source if plant_g is not None else None,
+        mode_source=mode_source if mode_out is not None else None,
+        mode_outlier_frac=None if mode_out is None else round(mode_out, 4),
+        main_start=str(series.first_valid_index()) if stray else None,
+        main_end=str(series.last_valid_index()) if stray else None,
+        n_stray=n_stray if stray else None,
     )
 
 
@@ -986,6 +1114,10 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     mixed-air temperature that fails the flow-weighted OA/RA balance (``mixing_balance``, from
     :func:`mixing_flow_consistency`). See :func:`_check_copied_signal` and
     :func:`_check_mixing_balance` for what each lowers.
+
+    Since 0.98 (#87) a point clipped at a round-number range limit (:func:`clipped_at_limit`) is
+    flagged ``clipped``, with the details and the share of those samples with the fan off in
+    ``SensorTrust.clipped``; the flag carries no trust penalty.
     """
     _check_fan_off_pressure(frame, health)
     _check_status_speed(frame, health)
@@ -993,11 +1125,80 @@ def frame_checks(frame: pd.DataFrame, health: dict) -> dict:
     # 0.92 (#16): cross-sensor physics into trust
     _check_copied_signal(frame, health)
     _check_mixing_balance(frame, health)
+    _check_clipped(frame, health)  # 0.98 (#87): flag only
     return health
 
 
+# ==== begin 098-sensor-health (#87) ====
+
+#: The inferred off-mode (0.98, #87): with no fan signal, a sample reads as "off" when the OA
+#: damper is at or below this (%) ...
+_OFF_DAMPER_PCT = 2.0
+#: ... and every trended coil valve at or below this (%) -- nothing is being conditioned.
+_OFF_VALVE_PCT = 1.0
+#: An "off" mode holding more than this share of the samples is not a minority operating mode
+#: (a unit parked for months, or points that never move): no mode is inferred.
+_OFF_MAX_SHARE = 0.60
+_OFF_MODE_SOURCE = "inferred off-mode (OA damper and coil valves closed)"
+
+
+def _inferred_off_mode(frame: pd.DataFrame):
+    """``(labels, source)``: an ``"on"`` / ``"off"`` label per sample for a unit with no fan signal.
+
+    "off" = OA damper <= 2 % and every trended coil valve <= 1 %; samples missing any of them are
+    unlabelled. Needs the damper and at least one valve, 24 samples in each mode, and an off share
+    of at most 60 %; otherwise ``(None, None)``.
+    """
+    from .units import normalize_percent
+
+    damper = _col(frame, Role.OA_DAMPER)
+    valves = [
+        v for v in (_col(frame, Role.HEAT_VALVE), _col(frame, Role.COOL_VALVE)) if v is not None
+    ]
+    if damper is None or not valves:
+        return None, None
+    damper = normalize_percent(damper)
+    valves = [normalize_percent(v) for v in valves]
+    known = damper.notna()
+    off = damper <= _OFF_DAMPER_PCT
+    for v in valves:
+        known &= v.notna()
+        off &= v <= _OFF_VALVE_PCT
+    off &= known
+    on = known & ~off
+    n_off, n_on = int(off.sum()), int(on.sum())
+    if n_off < _MIN_GATED or n_on < _MIN_GATED or n_off / (n_off + n_on) > _OFF_MAX_SHARE:
+        return None, None
+    labels = pd.Series(None, index=frame.index, dtype=object)
+    labels[off.to_numpy()] = "off"
+    labels[on.to_numpy()] = "on"
+    return labels, _OFF_MODE_SOURCE
+
+
+def _resolve_mode(frame: pd.DataFrame, mode, gate, gate_source):
+    """``(labels, source)`` for :func:`frame_sensor_health`'s ``mode`` argument."""
+    if mode is None:
+        return None, None
+    if not isinstance(mode, str):
+        return mode, "caller-supplied mode"
+    if mode != "auto":
+        raise ValueError(f"mode must be 'auto', a Series or None, got {mode!r}")
+    # A unit with a fan signal keeps the pooled read: per fan on/off mode it moved healthy duct
+    # points by up to -0.34 on the catalog data (a fan-off spread is not one population either).
+    if gate is not None:
+        return None, None
+    from .schedules import fan_on_mask
+
+    if fan_on_mask(frame)[0] is not None:
+        return None, None
+    return _inferred_off_mode(frame)
+
+
+# ==== end 098-sensor-health (#87) ====
+
+
 def frame_sensor_health(
-    frame: pd.DataFrame, *, expected_freq=None, gate=None, plant_gate=None
+    frame: pd.DataFrame, *, expected_freq=None, gate=None, plant_gate=None, mode=None
 ) -> dict:
     """Trust score every role-column of a role-frame -> ``{Role: SensorTrust}``.
 
@@ -1010,16 +1211,26 @@ def frame_sensor_health(
     (:data:`PLANT_GATED_ROLES`, and a chiller's power) on their equipment's running samples, with
     the gate read from the frame by :func:`plant_gates`; ``None`` (the default) leaves them
     ungated.
+
+    ``mode`` (provisional, 0.98, #87) reads the fan-dependent roles' outliers per operating mode
+    (see :func:`sensor_trust`): a Series of per-sample labels, or ``"auto"`` -- on a unit with **no
+    fan signal** (no ``gate`` and nothing for :func:`camber.schedules.fan_on_mask`), an **inferred
+    off-mode** (OA damper <= 2 % and every trended coil valve <= 1 %; it needs the damper and a
+    valve, 24 samples in each mode and an off share of at most 60 %). A unit with a fan signal keeps
+    the pooled read under ``"auto"`` (pass the fan mask as ``mode`` to read per fan mode anyway).
+    ``None`` (the default) keeps the pooled read. ``SensorTrust.mode_source`` names the split used.
     """
+    gate_source = None
     if isinstance(gate, str):
         if gate != "fan":
             raise ValueError(f"gate must be a boolean Series, 'fan' or None, got {gate!r}")
         from .schedules import fan_on_mask
 
-        gate = fan_on_mask(frame)[0]
+        gate, gate_source = fan_on_mask(frame)
     if plant_gate not in (None, "auto"):
         raise ValueError(f"plant_gate must be 'auto' or None, got {plant_gate!r}")
     pg = plant_gates(frame) if plant_gate == "auto" else {}  # 0.92 (#66)
+    labels, mode_source = _resolve_mode(frame, mode, gate, gate_source)  # 0.98 (#87)
     health = {
         role: sensor_trust(
             frame[role],
@@ -1028,6 +1239,8 @@ def frame_sensor_health(
             gate=gate,
             run_gate=pg[role][0] if role in pg else None,
             run_gate_source=pg[role][1] if role in pg else None,
+            mode=labels,
+            mode_source=mode_source,
         )
         for role in frame.columns
     }
@@ -1492,8 +1705,23 @@ _QUANTISED_SHARE = 0.5
 _CONTINUOUS_SHARE = 0.05
 
 
+#: Stepwise series (0.98, #87): a status point, or one with at least this share of its samples on
+#: at most two levels, follows a schedule when a whole day's pattern is shared by at least
+#: :data:`_SCHEDULE_MIN_DAYS` days -- a repeat that is the schedule doing its job, not a fill.
+_STEPWISE_SHARE = 0.95
+_SCHEDULE_MIN_DAYS = 3
+
+
+def _is_stepwise(s: pd.Series, role) -> bool:
+    if role in STATUS_ROLES:
+        return True
+    counts = s.value_counts()
+    return bool(len(counts) and counts.iloc[:2].sum() >= _STEPWISE_SHARE * len(s))
+
+
 def gapfill_signature(
     series: pd.Series,
+    role=None,
     *,
     window: str = "30D",
     min_window_samples: int = 500,
@@ -1519,6 +1747,13 @@ def gapfill_signature(
     likewise not evaluable. A granularity change can also be a trend reconfiguration or a sensor
     replacement -- the check says the segments came from different processes, not which one is
     true. Severity is at most ``warn``.
+
+    **Schedules (0.98, #87).** A *stepwise* point -- a status role (pass ``role``), or any series
+    with at least 95 % of its samples on at most two levels -- legitimately repeats whole days: a
+    fan on a fixed weekday schedule does exactly that. Days sharing one pattern with at least two
+    other days (three or more in all) are reported as scheduled (``scheduled_days``,
+    ``n_schedule_patterns``; the summary says "N days follow a fixed schedule"), not as a warning,
+    and ``repeated_days`` keeps only the repeats a schedule does not explain.
     """
     check = "gapfill_signature"
     s = pd.to_numeric(series, errors="coerce").dropna()
@@ -1552,10 +1787,21 @@ def gapfill_signature(
             continue
         key = (tuple(v.index - day), tuple(v.to_numpy(dtype="float64")))
         if key in seen:
-            repeated.append((str(seen[key].date()), str(day.date())))
+            repeated.append((str(seen[key].date()), str(day.date()), key))
         else:
             seen[key] = day
     n_days = len(seen) + len(repeated)
+    # 0.98 (#87): a stepwise point's patterns shared by >= 3 days are its schedule
+    n_sched_days, n_patterns = 0, 0
+    if repeated and _is_stepwise(s, role):
+        per_key: dict = {}
+        for _a, _b, key in repeated:
+            per_key[key] = per_key.get(key, 1) + 1
+        sched = {k for k, n in per_key.items() if n >= _SCHEDULE_MIN_DAYS}
+        n_patterns = len(sched)
+        n_sched_days = sum(per_key[k] for k in sched)
+        repeated = [r for r in repeated if r[2] not in sched]
+    repeated_pairs = [(a, b) for a, b, _key in repeated]
 
     classes = {w[3] for w in wins}
     caveats = []
@@ -1581,19 +1827,28 @@ def gapfill_signature(
     )
     susp = sum(1 for w in wins if w[3] == "continuous") if findings and continuous else 0
     frac = (susp / len(wins)) if wins else float("nan")
+    summary = "; ".join(findings) if findings else "no gap-fill signature found"
+    if n_sched_days:
+        summary += (
+            f"; {n_sched_days} days follow a fixed schedule ({n_patterns} daily pattern"
+            f"{'s' if n_patterns != 1 else ''} repeated on 3 or more days: a stepwise point doing "
+            "its job, not a fill)"
+        )
     return ConsistencyResult(
         check=check,
         n_checked=int(len(s)),
         violation_frac=round(frac, 4) if frac == frac else frac,
         severity="warn" if findings else ("info" if not wins else "ok"),
-        summary="; ".join(findings) if findings else "no gap-fill signature found",
+        summary=summary,
         metrics={
             "windows": [
                 {"start": str(a), "end": str(b), "repeat_share": sh, "class": c}
                 for a, b, sh, c in wins
             ],
             "n_days": n_days,
-            "repeated_days": repeated[:20],
+            "repeated_days": repeated_pairs[:20],
+            "scheduled_days": n_sched_days,
+            "n_schedule_patterns": n_patterns,
         },
         caveats=caveats,
     )
@@ -1891,3 +2146,167 @@ def _check_mixing_balance(frame: pd.DataFrame, health: dict) -> None:
     _mark(health, Role.MIXED_AIR_TEMP, "mixing_balance", dict(check), cap=_SUSPECT_CAP)
     for role in (Role.OAT, Role.RETURN_AIR_TEMP):
         _mark(health, role, "mixing_balance", dict(check))
+
+
+# ==== begin 098-sensor-health (#87) ====
+# Clipped at a range limit: a sensor that reads its full scale (a 0-2000 ppm CO2 transmitter in a
+# closed room overnight, a flow station topping out) reports the limit, not the quantity. The
+# reading is a lower (or upper) bound; nothing statistical names it, because the pile-up looks
+# like a second mode or a run of outliers.
+
+#: Roles checked at both ends of their range, and roles checked at the high end only (their low
+#: end is a legitimate "off" zero). Supply air, condenser water and humidity are left out: a
+#: controller's own limits (a SAT low limit, a tower's minimum, a humidifier's cap) pile up at
+#: round numbers too, and the check fired on those on the catalog data.
+_CLIP_BOTH: frozenset = frozenset(
+    {
+        Role.CO2,
+        Role.OUTDOOR_CO2,
+        Role.OAT,
+        Role.WETBULB_TEMP,
+        Role.SPACE_TEMP,
+        Role.RETURN_AIR_TEMP,
+    }
+)
+_CLIP_HIGH: frozenset = frozenset(
+    {Role.AIRFLOW, Role.OA_AIRFLOW, Role.CHW_FLOW, Role.HW_FLOW, Role.DUCT_STATIC}
+)
+_CLIP_UNITS: dict = {
+    Role.CO2: "ppm",
+    Role.OUTDOOR_CO2: "ppm",
+    Role.AIRFLOW: "cfm",
+    Role.OA_AIRFLOW: "cfm",
+    Role.CHW_FLOW: "gpm",
+    Role.HW_FLOW: "gpm",
+    Role.DUCT_STATIC: "in. w.c.",
+}
+#: A sample sits "at" the limit within this share of the series' value span ...
+_CLIP_TOL_FRAC = 0.001
+#: ... at least this many samples, and this share of them, sit there ...
+_CLIP_MIN_N = 12
+_CLIP_MIN_FRAC = 0.005
+#: ... at this many times the density (samples per unit value) of the adjacent band ...
+_CLIP_DENSITY_RATIO = 10.0
+#: ... which is this share of the span wide; and the limit is a round number (2 significant
+#: figures; temperatures in degF or degC) to within this relative error. A transmitter's full
+#: scale is a configured number, so its reading sits on it (2000 ppm read 1999.9985, 20000 cfm read
+#: 19999); a fan or flow at its design maximum lands only *near* one (a simulated supply fan
+#: topping out at 3397 cfm is 0.08 % from 3400 and must not count).
+_CLIP_BAND_FRAC = 0.05
+_CLIP_SIG_FIGS = 2
+_CLIP_ROUND_REL = 1e-4
+
+
+def _round_sig(x: float, sig: int = _CLIP_SIG_FIGS) -> float:
+    if x == 0 or not np.isfinite(x):
+        return 0.0
+    return float(round(x, sig - 1 - int(np.floor(np.log10(abs(x))))))
+
+
+def _round_limit(limit: float, role, tol: float):
+    """The round-number label of ``limit``, or None when it is not a round number."""
+    unit = _CLIP_UNITS.get(role, "")
+
+    def near(x: float, r: float, t: float) -> bool:
+        return abs(x - r) <= (min(t, _CLIP_ROUND_REL * abs(r)) if r else t)
+
+    r = _round_sig(limit)
+    if near(limit, r, tol):
+        if role in _TEMP_ROLES:
+            return f"{r:,g} °F"
+        return f"{r:,g} {unit}".strip()
+    if role in _TEMP_ROLES:
+        c = (limit - 32.0) / 1.8
+        rc = _round_sig(c)
+        if near(c, rc, tol / 1.8):
+            return f"{rc:,g} °C ({limit:.1f} °F)"
+    return None
+
+
+def _clip(series: pd.Series, role):
+    """``(clipped dict, at-limit mask)`` for one point, or ``(None, None)``."""
+    sides: tuple[str, ...]
+    if role in _CLIP_BOTH:
+        sides = ("high", "low")
+    elif role in _CLIP_HIGH:
+        sides = ("high",)
+    else:
+        return None, None
+    s = pd.to_numeric(series, errors="coerce")
+    v = s.dropna()
+    if len(v) < _MIN_GATED:
+        return None, None
+    lo, hi = float(v.min()), float(v.max())
+    span = hi - lo
+    if not span > 0:
+        return None, None
+    tol = _CLIP_TOL_FRAC * span
+    band = _CLIP_BAND_FRAC * span
+    best = None
+    for side in sides:
+        limit = hi if side == "high" else lo
+        dist = (limit - v) if side == "high" else (v - limit)
+        at = dist <= tol
+        n_at = int(at.sum())
+        if n_at < _CLIP_MIN_N or n_at / len(v) < _CLIP_MIN_FRAC:
+            continue
+        n_band = int(((dist > tol) & (dist <= band)).sum())
+        if n_at / tol < _CLIP_DENSITY_RATIO * n_band / (band - tol):
+            continue
+        label = _round_limit(limit, role, tol)
+        if label is None:
+            continue
+        if best is None or n_at > best[0]["n"]:
+            d = {
+                "side": side,
+                "limit": round(limit, 4),
+                "limit_label": label,
+                "n": n_at,
+                "frac": round(n_at / len(v), 4),
+            }
+            best = (d, at.reindex(s.index, fill_value=False))
+    return best if best is not None else (None, None)
+
+
+def clipped_at_limit(series: pd.Series, role) -> dict | None:
+    """A pile-up of ``series`` at a round-number range limit, or ``None``.
+
+    Provisional (0.98, #87). A sensor at full scale reports its limit, not the quantity: the
+    reading is a bound. A point is clipped when at least 12 samples and 0.5 % of them sit within
+    0.1 % of the value span of its maximum (or minimum), at ten times the density of the adjacent
+    5 % band, and that limit is a round number (2 significant figures, to within 0.01 %; a
+    temperature in degF or degC). Checked at both ends for CO2, OAT, wet bulb, space and return
+    air; at the high end only for airflow, OA airflow, chilled- and hot-water flow and duct static
+    (their low end is "off").
+    Supply air, condenser water and humidity are not checked: control limits pile up at round
+    numbers too.
+
+    Returns ``{"side", "limit", "limit_label", "n", "frac"}`` (``limit`` is the observed extreme;
+    ``limit_label`` the round number it sits at). :func:`frame_checks` adds ``frac_fan_off``, the
+    share of the clipped samples with the supply fan clearly off, and flags the point ``clipped``
+    (no trust penalty).
+    """
+    return _clip(series, role)[0]
+
+
+def _check_clipped(frame: pd.DataFrame, health: dict) -> None:
+    """Flag every point clipped at a range limit (``clipped``; flag only, no trust penalty)."""
+    off, looked = None, False
+    for role, t in health.items():
+        d, at = _clip(frame[role], role) if role in frame.columns else (None, None)
+        if d is None:
+            continue
+        if not looked:
+            off, looked = _fan_off(frame), True
+        frac_off = None
+        if off is not None:
+            known = at & off.notna()
+            n_known = int(known.sum())
+            if n_known:
+                frac_off = round(float((known & off.fillna(False).astype(bool)).sum()) / n_known, 4)
+        d = {**d, "frac_fan_off": frac_off}
+        t.clipped = d
+        _mark(health, role, "clipped", {"check": "clipped_at_limit", **d})
+
+
+# ==== end 098-sensor-health (#87) ====

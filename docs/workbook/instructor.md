@@ -940,8 +940,10 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 ### `data-trend-quality`: are the trends good enough?
 
 Figures from the real `nuig-ahu101`, `lbnl-b59` and `irish-ahu` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](data-trend-quality.md#setup). Trust scores
-are the RCx reports' (hourly, gated on the unit's fan signal).
+0.97.0-dev (the clipped, schedule, stray-row and per-mode figures 0.98.0-dev), with the commands
+on the [exercise page](data-trend-quality.md#setup). Trust scores are the RCx reports' (hourly,
+gated on the unit's fan signal; for a unit with no fan point, read per its inferred operating
+mode).
 
 **Answer key**
 
@@ -961,8 +963,10 @@ are the RCx reports' (hourly, gated on the unit's fan signal).
    screening-grade: it can make a point suspect, never untrusted on its own.
 4. *The ceiling.* The room CO2 tops out at the sensor's full scale, just under 2000 ppm; 532
    stored 15-minute samples read it, and every one has the supply fan off. It is a clipped reading, a
-   lower bound, not a measurement. The trust score does not name it (it flags outliers and a
-   bimodal shape); the ingest's quirk note and the dataset's data issues do.
+   lower bound, not a measurement. The trust table names it: the CO2 point carries the `clipped`
+   flag, and `SensorTrust.clipped` gives the limit (`2,000 ppm`, high side) and the share of
+   those samples with the fan off (1.0). The flag carries no trust penalty; the ingest's quirk
+   note and the dataset's data issues say the same.
 5. *The held meter.* `ELE_lig_S` holds one value for 32.25 h and 36.5 h, both runs starting on a
    Saturday. A lighting load parked at its base over a weekend is plausible; a logger holding its
    last value is too. The flag says "look", and the trend viewer (does anything else move in
@@ -970,14 +974,22 @@ are the RCx reports' (hourly, gated on the unit's fan signal).
 6. *Filled or not.* `RTU01_zone_022`'s CO2 has two 30-day windows of continuous values (every
    value unique) from 2020-04-26, between windows that repeat the sensor's resolution: a filled
    stretch, which the publisher's README says exists (gaps filled by interpolation and other
-   methods). The nuig fan status "repeats whole days exactly" too, but that is a fixed weekday
-   schedule doing its job: the same screen, an innocent cause.
-7. *The irish supply air.* It reads *untrusted* at 0.19 over the whole record for two reasons:
-   a few stray rows logged years before the rest, then a long gap, make its coverage over its
-   own span low, and a supply air held tightly at setpoint makes every hour spent at
-   another operating level look like a robust outlier. Judged from the first sample after the
-   longest gap (2017-06-23), the low-coverage flag goes; the outlier flag stays. The sensor is
-   fine; the verdict describes the record and the control, not a fault.
+   methods). The nuig fan status repeats whole days too, and the screen now says why: passed the
+   role (or seeing a series on two levels), it reports that 191 days follow a fixed schedule (whole
+   days sharing a pattern with two or more others) instead of calling them fills. Three repeats
+   that no shared pattern explains still warn (two weekend pairs in March and May 2018, and two
+   weekdays in May 2018): look at them in the trend viewer, but a schedule override that ran twice
+   is the likely story.
+7. *The irish supply air.* Two things used to make it *untrusted* (0.19 in CAMBER 0.97), and
+   both are now handled. A few stray rows logged years before the rest, then a long gap, made its
+   coverage over its own span low: CAMBER now flags `stray_lead` and judges the point from the
+   first sample after the gap (2017-06-23), leaving the 4 stray rows out. And a supply air held
+   tightly at setpoint made every hour spent idle look like a robust outlier: the unit has no fan
+   point, so the RCx table infers an off-mode (OA damper and coil valves closed) and reads the
+   outliers per mode. The RCx gated column reads *trusted* at 0.89 (`stray_lead`, no outliers).
+   The plain one-population read, `sensor_trust` on the series alone, still reads *untrusted* at
+   0.27 with `outliers`: it does not know the operating modes. The sensor is fine; the plain
+   verdict described the control, not a fault.
 
 **Discussion points**
 
@@ -993,8 +1005,10 @@ are the RCx reports' (hourly, gated on the unit's fan signal).
 **Common mistakes**
 
 - Reading *suspect* as "broken": it means "verify before relying on it".
-- Treating the nuig fan status's repeated days as fabricated data.
-- Concluding the irish supply-air sensor must be replaced because its score is 0.19.
+- Treating the nuig fan status's repeated days as fabricated data, or the 3 unexplained repeats
+  as proof of a fill.
+- Concluding the irish supply-air sensor must be replaced because its plain `sensor_trust` score
+  is 0.27: read it per operating mode first.
 - Running `gapfill_signature` on an hourly resample: the means erase the granularity signature.
 - Counting a fan speed as missing: CAMBER uses it as the fan-on gate when no status exists.
 

@@ -14,11 +14,13 @@ Real-data figures were recorded from::
     camber report irish.json --layout rcx --out irish_rcx.html
 
 and the Python read of the same store shown on the page (``frame_sensor_health`` with
-``gate="fan"`` on hourly frames, ``gapfill_signature`` and ``sensor_trust`` on the stored grid).
-The RCx reports' trust tables show the same verdicts and scores as the hourly reads below.
+``gate="fan"`` and ``mode="auto"`` on hourly frames, ``gapfill_signature`` and ``sensor_trust`` on
+the stored grid). The RCx reports' trust tables show the same verdicts and scores as the hourly
+reads below (the gated column; for irish-ahu, which has no fan point, the per-mode read).
 
 (CAMBER 0.97.0-dev, the default subsets of nuig-ahu101, lbnl-b59 (with its manual download) and
-irish-ahu, 2026-09-29.)
+irish-ahu, 2026-09-29; the clipped, schedule, stray-row and per-mode figures CAMBER 0.98.0-dev
+(#87), 2026-09-30.)
 """
 
 from __future__ import annotations
@@ -70,8 +72,11 @@ def _frame(ctx, run: str, equip: str, resample=None) -> pd.DataFrame:
 
 
 def _health(ctx, run: str, equip: str) -> dict:
-    """The trust table the RCx report shows: hourly frames, gated on the unit's own fan signal."""
-    return frame_sensor_health(_frame(ctx, run, equip, "1h"), gate="fan", plant_gate="auto")
+    """The trust table the RCx report shows: hourly frames, gated on the unit's own fan signal (a
+    unit with no fan point: outliers read per its inferred operating mode)."""
+    return frame_sensor_health(
+        _frame(ctx, run, equip, "1h"), gate="fan", plant_gate="auto", mode="auto"
+    )
 
 
 def _coverage(ctx) -> None:
@@ -125,7 +130,8 @@ def _mixing_balance(ctx) -> None:
 
 
 def _clipped_co2(ctx) -> None:
-    """Q4: the room CO2 tops out at the sensor's 2000 ppm full scale, only with the fan off."""
+    """Q4: the room CO2 tops out at the sensor's 2000 ppm full scale, only with the fan off; the
+    trust table names it (flag ``clipped``, 0.98 #87)."""
     f = _frame(ctx, "nuig", "AHU101__ahu101")
     co2, fan = f[Role.CO2], f[Role.SUPPLY_FAN_STATUS]
     assert 1999.0 <= co2.max() <= 2000.0, f"CO2 max {co2.max()}"
@@ -133,6 +139,11 @@ def _clipped_co2(ctx) -> None:
     assert top.sum() > 0 and (fan[top] < 0.5).all(), "a full-scale CO2 sample has the fan on"
     if ctx.mode == REAL:
         assert int(top.sum()) == 532, f"{int(top.sum())} full-scale samples"
+    t = _health(ctx, "nuig", "AHU101__ahu101")[Role.CO2]
+    assert "clipped" in t.flags and t.clipped, t.flags
+    c = t.clipped
+    assert c["side"] == "high" and c["limit_label"] == "2,000 ppm", c
+    assert c["frac_fan_off"] == 1.0, c
 
 
 def _stuck_lighting(ctx) -> None:
@@ -150,30 +161,44 @@ def _stuck_lighting(ctx) -> None:
 
 def _gapfill(ctx) -> None:
     """Q6: a zone CO2 changes value granularity (a filled stretch); nuig's fan status repeats
-    whole days exactly -- a fixed schedule, which the same screen also reports."""
+    whole days exactly -- a fixed schedule, which the screen reports as one (0.98 #87). On the real
+    data three repeats are not explained by a shared pattern and still warn."""
     r = gapfill_signature(_frame(ctx, "b59", "RTU01_zone_022")[Role.CO2])
     assert r.severity == "warn" and "granularity" in r.summary, r.summary
     cont = [w for w in r.metrics["windows"] if w["class"] == "continuous"]
     assert cont, r.metrics["windows"]
     if ctx.mode == REAL:
         assert len(cont) == 2 and cont[0]["start"].startswith("2020-04-26"), cont
-    fan = gapfill_signature(_frame(ctx, "nuig", "AHU101__ahu101")[Role.SUPPLY_FAN_STATUS])
-    assert fan.severity == "warn" and "repeat another day" in fan.summary, fan.summary
+    status = _frame(ctx, "nuig", "AHU101__ahu101")[Role.SUPPLY_FAN_STATUS]
+    fan = gapfill_signature(status, Role.SUPPLY_FAN_STATUS)
+    assert "follow a fixed schedule" in fan.summary, fan.summary
+    assert fan.metrics["scheduled_days"] > 0 and fan.metrics["n_schedule_patterns"] > 0
+    if ctx.mode == REAL:
+        assert fan.metrics["scheduled_days"] == 191, fan.metrics["scheduled_days"]
+        assert fan.severity == "warn" and len(fan.metrics["repeated_days"]) == 3, fan.summary
+    else:
+        assert fan.severity != "warn" and not fan.metrics["repeated_days"], fan.summary
 
 
 def _irish_sat(ctx) -> None:
-    """Q7: irish-ahu's supply air reads 'untrusted' over the whole record; after the stray
-    early rows (the longest gap) the low-coverage flag goes, the outlier flag stays."""
+    """Q7: irish-ahu's supply air: the stray early rows are left out (``stray_lead``; judged from
+    the first sample after the longest gap), and the RCx table reads its outliers per inferred
+    operating mode -- trusted. The plain one-population read keeps the outliers: untrusted."""
     sat = _frame(ctx, "irish", "AHU__ahu", "1h")[Role.SUPPLY_AIR_TEMP]
-    whole = sensor_trust(sat, Role.SUPPLY_AIR_TEMP)
-    assert whole.verdict == "untrusted", whole.verdict
-    assert {"low_coverage", "outliers"} <= set(whole.flags), whole.flags
+    rcx = _health(ctx, "irish", "AHU__ahu")[Role.SUPPLY_AIR_TEMP]
+    assert rcx.verdict == "trusted" and "stray_lead" in rcx.flags, (rcx.verdict, rcx.flags)
+    assert "low_coverage" not in rcx.flags and "outliers" not in rcx.flags, rcx.flags
+    assert rcx.mode_source and rcx.mode_source.startswith("inferred off-mode"), rcx.mode_source
+    plain = sensor_trust(sat, Role.SUPPLY_AIR_TEMP)
+    assert plain.verdict == "untrusted" and "outliers" in plain.flags, plain.flags
+    assert "stray_lead" in plain.flags and "low_coverage" not in plain.flags, plain.flags
     valid = sat.dropna().index.to_series()
     after_gap = valid.index[valid.diff().argmax()]
-    trimmed = sensor_trust(sat[after_gap:], Role.SUPPLY_AIR_TEMP)
-    assert "low_coverage" not in trimmed.flags and "outliers" in trimmed.flags, trimmed.flags
+    assert plain.main_start == str(after_gap), (plain.main_start, after_gap)
     if ctx.mode == REAL:
-        assert round(whole.trust, 2) == 0.19, whole.trust
+        assert round(rcx.trust, 2) == 0.89, rcx.trust
+        assert round(plain.trust, 2) == 0.27, plain.trust
+        assert plain.n_stray == 4, plain.n_stray
         assert str(after_gap).startswith("2017-06-23"), after_gap
 
 
@@ -283,8 +308,9 @@ def _irish(rng) -> pd.DataFrame:
     """A 24/7 mixing-box AHU with no fan point: a few stray rows, then a 30-day gap, then 28 days.
 
     The supply air is held tightly at its ~66 F setpoint 70 % of the time; in the other hours the
-    controller runs it anywhere between 56 and 64 F (other operating modes): a healthy,
-    well-controlled sensor whose off-setpoint hours look like outliers to a robust test.
+    unit idles (OA damper and both coil valves shut) and the supply air sits anywhere between 56 and
+    64 F: a healthy, well-controlled sensor whose idle hours look like outliers to a one-population
+    robust test, and an off-mode CAMBER can infer from the damper and valves.
     """
     stray = pd.date_range("2017-12-01 01:00", periods=6, freq="15min")
     block = pd.date_range("2018-01-01", periods=28 * 96, freq="15min")
@@ -301,8 +327,8 @@ def _irish(rng) -> pd.DataFrame:
             Role.RETURN_AIR_TEMP: air[Role.RETURN_AIR_TEMP],
             Role.MIXED_AIR_TEMP: 0.2 * air[Role.OAT] + 0.8 * air[Role.RETURN_AIR_TEMP],
             Role.SUPPLY_AIR_TEMP: sat,
-            Role.OA_DAMPER: np.full(n, 20.0),
-            Role.HEAT_VALVE: np.clip(rng.normal(20, 5, n), 0, 100),
+            Role.OA_DAMPER: np.where(other, 0.0, 20.0),
+            Role.HEAT_VALVE: np.where(other, 0.0, np.clip(rng.normal(20, 5, n), 2, 100)),
             Role.COOL_VALVE: np.zeros(n),
             Role.HEAT_COIL_LEAVING_TEMP: sat + 0.5,
             Role.COOL_COIL_LEAVING_TEMP: sat + 0.2,
@@ -363,12 +389,16 @@ EXERCISE = Exercise(
         Check("RTU01 mixed air fails the mixing balance", _mixing_balance, quote="0.75"),
         Check("nuig CO2 clipped at full scale with the fan off", _clipped_co2, quote="532"),
         Check("nuig CO2 full scale", _clipped_co2, quote="just under 2000 ppm"),
+        Check("nuig CO2 clipped flag", _clipped_co2, quote="2,000 ppm"),
         Check("B59 lighting meter held over weekends", _stuck_lighting, quote="36.5 h"),
         Check("B59 lighting meter, first held run", _stuck_lighting, on=REAL, quote="32.25 h"),
         Check("gap-fill and repeated-day screens", _gapfill, quote="2020-04-26"),
         Check("gap-fill windows", _gapfill, on=REAL, quote="two 30-day windows"),
-        Check("irish supply air: coverage vs outliers", _irish_sat, quote="0.19"),
+        Check("nuig fan status follows a schedule", _gapfill, on=REAL, quote="191 days"),
+        Check("irish supply air read per mode", _irish_sat, on=REAL, quote="0.89"),
+        Check("irish supply air, one-population read", _irish_sat, on=REAL, quote="0.27"),
         Check("irish supply air after the gap", _irish_sat, on=REAL, quote="2017-06-23"),
+        Check("irish supply air stray rows", _irish_sat, quote="stray_lead"),
     ),
     standin=standin,
 )

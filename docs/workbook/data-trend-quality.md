@@ -84,11 +84,11 @@ from camber.store import ParquetStore
 
 store = ParquetStore("lab_store")
 rtu = store.read_role_frame(facility_id="ds-lbnl-b59", equip="RTU04", resample="1h")
-for role, t in frame_sensor_health(rtu, gate="fan", plant_gate="auto").items():
+for role, t in frame_sensor_health(rtu, gate="fan", plant_gate="auto", mode="auto").items():
     print(role.value, t.verdict, round(t.trust, 2), t.flags)
 
 zone = store.read_role_frame(facility_id="ds-lbnl-b59", equip="RTU01_zone_022")
-print(gapfill_signature(zone[Role.CO2]).summary)
+print(gapfill_signature(zone[Role.CO2], Role.CO2).summary)
 
 light = store.read_role_frame(facility_id="ds-lbnl-b59", equip="ELE_lig_S")
 print(sensor_trust(light[Role.POWER], Role.POWER).stuck_intervals)
@@ -112,9 +112,11 @@ print(sensor_trust(light[Role.POWER], Role.POWER).stuck_intervals)
 5. **Find the ceiling.** Plot `AHU101__ahu101`'s room CO2 with its supply-fan status. Look at the
    highest values and what the fan was doing then.
 6. **Find the held value and the filled stretch.** Run the Python above on `ELE_lig_S` and on
-   `RTU01_zone_022`; also run `gapfill_signature` on `AHU101__ahu101`'s supply-fan status.
-7. **Question a verdict.** In `irish_rcx.html` the supply air reads *untrusted*. Re-score it with
-   `sensor_trust` on the whole record, then only from the first sample after its longest gap.
+   `RTU01_zone_022`; also run `gapfill_signature(status, Role.SUPPLY_FAN_STATUS)` on
+   `AHU101__ahu101`'s supply-fan status.
+7. **Question a verdict.** In `irish_rcx.html` read the supply air's gated and ungated cells and
+   the *Gate used* column. Then score the same hourly series with plain `sensor_trust` and with
+   `frame_sensor_health(frame, mode="auto")`, and compare the flags.
 
 ## Questions
 
@@ -125,13 +127,14 @@ print(sensor_trust(light[Role.POWER], Role.POWER).stuck_intervals)
 3. Which mixed-air sensors fail the flow-weighted mixing balance? Why is that verdict capped at
    *suspect*, never *untrusted*?
 4. What is the highest room CO2 reading on `AHU101__ahu101`, how many stored samples read it, and
-   what was the supply fan doing? Is that a measurement?
+   what was the supply fan doing? Is that a measurement? How does the trust table name it?
 5. `ELE_lig_S` is flagged *stuck*. How long are its held stretches, and on what day of the week
    do they start? Is the meter broken?
 6. What does `gapfill_signature` say about `RTU01_zone_022`'s CO2, and about the nuig fan status?
-   Which of the two do you believe?
-7. Why is `irish-ahu`'s supply-air temperature *untrusted*, and what changes when you judge it
-   from the first sample after its longest gap? Is the sensor bad?
+   Which of the two do you believe, and what do you make of the repeats it does not explain?
+7. Why does plain `sensor_trust` call `irish-ahu`'s supply-air temperature *untrusted* while the
+   RCx table calls it *trusted*? What do the `stray_lead` flag and the per-mode read each change?
+   Is the sensor bad?
 
 ## What CAMBER shows
 
@@ -144,7 +147,12 @@ print(sensor_trust(light[Role.POWER], Role.POWER).stuck_intervals)
 - **`sensor_trust`**: one point's score, with `stuck_intervals` (start, end, hours, value) for
   every held stretch longer than its role's limit.
 - **`gapfill_signature`**: a screening verdict, with each 30-day window's class (*quantised*,
-  *continuous*, *mixed*) and any whole days that repeat exactly.
+  *continuous*, *mixed*), the whole days that repeat exactly, and, for a stepwise point, the days
+  that follow a fixed schedule (`scheduled_days`), which are not counted as repeats.
+- **New flags (0.98)**: `clipped` (a pile-up at a round-number range limit, named in
+  `SensorTrust.clipped`), `stray_lead` / `stray_tail` (rows beyond a long gap, left out of the
+  judgement), and, on a unit with no fan point, an outlier read per inferred operating mode
+  (`SensorTrust.mode_source`).
 - **Ingest notes**: `camber datasets ingest` prints each quirk it annotates or fixes; the
   catalog's data issues say why.
 

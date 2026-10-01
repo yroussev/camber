@@ -558,3 +558,23 @@ def test_box_by_hour_labels_sample_counts():
     labels = {t.get_text(): t.get_color() for t in ax.texts}
     assert labels["n=14"] == "#555" and labels["n=1"] == "#b3261e"
     plt.close(fig)
+
+
+def test_fanless_unit_gets_a_per_mode_gated_column(tmp_path, captured):
+    """0.98 (#87): a unit with no fan signal is read per an inferred off-mode in the gated column;
+    a fan-gated unit keeps its plain gate label."""
+    st = fx.make_store(tmp_path)
+    fr = fx.ahu_frame(fan=False)
+    idle = fr[Role.OA_DAMPER] == 0.0
+    fr.loc[idle & (fr.index.hour >= 12), Role.OA_DAMPER] = 10.0  # off share well under 60 %
+    st.write_role_frame(fr, facility_id=fx.FID, equip="FanlessAHU", equip_class="AHU")
+    run = run_config(fx.config(), base_dir=str(tmp_path))
+    rep = build_rcx_report(run, options=RcxOptions(sections=("data",)))
+    data = next(s for s in rep.sections if s["id"] == "data")
+    table = next(b for b in data["blocks"] if b["kind"] == "table" and "Gate used" in b["header"])
+    sat = next(r for r in table["rows"] if r[:2] == ["FanlessAHU", "supply_air_temp"])
+    assert sat[2] != "—" and "outliers read per mode: inferred off-mode" in sat[4]
+    assert sat[4].startswith("ungated — no fan signal")
+    other = next(r for r in table["rows"] if r[:2] == ["DemoAHU2", "supply_air_temp"])
+    assert other[4] == "fan status"
+    assert any(b["kind"] == "p" and "operating mode" in b.get("text", "") for b in data["blocks"])

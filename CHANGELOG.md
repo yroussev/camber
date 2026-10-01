@@ -87,6 +87,30 @@ calibrate it, and reads run configs from YAML as well as JSON.
   mkdocs nav, the README, and a "going further" pointer in the workbook index.
 <!-- /098-thresholds -->
 
+<!-- 098-sensor-health -->
+- **Clipped readings are named (#87 item 2, provisional).** `sensorhealth.clipped_at_limit(series,
+  role)` finds a pile-up at a round-number range limit (at least 12 samples and 0.5 % within 0.1 %
+  of the span of the extreme, ten times the density of the adjacent 5 % band, and the limit a round
+  number to within 0.01 %, in degF or degC for temperatures). `frame_checks` flags the point
+  `clipped` and fills `SensorTrust.clipped` (`side`, `limit`, `limit_label`, `n`, `frac`,
+  `frac_fan_off`); no trust penalty. Checked on CO2, OAT, wet bulb, space and return air (both
+  ends) and airflows, water flows and duct static (high end). On the catalog: nuig-ahu101's CO2 at
+  2,000 ppm (all fan-off), lbnl-b59's OA flow at 20,000 cfm, and the simulated 140 °F bound of one
+  LBNL dual-duct fault run.
+- **Outliers read per operating mode (#87 item 1a, provisional).** `sensor_trust(mode=,
+  mode_source=)` and `frame_sensor_health(mode=None | "auto" | Series)` judge a fan-dependent
+  duct point's outliers within each operating mode; `"auto"` infers an off-mode (OA damper <= 2 %,
+  every coil valve <= 1 %) on a unit with no fan signal only. New `SensorTrust.mode_source` and
+  `mode_outlier_frac`.
+- **Stray lead / tail rows (#87 item 1b).** A point's rows beyond a gap of 30 days or more (and 20 %
+  of its span) that hold at most 1 % of its samples are left out of the judgement: flag
+  `stray_lead` / `stray_tail`, with `SensorTrust.main_start`, `main_end` and `n_stray`.
+- **Scheduled status points (#87 item 3).** `gapfill_signature(series, role=None)`: for a stepwise
+  point (a status role, or >= 95 % of samples on two levels) days sharing a pattern with two or
+  more others are reported as "N days follow a fixed schedule" (`scheduled_days`,
+  `n_schedule_patterns`) rather than warned on; `repeated_days` keeps only unexplained repeats.
+<!-- /098-sensor-health -->
+
 ### Changed
 <!-- 098-core -->
 - **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
@@ -167,6 +191,18 @@ calibrate it, and reads run configs from YAML as well as JSON.
   fan status since 0.93 (#42). The catalog note and the template comment now say so, and say that
   the template still leaves the rule out until it is re-checked on these baselines.
 <!-- /098-refs-catalog -->
+
+<!-- 098-sensor-health -->
+- **RCx trust table (#87).** A unit with no fan signal is scored per its inferred operating mode in
+  the gated column, and *Gate used* says "outliers read per mode: inferred off-mode (OA damper and
+  coil valves closed)". On the catalog only `irish-ahu` changes: its supply air reads *trusted*
+  0.89 (was *untrusted* 0.19; plain `sensor_trust` now 0.27), its stray 2015 rows are left out
+  (return air, OA damper and both valves *suspect* -> *trusted*), and its economizer high-limit
+  issue's confidence moves M -> H. Every point flagged `clipped` shows the flag (one LBNL dual-duct
+  return air). Fan-gated units are unchanged: reading them per fan mode too was measured and
+  rejected (see docs/SENSOR-HEALTH.md). The workbook exercise `data-trend-quality` answers 4, 6
+  and 7 are rewritten.
+<!-- /098-sensor-health -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

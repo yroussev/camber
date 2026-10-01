@@ -1223,10 +1223,15 @@ def build_rcx_report(
         trust_raw[e] = frame_sensor_health(num)
         # 0.92 (#66): plant points (CHW/CW/HW temperatures, a chiller's power) are judged on
         # their equipment's running samples, so a chiller that is off doesn't read as a bad sensor
+        # 0.98 (#87): a unit with no fan signal has its duct-air outliers read per an inferred
+        # operating mode (OA damper and coil valves closed = off); a fan-gated unit keeps the
+        # pooled read (mode="auto" does both; see docs/SENSOR-HEALTH.md)
         if g is not None or plant_gates(num):
-            trust_gated[e] = frame_sensor_health(num, gate=g, plant_gate="auto")
+            trust_gated[e] = frame_sensor_health(num, gate=g, plant_gate="auto", mode="auto")
         else:
-            trust_gated[e] = trust_raw[e]
+            moded = frame_sensor_health(num, mode="auto")
+            has_mode = any(t.mode_source for t in moded.values())
+            trust_gated[e] = moded if has_mode else trust_raw[e]
         gfr = fr[_on(g, fr.index).to_numpy()] if g is not None else fr
         mixing[e] = mixing_consistency(gfr)
 
@@ -1757,22 +1762,36 @@ def _sec_data(S) -> dict:
         blocks.append(_table(["Equipment", "Result", "Samples", "Outside", "Detail"], mrows))
     rows = []
     for e in sorted(S["trust_raw"]):
+        # 0.98 (#87): a unit with no fan signal still shows the gated column when its outliers
+        # were read per an inferred operating mode
+        moded = any(getattr(t, "mode_source", None) for t in S["trust_gated"][e].values())
+        gated = S["gates"].get(e) is not None or moded
         for r, t in S["trust_raw"][e].items():
             if r not in _P3_ROLES and r not in (Role.AIRFLOW, Role.SUPPLY_FAN_STATUS):
                 continue
             gt = S["trust_gated"][e].get(r)
-            gated = S["gates"].get(e) is not None
+            used = S["gate_src"].get(e, FAN_GATE_NONE)
+            if gt is not None and getattr(gt, "mode_source", None):
+                used = f"{used}; outliers read per mode: {gt.mode_source}"
             rows.append(
                 [
                     e,
                     getattr(r, "value", str(r)),
                     _trust_cell(gt) if gated else "—",
                     _trust_cell(t),
-                    S["gate_src"].get(e, FAN_GATE_NONE),
+                    used,
                 ]
             )
     if rows:
         blocks.append(_p("Sensor trust, scored on fan-on samples (gated) and on all samples:"))
+        if any("outliers read per mode" in r[4] for r in rows):
+            blocks.append(
+                _p(
+                    "A unit with no fan signal shows a gated column too when an operating mode "
+                    "could be inferred (OA damper and coil valves closed = off): its duct-air "
+                    "points' outliers are read per mode."
+                )
+            )
         blocks.append(_table(["Equipment", "Point", "Gated", "Ungated", "Gate used"], rows))
     return _section("data", "Data coverage and sensor health", blocks)
 
