@@ -4,6 +4,62 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.99.0] — Unreleased
+
+<!-- 0.99 is stacked on 0.98 (unreleased, below). This entry gets its date when 0.99 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+### Added
+<!-- 099-openfdd-importer -->
+- **CAMBER reads open-fdd data (#22 item 2, provisional).** The new
+  `camber.interop.openfdd` module reads an open-fdd building package (`openfdd_package_v1`, a
+  folder or a `.zip`) or open-fdd's historian Parquet layout. CAMBER's drift, M&V and
+  sensor-trust checks can then run on data collected at the open-fdd edge.
+  - **Boundary.** It works through files and processes only. No open-fdd code is imported or
+    copied, and nothing is written back.
+  - **Required inputs.** `read_package` / `read_historian` take the site time zone and the unit
+    system as required arguments, because a package carries neither and CAMBER will not guess.
+  - **Mapping.** Columns map through the package's own map, which is authoritative. Every other
+    column is counted and reported with its reason: no name, unknown name, deliberately
+    unmapped, wrong equipment type, unusable unit or duplicate role.
+  - **Units and time.** It handles UTC and local stamps, SI and IP units, declared units, and
+    0–1 vs 0–100 percent. It reads equipment classes from the `equipType` stamps and the
+    inventory, never from ids.
+- **`ingest_package` and `camber interop openfdd ingest` (provisional).** They write one facility
+  per building into a ParquetStore or a portfolio workspace.
+  - **Lifecycle.** In a workspace the facility is registered through the lifecycle
+    (`provisioning`, or `active` with `--activate`), the write takes the workspace lock and is
+    audited (`interop.openfdd.ingest`), and a facility in any other state is refused.
+  - **Provenance.** Recorded under `openfdd` on the registry entry: the source and schema
+    version, the sha256 of every file read, the crosswalk version and its pinned docs commit, the
+    zone, units and coverage.
+  - **Re-ingest.** It is idempotent, and data is staged and swapped in. `--config-out` writes a
+    starting run config: rules the mapped roles can run, the package weather as the shared
+    outdoor temperature, and a daily M&V baseline per metered class. `camber interop openfdd
+    inspect` does the same read without writing.
+- **A versioned open-fdd → CAMBER role crosswalk (#22 item 4, provisional).** It ships as
+  `camber/interop/openfdd/crosswalk.json`, version 1, written from open-fdd's documented
+  Haystack-name and SQL-role vocabulary at a pinned commit. 50 of its 71 rows map; the other 21
+  are deliberate non-mappings, each with its reason. `camber interop openfdd crosswalk [--json]`
+  prints it.
+- **A findings-exchange JSON, draft 0.1 (#22 item 3, provisional).** `findings_document`,
+  `run_findings` and `camber interop openfdd findings CONFIG --out FILE` emit an engine-labelled
+  document that a separate process (an open-fdd agent or pipeline) reads back.
+  - Every record carries `{engine: {name, version}}`.
+  - `declined` and `not_evaluated` are distinct statuses.
+  - `magnitude` names its denominator.
+  - Fields CAMBER does not yet produce are `null`.
+  - See docs/INTEROP-OPENFDD.md.
+<!-- /099-openfdd-importer -->
+
+### Changed
+<!-- 099-openfdd-importer -->
+- **A store facility ingested from open-fdd knows its zone.** A store-source config's
+  `source.timezone` now defaults to the zone the facility was ingested in, as it already did for
+  catalog datasets. This is additive. A facility without an `openfdd` provenance block is
+  unchanged.
+<!-- /099-openfdd-importer -->
+
 ## [0.98.0] — Unreleased
 
 <!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is

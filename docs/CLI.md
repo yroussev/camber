@@ -335,6 +335,31 @@ entry's gas volumes need `bills.heat_content`. Without the block nothing changes
 Outside a workspace, name the store with the config's top-level `"mv_store"` (or `--store`).
 `camber portfolio migrate` moves it, every version included, to `state/<fid>/mv_baselines.json`.
 
+## open-fdd interop (provisional, 0.99)
+
+`camber interop openfdd` reads open-fdd building packages (`openfdd_package_v1`, a folder or a
+`.zip`) or open-fdd's historian Parquet layout, and writes CAMBER's findings back as an
+engine-labelled JSON document. `--timezone` and `--units` are required: a package carries neither.
+See [INTEROP-OPENFDD.md](INTEROP-OPENFDD.md).
+
+```
+camber interop openfdd ingest PKG --timezone TZ --units ip|si (--store DIR | --workspace ROOT)
+                        [--activate] [--facility-id ID] [--name NAME] [--building B]
+                        [--resample 15min|native] [--equip-types FILE] [--reason TEXT]
+                        [--force] [--config-out run.json] [--json result.json]
+camber interop openfdd inspect PKG --timezone TZ --units ip|si [--building B] [--json FILE]
+camber interop openfdd crosswalk [--json]           # the open-fdd -> CAMBER role table
+camber interop openfdd findings CONFIG --out FILE   # findings-exchange JSON ('-' = stdout)
+```
+
+- **`ingest`** registers the building as one facility. In a workspace that goes through the
+  lifecycle (`provisioning` unless `--activate`) and is audited. It records provenance (file
+  sha256s, crosswalk version, zone, units) and prints the column coverage. An unchanged package
+  is skipped.
+- **`inspect`** is the same read with nothing written.
+- **`findings`** runs a config (rules, M&V, drift) and writes one JSON document for a separate
+  process to read back.
+
 ## Open datasets
 
 `camber datasets` fetches open building datasets from their publishers, verifies them, ingests

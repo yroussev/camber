@@ -18,6 +18,7 @@ flowchart TD
   ee["OpenEEmeter / eemeter"] -- cross-check --> core
   better["LBNL BETTER"] -- cross-check --> core
   openfdd["open-fdd"] -- G36 cross-validate --> core
+  openfdd -- package / historian files --> core
   volttron["Eclipse VOLTTRON"] -- data source --> core
 ```
 
@@ -229,6 +230,19 @@ single-signal framing is broader but less precisely tied to the standard's inten
 > operating-state-gated %, so a reviewer can reconcile Camber's numbers with an
 > open-fdd-style denominator without changing Camber's default outputs. See
 > `camber/fdd_g36.py`.
+
+### Reading open-fdd data (provisional, 0.99)
+
+CAMBER can now run its drift, M&V and sensor-trust checks on data collected at the open-fdd edge.
+`camber interop openfdd ingest` reads an open-fdd building package (`openfdd_package_v1`) or its
+historian Parquet layout into a CAMBER store or portfolio workspace:
+
+- The site time zone and the unit system are required, never guessed.
+- Columns map through a versioned role crosswalk, and every unmapped column is reported.
+- `camber interop openfdd findings` hands the results back as an engine-labelled JSON document.
+
+The boundary is files and processes only: no open-fdd code is imported or copied, and nothing is
+written back. See [INTEROP-OPENFDD.md](INTEROP-OPENFDD.md).
 
 ### Current open-fdd (4.x): not yet re-compared
 

@@ -431,7 +431,19 @@ def _load_mapping(config: dict, base_dir: str, *, default=None) -> MappingProvid
 
 
 def _catalog_timezone(meta: dict) -> str | None:
-    """The site zone a catalog dataset was ingested into (``ingest.local_timezone``), if known."""
+    """The site zone a catalog dataset was ingested into (``ingest.local_timezone``), if known.
+
+    0.99 (#22): a facility ingested from an open-fdd package records the zone it was given
+    (``meta["openfdd"]["timezone"]``); that is the store's clock too.
+    """
+    ofdd = (meta or {}).get("openfdd")
+    if isinstance(ofdd, dict) and ofdd.get("timezone"):
+        from .tsparse import check_timezone
+
+        try:
+            return check_timezone(ofdd["timezone"])
+        except ValueError:
+            return None
     block = (meta or {}).get("dataset") or {}
     did = block.get("dataset_id") if isinstance(block, dict) else None
     if not did:
