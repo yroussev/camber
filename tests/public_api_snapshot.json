@@ -383,7 +383,8 @@
     "run_config",
     "run_config_file",
     "run_drift_config",
-    "run_mv_config"
+    "run_mv_config",
+    "site_elevation_ft"
   ],
   "camber.coolingtower": [
     "CoolingTowerResult",

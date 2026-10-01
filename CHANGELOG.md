@@ -403,6 +403,19 @@ calibrate it, and reads run configs from YAML as well as JSON.
   `economizer_high_limit`'s value and prints it), and so are the synthetic and fleet benchmarks.
   `docs/TUNING.md` gains guidance on a climate-appropriate dry-bulb high limit (the unit's
   sequence, the energy code's high limit for the climate zone, or the trends).
+- **`condenser_water_reset` takes the site elevation (#92).** `CondenserWaterReset` and
+  `analyze_cw_reset` gain `elevation_ft` and `pressure_psia` (default `None`), passed to
+  `stull_wetbulb_f` when the wet-bulb is derived from OAT + RH. Without either, a derived wet-bulb
+  is now caveated as sea-level, as the cooling-tower rules already did; that caveat is the only
+  change to default output. A new top-level config key, `site_elevation_ft` (feet; validated by
+  `camber.config.site_elevation_ft`), sets the elevation once for the site. It reaches
+  `cooling_tower_approach` and `condenser_water_reset` and, through the `drift` section
+  (`run_drift`, `refit_baselines` and `build_drift_suite` gain `elevation_ft`),
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`. A rule's own `elevation_ft`
+  or `pressure_psia` wins. On a tower that resets 1:1 with the true wet-bulb at 1,600 m in hot,
+  dry air, the sea-level slope reads 0.93 and the corrected one 1.00, so `reset_present` can flip
+  near `reset_slope_flat`. The catalog's plant data trend a measured wet-bulb and do not change.
+  Documented in `docs/CLI.md` and `param_docs`.
 <!-- /098-followups -->
 
 ### Documentation

@@ -71,7 +71,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`compressor_short_cycle`](#compressor_short_cycle) | 1 | yes |
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
-| [`condenser_water_reset`](#condenser_water_reset) | 1 |  |
+| [`condenser_water_reset`](#condenser_water_reset) | 3 |  |
 | [`control_hunting`](#control_hunting) | 4 |  |
 | [`cooling_tower_approach`](#cooling_tower_approach) | 4 |  |
 | [`damper_census`](#damper_census) | 1 | yes |
@@ -335,10 +335,14 @@ How to calibrate:
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `reset_slope_flat` | `0.3` | °F CW supply per °F wet-bulb | 0.05 to 0.8 | CAMBER judgment: an ideal reset tracks wet-bulb about 1:1, so below this it is effectively flat |
+| `elevation_ft` | `null` | ft | -300.0 to 10000.0 | CAMBER judgment: None assumes sea level; a site input, not a threshold |
+| `pressure_psia` | `null` | psia | 10.0 to 15.5 | CAMBER judgment: None assumes sea level; a site input, not a threshold |
 
 How to calibrate:
 
-- `reset_slope_flat`: Check the reset schedule in the sequence of operations: a reset limited by a minimum condenser-water temperature has a lower slope over the year; fit the slope over a known-good period with the reset working and set this well below it. *Note:* No reset is reported as warn (an efficiency opportunity), never fault. The wet-bulb derived from OAT + RH is at sea level here.
+- `reset_slope_flat`: Check the reset schedule in the sequence of operations: a reset limited by a minimum condenser-water temperature has a lower slope over the year; fit the slope over a known-good period with the reset working and set this well below it. *Note:* No reset is reported as warn (an efficiency opportunity), never fault. A wet-bulb derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a little: give elevation_ft near this threshold.
+- `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, condenser_water_reset and the tower drift detectors. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, +2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are given; a rule's own value wins over the config's site_elevation_ft.
+- `pressure_psia`: Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the site, or leave None and give elevation_ft. *Note:* None = use elevation_ft, or sea level when that is also None.
 
 ## control_hunting
 
@@ -369,7 +373,7 @@ How to calibrate:
 
 - `design_approach_f`: Use the design approach from the tower selection (leaving water minus design wet-bulb). Without one, the median approach at high fan in a known-good period is a calibration, not a design value; a fouled tower calibrated this way will look healthy. *Note:* Severity is fixed in code on the median approach: warn at >= 1.3x this, fault at >= 1.7x. pct_hours_high_approach counts hours above design + 3 °F (metric only).
 - `min_effort_pct`: Set it just below the fan speed the tower reaches on a hot afternoon. If the rule declines because the fan never reaches it, lower it, knowing part-fan hours judge control, not the tower. *Note:* None restores the old 'fan running' gate, which judged cold-weather hours held above a minimum condenser-water temperature. Used only when a fan speed is trended.
-- `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude and so understates the approach. pressure_psia takes precedence when both are given.
+- `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, condenser_water_reset and the tower drift detectors. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, +2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are given; a rule's own value wins over the config's site_elevation_ft.
 - `pressure_psia`: Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the site, or leave None and give elevation_ft. *Note:* None = use elevation_ft, or sea level when that is also None.
 
 ## damper_census

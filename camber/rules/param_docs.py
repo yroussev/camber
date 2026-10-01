@@ -1829,6 +1829,31 @@ PARAM_DOCS["chiller_approach_fouling"] = {
     ),
 }
 
+# ---- begin 098-followups (#92): the site elevation for a derived wet-bulb ----
+_SITE_ELEVATION = {
+    "elevation_ft": _P(
+        "ft",
+        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
+        "Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb "
+        "derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site "
+        "with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, "
+        "condenser_water_reset and the tower drift detectors.",
+        (-300.0, 10000.0),
+        "None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, "
+        "+2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are "
+        "given; a rule's own value wins over the config's site_elevation_ft.",
+    ),
+    "pressure_psia": _P(
+        "psia",
+        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
+        "Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the "
+        "site, or leave None and give elevation_ft.",
+        (10.0, 15.5),
+        "None = use elevation_ft, or sea level when that is also None.",
+    ),
+}
+# ---- end 098-followups (#92) ----
+
 PARAM_DOCS["cooling_tower_approach"] = {
     "design_approach_f": _P(
         "°F",
@@ -1852,23 +1877,8 @@ PARAM_DOCS["cooling_tower_approach"] = {
         "None restores the old 'fan running' gate, which judged cold-weather hours held above a "
         "minimum condenser-water temperature. Used only when a fan speed is trended.",
     ),
-    "elevation_ft": _P(
-        "ft",
-        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
-        "Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb "
-        "derived from OAT + RH; a measured wet-bulb point ignores it.",
-        (-300.0, 10000.0),
-        "None = sea-level Stull wet-bulb, which reads high at altitude and so understates the "
-        "approach. pressure_psia takes precedence when both are given.",
-    ),
-    "pressure_psia": _P(
-        "psia",
-        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
-        "Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the "
-        "site, or leave None and give elevation_ft.",
-        (10.0, 15.5),
-        "None = use elevation_ft, or sea level when that is also None.",
-    ),
+    # 0.98 (#92, 098-followups): shared with condenser_water_reset, see _SITE_ELEVATION
+    **_SITE_ELEVATION,
 }
 
 PARAM_DOCS["condenser_water_reset"] = {
@@ -1880,9 +1890,12 @@ PARAM_DOCS["condenser_water_reset"] = {
         "condenser-water temperature has a lower slope over the year; fit the slope over a "
         "known-good period with the reset working and set this well below it.",
         (0.05, 0.8),
-        "No reset is reported as warn (an efficiency opportunity), never fault. The wet-bulb "
-        "derived from OAT + RH is at sea level here.",
+        "No reset is reported as warn (an efficiency opportunity), never fault. A wet-bulb "
+        "derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a "
+        "little: give elevation_ft near this threshold.",
     ),
+    # 0.98 (#92, 098-followups): the derived wet-bulb takes the site elevation
+    **_SITE_ELEVATION,
 }
 
 PARAM_DOCS["condenser_bypass_leak"] = {
