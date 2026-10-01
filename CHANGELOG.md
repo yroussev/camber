@@ -167,6 +167,22 @@ calibrate it, and reads run configs from YAML as well as JSON.
   fan status since 0.93 (#42). The catalog note and the template comment now say so, and say that
   the template still leaves the rule out until it is re-checked on these baselines.
 <!-- /098-refs-catalog -->
+<!-- 098-plant-boiler -->
+- **The boiler firing rules run without a boiler run status (#86 item 4a).**
+  `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` now declare
+  `roles_any_of = ((boiler_status, gas_input_rate),)` instead of requiring `boiler_status`. With
+  no run status mapped they read firing from the gas input above 5 % of its own 95th percentile
+  (`camber.schedules.plant_run_mask`); a sample with no gas reading stays missing rather than
+  counting as a stop. Such findings carry the metric `run_source: "gas"` and a caveat that a
+  firing shorter than the resample interval is invisible. A frame that has a run status gives
+  byte-identical findings. On `lbnl-boiler` (hourly) the three rules now give 17 findings each,
+  all `ok`: the fault-free boiler fires 37.8 % of hours with 0.92 starts a day, 0 % of firing
+  hours above the summer lockout, and a 36 °F loop delta-T median (12.2 % of hours below the
+  20 °F floor on the worst fouling run). The three rows leave the RCx report's "Checks not
+  evaluated" table. The online monitor, the default evidence chart, the RCx confidence inputs
+  and the triage sensor-precedence roles now count a rule's `roles_any_of` inputs too. The
+  workbook exercise `plant-boiler` is updated.
+<!-- /098-plant-boiler -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

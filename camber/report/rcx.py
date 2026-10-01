@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from ..model.entities import roles_any_of
 from ..model.roles import Role
 from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask
 
@@ -1328,6 +1329,8 @@ def build_rcx_report(
         root = iss.root
         rule = ctx.rule(getattr(root, "rule", ""))
         roles = [getattr(r, "value", str(r)) for r in getattr(rule, "roles_required", ())]
+        # 0.98 (#86 item 4a, 098-plant-boiler): a roles_any_of input the rule read counts too
+        roles += [getattr(r, "value", str(r)) for g in roles_any_of(rule) for r in g]
         tmap = trust_gated.get(iss.equip, {})
         trust = {r.value if isinstance(r, Role) else str(r): t for r, t in tmap.items()}
         trust = {r: t for r, t in trust.items() if r in roles}

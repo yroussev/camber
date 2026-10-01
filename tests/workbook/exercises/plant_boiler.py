@@ -8,7 +8,8 @@ Real-data figures were recorded from::
     camber run boil.json --out boil_out
     camber datasets score lbnl-boiler --store lab_store --findings boil_out/findings.json
 
-(CAMBER 0.97.0-dev, lbnl-boiler full subset, all 17 runs, 2026-09-29.)
+(CAMBER 0.97.0-dev, lbnl-boiler full subset, all 17 runs, 2026-09-29; the boiler firing-rule
+figures re-recorded with CAMBER 0.98.0-dev, 2026-09-30.)
 """
 
 from __future__ import annotations
@@ -22,8 +23,11 @@ _RUNS = (
     "hot_water_pressure_bias_20",
     "hot_water_pressure_bias_m20",
 )
-#: the rules of the exercise config that need a boiler run status this plant does not have
+# 0.98 (#86 item 4a, 098-plant-boiler) begin
+#: the rules of the exercise config that need to know when the boiler fired: this plant has no
+#: boiler run status, so since 0.98 they read firing from boiler 1's gas input instead
 _NEED_STATUS = ("boiler_summer_lockout", "boiler_short_cycle", "hw_plant_deltat")
+# 0.98 (#86 item 4a, 098-plant-boiler) end
 
 
 def standin(store) -> None:
@@ -32,11 +36,23 @@ def standin(store) -> None:
     boiler_standin(store, _RUNS)
 
 
-def _status_rules_silent(ctx) -> None:
-    """Without a boiler run status the lockout, short-cycle and plant delta-T rules produce no
-    finding at all, on any run."""
-    for f in ctx.findings():
-        assert f.rule not in _NEED_STATUS, f"{f.rule} ran on {f.equip}: {f.severity}"
+# 0.98 (#86 item 4a, 098-plant-boiler) begin
+def _status_rules_from_gas(ctx) -> None:
+    """With no boiler run status the lockout, short-cycle and plant delta-T rules read firing
+    from the gas input: each gives one finding per run, every one ok, with ``run_source`` gas
+    and the caveat that says so."""
+    equips = {f.equip for f in ctx.findings() if f.rule == "hw_pump_dp_reset"}
+    assert equips, "no hw_pump_dp_reset findings"
+    for rule in _NEED_STATUS:
+        got = {f.equip: f for f in ctx.findings() if f.rule == rule}
+        assert set(got) == equips, f"{rule} missing on {sorted(equips - set(got))}"
+        for equip, f in got.items():
+            assert f.severity == "ok", f"{rule} on {equip}: {f.severity}"
+            assert f.metrics.get("run_source") == "gas", f"{rule} on {equip}: {f.metrics}"
+            assert any("gas input" in c for c in f.caveats), f"{rule} on {equip}: {f.caveats}"
+
+
+# 0.98 (#86 item 4a, 098-plant-boiler) end
 
 
 def _pump_never_stops_no_reset(ctx) -> None:
@@ -88,9 +104,66 @@ EXERCISE = Exercise(
         "camber datasets score lbnl-boiler --store lab_store --findings boil_out/findings.json",
     ),
     expect=(
-        # 1. the three rules that need a firing status stay silent
-        Check("no lockout, short-cycle or delta-T finding", _status_rules_silent),
-        Finding("boiler_summer_lockout", "PLANT__fault_free", severity=("absent",)),
+        # 0.98 (#86 item 4a, 098-plant-boiler) begin
+        # 1-2. the three rules that need a firing status read it from the gas input: all ok
+        Check("lockout, short-cycle and delta-T read firing from the gas", _status_rules_from_gas),
+        Finding("boiler_summer_lockout", "PLANT__fault_free", severity=("ok",)),
+        Finding("boiler_short_cycle", "PLANT__fault_free", severity=("ok",)),
+        Finding("hw_plant_deltat", "PLANT__fault_free", severity=("ok",)),
+        Metric(
+            "boiler_summer_lockout",
+            "PLANT__fault_free",
+            "summer_run_pct",
+            0.0,
+            0.0,
+            quote="0% of its firing hours",
+        ),
+        Metric(
+            "boiler_summer_lockout",
+            "PLANT__boiler_PI",
+            "summer_run_pct",
+            0.35,
+            0.05,
+            on=REAL,
+            quote="0.35%",
+        ),
+        Metric(
+            "boiler_short_cycle",
+            "PLANT__fault_free",
+            "starts_per_day",
+            0.92,
+            0.01,
+            on=REAL,
+            quote="0.92 starts a day",
+        ),
+        Metric(
+            "boiler_short_cycle",
+            "PLANT__fault_free",
+            "runtime_pct",
+            37.8,
+            0.05,
+            on=REAL,
+            quote="37.8%",
+        ),
+        Metric(
+            "hw_plant_deltat",
+            "PLANT__fault_free",
+            "deltaT_median_f",
+            36.0,
+            0.05,
+            on=REAL,
+            quote="36.0 °F",
+        ),
+        Metric(
+            "hw_plant_deltat",
+            "PLANT__boiler_foul_065",
+            "low_deltaT_pct",
+            12.2,
+            0.05,
+            on=REAL,
+            quote="12.2%",
+        ),
+        # 0.98 (#86 item 4a, 098-plant-boiler) end
         # 2-3. the pump: ok, yet it never stops and its DP setpoint is never reset
         Finding("hw_pump_dp_reset", "PLANT__fault_free", severity=("ok",)),
         Check("the pump runs every hour against a flat DP setpoint", _pump_never_stops_no_reset),

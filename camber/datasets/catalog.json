@@ -3132,7 +3132,7 @@
      {
       "op": "annotate",
       "action": "annotate",
-      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; rules needing boiler_status decline on this plant.",
+      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; since 0.98 the boiler firing rules read firing from the gas input (gas_input_rate) instead.",
       "issue": "boiler-status-is-enable"
      }
     ],
@@ -3302,7 +3302,7 @@
       "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
      },
      "handling": "annotate",
-     "handling_note": "Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing, so rules needing boiler_status decline on this plant."
+     "handling_note": "Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing. Since 0.98 the rules that need a run status (boiler_summer_lockout, boiler_short_cycle, hw_plant_deltat) read firing from boiler 1's gas input (gas_input_rate) instead, and say so in a caveat."
     },
     {
      "id": "dp-setpoint-described-as-temperature",

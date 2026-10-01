@@ -16,6 +16,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..plant import analyze_hw_plant
+from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
 
 _ROLE_TO_HW_COL = {
@@ -31,7 +32,9 @@ class BoilerSummerLockout:
     """Detects a boiler running in cooling weather / no HWS reset (PNNL Re-tuning Ch.8)."""
 
     name = "boiler_summer_lockout"
-    roles_required = (Role.BOILER_STATUS,)
+    # 0.98 (#86 item 4a): a run status OR the gas input it can be inferred from (_boilerrun.py)
+    roles_required = ()
+    roles_any_of = BOILER_RUN_ANY_OF
     roles_optional = (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP, Role.HW_DIFF_PRESS, Role.OAT)
 
     def __init__(self, summer_lockout_oat_f: float = 65.0):
@@ -40,6 +43,7 @@ class BoilerSummerLockout:
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
+        frame, run_source = with_boiler_status(frame)  # 0.98 (#86 item 4a): gas fallback
         cols = {r: c for r, c in _ROLE_TO_HW_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         res = analyze_hw_plant(legacy, equip, summer_lockout_oat_f=self.summer_lockout_oat_f)
@@ -47,11 +51,13 @@ class BoilerSummerLockout:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
+        # 0.98 (#86 item 4a, 098-plant-boiler) begin: firing read from the gas input
+        caveats = [GAS_RUN_CAVEAT] if run_source else []
+        # 0.98 (#86 item 4a, 098-plant-boiler) end
         # Severity from summer-running: a comfort boiler should rarely run hot-weather.
         # The headline summer-lockout check needs OAT; without it summer_run_pct is None
         # (not evaluated) and we must NOT read that as a confident 0% ("clean") -> decline
         # to judge (info) rather than assert ok. Reset (None) is likewise not asserted.
-        caveats = []
         sp = res.summer_run_pct  # float or None (None = no OAT, not evaluated)
         if sp is None:
             caveats.append("summer lockout not evaluated: no OAT")
@@ -91,6 +97,7 @@ class BoilerSummerLockout:
                 "hws_reset_present": res.hws_reset_present,
                 "n_running": res.n_running,
                 "n_considered": res.n_considered,
+                **({"run_source": run_source} if run_source else {}),  # 0.98 (#86 item 4a)
             },
             summary=(
                 f"{equip}: boiler runs {res.boiler_running_pct:.0f}% of occupied "

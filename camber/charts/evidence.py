@@ -182,7 +182,13 @@ def finding_evidence(rule, equip: str, frame: pd.DataFrame):
     # not "this finding's" data); only per-equipment rules fall back to a default trend.
     if hasattr(rule, "analyze_fleet"):
         return None
-    roles = [r for r in getattr(rule, "roles_required", ()) if r in getattr(frame, "columns", ())]
+    from ..model.entities import roles_any_of  # 0.98 (#86 item 4a): plot the any-of input too
+
+    wanted = tuple(getattr(rule, "roles_required", ())) + tuple(
+        r for g in roles_any_of(rule) for r in g
+    )
+    cols = getattr(frame, "columns", ())
+    roles = list(dict.fromkeys(r for r in wanted if r in cols))
     if not roles:
         return None
     return Evidence(

@@ -636,7 +636,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `BOI_STA_1`, `BOI_STA_2`
 - **Evidence:** In the fault-free run BOI_STA_1 is 1 in 100% of rows while boiler 1 burns no gas (BOI_GAS_CSUM_1 = 0) in 50.5% of them.
 - **Contradicts:** Boiler-plant inventory Table 2 (BOI_STA: on-off status of a boiler, 0-Off; 1-On) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
-- **Handling: annotate** -- left as published and recorded in the provenance. Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing, so rules needing boiler_status decline on this plant.
+- **Handling: annotate** -- left as published and recorded in the provenance. Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing. Since 0.98 the rules that need a run status (boiler_summer_lockout, boiler_short_cycle, hw_plant_deltat) read firing from boiler 1's gas input (gas_input_rate) instead, and say so in a caveat.
 
 #### HWL_DPSPT is the loop DP setpoint in inH2O, not a temperature setpoint
 
