@@ -193,6 +193,44 @@ calibrate it, and reads run configs from YAML as well as JSON.
   reproduced.
 <!-- /098-rcx-verify -->
 
+<!-- 098-terminal-stuck -->
+- **`actuator_stuck`: a terminal or fan-coil damper or valve stuck against the zone's demand (#85
+  item 1, provisional).** A new rule for terminal boxes and fan coils (an air handler's outdoor-air
+  damper is out of scope). It finds the runs where an actuator holds one position over occupied
+  (trended occupancy, else the schedule), fan-on hours, through a thin wrapper around the
+  sensor-health run finder (`camber/rules/_flat_runs.py`), and judges each run of at least
+  `min_flat_hours` by what the zone asked for. **Contradicted** runs can reach `fault`: a damper
+  shut through occupied hours with the airflow at or below 5 % of `AIRFLOW_SP` or `min_airflow`
+  (with neither, judged against the occupied mode alone, with a caveat); a damper or cooling
+  valve below its open limit while the zone runs `warm_margin_f` over its cooling setpoint for a
+  quarter of the run (a heating valve: under its heating setpoint); fully open while the zone
+  sits `satisfied_margin_f` inside its setpoint for half the run; a heating-valve position flat
+  while its demand moves 20 points. **Unexplained** runs (one value for `whole_day_share` of a
+  day's active samples while the demand, airflow setpoint, a setpoint or the zone temperature
+  moves) warn at most, and a run at a limit the demand agrees with is saturated, not stuck. Roles:
+  `damper`, `heat_valve_position` (else `heat_valve`), `cool_valve`. Metrics per role:
+  `flat_runs`, `stuck_share`, `value`, `tier`, `reason`, `driver` and the flagged runs. Registered
+  in `RULE_CLASSES`, the applicability table (`terminal`, `fan_coil`), the scorecard
+  (maintenance), the references (PNNL chapter 7), the parameter docs, and the advisory
+  recommender (cause "Damper stuck at 20 %: the zone runs warm while it holds still"; stroke the
+  actuator before retuning anything). On `ornl-frp-vav` it finds 6 of 6 stuck days on the default
+  subset and 17 of 18 on the full one, with no false alarm on the 13 fault-free and airflow-bias
+  days (see Changed).
+- **`actuator_stuck` is a scored synthetic scenario (S3, approved).** `faultlab` gains a VAV box
+  whose damper sticks at 30 % through warm afternoons; `coverage.n_scored` and `n_single` go 45 ->
+  46 and the synthetic benchmark gains `actuator_stuck.tpr` 1.0 and `.fpr` 0.0. Every other
+  synthetic key is unchanged.
+- **Cohort-deviation options (#85 item 2, opt-in).** `CohortDeviation` (`cohort_airflow`,
+  `cohort_space_temp`) takes `group_by_topology` (compare only the units behind one air handler,
+  grouped like the rogue-zone census), `normalise` (`"design_max"`: by `design_max={equip: cfm}`,
+  else the peak `AIRFLOW_SP`; `"reference"`: by `reference={equip: reference_equip}`),
+  `summary="variability"` (the standard deviation) and `tail` (`"low"` / `"high"`). Every default
+  reproduces the earlier result. `camber.charts.cohort` gains the `variability` summary, a `tail`
+  argument and `cohort_deviation_from_values`. Size normalisation alone cannot isolate a stuck box:
+  on the ORNL set the share of design airflow flagged six healthy box-days and one stuck day of
+  six; each box against its own fault-free day flagged all six.
+<!-- /098-terminal-stuck -->
+
 ### Changed
 <!-- 098-core -->
 - **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
@@ -424,6 +462,23 @@ calibrate it, and reads run configs from YAML as well as JSON.
   rejected (see docs/SENSOR-HEALTH.md). The workbook exercise `data-trend-quality` answers 4, 6
   and 7 are rewritten.
 <!-- /098-sensor-health -->
+
+<!-- 098-terminal-stuck -->
+- **`ornl-frp-vav` declares `actuator_stuck` as its detector (#89 item 3, #85 item 2).**
+  `labels.targets` is now `{"actuator_stuck": "terminal_damper"}` and the template runs it;
+  `unmet_setpoint_hours` stays as context. Full subset: TPR 17/18, 94 % [74-99 %] (Wilson 95 %),
+  FPR 0/13, 0 % [0-23 %], against `unmet_setpoint_hours`' 10/18 and 1/13; default subset 6/6 and
+  0/1 (was 2/6 and 1/1). The miss is room 106 stuck at 100 % on a warm day, where an open damper
+  is what the zone asked for. `known_issues` gains three lines: the airflow-bias days have no
+  detector, a detection pointing upstream on the duct-static-collapse days is legitimate, and
+  fleet and neighbour findings are not scored. The workbook exercise `zone-bad-box` scores
+  `actuator_stuck` and reads its verdict on each day.
+- **A reheat valve that diverges from its demand gets a repair recommendation.** When a
+  `reheat_penalty` finding's `valve_divergence_share` is at or above 0.25 (the rule's caveat
+  threshold; `DEFAULT_PARAMS["reheat_valve_divergence_share"]`), the advice is "Repair the reheat
+  valve or actuator", with the cause "reheat valve stuck or failed shut (the controller calls for
+  heat the valve does not deliver)", instead of "Minimize reheat".
+<!-- /098-terminal-stuck -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

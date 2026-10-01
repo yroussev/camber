@@ -20,7 +20,8 @@ import pandas as pd
 
 from .diagnostic import _col
 
-_SUMMARIES = ("mean", "peak", "load_factor")
+_SUMMARIES = ("mean", "peak", "load_factor", "variability")
+_TAILS = ("both", "low", "high")
 
 
 @dataclass
@@ -40,8 +41,9 @@ class CohortResult:
 
 
 def cohort_summary(frames: dict, role, *, summary: str = "mean") -> pd.Series:
-    """Reduce each unit's role series to one number: ``mean``, ``peak`` (max), or ``load_factor``
-    (mean/peak). Returns a Series ``{equip: value}``."""
+    """Reduce each unit's role series to one number: ``mean``, ``peak`` (max), ``load_factor``
+    (mean/peak) or ``variability`` (the standard deviation; 0.98, #85: a damper or flow that never
+    moves stands out on the low side). Returns a Series ``{equip: value}``."""
     if summary not in _SUMMARIES:
         raise ValueError(f"summary must be one of {_SUMMARIES}, got {summary!r}")
     out = {}
@@ -56,6 +58,8 @@ def cohort_summary(frames: dict, role, *, summary: str = "mean") -> pd.Series:
             out[equip] = float(s.mean())
         elif summary == "peak":
             out[equip] = float(s.max())
+        elif summary == "variability":
+            out[equip] = float(s.std(ddof=0))
         else:  # load_factor
             peak = float(s.max())
             out[equip] = float(s.mean()) / peak if peak else float("nan")
@@ -63,11 +67,45 @@ def cohort_summary(frames: dict, role, *, summary: str = "mean") -> pd.Series:
 
 
 def cohort_deviation(
-    frames: dict, role, *, k: float = 3.5, summary: str = "mean", min_cohort: int = 3
+    frames: dict,
+    role,
+    *,
+    k: float = 3.5,
+    summary: str = "mean",
+    min_cohort: int = 3,
+    tail: str = "both",
 ) -> CohortResult:
-    """Robust z-score of each unit's role summary vs the cohort; flag ``|z| >= k`` as outliers."""
-    rname = getattr(role, "name", str(role))
+    """Robust z-score of each unit's role summary vs the cohort; flag ``|z| >= k`` as outliers.
+
+    ``tail`` (0.98, #85) picks which side flags: ``"both"`` (default), ``"low"`` (``z <= -k``) or
+    ``"high"`` (``z >= k``).
+    """
     vals = cohort_summary(frames, role, summary=summary).dropna()
+    return cohort_deviation_from_values(
+        vals, role, k=k, summary=summary, min_cohort=min_cohort, tail=tail
+    )
+
+
+def cohort_deviation_from_values(
+    vals: pd.Series,
+    role,
+    *,
+    k: float = 3.5,
+    summary: str = "mean",
+    min_cohort: int = 3,
+    tail: str = "both",
+) -> CohortResult:
+    """:func:`cohort_deviation` on per-unit values already reduced (and perhaps normalised).
+
+    ``vals`` is ``{equip: value}``; non-finite values are dropped. Added in 0.98 (#85) so a caller
+    can normalise each unit's summary (by its design airflow, or by its own reference period)
+    before the robust z.
+    """
+    if tail not in _TAILS:
+        raise ValueError(f"tail must be one of {_TAILS}, got {tail!r}")
+    rname = getattr(role, "name", str(role))
+    vals = pd.Series(vals, dtype=float)
+    vals = vals[np.isfinite(vals.to_numpy(float))]
     if len(vals) < min_cohort:
         return CohortResult(rname, summary, dict(vals), {}, [], float("nan"), float("nan"))
     arr = vals.to_numpy(float)
@@ -77,7 +115,12 @@ def cohort_deviation(
     # lone outlier isn't masked (z=0 for everyone). Standard MAD-blind-spot guard.
     scale = 1.4826 * mad if mad > 0 else 1.2533 * float(np.mean(np.abs(arr - med)))
     z = {e: ((v - med) / scale if scale > 0 else 0.0) for e, v in vals.items()}
-    outliers = [e for e, zz in z.items() if abs(zz) >= k]
+    if tail == "low":
+        outliers = [e for e, zz in z.items() if zz <= -k]
+    elif tail == "high":
+        outliers = [e for e, zz in z.items() if zz >= k]
+    else:
+        outliers = [e for e, zz in z.items() if abs(zz) >= k]
     return CohortResult(
         rname,
         summary,

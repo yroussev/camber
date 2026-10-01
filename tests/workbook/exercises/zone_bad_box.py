@@ -8,7 +8,9 @@ Real-data figures were recorded from::
     camber run vav.json --out vav_out
     camber datasets score ornl-frp-vav --store lab_store --findings vav_out/findings.json
 
-(CAMBER 0.97.0-dev, ornl-frp-vav default subset, 2026-09-29.) The trend comparisons (damper,
+(CAMBER 0.97.0-dev, ornl-frp-vav default subset, 2026-09-29; the actuator_stuck figures and the
+label scores 0.98.0-dev, 2026-09-30, when the dataset's declared detector became actuator_stuck,
+#85 / #89.) The trend comparisons (damper,
 airflow, the rooftop unit's airflow and static) read the same ingested store through
 ``camber.store.ParquetStore.read_role_frame``, over each day's occupied samples (the boxes'
 occupancy point): what the lab's trend viewer shows.
@@ -97,6 +99,42 @@ def _rogue_days_real(ctx) -> None:
     assert f.metrics.get("rogue_by_group") == want, f.metrics.get("rogue_by_group")
 
 
+#: actuator_stuck's verdict on box 205 per day: (severity, tier reason)
+STUCK_VERDICTS = {
+    "stuck_000": ("fault", "closed_occupied"),
+    "stuck_020": ("fault", "zone_warm"),
+    "stuck_040": ("fault", "zone_warm"),
+    "stuck_060": ("warn", "flat_all_day"),
+    "stuck_080": ("warn", "flat_all_day"),
+    "stuck_100": ("fault", "zone_satisfied"),
+}
+
+
+def _stuck_reasons(ctx) -> None:
+    """Why actuator_stuck flags box 205 each day: shut through occupied hours (0 %), part open
+    while the room runs over its cooling setpoint (20, 40 %), held all day while the room
+    temperature moves (60, 80 %, a warning only), fully open while the room is well below its
+    cooling setpoint (100 %)."""
+    got = {}
+    for sc in STUCK:
+        f = ctx.finding("actuator_stuck", _box(sc))
+        got[sc] = (f.severity, f.metrics.get("reason")) if f is not None else None
+    assert got == STUCK_VERDICTS, got
+
+
+def _neighbours_quiet(ctx) -> None:
+    """No neighbouring box is flagged on any day: their dampers hold still for hours too, but
+    never against their rooms' demand."""
+    loud = [
+        f.equip
+        for f in ctx.findings()
+        if f.rule == "actuator_stuck"
+        and f.severity in ("warn", "fault")
+        and not f.equip.startswith("RTU_VAV_205__")
+    ]
+    assert not loud, loud
+
+
 EXERCISE = Exercise(
     id="zone-bad-box",
     title="Terminal units: one bad box in a fleet",
@@ -146,8 +184,26 @@ EXERCISE = Exercise(
         Finding("sat_cohort_starvation", "<fleet>", severity=("ok",)),
         # the air handler reacts to the stuck box
         Check("the rooftop unit's airflow and static follow the stuck box", _ahu_reacts),
-        # the label score: 2 of 6 stuck days found, and the fault-free day flagged too
-        Score("unmet_setpoint_hours", tpr=2 / 6, fpr=1.0, tol=0.01, quote="TPR 33%"),
+        # the stuck-actuator rule: every stuck day, never the fault-free day or a neighbour
+        *(
+            Finding("actuator_stuck", _box(sc), severity=(sev,))
+            for sc, (sev, _reason) in STUCK_VERDICTS.items()
+        ),
+        Finding("actuator_stuck", _box("fault_free"), present=False),
+        Check("why actuator_stuck flags box 205 each day", _stuck_reasons),
+        Check("no neighbouring box is flagged", _neighbours_quiet),
+        Metric(
+            "actuator_stuck",
+            _box("stuck_020"),
+            "stuck_share",
+            100.0,
+            0.01,
+            quote="100 % of active samples",
+        ),
+        # the label score: the declared detector finds all six stuck days and stays quiet on the
+        # fault-free day; the comfort rule alone finds 2 of 6 and flags the fault-free day
+        Score("actuator_stuck", tpr=1.0, fpr=0.0, tol=0.01, quote="TPR 100%"),
+        Score(None, tpr=2 / 6, fpr=1.0, tol=0.01, rules=("unmet_setpoint_hours",), quote="TPR 33%"),
     ),
     standin=ornl_standin,
 )
