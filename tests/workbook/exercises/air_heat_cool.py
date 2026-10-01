@@ -13,13 +13,16 @@ Real-data figures were recorded from::
     camber datasets config irish-ahu --store lab_store --out irish.json
     camber run irish.json --out irish_out
 
-(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29.)
+(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29; the leak figures re-recorded
+with CAMBER 0.98.0-dev, 2026-09-30.)
 
-Finding reported to the maintainer: ``leaking_valve`` does not fire on the published 10 % leak
-(``AHU__coi_leakage_010``). With the valve commanded shut the leak takes about 1 F out of the
-air (the supply air sits 0.1 F *below* the mixed air, against 1.0 F above it on the fault-free
-unit), less than the rule's 3 F margin. The exercise teaches the comparison with the fault-free
-run instead; the rule's thresholds are left alone.
+Until 0.97 ``leaking_valve`` did not fire on the published 10 % leak (``AHU__coi_leakage_010``):
+with the valve commanded shut the leak takes about 1 F out of the air (the supply air sits 0.1 F
+*below* the mixed air, against about 1 F above it on the fault-free unit), less than the rule's
+3 F margin. Since 0.98 (#84) the ``lbnl-sdahu`` template credits the unit's own measured fan heat
+(``measured_fan_heat_f`` 1.0 F, ``cool_delta_thr_f`` 1.0 F, occupied hours only), so a leak is
+supply air below the mixed air, and the leak run is a fault. The 1.0 F was measured on the
+fault-free run, which is also scored: the exercise asks the learner to notice that circularity.
 """
 
 from __future__ import annotations
@@ -38,13 +41,14 @@ from _workbook import (
     write_standin,
 )
 
-_LEAK_F = 1.1  # the leak's pull on the air: below the fan's heat plus the rule's 3 F margin
+_LEAK_F = 1.1  # the leak's pull on the air: more than the fan's heat, less than its heat + 3 F
 
 
 def standin(store) -> None:
     """ds-lbnl-sdahu (a fault-free unit and one whose shut cooling valve still takes 1.1 F out
-    of the air), ds-lbnl-ddahu (a hot deck heating while the cold deck cools, by design) and
-    ds-irish-ahu (two coils that never open together and do not leak)."""
+    of the air, just more than the fan's 1.0 F), ds-lbnl-ddahu (a hot deck heating while the
+    cold deck cools, by design) and ds-irish-ahu (two coils that never open together and do not
+    leak)."""
     idx = hourly_index(days=28)
     write_standin(
         store,
@@ -93,18 +97,20 @@ EXERCISE = Exercise(
         "camber run irish.json --out irish_out",
     ),
     expect=(
-        # lbnl-sdahu: the leak is real but below the rule's margin
-        Finding("leaking_valve", "AHU__coi_leakage_010", severity=("ok",)),
+        # lbnl-sdahu: the leak is below the default 3 F margin, caught against the unit's own
+        # measured fan heat (the template's leaking_valve params, 0.98)
+        Finding("leaking_valve", "AHU__coi_leakage_010", severity=("fault",)),
         Finding("leaking_valve", "AHU__fault_free", severity=("ok",)),
         Check("the leak run's supply air sits colder", _leak_run_sits_colder),
+        Metric("leaking_valve", "AHU__coi_leakage_010", "cool_shift_f", 1.0, 0.0),
         Metric(
             "leaking_valve",
             "AHU__fault_free",
             "chw_median_delta_f",
-            1.0,
+            1.1,
             0.05,
             on=REAL,
-            quote="+1.0 °F",
+            quote="+1.1 °F",
         ),
         Metric(
             "leaking_valve",
@@ -115,7 +121,25 @@ EXERCISE = Exercise(
             on=REAL,
             quote="-0.1 °F",
         ),
-        Score("leaking_valve", tpr=0.0, fpr=0.0, quote="TPR 0%", on=BOTH),
+        Metric(
+            "leaking_valve",
+            "AHU__coi_leakage_010",
+            "chw_leak_pct",
+            60.5,
+            0.05,
+            on=REAL,
+            quote="60.5%",
+        ),
+        Metric(
+            "leaking_valve",
+            "AHU__fault_free",
+            "chw_leak_pct",
+            2.4,
+            0.05,
+            on=REAL,
+            quote="2.4%",
+        ),
+        Score("leaking_valve", tpr=1.0, fpr=0.0, quote="TPR 100%", on=BOTH),
         # lbnl-ddahu: both valves open by design
         Finding("simultaneous_heat_cool", "DDAHU__fault_free", severity=("fault",), run="ddahu"),
         Metric(

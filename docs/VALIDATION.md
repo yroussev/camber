@@ -51,9 +51,10 @@ minimum, OA-fraction catches every stuck damper on the fan-coil and dual-duct un
 alarm, but on the single-duct AHU it catches only the dampers stuck well open (75 %, 100 %). A
 damper stuck at that unit's 10 % minimum, or at 25 % (4.4 % OA against a 1.6 % minimum), looks like
 normal ventilation outside economizer weather; its real symptom is the missed economizer, which
-`economizer_damper_drift` catches (below). `leaking_valve` **misses the dataset's one leak run** — a 10 % leak (the valve sits at 0.10
-whenever it is commanded shut; the published 010/025/040/050 "severities" are one file) — gaps
-the benchmark *measures* rather than hides. The pooled interval is the defensible headline; the
+`economizer_damper_drift` catches (below). `leaking_valve` **catches the dataset's one leak run** — a 10 % leak (the valve sits at 0.10
+whenever it is commanded shut; the published 010/025/040/050 "severities" are one file) — since
+0.98 (#84), but only with a fan heat calibrated on this unit: see the circularity note below. The
+benchmark *measures* these gaps rather than hides them. The pooled interval is the defensible headline; the
 small-n per-family numbers are reported with their uncertainty.
 
 > **These figures moved in 0.86 (#30).** The 0.85 table read SDAHU 100 %, DDAHU 50 % with an FPR
@@ -228,10 +229,32 @@ replacement (fault) and 0.2 % after. Most of that sits downstream of the coils: 
 after. With the coils' own leaving-air temperatures mapped, the heating coil rises more than 3 °F
 above the mixed air in 11 % of closed hours before the replacement (warn; mostly the cold 2020/21
 100 %-outdoor-air winter) and 0 % after (ok); the whole record reads ok. On the LBNL single-duct AHU
-the scored runs keep their verdicts (fault-free and the damper runs quiet), and the one leak run
-(`coi_leakage_010`) is still missed: with the fan running and the valve commanded shut, its supply
-air sits a median 0.1 °F below the mixed air against +1.0 °F on the fault-free run. That is a 1 °F
-shift, well inside the 3 °F threshold.
+the scored runs keep their verdicts (fault-free and the damper runs quiet), and with the default
+parameters the one leak run (`coi_leakage_010`) is still missed: with the fan running and the valve
+commanded shut, its supply air sits a median 0.1 °F below the mixed air against +1.0 °F on the
+fault-free run. That is a 1 °F shift, well inside the 3 °F threshold.
+
+**`leaking_valve` with a measured fan heat on `lbnl-sdahu` (0.98, #84).** The default cooling-leak
+test credits no fan heat, so a leak that only cancels the fan's rise goes unseen. The `lbnl-sdahu`
+template now sets `measured_fan_heat_f: 1.0` (the fault-free run's median supply-minus-mixed rise,
+1.06 °F over 1,400 occupied, fan-on, valve-shut hours), `cool_delta_thr_f: 1.0` (a leak takes the
+supply air below the mixed air) and `occupied_only: true` (unoccupied fan cycling put 24.2 % of the
+fault-free run's valve-shut hours below that line, against 2.4 % occupied). Hourly, the leak run
+reads 60.5 % of its valve-shut hours below the line (**fault**, was ok), the fault-free run 2.4 %
+and the damper runs under 2 % (ok). The LBNL benchmark reads the same template, so SDAHU overall
+TPR moves 40 % → 60 % (accuracy 50 % → 67 %) and the pooled TPR 70 % → 80 % (accuracy 77 % → 85 %),
+with FPR still 0 %.
+
+> **Circularity.** The 1.0 °F was calibrated on `AHU__fault_free`, and that run is also a scored
+> negative in `camber datasets score` and the benchmark, so its clean verdict here is in-sample,
+> not a held-out result. A half-year split is the honest check: calibrated on January-June
+> (median 1.0 °F) and judged on July-December, the fault-free run reads 2.4 % (ok) and the leak
+> 54.3 % (fault); calibrated on July-December (1.1 °F) and judged on January-June, 2.7 % (ok) and
+> 77.2 % (fault). Both halves are the same simulated unit, so this shows the value is stable over
+> the year, not that it transfers to another building: measure your own unit's fan heat
+> ([TUNING.md](TUNING.md#a-known-circularity-lbnl-sdahu-leaking_valve)). On the dual-duct unit
+> the rule is not run: its mapped supply air is the cold deck, which the hot-deck heating coil
+> never touches (`judge_heating_on_supply_air: false` leaves that coil unjudged).
 
 **`reheat_capacity_shortfall` on `lbnl-b59` (#44).** Of the 35 underfloor terminals with a heating
 setpoint and a reheat valve, zone 051 (RTU01) sits more than 1.5 °F below its 72 °F setpoint with

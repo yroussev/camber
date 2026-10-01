@@ -138,19 +138,27 @@ the commands on the [exercise page](air-static-pressure.md#setup).
 ### `air-heat-cool`: Simultaneous heating and cooling, and a leaking valve
 
 Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](air-heat-cool.md#setup).
+0.97.0-dev (the leak figures 0.98.0-dev), with the commands on the
+[exercise page](air-heat-cool.md#setup).
 
 **Answer key**
 
-1. *Does CAMBER flag the leak?* No. `leaking_valve` is **ok** on `AHU__coi_leakage_010`, and the
-   label score gives `leaking_valve` TPR 0%, FPR 0 %: the one leak run is missed, and nothing
-   else is flagged.
+1. *Does CAMBER flag the leak?* Yes. `leaking_valve` is a **fault** on `AHU__coi_leakage_010`:
+   in 60.5% of its occupied, fan-on hours with the valve shut, the supply air sits below the
+   mixed air. The fault-free run reads 2.4% (**ok**), and the label score gives `leaking_valve`
+   TPR 100%, FPR 0 %.
 2. *Compare the two runs.* With the valve commanded shut and the fan running, the fault-free
-   unit's supply air sits a median +1.0 °F above its mixed air (the fan's heat); the leak run's
-   sits at -0.1 °F. The leak takes about 1 °F out of the air, all day, in every hour the valve is
-   meant to be shut. The rule only calls a cooling leak when the supply air is more than 3 °F
-   below the mixed air, a margin meant to ride over sensor error; this leak is real but smaller
-   than the margin. You see it by comparing the unit with its own fault-free behaviour.
+   unit's supply air sits a median +1.1 °F above its mixed air (the fan's heat, occupied hours);
+   the leak run's sits at -0.1 °F. The leak takes about 1 °F out of the air, all day, in every
+   hour the valve is meant to be shut. The rule's default only calls a cooling leak when the
+   supply air is more than 3 °F below the mixed air, a margin meant to ride over sensor error, so
+   with the defaults this leak is **ok** (CAMBER 0.97 missed it). The config credits the unit's
+   own fan heat (`measured_fan_heat_f` 1.0 °F, `cool_delta_thr_f` 1.0 °F): a leak is now any
+   supply air below the mixed air, and the caveat names the fan heat used. That 1.0 °F was
+   measured on `AHU__fault_free`, the same run the score counts as a negative, so its clean
+   verdict is partly by construction; the leak run, which the calibration never saw, is the
+   evidence. A half-year split (calibrate on one half, judge the other) still reads the
+   fault-free run ok and the leak a fault ([VALIDATION.md](../VALIDATION.md)).
 3. *Is the dual-duct unit fighting itself?* `simultaneous_heat_cool` is a **fault**: both valves
    open in 27% of occupied hours. But the two coils sit in different air streams: the hot deck
    heats while the cold deck cools, by design. The energy question is the mixing at the terminal
@@ -168,8 +176,10 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 **Discussion points**
 
-- A rule with a fixed margin misses small faults; a unit's own baseline catches them. Ask where
-  the class would put the margin, knowing the sensors' accuracy. Map it to the
+- A rule with a fixed margin misses small faults; a unit's own baseline catches them, at the
+  price of a calibration that must not be judged on the data it came from. Ask where the class
+  would put the margin, knowing the sensors' accuracy, and which period they would calibrate
+  on. Map it to the
   [AHU heating and cooling guide][pnnl-guide-ahu-heat-cool]'s question on valves that do not
   shut off.
 - "Both valves open" is a symptom, not a diagnosis: the system type (dual-duct) and the sequence
@@ -179,7 +189,10 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 **Common mistakes**
 
-- Reading the leak run's **ok** as "no leak". The label says leak, and question 2 shows it.
+- Quoting the fault-free run's FPR 0 % as proof the calibration works: that run set the
+  1.0 °F. The held-out half-year is the honest test.
+- Copying the 1.0 °F fan heat to another unit. Fan heat depends on the fan, its speed and the
+  sensor positions; measure it on the unit's own known-good hours.
 - Calling the dual-duct unit's 27% a fault to fix at the coils.
 - Judging a heating leak on supply air downstream of the fan without allowing for fan heat.
 
