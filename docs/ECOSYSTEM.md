@@ -18,6 +18,7 @@ flowchart TD
   ee["OpenEEmeter / eemeter"] -- cross-check --> core
   better["LBNL BETTER"] -- cross-check --> core
   openfdd["open-fdd"] -- G36 cross-validate --> core
+  openfdd -- shared M&V vectors --> core
   volttron["Eclipse VOLTTRON"] -- data source --> core
 ```
 
@@ -249,11 +250,61 @@ FC12 far more often than CAMBER does on the same data. That is a difference in
 thresholds, not in equations. Runs compared at matched tolerances are the only fair
 test. A re-run against 4.x, on labelled open data at both open-fdd's defaults and G36
 tolerances, is tracked in the [integration issue](https://github.com/yroussev/camber/issues/22).
-Until then, **do not read the 0.1.5 result above as a statement about current
-open-fdd.**
+Until then, **do not read the 0.1.5 result above as a statement about the fault conditions
+of current open-fdd.** The M&V helpers are a separate matter: shared test vectors exist for
+them (next section).
 
-open-fdd's change-point M&V module cites CAMBER as its algorithm reference. It is an
-independent reimplementation and can give different fits on the same data: it uses a
-different breakpoint grid and a different model-selection criterion, it allows a
-zero-width 5P dead-band, and its heating-slope sign is the opposite of CAMBER's.
-Compare savings from the two tools only after checking which model each one chose.
+### open-fdd's ECM tooling and the shared M&V vectors
+
+open-fdd's [ECM tooling](https://bbartling.github.io/open-fdd/ecm/) (MIT) has three parts:
+
+- Excel ECM workbooks backed by independent Python reference calculators: fan affinity,
+  chilled-water reset, condenser water, economizer runtime, outside-air loads, kW/ton, schedule
+  reduction and others;
+- an honest comparison of each calculator's estimate against an EnergyPlus twin;
+- change-point and ASHRAE Guideline 14 helpers (`fit_changepoint`, `select_changepoint`,
+  `score_g14_monthly`, `option_c_savings`) that credit CAMBER as their algorithm reference.
+
+The helpers are an independent reimplementation and can fit the same data differently. They use
+a different breakpoint grid and a different model-selection criterion, they allow a zero-width
+5P dead-band, and their heating-slope sign is the opposite of CAMBER's. Compare savings from the
+two tools only after checking which model each one chose.
+
+**How the two fit.** open-fdd's calculators estimate a retrofit's savings before it is built, and
+CAMBER measures and verifies them afterwards. CAMBER's findings can replace a calculator's
+assumptions with measured inputs, such as:
+
+- run hours;
+- missed free-cooling hours, and what caused them;
+- how a reset actually behaves;
+- pump minimum-speed floors.
+
+For M&V on monthly data, CAMBER's bill-only path covers calendarization, degree-day bases
+selected from the bills, and versioned billing baselines (see
+[MANDV.md](MANDV.md#billing-data)). Any integration stays at the file and process boundary,
+tracked in [#22](https://github.com/yroussev/camber/issues/22).
+
+**Shared vectors.** The
+[shared M&V test vectors](https://github.com/yroussev/camber/tree/main/examples/mv_vectors)
+let the two sets of helpers be cross-checked without either importing the other. They hold:
+
+- synthetic change-point cases with known truth;
+- bill cases;
+- CAMBER's expected outputs and predicted series;
+- expected statistics for BDG2 meters, whose daily, monthly and bill aggregates are not committed
+  (CAMBER redistributes no datasets). A standalone script rebuilds them from the publisher's
+  sha256-pinned files.
+
+The vectors are engine-agnostic:
+
+- the inputs are CSV, with optional Parquet that DataFusion reads natively;
+- the expected outputs are JSON with a versioned schema (`mv_vectors/1`);
+- the results contract is JSON, and its checker needs numpy and pandas only.
+
+So open-fdd's pandas library or a SQL M&V twin can be checked without installing CAMBER. The
+vectors also show where the two G14 gates differ:
+
+- `score_g14_monthly` applies Guideline 14's calibrated-simulation tolerances: |NMBE| ≤ 5 % and
+  CV(RMSE) ≤ 15 % monthly.
+- CAMBER's regression-baseline gate also requires R² ≥ 0.75 and |NMBE| ≤ 0.5 %.
+- On loads with little weather signal, the first passes and the second fails.

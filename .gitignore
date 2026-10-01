@@ -45,3 +45,6 @@ examples/drift/drift.html
 
 # Private third-party data for local analysis only -- never commit or package
 Data-Private/
+
+# shared M&V vectors: BDG2 inputs rebuilt locally by fetch_bdg2.py (never committed)
+examples/mv_vectors/local/

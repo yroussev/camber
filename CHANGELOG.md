@@ -175,6 +175,57 @@ calibrate it, and reads run configs from YAML as well as JSON.
   `n_schedule_patterns`) rather than warned on; `repeated_days` keeps only unexplained repeats.
 <!-- /098-sensor-health -->
 
+<!-- 098-mv-vectors -->
+- **Shared M&V test vectors (`examples/mv_vectors/`).** These are inputs, CAMBER's expected
+  outputs and a standalone checker, so that another change-point / Guideline 14 implementation
+  (open-fdd's helpers first) can be cross-checked through files alone.
+  - **Synthetic cases.** 8 seeded cases with exact truth: 2P; 3PH at 58 °F; 3PC at 65 °F; 4P;
+    5P at 55 / 68 °F; a noise pair either side of the baseline gate; and a weak-weather load.
+  - **BDG2 meters.** 6 meters (electricity, chilled water, steam and gas) as daily and
+    calendar-month aggregates, plus one irregular-bill variant. Each has a baseline year and a
+    reporting year, both raw and with a 10 % injected saving.
+  - **BDG2 data stays local.** CAMBER redistributes no datasets, so the BDG2 inputs and predicted
+    series are not committed; `expected.json` keeps only their statistics. `fetch_bdg2.py`
+    (numpy, pandas and the standard library) rebuilds them:
+    - it downloads the publisher's files at the catalog's URLs and checks their sha256 pins;
+    - it rebuilds the aggregates deterministically and checks each derived CSV against its own
+      pinned sha256;
+    - it writes them to a git-ignored `local/` folder, and prints the citation and the CC BY-SA
+      4.0 licence.
+  - **Bill cases.** 3 cases (1 synthetic, 2 BDG2) with mid-month 28–35-day reads, one estimated
+    read and one missing bill. They run through CAMBER's billing config path: `base_f: "auto"`
+    bases with their ranges, degree days built from each day vs from the bill's mean, the
+    degree-day model against the change-point models by BIC, Portfolio Manager calendarization
+    and avoided cost at each bill's own (synthetic) rate. The synthetic bill case is committed;
+    the 2 BDG2 bill cases are rebuilt locally.
+  - **Expected outputs.** `expected.json` uses the versioned schema `mv_vectors/1` and records,
+    per fit:
+    - the selected kind, every candidate's BIC and the BIC gap;
+    - the coefficients, in CAMBER's form and in a convention-free `slopes_dEdT` form;
+    - n, p, R², adjusted R², CV(RMSE) and NMBE;
+    - the baseline-gate, calibrated-simulation-gate and SEP verdicts side by side;
+    - Option C savings with FSU.
+
+    `predictions/` holds CAMBER's predicted series row by row.
+  - **Consumer tools.** These never import CAMBER, so a pandas library and a SQL twin are checked
+    alike:
+    - `check_vectors.py` (numpy and pandas only) rebuilds the expected numbers (`--self-test`),
+      compares another implementation's results JSON with the documented tolerances and prints
+      CAMBER's own results (`--template`);
+    - `export_parquet.py` writes typed Parquet copies of every CSV;
+    - `example_results.json` is a worked results file.
+  - **Documentation and licence.** `SCHEMA.md` documents every field, the two tiers, the method
+    (grid, BIC, p counting, day weighting, the bill choices) and the tolerances. Everything
+    committed is Apache-2.0. The locally rebuilt BDG2 files are CC BY-SA 4.0, with attribution.
+  - **Regression test.** `tests/test_mv_vectors.py` regenerates the synthetic tier offline and
+    requires an exact match, so any move in CAMBER's M&V numbers shows up there.
+    - With `examples/_data/bdg2` present, it also rebuilds the BDG2 tier, checks every sha256
+      pin and requires the BDG2 statistics to regenerate exactly.
+    - `-m network` does the same from a fresh download.
+
+    No default output changes.
+<!-- /098-mv-vectors -->
+
 ### Changed
 <!-- 098-core -->
 - **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
@@ -402,6 +453,13 @@ calibrate it, and reads run configs from YAML as well as JSON.
   named files, the manual `lbnl-b59` files (`Building_59.zip`, `README_Dryad_Bldg59.txt`) and the
   per-dataset file list, which a test keeps in step with the harness and the catalog.
 <!-- /098-refs-catalog -->
+<!-- 098-mv-vectors -->
+- **ECOSYSTEM: open-fdd's ECM tooling.** A reciprocal note covers open-fdd's ECM workbooks,
+  their reference calculators and EnergyPlus-twin comparison, and its change-point and G14
+  helpers. It explains how its pre-retrofit estimates and CAMBER's post-retrofit measurement fit
+  together, with measured inputs for the calculators (#22), and links the shared M&V vectors.
+  The "not yet re-compared" note now applies to the fault conditions only.
+<!-- /098-mv-vectors -->
 
 ### Fixed
 <!-- 098-terminal-ventilation -->
