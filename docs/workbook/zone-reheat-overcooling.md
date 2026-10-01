@@ -67,8 +67,10 @@ The exercise's config (`--exercise zone-reheat-overcooling`) runs four rules on 
 - `overcooling_min_flow`: is the zone overcooled while the box sits at its minimum airflow?
 - `unmet_setpoint_hours`: how often is the zone outside its setpoints?
 
-The reheat signal is the controller's reheat *demand*, not a measured valve position. Keep that
-in mind for question 5. `camber report fpu.json --out fpu.html` gives the same findings as a
+The box trends both the controller's reheat *demand* and the valve's measured *position*. Since
+0.98, `reheat_penalty` and `overcooling_min_flow` read the position (their findings say so in
+`valve_signal`), because they ask whether heat was actually delivered; the rules that ask how hard
+the controller calls for heat keep reading the demand. Keep that in mind for question 5. `camber report fpu.json --out fpu.html` gives the same findings as a
 report with evidence charts.
 
 ## Steps
@@ -98,8 +100,9 @@ report with evidence charts.
    often does that box reheat? Compare it with the half-open damper.
 4. `overcooling_min_flow` stays quiet on the stuck-open box, even though it overcools its zone
    more than any other run. Why?
-5. The box with its reheat valve stuck shut gets a `reheat_penalty` **fault**. Is it really
-   wasting reheat energy? What does the rule see?
+5. The box with its reheat valve stuck shut: what do `reheat_penalty` and `overcooling_min_flow`
+   say about it, and what does the caveat on their findings tell you? What would a rule that only
+   had the controller's demand have said?
 6. Which box, of the four in each simulated run, is the device under test, and how would you
    check that yourself?
 7. What true- and false-positive rates does the label score give `airflow_tracking`, and which
@@ -123,10 +126,13 @@ report with evidence charts.
 
 - The data are simulated: one building, one climate, one control sequence, and a fault held all
   year. A real stuck damper sticks at some unknown position on some unknown day.
-- The reheat signal is the controller's demand. A valve that cannot open, or that leaks, is
-  exactly what the demand cannot see.
+- A site that trends only the controller's demand cannot tell a valve that opens from one that
+  cannot: map the demand as `heat_valve` and, where it exists, the measured position as
+  `heat_valve_position`. A leaking valve is invisible to both.
 - In a parallel fan-powered box, the box fan adds warm plenum air when it runs, so the discharge
-  air rises a few degrees even with the reheat valve shut. The entering-air reading is the air
+  air rises a few degrees even with the reheat valve shut. The exercise sets `reheat_penalty`'s
+  `fan_heat_f` to `"auto"`, which measures that lift per box (`fan_heat_f` in the metrics) and
+  allows for it in the valve-versus-discharge check. The entering-air reading is the air
   handler's supply temperature, a proxy.
 - The rules judge weekdays 07–18 (their default schedule). The simulated building starts its
   occupied setpoints at 06:00.

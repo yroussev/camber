@@ -37,6 +37,26 @@ when that is mapped. Without it, the reference is the box's own closed-valve dis
 G36's minimum-SAT default); the closed-valve check then only uses cooling-weather samples (OAT >=
 70 °F, where a G36 OAT-limited supply air sits at its minimum) and the basis is recorded as lower
 confidence. Each check needs >= 12 samples.
+
+**Valve position vs demand (0.98, #85).** When a unit trends both, ``HEAT_VALVE`` is the
+controller's demand and ``HEAT_VALVE_POSITION`` the measured position. The penalty is about heat
+actually delivered, so the rule reads the **position** when it is mapped (``valve_signal`` says
+which it used). A valve stuck shut is then 0 % open, not a reheat penalty, however hard the
+controller asks. When the demand is at or above 90 % while the position is at or below 5 % on at
+least 25 % of the occupied full-demand samples (>= 12 of them), the finding carries a caveat: a
+stuck or failed valve, not a reheat penalty.
+
+**Fan heat (0.98, #85).** A fan-powered box's own fan warms the air it moves, and a parallel box
+also mixes in warm plenum air, so its discharge sits a few °F above the entering primary air with
+the valve shut. With a reheat valve stuck shut, the LBNL fan-powered boxes' discharge still rose
+6.0 °F (parallel) and 8.7 °F (series) over the entering air at full demand -- past the 5 °F no-rise
+bound, so a valve that delivered nothing looked corroborated. ``fan_heat_f`` raises both
+valve-vs-discharge bounds (no rise, big rise) by that many °F; ``"auto"`` estimates it per box as
+the median discharge-minus-entering-air rise on closed-valve, airflow-bearing samples (fan-on
+samples only when ``SUPPLY_FAN_STATUS`` is mapped; >= 12 of them), clipped to 0-8 °F, and needs the
+entering primary air. The default ``None`` leaves the bounds as they were. The offset is not added
+to the open-valve check when that check measures from the box's own closed-valve discharge, which
+already carries the fan's heat.
 """
 
 from __future__ import annotations
@@ -58,6 +78,86 @@ _BIG_RISE_SHARE = 0.25  # ... on at least this share of closed-valve samples
 _NOMINAL_PRIMARY_F = 55.0  # fallback entering-air reference (design cooling SAT / G36 min SAT)
 _COOLING_WEATHER_F = 70.0  # OAT at/above which a G36 OAT-limited SAT sits at its minimum
 _MIN_CHECK_SAMPLES = 12
+# ==== begin 098-terminal-reheat (#85 item 3): valve position vs demand, fan heat ====
+_DIVERGE_DEMAND_PCT = 90.0  # the controller asks for (near) full heat ...
+_DIVERGE_POSITION_PCT = 5.0  # ... and the valve reads shut (the closed-valve convention)
+_DIVERGE_SHARE = 0.25  # on at least this share of the occupied full-demand samples
+_FAN_HEAT_MAX_F = 8.0  # "auto" fan heat is clipped to 0-8 °F
+
+
+def _pct_series(frame: pd.DataFrame, role: Role) -> pd.Series | None:
+    """``frame[role]`` as numeric percent, or None when the role is absent or empty."""
+    if role not in frame.columns:
+        return None
+    s = normalize_percent(pd.to_numeric(frame[role], errors="coerce"))
+    return s if s.notna().any() else None
+
+
+def _reheat_valve_role(frame: pd.DataFrame) -> tuple:
+    """``(role, "position" | "demand")``: the valve point a delivered-heat judgement reads.
+
+    The measured position (``HEAT_VALVE_POSITION``) when it is mapped and has data, else
+    ``HEAT_VALVE`` (the demand, or the one valve point a site trends); ``(None, None)`` if neither.
+    """
+    if _pct_series(frame, Role.HEAT_VALVE_POSITION) is not None:
+        return Role.HEAT_VALVE_POSITION, "position"
+    if Role.HEAT_VALVE in frame.columns:
+        return Role.HEAT_VALVE, "demand"
+    return None, None
+
+
+def _with_valve(frame: pd.DataFrame, cols: dict, valve_role) -> pd.DataFrame:
+    """``frame`` renamed to the legacy columns, with ``HWValve`` read from ``valve_role`` (the
+    column as trended, as before 0.98) and the position column dropped."""
+    legacy = frame.drop(columns=[Role.HEAT_VALVE_POSITION], errors="ignore").rename(columns=cols)
+    if valve_role is Role.HEAT_VALVE_POSITION:
+        legacy["HWValve"] = frame[Role.HEAT_VALVE_POSITION]
+    return legacy
+
+
+def _valve_divergence(frame: pd.DataFrame, keep: pd.Series) -> dict:
+    """Demand at (near) full while the position reads shut, over the ``keep`` samples.
+
+    Returns ``valve_divergence_share`` (of the full-demand samples, None when fewer than
+    ``_MIN_CHECK_SAMPLES`` or when demand and position are not both mapped) and ``diverges``.
+    """
+    dem = _pct_series(frame, Role.HEAT_VALVE)
+    pos = _pct_series(frame, Role.HEAT_VALVE_POSITION)
+    out: dict = {"valve_divergence_share": None, "diverges": False}
+    if dem is None or pos is None:
+        return out
+    full = keep.reindex(frame.index).fillna(False).astype(bool) & dem.notna() & pos.notna()
+    full &= dem >= _DIVERGE_DEMAND_PCT
+    n = int(full.sum())
+    if n < _MIN_CHECK_SAMPLES:
+        return out
+    share = float((pos[full] <= _DIVERGE_POSITION_PCT).mean())
+    out["valve_divergence_share"] = round(share, 3)
+    out["diverges"] = share >= _DIVERGE_SHARE
+    return out
+
+
+def _divergence_caveat(share: float) -> str:
+    return (
+        f"the reheat demand is at or above {_DIVERGE_DEMAND_PCT:g}% while the measured valve "
+        f"position is at or below {_DIVERGE_POSITION_PCT:g}% on {share:.0%} of the occupied "
+        "full-demand samples: a stuck or failed valve (or actuator), not a reheat penalty -- the "
+        "controller calls for heat the valve does not deliver"
+    )
+
+
+def _check_fan_heat(fan_heat_f):
+    """Validate ``fan_heat_f``: None, a number of °F >= 0, or ``"auto"``."""
+    if fan_heat_f is None or fan_heat_f == "auto":
+        return fan_heat_f
+    if isinstance(fan_heat_f, bool) or not isinstance(fan_heat_f, (int, float)):
+        raise ValueError(f"fan_heat_f must be None, a number of °F or 'auto', not {fan_heat_f!r}")
+    if not fan_heat_f >= 0:
+        raise ValueError(f"fan_heat_f must be >= 0 °F, not {fan_heat_f!r}")
+    return float(fan_heat_f)
+
+
+# ==== end 098-terminal-reheat ====
 
 # role -> the legacy column name analyze_box expects
 _ROLE_TO_BOX_COL = {
@@ -83,6 +183,8 @@ class ReheatPenalty:
     name = "reheat_penalty"
     roles_required = (Role.HEAT_VALVE,)
     roles_optional = (
+        Role.HEAT_VALVE_POSITION,  # 0.98 (#85): read in place of the demand when mapped
+        Role.SUPPLY_FAN_STATUS,  # 0.98 (#85): gates the "auto" fan-heat samples when mapped
         Role.OAT,
         Role.SPACE_TEMP,
         Role.SUPPLY_AIR_TEMP,
@@ -103,16 +205,21 @@ class ReheatPenalty:
         start_hour: float = 7,
         end_hour: float = 18,
         occupied_days=(0, 1, 2, 3, 4),
+        fan_heat_f: float | str | None = None,
     ):
         # The schedule is only an assumption: a trended OCCUPANCY point replaces it.
         self.start_hour = start_hour
         self.end_hour = end_hour
         self.occupied_days = tuple(occupied_days)
+        # 0.98 (#85): °F a fan-powered box's own fan adds to its discharge ("auto": per box)
+        self.fan_heat_f = _check_fan_heat(fan_heat_f)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
+        # 0.98 (#85): judge the heat delivered from the measured position when it is mapped
+        valve_role, valve_signal = _reheat_valve_role(frame)
         cols = {r: c for r, c in _ROLE_TO_BOX_COL.items() if r in frame.columns}
-        legacy = frame.rename(columns=cols)
+        legacy = _with_valve(frame, cols, valve_role)
         # OAT is passed to analyze_box as a separate series, not a column
         oat = frame[Role.OAT] if Role.OAT in frame.columns else None
         res = analyze_box(
@@ -127,9 +234,12 @@ class ReheatPenalty:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"
             )
-        check = self._valve_rise_check(frame, oat)
+        check = self._valve_rise_check(frame, oat, valve_role or Role.HEAT_VALVE)
+        check["valve_signal"] = valve_signal
+        div = check.pop("_divergence")
+        check["valve_divergence_share"] = div["valve_divergence_share"]
         if check["valve_dat_consistency"] == "open_no_rise":
-            return self._declined(equip, res, check)
+            return self._declined(equip, res, check, div)
         # Headline = reheat at high OAT (heating in cooling weather). Falls back to
         # the cold-supply indicator if no OAT was available.
         hi = res.reheat_at_high_oat_pct
@@ -162,6 +272,8 @@ class ReheatPenalty:
             )
             if severity == "ok":
                 severity = "info"
+        if div["diverges"]:
+            caveats.append(_divergence_caveat(div["valve_divergence_share"]))
         check.pop("_ref_label", None)
         return Finding(
             rule=self.name,
@@ -179,8 +291,9 @@ class ReheatPenalty:
                 "n_considered": res.n_considered,
             },
             summary=(
-                f"{equip}: reheat valve open {res.valve_open_pct:.0f}% of occupied "
-                f"hours; "
+                f"{equip}: reheat valve "
+                + ("(measured position) " if valve_signal == "position" else "")
+                + f"open {res.valve_open_pct:.0f}% of occupied hours; "
                 + (
                     f"{res.reheat_at_high_oat_pct:.0f}% at OAT>65F"
                     if oat is not None
@@ -192,17 +305,19 @@ class ReheatPenalty:
             caveats=caveats,
         )
 
-    def _valve_rise_check(self, frame: pd.DataFrame, oat) -> dict:
-        """#63: does the discharge-air rise corroborate the reheat valve? (metrics dict)"""
+    def _valve_rise_check(self, frame: pd.DataFrame, oat, valve_role=Role.HEAT_VALVE) -> dict:
+        """#63: does the discharge-air rise corroborate the reheat valve? (metrics dict)
+
+        ``valve_role`` is the point the rule judges (the position when mapped, else the demand).
+        """
         out: dict = {
             "valve_dat_consistency": "not_checked",
             "valve_dat_basis": None,
             "valve_open_median_rise_f": None,
             "valve_closed_big_rise_share": None,
+            "fan_heat_f": None,
             "_ref_label": "",
         }
-        if Role.SUPPLY_AIR_TEMP not in frame.columns:
-            return out
         occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
         keep = effective_occupied_mask(
             frame.index,
@@ -214,7 +329,10 @@ class ReheatPenalty:
             cooldown=frame[Role.COOLDOWN] if Role.COOLDOWN in frame.columns else None,
         )
         keep = pd.Series(keep, index=frame.index).fillna(False).astype(bool)
-        v = normalize_percent(pd.to_numeric(frame[Role.HEAT_VALVE], errors="coerce"))
+        out["_divergence"] = _valve_divergence(frame, keep)
+        if Role.SUPPLY_AIR_TEMP not in frame.columns:
+            return out
+        v = normalize_percent(pd.to_numeric(frame[valve_role], errors="coerce"))
         dat = pd.to_numeric(frame[Role.SUPPLY_AIR_TEMP], errors="coerce")
         dat = dat.where((dat > 30) & (dat < 150))
         is_open, is_closed = v >= _OPEN_PCT, v <= _CLOSED_PCT
@@ -261,17 +379,22 @@ class ReheatPenalty:
             closed_label = f"a nominal {_NOMINAL_PRIMARY_F:g}°F primary air (OAT >= 70°F)"
         out["valve_dat_basis"] = basis
         out["_ref_label"] = ref_label
+        # 0.98 (#85): a fan-powered box's own fan heat raises both bounds
+        fan = self._fan_heat(frame, rise, closed_s, basis)
+        out["fan_heat_f"] = fan
+        fan = fan or 0.0
+        open_fan = 0.0 if basis == "closed_valve_discharge" else fan  # its reference has it
         checked = False
         if int(open_s.sum()) >= _MIN_CHECK_SAMPLES:
             checked = True
             med = float(rise[open_s].median())
             out["valve_open_median_rise_f"] = round(med, 2)
-            if med < _NO_RISE_F:
+            if med < _NO_RISE_F + open_fan:
                 out["valve_dat_consistency"] = "open_no_rise"
                 return out
         if int(closed_s.sum()) >= _MIN_CHECK_SAMPLES:
             checked = True
-            share = float((rise[closed_s] >= _BIG_RISE_F).mean())
+            share = float((rise[closed_s] >= _BIG_RISE_F + fan).mean())
             out["valve_closed_big_rise_share"] = round(share, 3)
             if share >= _BIG_RISE_SHARE:
                 out["valve_dat_consistency"] = "closed_with_rise"
@@ -281,10 +404,31 @@ class ReheatPenalty:
             out["valve_dat_consistency"] = "consistent"
         return out
 
-    def _declined(self, equip: str, res, check: dict) -> Finding:
+    def _fan_heat(self, frame: pd.DataFrame, rise, closed_s, basis: str):
+        """The fan heat (°F) the bounds allow for: the configured value, the "auto" estimate, or
+        None (not configured, or "auto" without the entering air or enough samples -> no
+        offset)."""
+        if self.fan_heat_f is None or self.fan_heat_f != "auto":
+            return self.fan_heat_f
+        if basis != "entering_air":
+            return None  # the fan's lift is measured against the air entering the box
+        s = closed_s
+        if Role.SUPPLY_FAN_STATUS in frame.columns:
+            s = s & (pd.to_numeric(frame[Role.SUPPLY_FAN_STATUS], errors="coerce") > 0.5)
+        s = s & rise.notna()
+        if int(s.sum()) < _MIN_CHECK_SAMPLES:
+            return None
+        return round(min(max(float(rise[s].median()), 0.0), _FAN_HEAT_MAX_F), 2)
+
+    def _declined(self, equip: str, res, check: dict, div: dict | None = None) -> Finding:
         """#63: the valve reads full open but the air shows no rise -- don't count the reheat."""
         ref = check.pop("_ref_label", "")
         rise = check["valve_open_median_rise_f"]
+        fan = check.get("fan_heat_f") or 0.0
+        if check["valve_dat_basis"] == "closed_valve_discharge":
+            fan = 0.0
+        bound = _NO_RISE_F + fan
+        fan_note = f" allowing {fan:g}°F of fan heat" if fan else ""
         return Finding(
             rule=self.name,
             equip=equip,
@@ -306,7 +450,8 @@ class ReheatPenalty:
             },
             summary=(
                 f"{equip}: declined -- the reheat valve reads >= {_OPEN_PCT:g}% open but discharge "
-                f"air rises only {rise:+.1f}°F over {ref} (< {_NO_RISE_F:g}°F); reheat not counted"
+                f"air rises only {rise:+.1f}°F over {ref} (< {bound:g}°F{fan_note}); reheat not "
+                "counted"
             ),
             caveats=[
                 f"reheat valve at >= {_OPEN_PCT:g}% with a median discharge-air rise of "
@@ -319,7 +464,12 @@ class ReheatPenalty:
                     if check["valve_dat_basis"] != "entering_air"
                     else ""
                 )
-            ],
+            ]
+            + (
+                [_divergence_caveat(div["valve_divergence_share"])]
+                if div and div["diverges"]
+                else []
+            ),
         )
 
     def evidence(self, equip: str, frame: pd.DataFrame):

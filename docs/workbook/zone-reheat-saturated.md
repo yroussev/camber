@@ -69,7 +69,10 @@ Both configs run the same three rules:
   but it sets samples with the reheat saturated apart as a heating shortfall.
 - `unmet_setpoint_hours` counts the cold (and hot) hours without asking about the reheat.
 
-The `lbnl-fpu` config also runs `reheat_penalty`, for question 4. The `ornl-frp-vav` config
+The `lbnl-fpu` config also runs `reheat_penalty`, for question 4. The box trends both the
+controller's reheat demand and the valve's measured position: `reheat_capacity_shortfall` and
+`overcooling_severity` read the demand (how hard the controller asks for heat), and
+`reheat_penalty` reads the position (how much heat the valve lets through). The `ornl-frp-vav` config
 limits itself to the fault-free day with an `"equip"` list.
 
 ## Steps
@@ -92,8 +95,9 @@ limits itself to the fault-free day with an `"equip"` list.
    does it use?
 3. How do `unmet_setpoint_hours` and `overcooling_severity` describe the same run? Why is
    "overcooled" the wrong word for it?
-4. The reheat valve in that run is stuck *shut*, yet the valve signal reads fully open and
-   `reheat_penalty` reports a **fault**. Why? What would you check on site?
+4. The reheat valve in that run is stuck *shut*, yet `reheat_capacity_shortfall` finds the
+   reheat maxed out. Which valve signal does it read, and which does `reheat_penalty` read? What
+   does `reheat_penalty` report, and what does its caveat tell you? What would you check on site?
 5. Which runs have heat to spare, and how can you tell?
 6. On the ORNL fault-free day, which rooms are too cold, and for how much of the occupied time?
    How deep does the worst one go below its heating setpoint?
@@ -114,9 +118,11 @@ limits itself to the fault-free day with an `"equip"` list.
 ## Caveats
 
 - `lbnl-fpu` is simulated: the stuck-shut valve is the only saturated-reheat case in the default
-  subset, and the reheat signal is the controller's demand, not a valve position.
+  subset. The shortfall rules read the controller's demand; with only a measured position a
+  stuck-shut valve would look like a box that never needed heat.
 - A parallel fan-powered box mixes in warm plenum air when its fan runs, so a few degrees of
-  discharge-air rise do not prove the coil is heating.
+  discharge-air rise do not prove the coil is heating. The config sets `reheat_penalty`'s
+  `fan_heat_f` to `"auto"` to allow for that lift.
 - The ORNL building is real, but each scenario is one day. A day's cold room may be that day's
   weather or occupancy, not a fault.
 - The shortfall thresholds (1.5 °F, 90 %, 5 % and 20 % of samples) are screening-grade judgement,

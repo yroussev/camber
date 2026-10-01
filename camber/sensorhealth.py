@@ -88,6 +88,7 @@ PHYSICAL_BOUNDS: dict = {
     Role.CW_RETURN_TEMP: (45.0, 130.0),
     Role.OUTDOOR_RH: (-2.0, 102.0),
     Role.HEAT_VALVE: (-2.0, 102.0),
+    Role.HEAT_VALVE_POSITION: (-2.0, 102.0),  # 0.98 (#85)
     Role.COOL_VALVE: (-2.0, 102.0),
     Role.OA_DAMPER: (-2.0, 102.0),
     Role.DAMPER: (-2.0, 102.0),

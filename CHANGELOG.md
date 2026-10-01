@@ -110,6 +110,24 @@ calibrate it, and reads run configs from YAML as well as JSON.
   (+53.7 / +24.9 / +5.1 %; 095 clears the 5 % warn floor by 0.1 point), no false alarm on the
   20 / 13 other runs. The scorer counts the reference run as a correct negative (0/21, 0/14).
 <!-- /098-plant-reference -->
+<!-- 098-terminal-reheat -->
+- **`heat_valve_position`: a reheat valve's measured position beside its demand (#85 item 3,
+  provisional).** A new role for a unit that trends both the controller's demand and the valve's
+  feedback: map the demand to `heat_valve` and the feedback to `heat_valve_position`. It is a
+  percent role (0-1 fractions are rescaled), physically bounded like the other valves, carries
+  the Haystack tags `heating valve sensor` and the 223P quantity of `heat_valve`, and is offered
+  by the mapping assistant for percent units. It is not exported as a Brick point (the importer
+  reads a heating coil's position sensor as `heat_valve`). `lbnl-fpu` maps `RH_VLV_S` to it; its
+  catalog known issue and mapping comment say why.
+- **`reheat_penalty(fan_heat_f=None)` (#85 item 3).** A fan-powered box's own fan (and, in a
+  parallel box, the plenum air it mixes in) lifts the discharge above the entering air with the
+  valve shut. A number of °F raises both valve-vs-discharge bounds (5 °F no rise at full valve,
+  10 °F big rise with it shut) by that much; `"auto"` estimates it per box as the median
+  closed-valve, airflow-bearing lift over the entering air (fan-on samples only when the fan
+  status is mapped, >= 12 samples), clipped to 0-8 °F. The value used is reported as
+  `fan_heat_f`. The default `None` changes nothing; the two `lbnl-fpu` exercise configs set
+  `"auto"`, with its basis.
+<!-- /098-terminal-reheat -->
 
 ### Changed
 <!-- 098-core -->
@@ -263,6 +281,20 @@ calibrate it, and reads run configs from YAML as well as JSON.
   catches all three (TPR 100%, replacing the overall TPR 0 % answer); page steps 5 and 7,
   questions 4 and 5 and instructor answers 4 and 5 rewritten.
 <!-- /098-plant-reference -->
+<!-- 098-terminal-reheat -->
+- **`reheat_penalty` and `overcooling_min_flow` read the valve position when it is mapped (#85
+  item 3).** Both judge heat actually delivered, so with `heat_valve_position` mapped they read it
+  in place of the demand (new metric `valve_signal`: `position` or `demand`). When the demand is
+  at or above 90 % while the position is at or below 5 % on at least 25 % of the occupied
+  full-demand samples (>= 12 of them), the finding carries a "stuck or failed valve, not a reheat
+  penalty" caveat (new metric `valve_divergence_share`). Sites with one valve point are unchanged.
+  **Intended default change** (from the new `lbnl-fpu` mapping): on `PFPU__ReheatVLVStuck_0pct`
+  `reheat_penalty` goes from `fault` (51 % "open", read from the demand) to `ok` (0 %) with the
+  caveat, and `overcooling_min_flow` from `fault` to `ok` with the caveat; the healthy runs' figures
+  hold (11 / 67 / 99 % open). `reheat_capacity_shortfall`, `overcooling_severity` and the
+  reheat-valve drift detector keep reading the demand. Workbook: `zone-reheat-overcooling`
+  question 5 and `zone-reheat-saturated` question 4 rewritten, with their instructor keys.
+<!-- /098-terminal-reheat -->
 
 ### Documentation
 <!-- 098-refs-catalog -->

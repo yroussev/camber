@@ -96,7 +96,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`overcooling_severity`](#overcooling_severity) | 10 |  |
 | [`reheat_capacity_shortfall`](#reheat_capacity_shortfall) | 10 |  |
 | [`reheat_minimization_g36`](#reheat_minimization_g36) | 2 | yes |
-| [`reheat_penalty`](#reheat_penalty) | 3 |  |
+| [`reheat_penalty`](#reheat_penalty) | 4 |  |
 | [`sat_cohort_starvation`](#sat_cohort_starvation) | 4 |  |
 | [`sat_reset_effectiveness`](#sat_reset_effectiveness) | 7 |  |
 | [`sat_rogue_zone_census`](#sat_rogue_zone_census) | 5 |  |
@@ -871,12 +871,14 @@ Fixed in code: warn when >= 15 % and fault when >= 40 % of reheating hours run a
 | `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
+| `fan_heat_f` | `null` | °F | 0.0 to 8.0 | CAMBER judgment (0.98, #85): a fan-powered box's own fan, and in a parallel box the plenum air it mixes in, lifts the discharge above the entering primary air with the valve shut; on the LBNL fan-powered boxes the discharge rose 6.0 °F (median, parallel box) and 8.7 °F (series box) over the entering air with the valve stuck shut, past the 5 °F no-rise bound, so a valve that delivered no heat looked corroborated |
 
 How to calibrate:
 
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
+- `fan_heat_f`: Map the entering primary air (MIXED_AIR_TEMP) and read the discharge minus entering air on hours the valve is shut and the box moves air (fan on, where the fan status is trended). Set the typical lift, or use "auto" to estimate it per box from those hours. Single-duct boxes with no fan: leave it None. *Note:* None (default) adds nothing to the valve-vs-discharge bounds (5 °F no rise at full valve, 10 °F big rise with the valve shut). A number raises both by that many °F. "auto" uses the median closed-valve, airflow-bearing lift over the entering air (>= 12 samples, fan-on only when SUPPLY_FAN_STATUS is mapped), clipped to 0-8 °F; without the entering air or enough samples it adds nothing. The finding reports the value used as fan_heat_f.
 
 ## sat_cohort_starvation
 

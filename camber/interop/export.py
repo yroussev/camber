@@ -56,6 +56,11 @@ ROLE_TO_BRICK_POINT_CLASS = {
 ROLE_TO_BRICK_PART = {
     Role.COOL_VALVE: ("Cooling_Coil", "Chilled_Water_Coil", "Valve_Position_Sensor"),
     Role.HEAT_VALVE: ("Heating_Coil", "Hot_Water_Coil", "Valve_Position_Sensor"),
+    # 0.98 (#85): HEAT_VALVE_POSITION (a heating valve's measured position, trended beside its
+    # demand) is deliberately NOT exported as a Brick point. The importer maps a heating coil's
+    # Valve_Position_Sensor to HEAT_VALVE (a position feedback wins over a command), so a lone
+    # exported position would come back as HEAT_VALVE; the Haystack export carries it
+    # ("heating valve sensor", which imports back to the same role).
     Role.OA_DAMPER: ("Outdoor_Air_Damper", "Outside_Damper", "Damper_Position_Sensor"),
     Role.SUPPLY_FAN_SPEED: ("Supply_Air_Fan", "Fan", "Speed_status"),
     Role.SUPPLY_FAN_STATUS: ("Supply_Air_Fan", "Fan", "Fan_On_Off_Status"),

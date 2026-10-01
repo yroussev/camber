@@ -2517,7 +2517,7 @@
    },
    "known_issues": [
     "Faults are imposed on the SOUTH zone box (_S columns); the other zones stay healthy (see the data issues).",
-    "The reheat valve maps to the demand column (RH_VLV_DM_S); VAV_DMPR_S has no demand twin and is the measured position.",
+    "The reheat valve demand (RH_VLV_DM_S) maps to heat_valve and its measured position (RH_VLV_S) to heat_valve_position (0.98): the drift and capacity rules read the demand, and reheat_penalty and overcooling_min_flow read the position, so a valve stuck shut is not reported as reheat. VAV_DMPR_S has no demand twin and is the measured position.",
     "The room setpoints RMCLGSPT_S / RMHTGSPT_S (72 / 68 F occupied, 85 / 55 F unoccupied) map to cool_sp / heat_sp, so unmet_setpoint_hours evaluates.",
     "SA_TEMP is the AHU supply air entering the box and maps to mixed_air_temp, the role CAMBER uses for a terminal's entering primary air. In a parallel box the reheat coil sees that primary air plus the plenum air the box fan adds when it runs, so SA_TEMP is a proxy for the coil's entering air, not a measurement of it.",
     "reheat_minimization_g36 is not run: VAV_PM_CFM_SP_S is the active airflow setpoint (the rule reads it as the design maximum and cannot fire on the fault-free run), and G36's dual-maximum reheat logic applies to single-duct VAV boxes, not fan-powered ones.",

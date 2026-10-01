@@ -314,8 +314,8 @@ Figures from the real `ornl-frp-ops` default subset, CAMBER 0.97.0-dev, with the
 
 ### `zone-reheat-overcooling`: the reheat penalty and overcooling at minimum airflow
 
-Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the commands on the
-[exercise page](zone-reheat-overcooling.md#setup).
+Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev (the valve-stuck-shut answer
+re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-overcooling.md#setup).
 
 **Answer key**
 
@@ -339,12 +339,16 @@ Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the com
    still overcools, which is a setting problem. The stuck box is never at its minimum: its airflow
    is far above its setpoint all the time. Its overcooling is a hardware fault, and
    `airflow_tracking` is the rule that names it.
-5. *The valve stuck shut.* It is not wasting reheat. It delivers none. The rule reads the
-   controller's reheat *demand*, which sits near full (about 93 % when open) because the zone is
-   cold and the valve cannot respond. The discharge air still rises a few degrees, because the
-   parallel box's fan mixes in warm plenum air, so the rule's valve-versus-discharge cross-check
-   does not catch it. `overcooling_min_flow` also rates it a **fault** for the same reason.
-   [`zone-reheat-saturated`](zone-reheat-saturated.md) shows what it really is.
+5. *The valve stuck shut.* It is not wasting reheat: it delivers none. Both rules read the
+   valve's measured position (`valve_signal` = `position`), which is 0 % all year, so
+   `reheat_penalty` is **ok** (0 % open) and so is `overcooling_min_flow` (no overcooling with
+   reheat). Each finding carries a caveat: the demand is at or above 90 % while the position reads
+   at or below 5 % on 100 % of the occupied full-demand hours, a stuck or failed valve rather than
+   a reheat penalty. With only the demand (as before 0.98), both rules rated it a **fault**: the
+   demand sits near full (about 93 % when open) because the zone is cold, and the discharge still
+   rose 6 °F at full demand, because the parallel box's fan mixes in warm plenum air, which passed
+   the valve-versus-discharge cross-check. [`zone-reheat-saturated`](zone-reheat-saturated.md)
+   shows what it really is.
 6. *Which box is under test?* The south-zone box (`_S` columns). Comparing each faulted run's
    columns with the fault-free run's shows that only the `_S` box's columns change. CAMBER's
    mapping (`mappings/lbnl_fpu.json`) documents this. It mapped the west box until 0.82 and
@@ -362,15 +366,18 @@ Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the com
 - The fault-free run is not "no findings". A simulated building designed with a conventional
   minimum still shows a small reheat penalty. That is the re-tuning opportunity, and it is why
   the rules warn rather than stay silent.
-- The reheat signal is a demand. Ask what a measured valve position or a discharge-air
-  temperature after a series box would change.
+- Demand versus position. The rules that judge heat delivered read the position; the rules
+  that judge how hard the controller asks read the demand. Ask what a site that trends only one
+  of the two can and cannot conclude, and what a series box (whose fan runs all the time) does to
+  the discharge-air rise.
 - Minimums are also a ventilation question: lowering them needs the zone's 62.1 minimum. See
   [`zone-min-oa`](zone-min-oa.md).
 
 **Common mistakes**
 
-- Reading the `reheat_penalty` fault on the stuck-shut valve as wasted energy. The valve gives
-  no heat. The demand is saturated because it cannot.
+- Reading the stuck-shut valve's quiet `reheat_penalty` as "nothing wrong". It is quiet because
+  no heat is delivered; the caveat names the stuck valve, and `reheat_capacity_shortfall` in
+  [`zone-reheat-saturated`](zone-reheat-saturated.md) grades it.
 - Expecting `overcooling_min_flow` to catch the stuck-open damper, and concluding the rule is
   broken when it is quiet.
 - Treating the half-open damper as harmless because the zone stays in band. It still reheats in
@@ -456,8 +463,9 @@ commands on the [exercise page](zone-bad-box.md#setup).
 
 ### `zone-reheat-saturated`: a zone below setpoint with its reheat maxed out
 
-Figures from the real `lbnl-fpu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev (answer 5
-re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-saturated.md#setup).
+Figures from the real `lbnl-fpu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev (answers 4
+and 5 re-checked on 0.98.0-dev), with the commands on the
+[exercise page](zone-reheat-saturated.md#setup).
 
 **Answer key**
 
@@ -475,12 +483,16 @@ re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-
    graded `fault` on both depth and share: 30% of occupied samples, well over the 20 % a fault
    needs. "Overcooled" would send you to the cooling side
    (minimum airflow, supply-air temperature), when the zone is cold because heat cannot get in.
-4. *Why does the valve read fully open?* The mapped signal is the controller's reheat demand,
-   not the valve's position. The controller keeps asking for full heat because the zone stays
-   cold, and the valve stuck shut cannot respond. `reheat_penalty` reads that demand as reheat
-   delivered in 51% of occupied hours and rates it a **fault**. The parallel box's fan mixes in
-   warm plenum air, so the discharge air rises a few degrees, enough to pass the rule's
-   valve-versus-discharge check. On site: stroke the valve, check the discharge air at full
+4. *Which signal?* `reheat_capacity_shortfall` reads the controller's reheat *demand*
+   (`heat_valve`): the controller keeps asking for full heat because the zone stays cold, and the
+   valve stuck shut cannot respond, so the reheat reads maxed out. `reheat_penalty` reads the
+   valve's measured *position* (`heat_valve_position`, `valve_signal` = `position`), which is 0 %
+   all year: it is **ok**, 0 % open, with a caveat that the demand is at or above 90 % while the
+   position reads shut on 100 % of the full-demand hours, a stuck or failed valve rather than a
+   reheat penalty. Before 0.98 it read the demand as reheat delivered in 51% of occupied hours and
+   rated it a **fault**: the parallel box's fan mixes in warm plenum air, so the discharge rose a
+   few degrees, enough to pass the valve-versus-discharge check (the config now allows for that
+   lift with `fan_heat_f` = `"auto"`). On site: stroke the valve, check the discharge air at full
    demand, and check the hot-water supply to the coil.
 5. *Heat to spare.* The fault-free run, the leaking valve and the half-open damper have no
    saturated shortfall at all. The fully open damper has a little (under 2 % of samples, `ok`):
@@ -513,7 +525,8 @@ re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-
 
 - Calling the ORNL rooms "overcooled" and lowering their airflow. With no reheat signal CAMBER
   cannot tell, and the rooms may be short of heat.
-- Reading `reheat_penalty` on the stuck-shut valve as an energy saving opportunity.
+- Reading `reheat_penalty`'s **ok** on the stuck-shut valve as "the reheat is fine". It is ok
+  because no heat is delivered; read its caveat.
 - Treating `unmet_setpoint_hours` as a diagnosis. It measures a symptom.
 - Expecting a finding on every box. A rule that lacks its input stays silent. Check which rules
   produced findings, not only which fired.
