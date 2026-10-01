@@ -35,7 +35,11 @@ for r in recs:
 `recommend(finding)` returns a single `Recommendation` (or `None` for a non-actionable finding or a
 rule with no recommender). A `Recommendation` carries: `title`, `action`, `parameter`, `suggested`
 (the target, possibly qualitative), `expected_effect`, `confidence` (high/medium/low), `standard`
-(the citation), `caveats`, and `advisory=True` (always). It is JSON-friendly via `as_dict()`.
+(the citation), `caveats`, `references`, `cause` and `advisory=True` (always). It is
+JSON-friendly via `as_dict()`. `cause` (0.98, #88) names the finding's cause in a short phrase
+("Outdoor-air damper not modulating (stuck low)", "Low chilled-water loop ΔT (40% of running
+hours)"), built from the same metrics the advice follows; `title` stays the action. The RCx
+report heads each issue with the cause.
 
 ## Targets & flags
 
@@ -57,7 +61,12 @@ Outside-air advice follows the finding's **failure mode**, not just its rule nam
 inferred from their metrics) gets "restore minimum outside air": check the minimum-OA damper
 position, actuator and linkage, the min-OA setpoint against design, and the outdoor airflow.
 Excess OA and `economizer_high_limit` get lockout advice at the rule's configured high limit, and
-`free_cooling_missed` gets "enable economizer free cooling".
+`free_cooling_missed` gets "enable economizer free cooling", unless the finding shows the damper
+was commanded open and outside air did not arrive (`missed_cause: damper_not_delivering`, 0.98):
+then it gets "repair the outdoor-air damper or actuator", a mechanical fix, "stuck low" or
+"stuck part open" by the OA fraction delivered while commanded open
+(`commanded_open_oaf_median_pct` against `stuck_low_oaf_pct`, default 30 %,
+`DEFAULT_PARAMS["econ_stuck_low_oaf_pct"]`).
 
 **Every recommender follows the cause (0.96, #78).** Advice is keyed to the reason a finding
 fired, read from its metrics, never only to its rule name:
@@ -73,6 +82,7 @@ fired, read from its metrics, never only to its rule name:
 | `cooling_tower_approach` | wide approach at full fan (`effort_gated`) | Restore tower capacity (fill, distribution, flow) |
 | `reheat_minimization_g36` | reheat above the minimum airflow | Implement the dual-maximum heating sequence |
 | `overcooling_min_flow`, `overcooling_severity` | at minimum flow / depth below setpoint | Lower min flow or raise SAT (never a higher cooling setpoint) |
+| `free_cooling_missed` | damper commanded open, OA not delivered (`missed_cause`) / economizer not commanded | Repair the OA damper or actuator / enable economizer free cooling |
 
 The dispatch thresholds mirror the rules' defaults (`DEFAULT_PARAMS`: `dcv_*`, `chw_low_dt_warn_pct`,
 `pump_near_*_warn_pct`); a finding's severity and metrics are never changed. The DCV system rule

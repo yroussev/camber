@@ -477,7 +477,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `to_html_document()`, `camber.report.audit.html_document` and `REPORT_CSS`, the config keys
   `report.title` and `report.ecms`, the RCx section id `reading`, and
   `camber.api.ui.role_units`. The **text** of recommendations and report titles is presentation,
-  not API: it follows the finding's cause and may be reworded.
+  not API: it follows the finding's cause and may be reworded. Additive and provisional in 0.98
+  (#88): `Recommendation.cause`, the `title` and `cause` keys of each RCx issue in
+  `RcxReport.to_dict()`, `DEFAULT_PARAMS["econ_stuck_low_oaf_pct"]`, and the
+  `free_cooling_missed` metrics `missed_cause` (`damper_not_delivering` /
+  `economizer_not_commanded` / `undetermined`, `None` with nothing missed),
+  `commanded_open_pct`, `commanded_open_hours`, `commanded_open_oaf_median_pct` and
+  `missed_damper_cmd_median_pct`.
 <!-- /096-report -->
 <!-- 096-bts (#75) -->
 - **The `bts` catalog entry and the `brick_streams` adapter** (0.96; #75), additive and

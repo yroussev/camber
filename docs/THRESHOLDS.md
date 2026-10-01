@@ -81,7 +81,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`dx_refrigerant_charge`](#dx_refrigerant_charge) | 12 |  |
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
 | [`filter_fouling`](#filter_fouling) | 1 |  |
-| [`free_cooling_missed`](#free_cooling_missed) | 4 |  |
+| [`free_cooling_missed`](#free_cooling_missed) | 9 |  |
 | [`g36_afdd`](#g36_afdd) | 11 |  |
 | [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
 | [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 10 |  |
@@ -546,6 +546,11 @@ How to calibrate:
 | `active` | `5.0` | % of valve stroke (cooling valve) | 1.0 to 20.0 | CAMBER judgment: a valve parked at a few percent is not mechanical cooling running |
 | `warn_pct` | `10.0` | % of free-cooling samples | 2.0 to 30.0 | CAMBER judgment |
 | `fault_pct` | `25.0` | % of free-cooling samples | 10.0 to 60.0 | CAMBER judgment |
+| `cmd_open_pct` | `90.0` | % of damper stroke (OA damper command) | 50.0 to 100.0 | CAMBER judgment: the full-outside-air damper test (ECON_DAMPER_MIN_PCT, 90 %); an economizer damper at full open commonly reads a few percent short |
+| `oaf_open_pct` | `80.0` | % outdoor-air fraction (temperature balance) | 50.0 to 100.0 | CAMBER judgment: the full-outside-air OA-fraction test (ECON_OAF_MIN_PCT, 80 %); sensor error and mixing-box stratification keep a true 100 % OA unit from reading 100 |
+| `stuck_min_share_pct` | `20.0` | % of missed, well-conditioned free-cooling samples | 5.0 to 60.0 | CAMBER judgment, checked on lbnl-sdahu (stuck-damper runs 40-87 %, fault-free and valve-leak runs 0 %) and lbnl-ddahu (stuck-closed run 95 %, fault-free 0 %) |
+| `stuck_min_hours` | `24.0` | hours | 6.0 to 168.0 | CAMBER judgment: one day of evidence before naming a mechanical cause |
+| `stuck_low_oaf_pct` | `30.0` | % outdoor-air fraction | 5.0 to 60.0 | CAMBER judgment: below 30 % the damper delivers about its minimum-OA share or less |
 
 How to calibrate:
 
@@ -553,6 +558,11 @@ How to calibrate:
 - `active`: Set it just above the cooling-valve position seen with cooling off on a known-good period (its 95th percentile when the chiller or compressor is off).
 - `warn_pct`: Read missed_pct on units whose economizers are known to work; set the warn level above their spread.
 - `fault_pct`: Set it well above warn_pct. *Note:* Must be at or above warn_pct.
+- `cmd_open_pct`: Read the OA-damper command on a known-good unit's free-cooling hours at full economizer; set it a few percent below the value it holds there. *Note:* Only the missed_cause metrics use it; severity does not.
+- `oaf_open_pct`: Compute (RAT - MAT) / (RAT - OAT) on a known-good unit's full-economizer hours with |OAT - RAT| >= 5 °F; set it below their low percentile. *Note:* Samples with |OAT - RAT| < 5 °F are not judged (the balance is ill-conditioned).
+- `stuck_min_share_pct`: Read commanded_open_pct on units whose dampers are known to work: set it well above their value (usually 0 %) and below that of a unit with a known stuck damper. *Note:* Below it, with a damper command trended, missed_cause is economizer_not_commanded.
+- `stuck_min_hours`: Raise it for long windows or noisy mixed-air sensors; one day is the floor for an hourly trend. *Note:* With the share met on fewer hours, missed_cause is undetermined.
+- `stuck_low_oaf_pct`: Set it just above the unit's design minimum OA fraction plus a margin; a damper delivering less while commanded open reads 'stuck low', more reads 'stuck part open'. *Note:* Recorded on the finding; the recommendation reads it (aso DEFAULT_PARAMS econ_stuck_low_oaf_pct mirrors the default).
 
 ## g36_afdd
 

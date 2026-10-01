@@ -121,9 +121,10 @@ caltrack_savings_hourly(
 
 ## Questions
 
-1. Which issue does the report rank first, on which unit, at what severity? What does its
-   recommended action ask you to verify, and why can the data alone not tell you whether the
-   damper or the economizer logic is at fault?
+1. Which issue does the report rank first, on which unit, at what severity? What cause does
+   its heading name, what evidence in the `free_cooling_missed` finding supports that cause
+   (`missed_cause`, `commanded_open_pct`), and what should the walk-down still confirm before
+   anything is repaired?
 2. How often did the onset unit run mechanical cooling in free-cooling weather, against the
    control? Why do the outdoor-air-fraction rules stay quiet on it?
 3. Which issue is *conditional*, on what, and with what trust? What goes on the walk-down list
@@ -141,7 +142,9 @@ caltrack_savings_hourly(
 - **RCx report** (`--layout rcx`): the ranked issues with severity, confidence and "why we
   believe this", cost or "uncosted" with the reason, the recommended action, conditional and
   dependent notes; data coverage and sensor trust; the economizer page; Appendix A's declines.
-- **Findings** (`cap_out/findings.json`): `free_cooling_missed`'s `missed_pct`, the
+- **Findings** (`cap_out/findings.json`): `free_cooling_missed`'s `missed_pct` and why the free
+  cooling was missed (`missed_cause`: the damper was commanded open but did not deliver outside
+  air, or the economizer never commanded it open; `commanded_open_pct`), the
   outdoor-air-fraction and high-limit verdicts, the supply-air and static-pressure checks.
 - **Drift** (`camber drift run`): one verdict per unit with its `locus` (`outdoor-air`, `steady`
   ...), severity and each detector's signal; the threshold notes printed with it.
@@ -157,7 +160,8 @@ caltrack_savings_hourly(
   "after" are perfect twins except for the damper.
 - The damper and valve points map to the controller's demand signals, so the command keeps
   moving while the damper is stuck: that is what drift sees, and also why the command alone would
-  never show the fault.
+  never show the fault. The report's cause comes from setting the command against the
+  mixed-air temperature.
 - Drift thresholds are screening-grade and its timing parameters untuned; a drift verdict ranks
   equipment for a walk-down, it does not dispatch a repair.
 - The ORNL tests were run in different winters, a week each; a before-and-after comparison of
