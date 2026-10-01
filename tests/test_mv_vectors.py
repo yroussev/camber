@@ -58,6 +58,65 @@ def regen(tmp_path_factory):
     return out, files, exp, gen.build_example(exp, out)
 
 
+# SCHEMA.md "Tolerances": a change point is compared to +-2 F. Exactly that tolerance is applied to
+# the change points of the candidates CAMBER did *not* select; everything else is compared exactly.
+_CP_TOL_F = 2.0
+_CP_KEYS = ("change_points", "bases_or_change_points")
+
+
+def _split_loose(node, best=None, path=""):
+    """``(node without the non-selected candidates' change points, {path: those change points})``.
+
+    A non-selected candidate is an entry of ``selection.candidates`` whose kind is not
+    ``selection.best``, or a comparison row with ``selected: false``. Their change points sit on
+    flat SSE surfaces where grid points can tie; CAMBER breaks ties deterministically (first grid
+    point), but they are not what the vectors promise, so they get the SCHEMA tolerance.
+    """
+    loose: dict = {}
+    if isinstance(node, list):
+        out = []
+        for i, v in enumerate(node):
+            o, lo = _split_loose(v, best, f"{path}[{i}]")
+            out.append(o)
+            loose.update(lo)
+        return out, loose
+    if not isinstance(node, dict):
+        return node, loose
+    if "best" in node and "candidates" in node:
+        best = node["best"]
+    out = {}
+    unselected = "kind" in node and (
+        node.get("selected") is False
+        or ("selected" not in node and best not in (None, node["kind"]))
+    )
+    for k, v in node.items():
+        if unselected and k in _CP_KEYS:
+            loose[f"{path}.{k}"] = v
+            continue
+        o, lo = _split_loose(v, best if k == "candidates" else None, f"{path}.{k}")
+        out[k] = o
+        loose.update(lo)
+    return out, loose
+
+
+def _assert_vectors_equal(got, want, label):
+    """Exact on everything but the non-selected candidates' change points (+-2 F there)."""
+    g, g_loose = _split_loose(got)
+    w, w_loose = _split_loose(want)
+    assert g == w, label
+    assert set(g_loose) == set(w_loose), label
+    for key, cps in w_loose.items():
+        other = g_loose[key]
+        assert len(other) == len(cps), f"{label}{key}"
+        assert all(_cp_close(a, b) for a, b in zip(other, cps)), f"{label}{key}"
+
+
+def _cp_close(a, b) -> bool:
+    if a is None or b is None:  # e.g. an unused degree-day base
+        return a is b
+    return abs(a - b) <= _CP_TOL_F
+
+
 def test_no_bdg2_data_is_committed():
     # CAMBER redistributes no datasets: no BDG2-derived inputs or series in the repository
     tracked = glob.glob(os.path.join(_DIR, "inputs", "**", "*"), recursive=True)
@@ -100,11 +159,11 @@ def test_expected_outputs_regenerate_exactly(regen):
         d["generator"].pop("camber_version")
     for a, b in zip(exp["cases"], committed["cases"]):
         for interval in b["fits"]:
-            assert a["fits"][interval] == b["fits"][interval], f"{b['id']}/{interval}"
+            _assert_vectors_equal(a["fits"][interval], b["fits"][interval], f"{b['id']}/{interval}")
     for a, b in zip(exp["bills"]["cases"], committed["bills"]["cases"]):
         for key in b:
-            assert a[key] == b[key], f"{b['id']}: {key}"
-    assert exp == committed
+            _assert_vectors_equal(a[key], b[key], f"{b['id']}: {key}")
+    _assert_vectors_equal(exp, committed, "expected.json")
 
 
 def test_example_results_regenerate_and_pass(regen):
@@ -233,9 +292,9 @@ def _bdg2_regenerates(source: str, tmp_path):
     for d in (exp, committed):
         d["generator"].pop("camber_version")
     for a, b in zip(exp["cases"], committed["cases"]):
-        assert a == b, a["id"]
+        _assert_vectors_equal(a, b, a["id"])
     for a, b in zip(exp["bills"]["cases"], committed["bills"]["cases"]):
-        assert a == b, a["id"]
+        _assert_vectors_equal(a, b, a["id"])
     chk = _load("check_vectors")
     assert chk.self_test(chk.load_expected(), local=local) == []
 
@@ -253,3 +312,27 @@ def test_bdg2_tier_regenerates_from_the_publisher(tmp_path):
     cache = str(tmp_path / "cache")
     fb.ensure_sources(cache=cache)  # downloads and checks every sha256 pin
     _bdg2_regenerates(cache, tmp_path)
+
+
+def test_only_unselected_candidates_change_points_are_loose():
+    """The tolerance covers exactly the non-selected candidates: every selected model's change
+    points, and everything else, stay exact."""
+    committed = _committed()
+    _, loose = _split_loose(committed)
+    assert loose and all(k.endswith(_CP_KEYS) for k in loose)
+    assert not [k for k in loose if ".model." in k or k.startswith(".model")]
+    fit = committed["cases"][0]["fits"]["daily"]
+    best = fit["selection"]["best"]
+    stripped, _ = _split_loose(fit)
+    kept = [c for c in stripped["selection"]["candidates"] if "change_points" in c]
+    assert [c["kind"] for c in kept] == [best]
+    moved = json.loads(json.dumps(fit))
+    for c in moved["selection"]["candidates"]:
+        if c["kind"] != best and c["change_points"]:
+            c["change_points"][0] += 1.5  # within the SCHEMA tolerance: passes
+    _assert_vectors_equal(moved, fit, "moved")
+    for c in moved["selection"]["candidates"]:
+        if c["kind"] == best and c["change_points"]:
+            c["change_points"][0] += 0.001  # the selected model is exact: fails
+            with pytest.raises(AssertionError):
+                _assert_vectors_equal(moved, fit, "moved")

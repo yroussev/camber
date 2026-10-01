@@ -1,7 +1,7 @@
 {
  "schema": "mv_vectors/1",
  "generator": {
-  "camber_version": "0.98.0-dev at 10577f0",
+  "camber_version": "0.98.0-dev at a849392",
   "script": "examples/mv_vectors/generate.py"
  },
  "method": {
@@ -257,7 +257,7 @@
         "sse": 69.70732,
         "bic": 31.05241,
         "change_points": [
-         79.762
+         78.64791
         ]
        },
        {
@@ -8328,7 +8328,7 @@
        "baseline_gate": true,
        "selected": false,
        "bases_or_change_points": [
-        39.71,
+        38.62,
         60.3
        ]
       },

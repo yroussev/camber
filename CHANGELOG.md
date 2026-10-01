@@ -695,6 +695,23 @@ are unchanged. Every other benchmark is unchanged.
   `DeprecationWarning` on every store read (14.0.0 also carries CVE-2023-47248). A new CI job,
   `min-deps`, runs the suite on Python 3.10 with every core floor pinned
   (`.github/min-deps.txt`; a test keeps it equal to the declared floors).
+- **Change-point ties break the same way on every platform.** The change-point grid searches in
+  `camber.mandv.models` (3PC/3PH/4P, the to-zero variants, 5P/5PZ) kept the grid point with the
+  strictly lowest SSE. On a flat SSE surface (no data between grid points, or a 4P/5P with no
+  second regime) several points tie up to rounding, and the BLAS build (Accelerate vs OpenBLAS)
+  picked the winner: fitting the five kinds to 1,961 BDG2 2016 meters, daily and monthly (19,610
+  fits), 170 fits' change points differed between the two builds. A later grid point now
+  replaces the best only when it lowers the objective by more than 1e-10 of it (floored at 1e-12
+  of the weighted sum of y² for exact fits), so ties keep the first grid point; `best_model`
+  treats BICs within 1e-9 as a tie (the earlier kind wins). The two builds now agree on every
+  fit. Default output: the five benchmarks are byte-identical before and after on both builds,
+  and no selected kind changes. Monthly change points do move within a tie, by at most 2.2 °F
+  (151 fits on Accelerate, 166 on OpenBLAS; 29 of them the selected model, whose SSE is
+  unchanged to 1e-10); daily fits do not move. The shared M&V vectors are regenerated: two
+  non-selected candidates' change points move (`syn_2p` monthly 4P 79.762 -> 78.64791, and the
+  `bills_bdg2_rat_public_leta_elec` 5P low change point 39.71 -> 38.62). The vectors test now
+  compares non-selected candidates' change points within SCHEMA's ±2 °F and everything else
+  exactly, and SCHEMA.md says how ties are broken.
 <!-- /098-pyarrow-compat -->
 
 ## [0.97.0] — Unreleased

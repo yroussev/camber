@@ -218,6 +218,14 @@ The method details below explain most of the differences you are likely to see.
   baseline OAT (`numpy.percentile` with linear interpolation, then `numpy.linspace`).
 - **Fit.** At each candidate the intercept and slopes are solved by least squares, and the
   candidate with the lowest SSE wins.
+- **Ties.** The SSE surface can be flat: several grid points fit equally well when no data lies
+  between them, or when a 4P or 5P model has no second regime to find (common for the
+  candidates CAMBER does not select, and on monthly data). Their SSEs then differ only by
+  rounding, which depends on the BLAS build. CAMBER keeps the **first** grid point (the lowest
+  change point, and for 5P the lowest `lo`, then the lowest `hi`) unless a later one is lower by
+  more than 1e-10 of the SSE, so the result is the same on every platform. Another tool may
+  break the same tie differently. That is why the change points of non-selected candidates are
+  compared within the change-point tolerance below, and never more tightly.
 - **5P.** The search tries every pair `(lo, hi)` on the same grid with `hi - lo` of at least one
   grid step, so the dead-band is never zero-width. When no pair qualifies, the model falls back
   to a line that keeps the label 5P.
@@ -227,7 +235,7 @@ The method details below explain most of the differences you are likely to see.
 ### Selection
 
 - CAMBER fits 2P, 3PC, 3PH, 4P and 5P, and keeps the lowest **BIC = n ln(SSE/n + 1e-12) + p ln(n)**.
-- A tie keeps the earlier kind in that order.
+- A tie keeps the earlier kind in that order (BICs within 1e-9 count as a tie).
 - For period tables, the SSE is day-weighted.
 - R² and adjusted R² are reported, but they are not used to choose.
 
