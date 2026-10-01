@@ -43,6 +43,7 @@ ROLE_TO_223 = {
     Role.PUMP_HEAD: ("Pressure", "Water"),
     Role.COOL_VALVE: ("PositionRatio", "Water"),
     Role.HEAT_VALVE: ("PositionRatio", "Water"),
+    Role.HEAT_VALVE_POSITION: ("PositionRatio", "Water"),  # 0.98 (#85)
     Role.OA_DAMPER: ("PositionRatio", "Air"),
     Role.DAMPER: ("PositionRatio", "Air"),
     Role.SUPPLY_FAN_SPEED: ("DimensionlessRatio", "Air"),

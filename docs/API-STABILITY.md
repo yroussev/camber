@@ -516,6 +516,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   typing. Entry texts (basis, calibration hints, ranges) are documentation and may change in any
   release; defaults are the rules' and follow the rules.
 <!-- /098-thresholds -->
+<!-- 098-terminal-reheat (#85) -->
+- **Reheat valve position vs demand** (0.98; #85), additive and provisional: the role
+  `heat_valve_position` (Haystack `heating valve sensor`; not exported as a Brick point); the
+  `fan_heat_f=` keyword of `ReheatPenalty` (`None`, a number of °F, or `"auto"`); the finding
+  metrics `valve_signal`, `valve_divergence_share` (`reheat_penalty`, `overcooling_min_flow`) and
+  `fan_heat_f` (`reheat_penalty`).
+<!-- /098-terminal-reheat -->
 
 ## Deprecated
 

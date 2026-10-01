@@ -40,9 +40,11 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
       reheated all day (valve 25-60 %), and fully open the box cannot hold the heating setpoint on
       cold mornings even with the valve near full (the zone falls to 66 F).
     - ``ReheatVLVStuck_0pct``: the valve is shut whatever the controller asks, so on cold days the
-      controller's demand (the mapped valve signal) sits at 100 % while the zone falls to 62 F at
-      the right airflow -- a capacity shortfall. The box fan still mixes in warm plenum air, so
-      the discharge sits about 7 F above the primary air with the valve shut.
+      controller's demand (``HEAT_VALVE``) sits at 100 % while the zone falls to 62 F at the right
+      airflow -- a capacity shortfall -- and the measured position (``HEAT_VALVE_POSITION``) stays
+      at 0 %. In every other run the position follows the demand (as in the real data). The box
+      fan still mixes in warm plenum air, so the discharge sits about 7 F above the primary air
+      with the valve shut.
     - ``ReheatVLVLeak_*``: a passing valve adds a little heat (discharge ~4 F over the primary air
       with the valve shut), enough for the light morning load, so the controller hardly opens
       it; the zone stays in band.
@@ -64,6 +66,7 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
     flow = flow_sp.copy()
     damper = flow / 8.4
     rise = 0.7 * valve  # a hot-water coil lifts discharge ~11 F at 16 % valve and minimum flow
+    position = None  # the measured valve position: the demand, unless the valve is stuck
     if fault.startswith("VAVDMPRStuck"):
         wide = fault.endswith("100pct")
         damper = np.full(n, 100.0 if wide else 50.0)
@@ -77,6 +80,7 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
         rise = np.where(valve > 0, 11.0, 0.0)
     elif fault == "ReheatVLVStuck_0pct":
         valve = np.where(occ, np.where(cold, 100.0, np.where(afternoon, 0.0, 30.0)), 0.0)
+        position = np.zeros(n)
         space = np.where(occ, np.where(cold, 62.0, 68.4), 62.0)
         rise = np.where(occ, 7.0, 0.0)
     elif fault.startswith("ReheatVLVLeak"):
@@ -89,6 +93,7 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
             Role.AIRFLOW_SP: flow_sp,
             Role.AIRFLOW: flow,
             Role.HEAT_VALVE: valve,
+            Role.HEAT_VALVE_POSITION: valve if position is None else position,
             Role.SUPPLY_AIR_TEMP: primary + rise,
             Role.MIXED_AIR_TEMP: primary,
             Role.DUCT_STATIC: static,

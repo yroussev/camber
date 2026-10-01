@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise zone-reheat-saturated (docs/workbook/zone-reheat-saturated.md), lbnl-fpu part: the South-zone boxes (PFPU__<run>) with the rules that tell a zone short of heat from an overcooled one. reheat_capacity_shortfall (0.93, #44) uses its defaults: a sample counts when the zone is more than 1.5 F below its trended heating setpoint (RMHTGSPT_S) with the reheat demand at or above 90%, outside the first 2 h of each occupied period and after a setpoint step; warn from 5%, fault from 20% of evaluated samples and 10 h. The reheat signal is the controller's demand (RH_VLV_DM_S), which is why a valve stuck shut reads as saturated: the controller asks for full heat and gets none. overcooling_severity sets those same samples apart as a heating shortfall rather than overcooling; unmet_setpoint_hours counts the cold hours without asking whether the box had heat to spare; reheat_penalty is kept to show what it says about a valve that delivers no heat. Weekday 07-18 occupancy (the rules' default; the dataset has no occupancy point). Hourly resample: a year of 15-minute data.",
+  "_comment": "Workbook exercise zone-reheat-saturated (docs/workbook/zone-reheat-saturated.md), lbnl-fpu part: the South-zone boxes (PFPU__<run>) with the rules that tell a zone short of heat from an overcooled one. reheat_capacity_shortfall (0.93, #44) uses its defaults: a sample counts when the zone is more than 1.5 F below its trended heating setpoint (RMHTGSPT_S) with the reheat demand at or above 90%, outside the first 2 h of each occupied period and after a setpoint step; warn from 5%, fault from 20% of evaluated samples and 10 h. The reheat signal is the controller's demand (RH_VLV_DM_S), which is why a valve stuck shut reads as saturated: the controller asks for full heat and gets none. overcooling_severity sets those same samples apart as a heating shortfall rather than overcooling; unmet_setpoint_hours counts the cold hours without asking whether the box had heat to spare; reheat_penalty is kept to show what it says about a valve that delivers no heat. Weekday 07-18 occupancy (the rules' default; the dataset has no occupancy point). Hourly resample: a year of 15-minute data. 0.98 (#85): reheat_penalty reads the valve's measured position (RH_VLV_S, heat_valve_position) and sets fan_heat_f to 'auto', so the stuck-shut valve is 0% open there, with a demand-vs-position caveat; reheat_capacity_shortfall and overcooling_severity keep reading the demand.",
   "_dataset": "lbnl-fpu",
   "source": {
     "kind": "store",
@@ -17,7 +17,15 @@
     "reheat_capacity_shortfall",
     "overcooling_severity",
     "unmet_setpoint_hours",
-    "reheat_penalty"
+    {
+      "name": "reheat_penalty",
+      "params": {
+        "fan_heat_f": "auto"
+      },
+      "basis": {
+        "fan_heat_f": "CAMBER judgment (0.98, #85): a fan-powered box's own fan (and, in a parallel box, the plenum air it mixes in) lifts the discharge above the entering primary air with the valve shut; 'auto' estimates that lift per box from its closed-valve samples (clipped to 0-8 F) and raises the valve-vs-discharge bounds by it"
+      }
+    }
   ],
   "report": {
     "level": 2

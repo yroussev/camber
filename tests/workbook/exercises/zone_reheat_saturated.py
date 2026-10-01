@@ -13,7 +13,8 @@ Real-data figures were recorded from::
     camber run rh_ornl.json --out rh_ornl_out
 
 (CAMBER 0.97.0-dev, lbnl-fpu and ornl-frp-vav default subsets, 2026-09-29; the fully open
-damper's shortfall grade re-checked on 0.98.0-dev, 2026-09-30.)
+damper's shortfall grade and reheat_penalty on the stuck-shut valve re-checked on 0.98.0-dev,
+2026-09-30.)
 """
 
 from __future__ import annotations
@@ -175,10 +176,18 @@ EXERCISE = Exercise(
         Finding("reheat_capacity_shortfall", FF, present=False, run="fpu"),
         Finding("reheat_capacity_shortfall", LEAK, present=False, run="fpu"),
         Finding("reheat_capacity_shortfall", D50, present=False, run="fpu"),
-        # the trap: the penalty rule reads the controller's demand as reheat delivered
-        Finding("reheat_penalty", VSTUCK, severity=("fault",), run="fpu"),
+        # the penalty rule reads the measured position (0.98, #85): no heat delivered, so ok at 0 %
+        # (on the demand alone it read 51% and a fault)
+        Finding("reheat_penalty", VSTUCK, severity=("ok",), run="fpu"),
+        Metric("reheat_penalty", VSTUCK, "valve_open_pct", 0.0, 0.01, run="fpu", quote="0 %"),
         Metric(
-            "reheat_penalty", VSTUCK, "valve_open_pct", 50.71, 0.2, run="fpu", on=REAL, quote="51%"
+            "reheat_penalty",
+            VSTUCK,
+            "valve_divergence_share",
+            1.0,
+            0.01,
+            run="fpu",
+            quote="100 %",
         ),
         # ORNL: electric reheat logged as energy -- cold rooms, but no reheat verdict
         Check("no reheat verdict without a reheat valve", _no_valve_no_verdict),

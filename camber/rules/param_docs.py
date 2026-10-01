@@ -701,6 +701,26 @@ _ZONE_REHEAT_SAT = {
 }
 
 PARAM_DOCS["reheat_penalty"] = {**_SCHEDULE}
+# ==== begin 098-terminal-reheat (#85 item 3) ====
+PARAM_DOCS["reheat_penalty"]["fan_heat_f"] = _P(
+    "°F",
+    "CAMBER judgment (0.98, #85): a fan-powered box's own fan, and in a parallel box the plenum "
+    "air it mixes in, lifts the discharge above the entering primary air with the valve shut; on "
+    "the LBNL fan-powered boxes the discharge rose 6.0 °F (median, parallel box) and 8.7 °F "
+    "(series box) over the entering air with the valve stuck shut, past the 5 °F no-rise bound, so "
+    "a valve that delivered no heat looked corroborated",
+    "Map the entering primary air (MIXED_AIR_TEMP) and read the discharge minus entering air on "
+    "hours the valve is shut and the box moves air (fan on, where the fan status is trended). Set "
+    'the typical lift, or use "auto" to estimate it per box from those hours. Single-duct '
+    "boxes with no fan: leave it None.",
+    (0.0, 8.0),
+    "None (default) adds nothing to the valve-vs-discharge bounds (5 °F no rise at full valve, "
+    '10 °F big rise with the valve shut). A number raises both by that many °F. "auto" uses the '
+    "median closed-valve, airflow-bearing lift over the entering air (>= 12 samples, fan-on only "
+    "when SUPPLY_FAN_STATUS is mapped), clipped to 0-8 °F; without the entering air or enough "
+    "samples it adds nothing. The finding reports the value used as fan_heat_f.",
+)
+# ==== end 098-terminal-reheat ====
 PARAM_DOCS["overcooling_min_flow"] = {**_SCHEDULE}
 
 PARAM_DOCS["overcooling_severity"] = {

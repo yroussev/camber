@@ -111,6 +111,13 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     never reported as a confident ok. It also cross-checks the valve against the discharge-air
     rise (#63): a valve at ≥ 90 % with a median rise under 5 °F is **declined** (nothing counted or
     costed), and a shut valve with a ≥ 10 °F rise on a quarter of its samples is caveated.
+    Where a box trends both the reheat demand and the measured position (0.98, #85), map the
+    position as `heat_valve_position`: `reheat_penalty` and `overcooling_min_flow` then judge the
+    heat delivered from the position (a valve stuck shut is 0 % open, not a reheat penalty),
+    record it in `valve_signal`, and caveat a demand ≥ 90 % while the position reads ≤ 5 % on a
+    quarter of the full-demand samples as a stuck or failed valve. On fan-powered boxes
+    `fan_heat_f` (°F, or `"auto"`: the median closed-valve lift, clipped to 0–8 °F) raises both
+    valve-vs-discharge bounds by the box fan's own heat.
   - *Not overcooling.* `overcooling_severity` excludes morning recovery (`WARMUP`, else the first
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
     setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**. The

@@ -10,12 +10,13 @@ Real-data figures were recorded from::
     camber run fpu.json --out fpu_out
     camber datasets score lbnl-fpu --store lab_store --findings fpu_out/findings.json
 
-(CAMBER 0.97.0-dev, lbnl-fpu default subset, 2026-09-29.)
+(CAMBER 0.97.0-dev, lbnl-fpu default subset, 2026-09-29; the valve stuck shut re-checked on
+0.98.0-dev, 2026-09-30, with the measured valve position mapped.)
 """
 
 from __future__ import annotations
 
-from _workbook import REAL, Exercise, Finding, Metric, Run, Score
+from _workbook import REAL, Check, Exercise, Finding, Metric, Run, Score
 from _zone_standins import fpu_standin
 
 FF = "PFPU__fault_free"
@@ -23,6 +24,20 @@ D50 = "PFPU__VAVDMPRStuck_50pct"
 D100 = "PFPU__VAVDMPRStuck_100pct"
 VSTUCK = "PFPU__ReheatVLVStuck_0pct"
 LEAK = "PFPU__ReheatVLVLeak_50pctMaxFlow"
+
+
+def _stuck_valve_is_named(ctx) -> None:
+    """0.98 (#85): both rules read the measured position (0 %), stay ok, and caveat the demand
+    that calls for full heat while the valve reads shut."""
+    for rule in ("reheat_penalty", "overcooling_min_flow"):
+        f = ctx.finding(rule, VSTUCK)
+        assert f is not None, f"no {rule} finding on {VSTUCK}"
+        assert f.metrics.get("valve_signal") == "position", (rule, f.metrics)
+        assert (f.metrics.get("valve_divergence_share") or 0) >= 0.25, (rule, f.metrics)
+        assert any("stuck or failed valve" in c for c in f.caveats), (rule, f.caveats)
+    rp = ctx.finding("reheat_penalty", VSTUCK)
+    assert rp.metrics.get("valve_open_pct") == 0.0, rp.metrics
+
 
 EXERCISE = Exercise(
     id="zone-reheat-overcooling",
@@ -71,9 +86,11 @@ EXERCISE = Exercise(
         ),
         # the stuck-open box is never "at minimum", so the minimum-flow rule is quiet on it
         Finding("overcooling_min_flow", D100, present=False),
-        # a valve stuck shut reads as heavy reheat: the signal is the controller's demand
-        Finding("reheat_penalty", VSTUCK, severity=("fault",)),
-        Finding("overcooling_min_flow", VSTUCK, severity=("fault",)),
+        # a valve stuck shut delivers no reheat: read from the measured position, both rules are
+        # ok and name the stuck valve (on the demand alone, before 0.98, both were faults)
+        Finding("reheat_penalty", VSTUCK, severity=("ok",)),
+        Finding("overcooling_min_flow", VSTUCK, severity=("ok",)),
+        Check("the stuck-shut valve is named, not counted as reheat", _stuck_valve_is_named),
         Finding("reheat_penalty", LEAK, present=False),
         # the label score: airflow_tracking finds both stuck dampers and nothing else
         Score("airflow_tracking", tpr=1.0, fpr=0.0, quote="TPR 100%"),
