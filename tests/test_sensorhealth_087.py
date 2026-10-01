@@ -172,6 +172,33 @@ def test_frame_checks_flag_clipped_with_fan_off_share_and_no_penalty():
     assert t.as_dict()["clipped"]["limit_label"] == "2,000 ppm"
 
 
+def test_fan_off_constant_on_a_fan_dependent_point_is_not_a_clip():
+    """A return air the BAS (or a gap-fill) holds at a round 70.0 F while the fan is off piles up
+    like a range limit; with a fan signal, a fan-dependent role's clip must show on the fan-on
+    samples too. A real return-air clip (pinned at 140 F with the fan on) still flags, and CO2
+    (not fan-dependent) keeps its fan-off clip."""
+    rng = np.random.default_rng(5)
+    idx = pd.date_range("2018-01-01", periods=24 * 21, freq="1h")
+    running = (idx.dayofweek < 5) & (idx.hour >= 6) & (idx.hour < 19)
+    rat = np.where(running, 73 + rng.normal(0, 0.4, len(idx)), 70.0)
+    fan = pd.Series(running.astype(float), index=idx)
+    f = pd.DataFrame({Role.RETURN_AIR_TEMP: rat, Role.SUPPLY_FAN_STATUS: fan}, index=idx)
+    assert clipped_at_limit(f[Role.RETURN_AIR_TEMP], Role.RETURN_AIR_TEMP) is not None
+    t = frame_sensor_health(f)[Role.RETURN_AIR_TEMP]
+    assert "clipped" not in t.flags and t.clipped is None
+    # without a fan signal there is nothing to tell a placeholder from a limit: still flagged
+    alone = frame_sensor_health(f[[Role.RETURN_AIR_TEMP]])[Role.RETURN_AIR_TEMP]
+    assert "clipped" in alone.flags
+    # a genuine high-end clip with the fan on survives the re-check
+    hot = np.where(running, 60 + rng.gamma(2.0, 4.0, len(idx)), 70.0 + rng.normal(0, 1, len(idx)))
+    on_rows = np.flatnonzero(running)
+    hot[on_rows[:30]] = 140.0
+    g = pd.DataFrame({Role.RETURN_AIR_TEMP: hot, Role.SUPPLY_FAN_STATUS: fan}, index=idx)
+    u = frame_sensor_health(g)[Role.RETURN_AIR_TEMP]
+    assert "clipped" in u.flags and u.clipped["limit_label"] == "140 °F"
+    assert u.clipped["frac_fan_off"] == 0.0
+
+
 # --------------------------------------------------------------------------- 3 schedules
 
 

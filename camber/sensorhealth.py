@@ -2285,7 +2285,11 @@ def clipped_at_limit(series: pd.Series, role) -> dict | None:
     Returns ``{"side", "limit", "limit_label", "n", "frac"}`` (``limit`` is the observed extreme;
     ``limit_label`` the round number it sits at). :func:`frame_checks` adds ``frac_fan_off``, the
     share of the clipped samples with the supply fan clearly off, and flags the point ``clipped``
-    (no trust penalty).
+    (no trust penalty). For a fan-dependent role (:data:`FAN_GATED_ROLES`: return air, airflow,
+    OA airflow, duct static) with a fan signal, :func:`frame_checks` also requires the clip on the
+    samples with the fan not clearly off: a constant the BAS or a gap-fill holds while the fan is
+    off is not a range limit. CO2 and the outdoor and space roles are judged on every sample (a
+    CO2 transmitter topping out in a closed room overnight is a real clip).
     """
     return _clip(series, role)[0]
 
@@ -2299,6 +2303,15 @@ def _check_clipped(frame: pd.DataFrame, health: dict) -> None:
             continue
         if not looked:
             off, looked = _fan_off(frame), True
+        if role in FAN_GATED_ROLES and off is not None:
+            # a fan-dependent point (return air, airflow, static) reads stagnant duct air or a
+            # placeholder while the fan is off -- a BAS or gap-fill that holds a round constant
+            # (70.0 °F) then piles up like a range limit. Its clip must also show on the samples
+            # with the fan not clearly off (wave-2 integration, #87).
+            on_only = frame[role].where(~off.reindex(frame.index).fillna(False).astype(bool))
+            d_on, _ = _clip(on_only, role)
+            if d_on is None or d_on["side"] != d["side"]:
+                continue
         frac_off = None
         if off is not None:
             known = at & off.notna()

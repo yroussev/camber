@@ -540,6 +540,9 @@ def _rec_chw_plant(f, frame, P):
         return _rec(
             f,
             title="Find why the chilled-water supply warms in hot weather",
+            cause=(
+                "Chilled-water supply warms in hot weather (plant capacity or a reversed reset)"
+            ),
             action=(
                 f"The chilled-water supply temperature rises as it gets warmer outside{seen}, the "
                 "opposite of a reset. Either the plant cannot hold its supply temperature at "

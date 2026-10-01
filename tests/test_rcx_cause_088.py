@@ -155,6 +155,20 @@ def test_causes_follow_the_metrics():
     assert cause("chw_plant_reset", chwst_reset_present=False) == (
         "Chilled-water supply temperature held flat"
     )
+    # 0.98 wave 2: the branches 098-plant-chw added to the chilled-water plant recommender
+    assert cause("chw_plant_reset", chwst_reset_direction="reverse", chwst_slope_per_F=0.76) == (
+        "Chilled-water supply warms in hot weather (plant capacity or a reversed reset)"
+    )
+    # a constant-flow plant gets no low-deltaT advice: the flat-reset cause, not the deltaT one
+    assert cause(
+        "chw_plant_reset", flow_mode="constant", low_deltaT_pct=80.0, chwst_reset_present=False
+    ) == ("Chilled-water supply temperature held flat")
+    assert cause(
+        "chw_plant_reset",
+        flow_mode="constant",
+        low_deltaT_pct=80.0,
+        chwst_reset_direction="reverse",
+    ).startswith("Chilled-water supply warms in hot weather")
     assert cause("supply_air_reset", reset_direction="rising_with_load").startswith(
         "Supply air rises with load"
     )
@@ -198,3 +212,28 @@ def test_report_heads_issues_with_the_cause(tmp_path):
     d = _issue_dict(_Iss())
     assert d["title"] == "Repair the outdoor-air damper or actuator"
     assert d["cause"] == "Outdoor-air damper not modulating (stuck low)"
+
+
+def test_every_recommender_branch_sets_a_cause():
+    """Every ``_rec(...)`` / ``Recommendation(...)`` built in camber.aso passes ``cause=``, so a
+    branch added later (0.98 wave 2: the reversed chilled-water reset) cannot ship without one."""
+    import ast
+    import inspect
+
+    import camber.aso as aso
+
+    tree = ast.parse(inspect.getsource(aso))
+    calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Name)
+        and n.func.id in ("_rec", "Recommendation")
+    ]
+    assert len(calls) > 30
+    missing = [
+        n.lineno
+        for n in calls
+        if n.func.id == "_rec" and not any(k.arg in ("cause", None) for k in n.keywords)
+    ]
+    assert not missing, f"_rec(...) without cause= at camber/aso.py lines {missing}"

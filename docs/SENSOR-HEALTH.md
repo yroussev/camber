@@ -206,12 +206,18 @@ end is "off"). Supply air, condenser water and humidity are not checked: a contr
 pile up at round numbers too. `frame_checks` flags the point `clipped`, with
 `SensorTrust.clipped = {"side", "limit", "limit_label", "n", "frac", "frac_fan_off"}`
 (`frac_fan_off`: the share of the clipped samples with the supply fan clearly off, `None` without a
-fan signal). The flag carries no trust penalty.
+fan signal). The flag carries no trust penalty. For a fan-dependent point (return air, airflow,
+OA airflow, duct static) on a unit with a fan signal, `frame_checks` also requires the pile-up on
+the samples with the fan not clearly off: a BAS or a gap-fill that holds a round constant while the
+fan is off (a return air parked at 70.0 °F) piles up like a range limit but is not one. CO2 and the
+outdoor and space points are judged on every sample, since a CO2 transmitter in a closed room
+topping out overnight is a real clip.
 
 On the catalog store (hourly) it fires on four points: `nuig-ahu101`'s room CO2 at 2,000 ppm (97
 hours, every one with the fan off), `lbnl-b59` RTU01's and RTU04's OA flow at 20,000 cfm, and the
 LBNL dual-duct `DMPRStuck_OA_0` run's return air at 140 °F, where the simulation pins every air
-temperature at its 140 °F bound during the fault (already flagged `out_of_range`).
+temperature at its 140 °F bound during the fault (already flagged `out_of_range`). All four
+still fire with the fan-on re-check (the three fan-dependent ones have the fan on).
 
 ## Cross-sensor and provenance checks
 

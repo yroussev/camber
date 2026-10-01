@@ -444,6 +444,20 @@ calibrate it, and reads run configs from YAML as well as JSON.
   fix the new sign check would have raised `chw_plant_reset.fpr` 0 -> 1. A test fixture in
   `tests/test_optional_role_honesty.py` had the same wrong-way "working reset" and is corrected.
 <!-- /098-plant-chw -->
+<!-- 098-w2-integration -->
+- **A constant held while the fan is off is not a clipped sensor.** `clipped` now needs the
+  pile-up on the fan-on samples too for a fan-dependent point (return air, airflow, OA airflow,
+  duct static) on a unit with a fan signal: a BAS or gap-fill that parks the return air at a round
+  70.0 °F while the fan is off had read as a clip at its range limit. CO2 and the outdoor and space
+  points are still judged on every sample (a CO2 transmitter topping out in a closed room
+  overnight is a real clip). The four clips on the catalog store all remain; the RCx golden loses
+  its four `clipped` tags on the demo units' fan-off return air.
+- **Every recommendation names a cause.** The reversed chilled-water reset recommendation (from
+  `098-plant-chw`) gets the cause "Chilled-water supply warms in hot weather (plant capacity or a
+  reversed reset)", and a test checks that every recommender call in `camber.aso` sets one.
+- **`reheat_penalty` `fan_heat_f` documents its keyword:** its range is `"auto"`, or 0.0 to 8.0
+  (the keyword-or-number convention from `098-plant-chw`).
+<!-- /098-w2-integration -->
 
 ## [0.97.0] — Unreleased
 

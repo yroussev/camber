@@ -889,7 +889,7 @@ Fixed in code: warn when >= 15 % and fault when >= 40 % of reheating hours run a
 | `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
 | `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
-| `fan_heat_f` | `null` | °F | 0.0 to 8.0 | CAMBER judgment (0.98, #85): a fan-powered box's own fan, and in a parallel box the plenum air it mixes in, lifts the discharge above the entering primary air with the valve shut; on the LBNL fan-powered boxes the discharge rose 6.0 °F (median, parallel box) and 8.7 °F (series box) over the entering air with the valve stuck shut, past the 5 °F no-rise bound, so a valve that delivered no heat looked corroborated |
+| `fan_heat_f` | `null` | °F, or "auto" | `"auto"`, or 0.0 to 8.0 | CAMBER judgment (0.98, #85): a fan-powered box's own fan, and in a parallel box the plenum air it mixes in, lifts the discharge above the entering primary air with the valve shut; on the LBNL fan-powered boxes the discharge rose 6.0 °F (median, parallel box) and 8.7 °F (series box) over the entering air with the valve stuck shut, past the 5 °F no-rise bound, so a valve that delivered no heat looked corroborated |
 
 How to calibrate:
 
