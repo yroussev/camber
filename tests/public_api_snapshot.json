@@ -216,6 +216,7 @@
   "camber.charts.cohort": [
     "CohortResult",
     "cohort_deviation",
+    "cohort_deviation_from_values",
     "cohort_small_multiples",
     "cohort_summary"
   ],
@@ -1747,6 +1748,9 @@
     "is_fleet",
     "rank_findings",
     "rule_names"
+  ],
+  "camber.rules.actuator_stuck_rule": [
+    "ActuatorStuck"
   ],
   "camber.rules.airflow_rule": [
     "AirflowTracking"

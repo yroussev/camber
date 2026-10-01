@@ -75,6 +75,7 @@ RULE_CATEGORY = {
     # maintenance / controls
     "leaking_valve": "maintenance",
     "control_hunting": "maintenance",
+    "actuator_stuck": "maintenance",  # 0.98 (#85): a damper or valve stuck against demand
     "damper_census": "maintenance",
     "chiller_approach_fouling": "maintenance",
     "filter_fouling": "maintenance",

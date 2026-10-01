@@ -405,8 +405,9 @@ re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-
 
 ### `zone-bad-box`: one bad box in a fleet
 
-Figures from the real `ornl-frp-vav` default subset (test set 3), CAMBER 0.97.0-dev, with the
-commands on the [exercise page](zone-bad-box.md#setup).
+Figures from the real `ornl-frp-vav` default subset (test set 3), CAMBER 0.97.0-dev (the
+`actuator_stuck` figures and the label scores 0.98.0-dev), with the commands on the
+[exercise page](zone-bad-box.md#setup).
 
 **Answer key**
 
@@ -438,11 +439,26 @@ commands on the [exercise page](zone-bad-box.md#setup).
    airflow rises at every step and its duct static pressure falls. A fixed-speed fan moves more
    air through a more open system. Each position is a different day, so the weather moves these
    numbers too, but the direction holds at every step.
-7. *Label score.* `unmet_setpoint_hours` catches 2 of the 6 stuck days and fires on the fault-free
-   day too: TPR 33%, FPR 100 %. A comfort rule detects a stuck damper only on the days the stuck
-   position hurts comfort. It cannot tell a stuck box from a warm room. The dataset logs no
-   airflow setpoint, so `airflow_tracking`, the rule that finds stuck dampers on `lbnl-fpu`,
-   cannot run.
+7. *`actuator_stuck` and the label score.* It flags box 205 on all six stuck days and stays
+   quiet on the fault-free day: TPR 100%, FPR 0 % (one negative day, so the interval is wide).
+   Each stuck day's damper holds one position through all the occupied hours
+   (100 % of active samples), and the rule says what contradicts it:
+   - 0 %: shut through occupied hours (a **fault**; no airflow setpoint is logged, so the caveat
+     says it was judged against the occupied mode alone);
+   - 20 % and 40 %: part open while the room runs over its cooling setpoint (a **fault**; 6 °F
+     and 3.8 °F over, median);
+   - 100 %: fully open while the room sits 5.2 °F below its cooling setpoint (a **fault**);
+   - 60 % and 80 %: nothing in the room contradicts the position, but it held all day while the
+     room temperature moved, so it is a **warn** only. A mid-stroke position the room is happy
+     with could be a healthy box holding its minimum.
+
+   The neighbours' dampers do sit still for hours (26-41 % open for 4-10.5 h), but at a minimum
+   position in a room below its cooling setpoint: consistent with what the room asked for, and
+   never for a whole day, so they stay quiet. `unmet_setpoint_hours` alone would catch 2 of the 6
+   stuck days and fire on the fault-free day too: TPR 33%, FPR 100 %. A comfort rule detects a
+   stuck damper only on the days the stuck position hurts comfort, and it cannot tell a stuck
+   box from a warm room. The dataset logs no airflow setpoint, so `airflow_tracking`, the rule
+   that finds stuck dampers on `lbnl-fpu`, cannot run.
 8. *Room 102.* No. Its box is not under test, and the room is too cold on every day, fault-free
    included (a **fault** each day). It is a cold room in this building. The reheat is electric
    and not trended as a valve, so CAMBER cannot say whether it was maxed out (see
@@ -451,18 +467,31 @@ commands on the [exercise page](zone-bad-box.md#setup).
 **Discussion points**
 
 - Chapter 7's advice to trend damper position and airflow for every box is the whole exercise.
-  A box that does not move while its neighbours do is the cheapest fault signature there is,
-  and no comfort rule reproduces it.
+  A box that does not move while its neighbours do is the cheapest fault signature there is. No
+  comfort rule reproduces it, and neither does a plain "flat for four hours" test: the healthy
+  boxes fail that one. `actuator_stuck` works because it asks whether the room wanted the damper
+  somewhere else.
+- On the full subset `actuator_stuck` finds 17 of the 18 stuck days and none of the 13
+  fault-free and airflow-bias days. It misses set 1's 100 % day: the room ran warm, so a fully
+  open damper looked like the right answer. A box stuck where a busy day would have put it
+  anyway cannot be told from a working one.
+- The going-further cohort question: grouped per day, the raw mean airflow never singles out
+  box 205 (robust z -1.5 to +2.0), and airflow as a share of each box's own peak flags six
+  healthy box-days and scores the fault-free day at z -3.1. Evening out sizes does not isolate a
+  stuck box. Its airflow against its own fault-free day does (all six days), and so, partly, does
+  its damper's variability on the low tail (z -2.1 to -5.0; three of six past the default 3.5).
 - The zone cohort needs a common basis. Each day's boxes are compared under that day's rooftop
   unit (the naming topology), never across days. Ask what goes wrong when a census pools
   boxes from different days (the dataset config's `_comment` explains why `cohort_airflow` is
-  left out).
+  left out of the default run, and its `group_by_topology` option fixes the pooling).
 - The labelled "fault-free" day is not a trouble-free building. Discuss room 205's warm
   afternoons and room 102's cold mornings as findings in their own right.
 
 **Common mistakes**
 
 - Concluding that the 0 % and 60–100 % days are healthy because `unmet_setpoint_hours` is quiet.
+- Reading the 60 % and 80 % warnings as weaker evidence of a fault than the others. The damper is
+  just as stuck; the room just did not contradict it that day.
 - Reading the rogue-zone census on the fault-free day as a false alarm. It correctly names the
   zone driving the reset, which happens to be a warm room, not a broken box.
 - Comparing raw airflows across rooms of different sizes and calling the smallest box the

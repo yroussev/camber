@@ -303,6 +303,7 @@ RULE_REFERENCES: dict = {
     "airflow_tracking": (_CH7,),
     "zones_heat_cool_census": (_CH7,),
     "reheat_capacity_shortfall": (_CH7,),  # 0.98 (#89)
+    "actuator_stuck": (_CH7,),  # 0.98 (#85): ch. 7's terminal damper and valve checks
     "cohort_airflow": (_CH7,),
     "cohort_space_temp": (_CH7,),
     # zone-request census rules (0.98, #89). The discharge-air guide's reset section bases a

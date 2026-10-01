@@ -54,6 +54,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 
 | Rule | Tunable parameters | Also fixed in code |
 |---|---|---|
+| [`actuator_stuck`](#actuator_stuck) | 14 |  |
 | [`airflow_tracking`](#airflow_tracking) | 4 |  |
 | [`boiler_short_cycle`](#boiler_short_cycle) | 1 |  |
 | [`boiler_summer_lockout`](#boiler_summer_lockout) | 1 |  |
@@ -66,8 +67,8 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`chw_supply_tracking`](#chw_supply_tracking) | 5 |  |
 | [`co2_ventilation`](#co2_ventilation) | 3 | yes |
 | [`co2_ventilation_system`](#co2_ventilation_system) | 3 (passed to `co2_ventilation`) |  |
-| [`cohort_airflow`](#cohort_airflow) | 3 |  |
-| [`cohort_space_temp`](#cohort_space_temp) | 3 |  |
+| [`cohort_airflow`](#cohort_airflow) | 6 |  |
+| [`cohort_space_temp`](#cohort_space_temp) | 6 |  |
 | [`compressor_short_cycle`](#compressor_short_cycle) | 1 | yes |
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
@@ -111,6 +112,42 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`supply_air_reset_compliance`](#supply_air_reset_compliance) | 10 |  |
 | [`unmet_setpoint_hours`](#unmet_setpoint_hours) | 5 |  |
 | [`zones_heat_cool_census`](#zones_heat_cool_census) | 3 |  |
+
+## actuator_stuck
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `roles` | `["damper", "heat_valve_position", "cool_valve"]` | role names (a list) | `"damper"`, `"heat_valve_position"`, `"heat_valve"`, `"cool_valve"` | CAMBER judgment (0.98, #85): the box and fan-coil actuators a zone's demand drives |
+| `tol_pct` | `0.5` | % | 0.0 to 5.0 | CAMBER judgment (0.98, #85): rounds away the sub-percent jitter of a 0.1 % resolution position trend |
+| `min_flat_hours` | `4.0` | h | 1.0 to 24.0 | calibrated on ornl-frp-vav (default subset, 15-minute data): the box under test's longest flat run on its fault-free day is under 3 h, while healthy neighbours hold one mid-stroke position (26-41 %) for 4-10.5 h on 13 box-days -- so length alone does not decide, and 4 h is the shortest run judged |
+| `whole_day_share` | `0.98` | fraction of a day's active samples | 0.8 to 1.0 | calibrated on ornl-frp-vav: the healthy boxes' longest flat runs cover at most 70 % of a day's occupied samples on the default subset and 95 % on the full one (room 102 on an airflow-test day); a stuck box covers 100 % |
+| `limit_pct` | `2.0` | % (from either end of the stroke) | 0.0 to 10.0 | CAMBER judgment (0.98, #85): a position within 2 % of 0 or 100 reads as at its limit |
+| `min_driver_span_f` | `1.0` | °F | 0.5 to 5.0 | CAMBER judgment (0.98, #85): one degree of zone-temperature or setpoint movement over a day is a demand a modulating actuator should answer |
+| `warm_margin_f` | `1.0` | °F | 0.5 to 5.0 | CAMBER judgment (0.98, #85): the zone over its cooling setpoint (or, for a heating valve, under its heating setpoint) by more than 1 °F is a demand the actuator ignored |
+| `satisfied_margin_f` | `2.0` | °F | 1.0 to 6.0 | CAMBER judgment (0.98, #85): a fully open damper with the zone 2 °F below its cooling setpoint is delivering cooling nobody asked for |
+| `min_airflow` | `null` | cfm (the trended airflow's unit) | 0.0 to 5000.0 | CAMBER judgment (0.98, #85): with no airflow setpoint trended, a closed damper is judged against the box's minimum airflow when one is given |
+| `warn_pct` | `10.0` | % of active samples | 0.0 to 100.0 | CAMBER judgment (0.98, #85): a tenth of the occupied samples held against demand |
+| `fault_pct` | `50.0` | % of active samples | 0.0 to 100.0 | CAMBER judgment (0.98, #85): half the occupied samples held against the zone's demand |
+| `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
+| `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
+| `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
+
+How to calibrate:
+
+- `roles`: Leave out a role whose point is a command echo rather than a position (a flat echo says nothing about the actuator). heat_valve_position falls back to heat_valve when no position is mapped. *Note:* A list; each must be one of the range values. An air handler's outdoor-air damper is out of scope.
+- `tol_pct`: Read a known-stuck or manually held actuator's trend: set this above the jitter it shows while still. Larger values join slow real movement into one run.
+- `min_flat_hours`: Read the longest flat runs of healthy boxes in a typical week; set it at or above the run length you are willing to call 'held'.
+- `whole_day_share`: Read the share of each day's occupied samples that healthy boxes' longest run covers, and set it above the largest. *Note:* Only the unexplained-flat tier (warn at most) uses it.
+- `limit_pct`: Read where healthy actuators sit when fully shut or fully open (some never read exactly 0 or 100); set it just beyond that offset.
+- `min_driver_span_f`: Raise it in a zone with a very stable load, so a held mid-stroke position on a calm day is not called unexplained.
+- `warm_margin_f`: Set it to the zone loop's normal overshoot: read how far healthy zones run over their cooling setpoint in a hot afternoon. *Note:* The zone must be out by this much for at least 25 % of the run (fixed in code).
+- `satisfied_margin_f`: Read how far below the cooling setpoint healthy zones sit while their boxes are fully open (normally they do not); set it above that. *Note:* The zone must be this far inside for at least 50 % of the run (fixed in code).
+- `min_airflow`: Set the box's scheduled minimum (occupied) airflow from the design or the controller. A closed damper is contradicted when the airflow is at or below 5 % of it. *Note:* None (default): AIRFLOW_SP when mapped; with neither, a damper shut through occupied hours is judged against the occupied mode alone, and the finding carries a caveat.
+- `warn_pct`: Lower it to catch one stuck day in a long window; raise it to report only persistent faults. *Note:* warn_pct <= fault_pct. Flagged runs of either tier count.
+- `fault_pct`: As warn_pct. Only contradicted runs reach fault; an unexplained flat run is warn at most.
+- `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
+- `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
+- `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
 
 ## airflow_tracking
 
@@ -268,13 +305,21 @@ Its parameters are passed through to [`co2_ventilation`](#co2_ventilation); set 
 |---|---|---|---|---|
 | `k` | `3.5` | - (robust z, MAD-scaled) | 2.0 to 6.0 | CAMBER judgment: the common 3.5 modified-z outlier cutoff (not cited in the cohort code) |
 | `min_cohort` | `3` | count | 3 to 50 | CAMBER judgment: a median and MAD need at least three peers |
-| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"` | CAMBER judgment: the mean is the most stable summary |
+| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"`, `"variability"` | CAMBER judgment: the mean is the most stable summary |
+| `group_by_topology` | `false` | flag | `false`, `true` | CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test dataset, on different days) are not peers |
+| `normalise` | `null` | choice | `"reference"`, `"design_max"` | CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among ten, one day per position): the share of design airflow flagged one stuck day of six and six healthy box-days; each box against its own fault-free day flagged all six |
+| `tail` | `"both"` | choice | `"both"`, `"low"`, `"high"` | CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a healthy box on a busy day is high |
 
 How to calibrate:
 
 - `k`: Run it on a cohort you believe healthy and read the largest |z|; set k above it. Lower k finds more outliers but flags normal spread in small cohorts.
 - `min_cohort`: Raise it when the cohort mixes unlike units; small cohorts give unstable z-scores.
-- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle.
+- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves (pair it with tail='low').
+- `group_by_topology`: Turn it on when the building has more than one air handler, or when the equipment ids mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the naming heuristic groups by id and the finding says so. *Note:* Groups smaller than min_cohort are left unscored (unscored_small_groups).
+- `normalise`: Use 'reference' when every unit has a known-good period or twin (declare it in reference); use 'design_max' to even out box sizes (declare design_max, or map AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box. *Note:* None (default) compares the raw summary. 'reference' divides each unit's summary by its reference unit's (reference units are not scored); 'design_max' divides by the unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no denominator are left out (left_out).
+- `tail`: Use 'low' with summary='variability' to look for units that never move, 'high' for units that move or run more than their peers.
+
+Not thresholds: `reference` (structured input: {equip: reference_equip} for normalise='reference', one entry per unit (described under normalise)); `design_max` (structured input: {equip: design airflow} for normalise='design_max', one entry per unit (described under normalise)).
 
 ## cohort_space_temp
 
@@ -282,13 +327,21 @@ How to calibrate:
 |---|---|---|---|---|
 | `k` | `3.5` | - (robust z, MAD-scaled) | 2.0 to 6.0 | CAMBER judgment: the common 3.5 modified-z outlier cutoff (not cited in the cohort code) |
 | `min_cohort` | `3` | count | 3 to 50 | CAMBER judgment: a median and MAD need at least three peers |
-| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"` | CAMBER judgment: the mean is the most stable summary |
+| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"`, `"variability"` | CAMBER judgment: the mean is the most stable summary |
+| `group_by_topology` | `false` | flag | `false`, `true` | CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test dataset, on different days) are not peers |
+| `normalise` | `null` | choice | `"reference"`, `"design_max"` | CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among ten, one day per position): the share of design airflow flagged one stuck day of six and six healthy box-days; each box against its own fault-free day flagged all six |
+| `tail` | `"both"` | choice | `"both"`, `"low"`, `"high"` | CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a healthy box on a busy day is high |
 
 How to calibrate:
 
 - `k`: Run it on a cohort you believe healthy and read the largest |z|; set k above it. Lower k finds more outliers but flags normal spread in small cohorts.
 - `min_cohort`: Raise it when the cohort mixes unlike units; small cohorts give unstable z-scores.
-- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle.
+- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves (pair it with tail='low').
+- `group_by_topology`: Turn it on when the building has more than one air handler, or when the equipment ids mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the naming heuristic groups by id and the finding says so. *Note:* Groups smaller than min_cohort are left unscored (unscored_small_groups).
+- `normalise`: Use 'reference' when every unit has a known-good period or twin (declare it in reference); use 'design_max' to even out box sizes (declare design_max, or map AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box. *Note:* None (default) compares the raw summary. 'reference' divides each unit's summary by its reference unit's (reference units are not scored); 'design_max' divides by the unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no denominator are left out (left_out).
+- `tail`: Use 'low' with summary='variability' to look for units that never move, 'high' for units that move or run more than their peers.
+
+Not thresholds: `reference` (structured input: {equip: reference_equip} for normalise='reference', one entry per unit (described under normalise)); `design_max` (structured input: {equip: design airflow} for normalise='design_max', one entry per unit (described under normalise)).
 
 ## compressor_short_cycle
 

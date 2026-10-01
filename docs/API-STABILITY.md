@@ -536,6 +536,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   metrics `valve_signal`, `valve_divergence_share` (`reheat_penalty`, `overcooling_min_flow`) and
   `fan_heat_f` (`reheat_penalty`).
 <!-- /098-terminal-reheat -->
+<!-- 098-terminal-stuck (#85) -->
+- **Stuck actuators and cohort options** (0.98; #85), additive and provisional: the rule
+  `actuator_stuck` (`camber.rules.actuator_stuck_rule.ActuatorStuck`, its parameters, tiers and
+  metrics `flat_runs`, `stuck_share`, `contradicted_share`, `value`, `tier`, `reason`, `driver`,
+  `roles`); the `CohortDeviation` keywords `group_by_topology`, `normalise`, `reference`,
+  `design_max` and `tail` and the `summary="variability"` value; in `camber.charts.cohort`, the
+  `tail=` keyword of `cohort_deviation` and `cohort_deviation_from_values`; the advisory default
+  `DEFAULT_PARAMS["reheat_valve_divergence_share"]`.
+<!-- /098-terminal-stuck -->
 <!-- 098-sensor-health (#87) -->
 - **Sensor-health modes, stray rows, clipping and schedules** (0.98; #87), all additive and
   provisional: `camber.sensorhealth.clipped_at_limit`; the `mode=` / `mode_source=` keywords of

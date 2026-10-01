@@ -7,6 +7,7 @@ one instance of every rule registered under ``rule.name``.
 
 from __future__ import annotations
 
+from .actuator_stuck_rule import ActuatorStuck  # 0.98 (#85)
 from .airflow_rule import AirflowTracking
 from .base import Registry
 from .boiler_rule import BoilerSummerLockout
@@ -114,6 +115,7 @@ RULE_CLASSES: list[type] = [
     HPRoomImbalance,
     SourceLoopDeltaT,
     # --- end 0.93 (#40) block
+    ActuatorStuck,  # 0.98 (#85): a terminal / fan-coil damper or valve stuck against demand
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

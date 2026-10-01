@@ -1098,8 +1098,9 @@ _ZONE_COHORT = {
         "choice",
         "CAMBER judgment: the mean is the most stable summary",
         "Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units "
-        "cycle.",
-        ("mean", "peak", "load_factor"),
+        "cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves "
+        "(pair it with tail='low').",
+        ("mean", "peak", "load_factor", "variability"),
     ),
 }
 
@@ -1248,6 +1249,151 @@ PARAM_DOCS["sat_cohort_starvation"] = {**_ZONE_STARVE}
 PARAM_DOCS["static_cohort_starvation"] = {**_ZONE_STARVE}
 EXEMPT["sat_cohort_starvation"] = {**_ZONE_GROUPS_EXEMPT}
 EXEMPT["static_cohort_starvation"] = {**_ZONE_GROUPS_EXEMPT}
+
+# ==== begin 098-terminal-stuck (#85 items 1-2) ====
+# The cohort rules' opt-in options (every default reproduces the pre-0.98 result).
+_ZONE_COHORT_OPTIONS = {
+    "group_by_topology": _P(
+        "flag",
+        "CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test "
+        "dataset, on different days) are not peers",
+        "Turn it on when the building has more than one air handler, or when the equipment ids "
+        "mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the "
+        "naming heuristic groups by id and the finding says so.",
+        (False, True),
+        "Groups smaller than min_cohort are left unscored (unscored_small_groups).",
+    ),
+    "normalise": _P(
+        "choice",
+        "CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among "
+        "ten, one day per position): the share of design airflow flagged one stuck day of six "
+        "and six healthy box-days; each box against its own fault-free day flagged all six",
+        "Use 'reference' when every unit has a known-good period or twin (declare it in "
+        "reference); use 'design_max' to even out box sizes (declare design_max, or map "
+        "AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box.",
+        ("reference", "design_max"),
+        "None (default) compares the raw summary. 'reference' divides each unit's summary by "
+        "its reference unit's (reference units are not scored); 'design_max' divides by the "
+        "unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no "
+        "denominator are left out (left_out).",
+    ),
+    "tail": _P(
+        "choice",
+        "CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a "
+        "healthy box on a busy day is high",
+        "Use 'low' with summary='variability' to look for units that never move, 'high' for "
+        "units that move or run more than their peers.",
+        ("both", "low", "high"),
+    ),
+}
+for _name in ("cohort_airflow", "cohort_space_temp"):
+    PARAM_DOCS[_name].update(_ZONE_COHORT_OPTIONS)
+    EXEMPT[_name] = {
+        "reference": "structured input: {equip: reference_equip} for normalise='reference', "
+        "one entry per unit (described under normalise)",
+        "design_max": "structured input: {equip: design airflow} for normalise='design_max', "
+        "one entry per unit (described under normalise)",
+    }
+
+PARAM_DOCS["actuator_stuck"] = {
+    **_SCHEDULE,
+    "roles": _P(
+        "role names (a list)",
+        "CAMBER judgment (0.98, #85): the box and fan-coil actuators a zone's demand drives",
+        "Leave out a role whose point is a command echo rather than a position (a flat echo says "
+        "nothing about the actuator). heat_valve_position falls back to heat_valve when no "
+        "position is mapped.",
+        ("damper", "heat_valve_position", "heat_valve", "cool_valve"),
+        "A list; each must be one of the range values. An air handler's outdoor-air damper is "
+        "out of scope.",
+    ),
+    "tol_pct": _P(
+        "%",
+        "CAMBER judgment (0.98, #85): rounds away the sub-percent jitter of a 0.1 % resolution "
+        "position trend",
+        "Read a known-stuck or manually held actuator's trend: set this above the jitter it "
+        "shows while still. Larger values join slow real movement into one run.",
+        (0.0, 5.0),
+    ),
+    "min_flat_hours": _P(
+        "h",
+        "calibrated on ornl-frp-vav (default subset, 15-minute data): the box under test's longest "
+        "flat run on its fault-free day is under 3 h, while healthy neighbours hold one "
+        "mid-stroke position (26-41 %) for 4-10.5 h on 13 box-days -- so length alone does not "
+        "decide, and 4 h is the shortest run judged",
+        "Read the longest flat runs of healthy boxes in a typical week; set it at or above the "
+        "run length you are willing to call 'held'.",
+        (1.0, 24.0),
+    ),
+    "whole_day_share": _P(
+        "fraction of a day's active samples",
+        "calibrated on ornl-frp-vav: the healthy boxes' longest flat runs cover at most 70 % of a "
+        "day's occupied samples on the default subset and 95 % on the full one (room 102 on an "
+        "airflow-test day); a stuck box covers 100 %",
+        "Read the share of each day's occupied samples that healthy boxes' longest run covers, "
+        "and set it above the largest.",
+        (0.8, 1.0),
+        "Only the unexplained-flat tier (warn at most) uses it.",
+    ),
+    "limit_pct": _P(
+        "% (from either end of the stroke)",
+        "CAMBER judgment (0.98, #85): a position within 2 % of 0 or 100 reads as at its limit",
+        "Read where healthy actuators sit when fully shut or fully open (some never read exactly "
+        "0 or 100); set it just beyond that offset.",
+        (0.0, 10.0),
+    ),
+    "min_driver_span_f": _P(
+        "°F",
+        "CAMBER judgment (0.98, #85): one degree of zone-temperature or setpoint movement over a "
+        "day is a demand a modulating actuator should answer",
+        "Raise it in a zone with a very stable load, so a held mid-stroke position on a calm day "
+        "is not called unexplained.",
+        (0.5, 5.0),
+    ),
+    "warm_margin_f": _P(
+        "°F",
+        "CAMBER judgment (0.98, #85): the zone over its cooling setpoint (or, for a heating "
+        "valve, under its heating setpoint) by more than 1 °F is a demand the actuator ignored",
+        "Set it to the zone loop's normal overshoot: read how far healthy zones run over their "
+        "cooling setpoint in a hot afternoon.",
+        (0.5, 5.0),
+        "The zone must be out by this much for at least 25 % of the run (fixed in code).",
+    ),
+    "satisfied_margin_f": _P(
+        "°F",
+        "CAMBER judgment (0.98, #85): a fully open damper with the zone 2 °F below its cooling "
+        "setpoint is delivering cooling nobody asked for",
+        "Read how far below the cooling setpoint healthy zones sit while their boxes are fully "
+        "open (normally they do not); set it above that.",
+        (1.0, 6.0),
+        "The zone must be this far inside for at least 50 % of the run (fixed in code).",
+    ),
+    "min_airflow": _P(
+        "cfm (the trended airflow's unit)",
+        "CAMBER judgment (0.98, #85): with no airflow setpoint trended, a closed damper is judged "
+        "against the box's minimum airflow when one is given",
+        "Set the box's scheduled minimum (occupied) airflow from the design or the controller. "
+        "A closed damper is contradicted when the airflow is at or below 5 % of it.",
+        (0.0, 5000.0),
+        "None (default): AIRFLOW_SP when mapped; with neither, a damper shut through occupied "
+        "hours is judged against the occupied mode alone, and the finding carries a caveat.",
+    ),
+    "warn_pct": _P(
+        "% of active samples",
+        "CAMBER judgment (0.98, #85): a tenth of the occupied samples held against demand",
+        "Lower it to catch one stuck day in a long window; raise it to report only persistent "
+        "faults.",
+        (0.0, 100.0),
+        "warn_pct <= fault_pct. Flagged runs of either tier count.",
+    ),
+    "fault_pct": _P(
+        "% of active samples",
+        "CAMBER judgment (0.98, #85): half the occupied samples held against the zone's demand",
+        "As warn_pct. Only contradicted runs reach fault; an unexplained flat run is warn at most.",
+        (0.0, 100.0),
+    ),
+}
+# ==== end 098-terminal-stuck ====
 
 # ==== end zones block ====
 

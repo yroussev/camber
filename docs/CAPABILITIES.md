@@ -175,9 +175,25 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   `occupancy_gate` (`"trended"` default, `"schedule"`, `"off"`). `airflow_tracking`: flags measured VAV airflow that fails to track its
   setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
   `tol_frac`, `warn_pct`, `fault_pct`.
+- **Stuck actuator** — `actuator_stuck` (0.98, #85; terminal boxes and fan coils): a damper or
+  valve (`roles`: damper, heating-valve position else demand, cooling valve) that holds one
+  position over occupied, fan-on hours is judged against what the zone asked for. A run of at
+  least `min_flat_hours` is **contradicted** (can fault) when the damper is shut through occupied
+  hours with no airflow (against `AIRFLOW_SP` or `min_airflow`; with neither, the occupied mode
+  alone, caveated), part open while the zone runs `warm_margin_f` over its cooling setpoint, fully
+  open while the zone sits `satisfied_margin_f` below it, or flat while its demand twin moves; it
+  is **unexplained** (warn at most) when one value holds `whole_day_share` of a day while the
+  demand, airflow setpoint, a setpoint or the zone temperature moves; anything else is
+  consistent (a box at its minimum in a mild zone, a damper saturated open on a hot day). The
+  `ornl-frp-vav` dataset declares it as its detector.
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
   a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
-  `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.
+  `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`, and
+  since 0.98 (#85, opt-in): `group_by_topology` (compare only units behind the same air handler),
+  `normalise` (`"design_max"`: by design airflow; `"reference"`: by each unit's declared
+  known-good twin or period), `summary="variability"` and `tail` (`"low"` / `"high"`). Size
+  normalisation alone cannot isolate a stuck box: on `ornl-frp-vav` only the box's own fault-free
+  reference, or its damper's variability on the low tail, separated it.
 - **Economizer / free cooling** — `economizer_high_limit` (excess OA above the high limit — not
   locked out; judged on measured OA/supply airflow when trended, else the MAT/RAT balance, else the
   damper; samples still below return air are left to a differential changeover; with no configured

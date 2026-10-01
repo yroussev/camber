@@ -10618,7 +10618,7 @@
    "equipment": "1 rooftop unit (DX cooling, gas heat, economizer) as AHU RTU, and its 10 VAV boxes (electric reheat) as VAV RTU_VAV_<room>; per run, the box under test is scored and the other nine are unscored context",
    "labels": {
     "targets": {
-     "unmet_setpoint_hours": "terminal_damper"
+     "actuator_stuck": "terminal_damper"
     },
     "fault_types": {
      "terminal_damper": "VAV box damper stuck at a fixed position (0-100%)",
@@ -11212,6 +11212,7 @@
    },
    "suggested_analyses": {
     "rules": [
+     "actuator_stuck",
      "unmet_setpoint_hours",
      "overcooling_severity",
      "control_hunting",
@@ -11228,7 +11229,10 @@
     "Each scenario is one day (07:00-22:00 occupied every day, weekends included), so rules with multi-day evidence thresholds see little data per scenario.",
     "Only the box under test was actively controlled; the article advises treating the other rooms' data as supplementary.",
     "The minimum airflow was set to 10.5 m3/min but measures 8.5 m3/min in the damper tests (documented in Table 3); the airflow tests recalibrated it to 10.5.",
-    "Reheat is electric and logged as energy per minute, not a valve or command: reheat rules decline."
+    "Reheat is electric and logged as energy per minute, not a valve or command: reheat rules decline.",
+    "airflow_sensor_bias has no declared detector: no airflow setpoint is logged, so airflow_tracking cannot run, and the runs move the delivered flow rather than its reading (see the airflow-bias-emulated-by-setpoint issue). The eight bias days are scored as negatives for actuator_stuck.",
+    "On the five duct-static-collapse days (see that issue) the air handler starves every box. A rule that points upstream there, or flags a healthy neighbour held fully open while its zone sits below setpoint (actuator_stuck on box 205 in set 1 at 80 %), is a legitimate detection of the unlabelled condition, not a false alarm on the box under test.",
+    "Only the box under test is labelled and scored. Fleet findings (the rogue-zone and cohort-starvation censuses) and findings on the nine neighbouring boxes are context, never scored."
    ],
    "data_issues": [
     {
