@@ -153,9 +153,10 @@ def _ornl_day(sc: str, day: int) -> dict:
     afternoon runs a few degrees over the cooling setpoint. Stuck at 20 or 40 % its airflow is
     capped and the afternoon runs hotter (a cool morning also runs cold at 20 %); stuck shut on a
     cool day it delivers almost no air, yet the room stays in band; stuck 60-100 % it delivers more
-    air than any box and the room sits comfortably in band. The rooftop unit's supply airflow is
-    the sum of its boxes, and its duct static falls as the stuck box opens (a fixed-speed fan
-    moving more air through a more open system).
+    air than any box and the room sits comfortably in band, its morning a degree cooler than its
+    afternoon (the damper ignores that swing, as on the real days). The rooftop unit's supply
+    airflow is the sum of its boxes, and its duct static falls as the stuck box opens (a
+    fixed-speed fan moving more air through a more open system).
     """
     idx = pd.date_range(
         pd.Timestamp("2023-12-04") + pd.Timedelta(days=day), periods=96, freq="15min"
@@ -181,6 +182,8 @@ def _ornl_day(sc: str, day: int) -> dict:
                 space = np.where(hot_pm | (occ & (h >= 17) & (h < 19)), 78.5, space)
                 if stuck == 20.0:
                     space = np.where(occ & (h < 9.5), 67.5, space)
+            elif stuck is not None and stuck >= 60.0:
+                space = np.where(occ & (h < 10), 69.9, space)
             damper = damper if stuck is None else np.full(len(idx), stuck)
         flow = np.where(occ | (damper > 0), _ORNL_VMAX[room] * damper / 100.0, np.nan)
         if room == "205" and stuck is not None:

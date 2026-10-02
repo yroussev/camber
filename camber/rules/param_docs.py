@@ -444,14 +444,25 @@ PARAM_DOCS["economizer_high_limit"] = {
 }
 
 PARAM_DOCS["free_cooling_missed"] = {
+    # ---- begin 098-followups (#91): one free-cooling high limit ----
     "high_limit_f": _P(
-        "°F",
-        "CAMBER judgment",
-        "Set it to the economizer high limit of the unit's sequence (or a few degrees below, so "
-        "only clearly cool weather counts as free-cooling weather).",
+        "°F (outdoor air dry-bulb)",
+        "CAMBER judgment: a deliberately conservative screening default. Below 60 °F an "
+        "economizer should be cooling with outside air in any climate, so a missed hour is "
+        "clearly missed. Economizer guidance sets the dry-bulb high limit by climate (ASHRAE 90.1 "
+        "§6.5.1.1.3, its high-limit table by climate zone; the PNNL economizer guide, reference "
+        "pnnl-guide-economizer), higher in dry climates and lower in humid ones",
+        "Set it to the dry-bulb high limit programmed in the unit's economizer sequence, or to "
+        "the energy code's high limit for the site's climate zone (a few degrees below it, so "
+        "only clearly cool weather counts). From trends, take the highest OAT at which the OA "
+        "damper still opens fully over a summer of known-good operation. See docs/TUNING.md.",
         (45.0, 75.0),
-        "camber.freecooling.free_cooling_opportunity defaults to 65 °F; this rule to 60 °F.",
+        "camber.freecooling.free_cooling_opportunity uses the same default "
+        "(DEFAULT_FREE_COOLING_HIGH_LIMIT_F, 60 °F; 65 °F before 0.98). The RCx report's "
+        "economizer page passes economizer_high_limit's high_limit_f to it instead, and states "
+        "that value. A higher value counts more hours as free-cooling weather.",
     ),
+    # ---- end 098-followups (#91) ----
     "active": _P(
         "% of valve stroke (cooling valve)",
         "CAMBER judgment: a valve parked at a few percent is not mechanical cooling running",
@@ -730,6 +741,47 @@ PARAM_DOCS["g36_afdd"] = {
         "percentile on idle hours).",
         (0.0, 15.0),
     ),
+    # ---- begin 098-fc9 (#94): free cooling needs the economizer open beyond its minimum ----
+    "oa_damper_min": _P(
+        "% of damper stroke (OA damper)",
+        "standard: ASHRAE Guideline 36-2021 §5.16.14 (operating-state definitions: free cooling "
+        "is the economizer modulating above its minimum position); the position itself is the "
+        "unit's own, set by its minimum outdoor-air control",
+        "Set it to the minimum position from the unit's sequence or balancing report, or read "
+        "the OA damper command on mechanical-cooling hours with the economizer locked out (its "
+        "median). The finding's oa_damper_min and oa_damper_min_source show what was used.",
+        (0.0, 60.0),
+        "None = learned: the median OA damper command over fan-on hours of mechanical cooling "
+        "below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % "
+        "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %.",
+    ),
+    "oa_damper_tol": _P(
+        "percentage points of damper stroke",
+        "CAMBER judgment (#94): a noise margin above the minimum position; G36 gives no damper "
+        "tolerance. On fault-free lbnl-sdahu the idle economizer hours sit at 47 % or more and "
+        "the minimum at 10 %, so any margin up to 30 points classifies them the same.",
+        "Set it above the scatter of the damper command while it holds its minimum (the spread "
+        "of the command on mechanical-cooling hours at minimum OA); raise it for a G36 unit whose "
+        "minimum position moves with airflow.",
+        (0.0, 20.0),
+    ),
+    "occupancy_gate": _P(
+        "choice",
+        "standard: ASHRAE Guideline 36-2021 §5.16.14 suspends AFDD only while the AHU is not "
+        "operating (and for ModeDelay after a zone-group mode change), so unoccupied operation "
+        "is evaluated by default. On the fault-free lbnl-sdahu run the unoccupied FC9 false "
+        "alarm came from the free-cooling misreading, not from evaluating unoccupied hours: "
+        "with OS#2 fixed, 'trended' changes no verdict on any lbnl-sdahu or lbnl-ddahu run.",
+        "Keep 'off'. Use 'trended' to screen occupied operation only, when the unit trends an "
+        "occupied/unoccupied point and its unoccupied runs (setback, purge) are out of scope.",
+        ("off", "trended"),
+        "'off' (default): every fan-on hour outside ModeDelay. 'trended': only the hours the "
+        "trended occupancy point marks occupied; with none trended, every fan-on hour (no "
+        "assumed-schedule fallback). The finding's occupancy_gate metric reports 'off', "
+        "'trended occupancy' or 'none trended (fan-on hours only)', and unoccupied_hours the "
+        "fan-on hours the gate left out.",
+    ),
+    # ---- end 098-fc9 ----
     "warn_pct": _P(
         "% of an FC's applicable intervals",
         "CAMBER judgment: screening-grade severity, not from G36 (G36 alarms every confirmed "
@@ -1098,8 +1150,9 @@ _ZONE_COHORT = {
         "choice",
         "CAMBER judgment: the mean is the most stable summary",
         "Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units "
-        "cycle.",
-        ("mean", "peak", "load_factor"),
+        "cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves "
+        "(pair it with tail='low').",
+        ("mean", "peak", "load_factor", "variability"),
     ),
 }
 
@@ -1248,6 +1301,151 @@ PARAM_DOCS["sat_cohort_starvation"] = {**_ZONE_STARVE}
 PARAM_DOCS["static_cohort_starvation"] = {**_ZONE_STARVE}
 EXEMPT["sat_cohort_starvation"] = {**_ZONE_GROUPS_EXEMPT}
 EXEMPT["static_cohort_starvation"] = {**_ZONE_GROUPS_EXEMPT}
+
+# ==== begin 098-terminal-stuck (#85 items 1-2) ====
+# The cohort rules' opt-in options (every default reproduces the pre-0.98 result).
+_ZONE_COHORT_OPTIONS = {
+    "group_by_topology": _P(
+        "flag",
+        "CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test "
+        "dataset, on different days) are not peers",
+        "Turn it on when the building has more than one air handler, or when the equipment ids "
+        "mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the "
+        "naming heuristic groups by id and the finding says so.",
+        (False, True),
+        "Groups smaller than min_cohort are left unscored (unscored_small_groups).",
+    ),
+    "normalise": _P(
+        "choice",
+        "CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among "
+        "ten, one day per position): the share of design airflow flagged one stuck day of six "
+        "and six healthy box-days; each box against its own fault-free day flagged all six",
+        "Use 'reference' when every unit has a known-good period or twin (declare it in "
+        "reference); use 'design_max' to even out box sizes (declare design_max, or map "
+        "AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box.",
+        ("reference", "design_max"),
+        "None (default) compares the raw summary. 'reference' divides each unit's summary by "
+        "its reference unit's (reference units are not scored); 'design_max' divides by the "
+        "unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no "
+        "denominator are left out (left_out).",
+    ),
+    "tail": _P(
+        "choice",
+        "CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a "
+        "healthy box on a busy day is high",
+        "Use 'low' with summary='variability' to look for units that never move, 'high' for "
+        "units that move or run more than their peers.",
+        ("both", "low", "high"),
+    ),
+}
+for _name in ("cohort_airflow", "cohort_space_temp"):
+    PARAM_DOCS[_name].update(_ZONE_COHORT_OPTIONS)
+    EXEMPT[_name] = {
+        "reference": "structured input: {equip: reference_equip} for normalise='reference', "
+        "one entry per unit (described under normalise)",
+        "design_max": "structured input: {equip: design airflow} for normalise='design_max', "
+        "one entry per unit (described under normalise)",
+    }
+
+PARAM_DOCS["actuator_stuck"] = {
+    **_SCHEDULE,
+    "roles": _P(
+        "role names (a list)",
+        "CAMBER judgment (0.98, #85): the box and fan-coil actuators a zone's demand drives",
+        "Leave out a role whose point is a command echo rather than a position (a flat echo says "
+        "nothing about the actuator). heat_valve_position falls back to heat_valve when no "
+        "position is mapped.",
+        ("damper", "heat_valve_position", "heat_valve", "cool_valve"),
+        "A list; each must be one of the range values. An air handler's outdoor-air damper is "
+        "out of scope.",
+    ),
+    "tol_pct": _P(
+        "%",
+        "CAMBER judgment (0.98, #85): rounds away the sub-percent jitter of a 0.1 % resolution "
+        "position trend",
+        "Read a known-stuck or manually held actuator's trend: set this above the jitter it "
+        "shows while still. Larger values join slow real movement into one run.",
+        (0.0, 5.0),
+    ),
+    "min_flat_hours": _P(
+        "h",
+        "calibrated on ornl-frp-vav (default subset, 15-minute data): the box under test's longest "
+        "flat run on its fault-free day is under 3 h, while healthy neighbours hold one "
+        "mid-stroke position (26-41 %) for 4-10.5 h on 13 box-days -- so length alone does not "
+        "decide, and 4 h is the shortest run judged",
+        "Read the longest flat runs of healthy boxes in a typical week; set it at or above the "
+        "run length you are willing to call 'held'.",
+        (1.0, 24.0),
+    ),
+    "whole_day_share": _P(
+        "fraction of a day's active samples",
+        "calibrated on ornl-frp-vav: the healthy boxes' longest flat runs cover at most 70 % of a "
+        "day's occupied samples on the default subset and 95 % on the full one (room 102 on an "
+        "airflow-test day); a stuck box covers 100 %",
+        "Read the share of each day's occupied samples that healthy boxes' longest run covers, "
+        "and set it above the largest.",
+        (0.8, 1.0),
+        "Only the unexplained-flat tier (warn at most) uses it.",
+    ),
+    "limit_pct": _P(
+        "% (from either end of the stroke)",
+        "CAMBER judgment (0.98, #85): a position within 2 % of 0 or 100 reads as at its limit",
+        "Read where healthy actuators sit when fully shut or fully open (some never read exactly "
+        "0 or 100); set it just beyond that offset.",
+        (0.0, 10.0),
+    ),
+    "min_driver_span_f": _P(
+        "°F",
+        "CAMBER judgment (0.98, #85): one degree of zone-temperature or setpoint movement over a "
+        "day is a demand a modulating actuator should answer",
+        "Raise it in a zone with a very stable load, so a held mid-stroke position on a calm day "
+        "is not called unexplained.",
+        (0.5, 5.0),
+    ),
+    "warm_margin_f": _P(
+        "°F",
+        "CAMBER judgment (0.98, #85): the zone over its cooling setpoint (or, for a heating "
+        "valve, under its heating setpoint) by more than 1 °F is a demand the actuator ignored",
+        "Set it to the zone loop's normal overshoot: read how far healthy zones run over their "
+        "cooling setpoint in a hot afternoon.",
+        (0.5, 5.0),
+        "The zone must be out by this much for at least 25 % of the run (fixed in code).",
+    ),
+    "satisfied_margin_f": _P(
+        "°F",
+        "CAMBER judgment (0.98, #85): a fully open damper with the zone 2 °F below its cooling "
+        "setpoint is delivering cooling nobody asked for",
+        "Read how far below the cooling setpoint healthy zones sit while their boxes are fully "
+        "open (normally they do not); set it above that.",
+        (1.0, 6.0),
+        "The zone must be this far inside for at least 50 % of the run (fixed in code).",
+    ),
+    "min_airflow": _P(
+        "cfm (the trended airflow's unit)",
+        "CAMBER judgment (0.98, #85): with no airflow setpoint trended, a closed damper is judged "
+        "against the box's minimum airflow when one is given",
+        "Set the box's scheduled minimum (occupied) airflow from the design or the controller. "
+        "A closed damper is contradicted when the airflow is at or below 5 % of it.",
+        (0.0, 5000.0),
+        "None (default): AIRFLOW_SP when mapped; with neither, a damper shut through occupied "
+        "hours is judged against the occupied mode alone, and the finding carries a caveat.",
+    ),
+    "warn_pct": _P(
+        "% of active samples",
+        "CAMBER judgment (0.98, #85): a tenth of the occupied samples held against demand",
+        "Lower it to catch one stuck day in a long window; raise it to report only persistent "
+        "faults.",
+        (0.0, 100.0),
+        "warn_pct <= fault_pct. Flagged runs of either tier count.",
+    ),
+    "fault_pct": _P(
+        "% of active samples",
+        "CAMBER judgment (0.98, #85): half the occupied samples held against the zone's demand",
+        "As warn_pct. Only contradicted runs reach fault; an unexplained flat run is warn at most.",
+        (0.0, 100.0),
+    ),
+}
+# ==== end 098-terminal-stuck ====
 
 # ==== end zones block ====
 
@@ -1423,10 +1621,13 @@ PARAM_DOCS["dcv_verification"] = {
     "below_floor_fault_pct": _P(
         "% of occupied fan-on samples (before the economizer and closed-OA exclusions)",
         "CAMBER judgment",
-        "Look at `below_floor_pct` on a known-good period; set this above it. Keep it low: OA "
-        "below the 62.1 floor while occupied is an under-ventilation fault.",
+        "Look at `below_floor_total_pct` on a known-good period; set this above it. Keep it "
+        "low: OA below the 62.1 floor while occupied is an under-ventilation fault.",
         (1.0, 50.0),
-        "Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor.",
+        "Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor. The test "
+        "reads below_floor_total_pct, which includes hours with the supply fan off; since 0.98 "
+        "(#93) those are also reported apart (fan_off_occupied_pct) and below_floor_pct is the "
+        "shortfall with the fan running.",
     ),
     "excess_warn_pct": _P(
         "% of low-demand samples (CO2 at or below its p25 and below the engage level)",
@@ -1483,6 +1684,33 @@ PARAM_DOCS["dcv_verification"] = {
         (False, True),
         "Falls back to the pooled lift when the same-hour strata hold too few pairs (lift_basis).",
     ),
+    # ---- begin 098-followups (#93): below-floor duration fault, fan-off hours named ----
+    "below_floor_fault_hours": _P(
+        "h (one contiguous run of occupied samples)",
+        "CAMBER judgment: a concentrated outage should not vanish in a long record; 4 h mirrors "
+        "unventilated_fault_hours (half a working day)",
+        "Set it to how long an occupied space may stay below its area-based floor before it is a "
+        "fault. Read below_floor_longest_h on a known-good period and set it well above that.",
+        (1.0, 24.0),
+        "None (the default) = off: only the share test (below_floor_fault_pct) faults. A run is "
+        "consecutive occupied samples below the floor, so it continues across the unoccupied "
+        "night between two days; it includes hours with the supply fan off, and the finding says "
+        "so when they make up most of the run. Needs oa_floor_cfm and an OA flow signal.",
+    ),
+    "fan_off_speed_pct": _P(
+        "% supply fan speed",
+        "CAMBER judgment: a VFD at a few percent moves essentially no air (the tower rules read "
+        "5 % as off too); on lbnl-b59 the fan-off days read 1.2-2.6 % while running hours read "
+        "far above it",
+        "Take the speed the drive reports with the fan stopped (its 99th percentile on known "
+        "off hours) and set this just above it, below the lowest running speed.",
+        (0.0, 20.0),
+        "Used only without a supply-fan status point and only where the OA floor is checked: an "
+        "occupied sample below the floor with the fan at or below this speed is counted as "
+        "fan_off_occupied_pct / _hours, not in below_floor_pct. Severity is unchanged: the share "
+        "test reads below_floor_total_pct.",
+    ),
+    # ---- end 098-followups (#93) ----
 }
 
 EXEMPT["dcv_verification"] = {
@@ -1818,6 +2046,31 @@ PARAM_DOCS["chiller_approach_fouling"] = {
     ),
 }
 
+# ---- begin 098-followups (#92): the site elevation for a derived wet-bulb ----
+_SITE_ELEVATION = {
+    "elevation_ft": _P(
+        "ft",
+        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
+        "Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb "
+        "derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site "
+        "with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, "
+        "condenser_water_reset and the tower drift detectors.",
+        (-300.0, 10000.0),
+        "None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, "
+        "+2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are "
+        "given; a rule's own value wins over the config's site_elevation_ft.",
+    ),
+    "pressure_psia": _P(
+        "psia",
+        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
+        "Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the "
+        "site, or leave None and give elevation_ft.",
+        (10.0, 15.5),
+        "None = use elevation_ft, or sea level when that is also None.",
+    ),
+}
+# ---- end 098-followups (#92) ----
+
 PARAM_DOCS["cooling_tower_approach"] = {
     "design_approach_f": _P(
         "°F",
@@ -1841,23 +2094,8 @@ PARAM_DOCS["cooling_tower_approach"] = {
         "None restores the old 'fan running' gate, which judged cold-weather hours held above a "
         "minimum condenser-water temperature. Used only when a fan speed is trended.",
     ),
-    "elevation_ft": _P(
-        "ft",
-        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
-        "Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb "
-        "derived from OAT + RH; a measured wet-bulb point ignores it.",
-        (-300.0, 10000.0),
-        "None = sea-level Stull wet-bulb, which reads high at altitude and so understates the "
-        "approach. pressure_psia takes precedence when both are given.",
-    ),
-    "pressure_psia": _P(
-        "psia",
-        "CAMBER judgment: None assumes sea level; a site input, not a threshold",
-        "Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the "
-        "site, or leave None and give elevation_ft.",
-        (10.0, 15.5),
-        "None = use elevation_ft, or sea level when that is also None.",
-    ),
+    # 0.98 (#92, 098-followups): shared with condenser_water_reset, see _SITE_ELEVATION
+    **_SITE_ELEVATION,
 }
 
 PARAM_DOCS["condenser_water_reset"] = {
@@ -1869,9 +2107,12 @@ PARAM_DOCS["condenser_water_reset"] = {
         "condenser-water temperature has a lower slope over the year; fit the slope over a "
         "known-good period with the reset working and set this well below it.",
         (0.05, 0.8),
-        "No reset is reported as warn (an efficiency opportunity), never fault. The wet-bulb "
-        "derived from OAT + RH is at sea level here.",
+        "No reset is reported as warn (an efficiency opportunity), never fault. A wet-bulb "
+        "derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a "
+        "little: give elevation_ft near this threshold.",
     ),
+    # 0.98 (#92, 098-followups): the derived wet-bulb takes the site elevation
+    **_SITE_ELEVATION,
 }
 
 PARAM_DOCS["condenser_bypass_leak"] = {

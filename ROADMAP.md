@@ -354,19 +354,31 @@ Version numbers are given only where a release is already planned.
     - [x] #83 data quality, energy charting, M&V baselines and the capstone;
     - [x] integration: the network tests ingest each run's subset into its own store, skip a
       manual dataset without local files, and list the files `CAMBER_WORKBOOK_FROM_DIR` needs.
-  - **0.98 — hardening from the workbook** (in progress, stacked on 0.97; `CHANGELOG.md`,
-    `[0.98.0]`, unreleased). Issues #84–#90, built in three waves:
-    - [x] wave 1: `roles_any_of`, the "Checks not evaluated" table, occupancy and share gates,
-      the documented parameter registry (`camber rules params`, `docs/THRESHOLDS.md`,
-      `docs/TUNING.md`, YAML configs), air-side gates, terminal and ventilation fixes, and the
-      references and catalog pass (#84–#90);
-    - [x] wave 2: the chilled-water reset's sign and constant-flow plants, the learned pump VFD
-      floor, boiler firing from the gas input, declared drift references, the reheat valve
-      position and box fan heat, the calibrated `lbnl-sdahu` leak test (the approved LBNL
-      baseline moves), cause-led RCx issues, and per-mode, stray-row, clipped and scheduled
-      sensor-health reads (#84–#88);
-    - [ ] wave 3: `actuator_stuck` as a scored synthetic rule and the remaining terminal-unit
-      items (#85), and the RCx verify-on-site section (#88).
+  - **0.98 — hardening from the workbook** (integrated, stacked on 0.97; `CHANGELOG.md`,
+    `[0.98.0]`, unreleased). Closes #84, #85, #86, #87, #88, #89, #90, #91, #92 and #93, built in
+    three waves:
+    - [x] #84 the air side: occupancy-gated damper census and `supply_air_control`, the share
+      gate, and the measured fan heat in `leaking_valve`;
+    - [x] #85 terminal units and ventilation: `actuator_stuck`, the reheat valve position and box
+      fan heat, the heating shortfall graded on share, opt-in cohort grouping and normalisation,
+      and the reheat-divergence repair advice;
+    - [x] #86 the central plant: the chilled-water reset's sign and constant-flow plants, the
+      learned pump VFD floor, boiler firing from the gas input, `roles_any_of`, and declared
+      drift references;
+    - [x] #87 sensor health: per-mode outliers on fan-less units (decision a), stray rows,
+      clipped readings and scheduled status points;
+    - [x] #88 the RCx report: cause-led issues, the "Checks not evaluated" table, M&V data
+      sufficiency, and the "Verify on site" walk-down checklist;
+    - [x] #89 references and the catalog: more PNNL re-tuning links, and `ornl-frp-vav`
+      declares `actuator_stuck` as its scored detector;
+    - [x] #90 the documented parameter registry (`camber rules params`, `docs/THRESHOLDS.md`,
+      `docs/TUNING.md`) and YAML configs;
+    - [x] #91 one 60 °F free-cooling high limit; #92 `site_elevation_ft` for derived wet-bulbs;
+      #93 named fan-off hours and the opt-in `below_floor_fault_hours` in `dcv_verification`;
+    - [x] approved benchmark decisions: S1 the calibrated `lbnl-sdahu` leak test (LBNL baseline
+      moves), S2 the healthy synthetic chilled-water reset runs the right way (no key moves), S3
+      `actuator_stuck` as a scored synthetic rule (46 scored rules, new TPR/FPR keys), S4 a
+      declared, never-stored drift reference.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'

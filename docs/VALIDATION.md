@@ -105,7 +105,7 @@ CI by `examples/lbnl_fdd/benchmark-baseline.json`.
 | `cooling_tower_approach` on a **pilot wet cooling tower** (CIEMAT, ~500 m) | message + elevation only | only 5 samples reached ≥ 90% fan; the decline said the fan "never reached 90%" and now says what happened. The site is ~500 m up: a derived wet-bulb now takes `elevation_ft` (median approach 29.1 → 30.0 °F) and a sea-level derivation is caveated |
 | `*_reset_effectiveness` | **scored on a generated fleet** (TPR + failure-mode attribution) | the per-cycle reset-**request** point is *generated* from the fleet via G36 Trim-&-Respond, not downloaded; scored on all four failure modes (stuck / not-responding / not-trimming / diverges) for both SAT and static — see `camber.fleetlab` below |
 | `*_rogue_zone_census`, `*_cohort_starvation` | **scored on a generated labeled fleet** (TPR/FPR + correct zone/AHU attribution) | a clean-room G36 T&R fleet generator (`camber.fleetlab`) emits per-zone role-frames + served-by topology + ground-truth labels; no public multi-zone-fleet dataset is vendorable, so the fleet is *generated* from the public ASHRAE G36 §5.14.8 request logic, not downloaded |
-| `dcv_verification`, `dcv_system_verification` | **real data + physics-simulated** | a lab room with a known DCV law reads `functioning` on CO₂, count and presence; three office rooms read `functioning` on camera counts; an office building with no DCV reads `insufficient` on every unit (never a false `functioning`), its 11 CO₂ zones attribute through the Brick chain, and its OA flow sits below the assumed floor in 2–4 % of occupied hours (fan-off days; the 2020 smoke-mode weeks held OA above it), `info` under the 10 % fault share; a lecture theatre's 110 fan-off hours at 2000 ppm are a fault; a schedule-driven valve is not credited as DCV. Datasets (all licence-clean, cited by DOI, not vendored) and numbers in [VENTILATION.md](VENTILATION.md#validation-and-limits); the synthetic scenario is `faultlab.dcv_sim`. No labeled DCV-fault dataset exists, so TPR is established on the one known-law room, not a sample |
+| `dcv_verification`, `dcv_system_verification` | **real data + physics-simulated** | a lab room with a known DCV law reads `functioning` on CO₂, count and presence; three office rooms read `functioning` on camera counts; an office building with no DCV reads `insufficient` on every unit (never a false `functioning`), its 11 CO₂ zones attribute through the Brick chain, and its OA flow sits below the assumed floor in 2–4 % of occupied hours (fan-off days, named "supply fan off while scheduled occupied" since 0.98; the 2020 smoke-mode weeks held OA above it), `info` under the 10 % fault share; a lecture theatre's 110 fan-off hours at 2000 ppm are a fault; a schedule-driven valve is not credited as DCV. Datasets (all licence-clean, cited by DOI, not vendored) and numbers in [VENTILATION.md](VENTILATION.md#validation-and-limits); the synthetic scenario is `faultlab.dcv_sim`. No labeled DCV-fault dataset exists, so TPR is established on the one known-law room, not a sample |
 
 These are honest boundaries, not oversights: where the data can't support a real-fault score, the
 family is validated on the synthetic whole-suite harness below (`camber.faultlab`) and said so here.
@@ -182,35 +182,60 @@ held stuck at 0 / 20 / 40 / 60 / 80 / 100 % for one day each in three rooms (106
 doi:10.1038/s41597-025-05063-z). Every box is logged, so each test day is a real zone cohort: the box
 under test is scored and its nine neighbours are unscored context.
 
-The catalog template scores **`unmet_setpoint_hours`** against the stuck dampers (its comfort
-symptom); the other 13 days — five fault-free days and eight airflow-bias days, which this rule does
-not target — are its negatives. On the `full` subset (31 days, `scripts/catalog_sweep.py --only
-ornl-frp-vav`):
+<!-- 0.98 (#85 items 1-2, #89 item 3, 098-terminal-stuck) begin -->
+Since 0.98 the catalog template declares **`actuator_stuck`** as the detector for the stuck dampers:
+it judges each stretch where a box's damper holds one position against what the room asked for
+(shut through occupied hours, part open while the room runs warm, fully open while it is satisfied:
+a fault; held all day while the room temperature moves: a warning, which the score counts as a
+detection). Until 0.97 it declared **`unmet_setpoint_hours`**, the comfort symptom, which stays in
+the template as context. The other 13 days -- five fault-free days and eight airflow-bias days,
+which neither rule targets -- are the negatives. On the `full` subset (31 days, `camber datasets
+score ornl-frp-vav` on a `--subset full` ingest, or `scripts/catalog_sweep.py --only ornl-frp-vav`):
 
 | Detector | Positives caught (TPR, 95% Wilson CI) | False alarms (FPR, 95% Wilson CI) |
 |---|---|---|
-| `unmet_setpoint_hours` → stuck box damper | **10 of 18** — 56% [34–75%] | **1 of 13** — 8% [1–33%] |
+| `actuator_stuck` → stuck box damper (declared since 0.98) | **17 of 18** — 94% [74–99%] | **0 of 13** — 0% [0–23%] |
+| `unmet_setpoint_hours` → stuck box damper (declared until 0.97) | **10 of 18** — 56% [34–75%] | **1 of 13** — 8% [1–33%] |
 
-By room: 104 caught 5 of 6 (misses 60 %), 106 caught 3 of 6 (misses 40 / 60 / 80 %), 205 caught 2 of
-6 (20 % and 40 %; misses 0 / 60 / 80 / 100 %). The one false alarm is room 205's set-3 fault-free day
-(2023-12-14): the room overheated in the afternoon from solar gain through its south and west windows
-(too hot 22 % of occupied hours), which the data descriptor's technical validation reports — real
-weather, not a fault.
+The default subset (set 3 only): `actuator_stuck` 6 of 6, 0 of 1 (TPR 100% [61–100%]);
+`unmet_setpoint_hours` 2 of 6, 1 of 1.
+
+By room, `actuator_stuck`: 104 caught 6 of 6, 205 caught 6 of 6, 106 caught 5 of 6. It misses room
+106 stuck at 100 % (set 1): the room ran warm that day, so a fully open damper was what the room
+asked for, and a box stuck where the load would have put it anyway cannot be told from a working
+one. Seven of the 17 detections are warnings: the days (room 205 at 60 / 80 %, room 104 at 60 /
+100 %, room 106 at 40 / 60 / 80 %) where nothing in the room contradicted the position. The nine neighbouring boxes are not scored; on the
+31 days one neighbour is flagged, room 205 in set 1 at 80 %, fully open while its room sat below
+setpoint on a duct-static-collapse day, when the air handler starved every box (data issue
+`duct-static-collapse-in-damper-runs`).
+
+By room, `unmet_setpoint_hours`: 104 caught 5 of 6 (misses 60 %), 106 caught 3 of 6 (misses 40 / 60 /
+80 %), 205 caught 2 of 6 (20 % and 40 %; misses 0 / 60 / 80 / 100 %). Its one false alarm is room
+205's set-3 fault-free day (2023-12-14): the room overheated in the afternoon from solar gain through
+its south and west windows (too hot 22 % of occupied hours), which the data descriptor's technical
+validation reports -- real weather, not a fault.
 
 Caveats, stated because the intervals are wide:
 
-- **A symptom rule, not a damper detector.** A damper stuck near the flow the room needs that day
-  leaves no comfort symptom, so mid-range positions are missed; whether a stuck position is caught
-  depends on the day's weather and load as much as on the fault.
+- **Calibrated on the same building.** `actuator_stuck`'s `min_flat_hours` and `whole_day_share`
+  defaults were set from the set-3 boxes, which are also scored here: the healthy boxes' longest
+  flat run covers at most 70 % of a day there, and at most 95 % on the full subset (room 102 on an
+  airflow-test day), against 100 % for every stuck box. The 0.98 whole-day bar sits in that narrow
+  gap, so the result is not an independent test.
+- **A symptom rule is not a damper detector.** A damper stuck near the flow the room needs that day
+  leaves no comfort symptom, so `unmet_setpoint_hours` misses mid-range positions; whether a stuck
+  position is caught depends on the day's weather and load as much as on the fault.
 - **Small n, one building, one day per case.** 18 positives in three rooms and 13 negatives; the
   per-room splits are anecdote, not rates.
 - **Not a CI-gated benchmark** and not in the dossier (`camber validate`): the number comes from the
-  catalog sweep on the downloaded data, and is published here so it can be reproduced and re-checked.
-- **Nothing else is scored on it yet.** The airflow-bias days are emulated by moving the box's
-  minimum airflow setpoint (the logged flow is true — data issue
-  `airflow-bias-emulated-by-setpoint`), and no CAMBER rule targets them; the rogue-zone and
-  cohort-starvation censuses run per test day as context.
-
+  catalog data, and is published here so it can be reproduced and re-checked.
+- **Nothing else is scored on it.** The airflow-bias days are emulated by moving the box's minimum
+  airflow setpoint (the logged flow is true -- data issue `airflow-bias-emulated-by-setpoint`), and
+  no CAMBER rule targets them; the rogue-zone and cohort-starvation censuses run per test day as
+  context. A cohort comparison does not replace the per-box rule: grouped per day, neither the raw
+  mean airflow nor the share of each box's peak airflow isolates the stuck box
+  (`camber.rules.cohort`).
+<!-- 0.98 (#85 items 1-2, #89 item 3, 098-terminal-stuck) end -->
 
 <!-- 0.93 rules1 (#42, #43, #44) -->
 ### 0.93 air-side checks on real, unlabelled data (setback, leaking valve, reheat capacity)
@@ -321,7 +346,7 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage (0.93): **all 45 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+Current coverage (0.98): **all 46 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
 their injected faults) — the fixture-only list is empty; the fleet rules are scored separately. A
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This

@@ -54,6 +54,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 
 | Rule | Tunable parameters | Also fixed in code |
 |---|---|---|
+| [`actuator_stuck`](#actuator_stuck) | 14 |  |
 | [`airflow_tracking`](#airflow_tracking) | 4 |  |
 | [`boiler_short_cycle`](#boiler_short_cycle) | 1 |  |
 | [`boiler_summer_lockout`](#boiler_summer_lockout) | 1 |  |
@@ -66,23 +67,23 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`chw_supply_tracking`](#chw_supply_tracking) | 5 |  |
 | [`co2_ventilation`](#co2_ventilation) | 3 | yes |
 | [`co2_ventilation_system`](#co2_ventilation_system) | 3 (passed to `co2_ventilation`) |  |
-| [`cohort_airflow`](#cohort_airflow) | 3 |  |
-| [`cohort_space_temp`](#cohort_space_temp) | 3 |  |
+| [`cohort_airflow`](#cohort_airflow) | 6 |  |
+| [`cohort_space_temp`](#cohort_space_temp) | 6 |  |
 | [`compressor_short_cycle`](#compressor_short_cycle) | 1 | yes |
 | [`compressor_staging`](#compressor_staging) | 1 | yes |
 | [`condenser_bypass_leak`](#condenser_bypass_leak) | 4 |  |
-| [`condenser_water_reset`](#condenser_water_reset) | 1 |  |
+| [`condenser_water_reset`](#condenser_water_reset) | 3 |  |
 | [`control_hunting`](#control_hunting) | 4 |  |
 | [`cooling_tower_approach`](#cooling_tower_approach) | 4 |  |
 | [`damper_census`](#damper_census) | 1 | yes |
-| [`dcv_system_verification`](#dcv_system_verification) | 23 (passed to `dcv_verification`) | yes |
-| [`dcv_verification`](#dcv_verification) | 19 |  |
+| [`dcv_system_verification`](#dcv_system_verification) | 25 (passed to `dcv_verification`) | yes |
+| [`dcv_verification`](#dcv_verification) | 21 |  |
 | [`dx_indoor_airflow`](#dx_indoor_airflow) | 11 |  |
 | [`dx_refrigerant_charge`](#dx_refrigerant_charge) | 12 |  |
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
 | [`filter_fouling`](#filter_fouling) | 1 |  |
 | [`free_cooling_missed`](#free_cooling_missed) | 9 |  |
-| [`g36_afdd`](#g36_afdd) | 11 |  |
+| [`g36_afdd`](#g36_afdd) | 14 |  |
 | [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
 | [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 10 |  |
 | [`hp_mode_vs_need`](#hp_mode_vs_need) | 9 |  |
@@ -111,6 +112,42 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`supply_air_reset_compliance`](#supply_air_reset_compliance) | 10 |  |
 | [`unmet_setpoint_hours`](#unmet_setpoint_hours) | 5 |  |
 | [`zones_heat_cool_census`](#zones_heat_cool_census) | 3 |  |
+
+## actuator_stuck
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `roles` | `["damper", "heat_valve_position", "cool_valve"]` | role names (a list) | `"damper"`, `"heat_valve_position"`, `"heat_valve"`, `"cool_valve"` | CAMBER judgment (0.98, #85): the box and fan-coil actuators a zone's demand drives |
+| `tol_pct` | `0.5` | % | 0.0 to 5.0 | CAMBER judgment (0.98, #85): rounds away the sub-percent jitter of a 0.1 % resolution position trend |
+| `min_flat_hours` | `4.0` | h | 1.0 to 24.0 | calibrated on ornl-frp-vav (default subset, 15-minute data): the box under test's longest flat run on its fault-free day is under 3 h, while healthy neighbours hold one mid-stroke position (26-41 %) for 4-10.5 h on 13 box-days -- so length alone does not decide, and 4 h is the shortest run judged |
+| `whole_day_share` | `0.98` | fraction of a day's active samples | 0.8 to 1.0 | calibrated on ornl-frp-vav: the healthy boxes' longest flat runs cover at most 70 % of a day's occupied samples on the default subset and 95 % on the full one (room 102 on an airflow-test day); a stuck box covers 100 % |
+| `limit_pct` | `2.0` | % (from either end of the stroke) | 0.0 to 10.0 | CAMBER judgment (0.98, #85): a position within 2 % of 0 or 100 reads as at its limit |
+| `min_driver_span_f` | `1.0` | °F | 0.5 to 5.0 | CAMBER judgment (0.98, #85): one degree of zone-temperature or setpoint movement over a day is a demand a modulating actuator should answer |
+| `warm_margin_f` | `1.0` | °F | 0.5 to 5.0 | CAMBER judgment (0.98, #85): the zone over its cooling setpoint (or, for a heating valve, under its heating setpoint) by more than 1 °F is a demand the actuator ignored |
+| `satisfied_margin_f` | `2.0` | °F | 1.0 to 6.0 | CAMBER judgment (0.98, #85): a fully open damper with the zone 2 °F below its cooling setpoint is delivering cooling nobody asked for |
+| `min_airflow` | `null` | cfm (the trended airflow's unit) | 0.0 to 5000.0 | CAMBER judgment (0.98, #85): with no airflow setpoint trended, a closed damper is judged against the box's minimum airflow when one is given |
+| `warn_pct` | `10.0` | % of active samples | 0.0 to 100.0 | CAMBER judgment (0.98, #85): a tenth of the occupied samples held against demand |
+| `fault_pct` | `50.0` | % of active samples | 0.0 to 100.0 | CAMBER judgment (0.98, #85): half the occupied samples held against the zone's demand |
+| `start_hour` | `7` | hour of day (0-23) | 0 to 23 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
+| `end_hour` | `18` | hour of day (1-24) | 1 to 24 | CAMBER judgment: a typical weekday office schedule (07:00-18:00) |
+| `occupied_days` | `[0, 1, 2, 3, 4]` | weekday numbers (Mon=0 ... Sun=6) | 0 to 6 | CAMBER judgment: a Monday-Friday schedule |
+
+How to calibrate:
+
+- `roles`: Leave out a role whose point is a command echo rather than a position (a flat echo says nothing about the actuator). heat_valve_position falls back to heat_valve when no position is mapped. *Note:* A list; each must be one of the range values. An air handler's outdoor-air damper is out of scope.
+- `tol_pct`: Read a known-stuck or manually held actuator's trend: set this above the jitter it shows while still. Larger values join slow real movement into one run.
+- `min_flat_hours`: Read the longest flat runs of healthy boxes in a typical week; set it at or above the run length you are willing to call 'held'.
+- `whole_day_share`: Read the share of each day's occupied samples that healthy boxes' longest run covers, and set it above the largest. *Note:* Only the unexplained-flat tier (warn at most) uses it.
+- `limit_pct`: Read where healthy actuators sit when fully shut or fully open (some never read exactly 0 or 100); set it just beyond that offset.
+- `min_driver_span_f`: Raise it in a zone with a very stable load, so a held mid-stroke position on a calm day is not called unexplained.
+- `warm_margin_f`: Set it to the zone loop's normal overshoot: read how far healthy zones run over their cooling setpoint in a hot afternoon. *Note:* The zone must be out by this much for at least 25 % of the run (fixed in code).
+- `satisfied_margin_f`: Read how far below the cooling setpoint healthy zones sit while their boxes are fully open (normally they do not); set it above that. *Note:* The zone must be this far inside for at least 50 % of the run (fixed in code).
+- `min_airflow`: Set the box's scheduled minimum (occupied) airflow from the design or the controller. A closed damper is contradicted when the airflow is at or below 5 % of it. *Note:* None (default): AIRFLOW_SP when mapped; with neither, a damper shut through occupied hours is judged against the occupied mode alone, and the finding carries a caveat.
+- `warn_pct`: Lower it to catch one stuck day in a long window; raise it to report only persistent faults. *Note:* warn_pct <= fault_pct. Flagged runs of either tier count.
+- `fault_pct`: As warn_pct. Only contradicted runs reach fault; an unexplained flat run is warn at most.
+- `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
+- `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
+- `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
 
 ## airflow_tracking
 
@@ -268,13 +305,21 @@ Its parameters are passed through to [`co2_ventilation`](#co2_ventilation); set 
 |---|---|---|---|---|
 | `k` | `3.5` | - (robust z, MAD-scaled) | 2.0 to 6.0 | CAMBER judgment: the common 3.5 modified-z outlier cutoff (not cited in the cohort code) |
 | `min_cohort` | `3` | count | 3 to 50 | CAMBER judgment: a median and MAD need at least three peers |
-| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"` | CAMBER judgment: the mean is the most stable summary |
+| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"`, `"variability"` | CAMBER judgment: the mean is the most stable summary |
+| `group_by_topology` | `false` | flag | `false`, `true` | CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test dataset, on different days) are not peers |
+| `normalise` | `null` | choice | `"reference"`, `"design_max"` | CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among ten, one day per position): the share of design airflow flagged one stuck day of six and six healthy box-days; each box against its own fault-free day flagged all six |
+| `tail` | `"both"` | choice | `"both"`, `"low"`, `"high"` | CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a healthy box on a busy day is high |
 
 How to calibrate:
 
 - `k`: Run it on a cohort you believe healthy and read the largest |z|; set k above it. Lower k finds more outliers but flags normal spread in small cohorts.
 - `min_cohort`: Raise it when the cohort mixes unlike units; small cohorts give unstable z-scores.
-- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle.
+- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves (pair it with tail='low').
+- `group_by_topology`: Turn it on when the building has more than one air handler, or when the equipment ids mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the naming heuristic groups by id and the finding says so. *Note:* Groups smaller than min_cohort are left unscored (unscored_small_groups).
+- `normalise`: Use 'reference' when every unit has a known-good period or twin (declare it in reference); use 'design_max' to even out box sizes (declare design_max, or map AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box. *Note:* None (default) compares the raw summary. 'reference' divides each unit's summary by its reference unit's (reference units are not scored); 'design_max' divides by the unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no denominator are left out (left_out).
+- `tail`: Use 'low' with summary='variability' to look for units that never move, 'high' for units that move or run more than their peers.
+
+Not thresholds: `reference` (structured input: {equip: reference_equip} for normalise='reference', one entry per unit (described under normalise)); `design_max` (structured input: {equip: design airflow} for normalise='design_max', one entry per unit (described under normalise)).
 
 ## cohort_space_temp
 
@@ -282,13 +327,21 @@ How to calibrate:
 |---|---|---|---|---|
 | `k` | `3.5` | - (robust z, MAD-scaled) | 2.0 to 6.0 | CAMBER judgment: the common 3.5 modified-z outlier cutoff (not cited in the cohort code) |
 | `min_cohort` | `3` | count | 3 to 50 | CAMBER judgment: a median and MAD need at least three peers |
-| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"` | CAMBER judgment: the mean is the most stable summary |
+| `summary` | `"mean"` | choice | `"mean"`, `"peak"`, `"load_factor"`, `"variability"` | CAMBER judgment: the mean is the most stable summary |
+| `group_by_topology` | `false` | flag | `false`, `true` | CAMBER judgment (0.98, #85): boxes behind different air handlers (or, in a test dataset, on different days) are not peers |
+| `normalise` | `null` | choice | `"reference"`, `"design_max"` | CAMBER judgment (0.98, #85): measured on the ORNL test building (one stuck box among ten, one day per position): the share of design airflow flagged one stuck day of six and six healthy box-days; each box against its own fault-free day flagged all six |
+| `tail` | `"both"` | choice | `"both"`, `"low"`, `"high"` | CAMBER judgment (0.98, #85): a stuck damper's variability is only ever low, while a healthy box on a busy day is high |
 
 How to calibrate:
 
 - `k`: Run it on a cohort you believe healthy and read the largest |z|; set k above it. Lower k finds more outliers but flags normal spread in small cohorts.
 - `min_cohort`: Raise it when the cohort mixes unlike units; small cohorts give unstable z-scores.
-- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle.
+- `summary`: Use peak to compare maxima (sizing), load_factor (mean / peak) to compare how units cycle, variability (the standard deviation; 0.98, #85) to find a unit that never moves (pair it with tail='low').
+- `group_by_topology`: Turn it on when the building has more than one air handler, or when the equipment ids mix runs or days. A served-by model (Brick/Haystack) groups exactly; otherwise the naming heuristic groups by id and the finding says so. *Note:* Groups smaller than min_cohort are left unscored (unscored_small_groups).
+- `normalise`: Use 'reference' when every unit has a known-good period or twin (declare it in reference); use 'design_max' to even out box sizes (declare design_max, or map AIRFLOW_SP). Size normalisation alone cannot isolate a stuck box. *Note:* None (default) compares the raw summary. 'reference' divides each unit's summary by its reference unit's (reference units are not scored); 'design_max' divides by the unit's design airflow (design_max, else the peak AIRFLOW_SP). Units with no denominator are left out (left_out).
+- `tail`: Use 'low' with summary='variability' to look for units that never move, 'high' for units that move or run more than their peers.
+
+Not thresholds: `reference` (structured input: {equip: reference_equip} for normalise='reference', one entry per unit (described under normalise)); `design_max` (structured input: {equip: design airflow} for normalise='design_max', one entry per unit (described under normalise)).
 
 ## compressor_short_cycle
 
@@ -335,10 +388,14 @@ How to calibrate:
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
 | `reset_slope_flat` | `0.3` | °F CW supply per °F wet-bulb | 0.05 to 0.8 | CAMBER judgment: an ideal reset tracks wet-bulb about 1:1, so below this it is effectively flat |
+| `elevation_ft` | `null` | ft | -300.0 to 10000.0 | CAMBER judgment: None assumes sea level; a site input, not a threshold |
+| `pressure_psia` | `null` | psia | 10.0 to 15.5 | CAMBER judgment: None assumes sea level; a site input, not a threshold |
 
 How to calibrate:
 
-- `reset_slope_flat`: Check the reset schedule in the sequence of operations: a reset limited by a minimum condenser-water temperature has a lower slope over the year; fit the slope over a known-good period with the reset working and set this well below it. *Note:* No reset is reported as warn (an efficiency opportunity), never fault. The wet-bulb derived from OAT + RH is at sea level here.
+- `reset_slope_flat`: Check the reset schedule in the sequence of operations: a reset limited by a minimum condenser-water temperature has a lower slope over the year; fit the slope over a known-good period with the reset working and set this well below it. *Note:* No reset is reported as warn (an efficiency opportunity), never fault. A wet-bulb derived from OAT + RH at altitude reads high, more so in dry air, so the slope moves a little: give elevation_ft near this threshold.
+- `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, condenser_water_reset and the tower drift detectors. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, +2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are given; a rule's own value wins over the config's site_elevation_ft.
+- `pressure_psia`: Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the site, or leave None and give elevation_ft. *Note:* None = use elevation_ft, or sea level when that is also None.
 
 ## control_hunting
 
@@ -369,7 +426,7 @@ How to calibrate:
 
 - `design_approach_f`: Use the design approach from the tower selection (leaving water minus design wet-bulb). Without one, the median approach at high fan in a known-good period is a calibration, not a design value; a fouled tower calibrated this way will look healthy. *Note:* Severity is fixed in code on the median approach: warn at >= 1.3x this, fault at >= 1.7x. pct_hours_high_approach counts hours above design + 3 °F (metric only).
 - `min_effort_pct`: Set it just below the fan speed the tower reaches on a hot afternoon. If the rule declines because the fan never reaches it, lower it, knowing part-fan hours judge control, not the tower. *Note:* None restores the old 'fan running' gate, which judged cold-weather hours held above a minimum condenser-water temperature. Used only when a fan speed is trended.
-- `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude and so understates the approach. pressure_psia takes precedence when both are given.
+- `elevation_ft`: Enter the site elevation above sea level from a survey or map. It corrects a wet-bulb derived from OAT + RH; a measured wet-bulb point ignores it. Set it once for the site with the config's top-level site_elevation_ft, which reaches cooling_tower_approach, condenser_water_reset and the tower drift detectors. *Note:* None = sea-level Stull wet-bulb, which reads high at altitude (about +1.4 °F at 500 m, +2.6 °F at 1,600 m in hot, dry air). pressure_psia takes precedence when both are given; a rule's own value wins over the config's site_elevation_ft.
 - `pressure_psia`: Enter a typical measured barometric pressure (absolute, not sea-level corrected) at the site, or leave None and give elevation_ft. *Note:* None = use elevation_ft, or sea level when that is also None.
 
 ## damper_census
@@ -427,6 +484,8 @@ Fixed in code: a zone needs >= 24 CO2 samples to take part, and >= 24 unoccupied
 | `unventilated_fault_hours` | `4.0` | h (total over the dataset) | 1.0 to 24.0 | CAMBER judgment: an outage is judged by duration, not share of the dataset |
 | `full_outdoor_air` | `false` | flag | `false`, `true` | CAMBER judgment: a site fact, not a threshold (0.93, #37) |
 | `stratify_hour` | `true` | flag | `false`, `true` | CAMBER judgment: a valve on a time clock and CO2 mixes the two in a pooled lift (0.93, #37) |
+| `below_floor_fault_hours` | `null` | h (one contiguous run of occupied samples) | 1.0 to 24.0 | CAMBER judgment: a concentrated outage should not vanish in a long record; 4 h mirrors unventilated_fault_hours (half a working day) |
+| `fan_off_speed_pct` | `5.0` | % supply fan speed | 0.0 to 20.0 | CAMBER judgment: a VFD at a few percent moves essentially no air (the tower rules read 5 % as off too); on lbnl-b59 the fan-off days read 1.2-2.6 % while running hours read far above it |
 
 How to calibrate:
 
@@ -439,7 +498,7 @@ How to calibrate:
 - `econ_high_limit_f`: Set it to the high-limit setpoint in the economizer sequence. Better, map ECON_CMD so the economizer need not be inferred. *Note:* Used only without ECON_CMD: samples with OAT at or below it are treated as possibly economizing and excluded (unless the heating valve is above 5 %). CAMBER temperatures are °F; an OAT trended in °C excludes nearly every sample.
 - `oa_floor_cfm`: Compute Ra·Az for the zones the unit serves from the design documents, or take the design minimum OA from the TAB report. For a multiple-zone system the true intake floor is higher than the sum of Ra·Az, so Ra·Az under-flags (the safe direction). *Note:* None: the below-floor and excess-at-low-demand sub-checks are not evaluated. A number or a mapping {equip: cfm}. Checked only on OA_AIRFLOW or AIRFLOW, not on a damper position or fan speed.
 - `breach_fault_pct`: Raise it if short CO2 excursions at minimum OA are accepted by the sequence (e.g. a slow integral loop). Look at `co2_breach_at_min_pct` on a known-good period and set it above that. *Note:* Needs co2_setpoint; share of samples with CO2 above the setpoint while OA sits at its floor (oa_floor_cfm + 10 %, else within 5 % of its range above its p5).
-- `below_floor_fault_pct`: Look at `below_floor_pct` on a known-good period; set this above it. Keep it low: OA below the 62.1 floor while occupied is an under-ventilation fault. *Note:* Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor.
+- `below_floor_fault_pct`: Look at `below_floor_total_pct` on a known-good period; set this above it. Keep it low: OA below the 62.1 floor while occupied is an under-ventilation fault. *Note:* Needs oa_floor_cfm. A sample counts when OA is more than 10 % below the floor. The test reads below_floor_total_pct, which includes hours with the supply fan off; since 0.98 (#93) those are also reported apart (fan_off_occupied_pct) and below_floor_pct is the shortfall with the fan running.
 - `excess_warn_pct`: Check `excess_at_low_demand_pct` on a unit whose DCV is known to reach its floor when zones are lightly occupied, and set this above it. *Note:* Needs oa_floor_cfm. Only lifts an otherwise 'ok' verdict to 'warn'.
 - `min_samples`: Raise it for short-interval data (e.g. 96 for a day of 15-minute samples) so the verdict rests on more than a few hours. *Note:* Also gates whether a fallback OA-signal segment gets its own line and whether the unventilated-while-occupied check runs.
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan starts in a typical week of trends. Better still, map the OCCUPANCY point, which replaces the schedule. *Note:* Used only when the equipment frame carries no OCCUPANCY point: a trended OCCUPANCY point replaces the schedule (WARMUP / COOLDOWN are excluded either way). Ignored for the verdict with occupied_only=False. dcv_system_verification also uses it on each zone frame to find the unoccupied hours of its CO2-offset guard.
@@ -449,6 +508,8 @@ How to calibrate:
 - `unventilated_fault_hours`: Set it to how long an occupied space may go without outdoor air before it is a fault; half a working day is a common tolerance. *Note:* Hours are the count of qualifying samples times the median sample step.
 - `full_outdoor_air`: Set it True only for a 100 % outdoor-air unit (no return air, no economizer damper), from the mechanical schedule. *Note:* True: the supply AIRFLOW, then SUPPLY_FAN_SPEED, serve as the OA signal when OA flow and damper are absent, and no economizer exclusion applies.
 - `stratify_hour`: Leave it on. Turn it off only to reproduce pre-0.93 pooled verdicts; the pooled lift is always reported as demand_lift_pooled. *Note:* Falls back to the pooled lift when the same-hour strata hold too few pairs (lift_basis).
+- `below_floor_fault_hours`: Set it to how long an occupied space may stay below its area-based floor before it is a fault. Read below_floor_longest_h on a known-good period and set it well above that. *Note:* None (the default) = off: only the share test (below_floor_fault_pct) faults. A run is consecutive occupied samples below the floor, so it continues across the unoccupied night between two days; it includes hours with the supply fan off, and the finding says so when they make up most of the run. Needs oa_floor_cfm and an OA flow signal.
+- `fan_off_speed_pct`: Take the speed the drive reports with the fan stopped (its 99th percentile on known off hours) and set this just above it, below the lowest running speed. *Note:* Used only without a supply-fan status point and only where the OA floor is checked: an occupied sample below the floor with the fan at or below this speed is counted as fan_off_occupied_pct / _hours, not in below_floor_pct. Severity is unchanged: the share test reads below_floor_total_pct.
 
 Not thresholds: `min_corr` (deprecated since 0.82 and ignored (warns; removal in 1.0): the verdict no longer uses Pearson correlation -- use min_lift_ppm).
 
@@ -562,7 +623,7 @@ How to calibrate:
 
 | Parameter | Default | Unit | Range | Basis |
 |---|---|---|---|---|
-| `high_limit_f` | `60.0` | °F | 45.0 to 75.0 | CAMBER judgment |
+| `high_limit_f` | `60.0` | °F (outdoor air dry-bulb) | 45.0 to 75.0 | CAMBER judgment: a deliberately conservative screening default. Below 60 °F an economizer should be cooling with outside air in any climate, so a missed hour is clearly missed. Economizer guidance sets the dry-bulb high limit by climate (ASHRAE 90.1 §6.5.1.1.3, its high-limit table by climate zone; the PNNL economizer guide, reference pnnl-guide-economizer), higher in dry climates and lower in humid ones |
 | `active` | `5.0` | % of valve stroke (cooling valve) | 1.0 to 20.0 | CAMBER judgment: a valve parked at a few percent is not mechanical cooling running |
 | `warn_pct` | `10.0` | % of free-cooling samples | 2.0 to 30.0 | CAMBER judgment |
 | `fault_pct` | `25.0` | % of free-cooling samples | 10.0 to 60.0 | CAMBER judgment |
@@ -574,7 +635,7 @@ How to calibrate:
 
 How to calibrate:
 
-- `high_limit_f`: Set it to the economizer high limit of the unit's sequence (or a few degrees below, so only clearly cool weather counts as free-cooling weather). *Note:* camber.freecooling.free_cooling_opportunity defaults to 65 °F; this rule to 60 °F.
+- `high_limit_f`: Set it to the dry-bulb high limit programmed in the unit's economizer sequence, or to the energy code's high limit for the site's climate zone (a few degrees below it, so only clearly cool weather counts). From trends, take the highest OAT at which the OA damper still opens fully over a summer of known-good operation. See docs/TUNING.md. *Note:* camber.freecooling.free_cooling_opportunity uses the same default (DEFAULT_FREE_COOLING_HIGH_LIMIT_F, 60 °F; 65 °F before 0.98). The RCx report's economizer page passes economizer_high_limit's high_limit_f to it instead, and states that value. A higher value counts more hours as free-cooling weather.
 - `active`: Set it just above the cooling-valve position seen with cooling off on a known-good period (its 95th percentile when the chiller or compressor is off).
 - `warn_pct`: Read missed_pct on units whose economizers are known to work; set the warn level above their spread.
 - `fault_pct`: Set it well above warn_pct. *Note:* Must be at or above warn_pct.
@@ -596,6 +657,9 @@ How to calibrate:
 | `avg_window_min` | `5.0` | min | 1.0 to 30.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (five-minute rolling averages) |
 | `econ_damper_open` | `80.0` | % of damper stroke (OA damper) | 50.0 to 100.0 | CAMBER judgment: separates G36 OS#3 (mechanical cooling on 100 % OA) from OS#4 |
 | `valve_thr` | `5.0` | % of valve stroke | 0.0 to 15.0 | CAMBER judgment: a noise deadband for 'coil active' |
+| `oa_damper_min` | `null` | % of damper stroke (OA damper) | 0.0 to 60.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (operating-state definitions: free cooling is the economizer modulating above its minimum position); the position itself is the unit's own, set by its minimum outdoor-air control |
+| `oa_damper_tol` | `5.0` | percentage points of damper stroke | 0.0 to 20.0 | CAMBER judgment (#94): a noise margin above the minimum position; G36 gives no damper tolerance. On fault-free lbnl-sdahu the idle economizer hours sit at 47 % or more and the minimum at 10 %, so any margin up to 30 points classifies them the same. |
+| `occupancy_gate` | `"off"` | choice | `"off"`, `"trended"` | standard: ASHRAE Guideline 36-2021 §5.16.14 suspends AFDD only while the AHU is not operating (and for ModeDelay after a zone-group mode change), so unoccupied operation is evaluated by default. On the fault-free lbnl-sdahu run the unoccupied FC9 false alarm came from the free-cooling misreading, not from evaluating unoccupied hours: with OS#2 fixed, 'trended' changes no verdict on any lbnl-sdahu or lbnl-ddahu run. |
 | `warn_pct` | `5.0` | % of an FC's applicable intervals | 1.0 to 30.0 | CAMBER judgment: screening-grade severity, not from G36 (G36 alarms every confirmed fault) |
 | `fault_pct` | `20.0` | % of an FC's applicable intervals | 5.0 to 60.0 | CAMBER judgment: screening-grade severity, not from G36 |
 | `min_applicable_hours` | `24.0` | h | 1.0 to 500.0 | CAMBER judgment: screening-grade, not from G36 |
@@ -610,6 +674,9 @@ How to calibrate:
 - `avg_window_min`: Keep the G36 value; on trends coarser than 5 minutes the window holds a single sample.
 - `econ_damper_open`: Set it just below the position the OA damper holds when the sequence calls for full economizer (its 5th percentile on such hours).
 - `valve_thr`: Set it just above the valve command's reading when commanded closed (its 95th percentile on idle hours).
+- `oa_damper_min`: Set it to the minimum position from the unit's sequence or balancing report, or read the OA damper command on mechanical-cooling hours with the economizer locked out (its median). The finding's oa_damper_min and oa_damper_min_source show what was used. *Note:* None = learned: the median OA damper command over fan-on hours of mechanical cooling below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % (closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %.
+- `oa_damper_tol`: Set it above the scatter of the damper command while it holds its minimum (the spread of the command on mechanical-cooling hours at minimum OA); raise it for a G36 unit whose minimum position moves with airflow.
+- `occupancy_gate`: Keep 'off'. Use 'trended' to screen occupied operation only, when the unit trends an occupied/unoccupied point and its unoccupied runs (setback, purge) are out of scope. *Note:* 'off' (default): every fan-on hour outside ModeDelay. 'trended': only the hours the trended occupancy point marks occupied; with none trended, every fan-on hour (no assumed-schedule fallback). The finding's occupancy_gate metric reports 'off', 'trended occupancy' or 'none trended (fan-on hours only)', and unoccupied_hours the fan-on hours the gate left out.
 - `warn_pct`: Read each FC's pct on units known to be healthy; set the warn level above the spread. Tuning it on the unit under test is circular.
 - `fault_pct`: Set it well above warn_pct. *Note:* Must be at or above warn_pct.
 - `min_applicable_hours`: Raise it for long histories so that a rare operating state with a few hours of applicability cannot set the severity; each FC's applicable_hours shows its base.

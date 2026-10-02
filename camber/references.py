@@ -33,6 +33,7 @@ __all__ = [
     "Reference",
     "REFERENCES",
     "RULE_REFERENCES",
+    "WALKDOWN_REFERENCES",
     "reference",
     "references_for",
     "reference_ids_for",
@@ -303,6 +304,7 @@ RULE_REFERENCES: dict = {
     "airflow_tracking": (_CH7,),
     "zones_heat_cool_census": (_CH7,),
     "reheat_capacity_shortfall": (_CH7,),  # 0.98 (#89)
+    "actuator_stuck": (_CH7,),  # 0.98 (#85): ch. 7's terminal damper and valve checks
     "cohort_airflow": (_CH7,),
     "cohort_space_temp": (_CH7,),
     # zone-request census rules (0.98, #89). The discharge-air guide's reset section bases a
@@ -337,6 +339,11 @@ RULE_REFERENCES: dict = {
     "boiler_summer_lockout": (_CH8,),
     "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
 }
+
+
+#: The walk-down chapter: every item of the RCx report's "Verify on site" checklist links to it
+#: (0.98, #88; :mod:`camber.walkdown`). A process chapter, so it is not in RULE_REFERENCES.
+WALKDOWN_REFERENCES: tuple = ("pnnl-retuning-ch9",)
 
 
 def reference(rid: str) -> Reference:

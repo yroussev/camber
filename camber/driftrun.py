@@ -280,20 +280,23 @@ def build_drift_suite(
     freeze_if_missing: bool = True,
     coils=("cooling",),
     sustained_alarm: bool = False,
+    elevation_ft: float | None = None,
 ) -> list:
     """The detector instances making up one drift ``family``, sharing one baseline ``store``.
 
     ``coils`` applies to the ``ahu`` family only (one
     :class:`~camber.rules.coil_valve_rule.CoilValveDrift` per coil); ``sustained_alarm`` applies to
     ``chiller`` only (appends the opt-in CUSUM alarm rule). Both are accepted and ignored elsewhere
-    so every family shares one call shape. Raises ``KeyError`` naming the known families on an
-    unknown ``family``.
+    so every family shares one call shape. ``elevation_ft`` (0.98, #92: the config's
+    ``site_elevation_ft``) is handed to every detector that derives a wet-bulb from OAT + RH (those
+    with an ``elevation_ft`` attribute); the others ignore it. Raises ``KeyError`` naming the known
+    families on an unknown ``family``.
     """
     try:
         fam = DRIFT_FAMILIES[family]
     except KeyError:
         raise KeyError(f"unknown drift family {family!r} (known: {family_names()})") from None
-    return fam.build(
+    suite = fam.build(
         store,
         site=site,
         run_id=run_id,
@@ -301,6 +304,20 @@ def build_drift_suite(
         coils=tuple(coils),
         sustained_alarm=sustained_alarm,
     )
+    if elevation_ft is not None:
+        _apply_site_elevation(suite, elevation_ft)
+    return suite
+
+
+def _apply_site_elevation(rules, elevation_ft) -> None:
+    """0.98 (#92): give the site elevation to each detector that derives a wet-bulb from OAT + RH
+    and has neither an elevation nor a measured pressure of its own."""
+    for rule in rules:
+        if not hasattr(rule, "elevation_ft") or rule.elevation_ft is not None:
+            continue
+        if getattr(rule, "pressure_psia", None) is not None:
+            continue
+        rule.elevation_ft = float(elevation_ft)
 
 
 @dataclass
@@ -642,6 +659,7 @@ def run_drift(
     min_trust=None,
     freeze_if_missing: bool = False,
     evidence: bool = False,
+    elevation_ft: float | None = None,
 ) -> DriftResult:
     """Run the configured drift families over discovered equipment and roll each one up.
 
@@ -668,6 +686,11 @@ def run_drift(
     frozen baseline's band (:func:`camber.charts.evidence.drift_evidence`) -- into
     :attr:`DriftFamilyResult.evidence`. Off by default because it re-resolves each equipment's
     current window, which a scoring run does not otherwise need.
+
+    ``elevation_ft`` (0.98, #92) is the site elevation for the detectors that derive a wet-bulb from
+    OAT + RH (the tower approach and fan-effort detectors); ``None`` keeps sea level. Set it before
+    freezing: a baseline frozen at one elevation and scored at another shifts by the wet-bulb
+    difference (up to ~2.6 °F at 1,600 m in hot, dry air).
     """
     out = DriftResult(
         site=site, run_id=run_id, store_path=getattr(store, "path", "") or "", families=[]
@@ -716,6 +739,7 @@ def run_drift(
             freeze_if_missing=fam_freeze,
             coils=tuple(entry.get("coils") or ("cooling",)),
             sustained_alarm=bool(entry.get("sustained_alarm")),
+            elevation_ft=elevation_ft,
         )
 
         findings: list = []
@@ -865,6 +889,7 @@ def refit_baselines(
     min_trust=None,
     coils=("cooling",),
     sustained_alarm: bool = False,
+    elevation_ft: float | None = None,
 ) -> dict:
     """Re-fit one family's baselines over ``period``, without touching any real store.
 
@@ -888,6 +913,7 @@ def refit_baselines(
         freeze_if_missing=True,
         coils=tuple(coils),
         sustained_alarm=sustained_alarm,
+        elevation_ft=elevation_ft,
     )
     for rule in suite:
         _run_one(

@@ -18,6 +18,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..schedules import occupied_mask
+from ..units import normalize_percent
 from ..ventilation import (
     DEFAULT_ECON_HIGH_LIMIT_F,
     DEFAULT_EZ_COOLING,
@@ -35,6 +36,8 @@ from ._topology_grouping import HEURISTIC_CAVEAT
 from .base import Finding
 
 _SEVERITY_RANK = {"ok": 0, "info": 1, "warn": 2, "fault": 3}
+#: the share below ``oa_floor_cfm`` that still counts as at the floor (assess_dcv's ``floor_tol``)
+_FLOOR_TOL = 0.10
 
 #: roles both DCV rules read when present (the gating signals + the OA signal)
 _DCV_CONTEXT = (
@@ -135,6 +138,19 @@ class DemandControlledVentilation:
     speed follow as proxies. The CO₂ lift is taken within the hour of day (``stratify_hour``) when
     enough same-hour samples exist. Frames without an OA signal (a VAV zone's CO₂) return ``None``:
     :class:`DcvSystemVerification` joins those to their air handler.
+
+    **Below the floor with the fan off (0.98, #93).** Occupied samples below ``oa_floor_cfm`` with
+    the supply fan off -- from ``SUPPLY_FAN_STATUS``, else ``SUPPLY_FAN_SPEED`` at or below
+    ``fan_off_speed_pct`` -- are an occupied schedule the fan did not keep, not a minimum-OA
+    problem. They are named in the summary and a caveat ("supply fan off while scheduled
+    occupied") and counted as ``fan_off_occupied_pct`` / ``fan_off_occupied_hours``, apart from
+    ``below_floor_pct`` (the shortfall with the fan running). The share fault still reads every
+    below-floor sample (``below_floor_total_pct``), so severity does not move. With a status point
+    the fan-off samples were never in the floor check (the fan gate drops them); they are counted
+    the same way. With no fan signal nothing changes. ``below_floor_fault_hours`` (opt-in, default
+    ``None``) makes a contiguous below-floor episode of that many occupied hours a fault whatever
+    its share; the longest episode (``below_floor_longest_h``, ``_start``, ``_fan_off_h``) is
+    reported either way.
     """
 
     name = "dcv_verification"
@@ -164,6 +180,8 @@ class DemandControlledVentilation:
         unventilated_fault_hours: float = 4.0,
         full_outdoor_air: bool = False,
         stratify_hour: bool = True,
+        below_floor_fault_hours: float | None = None,
+        fan_off_speed_pct: float = 5.0,
     ):
         self.min_corr = min_corr
         self.min_modulation = min_modulation
@@ -186,6 +204,11 @@ class DemandControlledVentilation:
         # 0.93 (#37)
         self.full_outdoor_air = bool(full_outdoor_air)
         self.stratify_hour = bool(stratify_hour)
+        # 0.98 (#93): an opt-in duration fault for a below-floor episode, and the fan speed at or
+        # below which the supply fan reads as off (its below-floor hours are named, not counted as
+        # a ventilation shortfall)
+        self.below_floor_fault_hours = below_floor_fault_hours
+        self.fan_off_speed_pct = fan_off_speed_pct
 
     def _occupied(self, frame: pd.DataFrame) -> pd.Series:
         """Occupied samples: a trended ``OCCUPANCY`` point is the truth when present (it
@@ -313,10 +336,22 @@ class DemandControlledVentilation:
         occupied = occupied & segment.reindex(idx, fill_value=False)
         mask = occupied
         fan_on = None
+        fan_off_speed = None  # 0.98 (#93): fan off read from the speed (no status point)
+        fan_source = None
         if Role.SUPPLY_FAN_STATUS in frame.columns:
             # an hourly mean below 1 is a partial-hour fan transition -- its OA mean is diluted
             fan_on = frame[Role.SUPPLY_FAN_STATUS].reindex(idx).fillna(0) > 0.95
             mask = mask & fan_on
+            fan_source = "fan status"
+        elif (
+            Role.SUPPLY_FAN_SPEED in frame.columns
+            and pd.to_numeric(frame[Role.SUPPLY_FAN_SPEED], errors="coerce").notna().any()
+        ):
+            spd = normalize_percent(
+                pd.to_numeric(frame[Role.SUPPLY_FAN_SPEED], errors="coerce").reindex(idx)
+            )
+            fan_off_speed = (spd <= self.fan_off_speed_pct) & spd.notna()
+            fan_source = "fan speed"
         full_oa = oa_role in _FULL_OA_PROXIES
         if full_oa:
             # a 100 % outdoor-air unit has no economizer damper: its OA is its airflow
@@ -374,6 +409,7 @@ class DemandControlledVentilation:
             oa_floor=floor,
             min_samples=self.min_samples,
             stratify_hour=self.stratify_hour,
+            fan_off_mask=fan_off_speed if floor is not None else None,
         )
 
         # Occupied, CO₂ high, and nothing ventilating: the fan off or the OA damper shut. The
@@ -388,11 +424,33 @@ class DemandControlledVentilation:
             off = off | ~fan_on
         judged = occupied & demand.notna()
         unvent = unvent_h = None
+        step_h = float(pd.Series(idx).diff().median() / pd.Timedelta(hours=1))
         if judged.sum() >= self.min_samples:
             hit = (off & (demand >= limit))[judged]
             unvent = round(100.0 * float(hit.mean()), 1)
-            step_h = float(pd.Series(idx).diff().median() / pd.Timedelta(hours=1))
             unvent_h = round(float(hit.sum()) * step_h, 1) if step_h == step_h else None
+
+        # 0.98 (#93): occupied, below the floor, with the supply fan off -- named apart from the
+        # ventilation shortfall. From the speed, assess_dcv split them (they stay in the
+        # occupied samples); with a status point they were never in its floor check (the fan
+        # gate drops them), so they are counted here over the same occupied samples plus those.
+        fan_off_pct = fan_off_h = None
+        if res.below_floor_pct is not None and fan_source is not None:
+            if fan_off_speed is not None:
+                fan_off_pct = res.fan_off_below_floor_pct
+                fan_off_n = fan_off_speed & mask & demand.notna() & oa_vals.notna()
+                fan_off_n = fan_off_n & (oa_vals < float(floor) * (1.0 - _FLOOR_TOL))
+            else:
+                status = pd.to_numeric(frame[Role.SUPPLY_FAN_STATUS], errors="coerce")
+                pop = occupied & demand.notna() & oa_vals.notna()
+                fan_off_n = (
+                    pop
+                    & (status.reindex(idx) < 0.5)
+                    & (oa_vals < float(floor) * (1.0 - _FLOOR_TOL))
+                )
+                fan_off_pct = round(100.0 * float(fan_off_n.sum()) / max(1, int(pop.sum())), 1)
+            fan_off_h = round(float(fan_off_n.sum()) * step_h, 1) if step_h == step_h else None
+        when = "while occupied" if Role.OCCUPANCY in frame.columns else "while scheduled occupied"
 
         not_evaluated = []
         if res.co2_breach_at_min_pct is None:
@@ -432,9 +490,50 @@ class DemandControlledVentilation:
                 f"; CO₂ above {self.co2_setpoint:.0f} ppm with OA at minimum "
                 f"{res.co2_breach_at_min_pct:.0f}% of samples"
             )
-        if (res.below_floor_pct or 0.0) >= self.below_floor_fault_pct:
+        # the share test reads every below-floor sample, as before 0.98: naming the fan-off ones
+        # (#93) changes the wording and the counts, never the severity
+        total_below = res.below_floor_total_pct
+        if total_below is None:
+            total_below = res.below_floor_pct
+        if (total_below or 0.0) >= self.below_floor_fault_pct:
             severity = "fault"
-            msg += f"; OA below the floor {res.below_floor_pct:.0f}% of samples"
+            if fan_off_speed is not None and (res.fan_off_below_floor_pct or 0.0) > 0.0:
+                msg += (
+                    f"; below the OA floor {total_below:.0f}% of occupied samples: supply fan off "
+                    f"{when} {res.fan_off_below_floor_pct:.1f}%, OA short with the fan running "
+                    f"{res.below_floor_pct:.1f}%"
+                )
+            else:
+                msg += f"; OA below the floor {res.below_floor_pct:.0f}% of samples"
+        # 0.98 (#93): opt-in -- a contiguous below-floor episode is a fault whatever its share
+        longest_h = res.below_floor_longest_h
+        if (
+            self.below_floor_fault_hours is not None
+            and longest_h is not None
+            and longest_h >= self.below_floor_fault_hours
+        ):
+            severity = "fault"
+            fan_off_run = (res.below_floor_longest_fan_off_h or 0.0) >= 0.5 * longest_h
+            msg += (
+                f"; OA below the floor for {longest_h:.0f} occupied h in a row from "
+                f"{res.below_floor_longest_start}"
+                + (f" (supply fan off {when})" if fan_off_run else "")
+            )
+        if fan_off_h and "supply fan off" not in msg:
+            msg += f"; supply fan off {when} for {fan_off_h:.0f} h (OA below the floor)"
+        if fan_off_h:
+            caveats.append(
+                f"supply fan off {when}: {fan_off_h:.0f} h ({fan_off_pct:.1f}% of occupied "
+                f"samples; read from the {fan_source}"
+                + (
+                    f", off at or below {self.fan_off_speed_pct:g} %"
+                    if fan_off_speed is not None
+                    else ""
+                )
+                + "), so OA was below the floor. These hours are named here and not counted in "
+                "below_floor_pct (the shortfall with the fan running); check the fan schedule "
+                "against the building's real occupancy"
+            )
         # an outage is judged by its duration, not its share: 110 hours at the CO₂ sensor's full
         # scale is a fault whether the dataset holds one month or fourteen
         if (unvent_h or 0.0) >= self.unventilated_fault_hours:
@@ -478,6 +577,18 @@ class DemandControlledVentilation:
             "start": start,
             "end": end,
         }
+        if res.below_floor_pct is not None:  # 0.98 (#93): only where the floor is checked
+            metrics.update(
+                {
+                    "below_floor_total_pct": total_below,
+                    "fan_off_occupied_pct": fan_off_pct,
+                    "fan_off_occupied_hours": fan_off_h,
+                    "fan_off_source": fan_source,
+                    "below_floor_longest_h": res.below_floor_longest_h,
+                    "below_floor_longest_start": res.below_floor_longest_start,
+                    "below_floor_longest_fan_off_h": res.below_floor_longest_fan_off_h,
+                }
+            )
         return {
             "severity": severity,
             "msg": msg,

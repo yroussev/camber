@@ -536,6 +536,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   metrics `valve_signal`, `valve_divergence_share` (`reheat_penalty`, `overcooling_min_flow`) and
   `fan_heat_f` (`reheat_penalty`).
 <!-- /098-terminal-reheat -->
+<!-- 098-terminal-stuck (#85) -->
+- **Stuck actuators and cohort options** (0.98; #85), additive and provisional: the rule
+  `actuator_stuck` (`camber.rules.actuator_stuck_rule.ActuatorStuck`, its parameters, tiers and
+  metrics `flat_runs`, `stuck_share`, `contradicted_share`, `value`, `tier`, `reason`, `driver`,
+  `roles`); the `CohortDeviation` keywords `group_by_topology`, `normalise`, `reference`,
+  `design_max` and `tail` and the `summary="variability"` value; in `camber.charts.cohort`, the
+  `tail=` keyword of `cohort_deviation` and `cohort_deviation_from_values`; the advisory default
+  `DEFAULT_PARAMS["reheat_valve_divergence_share"]`.
+<!-- /098-terminal-stuck -->
 <!-- 098-sensor-health (#87) -->
 - **Sensor-health modes, stray rows, clipping and schedules** (0.98; #87), all additive and
   provisional: `camber.sensorhealth.clipped_at_limit`; the `mode=` / `mode_source=` keywords of
@@ -545,6 +554,17 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   argument of `gapfill_signature` and its `scheduled_days` / `n_schedule_patterns` metrics. The
   thresholds behind them are module constants and may be retuned.
 <!-- /098-sensor-health -->
+<!-- 098-fc9 (#94) -->
+- **G36 free cooling needs an open economizer** (0.98; #94), additive and provisional: the
+  `g36_afdd` parameters `oa_damper_min`, `oa_damper_tol` and `occupancy_gate` and the metrics
+  `oa_damper_min`, `oa_damper_min_source`, `idle_at_min_oa_hours`, `occupancy_gate` and
+  `unoccupied_hours`; in `camber.fdd_g36`, `OA_DAMPER_TOL`, `OA_MIN_LEARN_N`, the
+  `oa_damper_min=` / `oa_damper_tol=` keywords of `classify_os`, the `oa_damper_min=`,
+  `oa_damper_tol=` and `occupied=` keywords of `run_g36_afdd`, and the trailing `G36Result` fields
+  `oa_damper_min`, `oa_damper_min_source`, `n_idle_at_min_oa` and `n_unoccupied`. Behaviour
+  change: with an OA damper point, an interval with both coils inactive and the damper at or below
+  its minimum is now OS#5, not OS#2, and a missing damper reading there is unclassified.
+<!-- /098-fc9 -->
 
 ## Deprecated
 

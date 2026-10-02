@@ -405,8 +405,9 @@ re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-
 
 ### `zone-bad-box`: one bad box in a fleet
 
-Figures from the real `ornl-frp-vav` default subset (test set 3), CAMBER 0.97.0-dev, with the
-commands on the [exercise page](zone-bad-box.md#setup).
+Figures from the real `ornl-frp-vav` default subset (test set 3), CAMBER 0.97.0-dev (the
+`actuator_stuck` figures and the label scores 0.98.0-dev), with the commands on the
+[exercise page](zone-bad-box.md#setup).
 
 **Answer key**
 
@@ -438,11 +439,26 @@ commands on the [exercise page](zone-bad-box.md#setup).
    airflow rises at every step and its duct static pressure falls. A fixed-speed fan moves more
    air through a more open system. Each position is a different day, so the weather moves these
    numbers too, but the direction holds at every step.
-7. *Label score.* `unmet_setpoint_hours` catches 2 of the 6 stuck days and fires on the fault-free
-   day too: TPR 33%, FPR 100 %. A comfort rule detects a stuck damper only on the days the stuck
-   position hurts comfort. It cannot tell a stuck box from a warm room. The dataset logs no
-   airflow setpoint, so `airflow_tracking`, the rule that finds stuck dampers on `lbnl-fpu`,
-   cannot run.
+7. *`actuator_stuck` and the label score.* It flags box 205 on all six stuck days and stays
+   quiet on the fault-free day: TPR 100%, FPR 0 % (one negative day, so the interval is wide).
+   Each stuck day's damper holds one position through all the occupied hours
+   (100 % of active samples), and the rule says what contradicts it:
+   - 0 %: shut through occupied hours (a **fault**; no airflow setpoint is logged, so the caveat
+     says it was judged against the occupied mode alone);
+   - 20 % and 40 %: part open while the room runs over its cooling setpoint (a **fault**; 6 °F
+     and 3.8 °F over, median);
+   - 100 %: fully open while the room sits 5.2 °F below its cooling setpoint (a **fault**);
+   - 60 % and 80 %: nothing in the room contradicts the position, but it held all day while the
+     room temperature moved, so it is a **warn** only. A mid-stroke position the room is happy
+     with could be a healthy box holding its minimum.
+
+   The neighbours' dampers do sit still for hours (26-41 % open for 4-10.5 h), but at a minimum
+   position in a room below its cooling setpoint: consistent with what the room asked for, and
+   never for a whole day, so they stay quiet. `unmet_setpoint_hours` alone would catch 2 of the 6
+   stuck days and fire on the fault-free day too: TPR 33%, FPR 100 %. A comfort rule detects a
+   stuck damper only on the days the stuck position hurts comfort, and it cannot tell a stuck
+   box from a warm room. The dataset logs no airflow setpoint, so `airflow_tracking`, the rule
+   that finds stuck dampers on `lbnl-fpu`, cannot run.
 8. *Room 102.* No. Its box is not under test, and the room is too cold on every day, fault-free
    included (a **fault** each day). It is a cold room in this building. The reheat is electric
    and not trended as a valve, so CAMBER cannot say whether it was maxed out (see
@@ -451,18 +467,31 @@ commands on the [exercise page](zone-bad-box.md#setup).
 **Discussion points**
 
 - Chapter 7's advice to trend damper position and airflow for every box is the whole exercise.
-  A box that does not move while its neighbours do is the cheapest fault signature there is,
-  and no comfort rule reproduces it.
+  A box that does not move while its neighbours do is the cheapest fault signature there is. No
+  comfort rule reproduces it, and neither does a plain "flat for four hours" test: the healthy
+  boxes fail that one. `actuator_stuck` works because it asks whether the room wanted the damper
+  somewhere else.
+- On the full subset `actuator_stuck` finds 17 of the 18 stuck days and none of the 13
+  fault-free and airflow-bias days. It misses set 1's 100 % day: the room ran warm, so a fully
+  open damper looked like the right answer. A box stuck where a busy day would have put it
+  anyway cannot be told from a working one.
+- The going-further cohort question: grouped per day, the raw mean airflow never singles out
+  box 205 (robust z -1.5 to +2.0), and airflow as a share of each box's own peak flags six
+  healthy box-days and scores the fault-free day at z -3.1. Evening out sizes does not isolate a
+  stuck box. Its airflow against its own fault-free day does (all six days), and so, partly, does
+  its damper's variability on the low tail (z -2.1 to -5.0; three of six past the default 3.5).
 - The zone cohort needs a common basis. Each day's boxes are compared under that day's rooftop
   unit (the naming topology), never across days. Ask what goes wrong when a census pools
   boxes from different days (the dataset config's `_comment` explains why `cohort_airflow` is
-  left out).
+  left out of the default run, and its `group_by_topology` option fixes the pooling).
 - The labelled "fault-free" day is not a trouble-free building. Discuss room 205's warm
   afternoons and room 102's cold mornings as findings in their own right.
 
 **Common mistakes**
 
 - Concluding that the 0 % and 60–100 % days are healthy because `unmet_setpoint_hours` is quiet.
+- Reading the 60 % and 80 % warnings as weaker evidence of a fault than the others. The damper is
+  just as stuck; the room just did not contradict it that day.
 - Reading the rogue-zone census on the fault-free day as a false alarm. It correctly names the
   zone driving the reset, which happens to be a warm room, not a broken box.
 - Comparing raw airflows across rooms of different sizes and calling the smallest box the
@@ -617,7 +646,7 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 
 ### `zone-min-oa`: minimum outdoor air and 62.1 system ventilation
 
-Figures from the real `lbnl-b59` default subset, CAMBER 0.97.0-dev, with the commands on the
+Figures from the real `lbnl-b59` default subset, CAMBER 0.98.0-dev, with the commands on the
 [exercise page](zone-min-oa.md#setup). The 62.1 procedure follows the public sources listed in
 [VENTILATION.md](../VENTILATION.md#system-level-vrp-multiple-zone-systems) (the free 62.1-2016
 Addendum f and secondary sources); no standard text is quoted here.
@@ -643,7 +672,11 @@ Addendum f and secondary sources); no standard text is quoted here.
 5. *DCV.* "DCV not judged" on all four units: the zones' CO₂ never varies enough to test whether
    outdoor air follows it (reason `no_demand_variation`). This building has no DCV, and CAMBER
    does not call it functioning. The specificity lesson: a checker that never refuses would have
-   given it a verdict.
+   given it a verdict. The finding also says "supply fan off while scheduled occupied", for
+   41, 82, 40 and 40 h by unit: the October and December 2020 days when the fans did not run
+   although the schedule says occupied (speed feedback a few percent). Those hours are the whole 2.0–4.2 % below the
+   750 cfm floor, so `below_floor_pct`, the shortfall with the fan running, is 0.0–0.1 % and the
+   grade stays `info` (since 0.98). The 2020 smoke-mode weeks are not among them.
 6. *How wrong would the inputs have to be?* To read "adequate" (a ratio of 1.5 or less), Vot
    would have to be about 2.6 to 3.5 times larger. That means roughly three times the assumed
    population or floor area. Neither is plausible for this office. Giving a system population
@@ -1198,7 +1231,8 @@ synthetic, cut from the open BDG2 meters.
 ### `capstone`: RCx report, walk-down, re-tuning plan and verification
 
 Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev (the
-top issue's cause and the M&V data need: 0.98.0-dev), with the commands on the
+top issue's cause, the M&V data need and the Verify on site section: 0.98.0-dev), with the
+commands on the
 [exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
 are frozen.
 
@@ -1224,15 +1258,23 @@ are frozen.
    placeholder that the ingest masks, so half the year has no setpoint. Walk-down item: read the
    static setpoint at the controller and confirm what the trend is mapped to.
 4. *Walk-down checklist and re-tuning plan* (a model answer; accept any that covers the
-   evidence):
+   evidence). The report's **Verify on site** section is the generated version: its sensor table
+   leads with the onset unit's `duct_static_sp` (trust 0.40, untrusted), then the equipment table
+   puts the onset unit's damper first (look at the blades, linkage and actuator while the BAS
+   strokes it; confirms if the blades stay near one position at a 100 % command; refutes if they
+   travel fully, and then the mixed-air sensor is the suspect), then each unit's supply-air and
+   static-reset logic and the control's economizer enable. It lists no design values: the
+   economizer's minimum outdoor air (1.6 %) and 60 °F high limit are site parameters in this
+   config, not rule defaults. The "rule defaults" confidence lines belong to `supply_air_reset`
+   and `static_pressure_reset`, whose parameters are detection thresholds, not site facts. A
+   student's list should match the generated one and add what a template cannot know:
    - Outdoor-air damper on the onset unit: stroke it from the BAS through its range, watch the
      blades and the linkage, and compare the mixed-air temperature with the command. Expect: the
      blades stay near a quarter open. Confirm the economizer enable logic and the 60 °F high limit
      in the program.
    - Static-pressure setpoint point: confirm the trend mapping and the value at the controller.
-   - Design values the report assumed (its confidence lines say "rule defaults"): the minimum
-     outdoor-air position, the supply-air setpoint and the static setpoint, from the drawings or
-     the controller.
+   - Design values worth confirming anyway, from the drawings or the controller: the minimum
+     outdoor-air position, the supply-air setpoint and the static setpoint.
    - The plan, sensors first: fix the static-setpoint trend; repair the damper actuator or
      linkage; then consider the sequence changes the report suggests (supply-air reset,
      static-pressure reset) as separate measures with their own verification. Verification: the

@@ -324,7 +324,9 @@ def test_rcx_further_reading_and_json_ids(tmp_path):
     assert reading and reading[0]["slot"] is None
     ids = reading[0]["blocks"][1]["refs"]
     want = {i for iss in d["issues"] for i in iss["references"]}
-    assert set(ids) == want and ids  # only the guides relevant to this report's issues
+    # only the guides relevant to this report's issues, plus (0.98, #88) the walk-down chapter
+    # behind the "Verify on site" section
+    assert set(ids) == want | {"pnnl-retuning-ch9"} and ids
     kinds = [R.REFERENCES[i].kind for i in ids]
     assert kinds == sorted(kinds, key=lambda k: k != R.GUIDE)  # guides first
     html = rep.to_html()

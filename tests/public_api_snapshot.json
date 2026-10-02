@@ -216,6 +216,7 @@
   "camber.charts.cohort": [
     "CohortResult",
     "cohort_deviation",
+    "cohort_deviation_from_values",
     "cohort_small_multiples",
     "cohort_summary"
   ],
@@ -383,7 +384,8 @@
     "run_config",
     "run_config_file",
     "run_drift_config",
-    "run_mv_config"
+    "run_mv_config",
+    "site_elevation_ft"
   ],
   "camber.coolingtower": [
     "CoolingTowerResult",
@@ -668,6 +670,8 @@
     "G36Result",
     "G36Thresholds",
     "MODE_DELAY_MIN",
+    "OA_DAMPER_TOL",
+    "OA_MIN_LEARN_N",
     "OS_FAULTS",
     "OS_FREECOOL",
     "OS_HEATING",
@@ -703,6 +707,7 @@
     "seasonal_forecast"
   ],
   "camber.freecooling": [
+    "DEFAULT_FREE_COOLING_HIGH_LIMIT_F",
     "ECON_DAMPER_MIN_PCT",
     "ECON_MIN_DELTA_F",
     "ECON_OAF_MIN_PCT",
@@ -1593,6 +1598,7 @@
     "Reference",
     "TOOL_GUIDE",
     "TRAINING",
+    "WALKDOWN_REFERENCES",
     "links_html",
     "links_text",
     "reference",
@@ -1747,6 +1753,9 @@
     "is_fleet",
     "rank_findings",
     "rule_names"
+  ],
+  "camber.rules.actuator_stuck_rule": [
+    "ActuatorStuck"
   ],
   "camber.rules.airflow_rule": [
     "AirflowTracking"
@@ -2431,6 +2440,18 @@
     "simplified_ev",
     "system_outdoor_air",
     "zones_from_records"
+  ],
+  "camber.walkdown": [
+    "CAUSE_KEYS",
+    "DESIGN_PARAMS",
+    "GENERIC_SITE_CHECK",
+    "KINDS",
+    "SITE_CHECKS",
+    "SiteCheck",
+    "SiteTemplate",
+    "WALKDOWN_REFERENCES",
+    "cause_key",
+    "site_checks"
   ],
   "camber.water": [
     "GAL_PER_CCF",

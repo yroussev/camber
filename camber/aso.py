@@ -53,6 +53,10 @@ DEFAULT_PARAMS = {
     # less outdoor air than this reads "stuck low", more reads "stuck part open" (the finding's
     # own recorded threshold wins when present)
     "econ_stuck_low_oaf_pct": 30.0,
+    # ==== begin 098-terminal-stuck (#85): reheat_penalty valve_divergence_share at/above which the
+    # demand-vs-position caveat fired (mirrors the rule's 0.25) -- the valve is the cause
+    "reheat_valve_divergence_share": 0.25,
+    # ==== end 098-terminal-stuck ====
 }
 
 
@@ -355,6 +359,35 @@ def _rec_reheat(f, frame, P):
             standard="ASHRAE G36 §5.6 (dual-maximum reheat control)",
             caveats=["Keep minimum airflow at/above the ventilation (62.1) requirement."],
         )
+    # ==== begin 098-terminal-stuck (#85): the valve diverges from its demand -> repair, not tune
+    div = (getattr(f, "metrics", None) or {}).get("valve_divergence_share")
+    if div is not None and div >= P["reheat_valve_divergence_share"]:
+        return _rec(
+            f,
+            title="Repair the reheat valve or actuator",
+            cause=(
+                "reheat valve stuck or failed shut (the controller calls for heat the valve does "
+                "not deliver)"
+            ),
+            action=(
+                f"On {div:.0%} of the occupied full-demand samples the controller asks for full "
+                "reheat while the measured valve position reads shut. Stroke the valve from the "
+                "BAS and watch the position and the discharge air; check the actuator, its "
+                "linkage and power, the hot-water supply to the coil, and the position feedback's "
+                "mapping. Do not retune the reheat sequence until the valve follows its command."
+            ),
+            parameter="Reheat valve / actuator / position feedback",
+            suggested="valve position follows its command over the full stroke",
+            expected_effect="Restores zone heating; the reheat figures become meaningful again.",
+            confidence="medium",
+            standard="PNNL Re-tuning Ch.7 (terminal units)",
+            caveats=[
+                "A mis-mapped or inverted position point mimics a stuck valve -- confirm the "
+                "feedback against the valve on site first."
+            ],
+            references=["pnnl-retuning-ch7"],
+        )
+    # ==== end 098-terminal-stuck ====
     return _rec(
         f,
         title="Minimize reheat (raise cooling SAT / lower min airflow)",
@@ -898,7 +931,8 @@ def _num(v) -> float:
 
 def _dcv_causes(m: dict, P, severity: str = "") -> list:
     """The causes of a DCV finding, worst first: ``unventilated``, ``below_floor``,
-    ``co2_high_at_min``, ``static``, ``uncorrelated``, ``excess_at_low_demand``.
+    ``fan_off_occupied`` (0.98, #93: below the floor because the supply fan was off while
+    occupied), ``co2_high_at_min``, ``static``, ``uncorrelated``, ``excess_at_low_demand``.
 
     A cause counts when it clears the rule's default threshold (:data:`DEFAULT_PARAMS`). Only the
     three under-ventilation causes raise a DCV finding to ``fault``, so a ``fault`` with none of
@@ -910,6 +944,10 @@ def _dcv_causes(m: dict, P, severity: str = "") -> list:
             float(P["dcv_unventilated_fault_hours"]),
         ),
         "below_floor": (_num(m.get("below_floor_pct")), float(P["dcv_below_floor_fault_pct"])),
+        "fan_off_occupied": (
+            _num(m.get("fan_off_occupied_pct")),
+            float(P["dcv_below_floor_fault_pct"]),
+        ),
         "co2_high_at_min": (
             _num(m.get("co2_breach_at_min_pct")),
             float(P["dcv_breach_fault_pct"]),
@@ -934,6 +972,7 @@ def _dcv_causes(m: dict, P, severity: str = "") -> list:
 _DCV_ALSO = {
     "unventilated": "occupied hours with high CO₂ and no ventilation (fan off or OA shut)",
     "below_floor": "outdoor air below its floor",
+    "fan_off_occupied": "the supply fan off while the schedule says occupied",
     "co2_high_at_min": "CO₂ above its setpoint while outdoor air sat at minimum",
     "static": "outdoor air that does not modulate with demand",
     "uncorrelated": "outdoor air that modulates, but not with demand",
@@ -989,6 +1028,25 @@ def _rec_dcv(f, frame, P):
             confidence="medium",
             standard="ASHRAE 62.1 (minimum outdoor air) / G36 §5.16.4 (minimum OA control)",
             caveats=["A stuck or disconnected damper is a mechanical repair, not a setpoint."],
+        )
+    if lead == "fan_off_occupied":  # 0.98 (#93)
+        h = _num(m.get("fan_off_occupied_hours"))
+        return _rec(
+            f,
+            title="Run the supply fan whenever the space is occupied",
+            cause="Supply fan off while scheduled occupied",
+            action=(
+                f"The supply fan was off while the schedule says occupied{where} for about "
+                f"{h:.0f} h, so no outdoor air reached the space. Check whether the building was "
+                "really occupied then (a holiday or a test missing from the schedule) and, if it "
+                "was, the fan's start command, safeties and alarms." + tail
+            ),
+            parameter="Occupied schedule / fan start",
+            suggested="the fan running, and outdoor air at or above the floor, whenever occupied",
+            expected_effect="Restores ventilation and IAQ in occupied hours.",
+            confidence="medium",
+            standard="ASHRAE 62.1 (minimum outdoor air) / PNNL Re-tuning",
+            caveats=["Correct the schedule instead when the building was empty on those days."],
         )
     if lead == "co2_high_at_min":
         pct = _num(m.get("co2_breach_at_min_pct"))
@@ -1066,6 +1124,50 @@ def _rec_dcv(f, frame, P):
     )
 
 
+# ==== begin 098-terminal-stuck (#85): actuator_stuck ====
+_STUCK_CAUSE = {
+    "zone_warm": "the zone runs warm while it holds still",
+    "zone_cold": "the zone runs cold while it holds still",
+    "zone_satisfied": "it stays fully open with the zone already satisfied",
+    "closed_no_flow": "it stays shut through occupied hours with no airflow",
+    "closed_occupied": "it stays shut through occupied hours",
+    "demand_moved": "its command moves while the position does not",
+    "flat_all_day": "it holds one position all day while its demand moves",
+}
+
+
+def _rec_actuator_stuck(f, frame, P):
+    m = getattr(f, "metrics", None) or {}
+    role = str(m.get("role") or "actuator").replace("_", " ")
+    value = m.get("value")
+    held = f" at {value:g} %" if isinstance(value, (int, float)) else ""
+    why = _STUCK_CAUSE.get(m.get("reason") or "", "it holds one position against the demand")
+    contradicted = m.get("tier") == "contradicted"
+    return _rec(
+        f,
+        title=f"Check the {role} for a stuck actuator",
+        cause=f"{role.capitalize()} stuck{held}: {why}",
+        action=(
+            f"The {role} held{held} for hours, and {why}. "
+            "Command it through its full stroke from the BAS and watch the position and the "
+            "airflow or discharge temperature respond; check the actuator, its linkage and "
+            "power, and the controller output it receives."
+        ),
+        parameter=f"{role.capitalize()} actuator / linkage / control output",
+        suggested="the position follows its command over the full stroke",
+        expected_effect="Restores zone control; ends the comfort or energy penalty it caused.",
+        confidence="medium" if contradicted else "low",
+        standard="PNNL Re-tuning Ch.7 (terminal units)",
+        caveats=[
+            "A flat trend can also be a frozen point or a manual override: check the point's "
+            "status and any operator override before replacing hardware."
+        ],
+        references=["pnnl-retuning-ch7"],
+    )
+
+
+# ==== end 098-terminal-stuck ====
+
 #: rule name -> recommender. Rules without an entry yield no recommendation (nothing fabricated).
 RECOMMENDERS = {
     "simultaneous_heat_cool": _rec_simul_hc,
@@ -1096,6 +1198,7 @@ RECOMMENDERS = {
     "leaking_valve": _rec_leaking_valve,
     "dcv_verification": _rec_dcv,
     "dcv_system_verification": _rec_dcv,
+    "actuator_stuck": _rec_actuator_stuck,  # 0.98 (#85)
 }
 
 

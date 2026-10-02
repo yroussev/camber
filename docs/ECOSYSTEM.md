@@ -18,6 +18,7 @@ flowchart TD
   ee["OpenEEmeter / eemeter"] -- cross-check --> core
   better["LBNL BETTER"] -- cross-check --> core
   openfdd["open-fdd"] -- G36 cross-validate --> core
+  openfdd -- shared M&V vectors --> core
   volttron["Eclipse VOLTTRON"] -- data source --> core
 ```
 
@@ -201,7 +202,7 @@ fault fires or where:
 - **Camber gates each fault by its G36 operating-state classifier.** We classify
   every interval into an operating state **OS#1–OS#5** from the heating/cooling
   valve commands plus the OA-damper position (`classify_os` →
-  heating / free-cooling / mechanical+economizer / mechanical+min-OA / simultaneous),
+  heating / free-cooling / mechanical+economizer / mechanical+min-OA / none of these),
   and evaluate each FC **only in the operating states G36 §5.16.14.9 lists for it**
   (`OS_FAULTS`). So FC10 ("OAT/MAT should track in 100% economizer"), for example,
   is scored only over the hours the AHU is actually in that economizer state.
@@ -224,6 +225,12 @@ hours — only those in its valid operating states), so Camber's denominators ar
 smaller and its percentages are computed over a stricter, more specific population
 of hours. We consider that the correct, standard-aligned behavior; the
 single-signal framing is broader but less precisely tied to the standard's intent.
+
+> **Since 0.98 (#94)** free cooling (OS#2) also needs the OA damper open beyond its minimum
+> position. An interval with both valves shut at minimum OA is OS#5, where only FC1–FC4 apply.
+> Before 0.98 it was OS#2. The 0.1.5 comparison above used the valves-only reading. To reproduce
+> it, pass `oa_damper_min=-100`. Every damper reading then counts as open, and only intervals
+> with a missing damper reading stay unclassified.
 
 > For cross-tool comparison, `run_g36_afdd(..., comparability=True)` additionally
 > emits a single-signal-gated (input-validity) fault % alongside the default
@@ -474,8 +481,57 @@ Corrections from the open-fdd side are welcome on
 [#22](https://github.com/yroussev/camber/issues/22), especially on the role mapping
 (`role_map.json`).
 
-open-fdd's change-point M&V module cites CAMBER as its algorithm reference. It is an
-independent reimplementation and can give different fits on the same data: it uses a
-different breakpoint grid and a different model-selection criterion, it allows a
-zero-width 5P dead-band, and its heating-slope sign is the opposite of CAMBER's.
-Compare savings from the two tools only after checking which model each one chose.
+### open-fdd's ECM tooling and the shared M&V vectors
+
+open-fdd's [ECM tooling](https://bbartling.github.io/open-fdd/ecm/) (MIT) has three parts:
+
+- Excel ECM workbooks backed by independent Python reference calculators: fan affinity,
+  chilled-water reset, condenser water, economizer runtime, outside-air loads, kW/ton, schedule
+  reduction and others;
+- an honest comparison of each calculator's estimate against an EnergyPlus twin;
+- change-point and ASHRAE Guideline 14 helpers (`fit_changepoint`, `select_changepoint`,
+  `score_g14_monthly`, `option_c_savings`) that credit CAMBER as their algorithm reference.
+
+The helpers are an independent reimplementation and can fit the same data differently. They use
+a different breakpoint grid and a different model-selection criterion, they allow a zero-width
+5P dead-band, and their heating-slope sign is the opposite of CAMBER's. Compare savings from the
+two tools only after checking which model each one chose.
+
+**How the two fit.** open-fdd's calculators estimate a retrofit's savings before it is built, and
+CAMBER measures and verifies them afterwards. CAMBER's findings can replace a calculator's
+assumptions with measured inputs, such as:
+
+- run hours;
+- missed free-cooling hours, and what caused them;
+- how a reset actually behaves;
+- pump minimum-speed floors.
+
+For M&V on monthly data, CAMBER's bill-only path covers calendarization, degree-day bases
+selected from the bills, and versioned billing baselines (see
+[MANDV.md](MANDV.md#billing-data)). Any integration stays at the file and process boundary,
+tracked in [#22](https://github.com/yroussev/camber/issues/22).
+
+**Shared vectors.** The
+[shared M&V test vectors](https://github.com/yroussev/camber/tree/main/examples/mv_vectors)
+let the two sets of helpers be cross-checked without either importing the other. They hold:
+
+- synthetic change-point cases with known truth;
+- bill cases;
+- CAMBER's expected outputs and predicted series;
+- expected statistics for BDG2 meters, whose daily, monthly and bill aggregates are not committed
+  (CAMBER redistributes no datasets). A standalone script rebuilds them from the publisher's
+  sha256-pinned files.
+
+The vectors are engine-agnostic:
+
+- the inputs are CSV, with optional Parquet that DataFusion reads natively;
+- the expected outputs are JSON with a versioned schema (`mv_vectors/1`);
+- the results contract is JSON, and its checker needs numpy and pandas only.
+
+So open-fdd's pandas library or a SQL M&V twin can be checked without installing CAMBER. The
+vectors also show where the two G14 gates differ:
+
+- `score_g14_monthly` applies Guideline 14's calibrated-simulation tolerances: |NMBE| ≤ 5 % and
+  CV(RMSE) ≤ 15 % monthly.
+- CAMBER's regression-baseline gate also requires R² ≥ 0.75 and |NMBE| ≤ 0.5 %.
+- On loads with little weather signal, the first passes and the second fails.

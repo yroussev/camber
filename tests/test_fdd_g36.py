@@ -14,6 +14,7 @@ from camber.fdd_g36 import (  # noqa: E402
     OS_HEATING,
     OS_MECH_ECON,
     OS_MECH_MINOA,
+    OS_UNCLASSIFIED,
     OS_UNKNOWN,
     classify_os,
     run_g36_afdd,
@@ -350,3 +351,83 @@ def test_fc14_fan_heat_term_is_configurable():
     # ... but with SAT downstream of the fan the coil drop is 6F, past hypot(5, 2)
     thr = G36Thresholds(fc14_fan_heat=-2.0)
     assert run_g36_afdd(df, "AHU", thr=thr).fault_pct[14] > 95
+
+
+# ---- 0.98 (#94): free cooling needs the economizer open beyond its minimum ----
+
+
+def test_os_free_cooling_needs_the_damper_beyond_its_minimum():
+    # both coils idle: OS#2 only with the OA damper open past minimum + tolerance (5 points)
+    assert classify_os(hc=0, cc=0, oa_damper=60, oa_damper_min=10) == OS_FREECOOL
+    assert classify_os(hc=0, cc=0, oa_damper=15, oa_damper_min=10) == OS_UNKNOWN
+    assert classify_os(hc=0, cc=0, oa_damper=0) == OS_UNKNOWN  # closed: recirculating
+    assert classify_os(hc=0, cc=0, oa_damper=float("nan")) == OS_UNCLASSIFIED
+    assert classify_os(hc=0, cc=0) == OS_FREECOOL  # no damper point: the valves-only reading
+    assert set(OS_FAULTS[OS_UNKNOWN]) == {1, 2, 3, 4}  # no free-cooling test at minimum OA
+
+
+def _unocc_recirc_frame():
+    """lbnl-sdahu's fault-free pattern: occupied hours cool on mechanical cooling at a 10 %
+    minimum or economize at 60 %; unoccupied hours run the fan with the OA damper shut and both
+    valves idle on a hot night (OAT 80 F, far above the 55 F setpoint)."""
+    idx = pd.date_range("2026-07-06", periods=24 * 7, freq="1h")
+    occ = (idx.hour >= 7) & (idx.hour < 19)
+    cool = occ & (idx.hour >= 12)
+    return pd.DataFrame(
+        {
+            "FS": 100.0,
+            "HC": 0.0,
+            "CC": np.where(cool, 60.0, 0.0),
+            "OA_Damper": np.where(occ, np.where(cool, 10.0, 60.0), 0.0),
+            "OAT": np.where(occ & ~cool, 50.0, 80.0),
+            "SATSP": 55.0,
+            "SAT": 55.0,
+            "MAT": np.where(occ & ~cool, 53.0, 72.0),
+            "RAT": 74.0,
+        },
+        index=idx,
+    ), occ
+
+
+def test_unoccupied_recirculation_is_not_free_cooling():
+    df, occ = _unocc_recirc_frame()
+    r = run_g36_afdd(df, "AHU", keep_masks=True)
+    assert r.oa_damper_min == 10.0 and r.oa_damper_min_source.startswith("learned")
+    # the 12 unoccupied hours a day are OS#5: FC9 (OAT too high for free cooling) cannot fire
+    assert r.n_idle_at_min_oa == int((~occ).sum())
+    assert r.os_distribution[OS_FREECOOL] == int((occ & (df.index.hour < 12)).sum())
+    assert r.os_distribution[OS_UNKNOWN] == int((~occ).sum())
+    assert r.fault_pct[9] == 0.0
+    assert not r.masks.loc[~occ, "FC9_app"].any()
+    # the pre-0.98 valves-only reading tripped FC9 on every unoccupied hour
+    legacy = run_g36_afdd(df.drop(columns="OA_Damper"), "AHU")
+    assert legacy.fault_pct[9] > 50
+    assert any("no OA damper point" in c for c in legacy.caveats)
+
+
+def test_oa_damper_minimum_from_the_caller_and_the_closed_fallback():
+    df, occ = _unocc_recirc_frame()
+    # a caller minimum of 60 % puts the economizer hours at the minimum too: no OS#2 at all
+    r = run_g36_afdd(df, "AHU", oa_damper_min=60.0)
+    assert r.oa_damper_min_source == "caller" and r.os_distribution[OS_FREECOOL] == 0
+    # no mechanical-cooling hours to learn from: the minimum is taken as closed (0 %)
+    no_cool = df.assign(CC=0.0)
+    r0 = run_g36_afdd(no_cool, "AHU")
+    assert r0.oa_damper_min == 0.0 and r0.oa_damper_min_source.startswith("assumed 0 %")
+    assert any("not learnable" in c for c in r0.caveats)
+    assert r0.os_distribution[OS_UNKNOWN] == int((~occ).sum())  # the shut damper is still OS#5
+    # a missing damper reading with both coils idle is unclassified, not free cooling
+    gap = df.copy()
+    gap.loc[gap.index[(~occ)][:5], "OA_Damper"] = np.nan
+    assert run_g36_afdd(gap, "AHU").n_unclassified == 5
+
+
+def test_occupied_mask_excludes_unoccupied_hours():
+    df, occ = _unocc_recirc_frame()
+    r = run_g36_afdd(df, "AHU", occupied=pd.Series(occ, index=df.index))
+    assert r.n_unoccupied == int((~occ).sum()) and r.fault_n_applicable[9] > 0
+    assert run_g36_afdd(df, "AHU", occupied=occ).n_unoccupied == r.n_unoccupied
+    import pytest
+
+    with pytest.raises(ValueError, match="occupied"):
+        run_g36_afdd(df, "AHU", occupied=occ[:10])

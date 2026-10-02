@@ -124,6 +124,15 @@ def test_legacy_year_partitions_read_mixed_and_migrate_losslessly(tmp_path):
     legacy_name = next(iter(st.migrated_files("old", 2025)))
     assert legacy_name.endswith(".parquet") and st.migrated_files("old", 1999) == {}
     pd.testing.assert_frame_equal(_sorted(st.read_long(facility_id="old")), before)
+    # the month files hold only the stored columns: pyarrow 17-24 read a part file's own hive path
+    # into dictionary partition-key columns, which then clashed with the keys on every read
+    import pyarrow.parquet as pq
+
+    for p in st.partitions(facility_id="old"):
+        for f in os.listdir(p["path"]):
+            if f.endswith(".parquet"):
+                names = pq.read_schema(os.path.join(p["path"], f)).names
+                assert not {"facility_id", "year", "month"} & set(names), (f, names)
     again = st.migrate_partitions(apply=True)
     assert again["partitions"] == [] and not again["applied"]  # idempotent
     st.write_role_frame(_frame("2025-01-20", 24), facility_id="old", equip="AHU_3")
