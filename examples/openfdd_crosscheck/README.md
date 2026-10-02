@@ -18,12 +18,12 @@ Verdicts are never merged.
 | File | What it is |
 |---|---|
 | `role_map.json` | The versioned CAMBER role ↔ open-fdd column / SQL role mapping, plus the declared fallback (fan command from run status) and substitution (MAT/SAT as cooling-coil temperatures on a cooling-only AHU, pandas engine only) |
-| `profiles.json` | Tolerance profiles: `openfdd_defaults` (no override) and `g36` (the G36 Table 5.16.14.7 tolerances CAMBER uses), per engine, with the SQL rules the tuning file cannot reach |
+| `profiles.json` | Tolerance profiles: `openfdd_defaults` (no override) and `g36` (the G36 Table 5.16.14.7 tolerances CAMBER uses), per engine. SQL rules whose G36 tolerances the tuning file cannot reach run at their defaults and are listed in `sql_not_expressible` |
 | `harness.py` | Engine inputs, one normaliser per engine, the verdict rule, scoring (Wilson CIs), Markdown |
 | `run_crosscheck.py` | The runner: one command, every engine, same frames |
 | `openfdd_pandas_driver.py` | Runs inside open-fdd's venv and calls `open_fdd.rules.run_rule` |
 | `Dockerfile.fdd_cli` | Builds open-fdd's SQL CLI from the pinned commit |
-| `fixtures/` | Synthetic test fixtures: pandas output recorded on the synthetic probes, and hand-written SQL result files |
+| `fixtures/` | Synthetic test fixtures: both engines' output recorded on the synthetic probes, and hand-written SQL result files for the normaliser's edge paths |
 | `results/` | The committed results (`results-run.*`, `results-month.*`, `probes.*`) |
 
 ## Versions
@@ -58,7 +58,20 @@ docker builder prune   # drop the Rust build cache afterwards
 ```
 
 An engine whose prerequisite is missing is listed under "Not run" with the reason. The runner
-checks `docker info` once, with a 20 s timeout. `lbnl-fcu` is not part of the run: neither
+checks `docker info` once, with a 20 s timeout.
+
+CAMBER runs `g36_afdd` at the G36 defaults plus the `g36_afdd` parameters of each dataset's
+catalog run template (on `lbnl-sdahu`, `min_oa_pct` 1.6, which enables FC6), as
+`camber datasets` does.
+
+The SQL engine gets **one building per equipment**. `fdd_cli run-rules` checks a rule's
+required roles against the building's columns, the union over its equipment, so equipment
+sharing a building would be reported as evaluated, with zero fault hours, on inputs only a
+neighbour has. Two containers run per profile: one ingests the read-only CSV tree to Parquet,
+and one runs the rules with the Parquet and the tuning file mounted read-only.
+
+To rebuild the SQL image after pruning (about 4 minutes with the Rust base image cached; the image is about 360 MB):
+`docker build -f examples/openfdd_crosscheck/Dockerfile.fdd_cli -t camber-crosscheck/fdd_cli:32a6d44 examples/openfdd_crosscheck`. `lbnl-fcu` is not part of the run: neither
 engine applies its G36 AHU fault conditions to a fan-coil unit (CAMBER's runner declines the
 class; open-fdd's FC rules are scoped to `ahu`).
 

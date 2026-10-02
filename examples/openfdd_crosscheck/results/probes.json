@@ -3,17 +3,18 @@
  "window": "run",
  "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
  "versions": {
-  "camber": "0.91.0 at commit b509bb1 (g36_afdd at its defaults)",
+  "camber": "0.91.0 at commit be4adea (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
   "role_map": "1",
-  "profiles": "1",
+  "profiles": "2",
   "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
-  "open-fdd pandas": "open-fdd pandas 4.4.9"
+  "open-fdd pandas": "open-fdd pandas 4.4.9",
+  "open-fdd sql": "fdd_cli from commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2 (camber-crosscheck/fdd_cli:32a6d44)"
  },
  "datasets": [
   {
    "id": "synthetic probes",
    "licence": "n/a",
-   "n_labelled": 3,
+   "n_labelled": 4,
    "n_fault_free": 0
   }
  ],
@@ -30,12 +31,15 @@
    "fc9_oat_4_over_sp_free_cooling": [
     "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
     "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
+   ],
+   "fc8_sat_3p5_over_mat_free_cooling": [
+    "cooling-coil-entering-temp <- mixed_air_temp (no heat_valve is mapped (an AHU without a heating coil))",
+    "cooling-coil-leaving-temp <- supply_air_temp (no heat_valve is mapped (an AHU without a heating coil))"
    ]
-  }
+  },
+  "sql": {}
  },
- "not_run": {
-  "open-fdd sql": "not run: the Docker daemon did not answer docker info within 20 s (Docker Desktop needs a restart)"
- },
+ "not_run": {},
  "scores": {
   "common": {
    "pooled": {
@@ -53,18 +57,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "declined: missing input(s): DSP, DSPSP",
         "fc13_sat_3_over_sp_half_cooling": "declined: missing input(s): DSP, DSPSP",
-        "fc9_oat_4_over_sp_free_cooling": "declined: missing input(s): DSP, DSPSP"
+        "fc9_oat_4_over_sp_free_cooling": "declined: missing input(s): DSP, DSPSP",
+        "fc8_sat_3p5_over_mat_free_cooling": "declined: missing input(s): DSP, DSPSP"
        }
       },
       "FC2": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -72,13 +77,13 @@
       },
       "FC3": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -86,13 +91,13 @@
       },
       "FC4": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -110,7 +115,8 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "not applicable: its operating states never occurred",
         "fc13_sat_3_over_sp_half_cooling": "not applicable: its operating states never occurred",
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC6": {
@@ -125,7 +131,8 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
         "fc13_sat_3_over_sp_half_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "fc9_oat_4_over_sp_free_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
+        "fc9_oat_4_over_sp_free_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
+        "fc8_sat_3p5_over_mat_free_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
        }
       },
       "FC7": {
@@ -140,18 +147,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "omitted: no heating coil",
         "fc13_sat_3_over_sp_half_cooling": "omitted: no heating coil",
-        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil"
+        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil",
+        "fc8_sat_3p5_over_mat_free_cooling": "omitted: no heating coil"
        }
       },
       "FC8": {
        "tp": 0,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -162,13 +170,13 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -189,7 +197,8 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "not applicable: its operating states never occurred",
         "fc13_sat_3_over_sp_half_cooling": "not applicable: its operating states never occurred",
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC11": {
@@ -204,18 +213,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "not applicable: its operating states never occurred",
         "fc13_sat_3_over_sp_half_cooling": "not applicable: its operating states never occurred",
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC12": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -234,18 +244,19 @@
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC14": {
        "tp": 0,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -266,19 +277,20 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "omitted: no heating coil",
         "fc13_sat_3_over_sp_half_cooling": "omitted: no heating coil",
-        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil"
+        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil",
+        "fc8_sat_3p5_over_mat_free_cooling": "omitted: no heating coil"
        }
       }
      },
      "overall": {
       "tp": 0,
-      "fn": 3,
+      "fn": 4,
       "fp": 0,
       "tn": 0,
       "tpr": 0.0,
       "tpr_ci": [
        0.0,
-       0.5615
+       0.4899
       ],
       "fpr": null,
       "fpr_ci": null,
@@ -287,11 +299,11 @@
      "by_fault_type": {
       "probe": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ]
       }
      }
@@ -310,18 +322,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp"
        }
       },
       "FC2": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -329,13 +342,13 @@
       },
       "FC3": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -343,13 +356,13 @@
       },
       "FC4": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -367,6 +380,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
@@ -382,6 +396,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav-total-airflow",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: vav-total-airflow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav-total-airflow",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: vav-total-airflow"
        }
       },
@@ -397,18 +412,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
       "FC8": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -416,13 +432,13 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -430,13 +446,13 @@
       },
       "FC10": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -444,13 +460,13 @@
       },
       "FC11": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -458,13 +474,13 @@
       },
       "FC12": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -472,13 +488,13 @@
       },
       "FC13": {
        "tp": 1,
-       "fn": 2,
+       "fn": 3,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.3333,
+       "tpr": 0.25,
        "tpr_ci": [
-        0.0615,
-        0.7923
+        0.0456,
+        0.6994
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -486,13 +502,13 @@
       },
       "FC14": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -510,19 +526,20 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp"
        }
       }
      },
      "overall": {
       "tp": 1,
-      "fn": 2,
+      "fn": 3,
       "fp": 0,
       "tn": 0,
-      "tpr": 0.3333,
+      "tpr": 0.25,
       "tpr_ci": [
-       0.0615,
-       0.7923
+       0.0456,
+       0.6994
       ],
       "fpr": null,
       "fpr_ci": null,
@@ -531,11 +548,11 @@
      "by_fault_type": {
       "probe": {
        "tp": 1,
-       "fn": 2,
-       "tpr": 0.3333,
+       "fn": 3,
+       "tpr": 0.25,
        "tpr_ci": [
-        0.0615,
-        0.7923
+        0.0456,
+        0.6994
        ]
       }
      }
@@ -554,18 +571,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp"
        }
       },
       "FC2": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -573,13 +591,13 @@
       },
       "FC3": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -587,13 +605,13 @@
       },
       "FC4": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -611,6 +629,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
@@ -626,6 +645,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav-total-airflow",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: vav-total-airflow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav-total-airflow",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: vav-total-airflow"
        }
       },
@@ -641,32 +661,33 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
       "FC8": {
-       "tp": 0,
+       "tp": 1,
        "fn": 3,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.0,
+       "tpr": 0.25,
        "tpr_ci": [
-        0.0,
-        0.5615
+        0.0456,
+        0.6994
        ],
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 1,
+       "tp": 2,
        "fn": 2,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.3333,
+       "tpr": 0.5,
        "tpr_ci": [
-        0.0615,
-        0.7923
+        0.15,
+        0.85
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -674,13 +695,13 @@
       },
       "FC10": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -688,13 +709,13 @@
       },
       "FC11": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -702,13 +723,13 @@
       },
       "FC12": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -716,13 +737,13 @@
       },
       "FC13": {
        "tp": 2,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.6667,
+       "tpr": 0.5,
        "tpr_ci": [
-        0.2077,
-        0.9385
+        0.15,
+        0.85
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -730,13 +751,13 @@
       },
       "FC14": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -754,18 +775,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp"
        }
       }
      },
      "overall": {
-      "tp": 3,
+      "tp": 4,
       "fn": 0,
       "fp": 0,
       "tn": 0,
       "tpr": 1.0,
       "tpr_ci": [
-       0.4385,
+       0.5101,
        1.0
       ],
       "fpr": null,
@@ -774,12 +796,506 @@
      },
      "by_fault_type": {
       "probe": {
-       "tp": 3,
+       "tp": 4,
        "fn": 0,
        "tpr": 1.0,
        "tpr_ci": [
-        0.4385,
+        0.5101,
         1.0
+       ]
+      }
+     }
+    },
+    "open-fdd sql [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct_static, duct_static_sp"
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav_total_flow",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: vav_total_flow",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: vav_total_flow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav_total_flow"
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC8": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC9": {
+       "tp": 2,
+       "fn": 2,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.15,
+        0.85
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC10": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC13": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC14": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC15": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      }
+     },
+     "overall": {
+      "tp": 3,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "tpr": 0.75,
+      "tpr_ci": [
+       0.3006,
+       0.9544
+      ],
+      "fpr": null,
+      "fpr_ci": null,
+      "not_evaluated": []
+     },
+     "by_fault_type": {
+      "probe": {
+       "tp": 3,
+       "fn": 1,
+       "tpr": 0.75,
+       "tpr_ci": [
+        0.3006,
+        0.9544
+       ]
+      }
+     }
+    },
+    "open-fdd sql [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct_static, duct_static_sp"
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav_total_flow",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: vav_total_flow",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: vav_total_flow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav_total_flow"
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC8": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC9": {
+       "tp": 2,
+       "fn": 2,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.15,
+        0.85
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC10": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC13": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC14": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC15": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      }
+     },
+     "overall": {
+      "tp": 3,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "tpr": 0.75,
+      "tpr_ci": [
+       0.3006,
+       0.9544
+      ],
+      "fpr": null,
+      "fpr_ci": null,
+      "not_evaluated": []
+     },
+     "by_fault_type": {
+      "probe": {
+       "tp": 3,
+       "fn": 1,
+       "tpr": 0.75,
+       "tpr_ci": [
+        0.3006,
+        0.9544
        ]
       }
      }
@@ -802,18 +1318,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "declined: missing input(s): DSP, DSPSP",
         "fc13_sat_3_over_sp_half_cooling": "declined: missing input(s): DSP, DSPSP",
-        "fc9_oat_4_over_sp_free_cooling": "declined: missing input(s): DSP, DSPSP"
+        "fc9_oat_4_over_sp_free_cooling": "declined: missing input(s): DSP, DSPSP",
+        "fc8_sat_3p5_over_mat_free_cooling": "declined: missing input(s): DSP, DSPSP"
        }
       },
       "FC2": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -821,13 +1338,13 @@
       },
       "FC3": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -835,13 +1352,13 @@
       },
       "FC4": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -859,7 +1376,8 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "not applicable: its operating states never occurred",
         "fc13_sat_3_over_sp_half_cooling": "not applicable: its operating states never occurred",
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC6": {
@@ -874,7 +1392,8 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
         "fc13_sat_3_over_sp_half_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "fc9_oat_4_over_sp_free_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
+        "fc9_oat_4_over_sp_free_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
+        "fc8_sat_3p5_over_mat_free_cooling": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
        }
       },
       "FC7": {
@@ -889,18 +1408,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "omitted: no heating coil",
         "fc13_sat_3_over_sp_half_cooling": "omitted: no heating coil",
-        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil"
+        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil",
+        "fc8_sat_3p5_over_mat_free_cooling": "omitted: no heating coil"
        }
       },
       "FC8": {
        "tp": 0,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -911,13 +1431,13 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -938,7 +1458,8 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "not applicable: its operating states never occurred",
         "fc13_sat_3_over_sp_half_cooling": "not applicable: its operating states never occurred",
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC11": {
@@ -953,18 +1474,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "not applicable: its operating states never occurred",
         "fc13_sat_3_over_sp_half_cooling": "not applicable: its operating states never occurred",
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC12": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -983,18 +1505,19 @@
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
-        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred"
+        "fc9_oat_4_over_sp_free_cooling": "not applicable: its operating states never occurred",
+        "fc8_sat_3p5_over_mat_free_cooling": "not applicable: its operating states never occurred"
        }
       },
       "FC14": {
        "tp": 0,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1015,19 +1538,20 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "omitted: no heating coil",
         "fc13_sat_3_over_sp_half_cooling": "omitted: no heating coil",
-        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil"
+        "fc9_oat_4_over_sp_free_cooling": "omitted: no heating coil",
+        "fc8_sat_3p5_over_mat_free_cooling": "omitted: no heating coil"
        }
       }
      },
      "overall": {
       "tp": 0,
-      "fn": 3,
+      "fn": 4,
       "fp": 0,
       "tn": 0,
       "tpr": 0.0,
       "tpr_ci": [
        0.0,
-       0.5615
+       0.4899
       ],
       "fpr": null,
       "fpr_ci": null,
@@ -1036,11 +1560,11 @@
      "by_fault_type": {
       "probe": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ]
       }
      }
@@ -1059,18 +1583,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp"
        }
       },
       "FC2": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1078,13 +1603,13 @@
       },
       "FC3": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1092,13 +1617,13 @@
       },
       "FC4": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1116,6 +1641,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
@@ -1131,6 +1657,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav-total-airflow",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: vav-total-airflow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav-total-airflow",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: vav-total-airflow"
        }
       },
@@ -1146,18 +1673,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
       "FC8": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1165,13 +1693,13 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1179,13 +1707,13 @@
       },
       "FC10": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1193,13 +1721,13 @@
       },
       "FC11": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1207,13 +1735,13 @@
       },
       "FC12": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1221,13 +1749,13 @@
       },
       "FC13": {
        "tp": 1,
-       "fn": 2,
+       "fn": 3,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.3333,
+       "tpr": 0.25,
        "tpr_ci": [
-        0.0615,
-        0.7923
+        0.0456,
+        0.6994
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1235,13 +1763,13 @@
       },
       "FC14": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1259,19 +1787,20 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp"
        }
       }
      },
      "overall": {
       "tp": 1,
-      "fn": 2,
+      "fn": 3,
       "fp": 0,
       "tn": 0,
-      "tpr": 0.3333,
+      "tpr": 0.25,
       "tpr_ci": [
-       0.0615,
-       0.7923
+       0.0456,
+       0.6994
       ],
       "fpr": null,
       "fpr_ci": null,
@@ -1280,11 +1809,11 @@
      "by_fault_type": {
       "probe": {
        "tp": 1,
-       "fn": 2,
-       "tpr": 0.3333,
+       "fn": 3,
+       "tpr": 0.25,
        "tpr_ci": [
-        0.0615,
-        0.7923
+        0.0456,
+        0.6994
        ]
       }
      }
@@ -1303,18 +1832,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: duct-static-pressure, duct-static-pressure-sp"
        }
       },
       "FC2": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1322,13 +1852,13 @@
       },
       "FC3": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1336,13 +1866,13 @@
       },
       "FC4": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1360,6 +1890,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
@@ -1375,6 +1906,7 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav-total-airflow",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: vav-total-airflow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav-total-airflow",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: vav-total-airflow"
        }
       },
@@ -1390,32 +1922,33 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-valve",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-valve",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-valve",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-valve"
        }
       },
       "FC8": {
-       "tp": 0,
+       "tp": 1,
        "fn": 3,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.0,
+       "tpr": 0.25,
        "tpr_ci": [
-        0.0,
-        0.5615
+        0.0456,
+        0.6994
        ],
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 1,
+       "tp": 2,
        "fn": 2,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.3333,
+       "tpr": 0.5,
        "tpr_ci": [
-        0.0615,
-        0.7923
+        0.15,
+        0.85
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1423,13 +1956,13 @@
       },
       "FC10": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1437,13 +1970,13 @@
       },
       "FC11": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1451,13 +1984,13 @@
       },
       "FC12": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1465,13 +1998,13 @@
       },
       "FC13": {
        "tp": 2,
-       "fn": 1,
+       "fn": 2,
        "fp": 0,
        "tn": 0,
-       "tpr": 0.6667,
+       "tpr": 0.5,
        "tpr_ci": [
-        0.2077,
-        0.9385
+        0.15,
+        0.85
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1479,13 +2012,13 @@
       },
       "FC14": {
        "tp": 0,
-       "fn": 3,
+       "fn": 4,
        "fp": 0,
        "tn": 0,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.5615
+        0.4899
        ],
        "fpr": null,
        "fpr_ci": null,
@@ -1503,18 +2036,19 @@
        "not_evaluated": {
         "fc13_sat_1p5_over_sp_full_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc13_sat_3_over_sp_half_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
         "fc9_oat_4_over_sp_free_cooling": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp"
        }
       }
      },
      "overall": {
-      "tp": 3,
+      "tp": 4,
       "fn": 0,
       "fp": 0,
       "tn": 0,
       "tpr": 1.0,
       "tpr_ci": [
-       0.4385,
+       0.5101,
        1.0
       ],
       "fpr": null,
@@ -1523,12 +2057,506 @@
      },
      "by_fault_type": {
       "probe": {
-       "tp": 3,
+       "tp": 4,
        "fn": 0,
        "tpr": 1.0,
        "tpr_ci": [
-        0.4385,
+        0.5101,
         1.0
+       ]
+      }
+     }
+    },
+    "open-fdd sql [g36]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct_static, duct_static_sp"
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav_total_flow",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: vav_total_flow",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: vav_total_flow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav_total_flow"
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC8": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC9": {
+       "tp": 2,
+       "fn": 2,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.15,
+        0.85
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC10": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC13": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC14": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC15": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      }
+     },
+     "overall": {
+      "tp": 3,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "tpr": 0.75,
+      "tpr_ci": [
+       0.3006,
+       0.9544
+      ],
+      "fpr": null,
+      "fpr_ci": null,
+      "not_evaluated": []
+     },
+     "by_fault_type": {
+      "probe": {
+       "tp": 3,
+       "fn": 1,
+       "tpr": 0.75,
+       "tpr_ci": [
+        0.3006,
+        0.9544
+       ]
+      }
+     }
+    },
+    "open-fdd sql [openfdd_defaults]": {
+     "per_fc": {
+      "FC1": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: duct_static, duct_static_sp",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: duct_static, duct_static_sp"
+       }
+      },
+      "FC2": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC3": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC4": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC5": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC6": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: vav_total_flow",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: vav_total_flow",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: vav_total_flow",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: vav_total_flow"
+       }
+      },
+      "FC7": {
+       "tp": 0,
+       "fn": 0,
+       "fp": 0,
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {
+        "fc13_sat_1p5_over_sp_full_cooling": "missing roles: htg_valve_pct",
+        "fc13_sat_3_over_sp_half_cooling": "missing roles: htg_valve_pct",
+        "fc9_oat_4_over_sp_free_cooling": "missing roles: htg_valve_pct",
+        "fc8_sat_3p5_over_mat_free_cooling": "missing roles: htg_valve_pct"
+       }
+      },
+      "FC8": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC9": {
+       "tp": 2,
+       "fn": 2,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.15,
+        0.85
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC10": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC11": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC12": {
+       "tp": 0,
+       "fn": 4,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4899
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC13": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC14": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      },
+      "FC15": {
+       "tp": 1,
+       "fn": 3,
+       "fp": 0,
+       "tn": 0,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": null,
+       "fpr_ci": null,
+       "not_evaluated": {}
+      }
+     },
+     "overall": {
+      "tp": 3,
+      "fn": 1,
+      "fp": 0,
+      "tn": 0,
+      "tpr": 0.75,
+      "tpr_ci": [
+       0.3006,
+       0.9544
+      ],
+      "fpr": null,
+      "fpr_ci": null,
+      "not_evaluated": []
+     },
+     "by_fault_type": {
+      "probe": {
+       "tp": 3,
+       "fn": 1,
+       "tpr": 0.75,
+       "tpr_ci": [
+        0.3006,
+        0.9544
        ]
       }
      }
@@ -2078,6 +3106,186 @@
    "native_fired": null
   },
   {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "declined: missing input(s): DSP, DSPSP",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "not applicable: its operating states never occurred",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "omitted: no heating coil",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC10",
+   "evaluated": false,
+   "reason": "not applicable: its operating states never occurred",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC11",
+   "evaluated": false,
+   "reason": "not applicable: its operating states never occurred",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC13",
+   "evaluated": false,
+   "reason": "not applicable: its operating states never occurred",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
+  },
+  {
+   "engine": "camber g36_afdd",
+   "profile": "camber_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC15",
+   "evaluated": false,
+   "reason": "omitted: no heating coil",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
    "engine": "open-fdd pandas",
    "profile": "openfdd_defaults",
    "equip": "fc13_sat_1p5_over_sp_full_cooling",
@@ -2440,6 +3648,186 @@
   {
    "engine": "open-fdd pandas",
    "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: heating-valve",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav-total-airflow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: heating-valve",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC15",
+   "evaluated": false,
+   "reason": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "openfdd_defaults",
    "equip": "fc9_oat_4_over_sp_free_cooling",
    "fc": "FC1",
    "evaluated": false,
@@ -2980,6 +4368,186 @@
   {
    "engine": "open-fdd pandas",
    "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: heating-valve",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav-total-airflow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: heating-valve",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC15",
+   "evaluated": false,
+   "reason": "missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd pandas",
+   "profile": "g36",
    "equip": "fc9_oat_4_over_sp_free_cooling",
    "fc": "FC1",
    "evaluated": false,
@@ -3156,6 +4724,1446 @@
    "eval_hours": null,
    "denominator": "",
    "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "openfdd_defaults",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC1",
+   "evaluated": false,
+   "reason": "missing roles: duct_static, duct_static_sp",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC2",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC3",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC4",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC5",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC6",
+   "evaluated": false,
+   "reason": "missing roles: vav_total_flow",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC7",
+   "evaluated": false,
+   "reason": "missing roles: htg_valve_pct",
+   "fault_hours": null,
+   "eval_hours": null,
+   "denominator": "",
+   "native_fired": null
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC8",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC9",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC10",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC11",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC12",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC13",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC14",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
+  },
+  {
+   "engine": "open-fdd sql",
+   "profile": "g36",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "fc": "FC15",
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 24.0,
+   "eval_hours": 24.0,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   }
  ],
  "caveats": [
@@ -3182,6 +6190,16 @@
      "observed": "not_fired",
      "expected_fired": false,
      "reason": null
+    },
+    "open-fdd sql [openfdd_defaults]": {
+     "observed": "fired",
+     "expected_fired": true,
+     "reason": null
+    },
+    "open-fdd sql [g36]": {
+     "observed": "fired",
+     "expected_fired": true,
+     "reason": null
     }
    }
   },
@@ -3203,6 +6221,16 @@
      "observed": "fired",
      "expected_fired": true,
      "reason": null
+    },
+    "open-fdd sql [openfdd_defaults]": {
+     "observed": "not_fired",
+     "expected_fired": false,
+     "reason": null
+    },
+    "open-fdd sql [g36]": {
+     "observed": "not_fired",
+     "expected_fired": false,
+     "reason": null
     }
    }
   },
@@ -3221,6 +6249,47 @@
      "reason": null
     },
     "open-fdd pandas [g36]": {
+     "observed": "not_fired",
+     "expected_fired": false,
+     "reason": null
+    },
+    "open-fdd sql [openfdd_defaults]": {
+     "observed": "fired",
+     "expected_fired": true,
+     "reason": null
+    },
+    "open-fdd sql [g36]": {
+     "observed": "fired",
+     "expected_fired": true,
+     "reason": null
+    }
+   }
+  },
+  "fc8_sat_3p5_over_mat_free_cooling": {
+   "fc": "FC8",
+   "what": "free cooling (damper 50 %, valve shut), SAT 3.5 F above MAT: outside open-fdd's default band (|SAT - 0.55 - MAT| > 1.63 F), inside the G36 one (|SAT - 2 - MAT| > 5.39 F). A positive control: FC8's tolerances are reachable in both open-fdd engines, so the G36 profile must silence it, showing the override mechanism is applied",
+   "engines": {
+    "camber g36_afdd [camber_defaults]": {
+     "observed": "not_fired",
+     "expected_fired": false,
+     "reason": null
+    },
+    "open-fdd pandas [openfdd_defaults]": {
+     "observed": "fired",
+     "expected_fired": true,
+     "reason": null
+    },
+    "open-fdd pandas [g36]": {
+     "observed": "not_fired",
+     "expected_fired": false,
+     "reason": null
+    },
+    "open-fdd sql [openfdd_defaults]": {
+     "observed": "fired",
+     "expected_fired": true,
+     "reason": null
+    },
+    "open-fdd sql [g36]": {
      "observed": "not_fired",
      "expected_fired": false,
      "reason": null

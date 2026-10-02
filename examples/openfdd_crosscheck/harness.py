@@ -100,26 +100,28 @@ def openfdd_frame(frame: pd.DataFrame, role_map: dict, engine: str) -> tuple[pd.
     return out, applied
 
 
-def write_sql_tree(
-    frames: dict, role_map: dict, root: str, *, building: str = "crosscheck", grid_minutes: int
-) -> dict:
-    """Write the SQL engine's CSV building tree; returns ``{equip: applied}``.
+def write_sql_tree(frames: dict, role_map: dict, root: str, *, grid_minutes: int) -> dict:
+    """Write the SQL engine's CSV input, **one building per equipment**; returns
+    ``{equip: applied}``.
 
-    Layout: ``<root>/<building>/manifest.json`` and one ``<equip>/columns.csv`` +
-    ``history_wide.csv`` (``timestamp_utc`` first) per equipment. Column names are the SQL roles
-    themselves, and columns.csv names the role again explicitly.
+    Layout per equipment ``e`` (``b = _safe(e)``): ``<root>/<b>/manifest.json`` and
+    ``<root>/<b>/<b>/columns.csv`` + ``history_wide.csv`` (``timestamp_utc`` first). Column names
+    are the SQL roles themselves, and columns.csv names the role again. One building per
+    equipment matters: ``fdd_cli run-rules`` checks a rule's required roles against the
+    building's column set (the union over its equipment), so equipment sharing a building would
+    be reported as evaluated -- with zero fault hours -- on inputs only a neighbour has.
     """
-    bdir = os.path.join(root, building)
-    os.makedirs(bdir, exist_ok=True)
-    with open(os.path.join(bdir, "manifest.json"), "w", encoding="utf-8") as fh:
-        json.dump({"grid_minutes": int(grid_minutes)}, fh)
     units = {r["sql"]: r["unit"] for r in role_map["roles"]}
     notes = {}
     for equip, frame in frames.items():
+        b = _safe(equip)
+        bdir = os.path.join(root, b)
+        edir = os.path.join(bdir, b)
+        os.makedirs(edir, exist_ok=True)
+        with open(os.path.join(bdir, "manifest.json"), "w", encoding="utf-8") as fh:
+            json.dump({"grid_minutes": int(grid_minutes)}, fh)
         df, applied = openfdd_frame(frame, role_map, "sql")
         notes[equip] = applied
-        edir = os.path.join(bdir, _safe(equip))
-        os.makedirs(edir, exist_ok=True)
         with open(os.path.join(edir, "columns.csv"), "w", encoding="utf-8") as fh:
             fh.write("column,point_role,point_name,units\n")
             for c in df.columns:
@@ -154,49 +156,44 @@ def sql_rule_overrides(profile: dict, role_map: dict) -> dict:
 
 
 def docker_commands(
-    image: str, tree: str, work: str, profile: str, *, building: str, tuning_file: str | None
+    image: str, tree: str, work: str, profile: str, *, buildings: list, tuning_file: str | None
 ) -> list:
-    """The two ``docker run`` argv lists for one SQL-engine profile (ingest, then run-rules).
+    """``[ingest, run]``: the two ``docker run`` argv lists for one SQL-engine profile.
 
-    Both run with ``--network none``; the CSV tree, the Parquet cache (for run-rules) and the
-    tuning file are mounted read-only, only the output directory is writable.
+    Each container loops over ``buildings`` (one per equipment, see :func:`write_sql_tree`) with
+    ``/bin/sh``. Both run with ``--network none``. The ingest container reads the CSV tree
+    read-only and writes Parquet to ``<work>/parquet``; the run container reads that Parquet and
+    the tuning file read-only and writes only ``<work>/results-<profile>/<building>/``.
     """
-    parquet = os.path.join(work, "parquet")
-    results = os.path.join(work, f"results-{profile}")
-    base = ["docker", "run", "--rm", "--network", "none"]
+    for b in buildings:
+        if not b or _safe(b) != b:
+            raise ValueError(f"unsafe building name {b!r}")
+    names = " ".join(buildings)
+    base = ["docker", "run", "--rm", "--network", "none", "--entrypoint", "/bin/sh"]
     ingest = base + [
         "-v",
         f"{os.path.abspath(tree)}:/data:ro",
         "-v",
-        f"{os.path.abspath(work)}:/work",
+        f"{os.path.abspath(os.path.join(work, 'parquet'))}:/parquet",
         image,
-        "ingest",
-        "--data-root",
-        "/data",
-        "--building",
-        building,
-        "--out",
-        "/work/parquet",
+        "-c",
+        f"set -e; for b in {names}; do openfdd_cli ingest --data-root /data --building $b "
+        "--out /parquet/$b > /dev/null; done",
     ]
     run = base + [
         "-v",
-        f"{os.path.abspath(parquet)}:/parquet:ro",
+        f"{os.path.abspath(os.path.join(work, 'parquet'))}:/parquet:ro",
         "-v",
-        f"{os.path.abspath(results)}:/out",
+        f"{os.path.abspath(os.path.join(work, f'results-{profile}'))}:/out",
     ]
     if tuning_file:
         run += ["-v", f"{os.path.abspath(tuning_file)}:/opt/open-fdd/rule_tuning/defaults.yaml:ro"]
     run += [
         image,
-        "run-rules",
-        "--parquet",
-        "/parquet",
-        "--rules-dir",
-        "/opt/open-fdd/sql_rules",
-        "--out",
-        "/out",
-        "--unit-system",
-        "imperial",
+        "-c",
+        f"set -e; for b in {names}; do mkdir -p /out/$b; openfdd_cli run-rules --parquet "
+        "/parquet/$b --rules-dir /opt/open-fdd/sql_rules --out /out/$b --unit-system imperial "
+        "> /out/$b.report.json; done",
     ]
     return [ingest, run]
 
@@ -475,8 +472,9 @@ def score(verdicts: list, labels: dict, *, rule=common_verdict) -> dict:
 
 # --------------------------------------------------------------------------- probes
 #: Synthetic one-day frames that isolate one engine behaviour each. ``expect`` maps
-#: "<engine> [<profile>]" -> whether the FC should fire (engine's own alarm). Entries for the SQL
-#: engine are predictions from a static reading of the pinned source until it is run.
+#: "<engine> [<profile>]" -> whether the FC should fire (engine's own alarm). The SQL entries were
+#: first predicted from a static reading of the pinned source, then confirmed by running fdd_cli
+#: (fixtures/sql_probe_results.json).
 PROBES = {
     "fc13_sat_1p5_over_sp_full_cooling": {
         "fc": "FC13",
@@ -488,7 +486,7 @@ PROBES = {
             "open-fdd pandas [openfdd_defaults]": True,
             "open-fdd pandas [g36]": False,
             "open-fdd sql [openfdd_defaults]": True,
-            "open-fdd sql [g36]": True,  # predicted: eps_sat is not reachable (profiles.json)
+            "open-fdd sql [g36]": True,  # eps_sat is not reachable (profiles.json)
         },
     },
     "fc13_sat_3_over_sp_half_cooling": {
@@ -500,7 +498,7 @@ PROBES = {
             "camber g36_afdd [camber_defaults]": False,
             "open-fdd pandas [openfdd_defaults]": True,  # clg_full_min default 0.01
             "open-fdd pandas [g36]": True,
-            "open-fdd sql [openfdd_defaults]": False,  # predicted: clg_full_min default 0.9
+            "open-fdd sql [openfdd_defaults]": False,  # clg_full_min default 0.9
             "open-fdd sql [g36]": False,
         },
     },
@@ -515,7 +513,27 @@ PROBES = {
             "open-fdd pandas [openfdd_defaults]": True,
             "open-fdd pandas [g36]": False,
             "open-fdd sql [openfdd_defaults]": True,
-            "open-fdd sql [g36]": True,  # predicted: the EPS_MAT FC9 reads stays at 1.15
+            "open-fdd sql [g36]": True,  # the EPS_MAT FC9 reads stays at 1.15
+        },
+    },
+    "fc8_sat_3p5_over_mat_free_cooling": {
+        "fc": "FC8",
+        "what": "free cooling (damper 50 %, valve shut), SAT 3.5 F above MAT: outside open-fdd's "
+        "default band (|SAT - 0.55 - MAT| > 1.63 F), inside the G36 one (|SAT - 2 - MAT| > "
+        "5.39 F). A positive control: FC8's tolerances are reachable in both open-fdd engines, so "
+        "the G36 profile must silence it, showing the override mechanism is applied",
+        "frame": {
+            "cool_valve": 0.0,
+            "oa_damper": 50.0,
+            "oat_offset_sp": 4.0,
+            "sat_offset_mat": 3.5,
+        },
+        "expect": {
+            "camber g36_afdd [camber_defaults]": False,
+            "open-fdd pandas [openfdd_defaults]": True,
+            "open-fdd pandas [g36]": False,
+            "open-fdd sql [openfdd_defaults]": True,
+            "open-fdd sql [g36]": False,
         },
     },
 }
@@ -531,7 +549,7 @@ def probe_frame(spec: dict, *, periods: int = 96, freq: str = "15min") -> pd.Dat
     if spec.get("oa_damper", 0.0) >= 40.0 and spec.get("cool_valve", 0.0) == 0.0:
         # free cooling: mixed air sits between OAT and RAT and the supply air follows it
         mat = (oat + 72.0) / 2.0
-        sat = mat + 0.5
+        sat = mat + spec.get("sat_offset_mat", 0.5)
     cols = {
         "supply_air_temp": sat,
         "supply_air_temp_sp": sp,
@@ -572,6 +590,11 @@ def markdown(results: dict) -> str:
         lines.append(
             f"- `{d['id']}` ({d['licence']}): {d['n_labelled']} labelled runs "
             f"({d['n_fault_free']} fault-free), window `{results['window']}`"
+            + (
+                f"; CAMBER template params {d['camber_template_params']}"
+                if d.get("camber_template_params")
+                else ""
+            )
         )
     for group, engines in results["scores"]["common"].items():
         lines += ["", f"## {group}"]

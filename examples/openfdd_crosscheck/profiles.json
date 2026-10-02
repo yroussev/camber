@@ -1,6 +1,6 @@
 {
-  "_comment": "Tolerance profiles for running open-fdd in the G36 cross-check. `openfdd_defaults` passes no override: each open-fdd engine runs at its own registry defaults. `g36` sets the G36 Table 5.16.14.7 initial tolerances CAMBER's g36_afdd uses by default (camber.fdd_g36.G36Thresholds: eps SAT 2, RAT 2, MAT 5, OAT 5, CCET 5, CCLT 2, HCET 5, HCLT 2 degF; supply-fan heat 2 degF; duct static 0.1 inH2O; fan speed 0.05; airflow 0.30; dT_min 10 degF; dOS_max 7). Tolerances only: delays, confirm windows and the 'valve fully open' / damper-position thresholds stay at each engine's defaults and are reported as such. Overrides go through each engine's supported mechanism: the pandas engine's `params` argument of open_fdd.rules.run_rule, and the SQL engine's rule_tuning/defaults.yaml (read by fdd_cli run-rules from the directory next to --rules-dir). SQL notes: several SQL rules use one tolerance placeholder for every sensor in the equation (FC5, FC10 read EPS_MAT; FC12 reads MIX_TOL). Their equations add the two sensor tolerances (or take the root-sum-square of two equal ones), so the value below reproduces the G36 margin exactly: FC5/FC12 SAT 2 + MAT 5 = 2 x 3.5; FC10 sqrt(5^2 + 5^2) = sqrt(2 x 5^2). `sql_not_expressible` lists the FCs whose G36 tolerance the tuning file cannot reach in the pinned SQL source (static reading of crates/fdd_rules/src/params.rs at the pinned commit; the harness's SQL probe confirms or refutes it when the engine runs).",
-  "version": "1",
+  "_comment": "Tolerance profiles for running open-fdd in the G36 cross-check. `openfdd_defaults` passes no override: each open-fdd engine runs at its own registry defaults. `g36` sets the G36 Table 5.16.14.7 initial tolerances CAMBER's g36_afdd uses by default (camber.fdd_g36.G36Thresholds: eps SAT 2, RAT 2, MAT 5, OAT 5, CCET 5, CCLT 2, HCET 5, HCLT 2 degF; supply-fan heat 2 degF; duct static 0.1 inH2O; fan speed 0.05; airflow 0.30; dT_min 10 degF; dOS_max 7). Tolerances only: delays, confirm windows and the 'valve fully open' / damper-position thresholds stay at each engine's defaults and are reported as such. Overrides go through each engine's supported mechanism: the pandas engine's `params` argument of open_fdd.rules.run_rule, and the SQL engine's rule_tuning/defaults.yaml (read by fdd_cli run-rules from the directory next to --rules-dir). SQL notes: several SQL rules use one tolerance placeholder for every sensor in the equation (FC5, FC10 read EPS_MAT; FC12 reads MIX_TOL). Their equations add the two sensor tolerances (or take the root-sum-square of two equal ones), so the value below reproduces the G36 margin exactly: FC5/FC12 SAT 2 + MAT 5 = 2 x 3.5; FC10 sqrt(5^2 + 5^2) = sqrt(2 x 5^2). `sql_not_expressible` lists the FCs whose G36 tolerances the tuning file cannot reach at the pinned commit (read from crates/fdd_rules/src/params.rs, confirmed by running fdd_cli on the synthetic probes: FC13 at the g36 profile still fires at SAT 1.5 F over setpoint, FC9 at OAT 4 F over it, while the tunable FC8 is silenced as G36 requires). Those rules run at their own defaults in the g36 profile rather than with a partial override.",
+  "version": "2",
   "profiles": {
     "openfdd_defaults": {
       "description": "open-fdd at its own registry defaults (no override)",
@@ -10,45 +10,125 @@
     "g36": {
       "description": "open-fdd at the G36 Table 5.16.14.7 tolerances CAMBER uses",
       "pandas": {
-        "FC1": {"eps_dsp": 0.1, "eps_vfd_spd": 0.05, "fan_hi": 0.95},
-        "FC2": {"eps_mat": 5.0, "eps_rat": 2.0, "eps_oat": 5.0},
-        "FC3": {"eps_mat": 5.0, "eps_rat": 2.0, "eps_oat": 5.0},
-        "FC4": {"delta_os_max": 7},
-        "FC5": {"eps_sat": 2.0, "eps_mat": 5.0, "delta_supply_fan": 2.0},
-        "FC6": {"eps_airflow": 0.3, "delta_t_min": 10.0},
-        "FC7": {"eps_sat": 2.0},
-        "FC8": {"eps_sat": 2.0, "eps_mat": 5.0, "delta_supply_fan": 2.0},
-        "FC9": {"eps_oat": 5.0, "eps_sat": 2.0, "delta_supply_fan": 2.0},
-        "FC10": {"eps_mat": 5.0, "eps_oat": 5.0},
-        "FC11": {"eps_oat": 5.0, "eps_sat": 2.0, "delta_supply_fan": 2.0},
-        "FC12": {"eps_sat": 2.0, "eps_mat": 5.0, "delta_supply_fan": 2.0},
-        "FC13": {"eps_sat": 2.0},
-        "FC14": {"eps_ccet": 5.0, "eps_cclt": 2.0, "delta_supply_fan": 2.0},
-        "FC15": {"eps_hcet": 5.0, "eps_hclt": 2.0, "delta_supply_fan": 2.0}
+        "FC1": {
+          "eps_dsp": 0.1,
+          "eps_vfd_spd": 0.05,
+          "fan_hi": 0.95
+        },
+        "FC2": {
+          "eps_mat": 5.0,
+          "eps_rat": 2.0,
+          "eps_oat": 5.0
+        },
+        "FC3": {
+          "eps_mat": 5.0,
+          "eps_rat": 2.0,
+          "eps_oat": 5.0
+        },
+        "FC4": {
+          "delta_os_max": 7
+        },
+        "FC5": {
+          "eps_sat": 2.0,
+          "eps_mat": 5.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC6": {
+          "eps_airflow": 0.3,
+          "delta_t_min": 10.0
+        },
+        "FC7": {
+          "eps_sat": 2.0
+        },
+        "FC8": {
+          "eps_sat": 2.0,
+          "eps_mat": 5.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC9": {
+          "eps_oat": 5.0,
+          "eps_sat": 2.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC10": {
+          "eps_mat": 5.0,
+          "eps_oat": 5.0
+        },
+        "FC11": {
+          "eps_oat": 5.0,
+          "eps_sat": 2.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC12": {
+          "eps_sat": 2.0,
+          "eps_mat": 5.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC13": {
+          "eps_sat": 2.0
+        },
+        "FC14": {
+          "eps_ccet": 5.0,
+          "eps_cclt": 2.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC15": {
+          "eps_hcet": 5.0,
+          "eps_hclt": 2.0,
+          "delta_supply_fan": 2.0
+        }
       },
       "sql": {
-        "FC1": {"eps_dsp": 0.1, "eps_vfd_spd": 0.05},
-        "FC2": {"eps_mat": 5.0, "eps_rat": 2.0, "eps_oat": 5.0},
-        "FC3": {"eps_mat": 5.0, "eps_rat": 2.0, "eps_oat": 5.0},
-        "FC4": {"delta_os_max": 7},
-        "FC5": {"eps_mat": 3.5, "delta_supply_fan": 2.0},
-        "FC6": {"eps_airflow": 0.3, "oat_rat_delta_min": 10.0},
-        "FC8": {"supply_tol": 2.0, "eps_mat": 5.0, "delta_supply_fan": 2.0},
-        "FC9": {"delta_supply_fan": 2.0},
-        "FC10": {"eps_mat": 5.0},
-        "FC11": {"delta_supply_fan": 2.0},
-        "FC12": {"mix_tol": 3.5, "delta_supply_fan": 2.0},
-        "FC14": {"delta_supply_fan": 2.0},
-        "FC15": {"delta_supply_fan": 2.0}
+        "FC1": {
+          "eps_dsp": 0.1,
+          "eps_vfd_spd": 0.05
+        },
+        "FC2": {
+          "eps_mat": 5.0,
+          "eps_rat": 2.0,
+          "eps_oat": 5.0
+        },
+        "FC3": {
+          "eps_mat": 5.0,
+          "eps_rat": 2.0,
+          "eps_oat": 5.0
+        },
+        "FC4": {
+          "delta_os_max": 7
+        },
+        "FC5": {
+          "eps_mat": 3.5,
+          "delta_supply_fan": 2.0
+        },
+        "FC6": {
+          "eps_airflow": 0.3,
+          "oat_rat_delta_min": 10.0
+        },
+        "FC8": {
+          "supply_tol": 2.0,
+          "eps_mat": 5.0,
+          "delta_supply_fan": 2.0
+        },
+        "FC10": {
+          "eps_mat": 5.0
+        },
+        "FC12": {
+          "mix_tol": 3.5,
+          "delta_supply_fan": 2.0
+        }
       },
       "sql_not_expressible": {
         "FC7": "the rule reads EPS_SAT, which is always set from SUPPLY_TOL (default 1.15); FC7 declares no supply_tol, so eps_sat cannot be raised to 2",
-        "FC9": "the rule reads EPS_MAT for both OAT and SAT but declares no eps_mat, so it stays at the 1.15 global default (mix_tol cannot reach it)",
-        "FC11": "as FC9",
+        "FC9": "the rule reads EPS_MAT for both OAT and SAT but declares no eps_mat, so it stays at the 1.15 global default (mix_tol cannot reach it); run at its defaults (a fan-heat-only override would make it more sensitive than its default)",
+        "FC11": "as FC9; run at its defaults",
         "FC13": "as FC7 (rule FC13-SAT-HIGH)",
-        "FC14": "the rule reads EPS_MAT for both coil temperatures but declares no eps_mat (1.15 global default)",
-        "FC15": "as FC14"
+        "FC14": "the rule reads EPS_MAT for both coil temperatures but declares no eps_mat (1.15 global default); run at its defaults",
+        "FC15": "as FC14; run at its defaults"
       }
     }
+  },
+  "changes": {
+    "1": "first version",
+    "2": "SQL g36 profile: FC9, FC11, FC14 and FC15 no longer get a partial override (fan heat 2 F with the 1.15 F tolerances it cannot raise). Run on the data, the partial override made FC9 more sensitive than open-fdd's own default (OAT > SATSP + 0.3 F instead of + 1.75 F), which is neither engine's setting nor G36. A rule whose G36 tolerances cannot all be set now runs at its defaults in the g36 profile and is listed in sql_not_expressible."
   }
 }

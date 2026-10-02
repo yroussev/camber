@@ -636,9 +636,9 @@ Per-dataset tables, confusions, leakage notes and attribution:
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the
 open-source **open-fdd** project **as of its 0.1.5 release** — they agree to 0.00 pts on
 every shared, runnable fault condition (one ≤2.3-pt mixed-air-bounds edge case). Current
-open-fdd is a different engine. It was re-compared in 2026-09 (PyPI 4.4.9, commit `32a6d44`): the
-pandas engine at its own defaults and at G36 tolerances, on the labelled LBNL AHU runs, with
-per-engine detection rates and Wilson intervals. The SQL engine is still to be run. The harness is
+open-fdd is a different engine. It was re-compared in 2026-09 (PyPI 4.4.9 and the SQL engine
+`fdd_cli`, both from commit `32a6d44`): each engine at its own defaults and at G36 tolerances, on
+the labelled LBNL AHU runs, with per-engine detection rates and Wilson intervals. The harness is
 `examples/openfdd_crosscheck`. The results, the FCs not evaluated and why, the causes of the
 differences, and where the 0.1.5 result no longer applies are in [ECOSYSTEM.md](ECOSYSTEM.md).
 

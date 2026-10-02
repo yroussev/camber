@@ -101,23 +101,35 @@ def test_fan_fallback_and_coil_substitution_are_declared():
     assert "cooling-coil-entering-temp" not in out.columns and applied == []
 
 
-def test_sql_tree_layout(tmp_path):
-    frames = {"AHU__a/b": _frame(supply_air_temp=55, cool_valve=40, supply_fan_status=1)}
-    notes = hx.write_sql_tree(frames, ROLE_MAP, str(tmp_path), building="B", grid_minutes=15)
-    assert json.loads((tmp_path / "B" / "manifest.json").read_text()) == {"grid_minutes": 15}
-    edir = tmp_path / "B" / "AHU__a_b"
+def test_sql_tree_layout_one_building_per_equipment(tmp_path):
+    frames = {
+        "AHU__a/b": _frame(supply_air_temp=55, cool_valve=40, supply_fan_status=1),
+        "AHU__c": _frame(supply_air_temp=55, cool_valve=40, supply_air_temp_sp=55),
+    }
+    notes = hx.write_sql_tree(frames, ROLE_MAP, str(tmp_path), grid_minutes=15)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["AHU__a_b", "AHU__c"]
+    manifest = tmp_path / "AHU__a_b" / "manifest.json"
+    assert json.loads(manifest.read_text()) == {"grid_minutes": 15}
+    edir = tmp_path / "AHU__a_b" / "AHU__a_b"
     cols = (edir / "columns.csv").read_text().splitlines()
     assert cols[0] == "column,point_role,point_name,units"
     assert "clg_valve_pct,clg_valve_pct,clg_valve_pct,0-1" in cols
+    # a role only the neighbour has stays out of this building's columns
+    assert not any(c.startswith("sat_sp,") for c in cols)
     hist = pd.read_csv(edir / "history_wide.csv")
     assert hist.columns[0] == "timestamp_utc" and hist["timestamp_utc"].iloc[0].endswith("Z")
     assert hist["clg_valve_pct"].iloc[0] == pytest.approx(0.4)
     assert notes["AHU__a/b"]  # the fan_cmd fallback was applied and recorded
+    assert notes["AHU__c"] == []
 
 
 def test_sql_tuning_and_docker_commands(tmp_path):
-    ov = hx.sql_rule_overrides(PROFILES["profiles"]["g36"], ROLE_MAP)
-    assert "FC13" not in ov and "FC8" in ov
+    g36 = PROFILES["profiles"]["g36"]
+    ov = hx.sql_rule_overrides(g36, ROLE_MAP)
+    assert "FC13-SAT-HIGH" not in ov and "FC8" in ov
+    # a rule whose G36 tolerances cannot all be set gets no partial override
+    for fc in g36["sql_not_expressible"]:
+        assert ROLE_MAP["fault_conditions"][fc]["sql"] not in ov
     text = hx.sql_tuning_yaml(ov)
     assert text.startswith("rules:\n") and "  FC8:\n    supply_tol: 2.0" in text
     assert hx.sql_tuning_yaml({}) == "rules: {}\n"
@@ -127,17 +139,25 @@ def test_sql_tuning_and_docker_commands(tmp_path):
         str(tmp_path / "tree"),
         str(tmp_path / "w"),
         "g36",
-        building="B",
+        buildings=["B1", "B2"],
         tuning_file=str(tuning),
     )
     for argv in (ingest, run):
         assert argv[:5] == ["docker", "run", "--rm", "--network", "none"]
+        assert "for b in B1 B2;" in argv[-1]
     assert any(a.endswith(":/data:ro") for a in ingest)
     assert any(a.endswith(":/parquet:ro") for a in run)
     assert any(a.endswith("/rule_tuning/defaults.yaml:ro") for a in run)
-    assert run[run.index("--rules-dir") + 1] == "/opt/open-fdd/sql_rules"
-    _, run_default = hx.docker_commands("img", "t", "w", "d", building="B", tuning_file=None)
+    assert "--rules-dir /opt/open-fdd/sql_rules" in run[-1]
+    # only results are writable in the run container
+    rw = [
+        a for a in run if a.startswith(("/", str(tmp_path))) and ":" in a and not a.endswith(":ro")
+    ]
+    assert rw == [f"{tmp_path / 'w' / 'results-g36'}:/out"]
+    _, run_default = hx.docker_commands("img", "t", "w", "d", buildings=["B"], tuning_file=None)
     assert not any("rule_tuning" in a for a in run_default)
+    with pytest.raises(ValueError):
+        hx.docker_commands("img", "t", "w", "d", buildings=["a; rm -rf /"], tuning_file=None)
 
 
 # --------------------------------------------------------------------------- normalisers
@@ -190,6 +210,12 @@ def test_probe_expectations_camber_and_recorded_pandas(name):
         vs = {v.fc: v for v in hx.normalise_pandas(recs, ROLE_MAP, prof, fx["poll_seconds"])}
         want = p["expect"][f"open-fdd pandas [{prof}]"]
         assert hx.native_verdict(vs[p["fc"]])[0] == ("fired" if want else "not_fired")
+    sql = _fixture("sql_probe_results.json")
+    for prof in ("openfdd_defaults", "g36"):
+        vs = hx.normalise_sql(sql["profiles"][prof], ROLE_MAP, prof, sorted(hx.PROBES), {})
+        v = {(x.equip, x.fc): x for x in vs}[(name, p["fc"])]
+        want = p["expect"][f"open-fdd sql [{prof}]"]
+        assert hx.native_verdict(v)[0] == ("fired" if want else "not_fired")
 
 
 def test_normalise_sql_denominators_and_skips():
@@ -306,3 +332,13 @@ def test_omit_verdicts_collapses_not_evaluated_to_counts():
     assert sc["overall"]["not_evaluated"] == 2
     md = hx._engine_tables(scores["common"]["pooled"])
     assert any("| FC8 |" in line and "2: missing roles: mat" in line for line in md)
+
+
+def test_template_params_come_from_the_catalog_run_template():
+    assert rc.template_params("lbnl-sdahu") == {"min_oa_pct": 1.6}
+    assert rc.template_params("no-such-dataset") == {}
+    # an equipment-specific param reaches the rule: FC6 is evaluated only with min_oa_pct
+    f = hx.probe_frame({"cool_valve": 100.0, "oa_damper": 0.0})  # minimum OA: OS#4
+    vs = rc.run_camber({"X": f}, {"X": {"min_oa_pct": 1.6}})
+    assert {v.fc: v for v in vs}["FC6"].evaluated
+    assert not {v.fc: v for v in rc.run_camber({"X": f})}["FC6"].evaluated

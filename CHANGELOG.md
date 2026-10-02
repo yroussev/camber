@@ -26,10 +26,12 @@ own marked block. -->
     "not detected";
   - synthetic probes that isolate single engine behaviours.
 
-  Results on `lbnl-sdahu` (full subset) and `lbnl-ddahu` replace the "not yet re-compared"
-  section of `docs/ECOSYSTEM.md`, which now also says where the 0.1.5 comparison no longer
-  applies. The SQL engine is not yet run; it needs Docker. Offline tests run without Docker or
-  open-fdd: `tests/test_openfdd_crosscheck.py`.
+  Results for all three engines on `lbnl-sdahu` (full subset) and `lbnl-ddahu` replace the "not
+  yet re-compared" section of `docs/ECOSYSTEM.md`, which now also says where the 0.1.5
+  comparison no longer applies. CAMBER runs with each dataset's run-template parameters, so FC6
+  is evaluated on `lbnl-sdahu` (#94). Synthetic probes run through `fdd_cli` confirm which G36
+  tolerances the SQL tuning file cannot set (FC7, FC9, FC11, FC13–FC15). Offline tests run
+  without Docker or open-fdd: `tests/test_openfdd_crosscheck.py`.
 <!-- /099-openfdd-crosscheck -->
 
 ## [0.98.0] — Unreleased

@@ -131,11 +131,31 @@ def load_dataset(dataset: str, store_path: str, window: str):
 
 
 # --------------------------------------------------------------------------- engines
-def run_camber(frames: dict) -> list:
-    """CAMBER g36_afdd at its defaults (the G36 Table 5.16.14.7 tolerances and delays)."""
-    rule = G36AFDD()
+def template_params(dataset: str) -> dict:
+    """``g36_afdd`` params from the dataset's catalog run template (``{}`` when it sets none).
+
+    The same parameters ``camber datasets`` runs the rule with (e.g. the unit's documented
+    minimum OA, which enables FC6); tolerances and delays stay at the G36 defaults.
+    """
+    import camber.datasets as cds
+
+    path = os.path.join(os.path.dirname(cds.__file__), "configs", f"{dataset}.json")
+    if not os.path.isfile(path):
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        cfg = json.load(fh)
+    for r in cfg.get("rules", []):
+        if r.get("name") == "g36_afdd":
+            return dict(r.get("params") or {})
+    return {}
+
+
+def run_camber(frames: dict, params_by_equip: dict | None = None) -> list:
+    """CAMBER g36_afdd: G36 Table 5.16.14.7 tolerances and delays, plus template params."""
+    params_by_equip = params_by_equip or {}
     out = []
     for equip, f in frames.items():
+        rule = G36AFDD(**params_by_equip.get(equip, {}))
         out += hx.normalise_camber(rule.analyze(equip, _camber_frame(f)).as_dict(), equip)
     return out
 
@@ -186,16 +206,15 @@ def docker_ready(timeout: float = 20.0) -> tuple[bool, str]:
 
 
 def run_sql(frames: dict, role_map: dict, profiles: dict, image: str, work: str):
-    """open-fdd SQL engine (fdd_cli in Docker), once per profile."""
+    """open-fdd SQL engine (fdd_cli in Docker), once per profile, one building per equipment."""
     tree = os.path.join(work, "sql_tree")
-    building = "crosscheck"
     step = _step_seconds(frames)
-    applied = hx.write_sql_tree(
-        frames, role_map, tree, building=building, grid_minutes=round(step / 60)
-    )
+    applied = hx.write_sql_tree(frames, role_map, tree, grid_minutes=round(step / 60))
     fan_h = {e: _fan_on_hours(f, step / 3600.0) for e, f in frames.items()}
+    buildings = {hx._safe(e): e for e in frames}
+    os.makedirs(os.path.join(work, "parquet"), exist_ok=True)
     verdicts = []
-    for name, prof in profiles["profiles"].items():
+    for k, (name, prof) in enumerate(profiles["profiles"].items()):
         tuning = None
         ov = hx.sql_rule_overrides(prof, role_map)
         if ov:
@@ -204,17 +223,19 @@ def run_sql(frames: dict, role_map: dict, profiles: dict, image: str, work: str)
                 fh.write(hx.sql_tuning_yaml(ov))
         res_dir = os.path.join(work, f"results-{name}")
         os.makedirs(res_dir, exist_ok=True)
-        cmds = hx.docker_commands(image, tree, work, name, building=building, tuning_file=tuning)
-        if os.path.isdir(os.path.join(work, "parquet")):
-            cmds = cmds[1:]  # ingest once
-        for argv in cmds:
+        ingest, run = hx.docker_commands(
+            image, tree, work, name, buildings=sorted(buildings), tuning_file=tuning
+        )
+        for argv in ([ingest] if k == 0 else []) + [run]:  # ingest once
             subprocess.run(argv, check=True)
-        bodies = {}
-        for fn in os.listdir(res_dir):
-            if fn.endswith(".json"):
-                with open(os.path.join(res_dir, fn), encoding="utf-8") as fh:
-                    bodies[fn[: -len(".json")]] = json.load(fh)
-        verdicts += hx.normalise_sql(bodies, role_map, name, list(frames), fan_h)
+        for b, equip in buildings.items():
+            bodies = {}
+            bdir = os.path.join(res_dir, b)
+            for fn in os.listdir(bdir):
+                if fn.endswith(".json"):
+                    with open(os.path.join(bdir, fn), encoding="utf-8") as fh:
+                        bodies[fn[: -len(".json")]] = json.load(fh)
+            verdicts += hx.normalise_sql(bodies, role_map, name, [equip], fan_h)
     return verdicts, {"name": "open-fdd sql (fdd_cli)", "image": image, **hx.OPENFDD_PIN}, applied
 
 
@@ -239,6 +260,7 @@ def main(argv=None) -> int:
 
     role_map, profiles = hx.load_json("role_map.json"), hx.load_json("profiles.json")
     groups: dict = {}
+    camber_params: dict = {}
     if args.probe:
         frames = {k: hx.probe_frame(p["frame"]) for k, p in hx.PROBES.items()}
         labels = {k: "probe" for k in frames}
@@ -257,22 +279,25 @@ def main(argv=None) -> int:
         for spec in args.store:
             ds, path = spec.split("=", 1)
             f, lab, info = load_dataset(ds, path, args.window)
+            info["camber_template_params"] = tparams = template_params(ds)
             frames.update(f)
             labels.update(lab)
+            camber_params.update({e: tparams for e in f})
             groups[ds] = lab
             datasets.append(info)
 
     work = args.work or tempfile.mkdtemp(prefix="camber-xc-")
     os.makedirs(work, exist_ok=True)
     versions = {
-        "camber": f"{CAMBER_VERSION} at commit {_git_commit()} (g36_afdd at its defaults)",
+        "camber": f"{CAMBER_VERSION} at commit {_git_commit()} (g36_afdd at the G36 defaults, "
+        "plus each dataset's run-template params)",
         "role_map": role_map["version"],
         "profiles": profiles["version"],
         "open-fdd pin": f"PyPI {hx.OPENFDD_PIN['pypi_version']}, commit {hx.OPENFDD_PIN['commit']}",
     }
     not_run: dict = {}
     applied: dict = {}
-    verdicts = run_camber(frames)
+    verdicts = run_camber(frames, camber_params)
     try:
         if args.openfdd_python:
             v, ver, applied["pandas"] = run_pandas(

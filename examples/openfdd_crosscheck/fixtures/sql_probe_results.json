@@ -1,0 +1,582 @@
+{
+ "_comment": "Recorded open-fdd SQL engine output (fdd_cli run-rules, built from commit 32a6d44, --network none) on the synthetic probe frames of harness.PROBES: the FC rule result files, per tolerance profile. Synthetic data only; used by the offline tests.",
+ "fan_on_hours": {},
+ "profiles": {
+  "openfdd_defaults": {
+   "FC1": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "duct_static",
+       "duct_static_sp"
+      ],
+      "notes": "missing roles/columns in history: duct_static, duct_static_sp"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "duct_static",
+     "duct_static_sp"
+    ],
+    "skipped": true
+   },
+   "FC10": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC11": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC12": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC13-SAT-HIGH": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC14": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC15": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC2": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC3": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC4": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC5": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "htg_valve_pct"
+      ],
+      "notes": "missing roles/columns in history: htg_valve_pct"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "htg_valve_pct"
+    ],
+    "skipped": true
+   },
+   "FC6": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "vav_total_flow"
+      ],
+      "notes": "missing roles/columns in history: vav_total_flow"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "vav_total_flow"
+    ],
+    "skipped": true
+   },
+   "FC7": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "htg_valve_pct"
+      ],
+      "notes": "missing roles/columns in history: htg_valve_pct"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "htg_valve_pct"
+    ],
+    "skipped": true
+   },
+   "FC8": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC9": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 24.0
+     }
+    ]
+   }
+  },
+  "g36": {
+   "FC1": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "duct_static",
+       "duct_static_sp"
+      ],
+      "notes": "missing roles/columns in history: duct_static, duct_static_sp"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "duct_static",
+     "duct_static_sp"
+    ],
+    "skipped": true
+   },
+   "FC10": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC11": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC12": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC13-SAT-HIGH": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC14": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC15": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC2": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC3": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC4": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC5": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "htg_valve_pct"
+      ],
+      "notes": "missing roles/columns in history: htg_valve_pct"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "htg_valve_pct"
+    ],
+    "skipped": true
+   },
+   "FC6": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "vav_total_flow"
+      ],
+      "notes": "missing roles/columns in history: vav_total_flow"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "vav_total_flow"
+    ],
+    "skipped": true
+   },
+   "FC7": {
+    "rows": [
+     {
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": [
+       "htg_valve_pct"
+      ],
+      "notes": "missing roles/columns in history: htg_valve_pct"
+     }
+    ],
+    "status": "SKIPPED_MISSING_ROLES",
+    "missing_roles": [
+     "htg_valve_pct"
+    ],
+    "skipped": true
+   },
+   "FC8": {
+    "rows": [
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 0.0
+     }
+    ]
+   },
+   "FC9": {
+    "rows": [
+     {
+      "equipment_id": "fc13_sat_1p5_over_sp_full_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc9_oat_4_over_sp_free_cooling",
+      "fault_hours": 24.0
+     },
+     {
+      "equipment_id": "fc13_sat_3_over_sp_half_cooling",
+      "fault_hours": 0.0
+     },
+     {
+      "equipment_id": "fc8_sat_3p5_over_mat_free_cooling",
+      "fault_hours": 24.0
+     }
+    ]
+   }
+  }
+ }
+}
