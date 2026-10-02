@@ -758,6 +758,19 @@ are unchanged. Every other benchmark is unchanged.
       `fault` on FC10). The fault-free and `DMPRStuck_OA_100` runs are unchanged.
     - `nuig-ahu101` is unchanged, and `irish-ahu` declines before and after (it has no fan
       signal).
+  - **The `lbnl-sdahu` template runs `g36_afdd` with FC6 enabled.** It passes the unit's
+    documented minimum, `min_oa_pct` 1.6 (the 10 % fixed damper minimum measured as an OA
+    fraction, the value `outdoor_air_fraction` already uses), with that provenance in the template
+    comment and its `basis` map. The rule's own defaults are unchanged. From the template,
+    `damper_stuck_075` and `damper_stuck_100_short` read `fault` again on FC6 (27.8 % and 28.1 %),
+    and the fault-free run reads `ok` (FC6 1.18 %). No other run's verdict changes; FC6 reads
+    0-1.5 % on the other runs.
+    - **Templates left unchanged.** `lbnl-ddahu` states a seasonal minimum (31.8 %, 11.9 % in
+      Jun-Aug). No single `min_oa_pct` works there: FC6 faults the fault-free run at 20.5 % with
+      31.8 and at 47.1 % with 11.9. `g36_afdd` declines `irish-ahu` (no fan signal) and
+      `lbnl-fcu` (a fan-coil unit), so they are left as they were. No exercise config runs
+      `g36_afdd`. `camber datasets score lbnl-sdahu` reads only the declared targets, so its score
+      is unchanged.
   - **Unchanged.** No gated benchmark key moves (the synthetic, fleet, LBNL, BDG2 and BDG2 savings
     benchmarks are all stable), and no workbook answer changes (no exercise runs `g36_afdd`).
 <!-- /098-fc9 -->
