@@ -390,6 +390,8 @@ Version numbers are given only where a release is already planned.
     - [x] #95 G36 heating (OS#1) needs the OA damper at its minimum, like free cooling (#94);
     - [x] integration: the cross-check re-run with #95, and a "For open-fdd users" entry point in
       `docs/ECOSYSTEM.md`.
+  - **0.99.1 — patch:** `/facilities` and the trend viewer report the site zone of an
+    open-fdd-ingested facility, including one ingested with 0.99.0 (#96).
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process

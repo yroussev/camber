@@ -737,6 +737,109 @@ def test_store_timezone_defaults_to_the_ingested_zone():
     assert _catalog_timezone({"openfdd": {"timezone": "Mars/X"}}) is None
 
 
+# ---------------------------------------------- 0.99.1 (#96): the read API reports the zone
+
+
+def _drop_registry_timezone(store, fid):
+    """Rewrite a registry entry as 0.99.0 left it: the zone only in the openfdd provenance."""
+    path = os.path.join(store, "_facilities.json")
+    with open(path) as fh:
+        data = json.load(fh)
+    data[fid].pop("timezone", None)
+    with open(path, "w") as fh:
+        json.dump(data, fh)
+
+
+def _ui_axis_label(facilities: dict, fid: str, *, utc: bool = False) -> str | None:
+    """Run the trend viewer's own zone code (setZone / zoneName) on a /facilities body in node
+    and return its time-axis label; ``None`` when node is not installed."""
+    import shutil
+    import subprocess
+
+    from camber.api.ui import live_dashboard_html
+
+    node = shutil.which("node")
+    if not node:
+        return None
+    h = live_dashboard_html()
+    assert "FTZ[f.facility_id]=f.timezone||null" in h  # how the page reads /facilities
+    assert "'time ('+zoneName()+')'" in h  # how it labels the time axis
+    a = h.index("function setZone(){")
+    b = h.index("function offMs(", a)
+    script = (
+        "var FTZ={},TZ=null,fmtZ=null,offC={};"
+        f"var facSel={{value:{json.dumps(fid)}}},utcBox={{checked:{json.dumps(utc)}}},"
+        "utcLbl={hidden:true};"
+        f"var d={json.dumps(facilities)};"
+        "d.facilities.forEach(function(f){FTZ[f.facility_id]=f.timezone||null;});"
+        + h[a:b]
+        + "setZone();process.stdout.write('time ('+zoneName()+')');"
+    )
+    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    return out.stdout
+
+
+def test_ingested_facility_reports_its_zone_through_the_read_api(tmp_path, pkg_dir):
+    from camber.api import ReadAPI
+    from camber.api.server import dispatch
+
+    store = str(tmp_path / "store")
+    res = ingest_package(pkg_dir, timezone=TZ, unit_system="ip", store=store)
+    fid = res.facility_id
+    entry = FacilityRegistry(store).get(fid)
+    assert entry["timezone"] == TZ == entry["openfdd"]["timezone"]  # the standard place, too
+    # a facility with no zone anywhere, in the same store
+    st = ParquetStore(store)
+    idx = pd.date_range("2025-01-01", periods=3, freq="1h")
+    st.write_role_frame(
+        pd.DataFrame({Role.HEAT_VALVE: range(3)}, index=idx),
+        facility_id="plain",
+        equip="AHU_1",
+        equip_class="AHU",
+        name="plain",
+    )
+    code, body = dispatch(ReadAPI(ParquetStore(store)), "GET", "/facilities", {})
+    assert code == 200
+    rows = {f["facility_id"]: f for f in body["facilities"]}
+    assert rows[fid]["timezone"] == TZ
+    assert set(rows["plain"]) == {"facility_id", "name", "display_name", "state"}  # unchanged
+    label = _ui_axis_label(body, fid)
+    if label is not None:
+        assert label == f"time ({TZ})"
+        assert _ui_axis_label(body, fid, utc=True) == "time (UTC)"  # the UTC box converts
+        assert _ui_axis_label(body, "plain") == "time (UTC)"  # no zone: UTC, as before
+    # re-ingesting the same building in another zone moves the facility's zone with it
+    ingest_package(pkg_dir, timezone="America/New_York", unit_system="ip", store=store)
+    rows = {f["facility_id"]: f for f in ReadAPI(ParquetStore(store)).facilities()["facilities"]}
+    assert rows[fid]["timezone"] == "America/New_York"
+
+
+def test_a_099_0_ingest_reports_its_zone_without_reingest(tmp_path, pkg_dir):
+    from camber.api import ReadAPI
+    from camber.api.read import _facility_timezone
+
+    store = str(tmp_path / "store")
+    fid = ingest_package(pkg_dir, timezone=TZ, unit_system="ip", store=store).facility_id
+    _drop_registry_timezone(store, fid)
+    assert "timezone" not in FacilityRegistry(store).get(fid)
+    rows = {f["facility_id"]: f for f in ReadAPI(ParquetStore(store)).facilities()["facilities"]}
+    assert rows[fid]["timezone"] == TZ  # from the openfdd provenance
+    # an unchanged re-ingest is skipped, but backfills the standard key
+    again = ingest_package(pkg_dir, timezone=TZ, unit_system="ip", store=store)
+    assert again.skipped and FacilityRegistry(store).get(fid)["timezone"] == TZ
+    # lookup order: explicit zone, then the catalog dataset zone, then the openfdd provenance
+    ofdd = {"openfdd": {"timezone": TZ}}
+    assert _facility_timezone(ofdd) == TZ
+    assert _facility_timezone({**ofdd, "timezone": "Europe/Oslo"}) == "Europe/Oslo"
+    lbnl = {"dataset": {"dataset_id": "lbnl-b59"}}
+    assert _facility_timezone({**ofdd, **lbnl}) == "America/Los_Angeles"
+    nozone = {"dataset": {"dataset_id": "no-such-dataset"}}
+    assert _facility_timezone({**ofdd, **nozone}) == TZ
+    assert _facility_timezone({"openfdd": {"timezone": "Mars/X"}}) is None
+    assert _facility_timezone({"openfdd": "not a block"}) is None
+
+
 # --------------------------------------------------------------------------- CLI
 
 

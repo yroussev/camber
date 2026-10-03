@@ -19,7 +19,9 @@ def _facility_timezone(meta: dict) -> str | None:
     0.96: the store holds naive wall-clock time, so the trend viewer labels its time axis with
     this zone. Looked up in order: a ``timezone`` on the registry entry, the dataset-catalog block
     (``local_timezone`` of a per-site ingest, else ``timezone``), then the catalog entry the
-    facility was ingested from. Anything that is not a valid IANA zone is ignored.
+    facility was ingested from, then (0.99.1, #96) the zone an open-fdd ingest recorded in its
+    ``"openfdd"`` provenance, so a facility ingested with 0.99.0 needs no re-ingest. Anything that
+    is not a valid IANA zone is ignored.
     """
     from ..tsparse import check_timezone
 
@@ -41,7 +43,13 @@ def _facility_timezone(meta: dict) -> str | None:
     if block.get("dataset_id"):
         from ..config import _catalog_timezone
 
-        return valid(_catalog_timezone(meta))
+        # the dataset block alone: the catalog zone comes before the open-fdd provenance below
+        tz = valid(_catalog_timezone({"dataset": block}))
+        if tz:
+            return tz
+    ofdd = meta.get("openfdd")
+    if isinstance(ofdd, dict):
+        return valid(ofdd.get("timezone"))
     return None
 
 

@@ -9,7 +9,8 @@ is safe; an unchanged package (same files, crosswalk, time zone, units and resam
 
 Provenance lands on the facility's registry entry under the key ``"openfdd"``: source, package
 schema version, the sha256 of every file read, the crosswalk version and the docs commit it was
-written from, the time zone and unit system given, and the column coverage.
+written from, the time zone and unit system given, and the column coverage. The time zone is also
+written to the entry's ``"timezone"`` (0.99.1, #96), the standard place for a facility's zone.
 """
 
 from __future__ import annotations
@@ -251,6 +252,8 @@ def ingest_package(
             prev = openfdd_meta(entry)
             if not force and prev.get("content_hash") == chash and fid in st.facilities():
                 res.skipped = True
+                if not entry.get("timezone"):  # 0.99.1 (#96): backfill a 0.99.0 ingest
+                    reg.register(fid, timezone=pkg.timezone)
                 if port is not None and activate and state == "provisioning":
                     port.transition(fid, "activate", reason=why)
                 res.state = reg.state(fid)
@@ -272,7 +275,11 @@ def ingest_package(
             shutil.rmtree(staging, ignore_errors=True)
         meta = provenance(pkg, chash=chash, resample=resample, rows=rows)
         has_name = bool(reg.get(fid).get("name"))
-        reg.register(fid, name=None if has_name else disp, **{META_KEY: meta})
+        # 0.99.1 (#96): the site zone also goes to meta["timezone"], where the read API and the
+        # trend viewer look; the store holds this zone's wall clock
+        reg.register(
+            fid, name=None if has_name else disp, timezone=pkg.timezone, **{META_KEY: meta}
+        )
         if port is not None:
             if activate and reg.state(fid) == "provisioning":
                 port.transition(fid, "activate", reason=why)

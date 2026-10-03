@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.99.1] — 2026-10-03
+
+**0.99.1 patch: open-fdd-ingested facilities report their time zone (#96).** The synthetic, fleet,
+LBNL and BDG2 benchmark gates did not move.
+
+### Fixed
+- **The read API did not report the time zone of an open-fdd-ingested facility (#96).**
+  `camber interop openfdd ingest` recorded the site zone only in the facility's `openfdd`
+  provenance. Config runs found it there, but `/facilities` looked a zone up only on the registry
+  entry or through a catalog `dataset_id`, so these facilities had no `timezone` and the trend
+  viewer labelled their site wall clock as UTC. The importer now also writes the zone to the
+  facility's `meta["timezone"]`. The read API looks up a facility's zone in this order: the
+  explicit `timezone`, the catalog dataset zone, then the `openfdd` provenance zone, so facilities
+  ingested with 0.99.0 report their zone without a re-ingest. An unchanged re-ingest, which is
+  skipped, also fills in the missing key. Facilities with no recorded zone are unchanged.
+
 ## [0.99.0] — 2026-10-03
 
 <!-- Each 0.99 branch adds its bullets only inside its own marked block. -->
