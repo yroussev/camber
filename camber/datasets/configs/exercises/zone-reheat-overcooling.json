@@ -1,0 +1,25 @@
+{
+  "_comment": "Workbook exercise zone-reheat-overcooling (docs/workbook/zone-reheat-overcooling.md): the lbnl-fpu template's South-zone boxes (PFPU__<run>, the box every fault is imposed on -- see mappings/lbnl_fpu.json) with the reheat and overcooling rules of PNNL chapter 7 added. airflow_tracking and unmet_setpoint_hours are the dataset template's (the controller's active airflow setpoint VAV_PM_CFM_S_SP is trended, so a stuck damper shows as airflow off its setpoint). reheat_penalty reads the controller's reheat demand (RH_VLV_DM_S) against the AHU supply air entering the box (SA_TEMP, mapped as mixed_air_temp); overcooling_min_flow reads the zone against its cooling setpoint while the box sits at its airflow setpoint with the damper at or below 30%. Defaults throughout (weekday 07-18 occupancy, the rules' own thresholds): the point is to compare each faulted run with the fault-free one, not to tune. reheat_minimization_g36 is left out for the template's reason (the trended setpoint is the active one, not the design maximum, and G36 dual-maximum logic is for single-duct boxes); reheat_capacity_shortfall is the zone-reheat-saturated exercise's. Hourly resample: a year of 15-minute data.",
+  "_dataset": "lbnl-fpu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-fpu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "VAV",
+      "marker_role": "airflow"
+    }
+  ],
+  "rules": [
+    "airflow_tracking",
+    "reheat_penalty",
+    "overcooling_min_flow",
+    "unmet_setpoint_hours"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -179,10 +179,19 @@ def remove(dataset_id: str, *, data_dir=None, store=None, purge_store: bool = Fa
 
 
 def config_template(
-    dataset_id: str, store, *, facility_id: str | None = None, out: str | None = None
+    dataset_id: str,
+    store,
+    *,
+    facility_id: str | None = None,
+    out: str | None = None,
+    exercise: str | None = None,
 ) -> dict:
-    """A ready-to-run ``source.kind: "store"`` config for the dataset (written to ``out``)."""
-    return build_config(get(dataset_id), store, facility_id=facility_id, out=out)
+    """A ready-to-run ``source.kind: "store"`` config for the dataset (written to ``out``).
+
+    ``exercise`` (0.97) takes a workbook exercise's tuned template instead of the dataset's own
+    (``camber datasets config <id> --exercise <exercise-id>``; see docs/workbook/index.md).
+    """
+    return build_config(get(dataset_id), store, facility_id=facility_id, out=out, exercise=exercise)
 
 
 def score(

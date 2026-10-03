@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -347,18 +348,65 @@ def _ingested(store, dataset_id: str) -> list:
     )
 
 
+_EXERCISE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,63}$")
+
+
+def exercise_config_ids() -> list:
+    """The ids of the shipped workbook exercise config templates (``configs/exercises/<id>.json``,
+    0.97, #79), sorted."""
+    from importlib.resources import files
+
+    node = files("camber.datasets").joinpath("configs").joinpath("exercises")
+    if not node.is_dir():
+        return []
+    return sorted(
+        p.name[: -len(".json")]
+        for p in node.iterdir()
+        if p.name.endswith(".json") and _EXERCISE_ID.match(p.name[: -len(".json")])
+    )
+
+
+def exercise_config(entry: DatasetEntry, exercise: str) -> dict:
+    """The workbook exercise's tuned config template for ``entry`` (not yet pointed at a store).
+
+    Exercise templates live in ``configs/exercises/<exercise>.json`` and name the dataset they
+    were tuned for in ``"_dataset"``; asking for one with another dataset is an error, since its
+    parameters (a unit's own design minimum OA, a high limit) belong to that dataset.
+    """
+    if not isinstance(exercise, str) or not _EXERCISE_ID.match(exercise):
+        raise KeyError(f"invalid exercise id {exercise!r}")
+    if exercise not in exercise_config_ids():
+        known = ", ".join(exercise_config_ids()) or "none"
+        raise KeyError(f"no exercise config {exercise!r} (shipped: {known})")
+    cfg = json.loads(package_text("configs", "exercises", f"{exercise}.json"))
+    if cfg.get("_dataset") != entry.id:
+        raise ValueError(
+            f"exercise config {exercise!r} is for dataset {cfg.get('_dataset')!r}, not {entry.id!r}"
+        )
+    return cfg
+
+
 def build_config(
-    entry: DatasetEntry, store, *, facility_id: str | None = None, out: str | None = None
+    entry: DatasetEntry,
+    store,
+    *,
+    facility_id: str | None = None,
+    out: str | None = None,
+    exercise: str | None = None,
 ) -> dict:
     """The entry's run-config template, pointed at ``store`` (and written to ``out`` if given).
 
     The facility defaults to the entry's; for a multi-facility dataset (BDG2: one per site) it
-    defaults to the first one ingested into ``store``.
+    defaults to the first one ingested into ``store``. ``exercise`` (0.97, #79) takes a workbook
+    exercise's tuned template (``configs/exercises/<exercise>.json``) instead of the dataset's.
     """
-    tmpl = (entry.suggested_analyses or {}).get("config_template")
-    if not tmpl:
-        raise KeyError(f"{entry.id} has no config template")
-    cfg = json.loads(package_text("configs", tmpl))
+    if exercise:
+        cfg = exercise_config(entry, exercise)
+    else:
+        tmpl = (entry.suggested_analyses or {}).get("config_template")
+        if not tmpl:
+            raise KeyError(f"{entry.id} has no config template")
+        cfg = json.loads(package_text("configs", tmpl))
     root = os.path.abspath(os.fspath(store.root if isinstance(store, ParquetStore) else store))
     fid = facility_id
     if fid is None:
@@ -428,6 +476,8 @@ __all__ = [
     "dataset_status",
     "remove_dataset",
     "build_config",
+    "exercise_config",
+    "exercise_config_ids",
     "score_dataset",
     "human_bytes",
     "sha256_file",

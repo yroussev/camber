@@ -1,0 +1,22 @@
+{
+  "_comment": "Workbook exercise air-heat-cool (docs/workbook/air-heat-cool.md), lbnl-ddahu part: simultaneous_heat_cool on the dual-duct unit, which the dataset's own template deliberately leaves out. `camber datasets config lbnl-ddahu --exercise air-heat-cool--lbnl-ddahu --store DIR --out cfg.json` fills in the store path. It is run here to show what the rule sees on a unit whose hot deck heats (to 90 F) while its cold deck cools (to 55 F) by design (inventory section 1.2): both valves open together is the dual-duct sequence, not two coils fighting in one air stream. The rule's default thresholds are kept and the dehumidification sequence is left undeclared (the default), so the rule reports what it can and cannot rule out: no cooling-coil leaving temperature or humidity is trended.",
+  "_dataset": "lbnl-ddahu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-ddahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "simultaneous_heat_cool"
+  ],
+  "report": {
+    "level": 2
+  }
+}

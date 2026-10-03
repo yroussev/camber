@@ -92,6 +92,10 @@ _PINNED_RE = re.compile(
     r"|[?&]version=\d+"
     r"|/records?/\d+"
 )
+#: 0.97 (#79): a workbook exercise link -- a docs-relative workbook page (``workbook/<id>.md``,
+#: optionally ``#<anchor>``) or an https URL. The lab resolves a relative one to the local docs
+#: tree or the published site (:func:`camber.lab._docs.exercise_url`).
+EXERCISE_PAGE_RE = re.compile(r"^workbook/[a-z0-9][a-z0-9-]*\.md(#[a-z0-9][a-z0-9_-]*)?$")
 #: Ingest keys the 0.89 intake branches spelled differently before they were reconciled:
 #: ``{(level, old key): what to use instead}``; :func:`validate_catalog` rejects the old ones.
 RENAMED_KEYS = {
@@ -126,6 +130,7 @@ __all__ = [
     "RENAMED_KEYS",
     "is_pinned_url",
     "is_research_only_licence",
+    "is_exercise_link",
     "load_catalog_data",
     "load_entries",
     "validate_catalog",
@@ -137,6 +142,14 @@ def is_research_only_licence(licence: str) -> bool:
     """True for a non-commercial (NC) or no-derivatives (ND) licence id."""
     parts = str(licence).upper().split("-")
     return "NC" in parts or "ND" in parts
+
+
+def is_exercise_link(value) -> bool:
+    """True for a valid ``suggested_analyses.exercise`` value: a docs-relative workbook page
+    (``workbook/<id>.md`` or ``workbook/<id>.md#<anchor>``) or an https URL without whitespace."""
+    if not isinstance(value, str):
+        return False
+    return bool(EXERCISE_PAGE_RE.match(value) or _URL_RE.fullmatch(value))
 
 
 def is_pinned_url(url: str) -> bool:
@@ -236,6 +249,11 @@ class DatasetEntry:
         """True for the research-only tier (acknowledgement needed): the licence forbids commercial
         use or derivatives, or the entry states an ``access_reason`` for holding it there."""
         return self.access == "research_only"
+
+    @property
+    def exercise(self) -> str:
+        """The workbook exercise link (``suggested_analyses.exercise``; ``""`` when none)."""
+        return str((self.suggested_analyses or {}).get("exercise") or "")
 
     @property
     def commercial_ok(self) -> bool:
@@ -943,6 +961,12 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
     tmpl = (d.get("suggested_analyses") or {}).get("config_template")
     if tmpl is not None and not _package_has("configs", tmpl):
         errs.append(f"{did}: config template {tmpl!r} is not shipped in camber/datasets/configs/")
+    ex = (d.get("suggested_analyses") or {}).get("exercise")
+    if ex is not None and not is_exercise_link(ex):
+        errs.append(
+            f"{did}: exercise {ex!r} must be a docs-relative workbook page "
+            "('workbook/<id>.md' or 'workbook/<id>.md#<anchor>') or an https URL"
+        )
     if deny:
         blob = json.dumps(d).lower()
         for pat in deny:

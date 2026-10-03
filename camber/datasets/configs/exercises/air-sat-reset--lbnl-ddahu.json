@@ -1,0 +1,23 @@
+{
+  "_comment": "Workbook exercise air-sat-reset (docs/workbook/air-sat-reset.md), lbnl-ddahu part: the cold deck's supply-air temperature (CSA_TEMP, mapped as supply_air_temp) against OAT. `camber datasets config lbnl-ddahu --exercise air-sat-reset--lbnl-ddahu --store DIR --out cfg.json` fills in the store path. The setpoint CSA_TEMPSPT is not mapped (it is 55.0 in every row; see the data issue economizer-sat-reset-absent), so supply_air_reset reads the reset from the supply air's shape alone; supply_air_reset_compliance compares it with the Guideline 36 OAT reset target at its defaults. Both judge fan-on (CSF_CS), operate-mode (SYS_CTL) samples. The hot deck is not judged: it heats to its own setpoint by design.",
+  "_dataset": "lbnl-ddahu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-ddahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "supply_air_reset",
+    "supply_air_reset_compliance"
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -24,6 +24,8 @@ flowchart LR
 
 - **New here?** Start with the **[Capabilities reference](CAPABILITIES.md)** — every capability, its
   key API, the option flags that tune it, and the standard it cites, grouped by layer.
+- **Learning re-tuning?** The **[re-tuning workbook](workbook/index.md)** follows PNNL's free
+  Building Re-tuning training with hands-on exercises on open datasets in `camber lab`.
 - **How it fits together:** the **[Architecture](ARCHITECTURE.md)** and the
   **[Ecosystem](ECOSYSTEM.md)** (fork-vs-depend) pages.
 - **Install:** `pip install camber-toolkit` (imports as `camber`); a multi-arch container image is

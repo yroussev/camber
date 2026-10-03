@@ -1,0 +1,22 @@
+{
+  "_comment": "Workbook exercise plant-chiller-efficiency (docs/workbook/plant-chiller-efficiency.md), second run: chiller_efficiency with the rule's own generic ceiling (0.85 kW/ton, no params) instead of the ceiling calibrated from this plant's fault-free run (1.44 kW/ton, the lbnl-chiller dataset template). It is deliberately uncalibrated: the exercise compares the two runs to show why a design ceiling must come from the chiller's schedule or its own healthy operation. `camber datasets config lbnl-chiller --exercise plant-chiller-efficiency--generic --store DIR --out cfg.json` fills in the store path.",
+  "_dataset": "lbnl-chiller",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-chiller"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "CHW_PLANT",
+      "marker_role": "power"
+    }
+  ],
+  "rules": [
+    "chiller_efficiency"
+  ],
+  "report": {
+    "level": 2
+  }
+}

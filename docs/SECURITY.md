@@ -310,6 +310,11 @@ that accepts writes. It is built for one person on their own machine:
   handlers or `style` attributes, and it sets catalog text only as text, never as HTML. Reports
   are served **sandboxed** (an opaque origin with no network), so a report cannot call the lab
   API. Every response carries `nosniff`, `no-referrer`, `no-store` and `frame-ancestors 'none'`.
+- **Workbook pages (0.97).** `GET /lab/docs/workbook/<page>.md` serves a workbook exercise page
+  from the local docs tree, read-only. Only names matching `workbook/<lowercase-id>.md` are
+  served, and the resolved path must stay inside `<docs>/workbook/`, so `..`, encoded dots,
+  symlinks out of the folder and the page template are 404. The page is escaped Markdown with
+  its links made clickable, under a CSP that allows no script at all.
 - **One worker.** Jobs run one at a time on a single worker thread; at most 20 can be pending
   (429). Cancelling is safe by construction: a download keeps its `.part` file for a resume, and
   an ingest stops before its staged data is swapped in.

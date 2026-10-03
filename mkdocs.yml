@@ -54,6 +54,41 @@ nav:
       - Site report: SITE-REPORT.md
       - RCx report: RCX-REPORT.md
       - "References: PNNL Re-tuning": REFERENCES.md  # 096-report (#78)
+  # 0.97 (#79-#83): the PNNL re-tuning workbook. Content branches add their pages ONLY between
+  # their own BEGIN/END markers below (see docs/workbook/index.md).
+  - Re-tuning workbook:
+      - Overview and curriculum map: workbook/index.md
+      # BEGIN workbook-air (#80)
+      - "Air side: supply-air temperature reset": workbook/air-sat-reset.md
+      - "Air side: duct static pressure": workbook/air-static-pressure.md
+      - "Air side: heating, cooling and a leaking valve": workbook/air-heat-cool.md
+      - "Air side: economizer and a stuck OA damper": workbook/air-economizer.md
+      - "Air side: scheduling and setback": workbook/air-scheduling.md
+      # END workbook-air (#80)
+      #
+      # BEGIN workbook-zone (#81)
+      - "Terminal units: reheat penalty and overcooling": workbook/zone-reheat-overcooling.md
+      - "Terminal units: one bad box in a fleet": workbook/zone-bad-box.md
+      - "Terminal units: reheat maxed out": workbook/zone-reheat-saturated.md
+      - "Terminal units: DCV and occupancy": workbook/zone-dcv.md
+      - "Terminal units: minimum OA and 62.1": workbook/zone-min-oa.md
+      # END workbook-zone (#81)
+      #
+      # BEGIN workbook-plant (#82)
+      - "Central plant: chiller efficiency": workbook/plant-chiller-efficiency.md
+      - "Central plant: cooling tower": workbook/plant-cooling-tower.md
+      - "Central plant: chilled-water reset and pumping": workbook/plant-chw-reset-pumping.md
+      - "Central plant: boiler plant": workbook/plant-boiler.md
+      - "Central plant: sensor vs equipment faults": workbook/plant-sensor-vs-equipment.md
+      # END workbook-plant (#82)
+      #
+      # BEGIN workbook-practice (#83)
+      - "Practice: are the trends good enough?": workbook/data-trend-quality.md
+      - "Practice: energy charting": workbook/data-energy-charting.md
+      - "Practice: change-point baselines and M&V": workbook/mv-baselines.md
+      - "Practice: capstone": workbook/capstone.md
+      # END workbook-practice (#83)
+      - Instructor guide: workbook/instructor.md
   - AI-assist:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md
@@ -80,6 +115,7 @@ nav:
 exclude_docs: |
   dev/
   proposals/
+  workbook/_template.md
 markdown_extensions:
   - admonition
   - tables

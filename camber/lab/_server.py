@@ -23,6 +23,7 @@ Routes::
     GET  /lab/catalog             catalog + fetched / ingested status + free disk (JSON)
     GET  /lab/jobs[/<id>]         job progress (JSON)
     GET  /lab/reports/<fid>       the audit report for an ingested dataset (built on demand)
+    GET  /lab/docs/workbook/<page>.md   a workbook exercise page from the local docs (0.97)
     GET  /ui /facilities /points /history    delegated unchanged to camber.api.server.dispatch
     POST /lab/jobs/fetch          {"ids": [...], "subset"?, "ingest"?, "acknowledge"?}
     POST /lab/jobs/ingest         {"ids": [...], "subset"?, "force"?, "acknowledge"?}
@@ -38,6 +39,7 @@ from urllib.parse import parse_qs, urlparse
 
 from ..api.server import _UI_CSP, dispatch
 from ._app import DEFAULT_PORT, LAB_HOST, LabApp, LabError
+from ._docs import DOCS_CSP, DOCS_ROUTE
 from ._ui import LAB_CSP, lab_page_html
 
 BODY_LIMIT = 16 * 1024
@@ -173,6 +175,8 @@ def _get(app: LabApp, path: str, query: dict):
         return _json(200, {"job": app.job(path.rsplit("/", 1)[1])})
     if path.startswith("/lab/reports/") and path.count("/") == 3:
         return _html(200, app.report_html(path.rsplit("/", 1)[1]), REPORT_CSP)
+    if path.startswith(DOCS_ROUTE):
+        return _html(200, app.docs_page(path[len(DOCS_ROUTE) :]), DOCS_CSP)
     if path in READ_ROUTES:
         status, body = dispatch(app.read_api, "GET", path, query)
         if isinstance(body, str):

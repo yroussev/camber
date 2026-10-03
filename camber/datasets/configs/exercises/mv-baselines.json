@@ -1,0 +1,38 @@
+{
+  "_comment": "Workbook exercise mv-baselines (docs/workbook/mv-baselines.md), part 2: SEP chaining on the two valladolid-uva buildings, 2016 baseline, 2017 intermediate, 2018 reporting (three calendar years, as SEP's chaining method needs: one intermediate period of the baseline's length between baseline and reporting). A daily change-point + occupied-day model (weekdays that are not a public holiday in Castilla y Leon, the bundled ES-CL calendar), because a university building follows the working week as much as the weather; the dataset template's all-days model fails G14 on every meter. The academic breaks (July-August, Christmas, Easter) are not in any calendar CAMBER ships, so they stay unmodelled: the page asks what that does to the fit. Weather is the publisher's daily NASA POWER temperature stored on 'weather'. validity 'both' reports the G14 acceptance and the SEP 50001 section 6.4.1 model validity side by side. 2020 is left out: the COVID-19 closure of March 2020 is a non-routine period (see the dataset's data issues).",
+  "_dataset": "valladolid-uva",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-valladolid-uva"
+  },
+  "resample": "1h",
+  "shared_oat": {
+    "equip": "weather",
+    "role": "oat"
+  },
+  "equipment": [
+    {
+      "class": "ELECTRICITY_METER"
+    }
+  ],
+  "rules": [],
+  "mv": [
+    {
+      "class": "ELECTRICITY_METER",
+      "role": "power",
+      "period": ["2016-01-01", "2016-12-31"],
+      "intermediate_period": ["2017-01-01", "2017-12-31"],
+      "reporting_period": ["2018-01-01", "2018-12-31"],
+      "method": "chaining",
+      "validity": "both",
+      "interval": "daily",
+      "model": "cp_driver",
+      "drivers": ["occupied_day"],
+      "holiday_calendar": "ES-CL"
+    }
+  ],
+  "report": {
+    "level": 2
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "_comment": "Workbook exercise capstone (docs/workbook/capstone.md): the lbnl-sdahu spliced fault-onset run AHU__onset_damper_stuck_025 (fault-free until 2018-07-01, then the OA damper stuck at 25%) beside the fault-free run AHU__fault_free as its control. Rules: the economizer three of the air-economizer exercise with this unit's own design minimum (a 1.6% OA fraction at its fixed 10% minimum damper position) and its fixed 60 F dry-bulb high limit, both from the dataset template (configs/lbnl-sdahu.json), plus supply_air_control, supply_air_reset and static_pressure_reset so the RCx report has the air-side issues a re-tuning plan must weigh. drift: the ahu family with the first half of 2018 (before the onset) as the frozen baseline and the second half as the current window; `camber drift freeze` writes capstone-baselines.json next to this config, and `camber drift run` scores against it. Freeze only after writing the RCx report: once baselines exist, `camber run` and `camber report` fold the drift verdicts into the findings.",
+  "_dataset": "lbnl-sdahu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-lbnl-sdahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp",
+      "equip": [
+        "AHU__onset_damper_stuck_025",
+        "AHU__fault_free"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "name": "outdoor_air_fraction",
+      "params": {
+        "min_oa_pct": 1.6
+      }
+    },
+    {
+      "name": "economizer_high_limit",
+      "params": {
+        "high_limit_f": 60.0,
+        "min_oa_pct": 1.6,
+        "differential": false
+      }
+    },
+    {
+      "name": "free_cooling_missed",
+      "params": {
+        "high_limit_f": 60.0
+      }
+    },
+    "supply_air_control",
+    "supply_air_reset",
+    "static_pressure_reset"
+  ],
+  "drift": {
+    "store": "capstone-baselines.json",
+    "baseline": [
+      "2018-01-01",
+      "2018-06-30"
+    ],
+    "current": [
+      "2018-07-01",
+      "2018-12-31"
+    ],
+    "families": [
+      {
+        "class": "AHU",
+        "family": "ahu"
+      }
+    ]
+  },
+  "report": {
+    "level": 2
+  }
+}

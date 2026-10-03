@@ -71,6 +71,7 @@ class LabApp:
         entries=None,
         opener=None,
         token: str | None = None,
+        docs_dir=None,
     ):
         if (store is None) == (workspace is None):
             raise ValueError("pass exactly one of store= or workspace=")
@@ -88,6 +89,11 @@ class LabApp:
         self._entries = tuple(entries) if entries is not None else None
         self.opener = opener
         self.token = token or secrets.token_urlsafe(32)
+        # 0.97 (#79): the docs tree a relative exercise link is served from (None: link to the
+        # published site). Default: docs/ beside the package, when it has a workbook/ folder.
+        from ._docs import default_docs_dir
+
+        self.docs_dir = os.fspath(docs_dir) if docs_dir is not None else default_docs_dir()
         self.jobs = JobQueue()
         self.port: int | None = None
         self.allowed_hosts: frozenset = frozenset()
@@ -157,6 +163,7 @@ class LabApp:
     def catalog_view(self) -> dict:
         """The JSON behind the catalog table: entries, what is fetched / ingested, free disk."""
         from ..datasets import _licence, _ops
+        from ._docs import exercise_href
 
         entries = self.entries()
         status = {r["id"]: r for r in _ops.dataset_status(entries, data_dir=self.data_dir)}
@@ -199,7 +206,8 @@ class LabApp:
                     ),
                     "facilities": ingested.get(e.id, []),
                     "report": bool(sugg.get("config_template")),
-                    "exercise": sugg.get("exercise"),
+                    # 0.97 (#79): the resolved link (local /lab/docs/... or the docs site)
+                    "exercise": exercise_href(sugg.get("exercise"), self.docs_dir),
                     "data_issues": len(e.data_issues),
                 }
             )
@@ -224,6 +232,15 @@ class LabApp:
             "busy": self.jobs.busy(),
             "datasets": rows,
         }
+
+    def docs_page(self, page: str) -> str:
+        """The offline reading copy of workbook ``page`` (``LabError`` 404 when not served)."""
+        from ._docs import page_html
+
+        out = page_html(self.docs_dir, page)
+        if out is None:
+            raise LabError(404, f"no local workbook page {page!r}")
+        return out
 
     # ------------------------------------------------------------------ jobs
 

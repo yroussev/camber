@@ -1,0 +1,23 @@
+{
+  "_comment": "Workbook exercise air-sat-reset (docs/workbook/air-sat-reset.md), irish-ahu part: a real unit whose supply-air setpoint is not trended. `camber datasets config irish-ahu --exercise air-sat-reset--irish-ahu --store DIR --out cfg.json` fills in the store path. supply_air_reset infers the reset from the supply air (DaTemp) against the unit's own outdoor sensor (OaTemp) over the cooling hours (cooling valve open); supply_air_reset_compliance compares it with the Guideline 36 OAT reset target at its defaults. The unit runs around the clock and trends no fan signal, so neither rule is fan-gated, and occupancy falls back to CAMBER's assumed weekday schedule.",
+  "_dataset": "irish-ahu",
+  "source": {
+    "kind": "store",
+    "store": "",
+    "facility_id": "ds-irish-ahu"
+  },
+  "resample": "1h",
+  "equipment": [
+    {
+      "class": "AHU",
+      "marker_role": "mixed_air_temp"
+    }
+  ],
+  "rules": [
+    "supply_air_reset",
+    "supply_air_reset_compliance"
+  ],
+  "report": {
+    "level": 2
+  }
+}

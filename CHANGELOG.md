@@ -4,6 +4,150 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.97.0] — 2026-10-03
+
+<!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+**0.97: the PNNL re-tuning workbook (#79, #80, #81, #82, #83).** A hands-on course that follows
+PNNL's free Building Re-tuning training, run on the open dataset catalog in `camber lab`. Default
+outputs are unchanged, and no gated benchmark moves.
+
+### Added
+<!-- 097-framework (#79) -->
+- **The workbook framework (#79, provisional).** `docs/workbook/` holds a curriculum map from the
+  PNNL chapters and guides to exercises and datasets (`index.md`), an exercise page template
+  (`_template.md`: goal, Learn more, datasets and licence, setup in the lab and on the CLI,
+  steps, questions, what CAMBER shows, caveats, going further) and an instructor page with a
+  section per exercise (answer key, discussion points, common mistakes). The docs site has a new
+  *Re-tuning workbook* section, and the README a "Learn re-tuning with CAMBER" section.
+  - **Answer keys pinned by tests.** Each exercise declares its datasets, configs, CLI commands and
+    expected answers (a finding present or absent on given equipment, a metric within a
+    tolerance, a label score, or a free-form check) in `tests/workbook/exercises/<id>.py`, with a
+    synthetic stand-in shaped like each dataset. The offline tests run the exercise's configs on
+    the stand-in every time; `pytest -m network` runs them on the real catalog data. A stale
+    answer fails and names the exercise, and the instructor page must quote every pinned figure.
+  - **Reference links from the registry.** Workbook pages link PNNL only through reference-style
+    Markdown links labelled with `camber.references` ids; `scripts/workbook_refs.py` prints the
+    definitions and `--check` (also a test) rejects an unknown id, a URL that differs from the
+    registry's, or a PNNL link made any other way. No mkdocs plugin is needed.
+  - **Catalog `exercise` field.** `suggested_analyses.exercise` is validated: a docs-relative
+    workbook page (`workbook/<id>.md`, optionally `#<anchor>`) or an https URL. `camber datasets
+    info` prints its published URL. `camber lab` serves a relative link offline from the local
+    docs tree (`/lab/docs/workbook/<id>.md`, a script-free reading copy; `--docs DIR`, by default
+    the checkout's `docs/`), and links the published docs site otherwise.
+  - **Exercise config templates.** `camber/datasets/configs/exercises/<id>.json` (package data)
+    holds a tuned config per exercise where the dataset's default doesn't fit;
+    `camber datasets config <dataset> --exercise <id>` (and
+    `datasets.config_template(..., exercise=)`) writes it.
+  - **Worked example: `air-economizer`** on `lbnl-sdahu`: a damper stuck open is found by
+    `outdoor_air_fraction` and `economizer_high_limit`, one stuck near minimum only as missed free
+    cooling (`free_cooling_missed`), and the label score is read against the published labels.
+<!-- /097-framework -->
+<!-- 097-air (#80) -->
+- **Workbook: the air side (#80).** Five exercises following PNNL re-tuning chapters 5 and 6 and
+  the AHU guides, each with an instructor key pinned by the answer-key tests:
+  - `air-sat-reset` (`lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu`): is the supply-air temperature
+    reset, which way should it move with the outdoor air, how far below the Guideline 36 target
+    does it sit, and does the unit hold its setpoint.
+  - `air-static-pressure` (`lbnl-sdahu`, `ornl-frp-vav`): a flat duct static setpoint, and a
+    damper census over one real test day's ten boxes.
+  - `air-heat-cool` (`lbnl-sdahu`, `lbnl-ddahu`, `irish-ahu`): the published 10 % cooling-valve
+    leak (which `leaking_valve`'s 3 °F margin misses; the exercise teaches the comparison with
+    the fault-free run), both valves open on a dual-duct unit by design, and a real unit's coils.
+  - `air-economizer` gains an `irish-ahu` part: the economizer rules on a real, unlabelled unit
+    with a documented 100 % outdoor-air period, split by period.
+  - `air-scheduling` (`ornl-frp-ops`): a 24/7 baseline against a night setback held by fan
+    cycling, compressor short-cycling, and the supply fan's night energy.
+  - Exercise configs `air-sat-reset`, `air-sat-reset--lbnl-ddahu`, `air-sat-reset--irish-ahu`,
+    `air-static-pressure`, `air-static-pressure--ornl-frp-vav` and `air-heat-cool--lbnl-ddahu`;
+    the catalog links `lbnl-ddahu`, `irish-ahu` and `ornl-frp-ops` to their exercises.
+<!-- /097-air -->
+<!-- 097-zone (#81) -->
+- **Workbook: terminal units and ventilation (#81).** Five exercises for PNNL chapter 7 and the
+  zone heating and cooling and minimum outdoor-air guides, each with an instructor key pinned by
+  offline stand-in tests and `-m network` tests on the real data:
+  - `zone-reheat-overcooling` (`lbnl-fpu`): a high minimum airflow that overcools and reheats,
+    against a stuck damper that floods the box (`airflow_tracking`, `reheat_penalty`,
+    `overcooling_min_flow`); the south-zone box is the one under test.
+  - `zone-bad-box` (`ornl-frp-vav`): the one box with a flat damper among ten, the SAT rogue-zone
+    census, the rooftop unit's airflow and static following the stuck box, and why a comfort rule
+    scores poorly as a stuck-damper detector (TPR 33 %, FPR 100 % on the published labels).
+  - `zone-reheat-saturated` (`lbnl-fpu`, `ornl-frp-vav`): a zone below its heating setpoint with
+    the reheat demand saturated (`reheat_capacity_shortfall`), a heating shortfall rather than
+    overcooling; and a real building whose electric reheat is not trended, where no reheat verdict
+    is possible.
+  - `zone-dcv` (`finnish-dcv`, `b4b-windesheim`, `sdu-ou44`): a documented DCV law, a verdict
+    that depends on which CO₂ sensor you trust, and the honest "not judged".
+  - `zone-min-oa` (`lbnl-b59`): the system-level 62.1 Ventilation Rate Procedure with stated
+    assumptions (public sources only), measured OA several times the requirement, and CO₂ and
+    DCV as second opinions.
+  - Four exercise config templates (`zone-reheat-overcooling`, `zone-reheat-saturated`,
+    `zone-reheat-saturated--ornl-frp-vav`, `zone-min-oa`); the catalog entries `lbnl-fpu`,
+    `ornl-frp-vav`, `finnish-dcv`, `b4b-windesheim`, `sdu-ou44` and `lbnl-b59` link their
+    exercise.
+<!-- /097-zone -->
+<!-- 097-plant (#82) -->
+- **Workbook: the central plant (#82).** Five exercises on the open LBNL plant datasets, each with
+  a page, an instructor key, a tuned config and a synthetic stand-in:
+  - `plant-chiller-efficiency` (`lbnl-chiller`): a generic kW/ton ceiling flags the healthy plant;
+    the ceiling calibrated from the fault-free run finds the severe chiller fouling and the tower
+    bypass, and the label score shows its false alarms.
+  - `plant-cooling-tower` (`lbnl-chiller`): a controlled tower hides fouling in fan effort rather
+    than approach; condenser-water reset; `condenser_bypass_leak` on the stuck bypass.
+  - `plant-chw-reset-pumping` (`lbnl-chiller`): chilled-water reset, a low delta-T that is a
+    property of the constant-flow primary loop, a flat DP setpoint, and a VFD floor above the pump
+    rule's fixed near-minimum band.
+  - `plant-boiler` (`lbnl-boiler`): why the lockout, short-cycle and delta-T rules stay silent on
+    a plant whose boiler status is an enable, a pump that runs all year, and boiler fouling that no
+    point-in-time rule sees.
+  - `plant-sensor-vs-equipment` (`lbnl-chiller`): where each sensor bias shows up (kW/ton, the
+    secondary pump, a sensor-offset attribution) and why the score counts it as a negative.
+  - The `lbnl-chiller` and `lbnl-boiler` catalog entries link their exercise.
+- **`lbnl-chiller` mapping (#82).** The secondary loop's lead pump speed and its DP and DP
+  setpoint now map to `chw_pump_speed`, `chw_diff_press` and `chw_diff_press_sp`, so
+  `chw_pump_dp_reset` can run on the plant. Re-ingest (`--force`) to pick them up. The dataset
+  template's rules do not read them, so its findings are unchanged.
+<!-- /097-plant -->
+<!-- 097-practice (#83) -->
+- **Workbook: data quality, energy charting, M&V and the capstone (#83, provisional).** Four
+  exercises, each with its page, instructor key and answer-key test (stand-in offline, real data
+  under `-m network`):
+  - **`data-trend-quality`** (`nuig-ahu101`, `lbnl-b59`, `irish-ahu`): the core points each unit
+    trends, then the sensor-health layer on real faults -- a copied return-air point, mixed-air
+    sensors that fail the flow balance, room CO2 clipped at full scale, a meter held over two
+    weekends, a gap-filled CO2 stretch -- and an "untrusted" supply air that is a well-controlled
+    sensor.
+  - **`data-energy-charting`** (`bdg2`, `valladolid-uva`): weekday and weekend profiles,
+    out-of-hours base load, load factor and the daily change-point baselines as the
+    weather-dependence chart.
+  - **`mv-baselines`** (`cofactor-drammen`, `valladolid-uva`, `bdg2`): G14 acceptance and SEP
+    50001 §6.4.1 validity, forecast against backcast, SEP chaining, a chain across the spring 2020
+    school closure with a non-routine adjustment, and bill-only M&V on synthetic bills cut from
+    an open meter (days-weighted fit, bases chosen from the bills, calendarized). Four exercise
+    configs: `mv-baselines`, `mv-baselines--forecast`, `--backcast` and `--covid`.
+  - **`capstone`** (`lbnl-sdahu`, `ornl-frp-ops`): the RCx report on the fault-onset splice, a
+    walk-down checklist built from its recommended actions, conditional issues and default
+    assumptions, a re-tuning plan, verification by drift (a first-half baseline scored on the
+    second half), and a before-and-after scheduling test where hourly M&V is refused for lack of
+    baseline data. Exercise config `capstone`.
+  - Catalog `exercise` links: `nuig-ahu101` to `data-trend-quality`, `bdg2` to
+    `data-energy-charting`, `valladolid-uva` and `cofactor-drammen` to `mv-baselines`.
+<!-- /097-practice -->
+
+### Fixed
+<!-- 097-integration -->
+- **Workbook network tests (test harness only).** `pytest -m network` now ingests each run's
+  `subset`: the plant exercises that need `full` get their own sibling store, so the default and
+  full ingests of `lbnl-chiller` no longer replace each other. A dataset already in the store is
+  ingested again when its subset or mapping has changed (for example the new `lbnl-chiller` pump
+  roles). A manual download (`lbnl-b59`) whose files are neither in `CAMBER_WORKBOOK_FROM_DIR`
+  nor in the cache is skipped, with a message listing the files to download, instead of failing
+  on a fetch. The harness docstring lists the files `CAMBER_WORKBOOK_FROM_DIR` needs for each
+  dataset, and a test keeps that list in step with the catalog.
+- **Workbook index.** The status note says that all 19 exercises are written.
+<!-- /097-integration -->
+
 ## [0.96.0] — 2026-10-03
 
 <!-- 0.96 is stacked on 0.95 (unreleased, below). This entry gets its date when 0.96 is

@@ -623,6 +623,10 @@ def _cmd_datasets_info(args) -> int:
     if e.manual:
         print(f"download  : manual -- {e.manual_instructions}")
         print(f"            then: camber datasets ingest {e.id} --from-dir DIR --store STORE")
+    if e.exercise:  # 0.97 (#79): the workbook exercise that uses this dataset
+        from .lab._docs import exercise_url
+
+        print(f"exercise  : {exercise_url(e.exercise)}")
     print(f"cite      : {e.citation}")
     if e.dois:
         print(f"doi       : {', '.join(e.dois)}")
@@ -849,7 +853,9 @@ def _cmd_datasets_remove(args) -> int:
 def _cmd_datasets_config(args) -> int:
     from . import datasets as ds
 
-    cfg = ds.config_template(args.id, args.store, facility_id=args.facility, out=args.out)
+    cfg = ds.config_template(
+        args.id, args.store, facility_id=args.facility, out=args.out, exercise=args.exercise
+    )
     if args.out:
         print(f"wrote {args.out} (facility {cfg['source']['facility_id']})")
         print(f"next: camber report {args.out} --out report.html")
@@ -920,7 +926,7 @@ def _cmd_lab(args) -> int:
 
     try:
         store, ws = _lab_target(args)
-        app = LabApp(store=store, workspace=ws, data_dir=args.dir)
+        app = LabApp(store=store, workspace=ws, data_dir=args.dir, docs_dir=args.docs)
         httpd = make_lab_server(app, port=args.port)
     except (ValueError, FileNotFoundError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
@@ -2959,6 +2965,10 @@ def _build_parser() -> argparse.ArgumentParser:
     dsc.add_argument("--store", required=True)
     dsc.add_argument("--out", help="config JSON to write (default: print it)")
     dsc.add_argument("--facility", help="facility id (multi-facility datasets such as bdg2)")
+    dsc.add_argument(
+        "--exercise",
+        help="a workbook exercise's tuned template instead of the dataset's (docs/workbook/)",
+    )
     dsc.set_defaults(func=_cmd_datasets_config)
 
     dsk = dssub.add_parser("score", help="score findings against the ingested fault labels")
@@ -2986,6 +2996,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--dir", help="dataset cache directory (default: $CAMBER_DATA_DIR or ~/.cache)"
     )
     plab.add_argument("--port", type=int, default=8765, help="port on 127.0.0.1 (default 8765)")
+    plab.add_argument(
+        "--docs",
+        help="docs source tree to serve workbook exercise pages from offline (default: docs/ "
+        "beside the package in a source checkout; else exercise links go to the docs site)",
+    )
     plab.set_defaults(func=_cmd_lab)
     # ----- /lab
 

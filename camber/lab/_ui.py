@@ -11,7 +11,8 @@ The page talks only to its own origin: ``GET /lab/catalog`` and ``/lab/jobs`` (p
 ``POST /lab/jobs/fetch|ingest`` and ``/lab/jobs/<id>/cancel`` with the token header and a JSON
 body. Research-only (NC / ND) entries open a modal that states the licence terms and asks the user
 to type the dataset id before a fetch is queued. Links go to the trend viewer
-(``/ui?facility_id=``), the on-demand report (``/lab/reports/<fid>``) and the publisher's page.
+(``/ui?facility_id=``), the on-demand report (``/lab/reports/<fid>``), the workbook exercise
+(0.97: the lab's ``/lab/docs/...`` copy or the docs site) and the publisher's page.
 """
 
 from __future__ import annotations
@@ -174,8 +175,8 @@ function render(){
         'trends'));
       if(d.report)c7.appendChild(el('a',{href:'/lab/reports/'+
         encodeURIComponent(f.facility_id),target:'_blank',rel:'noopener'},'report'));});
-    if(/^https:\/\//.test(d.exercise||''))c7.appendChild(el('a',{href:d.exercise,target:'_blank',
-      rel:'noopener noreferrer'},'exercise'));
+    if(/^(https:\/\/|\/lab\/docs\/workbook\/)/.test(d.exercise||''))c7.appendChild(el('a',
+      {href:d.exercise,target:'_blank',rel:'noopener noreferrer'},'exercise'));
     if(/^https:\/\//.test(d.landing_url||''))c7.appendChild(el('a',{href:d.landing_url,
       target:'_blank',rel:'noopener noreferrer'},'publisher'));
     tr.appendChild(c7);
