@@ -152,11 +152,12 @@ single-duct AHU dataset** (the CC-BY dataset the [`examples/lbnl_fdd`](https://g
 example uses). Running on a public, downloadable dataset makes this corroboration
 fully reproducible and shareable, with no client data involved.
 
-We pinned **open-fdd 0.1.5**, the last release that still exposes the classic
-**FC1–FC16** per-fault API. **Everything in this section describes that 0.1.5
-comparison only.** Current open-fdd (4.x) is a different engine (see
-[Current open-fdd](#current-open-fdd-4x-not-yet-re-compared) below), and these
-results say nothing about it.
+Two comparisons are described here. The first pinned **open-fdd 0.1.5**, the last release that
+still exposes the classic **FC1–FC16** per-fault API; its subsections describe that comparison
+only. Current open-fdd is a different engine and was re-compared in 2026-09, on labelled open data
+and with a reusable harness: see
+[Re-compared against open-fdd 4.4.9](#re-compared-against-open-fdd-449-2026-09) below, including
+[where the 0.1.5 comparison no longer applies](#where-the-015-comparison-no-longer-applies).
 
 > **Since 0.91** `run_g36_afdd` also applies the G36 §5.16.14 time filters by default: fan-on
 > gating, ModeDelay, AlarmDelay and 5-minute averaging. The 0.1.5 comparison below compares the
@@ -237,28 +238,294 @@ single-signal framing is broader but less precisely tied to the standard's inten
 > open-fdd-style denominator without changing Camber's default outputs. See
 > `camber/fdd_g36.py`.
 
-### Current open-fdd (4.x): not yet re-compared
+### Re-compared against open-fdd 4.4.9 (2026-09)
 
-open-fdd has since become a platform. Its fault conditions now run as SQL rules in a
-DataFusion engine, and the pandas library on PyPI is a secondary reference
-implementation. The equations are still G36-shaped, but the **default tolerances are
-much tighter** than the G36 Table 5.16.14.7 values CAMBER uses (open-fdd `sql_rules/registry.yaml`,
-checked at 4.4.7):
+open-fdd has since become a platform. Its fault conditions run as SQL rules in a DataFusion
+engine (`fdd_cli`), and the pandas rule cookbook on PyPI is a second implementation. We
+re-compared both engines against CAMBER's `g36_afdd` on labelled open data with a reusable
+harness,
+[`examples/openfdd_crosscheck`](https://github.com/yroussev/camber/tree/main/examples/openfdd_crosscheck)
+([#22](https://github.com/yroussev/camber/issues/22), item 1). The rules we follow:
 
-| Parameter | open-fdd 4.x default | G36 / CAMBER default |
+- **Files and processes only.** CAMBER does not import open-fdd. The pandas engine runs in its own
+  venv as a subprocess. The SQL engine runs as `fdd_cli` in a container built from the pinned
+  commit, with no network and read-only data mounts. No open-fdd code or SQL is copied.
+- **Each engine speaks for itself.** Every number below is labelled with its engine and tolerance
+  profile. Verdicts are never merged.
+
+**Versions.**
+
+- **open-fdd:** commit `32a6d44` (VERSION 3.5.58). PyPI `open-fdd` 4.4.9 was released from this
+  commit, and the wheel's `open_fdd/` tree is identical to it. The SQL engine is `fdd_cli` built
+  from the same commit. The newest repository tag, v3.2.8, is older.
+- **CAMBER:** `g36_afdd` on the 0.98 development line (with #94), at the G36 defaults plus each
+  dataset's run-template parameters: `min_oa_pct` 1.6 on `lbnl-sdahu`, which enables FC6.
+- **Role mapping and profiles:** role map version 1, profiles version 2.
+- **Python requirement:** the 4.4.9 wheel declares Python ≥ 3.10 but needs 3.11 or newer (it
+  imports `enum.StrEnum`).
+
+**Data.** `lbnl-sdahu`, the LBNL single-duct AHU (CC-BY-4.0, fetched from the publisher, never
+redistributed), full catalog subset:
+
+- 13 labelled faulted runs: 4 stuck OA damper, 4 supply-air-temperature bias, 4 partly stuck
+  cooling valve and 1 valve leak;
+- 1 fault-free run.
+
+`lbnl-ddahu`, the dual-duct AHU, is scored separately, with its default subset: 2 stuck OA damper
+runs and 1 fault-free run. `lbnl-fcu` is not part of the run: neither engine applies its G36 AHU
+fault conditions to a fan-coil unit. CAMBER declines the equipment class, and open-fdd scopes its
+FC rules to `ahu`.
+
+**Scoring.** Each labelled run is one case. An FC **fires** on a run when its fault hours reach
+5 % of that engine's **own** evaluated hours, over at least 24 evaluated hours. An FC an engine
+could not run is listed as **not evaluated** with the reason. It is left out of that FC's counts,
+never counted as a miss.
+
+The engines' own alarms are scored separately, and they differ by design:
+
+- open-fdd's status `FAULT` (pandas) or non-zero fault hours (SQL) means at least one confirmed
+  fault sample;
+- CAMBER flags an FC at 5 % of at least 24 applicable hours.
+
+On annual runs both open-fdd engines raise an alarm on every run, fault-free included, in both
+profiles. A shared duration rule is therefore needed to compare detection at all.
+
+Rates carry Wilson 95 % intervals. With one fault-free run per unit, every per-run FPR rests on
+n = 1, so read the intervals, not the point rates.
+
+**Tolerance profiles for open-fdd.**
+
+- **Own defaults:** ε 1.15 °F, fan heat 0.55 °F.
+- **G36:** the Table 5.16.14.7 tolerances CAMBER uses (ε SAT/RAT 2 °F, MAT/OAT 5 °F, coil
+  CCET/CCLT 5/2 °F, fan heat 2 °F).
+  - Pandas engine: passed as rule parameters.
+  - SQL engine: passed through its supported override, `rule_tuning/defaults.yaml`. Four SQL
+    rules (FC9, FC11, FC14, FC15) read a tolerance that file cannot set (see "SQL engine" below).
+    They run at their defaults in this profile rather than with a partial override.
+
+Only tolerances change. Delays and the damper and valve thresholds that select operating states
+stay at each engine's defaults.
+
+**`lbnl-sdahu`, one case per run.** TPR, Wilson 95 % interval and detected/evaluated runs. Every
+FPR is 0/1 except where the "not evaluated" table says otherwise.
+
+| FC | CAMBER `g36_afdd` | pandas, own defaults | pandas, G36 tol. | SQL, own defaults | SQL, G36 tol. |
+|---|---|---|---|---|---|
+| FC2–FC4 | 0.00 [0.00–0.23] (0/13) | 0/13 | 0/13 | 0/13 | 0/13 |
+| FC6 | 0.17 [0.05–0.45] (2/12) | – | – | – | – |
+| FC8 | 0.00 [0.00–0.26] (0/11) | 0.62 [0.36–0.82] (8/13) | 0.46 [0.23–0.71] (6/13) | 0.62 [0.36–0.82] (8/13) | 0.46 [0.23–0.71] (6/13) |
+| FC9 | 0.00 [0.00–0.26] (0/11) | 0.08 [0.01–0.33] (1/13) | 0.08 [0.01–0.33] (1/13) | 0.08 [0.01–0.33] (1/13) | 0.08 [0.01–0.33] (1/13) |
+| FC10 | 0.22 [0.06–0.55] (2/9) | 0.23 [0.08–0.50] (3/13) | 0.15 [0.04–0.42] (2/13) | 0.23 [0.08–0.50] (3/13) | 0.15 [0.04–0.42] (2/13) |
+| FC11 | 0.22 [0.06–0.55] (2/9) | 0.15 [0.04–0.42] (2/13) | 0.15 [0.04–0.42] (2/13) | 0.15 [0.04–0.42] (2/13) | 0.15 [0.04–0.42] (2/13) |
+| FC12 | 0.00 [0.00–0.23] (0/13) | 0/13 | 0/13 | 0/13 | 0/13 |
+| FC13 | 0.25 [0.09–0.53] (3/12) | 0.08 [0.01–0.33] (1/13) | 0.08 [0.01–0.33] (1/13) | 0.00 [0.00–0.23] (0/13) | 0.00 [0.00–0.23] (0/13) |
+| FC14 | 0.36 [0.15–0.65] (4/11) | 0.31 [0.13–0.58] (4/13) | 0.08 [0.01–0.33] (1/13) | 0.62 [0.36–0.82] (8/13) | 0.62 [0.36–0.82] (8/13) |
+| FC15 | – | – | – | 0.62 [0.36–0.82] (8/13) | 0.62 [0.36–0.82] (8/13) |
+| **any FC** | **0.77 [0.50–0.92] (10/13)** | **0.85 [0.58–0.96] (11/13)** | **0.69 [0.42–0.87] (9/13)** | **0.77 [0.50–0.92] (10/13)** | **0.77 [0.50–0.92] (10/13)** |
+| any-FC FPR | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 |
+
+Detection by fault type (any FC):
+
+| Fault type | CAMBER | pandas, own | pandas, G36 | SQL, own | SQL, G36 |
+|---|---|---|---|---|---|
+| Stuck damper | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
+| Supply-air-temperature bias | 2/4 | 4/4 | 2/4 | 4/4 | 4/4 |
+| Stuck valve | 4/4 | 3/4 | 3/4 | 2/4 | 2/4 |
+| Valve leak | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 |
+
+The valve leak goes undetected by every engine: its 10 % leak about cancels the unit's fan heat
+(see the `lbnl-sdahu` run template and `examples/lbnl_fdd/README.md`), and CAMBER's dedicated
+`leaking_valve` rule is calibrated for it.
+
+**Month windows.** `--window month` scores each run-month as a case: 151 faulted and 12
+fault-free months on `lbnl-sdahu`. Months of one run are not independent, so these intervals are
+narrower than the evidence supports. Any-FC results:
+
+| Engine | TPR | FPR |
 |---|---|---|
-| ε SAT / RAT / MAT / OAT | 1.15 / 1.15 / 1.15 / 1.15 °F | 2 / 2 / 5 / 5 °F |
-| Supply-fan heat ΔT | 0.55 °F | 2.0 °F |
-| FC8 band √(ε_SAT² + ε_MAT²) | ≈ 1.6 °F | ≈ 5.4 °F |
+| CAMBER | 0.68 [0.60–0.75] | 0/12 |
+| open-fdd pandas, own defaults | 0.71 [0.63–0.78] | 0/12 |
+| open-fdd pandas, G36 tolerances | 0.48 [0.41–0.56] | 0/12 |
+| open-fdd SQL, own defaults | 0.66 [0.58–0.73] | 0/12 |
+| open-fdd SQL, G36 tolerances | 0.61 [0.53–0.68] | 0/12 |
 
-With the defaults unchanged, expect open-fdd 4.x to report FC2, FC3, FC5, FC8, FC10 and
-FC12 far more often than CAMBER does on the same data. That is a difference in
-thresholds, not in equations. Runs compared at matched tolerances are the only fair
-test. A re-run against 4.x, on labelled open data at both open-fdd's defaults and G36
-tolerances, is tracked in the [integration issue](https://github.com/yroussev/camber/issues/22).
-Until then, **do not read the 0.1.5 result above as a statement about the fault conditions
-of current open-fdd.** The M&V helpers are a separate matter: shared test vectors exist for
-them (next section).
+**`lbnl-ddahu` (dual duct).** Any-FC results:
+
+| Engine | One case per run | Month windows |
+|---|---|---|
+| CAMBER | 1/2 detected, 0/1 false alarms | TPR 0.04 [0.01–0.20], FPR 0/12 |
+| open-fdd pandas, own defaults | 2/2 detected, 1/1 false alarms | TPR 0.75, FPR 9/12 |
+| open-fdd pandas, G36 tolerances | 2/2 detected, 1/1 false alarms | TPR 0.58, FPR 5/12 |
+| open-fdd SQL, own defaults | 2/2 detected, 1/1 false alarms | TPR 0.75, FPR 9/12 |
+| open-fdd SQL, G36 tolerances | 2/2 detected, 1/1 false alarms | TPR 0.75, FPR 9/12 |
+
+G36 §5.16.14 is written for single-duct units, and the mapping reads the cold-deck discharge as
+SAT next to the hot-deck valve. On this unit, "SAT below MAT while heating" (FC5) is the design,
+not a fault. Read the `lbnl-ddahu` numbers as a scope check, not as detection performance.
+
+Full tables, the per-run verdicts with each engine's denominator, the native-alarm scores and
+the probe outcomes are in `examples/openfdd_crosscheck/results/`.
+
+**CAMBER since #94 (0.98).** Free cooling now needs the OA damper open beyond its minimum, and
+the run template enables FC6 with the unit's documented minimum OA. Per run on `lbnl-sdahu`,
+before → after:
+
+| FC | Before | After | Why |
+|---|---|---|---|
+| FC6 | not evaluated | 2/12, FPR 0/1 | Catches both stuck-open damper runs: damper_stuck_075 24.5 %, damper_stuck_100_short 25.7 % of applicable hours; fault-free 0.0 % |
+| FC8 | 2/11 | 0/11 | The stuck-open runs left free cooling and are now reported by FC6 |
+| FC9 | FPR 1/1 | FPR 0/1 | The false alarm on the fault-free run is gone |
+| FC12 | 1/13 | 0/13 | |
+| Any FC | TPR 10/13, FPR 1/1 | TPR 10/13, FPR 0/1 | |
+
+The false alarm came from unoccupied hours with the fan at 100 % and the OA damper shut; it read
+18 % of the fault-free run's free-cooling hours. In month windows, CAMBER's any-FC result moves
+from TPR 0.60 with FPR 7/12 (all FC9) to TPR 0.68 with FPR 0/12.
+
+On `lbnl-ddahu`, FC12 moves from 0/2 to 1/2, and nothing else changes.
+
+#### Not evaluated, and why
+
+`lbnl-sdahu`:
+
+| FC | Engine | Why it was not evaluated |
+|---|---|---|
+| FC1 | all | No run has both duct static and its setpoint. The catalog masks the faulted runs' placeholder setpoint and the fault-free run's static, which is published in Pa. |
+| FC5, FC7 | all | No heating coil. |
+| FC6 | open-fdd (both) | Needs a VAV total airflow and a design minimum OA flow; airflow is deliberately unmapped. CAMBER evaluates FC6 from its template's minimum OA fraction. |
+| FC15 | CAMBER, pandas | No heating coil. The SQL rule requires no roles and falls back to MAT/SAT, so it is evaluated (see below). |
+| FC14 | open-fdd pandas | Evaluated only through the harness's declared MAT/SAT substitution (G36 allows it on an AHU without a heating coil). CAMBER makes the same substitution internally, and the SQL rule falls back to MAT/SAT by itself. |
+| FC8–FC14 | CAMBER | Not evaluated on a few runs where the FC's operating states held for under 24 h. |
+
+`lbnl-ddahu`:
+
+| FC | Engine | Why it was not evaluated |
+|---|---|---|
+| FC9, FC11, FC13 | all | No SAT setpoint is mapped (the cold-deck setpoint is published but not in the catalog mapping). |
+| FC14 | CAMBER | Declined: MAT/SAT span both coils. |
+| FC14 | open-fdd pandas | No coil temperatures. |
+| FC14 | open-fdd SQL | Evaluated: falls back to MAT/SAT. |
+| FC6 | all | No minimum OA is given. |
+
+#### SQL engine: the source-reading findings, tested
+
+Before the SQL engine could run, these were read from the pinned source. Each is now confirmed on
+synthetic one-day probes run through `fdd_cli`
+(`examples/openfdd_crosscheck/results/probes.md`, `run_crosscheck.py --probe`; 20 of 20 probe
+outcomes as predicted).
+
+| Probe | What it isolates | CAMBER | pandas own / G36 | SQL own / G36 |
+|---|---|---|---|---|
+| `fc13_sat_1p5_over_sp_full_cooling` | FC13 at SAT 1.5 °F over setpoint, full cooling | not fired | fired / not fired | fired / **fired** |
+| `fc9_oat_4_over_sp_free_cooling` | FC9 at OAT 4 °F over the SAT setpoint, free cooling | not fired | fired / not fired | fired / **fired** |
+| `fc8_sat_3p5_over_mat_free_cooling` | FC8 at SAT 3.5 °F over MAT, free cooling (positive control) | not fired | fired / not fired | fired / not fired |
+| `fc13_sat_3_over_sp_half_cooling` | FC13 with the cooling valve at 50 % | not fired | fired / fired | not fired / not fired |
+
+- **G36 tolerances the SQL tuning file cannot set: confirmed.** `fdd_cli run-rules` itself only
+  overrides `confirm_seconds`. Its rule parameters come from `rule_tuning/defaults.yaml` next to
+  the rules directory. Through that file:
+  - `EPS_SAT` is always taken from `SUPPLY_TOL`, so FC7 and FC13 (`FC13-SAT-HIGH`) keep
+    1.15 °F. At the "G36" profile, FC13 still fires at SAT 1.5 °F over setpoint.
+  - FC9, FC11, FC14 and FC15 read an `EPS_MAT` they do not declare, so it stays at the 1.15 °F
+    global default. FC9 still fires at OAT 4 °F over the setpoint.
+
+  The FC8 probe is the control: FC8's tolerances are declared, the G36 profile silences it, so
+  the override file is read.
+- **Partial overrides.** The first data run applied only the settable part (fan heat 2 °F) to
+  FC9. That made it fire on 4/13 runs against 1/13 at its defaults: the band became
+  OAT > SATSP + 0.3 °F instead of + 1.75 °F. Profiles version 2 therefore leaves rules whose G36
+  tolerances cannot all be set at their defaults. The G36 SQL column above runs FC9, FC11, FC14
+  and FC15 at open-fdd's defaults.
+- **FC13 "full cooling" threshold: confirmed.** The SQL rule requires the cooling valve at 90 %
+  or more (`clg_full_min` 0.9), and the pandas rule any cooling (0.01). With the valve at 50 %,
+  the pandas FC13 fires and the SQL one does not. CAMBER does not either, since G36 FC13 is a
+  full-cooling test.
+- **Default ModeDelay** is 10 min in the SQL rules and 0 in the pandas rules. The FC8, FC9, FC10
+  and FC11 results above agree between the two engines run for run (within 2 percentage points
+  per run on FC8, under 1 on FC9–FC11), so it does not matter on this data.
+- **Required roles are checked per building.** `fdd_cli run-rules` skips a rule when a required
+  role is missing from the building's columns, which are the union over all its equipment.
+  Equipment that lacks a role its neighbour has is reported with 0 fault hours rather than
+  skipped. The harness therefore gives each equipment its own building. In a first run with all
+  units in one building, FC9, FC11 and FC13 were reported for the dual-duct unit, which has no
+  SAT setpoint.
+
+#### What drives the differences
+
+These are behaviour differences, each traced to a cause on public code and open data.
+
+- **Tolerances.** Moving open-fdd from its defaults to the G36 tolerances lowers its FC8 rate in
+  both engines: 8/13 → 6/13 runs. The pandas FC14 drops from 4/13 to 1/13; the SQL FC14 stays at
+  its defaults (see above).
+
+  The SAT-bias runs show it most clearly. The −2 and −4 °C bias runs read 37–38 % FC8 and FC14
+  in both open-fdd engines at their defaults. At G36 tolerances the pandas FC14 reads 0–1 %.
+- **The two open-fdd engines agree with each other where their parameters match.** On every run,
+  FC8 agrees within 2 percentage points and FC10 within 1, in both profiles; FC9 and FC11 agree
+  within 1 at the defaults.
+- **FC14 sign, and FC15 on a unit without a heating coil (SQL).** The SQL FC14 and FC15 test the
+  absolute MAT→SAT temperature change (either sign), falling back to MAT/SAT when there are no
+  coil sensors. FC15 requires no roles, so it is evaluated on the cooling-only SDAHU as well,
+  where the MAT/SAT pair spans only the cooling coil and the fan.
+
+  On SDAHU, both rules fire on the same 8 faulted runs (SAT-bias, two stuck-valve and two
+  stuck-damper runs) and not on the fault-free run. On the dual-duct fault-free unit the SQL FC14
+  fires on 51 % of its hours.
+
+  The pandas FC14 tests the signed drop. CAMBER subtracts the fan-heat rise, because SAT is
+  downstream of the fan; on the −2/−4 °C SAT-bias runs CAMBER's FC14 reads 96–100 %.
+- **How the minimum-OA state is recognised.** Both open-fdd engines take "minimum OA" to mean a
+  damper at or below 5 % (`econ_min_pos`, `oa_damper_econ_low`). This unit's minimum position is
+  10 %, so the open-fdd FC12 and FC13 never see the OS#4 hours in which the partly stuck valves
+  show up. CAMBER's FC13 reads 92/89/77 % on the 10/25/50 % stuck-valve runs; pandas reads 5/7/1 %
+  and SQL 3/2/0 %.
+
+  With `econ_min_pos` set to the unit's own minimum (0.11) and G36 tolerances, the pandas FC13
+  reads 68/66/48 % on those runs and under 4 % on the other runs (fault-free 1.3 %). This is a
+  site setting, not a tolerance, so it is not part of either profile.
+- **FC5 on a dual-duct unit (both open-fdd engines).** The open-fdd FC5 tests "heating
+  commanded" without excluding simultaneous cooling. CAMBER evaluates FC5 only in OS#1, so the
+  dual-duct hours with both decks active are excluded. The open-fdd FC5 fires on 18–23 % of the
+  DDAHU fault-free run's hours.
+- **Denominators.** CAMBER divides by the hours in the FC's G36 operating states, after
+  ModeDelay. The pandas engine divides by the fan-proven hours after its startup delay. The SQL
+  FC rules report fault hours only, so the harness divides by the fan-on hours of the frame. Each
+  verdict in the results JSON records its denominator.
+
+  So CAMBER's percentages are larger for the same fault hours. On the 10 % and 25 % stuck-damper
+  runs, for example, FC10 reads 100 % in CAMBER and 37–38 % in both open-fdd engines. The 0.1.5
+  comparison found this too.
+
+#### Where the 0.1.5 comparison no longer applies
+
+- **"FC7, FC9, FC11, FC13 need a SAT setpoint, which this dataset didn't include."** No longer
+  true for SDAHU. The dataset publishes `SA_TEMPSPT`, a constant 55.2 °F, and the catalog maps
+  it, so FC9, FC11 and FC13 are now evaluated by every engine. FC7 is still not evaluated, because
+  the unit has no heating coil.
+- **"The equations agree to 0.00 pts" and "same faults, same hours".** Both describe the
+  per-interval equations of 0.1.5 with CAMBER's time filters off. They do not carry over to fault
+  rates now:
+  - CAMBER applies the G36 time filters by default (fan gate, ModeDelay, AlarmDelay, averaging),
+    and since #94 it requires the economizer open beyond minimum for free cooling;
+  - current open-fdd differs from G36 in default tolerances and in how it selects operating
+    states;
+  - the engines differ in the FC14/FC15 sign handling and in their denominators.
+
+  The fault conditions are still the same G36 tests, but the trip rates differ, for the reasons
+  above.
+- **"open-fdd gates on a single signal."** Partly superseded. Both current open-fdd engines
+  select free-cooling and mechanical-cooling states from damper and valve thresholds
+  (`econ_min_pos`, `econ_full_open`, the cooling thresholds) on top of a fan gate and a
+  mode/startup delay. This is closer to an operating-state gate than 0.1.5 was, but it is not
+  G36's OS#1–OS#5 classifier.
+- **"Run open-fdd at matched tolerances."** Still true, but not sufficient. The pandas engine can
+  match the G36 tolerances. The SQL engine cannot for FC7, FC9, FC11 and FC13–FC15. Even where
+  tolerances match, the remaining differences come from operating-state selection, the FC14/FC15
+  sign handling, the unit's minimum-OA damper position and the denominators.
+
+Corrections from the open-fdd side are welcome on
+[#22](https://github.com/yroussev/camber/issues/22), especially on the role mapping
+(`role_map.json`) and the SQL tuning findings.
 
 ### open-fdd's ECM tooling and the shared M&V vectors
 

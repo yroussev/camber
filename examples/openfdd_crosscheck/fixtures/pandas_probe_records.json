@@ -1,0 +1,2106 @@
+{
+ "_comment": "Recorded open-fdd pandas 4.4.9 output (openfdd_pandas_driver.py) on the synthetic probe frames of harness.PROBES, one record per (probe, rule, profile). Synthetic data only; used by the offline tests.",
+ "engine": {
+  "name": "open-fdd pandas",
+  "version": "4.4.9"
+ },
+ "poll_seconds": 900.0,
+ "records": [
+  {
+   "rule_id": "FC1",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "FAULT",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 24.0,
+   "fault_pct": 100.0,
+   "sample_count": 96,
+   "fault_sample_count": 96,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "24.0h fault (100.0% of active)",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "FAULT",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 24.0,
+   "fault_pct": 100.0,
+   "sample_count": 96,
+   "fault_sample_count": 96,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "24.0h fault (100.0% of active)",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "FAULT",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 24.0,
+   "fault_pct": 100.0,
+   "sample_count": 96,
+   "fault_sample_count": 96,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "24.0h fault (100.0% of active)",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "FAULT",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 24.0,
+   "fault_pct": 100.0,
+   "sample_count": 96,
+   "fault_sample_count": 96,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "24.0h fault (100.0% of active)",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "FAULT",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 24.0,
+   "fault_pct": 100.0,
+   "sample_count": 96,
+   "fault_sample_count": 96,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "24.0h fault (100.0% of active)",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "openfdd_defaults"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc13_sat_1p5_over_sp_full_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "FAULT",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 24.0,
+   "fault_pct": 100.0,
+   "sample_count": 96,
+   "fault_sample_count": 96,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "24.0h fault (100.0% of active)",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc13_sat_3_over_sp_half_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc8_sat_3p5_over_mat_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC1",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "duct-static-pressure",
+    "duct-static-pressure-sp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: duct-static-pressure, duct-static-pressure-sp",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC2",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC3",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC4",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC5",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC6",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "vav-total-airflow"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: vav-total-airflow",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC7",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-valve"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-valve",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC8",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC9",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC10",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC11",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC12",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC13",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC14",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "PASS",
+   "applicable": true,
+   "missing_roles": [],
+   "fault_hours": 0.0,
+   "fault_pct": 0.0,
+   "sample_count": 96,
+   "fault_sample_count": 0,
+   "metrics": {
+    "active_sample_count": 96,
+    "total_sample_count": 96,
+    "gate_source": "fan-status"
+   },
+   "notes": "No confirmed faults",
+   "profile": "g36"
+  },
+  {
+   "rule_id": "FC15",
+   "equip": "fc9_oat_4_over_sp_free_cooling",
+   "status": "SKIPPED_MISSING_ROLES",
+   "applicable": false,
+   "missing_roles": [
+    "heating-coil-entering-temp",
+    "heating-coil-leaving-temp"
+   ],
+   "fault_hours": null,
+   "fault_pct": null,
+   "sample_count": 0,
+   "fault_sample_count": 0,
+   "metrics": {},
+   "notes": "SKIPPED \u2014 missing roles: heating-coil-entering-temp, heating-coil-leaving-temp",
+   "profile": "g36"
+  }
+ ]
+}

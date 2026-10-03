@@ -1,0 +1,29 @@
+{
+  "_comment": "Hand-written, synthetic SQL-engine result files in the shape fdd_cli run-rules writes at the pinned commit: one <rule_id>.json per rule holding {rows: [...]} (FC rules report equipment_id and fault_hours), a SKIPPED_MISSING_ROLES marker, or {rows: [], error}. Not recorded from a run (the engine has not been run yet); the extra fault_pct / total_hours rows exercise the normaliser's other denominator paths. Equipment ids are the CSV tree's directory names.",
+  "equips": ["AHU__fault_free", "AHU__stuck"],
+  "fan_on_hours": {"AHU__fault_free": 100.0, "AHU__stuck": 80.0},
+  "bodies": {
+    "FC8": {"rows": [
+      {"equipment_id": "AHU__fault_free", "fault_hours": 2.0},
+      {"equipment_id": "AHU__stuck", "fault_hours": 20.0}
+    ]},
+    "FC13-SAT-HIGH": {"rows": [
+      {"equipment_id": "AHU__fault_free", "fault_hours": 0.0, "fault_pct": 0.0},
+      {"equipment_id": "AHU__stuck", "fault_hours": 10.0, "fault_pct": 25.0}
+    ]},
+    "FC10": {"rows": [
+      {"equipment_id": "AHU__fault_free", "fault_hours": 1.0, "total_hours": 50.0},
+      {"equipment_id": "AHU__stuck", "fault_hours": 30.0, "total_hours": 60.0}
+    ]},
+    "FC7": {
+      "rows": [{"status": "SKIPPED_MISSING_ROLES", "missing_roles": ["htg_valve_pct"], "notes": "missing roles/columns in history: htg_valve_pct"}],
+      "status": "SKIPPED_MISSING_ROLES",
+      "missing_roles": ["htg_valve_pct"],
+      "skipped": true
+    },
+    "FC9": {"rows": [], "error": "synthetic engine error"},
+    "FC12": {"rows": [
+      {"equipment_id": "AHU__fault_free", "fault_hours": 0.0}
+    ]}
+  }
+}
