@@ -245,3 +245,24 @@ def test_merge_estimated_runs_gaps_and_trailing():
     assert gb.merged == [{"action": "dropped", "start": "2024-02-01", "end": "2024-02-29"}]
     plain = BillingSeries.from_frame(f.assign(estimated=False), estimated="estimated")
     assert plain.merge_estimated() is plain
+
+
+def test_spellings_of_one_unit_are_one_unit(tmp_path):
+    """0.93 (#70): kWh / kwh / kilowatt-hours in one file are one unit, not mixed units."""
+    _write(tmp_path)
+    df = pd.read_csv(tmp_path / "gas.csv")
+    df["units"] = ["therm", "Therms", "THERM", "thm"] * (len(df) // 4) + ["therm"] * (len(df) % 4)
+    df.to_csv(tmp_path / "spelled.csv", index=False)
+    bs = BillingSeries.from_csv(tmp_path / "spelled.csv", energy="therms")
+    assert bs.units == "therm"
+    df["units"] = "therms"  # one spelling is kept as written, as before
+    df.to_csv(tmp_path / "one.csv", index=False)
+    assert BillingSeries.from_csv(tmp_path / "one.csv", energy="therms").units == "therms"
+    df.loc[0, "units"] = "MBtu"  # an unparseable spelling is compared by its letters only
+    df.loc[1, "units"] = "mbtu"
+    df.to_csv(tmp_path / "amb.csv", index=False)
+    with pytest.raises(ValueError, match="mixes energy units"):
+        BillingSeries.from_csv(tmp_path / "amb.csv", energy="therms")
+    df["units"] = ["MBtu", "mbtu"] * (len(df) // 2) + ["MBtu"] * (len(df) % 2)
+    df.to_csv(tmp_path / "amb2.csv", index=False)
+    assert BillingSeries.from_csv(tmp_path / "amb2.csv", energy="therms").units == "MBtu"

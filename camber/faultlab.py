@@ -547,6 +547,106 @@ def _cond_bypass(idx, *, faulty):
     )
 
 
+# --- 0.93 rules1 (#44) --------------------------------------------------------------------------
+def _reheat_capacity(idx, *, faulty):
+    """A VAV box through a heating season, occupied weekdays 07-18, heating setpoint 70 F.
+
+    Faulty: the reheat valve is pinned at 100 % and the zone still sits 3 F below its setpoint
+    (the box is out of heating). Clean: the valve modulates (60 %) and the zone holds 70 F.
+    """
+    occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    n = len(idx)
+    return pd.DataFrame(
+        {
+            Role.SPACE_TEMP: np.where(occ, 67.0 if faulty else 70.0, 64.0),
+            Role.HEAT_SP: np.where(occ, 70.0, 60.0),
+            Role.HEAT_VALVE: np.where(occ, 100.0 if faulty else 60.0, 0.0),
+            Role.OCCUPANCY: occ.astype(float),
+            Role.AIRFLOW: np.full(n, 400.0),
+            Role.AIRFLOW_SP: np.full(n, 400.0),
+        },
+        index=idx,
+    )
+
+
+# --- 0.93 (#40) DX / heat-pump scenarios (093-refrig) ------------------------------------------
+
+
+def _dx_charge(idx, *, faulty):
+    """A running split system; faulty = no liquid subcooling (flash gas: low charge)."""
+    n = len(idx)
+    return pd.DataFrame(
+        {
+            Role.SUBCOOLING_TEMP: np.full(n, 0.8 if faulty else 10.0),
+            Role.SUPERHEAT_TEMP: np.full(n, 22.0 if faulty else 10.0),
+            Role.RETURN_AIR_TEMP: np.full(n, 76.0),
+            Role.SUPPLY_AIR_TEMP: np.full(n, 58.0),
+            Role.COMPRESSOR_STATUS: np.ones(n),
+        },
+        index=idx,
+    )
+
+
+def _dx_airflow(idx, *, faulty):
+    """A running DX coil; faulty = a 32 degF split (starved of air), clean = 19 degF."""
+    n = len(idx)
+    return pd.DataFrame(
+        {
+            Role.RETURN_AIR_TEMP: np.full(n, 76.0),
+            Role.SUPPLY_AIR_TEMP: np.full(n, 44.0 if faulty else 57.0),
+            Role.COMPRESSOR_STATUS: np.ones(n),
+        },
+        index=idx,
+    )
+
+
+def _hp_zone(idx, *, zat, dat):
+    n = len(idx)
+    occ = ((idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)).astype(float)
+    return pd.DataFrame(
+        {
+            Role.SPACE_TEMP: np.broadcast_to(zat, n).astype(float),
+            Role.SUPPLY_AIR_TEMP: np.broadcast_to(dat, n).astype(float),
+            Role.OCCUPANCY: occ,
+        },
+        index=idx,
+    )
+
+
+def _hp_mode_need(idx, *, faulty):
+    """A water-to-air heat pump; faulty = cooling (52 degF air) a 64 degF room every morning."""
+    morning = (idx.hour >= 7) & (idx.hour < 10)
+    if faulty:
+        return _hp_zone(idx, zat=np.where(morning, 64.0, 70.0), dat=np.where(morning, 52.0, 70.0))
+    return _hp_zone(idx, zat=np.where(morning, 66.0, 70.0), dat=np.where(morning, 95.0, 70.0))
+
+
+def _hp_capacity(idx, *, faulty):
+    """Heating all occupied day; faulty = the room still sits at 64 degF (capacity shortfall)."""
+    occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    zat = np.where(occ, 64.0 if faulty else 70.0, 66.0)
+    return _hp_zone(idx, zat=zat, dat=np.where(occ, 92.0, 66.0))
+
+
+def _source_loop(idx, *, faulty):
+    """A ground loop pumped around the clock; faulty = ~0 degF difference, clean = 5-9 degF."""
+    n = len(idx)
+    sup = np.full(n, 60.0)
+    carried = 5.0 + 4.0 * np.clip(np.sin((idx.hour - 6) / 24 * 2 * np.pi), 0, None)
+    ret = sup + (0.2 if faulty else carried)
+    return pd.DataFrame(
+        {
+            Role.SOURCE_LOOP_SUPPLY_TEMP: sup,
+            Role.SOURCE_LOOP_RETURN_TEMP: ret,
+            Role.PUMP_STATUS: np.ones(n),
+        },
+        index=idx,
+    )
+
+
+# --- end 0.93 (#40) block ----------------------------------------------------------------------
+
+
 #: rule name -> its scenario builder (called with ``faulty=True/False``)
 SCENARIOS: dict = {
     "simultaneous_heat_cool": _simul,
@@ -588,6 +688,13 @@ SCENARIOS: dict = {
     "outdoor_air_fraction": _oa_fraction,
     "reheat_minimization_g36": _reheat_min,
     "condenser_bypass_leak": _cond_bypass,  # 0.92 (#15)
+    # 0.93: promoted from PENDING_SCENARIOS with the maintainer's sign-off
+    "reheat_capacity_shortfall": _reheat_capacity,  # 0.93 (#44)
+    "dx_refrigerant_charge": _dx_charge,  # 0.93 (#40)
+    "dx_indoor_airflow": _dx_airflow,  # 0.93 (#40)
+    "hp_mode_vs_need": _hp_mode_need,  # 0.93 (#40)
+    "hp_capacity_shortfall": _hp_capacity,  # 0.93 (#40)
+    "source_loop_deltat": _source_loop,  # 0.93 (#40)
 }
 
 
@@ -595,7 +702,8 @@ SCENARIOS: dict = {
 # Scenarios for new rules whose tpr/fpr are NOT yet gated synthetic keys. They are scored by the
 # tests (and reported for sign-off) but kept out of SCENARIOS, which the gated synthetic benchmark
 # reads with strict_new: moving one into SCENARIOS adds baseline keys, a maintainer decision. Empty
-# since 0.92, when condenser_bypass_leak (#15) was signed off and promoted.
+# after 0.93, when reheat_capacity_shortfall (#44) and the five single-equipment DX / heat-pump
+# rules (#40) were signed off and promoted (the 0.92 promotion was condenser_bypass_leak, #15).
 
 #: Scenarios pending sign-off as gated synthetic keys (see the note above).
 PENDING_SCENARIOS: dict = {}

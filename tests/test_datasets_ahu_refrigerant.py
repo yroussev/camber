@@ -559,7 +559,8 @@ def test_heat_pump_entry_labels_exclusions_and_no_rules():
     assert len(names) == len(set(names)) == 294  # every test file in exactly one run
     assert {r["label"] for r in runs} - {""} <= set(e.labels["fault_types"])
     assert e.ingest["units"]["discharge_pressure"] == "psia"
-    assert json.loads(package_text("configs", "nist-heatpump-fdd.json"))["rules"] == []
+    rules = json.loads(package_text("configs", "nist-heatpump-fdd.json"))["rules"]
+    assert [r["name"] for r in rules] == ["dx_refrigerant_charge"]
 
 
 def test_ibal_entry_is_manual_pinned_and_gauge():
@@ -571,7 +572,10 @@ def test_ibal_entry_is_manual_pinned_and_gauge():
     assert e.ingest["local_timezone"] == "America/New_York"
     assert e.ingest["timestamp_format"] == "ISO8601"
     aliases = _mapping("nist_ibal.json")
-    assert "ch1_sc_rtd" not in aliases and "ch1_sh_rtd" not in aliases  # temperatures, not deltas
+    # line temperatures, not deltas: subcooling / superheat are derived from them (0.93, #39)
+    assert aliases["ch1_sc_rtd"] == "liquid_line_temp"
+    assert aliases["ch1_sh_rtd"] == "suction_line_temp"
     assert e.ingest["units"]["discharge_pressure"] == "psig"
     cfg = json.loads(package_text("configs", "nist-ibal.json"))
     assert cfg["drift"]["families"] == [{"class": "CHILLER", "family": "chiller"}]
+    assert cfg["equipment"][0]["refrigerant"] == "R-410A"

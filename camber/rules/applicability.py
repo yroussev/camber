@@ -59,6 +59,8 @@ RULE_EQUIP_CLASSES: dict = {
     "sat_cohort_starvation": _TERMINAL,
     "static_cohort_starvation": _TERMINAL,
     "zones_heat_cool_census": ("terminal", "fan_coil"),
+    # --- 0.93 rules1 (#44): a box out of reheat below its heating setpoint (heat pumps: #40)
+    "reheat_capacity_shortfall": _TERMINAL,
     # --- chilled-water plant
     "chw_plant_reset": _CHW,
     "chw_supply_tracking": _CHW,
@@ -75,6 +77,17 @@ RULE_EQUIP_CLASSES: dict = {
     "boiler_short_cycle": _HW,
     "hw_plant_deltat": _HW,
     "hw_pump_dp_reset": ("hw_plant", "pump"),
+    # --- 0.93 (#40) DX / heat-pump block (093-refrig)
+    # subcooling means a refrigerant circuit; an RTU (air_handler family) has one too
+    "dx_refrigerant_charge": ("heat_pump", "dx", "air_handler"),
+    # the coil temperature split reads airflow only on a DX coil (a chilled-water AHU's split
+    # follows its valve), so no air_handler here: class an RTU's DX section DX or HEAT_PUMP
+    "dx_indoor_airflow": ("heat_pump", "dx"),
+    "hp_mode_vs_need": ("heat_pump",),
+    "hp_capacity_shortfall": ("heat_pump",),
+    "hp_room_imbalance": ("heat_pump",),
+    "source_loop_deltat": ("source_loop",),
+    # --- end 0.93 (#40) block
 }
 
 #: Built-in rules that stay roles-only, so the classification above is complete.
@@ -86,6 +99,8 @@ ROLES_SUFFICE: tuple = (
     "control_hunting",  # any modulating valve or damper
     "dcv_system_verification",  # groups zones to air handlers itself (served-by topology)
     "dcv_verification",  # declines without an OA signal; valid wherever CO2 and OA meet
+    # 0.93 rules2 (#38): groups zones to air handlers itself (served-by topology)
+    "co2_ventilation_system",
     "filter_fouling",  # any filtered fan unit
     "heatpump_defrost",  # a reversing-valve command already means a heat pump
     "night_weekend_setback",  # any fan unit

@@ -196,12 +196,15 @@ side diagnoses unchanged.
 
 ### Instrumentation gating
 
-Subcooling and superheat are **controller-reported differences**, and discharge/suction pressure are
-**raw pressures** — CAMBER models no refrigerant saturation curve, so none of them can be derived from a
-plain temperature and each must be mapped directly (`Role.SUBCOOLING_TEMP`, `Role.SUPERHEAT_TEMP`,
-`Role.DISCHARGE_PRESSURE`). Many chillers do not publish a given point, so the rule that depends on it
-**declines with a caveat** when it is absent — a chiller missing from a charge/feed/high-side report must
-never read as a healthy one.
+Subcooling and superheat are **differences against a saturation temperature**, and discharge/suction
+pressure are **raw pressures**. A chiller that publishes the differences maps them directly
+(`Role.SUBCOOLING_TEMP`, `Role.SUPERHEAT_TEMP`). Since 0.93 one that trends only pressures and line
+temperatures gets them derived: name its refrigerant on the config's equipment entry (`"refrigerant":
+"R-410A"`), map the line temperatures (`liquid_line_temp`, `suction_line_temp`), and CAMBER computes
+subcooling, superheat and both approaches from its saturation curve (see
+[Refrigerant properties](REFRIGERANT.md)). Many chillers publish neither, so the rule that depends on a
+point **declines with a caveat** when it is absent. A chiller missing from a charge, feed or high-side
+report must never read as a healthy one.
 
 ## Thresholds are honest about what they are
 

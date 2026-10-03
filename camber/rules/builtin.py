@@ -24,19 +24,23 @@ from .compressor_stage_rule import CompressorStaging
 from .condenser_bypass_rule import CondenserBypassLeak  # 0.92 (#15)
 from .condenserwater_rule import CondenserWaterReset
 from .coolingtower_rule import CoolingTowerApproach
+from .dx_airflow_rule import DXIndoorAirflow  # 0.93 (#40)
+from .dx_charge_rule import DXRefrigerantCharge  # 0.93 (#40)
 from .economizer_lockout_rule import EconomizerHighLimit
 from .filter_rule import FilterFouling
 from .freecoolingmissed_rule import FreeCoolingMissed
 from .g36_rule import G36AFDD
+from .heatpump_ops_rule import HPCapacityShortfall, HPModeVsNeed, HPRoomImbalance  # 0.93 (#40)
 from .heatpump_rule import HeatPumpDefrost
 from .hunting_rule import ControlHunting
 from .hwplant_deltat_rule import HWPlantDeltaT
 from .hwpump_rule import HWPumpDPReset
-from .iaq_rule import CO2Ventilation
+from .iaq_rule import CO2Ventilation, CO2VentilationSystem  # 0.93 (#38): + the fleet twin
 from .leakvalve_rule import LeakingValve
 from .oafraction_rule import OutdoorAirFraction
 from .overcooling_rule import OvercoolingMinFlow
 from .overcooling_severity_rule import OvercoolingSeverity
+from .reheat_capacity_rule import ReheatCapacityShortfall  # 0.93 rules1 (#44)
 from .reheat_min_rule import ReheatMinimization
 from .reheat_rule import ReheatPenalty
 from .reset_effectiveness_rule import ResetEffectiveness
@@ -46,6 +50,7 @@ from .satreset_compliance_rule import SupplyAirResetCompliance
 from .satreset_rule import SupplyAirReset
 from .setback_rule import NightWeekendSetback
 from .simul_hc import SimultaneousHeatCool
+from .source_loop_rule import SourceLoopDeltaT  # 0.93 (#40)
 from .static_rule import DamperCensus
 from .staticreset_rule import StaticPressureReset
 from .unmet_rule import UnmetHours
@@ -97,6 +102,18 @@ RULE_CLASSES: list[type] = [
     DcvSystemVerification,
     G36AFDD,
     CondenserBypassLeak,  # 0.92 (#15)
+    # --- 0.93 rules1
+    ReheatCapacityShortfall,  # 0.93 (#44)
+    # --- 0.93 rules2 (#38)
+    CO2VentilationSystem,
+    # --- 0.93 (#40) DX / heat-pump block (093-refrig)
+    DXRefrigerantCharge,
+    DXIndoorAirflow,
+    HPModeVsNeed,
+    HPCapacityShortfall,
+    HPRoomImbalance,
+    SourceLoopDeltaT,
+    # --- end 0.93 (#40) block
 ]
 
 # Parameterized rules shipped as ready-made instances (they take init args, so they can't be

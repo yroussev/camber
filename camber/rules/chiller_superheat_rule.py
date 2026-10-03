@@ -23,11 +23,12 @@ subcooling:
    condenser approach (fouling only ever widens an approach) would silently miss half the fault
    space, so this rule scores the **magnitude** of the drift and reports its sign.
 2. **It is instrumentation-gated.** :attr:`camber.model.roles.Role.SUPERHEAT_TEMP` is a
-   controller-reported difference, like subcooling and the approach roles: CAMBER has no refrigerant
-   saturation-temperature or pressure role, so superheat cannot be derived from a suction
-   temperature and must be mapped directly. Many chillers do not publish it. The role is therefore
-   **optional** and the rule *declines with a caveat* when it is absent, not silently skipped -- a
-   chiller missing from a feed report must not read as a chiller feeding correctly.
+   difference, like subcooling and the approach roles: mapped directly where the chiller publishes
+   it, or (0.93) derived from the suction pressure and the suction-line temperature when the
+   equipment's refrigerant is named (:mod:`camber.refrigerant`). Many chillers offer neither. The
+   role is therefore **optional** and the rule *declines with a caveat* when it is absent, not
+   silently skipped -- a chiller missing from a feed report must not read as a chiller feeding
+   correctly.
 
 Everything else is the machinery the other drift detectors already use: the same metric-neutral
 load-normalized fit (:func:`camber.chillerbaseline.fit_load_baseline`), the same
@@ -218,9 +219,9 @@ class ChillerSuperheatDrift:
                 metrics={"declined": True, "reason": "superheat_not_mapped"},
                 summary=f"{equip}: declined -- no superheat point mapped for this chiller",
                 caveats=[
-                    "could not evaluate refrigerant feed: superheat is a directly-reported point "
-                    "and this chiller does not publish one; it cannot be derived from the suction "
-                    "temperature alone"
+                    "could not evaluate refrigerant feed: this chiller does not publish superheat "
+                    "and none could be derived (it needs the suction pressure, the suction-line "
+                    "temperature and the equipment's refrigerant)"
                 ],
             )
 

@@ -1,6 +1,6 @@
 # Proposal: the refrigerant-circuit drift set
 
-**Status:** delivered, except discharge superheat · **Companion to:**
+**Status:** delivered; discharge superheat followed in 0.93 (see the note below) · **Companion to:**
 [`chiller_drift_detection_plan.md`](chiller_drift_detection_plan.md)
 
 > **Where this landed (updated 2026-09-08).** The scoping table below is preserved as the record of
@@ -138,6 +138,14 @@ behaviour, and setting them properly needs continuous trend history rather than 
 characterisation.
 
 ## Deferred: discharge superheat
+
+> **Update (0.93, issue #6).** Both reopening conditions were met from a different direction: the
+> NIST residential heat-pump FDD data publish discharge superheat beside labelled charge and airflow
+> faults, and `camber.refrigerant` derives it from a discharge pressure and a discharge-line
+> temperature (new role `discharge_line_temp`). `discharge_superheat_drift` now ships in the `dx`
+> drift family, on this machinery and two-sided. On the NIST TXV heat pumps it confirms the
+> assessment below: 32% of charge-fault test files against 91% for subcooling (docs/FDD-DX.md). A
+> labelled *chiller* discharge-superheat set is still not available.
 
 Not built. It would need a discharge-line-temperature role CAMBER does not have, and it earns less
 than either detector above — it responds to fewer fault families, and the ones it responds to

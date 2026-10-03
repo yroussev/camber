@@ -123,10 +123,21 @@
     "site_eui_plausibility",
     "site_eui_units"
   ],
+  "camber.calendars": [
+    "HolidayCalendar",
+    "SCHEMA",
+    "bundled",
+    "calendar_info",
+    "load_calendar_csv",
+    "public_holidays",
+    "register_calendar",
+    "registered"
+  ],
   "camber.carbon": [
     "DEFAULT_FACTORS",
     "Emissions",
-    "emissions"
+    "emissions",
+    "factor_per"
   ],
   "camber.carbon_hourly": [
     "HourlyEmissions",
@@ -459,6 +470,10 @@
     "positive_from_severity",
     "sweep"
   ],
+  "camber.dxdrift": [
+    "DX_DETECTORS",
+    "diagnose_dx_drift"
+  ],
   "camber.edge": [
     "AzureBlobSink",
     "BatchResult",
@@ -527,6 +542,7 @@
     "SYSTEMS",
     "Unit",
     "UnitSystem",
+    "VOLUME_FLOW_UNITS",
     "VOLUME_UNITS",
     "convert",
     "convert_eui",
@@ -539,6 +555,7 @@
     "parse_heat_content",
     "parse_unit",
     "power_factor",
+    "quantity_of_rate",
     "to_kwh"
   ],
   "camber.eval": [
@@ -676,7 +693,9 @@
   ],
   "camber.iaq": [
     "CO2VentilationResult",
-    "analyze_co2_ventilation"
+    "DEFAULT_ECON_HIGH_LIMIT_F",
+    "analyze_co2_ventilation",
+    "economizer_mode_mask"
   ],
   "camber.ingest": [
     "BacnetClientConfig",
@@ -1108,7 +1127,8 @@
     "degree_days",
     "energy_vs_degree_days",
     "hourly_energy_vs_temp",
-    "rate_to_energy"
+    "rate_to_energy",
+    "repeated_hour_weights"
   ],
   "camber.mandv.methods": [
     "ChainLink",
@@ -1444,6 +1464,24 @@
     "load_point",
     "load_status"
   ],
+  "camber.refrigerant": [
+    "DERIVED_ROLES",
+    "REFRIGERANTS",
+    "Refrigerant",
+    "STANDARD_ATM_PSIA",
+    "condenser_approach",
+    "derivation_inputs",
+    "derive_refrigerant_roles",
+    "discharge_superheat",
+    "evaporator_approach",
+    "get_refrigerant",
+    "is_supercritical",
+    "normalize_refrigerant",
+    "saturation_pressure",
+    "saturation_temp",
+    "subcooling",
+    "superheat"
+  ],
   "camber.reheat": [
     "BOX_MEASURES",
     "ReheatResult",
@@ -1738,6 +1776,35 @@
     "STATIC_WARN_INWC",
     "STATIC_WARN_SIGMA"
   ],
+  "camber.rules.dx_airflow_rule": [
+    "AIRFLOW_FAULT_F",
+    "AIRFLOW_FAULT_SIGMA",
+    "AIRFLOW_WARN_F",
+    "AIRFLOW_WARN_SIGMA",
+    "DXIndoorAirflow",
+    "MAX_SPLIT_F",
+    "MIN_SPLIT_F",
+    "TARGET_TOLERANCE_F",
+    "TEMP_SPLIT",
+    "return_dewpoint_f"
+  ],
+  "camber.rules.dx_charge_rule": [
+    "CHARGE_FAULT_F",
+    "CHARGE_FAULT_SIGMA",
+    "CHARGE_WARN_F",
+    "CHARGE_WARN_SIGMA",
+    "DXRefrigerantCharge",
+    "MAX_SUBCOOLING_F",
+    "MIN_SUBCOOLING_F",
+    "TARGET_TOLERANCE_F"
+  ],
+  "camber.rules.dx_discharge_superheat_rule": [
+    "DSH_FAULT_F",
+    "DSH_FAULT_SIGMA",
+    "DSH_WARN_F",
+    "DSH_WARN_SIGMA",
+    "DischargeSuperheatDrift"
+  ],
   "camber.rules.economizer_damper_rule": [
     "DAMPER_PLAUSIBLE",
     "DENOM_MIN_F",
@@ -1783,6 +1850,17 @@
     "MIN_APPLICABLE_HOURS",
     "WARN_PCT"
   ],
+  "camber.rules.heatpump_ops_rule": [
+    "BAND_TOL_F",
+    "COOL_DROP_F",
+    "DEFAULT_COOL_SP_F",
+    "DEFAULT_HEAT_SP_F",
+    "HEAT_RISE_F",
+    "HPCapacityShortfall",
+    "HPModeVsNeed",
+    "HPRoomImbalance",
+    "infer_hp_mode"
+  ],
   "camber.rules.heatpump_rule": [
     "HeatPumpDefrost"
   ],
@@ -1798,7 +1876,8 @@
     "HWPumpDPReset"
   ],
   "camber.rules.iaq_rule": [
-    "CO2Ventilation"
+    "CO2Ventilation",
+    "CO2VentilationSystem"
   ],
   "camber.rules.leakvalve_rule": [
     "LeakingValve"
@@ -1867,6 +1946,10 @@
     "POWER_WARN_SIGMA",
     "PumpPowerDrift"
   ],
+  "camber.rules.reheat_capacity_rule": [
+    "AIRFLOW_SHORT_RATIO",
+    "ReheatCapacityShortfall"
+  ],
   "camber.rules.reheat_min_rule": [
     "ReheatMinimization"
   ],
@@ -1894,6 +1977,9 @@
   ],
   "camber.rules.simul_hc": [
     "SimultaneousHeatCool"
+  ],
+  "camber.rules.source_loop_rule": [
+    "SourceLoopDeltaT"
   ],
   "camber.rules.static_rule": [
     "DamperCensus"

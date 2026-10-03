@@ -51,7 +51,40 @@ def degree_days(
     return contrib.resample(freq).sum(min_count=1) / 24.0
 
 
-def rate_to_energy(rate: pd.Series, freq: str) -> pd.Series:
+def repeated_hour_weights(index, timezone: str | None):
+    """How many real hours of clock each naive local sample of ``index`` stands for, around a
+    daylight-saving fall-back in ``timezone`` (0.93, #68; provisional).
+
+    CAMBER's time series are naive **wall-clock** time (:mod:`camber.timegrid`). On the autumn
+    fall-back day one hour of clock time happens twice, but a naive index can hold it only once:
+    the store's hourly resample averages the two readings into one bin (a trend export's first
+    reading is kept instead). Such a sample stands for **two** passes of the clock, so this
+    returns an array of weights -- ``2.0`` for a sample whose wall-clock time is ambiguous in
+    ``timezone`` (it falls in the repeated hour), ``1.0`` otherwise -- or ``None`` when no sample
+    is (no zone, a tz-aware index, or no fall-back inside the data). The spring-forward hour needs
+    no weight: it is simply absent, so that day already has 23 hours of samples.
+    """
+    if not timezone:
+        return None
+    idx = pd.DatetimeIndex(index)
+    if idx.tz is not None or len(idx) == 0:
+        return None
+    n = len(idx)
+    early = idx.tz_localize(timezone, ambiguous=np.ones(n, dtype=bool), nonexistent="NaT")
+    late = idx.tz_localize(timezone, ambiguous=np.zeros(n, dtype=bool), nonexistent="NaT")
+    amb = early.asi8 != late.asi8  # NaT (a skipped spring-forward time) is equal to itself
+    if not amb.any():
+        return None
+    return np.where(amb, 2.0, 1.0)
+
+
+def _dst_days(index, weights) -> pd.DatetimeIndex:
+    """The calendar days (midnight stamps) holding a sample whose weight is not 1."""
+    idx = pd.DatetimeIndex(index)
+    return pd.DatetimeIndex(idx[weights != 1.0].normalize().unique())
+
+
+def rate_to_energy(rate: pd.Series, freq: str, *, timezone: str | None = None) -> pd.Series:
     """Integrate an instantaneous rate (per hour) into energy per ``freq`` bin.
 
     Each sample represents its rate over the interval to the next sample, **capped at the
@@ -62,20 +95,37 @@ def rate_to_energy(rate: pd.Series, freq: str) -> pd.Series:
     rule can drop it) instead of silently inheriting the last reading for the whole gap. (Before
     0.86.0 the sample before a gap was credited the entire gap: two missing days after an hourly
     reading of 1 put 49 units into that reading's day.)
+
+    ``timezone`` (0.93, #68; provisional): the site's IANA zone. A sample in the repeated hour of
+    a daylight-saving fall-back then counts for both passes of the clock
+    (:func:`repeated_hour_weights`), so the autumn day has 25 hours of energy, not 24; the
+    spring-forward day has 23 either way. ``None`` (the default) is exactly the historical
+    result, and so is a zone whose data hold no fall-back.
     """
     rate = rate.sort_index().dropna()
+    if timezone and rate.index.has_duplicates:
+        # both readings of a repeated stamp kept by an export: one sample, their mean, which the
+        # weight below counts for both passes (as the store's hourly resample does)
+        rate = rate.groupby(level=0).mean()
     if len(rate) < 2:
         return pd.Series(dtype=float)
     # hours each sample represents: the interval to the next sample, capped at the nominal step
     secs = np.diff(rate.index.view("int64")) / 1e9
     nominal = float(np.median(secs))
     hours = np.minimum(np.append(secs, nominal), nominal) / 3600.0
+    w = repeated_hour_weights(rate.index, timezone)
+    if w is not None:
+        hours = hours * w
     energy_per_sample = pd.Series(rate.values * hours, index=rate.index)
     return energy_per_sample.resample(freq).sum(min_count=1)
 
 
 def daily_energy_vs_temp(
-    rate: pd.Series | BillingSeries, oat: pd.Series, *, rate_is_energy_rate: bool = True
+    rate: pd.Series | BillingSeries,
+    oat: pd.Series,
+    *,
+    rate_is_energy_rate: bool = True,
+    timezone: str | None = None,
 ) -> pd.DataFrame:
     """Daily energy vs daily-mean OAT, ready for change-point fitting.
 
@@ -90,6 +140,12 @@ def daily_energy_vs_temp(
     day**; the frame then also carries ``days``, ``start``, ``end``, ``estimated``, ``hdd``,
     ``cdd`` and ``coverage`` (see :meth:`~camber.mandv.billing.BillingSeries.energy_vs_temp`) and
     ``attrs["billing"]`` is true. Daily and sub-daily input is unchanged.
+
+    **Daylight saving** (0.93, #68; provisional). With the site's ``timezone`` a day is as long as
+    its clock: the autumn fall-back day sums 25 hours of energy (the repeated hour counts twice,
+    see :func:`repeated_hour_weights`) and its mean temperature weights that hour twice; the
+    spring-forward day has 23 hours (its skipped hour holds no sample). Only the fall-back days
+    change; without ``timezone`` the frame is exactly as before.
     """
     from .billing import BillingSeries, as_billing_series, is_billing_like
 
@@ -98,12 +154,42 @@ def daily_energy_vs_temp(
         out.attrs["billing"] = True
         return out
     if rate_is_energy_rate:
-        e = rate_to_energy(rate, "D")
+        e = rate_to_energy(rate, "D", timezone=timezone)
     else:
-        e = resample(rate, "D", method="time_weighted_sum")
-    t = oat.sort_index().resample("D").mean()
+        e = _energy_sum(rate, "D", timezone)
+    t = _mean_by_clock(oat.sort_index(), "D", timezone)
     df = pd.DataFrame({"energy": e, "oat": t}).dropna()
     return df[df["energy"] >= 0]
+
+
+def _energy_sum(energy: pd.Series, freq: str, timezone: str | None) -> pd.Series:
+    """Energy-per-interval samples summed per ``freq`` bin; a repeated-hour sample counts twice."""
+    out = resample(energy, freq, method="time_weighted_sum")
+    s = energy.sort_index()
+    w = repeated_hour_weights(s.index, timezone)
+    if w is None:
+        return out
+    fixed = resample(s * w, freq, method="time_weighted_sum")
+    days = _dst_days(s.index, w).intersection(out.index)
+    out.loc[days] = fixed.reindex(days)
+    return out
+
+
+def _mean_by_clock(x: pd.Series, freq: str, timezone: str | None) -> pd.Series:
+    """Per-bin mean of ``x``; on a fall-back day the repeated hour is weighted by its two passes.
+
+    Only the days holding a repeated-hour sample are recomputed, so every other day is the plain
+    ``resample(freq).mean()`` (bit for bit)."""
+    out = x.resample(freq).mean()
+    w = repeated_hour_weights(x.index, timezone)
+    if w is None:
+        return out
+    ws = pd.Series(w, index=x.index).where(x.notna())
+    num = (x * ws).resample(freq).sum(min_count=1)
+    den = ws.resample(freq).sum(min_count=1)
+    days = _dst_days(x.index, w).intersection(out.index)
+    out.loc[days] = (num / den).reindex(days)
+    return out
 
 
 def energy_vs_degree_days(

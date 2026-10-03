@@ -112,6 +112,38 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
     setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**.
     `overcooling_min_flow` declines without `AIRFLOW` + `AIRFLOW_SP` (it can't test "at minimum").
+  - *Held setback* (0.93, #43). A unit scheduled off at night still cycles on to hold its
+    zones at the setback temperature, so `night_weekend_setback` no longer reads runtime alone:
+    when the runtime test fails, a fan that *cycles* (mean duty below `max_hold_duty_pct`, 90 %,
+    in the unoccupied hours it runs) while the zone sits at setback reads "effective (fan cycling
+    to hold)". The zone is `space_temp`, else the return air while the fan runs; the setback is
+    the trended `heat_sp` / `cool_sp` in unoccupied hours, else the configured
+    `unoccupied_heat_sp_f` / `unoccupied_cool_sp_f`, else (heating only) a zone
+    `min_setback_depth_f` (3 °F) below its occupied temperature. A fan running every unoccupied hour stays "MISSING", and the
+    5 % runtime floor (#57) still decides first.
+  - *Leaking valves and fan heat* (0.93, #42). `leaking_valve` allows for the supply fan's heat
+    (`fan_heat_f`, default 2 °F, G36's ΔT_SF) before calling a heating leak, gives a cooling leak
+    no credit for it, judges fan-on samples only when a fan signal is mapped, and judges each coil
+    on its own leaving-air sensor (`heat_coil_leaving_temp` / `cool_coil_leaving_temp`) when
+    one is trended rather than on the supply air downstream of the fan
+    (`coil_sensor_fan_heat=True` on a blow-through unit).
+  - *Out of reheat* (0.93, #44). `reheat_capacity_shortfall` (terminal boxes only) flags a zone
+    more than `tol_f` (1.5 °F) below its heating setpoint while its reheat valve is at or above
+    `reheat_saturated_pct` (90 %) -- a capacity or airflow problem, not tuning. Occupied samples,
+    less morning recovery, warm-up and fan-off samples; warn at 5 %, fault at 20 % of them, after
+    10 h. The setpoint is `heat_sp`, else the config's `heat_sp_f` (one value, or per box); with
+    `airflow` + `airflow_sp` the finding says whether the box was short of air or of heat.
+  - *Dehumidification with reheat (0.93, #41).* `simultaneous_heat_cool` sets apart the both-open
+    hours that read as dehumidification with reheat: the fan running, the air leaving the cooling
+    coil (`COOL_COIL_LEAVING_TEMP`) at least 2 °F below the supply air (the heat is added after
+    the coil) and at or within 2 °F of the entering dew point (from `OAT` + `OUTDOOR_RH` and
+    `RETURN_AIR_TEMP` + `RETURN_AIR_HUMIDITY`, the lower of the two; else a return humidity of
+    55 % or more). A coil leaving above the entering dew point is dry, so reheat after it still
+    counts. Partial evidence (reheat after the coil but no humidity, or high humidity but no
+    coil-leaving temperature) is a caveat and caps the finding at `warn`, never a fault. The rule
+    parameter `dehumidification` declares the sequence (`true` accepts reheat after the coil
+    unless a dew point shows it dry; `false` counts every both-open hour). A unit with none of
+    these signals is judged as before, with a caveat.
   - *Status duty.* Event-logged status points are resampled to their time-weighted duty
     (`camber.realio.load_status(how="duty")`), so a runtime verdict such as setback does not change
     with the resample interval; `how="any"` keeps the old "on at any moment" bins.
@@ -218,10 +250,13 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   fabricated figure) when the sizing it needs is missing.
 - **Ventilation (ASHRAE 62.1)** — `ventilation.assess_62_1` (Ventilation Rate Procedure: required vs
   delivered OA, deficit) and `assess_dcv` (is OA raised when CO₂/occupancy is high, judged on
-  occupied, non-economizing samples via `economizer_active_mask`), with the
-  `VentilationRateProcedure` / `DemandControlledVentilation` rules, the `DcvSystemVerification`
-  fleet rule (zone CO₂ joined to the serving air handler's OA via the served-by topology) and
-  `Role.OA_AIRFLOW`. Flags: `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `co2_setpoint`,
+  occupied, non-economizing samples via `economizer_active_mask`; the CO₂ lift taken within the
+  hour of day since 0.93), with the `VentilationRateProcedure` / `DemandControlledVentilation`
+  rules, the `DcvSystemVerification` fleet rule (zone CO₂ joined to the serving air handler's OA
+  via the served-by topology) and `Role.OA_AIRFLOW` (the OA damper judges where the flow is
+  missing; a declared 100 % outdoor-air unit falls back to supply airflow or fan speed). CO₂
+  adequacy (`co2_ventilation`, and the fleet twin `co2_ventilation_system`) leaves economizer-mode
+  hours out of its over-ventilation verdict (`iaq.economizer_mode_mask`). Flags: `space_type` vs `rp`/`ra`, `ez`, `aggregate`, `co2_setpoint`,
   `oa_floor`, `min_modulation`, `min_lift_ppm`. See **[VENTILATION.md](VENTILATION.md)**.
 - **Accuracy + CI gating** — `eval.benchmark` + `validation.metrics_with_ci` (Wilson CIs), and
   `eval.check_against_baseline` to gate accuracy (TPR/FPR/diagnosis) against a committed baseline in

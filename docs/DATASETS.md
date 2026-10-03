@@ -810,7 +810,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `NUIG_AHU101_Ctrls_TE_102_2_Cooling_Off_Coil_Temp_D6_459`
 - **Evidence:** With the supply fan running, TE_101_3 (the other 'air after cooling coil' point) correlates 0.92 with the supply-duct temperature while TE_102_2 correlates 0.31, and TE_102_2 has the same median with the fan on and off (20.63 vs 20.64 C) where TE_101_3 moves 19.0 vs 15.9 C. Its tag names unit 102.
 - **Contradicts:** Variables workbook: both TE_101_3 and TE_102_2 described as 'AHU101 air temperature after cooling coil' (Messervey et al. 2019, Zenodo, doi:10.5281/zenodo.3406555)
-- **Handling: none** -- described only. Not mapped. Neither cooling-coil leaving temperature is mapped (the supply-duct sensor is the supply air temperature).
+- **Handling: none** -- described only. TE_102_2 is not mapped. Since 0.93 TE_101_3, the cooling-coil leaving temperature that does track AHU101, is mapped as cool_coil_leaving_temp; the supply-duct sensor stays the supply air temperature.
 
 #### One listed point file is empty
 
@@ -924,6 +924,22 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Description of data: one header row, then one row per test point (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
 - **Handling: none** -- described only. No run selects it (its Filename cell reads 'Filename'), so it is never ingested.
 
+#### The 16 SEER unit's suction-port pressure column repeats the discharge pressure
+
+- **Issue:** `suction-port-pressure-copies-discharge`
+- **Columns:** `1710_ODSuctPort_psia`, `CompDisch_psia`, `1701_ODVapSV_psia`
+- **Evidence:** On all 4,085 16 SEER rows 1710_ODSuctPort_psia equals CompDisch_psia exactly (256-507 psia), and the publisher's own CompSuct_Tsat_F is the R-410A dew temperature at 1701_ODVapSV_psia (median difference 0.002 F), not at the suction port (60 F off). On the 14 SEER unit the suction-port column is a real suction pressure (about 2.5% below the vapour service valve) and CompSuct_Tsat_F follows it (0.003 F).
+- **Contradicts:** Description of data, column list: 1710_ODSuctPort_psia is the compressor suction-port pressure (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: annotate** -- left as published and recorded in the provenance. CAMBER maps suction_pressure to the vapour service valve pressure (1701_ODVapSV_psia) for both units -- the pressure NIST itself used for the 16 SEER unit -- and ignores the suction-port column. Until 0.93 the mapping used the suction-port column, so a 16 SEER suction pressure read as the discharge pressure.
+
+#### Four fault-free 14 SEER files do not look like steady, fully charged cooling
+
+- **Issue:** `fault-free-points-not-steady-cooling`
+- **Columns:** `CompSuct_Suph_F`, `CompSuct_Tsat_F`, `CompDisch_Suph_F`, `ODLiqSV_Tsub_F`, `Filename`
+- **Evidence:** Goodman14SEER_NFTests-LONG-COOL-161212b and -161213a (16 and 20 rows, long line set) run a suction superheat of -16.3 and -19.8 F and a discharge superheat of 13-18 F with the evaporator at 65-66 F; every other fault-free row runs 7-34 F of suction and 35-88 F of discharge superheat, and 99% of them evaporate below 61 F. Goodman14SEER_NFTests-160315a and -160315b (2 and 4 rows, short line set) have no liquid subcooling (median 0.0 and -0.2 F) where the other short-line-set fault-free files median 8.8 F.
+- **Contradicts:** Description of data, 'Label Definitions': NF = 1 marks a fault-free test at the nominal charge and airflow (NIST HVAC&R Equipment Performance Group, FDD research data, doi:10.18434/M32132)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and scored as fault-free, so they count against CAMBER's false-positive rate: in the leave-one-file-out scoring the charge detector fires on the two no-subcooling files and the discharge-superheat detector on the two negative-superheat files.
+
 ### `nist-ibal`: NIST IBAL lab chiller with refrigerant pressures (real, unlabelled)
 
 #### The Experiments page's CSV export has no time column
@@ -965,6 +981,14 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Evidence:** In the portal's measurement metadata the two pressure transducers and the liquid- / suction-line RTDs have no instrument model, serial, calibration date or accuracy (all empty), while the plant's water RTDs list a model, a 2020-2023 calibration and +-0.18-0.21 F. All four refrigerant-line RTDs (both chillers) share one scaling (a0 3.2902, a1 0.9651) where each calibrated RTD has its own. In an export of 2023-10-01 to 2025-02-15 the pressures first report on 2024-04-10 and the liquid-line RTD on 2025-01-28 (UTC).
 - **Contradicts:** Record description: 'Each of the sensors/actuators has associated metadata' (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
 - **Handling: annotate** -- left as published and recorded in the provenance. Left as published. Drift detectors compare the chiller with its own baseline, so an uncalibrated offset matters less than for an absolute threshold; the standing-pressure check (R-410A at the suction-line temperature) confirms the pressures are gauge readings.
+
+#### Refrigerant pressures read below a perfect vacuum
+
+- **Issue:** `refrigerant-pressure-below-vacuum`
+- **Columns:** `ch1_p_dis`, `ch1_p_suc`
+- **Evidence:** In the full export 1,198 discharge-pressure samples (median -70.2 psig, on 3 days: 2025-02-05, 2025-08-21, 2025-09-17) and 1,396 suction-pressure samples (median -32.8 psig, on 7 days from 2025-01-28 to 2025-09-17) sit below -14.7 psig, i.e. below zero absolute pressure, which no gauge reading can reach; each channel holds one fixed value there, the signature of an unpowered or disconnected transducer. The default export has none.
+- **Contradicts:** Record description: measured sensor data (pressures reported in psi; gauge readings, see the mapping) (NIST IBAL record, Pertzborn et al., doi:10.18434/mds2-2751)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published. CAMBER's saturation transform has no temperature for a pressure below vacuum, so derived subcooling, superheat and approach decline on those samples (NaN) instead of taking an extrapolated value, and the pressure roles' physical bounds (-15 psig) flag them in sensor health.
 
 ### `robod`: ROBOD: room-level occupancy and building operation (Singapore, 5 rooms)
 
@@ -1335,7 +1359,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `TimeStamp (every building file)`
 - **Evidence:** All 1,628,777 rows in the 45 files carry the offset +0100 and every file is one unbroken hourly grid: no missing or repeated hour at any of the eight daylight-saving switches 2018-2021. The weekday morning rise of ElImp (the hour its mean profile crosses halfway between night and day) comes 0.98 h earlier in summer-time weeks (April, September-October) than in standard-time weeks (March, October-November): median of 44 buildings, 41 of them earlier by at least 0.5 h. The global-radiation (SolGlob) daily centroid stays at 11.8-12.0 h in both seasons. So the stamps are true UTC+1 instants, never shifted for summer time, while occupancy follows Europe/Oslo clock time.
 - **Contradicts:** Data descriptor Table 4 describes TimeStamp as 'Time stamp in local UTC time'. The Data Records section gives the zone as Etc/Gmt-1 (UTC+1) with Europe/Oslo as the actual local zone, which the data bear out. (Lien, Walnum & Sørensen 2025, Sci Data 12:393, doi:10.1038/s41597-025-04708-3)
-- **Handling: none** -- described only. Not a correction of values: the ingest parses each stamp as an instant (source_timezone 'offset') and stores Europe/Oslo wall-clock time (local_timezone), so schedules and time-of-day analyses line up with building operation. The spring-forward hour is a gap. The autumn fall-back hour holds two readings, which the hourly resample averages, so that day's energy is one hour short. Quirk timestamps below are UTC.
+- **Handling: none** -- described only. Not a correction of values: the ingest parses each stamp as an instant (source_timezone 'offset') and stores Europe/Oslo wall-clock time (local_timezone), so schedules and time-of-day analyses line up with building operation. The spring-forward hour is a gap. The autumn fall-back hour holds two readings, which the hourly resample averages into one stored hour; daily M&V counts that hour twice from the entry's zone (0.93, #68), so the day has its 25 hours of energy. Quirk timestamps below are UTC.
 
 #### The spring 2020 COVID-19 school and kindergarten closures are in the data, undocumented
 

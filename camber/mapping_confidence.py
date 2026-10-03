@@ -51,6 +51,7 @@ _DELTA_TEMP_ROLES = frozenset(
         Role.EVAP_APPROACH_TEMP,
         Role.SUBCOOLING_TEMP,
         Role.SUPERHEAT_TEMP,
+        Role.DISCHARGE_SUPERHEAT_TEMP,  # 0.93 (#6)
     }
 )
 _TEMP_ROLES = frozenset(r for r in Role if r.value.endswith("_temp") or r is Role.OAT)

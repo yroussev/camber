@@ -8,8 +8,19 @@
 * ``"cp_driver"`` -- :func:`~camber.mandv.multivariable.fit_cp_driver_model` with the
   ``mv[].drivers`` columns. A driver is ``"weekday"`` (1 Monday to Friday, else 0),
   ``"occupied_day"`` (1 on ``mv[].occupied_weekdays``, default Monday to Friday, except the dates
-  in ``mv[].holidays``), or the name of a mapped numeric role (its daily mean, e.g.
-  ``"occupancy"``).
+  in ``mv[].holidays`` and the days of ``mv[].holiday_calendar``), or the name of a mapped numeric
+  role (its daily mean, e.g. ``"occupancy"``).
+
+``mv[].holiday_calendar`` (0.93, #68; provisional) is a :class:`camber.calendars.HolidayCalendar`
+spec: a country code (``"NO"``, ``"US"``, ``"ES-CL"``) for its bundled public holidays, or
+``{"country", "subdivision", "files", "dates"}`` adding calendar CSV files (school breaks, an
+academic calendar) and single dates. Relative ``files`` resolve against the config's folder
+(:func:`with_base_dir`). A day of the calendar is unoccupied, like a weekend.
+
+``"break_day"`` (0.93) is for days that are neither: a school's term break, when staff, cleaning
+and after-school care keep part of the building running. It is 1 on an occupied weekday (not a
+holiday) that falls in ``mv[].break_calendar`` (the same spec form), so the model fits the break
+its own coefficient instead of forcing it to a weekday or a weekend.
 
 The drivers travel **as columns of the daily frame** (``drv:<name>``), so every slice of it --
 baseline, reporting, intermediate, a rebaseline window -- carries them, and the design a model
@@ -25,7 +36,7 @@ import pandas as pd
 
 PREFIX = "drv:"
 MODELS = ("change_point", "cp_driver")
-CALENDAR = ("weekday", "occupied_day")
+CALENDAR = ("weekday", "occupied_day", "break_day")
 _DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
@@ -76,12 +87,71 @@ def spec_of(entry: dict) -> tuple:
                 else "normal_year gives standard temperatures only, not standard driver values"
             )
         )
-    for key in ("occupied_weekdays", "holidays"):
-        if entry.get(key) is not None and "occupied_day" not in names:
-            raise ValueError(f'mv.{key} needs the "occupied_day" driver')
+    days_drivers = {"occupied_day", "break_day"} & set(names)
+    for key in ("occupied_weekdays", "holidays", "holiday_calendar"):
+        if entry.get(key) is not None and not days_drivers:
+            raise ValueError(f'mv.{key} needs the "occupied_day" (or "break_day") driver')
+    if ("break_calendar" in entry) != ("break_day" in names):
+        raise ValueError('mv.break_calendar and the "break_day" driver go together')
     _occupied_weekdays(entry)
     _holidays(entry)
+    _calendar(entry)
+    _calendar(entry, "break_calendar")
     return model, tuple(names)
+
+
+def with_base_dir(entry: dict, base_dir: str) -> dict:
+    """``entry`` with its calendars' ``files`` made absolute against ``base_dir`` (a copy;
+    the entry itself when there is nothing to resolve)."""
+    import os
+
+    out = entry
+    for key in ("holiday_calendar", "break_calendar"):
+        cal = entry.get(key)
+        if not isinstance(cal, dict) or not cal.get("files"):
+            continue
+        fs = [cal["files"]] if isinstance(cal["files"], str) else list(cal["files"])
+        fs = [
+            f if not isinstance(f, str) or os.path.isabs(f) else os.path.join(base_dir, f)
+            for f in fs
+        ]
+        out = {**out, key: {**cal, "files": fs}}
+    return out
+
+
+def _calendar(entry: dict, key: str = "holiday_calendar"):
+    """The entry's :class:`~camber.calendars.HolidayCalendar` under ``key``, or ``None`` (a
+    config error raises ``ValueError`` naming ``mv.<key>``)."""
+    spec = entry.get(key)
+    if spec is None:
+        return None
+    from ..calendars import HolidayCalendar
+
+    try:
+        return HolidayCalendar.from_spec(spec)
+    except ValueError as e:
+        raise ValueError(f"mv.{key}: {e}") from None
+
+
+def _calendar_days(entry: dict, key: str, idx: pd.DatetimeIndex) -> tuple:
+    """``(set of dates, per-row "known" flags)`` of the ``key`` calendar over ``idx``. A row in a
+    year outside the calendar's bundled coverage is not known (the driver cannot say)."""
+    cal = _calendar(entry, key)
+    if cal is None or not len(idx):
+        return set(), np.ones(len(idx), dtype=bool)
+    years = sorted(set(idx.year))
+    cov = cal.coverage()
+    lo, hi = (years[0], years[-1]) if cov is None else cov
+    known = (idx.year >= lo) & (idx.year <= hi)
+    inside = [y for y in years if lo <= y <= hi]
+    if not inside:
+        return set(), np.asarray(known)
+    a = max(idx.min(), pd.Timestamp(f"{inside[0]}-01-01"))
+    b = min(idx.max(), pd.Timestamp(f"{inside[-1]}-12-31"))
+    try:
+        return set(cal.days(a, b)), np.asarray(known)
+    except ValueError as e:
+        raise ValueError(f"mv.{key}: {e}") from None
 
 
 def driver_roles(entry: dict) -> tuple:
@@ -117,7 +187,8 @@ def add_drivers(daily: pd.DataFrame, entry: dict, full: pd.DataFrame | None = No
     """``daily`` with one ``drv:<name>`` column per driver of ``entry`` (unchanged without any).
 
     A numeric role's column is its daily mean in ``full`` (the resolved hourly frame); a day
-    without it is dropped, since the model cannot be evaluated there.
+    without it is dropped, since the model cannot be evaluated there. So is a day in a year outside
+    the coverage of ``mv[].holiday_calendar``'s bundled public holidays (0.93).
     """
     _model, names = spec_of(entry)
     if not names or daily is None:
@@ -129,8 +200,24 @@ def add_drivers(daily: pd.DataFrame, entry: dict, full: pd.DataFrame | None = No
         if name == "weekday":
             out[col] = (idx.dayofweek < 5).astype(float)
         elif name == "occupied_day":
-            occ, hol = _occupied_weekdays(entry), _holidays(entry)
-            out[col] = [float(ts.dayofweek in occ and ts.date() not in hol) for ts in idx]
+            occ = _occupied_weekdays(entry)
+            hol, known = _calendar_days(entry, "holiday_calendar", idx)
+            hol = hol | _holidays(entry)
+            out[col] = [
+                float(ts.dayofweek in occ and ts.date() not in hol) if ok else np.nan
+                for ts, ok in zip(idx, known)
+            ]
+        elif name == "break_day":
+            occ = _occupied_weekdays(entry)
+            hol, known = _calendar_days(entry, "holiday_calendar", idx)
+            hol = hol | _holidays(entry)
+            brk, known_b = _calendar_days(entry, "break_calendar", idx)
+            out[col] = [
+                float(ts.dayofweek in occ and ts.date() not in hol and ts.date() in brk)
+                if ok and ok_b
+                else np.nan
+                for ts, ok, ok_b in zip(idx, known, known_b)
+            ]
         else:
             from ..model.roles import Role
 

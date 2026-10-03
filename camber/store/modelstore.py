@@ -66,6 +66,11 @@ _MODEL_TYPES = {
     "boiler_efficiency": LoadBaseline,
     "boiler_gas_signature": LoadBaseline,
     "cooling_tower_fan_effort": LoadBaseline,
+    # 0.93 (#40, #6): DX / heat-pump refrigerant side, normalized on OAT + return air
+    "dx_subcooling": LoadBaseline,
+    "dx_superheat": LoadBaseline,
+    "dx_temp_split": LoadBaseline,
+    "discharge_superheat": LoadBaseline,
 }
 
 

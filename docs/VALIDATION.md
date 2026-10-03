@@ -198,6 +198,47 @@ Caveats, stated because the intervals are wide:
   cohort-starvation censuses run per test day as context.
 
 
+<!-- 0.93 rules1 (#42, #43, #44) -->
+### 0.93 air-side checks on real, unlabelled data (setback, leaking valve, reheat capacity)
+
+Three rules changed or added in 0.93 were checked on the open catalog data that showed the problem.
+None of these sets labels the fault, so these are before/after readings, not rates.
+
+**`night_weekend_setback` on `ornl-frp-ops` (#43).** The catalog template (occupied 07-22 every day,
+the tests' own schedule, with the descriptor's 15.6 / 29.4 °C unoccupied setpoints) at 1-minute
+resolution:
+
+| Test | Unoccupied fan runtime | 0.92 verdict | 0.93 verdict |
+|---|---:|---|---|
+| Heating baseline (24/7 by design) | 100 % | MISSING | MISSING |
+| Heating setback | 56 % | MISSING | **effective (fan cycling to hold)**: 71 % duty in the night hours it runs, return air 63.0 °F vs 67.3 °F occupied, against a 60.1 °F setback |
+| Pre-heat (on 10:00-05:00 by design) | 100 % | MISSING | MISSING |
+| Cooling baseline (24/7) | 100 % | MISSING | MISSING |
+| Cooling setback | 6.3 % | effective | effective |
+| Free float, heating and cooling | 0 % | effective (floor) | effective (floor) |
+
+The verdicts are the same at 1-minute, 15-minute and hourly resampling. The RTU has no zone
+temperature, so the return air read while the fan runs stands in for the zones (the finding says
+so). `ornl-frp-vav`'s rooftop units, whose fans are off at night, are unchanged.
+
+**`leaking_valve` on `irish-ahu` and `lbnl-sdahu` (#42).** On the Irish AHU the supply-air check read
+a heating-leak signature in 34 % of both-valves-closed hours before the documented 2022-05-01 valve
+replacement (fault) and 0.2 % after. Most of that sits downstream of the coils: the supply air reads
+2.6 °F above the cooling coil's leaving air in the median closed hour before the date and -0.7 °F
+after. With the coils' own leaving-air temperatures mapped, the heating coil rises more than 3 °F
+above the mixed air in 11 % of closed hours before the replacement (warn; mostly the cold 2020/21
+100 %-outdoor-air winter) and 0 % after (ok); the whole record reads ok. On the LBNL single-duct AHU
+the scored runs keep their verdicts (fault-free and the damper runs quiet), and the one leak run
+(`coi_leakage_010`) is still missed: with the fan running and the valve commanded shut, its supply
+air sits a median 0.1 °F below the mixed air against +1.0 °F on the fault-free run. That is a 1 °F
+shift, well inside the 3 °F threshold.
+
+**`reheat_capacity_shortfall` on `lbnl-b59` (#44).** Of the 35 underfloor terminals with a heating
+setpoint and a reheat valve, zone 051 (RTU01) sits more than 1.5 °F below its 72 °F setpoint with
+its valve at 90 % or more in 35.8 % of occupied hours (1,586 h over three years, median 2.9 °F
+below): a fault. Nine more read warn at 5-18 %, and 25 read ok. On `ornl-frp-vav` the rule declines:
+its electric reheat is logged as energy, not as a valve or command.
+
 ### Multi-zone fleet + reset validation (generated — `camber.fleetlab`)
 
 The rogue-zone census, cohort-starvation, and reset-effectiveness detectors need something no
@@ -244,7 +285,7 @@ into a role-frame (a labeled positive) and a matching fault-free frame (a negati
 deterministically, with no download, gated in CI against a committed baseline
 (`tests/test_faultlab.py`).
 
-Current coverage (0.92): **all 39 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
+Current coverage (0.93): **all 45 single-equipment rules** are accuracy-scored (100% TPR / 0% FPR on
 their injected faults) — the fixture-only list is empty; the fleet rules are scored separately. A
 companion harness scores the **G36 FC1–FC15 engine** over 6 representative fault conditions. The runner
 prints a scored-vs-fixture coverage table so the credibility story is explicit rather than implied. This
@@ -273,6 +314,25 @@ held in `faultlab.PENDING_SCENARIOS` until the sign-off and is now in `SCENARIOS
 `condenser_bypass_leak.tpr` 1.0 and `condenser_bypass_leak.fpr` 0.0; `coverage.n_scored` and
 `coverage.n_single` went from 38 to 39. Every other synthetic key is byte-identical to 0.91.0, and
 the fleet, LBNL, BDG2 and BDG2 savings baselines did not move.
+
+**Baseline refresh, 0.93 (maintainer sign-off).** Refreshed for 0.93 to add the six new
+single-equipment rules, whose `faultlab` scenarios were held in `faultlab.PENDING_SCENARIOS` (now
+empty) until the sign-off and are now in `SCENARIOS`: `reheat_capacity_shortfall` (#44: a VAV box
+with its reheat pinned at 100 % and the zone 3 °F below its 70 °F setpoint), and from #40
+`dx_refrigerant_charge` (a running split system with 0.8 °F of liquid subcooling),
+`dx_indoor_airflow` (a 32 °F evaporator split), `hp_mode_vs_need` (a water-to-air heat pump
+cooling a 64 °F room every morning), `hp_capacity_shortfall` (heating all occupied day with the
+room still at 64 °F) and `source_loop_deltat` (a ground loop pumped around the clock with ~0.2 °F
+across it). New keys: each rule's `.tpr` 1.0 and `.fpr` 0.0 (12 keys); `coverage.n_scored` and
+`coverage.n_single` went from 39 to 45. The other new 0.93 rules are not single-equipment rules
+with a scenario: `co2_ventilation_system` and `hp_room_imbalance` are fleet rules and
+`discharge_superheat_drift` is a drift detector. Every other synthetic key is byte-identical to
+the 0.92 baseline, and the fleet, LBNL, BDG2 and BDG2 savings baselines did not move. The
+harness's cross-fire diagnostic (reported, not gated) shows three co-detections on the new faulty
+frames: `unmet_setpoint_hours` on the reheat scenario (the zone is below its setpoint),
+`supply_air_reset` on the DX-airflow one (44 °F supply air) and `hp_capacity_shortfall` on the
+heat-pump mode one (it calls the cold room with the unit cooling a *control* problem, which is
+what it is).
 
 ## M&V accuracy — real-data acceptance on BDG2
 

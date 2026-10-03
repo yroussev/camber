@@ -26,6 +26,7 @@ DELTA_ROLES = frozenset(
         Role.EVAP_APPROACH_TEMP,
         Role.SUBCOOLING_TEMP,
         Role.SUPERHEAT_TEMP,
+        Role.DISCHARGE_SUPERHEAT_TEMP,  # 0.93 (#6)
     }
 )
 
@@ -136,6 +137,8 @@ def convert_frame(frame: pd.DataFrame, units: dict | None) -> pd.DataFrame:
 
 
 def _temp_range(role) -> tuple:
+    if role is Role.DISCHARGE_SUPERHEAT_TEMP:  # 0.93 (#6): tens of degF on a healthy compressor
+        return (-10.0, 150.0)
     return (-10.0, 60.0) if role in DELTA_ROLES else (-80.0, 260.0)
 
 

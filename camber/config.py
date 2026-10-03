@@ -99,6 +99,10 @@ the folder-source file marker and is ignored here); ``shared_oat`` may name a st
 role (``{"equip": "weather", "role": "oat"}``) or a CSV ``file`` as before; optional ``start`` /
 ``end`` bound every read. Any ``equipment`` entry (store or folder source) may add ``"equip":
 [names]`` to keep only the named equipment -- e.g. one scenario of a multi-scenario dataset.
+It may also name the equipment's ``"refrigerant"`` (``"R-410A"``, ``"R-134a"``, ``"R-22"``,
+``"R-32"``, ``"R-744"``; provisional, 0.93): the saturation-referenced roles (subcooling,
+superheat, discharge superheat, the approaches) are then derived from its refrigerant pressures and
+line temperatures wherever a rule asks for them (:mod:`camber.refrigerant`).
 The facility's provenance (dataset, licence, citation) recorded at ingest is attached to the
 report as ``AuditReport.data_sources``. A facility whose lifecycle state is not
 ``active`` (suspended, provisioning, ...; see :mod:`camber.portfolio`) is skipped with a warning --
@@ -115,6 +119,8 @@ a :class:`~camber.tsparse.TimezoneWarning` says so; ``"strict_timezone": true`` 
 instead. A store source is already on the site's wall clock (``camber datasets ingest`` converts
 with the catalog entry's ``local_timezone``); there ``timezone`` defaults to that zone and applies
 only to a ``shared_oat`` CSV file, and a ``timezone`` that disagrees with the catalog warns.
+Either way the zone also sets the length of a daily ``mv`` day (0.93, #68): the autumn fall-back
+day sums 25 hours of energy, the spring-forward day 23 (see docs/MANDV.md).
 
 **Facility identity and the portfolio workspace.** Every run has a ``facility_id``: a store
 source's ``source.facility_id``; for a folder source the optional top-level ``"facility_id"``,
@@ -379,6 +385,7 @@ class _Prepared:
     ctx: _FacilityCtx | None = None
     mv_store: object = None  # the facility's MVBaselineStore, opened read-only (#21 phase 21d)
     units: object = None  # 0.92 (#69): the config's reporting UnitSystem, or None (meter units)
+    timezone: str | None = None  # 0.93 (#68): the site's IANA zone, when known (DST day lengths)
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -415,7 +422,15 @@ def _catalog_timezone(meta: dict) -> str | None:
         entry = _get_dataset(did)
     except Exception:  # an unknown / retired id, or a catalog that fails to load
         return None
-    return (entry.ingest or {}).get("local_timezone") or entry.timezone or None
+    tz = (entry.ingest or {}).get("local_timezone") or entry.timezone or None
+    # 0.93 (#68): only an IANA zone -- an entry's ``timezone`` is often a prose description of
+    # its clock (e.g. "naive timestamps on one uniform hourly grid ..."), not a zone
+    from .tsparse import check_timezone
+
+    try:
+        return check_timezone(tz)
+    except ValueError:
+        return None
 
 
 def _site_timezone(source: dict, meta: dict | None = None) -> dict:
@@ -494,7 +509,7 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
             end=end,
             include_inactive=True,  # the lifecycle check was made once, above
         )
-        found = _only_named(found, eq)
+        found = _with_refrigerant(_only_named(found, eq), eq)
         refs += found
         refs_by_class.setdefault(eq["class"], []).extend(found)
 
@@ -517,9 +532,11 @@ def _prepare_store(config: dict, base_dir: str) -> _Prepared:
 
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
     prov = _provenance(meta, fid)
-    return _Prepared(
+    out = _Prepared(
         site, resample, mapping, shared, refs, refs_by_class, min_trust, [prov] if prov else [], ctx
     )
+    out.timezone = tzkw["timezone"]
+    return out
 
 
 def _prepare_bare(config: dict, base_dir: str) -> _Prepared:
@@ -592,7 +609,7 @@ def _prepare_sources(config: dict, base_dir: str) -> _Prepared:
             found = discover_terminals(folders, marker_measure=marker)
         else:
             found = discover(folders, eq["class"], marker_measure=marker)
-        found = _only_named(found, eq)
+        found = _with_refrigerant(_only_named(found, eq), eq)
         if tzkw["timezone"] or tzkw["strict_timezone"]:
             found = [dataclasses.replace(r, **tzkw) for r in found]
         refs += found
@@ -601,7 +618,29 @@ def _prepare_sources(config: dict, base_dir: str) -> _Prepared:
     # Optional sensor-health gate: a rule whose required inputs aren't trusted declines
     # to fire (see camber.sensorhealth). Off unless the config sets trust_gate.min_trust.
     min_trust = (config.get("trust_gate") or {}).get("min_trust")
-    return _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
+    out = _Prepared(site, resample, mapping, shared, refs, refs_by_class, min_trust, [], ctx)
+    out.timezone = tzkw["timezone"]
+    return out
+
+
+# --- 0.93 (#39) refrigerant-derivation block (093-refrig) ---------------------------------
+def _with_refrigerant(found: list, entry: dict) -> list:
+    """Tag refs with an ``equipment`` entry's ``"refrigerant"`` (validated; 0.93, #39).
+
+    A tagged equipment's saturation-referenced roles (subcooling, superheat, discharge superheat,
+    approaches) are derived at resolve time from its refrigerant pressures and line temperatures
+    (:func:`camber.refrigerant.derive_refrigerant_roles`). An unknown refrigerant fails the run.
+    """
+    fluid = entry.get("refrigerant")
+    if not fluid:
+        return found
+    from .refrigerant import normalize_refrigerant
+
+    name = normalize_refrigerant(fluid)
+    return [dataclasses.replace(r, refrigerant=name) for r in found]
+
+
+# --- end 0.93 (#39) block ----------------------------------------------------------------------
 
 
 def _only_named(found: list, entry: dict) -> list:
@@ -811,10 +850,10 @@ def _mv_frame(ctx: dict, win, entry: dict | None = None):
     """The context's rows over ``win``: daily from the resolved frame, or bills (0.92, #64)."""
     if ctx.get("slice") is not None:
         return ctx["slice"](win)
-    return _mv_daily(ctx["full"], ctx["role"], win, entry)
+    return _mv_daily(ctx["full"], ctx["role"], win, entry, timezone=ctx.get("timezone"))
 
 
-def _mv_daily(full, role, win, entry: dict | None = None):
+def _mv_daily(full, role, win, entry: dict | None = None, *, timezone: str | None = None):
     """Daily energy vs temperature over ``win``, with the entry's driver columns (if any)."""
     frame = full.loc[win[0] : win[1]]
     e, t = frame[role].dropna(), frame[Role.OAT].dropna()
@@ -823,7 +862,7 @@ def _mv_daily(full, role, win, entry: dict | None = None):
 
     if not (len(e) and len(t)):
         return None
-    daily = daily_energy_vs_temp(e, t)
+    daily = daily_energy_vs_temp(e, t, timezone=timezone)
     return _mvform.add_drivers(daily, entry, frame) if entry is not None else daily
 
 
@@ -1207,7 +1246,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     min_days = int(entry.get("min_days", 60))
     adj_specs = _mv_adjustment_specs(entry)
     cv_max = cv_rmse_max_for("daily")
-    conv = _mv_trended_units(entry, getattr(prep, "units", None))  # 0.92 (#69)
+    conv, conv_extra = _mv_trended_conversion(entry, getattr(prep, "units", None))  # #69, #70
     out = []
 
     def declined(equip, why):
@@ -1246,7 +1285,9 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             )
             continue
         frame = full.loc[period[0] : period[1]] if period else full
-        daily = daily_energy_vs_temp(frame[role].dropna(), frame[Role.OAT].dropna())
+        daily = daily_energy_vs_temp(
+            frame[role].dropna(), frame[Role.OAT].dropna(), timezone=prep.timezone
+        )
         daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
             declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
@@ -1313,6 +1354,7 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             "period": period,
             "reporting": reporting,
             "full": full,
+            "timezone": prep.timezone,
             "role": role,
             "daily": daily,
             "model": model,
@@ -1327,7 +1369,11 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             continue
         rframe = full.loc[reporting[0] : reporting[1]]
         r_e, r_t = rframe[role].dropna(), rframe[Role.OAT].dropna()
-        daily_r = daily_energy_vs_temp(r_e, r_t) if len(r_e) and len(r_t) else None
+        daily_r = (
+            daily_energy_vs_temp(r_e, r_t, timezone=prep.timezone)
+            if len(r_e) and len(r_t)
+            else None
+        )
         if daily_r is not None:
             daily_r = _mvform.add_drivers(daily_r, entry, rframe)
         if daily_r is None or daily_r.empty:
@@ -1353,6 +1399,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
             ctx["daily_r"] = daily_r
             out.append(_mv_other_method_finding(ctx, method, kernel))
         _add_caveats(out[n_before + 1 :], base_caveats)  # they rest on the same baseline
+    if conv_extra["caveats"] or conv_extra["metrics"]:  # 0.93 (#70): a gas volume's heat content
+        for f in out:
+            f.metrics.update(conv_extra["metrics"])
+        _add_caveats(out, conv_extra["caveats"])
     return _mv_apply_units(out, conv)
 
 
@@ -1390,25 +1440,86 @@ _MV_SENS_KEYS = ("savings", "abs_uncertainty", "adjusted_savings", "adjusted_abs
 def _mv_trended_units(entry: dict, units) -> tuple | None:
     """``(factor, reported unit, meter energy unit, system)`` for a trended ``mv`` entry, or
     ``None`` without a config ``units`` block. The entry's ``units`` names the metered rate (kW,
-    Btu/h, kBtu/h, MBH, tons); its hourly integral is the meter's energy unit."""
+    Btu/h, kBtu/h, MBH, tons); its hourly integral is the meter's energy unit. A gas meter's
+    volume flow (cfh, m3/h) integrates to a volume (0.93, #70), converted with the entry's
+    ``heat_content`` or the config's ``units.factor_set`` (:func:`_mv_trended_conversion`)."""
+    return _mv_trended_conversion(entry, units)[0]
+
+
+def _mv_trended_conversion(entry: dict, units) -> tuple:
+    """``(conv, extra)``: :func:`_mv_trended_units`' tuple (or ``None``) and ``extra`` =
+    ``{"metrics": {...}, "caveats": [...]}`` recording a factor set's use (0.93, #70).
+
+    ``mv[].units`` is a power (kW, Btu/h, ...) or a gas volume flow (``cfh``, ``CCF/h``,
+    ``Mcf/h``, ``m3/h``). A volume flow's daily integral is a volume (ft3, m3, ...): under a unit
+    system it converts with ``mv[].heat_content`` (e.g. ``"1037 Btu/ft3"``), else with the
+    ``units.factor_set`` heat content of ``mv[].meter_type`` (default ``natural_gas``); neither is
+    an error, never a default. Without a unit system the fits and savings stay in the meter's
+    unit, as before, and ``units`` / ``heat_content`` are only validated.
+    """
+    from .energy_units import parse_heat_content, quantity_of_rate
+
+    extra: dict = {"metrics": {}, "caveats": []}
+    rate, hc, mtype = entry.get("units"), entry.get("heat_content"), entry.get("meter_type")
+    kind = qty = None
+    if rate is not None:
+        try:
+            kind, qty = quantity_of_rate(rate)
+        except ValueError as e:
+            if units is None:
+                raise
+            raise ValueError(f"mv.units: {e} (a trended meter's units are its rate)") from None
+    if hc is not None:
+        try:
+            if parse_heat_content(hc)[1] != "volume":
+                raise ValueError(f"{hc!r} is per mass; a gas meter's heat content is per volume")
+        except ValueError as e:
+            raise ValueError(f"mv.heat_content: {e}") from None
+    if (hc is not None or mtype is not None) and kind != "volume":
+        key = "heat_content" if hc is not None else "meter_type"
+        raise ValueError(
+            f"mv.{key} is for a gas meter trended as a volume flow: give mv.units as cfh, "
+            "CCF/h, Mcf/h or m3/h"
+        )
+    if mtype is not None and getattr(units, "factor_set", None) is None:
+        raise ValueError("mv.meter_type is read only with a units.factor_set")
     if units is None:
-        if entry.get("units") is not None:  # validated even when nothing is converted
-            from .energy_units import energy_unit_of_rate
-
-            energy_unit_of_rate(entry["units"])
-        return None
-    from .energy_units import energy_unit_of_rate
-
-    if entry.get("units") is None:
+        return None, extra
+    if rate is None:
         raise ValueError(
             f"units.system is {units.system!r}, but mv entry {entry.get('class')!r} does not name "
-            'its meter\'s rate unit: add "units": "kW" (or Btu/h, kBtu/h, MBH, tons)'
+            'its meter\'s rate unit: add "units": "kW" (or Btu/h, kBtu/h, MBH, tons; cfh or m3/h '
+            "for gas metered by volume)"
         )
-    try:
-        meter = energy_unit_of_rate(entry["units"])
-    except ValueError as e:
-        raise ValueError(f"mv.units: {e} (a trended meter's units are its rate)") from None
-    return units.energy_factor(meter), units.energy, meter, units.system
+    assert qty is not None  # a rate was given and parsed above
+    if kind == "energy":
+        return (units.energy_factor(qty), units.energy, qty, units.system), extra
+    if hc is not None:
+        k = units.energy_factor(qty, heat_content=hc)
+        extra["caveats"].append(f"Gas volume ({qty}) converted with heat content {hc}.")
+    elif units.factor_set is not None:
+        from .energy_factors import factor_for
+        from .energy_units import energy_factor
+
+        try:
+            c = factor_for(
+                qty, mtype or "natural_gas", factor_set=units.factor_set, region=units.region
+            )
+        except ValueError as e:
+            raise ValueError(f"mv.units: {e}") from None
+        k = c.multiplier * energy_factor("kBtu", units.energy)
+        extra["metrics"]["energy_factor"] = c.as_dict()
+        extra["caveats"] += [f"Converted with {c.describe()}.", *c.caveats]
+    else:
+        raise ValueError(
+            f"mv.units {rate!r} is a gas volume flow: give mv.heat_content (e.g. "
+            "'1037 Btu/ft3') or a units.factor_set; there is no default"
+        )
+    if qty == "Mcf" and hc is not None:
+        from .energy_factors import _m_caveat
+
+        extra["caveats"].append(_m_caveat(rate, units.factor_set))
+    return (k, units.energy, qty, units.system), extra
 
 
 def _scale(d: dict, keys, k: float, *, digits: int | None = 2) -> None:
@@ -1574,7 +1685,9 @@ def _mv_versioned_findings(
 
     store = prep.mv_store
     out: list = []
-    daily_all = daily_energy_vs_temp(full[role].dropna(), full[Role.OAT].dropna())
+    daily_all = daily_energy_vs_temp(
+        full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
+    )
     daily_all = _mvform.add_drivers(daily_all, entry, full)
     reporting = _mv_window(entry, "reporting_period")
     if reporting is None:
@@ -1733,6 +1846,7 @@ def _mv_versioned_findings(
         "period": [rec.period_start, rec.period_end],
         "reporting": win_r,
         "full": full,
+        "timezone": prep.timezone,
         "role": role,
         "daily": daily,
         "model": model,
@@ -2074,6 +2188,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             findings += billing_findings(entry, prep, base_dir=base_dir)
             ran.append(f"mv:bills:{billing_label(entry)}")
             continue
+        entry = _mvform_base(entry, base_dir)  # 0.93 (#68): calendar files beside the config
         findings += _mv_findings(entry, refs_by_class.get(entry["class"], []), prep)
         ran.append(f"mv:{entry['class']}")
 
@@ -2437,8 +2552,15 @@ def run_mv_config(config: dict, *, base_dir: str = ".", prepared=None) -> list:
 
             out += billing_findings(entry, prep, base_dir=base_dir)
             continue
+        entry = _mvform_base(entry, base_dir)
         out += _mv_findings(entry, prep.refs_by_class.get(entry["class"], []), prep)
     return out
+
+
+def _mvform_base(entry: dict, base_dir: str) -> dict:
+    from .mandv._mvform import with_base_dir
+
+    return with_base_dir(entry, base_dir)
 
 
 def load_config(path: str) -> dict:

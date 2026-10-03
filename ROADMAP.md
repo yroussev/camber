@@ -284,7 +284,25 @@ Version numbers are given only where a release is already planned.
     - #50: the `lbnl-b59` meters as a data-issues teaching case, and two open meter datasets,
       `valladolid-uva` (the real-data SEP chaining case; results pending sign-off) and
       `cofactor-drammen`.
-  - **0.93** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only).
+  - **0.93 — hardening from real data, and the refrigerant cluster** (released 2026-10-03).
+    Closes #6, #37–#44, #68 and #70:
+    - [x] #43 `night_weekend_setback` reads a fan cycling to hold the setback as a working setback;
+    - [x] #42 `leaking_valve` allows for fan heat and judges each coil on its own leaving-air
+      sensor (the new `heat_coil_leaving_temp` / `cool_coil_leaving_temp` roles);
+    - [x] #44 `reheat_capacity_shortfall`, a VAV zone below setpoint with its reheat saturated;
+    - [x] #41 `simultaneous_heat_cool` tells dehumidification with reheat from coil fighting;
+    - [x] #37 DCV verification within the hour of day, with OA-damper and fan-speed fallbacks;
+    - [x] #38 `co2_ventilation` leaves economizer hours out, and the `co2_ventilation_system` fleet
+      rule;
+    - [x] #68 daylight-saving day lengths, holiday calendars and a break-day driver for M&V;
+    - [x] #70 the energy-units follow-ups (mv report, fleet EUI, trended gas volume, carbon);
+    - [x] #39 `camber.refrigerant` (R-410A, R-744, R-134a, R-22, R-32 saturation);
+    - [x] #40 DX / heat-pump charge and airflow rules, three-point water-source heat-pump rules and
+      the `dx` / `source_loop` families;
+    - [x] #6 the discharge-superheat drift detector;
+    - the synthetic baseline refreshed for the six new single-equipment rules with sign-off.
+  - **Next** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only),
+    moved out of 0.93.
   - **0.94** — education: worked exercises and learning docs on the catalog datasets.
 - **Portfolio lifecycle, steps 3–5** (#18): offboard / archive / restore / purge with export
   bundles; month partitions and `camber retention apply`; edge reconciliation, quarantine and

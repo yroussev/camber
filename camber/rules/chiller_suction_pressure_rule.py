@@ -18,10 +18,9 @@ Two properties shape the rule:
    Superheat catches overfeed by temperature; suction pressure catches it (and the far more common
    heat-transfer loss) by pressure, gauged directly.
 2. **It is instrumentation-gated.** :attr:`camber.model.roles.Role.SUCTION_PRESSURE` is a raw
-   pressure a chiller either publishes or does not; CAMBER models no refrigerant saturation curve,
-   so it cannot be reconstructed from a temperature. The role is **optional** and the rule *declines
-   with a caveat* when it is absent -- a chiller missing from a low-side report must not read as a
-   chiller with a healthy evaporator.
+   pressure a chiller either publishes or does not; it cannot be reconstructed from a temperature.
+   The role is **optional** and the rule *declines with a caveat* when it is absent -- a chiller
+   missing from a low-side report must not read as a chiller with a healthy evaporator.
 
 **The chilled-water-reset confound is regressed out, not just flagged.** Evaporating pressure is
 set first by the *leaving chilled-water temperature* the machine is controlled to, and only second

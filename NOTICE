@@ -13,6 +13,12 @@ onto the user's machine. The data remains under its publisher's licence, which
 the user accepts by downloading it; cite the publisher as the catalog entry
 states.
 
+camber/refrigerant.py carries the ancillary vapour-pressure coefficients for R-134a, R-22 and
+R-32 as published in CoolProp 8.0.0 (http://www.coolprop.org; Bell, Wronski, Quoilin & Lemort
+2014, doi:10.1021/ie4033999), Copyright (c) 2012-2018 Ian H. Bell and other CoolProp developers,
+used under the MIT License. The R-410A and CO2 coefficients are those published by Lemmon (2003)
+and Span & Wagner (1996). CoolProp itself is not a dependency.
+
 The test suite includes the NIST Statistical Reference Dataset "Norris" (36 rows; a
 U.S. Government work, not subject to copyright in the United States) to check CAMBER's
 regression statistics against NIST's certified values.

@@ -23,6 +23,11 @@ flowchart LR
 `emissions(consumption_by_fuel, factors=…)` → CO₂e from `{fuel: amount}` with per-fuel factors
 (kgCO₂e/unit), optionally normalized per ft². The location-based, single-average-factor view.
 
+A factor can be stated in any unit (0.93): `factors={"natural_gas_therm": {"rate": 53.06, "per":
+"MMBtu"}}` is converted exactly to kg CO₂e per therm by `carbon.factor_per`, through
+`energy_units.convert_rate`. A factor per gas volume needs its `heat_content`. No published
+greenhouse-gas factor set (EPA eGRID, EIA) is bundled yet; see docs/UNITS.md.
+
 ## Hourly / marginal Scope-2 — `camber.carbon_hourly`
 
 Grid electricity emissions vary hour to hour, so *when* a building uses power changes its real

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camber-toolkit"   # PyPI distribution name (the bare "camber" is squatted); imports as `camber`
-version = "0.92.0"
+version = "0.93.0"
 description = "Vendor-neutral building-automation-system trend analysis: FDD, M&V, and retro-commissioning"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -124,6 +124,8 @@ camber = ["py.typed"]
 "camber.datasets" = ["catalog.json", "mappings/*.json", "configs/*.json"]
 # Energy conversion factor sets (camber.energy_factors): one JSON file per published set.
 "camber.energy_factors" = ["*.json"]
+# Public-holiday calendars (camber.calendars, 0.93): one JSON file per country, citing its source.
+"camber.calendars" = ["*.json"]
 
 [tool.ruff]
 line-length = 100

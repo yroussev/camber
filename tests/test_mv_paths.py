@@ -556,3 +556,43 @@ def test_version_lookup_edges(frozen):
     with pytest.raises(ValueError, match="to adjust"):
         st.add_adjustments([], site="", equip="nope", kind="mv_power", accepted_by="a", reason="r")
     assert pd.Timestamp(STEP).year == 2018
+
+
+def test_chained_report_follows_the_unit_system(frozen):
+    """0.93 (#70): `camber mv report` reports energy in units.system (kBtu or kWh)."""
+    from camber import energy_units as eu
+    from camber.report.mv import mv_report_html
+
+    c, base = _cfg(frozen)
+    (raw,) = chained_report(c, base_dir=base)["meters"]
+    assert raw.units is None and "units" not in raw.as_dict()
+    c["mv"][0]["units"] = "kW"
+    (same,) = chained_report(c, base_dir=base)["meters"]  # units named, no system: unchanged
+    assert same.as_dict() == raw.as_dict()
+    for system, unit in (("ip", "kBtu"), ("si", "kWh")):
+        c["units"] = {"system": system}
+        (m,) = chained_report(c, base_dir=base)["meters"]
+        k = eu.energy_factor("kWh", unit)
+        assert m.units == {
+            "factor": k,
+            "energy_unit": unit,
+            "meter_unit": "kWh",
+            "unit_system": system,
+        }
+        d, d0 = m.as_dict(), raw.as_dict()
+        assert d["units"]["energy_unit"] == unit
+        assert d["chain"]["savings"] == pytest.approx(d0["chain"]["savings"] * k)
+        assert d["chain"]["savings_pct"] == d0["chain"]["savings_pct"]
+        assert d["links"][0]["abs_uncertainty"] == pytest.approx(
+            d0["links"][0]["abs_uncertainty"] * k
+        )
+        assert m.cusum["actual"].sum() == pytest.approx(raw.cusum["actual"].sum() * k)
+        html = mv_report_html({"facility_id": "f1", "meters": [m]}, charts=False)
+        assert f"Savings ({unit})" in html and f"Energy in {unit}" in html
+    c.pop("units")
+    html0 = mv_report_html({"facility_id": "f1", "meters": [raw]}, charts=False)
+    assert "Savings</th>" in html0 and "Energy in" not in html0
+    c["units"] = {"system": "ip"}
+    c["mv"][0].pop("units")
+    with pytest.raises(ValueError, match="rate unit"):
+        chained_report(c, base_dir=base)

@@ -126,6 +126,22 @@ PHYSICAL_BOUNDS: dict = {
     # higher). These bounds only reject sensor dropouts / sentinel codes (9999, 32767, 65535).
     Role.DISCHARGE_PRESSURE: (-15.0, 2000.0),
     Role.SUCTION_PRESSURE: (-15.0, 1000.0),
+    # 0.93 (#39): refrigerant line temperatures / liquid pressure / discharge superheat. The line
+    # temperatures span a low-temperature rack's suction (-40 degF and below) to a discharge line
+    # well past 200 degF; discharge superheat runs ~20-100 degF on a healthy compressor and past
+    # 150 degF on a starved one. Again only sentinels and dead channels fall outside.
+    Role.LIQUID_LINE_TEMP: (-60.0, 200.0),
+    Role.SUCTION_LINE_TEMP: (-80.0, 150.0),
+    Role.DISCHARGE_LINE_TEMP: (-40.0, 350.0),
+    Role.LIQUID_LINE_PRESSURE: (-15.0, 2000.0),
+    Role.DISCHARGE_SUPERHEAT_TEMP: (-20.0, 250.0),
+    Role.RETURN_AIR_DEWPOINT_TEMP: (-40.0, 100.0),  # 0.93 (#40)
+    # 0.93 (#40): a heat-pump source loop -- a ground loop can run near freezing (antifreeze
+    # below it) and a boiler/tower loop up to ~100 degF
+    Role.SOURCE_LOOP_SUPPLY_TEMP: (0.0, 140.0),
+    Role.SOURCE_LOOP_RETURN_TEMP: (0.0, 140.0),
+    Role.SOURCE_LOOP_DIFF_PRESS: (-5.0, 300.0),
+    Role.SOURCE_LOOP_PUMP_SPEED: (-2.0, 102.0),
     # hydronic flow (gpm) — same wide bound as the chilled-water flow role
     Role.HW_FLOW: (-1.0, 1e6),
     # pump differential head (psi) — wide; only rejects dropouts / impossible values
@@ -138,6 +154,9 @@ PHYSICAL_BOUNDS: dict = {
     # 0.92 (#15): condenser water entering the chillers, and the tower-bypass valve
     Role.COND_ENTERING_WATER_TEMP: (40.0, 120.0),
     Role.CW_BYPASS_VALVE: (-2.0, 102.0),
+    # 0.93 (#41, #42): coil leaving-air temperatures, degF (bounds of the supply air they feed)
+    Role.HEAT_COIL_LEAVING_TEMP: (20.0, 160.0),
+    Role.COOL_COIL_LEAVING_TEMP: (20.0, 140.0),
 }
 
 # Continuously-varying analog sensors, where a long flatline is a "stuck sensor"
@@ -158,6 +177,8 @@ _SENSOR_ROLES: frozenset = frozenset(
         Role.CW_SUPPLY_TEMP,
         Role.CW_RETURN_TEMP,
         Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
+        Role.HEAT_COIL_LEAVING_TEMP,  # 0.93 (#42)
+        Role.COOL_COIL_LEAVING_TEMP,  # 0.93 (#41, #42)
         Role.OUTDOOR_RH,
         Role.AIRFLOW,
         Role.CHW_FLOW,
@@ -327,6 +348,8 @@ FAN_GATED_ROLES: frozenset = frozenset(
         Role.SUPPLY_AIR_TEMP,
         Role.MIXED_AIR_TEMP,
         Role.RETURN_AIR_TEMP,
+        Role.HEAT_COIL_LEAVING_TEMP,  # 0.93 (#42)
+        Role.COOL_COIL_LEAVING_TEMP,  # 0.93 (#41, #42)
         Role.AIRFLOW,
         Role.OA_AIRFLOW,
         Role.DUCT_STATIC,
@@ -454,6 +477,8 @@ STUCK_HOURS: dict = {
             Role.CW_SUPPLY_TEMP,
             Role.CW_RETURN_TEMP,
             Role.COND_ENTERING_WATER_TEMP,  # 0.92 (#15)
+            Role.HEAT_COIL_LEAVING_TEMP,  # 0.93 (#42)
+            Role.COOL_COIL_LEAVING_TEMP,  # 0.93 (#41, #42)
             Role.OUTDOOR_RH,
             Role.AIRFLOW,
             Role.CHW_FLOW,
