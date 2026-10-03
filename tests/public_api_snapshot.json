@@ -1078,9 +1078,23 @@
     "nra_from_isolation",
     "propose_adjustments"
   ],
+  "camber.mandv.basetemp": [
+    "BaseSearch",
+    "BaseSelection",
+    "BillingDegreeDayModel",
+    "DD_KINDS",
+    "bill_degree_days",
+    "compare_models",
+    "fit_bill_degree_day",
+    "frame_rows",
+    "rows_at_bases",
+    "select_bases"
+  ],
   "camber.mandv.billing": [
     "BillingSeries",
+    "Calendarized",
     "as_billing_series",
+    "calendarize",
     "daily_weather",
     "is_billing_like"
   ],
@@ -1341,13 +1355,22 @@
     "Topology"
   ],
   "camber.mvbilling": [
+    "BILLS_KIND",
+    "base_spec",
+    "bases_changed",
     "billing_conversion",
     "billing_findings",
+    "billing_fit_version",
+    "billing_frame",
     "billing_label",
+    "billing_meter",
     "billing_oat",
     "billing_scale_check",
     "billing_units",
-    "load_bills"
+    "fit_billing_baseline",
+    "frame_for",
+    "load_bills",
+    "slice_bills"
   ],
   "camber.mvrun": [
     "MVPlan",
@@ -2291,6 +2314,32 @@
     "makeup_gpm",
     "min_night_flow"
   ],
+  "camber.weather_privacy": [
+    "AUDIT_FILE",
+    "CITY_TABLE",
+    "DEFAULT_PRECISION_DEG",
+    "MIN_PRECISION_DEG",
+    "OFFLINE_HELP",
+    "OfflineViolation",
+    "POWER_GRID",
+    "PRIVACY_MODES",
+    "PrivacyViolation",
+    "WeatherAudit",
+    "WeatherContext",
+    "WeatherPolicy",
+    "check_url",
+    "coarsen",
+    "coarsening_note",
+    "default_weather_dir",
+    "grid_snap",
+    "guarded_transport",
+    "read_weather_audit",
+    "redact_url",
+    "resolve_city",
+    "resolve_policy",
+    "weather_audit_path",
+    "weather_context"
+  ],
   "camber.weather_source": [
     "FALLBACKS",
     "FILL_VALUE",
@@ -2308,6 +2357,7 @@
     "isd_nearest_station",
     "isd_stations",
     "isd_transport",
+    "isd_url",
     "nasa_power_transport",
     "nasa_power_url",
     "nominatim_transport",
@@ -2320,7 +2370,8 @@
     "oat_reference_open_meteo",
     "open_meteo_transport",
     "open_meteo_url",
-    "power_grid_cell"
+    "power_grid_cell",
+    "resolve_place"
   ],
   "camber.zones": [
     "ZONE_MEASURES",

@@ -26,26 +26,47 @@ _URDB_URL = (
 
 
 def fetch_urdb_rate(
-    label: str, api_key: str | None = None, *, transport=None, timeout: float = 30.0
+    label: str,
+    api_key: str | None = None,
+    *,
+    transport=None,
+    timeout: float = 30.0,
+    privacy=None,
+    audit=None,
+    purpose: str = "tariff",
 ) -> dict:
     """Fetch one URDB rate page by ``label``; return the rate JSON dict.
 
     ``api_key`` defaults to the ``OPENEI_API_KEY`` environment variable -- get a free key
     at https://openei.org/services/ and export it (never hard-code or commit the key).
     ``transport`` (a ``url -> dict`` callable) overrides the network for tests; the live
-    path uses ``urllib``.
+    path uses ``urllib``. The request carries the rate label and the key, nothing else.
+
+    ``privacy`` / ``audit`` / ``purpose`` (0.94, provisional; :mod:`camber.weather_privacy`):
+    ``"offline"`` refuses (there is no URDB cache: save the rate JSON and use it as a file);
+    ``"coarse"`` checks the URL before it is sent; ``audit`` logs it with the key redacted.
     """
+    from ..weather_privacy import OfflineViolation, WeatherPolicy, guarded_transport
+
+    pol = WeatherPolicy.coerce(privacy)
+    if pol is not None and pol.offline:
+        raise OfflineViolation(
+            "privacy 'offline': the URDB rate is not fetched; save the rate JSON and give it as "
+            'a file (an mv billing entry\'s "scale_check": {"tariff": {"urdb_file": ...}})'
+        )
     api_key = api_key or os.environ.get("OPENEI_API_KEY")
     if not api_key and transport is None:
         raise ValueError("OpenEI API key required: pass api_key= or set OPENEI_API_KEY")
     url = _URDB_URL.format(label=label, key=api_key or "")
-    if transport is not None:
-        payload = transport(url)
-    else:
-        from urllib.request import urlopen  # stdlib; no dependency
+    if transport is None:
 
-        with urlopen(url, timeout=timeout) as resp:  # noqa: S310 -- fixed OpenEI host
-            payload = json.loads(resp.read().decode("utf-8"))
+        def transport(u: str) -> dict:  # pragma: no cover - the one real-network path
+            from urllib.request import urlopen  # stdlib; no dependency
+
+            with urlopen(u, timeout=timeout) as resp:  # noqa: S310 -- fixed OpenEI host
+                return json.loads(resp.read().decode("utf-8"))
+
+    payload = guarded_transport("urdb", transport, policy=pol, audit=audit, purpose=purpose)(url)
     items = payload.get("items") or []
     if not items:
         raise ValueError(f"no URDB rate found for label {label!r}")

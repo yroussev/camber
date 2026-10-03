@@ -1047,6 +1047,8 @@ def check_bills(
     end_inclusive: bool = False,
     price_bands: str = DEFAULT_PRICE_BANDS,
     eui_reference: str = DEFAULT_EUI_REFERENCE,
+    privacy=None,
+    audit=None,
 ) -> UnitScaleCheck:
     """Judge one meter's billed quantities at x0.001, x1 and x1000 (see the module docstring).
 
@@ -1068,6 +1070,9 @@ def check_bills(
 
     ``scale_override`` (``{"factor": 0.001, "reason": "..."}``) multiplies the quantities before
     judging and is recorded; nothing is ever corrected without it.
+
+    ``privacy`` / ``audit`` (0.94, provisional) are passed to the EIA request
+    (:func:`camber.interop.eia.fetch_state_price`; see :mod:`camber.weather_privacy`).
     """
     if not isinstance(unit, str) or not unit.strip():
         raise ValueError("unit is required: the unit the quantities are billed in")
@@ -1099,6 +1104,8 @@ def check_bills(
         "cache_dir": eia_cache_dir,
         "offline": eia_offline,
     }
+    if privacy is not None or audit is not None:
+        eia_kw.update(privacy=privacy, audit=audit)
     band, band_label, n = _price_reference(
         group,
         price_source=price_source,

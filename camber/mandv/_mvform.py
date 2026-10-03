@@ -239,6 +239,10 @@ def driver_columns(frame: pd.DataFrame) -> list:
 def design_rows(frame: pd.DataFrame, model) -> np.ndarray:
     """The rows ``model.predict`` takes for ``frame``: outdoor temperature, then the model's own
     drivers for a change-point + driver model (read from the frame's ``drv:`` columns)."""
+    if getattr(model, "heating_base_f", False) is not False:  # 0.94 (#72): degree days on bills
+        from .basetemp import frame_rows
+
+        return frame_rows(frame, model)
     names = getattr(model, "driver_names", None)
     T = frame["oat"].to_numpy(dtype=float)
     if not names:
@@ -286,13 +290,20 @@ def ledger_rows(frame: pd.DataFrame, model) -> dict:
     }
 
 
-def fit(frame: pd.DataFrame):
+def fit(frame: pd.DataFrame, *, family: str | None = None):
     """The entry's model on a daily frame: change-point + drivers when the frame carries driver
     columns, else the best change-point model (``None`` when none can be fitted). A billing frame
-    (:func:`row_days`) is fitted with the bills' days as weights."""
+    (:func:`row_days`) is fitted with the bills' days as weights.
+
+    A bills frame built at selected degree-day bases (``attrs["dd_kind"]``, 0.94, #72) also fits
+    the degree-day model at those bases, and the lower BIC wins (:func:`best_billing_model`);
+    ``family`` (``"cp"`` or ``"dd"``) keeps one form, e.g. for a reporting-period refit that must
+    match its baseline's."""
     cols = driver_columns(frame)
     T = frame["oat"].to_numpy(dtype=float)
     y = frame["energy"].to_numpy(dtype=float)
+    if not cols and frame.attrs.get("dd_kind") and "days" in frame.columns:
+        return best_billing_model(frame, family=family)
     if not cols:
         from .models import best_model
 
@@ -308,8 +319,64 @@ def fit(frame: pd.DataFrame):
     )
 
 
+def best_billing_model(frame: pd.DataFrame, *, family: str | None = None):
+    """The better by BIC of the best change-point model and the degree-day model at the frame's
+    bases (``attrs["dd_kind"]``, ``attrs["dd_bases_fitted"]``), both days-weighted; BIC counts
+    every parameter (change points, fitted bases). ``family`` keeps one form (provisional, 0.94)."""
+    import numpy as np
+
+    from .basetemp import _LEGS, fit_bill_degree_day, rows_at_bases
+    from .models import best_model
+
+    T = frame["oat"].to_numpy(dtype=float)
+    y = frame["energy"].to_numpy(dtype=float)
+    days = row_days(frame)
+    kind = frame.attrs["dd_kind"]
+    legs = _LEGS[kind]
+    cands: list = []
+    if family in (None, "cp"):
+        try:
+            cands.append(best_model(T, y, time_index=frame.index, weights=days))
+        except ValueError:
+            pass
+    if family in (None, "dd"):
+        hb = frame.attrs.get("heating_base_f") if "h" in legs else None
+        cb = frame.attrs.get("cooling_base_f") if "c" in legs else None
+        try:
+            m = fit_bill_degree_day(
+                rows_at_bases(frame, kind, hb, cb),
+                y,
+                kind=kind,
+                heating_base_f=hb,
+                cooling_base_f=cb,
+                days=days,
+                bases_fitted=bool(frame.attrs.get("dd_bases_fitted", True)),
+                time_index=frame.index,
+            )
+            if not m.caveats:  # a slope of the wrong sign is refused, never selected
+                cands.append(m)
+        except ValueError:
+            pass
+    if not cands:
+        raise ValueError("no model could be fit")
+    from .models import fit_weights
+
+    w, _ = fit_weights(days)
+
+    def bic(m):
+        r = y - np.asarray(m.predict(design_rows(frame, m)), dtype=float)
+        ok = np.isfinite(r)
+        sse = float(((w[ok] if w is not None else 1.0) * r[ok]) @ r[ok])
+        n = int(ok.sum())
+        return n * np.log(sse / n + 1e-12) + n_params(m) * np.log(n)
+
+    return min(cands, key=bic)
+
+
 def n_params(model) -> int:
     """The model's parameter count ``p`` (change points included; plus drivers)."""
+    if getattr(model, "heating_base_f", False) is not False:  # 0.94 (#72): bases included
+        return int(model.p)
     if getattr(model, "driver_names", None):
         return int(model.p)
     from .models import N_PARAMS

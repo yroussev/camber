@@ -134,6 +134,10 @@ class RcxOptions:
     ``sequence`` declares the site's SAT reset (``{"sat_reset": {"oat": [lo, hi], "sat":
     [at_lo, at_hi], "tol_f": 2}}``). ``g36_reference`` draws the G36 map on the no-sequence tier,
     labelled a reference, never a verdict. ``lifecycle`` pulls notes from the fault store.
+    ``weather`` (0.94, provisional) is the config's
+    :class:`~camber.weather_privacy.WeatherContext`: a fetched reference follows its privacy
+    (``oat_reference.weather`` overrides it) and is audited; ``oat_reference.place`` may name an
+    airport code or a city instead of coordinates.
     """
 
     top_n: int = 8
@@ -152,6 +156,7 @@ class RcxOptions:
     corroboration: bool = True
     lifecycle: bool = False
     title: str = ""
+    weather: object = None  # 0.94 (#73): the config's WeatherContext (privacy guardrails)
 
     @classmethod
     def from_config(cls, report: dict | None, *, base_dir: str = ".") -> RcxOptions:
@@ -965,10 +970,12 @@ def _synthetic_per_rule() -> dict:
     }
 
 
-def _load_reference_oat(spec: dict, index) -> pd.Series | None:
+def _load_reference_oat(spec: dict, index, weather=None) -> pd.Series | None:
     """A reference OAT series from ``spec`` (offline CSV, or an opt-in fetch: ``"nasa_power"``
     alone, or ``"auto"`` / ``"isd"`` / ``"open_meteo"`` through
-    :func:`camber.weather_source.oat_reference_auto`)."""
+    :func:`camber.weather_source.oat_reference_auto`). ``weather`` (0.94) is the config's
+    :class:`~camber.weather_privacy.WeatherContext`; a guarded fetch always goes through
+    ``oat_reference_auto``."""
     if spec.get("csv"):
         df = pd.read_csv(spec["csv"])
         tcol = spec.get("time_col") or df.columns[0]
@@ -979,7 +986,8 @@ def _load_reference_oat(spec: dict, index) -> pd.Series | None:
             name="oat_ref",
         )
         return s.sort_index()
-    if spec.get("fetch") == "nasa_power":
+    guard = _weather_guard(spec, weather)
+    if spec.get("fetch") == "nasa_power" and not guard:
         from ..weather_source import oat_reference
 
         return oat_reference(
@@ -989,7 +997,7 @@ def _load_reference_oat(spec: dict, index) -> pd.Series | None:
             index.max(),
             tz=spec.get("tz", "UTC"),
         )
-    if spec.get("fetch") in ("auto", "isd", "open_meteo"):  # 0.92 (#64): the fallback chain
+    if spec.get("fetch") in ("auto", "isd", "open_meteo", "nasa_power"):  # 0.92 (#64)
         import warnings
 
         from ..weather_source import oat_reference_auto
@@ -997,14 +1005,15 @@ def _load_reference_oat(spec: dict, index) -> pd.Series | None:
         with warnings.catch_warnings():  # the caveats are carried on the series, and reported
             warnings.simplefilter("ignore", UserWarning)
             return oat_reference_auto(
-                spec["latitude"],
-                spec["longitude"],
+                spec.get("latitude"),
+                spec.get("longitude"),
                 index.min(),
                 index.max(),
                 source=spec["fetch"],
                 tz=spec.get("tz", "UTC"),
                 cache_dir=spec.get("cache_dir"),
                 offline=bool(spec.get("offline", False)),
+                **guard,
             )
     if spec.get("fetch"):
         raise ValueError(
@@ -1012,6 +1021,44 @@ def _load_reference_oat(spec: dict, index) -> pd.Series | None:
             "open_meteo"
         )
     return None
+
+
+def _weather_of(options, run):
+    """The options' WeatherContext, else the run's config's (so an API caller of
+    :func:`build_rcx_report` gets a private facility's default too)."""
+    if options.weather is not None:
+        return options.weather
+    cfg = getattr(run, "config", None)
+    if not cfg:
+        return None
+    from ..weather_privacy import weather_context
+
+    ctx = None
+    if getattr(run, "workspace", None) and getattr(run, "facility_id", None):
+        from ..config import _FacilityCtx
+
+        ctx = _FacilityCtx(run.facility_id, run.workspace, getattr(run, "site", ""))
+    return weather_context(cfg, getattr(run, "base_dir", ".") or ".", ctx=ctx)
+
+
+def _weather_guard(spec: dict, weather) -> dict:
+    """The privacy / audit / place keywords of an OAT-reference fetch; empty for a public fetch
+    of coordinates with nowhere to audit (the pre-0.94 call exactly)."""
+    from ..weather_privacy import WeatherContext
+
+    if not spec.get("fetch"):
+        return {}
+    wctx = weather or WeatherContext()
+    pol = wctx.policy(spec.get("weather"))
+    audit = wctx.audit(pol, spec.get("cache_dir"))
+    out: dict = {}
+    if pol.privacy != "public":
+        out["privacy"] = pol
+    if audit is not None:
+        out.update(audit=audit, purpose="RCx OAT reference")
+    if spec.get("place"):
+        out["place"] = spec["place"]
+    return out
 
 
 def _reference_source_note(ref) -> str:
@@ -1205,7 +1252,7 @@ def build_rcx_report(
             for s_, _eqs in oat_sources[1:]:
                 idx = idx.union(s_.index)
             try:
-                ref = _load_reference_oat(o.oat_reference, idx)
+                ref = _load_reference_oat(o.oat_reference, idx, _weather_of(o, run))
             except Exception as exc:  # noqa: BLE001 - a bad reference is reported, not fatal
                 ref, ref_note = None, f"OAT reference could not be loaded: {exc}"
             if ref is not None:

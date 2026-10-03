@@ -128,6 +128,9 @@ def fetch_state_price(
     api_key: str | None = None,
     cache_dir: str | None = None,
     offline: bool = False,
+    privacy=None,
+    audit=None,
+    purpose: str = "unit-scale price check",
 ) -> StatePrice:
     """The mean monthly commercial retail price of ``fuel`` in ``state`` between ``start`` and
     ``end`` (inclusive months), as a :class:`StatePrice` in $/MMBtu.
@@ -135,21 +138,39 @@ def fetch_state_price(
     ``transport`` (``url -> dict``) replaces the network (tests); otherwise the live transport
     needs a key (``api_key`` or ``EIA_API_KEY``). ``cache_dir`` caches responses by their key-free
     URL; ``offline=True`` never calls the network. ``ValueError`` when EIA returns no price.
+
+    ``privacy`` / ``audit`` / ``purpose`` (0.94, provisional; :mod:`camber.weather_privacy`):
+    ``"offline"`` reads only the cache (under ``default_weather_dir()/eia`` when no
+    ``cache_dir``); ``"coarse"`` checks the URL (a state and months, nothing else) before it is
+    sent; ``audit`` logs the key-free URL. The live transport appends the key after the check.
     """
+    from ..weather_privacy import WeatherPolicy, default_weather_dir, guarded_transport
+
     url = eia_price_url(fuel, state, start, end)
+    pol = WeatherPolicy.coerce(privacy)
+    if pol is not None and pol.offline:
+        offline = True
+        if cache_dir is None:
+            cache_dir = os.path.join(default_weather_dir(), "eia")
     if transport is None and not offline:
         transport = eia_transport(api_key)
+    cache = None
     if cache_dir is not None or offline:
         from ..weather_source import cached_transport
 
         if cache_dir is None:
             raise ValueError("offline=True reads the cache: give cache_dir")
+        cdir = cache_dir
 
-        def _no_network(u: str) -> dict:  # pragma: no cover - offline never calls inner
-            raise RuntimeError("offline")
+        def cache(inner):
+            return cached_transport(inner, cdir, offline=offline)
 
-        transport = cached_transport(transport or _no_network, cache_dir, offline=offline)
-    assert transport is not None
+    def _no_network(u: str) -> dict:  # pragma: no cover - offline never calls inner
+        raise RuntimeError("offline")
+
+    transport = guarded_transport(
+        "eia", transport or _no_network, policy=pol, audit=audit, purpose=purpose, cache=cache
+    )
     payload = transport(url)
     rows = ((payload or {}).get("response") or {}).get("data") or []
     field = "price" if fuel == "electricity" else "value"

@@ -367,6 +367,29 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - `build_fleet_report(eui_unit=, units=)` and the trailing `FleetReport.eui_unit`;
   - `carbon.factor_per` and per-unit factor specs in `carbon.emissions(factors=)`.
 <!-- /093-mv -->
+- **Weather privacy guardrails** (0.94; #73), all additive and provisional:
+  - the module `camber.weather_privacy` (`PRIVACY_MODES`, `DEFAULT_PRECISION_DEG`,
+    `MIN_PRECISION_DEG`, `POWER_GRID`, `AUDIT_FILE`, `OFFLINE_HELP`, `PrivacyViolation`,
+    `OfflineViolation`, `WeatherPolicy`, `resolve_policy`, `WeatherContext`, `weather_context`,
+    `grid_snap`, `coarsen`, `coarsening_note`, `check_url`, `redact_url`, `WeatherAudit`,
+    `read_weather_audit`, `weather_audit_path`, `default_weather_dir`, `guarded_transport`,
+    `CITY_TABLE`, `resolve_city`). The city table's content is data and may grow;
+  - in `camber.weather_source`: `isd_url`, `resolve_place`, the trailing `IsdStation.icao`, and
+    the keyword-only `privacy=` of `nasa_power_url`, `open_meteo_url`, `nominatim_url`, `geocode`,
+    `fetch_nasa_power`, `fetch_open_meteo`, `oat_reference`, `oat_reference_open_meteo`, plus
+    `privacy=` / `audit=` / `purpose=` of `oat_reference_blended` and `oat_reference_auto`, and
+    `place=` of `oat_reference_auto`; the provenance keys `weather_privacy`,
+    `weather_provenance["privacy"]` and `weather_place`;
+  - `interop.eia.fetch_state_price(privacy=, audit=, purpose=)`,
+    `interop.openei.fetch_urdb_rate(privacy=, audit=, purpose=)`,
+    `unit_scale.check_bills(privacy=, audit=)`, `mvbilling.billing_scale_check(prep=)` and
+    `RcxOptions.weather`;
+  - `Portfolio.add_facility(private=)`, `Portfolio.set_private`, the registry field `private` and
+    the audit action `facility.private`;
+  - the config keys `private` and `weather` (`privacy`, `precision_deg`), `weather` and `place`
+    in an `mv` entry's `oat` and in `report.rcx.oat_reference`; the audit file
+    `weather_audit.ndjson` and its record fields; the CLI `camber weather audit` and
+    `camber facility private`, and `camber facility add --private`.
 
 ## Deprecated
 

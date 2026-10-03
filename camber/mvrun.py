@@ -78,6 +78,16 @@ class MeterSeries:
     role: str
     kind: str
     daily: pd.DataFrame  # columns oat, energy; one row per day with data
+    # 0.94 (#72): a billing entry's meter -- ``daily`` is then its bills frame (one row per bill,
+    # energy per day, ``days``), at the entry's own base; ``bills`` / ``oat`` rebuild it at a
+    # stored version's degree-day bases (camber.mvbilling.frame_for)
+    bills: Any = None
+    oat: Any = None
+    oat_source: str | None = None
+
+    @property
+    def billing(self) -> bool:
+        return self.bills is not None
 
 
 @dataclass
@@ -163,7 +173,18 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
     want = None if not equips else set(equips)
     out = []
     for k, entry in enumerate(config.get("mv") or []):
-        if entry.get("bills") is not None:  # billing entries are not versioned (0.92)
+        if entry.get("bills") is not None:  # 0.94 (#72): billing entries are versioned too
+            from .mvbilling import BILLS_KIND, billing_label, billing_meter
+
+            label = billing_label(entry)
+            if want is not None and label not in want:
+                continue
+            got = billing_meter(k, entry, prep, base_dir=base_dir)
+            if got is not None:
+                bills, oat, source, frame = got
+                out.append(
+                    MeterSeries(k, entry, label, "bills", BILLS_KIND, frame, bills, oat, source)
+                )
             continue
         entry = _mvform.with_base_dir(entry, base_dir)  # 0.93 (#68): calendar files
         role = Role(entry.get("role", Role.ENERGY_RATE.value))
@@ -187,6 +208,10 @@ def meter_series(config: dict, *, base_dir: str = ".", prep=None, equips=None) -
 
 
 def _window(daily: pd.DataFrame, win) -> pd.DataFrame:
+    if "days" in daily.columns and "start" in daily.columns:  # 0.94 (#72): bills wholly inside
+        from .mvbilling import slice_bills
+
+        return slice_bills(daily, win)
     return daily.loc[_day(win[0]) : _day(win[1]) + pd.Timedelta(hours=23)]
 
 
@@ -336,10 +361,16 @@ def plan_freeze(
                     "declare mv.method (forecast, backcast, chaining or standard_conditions) "
                     "before freezing: the declared method is frozen with the baseline"
                 )
-            fit = fit_version(ms.daily, entry["period"], entry=entry, allow_short=allow_short)
+            if ms.billing:  # 0.94 (#72)
+                from .mvbilling import billing_fit_version
+
+                fit = billing_fit_version(ms, entry["period"], allow_short=allow_short)
+            else:
+                fit = fit_version(ms.daily, entry["period"], entry=entry, allow_short=allow_short)
         except ValueError as e:
             plan.refused.append({"baseline": label, "why": str(e)})
             continue
+        extra = {"billing": fit["billing"]} if ms.billing else {}
         prov = mv_provenance(
             fit["model"],
             fit["sub"],
@@ -357,6 +388,7 @@ def plan_freeze(
                 "missing_frac": fit["missing_frac"],
                 "caveats": fit["caveats"],
                 "entry": ms.entry_index,
+                **extra,
             },
         )
         rec = plan.store.freeze_version(
@@ -387,7 +419,20 @@ def _change(rec, fit, what: str) -> dict:
         "method": rec.provenance.get("method"),
         "fit_frame_sha256": rec.provenance.get("fit_frame_sha256"),
         "caveats": list(fit.get("caveats") or []),
+        **_billing_change(fit),
     }
+
+
+def _billing_change(fit) -> dict:
+    """The degree-day bases of a billing version, for the change row (0.94, #72)."""
+    b = fit.get("billing")
+    if not b:
+        return {}
+    out = {"billing": True}
+    for k in ("heating_base_f", "cooling_base_f", "dd_kind"):
+        if b.get(k) is not None:
+            out[k] = b[k]
+    return out
 
 
 def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
@@ -408,7 +453,8 @@ def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
     )
     method = rec.provenance.get("method")
     inter = entry.get("intermediate_period") if method == "chaining" else None
-    daily = ms.daily if as_of is None else ms.daily.loc[: _day(as_of) + pd.Timedelta(hours=23)]
+    daily = _frame_of(ms, rec)
+    daily = daily if as_of is None else daily.loc[: _day(as_of) + pd.Timedelta(hours=23)]
     trig = assess_triggers(
         daily,
         store.model_of(rec),
@@ -423,6 +469,15 @@ def _assess(ms: MeterSeries, store, site, rec, *, as_of=None, versions=None):
         intermediate_period=inter,
     )
     return trig, pol, events, statics
+
+
+def _frame_of(ms: MeterSeries, rec) -> pd.DataFrame:
+    """The meter's rows for a version: daily rows as they are, bills at the version's bases."""
+    if not ms.billing or rec is None:
+        return ms.daily
+    from .mvbilling import frame_for
+
+    return frame_for(ms, rec.provenance)
 
 
 def plan_rebaseline(
@@ -511,6 +566,15 @@ def plan_rebaseline(
             continue
         anchor = window_anchor(trig, live)
         daily = ms.daily if as_of is None else ms.daily.loc[: _day(as_of) + pd.Timedelta(hours=23)]
+        if ms.billing and (from_proposal is not None or period is None):  # 0.94 (#72)
+            plan.refused.append(
+                {
+                    "baseline": label,
+                    "why": "a billing baseline is rebaselined over a window you name: pass "
+                    "--period START END (bills wholly inside it are fitted)",
+                }
+            )
+            continue
         if from_proposal is not None:
             win = from_proposal.get("window") or {}
             period = win.get("window")
@@ -550,7 +614,12 @@ def plan_rebaseline(
             plan.refused.append({"baseline": label, "why": "; ".join(why)})
             continue
         try:
-            fit = fit_version(daily, [start, end], entry=ms.entry)
+            if ms.billing:  # 0.94 (#72): auto bases are selected afresh on the new window
+                from .mvbilling import billing_fit_version
+
+                fit = billing_fit_version(ms, [start, end])
+            else:
+                fit = fit_version(daily, [start, end], entry=ms.entry)
         except ValueError as e:
             plan.refused.append({"baseline": label, "why": str(e)})
             continue
@@ -583,7 +652,9 @@ def plan_rebaseline(
         from .mandv import _mvform
         from .mandv.coverage import assess_coverage
 
-        cov = assess_coverage(fit["model"], _mvform.design_rows(ms.daily, fit["model"]))
+        cov = assess_coverage(
+            fit["model"], _mvform.design_rows(fit.get("frame", ms.daily), fit["model"])
+        )
         if cov.tier == "severe":
             plan.refused.append(
                 {
@@ -615,6 +686,7 @@ def plan_rebaseline(
                 "triggers": [t.as_dict() for t in live],
                 "entry": ms.entry_index,
                 "from_proposal": from_proposal is not None,
+                **_billing_extra(fit, rec),
             },
         )
         new = plan.store.rebaseline(
@@ -629,8 +701,34 @@ def plan_rebaseline(
         ch = _change(new, fit, "rebaselined")
         ch["supersedes"] = new.provenance.get("supersedes_version")
         ch["triggers"] = [t.key for t in live]
+        if new.provenance.get("bases_changed"):
+            ch["bases_changed"] = new.provenance["bases_changed"]
+            ch.setdefault("caveats", []).append(
+                "the degree-day bases change with this rebaseline: "
+                f"{_bases_text(new.provenance['bases_changed']['from'])} -> "
+                f"{_bases_text(new.provenance['bases_changed']['to'])}"
+            )
         plan.changes.append(ch)
     return plan
+
+
+def _billing_extra(fit: dict, prev) -> dict:
+    """``billing`` and, when the bases move, ``bases_changed`` for a rebaseline's provenance."""
+    if not fit.get("billing"):
+        return {}
+    from .mvbilling import bases_changed
+
+    out: dict = {"billing": fit["billing"]}
+    moved = bases_changed((prev.provenance or {}).get("billing"), fit["billing"])
+    if moved is not None:
+        out["bases_changed"] = moved
+    return out
+
+
+def _bases_text(b: dict) -> str:
+    bits = [f"{k.split('_')[0]} {b[k]:g} F" for k in ("heating_base_f", "cooling_base_f")
+            if b.get(k) is not None]  # fmt: skip
+    return (", ".join(bits) or "no bases") + (f" ({b['dd_kind']})" if b.get("dd_kind") else "")
 
 
 def _refit_stats(model, fit: dict) -> dict:
@@ -710,11 +808,15 @@ def plan_adjust(
             continue
         model = plan.store.model_of(rec)
         pol = RebaselinePolicy.from_entry(ms.entry)
-        b = _window(ms.daily, [rec.period_start, rec.period_end])
-        rep_end = _day(as_of) if as_of is not None else _day(ms.daily.index.max())
-        r = ms.daily.loc[
-            _day(rec.period_end) + pd.Timedelta(days=1) : rep_end + pd.Timedelta(hours=23)
-        ]
+        rows_all = _frame_of(ms, rec)
+        b = _window(rows_all, [rec.period_start, rec.period_end])
+        rep_end = _day(as_of) if as_of is not None else _day(rows_all.index.max())
+        if ms.billing:  # 0.94 (#72): the bills wholly after the baseline window
+            r = _window(rows_all, [_day(rec.period_end) + pd.Timedelta(days=1), rep_end])
+        else:
+            r = rows_all.loc[
+                _day(rec.period_end) + pd.Timedelta(days=1) : rep_end + pd.Timedelta(hours=23)
+            ]
         try:
             entries = []
             for k, spec in enumerate(specs):
@@ -742,6 +844,7 @@ def plan_adjust(
                             end=d.get("end"),
                             evidence=d.get("evidence"),
                             approved_by=d.get("approved_by"),
+                            **({"weights": _mvform.row_days(frame)} if ms.billing else {}),
                         )
                     )
                 else:
@@ -804,8 +907,17 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
     for ms in meter_series(config, base_dir=base_dir, equips=equips):
         row: dict = {"equip": ms.equip, "kind": ms.kind, "entry": ms.entry_index}
         rec = plan.store.get(site, ms.equip, ms.kind)
-        daily = ms.daily if as_of is None else ms.daily.loc[: _day(as_of) + pd.Timedelta(hours=23)]
-        if rec is not None:
+        rows = _frame_of(ms, rec)
+        daily = rows if as_of is None else rows.loc[: _day(as_of) + pd.Timedelta(hours=23)]
+        if rec is not None and ms.billing:  # 0.94 (#72): triggers; the window is the operator's
+            row["version"] = version_label(rec)
+            row["window"] = [rec.period_start, rec.period_end]
+            row["rebaseline"] = _billing_proposal(ms, plan.store, site, rec, as_of).as_dict()
+            sub = _window(rows, [rec.period_start, rec.period_end])
+            row["baseline_data_changed"] = fit_frame_sha256(sub) != rec.provenance.get(
+                "fit_frame_sha256"
+            )
+        elif rec is not None:
             row["version"] = version_label(rec)
             row["window"] = [rec.period_start, rec.period_end]
             _trig, pol, events, statics = _assess(ms, plan.store, site, rec, as_of=as_of)
@@ -846,6 +958,7 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
                     baseline=[_ds(base[0]), _ds(base[1])],
                     reporting=[_ds(rp[0]), _ds(rp[1])],
                     standard_conditions=ms.entry.get("normal_year"),
+                    days="days" if ms.billing else None,
                 )
                 d = mp.as_dict()
                 d.pop("results", None)
@@ -854,6 +967,42 @@ def propose(config: dict, *, base_dir: str = ".", as_of=None, equips=None, store
                 row["method_proposal"] = {"error": str(e)}
         out["meters"].append(row)
     return out
+
+
+def _billing_proposal(ms: MeterSeries, store, site, rec, as_of):
+    """A billing meter's :class:`~camber.mandv.rebaseline.RebaselineProposal`: its triggers and
+    outcome. A rebaseline window over bills is named by the operator (``--period``), so a
+    rebaseline-class trigger is proposed as ``declined`` with that instruction (0.94, #72)."""
+    from .mandv.rebaseline import _PROPOSAL_NOTE, RebaselineProposal, _nra_spec
+
+    trig, _pol, _e, _s = _assess(ms, store, site, rec, as_of=as_of)
+    rows = _frame_of(ms, rec)
+    last = _ds(as_of) if as_of is not None else (_ds(rows["end"].max() - pd.Timedelta(days=1)))
+    live = [t for t in trig if not t.resolved]
+    rb = [t for t in live if t.outcome == "rebaseline"]
+    nra = [t for t in live if t.outcome.startswith("nra_")]
+    caveats = [
+        _PROPOSAL_NOTE,
+        "bills: trigger T1 (step detection) needs at least two segments of min_segment_days "
+        "rows, which bills rarely have; declare changes in mv.rebaseline.events (T2)",
+    ]
+    specs = [_nra_spec(t) for t in nra]
+    if rb:
+        return RebaselineProposal(
+            "declined",
+            last,
+            trig,
+            nra_specs=specs,
+            declined_reason=(
+                "a rebaseline is called for; name the new window of whole bills with "
+                "`camber mv rebaseline --period START END` (at least a year of bills, "
+                "starting after the settle days)"
+            ),
+            caveats=caveats,
+        )
+    return RebaselineProposal(
+        "nra" if nra else "none", last, trig, nra_specs=specs, caveats=caveats
+    )
 
 
 @dataclass
@@ -874,6 +1023,10 @@ class MeterChain:
     #: ``units`` block, else ``None``. The results stay in the meter's unit (the fits are there);
     #: :meth:`as_dict`, the report page and the CUSUM frame give energy in ``energy_unit``.
     units: dict | None = None
+    #: 0.94 (#72): a billing meter's extras -- ``units`` of the bills, each version's degree-day
+    #: ``bases``, the ``calendarized`` months (PM method) and the ``avoided_cost`` per link;
+    #: ``None`` for a trended meter. The CUSUM frame's rows are then bills (energy per bill).
+    billing: dict | None = None
 
     def as_dict(self) -> dict:
         """JSON-safe summary (the per-day CUSUM frame stays out). Under a unit system (``units``)
@@ -897,6 +1050,8 @@ class MeterChain:
         }
         if self.units is not None:
             d["units"] = dict(self.units)
+        if self.billing is not None:
+            d["billing"] = dict(self.billing)
         return _json_safe(d)
 
 
@@ -1004,8 +1159,15 @@ def chained_report(
         vs = plan.store.versions(site, ms.equip, ms.kind)
         if not vs:
             continue
-        conv, conv_extra = _mv_trended_conversion(ms.entry, system)
-        end = _day(as_of) if as_of is not None else _day(ms.daily.index.max())
+        if ms.billing:  # 0.94 (#72)
+            from .mvbilling import _spec, billing_conversion
+
+            conv, conv_extra = billing_conversion(_spec(ms.entry), ms.bills, system)
+            last_day = ms.daily["end"].max() - pd.Timedelta(days=1)
+        else:
+            conv, conv_extra = _mv_trended_conversion(ms.entry, system)
+            last_day = ms.daily.index.max()
+        end = _day(as_of) if as_of is not None else _day(last_day)
         rp = ms.entry.get("reporting_period")
         if rp:
             end = min(end, _day(rp[1]))
@@ -1015,11 +1177,13 @@ def chained_report(
                 a, b = max(_day(seg["period"][0]), _day(rp[0])), _day(seg["period"][1])
                 seg["period"] = [_ds(a), _ds(b)] if b >= a else None
         links, adjusted, frames, trig_all, caveats, wins = [], [], [], [], [], []
+        costs: list = []
         for rec, seg in zip(vs, segs):
             label = version_label(rec)
             if seg["period"] is None:
                 continue
             model = plan.store.model_of(rec)
+            rows = _frame_of(ms, rec)
             trig, _pol, _e, _s = _assess(ms, plan.store, site, rec, as_of=end, versions=vs)
             trig_all += trig
             s0, s1 = _day(seg["period"][0]), _day(seg["period"][1])
@@ -1042,9 +1206,11 @@ def chained_report(
                 seg["period"] = [_ds(s0), _ds(cut)]
                 seg["partial"] = True
                 s1 = cut
-            rep = _window(ms.daily, [s0, s1])
-            base = _window(ms.daily, [rec.period_start, rec.period_end])
-            if len(rep) == 0 or len(base) < 10:
+            rep = _window(rows, [s0, s1])
+            base = _window(rows, [rec.period_start, rec.period_end])
+            if len(rep) == 0 or len(base) < (
+                int(ms.entry.get("min_bills", 9)) if ms.billing else 10
+            ):
                 seg["declined"] = "no data"
                 continue
             if fit_frame_sha256(base) != rec.provenance.get("fit_frame_sha256"):
@@ -1052,11 +1218,13 @@ def chained_report(
                     f"{label}: the data under this baseline changed since it was frozen "
                     "(fit-frame sha256 differs)"
                 )
+            d_b, d_r = _mvform.row_days(base), _mvform.row_days(rep)
             st = fit_stats(
                 base["energy"].values,
                 model.predict(_mvform.design_rows(base, model)),
                 _mvform.n_params(model),
                 time_index=base.index,
+                **({"weights": d_b, "cv_rmse_max": _monthly()} if ms.billing else {}),
             )
             res = forecast_savings(
                 model,
@@ -1068,6 +1236,7 @@ def chained_report(
                 rho=st.rho_lag1,
                 kernel=rec.provenance.get("kernel") or "g14",
                 baseline_version=label,
+                **({"days": d_r} if ms.billing else {}),
             )
             if rec.provenance.get("method") not in (None, "forecast"):
                 res.caveats.append(
@@ -1080,9 +1249,11 @@ def chained_report(
             )
             adjusted.append(_adjust_link(plan.store, rec, res, rep, model, ms.entry, caveats))
             proj = pd.Series(model.predict(_mvform.design_rows(rep, model)), index=rep.index)
-            frames.append(
-                pd.DataFrame({"version": label, "projected": proj, "actual": rep["energy"]})
-            )
+            act = rep["energy"]
+            if ms.billing:  # a bill's projected and actual energy (per day x days)
+                proj, act = proj * rep["days"], act * rep["days"]
+                costs.append(_link_cost(ms, rep, proj, act, label))
+            frames.append(pd.DataFrame({"version": label, "projected": proj, "actual": act}))
         chain = None
         good = [ln for ln in links if not ln.declined]
         if len(good) == len(links) and len(links) >= 2:
@@ -1098,6 +1269,7 @@ def chained_report(
             if frames
             else pd.DataFrame(columns=["version", "projected", "actual"])
         )
+        billing = _chain_billing(ms, vs, costs) if ms.billing else None
         units = None
         if conv is not None:
             k, unit, meter, sys_name = conv
@@ -1118,8 +1290,78 @@ def chained_report(
                 trig_all,
                 caveats,
                 units,
+                billing,
             )
         )
+    return out
+
+
+def _monthly() -> float:
+    from .mandv.stats import cv_rmse_max_for
+
+    return cv_rmse_max_for("monthly")
+
+
+def _link_cost(ms: MeterSeries, rep, proj, act, label: str) -> dict | None:
+    """One link's avoided cost at each bill's own rate, or a stated rate (``mv.avoided_cost``)."""
+    import numpy as np
+
+    spec = ms.entry.get("avoided_cost")
+    if spec is None:
+        return None
+    per = (proj - act).to_numpy(float)
+    if spec == "bills" or (isinstance(spec, dict) and spec.get("rate") == "bills"):
+        if "cost" not in rep.columns:
+            return {"version": label, "avoided_cost": None, "why": "no bills.cost column"}
+        c, e = rep["cost"].to_numpy(float), act.to_numpy(float)
+        ok = np.isfinite(c) & (e > 0)
+        blended = float(c[ok].sum() / e[ok].sum()) if ok.any() else float("nan")
+        rate = np.where(ok, c / np.where(e > 0, e, 1.0), blended)
+        return {"version": label, "avoided_cost": round(float(np.sum(per * rate)), 2),
+                "rate_basis": "each bill's own rate"}  # fmt: skip
+    return {
+        "version": label,
+        "avoided_cost": round(float(per.sum() * float(spec["rate"])), 2),
+        "rate_basis": f"stated rate {float(spec['rate']):g}",
+    }
+
+
+def _chain_billing(ms: MeterSeries, vs, costs) -> dict:
+    """The billing extras of a chained report (0.94, #72)."""
+    live = vs[-1] if vs else None
+    rows = _frame_of(ms, live)
+    cal = ms.bills.calendarize(
+        ms.oat,
+        heating_base_f=rows.attrs.get("heating_base_f", 65.0),
+        cooling_base_f=rows.attrs.get("cooling_base_f", 65.0),
+        max_gap_days=int((ms.entry.get("calendarize") or {}).get("max_gap_days", 0))
+        if isinstance(ms.entry.get("calendarize"), dict)
+        else 0,
+    )
+    bases = []
+    for v in vs:
+        b = (v.provenance or {}).get("billing") or {}
+        bases.append(
+            {
+                "version": version_label(v),
+                "base_f": b.get("base_f"),
+                "heating_base_f": b.get("heating_base_f"),
+                "cooling_base_f": b.get("cooling_base_f"),
+                "dd_kind": b.get("dd_kind"),
+            }
+        )
+    out = {
+        "units": ms.bills.units,
+        "oat_source": ms.oat_source,
+        "bases": bases,
+        "calendarized": cal.as_dict(),
+    }
+    got = [c for c in costs if c is not None]
+    if got:
+        out["avoided_cost"] = got
+        vals = [c["avoided_cost"] for c in got if c.get("avoided_cost") is not None]
+        if vals:
+            out["avoided_cost_total"] = round(float(sum(vals)), 2)
     return out
 
 
@@ -1135,13 +1377,14 @@ def _adjust_link(store, rec, res, rep, model, entry, caveats):
     mine = [a for a in led if lo <= _day(a.start) <= hi]
     if not mine:
         return None
+    rows = _mvform.ledger_rows(rep, model)  # 0.94 (#72): bills expand to their days
     try:
         return apply_adjustments(
             res,
             mine,
-            index=rep.index,
-            drivers=_mvform.design_rows(rep, model),
-            measured=rep["energy"].values,
+            index=rows["index"],
+            drivers=rows["drivers"],
+            measured=rows["measured"],
             model=model,
             schedule=EcmSchedule.from_dict(
                 {

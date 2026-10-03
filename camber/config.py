@@ -386,6 +386,7 @@ class _Prepared:
     mv_store: object = None  # the facility's MVBaselineStore, opened read-only (#21 phase 21d)
     units: object = None  # 0.92 (#69): the config's reporting UnitSystem, or None (meter units)
     timezone: str | None = None  # 0.93 (#68): the site's IANA zone, when known (DST day lengths)
+    weather: object = None  # 0.94 (#73): the config's WeatherContext (privacy guardrails)
 
 
 # Source kinds that mean "per-point CSV folders" (the historical default). Anything else that is
@@ -565,6 +566,9 @@ def _prepare(config: dict, base_dir: str) -> _Prepared:
     units = UnitSystem.from_config(config)  # 0.92 (#69): a bad units block fails up front
     prep = _prepare_sources(config, base_dir)
     prep.units = units
+    from .weather_privacy import weather_context
+
+    prep.weather = weather_context(config, base_dir, ctx=prep.ctx)  # 0.94 (#73)
     return prep
 
 
@@ -934,8 +938,8 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
     daily_b, daily_r, model = ctx["daily"], ctx["daily_r"], ctx["model"]
     X = _mvform.design_rows
 
-    def fit(d):
-        m = _mvform.fit(d)
+    def fit(d, family=None):
+        m = _mvform.fit(d) if family is None else _mvform.fit(d, family=family)
         st = fit_stats(
             d["energy"].values,
             m.predict(X(d, m)),
@@ -1006,9 +1010,14 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
         }
         fits = {"baseline": (daily_b, mi), "reporting": (daily_r, mi)}
     else:  # standard_conditions
-        mr, st_r = fit(daily_r)
+        # 0.94 (#72): a degree-day baseline on bills is paired with a degree-day reporting model
+        # at the same bases, and the normal year's daily temperatures become its degree days
+        dd = getattr(model, "heating_base_f", False) is not False
+        mr, st_r = fit(daily_r, "dd" if dd else ("cp" if daily_r.attrs.get("dd_kind") else None))
         st_b = ctx["st"]
         normal = np.asarray(entry["normal_year"], dtype=float)
+        if dd:
+            normal = model.rows_from_temps(normal)
         res = mm.standard_conditions_savings(
             model,
             mr,
@@ -1019,10 +1028,10 @@ def _mv_other_method_finding(ctx: dict, method: str, kernel: str) -> object:
             extrapolation=policy,
             baseline_cv_rmse=st_b.cv_rmse,
             n_baseline=st_b.n,
-            p_baseline=N_PARAMS[model.kind],
+            p_baseline=_mvform.n_params(model) if dd else N_PARAMS[model.kind],
             reporting_cv_rmse=st_r.cv_rmse,
             n_reporting=st_r.n,
-            p_reporting=N_PARAMS[mr.kind],
+            p_reporting=_mvform.n_params(mr) if dd else N_PARAMS[mr.kind],
             baseline_version=ctx.get("baseline_version"),
         )
         model_note = {"reporting_model": mr.kind, "reporting_r2": st_r.r2}
@@ -1663,8 +1672,13 @@ def _mv_versioned_findings(
     validity,
     schedule,
     adj_specs,
+    bills=None,
 ) -> list:
-    """The ``mv`` Findings of one meter measured against its frozen, versioned baseline."""
+    """The ``mv`` Findings of one meter measured against its frozen, versioned baseline.
+
+    ``bills`` (0.94, #72) is a billing entry's ``{"frame", "slice", "min_rows", "notes"}``: the
+    bills frame at the version's degree-day bases and the wholly-inside slicer. The rows are then
+    bills, judged at the monthly G14 thresholds and weighted by their days."""
     import pandas as pd
 
     from .mandv import _mvform
@@ -1685,10 +1699,13 @@ def _mv_versioned_findings(
 
     store = prep.mv_store
     out: list = []
-    daily_all = daily_energy_vs_temp(
-        full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
-    )
-    daily_all = _mvform.add_drivers(daily_all, entry, full)
+    if bills is None:
+        daily_all = daily_energy_vs_temp(
+            full[role].dropna(), full[Role.OAT].dropna(), timezone=prep.timezone
+        )
+        daily_all = _mvform.add_drivers(daily_all, entry, full)
+    else:  # 0.94 (#72): bills
+        daily_all = bills["frame"]
     reporting = _mv_window(entry, "reporting_period")
     if reporting is None:
         rec = versions[-1]
@@ -1697,7 +1714,14 @@ def _mv_versioned_findings(
     live_rec = rec or versions[-1]
     label = version_label(live_rec)
     model = store.model_of(live_rec)
-    daily, same = versioned_rows(daily_all, live_rec)
+    if bills is None:
+        daily, same = versioned_rows(daily_all, live_rec)
+    else:
+        from .mandv.rebaseline import fit_frame_sha256
+
+        daily = bills["slice"]([live_rec.period_start, live_rec.period_end])
+        daily = daily_all.iloc[:0] if daily is None else daily
+        same = fit_frame_sha256(daily) == (live_rec.provenance or {}).get("fit_frame_sha256")
     if len(daily) <= N_PARAMS.get(getattr(model, "kind", ""), 5):
         out.append(_mv_declined(equip, f"no data under the frozen baseline {label}'s window"))
         return out
@@ -1710,8 +1734,9 @@ def _mv_versioned_findings(
         daily["energy"].values,
         model.predict(X),
         _mvform.n_params(model),
-        cv_rmse_max=cv_rmse_max_for("daily"),
+        cv_rmse_max=cv_rmse_max_for("daily" if bills is None else "monthly"),
         time_index=daily.index,
+        weights=_mvform.row_days(daily),
     )
     prov = live_rec.provenance or {}
     caveats = []
@@ -1741,6 +1766,7 @@ def _mv_versioned_findings(
                 "frozen_method": prov.get("method"),
                 "baseline_data_changed": not same,
                 **_mvform.metrics(model),
+                **({} if bills is None else bills.get("metrics", {})),
             },
             summary=(
                 f"{equip}: frozen M&V baseline {label} ({getattr(model, 'kind', '')}, "
@@ -1811,7 +1837,12 @@ def _mv_versioned_findings(
     # requested reporting days
     blk = first_block([t for t in trig if pd.Timestamp(t.date) <= r1])
     if blk is not None:
-        if blk.outcome == "rebaseline":
+        if blk.outcome == "rebaseline" and bills is not None:
+            what = (
+                f"{event_phrase(blk)}; rebaseline the bills over a new window "
+                "(`camber mv rebaseline --period`)"
+            )
+        elif blk.outcome == "rebaseline":
             win = new_baseline_window(
                 daily_all, after=blk.date, policy=pol, event=event_phrase(blk)
             )
@@ -1834,9 +1865,14 @@ def _mv_versioned_findings(
         cut_caveats.append(
             f"partial: savings after {r1.date()} declined -- {what} ({blk.key}: {blk.detail})"
         )
-    daily_r = daily_all.loc[r0 : r1 + pd.Timedelta(hours=23)]
+    if bills is None:
+        daily_r = daily_all.loc[r0 : r1 + pd.Timedelta(hours=23)]
+    else:
+        daily_r = bills["slice"]([r0, r1])
+        daily_r = daily_all.iloc[:0] if daily_r is None else daily_r
     if daily_r.empty:
-        out.append(_mv_declined(equip, "no usable reporting-period days", rule="mv_savings"))
+        what = "days" if bills is None else "bills"
+        out.append(_mv_declined(equip, f"no usable reporting-period {what}", rule="mv_savings"))
         return out
     win_r = [str(r0.date()), str(r1.date())]
     ctx = {
@@ -1858,6 +1894,8 @@ def _mv_versioned_findings(
         "stored_ledger": store.ledger(rec),
         "daily_r": daily_r,
     }
+    if bills is not None:  # 0.94 (#72): bills, not days
+        ctx.update(slice=bills["slice"], interval="monthly", min_rows=bills["min_rows"])
     fnd: Any
     if method == "auto":
         fnd = _mv_proposal_finding(ctx)

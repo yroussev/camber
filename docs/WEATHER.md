@@ -35,6 +35,7 @@ PY
 | `isd_transport(*, timeout)` · `cached_bytes_transport(inner, cache_dir, *, ttl, clock)` | `callable(url) -> bytes` | the ISD default transport + its on-disk cache |
 | `oat_reference_blended(lat, lon, start, end, *, tz, transport, stations, power_transport, ...)` | `Series` | *provisional* — ISD, gaps from the next station, the rest from bias-corrected NASA POWER ([below](#isd-with-a-nasa-power-fallback-provisional)) |
 | `power_grid_cell(lat, lon)` · `isd_catalog_end(stations)` | `(lat, lon)` · `str` | *provisional* — the POWER cell centre · the catalog's latest station end date |
+| `isd_url(usaf, wban, year)` · `resolve_place(place, *, stations)` | `str` · `dict` | *provisional (0.94)* — one station-year file URL · an airport code, station id or city resolved locally ([privacy](#privacy-weather-for-non-public-sites-provisional-094)) |
 
 `start`/`end` accept `YYYYMMDD` / `YYYY-MM-DD` strings or date/datetime objects. `parameters` are NASA
 POWER codes (`T2M` = 2 m air temperature, `RH2M` = 2 m relative humidity). `GeoResult` and `IsdStation`
@@ -255,7 +256,8 @@ A config reaches it in two places:
   the OAT comparison. `{"fetch": "nasa_power"}` still means POWER alone;
 - an `mv` billing entry's `oat` (see [MANDV.md](MANDV.md#billing-data)).
 
-Weather requests carry coordinates and dates only: no key, account or other identifier.
+Weather requests carry coordinates and dates only: no key, account or other identifier. For a
+non-public site, coarsen or drop even the coordinates: see [Privacy](#privacy-weather-for-non-public-sites-provisional-094).
 
 ## Open-Meteo, a third source (provisional, 0.92)
 
@@ -275,3 +277,128 @@ publish them. Its free API is for non-commercial use under its terms of service,
 instance. The reanalysis itself comes from the Copernicus Climate Change Service. These terms were
 checked on open-meteo.com on 2026-09-27. CAMBER only sends the request, and whether your use is
 covered is for you to check.
+
+## Privacy: weather for non-public sites (provisional, 0.94)
+
+A weather request says where the building is: a latitude and longitude to five decimals locate
+one roof. For client data, CAMBER can still use real weather under guardrails that decide, by
+construction, what leaves the machine (`camber.weather_privacy`, issue #73).
+
+### The three modes
+
+| `privacy` | Network | What each request carries |
+|---|---|---|
+| `"public"` | yes | the coordinates as given (the behaviour before 0.94, and still the default) |
+| `"coarse"` | yes | coarsened locations only: ISD a station id and a year, NASA POWER a grid-cell centre, Open-Meteo the point rounded to `precision_deg` |
+| `"offline"` | **none** | nothing: caches and weather files you supply |
+
+Set it for a config, or for one fetch:
+
+```json
+{"site": "...", "facility_id": "...",
+ "weather": {"privacy": "coarse", "precision_deg": 0.1},
+ "mv": [{"bills": {"file": "gas.csv"},
+         "oat": {"fetch": "auto", "place": "KORD", "tz": "America/Chicago",
+                 "cache_dir": "wx"}}]}
+```
+
+A fetch's own `weather` block (in an `mv` entry's `oat`, or in `report.rcx.oat_reference`)
+overrides the config's.
+
+**How each source is coarsened.**
+
+- **NOAA ISD.** The station is chosen **locally**, from the downloaded station catalogue
+  (`isd-history.csv`). That download is one fixed URL with no query, so it carries nothing about the
+  site. After that, each request is one station-year file, `.../isd-lite/<year>/<usaf>-<wban>-<year>.gz`.
+  **No coordinates are in any ISD request.**
+- **NASA POWER.** The point snaps to the centre of its POWER grid cell before the URL is built.
+  POWER's meteorology comes from MERRA-2 on a "½° latitude by ⅝° longitude grid"
+  ([POWER data sources](https://power.larc.nasa.gov/docs/methodology/data/sources/), checked
+  2026-09-28), about 55 km × 50 km at 42° N. POWER returns that cell for any point inside it, so
+  snapping loses nothing. The cache key is the cell.
+- **Open-Meteo.** The point is rounded to `precision_deg`, 0.1° by default. The rounding moves it at
+  most 0.05°, about 5.6 km north-south and 4.1 km east-west at 42° N. The request therefore
+  names an area of about 11 km × 8 km there: a town or a district of a city, not a building. ERA5
+  (0.25°, about 25 km) and ERA5-Land (0.1°, about 9 km) resolve no finer, and Open-Meteo's higher-resolution
+  models only a little finer. The finest precision accepted is 0.05°. The cache key is the rounded cell.
+- **Geocoding (Nominatim)** sends the address itself, so it is refused under `coarse` and
+  `offline`. Name the location without coordinates instead, resolved on your machine:
+  `"place": "KORD"` (an airport ICAO code, looked up in the ISD catalogue), `"place":
+  "725300-94846"` (an ISD station id), or `"place": "Chicago, IL"` (a bundled table of about 80
+  major cities, `camber.weather_privacy.CITY_TABLE`). A code needs the catalogue; a city does not.
+
+Under `coarse` and `offline` the cache lives in `cache_dir`, else in `$CAMBER_WEATHER_DIR`, else in
+`$XDG_CACHE_HOME/camber/weather` (by default `~/.cache/camber/weather`). Caches are keyed by the
+request URL, which holds the station, the cell or the rounded point, so one cache serves every
+facility in that cell and never names a facility.
+
+**Offline** makes no network call at all. A cache miss raises `WeatherCacheMiss`, and an `mv`
+billing entry declines with the reason, which says how to supply the data. Give a point CSV
+(`"oat": {"file": "oat.csv"}` or the config's `shared_oat`), or the RCx report's
+`"oat_reference": {"csv": ...}`. You can also fill the cache once under `coarse`. After that, an
+`offline` re-run reads the same cells and gives the same series.
+
+### Private facilities
+
+A facility is **private** when its portfolio registry entry says so (`camber facility add
+--private`, or `camber facility private ID --reason ...`), or when its config says
+`"private": true`. Either is enough.
+
+- A private facility's weather fetches default to **`offline`**. The user opts in with `"weather":
+  {"privacy": "coarse"}`.
+- A private facility can never be `public`: that config is refused.
+- EIA and URDB requests follow the same policy.
+
+The flag belongs in the **registry** because it describes the facility, not one analysis. It then
+holds for every config that names the facility, including ones written later. Changing it is an
+audited admin action with a reason. The config flag covers runs outside a portfolio workspace, and
+it can only make a facility stricter.
+
+### The audit log
+
+Every outbound request is appended to an audit log, whatever the privacy mode. It covers weather,
+the EIA price check and a URDB tariff. Cache hits and offline misses are logged too, as `"sent":
+false`. Inside a portfolio workspace the log is `state/<facility_id>/weather_audit.ndjson`. Outside
+one, it is `weather_audit.ndjson` next to the cache. A public fetch with neither a workspace nor a
+`cache_dir` is not logged.
+
+```json
+{"ts": "2026-09-28T10:00:00Z", "service": "nasa_power", "privacy": "coarse",
+ "url": "https://power.larc.nasa.gov/api/temporal/hourly/point?parameters=T2M&community=RE&latitude=42.0&longitude=-87.5&start=20240101&end=20241231&format=JSON&time-standard=UTC",
+ "purpose": "M&V billing weather", "cache": "miss", "sent": true, "facility_id": "office-a"}
+```
+
+The `url` is the URL as sent, except that an API key is replaced by `REDACTED`. EIA's key is added
+by the live transport after the check, so it never appears in the log. The facility id appears in
+the local record only, never in a URL.
+
+```
+camber weather audit [--facility ID] [--since YYYY-MM-DD] [--workspace PATH] [--cache-dir DIR] [--file F] [--json]
+```
+
+### Enforced, not just intended
+
+`coarsen(service, lat, lon, policy)` is the only function that turns a location into request
+coordinates. The URL builders (`nasa_power_url`, `open_meteo_url`) call it. Independently,
+every request under `coarse` or `offline` passes `check_url` before it leaves. The check refuses:
+
+- a POWER coordinate off the POWER grid, or an Open-Meteo coordinate finer than `precision_deg`;
+- any coordinate in an ISD request;
+- a query field the service does not need, or a value longer than a short code or number;
+- a host other than the service's;
+- under `offline`, any request at all.
+
+A refusal raises `PrivacyViolation` and nothing is sent.
+
+### Provenance
+
+A fetched series records what was sent. `attrs["weather_privacy"]` (and, for the ISD blend, also
+`weather_provenance["privacy"]`) holds:
+
+- the mode, the precision and where the policy came from;
+- the coarsening applied to each source;
+- the number of requests sent and served from the cache.
+
+The rest of the provenance is unchanged: the source of every hour, the station, the POWER or
+Open-Meteo cell, and the bias correction. See [SECURITY.md](SECURITY.md#9-what-camber-sends-to-weather-and-price-services)
+for the full list of what is sent and what never is.

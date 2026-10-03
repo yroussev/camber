@@ -55,7 +55,9 @@ import pandas as pd
 
 __all__ = [
     "BillingSeries",
+    "Calendarized",
     "as_billing_series",
+    "calendarize",
     "is_billing_like",
     "daily_weather",
 ]
@@ -102,7 +104,11 @@ class BillingSeries:
         est = f["estimated"] if "estimated" in f.columns else False
         f["estimated"] = pd.Series(est, index=f.index).fillna(False).astype(bool)
         f.index = pd.DatetimeIndex(f["start"], name="start")
-        self.frame = f[["start", "end", "days", "energy", "estimated"]]
+        cols = ["start", "end", "days", "energy", "estimated"]
+        if "cost" in f.columns:  # 0.94 (#72): the billed cost, carried only when given
+            f["cost"] = pd.to_numeric(f["cost"], errors="coerce").astype(float)
+            cols.append("cost")
+        self.frame = f[cols]
 
     # ------------------------------------------------------------------ constructors
     @classmethod
@@ -116,11 +122,13 @@ class BillingSeries:
         estimated: str | None = None,
         units: str | None = None,
         end_inclusive: bool = True,
+        cost: str | None = None,
     ) -> BillingSeries:
         """Bills from a table with a start date, an end date and the energy per bill.
 
         ``end_inclusive`` (default) reads the end date as the last day served, as bills print it;
-        pass ``False`` when it is already the exclusive end (the next bill's start).
+        pass ``False`` when it is already the exclusive end (the next bill's start). ``cost``
+        (0.94, #72) names a column of each bill's billed cost, carried as ``frame["cost"]``.
         """
         out = pd.DataFrame(
             {
@@ -132,6 +140,8 @@ class BillingSeries:
                 "estimated": df[estimated].to_numpy() if estimated else False,
             }
         )
+        if cost:
+            out["cost"] = pd.to_numeric(df[cost], errors="coerce").to_numpy()
         return cls(out, units=units)
 
     @classmethod
@@ -146,6 +156,7 @@ class BillingSeries:
         units: str | None = None,
         units_column: str = "units",
         end_inclusive: bool = True,
+        cost: str | None = None,
     ) -> BillingSeries:
         """Bills from a CSV file: one row per bill (provisional, 0.92).
 
@@ -155,11 +166,13 @@ class BillingSeries:
         ``units_column`` holding one unit is used, and more than one unit in that column is an
         error. Spellings of one unit (``kWh`` / ``kwh`` / ``kilowatt-hours``) are one unit (0.93,
         #70): the column's unit is then the canonical name. ``end_inclusive`` is as in
-        :meth:`from_frame`. Raises ``ValueError`` on a missing column or an unreadable date or
-        flag.
+        :meth:`from_frame`, and so is ``cost`` (0.94: a column of billed cost, read only when
+        named). Raises ``ValueError`` on a missing column or an unreadable date or flag.
         """
         df = pd.read_csv(path, encoding="utf-8-sig")
-        missing = [c for c in (start, end, energy) if c not in df.columns]
+        missing = [
+            c for c in (start, end, energy, *([cost] if cost else [])) if c not in df.columns
+        ]
         if missing:
             raise ValueError(f"bills file has no column(s) {missing}; it has {list(df.columns)}")
         if units is None and units_column in df.columns:
@@ -182,6 +195,7 @@ class BillingSeries:
             estimated=flag,
             units=units,
             end_inclusive=end_inclusive,
+            cost=cost,
         )
 
     @classmethod
@@ -241,6 +255,7 @@ class BillingSeries:
         f = self.frame
         if not f["estimated"].any():
             return self
+        has_cost = "cost" in f.columns
         rows: list = []
         log: list = []
         run: list = []  # pending estimated bills
@@ -258,7 +273,8 @@ class BillingSeries:
                 continue
             if run:
                 energy = float(sum(x.energy for x in run) + r.energy)
-                rows.append((run[0].start, r.end, energy))
+                c = float(sum(x.cost for x in run) + r.cost) if has_cost else np.nan
+                rows.append((run[0].start, r.end, energy, c))
                 log.append(
                     {
                         "action": "merged",
@@ -269,9 +285,11 @@ class BillingSeries:
                 )
                 run = []
             else:
-                rows.append((r.start, r.end, float(r.energy)))
+                rows.append((r.start, r.end, float(r.energy), r.cost if has_cost else np.nan))
         _drop(run)
-        out = pd.DataFrame(rows, columns=["start", "end", "energy"])
+        out = pd.DataFrame(rows, columns=["start", "end", "energy", "cost"])
+        if not has_cost:
+            out = out.drop(columns="cost")
         out["estimated"] = False
         return BillingSeries(out, units=self.units, merged=list(self.merged) + log)
 
@@ -358,6 +376,8 @@ class BillingSeries:
         *,
         base_f: float = 65.0,
         min_coverage: float = 0.9,
+        heating_base_f: float | None = None,
+        cooling_base_f: float | None = None,
     ) -> pd.DataFrame:
         """Per-day energy of each bill against its own period's weather, ready to fit.
 
@@ -365,8 +385,14 @@ class BillingSeries:
         ``days``, ``start``, ``end``, ``estimated`` and ``coverage``; indexed by bill start.
         Bills with less than ``min_coverage`` of their days covered by temperature data, a
         missing energy value, or negative energy are dropped.
+
+        ``heating_base_f`` / ``cooling_base_f`` (0.94, #72) give the two legs their own bases
+        (each defaults to ``base_f``); the frame's ``attrs`` record the bases its HDD / CDD are
+        at. A ``cost`` column is carried when the bills have one.
         """
-        w = self.period_weather(temp, base_f=base_f)
+        hb = base_f if heating_base_f is None else heating_base_f
+        cb = base_f if cooling_base_f is None else cooling_base_f
+        w = self.period_weather(temp, heating_base_f=hb, cooling_base_f=cb)
         f = self.frame
         out = pd.DataFrame(
             {
@@ -382,6 +408,8 @@ class BillingSeries:
             },
             index=f.index,
         )
+        if "cost" in f.columns:
+            out["cost"] = f["cost"]
         keep = (
             out["energy"].notna()
             & out["oat"].notna()
@@ -390,7 +418,19 @@ class BillingSeries:
         )
         out = out[keep]
         out.attrs["billing"] = True
+        out.attrs["heating_base_f"] = float(hb)
+        out.attrs["cooling_base_f"] = float(cb)
         return out
+
+    def calendarize(self, temp=None, **kw) -> Calendarized:
+        """The bills prorated into calendar months (:func:`calendarize`; provisional, 0.94).
+        Months touched by a merged run of estimated reads are flagged estimated."""
+        spans = [
+            (pd.Timestamp(m["start"]), pd.Timestamp(m["end"]) + _DAY)
+            for m in self.merged
+            if m.get("action") == "merged"
+        ]
+        return calendarize(self.frame, temp, estimated_spans=spans, units=self.units, **kw)
 
 
 def _ds(x) -> str:
@@ -504,3 +544,253 @@ def _one_unit(column) -> str | None:
         raise ValueError(f"bills file mixes energy units {found}; convert to one first")
     (k,) = keys
     return k if not k.startswith("?") else found[0]
+
+
+# --------------------------------------------------------------------------- calendarization
+# (provisional, 0.94, #72)
+
+
+@dataclass
+class Calendarized:
+    """Bills prorated into calendar months (:func:`calendarize`; provisional, 0.94).
+
+    ``months`` has one row per calendar month the bills touch, indexed by the month's first day:
+    ``days_in_month``, ``days_covered`` (days served by exactly one bill), ``complete`` (every day
+    of the month served, the first and the last included, by exactly one bill), ``energy``,
+    ``energy_per_day``, ``cost`` (when the bills carry it), ``n_bills``, ``estimated`` (a day of
+    the month came from an estimated read) and, with a temperature series, ``oat``, ``hdd``,
+    ``cdd`` and ``weather_coverage``. ``gaps`` / ``overlaps`` list the unserved and doubly served
+    stretches (``start``, ``end`` inclusive, ``days``). ``declined_reason`` is set when a gap or
+    overlap is longer than ``max_gap_days``: Portfolio Manager computes no metric then, and neither
+    do :meth:`annual` and :meth:`total` (they return ``None``).
+    """
+
+    months: pd.DataFrame
+    gaps: list
+    overlaps: list
+    units: str | None = None
+    heating_base_f: float | None = None
+    cooling_base_f: float | None = None
+    max_gap_days: int = 0
+    declined_reason: str | None = None
+
+    @property
+    def declined(self) -> bool:
+        return self.declined_reason is not None
+
+    def total(self, start, end) -> dict | None:
+        """Totals over the calendar months ``start`` .. ``end`` (any date inside each; inclusive),
+        or ``None`` when declined or when a month in the range is incomplete or missing."""
+        if self.declined:
+            return None
+        a = pd.Timestamp(start).to_period("M").to_timestamp()
+        b = pd.Timestamp(end).to_period("M").to_timestamp()
+        want = pd.date_range(a, b, freq="MS")
+        m = self.months.reindex(want)
+        if m["complete"].isna().any() or not m["complete"].astype(bool).all():
+            return None
+        out = {
+            "months": [str(x.date())[:7] for x in want],
+            "energy": float(m["energy"].sum()),
+            "days": int(m["days_in_month"].sum()),
+            "estimated_months": int(m["estimated"].astype(bool).sum()),
+        }
+        for c in ("cost", "hdd", "cdd"):
+            if c in m.columns:
+                out[c] = float(m[c].sum())
+        return out
+
+    def annual(self) -> list:
+        """Calendar-year totals: one dict per year with all 12 months complete (``[]`` when
+        declined)."""
+        if self.declined:
+            return []
+        out = []
+        for y in sorted(set(self.months.index.year)):
+            t = self.total(f"{y}-01-01", f"{y}-12-31")
+            if t is not None:
+                out.append({"year": int(y), **{k: v for k, v in t.items() if k != "months"}})
+        return out
+
+    def as_dict(self) -> dict:
+        m = self.months
+        rows = []
+        for ts, r in m.iterrows():
+            d: dict = {"month": str(ts.date())[:7]}
+            for k, v in r.items():
+                if isinstance(v, (bool, np.bool_)):
+                    d[k] = bool(v)
+                elif isinstance(v, (int, np.integer)):
+                    d[k] = int(v)
+                else:
+                    fv = float(v)
+                    d[k] = round(fv, 6) if np.isfinite(fv) else None
+            rows.append(d)
+        return {
+            "method": "ENERGY STAR Portfolio Manager: energy per day of each bill, prorated to "
+            "calendar months (Technical Reference, Thermal Energy Conversions, Figure 1 step 3)",
+            "units": self.units,
+            "heating_base_f": self.heating_base_f,
+            "cooling_base_f": self.cooling_base_f,
+            "max_gap_days": int(self.max_gap_days),
+            "declined": self.declined,
+            "declined_reason": self.declined_reason,
+            "gaps": list(self.gaps),
+            "overlaps": list(self.overlaps),
+            "months": rows,
+            "annual": self.annual(),
+        }
+
+
+def calendarize(
+    bills,
+    temp=None,
+    *,
+    heating_base_f: float = 65.0,
+    cooling_base_f: float = 65.0,
+    max_gap_days: int = 0,
+    estimated_spans=(),
+    units: str | None = None,
+) -> Calendarized:
+    """Prorate bills into calendar months, the ENERGY STAR Portfolio Manager way (provisional).
+
+    Each bill's energy (and cost) is divided by its days and each day is assigned to its calendar
+    month, so a bill from January 15 to February 14 splits by its days in each (Portfolio Manager
+    Technical Reference, *Thermal Energy Conversions*, Figure 1 step 3). ``bills`` is a
+    :class:`BillingSeries` or a table with ``start``, ``end`` (exclusive) and ``energy``, and
+    optionally ``estimated`` and ``cost``; unlike :class:`BillingSeries` a table may overlap, so the
+    overlap can be reported. Portfolio Manager computes no metric when bills leave a gap or
+    overlap; here a gap or overlap longer than ``max_gap_days`` (default 0: any) sets
+    ``declined_reason`` and the totals are withheld, while the months are still listed with their
+    coverage. ``estimated_spans`` (``(start, exclusive end)`` pairs, e.g. merged estimated reads)
+    flag the months they touch as estimated, like an estimated bill does.
+
+    With ``temp`` the months also get their mean temperature and HDD / CDD at the given bases,
+    from the same daily series the bills are paired with (:func:`daily_weather`); a month with
+    some days missing is scaled to its length, as a bill is.
+
+    The calendarized months are an output view: models are fitted on the bills' own periods, and
+    a month is never fed back into a fit.
+    """
+    f = bills.frame if isinstance(bills, BillingSeries) else pd.DataFrame(bills)
+    if isinstance(bills, BillingSeries) and units is None:
+        units = bills.units
+    f = f.reset_index(drop=True)
+    f["start"] = pd.DatetimeIndex(f["start"]).normalize()
+    f["end"] = pd.DatetimeIndex(f["end"]).normalize()
+    f = f.sort_values("start", kind="stable").reset_index(drop=True)
+    days = ((f["end"] - f["start"]) / _DAY).astype(int)
+    if (days <= 0).any():
+        raise ValueError("every bill must end after it starts")
+    energy = pd.to_numeric(f["energy"], errors="coerce").to_numpy(float)
+    has_cost = "cost" in f.columns
+    cost = pd.to_numeric(f["cost"], errors="coerce").to_numpy(float) if has_cost else None
+    est = f["estimated"].fillna(False).astype(bool).to_numpy() if "estimated" in f else None
+    lo, hi = f["start"].min(), f["end"].max()
+    cal = pd.date_range(lo, hi - _DAY, freq="D")
+    n = len(cal)
+    served = np.zeros(n, int)
+    e_day = np.zeros(n)
+    c_day = np.zeros(n)
+    est_day = np.zeros(n, bool)
+    bill_id = np.full(n, -1)
+    base = lo.value
+    for k, (s0, d) in enumerate(zip(f["start"], days)):
+        i0 = int((s0.value - base) // 86_400_000_000_000)
+        i1 = i0 + int(d)
+        served[i0:i1] += 1
+        e_day[i0:i1] += energy[k] / d
+        if cost is not None:
+            c_day[i0:i1] += cost[k] / d
+        if est is not None and est[k]:
+            est_day[i0:i1] = True
+        bill_id[i0:i1] = k
+    for a, b in estimated_spans or ():
+        a, b = pd.Timestamp(a).normalize(), pd.Timestamp(b).normalize()
+        i0 = max(0, int((a.value - base) // 86_400_000_000_000))
+        i1 = min(n, int((b.value - base) // 86_400_000_000_000))
+        if i1 > i0:
+            est_day[i0:i1] = True
+
+    def runs(mask) -> list:
+        out = []
+        i = 0
+        while i < n:
+            if mask[i]:
+                j = i
+                while j < n and mask[j]:
+                    j += 1
+                out.append({"start": _ds(cal[i]), "end": _ds(cal[j - 1]), "days": int(j - i)})
+                i = j
+            else:
+                i += 1
+        return out
+
+    gaps, overlaps = runs(served == 0), runs(served > 1)
+    worst = max([g["days"] for g in gaps + overlaps] or [0])
+    why = None
+    if worst > int(max_gap_days):
+        bits = []
+        if gaps:
+            bits.append(f"{len(gaps)} gap(s) ({sum(g['days'] for g in gaps)} days)")
+        if overlaps:
+            bits.append(f"{len(overlaps)} overlap(s) ({sum(o['days'] for o in overlaps)} days)")
+        why = (
+            " and ".join(bits)
+            + " between bills: Portfolio Manager computes no metric across a gap "
+            "or an overlap, so the calendar totals are withheld"
+        )
+    # full calendar months touched by the bills (the first and last may be partial)
+    m0, m1 = lo.to_period("M").to_timestamp(), (hi - _DAY).to_period("M").to_timestamp()
+    mdays = pd.date_range(m0, m1 + pd.offsets.MonthEnd(0), freq="D")
+    s = pd.DataFrame(
+        {"served": 0, "energy": 0.0, "cost": 0.0, "est": False, "bill": -1},
+        index=mdays,
+    )
+    s.loc[cal, "served"] = served
+    s.loc[cal, "energy"] = e_day
+    s.loc[cal, "cost"] = c_day
+    s.loc[cal, "est"] = est_day
+    s.loc[cal, "bill"] = bill_id
+    month = s.index.to_period("M").to_timestamp()
+    g = s.groupby(month)
+    months = pd.DataFrame(
+        {
+            "days_in_month": g.size().astype(int),
+            "days_covered": g["served"].apply(lambda v: int((v == 1).sum())),
+            "energy": g["energy"].sum(),
+            "estimated": g["est"].any(),
+            "n_bills": g["bill"].apply(lambda v: int(len(set(v[v >= 0])))),
+        }
+    )
+    months["complete"] = months["days_covered"] == months["days_in_month"]
+    months["energy_per_day"] = months["energy"] / months["days_covered"].where(
+        months["days_covered"] > 0
+    )
+    if has_cost:
+        months["cost"] = g["cost"].sum()
+    months = months[
+        ["days_in_month", "days_covered", "complete", "energy", "energy_per_day"]
+        + (["cost"] if has_cost else [])
+        + ["n_bills", "estimated"]
+    ]
+    if temp is not None:
+        d = daily_weather(temp, heating_base_f=heating_base_f, cooling_base_f=cooling_base_f)
+        d = d.reindex(mdays)
+        gw = d.groupby(month)
+        cnt = gw["oat"].count()
+        months["oat"] = gw["oat"].mean()
+        months["hdd"] = gw["hdd"].mean() * months["days_in_month"]
+        months["cdd"] = gw["cdd"].mean() * months["days_in_month"]
+        months["weather_coverage"] = cnt / months["days_in_month"]
+    months.index.name = "month"
+    return Calendarized(
+        months,
+        gaps,
+        overlaps,
+        units=units,
+        heating_base_f=float(heating_base_f) if temp is not None else None,
+        cooling_base_f=float(cooling_base_f) if temp is not None else None,
+        max_gap_days=int(max_gap_days),
+        declined_reason=why,
+    )

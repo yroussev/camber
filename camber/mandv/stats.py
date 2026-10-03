@@ -981,6 +981,8 @@ def model_regression_tests(model, drivers, y, *, time_index=None, weights=None) 
     names = design_names(model)
     spec = model._fit_record.design
     n_cp = len(spec[2]) if spec[0] in ("cp", "cpd") else 0
+    if spec[0] == "bdd":  # 0.94 (#72): the fitted degree-day bases count, like change points
+        n_cp = int(spec[3]) if len(spec) > 3 else 0
     return regression_tests(
         X,
         y,
@@ -1004,6 +1006,9 @@ def logical_signs(model) -> dict | None:
         dd = {"heating": ("heating_slope",), "cooling": ("cooling_slope",)}
         cols = dd.get(spec[1], ("heating_slope", "cooling_slope"))
         return {c: 1 for c in cols}
+    if spec and spec[0] == "bdd":  # 0.94 (#72): degree-day slopes on bills are positive
+        legs = {"DD-H": ("heating_slope",), "DD-C": ("cooling_slope",)}
+        return {c: 1 for c in legs.get(spec[1], ("heating_slope", "cooling_slope"))}
     if not spec or spec[0] not in ("cp", "cpd") or not spec[2]:
         return None  # includes the 5P -> 2P fallback, whose line may slope either way
     signs = _LOGICAL_SIGNS.get(spec[1])
