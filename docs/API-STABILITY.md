@@ -390,6 +390,68 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     in an `mv` entry's `oat` and in `report.rcx.oat_reference`; the audit file
     `weather_audit.ndjson` and its record fields; the CLI `camber weather audit` and
     `camber facility private`, and `camber facility add --private`.
+<!-- 095-mv -->
+- **Bill-based M&V follow-ups** (0.95; #74), all additive and provisional:
+  - the modules `camber.mandv.billwindow` (`BillWindow`, `RANKING`, `new_bill_window`) and
+    `camber.mandv.billsteps` (`BillStepRule`, `scan_statistic`, `bill_steps`,
+    `DEFAULT_MIN_RUN`, `DEFAULT_THRESHOLD`);
+  - the trailing `RebaselinePolicy.bill_steps` field (in `as_dict` only when set) and the config
+    key `mv[].rebaseline.bill_steps`;
+  - the keyword-only `degree_day=` of `mandv.methods.select_method`, and the `heating_base_f` /
+    `cooling_base_f` / `p` keys of a degree-day model's summary in its `models`;
+  - the `mv_method_proposal` metrics `model_criterion` and `degree_day_candidate` (billing
+    entries with `base_f: "auto"`); the `n_bills`, `bases`, `ranking` and `tried` keys of a
+    billing meter's rebaseline `window` in `camber mv propose --json`.
+<!-- /095-mv -->
+<!-- 095-lifecycle (#18 steps 3-4) -->
+- **Portfolio lifecycle, offboarding to purge** (added in 0.95, provisional, #18 step 3):
+  `Portfolio.audit` and `Portfolio.note_edge_device` (the public audit and edge-device note
+  used by `camber.edge`), `Portfolio.offboard`, `archive`, `restore`, `purge` (each
+  `apply=False` by default; `purge` needs `confirm=` equal to the facility id), `Portfolio.export`, `bundles` and `recover`;
+  `Portfolio.transition` now runs `offboard` / `archive` / `restore`. On disk: the export bundle
+  layout under `archive/<fid>/<bundle_id>/` with `manifest.json` (`"schema": "camber.bundle/1"`)
+  and `manifest.sha256`; the registry fields `offboarding` and `archive`; the tombstone fields
+  `purged_at` and `purge_pending`; the `_swap-*` / `_trash-*` crash-recovery names; the audit
+  actions `facility.offboard|archive|restore|purge|export` and `portfolio.recover`. CLI:
+  `camber facility offboard|archive|restore|purge|export|bundles`.
+- **Retention and month partitions** (added in 0.95, provisional, #18 step 4):
+  `camber.portfolio.RETENTION_SCHEMA` and the policy document it describes
+  (`"schema": "camber.retention/1"`, from `Portfolio.retention_policy()`), `Portfolio.set_retention`,
+  `set_retention_override`, `hold`, `release_hold`, `apply_retention`; the data class
+  `weather_audit` in `DEFAULT_POLICY`; the rollup stores `rollups/hourly|daily/` (columns `value`
+  and `n`); `ParquetStore.partitions`, `drop_partition`, `migrate_partitions` and `migrated_files` (the
+  `year=Y/_migrated.json` record); the audit
+  actions `retention.set|override|hold|release|apply|incomplete` and
+  `store.migrate_partitions`. CLI: `camber retention show|set|override|hold|release|apply` and
+  `camber store migrate-partitions` (exit code 75 when the lock is held). **Stable surface
+  changed additively:** `ParquetStore` now writes `year=/month=` partitions and still reads
+  year-only ones; a full `read_long` returns a `month` column alongside `year`.
+<!-- /095-lifecycle -->
+<!-- 095-edge (#18 step 5) -->
+- **Edge lifecycle** (0.95; #18 step 5), all additive and provisional:
+  - the modules `camber.edge.landing` (`ACCEPTING_STATES`, `NON_ACCEPTING_STATES`,
+    `QUARANTINE_PREFIX`, `CATEGORIES` (with `duplicate`), `LandedKey`, `parse_landed_key`,
+    `already_migrated`, `facility_status`,
+    `route_key`, `read_key_listing`, `reconcile`), `camber.edge.quarantine` (`QUARANTINE_DIR`,
+    `RECORD_SUFFIX`, `quarantine_root`, `list_quarantine`, `land`, `quarantine_reconciled`,
+    `release`, `discard`), `camber.edge.decommission` (`DecommissionResult`,
+    `default_device_id`, `decommission`, `record_retirement`) and `camber.edge.bucket_rules`
+    (`PROVIDERS`, `BUCKET_CLASSES`, `DAYS_PER_MONTH`, `DAYS_PER_YEAR`, `rule_days`,
+    `normalize_policy`, `policy_from_portfolio`, `bucket_lifecycle_rules` and its `layout=`,
+    `LAYOUTS`, `class_prefixes_from_policy`);
+  - in `camber.edge.spool`: `Spool.compact`, `Spool.lock`, `Spool.retire`, `Spool.retirement`,
+    `Spool(lock_timeout=)`, `CompactResult` and `SpoolRetired` (also exported from
+    `camber.edge`); the journal record `op: "mark"` and the optional `attempts` field of an
+    `enqueue` record; the spool files `_lock` and `retired.json`;
+  - `EdgeConfig.device_id` (config key `device_id`, env `CAMBER_EDGE_DEVICE_ID`); the forwarder's
+    `year=/month=` object keys and the `month` field of its batch manifest;
+  - the workspace directory `quarantine/` and its `*.quarantine.json` records; the registry field
+    `edge_devices`; the audit actions `edge.land`, `edge.reconcile.quarantine`,
+    `edge.quarantine.release`, `edge.quarantine.discard` and `edge.decommission`;
+  - the bucket-rules input schema and the reconciliation report's JSON keys;
+  - the CLI `camber edge compact | decommission | reconcile | land | quarantine |
+    record-retirement | bucket-rules`.
+<!-- /095-edge -->
 
 ## Deprecated
 

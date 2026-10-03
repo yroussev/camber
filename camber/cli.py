@@ -14,7 +14,12 @@ Subcommands:
     camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui
     camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
     camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
-    camber facility add|list|show|rename|activate|suspend|resume      # facility lifecycle
+    camber facility add|list|show|rename|activate|suspend|resume|     # facility lifecycle
+                    offboard|restore|archive|purge|export|bundles
+    camber retention show|set|override|hold|release|apply             # retention policy (0.95)
+    camber store migrate-partitions STORE [--apply --yes]             # year= -> year=/month=
+    camber edge    run|send-once|status|selftest|compact|decommission    # edge forwarder
+    camber edge    reconcile|land|quarantine|record-retirement|bucket-rules  # edge landing
 
 The agent subcommands (`explain`, `ask`) are grounded and useful with **no LLM** (deterministic
 templates). To wire a model, pass ``--llm-cmd`` a shell command that reads the prompt on stdin and
@@ -387,11 +392,26 @@ def _cmd_bacnet_discover(args) -> int:  # pragma: no cover - drives a live BACne
     return 0
 
 
+def _edge_retired(fwd) -> bool:
+    """0.95 (#18): refuse to forward from a decommissioned device's spool (prints why)."""
+    retired = fwd.spool.retirement()
+    if retired is None:
+        return False
+    print(
+        f"error: this edge device was decommissioned at {retired.get('retired_at', '?')} "
+        f"(spool {fwd.spool.root}); it no longer forwards",
+        file=sys.stderr,
+    )
+    return True
+
+
 def _cmd_edge_run(args) -> int:
     from .edge.config import build_forwarder, load_config
 
     cfg = load_config(args.config)
     fwd = build_forwarder(cfg)
+    if _edge_retired(fwd):
+        return 1
     print(f"edge: forwarding facility '{cfg.facility_id}' every {cfg.interval:.0f}s (one-way)")
     fwd.run(cfg.interval)
     return 0
@@ -402,6 +422,8 @@ def _cmd_edge_send_once(args) -> int:
 
     cfg = load_config(args.config)
     fwd = build_forwarder(cfg)
+    if _edge_retired(fwd):
+        return 1
     res = fwd.poll_once()
     print(
         f"edge: facility '{res.facility_id}' rows={res.rows} parts={res.spooled} "
@@ -415,8 +437,53 @@ def _cmd_edge_status(args) -> int:
     from .edge.spool import Spool
 
     cfg = load_config(args.config)
-    count, nbytes = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes).depth()
+    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes)
+    count, nbytes = spool.depth()
     print(f"edge spool '{cfg.spool_dir}': {count} batch(es) pending, {nbytes} bytes queued")
+    retired = spool.retirement()  # 0.95 (#18): shown only for a decommissioned device
+    if retired is not None:
+        print(
+            f"  RETIRED at {retired.get('retired_at', '?')} (device "
+            f"{retired.get('device_id', '?')}); `edge run` / `send-once` refuse this spool"
+        )
+    return 0
+
+
+# ---- 0.95 edge lifecycle (#18 step 5): compaction ------------------------------------------------
+def _cmd_edge_compact(args) -> int:
+    """Rewrite the spool journal to its pending batches (crash-safe; never drops one)."""
+    from .edge.config import load_config
+    from .edge.spool import Spool
+    from .portfolio import PortfolioLocked
+
+    cfg = load_config(args.config)
+    spool = Spool(cfg.spool_dir, max_bytes=cfg.spool_max_bytes, lock_timeout=args.lock_timeout)
+    try:
+        res = spool.compact(dry_run=args.dry_run)
+    except PortfolioLocked as e:
+        print(f"error: spool is busy: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        import dataclasses
+
+        print(json.dumps(dataclasses.asdict(res), indent=2))
+        return 0
+    verb = "would compact" if args.dry_run else "compacted"
+    print(
+        f"edge spool '{cfg.spool_dir}': {verb} journal {res.records_before} -> "
+        f"{res.records_after} record(s), {res.bytes_before} -> {res.bytes_after} bytes; "
+        f"{res.pending} batch(es) still pending (none dropped)"
+    )
+    if res.torn:
+        print(f"  dropped {res.torn} torn journal line(s) (a crash mid-append)")
+    if res.missing_payloads:
+        print(f"  {len(res.missing_payloads)} committed batch(es) already delivered (payload gone)")
+    for label, files in (("orphan payload", res.orphan_payloads), ("tmp file", res.tmp_files)):
+        if files:
+            print(
+                f"  {len(files)} {label}(s) with no journal record (an enqueue interrupted before "
+                f"its commit); kept, inspect by hand: {', '.join(files[:5])}"
+            )
     return 0
 
 
@@ -820,7 +887,11 @@ def _cmd_datasets_score(args) -> int:
 # admin command is refused with the holder's pid@host) and require --reason, which is audited with
 # the OS user. Until CAMBER has authentication, write access to the workspace is admin.
 
-_LATER = {"offboard", "restore", "archive", "purge"}
+# ----- 0.95 (#18 steps 3-4): offboard / restore / archive / purge, retention, store partitions.
+# Destructive commands are dry runs unless --apply; --apply then needs a confirmation (--yes, or
+# the typed facility id: --confirm ID or an interactive prompt; purge accepts only the typed id).
+
+_CASCADE = ("offboard", "restore", "archive", "purge")
 
 
 # --------------------------------------------------------------------------- weather audit (0.94)
@@ -955,7 +1026,7 @@ def _cmd_portfolio_status(args) -> int:
     print(f"legal holds: {', '.join(st['legal_holds']) or 'none'}")
     print(f"lock      : {'held by ' + st['locked_by'] if st['locked_by'] else 'free'}")
     print(f"audit     : {st['audit_records']} record(s)")
-    print("retention defaults (enforced by a later release):")
+    print("retention defaults (`camber retention apply` enforces them):")
     for cls, rule in st["retention_defaults"].items():
         print(f"  {cls:16s} {', '.join(f'{k}={v}' for k, v in rule.items())}")
     return 0
@@ -1096,6 +1167,7 @@ def _cmd_facility_show(args) -> int:
         "retention": pf.effective_retention(args.id),
         "state_dir": pf.state_dir(args.id),
         "manifest": pf.manifest(args.id),
+        "bundles": pf.bundles(args.id),
         "audit": pf.audit_log(facility_id=args.id),
     }
     if args.json:
@@ -1110,6 +1182,13 @@ def _cmd_facility_show(args) -> int:
     if info.get("private"):
         print(f"{'private':17s}: yes (weather requests default to offline)")
     print(f"{'allowed actions':17s}: {', '.join(info['allowed_actions']) or 'none'}")
+    if info.get("offboarding"):
+        print(f"{'grace ends':17s}: {info['offboarding'].get('grace_until')}")
+    if info.get("archive"):
+        a = info["archive"]
+        print(f"{'archived':17s}: {a.get('archived_at')} (bundle {a.get('bundle')})")
+    for b in info["bundles"]:
+        print(f"{'bundle':17s}: {b['bundle_id']} ({b.get('kind')})")
     print("retention:")
     for cls, r in info["retention"].items():
         rule = ", ".join(f"{k}={v}" for k, v in r["rule"].items())
@@ -1148,15 +1227,554 @@ def _cmd_facility_private(args) -> int:
 
 @_pf_errors
 def _cmd_facility_transition(args) -> int:
-    if args.facility_cmd in _LATER:
-        print(
-            f"error: `camber facility {args.facility_cmd}` is available in a later release "
-            "(it needs export bundles and the deletion cascade); see docs/PORTFOLIO.md",
-            file=sys.stderr,
-        )
-        return 2
     r = _portfolio(args).transition(args.id, args.facility_cmd, reason=args.reason)
     print(f"{r['facility_id']}: {r['from_state']} -> {r['to_state']}")
+    return 0
+
+
+def _confirmed(args, what: str, *, typed_only: bool = False) -> None:
+    """Raise ``ValueError`` unless ``--apply`` is confirmed (``--yes``, ``--confirm ID`` or a
+    typed answer on an interactive terminal). ``typed_only`` refuses ``--yes`` (purge)."""
+    typed = getattr(args, "confirm", None)
+    if typed is not None:
+        if typed != what:
+            raise ValueError(f"--confirm {typed!r} does not match {what!r}; nothing changed")
+        return
+    if getattr(args, "yes", False) and not typed_only:
+        return
+    if sys.stdin is not None and sys.stdin.isatty():
+        answer = input(f"type {what} to confirm (anything else aborts): ").strip()
+        if answer == what:
+            return
+        raise ValueError("confirmation did not match; nothing changed")
+    need = f"--confirm {what}" if typed_only else f"--yes (or --confirm {what})"
+    extra = " (--yes is not enough for an irreversible purge)" if typed_only else ""
+    raise ValueError(f"--apply needs confirmation: pass {need}{extra}")
+
+
+def _need_apply_reason(args) -> str:
+    if args.apply and not (args.reason or "").strip():
+        raise ValueError("--apply needs --reason (every portfolio change is audited)")
+    return args.reason if (args.reason or "").strip() else "(dry run)"
+
+
+def _print_cascade(r: dict) -> None:
+    head = "dry run -- nothing changed" if r.get("dry_run") else "done"
+    print(f"{r['action']} {r['facility_id']}: {r['from_state']} -> {r['to_state']}  ({head})")
+    if r.get("grace_until"):
+        print(f"  grace period ends : {r['grace_until']}")
+    if r.get("skip_grace"):
+        print("  grace period      : skipped (--skip-grace, audited)")
+    exp = r.get("export")
+    if exp:
+        print(
+            f"  footprint         : {exp['files']} file(s), {exp['bytes']} B, "
+            f"{exp['store_rows']} stored row(s)"
+        )
+    if r.get("bundle"):
+        print(f"  bundle            : {r['bundle']}")
+    elif r["action"] in ("offboard", "archive") and r.get("dry_run"):
+        print("  bundle            : a new verified export bundle is written first")
+    if r.get("counts"):
+        c = r["counts"]
+        print(f"  bundle holds      : {c['files']} file(s), {c['store_rows']} stored row(s)")
+    for path in r.get("deletes") or []:
+        print(f"  deletes           : {path}")
+    ext = r.get("deletes_external")
+    if isinstance(ext, list):
+        for path in ext:
+            print(f"  deletes (report)  : {path}")
+    for k in r.get("kept_external") or []:
+        print(f"  kept in place     : {k['path']} ({k['kind']}; may be shared)")
+    for b in r.get("bundles") or []:
+        print(f"  deletes bundle    : {b}")
+    if r.get("restored"):
+        rs = r["restored"]
+        print(
+            f"  restored          : {rs['store']} store, {rs['rollups']} rollup, {rs['state']} "
+            f"state, {rs['external']} external file(s); checksums verified"
+        )
+        for p in rs.get("external_skipped") or []:
+            print(f"  not restored      : {p} (the path is taken)")
+
+
+@_pf_errors
+def _cmd_facility_cascade(args) -> int:
+    verb = args.facility_cmd
+    pf = _portfolio(args)
+    reason = _need_apply_reason(args)
+    kw: dict = {}
+    if verb == "archive":
+        kw["skip_grace"] = args.skip_grace
+    if verb == "restore" and args.bundle:
+        kw["bundle"] = args.bundle
+    if args.apply:
+        pf.facility(args.id)  # an unknown id fails before any prompt
+        _confirmed(args, args.id, typed_only=verb == "purge")
+        if verb == "purge":
+            kw["confirm"] = args.id
+    r = getattr(pf, verb)(args.id, reason=reason, apply=args.apply, **kw)
+    if args.json:
+        print(json.dumps(r, indent=2, default=str))
+    else:
+        _print_cascade(r)
+        if r.get("dry_run"):
+            conf = f"--confirm {args.id}" if verb == "purge" else "--yes"
+            print(f"\nre-run with --apply --reason ... {conf} to carry it out")
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_export(args) -> int:
+    man = _portfolio(args).export(args.id, reason=args.reason)
+    c = man["counts"]
+    print(
+        f"exported {args.id} -> archive/{args.id}/{man['bundle_id']} ({c['files']} file(s), "
+        f"{c['store_rows']} stored row(s), sha256 manifest verified)"
+    )
+    return 0
+
+
+@_pf_errors
+def _cmd_facility_bundles(args) -> int:
+    rows = _portfolio(args).bundles(args.id, verify=args.verify)
+    if args.json:
+        print(json.dumps(rows, indent=2, default=str))
+        return 0
+    bad = 0
+    for b in rows:
+        c = b.get("counts") or {}
+        ver = ""
+        if "verify" in b:
+            ok = b["verify"]["ok"]
+            bad += 0 if ok else 1
+            ver = "  verified" if ok else "  FAILED: " + "; ".join(b["verify"]["problems"][:3])
+        print(
+            f"{b['bundle_id']:32s} {b.get('kind') or '?':9s} {c.get('files', '?')} file(s), "
+            f"{c.get('store_rows', '?')} row(s){ver}"
+        )
+    print(f"\n{len(rows)} bundle(s).")
+    return 1 if bad else 0
+
+
+# ----- 0.95 (#18 step 4): retention and store partitions ----------------------------------------
+
+
+def _print_rule(rule: dict) -> str:
+    return ", ".join(f"{k}={v}" for k, v in rule.items() if k not in ("source", "min_age_days"))
+
+
+@_pf_errors
+def _cmd_retention_show(args) -> int:
+    pf = _portfolio(args)
+    doc = pf.retention_policy()
+    if args.facility:
+        pf.facility(args.facility)
+        eff = pf.effective_retention(args.facility)
+        if args.json:
+            print(json.dumps(eff, indent=2))
+            return 0
+        held = " (LEGAL HOLD: nothing is deleted)" if args.facility in doc["legal_holds"] else ""
+        print(f"retention for {args.facility}{held}:")
+        for cls, r in eff.items():
+            print(f"  {cls:16s} {_print_rule(r['rule']):40s} ({r['source']})")
+        return 0
+    if args.json:
+        print(json.dumps(doc, indent=2))
+        return 0
+    print("portfolio defaults:")
+    for cls, r in doc["defaults"].items():
+        print(f"  {cls:16s} {_print_rule(r)}")
+    overrides = {
+        f: {c: r for c, r in v["rules"].items() if r["source"] == "facility"}
+        for f, v in doc["facilities"].items()
+    }
+    rows = [(f, c, r) for f, v in overrides.items() for c, r in v.items()]
+    print("facility overrides:" + ("" if rows else " none"))
+    for f, c, r in rows:
+        print(f"  {f:28s} {c:16s} {_print_rule(r)}")
+    print(f"legal holds: {', '.join(doc['legal_holds']) or 'none'}")
+    print("precedence: legal hold > facility override > portfolio default; audit is never deleted")
+    return 0
+
+
+@_pf_errors
+def _cmd_retention_set(args) -> int:
+    from .portfolio._retention import parse_rule_args
+
+    new = _portfolio(args).set_retention(
+        args.data_class, parse_rule_args(args.rule), reason=args.reason
+    )
+    print(f"default {args.data_class}: {_print_rule(new)}")
+    return 0
+
+
+@_pf_errors
+def _cmd_retention_override(args) -> int:
+    from .portfolio._retention import parse_rule_args
+
+    if args.clear == bool(args.rule):
+        raise ValueError("give KEY=VALUE rule(s) or --clear (one of them)")
+    eff = _portfolio(args).set_retention_override(
+        args.id,
+        args.data_class,
+        None if args.clear else parse_rule_args(args.rule),
+        reason=args.reason,
+    )
+    r = eff[args.data_class]
+    print(f"{args.id} {args.data_class}: {_print_rule(r['rule'])} ({r['source']})")
+    return 0
+
+
+@_pf_errors
+def _cmd_retention_hold(args) -> int:
+    pf = _portfolio(args)
+    if args.retention_cmd == "hold":
+        h = pf.hold(args.id, reason=args.reason)
+        print(
+            f"{args.id}: legal hold since {h['since']} -- nothing of it is deleted until released"
+        )
+    else:
+        had = pf.release_hold(args.id, reason=args.reason)
+        print(f"{args.id}: " + ("hold released" if had else "was not held"))
+    return 0
+
+
+def _print_retention(r: dict) -> None:
+    head = "dry run -- nothing changed" if r.get("dry_run") else "applied"
+    print(f"retention apply as of {r['now']} ({head})")
+    for fid, fp in r["facilities"].items():
+        if fp["held"]:
+            print(f"  {fid}: LEGAL HOLD -- skipped")
+            continue
+        parts = []
+        if fp["raw"]:
+            rows = sum(p["rows"] for p in fp["raw"])
+            parts.append(
+                f"{len(fp['raw'])} raw partition(s) ({rows} rows) -> roll up, verify, prune"
+            )
+        for k in ("hourly", "daily"):
+            if fp[k]:
+                parts.append(f"{len(fp[k])} {k} rollup partition(s)")
+        if fp["findings"]:
+            parts.append(f"{len(fp['findings'])} closed fault(s)")
+        for k, label in (("drift_versions", "drift"), ("mv_versions", "M&V")):
+            if fp[k]:
+                parts.append(f"{fp[k]} superseded {label} baseline version(s)")
+        rep = [x for x in fp["reports"] if x["unchanged"]]
+        if rep:
+            parts.append(f"{len(rep)} old report(s)")
+        if fp["weather_audit_lines"]:
+            parts.append(f"{fp['weather_audit_lines']} weather-audit line(s)")
+        for x in fp["reports"]:
+            if not x["unchanged"]:
+                print(f"  {fid}: keeping {x['path']} (changed since CAMBER wrote it)")
+        for leg in fp["skipped_legacy"]:
+            print(
+                f"  {fid}: year {leg['year']} holds year-only files (straddling the cutoff, or "
+                "beside month partitions); run `camber store migrate-partitions` first"
+            )
+        if parts:
+            print(f"  {fid}: " + "; ".join(parts))
+    for fid in r.get("archive_due") or []:
+        print(f"  {fid}: offboarding grace period ended -> archive")
+    for p in r.get("problems") or []:
+        print(f"  ! {p}")
+    if not r["changes"]:
+        print("  nothing to do")
+
+
+@_pf_errors
+def _cmd_retention_apply(args) -> int:
+    from .portfolio import Portfolio, PortfolioLocked
+
+    pf = _portfolio(args)
+    if args.apply:
+        _need_apply_reason(args)
+        _confirmed(args, args.facility or "apply")
+        pf = Portfolio(pf.root, lock_timeout=args.wait)
+    try:
+        r = pf.apply_retention(
+            apply=args.apply, facility_id=args.facility, now=args.now, reason=args.reason
+        )
+    except PortfolioLocked as e:
+        print(f"error: {e} -- try again later", file=sys.stderr)
+        return 75  # EX_TEMPFAIL: a cron run simply retries next time
+    if args.json:
+        print(json.dumps(r, indent=2, default=str))
+    else:
+        _print_retention(r)
+        if r["dry_run"] and r["changes"]:
+            print("\nre-run with --apply --reason ... --yes to carry it out")
+    return 1 if r.get("problems") else 0
+
+
+def _cmd_store_migrate_partitions(args) -> int:
+    from .store import ParquetStore
+
+    if args.apply and not args.yes:
+        print("error: --apply needs --yes (the store is rewritten in place)", file=sys.stderr)
+        return 1
+    try:
+        r = ParquetStore(args.store).migrate_partitions(apply=args.apply, reason=args.reason)
+    except (ValueError, OSError, RuntimeError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(r, indent=2))
+        return 0
+    head = "dry run -- nothing changed" if r["dry_run"] else "applied"
+    print(f"migrate-partitions {r['store']} ({head})")
+    for p in r["partitions"]:
+        print(f"  {p['facility_id']} year={p['year']}: {p['files']} file(s), {p['rows']} rows")
+    if not r["partitions"]:
+        print("  every partition is already year=/month=")
+    elif r["dry_run"]:
+        print("\nre-run with --apply --yes (and --reason inside a workspace) to convert them")
+    return 0
+
+
+# ---- 0.95 edge lifecycle (#18 step 5): central reconciliation -----------------------------------
+def _edge_ws(p) -> None:
+    p.add_argument(
+        "--workspace",
+        help="portfolio workspace root (default: $CAMBER_PORTFOLIO, else the current dir)",
+    )
+
+
+def _print_reconcile(rep: dict, limit: int) -> None:
+    src = rep["source"]
+    print(
+        f"edge reconcile ({'read-only' if rep.get('read_only') else 'applied'}) {src['kind']} "
+        f"{src['path']}: {rep['objects_scanned']} object(s) scanned"
+    )
+    print("  " + "  ".join(f"{k} {v}" for k, v in rep["counts"].items()))
+    rows = rep["objects"]
+    for r in rows[:limit]:
+        who = r["facility_id"] or "-"
+        act = f"  -> {r['action']}" if r.get("action") else ""
+        print(f"  {r['category']:16s} {who:28s} {r['key']}  ({r['detail']}){act}")
+    if len(rows) > limit:
+        print(f"  ... {len(rows) - limit} more (use --json or --limit)")
+
+
+@_pf_errors
+def _cmd_edge_reconcile(args) -> int:
+    from .edge.landing import reconcile
+
+    pf = _portfolio(args)
+    if args.apply:
+        from .edge.quarantine import quarantine_reconciled
+
+        if args.keys:
+            raise ValueError(
+                "--apply works on the workspace store or a local --landing directory; CAMBER "
+                "never moves cloud objects (route uploads with a broker, see docs/EDGE-DEPLOY.md)"
+            )
+        rep = quarantine_reconciled(pf, landing=args.landing, reason=args.reason)
+    else:
+        rep = reconcile(pf, landing=args.landing, keys=args.keys, prefix=args.prefix or "")
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    _print_reconcile(rep, args.limit)
+    if args.apply:
+        print(f"  quarantined {rep['quarantined']} object(s) (audited)")
+    elif rep["to_quarantine"]:
+        hint = "" if args.keys else " (--apply --reason R to move them)"
+        print(f"  {rep['to_quarantine']} object(s) should be quarantined{hint}")
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_land(args) -> int:
+    from .edge.quarantine import land
+
+    rep = land(_portfolio(args), args.inbox, apply=args.apply, reason=args.reason)
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    c = rep["counts"]
+    head = "applied" if rep["applied"] else "dry run; --apply --reason R to move"
+    print(
+        f"edge land ({head}) {rep['inbox']}: {c['store']} to the store, "
+        f"{c['quarantine']} to quarantine, {c['inbox']} left in the inbox"
+    )
+    for r in rep["objects"][: args.limit]:
+        if r["to"] != "store":
+            print(f"  {r['to']:10s} {r['category']:16s} {r['key']}  ({r['detail']})")
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_quarantine(args) -> int:
+    from .edge import quarantine as q
+
+    pf = _portfolio(args)
+    if args.q_cmd == "list":
+        rows = q.list_quarantine(pf, facility_id=args.facility)
+        if args.json:
+            print(json.dumps(rows, indent=2, default=str))
+            return 0
+        if not rows:
+            print("quarantine is empty")
+            return 0
+        for r in rows:
+            print(
+                f"{r['status']:10s} {str(r.get('facility_id') or '-'):28s} "
+                f"{str(r.get('category') or '-'):16s} {r['key']}  "
+                f"({r.get('quarantined_at') or '?'}: {r.get('detail') or ''})"
+            )
+        print(f"{len(rows)} object(s) in quarantine")
+        return 0
+    if args.q_cmd == "release":
+        rep = q.release(
+            pf, facility_id=args.facility, keys=args.key, reason=args.reason, apply=args.apply
+        )
+    else:
+        rep = q.discard(
+            pf,
+            facility_id=args.facility,
+            keys=args.key,
+            reason=args.reason,
+            apply=args.apply,
+            yes=args.yes,
+            confirm=args.confirm,
+        )
+    if args.json:
+        print(json.dumps(rep, indent=2, default=str))
+        return 0
+    verb = {"release": "released", "discard": "discarded"}[args.q_cmd]
+    head = verb if rep["applied"] else f"would be {verb} (dry run; --apply)"
+    print(f"{len(rep['planned'])} object(s) {head}")
+    for k in rep["planned"]:
+        print(f"  {k}")
+    for r in rep["refused"]:
+        print(f"  refused {r['key']}: {r['why']}")
+    return 1 if rep["refused"] and not rep["planned"] else 0
+
+
+def _cmd_edge_decommission(args) -> int:
+    """Flush the spool, wait for acks, retire the device (dry run unless --apply)."""
+    import dataclasses
+
+    from .edge.config import build_forwarder, load_config
+    from .edge.decommission import decommission
+    from .portfolio import Portfolio, PortfolioLocked, find_workspace
+
+    cfg = load_config(args.config)
+    fwd = build_forwarder(cfg, source=_NoSource())
+    ws = find_workspace(args.workspace)
+    if args.workspace and ws is None:
+        print(f"error: {args.workspace} is not a portfolio workspace", file=sys.stderr)
+        return 1
+    try:
+        res = decommission(
+            fwd.spool,
+            fwd.sink,
+            facility_id=cfg.facility_id,
+            device_id=args.device or cfg.device_id,
+            reason=args.reason,
+            apply=args.apply,
+            yes=args.yes,
+            confirm=args.confirm,
+            force=args.force,
+            wait=args.wait,
+            portfolio=Portfolio(ws) if ws else None,
+        )
+    except (ValueError, PortfolioLocked) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(dataclasses.asdict(res), indent=2, default=str))
+        return 1 if res.refused and not res.dry_run else 0
+    head = "dry run; --apply to act" if res.dry_run else "applied"
+    print(
+        f"edge decommission ({head}) facility '{res.facility_id}' device '{res.device_id}': "
+        f"{res.pending_before} batch(es) pending, {res.forwarded} flushed, "
+        f"{res.pending_after} unacknowledged"
+    )
+    if res.refused:
+        print(f"  {'would refuse' if res.dry_run else 'REFUSED'}: {res.refused}")
+        return 0 if res.dry_run else 1
+    if res.dry_run:
+        print("  would retire the device (spool takes no new batches) and note it in the registry")
+        return 0
+    word = "already retired" if res.already_retired else "retired"
+    print(
+        f"  {word} at {(res.receipt or {}).get('retired_at')}" + (" (FORCED)" if res.forced else "")
+    )
+    for u in res.unacknowledged:
+        print(f"  unacknowledged, kept on disk: {u['key']} ({u['bytes']} bytes)")
+    if res.registry_noted:
+        print(f"  registry: {res.registry_noted}")
+    else:
+        print(
+            "  no portfolio workspace here: copy the spool's retired.json to the portfolio host "
+            "and run `camber edge record-retirement retired.json --reason R`"
+        )
+    return 0
+
+
+class _NoSource:
+    """A source placeholder: decommissioning never reads the BAS, it only flushes the spool."""
+
+    def point_names(self):
+        return []
+
+    def load_points(self, names, resample=None):
+        return None
+
+
+@_pf_errors
+def _cmd_edge_bucket_rules(args) -> int:
+    """Print (or write) provider lifecycle JSON from a retention policy. Never calls a cloud API."""
+    from .edge.bucket_rules import bucket_lifecycle_rules, policy_from_portfolio
+
+    facilities = list(args.facility or []) or None
+    if args.policy:
+        with open(args.policy, encoding="utf-8") as fh:
+            policy = json.load(fh)
+    else:
+        policy, facs = policy_from_portfolio(_portfolio(args))
+        facilities = facilities or facs
+    out = bucket_lifecycle_rules(
+        policy,
+        provider=args.provider,
+        facilities=facilities,
+        prefix=args.prefix or "",
+        container=args.container,
+        layout=args.layout,
+    )
+    doc = json.dumps(out["document"], indent=2)
+    if args.out:
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(doc + "\n")
+    if args.json:
+        print(doc)
+        return 0
+    print(f"# {args.provider} lifecycle rules (dry run: nothing was sent to any cloud)")
+    for row in out["plan"]:
+        n = len(row["prefixes"])
+        print(f"#   {row['class']}: delete after {row['days']} days ({n} prefix(es))")
+    for note in out["notes"]:
+        print(f"#   note: {note}")
+    print(f"# review, then apply yourself: {out['apply_with']}")
+    if args.out:
+        print(f"# wrote {args.out}")
+    else:
+        print(doc)
+    return 0
+
+
+@_pf_errors
+def _cmd_edge_record_retirement(args) -> int:
+    from .edge.decommission import record_retirement
+
+    with open(args.receipt, encoding="utf-8") as fh:
+        receipt = json.load(fh)
+    r = record_retirement(_portfolio(args), receipt, reason=args.reason)
+    print(f"{r['facility_id']}: device {r['device_id']} retirement {r['noted']}")
     return 0
 
 
@@ -1711,6 +2329,7 @@ def _cmd_mv_propose(args) -> int:
                 print(
                     f"  new window {w['window'][0]}..{w['window'][1]} ({w['model_kind']}, "
                     f"{w['missing_frac']:.0%} missing, coverage {w['coverage_tier']})"
+                    + (f", {w['n_bills']} bills" if w.get("n_bills") else "")  # 0.95 (#74)
                 )
             elif rb["outcome"] == "declined":
                 print(f"  declined: {rb['declined_reason']}")
@@ -2063,6 +2682,119 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     esf.add_argument("config")
     esf.set_defaults(func=_cmd_edge_selftest)
+    # ---- 0.95 edge lifecycle (#18 step 5) ----
+    ecp = edsub.add_parser(
+        "compact", help="rewrite the spool journal to its pending batches (crash-safe)"
+    )
+    ecp.add_argument("config")
+    ecp.add_argument("--dry-run", action="store_true", help="report only; change nothing")
+    ecp.add_argument(
+        "--lock-timeout", type=float, default=30.0, help="seconds to wait for a busy spool"
+    )
+    ecp.add_argument("--json", action="store_true")
+    ecp.set_defaults(func=_cmd_edge_compact)
+    erc = edsub.add_parser(
+        "reconcile",
+        help="central: check landed objects against the facility registry (read-only)",
+    )
+    _edge_ws(erc)
+    esrc = erc.add_mutually_exclusive_group()
+    esrc.add_argument("--landing", help="a local landing directory (default: the workspace store)")
+    esrc.add_argument(
+        "--keys", help="a cloud key listing (s3api / gcloud / az JSON, or one key per line)"
+    )
+    erc.add_argument("--prefix", help="the sink's key prefix to strip from listed keys")
+    erc.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    erc.add_argument(
+        "--apply", action="store_true", help="quarantine the flagged objects (needs --reason)"
+    )
+    erc.add_argument("--reason", help="why (audited; required with --apply)")
+    erc.add_argument("--json", action="store_true")
+    erc.set_defaults(func=_cmd_edge_reconcile)
+    eld = edsub.add_parser(
+        "land", help="central: route a landing inbox into the store or quarantine (dry run)"
+    )
+    _edge_ws(eld)
+    eld.add_argument("inbox", help="the landing directory edge uploads arrive in")
+    eld.add_argument("--apply", action="store_true", help="move the objects (needs --reason)")
+    eld.add_argument("--reason", help="why (audited; required with --apply)")
+    eld.add_argument("--limit", type=int, default=50, help="rows to print (default 50)")
+    eld.add_argument("--json", action="store_true")
+    eld.set_defaults(func=_cmd_edge_land)
+    eqr = edsub.add_parser(
+        "quarantine", help="central: list, release or discard quarantined uploads"
+    )
+    eqsub = eqr.add_subparsers(dest="q_cmd", required=True)
+    eql = eqsub.add_parser("list", help="quarantined objects with their reason and status")
+    _edge_ws(eql)
+    eql.add_argument("--facility", help="only this facility_id")
+    eql.add_argument("--json", action="store_true")
+    eql.set_defaults(func=_cmd_edge_quarantine)
+    for verb, text in (
+        ("release", "move quarantined objects into the store (the facility must accept data)"),
+        ("discard", "delete quarantined objects (destructive: --apply and --yes/--confirm ID)"),
+    ):
+        eqv = eqsub.add_parser(verb, help=text)
+        _edge_ws(eqv)
+        eqv.add_argument("--facility", help="every quarantined object of this facility_id")
+        eqv.add_argument("--key", action="append", help="one quarantined key (repeatable)")
+        eqv.add_argument("--apply", action="store_true", help="act (default: a dry run)")
+        eqv.add_argument("--reason", help="why (audited; required with --apply)")
+        if verb == "discard":
+            eqv.add_argument("--yes", action="store_true", help="confirm the deletion")
+            eqv.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the id")
+        eqv.add_argument("--json", action="store_true")
+        eqv.set_defaults(func=_cmd_edge_quarantine, yes=False, confirm=None)
+    edc = edsub.add_parser(
+        "decommission",
+        help="flush the spool, wait for acks, retire the device (dry run unless --apply)",
+    )
+    edc.add_argument("config")
+    edc.add_argument("--device", help="device id (default: config device_id, else the node name)")
+    _edge_ws(edc)
+    edc.add_argument(
+        "--wait", type=float, default=60.0, help="seconds to keep flushing for acks (default 60)"
+    )
+    edc.add_argument("--apply", action="store_true", help="act (default: a dry run)")
+    edc.add_argument("--yes", action="store_true", help="confirm the retirement")
+    edc.add_argument("--confirm", metavar="FACILITY_ID", help="confirm by typing the facility id")
+    edc.add_argument(
+        "--force",
+        action="store_true",
+        help="retire even with unacknowledged batches (kept on disk; refused under a legal hold)",
+    )
+    edc.add_argument("--reason", help="why (audited; required with --apply or --force)")
+    edc.add_argument("--json", action="store_true")
+    edc.set_defaults(func=_cmd_edge_decommission)
+    err = edsub.add_parser(
+        "record-retirement", help="central: record a device's retirement receipt (retired.json)"
+    )
+    _edge_ws(err)
+    err.add_argument("receipt", help="the retired.json a decommissioned device wrote")
+    err.add_argument("--reason", required=True, help="why (audited)")
+    err.set_defaults(func=_cmd_edge_record_retirement)
+    ebr = edsub.add_parser(
+        "bucket-rules",
+        help="emit S3 / GCS / Azure lifecycle JSON from the retention policy (text only)",
+    )
+    ebr.add_argument("--provider", required=True, choices=["s3", "gcs", "azure"])
+    _edge_ws(ebr)
+    ebr.add_argument("--policy", help="a policy JSON file instead of the workspace's policy")
+    ebr.add_argument(
+        "--facility", action="append", help="emit per-facility rules for this id (repeatable)"
+    )
+    ebr.add_argument("--prefix", help="the landing's key prefix in the bucket")
+    ebr.add_argument(
+        "--layout",
+        choices=["store", "workspace"],
+        default="store",
+        help="what --prefix is the root of: the store (as the forwarder lands it; default) or a "
+        "mirror of the whole workspace",
+    )
+    ebr.add_argument("--container", help="Azure container name (required for azure)")
+    ebr.add_argument("--out", help="write the rules JSON to this file")
+    ebr.add_argument("--json", action="store_true", help="print only the rules JSON")
+    ebr.set_defaults(func=_cmd_edge_bucket_rules)
 
     pwx = sub.add_parser(
         "weather", help="weather privacy: what was sent to weather and price services"
@@ -2238,7 +2970,9 @@ def _build_parser() -> argparse.ArgumentParser:
     pfm.set_defaults(func=_cmd_portfolio_migrate)
 
     pfc = sub.add_parser(
-        "facility", help="facility lifecycle: add, list, show, rename, suspend, resume, activate"
+        "facility",
+        help="facility lifecycle: add, list, show, rename, activate, suspend, resume, offboard, "
+        "restore, archive, purge, export, bundles",
     )
     fcsub = pfc.add_subparsers(dest="facility_cmd", required=True)
     fca = fcsub.add_parser("add", help="register a new facility (provisioning unless --activate)")
@@ -2283,16 +3017,123 @@ def _build_parser() -> argparse.ArgumentParser:
         ("activate", "provisioning -> active"),
         ("suspend", "active -> suspended (analyses skip it)"),
         ("resume", "suspended -> active"),
-        ("offboard", "(later release) start the reversible offboarding grace period"),
-        ("restore", "(later release) offboarding/archived -> active"),
-        ("archive", "(later release) delete hot data, keep the export bundle"),
-        ("purge", "(later release) delete everything but the tombstone and audit"),
     ):
         fct = fcsub.add_parser(verb, help=text)
         _ws(fct)
         fct.add_argument("id")
-        fct.add_argument("--reason", required=verb not in _LATER, help="why (audited)")
+        fct.add_argument("--reason", required=True, help="why (audited)")
         fct.set_defaults(func=_cmd_facility_transition)
+    for verb, text in (
+        ("offboard", "export a bundle, then start the reversible 30-day grace period"),
+        ("restore", "offboarding/archived -> active (from the verified bundle when archived)"),
+        ("archive", "after the grace period: delete hot data, keep the verified bundle"),
+        ("purge", "archived -> purged: delete everything but the tombstone and audit record"),
+    ):
+        fct = fcsub.add_parser(verb, help=f"{text} (dry run unless --apply)")
+        _ws(fct)
+        fct.add_argument("id")
+        mode = fct.add_mutually_exclusive_group()
+        mode.add_argument("--dry-run", action="store_true", help="show the plan only (default)")
+        mode.add_argument("--apply", action="store_true", help="carry it out (needs --reason)")
+        fct.add_argument("--reason", help="why (audited; required with --apply)")
+        if verb != "purge":
+            fct.add_argument("--yes", action="store_true", help="confirm --apply without a prompt")
+        fct.add_argument(
+            "--confirm", metavar="ID", help="confirm --apply by typing the facility id"
+        )
+        if verb == "archive":
+            fct.add_argument(
+                "--skip-grace",
+                dest="skip_grace",
+                action="store_true",
+                help="archive before the grace period ends (audited)",
+            )
+        if verb == "restore":
+            fct.add_argument("--bundle", help="restore this bundle id (default: the archived one)")
+        fct.add_argument("--json", action="store_true")
+        fct.set_defaults(func=_cmd_facility_cascade)
+    prt = sub.add_parser(
+        "retention",
+        help="retention policy: show, set, override, hold, release, apply (docs/PORTFOLIO.md)",
+    )
+    rtsub = prt.add_subparsers(dest="retention_cmd", required=True)
+    rts = rtsub.add_parser("show", help="defaults, overrides, holds (--json: the policy document)")
+    _ws(rts)
+    rts.add_argument("--facility", help="the effective policy of one facility")
+    rts.add_argument("--json", action="store_true")
+    rts.set_defaults(func=_cmd_retention_show)
+    rtt = rtsub.add_parser("set", help="change a portfolio default: CLASS KEY=VALUE ...")
+    _ws(rtt)
+    rtt.add_argument("data_class", metavar="CLASS")
+    rtt.add_argument("rule", nargs="+", metavar="KEY=VALUE")
+    rtt.add_argument("--reason", required=True, help="why (audited)")
+    rtt.set_defaults(func=_cmd_retention_set)
+    rto = rtsub.add_parser("override", help="one facility's rule: ID CLASS KEY=VALUE ... | --clear")
+    _ws(rto)
+    rto.add_argument("id")
+    rto.add_argument("data_class", metavar="CLASS")
+    rto.add_argument("rule", nargs="*", metavar="KEY=VALUE")
+    rto.add_argument("--clear", action="store_true", help="remove the override")
+    rto.add_argument("--reason", required=True, help="why (audited)")
+    rto.set_defaults(func=_cmd_retention_override)
+    for verb, text in (
+        ("hold", "place a legal hold: nothing of the facility is deleted"),
+        ("release", "release a legal hold"),
+    ):
+        rth = rtsub.add_parser(verb, help=text)
+        _ws(rth)
+        rth.add_argument("id")
+        rth.add_argument("--reason", required=True, help="why (audited)")
+        rth.set_defaults(func=_cmd_retention_hold)
+    rta = rtsub.add_parser(
+        "apply", help="roll up, verify, then prune by the policy (dry run unless --apply)"
+    )
+    _ws(rta)
+    mode = rta.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="show the plan only (default)")
+    mode.add_argument("--apply", action="store_true", help="carry it out (needs --reason)")
+    rta.add_argument("--reason", help="why (audited; required with --apply)")
+    rta.add_argument("--yes", action="store_true", help="confirm --apply without a prompt (cron)")
+    rta.add_argument(
+        "--confirm", metavar="WORD", help="confirm --apply by typing 'apply' (or the --facility id)"
+    )
+    rta.add_argument("--facility", help="only this facility_id")
+    rta.add_argument("--now", help="evaluate the policy as of this date (default: now)")
+    rta.add_argument(
+        "--wait",
+        type=float,
+        default=0.0,
+        help="seconds to wait for the portfolio lock (default 0; exit 75 if still held)",
+    )
+    rta.add_argument("--json", action="store_true")
+    rta.set_defaults(func=_cmd_retention_apply)
+
+    pst = sub.add_parser("store", help="store maintenance: migrate-partitions")
+    stsub = pst.add_subparsers(dest="store_cmd", required=True)
+    stm = stsub.add_parser(
+        "migrate-partitions",
+        help="convert year-only partitions to year=/month= (dry run unless --apply)",
+    )
+    stm.add_argument("store", help="ParquetStore directory (e.g. <workspace>/store)")
+    smode = stm.add_mutually_exclusive_group()
+    smode.add_argument("--dry-run", action="store_true", help="list what would change (default)")
+    smode.add_argument("--apply", action="store_true", help="rewrite the partitions")
+    stm.add_argument("--yes", action="store_true", help="confirm --apply")
+    stm.add_argument("--reason", help="why (audited; required with --apply inside a workspace)")
+    stm.add_argument("--json", action="store_true")
+    stm.set_defaults(func=_cmd_store_migrate_partitions)
+
+    fce = fcsub.add_parser("export", help="write a verified export bundle now (changes nothing)")
+    _ws(fce)
+    fce.add_argument("id")
+    fce.add_argument("--reason", required=True, help="why (audited)")
+    fce.set_defaults(func=_cmd_facility_export)
+    fcb = fcsub.add_parser("bundles", help="a facility's export bundles (--verify re-hashes them)")
+    _ws(fcb)
+    fcb.add_argument("id")
+    fcb.add_argument("--verify", action="store_true", help="re-check every checksum")
+    fcb.add_argument("--json", action="store_true")
+    fcb.set_defaults(func=_cmd_facility_bundles)
     return ap
 
 

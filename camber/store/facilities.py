@@ -203,9 +203,21 @@ class FacilityRegistry:
             and facility_id in self.tombstones()
         ):
             self._check_new(facility_id, {})  # raises the tombstone error
+        raw = self._raw()
+        # Checked before the partition fast path: an archived facility normally has no partition
+        # left, but an edge object PUT straight into a store-as-bucket after the archive creates
+        # one again, and that must not reopen the facility to writes.
+        if (raw.get(facility_id) or {}).get("state") == "archived":
+            raise ValueError(
+                f"facility {facility_id!r} is archived: its data lives in its export bundle, so "
+                "new data would never be in the bundle. Restore it first (`camber facility "
+                "restore`)."
+            )
         parts = _partition_ids(self.root)
-        if facility_id not in parts and facility_id not in self._raw():
-            self._check_new(facility_id, self._raw())
+        if facility_id in parts:
+            return  # the common, cheap case
+        if facility_id not in raw:
+            self._check_new(facility_id, raw)
 
     def _create(
         self,
@@ -283,28 +295,39 @@ class FacilityRegistry:
             data[facility_id] = entry
             self._write(data)
 
-    def _update(self, facility_id: str, fields: dict) -> dict:
-        """Merge ``fields`` into an existing entry (caller holds the lock); return the result."""
+    def _update(self, facility_id: str, fields: dict, *, drop=()) -> dict:
+        """Merge ``fields`` into an existing entry, removing the keys in ``drop`` (caller holds
+        the lock); return the result."""
         data = self._raw()
         if facility_id not in data:
             raise KeyError(f"facility {facility_id!r} is not registered")
         entry = dict(data[facility_id])
         entry.update(fields)
+        for k in drop:
+            entry.pop(k, None)
         data[facility_id] = entry
         self._write(data)
         return _normalize(facility_id, entry)
 
-    def _tombstone(self, facility_id: str, entry: dict, *, reason: str) -> None:
+    def _tombstone(
+        self, facility_id: str, entry: dict, *, reason: str, extra=None, replace: bool = False
+    ) -> None:
+        """Write ``facility_id``'s tombstone from its registry ``entry`` (plus ``extra`` fields);
+        ``replace=True`` writes ``entry`` itself as the tombstone record."""
         tomb = self.tombstones()
-        rec = {
-            "name": entry.get("name"),
-            "display_name": entry.get("display_name"),
-            "state": entry.get("state") or "active",
-            "removed_at": _utc_now(),
-            "reason": reason,
-        }
-        if isinstance(entry.get("dataset"), dict):  # provenance: lets a dataset reclaim its id
-            rec["dataset_id"] = entry["dataset"].get("dataset_id")
+        if replace:
+            rec = dict(entry)
+        else:
+            rec = {
+                "name": entry.get("name"),
+                "display_name": entry.get("display_name"),
+                "state": entry.get("state") or "active",
+                "removed_at": _utc_now(),
+                "reason": reason,
+            }
+            if isinstance(entry.get("dataset"), dict):  # provenance: lets a dataset reclaim its id
+                rec["dataset_id"] = entry["dataset"].get("dataset_id")
+            rec.update(extra or {})
         tomb[facility_id] = {k: v for k, v in rec.items() if v is not None}
         _write_json(os.path.join(self.root, _TOMBSTONES), tomb, root=self.root)
 

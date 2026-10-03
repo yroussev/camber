@@ -17,7 +17,7 @@ document is written for the IT / network-security team that must approve the edg
   BAS / historian  ───(read-only)──▶  EDGE (Pi / Windows) ──── HTTPS 443, outbound-only ───▶  object store
    (control zone)                       camber.edge                (single allowlisted host)      │
                                      read → map → quality                                         ▼
-                                     → Parquet → spool → PUT                         ParquetStore (facility_id=/year=)
+                                     → Parquet → spool → PUT                         ParquetStore (facility_id=/year=/month=)
                                                                                                   │
                                                                                           existing ReadAPI + FDD/M&V
 ```
@@ -27,7 +27,7 @@ document is written for the IT / network-security team that must approve the edg
 ```mermaid
 flowchart LR
   bas["BAS / historian (control zone)"] -- "read-only" --> edge["camber.edge Forwarder (IT / DMZ): read, map, quality-gate, Parquet, spool"]
-  edge -- "HTTPS 443 (outbound only, single allowlisted host)" --> obj["Cloud object store (facility_id= / year=)"]
+  edge -- "HTTPS 443 (outbound only, single allowlisted host)" --> obj["Cloud object store (facility_id= / year= / month=)"]
   obj -- "Hive layout, no transform" --> ps["ParquetStore"]
   ps -- "read_long / read_role_frame" --> api["ReadAPI + FDD / M&V"]
   obj -- "no inbound conduit; edge never listens" --x edge
@@ -46,15 +46,22 @@ flowchart LR
 
 ## 2. Data flow & landing format
 
-Each `poll_once` produces one Parquet part per `year=`, written **directly into the store's Hive
+Each `poll_once` produces one Parquet part per `year=/month=` partition, written **directly into
+the store's Hive
 layout** so the cloud reads it with the existing `ParquetStore.read_long` / `read_role_frame` /
 `ReadAPI` and **no transform**:
 
 - **Long schema** (the store's native shape): `[ts, equip, equip_class, role, value]`; NaNs dropped
-  (observations, not a dense grid). `facility_id` and `year` are encoded in the **object key path**,
-  not the file (standard Hive partitioning).
-- **Object key**: `facility_id=<id>/year=<yyyy>/part-<sha16>.parquet`, where `<sha16>` is the first
-  16 hex of the batch content SHA-256. Re-sending identical content lands the same key → **idempotent**.
+  (observations, not a dense grid). `facility_id`, `year` and `month` are encoded in the **object
+  key path**, not the file (standard Hive partitioning).
+- **Object key**: `facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet`, where `<sha16>` is
+  the first 16 hex of the batch content SHA-256. Re-sending identical content lands the same key →
+  **idempotent**. Month keys match the store's layout since 0.95, so retention prunes month by
+  month without splitting an edge part. Forwarders before 0.95 wrote year-only keys
+  (`facility_id=<id>/year=<yyyy>/part-<sha16>.parquet`); the landing still accepts and reads them,
+  and `camber store migrate-partitions` converts them. If an older forwarder re-sends a year-only
+  part after its year was migrated, the landing recognises it (same name and sha256 as recorded by
+  the migration) and quarantines it as a `duplicate` instead of storing its rows twice.
 - **Per-batch manifest** (sink metadata): facility, window, rows, roles, equips, quality summary,
   full `content_sha256`, `schema_version` — for cloud-side reconciliation and audit.
 - **NDJSON** (`wire_format="ndjson"`) is a documented compatibility fallback for endpoints that can't
@@ -80,6 +87,10 @@ construction.
 | **Tamper-evidence + idempotent landing** | `content_sha256` in the key + `x-camber-content-sha256` header | `test_edge_forwarder.py::test_manifest_carries_audit_fields` |
 | **Never lose data offline** | durable spool: atomic enqueue, retry/backoff, backfill after reboot, bounded-disk eviction with a WARNING | `test_edge_spool.py` |
 | **Per-batch audit log** | a structured `camber.edge` log record per PUT (host, key, bytes, sha256, status) | `test_edge_sink.py` / operator captures logs |
+| **Loss-free journal compaction** (0.95) | the compacted journal is read back and compared with the queue before an atomic swap | `test_edge_compact.py` |
+| **No retirement with data in flight** (0.95) | `decommission` refuses while any batch is unacknowledged, unless `--force` + reason (refused under a legal hold) | `test_edge_decommission.py` |
+| **Nothing lands for a facility that left** (0.95) | uploads of non-accepting or unknown facilities go to quarantine, never the store | `test_edge_quarantine.py` |
+| **No cloud API calls from the lifecycle tools** (0.95) | `bucket-rules` only emits JSON; its module imports no SDK or network module | `test_edge_bucket_rules.py::test_never_imports_a_cloud_sdk_or_a_network_module` |
 
 ### Standards mapping
 - **NIST SP 800-82r3** — the edge realizes the *one-way conduit / data-diode, push-upward* pattern;
@@ -172,7 +183,7 @@ and pushes, then exits — nothing stays resident and nothing listens.
 Each delivery emits one `camber.edge` record; ship these to your SIEM:
 
 ```
-INFO camber.edge edge.sink.put host=lake.example.org key=facility_id=fox-lodge-9f3a1c/year=2024/part-1a2b3c4d5e6f7a8b.parquet bytes=48213 sha256=<64hex> status=200 ok=True
+INFO camber.edge edge.sink.put host=lake.example.org key=facility_id=fox-lodge-9f3a1c/year=2024/month=7/part-1a2b3c4d5e6f7a8b.parquet bytes=48213 sha256=<64hex> status=200 ok=True
 INFO camber.edge edge.forward facility=fox-lodge-9f3a1c rows=2160 parts=1 forwarded=1 spool_remaining=0
 ```
 
@@ -184,3 +195,151 @@ INFO camber.edge edge.forward facility=fox-lodge-9f3a1c rows=2160 parts=1 forwar
   audited data loss — never silent corruption).
 - **Transient sink error** → the batch is kept, an attempt is recorded, a capped backoff is applied,
   and the next cycle retries. Nothing is acked until a 2xx.
+- **Journal growth** → the journal is append-only; `camber edge compact` (0.95) rewrites it to the
+  pending batches, loss-free and crash-safe (see §9). A torn last line from a crash is skipped on
+  replay, and the next append starts a fresh line.
+
+## 9. Lifecycle: reconciliation, quarantine, decommissioning
+
+*Provisional (0.95, #18 step 5).* These commands keep what lands in the cloud consistent with the
+portfolio's facility registry ([PORTFOLIO.md](PORTFOLIO.md)), retire devices without losing data,
+and keep the bucket's retention in line with the policy. Lifecycle state is read only through
+`camber.portfolio`. A facility **accepts** uploads when it is `provisioning` or `active`; any other
+state (`suspended`, `offboarding`, `archived`, or a state this CAMBER does not know) does not. A
+purged facility's id is tombstoned, so its uploads read as `unknown_facility` (a retired id) and
+are quarantined too. An archived facility's hot data is already gone, and its store refuses writes.
+
+### Reconciliation (central, read-only by default)
+
+`camber edge reconcile` classifies every landed object against the registry:
+
+| Category | Meaning | `--apply` |
+|---|---|---|
+| `ok` | a store key of a facility that accepts data | - |
+| `orphaned` | not a store object key (bad layout, invalid facility id, unknown extension) | reported only |
+| `unknown_facility` | a facility id the registry does not know, or a retired (tombstoned) one | quarantined (landing); reported (store) |
+| `unregistered` | store data with no registry entry (a pre-portfolio store; reads as active) | reported only |
+| `inactive` | a facility that does not accept data | quarantined if it landed after the state change |
+| `quarantined` | under the bucket's `_quarantine/` prefix (key listings) | - |
+| `duplicate` | a year-only part the store already migrated to month partitions (re-sent by an older forwarder) | quarantined |
+
+It reads the workspace store (the default), a local landing directory (`--landing`, e.g. an inbox
+or a mounted bucket) or a key listing exported from the cloud (`--keys`: the JSON of
+`aws s3api list-objects-v2`, `gcloud storage objects list --format=json` or
+`az storage blob list`, `aws s3 ls --recursive` text, or one key per line). CAMBER never lists or
+moves cloud objects itself, so `--apply` works only on local directories.
+
+In the store, an inactive facility's objects that landed **before** its state change are
+legitimate history (an offboarding facility's export needs them) and are only reported. Objects
+whose file time is **after** the facility's `state_changed_at` are late uploads, and `--apply`
+quarantines them. When either time is unknown, the object is reported only.
+
+### Quarantine
+
+Uploads never enter the store for a facility that does not accept data:
+
+- **A landing inbox:** `camber edge land <inbox> --apply --reason R` moves accepted objects into
+  the store and the rest into `<workspace>/quarantine/<key>`, beside a `<key>.quarantine.json`
+  record (category, facility state, reason, sha256, bytes, times). An object whose content sha256
+  does not start with the `part-<sha16>` in its name is quarantined too (`hash_mismatch`).
+  Orphaned and NDJSON objects stay in the inbox and are reported.
+- **A presigned-URL broker:** call `camber.edge.landing.route_key(portfolio, key)` before signing
+  a URL. It returns the key itself, or `_quarantine/<key>` for a facility that does not accept
+  data. The leading underscore keeps pyarrow / Hive discovery from reading it as data.
+
+`camber edge quarantine list` shows each object with its status: `held`, or `incomplete` (a
+record whose object is missing, left by an interrupted run), or `unrecorded`. `release` moves
+objects into the store once the facility accepts data again (resume or restore it first). It
+refuses a hash mismatch, a `duplicate` of already-migrated rows, or a store key that already
+holds different content. `discard` deletes
+objects: it needs `--yes` or `--confirm <facility_id>`, and a legal hold refuses it. Every change
+is audited per facility with a `begin` and a `done` record. Records are written before objects
+move, and objects are moved before their source is removed, so re-running any interrupted command
+finishes it.
+
+### Decommissioning a device
+
+```
+camber edge decommission /etc/camber/edge.json                    # dry run
+camber edge decommission /etc/camber/edge.json --apply --confirm fox-lodge-9f3a1c \
+    --reason "building sold" [--wait 300] [--workspace /srv/portfolio]
+```
+
+1. **Flush:** drain the spool through the sink, retrying with backoff for up to `--wait` seconds.
+2. **Wait for acknowledgements:** a batch counts only when the landing answers 2xx. If any batch
+   is still unacknowledged, the command **refuses** (exit 1) and changes nothing. `--force
+   --reason R` retires anyway: the payloads stay on disk and are listed in the receipt. A legal
+   hold on the facility refuses `--force`.
+3. **Retire:** write `retired.json` (the receipt: facility, device id, OS user, host, reason,
+   time, anything unacknowledged) to the spool. From then on the spool refuses new batches,
+   `edge run` / `send-once` exit 1, and `edge status` shows `RETIRED`.
+4. **Record centrally:** with a reachable workspace (`--workspace` or `$CAMBER_PORTFOLIO`), an
+   `edge.decommission` audit line and a note `edge_devices.<device_id>` on the facility's
+   registry entry. Otherwise copy `retired.json` to the portfolio host and run
+   `camber edge record-retirement retired.json --reason R`. Recording is idempotent.
+
+The device id is the config's `device_id` (or `CAMBER_EDGE_DEVICE_ID`, or `--device`), else the
+machine's node name. The spool lock is held through steps 1–3, so a running forwarder cannot
+enqueue mid-way. It is released before step 4 takes the portfolio lock (through
+`Portfolio.note_edge_device`): the two locks are never held together, so a device's spool lock
+never blocks `Portfolio.recover()` or any portfolio command, and a held portfolio lock never
+blocks the spool. `recover()` does not touch `retired.json` or the registry note. A re-run after a crash continues where the last run stopped: acks are journalled one by
+one, and an already-retired spool skips straight to the central note.
+
+### Spool journal compaction
+
+`camber edge compact <edge.json>` (from cron or Task Scheduler, e.g. weekly) rewrites
+`journal.ndjson` to one record per pending batch plus a high-water `mark`, so sequence numbers
+are never reused. The new journal is written to a side file, fsynced, read back and checked to
+hold exactly the same pending batches (sequence, key, payload, metadata, attempt count). Only then
+is it swapped in with an atomic rename. A crash leaves the old journal or the new one, never fewer
+pending batches. Payload files that no journal record owns (an enqueue interrupted before its
+commit) are reported, never deleted. `--dry-run` reports only.
+
+### Bucket lifecycle rules
+
+`camber edge bucket-rules --provider s3|gcs|azure` turns the retention policy into the provider's
+lifecycle JSON. It uses the workspace's policy, facility overrides and legal holds (read through
+`camber.portfolio`), or a `--policy FILE`. **It only prints text and never calls a cloud API.**
+Review the output, merge it with any existing rules (applying replaces the bucket's whole
+lifecycle configuration), then apply it yourself:
+
+```
+aws s3api put-bucket-lifecycle-configuration --bucket <bucket> --lifecycle-configuration file://rules.json
+gcloud storage buckets update gs://<bucket> --lifecycle-file=rules.json
+az storage account management-policy create --account-name <account> --resource-group <group> --policy @rules.json
+```
+
+The policy file schema:
+
+```json
+{
+  "defaults":    {"raw_trends": {"keep_months": 25}, "hourly_rollups": {"keep_years": 7},
+                  "daily_rollups": {"keep": "indefinite"}},
+  "overrides":   {"fox-lodge-9f3a1c": {"raw_trends": {"keep_months": 36}}},
+  "legal_holds": {"elm-court-0b1c2d": {"reason": "litigation"}}
+}
+```
+
+A rule is `keep_days`, `keep_months` or `keep_years` (a positive whole number), or
+`keep: indefinite | forever | equipment_life | legal_hold` (no expiry). A bare defaults object
+and the `_portfolio.json` shape are accepted too, and so is the policy document of
+`camber retention show --json` (what `--workspace` reads). Bucket data classes and their prefixes
+come from each class's `location` in that document. With `--layout store` (the default), `--prefix`
+is the store root, where the forwarder lands: `raw_trends` at `facility_id=<id>/`,
+`hourly_rollups` at `rollups/hourly/facility_id=<id>/` and `daily_rollups` at
+`rollups/daily/facility_id=<id>/`. With `--layout workspace`, `--prefix` mirrors the whole
+workspace, so raw trends are at `store/facility_id=<id>/`. A facility prefix covers both the
+`year=/month=` keys and legacy year-only keys. Other classes (findings, baselines, reports, the
+audit log) are not bucket objects, and `_quarantine/` gets no rule.
+
+- **Conservative ages:** a month counts as 31 days and a year as 366, so a rule never expires an
+  object before the policy would. Providers count age from the upload, not the data's timestamps,
+  so a backfilled month is kept longer, never shorter.
+- **Overrides and holds** cannot be carved out of a bucket-wide rule, because providers apply every
+  matching rule. With either, rules are emitted per facility (GCS and Azure group facilities of
+  equal age into one rule). A held facility gets no rule: also set the provider's own legal hold
+  or retention lock on its prefix. Without a facility list, overrides and holds are refused.
+- Provider limits (S3 1000 rules, GCS and Azure 100) are checked. Azure needs `--container`,
+  because its prefix filters start with the container name.
+

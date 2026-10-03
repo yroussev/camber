@@ -7,15 +7,16 @@
       _audit.ndjson     append-only audit log (see ._audit)
       _lock             single-writer advisory lock (see ._lock)
       store/            the ParquetStore root (+ registry v2, tombstones, _workspace.json marker)
-      rollups/          reserved: downsampled stores (created by a later release)
-      state/<fid>/      faults, drift and M&V baselines, migrated originals, sha256 manifest
-      archive/<fid>/    reserved: export bundles
+      rollups/<freq>/   hourly / daily rollup stores (written by retention apply, 0.95)
+      state/<fid>/      faults, drift and M&V baselines, weather audit, migrated originals, manifest
+      archive/<fid>/    export bundles with a sha256 manifest (0.95)
 
-The reserved directories are created lazily by the releases that use them.
+These directories are created lazily, the first time something is written there.
 """
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import datetime as _dt
 import json
@@ -28,12 +29,17 @@ from ._lock import LOCK_FILE, describe_holder, portfolio_lock, probe, read_holde
 from ._state import SiteResolver, read_manifest, state_dir
 from ._states import IMPLEMENTED, STATES, LifecycleError, transition
 
+_CASCADE = ("offboard", "restore", "archive", "purge")
+_UNSET = object()
+# audit namespaces written only by the portfolio's own methods (see Portfolio.audit)
+_RESERVED_AUDIT = ("facility.", "portfolio.", "retention.")
+
 PORTFOLIO_FILE = "_portfolio.json"
 SCHEMA_VERSION = 1
-RESERVED_DIRS = ("rollups", "state", "archive")
+RESERVED_DIRS = ("rollups", "state", "archive", "quarantine")
 
-# The agreed retention defaults, by data class. Stored now; *enforced* by a later release
-# (`camber retention apply`). Precedence: legal hold > facility override > portfolio default.
+# The agreed retention defaults, by data class, enforced by `camber retention apply` (0.95; see
+# ._retention). Precedence: legal hold > facility override > portfolio default.
 DEFAULT_POLICY: dict = {
     "raw_trends": {"keep_months": 25},
     "hourly_rollups": {"keep_years": 7},
@@ -43,6 +49,9 @@ DEFAULT_POLICY: dict = {
     # past reported savings depend on superseded M&V baselines, so every version is kept
     "mv_baselines": {"keep": "indefinite", "keep_versions": "all"},
     "reports": {"keep_last": 12},
+    # 0.95: the #73 log of requests to weather / price services -- a privacy record, kept while
+    # the facility exists (it goes with the facility's archive and purge)
+    "weather_audit": {"keep": "forever"},
     "audit": {"keep": "forever"},
 }
 OFFBOARDING_GRACE_DAYS = 30
@@ -213,6 +222,89 @@ class Portfolio:
         """Audit records, oldest first (optionally for one facility)."""
         return read_audit(self.root, facility_id=facility_id)
 
+    def audit(
+        self,
+        action: str,
+        *,
+        reason: str,
+        facility_id=None,
+        state=_UNSET,
+        details=None,
+    ) -> dict:
+        """Append one audit record for an admin action taken outside the portfolio module.
+
+        For callers such as the edge landing (``edge.land``, ``edge.quarantine.*``): the record
+        carries the OS user, host, ``reason`` (required) and ``details``, with the facility's
+        lifecycle ``state`` as both from- and to-state (looked up when not given; ``None`` for an
+        unknown or tombstoned id). ``action`` must be a dotted name (``area.verb``) outside the
+        namespaces the portfolio writes itself (``facility.``, ``portfolio.``, ``retention.``),
+        so those records always come from the lifecycle code. The line is fsynced before this
+        returns. Callers that change data hold :meth:`lock` around the change. Provisional (0.95).
+        """
+        _need_reason(reason)
+        if not isinstance(action, str) or "." not in action or not action.strip() == action:
+            raise ValueError(f"an audit action is a dotted name like 'edge.land', got {action!r}")
+        if action.startswith(_RESERVED_AUDIT):
+            raise ValueError(
+                f"{action!r} is in a namespace only the portfolio's own methods write "
+                f"({', '.join(_RESERVED_AUDIT)})"
+            )
+        if state is _UNSET:
+            state = None
+            if facility_id is not None:
+                with contextlib.suppress(KeyError):
+                    state = self.facility(facility_id).get("state")
+        return self._audit(
+            action,
+            facility_id=facility_id,
+            from_state=state,
+            to_state=state,
+            reason=reason,
+            details=details,
+        )
+
+    def note_edge_device(
+        self,
+        facility_id: str,
+        device_id: str,
+        note: dict,
+        *,
+        reason: str,
+        action: str = "edge.device",
+    ) -> dict:
+        """Record an edge device's note under the facility's registry entry (audited).
+
+        Sets ``edge_devices.<device_id>`` = ``note`` (replacing any earlier note for that device,
+        keeping the other devices'). Under the lock, the audit record (``action``, with the device
+        and the note in its details) is written *before* the registry, so a crash between them is
+        repaired by noting again. The facility must be registered (``KeyError`` otherwise).
+        Returns the facility's entry. Provisional (0.95).
+        """
+        _need_reason(reason)
+        if not isinstance(device_id, str) or not device_id.strip():
+            raise ValueError("a device id is required")
+        if not isinstance(note, dict):
+            raise ValueError("the device note must be a JSON object")
+        with self.lock():
+            reg = self.registry
+            entry = reg.get(facility_id)
+            if not entry:
+                raise KeyError(f"facility {facility_id!r} is not registered")
+            devices = dict(entry.get("edge_devices") or {})
+            self.audit(
+                action,
+                reason=reason,
+                facility_id=facility_id,
+                state=entry.get("state"),
+                details={
+                    "device_id": device_id,
+                    **{k: v for k, v in note.items() if k != "reason"},
+                },
+            )
+            devices[device_id] = dict(note)
+            reg._update(facility_id, {"edge_devices": devices})
+        return self.facility(facility_id)
+
     # ------------------------------------------------------------------ policy
 
     def policy(self) -> dict:
@@ -244,6 +336,125 @@ class Portfolio:
             else:
                 out[cls] = {"rule": dict(rule), "source": "default"}
         return out
+
+    # ------------------------------------------------------------------ retention (0.95)
+
+    def _write_doc(self, doc: dict) -> None:
+        _write_json(os.path.join(self.root, PORTFOLIO_FILE), doc)
+
+    def set_retention(self, data_class: str, rule: dict, *, reason: str) -> dict:
+        """Change the portfolio default rule of one data class (validated, audited).
+
+        ``rule`` is merged into the current rule: an age key (``keep_months``/``keep_years``)
+        replaces the other age keys. Returns the new rule. Provisional (0.95).
+        """
+        from ._retention import merge_rule
+
+        _need_reason(reason)
+        with self.lock():
+            doc = self._doc()
+            old = self.policy().get(data_class, {})
+            new = merge_rule(data_class, old, rule)
+            doc.setdefault("retention", {}).setdefault("defaults", {})[data_class] = new
+            self._write_doc(doc)
+            self._audit(
+                "retention.set",
+                reason=reason,
+                details={"class": data_class, "from": old, "to": new},
+            )
+        return new
+
+    def set_retention_override(
+        self, facility_id: str, data_class: str, rule=None, *, reason: str
+    ) -> dict:
+        """Set (``rule``) or clear (``rule=None``) one facility's override of a data class.
+
+        Returns the facility's effective retention. Audited. Provisional (0.95).
+        """
+        from ._retention import check_class, merge_rule
+
+        _need_reason(reason)
+        with self.lock():
+            self.facility(facility_id)
+            doc = self._doc()
+            ovs = doc.setdefault("retention", {}).setdefault("overrides", {})
+            cur = dict((ovs.get(facility_id) or {}).get(data_class) or {})
+            if rule is None:
+                check_class(data_class)
+                (ovs.get(facility_id) or {}).pop(data_class, None)
+                if facility_id in ovs and not ovs[facility_id]:
+                    del ovs[facility_id]
+                new = None
+            else:
+                base = cur or self.policy().get(data_class, {})
+                new = merge_rule(data_class, base, rule)
+                ovs.setdefault(facility_id, {})[data_class] = new
+            self._write_doc(doc)
+            self._audit(
+                "retention.override",
+                facility_id=facility_id,
+                reason=reason,
+                details={"class": data_class, "from": cur or None, "to": new},
+            )
+        return self.effective_retention(facility_id)
+
+    def hold(self, facility_id: str, *, reason: str) -> dict:
+        """Place a legal hold: nothing of the facility is deleted until it is released."""
+        _need_reason(reason)
+        with self.lock():
+            st = self.facility(facility_id).get("state")
+            doc = self._doc()
+            holds = doc.setdefault("legal_holds", {})
+            if facility_id in holds:
+                return dict(holds[facility_id])
+            from ._audit import _actor
+
+            holds[facility_id] = {"since": _utc_now(), "by": _actor(), "reason": reason}
+            self._write_doc(doc)
+            self._audit(
+                "retention.hold", facility_id=facility_id, from_state=st, to_state=st, reason=reason
+            )
+            return dict(holds[facility_id])
+
+    def release_hold(self, facility_id: str, *, reason: str) -> bool:
+        """Release a legal hold; returns whether there was one. Audited."""
+        _need_reason(reason)
+        with self.lock():
+            doc = self._doc()
+            holds = doc.get("legal_holds") or {}
+            if facility_id not in holds:
+                return False
+            rec = holds.pop(facility_id)
+            self._write_doc(doc)
+            self._audit(
+                "retention.release",
+                facility_id=facility_id,
+                reason=reason,
+                details={"hold": rec},
+            )
+            return True
+
+    def retention_policy(self, *, now=None) -> dict:
+        """The policy as a JSON-ready document (schema: ``camber.portfolio.RETENTION_SCHEMA``)."""
+        from ._retention import policy_document
+
+        return policy_document(self, now=now)
+
+    def apply_retention(
+        self, *, apply: bool = False, facility_id=None, now=None, reason=None
+    ) -> dict:
+        """Roll up, verify, then prune by the retention policy (``camber retention apply``).
+
+        A dry run (the default) returns the plan. ``apply=True`` needs a ``reason``, takes the
+        lock, recovers interrupted work first, and is idempotent. Provisional (0.95).
+        """
+        from ._retention import apply as _apply
+        from ._retention import plan as _plan
+
+        if not apply:
+            return _plan(self, facility_id=facility_id, now=now)
+        _need_reason(reason)
+        return _apply(self, facility_id=facility_id, now=now, reason=str(reason))
 
     # ------------------------------------------------------------------ facilities
 
@@ -338,23 +549,36 @@ class Portfolio:
         )
 
     def transition(self, facility_id: str, action: str, *, reason: str) -> dict:
-        """Apply a lifecycle ``action`` (``activate``/``suspend``/``resume``) to a facility.
+        """Apply a lifecycle ``action`` to a facility and return
+        ``{"facility_id", "from_state", "to_state"}``.
 
-        Returns ``{"facility_id", "from_state", "to_state"}``. Raises
-        :class:`~camber.portfolio.LifecycleError` for a transition the state machine refuses and
-        ``NotImplementedError`` for an action this release does not carry out yet (offboard,
-        restore, archive, purge).
+        ``activate``/``suspend``/``resume`` change the state only. ``offboard``, ``restore`` and
+        ``archive`` run the full cascade (:meth:`offboard`, :meth:`restore`, :meth:`archive` with
+        ``apply=True``). ``purge`` is refused here: it needs the typed facility id, so call
+        :meth:`purge` with ``confirm=``. Raises :class:`~camber.portfolio.LifecycleError` for a
+        transition the state machine refuses (including a deleting one under a legal hold).
         """
         _need_reason(reason)
+        if action in _CASCADE:
+            cur = self.facility(facility_id).get("state", "active")
+            transition(cur, action, legal_hold=facility_id in self.legal_holds())
+            if action == "purge":
+                raise LifecycleError(
+                    "purge is irreversible and needs the typed facility id: call "
+                    f"Portfolio.purge({facility_id!r}, confirm={facility_id!r}, apply=True, ...)"
+                )
+            r = getattr(self, action)(facility_id, reason=reason, apply=True)
+            return {
+                "facility_id": facility_id,
+                "from_state": r["from_state"],
+                "to_state": r["to_state"],
+            }
         with self.lock():
             cur = self.facility(facility_id).get("state", "active")  # KeyError if unknown
             held = facility_id in self.legal_holds()
             new = transition(cur, action, legal_hold=held)  # validates before anything changes
-            if action not in IMPLEMENTED:
-                raise NotImplementedError(
-                    f"`{action}` is defined by the lifecycle but available in a later release "
-                    "(it needs export bundles and the deletion cascade); see docs/PORTFOLIO.md"
-                )
+            if action not in IMPLEMENTED:  # pragma: no cover - every action is implemented
+                raise NotImplementedError(f"`{action}` is not implemented")
             self._ensure_registered(facility_id)
             reg = self.registry
             reg._update(facility_id, {"state": new, "state_changed_at": _utc_now()})
@@ -413,6 +637,118 @@ class Portfolio:
             )
         return self.facility(facility_id)
 
+    # ------------------------------------------------------------------ offboard .. purge (0.95)
+
+    def offboard(self, facility_id: str, *, reason: str, apply: bool = False, now=None) -> dict:
+        """Start the reversible offboarding grace period (active/suspended -> offboarding).
+
+        Exports a verified bundle to ``archive/<fid>/`` first, then records the state with its
+        grace deadline (``offboarding_grace_days``, default 30). ``apply=False`` (the default)
+        returns the plan and changes nothing. Provisional (0.95).
+        """
+        from ._cascade import offboard
+
+        _need_reason(reason)
+        return offboard(self, facility_id, reason=reason, apply=apply, now=now)
+
+    def archive(
+        self,
+        facility_id: str,
+        *,
+        reason: str,
+        apply: bool = False,
+        now=None,
+        skip_grace: bool = False,
+    ) -> dict:
+        """Delete the facility's hot data, keeping its verified bundle (offboarding -> archived).
+
+        Refused under a legal hold and, unless ``skip_grace``, before the grace period ends. The
+        latest bundle is reused only if it still matches the hot data and verifies; otherwise a
+        new one is exported first. Provisional (0.95).
+        """
+        from ._cascade import archive
+
+        _need_reason(reason)
+        return archive(
+            self, facility_id, reason=reason, apply=apply, now=now, skip_grace=skip_grace
+        )
+
+    def restore(
+        self, facility_id: str, *, reason: str, apply: bool = False, bundle=None, now=None
+    ) -> dict:
+        """Return an offboarding or archived facility to ``active``.
+
+        From ``archived`` the bundle (the one archive recorded, or ``bundle=`` id) is verified,
+        its content swapped back in and re-hashed. Provisional (0.95).
+        """
+        from ._cascade import restore
+
+        _need_reason(reason)
+        return restore(self, facility_id, reason=reason, apply=apply, bundle=bundle, now=now)
+
+    def purge(
+        self, facility_id: str, *, reason: str, apply: bool = False, confirm=None, now=None
+    ) -> dict:
+        """Delete everything of an archived facility but its tombstone and audit record.
+
+        ``apply=True`` needs ``confirm`` equal to the facility id (the typed confirmation). The id
+        stays tombstoned: it is never reused. Refused under a legal hold. Provisional (0.95).
+        """
+        from ._cascade import purge
+
+        _need_reason(reason)
+        return purge(self, facility_id, reason=reason, apply=apply, confirm=confirm, now=now)
+
+    def export(self, facility_id: str, *, reason: str, now=None) -> dict:
+        """Write a verified export bundle of the facility now, changing nothing else (audited)."""
+        from ._bundle import export_bundle
+
+        _need_reason(reason)
+        with self.lock():
+            self.facility(facility_id)
+            man = export_bundle(self, facility_id, kind="manual", reason=reason, now=now)
+            st = self.facility(facility_id).get("state")
+            self._audit(
+                "facility.export",
+                facility_id=facility_id,
+                from_state=st,
+                to_state=st,
+                reason=reason,
+                details={"bundle": man["bundle_id"], "counts": man["counts"]},
+            )
+        return man
+
+    def bundles(self, facility_id: str, *, verify: bool = False) -> list:
+        """The facility's export bundles, oldest first (``verify=True`` re-hashes each one)."""
+        from ._bundle import list_bundles, verify_bundle
+
+        out = list_bundles(self.root, facility_id)
+        if verify:
+            for b in out:
+                b["verify"] = verify_bundle(b["path"])
+        return out
+
+    def recover(self) -> list:
+        """Finish or roll back work a crash interrupted (lifecycle commands run this first)."""
+        from ._cascade import recover
+
+        with self.lock():
+            return recover(self)
+
+    def _drop_policy_entries(self, facility_id: str) -> None:
+        """Remove a facility's retention override and hold from ``_portfolio.json`` (purge)."""
+        doc = self._doc()
+        changed = False
+        ov = (doc.get("retention") or {}).get("overrides") or {}
+        if facility_id in ov:
+            del ov[facility_id]
+            changed = True
+        if facility_id in (doc.get("legal_holds") or {}):
+            del doc["legal_holds"][facility_id]
+            changed = True
+        if changed:
+            _write_json(os.path.join(self.root, PORTFOLIO_FILE), doc)
+
     # ------------------------------------------------------------------ per-facility state
 
     def state_dir(self, facility_id: str) -> str:
@@ -465,6 +801,7 @@ class Portfolio:
         holder = read_holder(self.root)
         locked = probe(self.root)
         tomb = self.registry.tombstones()
+        counts["purged"] += sum(1 for t in tomb.values() if (t or {}).get("state") == "purged")
         return {
             "root": self.root,
             "store": self.store_root,

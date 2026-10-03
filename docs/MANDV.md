@@ -838,6 +838,8 @@ shaded.
 The settle window is `mv[].settle_days`, one value shared with the confounding guard. A
 `rebaseline.settle_days` that differs from it is refused, not reconciled. Unknown keys are
 errors.
+A billing entry may add `"bill_steps": "scan"` (0.95), its own step test for trigger T1; see
+[Step changes on bills](#step-changes-on-bills-provisional-095-74).
 
 The verbs are in [CLI.md](CLI.md#mv-baselines). The real limits are worth stating: the bands
 are model-error only and under-cover in practice (Touzani et al. 2019). A meter whose daily
@@ -1220,16 +1222,174 @@ entries, with the same `--reason`, `--apply`, workspace lock and audit rules as 
   The fit-frame sha256 also hashes the bills' days and degree days.
 - **run / report.** Measure the reporting bills against the in-force version at **its** bases,
   never re-selected. Triggers work as for a trended meter: T2 (declared events), T3, T4 and T5.
-  T1's step detection needs two segments of `min_segment_days` rows, which bills rarely have, so
-  declare changes in `mv[].rebaseline.events`. A blocking trigger cuts the saving at its date.
+  T1's daily step detection needs two segments of `min_segment_days` rows, which bills rarely
+  have, so declare changes in `mv[].rebaseline.events`. Since 0.95 a billing entry can opt in to a
+  step test built for bills (`rebaseline.bill_steps`, see
+  [Step changes on bills](#step-changes-on-bills-provisional-095-74)). A blocking trigger cuts
+  the saving at its date.
   `mv report` chains the versions. Its CUSUM rows are bills (energy per bill). It adds each
   version's bases, the avoided cost per link and the calendarized months.
-- **rebaseline.** Bills need an explicit `--period`: the proposal does not search windows of
-  bills. `auto` bases are selected afresh on the new window. A change of bases is recorded as
-  `bases_changed` (from → to) in the provenance, shown in the change row and audited with the
-  operator's reason.
+- **rebaseline.** Since 0.95 the window is searched when `--period` is not given (see
+  [the window search](#rebaseline-windows-of-whole-bills-provisional-095-74)); `--period` still
+  names one by hand. `auto` bases are selected afresh on the new window. A change of bases is
+  recorded as `bases_changed` (from → to) in the provenance, shown in the change row and audited
+  with the operator's reason.
 - **adjust.** Records ledger entries as for a trended meter. An indicator is estimated on the
   bills, weighted by their days.
+
+### Rebaseline windows of whole bills (provisional, 0.95, #74)
+
+When a rebaseline-class trigger is unresolved, `camber mv propose` now searches a new baseline
+window for a billing meter, as it does for days (`camber.mandv.billwindow.new_bill_window`).
+`camber mv rebaseline` without `--period` uses the same search.
+
+**Candidates.** For each bill, from the latest backwards, the candidate is the window that ends
+with that bill and starts at the latest bill that still gives at least `min_baseline_days` (365)
+days of service. That is the shortest run of whole bills covering a full service year. The
+window's dates are its first bill's start and its last bill's last day, so no bill straddles an
+edge.
+
+**Rules**, those of the daily search:
+- it starts at least `settle_days` after the trigger it answers (the latest blocking trigger, as
+  for days);
+- it overlaps no ECM installation window (ECM date ± `settle_days`), and contains no declared
+  event (± `settle_days`);
+- it holds at least `min_bills` (9) bills;
+- the days its bills do not serve are at most `max_missing_frac` (10%) of its span. These are the
+  gaps between bills and the bills dropped for too little temperature coverage. This is the rule
+  every billing freeze already applies;
+- its model is valid under `require_validity`, and it covers the conditions seen: the #20 tier of
+  every bill's rows at the new model's bases is not `severe`.
+
+Each candidate is fitted the way `camber mv rebaseline --period` fits it, so `base_f: "auto"`
+selects the bases on that window.
+
+**Ranking** is the daily path's: the **latest** qualifying window wins. At most 12 candidates are
+fitted, and after a failed one the search steps back one bill (the daily search steps back 30
+days, about one bill). The proposal says so in a caveat. The `window` in `--json` adds
+`n_bills`, the model's `bases`, `ranking` and `tried` (the number of fits) to the daily fields.
+When no window qualifies yet, the proposal is `declined` with `days_needed`, or with the reasons
+the candidates failed.
+
+### Step changes on bills (provisional, 0.95, #74)
+
+The daily trigger T1 segments the reporting days' deviation from the frozen baseline by PELT,
+with segments of at least `min_segment_days` rows. Bills rarely have 56 rows. Run on bills with a
+short minimum segment instead, it raises far too many false alarms. In the simulation below, with
+at least 6 bills a segment, 13 to 22% of meters with no change raised one within 36 bills, and 49
+to 62% with 3.
+
+`"rebaseline": {"bill_steps": "scan"}` (or `{"min_run": 6, "threshold": 3.75}`) replaces it for
+a billing entry with a test built for bills (`camber.mandv.billsteps`). It is **opt-in**: without
+the key nothing changes.
+
+- **The series.** Each bill since the baseline ended gives `x = E / P − 1`: its energy per day
+  relative to the frozen baseline's projection for it. Each bill is weighted by its projected
+  energy (days × projection). A segment's weighted mean is then its fractional deviation in
+  energy, `(ΣE − ΣP) / ΣP`. A summer bill whose heating projection is near zero cannot swamp the
+  test with a huge relative deviation.
+- **The test.** At every split with at least `min_run` (6) bills on each side, the difference of
+  the two weighted means over its standard error. The variance is pooled within the two segments
+  and inflated by `(1 + ρ)/(1 − ρ)`. ρ is the lag-1 autocorrelation of the within-segment
+  residuals, corrected for its small-sample bias (`ρ + (1 + 3ρ)/n`, Marriott & Pope 1954). The
+  largest value is compared with `threshold` (3.75), and its split dates the step: the first bill
+  after it.
+- **Known changes are not steps.** The series is cut at each ECM installation window and each
+  declared event (± `settle_days`), and each stretch between them is tested on its own. An ECM's
+  own saving, or a change already declared, is never detected again.
+- **Outcome.** As for days: a step of at least `major_step_frac` (20%) of the projection calls for
+  a rebaseline, a smaller one for an indicator NRA, and a step must be material
+  (`|delta| ≥ max(materiality, 2 SE)`). The trigger's `basis` names the test and whether its
+  settings are the calibrated ones.
+
+**How the rule was chosen.** A scratch simulation (not gated) built synthetic meters from daily
+weather:
+- an office, with heating and cooling change points;
+- a heating-only gas meter with little summer use.
+
+Operations noise was persistent (daily AR(1), ρ = 0.9) plus independent day-to-day noise, at
+three levels. The baselines' monthly CV(RMSE) was about 3, 6 and 11% for the office, and 4, 7 and
+13% for gas. The days were cut into bills of 28 to 35 days, and a baseline of 12 or 24 bills was
+fitted the way a billing entry is. A 10% ECM saving started with the first reporting bill, and a
+step of ±5, ±10 or ±20% started at reporting bill 12.
+
+Each rule was looked at after every new bill, as a monthly `camber mv propose` would be, over 36
+reporting bills. That is SEP's maximum achievement period (2019 Ed. 2 §4.2), after which T5 calls
+for a rebaseline anyway. There were 300 seeds per cell.
+
+The candidates, each calibrated to the same target of **a false alarm on at most 5% of meters with
+no change over 36 bills**:
+- the daily PELT as it is, with a minimum segment of 3, 4 or 6 bills;
+- a CUSUM of the deviations from their mean (Brownian-bridge statistic);
+- a self-starting tabular (Page) CUSUM;
+- the scan of the two-sample t described above, with and without the ρ inflation, and with 3, 4
+  or 6 bills a side.
+
+The scan with 6 bills a side and the corrected ρ detected as much as any other and dated steps
+best. The CUSUM of deviations missed more. The tabular CUSUM alarmed later (median delays up to
+18 bills) and dated steps poorly. With 3 or 4 bills a side every rule lost power.
+
+The weights were chosen on the gas meter:
+- Weighted by days alone, the scan found a 20% step on only 30 to 52% of gas meters.
+- Weighted by projected energy, it found 61 to 97%, with the office figures unchanged within a few
+  points.
+- Weighted by days × projection², the gas meters' false alarms rose to 8 to 56%.
+
+The chosen rule at threshold 3.75. The false-alarm rate is over 36 bills. Detection is for the
+step at bill 12, and the delay is the median number of bills after the step.
+
+| Meter | Baseline | Monthly CV(RMSE) | False alarms | 5% step | 10% step | 20% step | Delay (20%) |
+|---|---|---|---|---|---|---|---|
+| office | 12 bills | ~3% | 2.3% | 47% | 97% | 100% | 5 |
+| office | 12 bills | ~6% | 4.7% | 18% | 64% | 98% | 6 |
+| office | 12 bills | ~11% | 7.0% | 10% | 24% | 71% | 8 |
+| office | 24 bills | ~3% | 5.7% | 62% | 99% | 100% | 5 |
+| office | 24 bills | ~6% | 6.3% | 26% | 76% | 100% | 6 |
+| office | 24 bills | ~11% | 6.7% | 14% | 32% | 82% | 7 |
+| gas | 12 bills | ~4% | 0.7% | 3% | 35% | 92% | 6 |
+| gas | 12 bills | ~7% | 1.3% | 4% | 21% | 79% | 9 |
+| gas | 12 bills | ~13% | 8.0% | 11% | 21% | 61% | 10 |
+| gas | 24 bills | ~4% | 1.0% | 4% | 43% | 97% | 6 |
+| gas | 24 bills | ~7% | 1.3% | 6% | 28% | 85% | 9 |
+| gas | 24 bills | ~13% | 12.7% | 15% | 26% | 67% | 10 |
+
+Over all cells the false-alarm rate is 4.8%. The step was dated within two bills in 80 to 100% of
+detections at 20%, and 57 to 97% at 10%.
+
+**Where it falls short, and what to do instead.**
+- A step becomes testable only once 6 bills follow it. A stretch is tested only once 12 bills
+  follow the baseline, an ECM or a declared event, and a step within the first 6 bills of a
+  stretch is never found. Detection takes half a year or more.
+- Steps of 5% are mostly missed at realistic bill noise, and 10% steps often; on the gas meter,
+  whose summer bills carry little information, more so.
+- The false-alarm target holds only when the residuals are not strongly persistent. With the
+  operations noise at daily ρ = 0.97 (slow drifts), 12 to 36 bills cannot tell a drift from a
+  step. The rate rose to 22%, and 4 to 41% by cell (150 seeds a cell). The ρ correction cannot
+  fix this with so few bills.
+
+So **declared events (`rebaseline.events`, T2) remain the recommended way to record a change on a
+bill-only meter**. The scan is a screen for large changes nobody announced, and every step it
+raises is a claim to check against what happened at the site.
+
+### The degree-day model in the SEP method proposal (provisional, 0.95, #74)
+
+With `base_f: "auto"`, the baseline finding already chooses between the change-point models and
+the degree-day model at the selected bases by BIC. From 0.95, `method: "auto"` (the SEP proposal,
+`select_method`) offers the degree-day model as a candidate too, in every period: the baseline,
+the reporting period and each intermediate window of a chain.
+- **One set of bases.** Every period uses the baseline's selected bases, and its `p` counts them
+  (`DD-H` / `DD-C` 3, `DD-HC` 5).
+- **The criterion** is the proposal's, unchanged: SEP validity (§6.4.1) first, then adjusted R²
+  with every fitted parameter counted (change points, and the degree-day model's bases). This is
+  the DOE EnPI tool's order. A fit with a slope of the wrong sign is left out, as in the baseline
+  selection. The finding states the criterion (`model_criterion`, and a caveat) and names the
+  candidate (`degree_day_candidate`). The baseline finding chooses by BIC, so the two can differ.
+- **Standard conditions** need one normal year to drive both models. The reporting model there is
+  the best of the baseline model's form.
+- `camber mv propose` does the same on a frozen version fitted at selected bases.
+  `select_method(..., degree_day=False)` leaves the model out.
+
+With a numeric `base_f`, or bases that were not selected, the proposal is unchanged.
 
 ## Cross-checking against eemeter
 

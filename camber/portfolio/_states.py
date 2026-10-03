@@ -7,9 +7,9 @@
                                   +--restore----+----restore--+
 
 Each *action* moves a facility from one of a set of states to exactly one state. The table is
-complete here (so it is tested as a whole), even though a release may expose only some actions:
-``offboard``, ``archive``, ``restore`` and ``purge`` need the export/cascade machinery of a later
-release (see docs/PORTFOLIO.md). A **legal hold** blocks every action that deletes data.
+complete here (so it is tested as a whole); ``offboard``, ``archive``, ``restore`` and ``purge``
+run the export-bundle cascade (see :mod:`camber.portfolio._cascade` and docs/PORTFOLIO.md). A
+**legal hold** blocks every action that deletes data.
 """
 
 from __future__ import annotations
@@ -31,8 +31,9 @@ TRANSITIONS: dict = {
 # everything but the tombstone and the audit record. A legal hold refuses both.
 DELETING = frozenset({"archive", "purge"})
 
-# Actions this release implements end to end; the rest are defined but refused by the CLI.
-IMPLEMENTED = frozenset({"activate", "suspend", "resume"})
+# Actions implemented end to end (all of them since 0.95: offboard/restore/archive/purge run the
+# export-bundle cascade in camber.portfolio._cascade).
+IMPLEMENTED = frozenset(TRANSITIONS)
 
 
 class LifecycleError(ValueError):

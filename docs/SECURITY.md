@@ -173,7 +173,58 @@ A single-writer lock (`_lock`) serializes admin changes. `camber serve` stays GE
 *shows* each facility's lifecycle state but cannot change it. Real roles arrive with the
 multi-tenant roadmap item. See [PORTFOLIO.md](PORTFOLIO.md).
 
-### 9. What CAMBER sends to weather and price services
+<!-- 095-edge (#18 step 5) -->
+**Edge landing and devices (0.95).** The same admin model covers the central edge commands:
+`camber edge land`, `reconcile --apply` and `quarantine release | discard` are audited with the OS
+user, host and a mandatory reason, take the workspace lock, and are dry runs without `--apply`.
+`discard` deletes data, so it also needs `--yes` or the typed facility id, and a legal hold
+refuses it. Uploads for a facility that is not `active` or `provisioning` (or is unknown, or whose
+content fails the hash in its key) never enter the store; they wait in `quarantine/` with a record
+of why. On a device, `camber edge decommission` refuses to retire while any batch is
+unacknowledged unless `--force` is given with a reason, and a forced retirement keeps the payloads
+on disk. The device's receipt names the OS user who ran it. `camber edge bucket-rules` only prints
+JSON: CAMBER never calls a cloud API to change a bucket, and the admin applies the rules with
+the provider's own tool and credentials. See
+[EDGE-DEPLOY.md](EDGE-DEPLOY.md#9-lifecycle-reconciliation-quarantine-decommissioning).
+<!-- /095-edge -->
+
+### 9. Data deletion and retention
+
+<!-- 095-lifecycle (#18 steps 3-4) -->
+CAMBER deletes facility data only through audited admin commands, and only after a copy exists:
+
+- **Offboarding** exports a verified bundle (`archive/<fid>/`, every file with its sha256) before
+  anything else, and deletes nothing. **Archiving** deletes the hot data only after the bundle is
+  verified against the current data; **purging** deletes the bundles and the facility's
+  quarantined edge uploads too, leaving the tombstone
+  (id, names, dates, reason) and the audit log. A purge cannot be undone. Take a copy of the
+  bundle first if the data must outlive it (a bundle is a plain directory).
+- Every deleting command is a dry run unless `--apply`, needs `--reason` and a confirmation
+  (`--yes` or the typed facility id; a purge only the typed id), takes the portfolio lock, and is
+  audited with the OS user and host. A **legal hold** blocks archive and purge.
+- Archive deletes external **report** files only if they are unchanged since CAMBER wrote them.
+  It never deletes other files outside the workspace (a config-chosen fault or baseline store may
+  be shared), and the plan lists what it leaves.
+- The audit log (`_audit.ndjson`) is never deleted by CAMBER, and it names what was deleted, when,
+  by whom and why. It may therefore still hold a purged facility's id and names. Weather caches
+  and downloaded datasets are shared, not per facility, and are not touched by a purge.
+- Deletion is ordinary file removal. CAMBER does not overwrite or shred the freed blocks, and it
+  cannot reach backups, snapshots or copies made outside the workspace. Apply your storage's
+  own controls (encrypted volumes, snapshot expiry) where erasure must be guaranteed.
+- A crash mid-deletion leaves `_trash-*` or `_swap-*` entries, which the next command finishes or
+  rolls back. Readers never see a half-deleted partition.
+- **Retention** (`camber retention apply`) deletes by the policy in `_portfolio.json`: raw trends
+  after 25 months, hourly rollups after 7 years, closed faults after 7 years, superseded drift
+  baseline versions beyond 10, reports beyond the last 12, by default. It deletes a raw partition
+  only after its hourly and daily rollups are written and verified against the raw row count. It
+  is a dry run unless `--apply` with `--reason` and `--yes`, takes the lock, audits each facility
+  before acting, and skips facilities under a legal hold. Precedence: legal hold > facility
+  override > portfolio default. The audit log is never deleted, and its rule cannot be changed.
+  Shortening a rule is itself audited (`retention.set`, `retention.override`), and anyone with
+  write access to the workspace can change the policy: protect it like the rest of the root.
+<!-- /095-lifecycle -->
+
+### 10. What CAMBER sends to weather and price services
 
 A few features fetch public reference data. They are all opt-in, and nothing is fetched unless a
 config or a call asks for it. Each request is one of these (0.94, #73):

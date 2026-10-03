@@ -5,7 +5,8 @@ per :mod:`docs/SECURITY`), turns each raw ``<equip>_<measure>`` token into a ven
 :class:`~camber.model.roles.Role` via a :class:`~camber.model.mapping.MappingProvider`, runs
 :func:`camber.ingest.quality.assess` (report-only -- it never mutates the data), melts to the
 store's long shape with :func:`camber.store.role_frame_to_long`, serializes one Parquet part per
-``year=`` directly into the :class:`~camber.store.ParquetStore` Hive layout, enqueues it on the
+``year=/month=`` partition (0.95; one per ``year=`` before) directly into the
+:class:`~camber.store.ParquetStore` Hive layout, enqueues it on the
 durable :class:`~camber.edge.spool.Spool`, and drains the spool through the one-way ``Sink``.
 
 Nothing here listens, binds, or writes to the BAS -- it only reads the source and pushes data out.
@@ -167,18 +168,23 @@ class Forwarder:
         keys: list = []
         if not long.empty:
             long = long.copy()
-            long["_year"] = pd.to_datetime(long["ts"]).dt.year
-            for year, grp in long.groupby("_year"):
+            ts = pd.to_datetime(long["ts"])
+            long["_year"], long["_month"] = ts.dt.year, ts.dt.month
+            # one object per year=/month= partition -- the store's layout since 0.95, so
+            # month-by-month retention never has to split an edge part (landing still reads the
+            # year-only keys older forwarders wrote)
+            for (year, month), grp in long.groupby(["_year", "_month"]):
                 part = grp[_LONG_COLS].reset_index(drop=True)
                 data = self._serialize(part)
                 sha = hashlib.sha256(data).hexdigest()
                 key = (
-                    f"facility_id={self.facility_id}/year={int(year)}/"
+                    f"facility_id={self.facility_id}/year={int(year)}/month={int(month)}/"
                     f"part-{sha[:16]}.{_EXT[self.wire_format]}"
                 )
                 manifest = {
                     "facility_id": self.facility_id,
                     "year": int(year),
+                    "month": int(month),
                     "window": list(window),
                     "rows": int(len(part)),
                     "roles": sorted(part["role"].unique().tolist()),
@@ -217,11 +223,16 @@ class Forwarder:
         """Daemon loop: ``poll_once`` then sleep ``interval`` s (``iterations`` bounds tests)."""
         import time
 
+        from .spool import SpoolRetired
+
         sleep = _sleep or time.sleep
         i = 0
         while iterations is None or i < iterations:
             try:
                 self.poll_once()
+            except SpoolRetired:  # a decommissioned device stops; it never retries forever
+                _LOG.error("edge.forward spool retired (device decommissioned); stopping")
+                raise
             except Exception:  # a poll failure must not kill the daemon; log and continue
                 _LOG.exception("edge.forward poll_once failed; will retry next interval")
             i += 1

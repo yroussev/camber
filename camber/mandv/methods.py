@@ -1061,7 +1061,7 @@ class _Candidate:
     accept: bool
 
     def summary(self) -> dict:
-        return {
+        d = {
             "kind": self.kind,
             "sep_valid": self.sep_valid,
             "adj_r2": _rn(self.adj_r2, 4),
@@ -1070,17 +1070,70 @@ class _Candidate:
             "cv_rmse": _rn(self.cv_rmse, 4),
             "n": self.n,
         }
+        if _is_dd(self.model):  # 0.95 (#74): the degree-day model's bases and parameter count
+            d["heating_base_f"] = getattr(self.model, "heating_base_f", None)
+            d["cooling_base_f"] = getattr(self.model, "cooling_base_f", None)
+            d["p"] = self.p
+        return d
 
 
-def _rank_models(T, y, index, kinds, weights=None) -> list:
+def _is_dd(model) -> bool:
+    """A degree-day model on bills (:class:`~camber.mandv.basetemp.BillingDegreeDayModel`)."""
+    return getattr(model, "heating_base_f", False) is not False and hasattr(
+        model, "rows_from_temps"
+    )
+
+
+def _rank_models(T, y, index, kinds, weights=None, dd=None) -> list:
     """Fit each kind and rank by SEP validity, then adjusted R² (the DOE EnPI tool's order).
 
-    ``weights`` (bills' day counts) make every fit, statistic and test a weighted one."""
+    ``weights`` (bills' day counts) make every fit, statistic and test a weighted one. ``dd``
+    (0.95, #74) adds the degree-day model on bills: ``{"rows", "kind", "heating_base_f",
+    "cooling_base_f", "bases_fitted"}`` with ``rows`` these rows' per-day degree days. It is
+    ranked with the others, its ``p`` counting its bases; a fit with a slope of the wrong sign
+    is left out, as :func:`~camber.mandv._mvform.best_billing_model` leaves it out."""
     from .models import N_PARAMS, fit_model
     from .stats import fit_stats, logical_signs, model_regression_tests, sep_validity
 
     out = []
     kw = {} if weights is None else {"weights": weights}
+    extra: list = []
+    if dd is not None:
+        from .basetemp import fit_bill_degree_day
+
+        try:
+            mdd = fit_bill_degree_day(
+                dd["rows"],
+                y,
+                kind=dd["kind"],
+                heating_base_f=dd.get("heating_base_f"),
+                cooling_base_f=dd.get("cooling_base_f"),
+                days=weights,
+                bases_fitted=bool(dd.get("bases_fitted", True)),
+                time_index=index,
+            )
+            if not mdd.caveats:
+                X = dd["rows"]
+                st = fit_stats(y, mdd.predict(X), mdd.p, time_index=index, **kw)
+                tests = model_regression_tests(mdd, X, y, time_index=index, **kw)
+                v = sep_validity(tests, signs=logical_signs(mdd))
+                adj = tests.adj_r2 if tests.adj_r2 is not None else float("-inf")
+                extra.append(
+                    _Candidate(
+                        mdd,
+                        mdd.kind,
+                        v.sep_valid,
+                        adj,
+                        v.failures,
+                        st.cv_rmse,
+                        st.n,
+                        mdd.p,
+                        st.rho_lag1,
+                        st.accept,
+                    )
+                )
+        except (ValueError, TypeError, np.linalg.LinAlgError):
+            pass
     for kind in kinds:
         try:
             m = fit_model(T, y, kind, time_index=index, **kw)
@@ -1096,6 +1149,7 @@ def _rank_models(T, y, index, kinds, weights=None) -> list:
                 m, kind, v.sep_valid, adj, v.failures, st.cv_rmse, st.n, p, st.rho_lag1, st.accept
             )
         )
+    out += extra  # after the change-point kinds: a tie keeps them first
     out.sort(key=lambda c: (c.sep_valid, c.adj_r2), reverse=True)
     return out
 
@@ -1124,6 +1178,48 @@ def _slice_days(frame, win, driver, energy, days):
         sub[energy].to_numpy(float),
         sub.index,
         sub[days].to_numpy(float),
+    )
+
+
+def _dd_spec(frame, days, degree_day) -> dict | None:
+    """The degree-day candidate of a bills frame at selected bases, or ``None`` (0.95, #74)."""
+    if degree_day is False or days is None:
+        return None
+    kind = frame.attrs.get("dd_kind")
+    if not kind:
+        if degree_day:
+            raise ValueError(
+                "degree_day=True needs a bills frame built at selected bases (attrs['dd_kind'])"
+            )
+        return None
+    from .basetemp import _LEGS
+
+    legs = _LEGS[kind]
+    return {
+        "kind": kind,
+        "heating_base_f": frame.attrs.get("heating_base_f") if "h" in legs else None,
+        "cooling_base_f": frame.attrs.get("cooling_base_f") if "c" in legs else None,
+        "bases_fitted": bool(frame.attrs.get("dd_bases_fitted", True)),
+    }
+
+
+def _dd_rows(frame, idx, dd: dict):
+    from .basetemp import rows_at_bases
+
+    return rows_at_bases(frame.loc[idx], dd["kind"], dd["heating_base_f"], dd["cooling_base_f"])
+
+
+def _dd_criterion(dd: dict) -> str:
+    """The proposal's model criterion, stated when the degree-day model is a candidate."""
+    bits = [f"{g} {dd[k]:g} F" for g, k in (("heating", "heating_base_f"),
+            ("cooling", "cooling_base_f")) if dd.get(k) is not None]  # fmt: skip
+    return (
+        f"candidate models: the change-point kinds and the degree-day model {dd['kind']} at the "
+        f"bases selected from the baseline bills ({', '.join(bits)}), the same bases in every "
+        "period; ranked by SEP validity (SEP 50001 M&V Protocol 2019 Ed. 2 §6.4.1), then adjusted "
+        "R² with every fitted parameter counted (change points, and the degree-day model's bases), "
+        "the DOE EnPI tool's order. The baseline finding chooses its model by BIC, so the two can "
+        "differ"
     )
 
 
@@ -1179,6 +1275,7 @@ def select_method(
     extrapolation: ExtrapolationPolicy | None = None,
     window_step: str = "MS",
     days: str | None = None,
+    degree_day: bool | None = None,
 ) -> MethodProposal:
     """Propose an SEP adjustment-model method, in the Protocol's order, with a sensitivity table.
 
@@ -1209,17 +1306,34 @@ def select_method(
     -- by default ``"days"`` when ``frame.attrs["billing"]`` is set (a
     :meth:`~camber.mandv.billing.BillingSeries.energy_vs_temp` frame). The candidates are then
     fitted with the days as weights and every total is summed weighted by them.
+
+    **The degree-day model on bills** (provisional, 0.95, #74). A bills frame built at bases
+    selected from the bills (``base_f: "auto"``: ``frame.attrs["dd_kind"]`` and its bases) also
+    offers the degree-day model at those bases as a candidate in every period -- baseline,
+    reporting and each intermediate window -- at the **same** bases (one set of bases everywhere),
+    its ``p`` counting them. The ranking is unchanged: SEP validity, then adjusted R². Standard
+    conditions need one normal year to drive both models, so there the reporting model is the best
+    of the baseline model's form. ``degree_day=False`` leaves it out; ``True`` requires it.
     """
     pol = extrapolation or ExtrapolationPolicy()
     if days is None and frame.attrs.get("billing") and "days" in frame.columns:
         days = "days"
+    dd = _dd_spec(frame, days, degree_day)
+
+    def X(model, T, idx):
+        """The design rows of ``model`` at the rows ``idx`` (``T`` for a change-point model)."""
+        return _dd_rows(frame, idx, dd) if dd is not None and _is_dd(model) else T
+
+    def dd_at(idx):
+        return None if dd is None else {**dd, "rows": _dd_rows(frame, idx, dd)}
+
     Tb, yb, ib, db = _slice_days(frame, baseline, driver, energy, days)
     Tr, yr, ir, dr = _slice_days(frame, reporting, driver, energy, days)
     steps: list = []
     results: dict = {}
     models: dict = {}
-    cand_b = _rank_models(Tb, yb, ib, kinds, db) if len(yb) > 5 else []
-    cand_r = _rank_models(Tr, yr, ir, kinds, dr) if len(yr) > 5 else []
+    cand_b = _rank_models(Tb, yb, ib, kinds, db, dd=dd_at(ib)) if len(yb) > 5 else []
+    cand_r = _rank_models(Tr, yr, ir, kinds, dr, dd=dd_at(ir)) if len(yr) > 5 else []
     best_b = cand_b[0] if cand_b else None
     best_r = cand_r[0] if cand_r else None
     models["baseline"] = best_b.summary() if best_b else None
@@ -1228,6 +1342,8 @@ def select_method(
         k: _model_dict(c.model) for k, c in (("baseline", best_b), ("reporting", best_r)) if c
     }
     caveats = [_PROPOSAL_CAVEAT]
+    if dd is not None:
+        caveats.append(_dd_criterion(dd))
 
     # 1. forecast
     reasons = []
@@ -1237,13 +1353,13 @@ def select_method(
     elif not best_b.sep_valid:
         reasons.append(f"baseline model not SEP-valid: {'; '.join(best_b.failures)}")
     else:
-        ok, tier, rv = _covers(best_b.model, Tr, pol)
+        ok, tier, rv = _covers(best_b.model, X(best_b.model, Tr, ir), pol)
         reasons.append(f"baseline coverage of the reporting period: {tier}; SEP range rule {rv}")
         valid = ok
     if valid and best_b is not None:
         results["forecast"] = forecast_savings(
             best_b.model,
-            Tr,
+            X(best_b.model, Tr, ir),
             yr,
             cv_rmse=best_b.cv_rmse,
             n_baseline=best_b.n,
@@ -1262,13 +1378,13 @@ def select_method(
     elif not best_r.sep_valid:
         reasons.append(f"reporting model not SEP-valid: {'; '.join(best_r.failures)}")
     else:
-        ok, tier, rv = _covers(best_r.model, Tb, pol)
+        ok, tier, rv = _covers(best_r.model, X(best_r.model, Tb, ib), pol)
         reasons.append(f"reporting-model coverage of the baseline: {tier}; SEP range rule {rv}")
         valid = ok
     if valid and best_r is not None:
         results["backcast"] = backcast_savings(
             best_r.model,
-            Tb,
+            X(best_r.model, Tb, ib),
             yb,
             cv_rmse=best_r.cv_rmse,
             n_reporting=best_r.n,
@@ -1304,12 +1420,12 @@ def select_method(
             Ti, yi, ii, di = _slice_days(frame, w, driver, energy, days)
             if len(yi) < need:
                 continue
-            cands = _rank_models(Ti, yi, ii, kinds, di)
+            cands = _rank_models(Ti, yi, ii, kinds, di, dd=dd_at(ii))
             for c in cands:
                 if not c.sep_valid:
                     break
-                ok_b, _, _ = _covers(c.model, Tb, pol)
-                ok_r, _, _ = _covers(c.model, Tr, pol)
+                ok_b, _, _ = _covers(c.model, X(c.model, Tb, ib), pol)
+                ok_r, _, _ = _covers(c.model, X(c.model, Tr, ir), pol)
                 if ok_b and ok_r:
                     found.append((c, w))
                     break
@@ -1330,9 +1446,9 @@ def select_method(
             valid = True
             results["chaining"] = chained_savings(
                 c.model,
-                Tb,
+                X(c.model, Tb, ib),
                 yb,
-                Tr,
+                X(c.model, Tr, ir),
                 yr,
                 periods={
                     "baseline": list(baseline),
@@ -1349,24 +1465,33 @@ def select_method(
 
     # 4. standard conditions
     reasons, valid = [], False
+    sc_r = best_r
+    if dd is not None and best_b is not None and best_r is not None:  # 0.95 (#74): one form
+        sc_r = next((c for c in cand_r if _is_dd(c.model) == _is_dd(best_b.model)), None)
+        if sc_r is not best_r and sc_r is not None:
+            reasons.append(
+                f"the reporting model is the best of the baseline model's form ({sc_r.kind}), so "
+                "one normal year drives both"
+            )
     if standard_conditions is None:
         reasons.append("no standard conditions supplied")
-    elif best_b is None or best_r is None or not (best_b.sep_valid and best_r.sep_valid):
+    elif best_b is None or sc_r is None or not (best_b.sep_valid and sc_r.sep_valid):
         reasons.append("needs SEP-valid baseline and reporting models")
     else:
         S = np.asarray(standard_conditions, dtype=float)
+        S = best_b.model.rows_from_temps(S) if dd is not None and _is_dd(best_b.model) else S
         ok_b, tb, _ = _covers(best_b.model, S, pol)
-        ok_r, tr, _ = _covers(best_r.model, S, pol)
+        ok_r, tr, _ = _covers(sc_r.model, S, pol)
         reasons.append(f"coverage of the standard conditions: baseline {tb}, reporting {tr}")
         valid = ok_b and ok_r
         if valid:
             results["standard_conditions"] = standard_conditions_savings(
                 best_b.model,
-                best_r.model,
+                sc_r.model,
                 S,
                 confidence=confidence,
                 rho_baseline=best_b.rho,
-                rho_reporting=best_r.rho,
+                rho_reporting=sc_r.rho,
                 extrapolation=pol,
             )
     steps.append({"method": "standard_conditions", "valid": valid, "reasons": reasons})

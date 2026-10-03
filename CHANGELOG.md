@@ -4,6 +4,211 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.95.0] — 2026-10-03
+
+<!-- 0.95 is stacked on 0.94, 0.93 and 0.92 (unreleased, below). This entry gets its date when
+0.95 is released. -->
+
+**0.95: bill-based M&V follow-ups (#74) and the portfolio lifecycle from offboarding to the edge
+(#18 steps 3–5).** A billing meter's rebaseline window is now searched, as a daily meter's is, so
+`camber mv rebaseline` no longer needs `--period` for bills; an opt-in step test built for bills
+gives trigger T1 a calibrated false-alarm rate; and the degree-day model at bases selected from the
+bills is a candidate in the SEP method proposal. A facility now leaves a portfolio in audited,
+reversible steps (offboard, archive, restore, purge), and nothing is deleted without a verified
+export bundle. The agreed retention defaults are enforced by `camber retention apply`, which rolls
+raw data up, verifies the rollup, and only then prunes; the store writes month partitions so
+retention works month by month. At the edge, what lands in the cloud follows the facility
+registry: uploads from a facility that has left are quarantined instead of stored, a device can
+be retired without losing data, and the bucket's own lifecycle rules are generated from the
+retention policy.
+
+### Added
+- **Rebaseline windows of whole bills (#74).** `camber mv propose` answers a rebaseline-class
+  trigger on a billing meter with a window, from `camber.mandv.billwindow.new_bill_window`
+  (provisional).
+  - Candidates are the shortest runs of whole bills covering a full service year
+    (`min_baseline_days`), ending at each bill from the latest backwards.
+  - A window starts `settle_days` after the trigger, avoids ECM installation windows and declared
+    events, holds `min_bills`, and leaves at most `max_missing_frac` of its days unserved (the
+    freeze rule). Its model must be valid under `require_validity` and must not be a `severe`
+    extrapolation of the bills seen. `auto` bases are selected on each candidate.
+  - Ranking is the daily path's: the latest qualifying window wins. At most 12 fits, stepping
+    back one bill after a failure. The proposal states the ranking. Its `window` adds `n_bills`,
+    `bases`, `ranking` and `tried`.
+  - `camber mv rebaseline` without `--period` uses the search. `--from-proposal` freezes the
+    proposed model exactly (statistics weighted by days, at the monthly G14 thresholds).
+    `--period` still works.
+- **A step test on bills, opt-in (#74).** `"rebaseline": {"bill_steps": "scan"}` on a billing
+  entry makes trigger T1 a scan of the two-sample t of the bills' deviation from the frozen
+  projection (`camber.mandv.billsteps`, provisional). Each bill is weighted by its projected
+  energy, at least 6 bills are needed each side, and the variance is inflated by the
+  bias-corrected lag-1 ρ. The series is cut at ECM installation windows and declared events.
+  - The threshold 3.75 is calibrated by simulation to a **5% false-alarm rate per meter over 36
+    bills**, looked at after every bill (4.8% pooled; 1 to 13% by cell). The simulation used an
+    office and a heating-only gas meter, bills of 28 to 35 days, baselines of 12 or 24 bills, and
+    a monthly CV(RMSE) of 3 to 13%, with 300 seeds a cell.
+  - Detection: 20% steps 61 to 100%, 10% steps 21 to 99%, 5% steps 3 to 62%, with a median delay
+    of 5 to 10 bills.
+  - The daily PELT on bills, for comparison, raised false alarms on 13 to 22% of meters with 6
+    bills a segment, and on 49 to 62% with 3. The other candidates were two CUSUM forms.
+  - With strongly persistent residuals the false-alarm rate rose to 22%. Declared events remain
+    the recommended path, and the docs say so.
+- **The degree-day model in `method: "auto"` (#74).** With `base_f: "auto"`, `select_method`
+  offers the degree-day model at the selected bases in every period (the same bases throughout,
+  counted in `p`).
+  - The criterion is unchanged: SEP validity (§6.4.1), then adjusted R² with every fitted
+    parameter counted.
+  - The `mv_method_proposal` finding states it (`model_criterion`, a caveat) and names the
+    candidate (`degree_day_candidate`).
+  - Standard conditions pair the baseline model with a reporting model of the same form.
+  - The adjusted sensitivity rows follow the same models.
+  - `select_method(degree_day=False)` leaves it out.
+- **Validation (#74).** `tests/test_mv_billing_followups.py` covers:
+  - the window search's rules (settle days, ECM windows, events, `min_bills`, gaps, stepping
+    back) and the propose / rebaseline paths;
+  - the scan's calibration on independent noise, its detection and dating of a 20% step, the
+    opt-in, and ECMs and declared events not detected again;
+  - the degree-day candidate in the proposal.
+- **`camber facility offboard | archive | restore | purge`** (and `Portfolio.offboard`,
+  `archive`, `restore`, `purge`; provisional).
+  - `offboard` writes a verified export bundle, then starts a 30-day reversible grace period.
+  - `archive`, after the grace period (or with `--skip-grace`, audited), deletes the hot data:
+    store and rollup partitions, `state/<fid>/`, and unchanged external report files. It keeps
+    the bundle, re-exporting first if anything changed during the grace period.
+  - `restore` brings an offboarding or archived facility back; from a bundle it re-verifies every
+    checksum after the copy.
+  - `purge` deletes everything but the tombstone and the audit record; the id is never reused.
+  - Each is a dry run unless `--apply`, needs `--reason` and a confirmation (`--yes` or the typed
+    id; `purge` only the typed id), takes the portfolio lock and is audited with the OS user. A
+    legal hold blocks `archive` and `purge`.
+- **Export bundles** under `archive/<fid>/<bundle_id>/`: raw partitions, rollups, the whole
+  `state/<fid>/` (fault history, drift baselines, M&V and bill-based M&V baselines, the #73
+  weather audit log, reports, the manifest), external artifacts, the registry entry, catalog keys
+  and retention override, with a sha256 manifest and a checksum of the manifest itself.
+  `camber facility export` makes one on demand; `camber facility bundles --verify` re-hashes
+  them.
+- **Crash safety.** Trees are replaced through a fsynced `_swap-*` stage and deleted through one
+  atomic rename to `_trash-*`. Every lifecycle command first finishes or rolls back whatever a
+  crash left (`Portfolio.recover`, audited as `portfolio.recover`). Tests cover a crash at each
+  step, including a killed child process.
+
+- **`camber retention show | set | override | hold | release | apply`** (and
+  `Portfolio.set_retention`, `set_retention_override`, `hold`, `release_hold`,
+  `apply_retention`, `retention_policy`; provisional). Defaults: raw trends 25 months, hourly
+  rollups 7 years, daily rollups indefinite, findings 7 years, drift baselines for the life of
+  the equipment with the last 10 versions, M&V (and bill-based M&V) baselines every version,
+  reports the last 12 per facility, the weather audit log while the facility exists, the audit
+  log never. Precedence: legal hold > facility override > portfolio default.
+  - `apply` rolls expired raw month partitions up into `rollups/hourly/` and `rollups/daily/`
+    (mean and count per bucket), verifies that the counts add up to the raw rows, and only then
+    prunes. It also trims closed faults, drift baseline history and old reports, and archives
+    offboarding facilities whose grace period has ended.
+  - It is a dry run unless `--apply --reason R --yes`, takes the lock (`--wait S`; exit 75 when
+    held), recovers interrupted work first, audits each facility before acting, and is
+    idempotent, so it is safe from cron.
+- **The policy as a documented JSON document** (`camber retention show --json`,
+  `Portfolio.retention_policy()`), described by the JSON Schema
+  `camber.portfolio.RETENTION_SCHEMA`: each class's storage location, the effective rule per
+  facility with its source, a conservative `min_age_days` for object-store lifecycle rules, and
+  the legal holds.
+- **`camber store migrate-partitions`** (`ParquetStore.migrate_partitions`): converts year-only
+  partitions to `year=/month=`, a dry run unless `--apply --yes`, crash-safe and idempotent.
+  `ParquetStore.partitions()` and `drop_partition()` list and delete single partitions.
+- **Central reconciliation (#18).** `camber edge reconcile` (provisional,
+  `camber.edge.landing`) classifies landed objects against the registry as `ok`, `orphaned`,
+  `unknown_facility`, `unregistered`, `inactive` or `quarantined`. It reads the workspace store, a
+  local landing directory, or a key listing exported from S3, GCS or Azure. It is read-only by
+  default and never calls a cloud API. In the store, an inactive facility's objects that landed
+  before its state change are history and are only reported.
+- **Quarantine (#18).** Uploads for a facility that is `suspended`, `offboarding`, `archived`,
+  `purged` or unknown, and objects whose content fails the hash in their name, go to
+  `<workspace>/quarantine/` with a record of why, not into the store. The routes are
+  `camber edge land <inbox>`, `camber edge reconcile --apply`, or `route_key()` for a
+  presigned-URL broker, which routes to the bucket's `_quarantine/` prefix.
+  `camber edge quarantine list | release | discard` are dry runs by default. They take the lock
+  and are audited with a reason. `discard` needs `--yes` or the typed facility id, and a legal
+  hold refuses it.
+- **Edge decommissioning (#18).** `camber edge decommission` flushes the spool, waits for the
+  landing to acknowledge every batch, then retires the device. The spool refuses new batches from
+  then on. The retirement is recorded as an audit line and an `edge_devices.<device_id>` note on
+  the facility's registry entry, directly or later with `camber edge record-retirement`. It
+  refuses while data is unacknowledged unless `--force` is given with a reason. A forced
+  retirement keeps the payloads on disk, and a legal hold refuses it.
+- **Spool journal compaction (#18).** `camber edge compact` / `Spool.compact()` rewrite the
+  append-only journal to the pending batches. The rewrite is verified before an atomic swap, so a
+  crash never drops an unacknowledged batch, and sequence numbers are never reused.
+- **Bucket lifecycle rules (#18).** `camber edge bucket-rules --provider s3|gcs|azure`
+  (`camber.edge.bucket_rules`) emits lifecycle JSON from a retention-policy dict or the
+  workspace's policy document (`Portfolio.retention_policy()`), whose `location` patterns give
+  the prefixes (`rollups/hourly/`, `rollups/daily/`; `--layout store|workspace`). Ages are
+  conservative, and facility overrides and legal holds produce per-facility rules; a held
+  facility gets no expiry rule. It is text only: the admin applies the rules.
+- `EdgeConfig.device_id` (config `device_id`, env `CAMBER_EDGE_DEVICE_ID`).
+- **`Portfolio.audit` and `Portfolio.note_edge_device`** (provisional): the public, audited way
+  for code outside the lifecycle (the edge landing) to write an audit record or an
+  `edge_devices.<device_id>` registry note. `audit` refuses the lifecycle's own namespaces
+  (`facility.`, `portfolio.`, `retention.`); the note is audited before the registry changes.
+
+### Changed
+- **Bill-based M&V (#74): nothing changes for existing configs.** A byte-identity harness
+  compared the findings of billing entries (numeric and `auto` bases, every method, adjustments,
+  versioned runs, `mv report`) and of a daily workspace (`propose`, dry-run `rebaseline`, `report`) before and after: they were
+  identical. The exceptions are the intended ones:
+  - a billing meter's `propose` / `rebaseline` with a rebaseline-class trigger (a window instead
+    of a decline);
+  - `method: "auto"` on a billing entry with selected bases: the proposal gains the degree-day
+    candidate, and the 0.94 caveat "ranks the change-point models only" is gone.
+
+  `RebaselinePolicy.as_dict()`, stored in rebaseline provenance, carries `bill_steps` only when
+  it is set.
+- **`ParquetStore` writes `year=/month=` partitions** (was `year=`). Year-only and mixed stores
+  are read unchanged, and range reads also skip month directories. A full `read_long` now
+  returns a `month` column.
+- An **archived** facility refuses store writes (its data lives in its bundle).
+- `ParquetStore.read_long` on a store with no partitions left returns an empty frame instead of
+  raising.
+- `ParquetStore.prune` and `drop_facility` delete through one atomic rename, then removal, so a
+  crash never leaves a half-deleted partition visible.
+- Spool journal writes now take the spool's single-writer lock (`<spool>/_lock`), and an append
+  after a torn last line starts a fresh line. Before, the next record could be glued onto the
+  torn line and lost with it. Spool contents and forwarding are otherwise unchanged.
+- `camber edge status` adds a `RETIRED` line for a decommissioned device. `edge run` and
+  `send-once` refuse a retired spool, and the forwarder daemon stops on one.
+- **The edge forwarder writes `year=/month=` keys**
+  (`facility_id=<id>/year=<yyyy>/month=<m>/part-<sha16>.parquet`, one part per month), matching
+  the store's layout, so retention prunes month by month without splitting an edge part. The
+  batch manifest gains `month`. Year-only keys from older forwarders are still accepted and read,
+  and `camber store migrate-partitions` converts them. A year-only part re-sent after its year
+  was migrated is recognised by name and sha256 and quarantined as a `duplicate` (a new
+  reconciliation category) instead of being stored twice; `release` refuses it.
+
+### Fixed
+- **A write after `ParquetStore.prune` could overwrite live data.** The part-file counter was the
+  number of files left, so after a prune a new write could reuse the name of an existing file in
+  the same partition and replace it. The counter is now one past the highest part number on
+  disk.
+- The store read caches (the per-facility fragment index and the resolve frame cache) now notice
+  writes into month directories.
+- **An archived facility accepted store writes again once an edge object recreated its
+  partition.** The archived check ran after the "partition exists" fast path, so an upload PUT
+  straight into a store-as-bucket reopened the facility. It now runs first.
+- **A late upload into an already rolled-up month replaced that month's rollup.** Retention
+  replaced the whole rollup partition with the rollup of whatever raw rows were left, so raw
+  rows landing in a month after it was rolled up and pruned (an edge backlog, a backfill; likely
+  with a short `raw_trends` override) wiped the month's earlier rollup. Each rollup part now
+  records the raw files it covers: a run replaces only the parts whose raw files are all still
+  there and keeps the rest, so re-runs never double-count and late rows add to the month.
+- **Purge left a facility's quarantined edge uploads behind.** Purge now deletes
+  `quarantine/facility_id=<id>/` with the rest (crash-safe, finished by `Portfolio.recover`, which
+  also sweeps `quarantine/`). Archive keeps them: they are not in the bundle.
+- **Migrating a year a second time could destroy rows migrated the first time.** Year-only files
+  that land after a migration (an older edge forwarder) are migrated again. The second run reused
+  the first run's `part-legacy0-0` name and wrote through the stage's hard link to that file,
+  truncating it, then refused with "nothing was changed". Migrated parts are now named by the
+  source file's content and written to a temporary name first. Each migrated year also records
+  its source files and their sha256 in `year=Y/_migrated.json`
+  (`ParquetStore.migrated_files`), so the edge landing recognises a re-sent legacy upload.
+
 ## [0.94.0] — 2026-10-03
 
 <!-- 0.94 is stacked on 0.93 and 0.92 (both unreleased, below). This entry gets its date when 0.94

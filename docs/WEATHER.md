@@ -400,5 +400,5 @@ A fetched series records what was sent. `attrs["weather_privacy"]` (and, for the
 - the number of requests sent and served from the cache.
 
 The rest of the provenance is unchanged: the source of every hour, the station, the POWER or
-Open-Meteo cell, and the bias correction. See [SECURITY.md](SECURITY.md#9-what-camber-sends-to-weather-and-price-services)
+Open-Meteo cell, and the bias correction. See [SECURITY.md](SECURITY.md#10-what-camber-sends-to-weather-and-price-services)
 for the full list of what is sent and what never is.

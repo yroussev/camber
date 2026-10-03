@@ -275,17 +275,11 @@ _STORE_LOCK = threading.Lock()
 
 
 def _facility_signature(store_root: str, facility_id: str) -> tuple:
-    """mtimes of the facility partition dir and its year dirs (changes on any write/drop)."""
-    fdir = os.path.join(store_root, f"facility_id={facility_id}")
-    try:
-        sig = [os.stat(fdir).st_mtime_ns]
-        for d in sorted(os.listdir(fdir)):
-            p = os.path.join(fdir, d)
-            sig.append(os.stat(p).st_mtime_ns)
-            sig.append(len(os.listdir(p)) if os.path.isdir(p) else 0)
-        return tuple(sig)
-    except OSError:
-        return ()
+    """mtimes of the facility partition dir, its year dirs and their month dirs (changes on any
+    write/drop, in either partition layout)."""
+    from .store.parquet_store import _partition_signature
+
+    return _partition_signature(os.path.join(store_root, f"facility_id={facility_id}"))
 
 
 def clear_store_cache(store_root=None, facility_id: str | None = None) -> int:

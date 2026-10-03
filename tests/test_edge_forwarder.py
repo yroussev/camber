@@ -73,7 +73,8 @@ def test_key_is_the_hive_layout(tmp_path):
     sink, log = collect_sink()
     _forwarder(tmp_path, sink).poll_once()
     assert re.match(
-        r"^facility_id=demo-fac-1/year=\d{4}/part-[0-9a-f]{16}\.parquet$", log[0]["key"]
+        r"^facility_id=demo-fac-1/year=\d{4}/month=\d{1,2}/part-[0-9a-f]{16}\.parquet$",
+        log[0]["key"],
     )
 
 
@@ -93,6 +94,12 @@ def test_multi_year_batch_splits_by_partition(tmp_path):
     fwd.poll_once()
     years = sorted(re.search(r"year=(\d{4})", o["key"]).group(1) for o in log)
     assert years == ["2024", "2025"]
+    months = sorted(re.search(r"year=(\d{4})/month=(\d+)/", o["key"]).groups() for o in log)
+    assert months == [("2024", "12"), ("2025", "1")]
+    assert sorted((o["metadata"]["year"], o["metadata"]["month"]) for o in log) == [
+        (2024, 12),
+        (2025, 1),
+    ]
 
 
 def test_quality_is_report_only(tmp_path):
