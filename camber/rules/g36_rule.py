@@ -25,6 +25,17 @@ What the adapter decides (and says, as caveats):
   free-cooling labels.
 * **FC6** needs the minimum outdoor-air fraction, which no role carries; pass ``min_oa_pct`` (the
   design minimum OA as a % of supply airflow) to evaluate it against %OA from the temperatures.
+* **Free cooling needs an open economizer** (0.98, #94). A fan-on hour with both coils inactive is
+  G36 OS#2 only when the OA damper is open beyond its minimum position plus ``oa_damper_tol``; at
+  or below it (a deadband hour, an unoccupied recirculation run) it is OS#5, where FC8/FC9 and the
+  other free-cooling tests do not apply. ``oa_damper_min`` is the unit's minimum position; by
+  default it is learned from the unit's own mechanical-cooling hours at minimum OA (the finding's
+  ``oa_damper_min`` / ``oa_damper_min_source`` say which). Without an OA damper point OS#2 is read
+  from the valves alone, with a caveat.
+* **Unoccupied operation** is evaluated, as G36 evaluates every hour the AHU operates (ModeDelay
+  covers the occupancy changes). ``occupancy_gate="trended"`` restricts the evaluation to the
+  hours a trended occupancy point marks occupied (no assumed-schedule fallback: a unit without an
+  occupancy point is evaluated on every fan-on hour, and says so).
 
 Severity is screening-grade: ``fault`` when any evaluated FC was reported for at least
 ``fault_pct`` % of its applicable hours, ``warn`` at ``warn_pct`` %, over at least
@@ -42,12 +53,14 @@ from ..fdd_g36 import (
     AVG_WINDOW_MIN,
     FC_DESC,
     MODE_DELAY_MIN,
+    OA_DAMPER_TOL,
     OS_FREECOOL,
     G36Thresholds,
     _median_step,
     run_g36_afdd,
 )
 from ..model.roles import Role
+from ..schedules import effective_occupied_mask
 from ..units import normalize_percent
 from .applicability import RULE_EQUIP_CLASSES
 from .base import Finding
@@ -113,6 +126,12 @@ class G36AFDD:
         Role.COOLDOWN,
     )
 
+    #: ``occupancy_gate`` values (0.98, #94). ``"off"`` (default): every fan-on hour is evaluated,
+    #: as G36 suspends AFDD only while the AHU is not operating. ``"trended"``: only the hours a
+    #: trended occupancy point marks occupied; without one, every fan-on hour (no assumed-schedule
+    #: fallback -- G36 has no schedule to guess).
+    OCCUPANCY_GATES = ("off", "trended")
+
     def __init__(
         self,
         *,
@@ -124,6 +143,9 @@ class G36AFDD:
         avg_window_min: float = AVG_WINDOW_MIN,  # G36 rolling-average window
         econ_damper_open: float = 80.0,  # OA damper % at/above which cooling is OS#3
         valve_thr: float = 5.0,  # valve % above which a coil is active
+        oa_damper_min: float | None = None,  # OA damper minimum position %; None = learned
+        oa_damper_tol: float = OA_DAMPER_TOL,  # points above the minimum before OS#2
+        occupancy_gate: str = "off",  # "off" (G36: every operating hour) or "trended"
         warn_pct: float = WARN_PCT,  # screening-grade
         fault_pct: float = FAULT_PCT,  # screening-grade
         min_applicable_hours: float = MIN_APPLICABLE_HOURS,
@@ -136,6 +158,14 @@ class G36AFDD:
         self.avg_window_min = avg_window_min
         self.econ_damper_open = econ_damper_open
         self.valve_thr = valve_thr
+        if occupancy_gate not in self.OCCUPANCY_GATES:
+            raise ValueError(
+                f"g36_afdd: occupancy_gate must be one of {self.OCCUPANCY_GATES}, "
+                f"got {occupancy_gate!r}"
+            )
+        self.oa_damper_min = oa_damper_min
+        self.oa_damper_tol = oa_damper_tol
+        self.occupancy_gate = occupancy_gate
         self.warn_pct = warn_pct
         self.fault_pct = fault_pct
         self.min_applicable_hours = min_applicable_hours
@@ -235,10 +265,30 @@ class G36AFDD:
             )
         return df, thr, caveats, declined_fcs, None
 
+    def _occupancy(self, frame: pd.DataFrame):
+        """``(mask | None, label)``: the hours to evaluate under ``occupancy_gate``, and how."""
+        if self.occupancy_gate == "off":
+            return None, "off"
+        occ = _num(frame, Role.OCCUPANCY)
+        if occ is None:
+            return None, "none trended (fan-on hours only)"
+        return effective_occupied_mask(frame.index, occ=occ), "trended occupancy"
+
     def _run(self, frame: pd.DataFrame):
         df, thr, caveats, declined_fcs, reason = self._engine_frame(frame)
         if reason is not None:
             return None, caveats, declined_fcs, reason
+        occ, _label = self._occupancy(frame)
+        if occ is not None:
+            caveats.append(
+                "occupancy_gate='trended': only the hours the trended occupancy point marks "
+                "occupied are evaluated"
+            )
+        elif self.occupancy_gate == "trended":
+            caveats.append(
+                "occupancy_gate='trended' but no occupancy point is trended: every fan-on hour "
+                "is evaluated"
+            )
         res = run_g36_afdd(
             df,
             "",
@@ -249,6 +299,9 @@ class G36AFDD:
             alarm_delay_min=self.alarm_delay_min,
             avg_window_min=self.avg_window_min,
             keep_masks=True,
+            oa_damper_min=self.oa_damper_min,
+            oa_damper_tol=self.oa_damper_tol,
+            occupied=occ,
         )
         return res, caveats, declined_fcs, None
 
@@ -378,6 +431,12 @@ class G36AFDD:
                 "suspended_hours": round(float(res.n_suspended) * step_h, 2),
                 "os_hours": os_hours,
                 "free_cooling_hours": os_hours.get(f"OS{OS_FREECOOL}"),
+                # 0.98 (#94): what OS#2 was judged against, and the idle hours it excluded
+                "oa_damper_min": res.oa_damper_min,
+                "oa_damper_min_source": res.oa_damper_min_source,
+                "idle_at_min_oa_hours": round(float(res.n_idle_at_min_oa) * step_h, 2),
+                "occupancy_gate": self._occupancy(frame)[1],
+                "unoccupied_hours": round(float(res.n_unoccupied) * step_h, 2),
                 "attributed_to_fc14_hours": moved,
                 "mode_delay_min": res.delays["mode_delay_min"],
                 "alarm_delay_min": res.delays["alarm_delay_min"],

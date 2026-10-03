@@ -13,10 +13,12 @@ Real-data figures were recorded from::
         --out sat_ie.json
     camber run sat_ie.json --out sat_ie_out
 
-(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29.) The share of the
-fault-free unit's too-warm running hours that are unoccupied (78%) was read from the same
-store with ``ParquetStore.read_role_frame(..., resample="1h")`` and
-``camber.schedules.fan_on_mask``, the rule's own fan gate (see ``_warm_hours_unoccupied``).
+(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29; the ``supply_air_control``
+figures re-recorded with 0.98.0-dev on 2026-09-30, when the rule gained its trended-occupancy
+gate, #84.) The share of the fault-free unit's too-warm fan-on hours that are unoccupied (78%)
+was read from the same store with ``ParquetStore.read_role_frame(..., resample="1h")`` and
+``camber.schedules.fan_on_mask``, the rule's own fan gate (see ``_warm_hours_unoccupied``); the
+ungated 12% by re-running the config with ``occupancy_gate: "off"`` (``_ungated_warn``).
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from __future__ import annotations
 from _air_standins import ddahu, irish, sdahu
 from _workbook import REAL, Check, Exercise, Finding, Metric, Run, hourly_index, write_standin
 
+from camber.config import run_config
 from camber.model.roles import Role
 from camber.schedules import fan_on_mask
 from camber.store import ParquetStore
@@ -73,6 +76,33 @@ def _warm_hours_unoccupied(ctx) -> None:
     warm = on[(on[Role.SUPPLY_AIR_TEMP] - on[Role.SUPPLY_AIR_TEMP_SP]) > 2.0]
     share = 100.0 * float((warm[Role.OCCUPANCY] < 0.5).mean())
     assert 77.0 <= share <= 79.0, f"{share:.1f}% of the too-warm hours unoccupied (pinned 78%)"
+
+
+def _gate(ctx) -> None:
+    """``supply_air_control`` judged the fault-free unit on its trended occupancy (SYS_CTL)."""
+    f = ctx.finding("supply_air_control", "AHU__fault_free")
+    assert f is not None, "no supply_air_control finding on AHU__fault_free"
+    got = (f.metrics or {}).get("occupancy_gate")
+    assert got == "trended occupancy", f"occupancy_gate {got!r}, expected 'trended occupancy'"
+
+
+def _ungated_warn(ctx) -> None:
+    """With ``occupancy_gate: "off"`` (every fan-on hour, the pre-0.98 behaviour) the unoccupied
+    fan cycling pushes the fault-free unit back to a warn at 12% too warm."""
+    cfg = ctx.config()
+    cfg["rules"] = [
+        {"name": "supply_air_control", "params": {"occupancy_gate": "off"}}
+        if r == "supply_air_control"
+        else r
+        for r in cfg["rules"]
+    ]
+    res = run_config(cfg, base_dir=ctx.store)
+    f = next(
+        f for f in res.findings if f.rule == "supply_air_control" and f.equip == "AHU__fault_free"
+    )
+    warm = float(f.metrics["too_warm_pct"])
+    assert f.severity == "warn", f"ungated severity {f.severity!r}, expected 'warn'"
+    assert abs(warm - 12.1) <= 0.5, f"ungated too_warm_pct {warm} (pinned 12.1)"
 
 
 EXERCISE = Exercise(
@@ -129,24 +159,28 @@ EXERCISE = Exercise(
             "supply_air_control",
             "AHU__damper_stuck_075",
             "too_cold_pct",
-            32.6,
+            31.2,
             0.5,
             on=REAL,
-            quote="33%",
+            quote="31%",
         ),
-        Finding("supply_air_control", "AHU__fault_free", severity=("warn",), on=REAL),
+        # the fault-free unit's too-warm hours are mostly unoccupied fan cycling: the rule's
+        # trended-occupancy gate (0.98, #84) judges only the occupied ones -> ok
+        Finding("supply_air_control", "AHU__fault_free", severity=("ok",), on=REAL),
         Metric(
             "supply_air_control",
             "AHU__fault_free",
             "too_warm_pct",
-            12.1,
+            2.97,
             0.5,
             on=REAL,
-            quote="12%",
+            quote="3%",
         ),
+        Check("supply_air_control reads the trended occupancy", _gate, on=REAL),
         Check(
             "fault-free too-warm hours are unoccupied", _warm_hours_unoccupied, on=REAL, quote="78%"
         ),
+        Check("ungated, the fault-free unit warns", _ungated_warn, on=REAL, quote="12%"),
         # lbnl-ddahu: the cold deck pinned at 55 F
         Finding("supply_air_reset", "DDAHU__fault_free", severity=("warn",), run="ddahu"),
         Check("ddahu reads as flat", _direction("ddahu", "DDAHU__fault_free", "flat")),

@@ -168,9 +168,12 @@ def test_no_g36_advice_without_a_declared_g36_sequence(tmp_path, captured):
     html = rep.to_html()
     assert "Apply G36 reheat minimization" not in html
     assert "no ASHRAE Guideline 36 sequence is declared for this unit" in html
-    page = next(s for s in rep.sections if "Reheat minimization g36" in s["title"])
+    # 0.98 (#88): the heading names the finding's cause; the action keeps the rule's name
+    page = next(
+        s for s in rep.sections if "Reheat with airflow above the heating minimum" in s["title"]
+    )
     text = " ".join(b.get("text", "") for b in page["blocks"] if b["kind"] == "p")
-    assert "Recommended action: engineer to specify" in text
+    assert "Recommended action — Reheat minimization g36: engineer to specify" in text
     assert "Suggested:" not in text
 
 

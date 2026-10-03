@@ -185,13 +185,18 @@ def config_template(
     facility_id: str | None = None,
     out: str | None = None,
     exercise: str | None = None,
+    format: str = "json",
 ) -> dict:
     """A ready-to-run ``source.kind: "store"`` config for the dataset (written to ``out``).
 
     ``exercise`` (0.97) takes a workbook exercise's tuned template instead of the dataset's own
     (``camber datasets config <id> --exercise <exercise-id>``; see docs/workbook/index.md).
+    ``format`` (0.98, #90) is ``"json"`` or ``"yaml"`` for the file written to ``out``; YAML
+    turns the template's ``_comment`` notes into comments and needs no extra to write.
     """
-    return build_config(get(dataset_id), store, facility_id=facility_id, out=out, exercise=exercise)
+    return build_config(
+        get(dataset_id), store, facility_id=facility_id, out=out, exercise=exercise, format=format
+    )
 
 
 def score(

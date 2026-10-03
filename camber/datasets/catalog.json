@@ -2517,7 +2517,7 @@
    },
    "known_issues": [
     "Faults are imposed on the SOUTH zone box (_S columns); the other zones stay healthy (see the data issues).",
-    "The reheat valve maps to the demand column (RH_VLV_DM_S); VAV_DMPR_S has no demand twin and is the measured position.",
+    "The reheat valve demand (RH_VLV_DM_S) maps to heat_valve and its measured position (RH_VLV_S) to heat_valve_position (0.98): the drift and capacity rules read the demand, and reheat_penalty and overcooling_min_flow read the position, so a valve stuck shut is not reported as reheat. VAV_DMPR_S has no demand twin and is the measured position.",
     "The room setpoints RMCLGSPT_S / RMHTGSPT_S (72 / 68 F occupied, 85 / 55 F unoccupied) map to cool_sp / heat_sp, so unmet_setpoint_hours evaluates.",
     "SA_TEMP is the AHU supply air entering the box and maps to mixed_air_temp, the role CAMBER uses for a terminal's entering primary air. In a parallel box the reheat coil sees that primary air plus the plenum air the box fan adds when it runs, so SA_TEMP is a proxy for the coil's entering air, not a measurement of it.",
     "reheat_minimization_g36 is not run: VAV_PM_CFM_SP_S is the active airflow setpoint (the rule reads it as the design maximum and cannot fire on the fault-free run), and G36's dual-maximum reheat logic applies to single-duct VAV boxes, not fan-powered ones.",
@@ -2596,6 +2596,9 @@
      "cooling_tower_approach": [
       "tower_fouling",
       "control"
+     ],
+     "cooling_tower_fan_effort_drift": [
+      "tower_fouling"
      ]
     },
     "fault_types": {
@@ -2905,7 +2908,8 @@
    "suggested_analyses": {
     "rules": [
      "chiller_efficiency",
-     "cooling_tower_approach"
+     "cooling_tower_approach",
+     "cooling_tower_fan_effort_drift"
     ],
     "config_template": "lbnl-chiller.json",
     "exercise": "workbook/plant-chiller-efficiency.md"
@@ -2915,7 +2919,8 @@
     "The simulated chiller/tower design curves are not published: calibrate the chiller_efficiency / cooling_tower_approach design ceilings from the fault-free run.",
     "Water-side only: the refrigerant-side chiller drift detectors cannot run on it.",
     "The tower-fouling severities are heat-transfer multipliers: 065 is the most severe, 095 the mildest (x 0.95, which no rule sees).",
-    "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning. The sensor-bias runs are negatives for both, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports."
+    "Scored targets: chiller_efficiency sees every fault that raises chiller lift (tower fouling, chiller fouling, the condenser bypass valve and the tower PI mistuning); cooling_tower_approach sees tower fouling and the PI mistuning; cooling_tower_fan_effort_drift (0.98) sees tower fouling. The sensor-bias runs are negatives for all three, since the plant is healthy and only a sensor lies. A detection on a chiller-bias run is a false alarm, which is what `camber datasets score` reports.",
+    "A controlled tower holds its approach, so tower fouling shows in fan effort, not approach: since 0.98 (#86) the template's drift section scores cooling_tower_fan_effort_drift against the declared reference PLANT__fault_free (drift.families[].reference, fitted in memory on every run and never stored). It catches fouling 065 and 080 (+17.8 / +10.9 fan %-points at matched load and wet-bulb) and misses 095 (+3.3, under the 5-point floor), with no alarm on the other 20 runs; the +1 / +2 F tower-sensor-bias runs are reported as sensor offsets (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 21."
    ],
    "data_issues": [
     {
@@ -2990,6 +2995,31 @@
      },
      "handling": "annotate",
      "handling_note": "Ingested and scored as chiller_fouling, marked undocumented; the severity is read from the file name by analogy with the tower-fouling runs (heat-transfer coefficient x 0.65 / 0.95), which the inventory does not confirm."
+    },
+    {
+     "id": "condenser-bypass-runs-implausible",
+     "title": "The condenser-bypass runs are fixed, physically implausible bypasses, and the two 75% runs are one case",
+     "columns": [
+      "CDWL_SW_TEMP",
+      "CDWL_RW_TEMP",
+      "TWV_CTRL",
+      "CT_FLOW_1",
+      "CDWL_CW_FLOW"
+     ],
+     "runs": [
+      "bypass_leakage_025",
+      "bypass_leakage_050",
+      "bypass_leakage_075",
+      "bypass_stuck_050",
+      "bypass_stuck_075"
+     ],
+     "evidence": "Over the minutes a chiller runs, the condenser-loop supply temperature CDWL_SW_TEMP has a p90 of 118.8 / 133.8 / 140.2 F and a maximum of 141.9 / 155.6 / 162.4 F in the 025 / 050 / 075 leakage runs, and is above 100 F in 29.5% / 41.1% / 51.1% of those minutes (the stuck runs give the same p90 and maximum as the leakage run of the same severity); the fault-free run never exceeds 85.8 F. The share of condenser flow that bypasses the towers, 1 - (CT_FLOW_1 + CT_FLOW_2 + CT_FLOW_3) / CDWL_CW_FLOW, is fixed all year at 0.917 / 0.967 / 0.988 (the fault-free run modulates it, p10 0.005 to p90 0.969), and the share estimated from the mixing temperatures equals it to 0.001, so the 25 / 50 / 75 in the file names are not bypassed-flow fractions. The valve command TWV_CTRL reads 0.0 in every one of the 525,540 rows of both bypass_leakage_075 and bypass_stuck_075, and those two runs agree to within 0.0005 F on the condenser-loop temperatures and exactly on the condenser and tower flows.",
+     "contradicts": {
+      "document": "Chiller-plant inventory Tables 3-4 and Granderson et al. 2023 Table 7 (condenser-water three-way valve leakage at 25%, 50% and 75%, imposed by raising the valve's minimum position, and stuck at 50% and 75%, a fixed position: listed as separate, graded fault cases)",
+      "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as published and still scored: every bypass run raises chiller lift, so all five remain chiller_efficiency positives. Read the file-name severity as the imposed valve setting, not the leak size; treat bypass_leakage_075 and bypass_stuck_075 as one case counted twice; and read the 100-160 F condenser water as a simulation artefact (a real water-cooled chiller would trip on high head pressure well before it): the direction of each finding is meaningful, its size is not."
     }
    ]
   },
@@ -3022,7 +3052,11 @@
    },
    "equipment": "2 boilers, 2 hot-water pumps, 1 loop; boiler/pump 1 mapped",
    "labels": {
-    "targets": {},
+    "targets": {
+     "boiler_efficiency_drift": [
+      "boiler_fouling"
+     ]
+    },
     "fault_types": {
      "boiler_fouling": "boiler heat-exchanger fouling",
      "sensor_bias": "boiler / loop temperature or pressure sensor offset",
@@ -3107,7 +3141,7 @@
      {
       "op": "annotate",
       "action": "annotate",
-      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; rules needing boiler_status decline on this plant.",
+      "note": "BOI_STA_1/BOI_STA_2 are the boiler enable, not burner firing, so they are left unmapped; since 0.98 the boiler firing rules read firing from the gas input (gas_input_rate) instead.",
       "issue": "boiler-status-is-enable"
      }
     ],
@@ -3253,14 +3287,16 @@
    },
    "suggested_analyses": {
     "rules": [
-     "hw_pump_dp_reset"
+     "hw_pump_dp_reset",
+     "boiler_efficiency_drift"
     ],
     "config_template": "lbnl-boiler.json",
     "exercise": "workbook/plant-boiler.md"
    },
    "known_issues": [
     "The boiler status points are enables (see the data issues); boiler_status is not mapped.",
-    "BOI_GAS_CSUM_1 / _2 are the boilers' instantaneous gas input in kW (Table 2), not cumulative counters: 26% of consecutive steps fall and the value is 0 in 50.5% of rows. Since 0.92 (#13) BOI_GAS_CSUM_1 maps to gas_input_rate and the boiler drift family's boiler_efficiency_drift reads the gas-per-heat signature of boiler fouling (boiler 1's annual gas +57% / +26% / +5.5% at 065 / 080 / 095) against the fault-free run (see docs/VALIDATION.md). There is still no supply-temperature-vs-setpoint check (the plant exports no supply-temperature setpoint; Table 1 fixes it at 176 F), and hw_pump_dp_reset, the template's one rule, detects none of the 16 faults.",
+    "BOI_GAS_CSUM_1 / _2 are the boilers' instantaneous gas input in kW (Table 2), not cumulative counters: 26% of consecutive steps fall and the value is 0 in 50.5% of rows. Since 0.92 (#13) BOI_GAS_CSUM_1 maps to gas_input_rate and the boiler drift family's boiler_efficiency_drift reads the gas-per-heat signature of boiler fouling (boiler 1's annual gas +57% / +26% / +5.5% at 065 / 080 / 095) against the fault-free run (see docs/VALIDATION.md). There is still no supply-temperature-vs-setpoint check (the plant exports no supply-temperature setpoint; Table 1 fixes it at 176 F), and hw_pump_dp_reset detects none of the 16 faults.",
+    "Since 0.98 (#86) the template's drift section scores boiler_efficiency_drift against the declared reference PLANT__fault_free (drift.families[].reference, fitted in memory on every run and never stored), and it is the entry's scored target for the three boiler-fouling runs: 3/3 caught (gas per unit heat +54 / +25 / +5.1 %; 095 clears the 5 % warn floor by only 0.1 point), none of the other 13 runs fire, and the +2 / +4 F hot-water temperature-bias runs are reported as heat-metering problems (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 14.",
     "PM_POW_1 / PM_POW_2 are the literal string 'NAN' in the eight runs the inventory's Table 4 marks with an asterisk."
    ],
    "data_issues": [
@@ -3277,7 +3313,7 @@
       "citation": "LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w"
      },
      "handling": "annotate",
-     "handling_note": "Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing, so rules needing boiler_status decline on this plant."
+     "handling_note": "Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing. Since 0.98 the rules that need a run status (boiler_summer_lockout, boiler_short_cycle, hw_plant_deltat) read firing from boiler 1's gas input (gas_input_rate) instead, and say so in a caveat."
     },
     {
      "id": "dp-setpoint-described-as-temperature",
@@ -10582,7 +10618,7 @@
    "equipment": "1 rooftop unit (DX cooling, gas heat, economizer) as AHU RTU, and its 10 VAV boxes (electric reheat) as VAV RTU_VAV_<room>; per run, the box under test is scored and the other nine are unscored context",
    "labels": {
     "targets": {
-     "unmet_setpoint_hours": "terminal_damper"
+     "actuator_stuck": "terminal_damper"
     },
     "fault_types": {
      "terminal_damper": "VAV box damper stuck at a fixed position (0-100%)",
@@ -11176,6 +11212,7 @@
    },
    "suggested_analyses": {
     "rules": [
+     "actuator_stuck",
      "unmet_setpoint_hours",
      "overcooling_severity",
      "control_hunting",
@@ -11192,7 +11229,10 @@
     "Each scenario is one day (07:00-22:00 occupied every day, weekends included), so rules with multi-day evidence thresholds see little data per scenario.",
     "Only the box under test was actively controlled; the article advises treating the other rooms' data as supplementary.",
     "The minimum airflow was set to 10.5 m3/min but measures 8.5 m3/min in the damper tests (documented in Table 3); the airflow tests recalibrated it to 10.5.",
-    "Reheat is electric and logged as energy per minute, not a valve or command: reheat rules decline."
+    "Reheat is electric and logged as energy per minute, not a valve or command: reheat rules decline.",
+    "airflow_sensor_bias has no declared detector: no airflow setpoint is logged, so airflow_tracking cannot run, and the runs move the delivered flow rather than its reading (see the airflow-bias-emulated-by-setpoint issue). The eight bias days are scored as negatives for actuator_stuck.",
+    "On the five duct-static-collapse days (see that issue) the air handler starves every box. A rule that points upstream there, or flags a healthy neighbour held fully open while its zone sits below setpoint (actuator_stuck on box 205 in set 1 at 80 %), is a legitimate detection of the unlabelled condition, not a false alarm on the box under test.",
+    "Only the box under test is labelled and scored. Fleet findings (the rogue-zone and cohort-starvation censuses) and findings on the nine neighbouring boxes are context, never scored."
    ],
    "data_issues": [
     {
@@ -17173,7 +17213,7 @@
       "citation": "Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y"
      },
      "handling": "annotate",
-     "handling_note": "Left as published; coil and mixing rules must judge fan-on samples only (leaking_valve is declined in the template because it does not gate on the fan)."
+     "handling_note": "Left as published; coil and mixing rules must judge fan-on samples only. leaking_valve has done so since 0.93 (#42) when a fan status or speed is mapped, as it is here; the template still leaves it out, because it has not been re-checked on these baselines since."
     }
    ]
   },

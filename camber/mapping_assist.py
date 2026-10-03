@@ -45,6 +45,7 @@ _TEMP_ROLES = frozenset(r for r in Role if r.value.endswith("_temp") or r in (Ro
 _PERCENT_ROLES = frozenset(
     {
         Role.HEAT_VALVE,
+        Role.HEAT_VALVE_POSITION,  # 0.98 (#85)
         Role.COOL_VALVE,
         Role.OA_DAMPER,
         Role.DAMPER,

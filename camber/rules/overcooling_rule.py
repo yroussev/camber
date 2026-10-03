@@ -4,6 +4,12 @@ Flags terminal boxes that overcool because they cannot throttle below their
 minimum airflow when already satisfied on cooling -- the root cause behind the
 reheat penalty. Adapts :func:`camber.overcooling.analyze_overcooling` to the
 role-frame interface.
+
+0.98 (#85): the "with reheat" overlap asks whether heat was actually delivered, so it reads the
+reheat valve's measured position (``HEAT_VALVE_POSITION``) when it is mapped beside the demand
+(``HEAT_VALVE``); ``valve_signal`` records which. A valve stuck shut then adds no reheat overlap,
+and the finding carries the same demand-vs-position caveat as ``reheat_penalty`` (demand >= 90 %
+while the position is <= 5 % on >= 25 % of the occupied full-demand samples).
 """
 
 from __future__ import annotations
@@ -12,7 +18,9 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..overcooling import analyze_overcooling
+from ..schedules import effective_occupied_mask
 from .base import Finding
+from .reheat_rule import _divergence_caveat, _reheat_valve_role, _valve_divergence, _with_valve
 
 _ROLE_TO_COL = {
     Role.SPACE_TEMP: "SpaceTemp",
@@ -38,6 +46,7 @@ class OvercoolingMinFlow:
         Role.AIRFLOW_SP,
         Role.DAMPER,
         Role.HEAT_VALVE,
+        Role.HEAT_VALVE_POSITION,  # 0.98 (#85): read in place of the demand when mapped
         Role.WARMUP,
         Role.COOLDOWN,
         Role.OCCUPANCY,
@@ -58,7 +67,9 @@ class OvercoolingMinFlow:
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
-        legacy = frame.rename(columns=cols)
+        # 0.98 (#85): the reheat overlap reads the measured position when it is mapped
+        valve_role, valve_signal = _reheat_valve_role(frame)
+        legacy = _with_valve(frame, cols, valve_role)
         res = analyze_overcooling(
             legacy,
             equip,
@@ -114,6 +125,9 @@ class OvercoolingMinFlow:
             caveats.append("damper unavailable: at-min inferred from flow only (unconfirmed)")
             if severity == "fault":
                 severity = "warn"
+        div = self._divergence(frame)
+        if div["diverges"]:
+            caveats.append(_divergence_caveat(div["valve_divergence_share"]))
         return Finding(
             rule=self.name,
             equip=equip,
@@ -124,6 +138,8 @@ class OvercoolingMinFlow:
                 "overcool_with_reheat_pct": res.overcool_with_reheat_pct,
                 "median_minflow_fraction": res.median_minflow_fraction,
                 "n_considered": res.n_considered,
+                "valve_signal": valve_signal,
+                "valve_divergence_share": div["valve_divergence_share"],
             },
             summary=(
                 f"{equip}: overcools at min flow {res.overcool_at_minflow_pct:.0f}% "
@@ -132,6 +148,20 @@ class OvercoolingMinFlow:
             ),
             caveats=caveats,
         )
+
+    def _divergence(self, frame: pd.DataFrame) -> dict:
+        """Demand vs position over the rule's occupied samples (see reheat_rule)."""
+        occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+        keep = effective_occupied_mask(
+            frame.index,
+            occ=occ,
+            start_hour=self.start_hour,
+            end_hour=self.end_hour,
+            days=self.occupied_days,
+            warmup=frame[Role.WARMUP] if Role.WARMUP in frame.columns else None,
+            cooldown=frame[Role.COOLDOWN] if Role.COOLDOWN in frame.columns else None,
+        )
+        return _valve_divergence(frame, pd.Series(keep, index=frame.index))
 
     def evidence(self, equip: str, frame: pd.DataFrame):
         """Pattern J: space temp vs cooling setpoint, spans where space runs below setpoint

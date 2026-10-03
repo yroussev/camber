@@ -8,7 +8,9 @@ Real-data figures were recorded from::
     camber run boil.json --out boil_out
     camber datasets score lbnl-boiler --store lab_store --findings boil_out/findings.json
 
-(CAMBER 0.97.0-dev, lbnl-boiler full subset, all 17 runs, 2026-09-29.)
+(CAMBER 0.97.0-dev, lbnl-boiler full subset, all 17 runs, 2026-09-29; the boiler firing-rule
+figures re-recorded and the boiler efficiency drift figures recorded with CAMBER 0.98.0-dev,
+2026-09-30.)
 """
 
 from __future__ import annotations
@@ -22,8 +24,11 @@ _RUNS = (
     "hot_water_pressure_bias_20",
     "hot_water_pressure_bias_m20",
 )
-#: the rules of the exercise config that need a boiler run status this plant does not have
+# 0.98 (#86 item 4a, 098-plant-boiler) begin
+#: the rules of the exercise config that need to know when the boiler fired: this plant has no
+#: boiler run status, so since 0.98 they read firing from boiler 1's gas input instead
 _NEED_STATUS = ("boiler_summer_lockout", "boiler_short_cycle", "hw_plant_deltat")
+# 0.98 (#86 item 4a, 098-plant-boiler) end
 
 
 def standin(store) -> None:
@@ -32,11 +37,23 @@ def standin(store) -> None:
     boiler_standin(store, _RUNS)
 
 
-def _status_rules_silent(ctx) -> None:
-    """Without a boiler run status the lockout, short-cycle and plant delta-T rules produce no
-    finding at all, on any run."""
-    for f in ctx.findings():
-        assert f.rule not in _NEED_STATUS, f"{f.rule} ran on {f.equip}: {f.severity}"
+# 0.98 (#86 item 4a, 098-plant-boiler) begin
+def _status_rules_from_gas(ctx) -> None:
+    """With no boiler run status the lockout, short-cycle and plant delta-T rules read firing
+    from the gas input: each gives one finding per run, every one ok, with ``run_source`` gas
+    and the caveat that says so."""
+    equips = {f.equip for f in ctx.findings() if f.rule == "hw_pump_dp_reset"}
+    assert equips, "no hw_pump_dp_reset findings"
+    for rule in _NEED_STATUS:
+        got = {f.equip: f for f in ctx.findings() if f.rule == rule}
+        assert set(got) == equips, f"{rule} missing on {sorted(equips - set(got))}"
+        for equip, f in got.items():
+            assert f.severity == "ok", f"{rule} on {equip}: {f.severity}"
+            assert f.metrics.get("run_source") == "gas", f"{rule} on {equip}: {f.metrics}"
+            assert any("gas input" in c for c in f.caveats), f"{rule} on {equip}: {f.caveats}"
+
+
+# 0.98 (#86 item 4a, 098-plant-boiler) end
 
 
 def _pump_never_stops_no_reset(ctx) -> None:
@@ -51,8 +68,15 @@ def _pump_never_stops_no_reset(ctx) -> None:
 
 
 def _fouling_invisible(ctx) -> None:
-    """Nothing in this config fires on the worst boiler fouling."""
-    fired = [f for f in ctx.findings() if f.equip == "PLANT__boiler_foul_065"]
+    """No point-in-time rule in this config fires on the worst boiler fouling (only the boiler
+    drift family's boiler_efficiency_drift, scored against the declared reference, does)."""
+    # 0.98 (#86 items 1 and 5, 098-plant-reference) begin
+    fired = [
+        f
+        for f in ctx.findings()
+        if f.equip == "PLANT__boiler_foul_065" and f.rule != "boiler_efficiency_drift"
+    ]
+    # 0.98 (#86 items 1 and 5, 098-plant-reference) end
     fired = [f"{f.rule}={f.severity}" for f in fired if f.severity in ("warn", "fault")]
     assert not fired, f"fired on PLANT__boiler_foul_065: {fired}"
 
@@ -72,6 +96,32 @@ def _dp_bias_moves_the_pump(ctx) -> None:
     assert lo < mid < hi, f"median pump speeds +20 %: {lo}, fault-free: {mid}, -20 %: {hi}"
 
 
+# 0.98 (#86 items 1 and 5, 098-plant-reference) begin
+def _reference_declines(ctx) -> None:
+    """The declared reference, PLANT__fault_free, declines (``is_reference``); every other run's
+    boiler_efficiency_drift finding is scored against it."""
+    f = ctx.finding("boiler_efficiency_drift", "PLANT__fault_free")
+    assert f is not None, "no boiler_efficiency_drift finding on PLANT__fault_free"
+    assert f.severity == "info", f"the reference is {f.severity}, not an info decline"
+    assert f.metrics.get("reason") == "is_reference", f"decline reason {f.metrics.get('reason')!r}"
+    for g in ctx.findings():
+        if g.rule == "boiler_efficiency_drift" and g.equip != "PLANT__fault_free":
+            src = g.metrics.get("baseline_source")
+            assert src == "reference:PLANT__fault_free", f"{g.equip}: baseline_source {src!r}"
+
+
+def _temp_bias_is_metering(ctx) -> None:
+    """The +2 / +4 F hot-water temperature biases raise the gas-per-heat ratio too, but the gas
+    at matched outdoor temperature did not rise: a heat-metering problem (info), not fouling."""
+    for run in ("hot_water_temp_bias_2", "hot_water_temp_bias_4"):
+        f = ctx.finding("boiler_efficiency_drift", f"PLANT__{run}")
+        assert f is not None, f"no boiler_efficiency_drift finding on PLANT__{run}"
+        assert f.severity == "info", f"PLANT__{run}: {f.severity}"
+        assert f.metrics.get("attribution") == "heat_metering", f"PLANT__{run}: {f.metrics}"
+
+
+# 0.98 (#86 items 1 and 5, 098-plant-reference) end
+
 EXERCISE = Exercise(
     id="plant-boiler",
     title="Boiler plant: what an enable point hides, pumping and a fouling gap",
@@ -88,9 +138,66 @@ EXERCISE = Exercise(
         "camber datasets score lbnl-boiler --store lab_store --findings boil_out/findings.json",
     ),
     expect=(
-        # 1. the three rules that need a firing status stay silent
-        Check("no lockout, short-cycle or delta-T finding", _status_rules_silent),
-        Finding("boiler_summer_lockout", "PLANT__fault_free", severity=("absent",)),
+        # 0.98 (#86 item 4a, 098-plant-boiler) begin
+        # 1-2. the three rules that need a firing status read it from the gas input: all ok
+        Check("lockout, short-cycle and delta-T read firing from the gas", _status_rules_from_gas),
+        Finding("boiler_summer_lockout", "PLANT__fault_free", severity=("ok",)),
+        Finding("boiler_short_cycle", "PLANT__fault_free", severity=("ok",)),
+        Finding("hw_plant_deltat", "PLANT__fault_free", severity=("ok",)),
+        Metric(
+            "boiler_summer_lockout",
+            "PLANT__fault_free",
+            "summer_run_pct",
+            0.0,
+            0.0,
+            quote="0% of its firing hours",
+        ),
+        Metric(
+            "boiler_summer_lockout",
+            "PLANT__boiler_PI",
+            "summer_run_pct",
+            0.35,
+            0.05,
+            on=REAL,
+            quote="0.35%",
+        ),
+        Metric(
+            "boiler_short_cycle",
+            "PLANT__fault_free",
+            "starts_per_day",
+            0.92,
+            0.01,
+            on=REAL,
+            quote="0.92 starts a day",
+        ),
+        Metric(
+            "boiler_short_cycle",
+            "PLANT__fault_free",
+            "runtime_pct",
+            37.8,
+            0.05,
+            on=REAL,
+            quote="37.8%",
+        ),
+        Metric(
+            "hw_plant_deltat",
+            "PLANT__fault_free",
+            "deltaT_median_f",
+            36.0,
+            0.05,
+            on=REAL,
+            quote="36.0 °F",
+        ),
+        Metric(
+            "hw_plant_deltat",
+            "PLANT__boiler_foul_065",
+            "low_deltaT_pct",
+            12.2,
+            0.05,
+            on=REAL,
+            quote="12.2%",
+        ),
+        # 0.98 (#86 item 4a, 098-plant-boiler) end
         # 2-3. the pump: ok, yet it never stops and its DP setpoint is never reset
         Finding("hw_pump_dp_reset", "PLANT__fault_free", severity=("ok",)),
         Check("the pump runs every hour against a flat DP setpoint", _pump_never_stops_no_reset),
@@ -113,8 +220,45 @@ EXERCISE = Exercise(
             quote="8,759",
         ),
         # 4. boiler fouling is invisible to these rules
-        Check("nothing fires on the worst boiler fouling", _fouling_invisible),
-        Score(None, tpr=0.0, on=BOTH, quote="TPR 0%"),
+        Check("no point-in-time rule fires on the worst boiler fouling", _fouling_invisible),
+        # 0.98 (#86 items 1 and 5, 098-plant-reference) begin
+        # ... but the boiler drift family, scored against the declared reference, does
+        Check("the declared reference declines and scores the others", _reference_declines),
+        Finding("boiler_efficiency_drift", "PLANT__boiler_foul_065", severity=("fault",)),
+        Finding("boiler_efficiency_drift", "PLANT__hot_water_pressure_bias_20", severity=("ok",)),
+        Metric(
+            "boiler_efficiency_drift",
+            "PLANT__boiler_foul_065",
+            "ratio_drift_rel",
+            0.537,
+            0.001,
+            on=REAL,
+            quote="+53.7%",
+        ),
+        Metric(
+            "boiler_efficiency_drift",
+            "PLANT__boiler_foul_080",
+            "ratio_drift_rel",
+            0.249,
+            0.001,
+            on=REAL,
+            quote="+24.9%",
+        ),
+        Finding("boiler_efficiency_drift", "PLANT__boiler_foul_095", severity=("warn",), on=REAL),
+        Metric(
+            "boiler_efficiency_drift",
+            "PLANT__boiler_foul_095",
+            "ratio_drift_rel",
+            0.051,
+            0.001,
+            on=REAL,
+            quote="+5.1%",
+        ),
+        Check(
+            "a hot-water temperature bias is a metering problem", _temp_bias_is_metering, on=REAL
+        ),
+        Score("boiler_efficiency_drift", tpr=1.0, fpr=0.0, on=BOTH, quote="TPR 100%"),
+        # 0.98 (#86 items 1 and 5, 098-plant-reference) end
         # 5. the loop DP sensor biases show in the pump speed, not in the DP reading
         Check("a DP sensor bias moves the pump speed", _dp_bias_moves_the_pump),
         Finding("hw_pump_dp_reset", "PLANT__hot_water_pressure_bias_20", severity=("ok",)),

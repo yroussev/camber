@@ -70,7 +70,26 @@ def _gate_caveats(source: str) -> list:
 
 class CHWPlantReset:
     """Detects no CHWST reset and/or low loop delta-T at the chilled-water plant
-    (PNNL Re-tuning Ch.8)."""
+    (PNNL Re-tuning Ch.8).
+
+    0.98 (#86) parameters:
+
+    - ``design_deltaT_min_f`` (8 F): the loop delta-T below which an hour counts as low;
+    - ``expected_reset_sign`` (``"negative"``): the direction a healthy reset moves CHWST as the
+      outdoor temperature rises. An outdoor-air reset lowers CHWST in hot weather, so its slope on
+      OAT is negative. A clear slope the other way is not a reset: ``chwst_reset_present`` is
+      False, ``chwst_reset_direction`` is ``"reverse"``, and the finding warns. It is usually a
+      plant that cannot hold its supply temperature in hot weather, or a reversed schedule.
+      ``"positive"`` expects the opposite; ``"any"`` accepts either direction (the pre-0.98
+      behaviour);
+    - ``flow_mode`` (``"auto"``) and ``constant_flow_cv`` (0.05): a constant-primary-flow plant
+      moves the same water at every load, so its loop delta-T is low at part load by design.
+      ``"auto"`` reads the mapped CHW flow (``chw_flow``) over the judged hours: when at least
+      24 hours have a reading and the flow's coefficient of variation is at most
+      ``constant_flow_cv``, the plant is taken as constant flow. For a constant-flow plant the
+      delta-T is reported but left out of severity, with a caveat. ``"constant"`` and
+      ``"variable"`` declare the plant's flow mode instead.
+    """
 
     name = "chw_plant_reset"
     roles_required = (Role.CHW_SUPPLY_TEMP,)
@@ -80,11 +99,62 @@ class CHWPlantReset:
         Role.OAT,
         RUN_STATUS_ROLE,
         Role.POWER,  # 0.92 (#66): the run gate's fallback when no status is mapped
+        Role.CHW_FLOW,  # 0.98 (#86): recognises a constant-primary-flow plant
     )
+
+    #: judged hours with a flow reading that ``flow_mode="auto"`` needs before deciding
+    MIN_FLOW_SAMPLES = 24
+
+    def __init__(
+        self,
+        *,
+        design_deltaT_min_f: float = 8.0,
+        expected_reset_sign: str = "negative",
+        flow_mode: str = "auto",
+        constant_flow_cv: float = 0.05,
+    ):
+        if expected_reset_sign not in ("negative", "positive", "any"):
+            raise ValueError(
+                f"expected_reset_sign must be 'negative', 'positive' or 'any', "
+                f"not {expected_reset_sign!r}"
+            )
+        if flow_mode not in ("auto", "constant", "variable"):
+            raise ValueError(
+                f"flow_mode must be 'auto', 'constant' or 'variable', not {flow_mode!r}"
+            )
+        self.design_deltaT_min_f = float(design_deltaT_min_f)
+        self.expected_reset_sign = expected_reset_sign
+        self.flow_mode = flow_mode
+        self.constant_flow_cv = float(constant_flow_cv)
+
+    def _direction(self, slope, present):
+        """``(reset present, direction)`` after the sign check.
+
+        Direction is ``"expected"``, ``"reverse"``, ``"flat"``, or ``None`` when the reset was
+        not evaluated.
+        """
+        if present is None or slope is None:
+            return None, None
+        if not present:
+            return False, "flat"
+        sign = self.expected_reset_sign
+        if sign == "any" or (sign == "negative") == (slope < 0):
+            return True, "expected"
+        return False, "reverse"
+
+    def _flow_mode(self, res):
+        """The plant's flow mode: ``"constant"``, ``"variable"`` or ``"unknown"``."""
+        if self.flow_mode != "auto":
+            return self.flow_mode
+        if res.flow_cv is None or res.n_flow < self.MIN_FLOW_SAMPLES:
+            return "unknown"
+        return "constant" if res.flow_cv <= self.constant_flow_cv else "variable"
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
+        if Role.CHW_FLOW in frame.columns:
+            cols[Role.CHW_FLOW] = "CHW_Flow"
         legacy = frame.rename(columns=cols)
         run, source = _run_mask(frame)
         if run is not None and not run.any():
@@ -95,7 +165,9 @@ class CHWPlantReset:
                 metrics={"n_running": 0, "run_source": source},
                 summary=f"{equip}: did not run in the window (run {source} never on); not judged",
             )
-        res = analyze_chw_plant(legacy, equip, running=run)
+        res = analyze_chw_plant(
+            legacy, equip, running=run, design_deltaT_min_f=self.design_deltaT_min_f
+        )
         if res is None:
             return Finding(
                 rule=self.name,
@@ -110,13 +182,33 @@ class CHWPlantReset:
         # (must not count toward the fault). Reset sub-check: None means OAT was absent/thin
         # -> not evaluated (must not read as a confident "no reset").
         dt_evaluated = res.low_deltaT_pct == res.low_deltaT_pct  # False when NaN
-        low_dt = res.low_deltaT_pct if dt_evaluated else 0.0
         if not dt_evaluated:
             caveats.append("loop deltaT not evaluated: no CHW return temp")
-        reset = res.chwst_reset_present  # True / False / None
+        flow_mode = self._flow_mode(res)
+        constant = flow_mode == "constant"
+        dt_judged = dt_evaluated and not constant
+        low_dt = res.low_deltaT_pct if dt_judged else 0.0
+        if constant and dt_evaluated:
+            how = (
+                f"CHW flow varies by {100.0 * res.flow_cv:.2f}% over the running hours"
+                if self.flow_mode == "auto" and res.flow_cv is not None
+                else "declared constant flow (flow_mode)"
+            )
+            caveats.append(
+                f"constant primary flow ({how}): a low loop deltaT at part load is expected by "
+                "design, so it is reported but not judged"
+            )
+        reset, direction = self._direction(res.chwst_slope_per_F, res.chwst_reset_present)
         if reset is None:
             caveats.append("CHWST reset not evaluated: no/insufficient OAT")
-        # Severity: only a genuinely-evaluated flat reset (is False) downgrades; None does not.
+        if direction == "reverse":
+            caveats.append(
+                f"CHWST moves the wrong way with OAT (slope {res.chwst_slope_per_F:+.2f} F/F; "
+                f"expected {self.expected_reset_sign}): not counted as a reset -- a plant that "
+                "cannot hold its supply temperature in hot weather, or a reversed reset schedule"
+            )
+        # Severity: only a genuinely-evaluated flat or reversed reset (is False) downgrades;
+        # None does not.
         if low_dt >= 50.0:
             severity = "fault"
         elif low_dt >= 20.0 or reset is False:
@@ -126,13 +218,16 @@ class CHWPlantReset:
         reset_note = (
             "CHWST reset present"
             if reset is True
+            else "CHWST rises with OAT (reverse of a reset)"
+            if direction == "reverse"
             else "flat CHWST (no reset)"
             if reset is False
             else "CHWST reset not evaluated (no OAT)"
         )
         dt_note = (
             f"loop deltaT median {res.deltaT_median_f:.1f}F "
-            f"({res.low_deltaT_pct:.0f}% of running hours < {res.design_deltaT_min_f:.0f}F)"
+            f"({res.low_deltaT_pct:.0f}% of running hours < {res.design_deltaT_min_f:g}F"
+            + (", constant flow: not judged)" if constant else ")")
             if dt_evaluated
             else "loop deltaT not evaluated (no return temp)"
         )
@@ -143,10 +238,14 @@ class CHWPlantReset:
             metrics={
                 "chwst_median_f": res.chwst_median_f,
                 "chwst_slope_per_F": res.chwst_slope_per_F,
-                "chwst_reset_present": res.chwst_reset_present,
+                "chwst_reset_present": reset,
+                "chwst_reset_direction": direction,
                 "pct_chwst_low": res.pct_chwst_low,
                 "deltaT_median_f": res.deltaT_median_f,
                 "low_deltaT_pct": res.low_deltaT_pct,
+                "design_deltaT_min_f": res.design_deltaT_min_f,
+                "flow_mode": flow_mode,
+                "flow_cv": res.flow_cv,
                 "n_running": res.n_running,
                 "run_source": source if run is not None else res.run_source,
             },
@@ -158,13 +257,16 @@ class CHWPlantReset:
 class CHWSupplyTracking:
     """Flags chilled-water supply temperature held above its setpoint while the plant runs.
 
-    Judged on running samples only: the chiller's status / command (``compressor_status``) when
-    mapped, the first interval after each start left out as pull-down. Reports the share of
-    running time with CHWST more than ``above_f`` above the trended setpoint, and the loop deltaT
-    (overall and during those hours: a wide deltaT while short of setpoint points at load beyond
-    capacity, a narrow one at flow or control). ``warn`` at ``warn_pct``, ``fault`` at
-    ``fault_pct`` of running time. Without a run status the plant is taken as running when CHWST
-    sits in 38-58F; the rule then caveats that and never goes beyond ``warn``.
+    Judged on running samples only, the first ``settle_intervals`` after each start left out as
+    pull-down. Running comes from the chiller's status / command (``compressor_status``) when
+    mapped; else (0.92, #66) from its ``power`` above a tenth of its own 95th-percentile draw,
+    with a caveat; else the plant is taken as running when CHWST sits in 38-58F, which is
+    caveated and never goes beyond ``warn``. A chiller that never ran in the window, or with fewer
+    than ``min_running`` judged samples, is ``info`` and not judged. Reports the share of running
+    time with CHWST more than ``above_f`` above the trended setpoint, and the loop deltaT (overall
+    and during those hours: a wide deltaT while short of setpoint points at load beyond capacity,
+    a narrow one at flow or control). ``warn`` at ``warn_pct``, ``fault`` at ``fault_pct`` of
+    running time.
 
     ``above_f`` defaults to 3F: outside a healthy loop's ~1F control band plus ~0.5F sensor
     accuracy and hourly staging transients (see :func:`camber.chwplant.analyze_chw_tracking`).

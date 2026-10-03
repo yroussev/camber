@@ -94,7 +94,7 @@ TARGETS = {OutdoorAirFraction().name: "damper", LeakingValve().name: "valve_leak
 # *design minimum* OA, a per-equipment sequence parameter, not a fudge factor -- come from the
 # dataset's run template (camber/datasets/configs/), where each is documented against the
 # publisher's sequence and measured on the fault-free run. `use_leak` adds the coil-leak detector
-# where a labeled leak scenario exists.
+# where a labeled leak scenario exists, with the template's leaking_valve params (0.98).
 FAMILIES = [
     {
         "label": "SDAHU (single-duct AHU)",
@@ -163,7 +163,10 @@ def family_detectors(fam):
     """The family's detectors, parameterized from the dataset's run template."""
     detectors = [OutdoorAirFraction(**template_params(fam["dataset"], OutdoorAirFraction.name))]
     if fam["use_leak"]:
-        detectors.append(LeakingValve())
+        # 0.98 (#84, S1): the leak detector also reads the template, whose lbnl-sdahu entry sets
+        # a fan heat measured on the fault-free run -- a run scored below as a negative, so that
+        # run's verdict is in-sample (the template comment and docs/VALIDATION.md say so)
+        detectors.append(LeakingValve(**template_params(fam["dataset"], LeakingValve.name)))
     return detectors
 
 

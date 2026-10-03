@@ -21,7 +21,7 @@ Each exercise's section has the same parts: **Answer key**, **Discussion points*
 ### `air-sat-reset`: Supply-air temperature reset
 
 Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](air-sat-reset.md#setup).
+0.98.0-dev, with the commands on the [exercise page](air-sat-reset.md#setup).
 
 **Answer key**
 
@@ -46,13 +46,15 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
    asking for the setpoint. A negative slope can also be a fixed setpoint that the coil only just
    holds in hot weather.
 4. *Which run fails to hold its setpoint?* `AHU__damper_stuck_075`: `supply_air_control` is a
-   **fault**, too cold in 33% of its running hours. With the damper stuck at 75 % the unit takes
+   **fault**, too cold in 31% of its occupied running hours. With the damper stuck at 75 % the unit takes
    in cold outdoor air it cannot shut out, and it has no heating coil to warm it back up.
-5. *The fault-free unit's too-warm hours?* `supply_air_control` is a **warn** on
-   `AHU__fault_free`: 12% of its running hours are more than 2 °F above the setpoint. 78% of
-   those hours are unoccupied: the fan cycling in the simulation's unoccupied mode, with the
-   damper shut and warm return air. That is not an occupied-control fault; the rule does not
-   separate unoccupied cycling from occupied control.
+5. *The fault-free unit's too-warm hours?* `supply_air_control` is **ok** on `AHU__fault_free`:
+   3% of its occupied running hours are more than 2 °F above the setpoint
+   (`occupancy_gate: trended occupancy`). Counting every fan-on hour instead, 78% of the
+   too-warm hours are unoccupied: the fan cycling in the simulation's unoccupied mode, with the
+   damper shut and warm return air. That is not an occupied-control fault, which is why the rule
+   judges only occupied hours when the unit trends occupancy. With `occupancy_gate: "off"` the
+   same unit reads a **warn** at 12%, the verdict CAMBER gave before 0.98.
 
 **Discussion points**
 
@@ -82,7 +84,7 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 ### `air-static-pressure`: Static pressure reset and the damper census
 
-Figures from the real `lbnl-sdahu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev, with
+Figures from the real `lbnl-sdahu` and `ornl-frp-vav` default subsets, CAMBER 0.98.0-dev, with
 the commands on the [exercise page](air-static-pressure.md#setup).
 
 **Answer key**
@@ -96,7 +98,8 @@ the commands on the [exercise page](air-static-pressure.md#setup).
    setpoint. Only the fault-free run, and the fault-free part of the spliced onset run, carry the
    real setpoint.
 3. *What does the census say?* `damper_census` is a **fault**: on the fault-free day all 10 boxes
-   have a median damper opening below 50 % (a fleet median of 39%), none is near fully open:
+   have a median damper opening below 50 % (a fleet median of 39%) over the hours the boxes'
+   own trended occupancy marks occupied, none is near fully open:
    "static likely too high". The proposal is a trim-and-respond static reset: lower the setpoint
    while no box asks for more air, raise it when one does, so that the most-open box ends up
    nearly fully open.
@@ -121,8 +124,10 @@ the commands on the [exercise page](air-static-pressure.md#setup).
 
 - Reading "no finding" on the faulted runs as "no problem". The rule had nothing to judge.
 - Pooling boxes from different test days or different air handlers into one census.
-- Running the census on a weekend test day and reading "no damper data" as an empty building:
-  the rule's occupied hours follow CAMBER's assumed weekday schedule.
+- Assuming the census judges an office schedule. Since 0.98 each box's occupied hours come from
+  its own trended occupancy point, so a weekend test day gets a census too (the tests ran
+  07:00-22:00 every day); only a box with no occupancy trended falls back to CAMBER's assumed
+  weekday 07:00-18:00 schedule, and the finding's `occupancy_gate` says which applied.
 
 [pnnl-guide-static-pressure]: https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_84187.pdf "Building Re-Tuning Training Guide: AHU Static Pressure Control (PNNL-SA-84187)"
 
@@ -133,19 +138,27 @@ the commands on the [exercise page](air-static-pressure.md#setup).
 ### `air-heat-cool`: Simultaneous heating and cooling, and a leaking valve
 
 Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](air-heat-cool.md#setup).
+0.97.0-dev (the leak figures 0.98.0-dev), with the commands on the
+[exercise page](air-heat-cool.md#setup).
 
 **Answer key**
 
-1. *Does CAMBER flag the leak?* No. `leaking_valve` is **ok** on `AHU__coi_leakage_010`, and the
-   label score gives `leaking_valve` TPR 0%, FPR 0 %: the one leak run is missed, and nothing
-   else is flagged.
+1. *Does CAMBER flag the leak?* Yes. `leaking_valve` is a **fault** on `AHU__coi_leakage_010`:
+   in 60.5% of its occupied, fan-on hours with the valve shut, the supply air sits below the
+   mixed air. The fault-free run reads 2.4% (**ok**), and the label score gives `leaking_valve`
+   TPR 100%, FPR 0 %.
 2. *Compare the two runs.* With the valve commanded shut and the fan running, the fault-free
-   unit's supply air sits a median +1.0 °F above its mixed air (the fan's heat); the leak run's
-   sits at -0.1 °F. The leak takes about 1 °F out of the air, all day, in every hour the valve is
-   meant to be shut. The rule only calls a cooling leak when the supply air is more than 3 °F
-   below the mixed air, a margin meant to ride over sensor error; this leak is real but smaller
-   than the margin. You see it by comparing the unit with its own fault-free behaviour.
+   unit's supply air sits a median +1.1 °F above its mixed air (the fan's heat, occupied hours);
+   the leak run's sits at -0.1 °F. The leak takes about 1 °F out of the air, all day, in every
+   hour the valve is meant to be shut. The rule's default only calls a cooling leak when the
+   supply air is more than 3 °F below the mixed air, a margin meant to ride over sensor error, so
+   with the defaults this leak is **ok** (CAMBER 0.97 missed it). The config credits the unit's
+   own fan heat (`measured_fan_heat_f` 1.0 °F, `cool_delta_thr_f` 1.0 °F): a leak is now any
+   supply air below the mixed air, and the caveat names the fan heat used. That 1.0 °F was
+   measured on `AHU__fault_free`, the same run the score counts as a negative, so its clean
+   verdict is partly by construction; the leak run, which the calibration never saw, is the
+   evidence. A half-year split (calibrate on one half, judge the other) still reads the
+   fault-free run ok and the leak a fault ([VALIDATION.md](../VALIDATION.md)).
 3. *Is the dual-duct unit fighting itself?* `simultaneous_heat_cool` is a **fault**: both valves
    open in 27% of occupied hours. But the two coils sit in different air streams: the hot deck
    heats while the cold deck cools, by design. The energy question is the mixing at the terminal
@@ -163,8 +176,10 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 **Discussion points**
 
-- A rule with a fixed margin misses small faults; a unit's own baseline catches them. Ask where
-  the class would put the margin, knowing the sensors' accuracy. Map it to the
+- A rule with a fixed margin misses small faults; a unit's own baseline catches them, at the
+  price of a calibration that must not be judged on the data it came from. Ask where the class
+  would put the margin, knowing the sensors' accuracy, and which period they would calibrate
+  on. Map it to the
   [AHU heating and cooling guide][pnnl-guide-ahu-heat-cool]'s question on valves that do not
   shut off.
 - "Both valves open" is a symptom, not a diagnosis: the system type (dual-duct) and the sequence
@@ -174,7 +189,10 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 **Common mistakes**
 
-- Reading the leak run's **ok** as "no leak". The label says leak, and question 2 shows it.
+- Quoting the fault-free run's FPR 0 % as proof the calibration works: that run set the
+  1.0 °F. The held-out half-year is the honest test.
+- Copying the 1.0 °F fan heat to another unit. Fan heat depends on the fan, its speed and the
+  sensor positions; measure it on the unit's own known-good hours.
 - Calling the dual-duct unit's 27% a fault to fix at the coils.
 - Judging a heating leak on supply air downstream of the fan without allowing for fan heat.
 
@@ -222,8 +240,6 @@ Figures from the real `lbnl-sdahu` default subset, CAMBER 0.97.0-dev, with the c
    years before it (2017-06 to 2020-02) show excess outdoor air in 53% of the cooling-weather
    hours, a **fault** on their own, against 45% in the documented 100 % outdoor-air period
    (2020-08 to 2021-11). Cooling weather is rare in Ireland, so each period has few such hours.
-   The catalog's own note on this unit reads the warning as mostly the COVID period; the
-   period split does not bear that out.
 
 **Discussion points**
 
@@ -311,8 +327,8 @@ Figures from the real `ornl-frp-ops` default subset, CAMBER 0.97.0-dev, with the
 
 ### `zone-reheat-overcooling`: the reheat penalty and overcooling at minimum airflow
 
-Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the commands on the
-[exercise page](zone-reheat-overcooling.md#setup).
+Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev (the valve-stuck-shut answer
+re-checked on 0.98.0-dev), with the commands on the [exercise page](zone-reheat-overcooling.md#setup).
 
 **Answer key**
 
@@ -336,12 +352,16 @@ Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the com
    still overcools, which is a setting problem. The stuck box is never at its minimum: its airflow
    is far above its setpoint all the time. Its overcooling is a hardware fault, and
    `airflow_tracking` is the rule that names it.
-5. *The valve stuck shut.* It is not wasting reheat. It delivers none. The rule reads the
-   controller's reheat *demand*, which sits near full (about 93 % when open) because the zone is
-   cold and the valve cannot respond. The discharge air still rises a few degrees, because the
-   parallel box's fan mixes in warm plenum air, so the rule's valve-versus-discharge cross-check
-   does not catch it. `overcooling_min_flow` also rates it a **fault** for the same reason.
-   [`zone-reheat-saturated`](zone-reheat-saturated.md) shows what it really is.
+5. *The valve stuck shut.* It is not wasting reheat: it delivers none. Both rules read the
+   valve's measured position (`valve_signal` = `position`), which is 0 % all year, so
+   `reheat_penalty` is **ok** (0 % open) and so is `overcooling_min_flow` (no overcooling with
+   reheat). Each finding carries a caveat: the demand is at or above 90 % while the position reads
+   at or below 5 % on 100 % of the occupied full-demand hours, a stuck or failed valve rather than
+   a reheat penalty. With only the demand (as before 0.98), both rules rated it a **fault**: the
+   demand sits near full (about 93 % when open) because the zone is cold, and the discharge still
+   rose 6 °F at full demand, because the parallel box's fan mixes in warm plenum air, which passed
+   the valve-versus-discharge cross-check. [`zone-reheat-saturated`](zone-reheat-saturated.md)
+   shows what it really is.
 6. *Which box is under test?* The south-zone box (`_S` columns). Comparing each faulted run's
    columns with the fault-free run's shows that only the `_S` box's columns change. CAMBER's
    mapping (`mappings/lbnl_fpu.json`) documents this. It mapped the west box until 0.82 and
@@ -359,15 +379,18 @@ Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the com
 - The fault-free run is not "no findings". A simulated building designed with a conventional
   minimum still shows a small reheat penalty. That is the re-tuning opportunity, and it is why
   the rules warn rather than stay silent.
-- The reheat signal is a demand. Ask what a measured valve position or a discharge-air
-  temperature after a series box would change.
+- Demand versus position. The rules that judge heat delivered read the position; the rules
+  that judge how hard the controller asks read the demand. Ask what a site that trends only one
+  of the two can and cannot conclude, and what a series box (whose fan runs all the time) does to
+  the discharge-air rise.
 - Minimums are also a ventilation question: lowering them needs the zone's 62.1 minimum. See
   [`zone-min-oa`](zone-min-oa.md).
 
 **Common mistakes**
 
-- Reading the `reheat_penalty` fault on the stuck-shut valve as wasted energy. The valve gives
-  no heat. The demand is saturated because it cannot.
+- Reading the stuck-shut valve's quiet `reheat_penalty` as "nothing wrong". It is quiet because
+  no heat is delivered; the caveat names the stuck valve, and `reheat_capacity_shortfall` in
+  [`zone-reheat-saturated`](zone-reheat-saturated.md) grades it.
 - Expecting `overcooling_min_flow` to catch the stuck-open damper, and concluding the rule is
   broken when it is quiet.
 - Treating the half-open damper as harmless because the zone stays in band. It still reheats in
@@ -382,8 +405,9 @@ Figures from the real `lbnl-fpu` default subset, CAMBER 0.97.0-dev, with the com
 
 ### `zone-bad-box`: one bad box in a fleet
 
-Figures from the real `ornl-frp-vav` default subset (test set 3), CAMBER 0.97.0-dev, with the
-commands on the [exercise page](zone-bad-box.md#setup).
+Figures from the real `ornl-frp-vav` default subset (test set 3), CAMBER 0.97.0-dev (the
+`actuator_stuck` figures and the label scores 0.98.0-dev), with the commands on the
+[exercise page](zone-bad-box.md#setup).
 
 **Answer key**
 
@@ -415,11 +439,26 @@ commands on the [exercise page](zone-bad-box.md#setup).
    airflow rises at every step and its duct static pressure falls. A fixed-speed fan moves more
    air through a more open system. Each position is a different day, so the weather moves these
    numbers too, but the direction holds at every step.
-7. *Label score.* `unmet_setpoint_hours` catches 2 of the 6 stuck days and fires on the fault-free
-   day too: TPR 33%, FPR 100 %. A comfort rule detects a stuck damper only on the days the stuck
-   position hurts comfort. It cannot tell a stuck box from a warm room. The dataset logs no
-   airflow setpoint, so `airflow_tracking`, the rule that finds stuck dampers on `lbnl-fpu`,
-   cannot run.
+7. *`actuator_stuck` and the label score.* It flags box 205 on all six stuck days and stays
+   quiet on the fault-free day: TPR 100%, FPR 0 % (one negative day, so the interval is wide).
+   Each stuck day's damper holds one position through all the occupied hours
+   (100 % of active samples), and the rule says what contradicts it:
+   - 0 %: shut through occupied hours (a **fault**; no airflow setpoint is logged, so the caveat
+     says it was judged against the occupied mode alone);
+   - 20 % and 40 %: part open while the room runs over its cooling setpoint (a **fault**; 6 °F
+     and 3.8 °F over, median);
+   - 100 %: fully open while the room sits 5.2 °F below its cooling setpoint (a **fault**);
+   - 60 % and 80 %: nothing in the room contradicts the position, but it held all day while the
+     room temperature moved, so it is a **warn** only. A mid-stroke position the room is happy
+     with could be a healthy box holding its minimum.
+
+   The neighbours' dampers do sit still for hours (26-41 % open for 4-10.5 h), but at a minimum
+   position in a room below its cooling setpoint: consistent with what the room asked for, and
+   never for a whole day, so they stay quiet. `unmet_setpoint_hours` alone would catch 2 of the 6
+   stuck days and fire on the fault-free day too: TPR 33%, FPR 100 %. A comfort rule detects a
+   stuck damper only on the days the stuck position hurts comfort, and it cannot tell a stuck
+   box from a warm room. The dataset logs no airflow setpoint, so `airflow_tracking`, the rule
+   that finds stuck dampers on `lbnl-fpu`, cannot run.
 8. *Room 102.* No. Its box is not under test, and the room is too cold on every day, fault-free
    included (a **fault** each day). It is a cold room in this building. The reheat is electric
    and not trended as a valve, so CAMBER cannot say whether it was maxed out (see
@@ -428,18 +467,31 @@ commands on the [exercise page](zone-bad-box.md#setup).
 **Discussion points**
 
 - Chapter 7's advice to trend damper position and airflow for every box is the whole exercise.
-  A box that does not move while its neighbours do is the cheapest fault signature there is,
-  and no comfort rule reproduces it.
+  A box that does not move while its neighbours do is the cheapest fault signature there is. No
+  comfort rule reproduces it, and neither does a plain "flat for four hours" test: the healthy
+  boxes fail that one. `actuator_stuck` works because it asks whether the room wanted the damper
+  somewhere else.
+- On the full subset `actuator_stuck` finds 17 of the 18 stuck days and none of the 13
+  fault-free and airflow-bias days. It misses set 1's 100 % day: the room ran warm, so a fully
+  open damper looked like the right answer. A box stuck where a busy day would have put it
+  anyway cannot be told from a working one.
+- The going-further cohort question: grouped per day, the raw mean airflow never singles out
+  box 205 (robust z -1.5 to +2.0), and airflow as a share of each box's own peak flags six
+  healthy box-days and scores the fault-free day at z -3.1. Evening out sizes does not isolate a
+  stuck box. Its airflow against its own fault-free day does (all six days), and so, partly, does
+  its damper's variability on the low tail (z -2.1 to -5.0; three of six past the default 3.5).
 - The zone cohort needs a common basis. Each day's boxes are compared under that day's rooftop
   unit (the naming topology), never across days. Ask what goes wrong when a census pools
   boxes from different days (the dataset config's `_comment` explains why `cohort_airflow` is
-  left out).
+  left out of the default run, and its `group_by_topology` option fixes the pooling).
 - The labelled "fault-free" day is not a trouble-free building. Discuss room 205's warm
   afternoons and room 102's cold mornings as findings in their own right.
 
 **Common mistakes**
 
 - Concluding that the 0 % and 60–100 % days are healthy because `unmet_setpoint_hours` is quiet.
+- Reading the 60 % and 80 % warnings as weaker evidence of a fault than the others. The damper is
+  just as stuck; the room just did not contradict it that day.
 - Reading the rogue-zone census on the fault-free day as a false alarm. It correctly names the
   zone driving the reset, which happens to be a warm room, not a broken box.
 - Comparing raw airflows across rooms of different sizes and calling the smallest box the
@@ -453,8 +505,9 @@ commands on the [exercise page](zone-bad-box.md#setup).
 
 ### `zone-reheat-saturated`: a zone below setpoint with its reheat maxed out
 
-Figures from the real `lbnl-fpu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev, with the
-commands on the [exercise page](zone-reheat-saturated.md#setup).
+Figures from the real `lbnl-fpu` and `ornl-frp-vav` default subsets, CAMBER 0.97.0-dev (answers 4
+and 5 re-checked on 0.98.0-dev), with the commands on the
+[exercise page](zone-reheat-saturated.md#setup).
 
 **Answer key**
 
@@ -469,18 +522,25 @@ commands on the [exercise page](zone-reheat-saturated.md#setup).
 3. *The other two rules.* `unmet_setpoint_hours` is a **fault**, with the zone too cold in 37% of
    occupied hours. It counts the complaint but not the cause. `overcooling_severity` reports no
    overcooling (`info`). It sets the cold, reheat-saturated samples apart as a heating shortfall,
-   graded `fault`, in 30% of occupied samples. "Overcooled" would send you to the cooling side
+   graded `fault` on both depth and share: 30% of occupied samples, well over the 20 % a fault
+   needs. "Overcooled" would send you to the cooling side
    (minimum airflow, supply-air temperature), when the zone is cold because heat cannot get in.
-4. *Why does the valve read fully open?* The mapped signal is the controller's reheat demand,
-   not the valve's position. The controller keeps asking for full heat because the zone stays
-   cold, and the valve stuck shut cannot respond. `reheat_penalty` reads that demand as reheat
-   delivered in 51% of occupied hours and rates it a **fault**. The parallel box's fan mixes in
-   warm plenum air, so the discharge air rises a few degrees, enough to pass the rule's
-   valve-versus-discharge check. On site: stroke the valve, check the discharge air at full
+4. *Which signal?* `reheat_capacity_shortfall` reads the controller's reheat *demand*
+   (`heat_valve`): the controller keeps asking for full heat because the zone stays cold, and the
+   valve stuck shut cannot respond, so the reheat reads maxed out. `reheat_penalty` reads the
+   valve's measured *position* (`heat_valve_position`, `valve_signal` = `position`), which is 0 %
+   all year: it is **ok**, 0 % open, with a caveat that the demand is at or above 90 % while the
+   position reads shut on 100 % of the full-demand hours, a stuck or failed valve rather than a
+   reheat penalty. Before 0.98 it read the demand as reheat delivered in 51% of occupied hours and
+   rated it a **fault**: the parallel box's fan mixes in warm plenum air, so the discharge rose a
+   few degrees, enough to pass the valve-versus-discharge check (the config now allows for that
+   lift with `fan_heat_f` = `"auto"`). On site: stroke the valve, check the discharge air at full
    demand, and check the hot-water supply to the coil.
 5. *Heat to spare.* The fault-free run, the leaking valve and the half-open damper have no
    saturated shortfall at all. The fully open damper has a little (under 2 % of samples, `ok`):
-   in a few cold hours its extra cold air outruns the reheat.
+   in a few cold hours its extra cold air outruns the reheat. `overcooling_severity` grades that
+   shortfall `info`: it is deep enough for a fault, but only 0.8% of occupied samples, under the
+   5 % a warning needs. Before 0.98 it graded the depth alone and called it a `fault`.
 6. *ORNL, fault-free day.* Several rooms are too cold on a normal day. Room 102 is below its
    heating setpoint in 33% of occupied hours (`unmet_setpoint_hours` **fault**), and rooms 104,
    105, 106, 204 and 206 are too cold for part of the day too. `overcooling_severity` rates room 104 a
@@ -507,7 +567,8 @@ commands on the [exercise page](zone-reheat-saturated.md#setup).
 
 - Calling the ORNL rooms "overcooled" and lowering their airflow. With no reheat signal CAMBER
   cannot tell, and the rooms may be short of heat.
-- Reading `reheat_penalty` on the stuck-shut valve as an energy saving opportunity.
+- Reading `reheat_penalty`'s **ok** on the stuck-shut valve as "the reheat is fine". It is ok
+  because no heat is delivered; read its caveat.
 - Treating `unmet_setpoint_hours` as a diagnosis. It measures a symptom.
 - Expecting a finding on every box. A rule that lacks its input stays silent. Check which rules
   produced findings, not only which fired.
@@ -565,9 +626,10 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 - Clock versus demand: a valve on a time clock correlates with occupancy because people also
   follow the clock. Taking the lift within the hour of day is what separates the two. Ask the
   class to predict what a pooled comparison would say for room 999169.
-- The per-finding caveat about return-air CO₂ is written for air handlers. Here each "unit" is a
-  room with its own sensor, so the caveat does not apply. Reading caveats critically is part of
-  the job.
+- Return-air CO₂ averages the zones an air handler serves and dilutes the critical one, so a DCV
+  verdict judged on an air handler's CO₂ carries a caveat saying so. Here each "unit" is a room
+  (equipment class `VAV`) with its own sensor, and CAMBER leaves the caveat off. Ask the class
+  what would change if the same data were mapped to one air handler instead.
 
 **Common mistakes**
 
@@ -584,7 +646,7 @@ whole published record), CAMBER 0.97.0-dev, with the commands on the
 
 ### `zone-min-oa`: minimum outdoor air and 62.1 system ventilation
 
-Figures from the real `lbnl-b59` default subset, CAMBER 0.97.0-dev, with the commands on the
+Figures from the real `lbnl-b59` default subset, CAMBER 0.98.0-dev, with the commands on the
 [exercise page](zone-min-oa.md#setup). The 62.1 procedure follows the public sources listed in
 [VENTILATION.md](../VENTILATION.md#system-level-vrp-multiple-zone-systems) (the free 62.1-2016
 Addendum f and secondary sources); no standard text is quoted here.
@@ -610,7 +672,11 @@ Addendum f and secondary sources); no standard text is quoted here.
 5. *DCV.* "DCV not judged" on all four units: the zones' CO₂ never varies enough to test whether
    outdoor air follows it (reason `no_demand_variation`). This building has no DCV, and CAMBER
    does not call it functioning. The specificity lesson: a checker that never refuses would have
-   given it a verdict.
+   given it a verdict. The finding also says "supply fan off while scheduled occupied", for
+   41, 82, 40 and 40 h by unit: the October and December 2020 days when the fans did not run
+   although the schedule says occupied (speed feedback a few percent). Those hours are the whole 2.0–4.2 % below the
+   750 cfm floor, so `below_floor_pct`, the shortfall with the fan running, is 0.0–0.1 % and the
+   grade stays `info` (since 0.98). The 2020 smoke-mode weeks are not among them.
 6. *How wrong would the inputs have to be?* To read "adequate" (a ratio of 1.5 or less), Vot
    would have to be about 2.6 to 3.5 times larger. That means roughly three times the assumed
    population or floor area. Neither is plausible for this office. Giving a system population
@@ -708,8 +774,8 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 
 ### `plant-cooling-tower`: Cooling tower: approach and fan effort
 
-Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the commands on the
-[exercise page](plant-cooling-tower.md#setup).
+Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev (the fan-effort drift:
+CAMBER 0.98.0-dev), with the commands on the [exercise page](plant-cooling-tower.md#setup).
 
 **Answer key**
 
@@ -732,11 +798,17 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
    (`info`) on the bypass runs because the tower fan never reaches 90 % (a peak of 51 % in the
    stuck-75 % run): with the water going around it, the tower has little heat to reject. The
    chiller pays instead ([`plant-chiller-efficiency`](plant-chiller-efficiency.md)).
-6. *Label score.* `cooling_tower_approach` scores TPR 0% and FPR 0 %: it finds none of its four
-   targets (the three tower foulings and the PI mistuning, on which it declines because the fan
-   never reaches 90 %). A detector for a controlled tower should measure the fan effort at
-   matched load and wet-bulb against the tower's own baseline, which is what
-   `cooling_tower_fan_effort_drift` does when a before-and-after exists.
+6. *Label score and fan effort.* `cooling_tower_approach` scores TPR 0% and FPR 0 %: it finds
+   none of its four targets (the three tower foulings and the PI mistuning, on which it declines
+   because the fan never reaches 90 %). `cooling_tower_fan_effort_drift` measures what answer 3
+   read by hand: the fan speed at matched condenser range and wet-bulb, here against the declared
+   reference `PLANT__fault_free`. It is a **fault** on the 65 % and 80 % foulings (+17.8 and
+   +10.9 fan %-points) and `ok` on the 95 % one (+3.3, under its 5-point floor): TPR 67% on its
+   target, tower fouling, and FPR 0 %, with no alarm on the other 20 runs. The fault-free run
+   declines as `is_reference` (it is the yardstick; the scorer still counts it as a correct
+   negative, so the false-positive count reads 0 of 21). The +1 and +2 °F tower-sensor biases also
+   push the fans harder (+29 and +48 points), but the tower's leaving-water reading moved with
+   them (+1.6 and +3.5 °F), so the rule reports a sensor offset (`info`), not fouling.
 
 **Discussion points**
 
@@ -748,7 +820,12 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
   holds its setpoint, the valve reads shut, and the chillers get the hot water. Only a sensor
   downstream of the mixing point sees it.
 - The simulated bypass runs drive the condenser loop to temperatures a real chiller would trip
-  on. Discuss what a real plant would show instead (high-pressure trips, alarms).
+  on (the catalog's [data issue](../DATASETS.md#the-condenser-bypass-runs-are-fixed-physically-implausible-bypasses-and-the-two-75-runs-are-one-case)). Discuss what a real plant would show instead
+  (high-pressure trips, alarms).
+- On the bypass runs `cooling_tower_fan_effort_drift` reads hundreds of fan %-points *below*
+  the reference (about -390 to -470), which no fan can do. The bypassed loop runs condenser
+  ranges the reference never saw, so the matched-load model extrapolates: read it as "not
+  comparable", not as a healthier tower. `condenser_bypass_leak` is the rule for those runs.
 
 **Common mistakes**
 
@@ -756,9 +833,14 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
   run's.
 - Reading `info` (declined) on the bypass runs as `ok`.
 - Treating the bypassed-fraction estimate as the leak size: in these runs it does not follow the
-  severities in the file names.
+  severities in the file names (it is fixed at 0.92, 0.97 and 0.99 for the 25, 50 and 75 % runs).
+- Counting the two 75 % runs as two detections: in both the valve command reads zero all year and
+  the condenser side is the same data, so they are one case.
 - Lowering the design approach until the fouled tower is flagged, and not checking what else
   gets flagged with it.
+- Reading the reference's `info` decline as a missing result, or comparing a real plant's tower
+  with another tower that was never shown to be healthy: a reference is only as good as the
+  evidence that it is clean.
 
 <!-- END plant-cooling-tower -->
 
@@ -766,38 +848,44 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 
 ### `plant-chw-reset-pumping`: Chilled-water reset and pumping
 
-Figures from the real `lbnl-chiller` default subset, CAMBER 0.97.0-dev, with the commands on the
+Figures from the real `lbnl-chiller` default subset, CAMBER 0.98.0-dev, with the commands on the
 [exercise page](plant-chw-reset-pumping.md#setup).
 
 **Answer key**
 
-1. *Reset.* Yes: `chwst_reset_present` is true, with a slope of -0.38 °F of supply per °F of
-   outdoor dry-bulb (median supply 47.6 °F over the running, occupied hours). The supply gets
-   warmer in cool weather and colder in hot weather, which is the right direction. The rule would
-   count a reset in the wrong direction too, so the sign is the learner's check.
-2. *Low delta-T.* `chw_plant_reset` is a **fault** on the healthy plant because chiller 1's loop
-   delta-T has a median of 6.4 °F, and 80.1% of its running hours are below the rule's 8 °F
-   minimum. The primary flow does not follow the load, so the chiller's delta-T is low at part
-   load by design: a property of this plant, and a design question (variable primary flow, a
-   higher supply setpoint in mild weather), not a broken component. The rule has no parameter to
-   calibrate it.
+1. *Reset.* Yes: `chwst_reset_present` is true and `chwst_reset_direction` is `expected`, with a
+   slope of -0.38 °F of supply per °F of outdoor dry-bulb (median supply 47.6 °F over the
+   running, occupied hours). The supply gets warmer in cool weather and colder in hot weather,
+   which is the direction the rule expects (`expected_reset_sign: negative`). A slope the other
+   way would not count as a reset.
+2. *Low delta-T.* Chiller 1's loop delta-T has a median of 6.4 °F, and 80.1% of its running hours
+   are below the rule's 8 °F minimum. Yet `chw_plant_reset` is **ok** on the healthy plant: the
+   rule reads the chiller's flow, finds it constant (`flow_mode: constant`, a coefficient of
+   variation of about 0.1 %), and reports the delta-T without judging it, with a caveat. A
+   constant primary flow does not follow the load, so the chiller's delta-T is low at part load
+   by design: a property of this plant, and a design question (variable primary flow, a higher
+   supply setpoint in mild weather), not a broken component. On a variable-flow plant the same
+   figures would count, against `design_deltaT_min_f` (8 °F unless set from the loop's design).
 3. *DP reset and pumping.* No: the DP setpoint is flat (`dp_sp_reset_present` false, the same
    value all year). The secondary pump runs at a median 84.9% and at 90 % or more in 38.0% of
    its hours: a **warn** for riding the curve.
-4. *VFD minimum.* The pump's floor is 34.5% (the median speed of the chiller-bias run, where the
-   pump idles at its floor for at least half the year; the trend viewer shows the same floor on the
-   fault-free run in winter). The rule counts 0 % of hours near minimum on every run because its
-   near-minimum band stops at 25 %, below this pump's floor. The pump also runs all year, with no
-   cooling load in winter.
+4. *VFD minimum.* The pump's floor is 34.5%: the rule learns it from the speeds
+   (`vfd_floor_pct`, `near_min_source: learned`) and counts 31.3% of the fault-free run's hours
+   at or near it (the band is the floor plus a point, 35.5 %). The pump also runs all year, with
+   no cooling load in winter. On the chiller-bias run the pump idles at its floor (a median of
+   34.5%) for 68.6% of its hours, a **warn** for sitting at the minimum.
 5. *Stuck bypass.* The plant cannot make chilled water: the supply median is 65.0 °F and the
-   delta-T 0.7 °F, and the pump runs at a median 100%. `chw_plant_reset` (a fault) and
-   `chw_pump_dp_reset` (a warn) are both symptoms; the cause is the tower bypass, which only
-   `condenser_bypass_leak` names ([`plant-cooling-tower`](plant-cooling-tower.md)).
+   delta-T 0.7 °F, and the pump runs at a median 100%. The supply warms as the weather warms, a
+   slope of +0.76 °F per °F, the reverse of a reset: `chw_plant_reset` is a **warn** with
+   `chwst_reset_direction: reverse` (its low delta-T is not judged on this constant-flow plant).
+   That warn and `chw_pump_dp_reset` (a warn) are both symptoms; the cause is the tower bypass,
+   which only `condenser_bypass_leak` names ([`plant-cooling-tower`](plant-cooling-tower.md)).
 
 **Discussion points**
 
 - Map the three answers onto the PNNL cooling guide's three questions. The guide's low-delta-T
-  test uses the same 8 °F line; discuss whether it fits a constant-flow primary loop.
+  test uses the same 8 °F line; discuss why it does not fit a constant-flow primary loop, and
+  what the rule does instead.
 - Why does a flat DP setpoint cost energy? Pump power goes roughly with the cube of speed, so the
   hours near full speed dominate the bill.
 - A plant whose pump idles at a floor all winter is a scheduling question: can the loop be shut
@@ -809,9 +897,10 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.97.0-dev, with the
 
 - Fixing the low delta-T by chasing a broken part: nothing is broken; the plant is designed that
   way.
-- Reading "0 % near minimum" as "the pump is never at its minimum".
-- Reading a negative slope as "no reset" (or a positive one as a working reset) without asking
-  which way a chilled-water reset should go.
+- Reading the `ok` on the healthy plant as "the delta-T is fine": it is low, and the rule says
+  why it does not judge it.
+- Reading the bypassed plant's positive slope as a working reset: it is the plant losing its
+  chilled water in hot weather.
 - Blaming the pump for the bypassed plant: it runs flat out because the chilled water is warm.
 
 <!-- END plant-chw-reset-pumping -->
@@ -820,46 +909,69 @@ Figures from the real `lbnl-chiller` default subset, CAMBER 0.97.0-dev, with the
 
 ### `plant-boiler`: Boiler plant
 
-Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev, with the commands on the
+Figures from the real `lbnl-boiler` full subset, CAMBER 0.97.0-dev (the firing rules and the
+boiler efficiency drift: CAMBER 0.98.0-dev), with the commands on the
 [exercise page](plant-boiler.md#setup).
 
 **Answer key**
 
-1. *Which rules run.* Only `hw_pump_dp_reset`: 17 findings, one per run, all `ok`.
-   `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` need a boiler run status
-   (`boiler_status`). The plant's status point is the boiler enable, on all year even while the
-   boiler burns no gas, so the catalog leaves it unmapped and the three rules do not run: no
-   finding at all, which is not the same as `ok`.
-2. *Reset and summer lockout.* CAMBER cannot judge either on this plant: the lockout rule needs
-   the run status, and there is no supply-temperature setpoint. The trend viewer shows the loop
-   supply flat all year (no reset), and boiler 1's gas input falling to nearly zero in warm weather: the
-   boiler stops firing, but the plant stays enabled and pump 1 keeps running.
+1. *Which rules run.* All four point-in-time rules, on every run: 68 findings, 17 per rule, all
+   `ok` (the boiler drift family's findings come on top; see answer 4).
+   `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` need to know when the
+   boiler fired. The plant's status point is the boiler enable, on all year even while the
+   boiler burns no gas, so the catalog leaves it unmapped. The three rules accept either a run
+   status or the boiler's gas input, and here they read firing from boiler 1's gas input (above
+   5 % of its own 95th percentile): each of their findings carries `run_source` `gas` and a caveat
+   that says so. The fault-free boiler fires in 37.8% of the hours, with 0.92 starts a day; the
+   hourly trend hides any firing shorter than an hour, so the start count is a floor. Before
+   CAMBER 0.98 the three rules printed nothing here, and the RCx report listed them under
+   "Checks not evaluated"; that table is now gone.
+2. *Reset and summer lockout.* The lockout is judged: the fault-free boiler spends
+   0% of its firing hours above the 65 °F lockout (0.35% on `PLANT__boiler_PI`; occupied hours),
+   so `ok`. The reset is
+   judged too, from the supply temperature against the outdoor temperature over firing hours:
+   `hws_reset_present` is false on every run (a flat supply), which the rule reports in its
+   summary without raising the severity. There is no supply-temperature setpoint to compare
+   with. The trend viewer shows the same: the loop supply flat all year, and boiler 1's gas input
+   falling to nearly zero in warm weather while the plant stays enabled and pump 1 keeps running.
 3. *Pumping.* `hw_pump_dp_reset` is `ok`: a median speed of 29.0%, almost no hours near full
    speed, none near the 25 % minimum band, so neither riding the curve nor pinned at minimum.
    What the `ok` leaves out: the DP setpoint is flat (`dp_sp_reset_present` false), and the pump
    ran in 8,759 hours, every hour of the year, summer included.
-4. *Fouling.* Nothing fires on `PLANT__boiler_foul_065` (its pump finding is `ok`). Fouling shows
-   as more gas for the same heat, and no point-in-time rule here compares the two.
-   `boiler_efficiency_drift` does, against a frozen baseline of the same boiler; this dataset has
-   no before-and-after on one boiler to feed it through a config.
+4. *Fouling.* No point-in-time rule fires on `PLANT__boiler_foul_065`: the pump and the three
+   gas-read firing rules are all `ok`. The loop delta-T holds its 36.0 °F median; only 12.2% of
+   firing hours fall below the 20 °F design floor, under the 20 % warn line. Fouling shows as more
+   gas for the same heat, and no point-in-time rule here compares the two.
+   `boiler_efficiency_drift` does, against the declared reference `PLANT__fault_free`: gas
+   input per unit of heat delivered is +53.7% on the 65 % fouling and +24.9% on the 80 % one (both
+   **fault**), and +5.1% on the 95 % one (**warn**; it clears the 5 % warn floor by 0.1 point, so
+   a slightly different reference period could miss it). The +2 and +4 °F hot-water temperature
+   biases raise the ratio too (+11 % and +25 %), but the gas at matched outdoor temperature did not
+   rise: the rule reports a heat-metering problem (`info`), not fouling. The fault-free run
+   declines as `is_reference`.
 5. *DP sensor bias.* A DP sensor reading 20 % high makes the pump slow to a median 26.4%, and
    one reading 20 % low speeds it up to 32.4% (29.0% healthy), while the DP reading itself stays
    at its setpoint: the controller holds the lying reading there. The rule stays `ok` on both.
-   Overall, the label score is TPR 0%: nothing in this config detects any of the 16 faults.
+   The label score for `boiler_efficiency_drift` is TPR 100% (3 of 3 foulings) and FPR 0 %:
+   none of the other 13 runs fire (the scorer still counts the reference as a correct negative,
+   so the false-positive count reads 0 of 14). Nothing else in this config detects any of the 16
+   faults.
 
 **Discussion points**
 
 - The heating guide asks the same three questions as the cooling guide (reset, delta-T, DP
   reset), plus a summer shutdown. Which could a technician answer from this plant's trends, and
   which need a point it does not have?
-- An enable is not a run status. Ask what trend you would add on a real plant (burner firing,
-  flame signal, gas valve) before trusting a lockout or short-cycle analysis.
+- An enable is not a run status. The gas input stands in for one here; ask what trend you would
+  add on a real plant (burner firing, flame signal, gas valve) to count short firings the hourly
+  gas trend cannot see.
 - A pump that runs all summer for a boiler that does not fire is a scheduling opportunity even
   though every rule says `ok`.
 
 **Common mistakes**
 
-- Reading the missing lockout and short-cycle findings as "no problem".
+- Reading a short-cycle `ok` from the gas input as proof of long firings: sub-hour cycles are
+  invisible on an hourly trend.
 - Mapping the enable point as the boiler status to make the rules run: every idle hour would
   then count as firing.
 - Reading the pump's `ok` as "nothing to re-tune": the flat DP setpoint and the all-year running
@@ -887,7 +999,9 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 2. *Where the low-reading sensor also shows.* In the secondary pump: `chw_pump_dp_reset` is a
    **fault** on the 2 °C-low run, with the pump at 90 % or more in 82.1% of its hours (a median
    of 100 %). The real chilled water is warmer, so the air handlers' valves open wider and the
-   pump works harder to hold the loop DP.
+   pump works harder to hold the loop DP. The high-reading runs do the opposite: the pump idles
+   at its 34.5 % VFD floor for most of its hours, a warn for sitting at the minimum (0.98 learns
+   the floor; before, the rule's 25 % band missed it).
 3. *Tower sensor vs bypass.* `condenser_bypass_leak` reports both ±2 °C tower-sensor biases as
    `info` with `attribution: sensor_offset`: the water entering the chillers reads -3.1 °F and
    +3.6 °F from the tower's leaving water, and the difference stays the same at every load.
@@ -930,8 +1044,10 @@ Figures from the real `lbnl-chiller` full subset, CAMBER 0.97.0-dev, with the co
 ### `data-trend-quality`: are the trends good enough?
 
 Figures from the real `nuig-ahu101`, `lbnl-b59` and `irish-ahu` default subsets, CAMBER
-0.97.0-dev, with the commands on the [exercise page](data-trend-quality.md#setup). Trust scores
-are the RCx reports' (hourly, gated on the unit's fan signal).
+0.97.0-dev (the clipped, schedule, stray-row and per-mode figures 0.98.0-dev), with the commands
+on the [exercise page](data-trend-quality.md#setup). Trust scores are the RCx reports' (hourly,
+gated on the unit's fan signal; for a unit with no fan point, read per its inferred operating
+mode).
 
 **Answer key**
 
@@ -951,8 +1067,10 @@ are the RCx reports' (hourly, gated on the unit's fan signal).
    screening-grade: it can make a point suspect, never untrusted on its own.
 4. *The ceiling.* The room CO2 tops out at the sensor's full scale, just under 2000 ppm; 532
    stored 15-minute samples read it, and every one has the supply fan off. It is a clipped reading, a
-   lower bound, not a measurement. The trust score does not name it (it flags outliers and a
-   bimodal shape); the ingest's quirk note and the dataset's data issues do.
+   lower bound, not a measurement. The trust table names it: the CO2 point carries the `clipped`
+   flag, and `SensorTrust.clipped` gives the limit (`2,000 ppm`, high side) and the share of
+   those samples with the fan off (1.0). The flag carries no trust penalty; the ingest's quirk
+   note and the dataset's data issues say the same.
 5. *The held meter.* `ELE_lig_S` holds one value for 32.25 h and 36.5 h, both runs starting on a
    Saturday. A lighting load parked at its base over a weekend is plausible; a logger holding its
    last value is too. The flag says "look", and the trend viewer (does anything else move in
@@ -960,14 +1078,22 @@ are the RCx reports' (hourly, gated on the unit's fan signal).
 6. *Filled or not.* `RTU01_zone_022`'s CO2 has two 30-day windows of continuous values (every
    value unique) from 2020-04-26, between windows that repeat the sensor's resolution: a filled
    stretch, which the publisher's README says exists (gaps filled by interpolation and other
-   methods). The nuig fan status "repeats whole days exactly" too, but that is a fixed weekday
-   schedule doing its job: the same screen, an innocent cause.
-7. *The irish supply air.* It reads *untrusted* at 0.19 over the whole record for two reasons:
-   a few stray rows logged years before the rest, then a long gap, make its coverage over its
-   own span low, and a supply air held tightly at setpoint makes every hour spent at
-   another operating level look like a robust outlier. Judged from the first sample after the
-   longest gap (2017-06-23), the low-coverage flag goes; the outlier flag stays. The sensor is
-   fine; the verdict describes the record and the control, not a fault.
+   methods). The nuig fan status repeats whole days too, and the screen now says why: passed the
+   role (or seeing a series on two levels), it reports that 191 days follow a fixed schedule (whole
+   days sharing a pattern with two or more others) instead of calling them fills. Three repeats
+   that no shared pattern explains still warn (two weekend pairs in March and May 2018, and two
+   weekdays in May 2018): look at them in the trend viewer, but a schedule override that ran twice
+   is the likely story.
+7. *The irish supply air.* Two things used to make it *untrusted* (0.19 in CAMBER 0.97), and
+   both are now handled. A few stray rows logged years before the rest, then a long gap, made its
+   coverage over its own span low: CAMBER now flags `stray_lead` and judges the point from the
+   first sample after the gap (2017-06-23), leaving the 4 stray rows out. And a supply air held
+   tightly at setpoint made every hour spent idle look like a robust outlier: the unit has no fan
+   point, so the RCx table infers an off-mode (OA damper and coil valves closed) and reads the
+   outliers per mode. The RCx gated column reads *trusted* at 0.89 (`stray_lead`, no outliers).
+   The plain one-population read, `sensor_trust` on the series alone, still reads *untrusted* at
+   0.27 with `outliers`: it does not know the operating modes. The sensor is fine; the plain
+   verdict described the control, not a fault.
 
 **Discussion points**
 
@@ -983,8 +1109,10 @@ are the RCx reports' (hourly, gated on the unit's fan signal).
 **Common mistakes**
 
 - Reading *suspect* as "broken": it means "verify before relying on it".
-- Treating the nuig fan status's repeated days as fabricated data.
-- Concluding the irish supply-air sensor must be replaced because its score is 0.19.
+- Treating the nuig fan status's repeated days as fabricated data, or the 3 unexplained repeats
+  as proof of a fill.
+- Concluding the irish supply-air sensor must be replaced because its plain `sensor_trust` score
+  is 0.27: read it per operating mode first.
 - Running `gapfill_signature` on an hourly resample: the means erase the granularity signature.
 - Counting a fan speed as missing: CAMBER uses it as the fan-on gate when no status exists.
 
@@ -1102,19 +1230,25 @@ synthetic, cut from the open BDG2 meters.
 
 ### `capstone`: RCx report, walk-down, re-tuning plan and verification
 
-Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev, with
-the commands on the [exercise page](capstone.md#setup). The RCx report is the one written before
-the drift baselines are frozen.
+Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev (the
+top issue's cause, the M&V data need and the Verify on site section: 0.98.0-dev), with the
+commands on the
+[exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
+are frozen.
 
 **Answer key**
 
-1. *The top issue.* Rank 1 is "Enable economizer free cooling" on
-   `AHU__onset_damper_stuck_025`, a **fault**. Its action asks you to check the economizer
-   enable logic and high-limit setting, then **verify the OA damper modulates open** when free
-   cooling is available. The data cannot separate a stuck damper from wrong logic here: the
-   dataset maps the damper to the controller's command, which keeps modulating, so only the
-   temperatures show that less outdoor air arrives. The report's title says "enable", the
-   likely cause is mechanical: that is what the walk-down is for.
+1. *The top issue.* Rank 1 is headed "Outdoor-air damper not modulating (stuck low)", on
+   `AHU__onset_damper_stuck_025`, a **fault**. The heading names the cause; the recommended
+   action is "Repair the outdoor-air damper or actuator": stroke the damper from the BAS and
+   watch the blades, the linkage and the actuator before changing any economizer logic. The
+   finding tells the two causes apart by setting the command against the temperatures. On 40%
+   of the missed free-cooling hours with a usable temperature balance (673 h), the damper was
+   commanded at least 90 % open, yet the outdoor-air fraction from the mixed-air temperature
+   stayed near 4 % (`missed_cause: damper_not_delivering`, `commanded_open_pct` 40.3). On the
+   fault-free control, the damper was commanded low on every missed hour
+   (`economizer_not_commanded`, 0 %). "Stuck low" is inferred from the mixed-air temperature, and
+   a badly placed mixed-air sensor reads the same way. That is why the walk-down confirms it.
 2. *Missed free cooling.* The onset unit ran mechanical cooling in 30% of the free-cooling hours
    (outdoor air below 60 °F), against 17% for the fault-free control. A damper stuck at 25 %
    admits about as much outdoor air in cooling weather as the unit's small design minimum, so the
@@ -1124,15 +1258,23 @@ the drift baselines are frozen.
    placeholder that the ingest masks, so half the year has no setpoint. Walk-down item: read the
    static setpoint at the controller and confirm what the trend is mapped to.
 4. *Walk-down checklist and re-tuning plan* (a model answer; accept any that covers the
-   evidence):
+   evidence). The report's **Verify on site** section is the generated version: its sensor table
+   leads with the onset unit's `duct_static_sp` (trust 0.40, untrusted), then the equipment table
+   puts the onset unit's damper first (look at the blades, linkage and actuator while the BAS
+   strokes it; confirms if the blades stay near one position at a 100 % command; refutes if they
+   travel fully, and then the mixed-air sensor is the suspect), then each unit's supply-air and
+   static-reset logic and the control's economizer enable. It lists no design values: the
+   economizer's minimum outdoor air (1.6 %) and 60 °F high limit are site parameters in this
+   config, not rule defaults. The "rule defaults" confidence lines belong to `supply_air_reset`
+   and `static_pressure_reset`, whose parameters are detection thresholds, not site facts. A
+   student's list should match the generated one and add what a template cannot know:
    - Outdoor-air damper on the onset unit: stroke it from the BAS through its range, watch the
      blades and the linkage, and compare the mixed-air temperature with the command. Expect: the
      blades stay near a quarter open. Confirm the economizer enable logic and the 60 °F high limit
      in the program.
    - Static-pressure setpoint point: confirm the trend mapping and the value at the controller.
-   - Design values the report assumed (its confidence lines say "rule defaults"): the minimum
-     outdoor-air position, the supply-air setpoint and the static setpoint, from the drawings or
-     the controller.
+   - Design values worth confirming anyway, from the drawings or the controller: the minimum
+     outdoor-air position, the supply-air setpoint and the static setpoint.
    - The plan, sensors first: fix the static-setpoint trend; repair the damper actuator or
      linkage; then consider the sequence changes the report suggests (supply-air reset,
      static-pressure reset) as separate measures with their own verification. Verification: the
@@ -1149,14 +1291,16 @@ the drift baselines are frozen.
    cycling at night. The measure did not fix the short cycling: 178 compressor starts a day
    before and 131 after, both far above the rule's limit. A second issue for the plan.
 7. *M&V.* CAMBER refuses: an hourly baseline needs at least 1440 hours and the baseline test has
-   168. A defensible measurement needs a longer baseline covering the reporting weather (months,
-   not a week), or an IPMVP Option B isolation measurement of the unit's own energy, set up
-   before the change.
+   168. The refusal says what is missing: its `need` puts the gap at 1,272 more hours (about 53
+   days of data). A defensible measurement needs a longer baseline covering the reporting weather
+   (months, not a week), or an IPMVP Option B isolation measurement of the unit's own energy, set
+   up before the change.
 
 **Discussion points**
 
-- The RCx report ranks issues; it does not decide causes. Map each item on the checklist to the
-  walk-down chapter's advice on what to observe, and to the economizer guide's two questions.
+- The RCx report ranks issues and names the likely cause from the trends; it does not prove
+  it. Map each item on the checklist to the walk-down chapter's advice on what to observe, and
+  to the economizer guide's two questions.
 - Verification is planned before the change: decide the check, the window and the pass mark in
   the re-tuning plan, then run it.
 - Drift and M&V answer different questions: "did the equipment go back to how it was?" and "how
@@ -1166,8 +1310,10 @@ the drift baselines are frozen.
 
 - Freezing the drift baselines before writing the RCx report, so the report already contains the
   drift verdict.
-- Taking the report's "Enable economizer free cooling" literally and reprogramming instead of
-  inspecting the damper.
+- Reprogramming the economizer on a damper-cause issue: the command already opens, so the fix is
+  mechanical.
+- Ordering a new actuator on the heading alone: "stuck low" comes from the mixed-air
+  temperature, so stroke the damper and check the mixed-air sensor first.
 - Treating the conditional static-reset issue as a confirmed fault.
 - Comparing the two RTU tests' energy directly as a saving: different winters, a week each, no
   weather normalization.

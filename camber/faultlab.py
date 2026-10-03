@@ -352,7 +352,9 @@ def _chw_reset(idx, *, faulty):
         chws = np.full(n, 44.0)  # flat CHWST (no reset) + low deltaT
         chwr = np.full(n, 48.0)  # 4F dT (well below design)
     else:
-        chws = np.clip(42 + 0.30 * (oat - 55), 42, 52)  # clear upward reset with OAT
+        # a healthy reset: CHWST warm (52F) in mild weather, reset DOWN to 42F as OAT rises
+        # (a negative slope on OAT; 0.98, #86 -- until 0.97 this ramp ran the wrong way)
+        chws = np.clip(52 - 0.30 * (oat - 55), 42, 52)
         chwr = chws + 12.0  # healthy 12F dT
     return pd.DataFrame(
         {
@@ -569,6 +571,30 @@ def _reheat_capacity(idx, *, faulty):
     )
 
 
+# --- 0.98 (#85): a terminal damper stuck at one position --------------------------------------
+def _actuator_stuck(idx, *, faulty):
+    """A cooling-season VAV box, occupied weekdays 07-18, cooling setpoint 74 F.
+
+    The afternoon solar load peaks mid-day. Clean: the damper follows it (30-80 %) and the zone
+    holds within 1 F of 72 F. Faulty: the damper is stuck at 30 % all day, so the afternoon runs
+    up to 5 F warm -- more than 1 F over the cooling setpoint for over half the occupied hours.
+    """
+    occ = (idx.dayofweek < 5) & (idx.hour >= 7) & (idx.hour < 18)
+    load = np.where(occ, np.clip(np.sin((idx.hour - 7) / 11.0 * np.pi), 0.0, None), 0.0)
+    n = len(idx)
+    damper = np.full(n, 30.0) if faulty else np.where(occ, 30.0 + 50.0 * load, 0.0)
+    return pd.DataFrame(
+        {
+            Role.DAMPER: damper,
+            Role.SPACE_TEMP: np.where(occ, 72.0 + (5.0 if faulty else 1.0) * load, 70.0),
+            Role.COOL_SP: np.where(occ, 74.0, 80.0),
+            Role.HEAT_SP: np.where(occ, 70.0, 60.0),
+            Role.OCCUPANCY: occ.astype(float),
+        },
+        index=idx,
+    )
+
+
 # --- 0.93 (#40) DX / heat-pump scenarios (093-refrig) ------------------------------------------
 
 
@@ -695,6 +721,8 @@ SCENARIOS: dict = {
     "hp_mode_vs_need": _hp_mode_need,  # 0.93 (#40)
     "hp_capacity_shortfall": _hp_capacity,  # 0.93 (#40)
     "source_loop_deltat": _source_loop,  # 0.93 (#40)
+    # 0.98 (#85): promoted with the maintainer's sign-off (S3)
+    "actuator_stuck": _actuator_stuck,
 }
 
 

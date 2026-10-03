@@ -273,3 +273,22 @@ def test_version_is_consistent_across_the_package():
         f"camber.__version__ is {declared!r} but pyproject.toml says {packaged!r} — "
         "bump both (see RELEASING.md, pre-release checklist item 2)"
     )
+
+
+def test_min_deps_constraints_pin_the_declared_floors():
+    """CI's min-deps job installs ``.github/min-deps.txt``: it must pin every core dependency at
+    exactly the floor ``pyproject.toml`` declares, or that job proves a floor nobody declared."""
+    import re
+
+    pyproject = open(os.path.join(_ROOT, "pyproject.toml"), encoding="utf-8").read()
+    block = pyproject.split("\ndependencies = [", 1)[1].split("]", 1)[0]
+    floors = dict(re.findall(r'"([A-Za-z0-9_.-]+)>=([0-9.]+)', block))
+    pins_txt = open(os.path.join(_ROOT, ".github", "min-deps.txt"), encoding="utf-8").read()
+    pins = dict(re.findall(r"^([A-Za-z0-9_.-]+)==([0-9.]+)\s*$", pins_txt, flags=re.M))
+
+    def _v(s):
+        parts = [int(p) for p in s.split(".")]
+        return tuple(parts + [0] * (3 - len(parts)))
+
+    assert floors and set(pins) == set(floors), (pins, floors)
+    assert {k: _v(v) for k, v in pins.items()} == {k: _v(v) for k, v in floors.items()}

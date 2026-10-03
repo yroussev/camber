@@ -151,6 +151,74 @@ economizer high-limit finding (on the copied return air) and RTU01/RTU02's SAT-r
 (on OAT, which the failing balance also names). On 2020 alone the copy covers the whole window, so
 both points are flagged "undetermined".
 
+### Operating modes, stray rows and clipped readings (0.98, #87; provisional)
+
+**Outliers read per operating mode.** The shape-aware read still assumes one population per
+point. A supply air held to a fraction of a degree while the unit conditions, and anywhere between
+plenum and coil temperature while it idles, is two populations: every idle hour reads as a robust
+outlier. `sensor_trust(series, role, mode=labels)` judges the shape-aware outliers within each
+operating mode (`labels` names each sample's mode; a mode with fewer than 24 samples, and
+unlabelled samples, keep the whole-series read) and rebuilds the score from its parts:
+coverage x (1 - min(2 x outliers, 1)) x (1 - 0.2 x flatline) x the range term. It applies only to
+the fan-dependent roles (`FAN_GATED_ROLES`, less the duty-cycled airflows, which have the
+two-regime read already) and never when a plant run gate applies. `SensorTrust.mode_outlier_frac`
+carries the per-mode share and `mode_source` names the split; the pooled `outlier_frac` keeps its
+meaning.
+
+`frame_sensor_health(frame, mode="auto")` infers the modes only for a unit with **no fan signal**:
+a sample is "off" when the OA damper is at or below 2 % and every trended coil valve at or below
+1 % (the damper and at least one valve are needed, 24 samples in each mode, and an off share of at
+most 60 %). A unit with a fan signal keeps the pooled read under `"auto"`; pass its fan mask as
+`mode` to read per fan mode anyway. The [RCx report](RCX-REPORT.md) passes `mode="auto"`, so a
+fan-less unit now shows a gated column, and *Gate used* adds "outliers read per mode: inferred
+off-mode (OA damper and coil valves closed)".
+
+On `irish-ahu` (catalog example, hourly, no fan point) the supply air goes from *untrusted* 0.19 to
+*trusted* 0.89 in the RCx table (per-mode outlier share 4.1 %). No fan-gated unit changes.
+
+*Measured and rejected: per fan mode on every gated unit.* Reading the gated units' outliers per
+fan on / off as well was measured on every catalog RCx report: 175 of 511 trust-table rows moved,
+by up to -0.34 (an LBNL single-duct AHU's duct static, *trusted* 1.00 -> *suspect* 0.66), with five
+verdict changes in both directions on the LBNL and ORNL data. A fan-off reading is not one
+population either (it drifts from coil to plenum temperature as the unit coasts), so splitting it
+out moves healthy points as much as it fixes anything. *Also rejected:* reading supply air relative
+to its setpoint, which scored worse on every unit tried; it is deferred.
+
+**Stray lead and tail rows.** A few rows logged long before (or after) a point's real record make
+its coverage over its own span low, though the record itself is complete. When a point's longest
+gap is at least 30 days and 20 % of its span, and the rows on one side of it are at most 1 % of its
+samples, those rows are left out: the point is flagged `stray_lead` (or `stray_tail`) and judged on
+its main span (`main_start`, `main_end`; `n_stray` rows left out). `first_valid` and
+`window_coverage` keep their meaning. Of 1,326 hourly series in the catalog store this applies only
+to `irish-ahu`'s five points that logged 4 rows in January 2015, 904 days before the record starts
+on 2017-06-23 (their coverage 0.57-0.67 -> 0.97).
+
+**Clipped at a range limit.** A transmitter at full scale reports its limit, not the quantity: the
+reading is a bound. `clipped_at_limit(series, role)` finds a pile-up at the series' maximum (or
+minimum): at least 12 samples and 0.5 % of them within 0.1 % of the value span of the extreme, at
+ten times the density of the adjacent 5 % band, **and** the extreme is a round number to within
+0.01 % (2 significant figures; temperatures in degF or degC). The last test separates a configured
+full scale (2000 ppm read as 1999.9985, 20000 cfm read as 19999) from a fan or flow at its design
+maximum, which lands only near one (a simulated supply fan topping out at 3397 cfm is 0.08 % from
+3400 and is not flagged). It checks both ends of CO2, outdoor CO2, OAT, wet bulb, space and return
+air, and the high end of airflow, OA airflow, chilled- and hot-water flow and duct static (their low
+end is "off"). Supply air, condenser water and humidity are not checked: a controller's own limits
+pile up at round numbers too. `frame_checks` flags the point `clipped`, with
+`SensorTrust.clipped = {"side", "limit", "limit_label", "n", "frac", "frac_fan_off"}`
+(`frac_fan_off`: the share of the clipped samples with the supply fan clearly off, `None` without a
+fan signal). The flag carries no trust penalty. For a fan-dependent point (return air, airflow,
+OA airflow, duct static) on a unit with a fan signal, `frame_checks` also requires the pile-up on
+the samples with the fan not clearly off: a BAS or a gap-fill that holds a round constant while the
+fan is off (a return air parked at 70.0 °F) piles up like a range limit but is not one. CO2 and the
+outdoor and space points are judged on every sample, since a CO2 transmitter in a closed room
+topping out overnight is a real clip.
+
+On the catalog store (hourly) it fires on four points: `nuig-ahu101`'s room CO2 at 2,000 ppm (97
+hours, every one with the fan off), `lbnl-b59` RTU01's and RTU04's OA flow at 20,000 cfm, and the
+LBNL dual-duct `DMPRStuck_OA_0` run's return air at 140 °F, where the simulation pins every air
+temperature at its 140 °F bound during the fault (already flagged `out_of_range`). All four
+still fire with the fan-on re-check (the three fan-dependent ones have the fan on).
+
 ## Cross-sensor and provenance checks
 
 Each returns a `ConsistencyResult` (`check`, `n_checked`, `violation_frac`, `severity`, `summary`,
@@ -161,7 +229,7 @@ Each returns a `ConsistencyResult` (`check`, `n_checked`, `violation_frac`, `sev
 | `mixing_consistency(frame)` | MAT outside [min(OAT, RAT), max(OAT, RAT)] +/- 5 F | physics |
 | `mixing_flow_consistency(frame)` | MAT biased against the flow-weighted OA/RA blend | screening (max `warn`) |
 | `copied_signal_consistency(frame)` | two measured roles carrying identical data | hard evidence (`fault`) |
-| `gapfill_signature(series)` | imputed / interpolated stretches, repeated days | screening (max `warn`) |
+| `gapfill_signature(series, role=None)` | imputed / interpolated stretches, repeated days | screening (max `warn`) |
 | `cross_unit_identity(series_by_equip, role)` | one role implausibly identical across units | screening (max `warn`) |
 | `co2_outdoor_consistency(frame)` | zone CO2 below outdoor CO2 | physics |
 | `percent_scale_suspect(series, role)` | a 0-100 % (or 0-1) signal mapped to a cfm role | screening (bool / `None`) |
@@ -205,6 +273,15 @@ Filled data can be plausible in range and shape, so no single-series statistic s
 Resampled means erase the granularity fingerprint: if every window is continuous the result says
 "not evaluable" rather than clean. A granularity change can also be a trend reconfiguration or a
 sensor swap, so this is screening-grade.
+
+**Scheduled points (0.98, #87).** A fan or a status on a fixed weekday schedule repeats whole days
+exactly, and that is the schedule doing its job. For a *stepwise* point (a status role passed as
+`role`, or any series with at least 95 % of its samples on at most two levels) days that share one
+pattern with at least two other days are reported as scheduled: the summary says "N days follow a
+fixed schedule", the metrics carry `scheduled_days` and `n_schedule_patterns`, and they do not warn.
+`repeated_days` keeps only the repeats no shared pattern explains. On `nuig-ahu101`'s fan status
+(15-minute grid) 191 days follow 12 patterns; 3 pairs of days remain unexplained and still warn.
+An analog series is never excused this way.
 
 `cross_unit_identity` complements it when the same role exists on several units: per 30-day window
 of hourly means, a pairwise `r >= 0.995` is more agreement than independent measurement allows, and

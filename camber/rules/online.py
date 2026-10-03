@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from ..model.entities import missing_inputs
+
 __all__ = ["Transition", "OnlineFDD"]
 
 _ACTIONABLE = frozenset({"warn", "fault"})
@@ -39,7 +41,8 @@ class OnlineFDD:
 
     Feed samples with :meth:`push` (one role-named row) or :meth:`extend` (a frame). Every
     ``eval_every`` new samples — or on an explicit :meth:`evaluate` — each rule whose required
-    roles are present is run over the current window; a :class:`Transition` is returned only when a
+    roles (and one role of each ``roles_any_of`` group, 0.98) are present is run over the
+    current window; a :class:`Transition` is returned only when a
     rule's severity differs from its last emitted value for that equipment.
     """
 
@@ -91,8 +94,9 @@ class OnlineFDD:
             return []
         out = []
         for rule in self.rules:
-            required = tuple(getattr(rule, "roles_required", ()))
-            if any(r not in frame.columns for r in required):
+            # 0.98 (#86 item 4a): required roles AND roles_any_of groups (one shared test)
+            req, groups = missing_inputs(rule, frame.columns)
+            if req or groups:
                 continue
             finding = rule.analyze(equip, frame)
             if finding is None:

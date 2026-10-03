@@ -36,6 +36,7 @@ __all__ = [
 PERCENT_ROLES = frozenset(
     {
         Role.HEAT_VALVE,
+        Role.HEAT_VALVE_POSITION,  # 0.98 (#85)
         Role.COOL_VALVE,
         Role.OA_DAMPER,
         Role.DAMPER,

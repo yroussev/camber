@@ -6,8 +6,9 @@
 
 Ten VAV boxes share one rooftop unit, and on six of seven test days one of them has its damper
 stuck. Find that box from the trends and from the zone cohort, see how the rooftop unit reacts
-to it, and find out how much a comfort rule alone can tell you. The published fault labels
-score CAMBER, and the score is not flattering. Working out why is the lesson.
+to it, and find out how much a comfort rule alone can tell you. Then read the rule that judges
+the damper itself against what its room asked for, and see why the healthy boxes, whose dampers
+also sit still for hours, stay quiet. The published fault labels score both.
 
 ## Learn more
 
@@ -54,7 +55,10 @@ camber datasets score ornl-frp-vav --store lab_store --findings vav_out/findings
 
 The exercise uses the dataset's own config. Among its rules:
 
-- `unmet_setpoint_hours` runs on every box.
+- `actuator_stuck` runs on every box. It is the dataset's declared detector: it finds the
+  stretches where a damper holds one position, and judges each against the room's temperature
+  and setpoints.
+- `unmet_setpoint_hours` runs on every box, as context.
 - `sat_rogue_zone_census` and `sat_cohort_starvation` read each day's ten boxes as one cohort
   under that day's rooftop unit. The grouping comes from the equipment names.
 
@@ -70,7 +74,8 @@ setpoint is logged.
    its airflow on the 0 % and 100 % days. Then compare it with the other nine boxes on those
    days.
 3. **Run the config** (the commands above) and read the `unmet_setpoint_hours` finding for the
-   suspect box on each day.
+   suspect box on each day. Then read its `actuator_stuck` finding each day: the severity, the
+   summary, and the `reason` and `tier` metrics.
 4. **The cohort rules.** Find `sat_rogue_zone_census` and `sat_cohort_starvation` (equipment
    `<fleet>`). Which box drags which day's supply-air reset? Is any day's whole cohort starved?
 5. **The rooftop unit.** Open `RTU__d3_stuck_000` … `RTU__d3_stuck_100` and compare their supply
@@ -89,19 +94,24 @@ setpoint is logged.
 5. What does the supply-air rogue-zone census say, and on which days? What does the
    cohort-starvation census add?
 6. How does the rooftop unit react as the stuck damper goes from shut to fully open?
-7. What true- and false-positive rates does the label score give `unmet_setpoint_hours`? Why is
-   a comfort rule a poor stuck-damper detector here?
+7. On which days does `actuator_stuck` flag the box under test, and why is it a fault on some
+   days and only a warning on others? Its neighbours' dampers also hold one position for hours:
+   why are they not flagged? What label score does it get, and what would
+   `unmet_setpoint_hours` alone score (your answer to question 3)? Why is a comfort rule a poor
+   stuck-damper detector here?
 8. Room 102 is flagged on every day, whatever the test. Is that the fault under test?
 
 ## What CAMBER shows
 
-- **Findings.** One `unmet_setpoint_hours` finding per box per day (`unmet_pct`, `too_hot_pct`,
-  `too_cold_pct`), and one `<fleet>` finding for each census. The rogue-zone census lists
+- **Findings.** One `actuator_stuck` finding per box per day (`tier`, `reason`, `value`,
+  `stuck_share`, and every flagged run under `roles`), one `unmet_setpoint_hours` finding per box
+  per day (`unmet_pct`, `too_hot_pct`, `too_cold_pct`), and one `<fleet>` finding for each
+  census. The rogue-zone census lists
   `rogue_by_group` (the rogue box of each day's rooftop unit) and `zone_request_share`.
 - **Trends.** The trend viewer shows every box's damper, airflow, room temperature and
   setpoints, and the rooftop unit's airflow and static pressure.
 - **Score.** `camber datasets score` prints the rates for the declared detector
-  (`unmet_setpoint_hours` → stuck damper), scoring only the box under test on each day.
+  (`actuator_stuck` → stuck damper), scoring only the box under test on each day.
 
 ## Caveats
 
@@ -120,6 +130,10 @@ setpoint is logged.
 
 - The `full` subset (`camber datasets ingest ornl-frp-vav --subset full --store lab_store`) adds
   test sets 1 and 2 (the box of rooms 106 and 104 under test) and two airflow-sensor-bias sets.
-  Does the flat-damper test find the box under test in each set?
-- Copy `vav.json`, add `cohort_airflow` to its rules and give its VAV equipment entry an
-  `"equip"` list of one day's ten boxes. Does the rule pick out the stuck box? Why, or why not?
+  Does `actuator_stuck` find the box under test in each set? Look closely at set 1's 100 % day.
+- Copy `vav.json` and add `cohort_airflow` to its rules with
+  `"params": {"group_by_topology": true}`, so each day's ten boxes are compared only with each
+  other. Does the raw mean airflow pick out the stuck box? Try `"normalise": "design_max"` with a
+  `"design_max"` map of each box's largest airflow, then a cohort on the damper itself (in Python:
+  `CohortDeviation(Role.DAMPER, group_by_topology=True, summary="variability", tail="low")`).
+  Which comparison isolates the stuck box, and why does evening out the box sizes not?

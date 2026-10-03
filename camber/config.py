@@ -28,6 +28,12 @@ mapping, which equipment to discover, which rules to run, and what report to wri
       "report": {"level": 2, "climate_zone": "CA CZ15", "out_text": "audit.txt"}
     }
 
+The optional top-level ``site_elevation_ft`` (0.98, #92) is the site's elevation in feet. Every rule
+and drift detector that derives a wet-bulb from OAT + RH takes it as its ``elevation_ft`` (unless
+its own params set ``elevation_ft`` or ``pressure_psia``): ``cooling_tower_approach``,
+``condenser_water_reset``, ``cooling_tower_approach_drift`` and
+``cooling_tower_fan_effort_drift``. See :func:`site_elevation_ft`.
+
 The optional ``soo`` section evaluates Sequence-of-Operations conformance per
 equipment class -- either a packaged library sequence (``library``: ``g36_ahu`` /
 ``g36_plant``) or a JSON clause spec (``spec``) -- merging the per-clause Findings into
@@ -89,6 +95,17 @@ each configured detector family (:mod:`camber.driftrun`), merging its Findings i
 strictly read-only toward the baseline store: a config-driven run never creates or moves a frozen
 reference, because a run that mints the baseline it scores against is circular. Creating one is
 ``camber drift freeze``; moving one is ``camber drift accept`` (see :mod:`camber.cli`).
+
+A family may instead **declare** its reference (0.98, #86, approved decision S4):
+``{"class": "CHW_PLANT", "family": "tower", "reference": {"equip": "PLANT__fault_free"}}`` scores
+every other equipment of the class against a named healthy one (a labelled dataset's fault-free
+run, a sister unit), and ``"reference": {"period": [start, end]}`` against a known-good window of
+the same equipment. That is allowed because nothing is minted: the reference's baseline is fitted
+in a scratch in-memory store on every run and **never persisted**, the reference is named in the
+config for anyone to audit, each Finding records it (``baseline_source``) with a caveat, and the
+reference equipment itself declines (``reason="is_reference"``). Such a family needs no store and
+no windows (they default to the whole history; a period reference's current window to everything
+after it), and ``camber drift freeze`` refuses it.
 
 **Store-backed source.** ``"source": {"kind": "store", "store": "lab_store", "facility_id":
 "ds-lbnl-sdahu"}`` reads equipment from a :class:`~camber.store.ParquetStore` (e.g. one filled by
@@ -201,8 +218,8 @@ from .resolve import (
     discover_terminals,
     resolve,
 )
-from .rules.base import _merge_shared
-from .rules.builtin import builtin_registry, is_fleet, make_rule
+from .rules.base import _merge_shared, _with_class
+from .rules.builtin import builtin_registry, is_fleet, make_rule, rule_factories
 from .soo import soo_findings, spec_from_dicts
 from .soo_library import g36_ahu_sequence, g36_plant_sequence
 from .store.modelstore import BaselineStore
@@ -210,6 +227,7 @@ from .store.modelstore import BaselineStore
 __all__ = [
     "RunResult",
     "run_config",
+    "site_elevation_ft",
     "run_drift_config",
     "run_mv_config",
     "drift_store_path",
@@ -250,6 +268,10 @@ class RunResult:
     # its provenance (source file(s), edge count, ids that named no discovered equipment).
     topology: object | None = None
     topology_source: dict | None = None
+    # -- 0.98 (#88): configured rules that applied but produced nothing, as
+    # :class:`camber.rules.base.RuleSkip` records (missing inputs, no data, no verdict). Kept out of
+    # ``findings`` (and so out of findings.json) on purpose; the RCx report lists them.
+    rules_skipped: list = field(default_factory=list)
 
 
 def _path(base: str, p: str) -> str:
@@ -660,15 +682,18 @@ def _only_named(found: list, entry: dict) -> list:
     return [r for r in found if r.equip in names]
 
 
-def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline"):
+def _mv_declined(equip: str, why: str, *, rule: str = "mv_baseline", need: dict | None = None):
     from .rules.base import Finding
 
     what = "M&V savings" if rule == "mv_savings" else "M&V baseline"
+    metrics: dict = {"declined": True, "declined_reason": why}
+    if need is not None:  # 0.98 (#88): what data would carry the fit (camber.mandv.sufficiency)
+        metrics["data_needed"] = dict(need)
     return Finding(
         rule=rule,
         equip=equip,
         severity="info",
-        metrics={"declined": True, "declined_reason": why},
+        metrics=metrics,
         summary=f"{equip}: {what} declined -- {why}",
         caveats=[f"{what} not {'computed' if rule == 'mv_savings' else 'fitted'}: {why}"],
     )
@@ -1271,10 +1296,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
     conv, conv_extra = _mv_trended_conversion(entry, getattr(prep, "units", None))  # #69, #70
     out = []
 
-    def declined(equip, why):
-        out.append(_mv_declined(equip, why))
+    def declined(equip, why, need=None):
+        out.append(_mv_declined(equip, why, need=need))
         if reporting is not None:
-            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings"))
+            out.append(_mv_declined(equip, f"no baseline: {why}", rule="mv_savings", need=need))
 
     for ref in refs:
         full = resolve(ref, prep.mapping, (role, Role.OAT, *extra_roles), resample="1h")
@@ -1312,7 +1337,10 @@ def _mv_findings(entry: dict, refs: list, prep: _Prepared) -> list:
         )
         daily = _mvform.add_drivers(daily, entry, frame)
         if len(daily) < min_days:
-            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})")
+            from .mandv.sufficiency import baseline_need
+
+            need = baseline_need("daily", len(daily), min_n=min_days)
+            declined(ref.equip, f"only {len(daily)} usable days (< {min_days})", need)
             continue
         if _mvform.driver_columns(daily):
             model = _mvform.fit(daily)
@@ -2138,8 +2166,131 @@ def _drift_families(spec: dict, refs_by_class: dict) -> list:
             if key in e:
                 win = _drift_window(e, key)
                 e[key] = win
+        if e.get("reference") is not None:
+            e["reference"] = _drift_reference(e["reference"], f"{cls}:{fam}", refs_by_class)
         out.append(e)
     return out
+
+
+# --- 0.98 (#86, S4) declared drift reference (098-plant-reference) ------------------------------
+_REFERENCE_KEYS = ("equip", "period")
+
+
+def _drift_reference(ref, where: str, refs_by_class: dict) -> dict:
+    """Validate one ``drift.families[].reference``: ``{"equip": name}`` (a discovered equipment,
+    optionally with a ``"period"``) or ``{"period": [start, end]}`` (a known-good window of the
+    same equipment)."""
+    if not isinstance(ref, dict) or not ref:
+        raise ValueError(
+            f"drift family {where}: reference must be an object naming an 'equip' and/or a "
+            f"'period', got {ref!r}"
+        )
+    unknown = sorted(set(ref) - set(_REFERENCE_KEYS))
+    if unknown:
+        raise ValueError(
+            f"drift family {where}: unknown reference key(s) {unknown} "
+            f"(known: {list(_REFERENCE_KEYS)})"
+        )
+    out: dict = {}
+    if ref.get("period") is not None:
+        out["period"] = _drift_window(ref, "period")
+    equip = ref.get("equip")
+    if equip is not None:
+        known = sorted(r.equip for refs in refs_by_class.values() for r in refs)
+        if not isinstance(equip, str) or equip not in known:
+            raise ValueError(
+                f"drift family {where}: reference equip {equip!r} was not discovered "
+                f"(discovered: {known[:12]}{' ...' if len(known) > 12 else ''})"
+            )
+        out["equip"] = equip
+    if not out:
+        raise ValueError(f"drift family {where}: reference names neither an 'equip' nor a 'period'")
+    return out
+
+
+def _all_reference(fams: list) -> bool:
+    """True when every drift family declares a reference (no frozen store is then read)."""
+    return bool(fams) and all(e.get("reference") for e in fams)
+
+
+# --- end 0.98 declared drift reference -----------------------------------------------------------
+
+
+def _rule_level_skip(rule):
+    """0.98 (#88): the :class:`RuleSkip` for a configured rule that produced nothing anywhere and
+    recorded no per-equipment skip (no equipment carried any of its inputs)."""
+    from .rules.base import RuleSkip, _missing_labels
+
+    missing = _missing_labels(rule, ())
+    return RuleSkip(rule.name, "", "", missing, "missing_inputs" if missing else "no_verdict")
+
+
+# --- 0.98 (#92, 098-followups): the site elevation for a derived wet-bulb ----------------------
+#: The rules that take the config's ``site_elevation_ft``: every built-in rule whose constructor
+#: has an ``elevation_ft`` parameter (it derives a wet-bulb from OAT + RH). The drift detectors
+#: get it through :func:`camber.driftrun.run_drift`.
+_SITE_ELEVATION_KEY = "site_elevation_ft"
+
+
+def site_elevation_ft(config: dict) -> float | None:
+    """The config's ``site_elevation_ft`` (ft above sea level), validated; ``None`` when absent.
+
+    One key for the site: it feeds every rule and drift detector that derives a wet-bulb from OAT
+    + RH (``cooling_tower_approach``, ``condenser_water_reset``, ``cooling_tower_approach_drift``,
+    ``cooling_tower_fan_effort_drift``). A rule's own ``elevation_ft`` or ``pressure_psia`` param
+    wins over it. Raises ``ValueError`` on a non-number or a value outside -1,500 to 15,000 ft.
+    """
+    v = config.get(_SITE_ELEVATION_KEY)
+    if v is None:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+        raise ValueError(f"{_SITE_ELEVATION_KEY} must be a number of feet, got {v!r}")
+    if not -1500.0 <= float(v) <= 15000.0:
+        raise ValueError(
+            f"{_SITE_ELEVATION_KEY} {v!r} is outside -1,500 to 15,000 ft (give feet, not metres)"
+        )
+    return float(v)
+
+
+def _with_site_elevation(name: str, params: dict, elevation_ft: float | None) -> dict:
+    """``params`` plus ``elevation_ft`` when the rule takes one and sets neither it nor a
+    measured ``pressure_psia`` itself."""
+    if elevation_ft is None or "elevation_ft" in params or "pressure_psia" in params:
+        return params
+    fac = rule_factories().get(name)
+    if fac is None:
+        return params
+    import inspect
+
+    try:
+        sig = inspect.signature(fac[0])
+    except (TypeError, ValueError):  # pragma: no cover - builtin classes always have one
+        return params
+    if "elevation_ft" not in sig.parameters:
+        return params
+    return {**params, "elevation_ft": elevation_ft}
+
+
+def _param_basis(name: str, params: dict, basis) -> dict | None:
+    """A rule entry's ``"basis"`` ({param: where its value came from}) as finding metrics.
+
+    0.98 (#90): a template that sets a calibrated value (``"params": {"fan_heat_f": 1.0}``) can
+    say where it came from (``"basis": {"fan_heat_f": "calibrated on lbnl-sdahu fault_free"}``);
+    each finding of the rule then records ``metrics["param_basis"]`` =
+    ``{param: {"value": ..., "basis": ...}}``. A basis for a parameter the entry does not set
+    records the rule's default. Unknown parameters raise ``ValueError`` (fail fast on a typo).
+    """
+    if not basis:
+        return None
+    if not isinstance(basis, dict):
+        raise ValueError(f"rule {name!r}: 'basis' must map parameter names to text")
+    from .rules.param_docs import rule_params
+
+    defaults = {rp.name: rp.default for rp in rule_params(name)}
+    unknown = sorted(set(basis) - set(defaults) - set(params))
+    if unknown:
+        raise ValueError(f"rule {name!r}: 'basis' names unknown parameter(s) {', '.join(unknown)}")
+    return {k: {"value": params.get(k, defaults.get(k)), "basis": str(v)} for k, v in basis.items()}
 
 
 def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
@@ -2162,22 +2313,31 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         )
 
     reg = builtin_registry()
-    findings, ran = [], []
+    findings: list = []
+    ran: list = []
+    skipped: list = []  # 0.98 (#88): RuleSkip records from the rule runners
     # 0.92 (#17): the "ventilation" section configures the system-level 62.1 VRP rule
     vent_rule = _ventilation_rule(config, base_dir)
     if vent_rule is not None:
         reg.register(vent_rule)
+    site_elev = site_elevation_ft(config)  # 0.98 (#92)
     for entry in config.get("rules", []):
         # A rule entry is either a bare name "economizer_high_limit" (defaults) or a dict
         # {"name": ..., "params": {...}} that overrides the rule's constructor for this run.
+        basis = None
         if isinstance(entry, dict):
             name = entry["name"]
             params = entry.get("params") or {}
-            if params:
-                reg.register(make_rule(name, **params))  # override the default instance
+            basis = _param_basis(name, params, entry.get("basis"))
         else:
-            name = entry
+            name, params = entry, {}
+        # 0.98 (#92): the site elevation reaches every rule that derives a wet-bulb
+        params = _with_site_elevation(name, params, site_elev)
+        if params:
+            reg.register(make_rule(name, **params))  # override the default instance
         rule = reg.get(name)  # KeyError on unknown name
+        n_skip = len(skipped)
+        n_before = len(findings)
         if is_fleet(rule):
             f = reg.run_fleet(
                 name,
@@ -2187,13 +2347,26 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
                 shared=shared,
                 min_trust=min_trust,
                 topology=topology,
+                skipped=skipped,
             )
             if f is not None:
                 findings.append(f)
         else:
-            findings += reg.run(
-                name, refs, mapping, resample=resample, shared=shared, min_trust=min_trust
+            got = reg.run(
+                name,
+                refs,
+                mapping,
+                resample=resample,
+                shared=shared,
+                min_trust=min_trust,
+                skipped=skipped,
             )
+            findings += got
+            if not got and len(skipped) == n_skip:
+                skipped.append(_rule_level_skip(rule))
+        if basis:  # 0.98 (#90): a calibrated value's provenance travels with its findings
+            for f in findings[n_before:]:
+                f.metrics = {**(f.metrics or {}), "param_basis": basis}
         ran.append(name)
     # 0.92 (#17): a configured ventilation section runs even when "rules" omits the rule
     if vent_rule is not None and vent_rule.name not in ran:
@@ -2205,6 +2378,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
             shared=shared,
             min_trust=min_trust,
             topology=topology,
+            skipped=skipped,
         )
         if f is not None:
             findings.append(f)
@@ -2319,6 +2493,7 @@ def run_config(config: dict, *, base_dir: str = ".") -> RunResult:
         base_dir=base_dir,
         topology=topology,
         topology_source=topology_source,
+        rules_skipped=skipped,
     )
 
 
@@ -2410,7 +2585,7 @@ def _frame_resolver(prep: _Prepared) -> Callable:
         if key not in cache:
             want = tuple(Role) if roles is None else tuple(roles)
             frame = resolve(ref, prep.mapping, want, resample=prep.resample)
-            cache[key] = _merge_shared(frame, prep.shared)
+            cache[key] = _with_class(_merge_shared(frame, prep.shared), ref)  # 0.98 (#85)
         return cache[key]
 
     return frame_for
@@ -2509,13 +2684,17 @@ def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str =
     Returns ``{(equip, kind): fitted model}`` merged across the families, ready for
     :func:`camber.driftrun.accept_new_normal_from_periods`. ``period`` defaults to the config's
     ``drift.current`` window -- accepting a new normal means "what it is doing *now* is the
-    reference". Nothing is written: the fits come from a scratch store.
+    reference". Nothing is written: the fits come from a scratch store. Families that declare a
+    ``reference`` (0.98) have no frozen baseline to move and are left out.
     """
     dspec = config.get("drift")
     if dspec is None:
         return {}
     prep = _prepare(config, base_dir)
     fams = _drift_families(dspec, prep.refs_by_class)
+    fams = [e for e in fams if not e.get("reference")]  # 0.98: a declared reference is never kept
+    if not fams:
+        return {}
     win = tuple(period) if period else _drift_window(dspec, "current")
     out: dict = {}
     for entry in fams:
@@ -2532,6 +2711,7 @@ def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str =
                 min_trust=prep.min_trust,
                 coils=tuple(entry.get("coils") or ("cooling",)),
                 sustained_alarm=bool(entry.get("sustained_alarm")),
+                elevation_ft=site_elevation_ft(config),
             )
         )
     return out
@@ -2554,6 +2734,11 @@ def run_drift_config(
     responsibility to save afterwards -- only ``camber drift freeze`` passes ``True``, so an
     ordinary run can never mint the baseline it is scoring against.
 
+    A family that declares a ``reference`` (0.98, #86, S4) needs no store: its baselines are fitted
+    on the reference in a scratch store that is never saved, and when every family declares one
+    neither a store nor the ``baseline`` / ``current`` windows are required. ``freeze_if_missing``
+    with such a family is a ``ValueError`` (``camber drift freeze`` refuses it).
+
     ``evidence`` additionally builds each rule's pattern-J chart spec (see
     :func:`camber.driftrun.run_drift`). Pass ``store`` to own the
     :class:`~camber.store.modelstore.BaselineStore` yourself -- the freeze path needs the mutated
@@ -2563,20 +2748,30 @@ def run_drift_config(
     dspec = config.get("drift")
     if dspec is None:
         return None
-    drift_store_path(config, base_dir=base_dir)  # fail fast when no store can be named
+    # 0.98 (#86, S4): families that all declare a reference read no frozen store at all
+    declares_ref = [e for e in dspec.get("families", []) if e.get("reference") is not None]
+    if freeze_if_missing and declares_ref:
+        raise ValueError(
+            "drift freeze refuses families that declare a reference ("
+            + ", ".join(f"{e.get('class')}:{e.get('family')}" for e in declares_ref)
+            + "): a declared reference is re-read on every run and never frozen"
+        )
+    only_ref = bool(declares_ref) and len(declares_ref) == len(dspec.get("families", []))
+    if not only_ref:
+        drift_store_path(config, base_dir=base_dir)  # fail fast when no store can be named
     prep = prepared if prepared is not None else _prepare(config, base_dir)
     fams = _drift_families(dspec, prep.refs_by_class)
     if not fams:
         return None
-    if store is None:
+    if store is None and not _all_reference(fams):
         store, _p, _c = _baseline_store(config, base_dir=base_dir, ctx=prep.ctx)
     return run_drift(
         prep.refs_by_class,
         prep.mapping,
         store=store,
         families=fams,
-        baseline=_drift_window(dspec, "baseline"),
-        current=_drift_window(dspec, "current"),
+        baseline=_drift_window(dspec, "baseline", required=not only_ref),
+        current=_drift_window(dspec, "current", required=not only_ref),
         site=prep.site,
         run_id=run_id if run_id is not None else dspec.get("run_id", ""),
         resample=prep.resample,
@@ -2584,6 +2779,7 @@ def run_drift_config(
         min_trust=prep.min_trust,
         freeze_if_missing=freeze_if_missing,
         evidence=evidence,
+        elevation_ft=site_elevation_ft(config),
     )
 
 
@@ -2618,9 +2814,15 @@ def _mvform_base(entry: dict, base_dir: str) -> dict:
 
 
 def load_config(path: str) -> dict:
-    """Load a JSON config file into a dict."""
-    with open(path) as fh:
-        return json.load(fh)
+    """Load a run config file into a dict: JSON, or YAML for a ``.yaml`` / ``.yml`` path.
+
+    0.98 (#90): YAML is an optional, equivalent format (the ``[yaml]`` extra, PyYAML) so that
+    calibration notes can live as comments beside the values; a missing PyYAML raises an
+    ``ImportError`` that says how to install it. JSON needs nothing.
+    """
+    from ._yaml import read_config_file
+
+    return read_config_file(path)
 
 
 def run_config_file(path: str) -> RunResult:
@@ -2632,8 +2834,13 @@ if __name__ == "__main__":  # pragma: no cover
     import sys
 
     if len(sys.argv) < 2:
-        raise SystemExit("usage: python -m camber.config <config.json>")
-    res = run_config_file(sys.argv[1])
+        raise SystemExit("usage: python -m camber.config <config.json|config.yaml>")
+    from ._yaml import MissingYamlExtra
+
+    try:
+        res = run_config_file(sys.argv[1])
+    except MissingYamlExtra as e:  # a .yaml config without the [yaml] extra
+        raise SystemExit(f"error: {e}") from None
     print(
         f"{res.site}: {res.equipment} equipment, {len(res.findings)} findings "
         f"from {len(res.rules_run)} rules"

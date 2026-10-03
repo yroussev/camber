@@ -190,6 +190,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
     `chiller_running`, `chw_tracking_mask`, `analyze_chw_plant(running=)` and the trailing
     `CHWPlantResult.run_source` in `camber.chwplant`; the `run_source` metric of
     `chw_plant_reset`. The tracking threshold and severity bands may be retuned;
+  - 0.98 (#86), provisional: `CHWPlantReset(design_deltaT_min_f=, expected_reset_sign=,
+    flow_mode=, constant_flow_cv=)` with the `chwst_reset_direction`, `flow_mode`, `flow_cv` and
+    `design_deltaT_min_f` metrics, and the trailing `CHWPlantResult.flow_cv` / `n_flow`;
+    `CHWPumpDPReset` / `HWPumpDPReset(near_min_pct=, floor_tol_pct=)`,
+    `analyze_chw_pump(near_min_pct="auto", floor_tol_pct=)`, `camber.chwpump.learn_vfd_floor`,
+    the trailing `CHWPumpResult` fields `near_min_band_pct` / `near_min_source` /
+    `vfd_floor_pct` and the pump rules' metrics of the same names;
   - in `camber.rules.triage`: `UpstreamCause`, `PLANT_CAPACITY_RULES`, `SAT_HIGH_RULES`,
     `G36_SAT_HIGH_FCS`, `is_sat_high`, `link_findings(topology=, plant_overlap_min=)`, the trailing `Issue` fields
     `upstream_causes` / `downstream`, and the `scope_equips` metric that scopes a sensor-drift
@@ -477,7 +484,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `to_html_document()`, `camber.report.audit.html_document` and `REPORT_CSS`, the config keys
   `report.title` and `report.ecms`, the RCx section id `reading`, and
   `camber.api.ui.role_units`. The **text** of recommendations and report titles is presentation,
-  not API: it follows the finding's cause and may be reworded.
+  not API: it follows the finding's cause and may be reworded. Additive and provisional in 0.98
+  (#88): `Recommendation.cause`, the `title` and `cause` keys of each RCx issue in
+  `RcxReport.to_dict()`, `DEFAULT_PARAMS["econ_stuck_low_oaf_pct"]`, and the
+  `free_cooling_missed` metrics `missed_cause` (`damper_not_delivering` /
+  `economizer_not_commanded` / `undetermined`, `None` with nothing missed),
+  `commanded_open_pct`, `commanded_open_hours`, `commanded_open_oaf_median_pct` and
+  `missed_damper_cmd_median_pct`.
 <!-- /096-report -->
 <!-- 096-bts (#75) -->
 - **The `bts` catalog entry and the `brick_streams` adapter** (0.96; #75), additive and
@@ -503,6 +516,55 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   recorded, and the viewer's **UTC** toggle. The count units in `camber.api.ui.role_units`
   (`occupancy` persons, request and stage roles) are display data and may be extended.
 <!-- /096-integration -->
+<!-- 098-thresholds (#90) -->
+- **Tunable thresholds and YAML configs** (0.98; #90), all additive and provisional:
+  `camber.rules.param_docs` (`PARAM_DOCS`, `ParamDoc`, `BASIS_KINDS`, `EXEMPT`, `DELEGATES`,
+  `FIXED`, `RuleParam`, `rule_params`, `documented_rules`, `describe`, `config_snippet`,
+  `snippet_yaml`, `render_text`, `json_value`); `camber.rules.builtin.rule_factories` and
+  `make_rule` accepting the extra instances (`cohort_airflow`, `sat_reset_effectiveness`, ...);
+  the `camber rules params [RULE] [--json|--yaml]` command and its JSON shape; the `format=`
+  keyword of `camber.datasets.config_template` and `camber datasets config --format json|yaml`;
+  a rule entry's `basis` map and the `param_basis` finding metric it adds; `.yaml` / `.yml` run
+  configs through `camber.config.load_config` (the `[yaml]` extra) and the loader's JSON-like
+  typing. Entry texts (basis, calibration hints, ranges) are documentation and may change in any
+  release; defaults are the rules' and follow the rules.
+<!-- /098-thresholds -->
+<!-- 098-terminal-reheat (#85) -->
+- **Reheat valve position vs demand** (0.98; #85), additive and provisional: the role
+  `heat_valve_position` (Haystack `heating valve sensor`; not exported as a Brick point); the
+  `fan_heat_f=` keyword of `ReheatPenalty` (`None`, a number of °F, or `"auto"`); the finding
+  metrics `valve_signal`, `valve_divergence_share` (`reheat_penalty`, `overcooling_min_flow`) and
+  `fan_heat_f` (`reheat_penalty`).
+<!-- /098-terminal-reheat -->
+<!-- 098-terminal-stuck (#85) -->
+- **Stuck actuators and cohort options** (0.98; #85), additive and provisional: the rule
+  `actuator_stuck` (`camber.rules.actuator_stuck_rule.ActuatorStuck`, its parameters, tiers and
+  metrics `flat_runs`, `stuck_share`, `contradicted_share`, `value`, `tier`, `reason`, `driver`,
+  `roles`); the `CohortDeviation` keywords `group_by_topology`, `normalise`, `reference`,
+  `design_max` and `tail` and the `summary="variability"` value; in `camber.charts.cohort`, the
+  `tail=` keyword of `cohort_deviation` and `cohort_deviation_from_values`; the advisory default
+  `DEFAULT_PARAMS["reheat_valve_divergence_share"]`.
+<!-- /098-terminal-stuck -->
+<!-- 098-sensor-health (#87) -->
+- **Sensor-health modes, stray rows, clipping and schedules** (0.98; #87), all additive and
+  provisional: `camber.sensorhealth.clipped_at_limit`; the `mode=` / `mode_source=` keywords of
+  `sensor_trust` and `mode=` of `frame_sensor_health` (and what `"auto"` infers); the
+  `SensorTrust` fields `mode_source`, `mode_outlier_frac`, `main_start`, `main_end`, `n_stray` and
+  `clipped` (and its dict keys); the flags `clipped`, `stray_lead` and `stray_tail`; the `role`
+  argument of `gapfill_signature` and its `scheduled_days` / `n_schedule_patterns` metrics. The
+  thresholds behind them are module constants and may be retuned.
+<!-- /098-sensor-health -->
+<!-- 098-fc9 (#94) -->
+- **G36 free cooling needs an open economizer** (0.98; #94), additive and provisional: the
+  `g36_afdd` parameters `oa_damper_min`, `oa_damper_tol` and `occupancy_gate` and the metrics
+  `oa_damper_min`, `oa_damper_min_source`, `idle_at_min_oa_hours`, `occupancy_gate` and
+  `unoccupied_hours`; in `camber.fdd_g36`, `OA_DAMPER_TOL`, `OA_MIN_LEARN_N`, the
+  `oa_damper_min=` / `oa_damper_tol=` keywords of `classify_os`, the `oa_damper_min=`,
+  `oa_damper_tol=` and `occupied=` keywords of `run_g36_afdd`, and the trailing `G36Result` fields
+  `oa_damper_min`, `oa_damper_min_source`, `n_idle_at_min_oa` and `n_unoccupied`. Behaviour
+  change: with an OA damper point, an interval with both coils inactive and the damper at or below
+  its minimum is now OS#5, not OS#2, and a missing damper reading there is unclassified.
+<!-- /098-fc9 -->
 
 ## Deprecated
 

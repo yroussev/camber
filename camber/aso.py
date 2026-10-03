@@ -49,6 +49,14 @@ DEFAULT_PARAMS = {
     "chw_low_dt_warn_pct": 20.0,  # chw_plant_reset: low loop deltaT share that warns
     "pump_near_full_warn_pct": 30.0,  # *_pump_dp_reset: share of running time near full speed
     "pump_near_min_warn_pct": 50.0,  # *_pump_dp_reset: share of running time at the VFD minimum
+    # 0.98 (#88): free_cooling_missed stuck_low_oaf_pct -- a damper commanded open that delivers
+    # less outdoor air than this reads "stuck low", more reads "stuck part open" (the finding's
+    # own recorded threshold wins when present)
+    "econ_stuck_low_oaf_pct": 30.0,
+    # ==== begin 098-terminal-stuck (#85): reheat_penalty valve_divergence_share at/above which the
+    # demand-vs-position caveat fired (mirrors the rule's 0.25) -- the valve is the cause
+    "reheat_valve_divergence_share": 0.25,
+    # ==== end 098-terminal-stuck ====
 }
 
 
@@ -70,6 +78,10 @@ class Recommendation:
     advisory: bool = True  # ALWAYS advisory — review + apply by a human; never written
     # 0.96 (#78): ids of linked references (camber.references) to learn more, most specific first
     references: list = field(default_factory=list)
+    # 0.98 (#88): the finding's cause in a short phrase ("Outdoor-air damper not modulating (stuck
+    # low)"), built from the metrics the recommender reads; ``title`` stays the action. The RCx
+    # report heads an issue with the cause.
+    cause: str = ""
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -92,6 +104,7 @@ def _rec_simul_hc(f, frame, P):
     return _rec(
         f,
         title="Lock out simultaneous heating and cooling",
+        cause="Heating and cooling coils open together",
         action=(
             f"Add a heating↔cooling changeover deadband of ≥{P['hc_deadband_F']:g}°F and "
             "verify coil-valve sequencing so both coils cannot modulate open together."
@@ -115,6 +128,7 @@ def _rec_sat_reset(f, frame, P):
         return _rec(
             f,
             title="Check cooling capacity (supply air rises with load)",
+            cause="Supply air rises with load (short of cooling capacity)",
             action=(
                 "Supply-air temperature rises as outdoor temperature rises over cooling hours, "
                 "which a reset does not do: the coil or the plant is likely short of capacity on "
@@ -132,6 +146,7 @@ def _rec_sat_reset(f, frame, P):
         return _rec(
             f,
             title="Widen the supply-air-temperature reset range",
+            cause="Supply-air reset does not reach its upper end",
             action=(
                 "The trended SAT setpoint already resets, yet supply air stays cold on most "
                 "cooling hours: review the reset's limits and its driver so the setpoint reaches "
@@ -148,6 +163,11 @@ def _rec_sat_reset(f, frame, P):
     return _rec(
         f,
         title="Enable supply-air-temperature reset",
+        cause=(
+            "Supply-air setpoint resets the wrong way"
+            if m.get("sp_wrong_direction")
+            else "Supply air held cold (no reset seen)"
+        ),
         action=(
             f"Reset SAT setpoint on OAT: {s['sat_hi']:g}°F at {s['oat_lo']:g}°F OAT "
             f"ramping to {s['sat_lo']:g}°F at {s['oat_hi']:g}°F (clamped at the ends)."
@@ -194,6 +214,7 @@ def _rec_economizer(f, frame, P):
         return _rec(
             f,
             title="Restore minimum outside air",
+            cause="Outside air below the ventilation minimum",
             action=(
                 "Outside air is below the ventilation minimum"
                 + seen
@@ -220,10 +241,19 @@ def _rec_economizer(f, frame, P):
         )
     hl = m.get("high_limit_f")
     hl = float(hl) if isinstance(hl, (int, float)) else float(P["econ_high_limit_F"])
+    if mode == "missed_free_cooling" and m.get("missed_cause") == "damper_not_delivering":
+        # 0.98 (#88): the damper was commanded open and outside air did not arrive -- a repair,
+        # not an economizer enable
+        return _rec_damper_not_delivering(f, m, P)
     if mode == "missed_free_cooling":
         return _rec(
             f,
             title="Enable economizer free cooling",
+            cause=(
+                "Economizer not commanded open in free-cooling weather"
+                if m.get("missed_cause") == "economizer_not_commanded"
+                else "Mechanical cooling in free-cooling weather"
+            ),
             action=(
                 f"Mechanical cooling ran while outdoor air was below the ~{hl:g}°F high limit. "
                 "Check the economizer enable logic and high-limit setting, then verify the OA "
@@ -239,6 +269,11 @@ def _rec_economizer(f, frame, P):
     return _rec(
         f,
         title="Lock out the economizer above the high limit",
+        cause=(
+            "Economizer open above the high limit"
+            if getattr(f, "rule", "") == "economizer_high_limit"
+            else "Excess outside air admitted"
+        ),
         action=(
             f"Excess outside air is admitted when it is hot. Verify the OA dry-bulb high limit "
             f"(~{hl:g}°F, or differential against return air) actually locks the economizer out, "
@@ -257,6 +292,52 @@ def _rec_economizer(f, frame, P):
     )
 
 
+def _rec_damper_not_delivering(f, m, P):
+    """0.98 (#88): ``free_cooling_missed`` with the OA damper commanded open while the measured OA
+    fraction stayed low -- the damper, actuator or linkage does not deliver what it is told."""
+    oaf = m.get("commanded_open_oaf_median_pct")
+    thr = m.get("stuck_low_oaf_pct")
+    thr = float(thr) if isinstance(thr, (int, float)) else float(P["econ_stuck_low_oaf_pct"])
+    if isinstance(oaf, (int, float)):
+        how = "stuck low" if oaf < thr else "stuck part open"
+        cause = f"Outdoor-air damper not modulating ({how})"
+        seen = f", yet the measured outdoor-air fraction stayed near {oaf:.0f}%"
+    else:
+        cause = "Outdoor-air damper not delivering outside air"
+        seen = ", yet the measured outdoor-air fraction stayed low"
+    cmd = m.get("cmd_open_pct")
+    cmd = f"≥{cmd:g}%" if isinstance(cmd, (int, float)) else "fully"
+    share, hours = m.get("commanded_open_pct"), m.get("commanded_open_hours")
+    when = (
+        f" on {share:.0f}% of the missed free-cooling hours"
+        + (f" ({hours:,.0f} h)" if isinstance(hours, (int, float)) else "")
+        if isinstance(share, (int, float))
+        else " during missed free-cooling hours"
+    )
+    return _rec(
+        f,
+        title="Repair the outdoor-air damper or actuator",
+        cause=cause,
+        action=(
+            f"The outdoor-air damper was commanded {cmd} open{when}{seen}: the damper does not "
+            "deliver the outside air it is told to. Stroke it from the BAS through its range and "
+            "watch the blades, the linkage and the actuator; compare the actuator's feedback with "
+            "the command. Repair the damper before changing any economizer logic."
+        ),
+        parameter="OA damper / actuator / linkage",
+        suggested="measured outdoor-air fraction following the damper command",
+        expected_effect="Recovers free cooling in mild weather once outside air arrives.",
+        confidence="medium",
+        standard="PNNL Re-tuning Ch.6 (air-handler economizer)",
+        references=["pnnl-guide-economizer", "pnnl-retuning-ch6"],
+        caveats=[
+            "This is a mechanical repair, not a setpoint change.",
+            "A mixed-air sensor in a poorly mixed plenum can read a low outdoor-air fraction too: "
+            "check its location (or measure across the mixing box) before replacing parts.",
+        ],
+    )
+
+
 def _rec_reheat(f, frame, P):
     if getattr(f, "rule", "") == "reheat_minimization_g36":
         # 0.96 (#78): this finding is reheat with airflow *above* its minimum -- the G36 dual-max
@@ -264,6 +345,7 @@ def _rec_reheat(f, frame, P):
         return _rec(
             f,
             title="Implement the dual-maximum heating sequence",
+            cause="Reheat with airflow above the heating minimum",
             action=(
                 "The box reheats while its airflow is well above the minimum: hold airflow at the "
                 "heating minimum while the heating loop raises the discharge temperature first, "
@@ -277,9 +359,39 @@ def _rec_reheat(f, frame, P):
             standard="ASHRAE G36 §5.6 (dual-maximum reheat control)",
             caveats=["Keep minimum airflow at/above the ventilation (62.1) requirement."],
         )
+    # ==== begin 098-terminal-stuck (#85): the valve diverges from its demand -> repair, not tune
+    div = (getattr(f, "metrics", None) or {}).get("valve_divergence_share")
+    if div is not None and div >= P["reheat_valve_divergence_share"]:
+        return _rec(
+            f,
+            title="Repair the reheat valve or actuator",
+            cause=(
+                "reheat valve stuck or failed shut (the controller calls for heat the valve does "
+                "not deliver)"
+            ),
+            action=(
+                f"On {div:.0%} of the occupied full-demand samples the controller asks for full "
+                "reheat while the measured valve position reads shut. Stroke the valve from the "
+                "BAS and watch the position and the discharge air; check the actuator, its "
+                "linkage and power, the hot-water supply to the coil, and the position feedback's "
+                "mapping. Do not retune the reheat sequence until the valve follows its command."
+            ),
+            parameter="Reheat valve / actuator / position feedback",
+            suggested="valve position follows its command over the full stroke",
+            expected_effect="Restores zone heating; the reheat figures become meaningful again.",
+            confidence="medium",
+            standard="PNNL Re-tuning Ch.7 (terminal units)",
+            caveats=[
+                "A mis-mapped or inverted position point mimics a stuck valve -- confirm the "
+                "feedback against the valve on site first."
+            ],
+            references=["pnnl-retuning-ch7"],
+        )
+    # ==== end 098-terminal-stuck ====
     return _rec(
         f,
         title="Minimize reheat (raise cooling SAT / lower min airflow)",
+        cause="Cooled supply air reheated at the terminal",
         action=(
             f"Apply G36 reheat minimization: lower the VAV minimum airflow toward "
             f"~{P['min_flow_frac']:.0%} of max and/or raise cooling SAT before reheating; "
@@ -309,6 +421,7 @@ def _rec_overcooling(f, frame, P):
         return _rec(
             f,
             title="Investigate zone overcooling",
+            cause="Space held below its setpoint",
             action=(
                 "The space runs below its setpoint for long stretches. Check whether the box sits "
                 f"at its minimum airflow while it does (then lower the minimum toward "
@@ -325,6 +438,7 @@ def _rec_overcooling(f, frame, P):
     return _rec(
         f,
         title="Reduce overcooling at minimum flow",
+        cause="Zone overcooled at minimum airflow",
         action=(
             f"The box overcools while already at its minimum airflow: lower the VAV minimum "
             f"airflow toward ~{P['min_flow_frac']:.0%} of maximum (not below the ventilation "
@@ -341,9 +455,15 @@ def _rec_overcooling(f, frame, P):
 
 
 def _rec_setback(f, frame, P):
+    run = (getattr(f, "metrics", None) or {}).get("fan_run_unoccupied_pct")
     return _rec(
         f,
         title="Add / repair the unoccupied setback",
+        cause=(
+            f"Fan runs {run:.0f}% of unoccupied hours"
+            if isinstance(run, (int, float)) and run == run
+            else "Unoccupied setback missing or ineffective"
+        ),
         action=(
             f"Program an occupancy schedule that stops the supply fan and setbacks temps "
             f"~{P['unocc_setback_F']:g}°F when unoccupied (with optimal start/morning "
@@ -359,9 +479,15 @@ def _rec_setback(f, frame, P):
 
 
 def _rec_chiller_eff(f, frame, P):
+    kwt = (getattr(f, "metrics", None) or {}).get("kw_per_ton_median")
     return _rec(
         f,
         title="Improve chiller efficiency (kW/ton)",
+        cause=(
+            f"Chiller efficiency poor (median {kwt:.2f} kW/ton)"
+            if isinstance(kwt, (int, float)) and kwt == kwt
+            else "Chiller efficiency poor (kW/ton)"
+        ),
         action=(
             "Enable condenser-water and CHW-supply-temperature reset toward design, and "
             "review staging so machines don't run low on their efficiency curve."
@@ -375,10 +501,17 @@ def _rec_chiller_eff(f, frame, P):
     )
 
 
+_RESET_CAUSE = {
+    "static_pressure_reset": "Duct static pressure setpoint not reset",
+    "condenser_water_reset": "Condenser-water temperature not reset",
+}
+
+
 def _rec_reset_generic(f, frame, P):
     return _rec(
         f,
         title="Enable the loop reset (trim-and-respond)",
+        cause=_RESET_CAUSE.get(getattr(f, "rule", ""), "Loop setpoint not reset from demand"),
         action=(
             "Enable a trim-and-respond reset of this loop's setpoint from actual demand "
             "(zone/valve requests), rather than a fixed setpoint."
@@ -403,6 +536,7 @@ def _rec_chw_tracking(f, frame, P):
     return _rec(
         f,
         title="Restore chilled-water supply temperature to setpoint",
+        cause="Chilled-water supply above setpoint",
         action=(
             f"Chilled-water supply runs above its setpoint while the plant is on — likely {lean}. "
             "Check chiller staging (a second machine available but not called), the chiller's "
@@ -427,6 +561,37 @@ def _rec_chw_plant(f, frame, P):
     low = float(low) if isinstance(low, (int, float)) and low == low else 0.0
     reset = m.get("chwst_reset_present")
     low_dt = low >= float(P["chw_low_dt_warn_pct"]) or (reset is not False and low > 0.0)
+    # ---- begin 098-plant-chw (#86 item 2): constant flow, reversed reset ----
+    # A constant-primary-flow plant has a low loop deltaT at part load by design: no "fix low
+    # deltaT" advice for it. A supply temperature that rises with the outdoor temperature is not
+    # a flat reset and gets its own advice.
+    if m.get("flow_mode") == "constant":
+        low_dt = False
+    if not low_dt and m.get("chwst_reset_direction") == "reverse":
+        slope = m.get("chwst_slope_per_F")
+        seen = f" ({slope:+.2f}°F per °F)" if isinstance(slope, (int, float)) else ""
+        return _rec(
+            f,
+            title="Find why the chilled-water supply warms in hot weather",
+            cause=(
+                "Chilled-water supply warms in hot weather (plant capacity or a reversed reset)"
+            ),
+            action=(
+                f"The chilled-water supply temperature rises as it gets warmer outside{seen}, the "
+                "opposite of a reset. Either the plant cannot hold its supply temperature at "
+                "high load (check whether it reaches its setpoint, the chillers' capacity and "
+                "the condenser side: tower, condenser-water bypass, entering water "
+                "temperature), or the reset schedule runs the wrong way. Fix the cause before "
+                "tuning a reset."
+            ),
+            parameter="CHW plant capacity / CHW supply temperature reset direction",
+            suggested="supply temperature held in hot weather; any reset lowers it as load rises",
+            expected_effect="Coils get the chilled water they need at peak load.",
+            confidence="medium",
+            standard="PNNL Re-tuning Ch.8 (chilled-water plant)",
+            caveats=["A warm chilled-water supply sensor reading high mimics this."],
+        )
+    # ---- end 098-plant-chw ----
     if low_dt:
         also = (
             " The supply temperature is also flat: once deltaT recovers, reset it on load."
@@ -438,6 +603,7 @@ def _rec_chw_plant(f, frame, P):
         return _rec(
             f,
             title="Fix low chilled-water loop ΔT",
+            cause=f"Low chilled-water loop ΔT ({low:.0f}% of running hours)",
             action=(
                 f"The loop deltaT is low{seen} on {low:.0f}% of running hours: water is pumped "
                 "around the loop without picking up load. Check for three-way or bypass valves "
@@ -455,6 +621,7 @@ def _rec_chw_plant(f, frame, P):
     return _rec(
         f,
         title="Reset the chilled-water supply temperature",
+        cause="Chilled-water supply temperature held flat",
         action=(
             "The chilled-water supply temperature is held flat. Reset it upward at part load "
             f"({P['chw_reset_F']['lo']:g}–{P['chw_reset_F']['hi']:g}°F) from cooling demand "
@@ -484,6 +651,7 @@ def _rec_pump_dp(f, frame, P):
         return _rec(
             f,
             title="Right-size the pump (pinned at its minimum speed)",
+            cause=f"{loop.capitalize()} pump pinned at its minimum speed",
             action=(
                 f"The {loop} pump runs at its VFD minimum speed {near_min:.0f}% of the time: it "
                 "is oversized for the load, or the differential-pressure setpoint is lower than "
@@ -501,6 +669,7 @@ def _rec_pump_dp(f, frame, P):
         return _rec(
             f,
             title="Find why the pump rides near full speed",
+            cause=f"{loop.capitalize()} pump near full speed despite a DP reset",
             action=(
                 f"The {loop} pump runs near full speed {full:.0f}% of the time although its "
                 "differential-pressure setpoint already resets. Look for the coil valve that "
@@ -517,6 +686,11 @@ def _rec_pump_dp(f, frame, P):
     return _rec(
         f,
         title="Reset the pump's differential-pressure setpoint",
+        cause=(
+            f"{loop.capitalize()} pump near full speed on a fixed DP setpoint"
+            if reset is False
+            else f"{loop.capitalize()} pump near full speed at part load"
+        ),
         action=(
             f"The {loop} pump runs near full speed {full:.0f}% of the time. Reset its "
             "differential-pressure setpoint from demand (trim-and-respond on the most-open "
@@ -539,6 +713,7 @@ def _rec_cooling_tower(f, frame, P):
         return _rec(
             f,
             title="Restore cooling-tower capacity (approach high at full fan)",
+            cause="Cooling-tower approach high at full fan",
             action=(
                 "The approach is wide even while the tower fans run near full speed, so staging "
                 "or reset cannot close it. Inspect the tower: fill fouling or scale, blocked or "
@@ -555,6 +730,7 @@ def _rec_cooling_tower(f, frame, P):
     return _rec(
         f,
         title="Reset condenser-water / stage tower cells",
+        cause="Cooling-tower approach above target",
         action=(
             f"Reset condenser-water temperature toward a ~{P['cw_approach_F']:g}°F approach "
             "and stage additional tower cells/fans before letting the approach widen."
@@ -569,9 +745,15 @@ def _rec_cooling_tower(f, frame, P):
 
 
 def _rec_boiler_cycle(f, frame, P):
+    spd = (getattr(f, "metrics", None) or {}).get("starts_per_day")
     return _rec(
         f,
         title="Stop boiler short-cycling",
+        cause=(
+            f"Boiler short-cycling ({spd:.0f} starts/day)"
+            if isinstance(spd, (int, float)) and spd == spd
+            else "Boiler short-cycling"
+        ),
         action=(
             "Widen the firing deadband / raise minimum on-time, stage a lag boiler, and "
             "enable hot-water-temperature reset so the boiler isn't cycling at low load."
@@ -585,10 +767,19 @@ def _rec_boiler_cycle(f, frame, P):
     )
 
 
+def _leak_cause(m: dict) -> str:
+    """Which valve leaks: the larger of the heating and cooling leak shares (0.98, #88)."""
+    hw, chw = _num(m.get("hw_leak_pct")), _num(m.get("chw_leak_pct"))
+    if hw <= 0.0 and chw <= 0.0:
+        return "Coil valve passes flow when closed"
+    return ("Heating" if hw >= chw else "Cooling") + " valve passes flow when closed"
+
+
 def _rec_leaking_valve(f, frame, P):
     return _rec(
         f,
         title="Repair the leaking valve (maintenance)",
+        cause=_leak_cause(getattr(f, "metrics", None) or {}),
         action=(
             "Inspect and repair/replace the valve or actuator: it passes flow when "
             "commanded closed. This is a maintenance fix, not a setpoint change."
@@ -603,10 +794,12 @@ def _rec_leaking_valve(f, frame, P):
 
 
 def _rec_hunting(f, frame, P):
-    sig = (getattr(f, "metrics", {}) or {}).get("worst_signal", "the modulating output")
+    worst = (getattr(f, "metrics", {}) or {}).get("worst_signal")
+    sig = worst or "the modulating output"
     return _rec(
         f,
         title="Retune the hunting control loop",
+        cause=f"Control loop hunting ({worst})" if worst else "Control loop hunting",
         action=(
             f"{sig} reverses direction excessively (unstable loop). Slow the loop "
             "(lower proportional/integral gain) or widen the deadband so the actuator "
@@ -627,6 +820,7 @@ def _rec_cohort(f, frame, P):
     return _rec(
         f,
         title="Investigate the unit(s) deviating from the cohort",
+        cause=f"Deviates from its cohort: {who}" if outliers else "Deviates from its cohort",
         action=(
             f"{who} run unlike their peers on this role. Compare setpoints, schedule, "
             "valve/damper travel, and sensor calibration against a typical sibling to "
@@ -643,14 +837,16 @@ def _rec_cohort(f, frame, P):
 
 def _rec_sat_control(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
-    lean = (
-        "under-cooling (coil/valve/airflow can't hit SAT)"
-        if (m.get("too_warm_pct") or 0) >= (m.get("too_cold_pct") or 0)
-        else "over-cooling / hunting"
-    )
+    warm = (m.get("too_warm_pct") or 0) >= (m.get("too_cold_pct") or 0)
+    lean = "under-cooling (coil/valve/airflow can't hit SAT)" if warm else "over-cooling / hunting"
     return _rec(
         f,
         title="Restore supply-air temperature control",
+        cause=(
+            "Supply air runs warm of its setpoint"
+            if warm
+            else "Supply air runs cold of its setpoint or hunts"
+        ),
         action=(
             f"SAT isn't tracking its setpoint — likely {lean}. Check the coil valve "
             "travels fully, the SAT sensor calibration, and the loop tuning (P/I "
@@ -667,14 +863,16 @@ def _rec_sat_control(f, frame, P):
 
 def _rec_airflow(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
+    under = (m.get("undershoot_pct") or 0) >= (m.get("overshoot_pct") or 0)
     lean = (
         "starved (undershooting — check upstream duct static / damper travel)"
-        if (m.get("undershoot_pct") or 0) >= (m.get("overshoot_pct") or 0)
+        if under
         else "overshooting (check flow-sensor calibration / min-max limits)"
     )
     return _rec(
         f,
         title="Restore VAV airflow control",
+        cause="VAV airflow below its setpoint" if under else "VAV airflow above its setpoint",
         action=(
             f"Airflow isn't tracking its setpoint — likely {lean}. Verify the damper "
             "actuator strokes fully, the flow sensor (pitot/ring) calibration, and that "
@@ -691,14 +889,12 @@ def _rec_airflow(f, frame, P):
 
 def _rec_unmet(f, frame, P):
     m = getattr(f, "metrics", {}) or {}
-    lean = (
-        "cooling capacity/airflow"
-        if (m.get("too_hot_pct") or 0) >= (m.get("too_cold_pct") or 0)
-        else "heating capacity/airflow"
-    )
+    hot = (m.get("too_hot_pct") or 0) >= (m.get("too_cold_pct") or 0)
+    lean = "cooling capacity/airflow" if hot else "heating capacity/airflow"
     return _rec(
         f,
         title="Investigate unmet-setpoint zones (capacity / airflow / control)",
+        cause="Zone too warm (setpoint unmet)" if hot else "Zone too cold (setpoint unmet)",
         action=(
             f"Check {lean}: verify the coil valve reaches full travel, airflow meets the "
             "request, the setpoint schedule is correct, and the terminal isn't starved by "
@@ -735,7 +931,8 @@ def _num(v) -> float:
 
 def _dcv_causes(m: dict, P, severity: str = "") -> list:
     """The causes of a DCV finding, worst first: ``unventilated``, ``below_floor``,
-    ``co2_high_at_min``, ``static``, ``uncorrelated``, ``excess_at_low_demand``.
+    ``fan_off_occupied`` (0.98, #93: below the floor because the supply fan was off while
+    occupied), ``co2_high_at_min``, ``static``, ``uncorrelated``, ``excess_at_low_demand``.
 
     A cause counts when it clears the rule's default threshold (:data:`DEFAULT_PARAMS`). Only the
     three under-ventilation causes raise a DCV finding to ``fault``, so a ``fault`` with none of
@@ -747,6 +944,10 @@ def _dcv_causes(m: dict, P, severity: str = "") -> list:
             float(P["dcv_unventilated_fault_hours"]),
         ),
         "below_floor": (_num(m.get("below_floor_pct")), float(P["dcv_below_floor_fault_pct"])),
+        "fan_off_occupied": (
+            _num(m.get("fan_off_occupied_pct")),
+            float(P["dcv_below_floor_fault_pct"]),
+        ),
         "co2_high_at_min": (
             _num(m.get("co2_breach_at_min_pct")),
             float(P["dcv_breach_fault_pct"]),
@@ -771,6 +972,7 @@ def _dcv_causes(m: dict, P, severity: str = "") -> list:
 _DCV_ALSO = {
     "unventilated": "occupied hours with high CO₂ and no ventilation (fan off or OA shut)",
     "below_floor": "outdoor air below its floor",
+    "fan_off_occupied": "the supply fan off while the schedule says occupied",
     "co2_high_at_min": "CO₂ above its setpoint while outdoor air sat at minimum",
     "static": "outdoor air that does not modulate with demand",
     "uncorrelated": "outdoor air that modulates, but not with demand",
@@ -794,6 +996,7 @@ def _rec_dcv(f, frame, P):
         return _rec(
             f,
             title="Restore ventilation during occupied hours",
+            cause="Occupied with high CO₂ and no ventilation",
             action=(
                 f"The space was occupied with high CO₂ and no ventilation{where} for about "
                 f"{h:.0f} h (supply fan off or outdoor-air damper shut). Check the fan schedule "
@@ -812,6 +1015,7 @@ def _rec_dcv(f, frame, P):
         return _rec(
             f,
             title="Restore the minimum outdoor-air floor",
+            cause="Outdoor air below its floor",
             action=(
                 f"Outdoor air is below its floor{where} on {pct:.0f}% of occupied samples. Check "
                 "the minimum-OA damper position and actuator travel, the DCV lower limit and the "
@@ -825,11 +1029,31 @@ def _rec_dcv(f, frame, P):
             standard="ASHRAE 62.1 (minimum outdoor air) / G36 §5.16.4 (minimum OA control)",
             caveats=["A stuck or disconnected damper is a mechanical repair, not a setpoint."],
         )
+    if lead == "fan_off_occupied":  # 0.98 (#93)
+        h = _num(m.get("fan_off_occupied_hours"))
+        return _rec(
+            f,
+            title="Run the supply fan whenever the space is occupied",
+            cause="Supply fan off while scheduled occupied",
+            action=(
+                f"The supply fan was off while the schedule says occupied{where} for about "
+                f"{h:.0f} h, so no outdoor air reached the space. Check whether the building was "
+                "really occupied then (a holiday or a test missing from the schedule) and, if it "
+                "was, the fan's start command, safeties and alarms." + tail
+            ),
+            parameter="Occupied schedule / fan start",
+            suggested="the fan running, and outdoor air at or above the floor, whenever occupied",
+            expected_effect="Restores ventilation and IAQ in occupied hours.",
+            confidence="medium",
+            standard="ASHRAE 62.1 (minimum outdoor air) / PNNL Re-tuning",
+            caveats=["Correct the schedule instead when the building was empty on those days."],
+        )
     if lead == "co2_high_at_min":
         pct = _num(m.get("co2_breach_at_min_pct"))
         return _rec(
             f,
             title="Make outdoor air respond to high CO₂",
+            cause="CO₂ high while outdoor air sits at minimum",
             action=(
                 f"CO₂ stayed above its setpoint while outdoor air sat at minimum{where} on "
                 f"{pct:.0f}% of samples: DCV is not raising outdoor air when demand is high. "
@@ -848,6 +1072,7 @@ def _rec_dcv(f, frame, P):
         return _rec(
             f,
             title="Lower the minimum outdoor air at low demand",
+            cause="Outdoor air above its floor at low demand",
             action=(
                 "DCV responds to demand, but outdoor air stays above its floor at low demand"
                 f"{where} on {pct:.0f}% of low-demand samples. Review the DCV lower limit and the "
@@ -869,6 +1094,7 @@ def _rec_dcv(f, frame, P):
         return _rec(
             f,
             title="Tie outdoor air to demand",
+            cause="Outdoor air not following CO₂ demand",
             action=(
                 f"Outdoor air modulates{where}, but not with CO₂ / occupancy. Check which input "
                 "drives the damper (a schedule, the economizer, another sensor), the CO₂ "
@@ -884,6 +1110,7 @@ def _rec_dcv(f, frame, P):
     return _rec(
         f,
         title="Enable / repair demand-controlled ventilation",
+        cause="Outdoor air not modulating with demand",
         action=(
             "Enable DCV so outdoor air modulates with CO₂ / occupancy, and verify the CO₂ "
             "sensor calibration and the minimum-OA floor." + tail
@@ -896,6 +1123,50 @@ def _rec_dcv(f, frame, P):
         caveats=[never],
     )
 
+
+# ==== begin 098-terminal-stuck (#85): actuator_stuck ====
+_STUCK_CAUSE = {
+    "zone_warm": "the zone runs warm while it holds still",
+    "zone_cold": "the zone runs cold while it holds still",
+    "zone_satisfied": "it stays fully open with the zone already satisfied",
+    "closed_no_flow": "it stays shut through occupied hours with no airflow",
+    "closed_occupied": "it stays shut through occupied hours",
+    "demand_moved": "its command moves while the position does not",
+    "flat_all_day": "it holds one position all day while its demand moves",
+}
+
+
+def _rec_actuator_stuck(f, frame, P):
+    m = getattr(f, "metrics", None) or {}
+    role = str(m.get("role") or "actuator").replace("_", " ")
+    value = m.get("value")
+    held = f" at {value:g} %" if isinstance(value, (int, float)) else ""
+    why = _STUCK_CAUSE.get(m.get("reason") or "", "it holds one position against the demand")
+    contradicted = m.get("tier") == "contradicted"
+    return _rec(
+        f,
+        title=f"Check the {role} for a stuck actuator",
+        cause=f"{role.capitalize()} stuck{held}: {why}",
+        action=(
+            f"The {role} held{held} for hours, and {why}. "
+            "Command it through its full stroke from the BAS and watch the position and the "
+            "airflow or discharge temperature respond; check the actuator, its linkage and "
+            "power, and the controller output it receives."
+        ),
+        parameter=f"{role.capitalize()} actuator / linkage / control output",
+        suggested="the position follows its command over the full stroke",
+        expected_effect="Restores zone control; ends the comfort or energy penalty it caused.",
+        confidence="medium" if contradicted else "low",
+        standard="PNNL Re-tuning Ch.7 (terminal units)",
+        caveats=[
+            "A flat trend can also be a frozen point or a manual override: check the point's "
+            "status and any operator override before replacing hardware."
+        ],
+        references=["pnnl-retuning-ch7"],
+    )
+
+
+# ==== end 098-terminal-stuck ====
 
 #: rule name -> recommender. Rules without an entry yield no recommendation (nothing fabricated).
 RECOMMENDERS = {
@@ -927,6 +1198,7 @@ RECOMMENDERS = {
     "leaking_valve": _rec_leaking_valve,
     "dcv_verification": _rec_dcv,
     "dcv_system_verification": _rec_dcv,
+    "actuator_stuck": _rec_actuator_stuck,  # 0.98 (#85)
 }
 
 

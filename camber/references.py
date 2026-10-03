@@ -33,6 +33,7 @@ __all__ = [
     "Reference",
     "REFERENCES",
     "RULE_REFERENCES",
+    "WALKDOWN_REFERENCES",
     "reference",
     "references_for",
     "reference_ids_for",
@@ -129,7 +130,8 @@ _ALL = (
         "AHU Static Pressure Control",
         "PNNL-SA-84187",
         "pnnl_sa_84187.pdf",
-        "Is there a reset-schedule for the duct static pressure?",
+        "Is there a reset-schedule for the duct static pressure?; "
+        "Determine whether the static pressure set point is too high or too low",
     ),
     _guide(
         "pnnl-guide-discharge-air-temp",
@@ -282,6 +284,9 @@ RULE_REFERENCES: dict = {
     "ventilation_system_62_1": ("pnnl-guide-min-oa",),
     # air handler: static pressure, discharge-air temperature, heating and cooling
     "static_pressure_reset": ("pnnl-guide-static-pressure", _CH5),
+    # the static guide's "too high or too low" section reads the box damper positions: most boxes
+    # throttled means static is too high, most wide open means the boxes are starved (0.98, #89)
+    "damper_census": ("pnnl-guide-static-pressure", _CH5, _CH7),
     "supply_air_reset": ("pnnl-guide-discharge-air-temp", _CH5),
     "supply_air_reset_compliance": ("pnnl-guide-discharge-air-temp", _CH5),
     "supply_air_control": ("pnnl-guide-discharge-air-temp", _CH5),
@@ -298,6 +303,23 @@ RULE_REFERENCES: dict = {
     "unmet_setpoint_hours": (_CH7,),
     "airflow_tracking": (_CH7,),
     "zones_heat_cool_census": (_CH7,),
+    "reheat_capacity_shortfall": (_CH7,),  # 0.98 (#89)
+    "actuator_stuck": (_CH7,),  # 0.98 (#85): ch. 7's terminal damper and valve checks
+    "cohort_airflow": (_CH7,),
+    "cohort_space_temp": (_CH7,),
+    # zone-request census rules (0.98, #89). The discharge-air guide's reset section bases a
+    # zone-driven reset on the zones it serves, setting aside the warmest and coolest; the static
+    # guide's "too high or too low" section sets the static by the most demanding boxes, leaving
+    # out failed or outlier ones, and reads boxes wide open as starved.
+    "sat_rogue_zone_census": ("pnnl-guide-discharge-air-temp", _CH7),
+    "static_rogue_zone_census": ("pnnl-guide-static-pressure", _CH7),
+    "sat_cohort_starvation": (_CH5, _CH7),
+    "static_cohort_starvation": ("pnnl-guide-static-pressure", _CH5, _CH7),
+    # Left unmapped (no guide or chapter clearly covers them): the G36 reset-effectiveness rules
+    # (sat_/static_reset_effectiveness, trim-and-respond, a G36 sequence the guides predate),
+    # filter_fouling, g36_afdd (cites Guideline 36 itself), the DX and heat-pump rules and
+    # source_loop_deltat (the course covers built-up air handlers and central plants), and the
+    # drift detectors other than the two plant ones mapped below.
     # central plant, cooling
     "chw_plant_reset": ("pnnl-guide-plant-cooling", _CH8),
     "chw_pump_dp_reset": ("pnnl-guide-plant-cooling", _CH8),
@@ -306,12 +328,22 @@ RULE_REFERENCES: dict = {
     "chiller_staging": (_CH8,),
     "condenser_water_reset": (_CH8,),
     "cooling_tower_approach": (_CH8,),
+    "condenser_bypass_leak": (_CH8,),  # 0.98 (#89): chiller, condenser-water and tower topics
+    "chiller_approach_fouling": (_CH8,),
+    "chiller_staging_fleet": (_CH8,),
+    "cooling_tower_fan_effort_drift": (_CH8,),
     # central plant, heating
     "hw_plant_deltat": ("pnnl-guide-plant-heating", _CH8),
     "hw_pump_dp_reset": ("pnnl-guide-plant-heating", _CH8),
     "boiler_short_cycle": (_CH8,),
     "boiler_summer_lockout": (_CH8,),
+    "boiler_efficiency_drift": (_CH8,),  # 0.98 (#89): ch. 8's boiler-efficiency topic
 }
+
+
+#: The walk-down chapter: every item of the RCx report's "Verify on site" checklist links to it
+#: (0.98, #88; :mod:`camber.walkdown`). A process chapter, so it is not in RULE_REFERENCES.
+WALKDOWN_REFERENCES: tuple = ("pnnl-retuning-ch9",)
 
 
 def reference(rid: str) -> Reference:

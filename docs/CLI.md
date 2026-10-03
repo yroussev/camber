@@ -15,6 +15,7 @@ camber validate [--html d.html] [--json d.json] [--full]         # validation cr
 camber serve   <store> [--host H] [--port P]                     # read-only API + live /ui dashboard
 camber drift   run|report|freeze|list|accept <config.json>       # baseline-vs-current drift
 camber datasets list|info|fetch|ingest|status|remove|config|score # open dataset catalog
+camber rules   params [RULE] [--json|--yaml]      # tunable thresholds + calibration (0.98)
 camber lab     [--workspace W | --store S] [--dir D] [--port P] [--docs DIR]   # local catalog UI (127.0.0.1)
 camber portfolio init|adopt|status|audit|migrate                  # portfolio workspace
 camber facility add|list|show|rename|activate|suspend|resume|offboard|archive|restore|purge
@@ -61,6 +62,54 @@ constructor for the run — e.g. a high-outside-air building setting its design 
 "rules": ["simultaneous_heat_cool",
           {"name": "economizer_high_limit", "params": {"high_limit_f": 75, "min_damper": 0.45}}]
 ```
+
+<!-- BEGIN 098-thresholds (#90) -->
+### YAML configs and tunable thresholds (provisional, 0.98)
+
+**YAML.** Every command that takes a config (`run`, `report`, `explain`, `ask`, `fleet`, `drift`,
+`mv`, `python -m camber.config`, the portfolio migration and the edge forwarder's config) also
+reads a `.yaml` / `.yml` file. YAML needs the optional extra, `pip install
+'camber-toolkit[yaml]'` (PyYAML); without it the command stops with an error that says so. JSON
+stays the dependency-free default, and the two formats are equivalent: a YAML config and the JSON
+config that says the same thing give identical results. YAML's point is comments, so a calibration
+note can sit beside its value. The loader reads values the way JSON does: `2018-07-01` and `07:00`
+stay strings, `no` / `on` stay strings, and only `true` / `false` are booleans.
+
+**`camber rules params`.** Every numeric, flag or enumerated constructor parameter of every
+built-in rule, including the extra instances (`cohort_airflow`, `sat_reset_effectiveness`, ...),
+is documented in `camber/rules/param_docs.py`:
+
+```
+camber rules params                     # every rule: default, unit, range, basis, how to calibrate
+camber rules params leaking_valve       # one rule, plus a ready-to-paste JSON config snippet
+camber rules params leaking_valve --yaml   # the snippet as YAML, each note a comment
+camber rules params --json              # machine-readable: {"rules": [...], "config": {...}}
+```
+
+Defaults are read from the rule constructors, never copied, and every parameter is settable from a
+config's `params`. The extra instances are tunable too; their identity arguments (the cohort
+role, the reset kind) are fixed. A rule entry may also carry a `basis` map (`{"fan_heat_f":
+"calibrated on ..."}`), which is copied into each of its findings as `metrics["param_basis"]`.
+[THRESHOLDS.md](THRESHOLDS.md) is the generated reference and [TUNING.md](TUNING.md) is the
+calibration guide.
+<!-- END 098-thresholds (#90) -->
+
+<!-- BEGIN 098-followups (#92) -->
+**Site elevation (`site_elevation_ft`).** A rule that derives the wet-bulb from outdoor air
+temperature and RH assumes sea-level pressure unless it knows the site's elevation. One top-level
+config key sets it for the site, in feet above sea level:
+
+```json
+{"site": "Plant", "site_elevation_ft": 5280, "rules": ["cooling_tower_approach", "condenser_water_reset"]}
+```
+
+It reaches `cooling_tower_approach` and `condenser_water_reset` (as their `elevation_ft`) and,
+through the `drift` section, `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`.
+A rule's own `elevation_ft` or `pressure_psia` param wins over it, and a measured wet-bulb point
+ignores it. Without it a derived wet-bulb is caveated as sea-level. Set it before freezing a
+drift baseline: a baseline frozen at one elevation and scored at another shifts by the wet-bulb
+difference (about 2.6 °F at 1,600 m in hot, dry air).
+<!-- END 098-followups (#92) -->
 
 ## Report layouts
 
@@ -124,8 +173,8 @@ the reference. Both live in a `drift` section of the same config:
 }
 ```
 
-`family` is one of `ahu · chiller · condenser · evaporator · pump · vav`; each `class` must appear in
-the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump)
+`family` is one of `ahu · chiller · condenser · evaporator · pump · vav · boiler · tower · dx`;
+each `class` must appear in the config's `equipment` list. `coils` (AHU) adds one coil-valve detector per coil; `plant` (pump)
 adds the cross-pump roll-up; `sustained_alarm` (chiller) appends the opt-in CUSUM alarm rule. A
 family may override `baseline` / `current` — a chiller re-commissioned later has its own reference
 window. Any `trust_gate`, `shared_oat` and `resample` settings apply unchanged.
@@ -172,6 +221,48 @@ window is reported (`could not refit … — leaving it frozen`) rather than ski
 
 There is deliberately no `--reason` on `freeze`: the initial reason string lives inside each
 detector, so the flag would not be honoured.
+
+### A declared reference
+
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
+Sometimes the reference is not this equipment's own past but something known to be healthy: a
+sister unit, or a season you have evidence was clean. A family can **declare** it instead of
+reading a frozen baseline:
+
+```json
+"drift": {
+  "families": [
+    {"class": "CHW_PLANT", "family": "tower",  "reference": {"equip": "PLANT__fault_free"}},
+    {"class": "HW_PLANT",  "family": "boiler", "reference": {"period": ["2025-10-01", "2026-01-31"]}}
+  ]
+}
+```
+
+- `{"equip": ID}` scores every other unit of the class against that unit. `ID` must be one the
+  config discovers. Add `"period": [start, end]` to use only part of its history (else the
+  family's or section's `baseline` window, else all of it); the scored units use `current`, else
+  their whole history.
+- `{"period": [start, end]}` scores each unit against a known-good window of its own history;
+  `current` then defaults to everything from the end of that period on.
+
+The reference is fitted in a scratch in-memory store on **every run and never saved**, so a run
+still cannot mint the baseline it scores against: someone declared the reference, in the config,
+where a reviewer can see it. When every family declares one, the section needs no `store` and no
+windows. Each finding carries `baseline_source` (`reference:<equip>` or `period:<start>..<end>`)
+and a caveat naming the reference, and its summary reads "vs the reference ..." rather than "vs
+frozen baseline". The reference unit itself declines as `is_reference` (it is the yardstick, not
+a result). A reference that cannot serve a detector declines every target with the reason
+(`reference_missing_inputs`, `reference_untrusted`, `empty_reference`) rather than scoring against
+nothing.
+
+`camber drift freeze` refuses a config whose families declare a reference (exit 1): there is
+nothing to freeze. `drift accept` and the re-fit leave those families out. A declared reference
+is only as good as the evidence that it is healthy; on a real plant prefer the unit's own frozen
+baseline, and keep the reference's provenance in the config's `_comment`. The `lbnl-chiller` and
+`lbnl-boiler` templates use `{"equip": "PLANT__fault_free"}`, because each labelled fault there is
+its own year-long run with no before-and-after on one unit (see
+[PLANT-DETECTORS](PLANT-DETECTORS.md) and [TUNING](TUNING.md#drift-references)).
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
 
 ### Untested is not steady
 
@@ -274,13 +365,18 @@ camber datasets ingest <id>... | --all --store DIR [--subset S] [--force] [--no-
                         [--from-dir DIR] [--accept-noncommercial]
 camber datasets status [--dir D] [--store DIR] [--json]
 camber datasets remove <id> [--dir D] [--store DIR --purge-store]
-camber datasets config <id> --store DIR [--out cfg.json] [--facility ID] [--exercise EX]
+camber datasets config <id> --store DIR [--out cfg.json|cfg.yaml] [--format json|yaml]
+                        [--facility ID] [--exercise EX]
 camber datasets score  <id> --store DIR [--findings findings.json] [--json]
 ```
 
 `config --exercise <exercise-id>` (0.97) writes a [workbook](workbook/index.md) exercise's tuned
 template instead of the dataset's own; the template names the dataset it was tuned for, and any
 other dataset is refused.
+
+`config --format yaml` (0.98) writes the template as YAML, with its `_comment` notes turned into
+comments; `--out` with a `.yaml` / `.yml` suffix picks YAML too. Writing YAML needs no extra;
+running the YAML config needs the `[yaml]` extra.
 
 `list` shows each entry's licence **tier** (`open` / `research-only`) and marks manual downloads.
 `fetch --all` takes the open tier only; research-only (NC/ND) datasets also need `--licence all`

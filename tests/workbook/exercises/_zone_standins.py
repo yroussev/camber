@@ -40,9 +40,11 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
       reheated all day (valve 25-60 %), and fully open the box cannot hold the heating setpoint on
       cold mornings even with the valve near full (the zone falls to 66 F).
     - ``ReheatVLVStuck_0pct``: the valve is shut whatever the controller asks, so on cold days the
-      controller's demand (the mapped valve signal) sits at 100 % while the zone falls to 62 F at
-      the right airflow -- a capacity shortfall. The box fan still mixes in warm plenum air, so
-      the discharge sits about 7 F above the primary air with the valve shut.
+      controller's demand (``HEAT_VALVE``) sits at 100 % while the zone falls to 62 F at the right
+      airflow -- a capacity shortfall -- and the measured position (``HEAT_VALVE_POSITION``) stays
+      at 0 %. In every other run the position follows the demand (as in the real data). The box
+      fan still mixes in warm plenum air, so the discharge sits about 7 F above the primary air
+      with the valve shut.
     - ``ReheatVLVLeak_*``: a passing valve adds a little heat (discharge ~4 F over the primary air
       with the valve shut), enough for the light morning load, so the controller hardly opens
       it; the zone stays in band.
@@ -64,6 +66,7 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
     flow = flow_sp.copy()
     damper = flow / 8.4
     rise = 0.7 * valve  # a hot-water coil lifts discharge ~11 F at 16 % valve and minimum flow
+    position = None  # the measured valve position: the demand, unless the valve is stuck
     if fault.startswith("VAVDMPRStuck"):
         wide = fault.endswith("100pct")
         damper = np.full(n, 100.0 if wide else 50.0)
@@ -77,6 +80,7 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
         rise = np.where(valve > 0, 11.0, 0.0)
     elif fault == "ReheatVLVStuck_0pct":
         valve = np.where(occ, np.where(cold, 100.0, np.where(afternoon, 0.0, 30.0)), 0.0)
+        position = np.zeros(n)
         space = np.where(occ, np.where(cold, 62.0, 68.4), 62.0)
         rise = np.where(occ, 7.0, 0.0)
     elif fault.startswith("ReheatVLVLeak"):
@@ -89,6 +93,7 @@ def _fpu_box(idx: pd.DatetimeIndex, fault: str) -> pd.DataFrame:
             Role.AIRFLOW_SP: flow_sp,
             Role.AIRFLOW: flow,
             Role.HEAT_VALVE: valve,
+            Role.HEAT_VALVE_POSITION: valve if position is None else position,
             Role.SUPPLY_AIR_TEMP: primary + rise,
             Role.MIXED_AIR_TEMP: primary,
             Role.DUCT_STATIC: static,
@@ -148,9 +153,10 @@ def _ornl_day(sc: str, day: int) -> dict:
     afternoon runs a few degrees over the cooling setpoint. Stuck at 20 or 40 % its airflow is
     capped and the afternoon runs hotter (a cool morning also runs cold at 20 %); stuck shut on a
     cool day it delivers almost no air, yet the room stays in band; stuck 60-100 % it delivers more
-    air than any box and the room sits comfortably in band. The rooftop unit's supply airflow is
-    the sum of its boxes, and its duct static falls as the stuck box opens (a fixed-speed fan
-    moving more air through a more open system).
+    air than any box and the room sits comfortably in band, its morning a degree cooler than its
+    afternoon (the damper ignores that swing, as on the real days). The rooftop unit's supply
+    airflow is the sum of its boxes, and its duct static falls as the stuck box opens (a
+    fixed-speed fan moving more air through a more open system).
     """
     idx = pd.date_range(
         pd.Timestamp("2023-12-04") + pd.Timedelta(days=day), periods=96, freq="15min"
@@ -176,6 +182,8 @@ def _ornl_day(sc: str, day: int) -> dict:
                 space = np.where(hot_pm | (occ & (h >= 17) & (h < 19)), 78.5, space)
                 if stuck == 20.0:
                     space = np.where(occ & (h < 9.5), 67.5, space)
+            elif stuck is not None and stuck >= 60.0:
+                space = np.where(occ & (h < 10), 69.9, space)
             damper = damper if stuck is None else np.full(len(idx), stuck)
         flow = np.where(occ | (damper > 0), _ORNL_VMAX[room] * damper / 100.0, np.nan)
         if room == "205" and stuck is not None:

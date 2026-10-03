@@ -94,7 +94,10 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     the DCV rules) take a
     trended `OCCUPANCY` point as the truth — it *replaces* the schedule — and otherwise use
     `start_hour` / `end_hour` / `occupied_days` (default Mon–Fri 07–18, a generic office
-    assumption; `camber.schedules.effective_occupied_mask`).
+    assumption; `camber.schedules.effective_occupied_mask`). Since 0.98 `damper_census` reads
+    each box's trended occupancy the same way (schedule fallback), and `supply_air_control` gates
+    its fan-on hours on a trended occupancy point when one exists, with no schedule fallback
+    (`occupancy_gate`); both report which gate applied in an `occupancy_gate` metric.
   - *Fan-on only.* `outdoor_air_fraction` judges fan-on samples by default (`fan_gate=True`: fan
     status, else fan speed, else airflow — `camber.schedules.fan_on_mask`): with the fan stopped
     the mixing-box temperatures read still air, not a mix. A unit with no fan signal is judged
@@ -108,9 +111,20 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     never reported as a confident ok. It also cross-checks the valve against the discharge-air
     rise (#63): a valve at ≥ 90 % with a median rise under 5 °F is **declined** (nothing counted or
     costed), and a shut valve with a ≥ 10 °F rise on a quarter of its samples is caveated.
+    Where a box trends both the reheat demand and the measured position (0.98, #85), map the
+    position as `heat_valve_position`: `reheat_penalty` and `overcooling_min_flow` then judge the
+    heat delivered from the position (a valve stuck shut is 0 % open, not a reheat penalty),
+    record it in `valve_signal`, and caveat a demand ≥ 90 % while the position reads ≤ 5 % on a
+    quarter of the full-demand samples as a stuck or failed valve. On fan-powered boxes
+    `fan_heat_f` (°F, or `"auto"`: the median closed-valve lift, clipped to 0–8 °F) raises both
+    valve-vs-discharge bounds by the box fan's own heat.
   - *Not overcooling.* `overcooling_severity` excludes morning recovery (`WARMUP`, else the first
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
-    setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**.
+    setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**. The
+    shortfall grade is the lesser of its depth tier and its share tier (0.98, #85:
+    `shortfall_share_pct`, warn from 5 %, fault from 20 % of occupied samples at least `warn`
+    deep), so a few deep cold hours a year grade `info`; `share_pct` applies the same gate to the
+    overcooling tiers (off by default).
     `overcooling_min_flow` declines without `AIRFLOW` + `AIRFLOW_SP` (it can't test "at minimum").
   - *Held setback* (0.93, #43). A unit scheduled off at night still cycles on to hold its
     zones at the setback temperature, so `night_weekend_setback` no longer reads runtime alone:
@@ -156,13 +170,30 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   (percent of stroke; data gaps are not counted as calm time). A trend too coarse to show the warn
   rate (15-min data can show at most 4 reversals/hr) is declined with a caveat, never called
   stable. Flags: `warn_per_hr`, `fault_per_hr`, `deadband`, `gap_factor`. `supply_air_control`: flags supply-air temperature
-  that fails to *track its setpoint* (control/capacity fault; running hours only). Flags: `tol_F`,
-  `warn_pct`, `fault_pct`. `airflow_tracking`: flags measured VAV airflow that fails to track its
+  that fails to *track its setpoint* (control/capacity fault; fan-on hours only, and since 0.98
+  only occupied ones when the unit trends occupancy). Flags: `tol_F`, `warn_pct`, `fault_pct`,
+  `occupancy_gate` (`"trended"` default, `"schedule"`, `"off"`). `airflow_tracking`: flags measured VAV airflow that fails to track its
   setpoint (stuck/undersized damper, failed actuator, starvation, bad flow sensor). Flags:
   `tol_frac`, `warn_pct`, `fault_pct`.
+- **Stuck actuator** — `actuator_stuck` (0.98, #85; terminal boxes and fan coils): a damper or
+  valve (`roles`: damper, heating-valve position else demand, cooling valve) that holds one
+  position over occupied, fan-on hours is judged against what the zone asked for. A run of at
+  least `min_flat_hours` is **contradicted** (can fault) when the damper is shut through occupied
+  hours with no airflow (against `AIRFLOW_SP` or `min_airflow`; with neither, the occupied mode
+  alone, caveated), part open while the zone runs `warm_margin_f` over its cooling setpoint, fully
+  open while the zone sits `satisfied_margin_f` below it, or flat while its demand twin moves; it
+  is **unexplained** (warn at most) when one value holds `whole_day_share` of a day while the
+  demand, airflow setpoint, a setpoint or the zone temperature moves; anything else is
+  consistent (a box at its minimum in a mild zone, a damper saturated open on a hot day). The
+  `ornl-frp-vav` dataset declares it as its detector.
 - **Peer/cohort** — `cohort.CohortDeviation` (fleet rule): flags a unit running unlike its peers on
   a role (robust z of a mean/peak/load-shape summary). Shipped instances `cohort_airflow`,
-  `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`.
+  `cohort_space_temp`; construct your own for any role. Flags: `k`, `summary`, `min_cohort`, and
+  since 0.98 (#85, opt-in): `group_by_topology` (compare only units behind the same air handler),
+  `normalise` (`"design_max"`: by design airflow; `"reference"`: by each unit's declared
+  known-good twin or period), `summary="variability"` and `tail` (`"low"` / `"high"`). Size
+  normalisation alone cannot isolate a stuck box: on `ornl-frp-vav` only the box's own fault-free
+  reference, or its damper's variability on the low tail, separated it.
 - **Economizer / free cooling** — `economizer_high_limit` (excess OA above the high limit — not
   locked out; judged on measured OA/supply airflow when trended, else the MAT/RAT balance, else the
   damper; samples still below return air are left to a differential changeover; with no configured
@@ -171,7 +202,9 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   `free_cooling_missed` (mechanical cooling — cooling valve above `active` %, default 5 % — ran while
   OAT was cool enough for free; durations in hours; hours already on ~100 % outside air are an
   integrated economizer, not missed — the RCx economizer page's test, shared as
-  `camber.freecooling.integrated_economizer_mask`), `static_pressure_reset` (duct-static setpoint
+  `camber.freecooling.integrated_economizer_mask`; 0.98 records why: `missed_cause` tells a
+  damper commanded open that did not deliver outside air from an economizer never commanded
+  open), `static_pressure_reset` (duct-static setpoint
   that doesn't trim with demand; a one-time step is reported as a step, not a reset — see
   `camber.setpoint_reset`). Flags: `high_limit_f`, `min_oa_pct`, `min_damper`, `differential`,
   `active`, `min_range_inwc`.
@@ -220,8 +253,15 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   SAT stand in for the cooling-coil entering and leaving temperatures only on an AHU without a
   heating coil. Otherwise FC14 and FC15 are declined. FC8/FC9 hours that coincide with a
   confirmed FC14 are attributed to FC14, so a passing valve is reported as a leak, not under the
-  free-cooling labels. Parameters: `heating_coil`, `min_oa_pct` (enables FC6),
-  `mode_delay_min`, `alarm_delay_min`, and the screening-grade `warn_pct` / `fault_pct`. Like
+  free-cooling labels. Since 0.98 (#94) free cooling (OS#2) needs the OA damper open beyond its
+  minimum position, not just both valves shut: a fan-on hour at minimum OA with both coils idle (a
+  deadband hour, an unoccupied recirculation run) is OS#5, where only FC1-FC4 apply. The minimum
+  is `oa_damper_min`, learned by default from the unit's mechanical-cooling hours at minimum OA.
+  Unoccupied operation is evaluated, as in G36; `occupancy_gate="trended"` limits the evaluation
+  to a trended occupancy point's occupied hours. Parameters: `heating_coil`, `min_oa_pct`
+  (enables FC6, the test for a damper stuck open at minimum OA), `oa_damper_min`,
+  `oa_damper_tol`, `occupancy_gate`, `mode_delay_min`, `alarm_delay_min`, and the
+  screening-grade `warn_pct` / `fault_pct`. Like
   every air-handler rule it declines a VAV box, heat pump, fan coil or plant
   (`camber.rules.applicability`), and an FC13 it reports is linked to a chilled-water plant short
   of setpoint in the same hours (`chw_supply_tracking`) as the likely upstream cause.

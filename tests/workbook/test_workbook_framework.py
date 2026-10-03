@@ -107,7 +107,8 @@ def test_exercise_config_templates(tmp_path):
     ]
     assert json.loads(out.read_text()) == cfg
     default = datasets.config_template("lbnl-sdahu", tmp_path)
-    assert "leaking_valve" in default["rules"] and "_dataset" not in default
+    names = [r if isinstance(r, str) else r["name"] for r in default["rules"]]
+    assert "leaking_valve" in names and "_dataset" not in default
     with pytest.raises(ValueError, match="is for dataset 'lbnl-sdahu'"):
         datasets.config_template("lbnl-ddahu", tmp_path, exercise="air-economizer")
     with pytest.raises(KeyError, match="no exercise config"):

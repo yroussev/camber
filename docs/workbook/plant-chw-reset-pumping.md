@@ -7,7 +7,7 @@
 Answer the chilled-water side's three re-tuning questions on a simulated plant: is the supply
 temperature reset, is the loop delta-T low, and is the loop differential-pressure (DP) setpoint
 reset or held constant? Then see what a stuck tower bypass does to the chilled water and to the
-pumps, and where a rule's fixed band does not fit this pump.
+pumps, and how the rules read a constant-flow plant and a pump's own VFD floor.
 
 ## Learn more
 
@@ -57,10 +57,12 @@ camber run chw.json --out chw_out
 
 The exercise's config (`--exercise plant-chw-reset-pumping`) runs two rules. `chw_plant_reset`
 fits chiller 1's leaving-water temperature against the outdoor dry-bulb over the chiller's
-running, occupied hours, and reports the loop delta-T against a fixed 8 °F design minimum.
-`chw_pump_dp_reset` reads the secondary pump's speed and the loop's DP setpoint. Neither has a
-parameter to calibrate. The plant's chiller status point is an enable, not a run status, so
-CAMBER decides when the chiller runs from its power.
+running, occupied hours, checks that the slope goes the way a reset should, and reports the
+loop delta-T against an 8 °F design minimum (`design_deltaT_min_f`). It also reads chiller 1's
+flow: on a constant-flow plant the delta-T is reported but not judged. `chw_pump_dp_reset` reads
+the secondary pump's speed and the loop's DP setpoint, and learns the pump's VFD floor from its
+speeds. The exercise keeps every parameter at its default. The plant's chiller status point is
+an enable, not a run status, so CAMBER decides when the chiller runs from its power.
 
 ## Steps
 
@@ -69,11 +71,12 @@ CAMBER decides when the chiller runs from its power.
    secondary pump speed and the loop DP with its setpoint over the same month.
 2. **Run the exercise's config** (the commands above) and read the findings.
 3. **Reset.** In `chw_out/findings.json`, read `chw_plant_reset` for the fault-free run:
-   `chwst_reset_present`, `chwst_slope_per_F` and `chwst_median_f`.
-4. **Delta-T.** In the same finding, read `deltaT_median_f` and `low_deltaT_pct`.
+   `chwst_reset_present`, `chwst_reset_direction`, `chwst_slope_per_F` and `chwst_median_f`.
+4. **Delta-T.** In the same finding, read `deltaT_median_f`, `low_deltaT_pct`, `flow_mode`,
+   `flow_cv` and the caveats.
 5. **Pumping.** Read `chw_pump_dp_reset` for the fault-free run: `median_speed_pct`,
-   `pct_running_near_full`, `pct_running_near_min` and `dp_sp_reset_present`. Then find the run
-   where the pump's median speed is lowest.
+   `pct_running_near_full`, `pct_running_near_min`, `vfd_floor_pct`, `near_min_band_pct` and
+   `dp_sp_reset_present`. Then find the run where the pump's median speed is lowest.
 6. **The stuck bypass.** Compare both findings for `PLANT__bypass_stuck_075` with the fault-free
    run's.
 
@@ -81,12 +84,12 @@ CAMBER decides when the chiller runs from its power.
 
 1. Is the chilled-water supply temperature reset? Which way does it move as the weather warms,
    and is that the right way?
-2. Why does `chw_plant_reset` call the healthy plant a fault? What delta-T does it find, and is
-   this a fault to fix or a property of the plant?
+2. What delta-T does `chw_plant_reset` find on the healthy plant, and why is the finding `ok`
+   anyway? Is a low delta-T here a fault to fix or a property of the plant?
 3. Is the DP setpoint reset? How hard does the secondary pump work, and what does the rule call
    it?
-4. Where is the pump's VFD minimum, and what share of hours does the rule count near its minimum?
-   Why?
+4. Where is the pump's VFD minimum, how does the rule find it, and what share of hours does it
+   count near the minimum? On which run does the pump sit at its floor most?
 5. What does the stuck tower bypass do to the chilled water and its delta-T, and to the pump?
    Which finding points at the cause, and which only at a symptom?
 
@@ -94,23 +97,32 @@ CAMBER decides when the chiller runs from its power.
 
 - **Findings.** `camber run` prints one line per finding with its severity and a summary.
   `findings.json` holds the metrics: for `chw_plant_reset` the supply median, its slope on the
-  dry-bulb, whether a reset was found, the delta-T median and the share of running hours below
-  8 °F, and `run_source` (what decided the chiller was running); for `chw_pump_dp_reset` the
-  median speed, the shares near full (90 % or more) and near minimum (25 % or less), and whether
-  the DP setpoint is reset.
+  dry-bulb, whether a reset was found and which way it goes (`chwst_reset_direction`:
+  `expected`, `reverse` or `flat`), the delta-T median and the share of running hours below
+  8 °F, the flow mode and the flow's coefficient of variation, and `run_source` (what decided
+  the chiller was running); for `chw_pump_dp_reset` the median speed, the shares near full (90 %
+  or more) and near minimum, the learned VFD floor and the near-minimum band it used
+  (`near_min_source`: `learned`, or `default` for 25 % when no floor is found), and whether the
+  DP setpoint is reset.
 - **Severity.** `chw_plant_reset` is a `fault` when half or more of the running hours are below
-  the delta-T minimum, a `warn` from a fifth, or on a flat supply temperature; `chw_pump_dp_reset`
-  is a `fault` at 60 % or more of the hours near full speed, a `warn` from 30 %.
+  the delta-T minimum, a `warn` from a fifth, or on a flat or reversed supply temperature; on a
+  constant-flow plant the delta-T does not count. `chw_pump_dp_reset` is a `fault` at 60 % or
+  more of the hours near full speed, a `warn` from 30 %, or at half the hours or more near the
+  minimum.
 
 ## Caveats
 
 - The delta-T is chiller 1's own, on a primary loop whose flow does not follow the load, so it
-  is low at part load by design. The rule's 8 °F minimum is generic and has no parameter.
-- The rule counts a reset in either direction; check the sign yourself.
+  is low at part load by design. The rule recognises this from the flow point; without one it
+  cannot, and judges the delta-T (declare `flow_mode` then). The 8 °F minimum is generic: set
+  `design_deltaT_min_f` from the loop's design.
+- The rule expects a reset to lower the supply in hot weather (`expected_reset_sign`); a plant
+  whose sequence does the opposite on purpose needs that parameter changed.
 - The chilled-water setpoint point is in the data but is not mapped (see the data issues), so
   CAMBER judges the reset from the supply temperature itself.
-- The pump rule's near-minimum band is fixed; a pump whose VFD floor sits above it never counts
-  as near its minimum.
+- The learned floor is a plateau in the speeds, not the drive's setting: a pump that rarely
+  reaches its floor falls back to the 25 % band. Set `near_min_pct` from the VFD parameters when
+  you know them.
 - The data are simulated: one plant, one climate, one control sequence.
 
 ## Going further

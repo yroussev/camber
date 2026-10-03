@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise plant-boiler (docs/workbook/plant-boiler.md): the four point-in-time hot-water plant rules on the lbnl-boiler plant. hw_pump_dp_reset (the dataset template's one rule; fixed near-full / near-minimum bands) reads pump 1's speed and the loop DP setpoint. boiler_summer_lockout (default 65 F lockout), boiler_short_cycle (default 6 starts a day) and hw_plant_deltat all need a boiler run status (boiler_status), which this plant does not have: BOI_STA_1 is the boiler enable, 1 all year, and is deliberately left unmapped (see the data issues). They are listed anyway, on purpose: the exercise asks why CAMBER prints nothing for them. Boiler fouling needs the boiler drift family (boiler_efficiency_drift, a baseline-vs-current comparison of one boiler), which a per-run dataset cannot feed through a config.",
+  "_comment": "Workbook exercise plant-boiler (docs/workbook/plant-boiler.md): the four point-in-time hot-water plant rules on the lbnl-boiler plant. hw_pump_dp_reset (the dataset template's one rule; fixed near-full / near-minimum bands) reads pump 1's speed and the loop DP setpoint. boiler_summer_lockout (default 65 F lockout), boiler_short_cycle (default 6 starts a day) and hw_plant_deltat need to know when the boiler fired. This plant has no boiler run status: BOI_STA_1 is the boiler enable, 1 all year, and is deliberately left unmapped (see the data issues). Since 0.98 the three rules read firing from boiler 1's gas input instead (gas_input_rate above 5% of its own 95th percentile; run_source gas, with a caveat): the exercise asks what that fallback can and cannot see. None of the four point-in-time rules sees boiler fouling. Boiler fouling needs the boiler drift family (boiler_efficiency_drift, a baseline-vs-current comparison of one boiler): since 0.98 the config feeds it through a declared reference. The boiler drift family scores every run against the declared reference PLANT__fault_free (drift.families[].reference), re-read on every run and never stored: boiler_efficiency_drift reads boiler 1's gas input per unit of heat delivered. Measured on the full subset: boiler fouling 065 / 080 / 095 +54 / +25 / +5.1 % (fault / fault / warn; 095 clears the 5 % warn floor by 0.1 point); 0 of the 13 other runs fire, and the +2 / +4 F hot-water temperature-bias runs are reported as heat-metering problems (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 14.",
   "_dataset": "lbnl-boiler",
   "source": {
     "kind": "store",
@@ -21,5 +21,16 @@
   ],
   "report": {
     "level": 2
+  },
+  "drift": {
+    "families": [
+      {
+        "class": "HW_PLANT",
+        "family": "boiler",
+        "reference": {
+          "equip": "PLANT__fault_free"
+        }
+      }
+    ]
   }
 }

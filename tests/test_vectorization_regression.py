@@ -71,8 +71,12 @@ def _g36_golden_frame():
 
 
 def test_g36_matches_rowloop_golden():
-    # the golden values pin the per-interval equations, so the G36 time filters (0.91) are off
-    g = run_g36_afdd(_g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0)
+    # the golden values pin the per-interval equations, so the G36 time filters (0.91) are off,
+    # and the valves-only free-cooling reading is kept (oa_damper_min=-100: every damper reading
+    # counts as open), since the frame idles its coils at the 20 % damper minimum (0.98, #94)
+    g = run_g36_afdd(
+        _g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0, oa_damper_min=-100
+    )
     assert g.n_intervals == 400
     assert g.os_distribution == {1: 115, 2: 114, 3: 34, 4: 137, 5: 0}
     assert g.fault_n_applicable == {
@@ -109,3 +113,11 @@ def test_g36_matches_rowloop_golden():
         14: 0.0,
         15: 0.0,
     }
+
+
+def test_g36_golden_default_reads_idle_at_minimum_as_os5():
+    # 0.98 (#94): by default the learned 20 % minimum moves the 91 idle intervals at it to OS#5
+    g = run_g36_afdd(_g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0)
+    assert g.oa_damper_min == 20.0 and g.n_idle_at_min_oa == 91
+    assert g.os_distribution == {1: 115, 2: 23, 3: 34, 4: 137, 5: 91}
+    assert g.fault_n_applicable[8] == 23 and g.fault_pct[8] == 69.57

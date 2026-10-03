@@ -6,7 +6,7 @@
 
 Ask the heating plant's re-tuning questions (is the hot-water supply temperature reset, are the
 boilers shut down in summer, do they short-cycle, is the loop DP setpoint reset?) of a simulated
-boiler plant, and find out which of them CAMBER can answer on this data and why. Then see what a
+boiler plant, and find out how CAMBER answers them on a plant with no boiler run status. Then see what a
 fouled boiler and a lying DP sensor look like to the rules that do run.
 
 ## Learn more
@@ -58,8 +58,12 @@ camber datasets score lbnl-boiler --store lab_store --findings boil_out/findings
 
 The exercise's config (`--exercise plant-boiler`) lists four rules: `hw_pump_dp_reset` (the
 dataset template's one rule), `boiler_summer_lockout`, `boiler_short_cycle` and
-`hw_plant_deltat`, all with their defaults. Read its `_comment`: the last three are listed on
-purpose.
+`hw_plant_deltat`, all with their defaults. Read its `_comment`: the last three need to know when
+the boiler fired, and this plant has no boiler run status.
+
+Its `drift` section adds the boiler drift family with a **declared reference**:
+`boiler_efficiency_drift` scores every run's gas input per unit of heat delivered against
+`PLANT__fault_free`, fitted in memory on each run and never stored.
 
 ## Steps
 
@@ -67,44 +71,60 @@ purpose.
    supply and return temperatures with the outdoor temperature over the whole year. Then plot
    boiler 1's gas input.
 2. **Run the exercise's config** (the commands above). Count the findings per rule.
-3. **The missing rules.** Read the dataset's data issues and known issues on the boiler status
-   point (`camber datasets info lbnl-boiler` prints them).
+3. **Firing without a run status.** Read the dataset's data issues and known issues on the
+   boiler status point (`camber datasets info lbnl-boiler` prints them). Then read the
+   `run_source` metric and the caveats of the `boiler_summer_lockout`, `boiler_short_cycle` and
+   `hw_plant_deltat` findings for the fault-free run.
 4. **Pumping.** Read `hw_pump_dp_reset` for the fault-free run in `boil_out/findings.json`:
    `median_speed_pct`, `pct_running_near_full`, `pct_running_near_min`, `dp_sp_reset_present` and
    `n_running`.
 5. **Fouling.** Find every finding on `PLANT__boiler_foul_065`, and compare its gas input with
-   the fault-free run's in the trend viewer.
+   the fault-free run's in the trend viewer. Then read `boiler_efficiency_drift` for the three
+   boiler-fouling runs and the two hot-water temperature biases (`PLANT__hot_water_temp_bias_2`,
+   `_4`): `ratio_drift_rel`, `gas_rise_at_matched_oat`, `attribution` and the summary.
 6. **The DP sensor.** Compare `median_speed_pct` for the two ±20 % loop DP sensor biases with the
    fault-free run's, and plot the loop DP against its setpoint for one of them.
-7. **Score.** Run `camber datasets score` and read the overall detection rate.
+7. **Score.** Run `camber datasets score` and read the rates for `boiler_efficiency_drift`.
 
 ## Questions
 
-1. The config lists four rules. Which produce findings, and why do the others print nothing?
-2. Is the hot-water supply temperature reset, and is the boiler shut down in summer? What can
+1. The config lists four rules. Which produce findings? How do the three that need a boiler run
+   status decide when the boiler fired, and what can that not see?
+2. Is the hot-water supply temperature reset, and is the boiler shut down in summer? What does
    CAMBER say about each on this plant, and what does the trend viewer show you?
 3. What does `hw_pump_dp_reset` find on the fault-free plant, and what does its `ok` leave out?
-4. Does anything in this config see the worst boiler fouling? Where does it show, and what kind
-   of CAMBER analysis would catch it?
+4. Does any point-in-time rule see the worst boiler fouling? Where does it show? What does
+   `boiler_efficiency_drift`, scored against the declared reference, find on the three foulings
+   and on the hot-water temperature biases?
 5. What does a loop DP sensor that reads 20 % high or low do to the pump, and to the DP reading
-   itself? What does the label score say overall?
+   itself? What does the label score say for `boiler_efficiency_drift`?
 
 ## What CAMBER shows
 
 - **Findings.** `camber run` prints one line per finding. A rule whose required points are not
   mapped does not run on that equipment, and prints nothing: no finding is not the same as `ok`.
+- **Firing.** `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` read when the
+  boiler fired from its run status (`boiler_status`) or, when none is mapped, from its gas input
+  (`gas_input_rate`) above 5 % of its own 95th percentile. A finding read from the gas input
+  carries `run_source` `gas` and a caveat saying so.
 - **Metrics.** For `hw_pump_dp_reset`: the median speed, the shares near full (90 % or more) and
   near minimum (25 % or less), the median DP setpoint, whether it is reset, and `n_running` (the
   hours the pump ran).
-- **Score.** `camber datasets score` prints the overall detection rate and which rules fired on
-  each labelled run (this entry declares no per-detector targets).
+- **Drift.** `boiler_efficiency_drift` reports `ratio_drift_rel` (the change in gas input per
+  unit of heat delivered, as a fraction), `gas_rise_at_matched_oat`, `attribution` and
+  `baseline_source`. The declared reference itself declines as `is_reference`: it is the
+  yardstick, not a result.
+- **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
+  intervals, for the entry's one declared detector, `boiler_efficiency_drift` (target: boiler
+  fouling).
 
 ## Caveats
 
 - The data are simulated: one plant, one climate, one control sequence.
 - The plant's boiler status is an enable, on all year; mapping it as a run status would make
-  every idle hour look like firing, so CAMBER leaves it unmapped and the status-based rules stay
-  silent. On a real plant, trend the burner's firing signal.
+  every idle hour look like firing, so CAMBER leaves it unmapped and the firing rules read the gas
+  input instead. On the hourly trend a firing shorter than an hour is invisible, so the start
+  count is a floor. On a real plant, trend the burner's firing signal.
 - The plant exports no hot-water supply setpoint, so no rule compares the supply with it.
 - `hw_pump_dp_reset` reads pump 1 only; pump 2 is not mapped.
 - The `hot_water_temp_bias` runs bias the loop return, not the supply as documented (see the data
@@ -112,10 +132,11 @@ purpose.
 
 ## Going further
 
-- CAMBER's `boiler_efficiency_drift` rule reads fouling as gas input per unit of heat delivered,
-  against a frozen baseline of the same boiler (`camber drift`). On this dataset each fault is its
-  own year-long run, so there is no before-and-after on one boiler to compare; on a real plant,
-  freeze a baseline in a clean season and compare later seasons with it.
+- Here `boiler_efficiency_drift` compares each run with another boiler (the fault-free run),
+  because each fault is its own year-long run. On a real plant, compare a boiler with itself:
+  declare a clean season as the reference (`"reference": {"period": [start, end]}`), or freeze a
+  baseline with `camber drift freeze` and compare later seasons with it (see
+  [the CLI guide](../CLI.md#a-declared-reference)).
 - Compare this plant with [the chilled-water side](plant-chw-reset-pumping.md): the same three
   questions, answered from different points.
 - See [the sensor exercise](plant-sensor-vs-equipment.md) for why a sensor bias is scored as a

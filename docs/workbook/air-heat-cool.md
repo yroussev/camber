@@ -7,8 +7,8 @@
 Look for heating and cooling energy spent against each other at the air handler: a cooling
 valve that passes chilled water while it is commanded shut, and heating and cooling coils open
 at the same time. Learn to tell a real fault from a design that heats and cools on purpose (a
-dual-duct unit, or dehumidification with reheat), and see where an automated rule's margin is
-too coarse for a small leak.
+dual-duct unit, or dehumidification with reheat), and see how a margin set from the unit's own
+fan heat catches a small leak that a generic margin misses, and what that calibration costs.
 
 ## Learn more
 
@@ -65,10 +65,15 @@ camber run irish.json --out irish_out
 ```
 
 - `leaking_valve` looks at the hours when the fan runs and every coil valve is commanded shut.
-  Then the supply air should be the mixed air plus the supply fan's heat. It calls a cooling
-  leak when the air leaves more than 3 °F *below* the mixed air, and a heating leak when it
-  leaves more than 3 °F above the mixed air plus a 2 °F fan-heat allowance. Where a coil has its
-  own leaving-air sensor, that sensor is used instead of the supply air.
+  Then the supply air should be the mixed air plus the supply fan's heat. By default it calls a
+  cooling leak when the air leaves more than 3 °F *below* the mixed air, and a heating leak when
+  it leaves more than 3 °F above the mixed air plus a 2 °F fan-heat allowance. Where a coil has
+  its own leaving-air sensor, that sensor is used instead of the supply air.
+- The `lbnl-sdahu` config does not use the default cooling test. It sets
+  `measured_fan_heat_f: 1.0` (this unit's fan heat, measured on its fault-free run),
+  `cool_delta_thr_f: 1.0` and `occupied_only: true`: a cooling leak is supply air that sits
+  below the mixed air, in occupied hours. Read the config's comment for where the 1.0 °F came
+  from.
 - `simultaneous_heat_cool` counts the occupied hours with both coil valves open, after setting
   aside the hours it can show are dehumidification with reheat (a cooling coil running below
   the entering air's dew point, followed by reheat).
@@ -78,9 +83,10 @@ camber run irish.json --out irish_out
 1. **Look first.** In the trend viewer, plot `AHU__fault_free` and `AHU__coi_leakage_010` on a
    cool spring day: the cooling-valve command, the mixed-air and the supply-air temperature.
 2. **Run the three configs** and read the findings.
-3. **The leak.** Read `leaking_valve` on both single-duct runs: the severity, `chw_leak_pct`
-   and `chw_median_delta_f` (the median supply-minus-mixed-air temperature with the valve
-   shut). Then run `camber datasets score` and read the `leaking_valve` line.
+3. **The leak.** Read `leaking_valve` on both single-duct runs: the severity, `chw_leak_pct`,
+   `chw_median_delta_f` (the median supply-minus-mixed-air temperature with the valve shut),
+   `cool_shift_f` and the caveat. Then run `camber datasets score` and read the `leaking_valve`
+   line. Read the `_comment` and the `basis` of `leaking_valve` in `sdahu.json`.
 4. **Both coils open.** Read `simultaneous_heat_cool` on `DDAHU__fault_free`, and its caveat.
 5. **A real unit.** Read `simultaneous_heat_cool` and `leaking_valve` on the Irish unit, and
    which temperature each coil was judged on.
@@ -89,7 +95,9 @@ camber run irish.json --out irish_out
 
 1. Does CAMBER flag the leaking cooling valve? What does the label score say?
 2. Compare `chw_median_delta_f` on the leak run and the fault-free run. What does the difference
-   tell you, and why does the rule not call it a leak?
+   tell you? Why would the rule's default 3 °F margin not call it a leak, and what in the config
+   makes it one? Which run was the 1.0 °F measured on, and what does that do to the fault-free
+   run's **ok**?
 3. The dual-duct unit has both valves open for a large share of its occupied hours. Is that
    coil fighting? What does the rule's caveat ask you for?
 4. How would you tell dehumidification with reheat from coils fighting, on a unit that has a
@@ -115,13 +123,19 @@ camber run irish.json --out irish_out
   the dual-duct unit shows it by design; the Irish unit is real but unlabelled.
 - The Irish unit runs around the clock and trends no fan status, so its leak check includes any
   fan-off samples.
-- The rules' margins (3 °F, the 2 °F fan-heat allowance) are screening judgments. A smaller
-  margin would catch a smaller leak and also more sensor noise.
+- The rules' default margins (3 °F, the 2 °F fan-heat allowance) are screening judgments. A
+  smaller margin would catch a smaller leak and also more sensor noise.
+- The config's 1.0 °F fan heat was measured on `AHU__fault_free`, which the label score also
+  counts as a negative: its clean verdict is in-sample. On your own unit, measure the fan heat
+  on one known-good period and judge another.
 
 ## Going further
 
 - The Irish unit's valves were replaced on 2022-05-01. Add `"start"` / `"end"` to the `source`
   block of `irish.json` and compare the leak check before and after the replacement.
-- Set `fan_heat_f` on `leaking_valve` to the fault-free unit's own fan heat (read it from
-  `chw_median_delta_f`) and see what changes, and what does not.
+- Replace the `leaking_valve` entry in `sdahu.json` with the plain `"leaking_valve"` (the
+  defaults) and run again: the leak goes back to **ok**.
+- Calibrate out of sample: add `"start": "2018-01-01", "end": "2018-07-01"` to the `source`
+  block, read the fault-free run's `chw_median_delta_f`, then judge July to December with that
+  value as `measured_fan_heat_f`.
 - The exercise `air-economizer` uses the same single-duct runs for the outdoor-air damper.

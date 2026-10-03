@@ -34,6 +34,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from ..model.entities import roles_any_of
 from ..model.roles import Role
 from ..schedules import FAN_GATE_NONE, effective_occupied_mask, fan_on_mask
 
@@ -123,7 +124,8 @@ class RcxOptions:
     ``week`` is a :data:`WEEK_MODES` value (``"auto"`` means ``"evidence"``; ``"oat-range"`` is
     accepted for ``"oat_range"``; a bare ``YYYY-MM-DD`` means ``fixed:``). ``chart_format="svg"``
     renders line charts as SVG (dense scatters stay PNG). ``sections`` lists the section ids to
-    include (default: all; 0.96 adds ``"reading"``, the linked further-reading list). ``price`` /
+    include (default: all; 0.96 adds ``"reading"``, the linked further-reading list; 0.98 adds
+    ``"verify"``, the "Verify on site" walk-down checklist). ``price`` /
     ``loads`` feed the existing cost estimators (:class:`~camber.fault_economics.EnergyPrice`,
     ``{equip: EquipmentLoad}``). ``occupancy``
     overrides the assumed schedule (``{"start_hour", "end_hour", "days"}``) where no occupancy
@@ -867,9 +869,15 @@ class RcxReport:
 
 
 def _issue_dict(i) -> dict:
+    from ..aso import recommend
+
+    rec = recommend(i.root)
     return {
         "key": i.key,
         "rank": i.rank,
+        # 0.98 (#88): the packaged action's title and the finding's cause (the issue heading)
+        "title": rec.title if rec is not None else _humanize(getattr(i.root, "rule", "")),
+        "cause": rec.cause if rec is not None else "",
         "equip": i.equip,
         "severity": i.severity,
         "rules": i.rules,
@@ -1223,10 +1231,15 @@ def build_rcx_report(
         trust_raw[e] = frame_sensor_health(num)
         # 0.92 (#66): plant points (CHW/CW/HW temperatures, a chiller's power) are judged on
         # their equipment's running samples, so a chiller that is off doesn't read as a bad sensor
+        # 0.98 (#87): a unit with no fan signal has its duct-air outliers read per an inferred
+        # operating mode (OA damper and coil valves closed = off); a fan-gated unit keeps the
+        # pooled read (mode="auto" does both; see docs/SENSOR-HEALTH.md)
         if g is not None or plant_gates(num):
-            trust_gated[e] = frame_sensor_health(num, gate=g, plant_gate="auto")
+            trust_gated[e] = frame_sensor_health(num, gate=g, plant_gate="auto", mode="auto")
         else:
-            trust_gated[e] = trust_raw[e]
+            moded = frame_sensor_health(num, mode="auto")
+            has_mode = any(t.mode_source for t in moded.values())
+            trust_gated[e] = moded if has_mode else trust_raw[e]
         gfr = fr[_on(g, fr.index).to_numpy()] if g is not None else fr
         mixing[e] = mixing_consistency(gfr)
 
@@ -1328,6 +1341,8 @@ def build_rcx_report(
         root = iss.root
         rule = ctx.rule(getattr(root, "rule", ""))
         roles = [getattr(r, "value", str(r)) for r in getattr(rule, "roles_required", ())]
+        # 0.98 (#86 item 4a, 098-plant-boiler): a roles_any_of input the rule read counts too
+        roles += [getattr(r, "value", str(r)) for g in roles_any_of(rule) for r in g]
         tmap = trust_gated.get(iss.equip, {})
         trust = {r.value if isinstance(r, Role) else str(r): t for r, t in tmap.items()}
         trust = {r: t for r, t in trust.items() if r in roles}
@@ -1481,8 +1496,13 @@ def build_rcx_report(
                 sections.append(sec)
     if want("issues"):
         sections += [_sec_issue(S, iss) for iss in issues]
+    verify = _sec_verify(S) if want("verify") else None  # 0.98 (#88): the walk-down checklist
+    if verify is not None:
+        sections.append(verify)
     if want("reading"):  # 0.96 (#78): linked PNNL Re-tuning guides for this report's issues
-        sec = _sec_reading(issues)
+        from ..references import WALKDOWN_REFERENCES
+
+        sec = _sec_reading(issues, extra=WALKDOWN_REFERENCES if verify is not None else ())
         if sec is not None:
             sections.append(sec)
     if want("appendix"):
@@ -1616,6 +1636,9 @@ def _sec_cover(S) -> dict:
         ["Rules run", str(len(getattr(run, "rules_run", []) or []))],
         ["Findings", str(len(S["findings"]))],
     ]
+    n_skip = len(_skip_rows(run))  # 0.98 (#88): only when the Appendix A table is non-empty
+    if n_skip:
+        rows.append(["Checks not evaluated", f"{n_skip} (missing inputs; see Appendix A)"])
     if ctx.config.get("source"):
         src = ctx.config["source"]
         rows.append(["Data source", str(src.get("kind") or "per-point CSV folders")])
@@ -1656,7 +1679,9 @@ def _sec_summary(S) -> dict:
         )
     rows = []
     for iss in issues[: max(int(o.top_n), 0)]:
-        title, action, _sug = _advice(S, iss, recommend(iss.root))
+        rec = recommend(iss.root)
+        title, action, _sug = _advice(S, iss, rec)
+        title = _heading(rec, title)  # 0.98 (#88): the Issue column names the cause
         action = action[:1].upper() + action[1:] if action else ""
         action = action or "Engineer to specify (no packaged action)."
         cost = _fmt_usd(iss.cost) if iss.cost is not None else _cut(iss.cost_basis_note, 60)
@@ -1754,22 +1779,36 @@ def _sec_data(S) -> dict:
         blocks.append(_table(["Equipment", "Result", "Samples", "Outside", "Detail"], mrows))
     rows = []
     for e in sorted(S["trust_raw"]):
+        # 0.98 (#87): a unit with no fan signal still shows the gated column when its outliers
+        # were read per an inferred operating mode
+        moded = any(getattr(t, "mode_source", None) for t in S["trust_gated"][e].values())
+        gated = S["gates"].get(e) is not None or moded
         for r, t in S["trust_raw"][e].items():
             if r not in _P3_ROLES and r not in (Role.AIRFLOW, Role.SUPPLY_FAN_STATUS):
                 continue
             gt = S["trust_gated"][e].get(r)
-            gated = S["gates"].get(e) is not None
+            used = S["gate_src"].get(e, FAN_GATE_NONE)
+            if gt is not None and getattr(gt, "mode_source", None):
+                used = f"{used}; outliers read per mode: {gt.mode_source}"
             rows.append(
                 [
                     e,
                     getattr(r, "value", str(r)),
                     _trust_cell(gt) if gated else "—",
                     _trust_cell(t),
-                    S["gate_src"].get(e, FAN_GATE_NONE),
+                    used,
                 ]
             )
     if rows:
         blocks.append(_p("Sensor trust, scored on fan-on samples (gated) and on all samples:"))
+        if any("outliers read per mode" in r[4] for r in rows):
+            blocks.append(
+                _p(
+                    "A unit with no fan signal shows a gated column too when an operating mode "
+                    "could be inferred (OA damper and coil valves closed = off): its duct-air "
+                    "points' outliers are read per mode."
+                )
+            )
         blocks.append(_table(["Equipment", "Point", "Gated", "Ungated", "Gate used"], rows))
     return _section("data", "Data coverage and sensor health", blocks)
 
@@ -2200,9 +2239,31 @@ def _sec_mv(S) -> dict | None:
                 ]
             )
         blocks.append(_table(["Meter", "Result", "Model", "R²", "CV(RMSE)", "Summary"], rows))
+    blocks += _mv_data_needed(S["findings"])
     if not blocks:
         return None
     return _section("mv", "M&V and drift", blocks)
+
+
+def _mv_data_needed(findings) -> list:
+    """0.98 (#88): a "Data needed" paragraph per meter whose M&V declined for too little baseline
+    data (``metrics["data_needed"]``, see :mod:`camber.mandv.sufficiency`)."""
+    seen: list = []
+    for f in findings:
+        m = f.metrics or {}
+        need = m.get("data_needed")
+        if not (str(f.rule).startswith("mv_") and m.get("declined") and isinstance(need, dict)):
+            continue
+        key = (f.equip, need.get("text"))
+        if need.get("text") and key not in seen:
+            seen.append(key)
+    return [
+        _p(
+            f"Data needed ({equip}): {text}. Extend the baseline period, or collect more data "
+            "before this meter's M&V can be fitted."
+        )
+        for equip, text in seen
+    ]
 
 
 # ---- G36 advice only where a G36 sequence is declared (#32)
@@ -2264,6 +2325,13 @@ def _plant_first(iss) -> str:
         "setpoint while this unit ran warm, so restore plant capacity, staging or the CHW setpoint "
         "before adjusting this unit's coil valve or its controls."
     )
+
+
+def _heading(rec, title: str) -> str:
+    """An issue's heading: the finding's cause when the recommendation names one (0.98, #88), else
+    the action title."""
+    cause = getattr(rec, "cause", "") if rec is not None else ""
+    return cause or title
 
 
 def _packaged_advice(S, iss, rec) -> tuple:
@@ -2386,7 +2454,8 @@ def _sec_issue(S, iss) -> dict:
         )
     blocks.append(_table(["Role", "Rule", "Severity", "Estimate $/yr", "Finding"], mrows))
     if action:
-        blocks.append(_p(f"Recommended action: {action}"))
+        # 0.98 (#88): the heading names the cause; the action paragraph keeps the action's title
+        blocks.append(_p(f"Recommended action — {title}: {action}"))
         if suggested:
             blocks.append(_p(f"Suggested: {suggested}"))
         refs = _issue_refs(iss, rec)
@@ -2427,7 +2496,9 @@ def _sec_issue(S, iss) -> dict:
     ai = _ai_prose(iss, None)
     if ai:
         blocks.append(_p(ai))
-    sec = _section(f"issue-{iss.key}", f"Issue {iss.rank}: {title}", blocks, kind="issue")
+    sec = _section(
+        f"issue-{iss.key}", f"Issue {iss.rank}: {_heading(rec, title)}", blocks, kind="issue"
+    )
     sec["slot"] = f"issue:{iss.key}"
     return sec
 
@@ -2445,9 +2516,10 @@ def _issue_refs(iss, rec=None) -> list:
     return out
 
 
-def _sec_reading(issues) -> dict | None:
+def _sec_reading(issues, extra=()) -> dict | None:
     """ "Further reading": the linked PNNL Re-tuning guides and chapters relevant to this report's
-    issues only (none -> no section). Link only: nothing from them is reproduced."""
+    issues only (none -> no section), plus ``extra`` ids (0.98: the walk-down chapter when the
+    report has a "Verify on site" section). Link only: nothing from them is reproduced."""
     from ..references import GUIDE, REFERENCES
 
     ids: list = []
@@ -2455,6 +2527,9 @@ def _sec_reading(issues) -> dict | None:
         for rid in _issue_refs(iss):
             if rid not in ids:
                 ids.append(rid)
+    for rid in extra:
+        if rid in REFERENCES and rid not in ids:
+            ids.append(rid)
     if not ids:
         return None
     ids.sort(key=lambda r: 0 if REFERENCES[r].kind == GUIDE else 1)  # guides before chapters
@@ -2468,9 +2543,102 @@ def _sec_reading(issues) -> dict | None:
     return _section("reading", "Further reading", blocks, slot=False)
 
 
+#: 0.98 (#88): the "Verify on site" tables, one per item kind, in checklist order
+_VERIFY_KINDS = (
+    (
+        "sensor",
+        "Sensors and setpoints first (a wrong sensor can make any finding that uses it wrong):",
+    ),
+    ("equipment", "Equipment and controls:"),
+    ("design_value", "Design values the checks assumed (no site value was configured):"),
+    ("data", "Points the checks lacked (see Appendix A):"),
+)
+
+
+def _sec_verify(S) -> dict | None:
+    """0.98 (#88): "Verify on site", the walk-down checklist (:func:`camber.walkdown.site_checks`)
+    after the issue pages: per issue, what to look at on site, which point to compare, and what
+    result would confirm or refute the finding. Sensors first, then equipment, design values and
+    missing points. No items -> no section."""
+    from ..aso import recommend
+    from ..references import WALKDOWN_REFERENCES
+    from ..walkdown import site_checks
+
+    ctx = S["ctx"]
+    checks = site_checks(
+        S["issues"],
+        recommend=recommend,
+        rule_of=ctx.rule,
+        overrides=ctx.overrides,
+        trust=S["trust_gated"],
+        skipped=getattr(ctx.run, "rules_skipped", None) or (),
+        declined=S["declined"],
+    )
+    if not checks:
+        return None
+    blocks: list = [
+        {
+            "kind": "links",
+            "lead": "A walk-down checklist built from this report, following the building "
+            "walk-down of the PNNL Re-tuning training (linked; nothing from it is reproduced). For "
+            "each item: what to look at on site, which point to compare, and what result would "
+            "confirm or refute the finding. # links to the issue (A: Appendix A).",
+            "refs": list(WALKDOWN_REFERENCES),
+        }
+    ]
+    for kind, lead in _VERIFY_KINDS:
+        rows = []
+        for c in checks:
+            if c.kind != kind:
+                continue
+            anchor = (
+                f"<a href='#issue-{_esc(c.issue_key)}'>{int(c.rank)}</a>"
+                if c.issue_key
+                else "<a href='#appendix-a'>A</a>"
+            )
+            rows.append([anchor, c.equip, c.look_at, c.point, c.confirms, c.refutes])
+        if rows:
+            tbl = _table(["#", "Equipment", "Look at", "Point", "Confirms", "Refutes"], rows)
+            tbl["link_col"] = 0  # the first column carries an internally built anchor
+            blocks += [_p(lead), tbl]
+    return _section("verify", "Verify on site", blocks)
+
+
 def _ai_prose(issue, client) -> str:
     """Phase-C hook for grounded AI prose on an issue page; renders nothing in phase B."""
     return ""
+
+
+_SKIP_EQUIP_CAP = 6  # equipment named per "Checks not evaluated" row before "and N more"
+
+
+def _skip_rows(run) -> list:
+    """0.98 (#88): Appendix A's "Checks not evaluated" rows from ``run.rules_skipped``.
+
+    One row per (rule, missing set) over the ``missing_inputs`` / ``no_data`` records, in first-seen
+    order; the equipment cell names up to :data:`_SKIP_EQUIP_CAP` units, then "and N more". A
+    ``no_verdict`` record (the rule ran and returned nothing) is not a missing input and is left
+    out of the table.
+    """
+    groups: dict = {}
+    for sk in getattr(run, "rules_skipped", None) or []:
+        if getattr(sk, "reason", "") not in ("missing_inputs", "no_data"):
+            continue
+        key = (sk.rule, tuple(sk.missing) if sk.missing else ("no data",))
+        groups.setdefault(key, [])
+        if sk.equip and sk.equip not in groups[key]:
+            groups[key].append(sk.equip)
+    rows = []
+    for (rule, missing), equips in groups.items():
+        if not equips:
+            where = "none of the equipment carries these inputs"
+        elif len(equips) > _SKIP_EQUIP_CAP:
+            more = len(equips) - _SKIP_EQUIP_CAP
+            where = ", ".join(equips[:_SKIP_EQUIP_CAP]) + f" and {more} more"
+        else:
+            where = ", ".join(equips)
+        rows.append([rule, ", ".join(missing), where])
+    return rows
 
 
 def _sec_appendices(S) -> list:
@@ -2491,6 +2659,16 @@ def _sec_appendices(S) -> list:
     if rows:
         blocks.append(_p("Checks that declined to reach a verdict:"))
         blocks.append(_table(["Rule", "Equipment", "Why"], rows))
+    skip_rows = _skip_rows(run)
+    if skip_rows:
+        blocks.append(
+            _p(
+                "Checks not evaluated (missing inputs): configured rules that could not run "
+                "because a required input is not mapped or has no data. Map the named points "
+                "to evaluate them."
+            )
+        )
+        blocks.append(_table(["Rule", "Missing", "Equipment"], skip_rows))
     miss = []
     for f in S["findings"]:
         mo = (f.metrics or {}).get("_missing_optional")

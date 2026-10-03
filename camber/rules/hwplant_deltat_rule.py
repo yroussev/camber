@@ -14,6 +14,7 @@ import pandas as pd
 
 from ..model.roles import Role
 from ..plant import analyze_hw_plant
+from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
 
 _ROLE_TO_COL = {
@@ -28,7 +29,9 @@ class HWPlantDeltaT:
     """Detects low hot-water loop delta-T at the heating plant (PNNL Re-tuning Ch.8)."""
 
     name = "hw_plant_deltat"
-    roles_required = (Role.BOILER_STATUS, Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP)
+    # 0.98 (#86 item 4a): a run status OR the gas input it can be inferred from (_boilerrun.py)
+    roles_required = (Role.HW_SUPPLY_TEMP, Role.HW_RETURN_TEMP)
+    roles_any_of = BOILER_RUN_ANY_OF
     roles_optional = (Role.OAT,)
 
     def __init__(self, design_deltaT_min_f: float = 20.0):
@@ -37,6 +40,7 @@ class HWPlantDeltaT:
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
+        frame, run_source = with_boiler_status(frame)  # 0.98 (#86 item 4a): gas fallback
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         res = analyze_hw_plant(legacy, equip, design_deltaT_min_f=self.design_deltaT_min_f)
@@ -63,10 +67,12 @@ class HWPlantDeltaT:
                 "design_deltaT_min_f": res.design_deltaT_min_f,
                 "low_deltaT_pct": res.low_deltaT_pct,
                 "n_running": res.n_running,
+                **({"run_source": run_source} if run_source else {}),  # 0.98 (#86 item 4a)
             },
             summary=(
                 f"{equip}: HW loop deltaT median {res.deltaT_median_f:.1f}F "
                 f"({res.low_deltaT_pct:.0f}% of running hours < "
                 f"{res.design_deltaT_min_f:.0f}F design)"
             ),
+            caveats=[GAS_RUN_CAVEAT] if run_source else [],  # 0.98 (#86 item 4a)
         )

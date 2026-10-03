@@ -12,7 +12,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..model.roles import Role
-from ..schedules import fan_on_mask
+from ..schedules import effective_occupied_mask, fan_on_mask
 from .base import Finding
 
 
@@ -21,23 +21,63 @@ class SupplyAirControl:
 
     name = "supply_air_control"
     roles_required = (Role.SUPPLY_AIR_TEMP, Role.SUPPLY_AIR_TEMP_SP)
-    roles_optional = (Role.SUPPLY_FAN_STATUS, Role.SUPPLY_FAN_SPEED)
+    #: a trended occupancy point gates the judged hours to occupied ones (0.98, #84)
+    roles_optional = (Role.SUPPLY_FAN_STATUS, Role.SUPPLY_FAN_SPEED, Role.OCCUPANCY)
 
-    def __init__(self, *, tol_F: float = 2.0, warn_pct: float = 10.0, fault_pct: float = 25.0):
+    #: ``occupancy_gate`` values. ``"trended"`` (default): when the unit trends an occupancy point
+    #: (any non-null value), judge only fan-on samples that are also occupied; without one, judge
+    #: every fan-on sample (no assumed-schedule fallback -- a unit that runs evenings or weekends
+    #: on purpose must not lose those hours to a guessed office schedule). ``"schedule"``: AND
+    #: the fan mask with the trended occupancy if present, else the assumed weekday 07-18
+    #: schedule. ``"off"``: fan-on samples only (the pre-0.98 behaviour).
+    OCCUPANCY_GATES = ("trended", "schedule", "off")
+
+    def __init__(
+        self,
+        *,
+        tol_F: float = 2.0,
+        warn_pct: float = 10.0,
+        fault_pct: float = 25.0,
+        occupancy_gate: str = "trended",
+    ):
+        if occupancy_gate not in self.OCCUPANCY_GATES:
+            raise ValueError(
+                f"supply_air_control: occupancy_gate must be one of {self.OCCUPANCY_GATES}, "
+                f"got {occupancy_gate!r}"
+            )
         self.tol_F = tol_F
         self.warn_pct = warn_pct
         self.fault_pct = fault_pct
+        self.occupancy_gate = occupancy_gate
+
+    def _occupancy(self, frame):
+        """``(mask | None, label)``: the occupied samples under ``occupancy_gate``, and how."""
+        if self.occupancy_gate == "off":
+            return None, "off"
+        occ = frame[Role.OCCUPANCY] if Role.OCCUPANCY in frame.columns else None
+        trended = occ is not None and occ.notna().any()
+        if trended:
+            return effective_occupied_mask(frame.index, occ=occ), "trended occupancy"
+        if self.occupancy_gate == "schedule":
+            return effective_occupied_mask(frame.index), "assumed schedule (weekdays 07-18)"
+        return None, "none trended (fan-on hours only)"
 
     def _running_mask(self, frame):
         # Running = fan on for most of the interval (camber.schedules.fan_on_mask: status duty
         # > 0.5, else speed > 1 %). "Any duty > 0" counted start-up / shut-down hours, where SAT
-        # is still settling from plenum temperature, as off-setpoint running hours.
+        # is still settling from plenum temperature, as off-setpoint running hours. The
+        # occupancy gate is applied here too, so the finding, its evidence chart and the triage
+        # violation mask all judge the same samples.
         if not self._has_running_signal(frame):
             return pd.Series(True, index=frame.index)
         mask, _src = fan_on_mask(frame[[c for c in frame.columns if c != Role.AIRFLOW]])
         if mask is None:
             return pd.Series(True, index=frame.index)
-        return pd.Series(mask.to_numpy(dtype=bool), index=frame.index)
+        run = pd.Series(mask.to_numpy(dtype=bool), index=frame.index)
+        occ, _label = self._occupancy(frame)
+        if occ is not None:
+            run = run & pd.Series(occ.to_numpy(dtype=bool), index=frame.index)
+        return run
 
     def _deviation(self, frame):
         return frame[Role.SUPPLY_AIR_TEMP] - frame[Role.SUPPLY_AIR_TEMP_SP]
@@ -74,11 +114,13 @@ class SupplyAirControl:
             )
         run = self._running_mask(frame) & dev.notna()
         n = int(run.sum())
+        occ_mask, occ_label = self._occupancy(frame)
         if n == 0:
             return Finding(
                 rule=self.name,
                 equip=equip,
                 severity="info",
+                metrics={"n_running": 0, "occupancy_gate": occ_label},
                 summary=f"{equip}: no running supply-air data",
             )
         off = (dev.abs() > self.tol_F) & run
@@ -86,6 +128,7 @@ class SupplyAirControl:
         above = 100.0 * float(((dev > self.tol_F) & run).sum()) / n  # SAT too warm
         below = 100.0 * float(((dev < -self.tol_F) & run).sum()) / n  # SAT too cold
         mean_abs = float(dev[run].abs().mean())
+        hours = "occupied running hours" if occ_mask is not None else "running hours"
         sev = "fault" if off_pct >= self.fault_pct else "warn" if off_pct >= self.warn_pct else "ok"
         return Finding(
             rule=self.name,
@@ -98,9 +141,10 @@ class SupplyAirControl:
                 "mean_abs_dev_F": round(mean_abs, 2),
                 "n_running": n,
                 "tol_F": self.tol_F,
+                "occupancy_gate": occ_label,
             },
             summary=(
-                f"{equip}: SAT off setpoint {off_pct:.0f}% of running hours "
+                f"{equip}: SAT off setpoint {off_pct:.0f}% of {hours} "
                 f"(mean |Δ| {mean_abs:.1f}°F; warm {above:.0f}%, cold {below:.0f}%)"
             ),
         )

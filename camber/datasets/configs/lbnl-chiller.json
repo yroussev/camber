@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for lbnl-chiller: plant-level kW/ton and cooling-tower approach on chiller/tower 1. The simulated design curves are not published, so each rule's design ceiling is CALIBRATED from the fault_free run's own median (commissioning practice, as examples/lbnl_fdd/benchmark.py does): 1.44 kW/ton and an 8.1 F approach. With the rules' generic defaults every run, including fault_free, would read as a fault.",
+  "_comment": "Run template for lbnl-chiller: plant-level kW/ton and cooling-tower approach on chiller/tower 1. The simulated design curves are not published, so each rule's design ceiling is CALIBRATED from the fault_free run's own median (commissioning practice, as examples/lbnl_fdd/benchmark.py does): 1.44 kW/ton and an 8.1 F approach. With the rules' generic defaults every run, including fault_free, would read as a fault. 0.98 (#86): the tower drift family scores every run against the declared reference PLANT__fault_free (drift.families[].reference), re-read on every run and never stored: cooling_tower_fan_effort_drift reads the fan effort at matched condenser range and wet-bulb, which is where a controlled tower's fouling shows (it holds its approach). Measured on the full subset: tower fouling 065 +17.8 and 080 +10.9 fan %-points (fault), 095 +3.3 (under the 5-point floor, ok); 0 of the 20 other runs fire, and the +1 / +2 F tower-sensor-bias runs are reported as sensor offsets (info). The fault-free run is the reference, so it declines (is_reference); camber datasets score still counts it as a correct negative, so the false-positive count reads 0 of 21.",
   "source": {
     "kind": "store",
     "store": "",
@@ -28,5 +28,16 @@
   ],
   "report": {
     "level": 2
+  },
+  "drift": {
+    "families": [
+      {
+        "class": "CHW_PLANT",
+        "family": "tower",
+        "reference": {
+          "equip": "PLANT__fault_free"
+        }
+      }
+    ]
   }
 }

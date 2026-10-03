@@ -268,10 +268,10 @@ Sub-checks, each `None` when it cannot be evaluated:
 - `below_floor_pct` (needs `oa_floor`, same units as the OA signal) — OA below the floor, over
   **every** occupied sample: it is measured before the economizer and closed-damper exclusions,
   because an economizer only raises OA and a damper shut while occupied is the deepest
-  below-floor case there is. (Until 0.82.0's real-data pass it ran after them, and a wildfire
-  damper closure vanished into "not judged".) For 62.1 dynamic reset the floor is the area
-  component `Ra·Az` (§6.2.7; numbering varies by edition). For a multiple-zone system the true
-  intake floor is higher than `ΣRa·Az`, so this under-flags — the safe direction.
+  below-floor case there is. (Until 0.82.0 it ran after them, so OA below the floor while the
+  economizer might be active vanished into "not judged".) For 62.1 dynamic reset the floor is
+  the area component `Ra·Az` (§6.2.7; numbering varies by edition). For a multiple-zone system
+  the true intake floor is higher than `ΣRa·Az`, so this under-flags — the safe direction.
 - `excess_at_low_demand_pct` (needs `oa_floor`) — share of low-CO₂ samples with OA held above the
   floor: DCV installed but not saving energy, the reason it exists (ASHRAE 90.1 §6.4.3.8).
 
@@ -317,6 +317,20 @@ Sub-checks, each `None` when it cannot be evaluated:
   this a lecture theatre at its CO₂ sensor's full scale with the fan off read "not judged".
   CAMBER temperatures are °F: when the economizer is inferred from OAT and nearly every sample is
   excluded, the finding says an OAT in °C would do that.
+
+  **Below the floor with the fan off (0.98, #93).** An occupied hour below `oa_floor_cfm` because
+  the supply fan was off is a schedule the fan did not keep, not a minimum-OA problem. The fan is
+  read from `SUPPLY_FAN_STATUS`, else from `SUPPLY_FAN_SPEED` at or below `fan_off_speed_pct`
+  (5 %). Those hours are named in the summary and a caveat ("supply fan off while scheduled
+  occupied") and counted as `fan_off_occupied_pct` / `fan_off_occupied_hours`, and
+  `below_floor_pct` is the shortfall with the fan running. The share test still reads every
+  below-floor sample (`below_floor_total_pct`), so the severity does not move. With no fan
+  signal nothing changes. **Duration (opt-in):** `below_floor_fault_hours` (default `None`)
+  makes a contiguous below-floor episode of that many occupied hours a `fault` whatever its share,
+  because a short, concentrated event otherwise vanishes in a long record. The longest episode is
+  reported either way (`below_floor_longest_h`, `_start`, `_fan_off_h`). It counts consecutive
+  occupied samples, so it continues across the night between two occupied days, and the summary
+  says when the fan was off for most of it.
 
   **Which OA signal (0.93, #37).** The best signal judges every sample it covers, a lesser one only
   the samples the better ones miss: `OA_AIRFLOW`, then `OA_DAMPER`. An air handler whose flow
@@ -377,14 +391,16 @@ warm-up closures and a fan schedule — and, since 0.82.0, against open real-bui
 |---|---|
 | Lab room running a known DCV law, 3 + 6 L/s per person (Zenodo 10.5281/zenodo.18299691, CC BY) | `functioning` on CO₂ (lift 392 ppm), on the occupant count and on the controller's own occupancy estimate. The CO₂ mass balance closes at 5.3–5.8 mL/s per person, close to the 5.0 mL/s (0.0105 cfm) the simulator assumes for a sedentary adult |
 | Three office rooms, camera counts + VAV damper (data descriptor doi:10.1038/s41597-019-0274-4, CC0) | `functioning` on counts in all three (lift 2–20 people within the hour); on CO₂ one room, the other two never reached the engage level |
-| Office building with no DCV, 4 rooftop units, 11 CO₂ zones, Brick model (Dryad 10.7941/D1N33Q) | `insufficient` on every unit — never a false `functioning` (specificity); all 11 zones attributed through the Brick air handler → VAV → zone chain; the 2020 wildfire damper closure is a below-floor `fault` on the two units that fell under the 62.1 requirement and not on the two that stayed above it. Since 0.93 the months before the OA-flow record (Aug 2019 – Mar 2020) are judged on the damper position: `insufficient` too, zone CO₂ never varying 150 ppm. `co2_ventilation_system`: 57–71 % of occupied hours are economizer mode and set apart; the zones stay within 150 ppm of outdoor in 99–100 % of the remaining minimum-damper hours — over-ventilated at the minimum, not only while economizing |
+| Office building with no DCV, 4 rooftop units, 11 CO₂ zones, Brick model (Dryad 10.7941/D1N33Q) | `insufficient` on every unit — never a false `functioning` (specificity); all 11 zones attributed through the Brick air handler → VAV → zone chain. Below the 750 cfm floor (the config's assumed `Ra·Az` per unit) in 2.0–4.2 % of occupied hours over the OA-flow record (April–December 2020): `info`, under the 10 % `below_floor_fault_pct`. Those hours are days with the supply fans off while the schedule says occupied (October and December 2020; fan speed feedback 1.2–2.6 %, and −24.9 on 2020-12-17), not the wildfire smoke mode. Since 0.98 the finding says so: "supply fan off while scheduled occupied" for 41, 82, 40 and 40 h, and `below_floor_pct` (the shortfall with the fan running) is 0.1, 0.0, 0.1 and 0.0 %; the longest episode is 22 h (RTU02: 64 h, 2020-10-08 to 10-15), so `below_floor_fault_hours: 4` would flag every unit (a `fault`, shown as `warn` because this run's zone grouping is heuristic). The smoke mode stays unflagged: from 2020-08-24 to 09-06 the dampers were held at their 10 % minimum and the units still took in 1,130–3,625 cfm (median by unit), so the smoke-mode weeks alone read 0–0.9 % below the floor (re-measured in 0.98; earlier versions of this page called the smoke mode a below-floor `fault` on two units). Since 0.93 the months before the OA-flow record (Aug 2019 – Mar 2020) are judged on the damper position: `insufficient` too, zone CO₂ never varying 150 ppm. `co2_ventilation_system`: 57–71 % of occupied hours are economizer mode and set apart; the zones stay within 150 ppm of outdoor in 99–100 % of the remaining minimum-damper hours — over-ventilated at the minimum, not only while economizing |
 | Lecture theatre, fan speed + two CO₂ sensors (Zenodo 10.5281/zenodo.3406555, CDLA-Permissive) | `fault`: 110 occupied hours with the fan off and CO₂ at the sensor's 2000 ppm full scale. Since 0.93 the unit (100 % outdoor air) is judged on its fan speed: `insufficient` on the fan-on hours (CO₂ never varies enough), and the fan-off hours at full-scale CO₂ remain a `fault` |
 | Rooms with a schedule-driven ventilation valve (github energietransitie/b4b-windesheim, CC BY) | not `functioning` on presence once the lift is taken within the hour — a time clock is not DCV. On CO₂ (0.93, within the hour): one room reads `functioning` on both its sensors, where the pooled lift read "uncorrelated" on one; the other stays sensor-dependent (`functioning` on its desk sensor, a 12 ppm same-hour lift on the BMS sensor) |
 
 - Without `ECON_CMD` the economizer state is inferred, and the OAT-only fallback discards all mild
   weather — expect `insufficient` more often. That is the honest answer, not a defect.
 - Damper position is not OA flow; the floor sub-checks need `OA_AIRFLOW` in cfm.
-- Return-air CO₂ averages the zones and dilutes the critical one.
+- Return-air CO₂ averages the zones and dilutes the critical one. `dcv_verification` attaches
+  this caveat to air handlers and to equipment of unknown class, not to terminals or fan coils,
+  whose CO₂ is the room's own (0.98).
 - A fixed OA damper on a variable-speed supply fan moves OA flow with fan speed, and fan speed
   tends to follow occupancy through cooling load — that can mimic DCV. Not detected.
 - The fleet rule's `max` aggregation follows the worst trusted zone sensor; the plausibility, stuck

@@ -282,6 +282,15 @@ class DcvResult:
     # kept alongside as a diagnostic. None on a verdict that never reached the lift.
     lift_basis: str | None = None
     demand_lift_pooled: float | None = None
+    # 0.98 (#93): the below-floor samples split by the supply fan (``fan_off_mask``), and the
+    # longest contiguous below-floor episode. ``below_floor_total_pct`` is every below-floor
+    # sample (the pre-0.98 ``below_floor_pct``); with a fan-off mask ``below_floor_pct`` is the
+    # ventilation shortfall with the fan running and ``fan_off_below_floor_pct`` the rest.
+    below_floor_total_pct: float | None = None
+    fan_off_below_floor_pct: float | None = None
+    below_floor_longest_h: float | None = None
+    below_floor_longest_start: str | None = None
+    below_floor_longest_fan_off_h: float | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -312,6 +321,22 @@ def _demand_kind(d: pd.Series) -> str:
 
 def _pct(mask) -> float:
     return round(100.0 * float(np.mean(mask)), 1) if len(mask) else 0.0
+
+
+def _longest_run(below: np.ndarray, off: np.ndarray) -> tuple:
+    """``(start position, length, fan-off samples in it)`` of the longest run of consecutive
+    ``below`` samples (``(None, 0, 0)`` when there is none). The samples are the judged occupied
+    ones in time order, so a run continues across the unoccupied hours between two days."""
+    best: tuple = (None, 0, 0)
+    start = None
+    for i, b in enumerate(np.append(below, False)):
+        if b and start is None:
+            start = i
+        elif not b and start is not None:
+            if i - start > best[1]:
+                best = (start, i - start, int(off[start:i].sum()))
+            start = None
+    return best
 
 
 def _hour_of_day_lift(index, d, raised, at_floor, agg, *, min_pairs: int = 3) -> tuple:
@@ -355,6 +380,7 @@ def assess_dcv(
     demand_kind: str = "auto",
     min_lift_people: float = 1.0,
     stratify_hour: bool = True,
+    fan_off_mask=None,
 ) -> DcvResult:
     """Verify DCV: is outdoor air raised when -- and only when -- ventilation demand is high?
 
@@ -407,6 +433,15 @@ def assess_dcv(
     ``co2_breach_at_min_pct`` is the share of **all** judged samples with CO₂ above
     ``co2_setpoint`` while OA is at its floor.
 
+    ``fan_off_mask`` (0.98, #93; True where the supply fan is off) splits the below-floor samples:
+    ``fan_off_below_floor_pct`` counts those with the fan off (an occupied schedule the fan did not
+    keep, not a damper or minimum-OA problem), ``below_floor_pct`` the rest (the ventilation
+    shortfall with the fan running) and ``below_floor_total_pct`` both (the pre-0.98
+    ``below_floor_pct``). Without it ``below_floor_pct`` equals ``below_floor_total_pct``. The
+    longest run of consecutive below-floor occupied samples is reported either way
+    (``below_floor_longest_h``, its ``_start`` and the fan-off hours in it); a run continues across
+    the unoccupied hours between two occupied periods.
+
     Samples with OA effectively **closed** (at or below ``closed_frac`` of its 95th percentile)
     are excluded from the verdict and reported as ``closed_pct``: DCV never shuts OA fully while
     a space is occupied (the 62.1 area component keeps a floor above zero), so a closed damper
@@ -440,15 +475,39 @@ def assess_dcv(
     # The floor sub-checks run on EVERY occupied sample, before the economizer and closed-damper
     # exclusions: an economizer only ever raises OA, and a closed damper while occupied is the most
     # below-floor OA can be -- excluding either would hide exactly the under-ventilation the floor
-    # exists to catch (a wildfire damper closure read as "not judged").
+    # exists to catch (OA held below the floor read as "not judged").
     below_floor = None
+    floor_kw: dict = {}
     if oa_floor is not None and len(df):
         fl_all = (
             _dedup(oa_floor).reindex(df.index).to_numpy(dtype=float)
             if isinstance(oa_floor, pd.Series)
             else np.full(len(df), float(oa_floor))
         )
-        below_floor = _pct(df["oa"].to_numpy(dtype=float) < fl_all * (1.0 - floor_tol))
+        below = df["oa"].to_numpy(dtype=float) < fl_all * (1.0 - floor_tol)
+        below_floor = _pct(below)
+        floor_kw["below_floor_total_pct"] = below_floor
+        off = np.zeros(len(df), dtype=bool)
+        if fan_off_mask is not None:  # 0.98 (#93): fan-off samples are named, not a shortfall
+            off_s = _dedup(fan_off_mask).reindex(df.index)
+            off = off_s.where(off_s.notna(), False).to_numpy(dtype=bool)
+            below_floor = _pct(below & ~off)
+            floor_kw["fan_off_below_floor_pct"] = _pct(below & off)
+        idx_all = _dedup(oa_signal).index
+        steps = (
+            pd.Series(idx_all[1:] - idx_all[:-1]) if isinstance(idx_all, pd.DatetimeIndex) else None
+        )
+        step_h = (
+            float(steps.median() / pd.Timedelta(hours=1))
+            if steps is not None and len(steps)
+            else float("nan")
+        )
+        i0, k, k_off = _longest_run(below, off)
+        if step_h == step_h:
+            floor_kw["below_floor_longest_h"] = round(k * step_h, 1)
+            floor_kw["below_floor_longest_fan_off_h"] = round(k_off * step_h, 1)
+        if i0 is not None:
+            floor_kw["below_floor_longest_start"] = str(df.index[i0])
 
     n_econ = None
     econ_excluded = None
@@ -479,6 +538,7 @@ def assess_dcv(
             closed_pct=closed_pct,
             below_floor_pct=below_floor,
             demand_kind=kind,
+            **floor_kw,
         )
         base.update(kw)
         return DcvResult(**base)

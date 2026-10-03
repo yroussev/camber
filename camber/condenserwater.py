@@ -60,12 +60,20 @@ def analyze_cw_reset(
     reset_slope_flat: float = 0.3,  # CWS/wet-bulb slope below this = effectively no reset
     min_range_f: float = 2.0,  # CW range below this == not rejecting heat
     min_fan_pct: float = 5.0,  # tower fan above this == operating (if available)
+    elevation_ft: float | None = None,  # site elevation for a derived wet-bulb (None = sea level)
+    pressure_psia: float | None = None,  # or a measured barometric pressure
 ) -> CondenserWaterResetResult | None:
     """Regress CW supply temp on wet-bulb over operating hours to detect a reset.
 
     Expects legacy column ``CWS_Temp`` and either ``WetBulb`` or ``OAT`` + ``RH``.
     Optional ``CWR_Temp``/``TowerFanSpeed`` gate "operating". ``reset_slope_flat`` is
     the judgment knob (an ideal reset tracks wet-bulb ~1:1).
+
+    A wet-bulb derived from ``OAT`` + ``RH`` assumes sea level unless ``elevation_ft`` (standard
+    atmosphere) or a measured ``pressure_psia`` is given (0.98, #92; see
+    :func:`camber.coolingtower.stull_wetbulb_f`). At altitude a sea-level wet-bulb reads high, more
+    so in dry air, which shifts the regression's x-axis and can move the slope a little. A measured
+    ``WetBulb`` column ignores both.
     """
     if "CWS_Temp" not in df.columns:
         return None
@@ -75,7 +83,12 @@ def analyze_cw_reset(
         wb = work["WetBulb"]
         wb_source = "measured"
     elif "OAT" in work.columns and "RH" in work.columns:
-        wb = pd.Series(stull_wetbulb_f(work["OAT"], work["RH"]), index=work.index)
+        wb = pd.Series(
+            stull_wetbulb_f(
+                work["OAT"], work["RH"], elevation_ft=elevation_ft, pressure_psia=pressure_psia
+            ),
+            index=work.index,
+        )
         wb_source = "derived"
     else:
         return None

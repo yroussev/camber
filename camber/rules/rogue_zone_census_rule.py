@@ -14,11 +14,20 @@ pure :func:`camber.g36_reset.rogue_zone_census` analyzer. It ships as two instan
 airflow vs setpoint and damper) — sharing one engine.
 
 **Topology honesty.** Deciding that a zone drags *AHU-1's* reset needs to know which zones AHU-1
-serves, and the fleet interface carries no served-by topology. So by default the zones are pooled
-building-wide and the rule attaches a loud confound caveat (a zone flagged here may simply serve a
-hotter loop — a screening signal only). When a caller supplies a ``groups`` map (``{zone: ahu}`` or
-a ``zone -> ahu`` callable) the census scopes per air handler and the caveat drops. Automatic
-zone→AHU discovery is the remaining deferred piece. Thresholds are screening / opportunity-grade.
+serves. The grouping is resolved in this order
+(:func:`camber.rules._topology_grouping.resolve_grouping`):
+
+1. a ``topology`` handed to :meth:`analyze_fleet` -- a semantic Brick/Haystack model, or, since the
+   rule sets ``wants_topology``, the naming-based served-by graph that
+   :meth:`camber.rules.base.Registry.run_fleet` auto-builds from the equipment refs when none is
+   given. The census scopes per air handler; a naming-inferred grouping carries a
+   screening-grade caveat, and zones it does not cover are counted and caveated;
+2. else an explicit ``groups`` map (``{zone: ahu}`` or a ``zone -> ahu`` callable);
+3. else (a topology that covers none of the zones, or a direct call with neither) the zones are
+   pooled building-wide with a loud confound caveat (a zone flagged here may simply serve a hotter
+   loop -- a screening signal only).
+
+Thresholds are screening / opportunity-grade.
 """
 
 from __future__ import annotations
@@ -48,8 +57,10 @@ class RogueZoneCensus:
     zone that both holds the binding (maximum) request a dominant fraction of the active cycles and
     commands a disproportionate share of the group's total requests. ``reset`` selects the family:
     ``"sat"`` (zone temp vs cooling setpoint) or ``"static"`` (zone airflow vs setpoint and damper).
-    Warn-level (an operational opportunity, not a hard fault). Pools zones building-wide with a
-    confound caveat unless a ``groups`` (``{zone: ahu}`` dict or ``zone -> ahu`` callable) is given.
+    Warn-level (an operational opportunity, not a hard fault). Scopes per air handler from the
+    fleet ``topology`` (the runner auto-builds a naming one), else from ``groups`` (a
+    ``{zone: ahu}`` dict or ``zone -> ahu`` callable); with neither it pools zones building-wide
+    with a confound caveat (see the module docstring for the order).
     """
 
     def __init__(

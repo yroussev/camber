@@ -183,3 +183,76 @@ def test_fan_off_samples_are_left_out():
     fr2 = fr.drop(columns=[Role.SUPPLY_FAN_STATUS])
     fr2[Role.SUPPLY_FAN_SPEED] = np.where(on, 60.0, 0.0)
     assert LeakingValve().analyze("AHU", fr2).severity == "ok"
+
+
+# ------------------------------------------- 0.98 (#84): measured fan heat, occupancy, dual duct
+
+
+def test_defaults_report_no_new_metrics():
+    f = LeakingValve().analyze("AHU", _closed_frame())
+    assert "cool_shift_f" not in f.metrics and "occupancy_gate" not in f.metrics
+    assert Role.OCCUPANCY not in LeakingValve().roles_optional
+    assert Role.OCCUPANCY in LeakingValve(occupied_only=True).roles_optional
+    # the per-instance override leaves the class (and other instances) untouched
+    assert Role.OCCUPANCY not in LeakingValve.roles_optional
+
+
+def test_measured_fan_heat_catches_a_leak_that_cancels_the_fan_rise():
+    # fault-free unit: +1.0 F fan rise; leaking unit: -0.1 F (the leak cancels the fan heat)
+    healthy = _closed_frame(mat=60.0, sat=61.0)
+    leaking = _closed_frame(mat=60.0, sat=59.9)
+    assert LeakingValve().analyze("AHU", leaking).severity == "ok"  # inside the 3 F margin
+    rule = LeakingValve(measured_fan_heat_f=1.0, cool_delta_thr_f=1.0)
+    f = rule.analyze("AHU", leaking)
+    assert f.severity == "fault" and f.metrics["chw_leak_pct"] == 100.0
+    assert f.metrics["cool_shift_f"] == 1.0
+    assert any("measured fan heat of 1F" in c for c in f.caveats)
+    g = rule.analyze("AHU", healthy)
+    assert g.severity == "ok" and g.metrics["chw_leak_pct"] == 0.0
+
+
+def test_cool_delta_thr_defaults_to_delta_thr():
+    # with no separate margin the line is fan heat - delta_thr_f (1.0 - 3.0 = -2.0 F)
+    fr = _closed_frame(mat=60.0, sat=58.5)  # -1.5 F: above -2.0
+    assert LeakingValve(measured_fan_heat_f=1.0).analyze("AHU", fr).severity == "ok"
+    fr = _closed_frame(mat=60.0, sat=57.5)  # -2.5 F: below it
+    assert LeakingValve(measured_fan_heat_f=1.0).analyze("AHU", fr).severity == "fault"
+
+
+def test_measured_fan_heat_is_not_credited_upstream_of_the_fan():
+    # a cooling-coil sensor ahead of a draw-through fan sees no fan heat: no shift
+    fr = _closed_frame(mat=60.0, sat=61.0, **{Role.COOL_COIL_LEAVING_TEMP: 59.9})
+    f = LeakingValve(measured_fan_heat_f=1.0, cool_delta_thr_f=1.0).analyze("AHU", fr)
+    assert f.metrics["cool_shift_f"] == 0.0 and f.severity == "ok"
+    g = LeakingValve(
+        measured_fan_heat_f=1.0, cool_delta_thr_f=1.0, coil_sensor_fan_heat=True
+    ).analyze("AHU", fr)
+    assert g.metrics["cool_shift_f"] == 1.0 and g.severity == "fault"
+
+
+def test_occupied_only_reads_trended_occupancy():
+    n = 24 * 21
+    occ = (np.arange(n) % 24 >= 8) & (np.arange(n) % 24 < 12)  # every day, 08-12
+    # unoccupied hours read a false cooling-leak signature; occupied hours are clean
+    sat = np.where(occ, 61.0, 50.0)
+    fr = _closed_frame(n, sat=sat, **{Role.OCCUPANCY: occ.astype(float)})
+    assert LeakingValve().analyze("AHU", fr).severity == "fault"
+    f = LeakingValve(occupied_only=True).analyze("AHU", fr)
+    assert f.severity == "ok" and f.metrics["occupancy_gate"] == "trended occupancy"
+    assert f.metrics["n_both_closed"] == int(occ.sum())  # weekends included: trended, not assumed
+    # no occupancy trended: the assumed weekday schedule
+    g = LeakingValve(occupied_only=True).analyze("AHU", fr.drop(columns=[Role.OCCUPANCY]))
+    assert g.metrics["occupancy_gate"].startswith("assumed schedule")
+
+
+def test_heating_can_be_left_unjudged_on_a_dual_duct_unit():
+    # the mapped supply air (the cold deck) rises 5.5 F: no heating leak to judge on it
+    fr = _closed_frame()
+    f = LeakingValve(judge_heating_on_supply_air=False).analyze("AHU", fr)
+    assert f.metrics["hw_leak_pct"] == 0.0 and f.metrics["hw_basis"] is None
+    assert f.severity == "ok"
+    assert any("heating coil not judged" in c for c in f.caveats)
+    # a heating coil with its own leaving-air sensor is judged on it either way
+    fr[Role.HEAT_COIL_LEAVING_TEMP] = 66.0
+    g = LeakingValve(judge_heating_on_supply_air=False).analyze("AHU", fr)
+    assert g.severity == "fault" and g.metrics["hw_basis"] == "heat_coil_leaving_temp"

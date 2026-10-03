@@ -87,6 +87,21 @@ def _sha256_file(path: str) -> str:
     return h.hexdigest()
 
 
+def _read_part_file(path: str) -> pa.Table:
+    """One Parquet part file's own columns, exactly as stored.
+
+    Not ``pq.read_table(path)``: before pyarrow 25 that applies hive partition discovery to a
+    single file's path, so a part under ``facility_id=X/year=Y/`` comes back with dictionary-typed
+    ``facility_id`` and ``year`` columns. Rewritten into the store, those columns then clash with
+    the string/int partition keys and the whole dataset stops opening ("Unable to merge: Field
+    facility_id has incompatible types").
+    """
+    import pyarrow.parquet as pq
+
+    with pq.ParquetFile(path) as f:
+        return f.read()
+
+
 def _partition_signature(fdir: str) -> tuple:
     """mtimes and file counts of a facility partition, its year dirs and their month dirs (changes
     on any write, prune or drop, whichever layout the partition uses)."""
@@ -866,14 +881,16 @@ class ParquetStore:
                         before_months += int(pq.ParquetFile(a).metadata.num_rows)
         for k, n in enumerate(n for n in names if n.endswith(".parquet")):
             src_sha = _sha256_file(os.path.join(ypath, n))
-            table = pq.read_table(os.path.join(ypath, n))
+            table = _read_part_file(os.path.join(ypath, n))
             migrated[n] = src_sha
             if table.num_rows == 0:
                 continue
             ts = table.column(_TS)
-            months = pc.month(ts)
+            # call_function, not pc.month / pc.equal: those are generated at import time, and the
+            # pyarrow releases that ship type stubs (py.typed) do not declare them.
+            months = pc.call_function("month", [ts])
             for mo in sorted(set(months.to_pylist())):
-                part = table.filter(pc.equal(months, mo))
+                part = table.filter(pc.call_function("equal", [months, mo]))
                 mdir = os.path.join(stage, f"{_MONTH}={int(mo)}")
                 os.makedirs(mdir, exist_ok=True)
                 # Named by the source's content (unique across repeated migrations of one year),

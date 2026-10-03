@@ -33,6 +33,7 @@ from typing import Protocol, runtime_checkable
 
 import pandas as pd
 
+from ..model.entities import missing_inputs, roles_any_of
 from ..model.mapping import MappingProvider
 from ..resolve import resolve
 from ..sensorhealth import untrusted_roles
@@ -69,6 +70,14 @@ class Rule(Protocol):
     enrich it (e.g. OAT enables the high-OAT reheat indicator) and are loaded when
     present but never block the rule. Rules may omit ``roles_optional`` (treated
     as empty) -- the runner reads it via ``getattr``.
+
+    0.98 (#86): a rule may also declare ``roles_any_of`` (optional, provisional), a tuple of role
+    groups of which each needs **at least one** role present -- e.g.
+    ``((Role.BOILER_STATUS, Role.GAS_INPUT_RATE),)`` for "a run status or a gas input". Every role
+    in a group is loaded when present; a group with none present blocks the rule like a missing
+    required role
+    (:func:`camber.model.entities.missing_inputs` is the one test the runners and
+    :func:`camber.model.entities.runnable_rules` share).
     """
 
     name: str
@@ -124,8 +133,100 @@ class PeriodRule(Protocol):
 
 
 def _roles_to_load(rule) -> tuple:
-    """Required + optional roles a rule wants resolved (optional may be absent)."""
-    return tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
+    """Required + optional (+ any-of) roles a rule wants resolved (only required must exist)."""
+    load = tuple(rule.roles_required) + tuple(getattr(rule, "roles_optional", ()))
+    extra = [r for g in roles_any_of(rule) for r in g if r not in load]
+    return load + tuple(dict.fromkeys(extra)) if extra else load
+
+
+def _gate_roles(rule, frame: pd.DataFrame) -> tuple:
+    """The roles the sensor-health gate judges: required, plus the any-of roles present."""
+    req = tuple(rule.roles_required)
+    extra = [r for g in roles_any_of(rule) for r in g if r in frame.columns and r not in req]
+    return req + tuple(dict.fromkeys(extra)) if extra else req
+
+
+def _cannot_run(rule, frame: pd.DataFrame) -> bool:
+    """True when the resolved frame is empty or lacks a required role or an any-of group."""
+    if frame.empty:
+        return True
+    req, groups = missing_inputs(rule, frame.columns)
+    return bool(req or groups)
+
+
+def _with_class(frame, ref):
+    """0.98 (#85): record the equipment's class on the role frame (``attrs["camber_equip_class"]``)
+    so a rule can tailor its wording to the class without a new parameter. Rules must treat an
+    absent or empty value as "class unknown"."""
+    if frame is not None:
+        frame.attrs["camber_equip_class"] = str(getattr(ref, "equip_class", "") or "")
+    return frame
+
+
+@dataclass
+class RuleSkip:
+    """A rule that applied to an equipment but produced no Finding there (0.98, #88).
+
+    Collected only when a runner is given a ``skipped`` list; default runs record nothing.
+
+    ``reason`` is ``"missing_inputs"`` (a required role, or every role of a ``roles_any_of``
+    group, is absent), ``"no_data"`` (the inputs resolve but carry no rows) or ``"no_verdict"``
+    (the rule ran and returned nothing). ``missing`` names the absent inputs as role values; an
+    any-of group renders as ``"a or b"``. ``equip`` is ``""`` for a rule-level record (a
+    configured rule that produced nothing on any equipment).
+    """
+
+    rule: str
+    equip: str
+    equip_class: str = ""
+    missing: list = field(default_factory=list)
+    reason: str = "missing_inputs"
+
+    def as_dict(self):
+        """Return the record as a plain dict (JSON/report friendly)."""
+        return asdict(self)
+
+
+def _missing_labels(rule, present) -> list:
+    """The absent inputs of ``rule`` as display labels (an any-of group as ``"a or b"``)."""
+    req, groups = missing_inputs(rule, present)
+    labels = [getattr(r, "value", str(r)) for r in req]
+    labels += [" or ".join(getattr(r, "value", str(r)) for r in g) for g in groups]
+    return labels
+
+
+def _skip_applies(rule, ref, frame) -> bool:
+    """Whether a rule that could not run on ``ref`` is worth recording as skipped.
+
+    It is when the rule is written for this equipment's class (a declared class list that the
+    recorded class matches), or when at least one of its required or any-of roles is present.
+    A chiller rule on an air handler is "not applicable", not skipped.
+    """
+    applies, classes = _class_verdict(rule, ref)
+    if applies is False:
+        return False
+    if applies and classes and str(getattr(ref, "equip_class", "") or ""):
+        return True
+    cols = frame.columns if frame is not None else ()
+    wanted = tuple(rule.roles_required) + tuple(r for g in roles_any_of(rule) for r in g)
+    return any(r in cols for r in wanted)
+
+
+def _record_skip(skipped, rule, ref, frame, *, reason=None) -> None:
+    """Append a :class:`RuleSkip` for ``ref`` to ``skipped`` (a no-op when ``skipped`` is None)."""
+    if skipped is None:
+        return
+    cls = str(getattr(ref, "equip_class", "") or "")
+    if reason == "no_verdict":
+        skipped.append(RuleSkip(rule.name, ref.equip, cls, [], "no_verdict"))
+        return
+    if not _skip_applies(rule, ref, frame):
+        return
+    cols = frame.columns if frame is not None else ()
+    missing = _missing_labels(rule, cols)
+    skipped.append(
+        RuleSkip(rule.name, ref.equip, cls, missing, "missing_inputs" if missing else "no_data")
+    )
 
 
 def _missing_optional(rule, frame: pd.DataFrame) -> list:
@@ -308,6 +409,7 @@ class Registry:
         resample: str = "1h",
         shared=None,
         min_trust=None,
+        skipped: list | None = None,
     ) -> list[Finding]:
         """Run one rule across equipment, resolving each to a role-frame first.
 
@@ -321,21 +423,29 @@ class Registry:
         required roles scores below it on the resolved frame, the rule **declines to
         fire** and instead records an ``info`` finding naming the untrusted input -- so
         a fault that is really a sensor problem isn't reported as an equipment fault.
+
+        ``roles_any_of`` groups (0.98) gate like required roles: each needs one role present, and
+        the present ones join the sensor-health gate.
+
+        ``skipped`` (0.98, #88) is an optional list the runner appends a :class:`RuleSkip` to for
+        each equipment the rule applies to but produced nothing on (missing inputs, no data, or
+        no verdict). The default (``None``) records nothing.
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
         out: list[Finding] = []
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
-            frame = _merge_shared(frame, shared)
-            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+            frame = _with_class(_merge_shared(frame, shared), ref)
+            if _cannot_run(rule, frame):
+                _record_skip(skipped, rule, ref, frame)
                 continue
             declined = _class_declined(rule, ref)
             if declined is not None:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
+                bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
                 if bad:
                     out.append(
                         Finding(
@@ -359,6 +469,8 @@ class Registry:
             _note_unrecognised(f, rule, ref)
             if f is not None:
                 out.append(f)
+            else:
+                _record_skip(skipped, rule, ref, frame, reason="no_verdict")
         return out
 
     def run_periods(
@@ -372,6 +484,7 @@ class Registry:
         resample: str = "1h",
         shared=None,
         min_trust=None,
+        skipped: list | None = None,
     ) -> list[Finding]:
         """Run a :class:`PeriodRule` across equipment, comparing two explicit time windows.
 
@@ -386,21 +499,24 @@ class Registry:
         fault. When a window resolves to no rows the rule also **declines**, with a caveat naming
         the empty window: a chiller silently dropped from a drift report reads as "no drift",
         which is precisely the false negative the honesty convention forbids.
+
+        ``skipped`` collects :class:`RuleSkip` records exactly as in :meth:`run`.
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
         out: list[Finding] = []
         for ref in equip_refs:
             frame = resolve(ref, mapping, load, resample=resample)
-            frame = _merge_shared(frame, shared)
-            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+            frame = _with_class(_merge_shared(frame, shared), ref)
+            if _cannot_run(rule, frame):
+                _record_skip(skipped, rule, ref, frame)
                 continue
             declined = _class_declined(rule, ref)
             if declined is not None:
                 out.append(declined)
                 continue
             if min_trust is not None:
-                bad = untrusted_roles(frame, rule.roles_required, min_trust=min_trust)
+                bad = untrusted_roles(frame, _gate_roles(rule, frame), min_trust=min_trust)
                 if bad:
                     out.append(
                         Finding(
@@ -439,6 +555,8 @@ class Registry:
             _note_unrecognised(f, rule, ref)
             if f is not None:
                 out.append(f)
+            else:
+                _record_skip(skipped, rule, ref, frame, reason="no_verdict")
         return out
 
     def run_fleet(
@@ -451,6 +569,7 @@ class Registry:
         shared=None,
         min_trust=None,
         topology=None,
+        skipped: list | None = None,
     ) -> Finding:
         """Run a FleetRule: resolve every equipment, pass the set as one batch.
 
@@ -465,6 +584,10 @@ class Registry:
         handler). When it is ``None`` and the rule opts in via ``wants_topology``, a naming
         served-by graph is auto-built from the ``equip_refs`` -- so the census auto-scopes even
         with no semantic model (that heuristic grouping carries a screening caveat downstream).
+
+        ``skipped`` collects a :class:`RuleSkip` per equipment the rule applies to but that lacks
+        its inputs, plus a rule-level one (``equip=""``, ``reason="no_verdict"``) when the rule
+        returns nothing.
         """
         rule = self.get(rule_name)
         load = _roles_to_load(rule)
@@ -477,11 +600,12 @@ class Registry:
                 other_class[ref.equip] = str(ref.equip_class)
                 continue
             frame = resolve(ref, mapping, load, resample=resample)
-            frame = _merge_shared(frame, shared)
-            if frame.empty or any(r not in frame.columns for r in rule.roles_required):
+            frame = _with_class(_merge_shared(frame, shared), ref)
+            if _cannot_run(rule, frame):
+                _record_skip(skipped, rule, ref, frame)
                 continue
             if min_trust is not None and untrusted_roles(
-                frame, rule.roles_required, min_trust=min_trust
+                frame, _gate_roles(rule, frame), min_trust=min_trust
             ):
                 continue
             frames[ref.equip] = frame
@@ -490,6 +614,8 @@ class Registry:
         if topology is None and getattr(rule, "wants_topology", False):
             topology = _heuristic_topology(equip_refs)
         f = rule.analyze_fleet(frames, topology=topology)  # type: ignore[attr-defined]  # fleet only
+        if f is None and skipped is not None:
+            skipped.append(RuleSkip(rule.name, "", "", [], "no_verdict"))
         if f is not None and other_class:
             f.metrics.setdefault(
                 "_class_excluded",

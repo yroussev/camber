@@ -161,3 +161,27 @@ def test_bias_mode_default_is_sse():
     a = fit_model(T, y, "3PC")
     b = fit_model(T, y, "3PC", objective="sse")
     assert a.change_points == b.change_points
+
+
+def test_grid_ties_keep_the_first_grid_point_whatever_the_rounding():
+    """A flat SSE surface (no data between grid points) ties change points up to rounding, which
+    depends on the BLAS build; the first grid point wins unless a later one is clearly better."""
+    from camber.mandv import models as M
+
+    floor = 1e-12 * 100.0
+    assert not M._improves(70.0 * (1 - 1e-14), 70.0, floor)  # rounding: a tie
+    assert M._improves(70.0 * (1 - 1e-8), 70.0, floor)  # a real improvement
+    assert not M._improves(1e-30, 0.0, floor) and not M._improves(0.0, 1e-25, floor)  # exact fits
+    # 12 monthly points with a gap above 75 F: every 4P change point in the gap fits identically
+    T = np.array([30, 35, 42, 48, 55, 61, 66, 70, 72, 74, 90, 92], dtype=float)
+    y = 100.0 + 2.0 * T
+    grid = M._grid(T)
+    in_gap = [g for g in grid if 74 < g < 90]
+    assert len(in_gap) >= 2
+    for kind in ("4P", "3PC"):
+        cp = M.fit_model(T, y, kind).change_points[0]
+        assert cp == grid[0] or cp <= in_gap[0], (kind, cp)
+    # the 5P search keeps the lowest (lo, hi) pair among exact ties
+    m5 = M.fit_model(T, y, "5P")
+    lo, hi = m5.change_points
+    assert lo == grid[0] and hi == grid[1]

@@ -16,7 +16,9 @@ Real-data figures were recorded from::
 and the M&V attempt in Python shown on the page (``caltrack_savings_hourly`` on the RTU's
 power, baseline test against setback test).
 
-(CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29.)
+(CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
+refusal's data need, the top issue's cause and the "Verify on site" section, 0.98.0-dev,
+2026-09-30.)
 """
 
 from __future__ import annotations
@@ -31,6 +33,7 @@ from _workbook import REAL, Check, Exercise, Finding, Metric, Run, write_standin
 
 from camber.config import run_config, run_drift_config
 from camber.mandv.caltrack import caltrack_savings_hourly
+from camber.mandv.sufficiency import InsufficientBaseline
 from camber.model.roles import Role
 from camber.report import build_rcx_report
 from camber.store import ParquetStore
@@ -56,13 +59,33 @@ def _rcx(ctx):
 
 
 def _rcx_ranking(ctx) -> None:
-    """Step 1: the top issue is the onset unit's economizer chain, at fault severity; its
-    recommended action asks for an on-site check of the damper."""
+    """Step 1: the top issue is the onset unit's economizer chain, at fault severity. Its heading
+    names the cause (0.98, #88): the damper was commanded open and outside air did not arrive, so
+    the recommended action is a damper repair, not "enable the economizer"."""
     rep = _rcx(ctx)
     top = rep.to_dict()["issues"][0]
     assert top["equip"] == ONSET and top["severity"] == "fault", top
     assert "free_cooling_missed" in top["rules"] and top["chain"] == "econ", top
-    assert "verify the OA damper modulates open" in rep.to_html()
+    assert top["cause"] == "Outdoor-air damper not modulating (stuck low)", top
+    assert top["title"] == "Repair the outdoor-air damper or actuator", top
+    html = rep.to_html()
+    assert "Issue 1: Outdoor-air damper not modulating (stuck low)" in html
+    assert "Recommended action — Repair the outdoor-air damper or actuator" in html
+
+
+def _missed_cause(ctx) -> None:
+    """Step 1 (0.98, #88): the finding separates the causes. On the onset unit the damper was
+    commanded open while the outdoor-air fraction stayed near its stuck value; the control's
+    missed hours (real data) all had the damper commanded low."""
+    m = ctx.finding("free_cooling_missed", ONSET).metrics
+    assert m["missed_cause"] == "damper_not_delivering", m
+    assert m["commanded_open_oaf_median_pct"] < m["stuck_low_oaf_pct"], m
+    if ctx.mode == REAL:
+        assert (m["commanded_open_pct"], m["commanded_open_hours"]) == (40.3, 673.0), m
+        assert m["commanded_open_oaf_median_pct"] == 4.4, m
+        free = ctx.finding("free_cooling_missed", FREE).metrics
+        assert free["missed_cause"] == "economizer_not_commanded", free
+        assert free["commanded_open_pct"] == 0.0, free
 
 
 def _rcx_conditional(ctx) -> None:
@@ -75,6 +98,33 @@ def _rcx_conditional(ctx) -> None:
     assert "duct_static_sp untrusted" in c["conditional_on"][0], c
     if ctx.mode == REAL:
         assert "(trust 0.40)" in c["conditional_on"][0], c
+
+
+def _rcx_verify(ctx) -> None:
+    """Step 2 (0.98, #88): the generated "Verify on site" section. The static-setpoint point the
+    conditional issue leans on comes first (a sensor item), then the onset unit's damper item,
+    which says what would confirm the stuck damper and what would point at the mixed-air sensor
+    instead. The economizer's minimum and high limit are site parameters in this config, so no
+    design-value item asks to confirm them."""
+    rep = _rcx(ctx)
+    sec = next(s for s in rep.to_dict()["sections"] if s["id"] == "verify")
+    assert sec["title"] == "Verify on site" and sec["slot"] == "section:verify", sec["title"]
+    leads = [b["text"] for b in sec["blocks"] if b["kind"] == "p"]
+    tables = [b["rows"] for b in sec["blocks"] if b["kind"] == "table"]
+    kinds = dict(zip(leads, tables))
+    sensors = next(rows for lead, rows in kinds.items() if lead.startswith("Sensors"))
+    static = [r for r in sensors if r[1] == ONSET and r[3].startswith("duct_static_sp")]
+    assert len(static) == 1 and "setpoint at the controller" in static[0][2], sensors
+    if ctx.mode == REAL:
+        assert static[0][3] == "duct_static_sp (trust 0.40, untrusted)", static
+    equipment = next(rows for lead, rows in kinds.items() if lead.startswith("Equipment"))
+    damper = [r for r in equipment if r[1] == ONSET and r[3].startswith("oa_damper (command)")]
+    assert len(damper) == 1, equipment
+    assert damper[0][0].endswith(">1</a>"), damper  # the top issue's item
+    assert "blades" in damper[0][2] and "mixed-air sensor" in damper[0][5], damper
+    assert not any(lead.startswith("Design values") for lead in leads), leads
+    html = rep.to_html()
+    assert "<h2>Verify on site</h2>" in html and "ch9_building_walkdown.pdf" in html
 
 
 def _drift(ctx) -> None:
@@ -115,12 +165,27 @@ def _mv_refused(ctx) -> None:
     try:
         caltrack_savings_hourly(base, b_oat, rep, r_oat)
     except ValueError as e:
-        msg = str(e)
+        msg, err = str(e), e
     else:
         raise AssertionError("caltrack_savings_hourly accepted a one-week baseline")
     assert "need >= 1440 baseline hours" in msg, msg
     if ctx.mode == REAL:
         assert msg.endswith("got 168"), msg
+    ctx.__dict__.setdefault("_capstone", {})["mv_error"] = err
+
+
+def _mv_need(ctx) -> None:
+    """Step 5 (0.98, #88): the refusal says what data is needed -- 1,272 more hours."""
+    err = ctx.__dict__.get("_capstone", {}).get("mv_error")
+    if err is None:
+        _mv_refused(ctx)
+        err = ctx.__dict__["_capstone"]["mv_error"]
+    assert isinstance(err, InsufficientBaseline), type(err)
+    need = err.need
+    assert (need["interval"], need["unit"], need["required"]) == ("hourly", "hours", 1440), need
+    assert need["shortfall"] == need["required"] - need["have"] > 0, need
+    if ctx.mode == REAL:
+        assert (need["have"], need["shortfall"], need["days_short"]) == (168, 1272, 53), need
 
 
 # --------------------------------------------------------------------------- the stand-in
@@ -262,8 +327,10 @@ EXERCISE = Exercise(
         Finding("outdoor_air_fraction", ONSET, present=False),
         Metric("free_cooling_missed", ONSET, "missed_pct", 30.0, 0.5, on=REAL, quote="30%"),
         Metric("free_cooling_missed", FREE, "missed_pct", 17.0, 0.5, on=REAL, quote="17%"),
-        Check("RCx: the top issue and its on-site check", _rcx_ranking),
+        Check("RCx: the top issue names its cause", _rcx_ranking, quote="stuck low"),
+        Check("why free cooling was missed", _missed_cause, quote="40%"),
         Check("RCx: the conditional issue", _rcx_conditional, quote="trust 0.40"),
+        Check("RCx: the generated walk-down checklist", _rcx_verify, quote="Verify on site"),
         # step 4: verification by drift
         Check("drift localizes the onset to the outdoor-air path", _drift, quote="-83"),
         # step 5: the ORNL scheduling measure, before and after
@@ -293,6 +360,7 @@ EXERCISE = Exercise(
             quote="131",
         ),
         Check("M&V on a one-week test is refused", _mv_refused, quote="168"),
+        Check("the refusal says what data is needed", _mv_need, quote="1,272"),
     ),
     standin=standin,
 )

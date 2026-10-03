@@ -14,6 +14,7 @@ import pandas as pd
 
 from ..boilercycle import analyze_boiler_cycling
 from ..model.roles import Role
+from ._boilerrun import BOILER_RUN_ANY_OF, GAS_RUN_CAVEAT, with_boiler_status
 from .base import Finding
 
 _ROLE_TO_COL = {Role.BOILER_STATUS: "BoilerStatus"}
@@ -23,7 +24,9 @@ class BoilerShortCycle:
     """Detects a boiler short-cycling (excess firing starts per day) (PNNL Re-tuning Ch.8)."""
 
     name = "boiler_short_cycle"
-    roles_required = (Role.BOILER_STATUS,)
+    # 0.98 (#86 item 4a): a run status OR the gas input it can be inferred from (_boilerrun.py)
+    roles_required = ()
+    roles_any_of = BOILER_RUN_ANY_OF
     roles_optional = ()
 
     def __init__(self, max_starts_per_day: float = 6.0):
@@ -32,6 +35,7 @@ class BoilerShortCycle:
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
+        frame, run_source = with_boiler_status(frame)  # 0.98 (#86 item 4a): gas fallback
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         res = analyze_boiler_cycling(legacy, equip)
@@ -59,10 +63,12 @@ class BoilerShortCycle:
                 "runtime_pct": res.runtime_pct,
                 "n_starts": res.n_starts,
                 "n_days": res.n_days,
+                **({"run_source": run_source} if run_source else {}),  # 0.98 (#86 item 4a)
             },
             summary=(
                 f"{equip}: {res.starts_per_day:.1f} boiler starts/day "
                 f"(threshold {self.max_starts_per_day:.0f}), firing "
                 f"{res.runtime_pct:.0f}% of the time"
             ),
+            caveats=[GAS_RUN_CAVEAT] if run_source else [],  # 0.98 (#86 item 4a)
         )

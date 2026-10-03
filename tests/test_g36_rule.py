@@ -19,8 +19,9 @@ from camber.rules.g36_rule import G36AFDD  # noqa: E402
 
 
 def _ahu(days=5, *, leak=False, heat=False, fan=True, occupancy=False):
-    """A 5-minute cooling AHU, fan 06-18. ``leak``: from noon the valve is shut but the coil still
-    cools the air 10F (a passing chilled-water valve) on a 80F day."""
+    """A 5-minute cooling AHU, fan 06-18, OA damper at its 20 % minimum while it cools. ``leak``:
+    from noon the valve is shut and the economizer open (50 %), but the coil still cools the air
+    10F (a passing chilled-water valve) on a 80F day."""
     idx = pd.date_range("2026-07-06", periods=12 * 24 * days, freq="5min")
     on = (idx.hour >= 6) & (idx.hour < 18)
     pm = on & (idx.hour >= 12) if leak else np.zeros(len(idx), dtype=bool)
@@ -33,7 +34,7 @@ def _ahu(days=5, *, leak=False, heat=False, fan=True, occupancy=False):
         Role.SUPPLY_AIR_TEMP_SP: np.full(len(idx), 55.0),
         Role.DUCT_STATIC: np.where(on, 1.5, 0.0),
         Role.DUCT_STATIC_SP: np.full(len(idx), 1.5),
-        Role.OA_DAMPER: np.full(len(idx), 20.0),
+        Role.OA_DAMPER: np.where(pm, 50.0, 20.0),
     }
     if fan:
         cols[Role.SUPPLY_FAN_SPEED] = np.where(on, 60.0, 0.0)
@@ -139,3 +140,56 @@ def test_config_run_and_rcx_report(tmp_path):
     assert all(f.metrics.get("fan_gate") == "fan status" for f in g.values())
     rep = build_rcx_report(res)
     assert rep.to_html()  # the G36 findings flow through the report without error
+
+
+# ---- 0.98 (#94): free cooling needs an open economizer; the opt-in occupancy gate ----
+
+
+def _recirc_ahu(days=5):
+    """Fan on around the clock: occupied 07-19 at a 20 % minimum (cooling) or economizing at 60 %;
+    unoccupied with the OA damper shut and both valves idle on a hot night."""
+    idx = pd.date_range("2026-07-06", periods=24 * days, freq="1h")
+    occ = (idx.hour >= 7) & (idx.hour < 19)
+    cool = occ & (idx.hour >= 12)
+    return pd.DataFrame(
+        {
+            Role.SUPPLY_FAN_STATUS: np.ones(len(idx)),
+            Role.COOL_VALVE: np.where(cool, 60.0, 0.0),
+            Role.OA_DAMPER: np.where(occ, np.where(cool, 20.0, 60.0), 0.0),
+            Role.SUPPLY_AIR_TEMP: np.full(len(idx), 55.0),
+            Role.SUPPLY_AIR_TEMP_SP: np.full(len(idx), 55.0),
+            Role.MIXED_AIR_TEMP: np.where(occ & ~cool, 53.0, 72.0),
+            Role.RETURN_AIR_TEMP: np.full(len(idx), 74.0),
+            Role.OAT: np.where(occ & ~cool, 50.0, 80.0),
+            Role.OCCUPANCY: occ.astype(float),
+        },
+        index=idx,
+    )
+
+
+def test_unoccupied_recirculation_does_not_trip_fc9():
+    f = G36AFDD().analyze("AHU-1", _recirc_ahu())
+    m = f.metrics
+    assert f.severity == "ok" and m["fc"]["FC9"]["pct"] == 0.0
+    assert m["oa_damper_min"] == 20.0 and m["oa_damper_min_source"].startswith("learned")
+    assert m["idle_at_min_oa_hours"] == 60.0  # 12 unoccupied hours a day, as OS#5
+    assert m["os_hours"]["OS5"] == 60.0 and m["free_cooling_hours"] == 25.0
+    assert m["occupancy_gate"] == "off" and m["unoccupied_hours"] == 0.0
+    # a stated minimum of 0 % with no tolerance reads the shut damper as closed, still not OS#2
+    g = G36AFDD(oa_damper_min=0.0, oa_damper_tol=0.0).analyze("AHU-1", _recirc_ahu())
+    assert g.metrics["oa_damper_min_source"] == "caller"
+    assert g.metrics["fc"]["FC9"]["pct"] == 0.0
+
+
+def test_occupancy_gate_trended_evaluates_occupied_hours_only():
+    f = G36AFDD(occupancy_gate="trended").analyze("AHU-1", _recirc_ahu())
+    assert f.metrics["occupancy_gate"] == "trended occupancy"
+    assert f.metrics["unoccupied_hours"] > 0
+    assert any("occupancy_gate='trended'" in c for c in f.caveats)
+    no_occ = _recirc_ahu().drop(columns=[Role.OCCUPANCY])
+    g = G36AFDD(occupancy_gate="trended").analyze("AHU-1", no_occ)
+    assert g.metrics["occupancy_gate"].startswith("none trended")
+    assert g.metrics["unoccupied_hours"] == 0.0
+    assert any("no occupancy point is trended" in c for c in g.caveats)
+    with pytest.raises(ValueError, match="occupancy_gate"):
+        G36AFDD(occupancy_gate="schedule")

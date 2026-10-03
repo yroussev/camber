@@ -89,8 +89,8 @@ pip install "camber-toolkit[brick]"    # + rdflib, for robust Brick-model parsin
 
 The core is dependency-light (numpy / pandas / pyarrow / matplotlib). Everything else is an
 **optional extra**, lazy-imported so the core never pays for it: `brick`, `haystack`, `modbus`,
-`mqtt`, `bacnet`, `opcua`, `pv`, `psychro`, `tariff`, `ml`, `energyplus`, `docs`, `dev`. Install
-what you use.
+`mqtt`, `bacnet`, `opcua`, `pv`, `psychro`, `tariff`, `ml`, `energyplus`, `yaml`, `docs`, `dev`.
+Install what you use.
 
 ```sh
 pip install -e .            # the package (editable)
@@ -173,6 +173,13 @@ role-frames. See `examples/` for end-to-end runs on public datasets.
 **Reproducible runs** — describe a whole analysis in one JSON config and run it without a
 script: `camber run config.json` (or `python -m camber.config config.json`). Add a `drift`
 section and the same command scores baseline-vs-current drift alongside the rules.
+
+**Tunable thresholds** — every rule threshold can be set from the config's `params`.
+`camber rules params [RULE]` lists each one with its default, where that default comes from, and
+how to calibrate it from your own data, plus a ready-to-paste config snippet. Configs may be
+YAML (`pip install "camber-toolkit[yaml]"`) so a calibration note can sit beside its value; JSON
+needs nothing extra. See [docs/THRESHOLDS.md](docs/THRESHOLDS.md) and
+[Tuning thresholds with your own data](docs/TUNING.md).
 
 ## Docker
 

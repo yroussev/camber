@@ -4,6 +4,777 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.98.0] — 2026-10-03
+
+<!-- 0.98 is stacked on 0.97 (unreleased, below). This entry gets its date when 0.98 is
+released. Each branch adds its bullets only inside its own marked block below. -->
+
+**0.98: hardening from the workbook (#84-#93).** Working through the 0.97 workbook on real data
+showed where CAMBER's answers were wrong, silent or hard to tune. On the air side (#84) the damper
+census and `supply_air_control` gate on trended occupancy, and `leaking_valve` can credit a unit's measured
+fan heat. For terminal units and ventilation (#85) a new rule, `actuator_stuck`, finds a box's
+damper or valve stuck against the zone's demand, `reheat_penalty` reads a valve's measured
+position, a heating shortfall is graded on how often it happens as well as how deep it goes, and
+cohort deviation gains opt-in grouping and normalisation. The central plant (#86) checks the
+sign of the chilled-water reset, learns a pump's VFD floor, runs the boiler rules without a run
+status, and accepts a declared drift reference. Sensor health (#87) reads a fan-less unit's
+outliers per operating mode and names clipped readings, stray rows and scheduled status points.
+The RCx report (#88) names each issue's cause, lists the checks that did not run, says what data
+an M&V refusal needs, and ends the issues with a generated "Verify on site" checklist. More
+rules link to the PNNL re-tuning material and `ornl-frp-vav` declares a scored detector (#89).
+Every tunable threshold is documented with its basis and a way to calibrate it, and run configs
+read from YAML as well as JSON (#90). Three follow-ups close small inconsistencies: one 60 °F
+free-cooling high limit (#91), a site elevation for derived wet-bulbs (`site_elevation_ft`, #92),
+and named fan-off hours with an opt-in duration fault in `dcv_verification` (#93).
+
+Four maintainer decisions shape the benchmarks. **S1:** the LBNL benchmark reads the
+`leaking_valve` parameters from the `lbnl-sdahu` template, which moves the SDAHU and pooled
+leaking-valve keys (the fan heat was calibrated on a run that is also a scored negative;
+`docs/VALIDATION.md` states the circularity). **S2:** faultlab's healthy chilled-water reset now
+runs the right way, with no synthetic key moving. **S3:** `actuator_stuck` is a scored synthetic
+scenario (46 scored rules, new `actuator_stuck` TPR/FPR keys). **S4:** drift accepts a declared,
+never-stored reference (another unit or a known-good period). For sensor health, decision (a)
+applies: only units with no fan signal are read per inferred operating mode, and fan-gated units
+are unchanged. Every other benchmark is unchanged.
+
+### Added
+<!-- 098-core -->
+- **`roles_any_of` (#86 item 4a, provisional).** A rule may declare `roles_any_of`, a tuple of
+  role groups of which each needs at least one role present (a run status *or* a gas input). The
+  runners load every role of a group, skip the equipment when a group has none, and include the
+  present group roles in the sensor-health gate. `camber.model.entities.missing_inputs` is the
+  one test shared by the runners and `runnable_rules`, and `Runnable.missing_any_of` names the
+  unmet groups. The mechanism alone leaves default outputs unchanged; the first rules to
+  declare groups are the boiler firing rules (see Changed, 098-plant-boiler).
+- **Rules that did not run are listed (#88 item 3, #86 item 4b).** `Registry.run`, `run_periods`
+  and `run_fleet` take an optional `skipped=` list and append a `RuleSkip` (rule, equipment,
+  class, missing inputs, reason `missing_inputs` / `no_data` / `no_verdict`) for each equipment
+  a rule applies to but produced nothing on. A skip is recorded only when the rule applies: its
+  declared classes match the equipment's, or at least one of its inputs is present (a chiller
+  rule on an air handler is not applicable, not skipped). The default (`None`) records nothing,
+  so the benchmarks and faultlab are untouched. `run_config` collects them in
+  `RunResult.rules_skipped`, adding a rule-level record when a configured rule found none of its
+  inputs on any equipment; they stay out of `findings` (and `findings.json`, so `datasets score`
+  decline counts do not move).
+  - **RCx report.** Appendix A gains a "Checks not evaluated (missing inputs)" table (rule,
+    missing inputs, equipment: one row per rule and missing set, six units named, then "and N
+    more"), and the cover a "Checks not evaluated" row, both only when there is something to
+    list. `no_verdict` records are kept for later use but not listed.
+- **An M&V refusal says what data is needed (#88 item 4).** New `camber.mandv.sufficiency`:
+  `baseline_need(interval, n_have, min_n=...)` returns the required, available and missing
+  amount, its unit, the calendar days it takes to collect, and a one-line text ("1,440 baseline
+  hours needed, 168 available: 1,272 more hours (about 53 days of data)").
+  `caltrack_savings` and `caltrack_savings_hourly` raise `InsufficientBaseline`, a `ValueError`
+  whose message is byte-identical to before, with the gap on `.need`: too few days or hours,
+  missing hour-of-week bins, or thinly observed bins. The config's daily M&V decline for too few
+  days adds `metrics["data_needed"]` to its `mv_baseline` and `mv_savings` findings
+  (`declined_reason` and `summary` unchanged), and the RCx "M&V and drift" section prints a
+  "Data needed" paragraph per meter. Hourly M&V has no config path, so its need is reported
+  through the exception only. Workbook `capstone` pins the one-week refusal's need at 1,272 hours.
+<!-- /098-core -->
+<!-- 098-thresholds -->
+- **Tunable thresholds, documented (#90, provisional).** `camber/rules/param_docs.py` documents
+  every numeric, flag and enumerated constructor parameter of every built-in rule, including the
+  extra instances. Each entry gives the unit, a sensible range, the basis of the default
+  (`standard: ...` only where the code cites a section, `public source: ...`, `CAMBER judgment` or
+  `calibrated on ...`) and how to calibrate it from your own data. Defaults are read from the
+  constructors, never copied. `FIXED` lists thresholds that are still hard-coded, and a test fails
+  on any undocumented or stale parameter.
+- **`camber rules params [RULE] [--json|--yaml]`.** Prints each parameter with its default,
+  basis and calibration hint, plus a ready-to-paste config snippet. The YAML snippet carries each
+  note as a comment beside its value.
+- **Every built-in rule is tunable from a config.** `make_rule` and a config's `params` now also
+  cover the extra instances (`cohort_airflow`, `cohort_space_temp`, `sat_/static_reset_effectiveness`,
+  `sat_/static_rogue_zone_census`, `sat_/static_cohort_starvation`); their identity arguments
+  (the cohort role, the reset kind) stay fixed. `rule_factories()` lists them.
+- **YAML run configs (the `[yaml]` extra, `pyyaml>=6`).** `camber run`, `report`, `explain`,
+  `ask`, `fleet`, `drift`, `mv`, `python -m camber.config`, the portfolio migration and the edge
+  config read `.yaml` / `.yml`. Without PyYAML the command stops with an error that names the
+  extra. The loader types values as JSON does (dates, `07:00`, `no` / `on` and `012` stay
+  strings), so equivalent JSON and YAML configs give identical results, as a test asserts. JSON
+  stays the dependency-free default.
+- **`camber datasets config --format yaml`** (and `--out *.yaml`) writes a template as YAML, with
+  its `_comment` notes turned into comments; `config_template(..., format=)`. Writing YAML needs
+  no extra.
+- **Calibration provenance in findings.** A rule entry may carry a `basis` map
+  (`{"fan_heat_f": "calibrated on ..."}`), which each finding of the rule records as
+  `metrics["param_basis"]` = `{param: {"value", "basis"}}`. A misspelt parameter name is an
+  error. Existing configs are unaffected.
+- **Docs.** `docs/THRESHOLDS.md` is generated from the registry by `scripts/thresholds_doc.py`
+  (`--check` is a test). The new guide `docs/TUNING.md`, "Tuning thresholds with your own data",
+  covers calibrating on a known-good period, avoiding circular calibration, recording provenance
+  in config comments and re-checking against labelled data. Its worked examples use
+  `lbnl-sdahu` and `nist-heatpump-fdd`. Also updated: CLI.md, API-STABILITY (provisional), the
+  mkdocs nav, the README, and a "going further" pointer in the workbook index.
+<!-- /098-thresholds -->
+<!-- 098-plant-reference -->
+- **A declared, never-stored drift reference (#86 items 1 and 5, decision S4; provisional).** A
+  `drift.families[]` entry may carry `"reference": {"equip": ID}` (score every other unit of the
+  class against a named healthy one, optionally with its own `"period"`) or
+  `"reference": {"period": [start, end]}` (a known-good window of the same unit). The reference is
+  fitted in a scratch in-memory store on every run and never saved, so a run still cannot mint
+  its own baseline. Findings carry `metrics["baseline_source"]` (`reference:<equip>` or
+  `period:<start>..<end>`) and a caveat, and their summaries read "vs the reference ..." instead
+  of "vs frozen baseline". The reference unit declines as `is_reference`; a reference that cannot
+  serve a detector declines every target (`reference_missing_inputs`, `reference_untrusted`,
+  `empty_reference`). A section whose families all declare a reference needs no `store` and no
+  windows. `DriftFamilyResult.reference` is new (also in `as_dict`); the drift report and
+  `camber drift run` name the reference. Nothing changes for configs without one.
+- **The LBNL plant templates score the plant drift detectors.** `lbnl-chiller.json` and
+  `lbnl-boiler.json` (and the `plant-cooling-tower` / `plant-boiler` exercise configs) declare
+  `PLANT__fault_free` as the reference for the `tower` and `boiler` families, and the catalog
+  declares `cooling_tower_fan_effort_drift: [tower_fouling]` and
+  `boiler_efficiency_drift: [boiler_fouling]` as scored targets. Through `camber run` the verdicts
+  match `examples/lbnl_fdd/plant_detectors.py` run by run: tower fan effort 2/3 (fouling 065 and
+  080 at +17.8 / +10.9 fan %-points; 095 at +3.3 is under the floor), boiler efficiency 3/3
+  (+53.7 / +24.9 / +5.1 %; 095 clears the 5 % warn floor by 0.1 point), no false alarm on the
+  20 / 13 other runs. The scorer counts the reference run as a correct negative (0/21, 0/14).
+<!-- /098-plant-reference -->
+<!-- 098-terminal-reheat -->
+- **`heat_valve_position`: a reheat valve's measured position beside its demand (#85 item 3,
+  provisional).** A new role for a unit that trends both the controller's demand and the valve's
+  feedback: map the demand to `heat_valve` and the feedback to `heat_valve_position`. It is a
+  percent role (0-1 fractions are rescaled), physically bounded like the other valves, carries
+  the Haystack tags `heating valve sensor` and the 223P quantity of `heat_valve`, and is offered
+  by the mapping assistant for percent units. It is not exported as a Brick point (the importer
+  reads a heating coil's position sensor as `heat_valve`). `lbnl-fpu` maps `RH_VLV_S` to it; its
+  catalog known issue and mapping comment say why.
+- **`reheat_penalty(fan_heat_f=None)` (#85 item 3).** A fan-powered box's own fan (and, in a
+  parallel box, the plenum air it mixes in) lifts the discharge above the entering air with the
+  valve shut. A number of °F raises both valve-vs-discharge bounds (5 °F no rise at full valve,
+  10 °F big rise with it shut) by that much; `"auto"` estimates it per box as the median
+  closed-valve, airflow-bearing lift over the entering air (fan-on samples only when the fan
+  status is mapped, >= 12 samples), clipped to 0-8 °F. The value used is reported as
+  `fan_heat_f`. The default `None` changes nothing; the two `lbnl-fpu` exercise configs set
+  `"auto"`, with its basis.
+<!-- /098-terminal-reheat -->
+<!-- 098-rcx-cause -->
+- **Why free cooling was missed (#88 item 2).** `free_cooling_missed` records the cause as
+  additive metrics; its severity and `missed_pct` do not change. `missed_cause` is
+  `damper_not_delivering` when, on missed hours with a usable temperature balance
+  (|OAT - RAT| >= 5 °F), the OA damper was commanded at least 90 % open while the measured
+  OA fraction stayed below 80 %, on at least 20 % of those hours and 24 h. It is
+  `economizer_not_commanded` when a damper command is trended but stayed below open, and
+  `undetermined` otherwise. The rule also reports `commanded_open_pct`, `commanded_open_hours`,
+  `commanded_open_oaf_median_pct` and `missed_damper_cmd_median_pct`. The new parameters
+  (`cmd_open_pct`, `oaf_open_pct`, `stuck_min_share_pct`, `stuck_min_hours`,
+  `stuck_low_oaf_pct`) are documented in `docs/THRESHOLDS.md`. Measured on real data: the four
+  lbnl-sdahu stuck-damper runs read `damper_not_delivering` (40-87 % of those hours) and the
+  fault-free and valve-leak runs 0 %; on lbnl-ddahu the damper stuck closed reads 95 % and the
+  fault-free run 0 %.
+- **`Recommendation.cause` (#88 item 2, provisional).** Every recommender names the finding's
+  cause in a short phrase built from the metrics it reads, e.g. "Outdoor-air damper not
+  modulating (stuck low)" or "Hot-water pump pinned at its minimum speed". `title` stays the
+  action. `free_cooling_missed` with `damper_not_delivering` gets a new recommendation, "Repair
+  the outdoor-air damper or actuator", linked to the PNNL economizer guide and Re-tuning ch. 6.
+  "Stuck low" or "stuck part open" follows `commanded_open_oaf_median_pct` against
+  `stuck_low_oaf_pct` (default mirrored in `DEFAULT_PARAMS["econ_stuck_low_oaf_pct"]`).
+<!-- /098-rcx-cause -->
+
+<!-- 098-sensor-health -->
+- **Clipped readings are named (#87 item 2, provisional).** `sensorhealth.clipped_at_limit(series,
+  role)` finds a pile-up at a round-number range limit (at least 12 samples and 0.5 % within 0.1 %
+  of the span of the extreme, ten times the density of the adjacent 5 % band, and the limit a round
+  number to within 0.01 %, in degF or degC for temperatures). `frame_checks` flags the point
+  `clipped` and fills `SensorTrust.clipped` (`side`, `limit`, `limit_label`, `n`, `frac`,
+  `frac_fan_off`); no trust penalty. Checked on CO2, OAT, wet bulb, space and return air (both
+  ends) and airflows, water flows and duct static (high end). On the catalog: nuig-ahu101's CO2 at
+  2,000 ppm (all fan-off), lbnl-b59's OA flow at 20,000 cfm, and the simulated 140 °F bound of one
+  LBNL dual-duct fault run.
+- **Outliers read per operating mode (#87 item 1a, provisional).** `sensor_trust(mode=,
+  mode_source=)` and `frame_sensor_health(mode=None | "auto" | Series)` judge a fan-dependent
+  duct point's outliers within each operating mode; `"auto"` infers an off-mode (OA damper <= 2 %,
+  every coil valve <= 1 %) on a unit with no fan signal only. New `SensorTrust.mode_source` and
+  `mode_outlier_frac`.
+- **Stray lead / tail rows (#87 item 1b).** A point's rows beyond a gap of 30 days or more (and 20 %
+  of its span) that hold at most 1 % of its samples are left out of the judgement: flag
+  `stray_lead` / `stray_tail`, with `SensorTrust.main_start`, `main_end` and `n_stray`.
+- **Scheduled status points (#87 item 3).** `gapfill_signature(series, role=None)`: for a stepwise
+  point (a status role, or >= 95 % of samples on two levels) days sharing a pattern with two or
+  more others are reported as "N days follow a fixed schedule" (`scheduled_days`,
+  `n_schedule_patterns`) rather than warned on; `repeated_days` keeps only unexplained repeats.
+<!-- /098-sensor-health -->
+<!-- 098-rcx-verify -->
+- **"Verify on site": a generated walk-down checklist in the RCx report (#88 item 1).** New
+  provisional module `camber.walkdown`: `site_checks(issues, *, recommend, rule_of, overrides,
+  trust, skipped, declined)` returns `SiteCheck` items (`issue_key`, `equip`, `kind`, `look_at`,
+  `point`, `confirms`, `refutes`, `references`, plus `rule` and `rank`), ordered sensors,
+  equipment, design values, data. Sensors: each sensor a conditional issue leans on (with its
+  gated trust), a `sensor_drift` issue's sensor, and each input a check declined as untrusted.
+  Equipment: one item per issue from `SITE_CHECKS[rule][cause]`, a template for every rule with a
+  recommender, its cause read from the finding's metrics (`CAUSE_KEYS`: `missed_cause`, the CHW
+  reset direction and flow mode, a pump's inferred VFD floor, the reheat valve divergence, the
+  DCV causes, ...); other rules get a generic item built from their required inputs. Design
+  values: `DESIGN_PARAMS` (site facts such as a minimum outdoor-air fraction, a high limit or an
+  occupancy schedule, never detection thresholds) still at the rule's default. Data: the checks
+  not evaluated for missing inputs. The texts describe what a technician checks on site, in
+  CAMBER's own words; every item links PNNL Re-tuning chapter 9 through the references registry
+  (`camber.references.WALKDOWN_REFERENCES`, not a rule mapping), and nothing from the chapter is
+  reproduced.
+<!-- /098-rcx-verify -->
+
+<!-- 098-terminal-stuck -->
+- **`actuator_stuck`: a terminal or fan-coil damper or valve stuck against the zone's demand (#85
+  item 1, provisional).** A new rule for terminal boxes and fan coils (an air handler's outdoor-air
+  damper is out of scope). It finds the runs where an actuator holds one position over occupied
+  (trended occupancy, else the schedule), fan-on hours, through a thin wrapper around the
+  sensor-health run finder (`camber/rules/_flat_runs.py`), and judges each run of at least
+  `min_flat_hours` by what the zone asked for. **Contradicted** runs can reach `fault`: a damper
+  shut through occupied hours with the airflow at or below 5 % of `AIRFLOW_SP` or `min_airflow`
+  (with neither, judged against the occupied mode alone, with a caveat); a damper or cooling
+  valve below its open limit while the zone runs `warm_margin_f` over its cooling setpoint for a
+  quarter of the run (a heating valve: under its heating setpoint); fully open while the zone
+  sits `satisfied_margin_f` inside its setpoint for half the run; a heating-valve position flat
+  while its demand moves 20 points. **Unexplained** runs (one value for `whole_day_share` of a
+  day's active samples while the demand, airflow setpoint, a setpoint or the zone temperature
+  moves) warn at most, and a run at a limit the demand agrees with is saturated, not stuck. Roles:
+  `damper`, `heat_valve_position` (else `heat_valve`), `cool_valve`. Metrics per role:
+  `flat_runs`, `stuck_share`, `value`, `tier`, `reason`, `driver` and the flagged runs. Registered
+  in `RULE_CLASSES`, the applicability table (`terminal`, `fan_coil`), the scorecard
+  (maintenance), the references (PNNL chapter 7), the parameter docs, and the advisory
+  recommender (cause "Damper stuck at 20 %: the zone runs warm while it holds still"; stroke the
+  actuator before retuning anything). On `ornl-frp-vav` it finds 6 of 6 stuck days on the default
+  subset and 17 of 18 on the full one, with no false alarm on the 13 fault-free and airflow-bias
+  days (see Changed).
+- **`actuator_stuck` is a scored synthetic scenario (S3, approved).** `faultlab` gains a VAV box
+  whose damper sticks at 30 % through warm afternoons; `coverage.n_scored` and `n_single` go 45 ->
+  46 and the synthetic benchmark gains `actuator_stuck.tpr` 1.0 and `.fpr` 0.0. Every other
+  synthetic key is unchanged.
+- **Cohort-deviation options (#85 item 2, opt-in).** `CohortDeviation` (`cohort_airflow`,
+  `cohort_space_temp`) takes `group_by_topology` (compare only the units behind one air handler,
+  grouped like the rogue-zone census), `normalise` (`"design_max"`: by `design_max={equip: cfm}`,
+  else the peak `AIRFLOW_SP`; `"reference"`: by `reference={equip: reference_equip}`),
+  `summary="variability"` (the standard deviation) and `tail` (`"low"` / `"high"`). Every default
+  reproduces the earlier result. `camber.charts.cohort` gains the `variability` summary, a `tail`
+  argument and `cohort_deviation_from_values`. Size normalisation alone cannot isolate a stuck box:
+  on the ORNL set the share of design airflow flagged six healthy box-days and one stuck day of
+  six; each box against its own fault-free day flagged all six.
+<!-- /098-terminal-stuck -->
+
+<!-- 098-mv-vectors -->
+- **Shared M&V test vectors (`examples/mv_vectors/`).** These are inputs, CAMBER's expected
+  outputs and a standalone checker, so that another change-point / Guideline 14 implementation
+  (open-fdd's helpers first) can be cross-checked through files alone.
+  - **Synthetic cases.** 8 seeded cases with exact truth: 2P; 3PH at 58 °F; 3PC at 65 °F; 4P;
+    5P at 55 / 68 °F; a noise pair either side of the baseline gate; and a weak-weather load.
+  - **BDG2 meters.** 6 meters (electricity, chilled water, steam and gas) as daily and
+    calendar-month aggregates, plus one irregular-bill variant. Each has a baseline year and a
+    reporting year, both raw and with a 10 % injected saving.
+  - **BDG2 data stays local.** CAMBER redistributes no datasets, so the BDG2 inputs and predicted
+    series are not committed; `expected.json` keeps only their statistics. `fetch_bdg2.py`
+    (numpy, pandas and the standard library) rebuilds them:
+    - it downloads the publisher's files at the catalog's URLs and checks their sha256 pins;
+    - it rebuilds the aggregates deterministically and checks each derived CSV against its own
+      pinned sha256;
+    - it writes them to a git-ignored `local/` folder, and prints the citation and the CC BY-SA
+      4.0 licence.
+  - **Bill cases.** 3 cases (1 synthetic, 2 BDG2) with mid-month 28–35-day reads, one estimated
+    read and one missing bill. They run through CAMBER's billing config path: `base_f: "auto"`
+    bases with their ranges, degree days built from each day vs from the bill's mean, the
+    degree-day model against the change-point models by BIC, Portfolio Manager calendarization
+    and avoided cost at each bill's own (synthetic) rate. The synthetic bill case is committed;
+    the 2 BDG2 bill cases are rebuilt locally.
+  - **Expected outputs.** `expected.json` uses the versioned schema `mv_vectors/1` and records,
+    per fit:
+    - the selected kind, every candidate's BIC and the BIC gap;
+    - the coefficients, in CAMBER's form and in a convention-free `slopes_dEdT` form;
+    - n, p, R², adjusted R², CV(RMSE) and NMBE;
+    - the baseline-gate, calibrated-simulation-gate and SEP verdicts side by side;
+    - Option C savings with FSU.
+
+    `predictions/` holds CAMBER's predicted series row by row.
+  - **Consumer tools.** These never import CAMBER, so a pandas library and a SQL twin are checked
+    alike:
+    - `check_vectors.py` (numpy and pandas only) rebuilds the expected numbers (`--self-test`),
+      compares another implementation's results JSON with the documented tolerances and prints
+      CAMBER's own results (`--template`);
+    - `export_parquet.py` writes typed Parquet copies of every CSV;
+    - `example_results.json` is a worked results file.
+  - **Documentation and licence.** `SCHEMA.md` documents every field, the two tiers, the method
+    (grid, BIC, p counting, day weighting, the bill choices) and the tolerances. Everything
+    committed is Apache-2.0. The locally rebuilt BDG2 files are CC BY-SA 4.0, with attribution.
+  - **Regression test.** `tests/test_mv_vectors.py` regenerates the synthetic tier offline and
+    requires an exact match, so any move in CAMBER's M&V numbers shows up there.
+    - With `examples/_data/bdg2` present, it also rebuilds the BDG2 tier, checks every sha256
+      pin and requires the BDG2 statistics to regenerate exactly.
+    - `-m network` does the same from a fresh download.
+
+    No default output changes.
+<!-- /098-mv-vectors -->
+
+### Changed
+<!-- 098-core -->
+- **Equipment class on role frames; the DCV return-air caveat only where it applies (#85 item
+  4).** The rule runners (and a run's lazy `frame_for`) set
+  `frame.attrs["camber_equip_class"]` to the equipment's class. `dcv_verification` keeps its
+  "typically return-air CO₂" caveat on air handlers and on equipment of absent or unrecognised
+  class (direct API calls are unchanged), and drops it on terminals and fan coils, whose CO₂ is
+  the room's own: the finnish-dcv, b4b-windesheim and sdu-ou44 rooms (class `VAV`) lose it. Only
+  that caveat changes; severities and metrics do not. Workbook `zone-dcv` pins the caveat absent
+  and its instructor discussion point is rewritten.
+<!-- /098-core -->
+<!-- 098-air-gates -->
+- **`damper_census` reads trended occupancy (#84).** Each box's occupied hours now come from its
+  own trended occupancy point when it has any non-null value, and from the assumed weekday
+  07:00-18:00 schedule only when it has none; trended warm-up / cool-down flags drop prep-mode
+  samples (the rule declared them but never read them). A weekend test day now gets a census
+  instead of "no damper data". New rule param `occupancy_gate` (`"trended"` default,
+  `"schedule"` for the old behaviour, `"off"` for every sample), new `occupancy_gate` metric and
+  `DamperCensusResult.occupancy_gate` field (`trended occupancy` / the assumed schedule / `mixed`
+  / `off`), and `damper_census(..., use_trended_occupancy=True)`. **Intended default change:**
+  on `ornl-frp-vav` the fault-free day's census median moves 39.3 -> 38.7 % (still a fault, all
+  10 boxes low), and the weekend days `d3_stuck_000`, `d3_stuck_060` and `d3_stuck_100`, which
+  returned "no damper data", now read 36.8 % / 40.3 % / 41.8 %.
+- **`supply_air_control` gates on trended occupancy (#84).** New param `occupancy_gate`:
+  `"trended"` (default) judges only fan-on samples that the unit's trended occupancy marks
+  occupied, and keeps the fan-only gate when no occupancy is trended (no assumed-schedule
+  fallback); `"schedule"` falls back to the weekday 07-18 schedule; `"off"` is the pre-0.98
+  fan-only gate. The gate sits in the running mask, so the finding, its evidence chart and the
+  triage violation mask judge the same samples. New `occupancy_gate` metric; the summary says
+  "occupied running hours" when gated. **Intended default change:** the fault-free `lbnl-sdahu`
+  unit goes from a warn at 12.1 % too warm (78 % of those hours were unoccupied fan cycling) to
+  ok at 2.97 %; `AHU__damper_stuck_075` stays a fault, too cold 32.6 -> 31.2 %; the capstone's
+  RCx report loses the fault-free control's `supply_air_control` issue (6 issues, was 7).
+- **`irish-ahu` template comment corrected (#84).** The excess outdoor air is not "mostly the
+  COVID-19 period": 53 % of the cooling-weather hours before it (2017-06 to 2020-02) against
+  45 % during it (2020-08 to 2021-11).
+- **Workbook.** `air-sat-reset` (fault-free unit ok at 3 %, the stuck damper 31 %, question 5
+  recast around the gate, with a pinned check that `occupancy_gate: "off"` restores the 12 %
+  warn), `air-static-pressure` (census median 38.7 %, the weekend caveat and common mistake
+  rewritten) and the `air-economizer` instructor key (the stale sentence about the catalog note
+  removed) updated; `capstone` re-verified.
+<!-- /098-air-gates -->
+<!-- 098-terminal-ventilation -->
+- **`overcooling_severity` grades a heating shortfall on share as well as depth (#85).** The
+  shortfall grade was the deepest tier sustained for an hour, so a few cold hours a year with the
+  reheat saturated read `fault`. It is now the lesser of the depth tier and a share tier set by
+  the share of occupied samples in a sustained shortfall at least `warn` deep (new
+  `shortfall_share_pct`, default `{"warn": 5, "fault": 20}`; below 5 % a shortfall is `info`).
+  **Intended default change:** on `lbnl-fpu` the fully open damper
+  (`PFPU__VAVDMPRStuck_100pct`) goes from shortfall `fault` to `info` (fault-deep, but 0.81 % of
+  samples) and its finding from `info` to `ok`; the stuck-shut reheat valve stays a shortfall `fault`
+  (29.9 %). New metric `shortfall_depth_severity` keeps the depth-only grade, and a caveat says
+  when the share lowered it. `shortfall_share_pct=None` restores the old grading. The same gate
+  is available for the overcooling tiers as `share_pct`, off by default (no overcooling verdict
+  changes). Workbook `zone-reheat-saturated`: answers 3 and 5 updated, and the new grade pinned.
+<!-- /098-terminal-ventilation -->
+<!-- 098-refs-catalog -->
+- **More rules link to the PNNL Re-tuning material (#89).** `RULE_REFERENCES` maps 48 rules, up
+  from 35, each checked against the guide's own headings. `sat_rogue_zone_census` links the
+  discharge-air-temperature guide, whose reset section bases a zone-driven reset on the zones
+  served, setting aside the warmest and coolest. `static_rogue_zone_census`,
+  `static_cohort_starvation` and `damper_census` link the static-pressure guide, whose "too high
+  or too low" section reads the box damper positions. `sat_cohort_starvation` maps to
+  chapters 5 and 7; `reheat_capacity_shortfall`, `cohort_airflow` and `cohort_space_temp` to
+  chapter 7.
+  `condenser_bypass_leak`, `chiller_approach_fouling`, `chiller_staging_fleet`,
+  `cooling_tower_fan_effort_drift` and `boiler_efficiency_drift` map to chapter 8. The G36
+  reset-effectiveness rules, `filter_fouling`, `g36_afdd`, the DX and heat-pump rules and the other
+  drift detectors stay unmapped, with the reason in a comment and in `docs/REFERENCES.md`.
+  Reports gain "Learn more" links for these findings; no finding changes.
+- **`lbnl-chiller` data issue `condenser-bypass-runs-implausible` (#89, annotate).** The five
+  condenser-bypass runs hold a fixed bypass all year (0.917 / 0.967 / 0.988 of the condenser flow
+  for 25 / 50 / 75), drive the condenser loop to 118-162 °F at p90 / maximum, and the two 75 % runs
+  are the same data with the valve command at 0.0 in every row. The runs stay as published and
+  scored. The ingest is unchanged, so every `content_hash` is too. The `plant-cooling-tower`
+  workbook caveats and instructor notes now say "both 75 % runs" and link the issue.
+- **`rbc-g36-ahu`: the stale `leaking_valve` note is corrected.** The rule has gated on a mapped
+  fan status since 0.93 (#42). The catalog note and the template comment now say so, and say that
+  the template still leaves the rule out until it is re-checked on these baselines.
+<!-- /098-refs-catalog -->
+<!-- 098-plant-chw -->
+- **`chw_plant_reset` checks the reset's sign and recognises constant-flow plants (#86 item 2).**
+  New params `design_deltaT_min_f` (8 °F, was fixed), `expected_reset_sign` (`"negative"`
+  default: an outdoor-air reset lowers CHWST as OAT rises; `"positive"`, or `"any"` for the old
+  either-way test), `flow_mode` (`"auto"` default, `"constant"`, `"variable"`) and
+  `constant_flow_cv` (0.05). A clear slope the wrong way is no longer a reset:
+  `chwst_reset_present` is false, the new `chwst_reset_direction` metric reads `reverse`
+  (`expected` / `flat` otherwise), a caveat says so, and the finding warns. `Role.CHW_FLOW` is
+  now an optional input: with `flow_mode="auto"`, a flow whose coefficient of variation over the
+  running hours is at most `constant_flow_cv` (on at least 24 hours) marks a constant-flow plant,
+  whose low loop delta-T is reported but left out of severity, with a caveat. New metrics
+  `flow_mode` (`constant` / `variable` / `unknown`), `flow_cv` and `design_deltaT_min_f`;
+  `CHWPlantResult` gains trailing `flow_cv` / `n_flow`. The recommender gives no "fix low ΔT"
+  advice on a constant-flow plant and has a new branch for a reversed reset, "Find why the
+  chilled-water supply warms in hot weather". **Intended default change** on `lbnl-chiller`
+  (chiller 1's flow varies by at most 0.11 % on every run): the fault-free plant goes `fault` ->
+  `ok` (delta-T median 6.4 °F, 80.1 % of hours below 8 °F, now not judged), and so do the other
+  18 non-bypass runs (the chiller-bias runs' `fault`/`warn` were never this rule's to raise); the
+  five tower-bypass runs go `fault` -> `warn`, their CHWST rising with OAT at +0.57 to +0.95 °F/°F.
+- **The pump rules learn the VFD floor (#86 item 3).** `chw_pump_dp_reset` and
+  `hw_pump_dp_reset` take `near_min_pct` (a number, or `"auto"`) and `floor_tol_pct` (1.0).
+  `"auto"`, the chilled-water default, learns the pump's minimum speed from a plateau in its
+  running speeds (`camber.chwpump.learn_vfd_floor`: the 2nd percentile, accepted when >= 10 %
+  of running samples sit within `floor_tol_pct` of it and the 90th percentile is >= 20 points
+  above it) and counts speeds at or below `max(25, floor + floor_tol_pct)` as near the minimum;
+  with no plateau it falls back to 25. The hot-water rule keeps the fixed 25 % band by default.
+  New metrics `vfd_floor_pct`, `near_min_band_pct` and `near_min_source` (`learned` / `default`
+  / `fixed`) on both rules; the summary names the band. **Intended default change** on
+  `lbnl-chiller`: the secondary pump's floor is learned at 34.5 %, so the fault-free run counts
+  31.3 % of hours near minimum (was 0), and the two high-reading chiller-sensor-bias runs, where
+  the pump idles at its floor 68 % of the time, go `ok` -> `warn`. No other severity moves.
+- **Parameter registry: keyword-or-number ranges.** A parameter that takes a keyword or a number
+  lists the keywords first and ends with the numeric range (`("auto", 10.0, 60.0)`), printed as
+  '"auto", or 10.0 to 60.0' by `camber rules params` and `docs/THRESHOLDS.md`.
+  `chw_plant_reset`, `chw_pump_dp_reset` and `hw_pump_dp_reset` move from fixed-in-code notes to
+  documented tunables.
+- **Workbook.** `plant-chw-reset-pumping`: the healthy plant's `chw_plant_reset` is pinned `ok`
+  with the constant-flow check, the stuck bypass `warn` with a reversed reset (+0.76 °F/°F), and
+  the learned floor (34.5 %, 31.3 % of fault-free hours; the chiller-bias run a `warn` at 68.6 %);
+  the page's setup, steps, questions and caveats and the instructor key (answers 1, 2, 4 and 5,
+  discussion, mistakes) are rewritten. `plant-sensor-vs-equipment`: answer 2 notes the
+  high-reading runs' pump now warns at its floor.
+<!-- /098-plant-chw -->
+<!-- 098-plant-boiler -->
+- **The boiler firing rules run without a boiler run status (#86 item 4a).**
+  `boiler_summer_lockout`, `boiler_short_cycle` and `hw_plant_deltat` now declare
+  `roles_any_of = ((boiler_status, gas_input_rate),)` instead of requiring `boiler_status`. With
+  no run status mapped they read firing from the gas input above 5 % of its own 95th percentile
+  (`camber.schedules.plant_run_mask`); a sample with no gas reading stays missing rather than
+  counting as a stop. Such findings carry the metric `run_source: "gas"` and a caveat that a
+  firing shorter than the resample interval is invisible. A frame that has a run status gives
+  byte-identical findings. On `lbnl-boiler` (hourly) the three rules now give 17 findings each,
+  all `ok`: the fault-free boiler fires 37.8 % of hours with 0.92 starts a day, 0 % of firing
+  hours above the summer lockout, and a 36 °F loop delta-T median (12.2 % of hours below the
+  20 °F floor on the worst fouling run). The three rows leave the RCx report's "Checks not
+  evaluated" table. The online monitor, the default evidence chart, the RCx confidence inputs
+  and the triage sensor-precedence roles now count a rule's `roles_any_of` inputs too. The
+  workbook exercise `plant-boiler` is updated.
+<!-- /098-plant-boiler -->
+<!-- 098-plant-reference -->
+- **`camber drift freeze` refuses a config whose families declare a reference** (exit 1, naming
+  them), and `drift accept` / `drift_refit` leave those families out: there is nothing stored to
+  freeze or move. The config docstring's "a run never mints its own baseline" now states the S4
+  exception. Docs: CLI.md ("A declared reference"), TUNING.md ("Drift references"),
+  PLANT-DETECTORS.md and VALIDATION.md.
+- **Workbook.** `plant-cooling-tower` pins the fan-effort findings and
+  `cooling_tower_fan_effort_drift` TPR 67% (step 6, question 6, the instructor's answer 6 and a
+  discussion point on the bypass runs, where the matched-load model extrapolates).
+  `plant-boiler`: the point-in-time rules still miss the fouling, but `boiler_efficiency_drift`
+  catches all three (TPR 100%, replacing the overall TPR 0 % answer); page steps 5 and 7,
+  questions 4 and 5 and instructor answers 4 and 5 rewritten.
+<!-- /098-plant-reference -->
+<!-- 098-terminal-reheat -->
+- **`reheat_penalty` and `overcooling_min_flow` read the valve position when it is mapped (#85
+  item 3).** Both judge heat actually delivered, so with `heat_valve_position` mapped they read it
+  in place of the demand (new metric `valve_signal`: `position` or `demand`). When the demand is
+  at or above 90 % while the position is at or below 5 % on at least 25 % of the occupied
+  full-demand samples (>= 12 of them), the finding carries a "stuck or failed valve, not a reheat
+  penalty" caveat (new metric `valve_divergence_share`). Sites with one valve point are unchanged.
+  **Intended default change** (from the new `lbnl-fpu` mapping): on `PFPU__ReheatVLVStuck_0pct`
+  `reheat_penalty` goes from `fault` (51 % "open", read from the demand) to `ok` (0 %) with the
+  caveat, and `overcooling_min_flow` from `fault` to `ok` with the caveat; the healthy runs' figures
+  hold (11 / 67 / 99 % open). `reheat_capacity_shortfall`, `overcooling_severity` and the
+  reheat-valve drift detector keep reading the demand. Workbook: `zone-reheat-overcooling`
+  question 5 and `zone-reheat-saturated` question 4 rewritten, with their instructor keys.
+<!-- /098-terminal-reheat -->
+<!-- 098-air-leak -->
+- **`leaking_valve` can credit a unit's measured fan heat (#84 item 1, provisional).** New opt-in
+  params, all off by default so default outputs are byte-identical: `measured_fan_heat_f` (the
+  unit's own fan rise; a cooling leak on the supply-air path is then a rise below
+  `measured_fan_heat_f - cool_delta_thr_f`), `cool_delta_thr_f` (the cooling margin, default
+  `delta_thr_f`), `occupied_only` (judge occupied samples, from the trended occupancy when
+  mapped, else the weekday 07-18 schedule; `Role.OCCUPANCY` becomes an optional input only on
+  such an instance) and `judge_heating_on_supply_air` (`False` judges a heating leak only on the
+  heating coil's own leaving air). New metrics `cool_shift_f` and `occupancy_gate` appear only
+  when configured, with caveats; `LeakValveResult` gains `cool_shift_f`, `occupancy_gate` and
+  `hw_judged`, and `analyze_leak_valves` the same keywords. Documented in `param_docs.py` and
+  `docs/THRESHOLDS.md`.
+- **The `lbnl-sdahu` template catches the published valve leak.** Its `leaking_valve` entry sets
+  `measured_fan_heat_f: 1.0`, `cool_delta_thr_f: 1.0` and `occupied_only: true`, with a `basis`
+  map. **Intended default change:** `AHU__coi_leakage_010` goes ok -> fault (60.5 % of occupied,
+  fan-on, valve-shut hours below the mixed air, was 0.6 % beyond the 3 °F margin); the fault-free
+  run stays ok at 2.4 % and the damper runs under 2 %. **The 1.0 °F was calibrated on the
+  fault-free run, which is also a scored negative**: its verdict is in-sample, and the template
+  comment, `docs/VALIDATION.md` and `docs/TUNING.md` say so; a half-year split (calibrate on one
+  half, judge the other) keeps the fault-free run ok (2.4 % / 2.7 %) and the leak a fault
+  (54.3 % / 77.2 %). The `lbnl-ddahu` template comment records why the rule is not run there
+  (its mapped supply air is the cold deck; run anyway it false-faults `DDAHU__DMPRStuck_OA_0`).
+- **LBNL benchmark (approved gated move, S1).** `examples/lbnl_fdd/benchmark.py` builds
+  `LeakingValve` from the same template params. SDAHU TPR 0.4 -> 0.6, accuracy 0.5 -> 0.6667,
+  correct diagnosis 0.4 -> 0.6; pooled TPR 0.7 -> 0.8, accuracy 0.7692 -> 0.8462, correct
+  diagnosis 0.7 -> 0.8; FPR unchanged at 0. No other benchmark key moves. The committed baseline
+  is refreshed by the integrator.
+- **Workbook.** `air-heat-cool`: the leak run is now a fault (TPR 100 %, FPR 0 %), the fault-free
+  median rise reads +1.1 °F over occupied hours (was +1.0 °F over all fan-on hours); the page,
+  questions, going-further steps and instructor key are rewritten around the calibrated fan heat
+  and its circularity.
+<!-- /098-air-leak -->
+<!-- 098-rcx-cause -->
+- **RCx issue headings name the cause, not the remedy (#88 item 2).** An issue page is headed
+  "Issue N: {cause}", and the executive summary's Issue column shows the cause. The action
+  paragraph reads "Recommended action — {title}: {action}", so the action titles stay in the
+  report. `RcxReport.to_dict()` issues gain `title` and `cause`. The RCx golden file changes
+  (intended). Workbook `capstone`: the top issue is now headed "Outdoor-air damper not
+  modulating (stuck low)", with a damper repair as its action. The answer key and the page
+  questions are updated.
+<!-- /098-rcx-cause -->
+<!-- 098-rcx-verify -->
+- **RCx report: a "Verify on site" section, on by default (#88 item 1).** Section id `verify`
+  (slot `section:verify`, so `--notes-template` writes it), after the issue pages and before
+  Further reading; omitted when it would be empty, or left out with `report.rcx.sections`. A
+  lead paragraph links chapter 9, then one table per kind of item: # (linked to the issue, or A
+  for Appendix A), Equipment, Look at, Point, Confirms, Refutes. Further reading adds chapter 9
+  when the section is present. The RCx golden file changes (intended). Workbook `capstone`: step 2
+  now compares the student's checklist with the generated one, answer 4 of the instructor key
+  points to it, and a new check pins the section's static-setpoint sensor item (trust 0.40) and
+  the onset unit's damper item. The capstone's minimum outdoor air and high limit are site
+  parameters in its config, so the section lists no design values for it; the key now says so.
+<!-- /098-rcx-verify -->
+
+<!-- 098-sensor-health -->
+- **RCx trust table (#87).** A unit with no fan signal is scored per its inferred operating mode in
+  the gated column, and *Gate used* says "outliers read per mode: inferred off-mode (OA damper and
+  coil valves closed)". On the catalog only `irish-ahu` changes: its supply air reads *trusted*
+  0.89 (was *untrusted* 0.19; plain `sensor_trust` now 0.27), its stray 2015 rows are left out
+  (return air, OA damper and both valves *suspect* -> *trusted*), and its economizer high-limit
+  issue's confidence moves M -> H. Every point flagged `clipped` shows the flag (one LBNL dual-duct
+  return air). Fan-gated units are unchanged: reading them per fan mode too was measured and
+  rejected (see docs/SENSOR-HEALTH.md). The workbook exercise `data-trend-quality` answers 4, 6
+  and 7 are rewritten.
+<!-- /098-sensor-health -->
+<!-- 098-followups -->
+- **One free-cooling high limit, 60 °F (#91).** `camber.freecooling.free_cooling_opportunity`
+  defaulted `high_limit_f` to 65 °F while the `free_cooling_missed` rule used 60 °F. Both now read
+  one constant, `DEFAULT_FREE_COOLING_HIGH_LIMIT_F` (60 °F), CAMBER's deliberately conservative
+  screening default. Only a direct library call with no `high_limit_f` changes (it counts fewer
+  free-cooling hours). Rule findings and reports are unchanged (the RCx economizer page passes
+  `economizer_high_limit`'s value and prints it), and so are the synthetic and fleet benchmarks.
+  `docs/TUNING.md` gains guidance on a climate-appropriate dry-bulb high limit (the unit's
+  sequence, the energy code's high limit for the climate zone, or the trends).
+- **`condenser_water_reset` takes the site elevation (#92).** `CondenserWaterReset` and
+  `analyze_cw_reset` gain `elevation_ft` and `pressure_psia` (default `None`), passed to
+  `stull_wetbulb_f` when the wet-bulb is derived from OAT + RH. Without either, a derived wet-bulb
+  is now caveated as sea-level, as the cooling-tower rules already did; that caveat is the only
+  change to default output. A new top-level config key, `site_elevation_ft` (feet; validated by
+  `camber.config.site_elevation_ft`), sets the elevation once for the site. It reaches
+  `cooling_tower_approach` and `condenser_water_reset` and, through the `drift` section
+  (`run_drift`, `refit_baselines` and `build_drift_suite` gain `elevation_ft`),
+  `cooling_tower_approach_drift` and `cooling_tower_fan_effort_drift`. A rule's own `elevation_ft`
+  or `pressure_psia` wins. On a tower that resets 1:1 with the true wet-bulb at 1,600 m in hot,
+  dry air, the sea-level slope reads 0.93 and the corrected one 1.00, so `reset_present` can flip
+  near `reset_slope_flat`. The catalog's plant data trend a measured wet-bulb and do not change.
+  Documented in `docs/CLI.md` and `param_docs`.
+- **`dcv_verification` names fan-off hours and gains an opt-in duration fault (#93).** Occupied
+  hours below `oa_floor_cfm` with the supply fan off (from `SUPPLY_FAN_STATUS`, else
+  `SUPPLY_FAN_SPEED` at or below the new `fan_off_speed_pct`, 5 %) are named in the summary and a
+  caveat ("supply fan off while scheduled occupied"), counted as `fan_off_occupied_pct` /
+  `fan_off_occupied_hours`, and left out of `below_floor_pct`, which is now the shortfall with the
+  fan running. The share fault still reads every below-floor sample (`below_floor_total_pct`, the
+  old `below_floor_pct`), so severity does not move; with no fan signal nothing changes. The new
+  `below_floor_fault_hours` (default `None`, opt-in) faults a contiguous below-floor episode of
+  that many occupied hours whatever its share; the longest episode (`below_floor_longest_h`,
+  `_start`, `_fan_off_h`) is reported either way. `assess_dcv` gains `fan_off_mask` and the
+  matching `DcvResult` fields. The ASO recommender reads a `fan_off_occupied` cause ("Run the
+  supply fan whenever the space is occupied"). On `lbnl-b59` the October and December 2020 days
+  are now named fan-off (41, 82, 40 and 40 h); `below_floor_pct` goes 2.2 / 4.2 / 2.1 / 2.0 % ->
+  0.1 / 0.0 / 0.1 / 0.0 %, severity stays `info`, and the 2020 smoke-mode window stays
+  unflagged. `b4b-windesheim` is unchanged and `finnish-dcv` (no fan signal) gains only the new
+  metrics. `docs/VENTILATION.md`, `docs/VALIDATION.md` and the workbook `zone-min-oa` (caveat,
+  answer 5 and two new checks) are updated.
+<!-- /098-followups -->
+
+<!-- 098-terminal-stuck -->
+- **`ornl-frp-vav` declares `actuator_stuck` as its detector (#89 item 3, #85 item 2).**
+  `labels.targets` is now `{"actuator_stuck": "terminal_damper"}` and the template runs it;
+  `unmet_setpoint_hours` stays as context. Full subset: TPR 17/18, 94 % [74-99 %] (Wilson 95 %),
+  FPR 0/13, 0 % [0-23 %], against `unmet_setpoint_hours`' 10/18 and 1/13; default subset 6/6 and
+  0/1 (was 2/6 and 1/1). The miss is room 106 stuck at 100 % on a warm day, where an open damper
+  is what the zone asked for. `known_issues` gains three lines: the airflow-bias days have no
+  detector, a detection pointing upstream on the duct-static-collapse days is legitimate, and
+  fleet and neighbour findings are not scored. The workbook exercise `zone-bad-box` scores
+  `actuator_stuck` and reads its verdict on each day.
+- **A reheat valve that diverges from its demand gets a repair recommendation.** When a
+  `reheat_penalty` finding's `valve_divergence_share` is at or above 0.25 (the rule's caveat
+  threshold; `DEFAULT_PARAMS["reheat_valve_divergence_share"]`), the advice is "Repair the reheat
+  valve or actuator", with the cause "reheat valve stuck or failed shut (the controller calls for
+  heat the valve does not deliver)", instead of "Minimize reheat".
+<!-- /098-terminal-stuck -->
+
+### Documentation
+<!-- 098-refs-catalog -->
+- **`docs/DATASETS.md`: "Running the workbook answer checks on local files" (#89).** Covers
+  `CAMBER_WORKBOOK_FROM_DIR`, the `<dir>/<dataset-id>/` layout, symlinking a checkout's differently
+  named files, the manual `lbnl-b59` files (`Building_59.zip`, `README_Dryad_Bldg59.txt`) and the
+  per-dataset file list, which a test keeps in step with the harness and the catalog.
+<!-- /098-refs-catalog -->
+<!-- 098-mv-vectors -->
+- **ECOSYSTEM: open-fdd's ECM tooling.** A reciprocal note covers open-fdd's ECM workbooks,
+  their reference calculators and EnergyPlus-twin comparison, and its change-point and G14
+  helpers. It explains how its pre-retrofit estimates and CAMBER's post-retrofit measurement fit
+  together, with measured inputs for the calculators (#22), and links the shared M&V vectors.
+  The "not yet re-compared" note now applies to the fault conditions only.
+<!-- /098-mv-vectors -->
+
+### Fixed
+<!-- 098-terminal-ventilation -->
+- **`docs/VENTILATION.md` overstated the `lbnl-b59` wildfire result (#85).** It said the 2020
+  smoke mode was a below-floor `fault` on two rooftop units. Re-measured on the default subset
+  (which holds the whole OA-flow record, April–December 2020): all four units are below the
+  750 cfm floor in 2.0–4.2 % of occupied hours, `info` under the 10 % fault share, and those hours
+  are fan-off days in October and December. In the smoke-mode weeks (2020-08-24 to 09-06) the
+  dampers sat at their 10 % minimum and the units still took in 1,130–3,625 cfm, 0–0.9 % below
+  the floor. The page, `docs/VALIDATION.md` and the `zone-min-oa` caveat now say so.
+<!-- /098-terminal-ventilation -->
+<!-- 098-refs-catalog -->
+- **`tests/test_references.py` sees instance-named rules.** `_rule_names()` now includes
+  `builtin.rule_names()`, so a mapping for `cohort_airflow` or the census and starvation rules no
+  longer fails the "every mapped rule exists" check.
+<!-- /098-refs-catalog -->
+<!-- 098-w1-integration -->
+- **Stale rule docstrings and comments corrected (text only, no behaviour change).** The
+  `supply_air_reset_compliance` module described the SAT reset as a positive slope against OAT
+  (it is negative since 0.92); `dcv_verification` said a trended occupancy is AND-ed with the
+  schedule (it replaces it); the rogue-zone census said the fleet runner carries no topology (it
+  auto-builds a naming one, which takes precedence over `groups`); `chw_supply_tracking` left out
+  the chiller-power run gate added in 0.92; and the `compressor_short_cycle` / `heatpump_defrost`
+  default comments got their arithmetic wrong (a 5 min timer allows about 12 starts an *hour*;
+  hourly defrost is about 48 reversing-valve transitions a day), so 12 and 24 a day are screening
+  ceilings, not generous ones. The `camber rules params` basis text for those two says so.
+- **Parameter registry: the `occupancy_gate` and share-gate entries.** `supply_air_control` and
+  `damper_census` `occupancy_gate`, and `overcooling_severity` `shortfall_share_pct` and
+  `share_pct`, are documented in `camber/rules/param_docs.py` and `docs/THRESHOLDS.md`. A
+  dict-valued tier map names its keys in its unit and gives the range of each value ("each value:
+  0 to 100"); `overcooling_severity` `tiers` follows the same convention, and a test checks every
+  tier map's default values against the range. The `damper_census` fixed-in-code note no longer
+  says occupied hours are always the weekday schedule.
+<!-- /098-w1-integration -->
+<!-- 098-plant-chw -->
+- **The synthetic healthy chilled-water reset ran the wrong way (S2).** `faultlab`'s clean
+  `chw_plant_reset` scenario raised CHWST as OAT rose (`42 + 0.30 x (OAT - 55)`); a healthy
+  outdoor-air reset lowers it. It is now `clip(52 - 0.30 x (OAT - 55), 42, 52)`. The synthetic
+  benchmark's metrics JSON is byte-identical before and after (sha256 `a0d5c8fb...`); without the
+  fix the new sign check would have raised `chw_plant_reset.fpr` 0 -> 1. A test fixture in
+  `tests/test_optional_role_honesty.py` had the same wrong-way "working reset" and is corrected.
+<!-- /098-plant-chw -->
+<!-- 098-w2-integration -->
+- **A constant held while the fan is off is not a clipped sensor.** `clipped` now needs the
+  pile-up on the fan-on samples too for a fan-dependent point (return air, airflow, OA airflow,
+  duct static) on a unit with a fan signal: a BAS or gap-fill that parks the return air at a round
+  70.0 °F while the fan is off had read as a clip at its range limit. CO2 and the outdoor and space
+  points are still judged on every sample (a CO2 transmitter topping out in a closed room
+  overnight is a real clip). The four clips on the catalog store all remain; the RCx golden loses
+  its four `clipped` tags on the demo units' fan-off return air.
+- **Every recommendation names a cause.** The reversed chilled-water reset recommendation (from
+  `098-plant-chw`) gets the cause "Chilled-water supply warms in hot weather (plant capacity or a
+  reversed reset)", and a test checks that every recommender call in `camber.aso` sets one.
+- **`reheat_penalty` `fan_heat_f` documents its keyword:** its range is `"auto"`, or 0.0 to 8.0
+  (the keyword-or-number convention from `098-plant-chw`).
+<!-- /098-w2-integration -->
+<!-- 098-integration -->
+- **The walk-down covers `actuator_stuck` and the DCV fan-off cause.** `camber.walkdown` gains a
+  `SITE_CHECKS["actuator_stuck"]` entry (a "contradicted" item when any actuator's flat run
+  contradicts the zone's demand, else the unexplained-flat item) and a `fan_off_occupied` item for
+  `dcv_verification` (#93), so every cause the DCV recommender can lead with has its own check.
+  The reheat walk-down cause now reads `DEFAULT_PARAMS["reheat_valve_divergence_share"]`, the
+  threshold the recommender uses.
+<!-- /098-integration -->
+<!-- 098-pyarrow-compat -->
+- **A store with migrated partitions opens on pyarrow 17-24.** `migrate_partitions` (0.95) read
+  each legacy part file with `pyarrow.parquet.read_table(path)`. On pyarrow 17 through 24 that
+  applies hive partition discovery to a single file's own path, so a part under
+  `facility_id=X/year=Y/` came back with dictionary-typed `facility_id` and `year` columns, and
+  the rewritten month files carried them. The store then refused to open ("Unable to merge: Field
+  facility_id has incompatible types: dictionary<values=string, indices=int32> vs string"). Part
+  files are now read with `ParquetFile(path).read()`, which returns only the stored columns on
+  every pyarrow; the retention rollups' legacy reads use the same helper. On pyarrow 14-16 and 25
+  nothing changes: a migrated store is byte-identical before and after. `_migrate_year` calls
+  `pyarrow.compute` through `call_function`, so mypy passes with pyarrow builds that bundle type
+  stubs (which do not declare the generated compute functions) as well as without them.
+- **A constant meter finds no steps on any BLAS.** `detect_step_changes` round 1 scaled its
+  segmentation by the first-difference noise and fell back to the residual variance, with no
+  rounding floor: a constant meter's exact fit leaves residuals of zero or ~1e-15 depending on the
+  BLAS build (Accelerate gives zero, OpenBLAS does not), and on OpenBLAS round 1 segmented that
+  rounding noise into two zero-size "steps" that the later rounds kept. Round 1 now applies the
+  same rounding floor as the later rounds (falling back to a unit scale below it).
+- **Dependency floors match what works.** `pyproject.toml` now declares `numpy>=1.24.1`,
+  `pandas>=2.2.1` and `pyarrow>=14.0.2` (were 1.24, 2.0 and 14). CAMBER and its tests use pandas
+  2.2 API (`Index.round`, the `"ME"` and `"min"` aliases); pandas 2.2.0 has a `concat` regression
+  that left a SQL source's merged index unsorted; numpy 1.24.0 breaks matplotlib's masked
+  `fill_between` on time axes; pyarrow 14.0.0/14.0.1 emit pandas 2.2's BlockManager
+  `DeprecationWarning` on every store read (14.0.0 also carries CVE-2023-47248). A new CI job,
+  `min-deps`, runs the suite on Python 3.10 with every core floor pinned
+  (`.github/min-deps.txt`; a test keeps it equal to the declared floors).
+- **Change-point ties break the same way on every platform.** The change-point grid searches in
+  `camber.mandv.models` (3PC/3PH/4P, the to-zero variants, 5P/5PZ) kept the grid point with the
+  strictly lowest SSE. On a flat SSE surface (no data between grid points, or a 4P/5P with no
+  second regime) several points tie up to rounding, and the BLAS build (Accelerate vs OpenBLAS)
+  picked the winner: fitting the five kinds to 1,961 BDG2 2016 meters, daily and monthly (19,610
+  fits), 170 fits' change points differed between the two builds. A later grid point now
+  replaces the best only when it lowers the objective by more than 1e-10 of it (floored at 1e-12
+  of the weighted sum of y² for exact fits), so ties keep the first grid point; `best_model`
+  treats BICs within 1e-9 as a tie (the earlier kind wins). The two builds now agree on every
+  fit. Default output: the five benchmarks are byte-identical before and after on both builds,
+  and no selected kind changes. Monthly change points do move within a tie, by at most 2.2 °F
+  (151 fits on Accelerate, 166 on OpenBLAS; 29 of them the selected model, whose SSE is
+  unchanged to 1e-10); daily fits do not move. The shared M&V vectors are regenerated: two
+  non-selected candidates' change points move (`syn_2p` monthly 4P 79.762 -> 78.64791, and the
+  `bills_bdg2_rat_public_leta_elec` 5P low change point 39.71 -> 38.62). The vectors test now
+  compares non-selected candidates' change points within SCHEMA's ±2 °F and everything else
+  exactly, and SCHEMA.md says how ties are broken.
+<!-- /098-pyarrow-compat -->
+<!-- 098-fc9 -->
+- **`g36_afdd`: shut valves alone are not free cooling (#94).** The G36 operating-state
+  classifier read every fan-on interval with both coil valves shut as OS#2 (free cooling), even
+  with the outdoor-air damper shut. Following the G36 §5.16.14 operating-state definitions, OS#2
+  now also needs the OA damper open beyond its minimum position plus `oa_damper_tol` (5 points).
+  At or below that, the interval is OS#5, where only the state-independent FC1-FC4 apply. These
+  are deadband hours and unoccupied recirculation runs. OS#5 is used rather than "unclassified"
+  because the definitions place an interval that fits none of OS#1-#4 there, and it keeps FC1-FC4.
+  The minimum position is `oa_damper_min`. By default it is learned as the median damper command
+  over fan-on mechanical-cooling intervals below `econ_damper_open` (the OS#4 position), or taken
+  as 0 % with a caveat when there are fewer than 24 such intervals. A missing damper reading with
+  both valves shut is unclassified. A frame without an OA damper point keeps the valves-only
+  reading and gets a caveat. New finding metrics: `oa_damper_min`, `oa_damper_min_source`,
+  `idle_at_min_oa_hours`, `occupancy_gate` and `unoccupied_hours`. New trailing `G36Result`
+  fields: `oa_damper_min`, `oa_damper_min_source`, `n_idle_at_min_oa` and `n_unoccupied`.
+  `run_g36_afdd` gains `oa_damper_min=`, `oa_damper_tol=` and `occupied=`, and `classify_os`
+  gains `oa_damper_min=` and `oa_damper_tol=`.
+  - **Occupancy.** Unoccupied operation is still evaluated by default, since G36 suspends AFDD
+    only while the AHU is not operating. A new `occupancy_gate` parameter (`"off"` by default, or
+    `"trended"`) limits the evaluation to the occupied hours of a trended occupancy point, with
+    no assumed-schedule fallback. Once OS#2 is fixed it changes no verdict on `lbnl-sdahu` or
+    `lbnl-ddahu`.
+  - **lbnl-sdahu, full subset, at defaults.**
+    - The fault-free run goes from `warn` to `ok`: FC9 drops from 18.65 % to 0 %. All 323 FC9
+      hours were unoccupied hours with the fan at full speed and the damper at 0 %, and those
+      483 hours are now OS#5. The learned minimum is 10 %, the unit's documented fixed minimum.
+    - `onset_damper_stuck_025`: FC9 drops from 11.65 % to 0 % (the same unoccupied pattern). The
+      run stays `fault` on FC10 and FC11.
+    - `damper_stuck_075` and `damper_stuck_100_short` go from `fault` to `ok`. FC8 drops from
+      30.9 % and 26.8 % to 0 %, and FC12 from 8.75 % and 3.98 % to 0 %. Those hours had the damper
+      *commanded* to its 10 % minimum with both valves shut, while the stuck damper let in 68-100 %
+      outdoor air. That is OS#5 by command, so the free-cooling tests no longer apply, and their
+      earlier hits came from hours that were wrongly read as free cooling. The G36 test for this
+      fault is FC6 (outdoor-air fraction vs the minimum). With the template's own `min_oa_pct`
+      1.6, FC6 flags both runs (27.8 % and 28.1 %, `fault`), while the fault-free run reads
+      1.18 %.
+    - `coi_stuck_050`: 7 hours move to OS#5, and FC14 goes from 13.06 % to 12.68 % (still
+      `fault` on FC13).
+    - The other ten runs are unchanged.
+  - **Other datasets.**
+    - `lbnl-ddahu` `DMPRStuck_OA_0`: 186 hours with the damper at or below its learned 28 %
+      minimum (176 of them at 0 %) move to OS#5, and FC8 goes from 16.2 % to 39.7 % (still
+      `fault` on FC10). The fault-free and `DMPRStuck_OA_100` runs are unchanged.
+    - `nuig-ahu101` is unchanged, and `irish-ahu` declines before and after (it has no fan
+      signal).
+  - **The `lbnl-sdahu` template runs `g36_afdd` with FC6 enabled.** It passes the unit's
+    documented minimum, `min_oa_pct` 1.6 (the 10 % fixed damper minimum measured as an OA
+    fraction, the value `outdoor_air_fraction` already uses), with that provenance in the template
+    comment and its `basis` map. The rule's own defaults are unchanged. From the template,
+    `damper_stuck_075` and `damper_stuck_100_short` read `fault` again on FC6 (27.8 % and 28.1 %),
+    and the fault-free run reads `ok` (FC6 1.18 %). No other run's verdict changes; FC6 reads
+    0-1.5 % on the other runs.
+    - **Templates left unchanged.** `lbnl-ddahu` states a seasonal minimum (31.8 %, 11.9 % in
+      Jun-Aug). No single `min_oa_pct` works there: FC6 faults the fault-free run at 20.5 % with
+      31.8 and at 47.1 % with 11.9. `g36_afdd` declines `irish-ahu` (no fan signal) and
+      `lbnl-fcu` (a fan-coil unit), so they are left as they were. No exercise config runs
+      `g36_afdd`. `camber datasets score lbnl-sdahu` reads only the declared targets, so its score
+      is unchanged.
+  - **Unchanged.** No gated benchmark key moves (the synthetic, fleet, LBNL, BDG2 and BDG2 savings
+    benchmarks are all stable), and no workbook answer changes (no exercise runs `g36_afdd`).
+<!-- /098-fc9 -->
+
 ## [0.97.0] — 2026-10-03
 
 <!-- 0.97 is stacked on 0.96 (unreleased, below). This entry gets its date when 0.97 is

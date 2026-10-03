@@ -11,7 +11,9 @@ Real-data figures were recorded from::
         --store lab_store --out census.json
     camber run census.json --out census_out
 
-(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29.)
+(CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29; the census re-recorded with
+0.98.0-dev on 2026-09-30, when ``damper_census`` began reading each box's trended occupancy, #84:
+the fleet median moved 39.3 -> 38.7 %, the verdict did not.)
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from _air_standins import SDAHU_STATIC_SP, sdahu
-from _workbook import REAL, Exercise, Finding, Metric, Run, hourly_index, write_standin
+from _workbook import REAL, Check, Exercise, Finding, Metric, Run, hourly_index, write_standin
 
 from camber.model.roles import Role
 
@@ -60,6 +62,13 @@ def standin(store) -> None:
     day = hourly_index(days=3)
     boxes = {f"RTU_VAV_{r}__d3_fault_free": ("VAV", _box(day, k)) for k, r in enumerate(_ROOMS)}
     write_standin(store, "ornl-frp-vav", boxes)
+
+
+def _census_gate(ctx) -> None:
+    f = ctx.finding("damper_census", "<fleet>", "census")
+    assert f is not None, "no damper_census finding"
+    got = (f.metrics or {}).get("occupancy_gate")
+    assert got == "trended occupancy", f"occupancy_gate {got!r}, expected 'trended occupancy'"
 
 
 EXERCISE = Exercise(
@@ -104,12 +113,14 @@ EXERCISE = Exercise(
             "damper_census",
             "<fleet>",
             "median_damper_pct",
-            39.3,
+            38.7,
             0.2,
             run="census",
             on=REAL,
             quote="39%",
         ),
+        # ... over the boxes' own trended occupancy, not the assumed weekday schedule (0.98, #84)
+        Check("the census reads the trended occupancy", _census_gate),
     ),
     standin=standin,
 )

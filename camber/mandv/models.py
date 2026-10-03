@@ -258,6 +258,32 @@ def _fit_2p(T, y, w=None):
     return coeffs, sse, (), lambda t: beta[0] + beta[1] * t
 
 
+# Grid-search tie-break (0.98). On a flat objective surface (a change point in a stretch with no
+# data, a degenerate 4P/5P on data with no second regime) several grid points give the same SSE
+# up to rounding, and which one is smallest by ~1e-15 depends on the BLAS build (Accelerate vs
+# OpenBLAS), so a strict ``<`` let the build pick the reported change point. A grid point now
+# replaces the best only when it improves the objective by more than this relative margin:
+# exact and near ties keep the first grid point (the lowest change point) on every build.
+_TIE_REL = 1e-10
+# BIC ties between candidate kinds (n*ln(SSE/n) is noise-free to ~1e-12 at these sizes): the
+# earlier kind in ``kinds`` wins.
+_BIC_TIE = 1e-9
+
+
+def _tie_floor(y, w=None) -> float:
+    """The SSE scale under which differences are rounding: 1e-12 of the (weighted) sum of y^2.
+
+    Floors :func:`_improves` for an exact fit (best SSE ~ 0), where a relative margin is
+    itself noise."""
+    yy = float(y @ y) if w is None else float((w * y) @ y)
+    return 1e-12 * yy if np.isfinite(yy) else 0.0
+
+
+def _improves(new: float, best: float, floor: float = 0.0) -> bool:
+    """Whether ``new`` beats ``best`` by more than the tie margin (see ``_TIE_REL``)."""
+    return new < best - _TIE_REL * max(abs(best), floor)
+
+
 def _grid(T, n=40):
     lo, hi = np.percentile(T, 5), np.percentile(T, 95)
     if hi <= lo:
@@ -288,12 +314,14 @@ def _cp_score(beta, X, y, objective, w=None):
 
 def _fit_one_cp(T, y, design, name_slopes, objective=None, w=None):
     objective = objective or _OBJECTIVE
+    # the bias objective is a dimensionless fraction; the SSE one is on y's squared scale
+    floor = 1e-12 if objective == "bias" else _tie_floor(y, w)
     best = None
     for tc in _grid(T):
         X = design(T, tc)
         beta, sse = _lstsq_sse(X, y, w)
         score = _cp_score(beta, X, y, objective, w)
-        if best is None or score < best[0]:
+        if best is None or _improves(score, best[0], floor):
             best = (score, beta, sse, tc)
     _, beta, sse, tc = best
     return beta, sse, tc
@@ -323,10 +351,11 @@ def _fit_3ph_zero(T, y, w=None):
     # heating that goes to ZERO above the change point: energy = slope*max(0, tc-T),
     # no intercept (the "heating-to-zero" variant -- gas used only for space heating).
     best = None
+    floor = _tie_floor(y, w)
     for tc in _grid(T):
         x = np.maximum(0.0, tc - T).reshape(-1, 1)
         beta, sse = _lstsq_sse(x, y, w)
-        if best is None or sse < best[1]:
+        if best is None or _improves(sse, best[1], floor):
             best = (beta, sse, tc)
     beta, sse, tc = best
     slope = float(beta[0])
@@ -341,10 +370,11 @@ def _fit_3ph_zero(T, y, w=None):
 def _fit_3pc_zero(T, y, w=None):
     # cooling that goes to zero below the change point (the cooling analogue).
     best = None
+    floor = _tie_floor(y, w)
     for tc in _grid(T):
         x = np.maximum(0.0, T - tc).reshape(-1, 1)
         beta, sse = _lstsq_sse(x, y, w)
-        if best is None or sse < best[1]:
+        if best is None or _improves(sse, best[1], floor):
             best = (beta, sse, tc)
     beta, sse, tc = best
     slope = float(beta[0])
@@ -369,12 +399,13 @@ def _fit_4p(T, y, objective=None, w=None):
 def _fit_5p(T, y, w=None):
     grid = _grid(T)
     best = None
+    floor = _tie_floor(y, w)
     for i, tlo in enumerate(grid):
         for thi in grid[i:]:
             if thi - tlo < (grid[1] - grid[0]):  # keep a real dead-band
                 continue
             beta, sse = _lstsq_sse(_design_5p(T, tlo, thi), y, w)
-            if best is None or sse < best[1]:
+            if best is None or _improves(sse, best[1], floor):
                 best = (beta, sse, tlo, thi)
     if best is None:
         return _fit_2p(T, y) if w is None else _fit_2p(T, y, w)
@@ -395,13 +426,14 @@ def _fit_5p_zero(T, y, w=None):
     grid = _grid(T)
     step = grid[1] - grid[0]
     best = None
+    floor = _tie_floor(y, w)
     for i, tlo in enumerate(grid):
         for thi in grid[i:]:
             if thi - tlo < step:
                 continue
             X = np.column_stack([np.maximum(0.0, tlo - T), np.maximum(0.0, T - thi)])
             beta, sse = _lstsq_sse(X, y, w)
-            if best is None or sse < best[1]:
+            if best is None or _improves(sse, best[1], floor):
                 best = (beta, sse, tlo, thi)
     if best is None:
         return _fit_2p(T, y) if w is None else _fit_2p(T, y, w)
@@ -528,7 +560,7 @@ def best_model(
             continue
         # BIC: n*ln(SSE/n) + p*ln(n)
         bic = m.n * np.log(m.sse / m.n + 1e-12) + p * np.log(m.n)
-        if bic < best_score:
+        if bic < best_score - _BIC_TIE:  # inf - tie is inf: the first finite kind is taken
             best, best_score = m, bic
     if best is None:
         raise ValueError("no model could be fit")

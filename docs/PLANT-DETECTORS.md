@@ -19,6 +19,16 @@ window, like the [chiller](CHILLER-DRIFT.md) and [pump](PUMP-DRIFT.md) drift fam
 `Registry.run_periods`. `camber.plantdrift` rolls each family up to a locus: the equipment, a
 sensor, or steady.
 
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
+Since 0.98 a family can also **declare its reference** instead of reading a frozen baseline:
+`{"class": "CHW_PLANT", "family": "tower", "reference": {"equip": "PLANT__fault_free"}}` scores
+every other unit against a named healthy one, and `"reference": {"period": [start, end]}` against
+a known-good window of the same unit. The reference is fitted in memory on every run and never
+stored; each finding records it in `baseline_source` with a caveat, and the reference unit itself
+declines as `is_reference`. See [the CLI guide](CLI.md#a-declared-reference) for the windows and
+the declines, and [Tuning](TUNING.md#drift-references) for choosing a reference.
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
+
 ## Boiler combustion efficiency (`boiler_efficiency_drift`)
 
 A fouled boiler burns more gas for the same heat, so its input/output ratio (1 / efficiency)
@@ -99,3 +109,16 @@ On the labelled LBNL chiller and boiler plants (`examples/lbnl_fdd/plant_detecto
 not gated) the three detectors catch 3/3, 2/3 and 5/5 of their target faults with no false alarm on
 any other run; see [Validation](VALIDATION.md#092-plant-detectors-on-the-lbnl-plants) for the
 intervals and what the sensor-bias runs did.
+
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
+**Through a config (0.98).** On these datasets each fault is its own year-long run, so the drift
+detectors have no before-and-after on one unit. The `lbnl-chiller` and `lbnl-boiler` templates
+(and the `plant-cooling-tower` and `plant-boiler` workbook exercises) therefore declare
+`PLANT__fault_free` as the reference, and `camber run` gives the same verdict, run by run, as the
+example script (`tests/test_drift_reference_098.py` checks it on the real data when present):
+`cooling_tower_fan_effort_drift` catches tower fouling 065 and 080 (+17.8 and +10.9 fan %-points)
+and misses 095 (+3.3), and `boiler_efficiency_drift` catches all three boiler foulings (+53.7 %,
++24.9 %, +5.1 %; 095 clears the 5 % warn floor by 0.1 point). Both are now the entries' declared
+targets for `camber datasets score`. The scorer counts the fault-free run, which declines as the
+reference, as a correct negative, so the false-positive counts read 0 of 21 and 0 of 14.
+<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->

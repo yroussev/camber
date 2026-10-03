@@ -25,7 +25,9 @@ class HeatPumpDefrost:
     roles_optional = (Role.COMPRESSOR_STATUS, Role.OAT)
 
     def __init__(self, max_reversals_per_day: float = 24.0):
-        # normal defrost is ~ once/hour in cold weather at worst; 24/day is a generous ceiling
+        # Defrost at worst ~once an hour in cold weather, and each defrost is two reversing-valve
+        # transitions (into cooling and back): up to ~48 transitions a day. 24/day (~12 defrosts,
+        # one every 2 h) is a CAMBER screening ceiling, not a generous one.
         self.max_reversals_per_day = max_reversals_per_day
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:

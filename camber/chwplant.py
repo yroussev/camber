@@ -19,7 +19,9 @@ running machine. OAT is typically building-level (pass via the rule layer's ``sh
 CHWST actually reach its trended setpoint?
 
 Note: a CHW flow point is intentionally NOT required -- on some buildings it is
-dead/untrended, so this diagnostic relies on temperatures, not flow.
+dead/untrended, so this diagnostic relies on temperatures, not flow. When one is given
+(``CHW_Flow``), 0.98 (#86) reports its coefficient of variation over the judged hours, so the
+rule layer can recognise a constant-primary-flow plant, whose loop delta-T is low by design.
 """
 
 from __future__ import annotations
@@ -60,6 +62,9 @@ class CHWPlantResult:
     coverage_start: str
     coverage_end: str
     run_source: str = "temperature"  # "status" (run status / command) | "temperature" (proxy)
+    # 0.98 (#86): CHW flow over the judged hours (a ``CHW_Flow`` column); None = no flow point
+    flow_cv: float | None = None  # std / mean of the flow
+    n_flow: int = 0  # judged hours with a finite flow reading
 
     def as_dict(self):
         """Return the result as a plain dict."""
@@ -177,6 +182,8 @@ def analyze_chw_plant(
     else:
         dt_median = low_dt_pct = float("nan")
 
+    flow_cv, n_flow = _flow_cv(work)
+
     return CHWPlantResult(
         equip=equip,
         n_running=n,
@@ -190,7 +197,27 @@ def analyze_chw_plant(
         coverage_start=str(df.index.min()),
         coverage_end=str(df.index.max()),
         run_source=source,
+        flow_cv=flow_cv,
+        n_flow=n_flow,
     )
+
+
+def _flow_cv(work: pd.DataFrame) -> tuple[float | None, int]:
+    """``(coefficient of variation, n)`` of the ``CHW_Flow`` column over ``work``'s hours.
+
+    Only finite readings count. ``None`` when there is no flow column, no reading, or a mean flow
+    that is not positive (a dead or reversed meter says nothing about the flow's shape).
+    """
+    if "CHW_Flow" not in work.columns:
+        return None, 0
+    q = pd.to_numeric(work["CHW_Flow"], errors="coerce").dropna()
+    n = len(q)
+    if n == 0:
+        return None, 0
+    mean = float(q.mean())
+    if not mean > 0.0:
+        return None, n
+    return round(float(q.std(ddof=0)) / mean, 4), n
 
 
 @dataclass

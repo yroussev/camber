@@ -612,9 +612,15 @@ def detect_step_changes(
     # which prunes what round 1 over-found. The reported steps always come from a later round.
     x = y - np.asarray(model.predict(T), dtype=float)
     d = np.diff(x)
+    # The floor is rounding noise on the meter's own scale. Round 1 needs it too: an exact fit
+    # leaves residuals that are zero or pure rounding (~1e-15, which BLAS build decides), and
+    # segmenting rounding noise on a rounding-sized scale finds "steps" of zero size.
+    floor = (1e-9 * float(np.mean(np.abs(y)))) ** 2
     scale = (1.4826 * float(np.median(np.abs(d - np.median(d))))) ** 2 / 2.0
-    if not scale > 0:
-        scale = float(np.var(x, ddof=1)) or 1.0
+    if not scale > floor:
+        scale = float(np.var(x, ddof=1))
+        if not scale > floor:
+            scale = 1.0
     cps_found = _pelt(x, scale=scale, penalty=pen, min_seg=min_segment_days, **seg_kw)
     weather, levels, A_lvl, wcps, s2, resid = _refit(T, y, model, kind, cps0, cps_found, n)
     converged = False
@@ -625,14 +631,14 @@ def detect_step_changes(
         kappa = 1.0 if rho is None else (1.0 + rho) / (1.0 - rho)
         x = y - weather  # residual plus the segment levels
         # an exact fit (a constant or dead meter) gives a 0/0 cost that no penalty prunes: keep
-        # the steps found so far and stop. The floor is rounding noise on the meter's own scale.
+        # the steps found so far and stop.
         found = _pelt_capped(
             x,
             scale=s2 * kappa,
             penalty=pen,
             min_seg=min_segment_days,
             max_steps=max_steps,
-            floor=(1e-9 * float(np.mean(np.abs(y)))) ** 2,
+            floor=floor,
             **seg_kw,
         )
         if found is None:

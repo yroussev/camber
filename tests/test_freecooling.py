@@ -61,3 +61,33 @@ def test_high_limit_widens_available_hours():
 def test_empty_input():
     r = free_cooling_opportunity(pd.Series(dtype=float), pd.Series(dtype=float))
     assert r.hours_missed == 0.0 and r.missed_fraction != r.missed_fraction  # NaN
+
+
+# --- 0.98 (#91): one free-cooling high limit for the library and the rule -------------------
+
+
+def test_library_and_rule_share_one_high_limit_default():
+    import inspect
+
+    from camber.freecooling import DEFAULT_FREE_COOLING_HIGH_LIMIT_F
+    from camber.rules.freecoolingmissed_rule import FreeCoolingMissed
+
+    assert DEFAULT_FREE_COOLING_HIGH_LIMIT_F == 60.0
+    lib = inspect.signature(free_cooling_opportunity).parameters["high_limit_f"].default
+    assert lib == DEFAULT_FREE_COOLING_HIGH_LIMIT_F
+    assert FreeCoolingMissed().high_limit_f == DEFAULT_FREE_COOLING_HIGH_LIMIT_F
+
+
+def test_default_call_counts_only_weather_below_60f():
+    oat, cool, kw = _data()
+    r = free_cooling_opportunity(oat, cool, cooling_kw=kw)
+    assert r.high_limit_f == 60.0
+    explicit = free_cooling_opportunity(oat, cool, cooling_kw=kw, high_limit_f=60.0)
+    assert (r.hours_available, r.hours_missed, r.addressable_kwh) == (
+        explicit.hours_available,
+        explicit.hours_missed,
+        explicit.addressable_kwh,
+    )
+    # the pre-0.98 default counts more free-cooling weather; it is still one argument away
+    old = free_cooling_opportunity(oat, cool, cooling_kw=kw, high_limit_f=65.0)
+    assert old.hours_available > r.hours_available and old.hours_missed >= r.hours_missed

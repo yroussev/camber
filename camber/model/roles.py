@@ -50,7 +50,14 @@ class Role(str, Enum):
     STATIC_PRESSURE_REQUESTS = "static_pressure_requests"
 
     # --- valves / coils / dampers (command or position, %) ---
-    HEAT_VALVE = "heat_valve"  # heating-coil / reheat valve position
+    HEAT_VALVE = "heat_valve"  # heating-coil / reheat valve command or position (see below)
+    # 0.98 (#85): the reheat / heating valve's MEASURED position (feedback), for a unit that trends
+    # both the controller's demand and the position. Map the demand to HEAT_VALVE and the feedback
+    # here: the drift and capacity rules read how hard the controller asks (HEAT_VALVE), and the
+    # reheat-penalty rules judge the heat actually delivered from the position when it is mapped
+    # (a valve stuck shut is 0 % open whatever the demand). With only one valve point, map it to
+    # HEAT_VALVE whichever it is.
+    HEAT_VALVE_POSITION = "heat_valve_position"
     COOL_VALVE = "cool_valve"  # cooling-coil valve position
     OA_DAMPER = "oa_damper"
     DAMPER = "damper"  # terminal/zone damper position
@@ -225,6 +232,7 @@ HAYSTACK_HINT: dict[Role, str] = {
     Role.STATIC_PRESSURE_REQUESTS: "duct air pressure reset request point",
     Role.AIRFLOW_SP: "discharge air flow sp",
     Role.HEAT_VALVE: "heating valve cmd",
+    Role.HEAT_VALVE_POSITION: "heating valve sensor",  # 0.98 (#85): the measured position
     Role.COOL_VALVE: "cooling valve cmd",
     Role.OA_DAMPER: "outside air damper cmd",
     Role.DAMPER: "damper cmd",

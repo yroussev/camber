@@ -201,6 +201,54 @@ into the cache, recorded in the manifest as `source: "local"` -- from then on `s
 and re-ingest treat them like fetched files. `--from-dir` works for any entry whose files you
 already have. A research-only manual entry also needs `--accept-noncommercial`.
 
+### Running the workbook answer checks on local files
+
+The [workbook](workbook/index.md)'s answer checks run on the real catalog data with
+`pytest -m network tests/workbook`. By default they download what they need. To use files you
+already have, point `CAMBER_WORKBOOK_FROM_DIR` at a directory that holds them; the checks then
+ingest with `--from-dir`, so pinned files are still size- and SHA-256-verified:
+
+```
+CAMBER_WORKBOOK_FROM_DIR=<dir> CAMBER_WORKBOOK_STORE=<store> \
+    pytest -m network tests/workbook -k plant-cooling-tower
+```
+
+- **Layout.** Put each dataset's files in a `<dir>/<dataset-id>/` subfolder
+  (`<dir>/lbnl-b59/Building_59.zip`). When that subfolder does not exist, `<dir>` itself is
+  searched. A file is found by its catalog path or its bare catalog name.
+- **Names.** Files must carry their catalog names. A copy saved under another name (a checkout's
+  `examples/_data` has `LBNL_Chiller_Plant.zip` for `LBNL_FDD_Data_Sets_Chiller_Plant.zip`) is
+  not found, so build the directory from symlinks with the catalog names.
+- **Manual downloads.** `lbnl-b59` is never fetched. Download `Building_59.zip` and
+  `README_Dryad_Bldg59.txt` from its Dryad page (`camber datasets info lbnl-b59` prints the
+  instructions) into `<dir>/lbnl-b59/`. Without them, and without an earlier ingest in the
+  cache, its exercises are skipped with a message naming the missing files.
+- **Store.** `CAMBER_WORKBOOK_STORE` keeps the ingested store between runs; a dataset already
+  ingested there from the same inputs and mapping is not ingested again.
+
+The files the exercises need, per dataset:
+
+- `b4b-windesheim`: `preprocessed_data/b4b_preprocess_properties.zip`, `metadata/b4b-room-metadata.zip`, `README.md`
+- `bdg2`: `metadata.csv`, `weather.csv`, `cleaned/electricity_cleaned.csv`, `cleaned/chilledwater_cleaned.csv`
+- `cofactor-drammen`: `Cofactor_Drammen_Buildings_45_v3.zip`
+- `finnish-dcv`: `training_data_1.csv`, `training_data_2.csv`, `ventilation_test.csv`
+- `irish-ahu`: `Data_Article_Dataset.csv`
+- `lbnl-b59` (manual): `Building_59.zip`, `README_Dryad_Bldg59.txt`
+- `lbnl-boiler`: `LBNL_FDD_Data_Sets_Boiler_Plant.zip`, `LBNL_FDD_Data_Sets_Boiler_Plant_ttl.zip`
+- `lbnl-chiller`: `LBNL_FDD_Data_Sets_Chiller_Plant.zip`, `LBNL_FDD_Data_Sets_Chiller_Plant_ttl.zip`
+- `lbnl-ddahu`: `LBNL_FDD_Data_Sets_DDAHU.zip`, `LBNL_FDD_Data_Sets_DDAHU_ttl.zip`
+- `lbnl-fpu`: `LBNL_FDD_Data_Sets_FPU.zip`, `LBNL_FDD_Data_Sets_FPU_ttl.zip`
+- `lbnl-sdahu`: `LBNL_FDD_Data_Sets_SDAHU.zip`, `LBNL_FDD_Data_Sets_SDAHU_ttl.zip`
+- `nuig-ahu101`: `nuig-data.tar.gz`, `NUIG_variables_MR1_MP5_AHU101 focus v1.xlsx`
+- `ornl-frp-ops`: `Building_Base_Heating.csv`, `Weather_Base_Heating.csv`, `Building_SB_Heating.csv`, `Weather_SB_Heating.csv`
+- `ornl-frp-vav`: `Set_03_Damper Tests_Room 205.xlsx`
+- `sdu-ou44`: `Dataset.zip`
+- `valladolid-uva`: `db_building_A.csv`, `db_building_B.csv`
+
+The small `*_ttl.zip` Brick files of the LBNL sets are separate catalog downloads; fetch them
+with `camber datasets fetch <id>` if a local copy lacks them. A test keeps this list in step with
+the catalog.
+
 ## Excel workbooks (the `xlsx` extra)
 
 A few publishers ship `.xlsx` workbooks. Reading them needs the optional extra:
@@ -571,6 +619,15 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Contradicts:** Chiller-plant inventory Tables 3-4 (21 faulted cases; no chiller fouling) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
 - **Handling: annotate** -- left as published and recorded in the provenance. Ingested and scored as chiller_fouling, marked undocumented; the severity is read from the file name by analogy with the tower-fouling runs (heat-transfer coefficient x 0.65 / 0.95), which the inventory does not confirm.
 
+#### The condenser-bypass runs are fixed, physically implausible bypasses, and the two 75% runs are one case
+
+- **Issue:** `condenser-bypass-runs-implausible`
+- **Columns:** `CDWL_SW_TEMP`, `CDWL_RW_TEMP`, `TWV_CTRL`, `CT_FLOW_1`, `CDWL_CW_FLOW`
+- **Runs:** `bypass_leakage_025`, `bypass_leakage_050`, `bypass_leakage_075`, `bypass_stuck_050`, `bypass_stuck_075`
+- **Evidence:** Over the minutes a chiller runs, the condenser-loop supply temperature CDWL_SW_TEMP has a p90 of 118.8 / 133.8 / 140.2 F and a maximum of 141.9 / 155.6 / 162.4 F in the 025 / 050 / 075 leakage runs, and is above 100 F in 29.5% / 41.1% / 51.1% of those minutes (the stuck runs give the same p90 and maximum as the leakage run of the same severity); the fault-free run never exceeds 85.8 F. The share of condenser flow that bypasses the towers, 1 - (CT_FLOW_1 + CT_FLOW_2 + CT_FLOW_3) / CDWL_CW_FLOW, is fixed all year at 0.917 / 0.967 / 0.988 (the fault-free run modulates it, p10 0.005 to p90 0.969), and the share estimated from the mixing temperatures equals it to 0.001, so the 25 / 50 / 75 in the file names are not bypassed-flow fractions. The valve command TWV_CTRL reads 0.0 in every one of the 525,540 rows of both bypass_leakage_075 and bypass_stuck_075, and those two runs agree to within 0.0005 F on the condenser-loop temperatures and exactly on the condenser and tower flows.
+- **Contradicts:** Chiller-plant inventory Tables 3-4 and Granderson et al. 2023 Table 7 (condenser-water three-way valve leakage at 25%, 50% and 75%, imposed by raising the valve's minimum position, and stuck at 50% and 75%, a fixed position: listed as separate, graded fault cases) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published and still scored: every bypass run raises chiller lift, so all five remain chiller_efficiency positives. Read the file-name severity as the imposed valve setting, not the leak size; treat bypass_leakage_075 and bypass_stuck_075 as one case counted twice; and read the 100-160 F condenser water as a simulation artefact (a real water-cooled chiller would trip on high head pressure well before it): the direction of each finding is meaningful, its size is not.
+
 ### `lbnl-boiler`: LBNL simulated boiler plant (labelled faults, Brick model)
 
 #### BOI_STA is the boiler enable, not burner firing
@@ -579,7 +636,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `BOI_STA_1`, `BOI_STA_2`
 - **Evidence:** In the fault-free run BOI_STA_1 is 1 in 100% of rows while boiler 1 burns no gas (BOI_GAS_CSUM_1 = 0) in 50.5% of them.
 - **Contradicts:** Boiler-plant inventory Table 2 (BOI_STA: on-off status of a boiler, 0-Off; 1-On) (LBNL FDD Data Sets, doi:10.25984/1881324; Granderson et al. 2023, Sci Data 10:342, doi:10.1038/s41597-023-02197-w)
-- **Handling: annotate** -- left as published and recorded in the provenance. Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing, so rules needing boiler_status decline on this plant.
+- **Handling: annotate** -- left as published and recorded in the provenance. Left unmapped: mapping it to boiler_status would read every enabled-but-idle minute as firing. Since 0.98 the rules that need a run status (boiler_summer_lockout, boiler_short_cycle, hw_plant_deltat) read firing from boiler 1's gas input (gas_input_rate) instead, and say so in a caveat.
 
 #### HWL_DPSPT is the loop DP setpoint in inH2O, not a temperature setpoint
 
@@ -1378,7 +1435,7 @@ only). Nothing is corrected silently. `camber datasets info <id>` prints the sam
 - **Columns:** `AHU Supply Air Temperature`, `AHU Mixed Air Temperature`
 - **Evidence:** In the 04_G36-1wk baselines, fan-off supply minus mixed air temperature has a median of -10.4 K (cooling season) and +23.8 K (heating season) at zero flow.
 - **Contradicts:** conventions.pdf (measured supply and mixed air temperatures) (Ghalamsiah, N., Wen, J., Li, G., Chen, Y., Lu, X., Fu, Y., Chu, M. & O'Neill, Z., Labeled Datasets for Air Handling Units Operating in Faulted and Fault-free States, Sci Data 13:15, doi:10.1038/s41597-025-06179-y)
-- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; coil and mixing rules must judge fan-on samples only (leaking_valve is declined in the template because it does not gate on the fan).
+- **Handling: annotate** -- left as published and recorded in the provenance. Left as published; coil and mixing rules must judge fan-on samples only. leaking_valve has done so since 0.93 (#42) when a fan status or speed is mapped, as it is here; the template still leaves it out, because it has not been re-checked on these baselines since.
 
 ### `at-30bldg-sensors`: Austrian 30-building campus sensors (research-only)
 
