@@ -1034,6 +1034,26 @@
     "fetch_urdb_rate",
     "tariff_from_urdb"
   ],
+  "camber.interop.openfdd": [
+    "ColumnMapping",
+    "Crosswalk",
+    "CrosswalkRow",
+    "FINDINGS_SCHEMA",
+    "FINDINGS_SCHEMA_VERSION",
+    "OpenFddEquipment",
+    "OpenFddIngestResult",
+    "OpenFddPackage",
+    "crosswalk_table",
+    "findings_document",
+    "ingest_package",
+    "load_crosswalk",
+    "openfdd_meta",
+    "package_config",
+    "read_historian",
+    "read_package",
+    "run_findings",
+    "suggested_rules"
+  ],
   "camber.interop.psychro": [
     "compare_wetbulb",
     "psychrometrics",

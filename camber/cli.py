@@ -3036,6 +3036,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     dsc.set_defaults(func=_cmd_datasets_config)
 
+    # ---- 0.99 (#22): camber interop openfdd (ingest / inspect / crosswalk / findings)
+    from ._cli_openfdd import add_parser as _add_interop_parser
+
+    _add_interop_parser(sub)
+
     # ---- 0.98 (#90): camber rules params
     prl = sub.add_parser("rules", help="rule reference: tunable parameters (rules params)")
     rlsub = prl.add_subparsers(dest="rules_cmd", required=True)

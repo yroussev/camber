@@ -68,6 +68,21 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   back-compatibly: `_portfolio.json` with its `schema_version`, `_audit.ndjson`, the registry-v2
   fields, `state/<fid>/manifest.json` with its `schema_version`, and the migration redirect
   stubs. See [PORTFOLIO.md](PORTFOLIO.md).
+- **`camber.interop.openfdd`** (added in 0.99, #22). The open-fdd importer and findings JSON:
+  - readers and ingest: `read_package`, `read_historian`, `ingest_package`, `package_config`,
+    `suggested_rules`, `openfdd_meta`;
+  - the crosswalk: `load_crosswalk`, `crosswalk_table`, `Crosswalk`, `CrosswalkRow`;
+  - results: `ColumnMapping`, `OpenFddEquipment`, `OpenFddPackage`, `OpenFddIngestResult`;
+  - findings: `findings_document`, `run_findings`, `FINDINGS_SCHEMA`,
+    `FINDINGS_SCHEMA_VERSION`;
+  - and the `camber interop openfdd` commands.
+
+  Three formats are versioned data that may change in a minor release: the crosswalk
+  (`crosswalk.json`, `crosswalk_version`), the findings-exchange schema (`0.1-draft`) and the
+  `openfdd` provenance block on a facility's registry entry. A crosswalk change bumps its
+  version, which re-ingests on the next run. The additive `config` change is provisional too: a
+  store facility ingested from open-fdd defaults `source.timezone` to the zone it was ingested
+  in. See [INTEROP-OPENFDD.md](INTEROP-OPENFDD.md).
 - **The RCx report** (added in 0.88): `camber.report.rcx` -- `RcxOptions`, `RcxReport`
   (`to_html`, `to_dict`, `slots`), `build_rcx_report`, `select_week`, `WeekChoice`, `load_notes`,
   `notes_template`, `P3_FAMILIES`, `WEEK_MODES`; `PLANT_FAMILIES` and `select_week(roles_for=)`

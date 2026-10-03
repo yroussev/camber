@@ -130,6 +130,8 @@ camber = ["py.typed"]
 "camber.energy_factors" = ["*.json"]
 # Public-holiday calendars (camber.calendars, 0.93): one JSON file per country, citing its source.
 "camber.calendars" = ["*.json"]
+# The open-fdd -> CAMBER role crosswalk (camber.interop.openfdd, 0.99): a versioned data file.
+"camber.interop.openfdd" = ["crosswalk.json"]
 
 [tool.ruff]
 line-length = 100
