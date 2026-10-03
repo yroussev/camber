@@ -4,7 +4,7 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## Unreleased
+## [0.92.0] — 2026-10-03
 
 **0.92: detection gaps on the complete catalog data (#11-#17, #50, #64-#67, #69, #71).** New plant detectors
 (boiler combustion efficiency, tower fouling from fan effort, the condenser-water bypass leak), a

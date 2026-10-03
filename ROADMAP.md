@@ -269,8 +269,7 @@ Three stacked releases; `CHANGELOG.md` has the detail.
 Version numbers are given only where a release is already planned.
 
 - **Dataset catalog, the remaining releases.** The next releases:
-  - **0.92 — detection gaps on the complete catalog data** (integrated; `CHANGELOG.md`,
-    Unreleased):
+  - **0.92 — detection gaps on the complete catalog data** (released 2026-10-03):
     - plant detectors: boiler combustion-efficiency drift (#13), tower fouling from fan effort
       (#14) and the condenser-water bypass leak with two new roles (#15), scored on the LBNL plants
       in [PLANT-DETECTORS.md](docs/PLANT-DETECTORS.md);
