@@ -53,6 +53,7 @@ nav:
       - Building health scorecard: SCORECARD.md
       - Site report: SITE-REPORT.md
       - RCx report: RCX-REPORT.md
+      - "References: PNNL Re-tuning": REFERENCES.md  # 096-report (#78)
   - AI-assist:
       - Assisted point mapping: MAPPING-ASSIST.md
       - Grounded explanation & Q&A: AGENT.md

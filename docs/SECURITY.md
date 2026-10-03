@@ -71,7 +71,9 @@ The **read-only HTTP API + live `/ui` dashboard** (`camber serve` / `camber.api.
 (no write endpoints) and binds `127.0.0.1` by default; the `/ui` HTML is served with a strict
 same-origin `Content-Security-Policy` and loads no external asset. It ships **no authentication** —
 binding it to a non-localhost interface (`--host` / `CAMBER_API_HOST`) is your decision, and if you
-do, put it behind your own authenticating reverse proxy / network controls.
+do, put it behind your own authenticating reverse proxy / network controls. The catalog UI,
+`camber lab`, is a separate loopback-only server with its own request checks (§11); it does not
+add a write route to `camber serve`.
 
 ### 4. Secrets and TLS
 
@@ -133,6 +135,14 @@ building networks. Its guarantees:
 - **Workbooks**: `.xlsx` files are parsed only with the optional `xlsx` extra (`openpyxl`,
   imported lazily when a workbook is read), and only after the file has passed its pin check.
   Legacy `.xls` (`xlrd`) is not part of the extra.
+<!-- 096-bts (#75) -->
+- **Pickled series (`bts`)**: one publisher ships its series as Python pickles of numpy arrays.
+  A pickle can run code while loading, so these files are read only after their archive passed
+  its pin check, and only through a restricted unpickler that resolves numpy's array globals
+  (`ndarray`, `dtype`, `_reconstruct`, `_frombuffer`) and refuses every other global; the result
+  must be a name, a datetime array and a numeric array. Members are read from the verified zip in
+  memory (nothing is extracted), and archiver by-products (`__MACOSX/`, `._*`) are skipped.
+<!-- /096-bts -->
 - **Link check**: `scripts/datasets_linkcheck.py` (weekly, advisory, CI only) sends `HEAD` /
   one-byte ranged `GET` requests to the catalog's own HTTPS URLs and licence pages; it downloads
   no data, and its workflow has a read-only token.
@@ -264,6 +274,56 @@ Some outbound connections go only to endpoints the user configures, and they car
 data by design. They are outside this table: Haystack ingest (`ingest.haystack`), the edge
 forwarder's push sink, and ticket webhooks (`integrate.tickets`). Point them only at systems you
 control.
+
+<!-- 096-lab (#77) -->
+### 11. The lab server (`camber lab`, provisional, 0.96)
+
+`camber serve` stays GET-only (§2). `camber lab` is a **separate** local server for the dataset
+catalog: it downloads datasets (§7) and writes them into a store, so it is the one CAMBER server
+that accepts writes. It is built for one person on their own machine:
+
+- **Loopback only.** It binds `127.0.0.1` and has no `--host` option; `make_lab_server` refuses
+  any other address with an error. Use `camber serve` to publish a read-only API on another
+  interface.
+- **DNS-rebinding guard.** Every request's `Host` header must be `127.0.0.1:<port>` or
+  `localhost:<port>`, else 403. A page on another domain that re-points its name at 127.0.0.1
+  therefore gets nothing.
+- **Origin allowlist.** A request that carries an `Origin` must come from one of those two
+  origins, and every POST must carry one. A browser's `Sec-Fetch-Site` other than `same-origin` or
+  `none` is refused. The lab answers no CORS preflight (`OPTIONS` is 405), so no other origin can
+  send it a JSON POST.
+- **CSRF token.** Each run generates a random token, held only in the lab page (which another
+  origin cannot read). Every POST must send it in `X-Camber-Lab-Token`; it is compared with
+  `hmac.compare_digest`.
+- **Narrow writes.** POST accepts only `application/json` (else 415) with a body of at most
+  16 KiB (else 413, decided on the declared length before the body is read; chunked bodies are
+  refused). Unknown fields are refused. The only writes are queueing a fetch or ingest job, and
+  cancelling one, for **catalog ids only**: no URL, path or file name is ever taken from a
+  request. Manual-download entries are not fetched.
+- **Licence gate.** A research-only (NC / ND) dataset is refused with 403 unless the request
+  carries the acknowledgement the modal collects (the user ticks the terms and types the dataset
+  id). As on the CLI, every fetch needs it again. The acceptance goes to the same
+  `acknowledgements.json` ledger, with `via: "lab fetch"`, and reports built from the data carry
+  the do-not-redistribute banner.
+- **Strict CSP.** The lab page allows only its own inline script and stylesheet, pinned by
+  SHA-256 (no `'unsafe-inline'`, no `eval`), and same-origin `fetch`. It has no inline event
+  handlers or `style` attributes, and it sets catalog text only as text, never as HTML. Reports
+  are served **sandboxed** (an opaque origin with no network), so a report cannot call the lab
+  API. Every response carries `nosniff`, `no-referrer`, `no-store` and `frame-ancestors 'none'`.
+- **One worker.** Jobs run one at a time on a single worker thread; at most 20 can be pending
+  (429). Cancelling is safe by construction: a download keeps its `.part` file for a resume, and
+  an ingest stops before its staged data is swapped in.
+- **Workspace.** In a portfolio workspace the dataset facilities follow the lifecycle: they are
+  registered `provisioning`, ingested under the single-writer lock, then activated. Suspended,
+  offboarding and archived facilities are not written. Every fetch, acknowledgement and ingest
+  appends a `lab.*` line to the audit log. The actor is the OS user running the lab (§8).
+- **No OT code.** `camber.lab` and `camber.datasets` import no BACnet, Modbus, OPC-UA, MQTT,
+  OpenADR or edge module, directly or through anything they import. A static test
+  (`tests/test_lab.py`) enforces this.
+
+The lab has no user accounts. Anyone who can run processes as you on the machine can use it,
+exactly as they could run `camber datasets` themselves.
+<!-- /096-lab -->
 
 ## References
 

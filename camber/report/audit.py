@@ -156,6 +156,46 @@ def data_sources_html(sources) -> str:
     return "\n".join(parts)
 
 
+# 0.96 (#78): minimal readable styling carried inside the report fragment -- no external asset,
+# scoped to .camber-report so a host page's own styles are untouched; light and dark schemes
+REPORT_CSS = (
+    ".camber-report{--fg:#1d1d1b;--muted:#5f5f5a;--line:#d6d6d0;--head:#f1f1ee;--acc:#2f5fb3;"
+    "color:var(--fg);font:15px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;"
+    "max-width:1100px;margin:0 auto;padding:16px}"
+    "@media (prefers-color-scheme:dark){.camber-report{--fg:#ececea;--muted:#a3a39c;"
+    "--line:#3a3a36;--head:#26262a;--acc:#8fb0ee}}"
+    ".camber-report h1{font-size:1.5em;line-height:1.25;margin:0 0 .4em}"
+    ".camber-report h2{font-size:1.15em;margin:1.6em 0 .5em;padding-bottom:.2em;"
+    "border-bottom:1px solid var(--line)}"
+    ".camber-report a{color:var(--acc)}"
+    ".camber-report .camber-tw{overflow-x:auto;max-width:100%}"
+    ".camber-report table{border-collapse:collapse;font-size:13.5px;margin:.4em 0}"
+    ".camber-report th,.camber-report td{border:1px solid var(--line);padding:5px 8px;"
+    "text-align:left;vertical-align:top}"
+    ".camber-report th{background:var(--head);font-weight:600}"
+    ".camber-report .camber-refs{font-size:12.5px;color:var(--muted);margin-top:3px}"
+    ".camber-report .camber-scope{color:var(--muted);font-size:13px;margin:0 0 1em}"
+    ".camber-report ul{padding-left:1.3em}.camber-report img{max-width:100%;height:auto}"
+    # at phone width a wide table keeps readable columns and scrolls inside its box
+    "@media (max-width:640px){.camber-report{padding:12px 0}"
+    ".camber-report .camber-tw table{min-width:880px}}"
+)
+
+
+def html_document(body: str, *, title: str = "CAMBER report") -> str:
+    """Wrap a report fragment in a standalone HTML document (charset, viewport, title)."""
+    return (
+        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+        f"<title>{_html.escape(title)}</title></head><body>\n{body}\n</body></html>\n"
+    )
+
+
+def _tw(table_html: str) -> str:
+    """A table inside a horizontal scroller, so a wide table never widens a phone-width page."""
+    return f"<div class='camber-tw'>{table_html}</div>"
+
+
 @dataclass
 class Benchmark:
     """EUI benchmark vs a peer median (Std 211 §5.2.3 / §6.1.3)."""
@@ -207,6 +247,24 @@ class AuditReport:
     # provenance of the data the report was built from (dataset, licence, citation); rendered as a
     # "Data source & licence" block, with a do-not-redistribute banner for research-only data
     data_sources: list = field(default_factory=list)
+    # 0.96 (#78): an explicit title; "" builds one -- the Std-211 title only when the report carries
+    # the Std-211 inputs (see :meth:`is_std211`), else a neutral one
+    title: str = ""
+
+    def is_std211(self) -> bool:
+        """Whether the report carries the inputs a Std-211 audit needs: an EUI benchmark, plus an
+        ECM table at Level 2 and above. A report built from trend data alone (a dataset, a single
+        room) is an analytics report, not a Std-211 audit, and is titled neutrally."""
+        return self.benchmark is not None and (self.level <= 1 or bool(self.ecms))
+
+    def display_title(self) -> str:
+        """The report's title: :attr:`title` when set, else the Std-211 title when
+        :meth:`is_std211`, else a neutral "Building analytics report" title."""
+        if self.title:
+            return self.title
+        if self.is_std211():
+            return f"ASHRAE Std-211 Level {self.level} Audit -- {self.building}"
+        return f"Building analytics report -- {self.building}"
 
     def add_ecm(self, ecm: ECM):
         """Append an ECM row to the report; return self for chaining."""
@@ -251,7 +309,9 @@ class AuditReport:
 
     def to_text(self) -> str:
         """Render the audit report as plain text."""
-        L = [f"ASHRAE Std-211 Level {self.level} Audit -- {self.building}"]
+        from ..references import links_text, reference_ids_for
+
+        L = [self.display_title()]
         if self.climate_zone:
             L.append(f"Climate zone: {self.climate_zone}")
         src = data_sources_text(self.data_sources)
@@ -279,7 +339,11 @@ class AuditReport:
                 summ = getattr(r.finding, "summary", "") or ""
                 if summ:
                     L.append(f"     {summ}")
-        L.append(f"\nEnergy Conservation Measures ({len(self.ecms)}):")
+                refs = links_text(reference_ids_for(rule))
+                if refs:
+                    L.append(f"     learn more: {refs}")
+        if self.ecms:  # 0.96 (#78): an empty section is left out
+            L.append(f"\nEnergy Conservation Measures ({len(self.ecms)}):")
         for i, e in enumerate(self.ranked_ecms(), 1):
             L.append(f"  {i}. [{e.priority.upper()}] {e.name} ({e.affected_system})")
             L.append(f"     finding: {e.finding}")
@@ -333,8 +397,13 @@ class AuditReport:
         findings table. ``recommend=True`` appends a ranked **action plan** ($/yr + advisory
         recommendation per finding; ``loads``/``price`` feed the cost estimate).
         """
+        from ..references import links_html, reference_ids_for
+
         e = _html.escape
-        parts = [f"<h1>ASHRAE Std-211 Level {self.level} Audit &mdash; {e(self.building)}</h1>"]
+        parts = [
+            f"<style>{REPORT_CSS}</style><div class='camber-report'>",
+            f"<h1>{e(self.display_title()).replace(' -- ', ' &mdash; ')}</h1>",
+        ]
         if self.climate_zone:
             parts.append(f"<p><b>Climate zone:</b> {e(self.climate_zone)}</p>")
         src = data_sources_html(self.data_sources)
@@ -362,20 +431,25 @@ class AuditReport:
         rf = self.ranked_findings() if self.findings else []
         if rf:
             parts.append("<h2>Prioritized FDD findings</h2>")
-            parts.append(
+            refs = [links_html(reference_ids_for(getattr(r.finding, "rule", ""))) for r in rf]
+            more = "<th>Learn more</th>" if any(refs) else ""
+            rows = [
                 "<table border='1' cellpadding='4'><tr><th>#</th>"
                 "<th>Severity</th><th>Rule</th><th>Equipment</th>"
-                "<th>Summary</th></tr>"
-            )
-            for r in rf:
+                f"<th>Summary</th>{more}</tr>"
+            ]
+            for r, ref in zip(rf, refs):
                 eq = e(str(getattr(r.finding, "equip", "")))
                 rule = e(str(getattr(r.finding, "rule", "")))
                 summ = e(str(getattr(r.finding, "summary", "") or ""))
-                parts.append(
+                rows.append(
                     f"<tr><td>{r.rank}</td><td>{e(r.severity)}</td>"
-                    f"<td>{rule}</td><td>{eq}</td><td>{summ}</td></tr>"
+                    f"<td>{rule}</td><td>{eq}</td><td>{summ}</td>"
+                    + (f"<td class='camber-refs'>{ref}</td>" if more else "")
+                    + "</tr>"
                 )
-            parts.append("</table>")
+            rows.append("</table>")
+            parts.append(_tw("".join(rows)))
             if rules is not None and frames is not None:
                 imgs = self._evidence_html(rf, rules, frames)
                 if imgs:
@@ -391,25 +465,32 @@ class AuditReport:
                 )
                 parts.append(
                     f"<h2>Recommended actions (ranked by {ranked_by})</h2>"
-                    + action_plan_html(items)
+                    + _tw(action_plan_html(items))
                 )
-        parts.append("<h2>Energy Conservation Measures</h2>")
-        parts.append(
-            "<table border='1' cellpadding='4'><tr><th>#</th><th>Priority</th>"
-            "<th>Measure</th><th>System</th><th>Finding</th>"
-            "<th>Comfort/IAQ</th><th>Savings</th><th>Cost</th></tr>"
-        )
-        for i, m in enumerate(self.ranked_ecms(), 1):
-            parts.append(
-                f"<tr><td>{i}</td><td>{e(m.priority)}</td><td>{e(m.name)}</td>"
-                f"<td>{e(m.affected_system)}</td><td>{e(m.finding)}</td>"
-                f"<td>{e(m.comfort_iaq_impact)}</td><td>{e(m.est_savings)}</td>"
-                f"<td>{e(m.est_cost)}</td></tr>"
-            )
-        parts.append("</table>")
+        if self.ecms:  # 0.96 (#78): an empty ECM table is left out
+            parts.append("<h2>Energy Conservation Measures</h2>")
+            rows = [
+                "<table border='1' cellpadding='4'><tr><th>#</th><th>Priority</th>"
+                "<th>Measure</th><th>System</th><th>Finding</th>"
+                "<th>Comfort/IAQ</th><th>Savings</th><th>Cost</th></tr>"
+            ]
+            for i, m in enumerate(self.ranked_ecms(), 1):
+                rows.append(
+                    f"<tr><td>{i}</td><td>{e(m.priority)}</td><td>{e(m.name)}</td>"
+                    f"<td>{e(m.affected_system)}</td><td>{e(m.finding)}</td>"
+                    f"<td>{e(m.comfort_iaq_impact)}</td><td>{e(m.est_savings)}</td>"
+                    f"<td>{e(m.est_cost)}</td></tr>"
+                )
+            rows.append("</table>")
+            parts.append(_tw("".join(rows)))
         cav = self.all_caveats()
         if cav:
             parts.append(
                 "<h2>Caveats</h2><ul>" + "".join(f"<li>{e(c)}</li>" for c in cav) + "</ul>"
             )
+        parts.append("</div>")
         return "\n".join(parts)
+
+    def to_html_document(self, **kw) -> str:
+        """:meth:`to_html` as a standalone HTML document (see :func:`html_document`)."""
+        return html_document(self.to_html(**kw), title=self.display_title())

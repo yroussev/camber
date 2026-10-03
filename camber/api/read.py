@@ -13,6 +13,38 @@ from __future__ import annotations
 import pandas as pd
 
 
+def _facility_timezone(meta: dict) -> str | None:
+    """The site's IANA zone for a registry entry, when the store or registry records one.
+
+    0.96: the store holds naive wall-clock time, so the trend viewer labels its time axis with
+    this zone. Looked up in order: a ``timezone`` on the registry entry, the dataset-catalog block
+    (``local_timezone`` of a per-site ingest, else ``timezone``), then the catalog entry the
+    facility was ingested from. Anything that is not a valid IANA zone is ignored.
+    """
+    from ..tsparse import check_timezone
+
+    def valid(tz) -> str | None:
+        if not isinstance(tz, str) or not tz.strip():
+            return None
+        try:
+            return check_timezone(tz.strip())
+        except ValueError:
+            return None
+
+    meta = meta or {}
+    block = meta.get("dataset")
+    if not isinstance(block, dict):
+        block = {}
+    for tz in (meta.get("timezone"), block.get("local_timezone"), block.get("timezone")):
+        if valid(tz):
+            return valid(tz)
+    if block.get("dataset_id"):
+        from ..config import _catalog_timezone
+
+        return valid(_catalog_timezone(meta))
+    return None
+
+
 class ReadAPI:
     """Query facade over a :class:`~camber.store.ParquetStore`."""
 
@@ -24,20 +56,23 @@ class ReadAPI:
 
         ``name`` is the registered name (falls back to the id), ``display_name`` the editable one,
         ``state`` the lifecycle state (``"active"`` when unregistered). Read-only: lifecycle
-        changes happen through ``camber facility``, never over HTTP.
+        changes happen through ``camber facility``, never over HTTP. 0.96: a ``timezone`` key
+        (the site's IANA zone) is added only when the store or registry records one.
         """
         meta = self.store.facilities_meta()
         out = []
         for f in self.store.facilities():
             m = meta.get(f) or {}
-            out.append(
-                {
-                    "facility_id": f,
-                    "name": m.get("name") or f,
-                    "display_name": m.get("display_name") or m.get("name") or f,
-                    "state": m.get("state") or "active",
-                }
-            )
+            row = {
+                "facility_id": f,
+                "name": m.get("name") or f,
+                "display_name": m.get("display_name") or m.get("name") or f,
+                "state": m.get("state") or "active",
+            }
+            tz = _facility_timezone(m)
+            if tz:
+                row["timezone"] = tz
+            out.append(row)
         return out
 
     def about(self) -> dict:

@@ -19333,6 +19333,398 @@
      "handling_note": "Metadata only; CAMBER does not ingest the header block."
     }
    ]
+  },
+  {
+   "id": "bts",
+   "title": "BTS Building TimeSeries: three Australian buildings, Brick-labelled, three years",
+   "summary": "Raw building-management-system streams from three real Australian buildings, identified only by city (A Canberra, B Newcastle, C Melbourne), 2021-2023: 19,665 points in the three Brick models (14,422 with a series file), each labelled with a Brick v1.2.1 class and linked to its equipment, sampled about every 10 minutes. The data behind the NeurIPS 2024 BTS benchmark and the Brick by Brick 2024 challenge. No fault labels; the data is published uncleaned.",
+   "teaches": [
+    "point-type inference from time series when the point names are anonymised (the evaluation set of the time-series role suggester)",
+    "Brick owner grouping on real buildings: points to equipment through isPointOf / isPartOf",
+    "false alarms and specificity on real operation, three buildings, three years"
+   ],
+   "publisher": "Prabowo, Lin, Razzak, Xue, Yap, Amos & Salim (CRUISE Research Group, UNSW; CSIRO Data Clearing House; NSW DIEF project)",
+   "citation": "Prabowo, A., Lin, X., Razzak, I., Xue, H., Yap, E. W. J., Amos, M., Salim, F. D. (2024). BTS: Building Timeseries Dataset: Empowering Large-Scale Building Analytics. NeurIPS 2024 Datasets and Benchmarks Track, https://openreview.net/forum?id=6cCFK69vJI (arXiv doi:10.48550/arXiv.2406.08990). Data: BTS: Building Timeseries Dataset: Raw (v3), figshare, doi:10.6084/m9.figshare.28705559.v3.",
+   "dois": [
+    "10.6084/m9.figshare.28705559.v3",
+    "10.48550/arXiv.2406.08990"
+   ],
+   "landing_url": "https://figshare.com/articles/dataset/BTS_Building_Timeseries_Dataset_Raw/28705559",
+   "licence": "CC-BY-4.0",
+   "access": "open",
+   "attribution_required": true,
+   "verified_on": "2026-09-29",
+   "kind": "real",
+   "labeled_faults": false,
+   "timezone": "UTC instants in the published files; ingested on each site's wall clock (A and B Australia/Sydney, C Australia/Melbourne)",
+   "requires_extras": [],
+   "licence_check": {
+    "url": "https://api.figshare.com/v2/articles/28705559",
+    "json_path": "license.name",
+    "expect": "CC BY 4.0"
+   },
+   "equipment": "one facility per site (ds-bts-a, ds-bts-b, ds-bts-c); points grouped into equipment by their Brick owner (air handlers, fan-coil units, VAV boxes, zones, pumps, chillers, plant loops), named <class>_<id prefix>; points with no mapped owner go to the site equipment",
+   "files": [
+    {
+     "name": "Site_A_metadata.csv",
+     "url": "https://ndownloader.figshare.com/files/53352143",
+     "size": 1523881,
+     "sha256": "3df0a64b4b0730c0b4ddd8ac7591f91131f2f5d948b2f59604412eade3e5292a",
+     "pinned": true,
+     "archive": null
+    },
+    {
+     "name": "Site_B_metadata.csv",
+     "url": "https://ndownloader.figshare.com/files/53352146",
+     "size": 136315,
+     "sha256": "9e774ef4eda56635f3c70feb1db01304b93a6d4477822113687e5d50b3df3268",
+     "pinned": true,
+     "archive": null
+    },
+    {
+     "name": "Site_C_metadata.csv",
+     "url": "https://ndownloader.figshare.com/files/53352149",
+     "size": 1492713,
+     "sha256": "a033ed0399a58192ccbeb66528006d161d6ea39ee57366e25194f58890cc0fd4",
+     "pinned": true,
+     "archive": null
+    },
+    {
+     "name": "Site_A.ttl",
+     "url": "https://ndownloader.figshare.com/files/53352152",
+     "size": 3559525,
+     "sha256": "50f01e0af15c6b9ccccff8a388fb0345eba0585d1f461ad1c75add324d4c3da4",
+     "pinned": true,
+     "archive": null
+    },
+    {
+     "name": "Site_B.ttl",
+     "url": "https://ndownloader.figshare.com/files/53352155",
+     "size": 378775,
+     "sha256": "770cc0ddadf6ce7df25963b7d4e9ff1c2840947152f5e27f6e4db8fde9bdf83f",
+     "pinned": true,
+     "archive": null
+    },
+    {
+     "name": "Site_C.ttl",
+     "url": "https://ndownloader.figshare.com/files/53352158",
+     "size": 4835746,
+     "sha256": "a0cd26fe2115b9d918fa7f971c6583f598d36bec5c7e59be8f956bd06175bed9",
+     "pinned": true,
+     "archive": null
+    },
+    {
+     "name": "Site_Aaa.zip",
+     "url": "https://ndownloader.figshare.com/files/53366168",
+     "size": 8475679488,
+     "sha256": "ffc13b3710c66de505678cf5b48e8c7b3d5be97900653c82f48c2f5dfec7e77f",
+     "pinned": true,
+     "archive": "zip"
+    },
+    {
+     "name": "Site_Baa.zip",
+     "url": "https://ndownloader.figshare.com/files/53354039",
+     "size": 1513172125,
+     "sha256": "fade67675e97274075e003c27e411eadc50f17c5fe0cb294bd3569388a517ef8",
+     "pinned": true,
+     "archive": "zip"
+    },
+    {
+     "name": "Site_Caa.zip",
+     "url": "https://ndownloader.figshare.com/files/53386793",
+     "size": 8984334527,
+     "sha256": "fa03a0629fb1da4eb9ef3c430546311470fc9bd8f5e53cfcd76853d535676b5b",
+     "pinned": true,
+     "archive": "zip"
+    }
+   ],
+   "subsets": {
+    "default": {
+     "files": [
+      "Site_A_metadata.csv",
+      "Site_B_metadata.csv",
+      "Site_C_metadata.csv",
+      "Site_A.ttl",
+      "Site_B.ttl",
+      "Site_C.ttl",
+      "Site_Baa.zip"
+     ],
+     "groups": [
+      "B"
+     ],
+     "store_bytes_estimate": 38272714
+    },
+    "full": {
+     "files": "all",
+     "groups": "all",
+     "store_bytes_estimate": 1117802310
+    }
+   },
+   "ingest": {
+    "adapter": "brick_streams",
+    "facility": "ds-bts",
+    "sites": {
+     "A": {
+      "model": "Site_A.ttl",
+      "index": "Site_A_metadata.csv",
+      "series": "Site_Aaa.zip",
+      "source_timezone": "UTC",
+      "local_timezone": "Australia/Sydney"
+     },
+     "B": {
+      "model": "Site_B.ttl",
+      "index": "Site_B_metadata.csv",
+      "series": "Site_Baa.zip",
+      "source_timezone": "UTC",
+      "local_timezone": "Australia/Sydney"
+     },
+     "C": {
+      "model": "Site_C.ttl",
+      "index": "Site_C_metadata.csv",
+      "series": "Site_Caa.zip",
+      "source_timezone": "UTC",
+      "local_timezone": "Australia/Melbourne"
+     }
+    },
+    "index": {
+     "id": "StreamID",
+     "class": "Brick"
+    },
+    "stream_predicate": "stream_id",
+    "series_format": "bts_pickle",
+    "equip_classes": {
+     "Air_Handler_Unit": "AHU",
+     "Air_Handling_Unit": "AHU",
+     "AHU": "AHU",
+     "Fan_Coil_Unit": "FCU",
+     "FCU": "FCU",
+     "VAV": "VAV",
+     "Terminal_Unit": "VAV",
+     "HVAC_Zone": "ZONE",
+     "Zone": "ZONE",
+     "Chilled_Water_Pump": "PUMP",
+     "Hot_Water_Pump": "PUMP",
+     "Pump": "PUMP",
+     "Chiller": "CHILLER",
+     "Boiler": "HW_PLANT",
+     "Hot_Water_System": "HW_PLANT",
+     "Hot_Water_Loop": "HW_PLANT",
+     "Chilled_Water_System": "CHW_PLANT",
+     "Chilled_Water_Loop": "CHW_PLANT",
+     "Evaporative_Heat_Exchanger": "HEAT_EXCHANGER",
+     "Weather_Station": "WEATHER",
+     "Building_Gas_Meter": "METER",
+     "Room": "ZONE",
+     "Conference_Room": "ZONE",
+     "Office": "ZONE",
+     "Hallway": "ZONE",
+     "Library": "ZONE",
+     "Restroom": "ZONE",
+     "Kitchen": "ZONE",
+     "Common_Space": "ZONE",
+     "Enclosed_space": "ZONE",
+     "Open_space": "ZONE",
+     "Shared_space": "ZONE",
+     "Location": "ZONE"
+    },
+    "site_equip": [
+     "site",
+     "SITE"
+    ],
+    "units": {
+     "space_temp": "degC",
+     "supply_air_temp": "degC",
+     "return_air_temp": "degC",
+     "mixed_air_temp": "degC",
+     "supply_air_temp_sp": "degC",
+     "oat": "degC",
+     "wetbulb_temp": "degC",
+     "chw_supply_temp": "degC",
+     "chw_return_temp": "degC",
+     "hw_supply_temp": "degC",
+     "hw_return_temp": "degC",
+     "duct_static": "Pa",
+     "duct_static_sp": "Pa",
+     "filter_diff_press": "Pa",
+     "chw_diff_press": "kPa",
+     "airflow": "L/s",
+     "airflow_sp": "L/s",
+     "chw_flow": "L/s",
+     "hw_flow": "L/s"
+    },
+    "resample": "15min",
+    "hold": "1h",
+    "quirks": [
+     {
+      "op": "mask",
+      "action": "fix",
+      "issue": "site-c-zero-dropouts",
+      "columns": [
+       "space_temp",
+       "supply_air_temp",
+       "return_air_temp",
+       "mixed_air_temp",
+       "supply_air_temp_sp",
+       "oat",
+       "wetbulb_temp",
+       "chw_supply_temp",
+       "chw_return_temp",
+       "hw_supply_temp",
+       "hw_return_temp",
+       "outdoor_rh",
+       "supply_air_humidity",
+       "return_air_humidity",
+       "co2"
+      ],
+      "eq": 0,
+      "runs": [
+       "C"
+      ],
+      "note": "Site C: exact 0.0 samples in temperature, humidity and CO2 streams are dropouts, not readings; masked to missing before the 15-minute resample (a bin mixing 22 and 0 would otherwise read 11)"
+     }
+    ]
+   },
+   "suggested_analyses": {
+    "rules": [],
+    "config_template": "bts.json"
+   },
+   "known_issues": [
+    "Licences: the figshare data record (the files CAMBER fetches) is CC BY 4.0, verified on the record's public API (license.name 'CC BY 4.0'); the GitHub repository's LICENSE is MIT and covers its code and the small repository data snippet (DIEF_B_Snippet50_3weeks.pkl.zip, Site_B.ttl), whose data licence the repository does not state separately. CAMBER fetches only from the data archive, never the repository snippet, and redistributes nothing. The Brick by Brick challenge's 'no external data' rule binds competition entrants only. Cite the NeurIPS 2024 paper and the figshare record.",
+    "The point names are anonymised (UUIDs): the only point semantics are the Brick classes. That is what makes BTS the evaluation set of the time-series role suggester (examples/suggester_eval).",
+    "Roles come from the Brick class alone where the mapping is clean (camber.interop.brick): 1,492 of the 19,665 points, 903 of them with a series file (A 416, B 32, C 455); the rest are counted per class on each facility (unmapped_classes) and never guessed. Many Brick classes here are generic (Point, Status, Mode_Status, Air_Temperature_Sensor under a fan-coil unit) and have no CAMBER role.",
+    "A second point with the same role on the same owner (an air handler's second supply-air sensor, the unowned zone temperatures on a site) becomes its own equipment <equip>-2, -3, ... of the same class, in archive order (duplicate_roles_split): rules see it as a separate piece of equipment.",
+    "Series files are Python pickles of numpy arrays; CAMBER reads them with a restricted unpickler that resolves only numpy's array globals and refuses anything else.",
+    "Site B's archive also holds 16 macOS by-product files (__MACOSX resource forks, .DS_Store); they are skipped.",
+    "Sensor faults are left in place: the publisher states the data was not cleaned, to allow the evaluation of cleaning algorithms (data card). Negative filter pressure drops (5 of site B's 10 filter sensors have a negative median; one never rises above -6.6 Pa) and stuck points are for the sensor-health checks to find."
+   ],
+   "data_issues": [
+    {
+     "id": "timestamps-are-utc",
+     "title": "Timestamps are UTC instants, not local time",
+     "columns": [
+      "timestamps (every series file)"
+     ],
+     "evidence": "The metadata stamps end in 'Z' and the series arrays are naive datetime64; the daily outdoor-air temperature peak falls at 03-04 UTC and the trough at 19 UTC at all three sites (13-15 h and 05-06 h local), so the clock is UTC and was not shifted when the identifiers were anonymised.",
+     "contradicts": {
+      "document": "Data card, Data Fields: t is a 'Numpy array of Timestamp' (no time zone stated)",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "Declared per site as source_timezone UTC and moved to the site's wall clock (A and B Australia/Sydney, C Australia/Melbourne); a DST fall-back hour keeps both readings."
+    },
+    {
+     "id": "units-undocumented",
+     "title": "No unit on any HVAC point",
+     "columns": [
+      "value (temperature, pressure, flow and humidity points)"
+     ],
+     "evidence": "The Brick models carry hasUnit on 1,798 (A), 121 (B) and 1,230 (C) points, all electrical (kW, V, A, kVA, kWh, Hz) or PERCENT/DEG; none on a temperature, pressure or flow point. Levels: zone temperatures have a median of 22.2 C (A), supply static pressures 319 Pa and their setpoints 270-315 Pa (A), filter pressure drops 42-213 Pa (A).",
+     "contradicts": {
+      "document": "Data card, Data Fields: v is a 'Numpy array of Float', 'Field Value' (no unit)",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "CAMBER declares degC for temperatures, Pa for duct static and filter pressure, kPa for chilled-water differential pressure and L/s for air and water flows, from these levels, and converts to IP; the flows and site C's pressures are the least certain (see the other issues and the ingest warnings)."
+    },
+    {
+     "id": "streams-without-series",
+     "title": "Streams listed with samples have no series file",
+     "columns": [
+      "StreamID (Site_B_metadata.csv, Site_A_metadata.csv)"
+     ],
+     "evidence": "The data card counts 14,547 timeseries; the three archives hold 14,422 series files. The 125 missing are site B's 121 streams (listed with 17,321,764 samples in the metadata count column, mostly Point, Mode_Command, Temperature_Parameter and Reset_Command) and site A's 4 streams the README names as intentionally missing. A further 25 (A) and 5,093 of 10,440 (C) listed streams have a count of 0 and no file.",
+     "contradicts": {
+      "document": "Data card, Summary statistics: Number of Timeseries 14 547; metadata files: count per StreamID",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "Counted on each facility (streams_without_file, mapped_without_file); nothing is ingested for them."
+    },
+    {
+     "id": "site-c-outside-documented-period",
+     "title": "Site C's series run outside the documented period",
+     "columns": [
+      "timestamps (site C)"
+     ],
+     "evidence": "427 of the 455 mapped site C streams with a file have samples before 2021-01-01 (from May 2020; the metadata first_t goes back to 2017-06-23 on 4,792 rows) and 440 have samples after 2023-12-31 (to 2024-01-18); sites A and B stay within 2021-2023.",
+     "contradicts": {
+      "document": "Data card, Summary statistics: Start Date 01-01-2021, three-year period",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "Ingested as published; clip site C to 2021-2023 to compare the three sites over one period."
+    },
+    {
+     "id": "shared-outages",
+     "title": "Every stream of a site is silent for weeks at a time",
+     "columns": [
+      "timestamps (all streams of site B; site A, site C)"
+     ],
+     "evidence": "Site B: fewer than 5% of streams log anything on 2021-05-14/15, 2023-06-30 to 07-07, 2023-07-10 to 08-13 (35 days), 2023-10-10 to 10-16 and 2023-10-25 to 11-19 (26 days): 78 days. Site A: one day (2022-03-09). Site C: 2021-02-23 to 25 and 2021-08-31, plus 38 days on which only 5-50% of streams log.",
+     "contradicts": {
+      "document": "Data card, Summary statistics: Duration 1 112 days, over a three-year period",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "Left as gaps: the sample-and-hold resample carries a value for at most 1 hour."
+    },
+    {
+     "id": "site-c-zero-dropouts",
+     "title": "Site C's temperatures, humidities and CO2 drop to exactly 0",
+     "columns": [
+      "value (site C temperature, humidity and CO2 streams)"
+     ],
+     "evidence": "12.5% of all samples of site C's mapped temperature streams are exactly 0.0; 229 of its 230 temperature streams have more than 1% zeros; the zeros come one sample at a time (median run 1 sample, 449,068 runs) between normal readings, and on 115 days more than half the temperature streams read 0. Site A has 0.6% (two dead streams), site B none (every temperature stream's 5th percentile is above 7 C). CO2 and humidity streams at site C have a 5th percentile of exactly 0 as well.",
+     "contradicts": {
+      "document": "Data card, Data Fields: v is the 'Field Value' of the point",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "fix",
+     "handling_note": "Masked to missing at ingest for site C only (quirk mask eq 0), before the 15-minute resample; --no-corrections keeps them."
+    },
+    {
+     "id": "sentinel-and-overflow-values",
+     "title": "Placeholder and overflow values in some streams",
+     "columns": [
+      "value (site A hot-water flow; site C outdoor air, chilled-water return, supply-air setpoint)"
+     ],
+     "evidence": "Site A's 4 hot-water flow streams sit at 4,294,967.3 (2^32 / 1000) or 1,193,046.5 (2^32 / 3600): an unsigned 32-bit -1 scaled, not a flow. Site C: one outdoor-air stream reads 2000 for 35% of its samples (another 1105.8), a chilled-water return 137,300, a supply-air setpoint 500 for 38% of its samples. Site A's 6 outdoor CO2 streams are 0.0 throughout.",
+     "contradicts": {
+      "document": "Data card, Data Fields: v is the 'Field Value' of the point",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "Left in place for the sensor-health checks (range violation, trust); leave these streams out of statistics."
+    },
+    {
+     "id": "site-c-airflow-sign-and-scale",
+     "title": "Site C's airflows are mostly negative and its duct static pressures mix scales",
+     "columns": [
+      "value (site C Discharge_Air_Flow_Sensor, Discharge_Air_Flow_Setpoint, Supply_Air_Static_Pressure_Sensor)"
+     ],
+     "evidence": "45 of 58 discharge airflow streams have a negative 5th percentile, 19 a negative median and 23 never rise above 0; 37 of 38 airflow setpoints hold -50 throughout. Of 18 supply static pressure streams, 14 stay below 30 at their 95th percentile and 4 reach 190-292, the level of site C's own static pressure setpoints (190-290) and of site A's sensors in Pa.",
+     "contradicts": {
+      "document": "Brick v1.2.1 Discharge_Air_Flow_Sensor / Supply_Air_Static_Pressure_Sensor (a flow and a positive duct pressure)",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "annotate",
+     "handling_note": "Ingested as published (L/s and Pa declared for the entry); the airflow rules and ingest warnings flag them. Do not compare site C's airflows or static pressures with sites A and B."
+    },
+    {
+     "id": "non-anonymised-stream-ids",
+     "title": "Some site C points keep a second, non-anonymised stream id",
+     "columns": [
+      "senaps:stream_id (Site_C.ttl)"
+     ],
+     "evidence": "136 of site C's points carry two stream-id literals: the UUID the metadata lists and a second one that is a BMS object path rather than a UUID; sites A and B have one UUID per point.",
+     "contradicts": {
+      "document": "Data card, Collection: identifiers for both the point and the timeseries were anonymised by generating UUIDs",
+      "citation": "Prabowo et al. 2024, BTS data card and README (github.com/cruiseresearchgroup/DIEF_BTS at commit ad1f0d4); paper: NeurIPS 2024 Datasets and Benchmarks, doi:10.48550/arXiv.2406.08990"
+     },
+     "handling": "none",
+     "handling_note": "CAMBER matches points only through the ids the metadata index lists; the second literal is never read into a store or a report."
+    }
+   ]
   }
  ]
 }

@@ -321,10 +321,25 @@ Version numbers are given only where a release is already planned.
       drive the real offboard / archive / purge transitions. Fixes found on the way: repeated
       partition migration, late uploads into rolled-up months, archived-write refusal, and purge
       of quarantined uploads.
-  - **0.96** — `camber lab`, a loopback-only local catalog UI (`camber serve` stays GET-only); the
-    BTS catalog entry (#75) and a time-series point-type suggester evaluated on it (#45); the
-    fault-lifecycle cross-site fix (#76).
-  - **0.97** — education: worked exercises and learning docs on the catalog datasets.
+  - **0.96 — `camber lab`, BTS and the point-role suggester, report fixes** (released
+    2026-10-03). Closes #75, #45, #76, #77 and #78:
+    - [x] #77 `camber lab`, a loopback-only local catalog UI with fetch and ingest jobs, the
+      research-only acknowledgement and workspace registration (`camber serve` stays GET-only);
+    - [x] #75 the BTS catalog entry (three real buildings, Brick-labelled) and the
+      `brick_streams` ingest adapter;
+    - [x] #45 time-series evidence for point-role suggestion, evaluated on BTS with the names
+      hidden, on real published point names and on synthetic vendor-style names (no gated
+      benchmark);
+    - [x] #76 a site-keyed fault run no longer resolves other sites' faults;
+    - [x] #78 recommended actions follow the cause, trend-only reports are titled "Building
+      analytics report", a trend viewer with one panel per unit, and linked PNNL Building
+      Re-tuning references;
+    - [x] integration: the trend viewer shows site time labelled with the facility's zone (a UTC
+      toggle; UTC when no zone is recorded) and count units (`occupancy` in persons).
+  - **0.97 — next: the PNNL re-tuning workbook** (#79–#83): the workbook framework (curriculum
+    map, exercise template, instructor keys, answer-key tests, catalog exercise links, #79), then
+    the air side (#80), terminal units and ventilation (#81), the central plant (#82), and data
+    quality, energy charting, M&V and the capstone (#83), worked on the catalog datasets.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'

@@ -70,7 +70,7 @@ LICENCES = {
 }
 ACCESS = ("open", "research_only")
 KINDS = ("simulated", "real", "lab")
-ADAPTERS = ("wide_csv", "bdg2", "per_point")
+ADAPTERS = ("wide_csv", "bdg2", "per_point", "brick_streams")
 ARCHIVES = ("zip", "tar")
 #: How CAMBER handles a problem in the published data: correct it at ingest (a ``fix`` quirk, which
 #: ``--no-corrections`` skips), leave it in place and say so, keep the affected runs / columns out
@@ -932,6 +932,10 @@ def _check_entry(d: dict, deny: list, errs: list) -> None:
         from ._perpoint import check_spec
 
         check_spec(did, d.get("ingest") or {}, file_names, d.get("subsets") or {}, errs)
+    if (d.get("ingest") or {}).get("adapter") == "brick_streams":  # 0.96 (#75)
+        from ._brickstreams import check_spec as check_streams
+
+        check_streams(did, d.get("ingest") or {}, file_names, d.get("subsets") or {}, errs)
     _check_subsets(did, d, file_names, run_ids, errs)
     _check_targets(did, d, errs)
     _check_issues(did, d, run_ids, errs)

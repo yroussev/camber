@@ -515,6 +515,61 @@ temperature in place of the station series, Building 2's 2018 chain reads 0.829 
 Building 1's 1.002 ± 0.049. Building 1's forecast moves from 1.066 to 1.028, so on that building the
 forecast depends on the weather source and the chain does not.
 
+<!-- 096-bts (#45) -->
+## Point-role suggestion: real point names, anonymised names, synthetic names
+
+The scripts are in `examples/suggester_eval/`. None of these figures is a gated benchmark.
+
+**Real BMS point names** (`real_names.py`). Every mapped point of seven open real-building
+catalog datasets is scored by its published name:
+
+- `lbnl-b59` (Luo et al. 2022)
+- `irish-ahu` (Ahern et al. 2023)
+- `nuig-ahu101` (Messervey et al. 2019)
+- `robod` (Tekler et al. 2022)
+- `b4b-windesheim` (ter Hofte et al. 2023)
+- `sdu-ou44` (Schwee et al. 2019)
+- `ornl-frp-ops` (Yoon et al. 2022)
+
+The labels are each dataset's catalog mapping, hand-curated by CAMBER. The name tokenizer was
+written against the `irish-ahu` names and partly the `lbnl-b59` ones, so those two are
+in-sample for the name.
+
+| real buildings | points | name only top-1 / top-3 % | data only top-1 / top-3 % | name + data top-1 / top-3 % |
+|---|---|---|---|---|
+| pooled, all seven | 422 | 82.5 / 82.9 | 38.9 / 54.7 | 83.9 / 89.1 |
+| pooled, excluding the in-sample two | 129 | 52.7 / 53.5 | 43.4 / 58.9 | 58.1 / 72.9 |
+| LBNL simulated FDD sets (reported apart) | 72 | 48.6 / 58.3 | 23.6 / 37.5 | 56.9 / 66.7 |
+
+On real names, adding the data changed the top-1 result of 16 points: it helped 11 (room
+temperatures whose names read as outdoor, unreadable VAV discharge temperatures) and hurt 5
+(weather-station outdoor temperature and humidity, one heating valve).
+
+**BTS, anonymised names** (`bts.py`; Prabowo et al., NeurIPS 2024 Datasets and Benchmarks,
+doi:10.48550/arXiv.2406.08990; three Australian buildings, 903 points, leave one building out).
+The rows marked *Brick-class labels used as names* are an **upper bound, not real-world naming**:
+BTS publishes no point names, and the Brick class text is effectively the label.
+
+| method | names | top-1 % | top-3 % |
+|---|---|---|---|
+| name only (0.95 default) | anonymised | 0.0 | 0.0 |
+| data only, role templates | anonymised | 48.0 | 65.2 |
+| data only, fitted on the other two buildings | anonymised | 38.4 | 58.8 |
+| name only (0.95 default) | Brick-class labels used as names (upper bound, not real-world naming) | 93.0 | 97.2 |
+| name + data (`use_timeseries=True`) | Brick-class labels used as names (upper bound, not real-world naming) | 95.2 | 99.9 |
+
+The template rows are optimistic, because the templates were adjusted while looking at these
+results. The fitted rows are the out-of-sample reference.
+
+**Synthetic vendor-style names** (`messy_names.py`). A seeded generator names the BTS points in
+five styles, from `AHU1_SAT` to `ahu_03_supply_temp`. The name alone places 25-88 % first, and
+the name with the data places 52-91 % first. These figures are synthetic and are never pooled
+with the real ones.
+
+Per-dataset tables, confusions, leakage notes and attribution:
+[MAPPING-ASSIST.md](MAPPING-ASSIST.md#evaluation).
+<!-- /096-bts -->
+
 ## Cross-validation vs an independent implementation
 
 The ASHRAE G36 fault-condition equations (FC1–FC15) are cross-validated against the

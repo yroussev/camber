@@ -84,7 +84,7 @@ Adapters normalize any source to named point series on a common time grid (`Sour
 Rule engine (`rules.base.Registry`, `rules.builtin.builtin_registry`); each rule consumes a
 role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, mapping, min_trust=…)`.
 
-- **Air-side (G36 + PNNL Re-tuning)** — simultaneous heat/cool, reheat (penalty + G36 minimization),
+- **Air-side (G36 + [PNNL Re-tuning](REFERENCES.md))** — simultaneous heat/cool, reheat (penalty + G36 minimization),
   SAT reset, overcooling (min-flow + severity), economizer / OA-fraction (incl. under-ventilation),
   night/weekend setback, duct-static, zone census, and **unmet-setpoint hours** (`unmet_setpoint_hours`
   — occupied space temp outside the heating/cooling band, the operator-facing comfort/capacity

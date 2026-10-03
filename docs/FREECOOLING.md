@@ -32,3 +32,9 @@ mechanical cooling runs (`cooling_signal > active_thresh`). With `cooling_kw` th
 is summed; `recover_frac` is the share an economizer could offset; `price_per_kwh` (caller-supplied)
 values it. Without power the result is hours-only; without a price the energy is reported and savings
 is NaN — nothing is fabricated. Pairs with `camber.fault_economics` (fault → dollars).
+
+## Further reading
+
+PNNL's [Air-Side Economizer Operation](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_86706.pdf) guide (PNNL-SA-86706) and training
+[chapter 6](https://www.pnnl.gov/sites/default/files/media/file/ch6_economizer.pdf) back the economizer rules (`outdoor_air_fraction`,
+`economizer_high_limit`, `free_cooling_missed`); links only, see [References](REFERENCES.md).

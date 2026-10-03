@@ -33,6 +33,7 @@ headers repeat, and the screen-only table of contents is hidden in print.
 | P6 | Air distribution | Duct static by hour of day (fan-on samples only) and any static-reset findings. Omitted when there is no duct static. |
 | P7 | M&V and drift | The drift report and the `mv_baseline` results, including declines. Omitted when neither ran. |
 | P8+ | One page per issue | $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
+| — | Further reading | 0.96 (#78): the [PNNL Re-tuning guides and chapters](REFERENCES.md) relevant to this report's issues only, guides first, as links (nothing reproduced). Each issue page also ends its recommended action with **Learn more** links, and `to_dict()` carries each issue's `references` ids. Section id `reading`; no engineer-note slot. |
 | A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: fact index (reserved). E: orphaned engineer notes. |
 
 ## Issues: grouping, dollars and hours
@@ -168,7 +169,7 @@ slots.json` writes an empty entry for every slot. `--lifecycle` also pulls each 
   "loads": {"AHU-1": {"heating_capacity_kbtuh": 400, "fan_kw": 15}},
   "rcx": {
     "top_n": 8, "week": "evidence", "paper": "letter", "chart_format": "png",
-    "sections": ["cover", "summary", "data", "week", "economizer", "sat", "air", "mv", "issues", "appendix"],
+    "sections": ["cover", "summary", "data", "week", "economizer", "sat", "air", "mv", "issues", "reading", "appendix"],
     "price": {"electricity_per_kwh": 0.14, "gas_per_therm": 1.10},
     "occupancy": {"start_hour": 6, "end_hour": 20, "days": [0, 1, 2, 3, 4, 5]},
     "oat_reference": {"csv": "weather/oat_reference.csv"},

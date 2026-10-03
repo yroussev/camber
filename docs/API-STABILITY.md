@@ -452,6 +452,57 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   - the CLI `camber edge compact | decommission | reconcile | land | quarantine |
     record-retirement | bucket-rules`.
 <!-- /095-edge -->
+<!-- 096-lab (#77) -->
+- **`camber.lab`** (added in 0.96, provisional, #77) -- the loopback-only catalog UI: `LabApp`,
+  `LabError`, `dispatch_lab`, `make_lab_server`, `serve_lab`, `Job`, `JobQueue`, `JobCancelled`,
+  and the constants `LAB_HOST`, `DEFAULT_PORT`, `BODY_LIMIT` and `TOKEN_HEADER`; the HTTP routes
+  `GET /lab`, `/lab/catalog`, `/lab/jobs[/<id>]`, `/lab/reports/<fid>` and
+  `POST /lab/jobs/fetch|ingest`, `/lab/jobs/<id>/cancel`, with their JSON bodies; the audit
+  actions `lab.fetch`, `lab.acknowledge` and `lab.ingest`; and the `camber lab` command. The page's
+  markup and the catalog-view JSON may change with the exercises. Also additive: the internal
+  `via=` of `camber.datasets._ops.fetch_dataset` (the ledger records `"lab fetch"`), and the
+  `/ui?facility_id=` deep link of the live viewer. `camber serve` and `camber.api.server.dispatch`
+  are unchanged and stay GET-only.
+<!-- /096-lab -->
+<!-- 096-report (#78) -->
+- **`camber.references`** (added in 0.96, provisional, #78) -- the linked-reference registry:
+  `Reference`, `REFERENCES`, `RULE_REFERENCES`, the kind constants (`GUIDE`, `TRAINING`,
+  `TOOL_GUIDE`, `REPORT`, `PROJECT`, `RELATED_TOOL`, `KINDS`), `reference`, `references_for`,
+  `reference_ids_for`, `references_for_findings`, `reference_urls`, `links_html` and
+  `links_text`. Reference ids are stable; titles, the rule map and `verified_on` dates are data
+  and change as the publisher moves documents. Also additive and provisional in 0.96:
+  `Recommendation.references` (and the `references` key of `action_plan_rows` rows and of each
+  RCx issue in `RcxReport.to_dict()`), the `DEFAULT_PARAMS` keys `dcv_*`, `chw_low_dt_warn_pct`
+  and `pump_near_*_warn_pct`, `AuditReport.title` / `is_std211()` / `display_title()` /
+  `to_html_document()`, `camber.report.audit.html_document` and `REPORT_CSS`, the config keys
+  `report.title` and `report.ecms`, the RCx section id `reading`, and
+  `camber.api.ui.role_units`. The **text** of recommendations and report titles is presentation,
+  not API: it follows the finding's cause and may be reworded.
+<!-- /096-report -->
+<!-- 096-bts (#75) -->
+- **The `bts` catalog entry and the `brick_streams` adapter** (0.96; #75), additive and
+  provisional: the catalog id `bts` and its facilities `ds-bts-a|b|c`; the ingest keys of
+  `"adapter": "brick_streams"` (`sites` with `model` / `index` / `series` / `source_timezone` /
+  `local_timezone`, `index.id` / `index.class`, `stream_predicate`, `series_format:
+  "bts_pickle"`, `equip_classes`, `site_equip`, `hold`) and a subset's `groups` of site keys; the
+  provenance keys `site`, `streams_listed`, `series_files`, `streams_without_file`,
+  `streams_by_status`, `streams_mapped`, `streams_ingested`, `mapped_without_file`,
+  `duplicate_roles_split`, `unmapped_classes`; the equipment ids `<class>_<id prefix>` and
+  `<equip>-<n>`.
+- **Time-series point-role evidence** (0.96; #45), additive and provisional: the module
+  `camber.mapping_timeseries` (`SeriesProfile`, `profile_series`, `RoleTemplate`,
+  `ROLE_TEMPLATES`, `UNIT_SCALES`, `template_scores`, `ProfileModel`, `PROFILE_FEATURES`, `blend`,
+  `INFORMATIVE_NAME`, `TS_WEIGHT_UNINFORMATIVE`, `TS_WEIGHT_INFORMATIVE`); the keyword-only
+  `use_timeseries=`, `oat=` and `model=` of `FeatureSuggester` and `oat=` / `profile=` of
+  `FeatureSuggester.suggest`; the `RoleSuggestion.basis` value `timeseries`. The template
+  contents and the blend weights may be retuned in a minor release.
+<!-- /096-bts -->
+<!-- 096-integration -->
+- **The trend viewer's site time** (0.96), additive and provisional: the `timezone` key of a
+  `/facilities` row (and of `ReadAPI.facilities()`), present only when the facility's zone is
+  recorded, and the viewer's **UTC** toggle. The count units in `camber.api.ui.role_units`
+  (`occupancy` persons, request and stage roles) are display data and may be extended.
+<!-- /096-integration -->
 
 ## Deprecated
 
