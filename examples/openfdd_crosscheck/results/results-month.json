@@ -3,7 +3,7 @@
  "window": "month",
  "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
  "versions": {
-  "camber": "0.91.0 at commit be4adea (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
+  "camber": "0.98.0 at commit b5c4b91 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
   "role_map": "1",
   "profiles": "2",
   "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
@@ -999,23 +999,17 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 11,
+       "fn": 0,
        "fp": 0,
-       "tn": 7,
-       "tpr": 0.0,
-       "tpr_ci": [
-        0.0,
-        0.2588
-       ],
-       "fpr": 0.0,
-       "fpr_ci": [
-        0.0,
-        0.3543
-       ],
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 177,
-         "evaluated on fewer than 24 h": 4
+         "not applicable: its operating states never occurred": 198,
+         "evaluated on fewer than 24 h": 1
         }
        }
       },
@@ -4395,23 +4389,17 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 11,
+       "fn": 0,
        "fp": 0,
-       "tn": 7,
-       "tpr": 0.0,
-       "tpr_ci": [
-        0.0,
-        0.2588
-       ],
-       "fpr": 0.0,
-       "fpr_ci": [
-        0.0,
-        0.3543
-       ],
+       "tn": 0,
+       "tpr": null,
+       "tpr_ci": null,
+       "fpr": null,
+       "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 14,
-         "evaluated on fewer than 24 h": 4
+         "not applicable: its operating states never occurred": 35,
+         "evaluated on fewer than 24 h": 1
         }
        }
       },
@@ -5845,22 +5833,19 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 13,
+       "fn": 0,
        "fp": 0,
-       "tn": 9,
-       "tpr": 0.0,
-       "tpr_ci": [
-        0.0,
-        0.2281
-       ],
+       "tn": 1,
+       "tpr": null,
+       "tpr_ci": null,
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2992
+        0.7935
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 177
+         "not applicable: its operating states never occurred": 198
         }
        }
       },
@@ -9225,22 +9210,19 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 13,
+       "fn": 0,
        "fp": 0,
-       "tn": 9,
-       "tpr": 0.0,
-       "tpr_ci": [
-        0.0,
-        0.2281
-       ],
+       "tn": 1,
+       "tpr": null,
+       "tpr_ci": null,
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2992
+        0.7935
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 14
+         "not applicable: its operating states never occurred": 35
         }
        }
       },

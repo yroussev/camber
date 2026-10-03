@@ -143,6 +143,32 @@ profiles, carpet plots and change-point M&V cover the same ground in Python. See
    scheduling, COV) as a **design reference**. No `volttron-*` dependency; if any snippet is ever
    adapted, its Apache-2.0 NOTICE/attribution is retained.
 
+## For open-fdd users
+
+If you come from [open-fdd](https://github.com/bbartling/open-fdd) (MIT), these are the four
+places where the two projects meet. Every result is labelled with the engine and version that
+produced it, and neither project imports the other's code: the exchange is files and processes.
+
+| What | Where | Engines and versions |
+|---|---|---|
+| **G36 cross-check**: CAMBER's `g36_afdd` and open-fdd's two rule engines scored side by side on the same labelled open data | [`examples/openfdd_crosscheck`](https://github.com/yroussev/camber/tree/main/examples/openfdd_crosscheck) (harness, role map, tolerance profiles), [`results/`](https://github.com/yroussev/camber/tree/main/examples/openfdd_crosscheck/results), and the write-up [below](#re-compared-against-open-fdd-449-2026-09) | CAMBER `g36_afdd` (0.99); open-fdd pandas engine (PyPI 4.4.9) and SQL engine `fdd_cli`, both from commit `32a6d44` |
+| **Reading open-fdd data**: an importer for the building package and the historian Parquet layout, a versioned role crosswalk, and a draft findings-exchange JSON that hands CAMBER's results back | [INTEROP-OPENFDD.md](INTEROP-OPENFDD.md), with the [findings-exchange schema (draft 0.1)](INTEROP-OPENFDD.md#findings-exchange-schema-draft-01) | CAMBER `camber.interop.openfdd` (0.99, provisional); open-fdd `openfdd_package_v1` and the crosswalk's pinned docs commit |
+| **Shared M&V test vectors**: change-point and bill cases with expected outputs, checkable without installing CAMBER | [`examples/mv_vectors`](https://github.com/yroussev/camber/tree/main/examples/mv_vectors) and the [section below](#open-fdds-ecm-tooling-and-the-shared-mv-vectors) | CAMBER M&V (0.98); schema `mv_vectors/1`; any engine that reads CSV or Parquet |
+| **Open questions for the open-fdd author** | [Questions for open-fdd](INTEROP-OPENFDD.md#questions-for-open-fdd) | — |
+
+The questions, in short:
+
+1. **Time zone and units**: a stable, documented place for a building's IANA zone and unit
+   system.
+2. **Historian layout**: whether the Parquet layout is stable enough for an external reader, and
+   whether `equipType` could travel with it.
+3. **Vocabulary**: whether point names seen in packages but not in the quick reference belong to
+   the vocabulary, and which SQL roles they map to.
+4. **Weather**: whether a weather folder always carries a points map.
+5. **Commands**: a declared way to tell 0/1 commands from percentages.
+
+Corrections and answers are welcome on [#22](https://github.com/yroussev/camber/issues/22).
+
 ## Cross-validation: G36 fault conditions vs. open-fdd
 
 Our G36 AHU fault engine (`camber.fdd_g36`) is a clean-room implementation of the
@@ -275,8 +301,9 @@ harness,
 - **open-fdd:** commit `32a6d44` (VERSION 3.5.58). PyPI `open-fdd` 4.4.9 was released from this
   commit, and the wheel's `open_fdd/` tree is identical to it. The SQL engine is `fdd_cli` built
   from the same commit. The newest repository tag, v3.2.8, is older.
-- **CAMBER:** `g36_afdd` on the 0.98 development line (with #94), at the G36 defaults plus each
-  dataset's run-template parameters: `min_oa_pct` 1.6 on `lbnl-sdahu`, which enables FC6.
+- **CAMBER:** `g36_afdd` on the 0.99 development line (with #94 and #95; the results files record
+  the version string 0.98.0 and the commit), at the G36 defaults plus each dataset's run-template
+  parameters: `min_oa_pct` 1.6 on `lbnl-sdahu`, which enables FC6.
 - **Role mapping and profiles:** role map version 1, profiles version 2.
 - **Python requirement:** the 4.4.9 wheel declares Python ≥ 3.10 but needs 3.11 or newer (it
   imports `enum.StrEnum`).
@@ -401,6 +428,21 @@ from TPR 0.60 with FPR 7/12 (all FC9) to TPR 0.68 with FPR 0/12.
 
 On `lbnl-ddahu`, FC12 moves from 0/2 to 1/2, and nothing else changes.
 
+**CAMBER since #95 (0.99).** Heating (OS#1) now also needs the OA damper at its minimum, judged
+against the same minimum and tolerance as free cooling. The open-fdd results are unchanged
+(same engines, same pin), and so is every CAMBER verdict on `lbnl-sdahu`, which has no heating
+coil. On `lbnl-ddahu` the hot deck heats while the OA damper command sits well above the learned
+28 % minimum (median 55 % on the fault-free run), so those hours are now OS#5. CAMBER's FC5, the
+one heating-only test the mapping can run there, changes as follows:
+
+| `lbnl-ddahu` | Before (0.98) | After (0.99) |
+|---|---|---|
+| FC5, one case per run | evaluated on all 3 runs (863–1,442 h), never fired: 0/2, FPR 0/1 | not evaluated on any run: no OS#1 hours on the two stuck-damper runs, 0.5 h on the fault-free run |
+| FC5, month windows | 0/11, FPR 0/7 | not evaluated |
+| Any FC | 1/2 detected, 0/1 false alarms | unchanged |
+
+FC5 never fired on this unit before #95, so no detection changes.
+
 #### Not evaluated, and why
 
 `lbnl-sdahu`:
@@ -423,6 +465,7 @@ On `lbnl-ddahu`, FC12 moves from 0/2 to 1/2, and nothing else changes.
 | FC14 | open-fdd pandas | No coil temperatures. |
 | FC14 | open-fdd SQL | Evaluated: falls back to MAT/SAT. |
 | FC6 | all | No minimum OA is given. |
+| FC5 | CAMBER | Since #95: the hot deck heats with the OA damper above its learned minimum, so there are no OS#1 hours to judge (0.5 h on the fault-free run). |
 
 #### SQL engine: the source-reading findings, tested
 
@@ -502,8 +545,9 @@ These are behaviour differences, each traced to a cause on public code and open 
   site setting, not a tolerance, so it is not part of either profile.
 - **FC5 on a dual-duct unit (both open-fdd engines).** The open-fdd FC5 tests "heating
   commanded" without excluding simultaneous cooling. CAMBER evaluates FC5 only in OS#1, so the
-  dual-duct hours with both decks active are excluded. The open-fdd FC5 fires on 18–23 % of the
-  DDAHU fault-free run's hours.
+  dual-duct hours with both decks active are excluded. Since #95 the hot-deck hours with the OA
+  damper above its minimum are excluded too, which leaves CAMBER's FC5 not evaluated on this
+  unit. The open-fdd FC5 fires on 18–23 % of the DDAHU fault-free run's hours.
 - **Denominators.** CAMBER divides by the hours in the FC's G36 operating states, after
   ModeDelay. The pandas engine divides by the fan-proven hours after its startup delay. The SQL
   FC rules report fault hours only, so the harness divides by the fan-on hours of the frame. Each

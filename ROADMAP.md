@@ -378,10 +378,23 @@ Version numbers are given only where a release is already planned.
       moves), S2 the healthy synthetic chilled-water reset runs the right way (no key moves), S3
       `actuator_stuck` as a scored synthetic rule (46 scored rules, new TPR/FPR keys), S4 a
       declared, never-stored drift reference.
+  - **0.99 — open-fdd interop and G36 heating at minimum OA** (integrated; not yet released).
+    Builds #22 items 1–4 and closes #95:
+    - [x] #22 item 1, the G36 cross-check: CAMBER `g36_afdd` against open-fdd's pandas and SQL
+      engines (commit `32a6d44`, PyPI 4.4.9) on `lbnl-sdahu` and `lbnl-ddahu`, with a reusable
+      harness, synthetic probes and committed results;
+    - [x] #22 item 2, the importer: `camber interop openfdd` reads an open-fdd building package
+      or its historian Parquet layout into a store or workspace;
+    - [x] #22 item 3, a findings-exchange JSON (draft 0.1), engine-labelled;
+    - [x] #22 item 4, a versioned open-fdd → CAMBER role crosswalk;
+    - [x] #95 G36 heating (OS#1) needs the OA damper at its minimum, like free cooling (#94);
+    - [x] integration: the cross-check re-run with #95, and a "For open-fdd users" entry point in
+      `docs/ECOSYSTEM.md`.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
-- **Parked — open-fdd integration (#22):** a proposal waiting for the open-fdd maintainers'
-  feedback; nothing is built.
+- **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
+  boundary; the shared findings format and the crosswalk stay drafts until the open-fdd
+  maintainers have reviewed them.
 - **On hold — an MCP server** for CAMBER.
 
 

@@ -8,6 +8,18 @@ All notable changes to CAMBER are documented here. The format follows
 
 <!-- Each 0.99 branch adds its bullets only inside its own marked block. -->
 
+**0.99: open-fdd interop and G36 heating at minimum OA (#22 items 1–4, #95).** CAMBER and
+[open-fdd](https://github.com/bbartling/open-fdd) now meet at a file and process boundary, with
+every result labelled by the engine and version that produced it. A reusable cross-check (#22
+item 1) scores CAMBER's `g36_afdd` and open-fdd's pandas and SQL engines (commit `32a6d44`, PyPI
+4.4.9) on the same labelled LBNL air-handler data, and explains each difference from public code
+and open data. An importer (#22 item 2) reads an open-fdd building package or historian layout
+into a CAMBER store, so drift, M&V and sensor-trust checks can run on data collected at the
+open-fdd edge. Columns map through a versioned role crosswalk (#22 item 4), and the results go
+back as a draft findings-exchange JSON (#22 item 3). `docs/ECOSYSTEM.md` opens with an entry
+point for open-fdd users. In `g36_afdd`, heating (operating state 1) now needs the OA damper at
+its minimum, the companion of #94's free-cooling test (#95).
+
 ### Added
 <!-- 099-openfdd-crosscheck -->
 - **G36 cross-check against current open-fdd (#22 item 1).** `examples/openfdd_crosscheck`
