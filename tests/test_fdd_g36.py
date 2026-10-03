@@ -431,3 +431,83 @@ def test_occupied_mask_excludes_unoccupied_hours():
 
     with pytest.raises(ValueError, match="occupied"):
         run_g36_afdd(df, "AHU", occupied=occ[:10])
+
+
+# ---- 0.99 (#95): heating (OS#1) needs the OA damper at its minimum ----
+
+
+def test_os_heating_needs_the_damper_at_its_minimum():
+    # heating coil alone: OS#1 only with the OA damper at or below minimum + tolerance (5 points)
+    assert classify_os(hc=40, cc=0, oa_damper=12, oa_damper_min=10) == OS_HEATING
+    assert classify_os(hc=40, cc=0, oa_damper=15, oa_damper_min=10) == OS_HEATING  # at the edge
+    assert classify_os(hc=40, cc=0, oa_damper=16, oa_damper_min=10) == OS_UNKNOWN
+    assert classify_os(hc=40, cc=0, oa_damper=60, oa_damper_min=10, oa_damper_tol=0) == OS_UNKNOWN
+    assert classify_os(hc=40, cc=0, oa_damper=0) == OS_HEATING  # closed, minimum 0 %
+    assert classify_os(hc=40, cc=0, oa_damper=float("nan")) == OS_UNCLASSIFIED
+    assert classify_os(hc=40, cc=0) == OS_HEATING  # no damper point: the valves-only reading
+    # simultaneous heating and cooling stays OS#5 whatever the damper does
+    assert classify_os(hc=40, cc=40, oa_damper=10, oa_damper_min=10) == OS_UNKNOWN
+
+
+def _heating_frame():
+    """Full heating with SAT short of its setpoint (FC7). Hours 0-11 hold the OA damper at a 20 %
+    minimum; hours 12-23 open it to 70 % (heating while the economizer is open). The cooling valve
+    runs at 60 % on minimum OA for the first 30 h, so the minimum is learned."""
+    idx = pd.date_range("2026-01-05", periods=24 * 3, freq="1h")
+    cooling = idx < idx[30]
+    open_oa = ~cooling & (idx.hour >= 12)
+    return (
+        pd.DataFrame(
+            {
+                "FS": 100.0,
+                "HC": np.where(cooling, 0.0, 100.0),
+                "CC": np.where(cooling, 60.0, 0.0),
+                "OA_Damper": np.where(open_oa, 70.0, 20.0),
+                "SAT": np.where(cooling, 55.0, 80.0),
+                "SATSP": np.where(cooling, 55.0, 95.0),
+                "MAT": 60.0,
+                "RAT": 70.0,
+                "OAT": 40.0,
+            },
+            index=idx,
+        ),
+        cooling,
+        open_oa,
+    )
+
+
+def test_heating_with_the_economizer_open_is_not_os1():
+    df, cooling, open_oa = _heating_frame()
+    r = run_g36_afdd(df, "AHU", keep_masks=True, mode_delay_min=0, alarm_delay_min=0)
+    assert r.oa_damper_min == 20.0 and r.oa_damper_min_source.startswith("learned")
+    heat_min = ~cooling & ~open_oa
+    assert r.n_heating_above_min_oa == int(open_oa.sum())
+    assert r.os_distribution[OS_HEATING] == int(heat_min.sum())
+    assert r.os_distribution[OS_UNKNOWN] == int(open_oa.sum())
+    # FC7 is judged only on the heating hours at minimum OA
+    assert r.fault_n_applicable[7] == int(heat_min.sum())
+    assert not r.masks.loc[open_oa, "FC7_app"].any()
+    assert r.fault_pct[7] > 95
+    # vectorized and scalar classifiers agree interval by interval
+    for t, row in df.iterrows():
+        assert r.masks.loc[t, "os"] == classify_os(
+            row["HC"], row["CC"], row["OA_Damper"], oa_damper_min=r.oa_damper_min
+        )
+    # without a damper point every heating hour is OS#1, as before 0.99
+    legacy = run_g36_afdd(df.drop(columns="OA_Damper"), "AHU", mode_delay_min=0, alarm_delay_min=0)
+    assert legacy.os_distribution[OS_HEATING] == int((~cooling).sum())
+    assert legacy.n_heating_above_min_oa == 0
+    assert any("heating (OS#1)" in c for c in legacy.caveats)
+
+
+def test_heating_with_a_missing_damper_reading_is_unclassified():
+    df, cooling, open_oa = _heating_frame()
+    df.loc[open_oa, "OA_Damper"] = np.nan
+    r = run_g36_afdd(df, "AHU", oa_damper_min=20.0)
+    assert r.oa_damper_min_source == "caller"
+    assert r.n_unclassified == int(open_oa.sum())
+    assert r.n_heating_above_min_oa == 0
+    # a caller minimum of 70 % puts the open hours at the minimum: all heating hours are OS#1
+    df2, cooling2, _ = _heating_frame()
+    r2 = run_g36_afdd(df2, "AHU", oa_damper_min=70.0)
+    assert r2.os_distribution[OS_HEATING] == int((~cooling2).sum())

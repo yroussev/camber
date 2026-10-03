@@ -257,6 +257,8 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   minimum position, not just both valves shut: a fan-on hour at minimum OA with both coils idle (a
   deadband hour, an unoccupied recirculation run) is OS#5, where only FC1-FC4 apply. The minimum
   is `oa_damper_min`, learned by default from the unit's mechanical-cooling hours at minimum OA.
+  Since 0.99 (#95) heating (OS#1) likewise needs the OA damper at that minimum: a heating hour
+  with the damper open beyond it is OS#5.
   Unoccupied operation is evaluated, as in G36; `occupancy_gate="trended"` limits the evaluation
   to a trended occupancy point's occupied hours. Parameters: `heating_coil`, `min_oa_pct`
   (enables FC6, the test for a damper stuck open at minimum OA), `oa_damper_min`,

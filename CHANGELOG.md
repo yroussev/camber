@@ -81,7 +81,23 @@ All notable changes to CAMBER are documented here. The format follows
   catalog datasets. This is additive. A facility without an `openfdd` provenance block is
   unchanged.
 <!-- /099-openfdd-importer -->
-
+<!-- 099-g36-heating (#95) -->
+- **G36 heating needs the OA damper at its minimum (#95).** `g36_afdd` now reads a fan-on hour
+  with the heating coil alone active as operating state 1 only when the OA damper is at its
+  minimum position, per the G36 §5.16.14 operating-state definitions. It uses the same learned or
+  configured `oa_damper_min` and `oa_damper_tol` as the free-cooling test from #94. A heating
+  hour with the damper open beyond the minimum is state 5, where only FC1–FC4 apply. A missing
+  damper reading there leaves the hour unclassified. Without an OA damper point the valves-only
+  reading stays, and the caveat now names both states.
+  - **New outputs (provisional).** The `G36Result.n_heating_above_min_oa` field and the finding
+    metric `heating_above_min_oa_hours`.
+  - **Before/after.** No change on `lbnl-sdahu` (no heating coil), `nuig-ahu101` (no OA damper
+    point) or the synthetic G36 scenarios, and no gated benchmark moved. On the dual-duct
+    `lbnl-ddahu` the hot deck heats while the OA damper command is well above the learned 28 %
+    minimum (median 55 % on the fault-free run). Between 885 and 1,520 heating hours per run move
+    from state 1 to state 5, so FC5 is no longer applicable on the two stuck-damper runs. No
+    run's flagged FCs or severity changed.
+<!-- /099-g36-heating -->
 
 ## [0.98.0] — 2026-10-03
 

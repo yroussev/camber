@@ -181,6 +181,24 @@ def test_unoccupied_recirculation_does_not_trip_fc9():
     assert g.metrics["fc"]["FC9"]["pct"] == 0.0
 
 
+def test_heating_above_minimum_oa_is_counted_and_not_os1():
+    # 0.99 (#95): a heating hour with the OA damper open beyond its minimum is OS#5, not OS#1
+    df = _recirc_ahu()
+    occ = df[Role.OCCUPANCY].to_numpy() > 0
+    heat = ~occ & (df.index.hour < 3)  # 3 night hours a day: heating with the damper at 60 %
+    df[Role.HEAT_VALVE] = np.where(heat, 80.0, 0.0)
+    df.loc[heat, Role.OA_DAMPER] = 60.0
+    m = G36AFDD().analyze("AHU-1", df).metrics
+    assert m["oa_damper_min"] == 20.0
+    assert m["heating_above_min_oa_hours"] == float(heat.sum())
+    assert m["os_hours"]["OS1"] == 0.0
+    # at its minimum the same hours are heating
+    df.loc[heat, Role.OA_DAMPER] = 20.0
+    m2 = G36AFDD().analyze("AHU-1", df).metrics
+    assert m2["heating_above_min_oa_hours"] == 0.0
+    assert m2["os_hours"]["OS1"] == float(heat.sum())
+
+
 def test_occupancy_gate_trended_evaluates_occupied_hours_only():
     f = G36AFDD(occupancy_gate="trended").analyze("AHU-1", _recirc_ahu())
     assert f.metrics["occupancy_gate"] == "trended occupancy"

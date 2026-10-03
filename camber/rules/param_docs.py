@@ -745,21 +745,24 @@ PARAM_DOCS["g36_afdd"] = {
     "oa_damper_min": _P(
         "% of damper stroke (OA damper)",
         "standard: ASHRAE Guideline 36-2021 §5.16.14 (operating-state definitions: free cooling "
-        "is the economizer modulating above its minimum position); the position itself is the "
-        "unit's own, set by its minimum outdoor-air control",
+        "is the economizer modulating above its minimum position, and heating (0.99, #95) runs "
+        "with the OA damper at it); the position itself is the unit's own, set by its minimum "
+        "outdoor-air control",
         "Set it to the minimum position from the unit's sequence or balancing report, or read "
         "the OA damper command on mechanical-cooling hours with the economizer locked out (its "
         "median). The finding's oa_damper_min and oa_damper_min_source show what was used.",
         (0.0, 60.0),
         "None = learned: the median OA damper command over fan-on hours of mechanical cooling "
         "below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % "
-        "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %.",
+        "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %. "
+        "The same minimum splits OS#2 (beyond it) and OS#1 (at it) since 0.99.",
     ),
     "oa_damper_tol": _P(
         "percentage points of damper stroke",
         "CAMBER judgment (#94): a noise margin above the minimum position; G36 gives no damper "
         "tolerance. On fault-free lbnl-sdahu the idle economizer hours sit at 47 % or more and "
-        "the minimum at 10 %, so any margin up to 30 points classifies them the same.",
+        "the minimum at 10 %, so any margin up to 30 points classifies them the same. Since 0.99 "
+        "(#95) the same margin decides whether a heating hour is at minimum OA (OS#1).",
         "Set it above the scatter of the damper command while it holds its minimum (the spread "
         "of the command on mechanical-cooling hours at minimum OA); raise it for a G36 unit whose "
         "minimum position moves with airflow.",

@@ -32,6 +32,12 @@ What the adapter decides (and says, as caveats):
   default it is learned from the unit's own mechanical-cooling hours at minimum OA (the finding's
   ``oa_damper_min`` / ``oa_damper_min_source`` say which). Without an OA damper point OS#2 is read
   from the valves alone, with a caveat.
+* **Heating needs minimum OA** (0.99, #95). By the same §5.16.14 definitions a fan-on hour with the
+  heating coil alone active is OS#1 only when the OA damper is at its minimum position (at or
+  below ``oa_damper_min`` plus ``oa_damper_tol``, the same learned or configured minimum); with the
+  damper open beyond it the hour is OS#5, where only FC1-FC4 apply.
+  The finding's ``heating_above_min_oa_hours`` counts those hours. Without an OA damper point
+  OS#1 is read from the valves alone.
 * **Unoccupied operation** is evaluated, as G36 evaluates every hour the AHU operates (ModeDelay
   covers the occupancy changes). ``occupancy_gate="trended"`` restricts the evaluation to the
   hours a trended occupancy point marks occupied (no assumed-schedule fallback: a unit without an
@@ -144,7 +150,7 @@ class G36AFDD:
         econ_damper_open: float = 80.0,  # OA damper % at/above which cooling is OS#3
         valve_thr: float = 5.0,  # valve % above which a coil is active
         oa_damper_min: float | None = None,  # OA damper minimum position %; None = learned
-        oa_damper_tol: float = OA_DAMPER_TOL,  # points above the minimum before OS#2
+        oa_damper_tol: float = OA_DAMPER_TOL,  # points above the minimum: OS#2 beyond, OS#1 within
         occupancy_gate: str = "off",  # "off" (G36: every operating hour) or "trended"
         warn_pct: float = WARN_PCT,  # screening-grade
         fault_pct: float = FAULT_PCT,  # screening-grade
@@ -435,6 +441,8 @@ class G36AFDD:
                 "oa_damper_min": res.oa_damper_min,
                 "oa_damper_min_source": res.oa_damper_min_source,
                 "idle_at_min_oa_hours": round(float(res.n_idle_at_min_oa) * step_h, 2),
+                # 0.99 (#95): heating hours with the OA damper off its minimum (OS#5, not OS#1)
+                "heating_above_min_oa_hours": round(float(res.n_heating_above_min_oa) * step_h, 2),
                 "occupancy_gate": self._occupancy(frame)[1],
                 "unoccupied_hours": round(float(res.n_unoccupied) * step_h, 2),
                 "attributed_to_fc14_hours": moved,

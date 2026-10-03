@@ -580,6 +580,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   change: with an OA damper point, an interval with both coils inactive and the damper at or below
   its minimum is now OS#5, not OS#2, and a missing damper reading there is unclassified.
 <!-- /098-fc9 -->
+<!-- 099-g36-heating (#95) -->
+- **G36 heating needs the OA damper at its minimum** (0.99; #95), additive and provisional: the
+  trailing `G36Result` field `n_heating_above_min_oa` and the `g36_afdd` metric
+  `heating_above_min_oa_hours`. Behaviour change: with an OA damper point, an interval with the
+  heating coil alone active and the damper open beyond its minimum (plus `oa_damper_tol`) is now
+  OS#5, not OS#1, and a missing damper reading there is unclassified.
+<!-- /099-g36-heating -->
 
 ## Deprecated
 

@@ -71,32 +71,13 @@ def _g36_golden_frame():
 
 
 def test_g36_matches_rowloop_golden():
-    # the golden values pin the per-interval equations, so the G36 time filters (0.91) are off,
-    # and the valves-only free-cooling reading is kept (oa_damper_min=-100: every damper reading
-    # counts as open), since the frame idles its coils at the 20 % damper minimum (0.98, #94)
-    g = run_g36_afdd(
-        _g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0, oa_damper_min=-100
-    )
-    assert g.n_intervals == 400
-    assert g.os_distribution == {1: 115, 2: 114, 3: 34, 4: 137, 5: 0}
-    assert g.fault_n_applicable == {
-        1: 400,
-        2: 400,
-        3: 400,
-        4: 400,
-        5: 115,
-        6: 252,
-        7: 115,
-        8: 114,
-        9: 114,
-        10: 34,
-        11: 34,
-        12: 285,
-        13: 171,
-        14: 229,
-        15: 285,
-    }
-    assert g.fault_pct == {
+    # the golden values pin the per-interval equations, so the G36 time filters (0.91) are off.
+    # The frame idles its coils at the 20 % damper minimum (0.98, #94) and heats with the damper
+    # at 20 % or 90 % (0.99, #95), so no single damper minimum reproduces the valves-only reading
+    # the golden values were taken on: the cooling and free-cooling states are pinned with every
+    # damper reading counted as open (oa_damper_min=-100), the heating state with every reading
+    # counted as at its minimum (oa_damper_min=90). FC14 spans OS#1 and OS#2 (114 + 115 = 229).
+    golden_pct = {
         1: 100.0,
         2: 10.75,
         3: 0.0,
@@ -113,11 +94,50 @@ def test_g36_matches_rowloop_golden():
         14: 0.0,
         15: 0.0,
     }
+    golden_n = {
+        1: 400,
+        2: 400,
+        3: 400,
+        4: 400,
+        5: 115,
+        6: 252,
+        7: 115,
+        8: 114,
+        9: 114,
+        10: 34,
+        11: 34,
+        12: 285,
+        13: 171,
+        14: 229,
+        15: 285,
+    }
+    g = run_g36_afdd(
+        _g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0, oa_damper_min=-100
+    )
+    assert g.n_intervals == 400
+    # every heating interval is off its (-100 %) minimum: OS#5 (0.99, #95)
+    assert g.os_distribution == {1: 0, 2: 114, 3: 34, 4: 137, 5: 115}
+    assert g.n_heating_above_min_oa == 115
+    for fc in (1, 2, 3, 4, 8, 9, 10, 11, 12, 13, 15):
+        assert g.fault_n_applicable[fc] == golden_n[fc], fc
+        assert g.fault_pct[fc] == golden_pct[fc], fc
+    assert g.fault_n_applicable[14] == 114 and g.fault_pct[14] == 0.0
+    h = run_g36_afdd(
+        _g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0, oa_damper_min=90
+    )
+    assert h.os_distribution == {1: 115, 2: 0, 3: 34, 4: 137, 5: 114}
+    for fc in (5, 6, 7):
+        assert h.fault_n_applicable[fc] == golden_n[fc], fc
+        assert h.fault_pct[fc] == golden_pct[fc], fc
+    assert h.fault_n_applicable[14] + g.fault_n_applicable[14] == golden_n[14]
+    assert h.fault_pct[14] == 0.0
 
 
 def test_g36_golden_default_reads_idle_at_minimum_as_os5():
-    # 0.98 (#94): by default the learned 20 % minimum moves the 91 idle intervals at it to OS#5
+    # 0.98 (#94): by default the learned 20 % minimum moves the 91 idle intervals at it to OS#5;
+    # 0.99 (#95): and the 23 heating intervals with the damper at 90 % leave OS#1 for OS#5
     g = run_g36_afdd(_g36_golden_frame(), "AHU_1", alarm_delay_min=0, mode_delay_min=0)
     assert g.oa_damper_min == 20.0 and g.n_idle_at_min_oa == 91
-    assert g.os_distribution == {1: 115, 2: 23, 3: 34, 4: 137, 5: 91}
+    assert g.n_heating_above_min_oa == 23
+    assert g.os_distribution == {1: 92, 2: 23, 3: 34, 4: 137, 5: 114}
     assert g.fault_n_applicable[8] == 23 and g.fault_pct[8] == 69.57

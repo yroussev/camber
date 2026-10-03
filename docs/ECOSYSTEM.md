@@ -229,9 +229,12 @@ single-signal framing is broader but less precisely tied to the standard's inten
 
 > **Since 0.98 (#94)** free cooling (OS#2) also needs the OA damper open beyond its minimum
 > position. An interval with both valves shut at minimum OA is OS#5, where only FC1–FC4 apply.
-> Before 0.98 it was OS#2. The 0.1.5 comparison above used the valves-only reading. To reproduce
-> it, pass `oa_damper_min=-100`. Every damper reading then counts as open, and only intervals
-> with a missing damper reading stay unclassified.
+> Before 0.98 it was OS#2. **Since 0.99 (#95)** heating (OS#1) likewise needs the OA damper at its
+> minimum, judged against the same `oa_damper_min` and `oa_damper_tol`. A heating interval with the
+> damper open beyond it is OS#5. The 0.1.5 comparison above used the valves-only reading for both
+> states, and no single setting reproduces it any more. `oa_damper_min=-100` counts every damper
+> reading as open: it restores the valves-only free-cooling reading, but every heating interval
+> becomes OS#5. `oa_damper_min=100` keeps every heating interval in OS#1, but leaves no free cooling.
 
 > For cross-tool comparison, `run_g36_afdd(..., comparability=True)` additionally
 > emits a single-signal-gated (input-validity) fault % alongside the default
