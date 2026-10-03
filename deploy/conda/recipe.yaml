@@ -7,7 +7,7 @@
 # See docs/DEPLOY.md and RELEASING.md.
 context:
   name: camber-toolkit
-  version: "0.89.0"
+  version: "0.98.0"
 
 package:
   name: ${{ name|lower }}
@@ -15,7 +15,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/${{ name[0] }}/${{ name }}/${{ name|replace('-', '_') }}-${{ version }}.tar.gz
-  sha256: ec070a89ad051ee41185b7942f29c65717e6c29b90982c81c5b332b2bb7b7695
+  sha256: 07847cac92c95c461ee3be5a5133119f77f556572d49f654ea1dd3ab524a2c35
 
 build:
   noarch: python
@@ -32,10 +32,10 @@ requirements:
     - setuptools >=64
   run:
     - python >=${{ python_min }}
-    - numpy >=1.24,<3
-    - pandas >=2.0,<3
+    - numpy >=1.24.1,<3
+    - pandas >=2.2.1,<3
     - matplotlib-base >=3.7
-    - pyarrow >=14
+    - pyarrow >=14.0.2
 
 tests:
   - python:

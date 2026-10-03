@@ -378,7 +378,7 @@ Version numbers are given only where a release is already planned.
       moves), S2 the healthy synthetic chilled-water reset runs the right way (no key moves), S3
       `actuator_stuck` as a scored synthetic rule (46 scored rules, new TPR/FPR keys), S4 a
       declared, never-stored drift reference.
-  - **0.99 — open-fdd interop and G36 heating at minimum OA** (integrated; not yet released).
+  - **0.99 — open-fdd interop and G36 heating at minimum OA** (released 2026-10-03).
     Builds #22 items 1–4 and closes #95:
     - [x] #22 item 1, the G36 cross-check: CAMBER `g36_afdd` against open-fdd's pandas and SQL
       engines (commit `32a6d44`, PyPI 4.4.9) on `lbnl-sdahu` and `lbnl-ddahu`, with a reusable
