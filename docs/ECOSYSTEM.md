@@ -301,9 +301,10 @@ harness,
 - **open-fdd:** commit `32a6d44` (VERSION 3.5.58). PyPI `open-fdd` 4.4.9 was released from this
   commit, and the wheel's `open_fdd/` tree is identical to it. The SQL engine is `fdd_cli` built
   from the same commit. The newest repository tag, v3.2.8, is older.
-- **CAMBER:** `g36_afdd` on the 0.99 development line (with #94 and #95; the results files record
-  the version string 0.98.0 and the commit), at the G36 defaults plus each dataset's run-template
-  parameters: `min_oa_pct` 1.6 on `lbnl-sdahu`, which enables FC6.
+- **CAMBER:** `g36_afdd` on the integrated 0.101 code (with #94, #95, #97 and #105; the results
+  files record the version string 0.100.0 and the commit), at the G36 defaults plus each
+  dataset's run-template parameters: `min_oa_pct` 1.6 on `lbnl-sdahu`, which enables FC6, and on
+  `lbnl-ddahu` the unit's seasonal minimum OA and damper position (#97, #105, below).
 - **Role mapping and profiles:** role map version 1, profiles version 2.
 - **Python requirement:** the 4.4.9 wheel declares Python ≥ 3.10 but needs 3.11 or newer (it
   imports `enum.StrEnum`).
@@ -407,8 +408,9 @@ G36 §5.16.14 is written for single-duct units, and the mapping reads the cold-d
 SAT next to the hot-deck valve. On this unit, "SAT below MAT while heating" (FC5) is the design,
 not a fault. Read the `lbnl-ddahu` numbers as a scope check, not as detection performance.
 
-Full tables, the per-run verdicts with each engine's denominator, the native-alarm scores and
-the probe outcomes are in `examples/openfdd_crosscheck/results/`.
+Full tables, the native-alarm scores and the probe outcomes are in
+`examples/openfdd_crosscheck/results/`. Since 0.101 (#109) the committed JSON leaves out the
+per-run verdicts with each engine's denominator; `run_crosscheck.py --keep-verdicts` writes them.
 
 **CAMBER since #94 (0.98).** Free cooling now needs the OA damper open beyond its minimum, and
 the run template enables FC6 with the unit's documented minimum OA. Per run on `lbnl-sdahu`,
@@ -507,6 +509,14 @@ stuck shut, and no damper minimum can make it: outside June to August the faulte
 command saturates (median 100 %) while the hot deck heats, or both coils run, so those hours are
 OS#5, where FC6 does not apply. The temperature balance there reads a median 17.7 % OA, which is
 within G36's 30-point tolerance of 31.8 % in any case.
+
+Re-run once on the integrated 0.101 code, with all three engines at the same pin: CAMBER's
+`lbnl-ddahu` verdicts are exactly those above, in both windows, and nothing else moves. Every
+open-fdd verdict and every `lbnl-sdahu` verdict is unchanged, and so is each engine's any-FC
+result on both units. In month windows on `lbnl-ddahu`, CAMBER's FC5 and FC7 are now evaluated in
+5 faulted and 4 fault-free months and never fire, FC6 in 11 faulted and 7 fault-free months (was
+6 and 3) and never fires, and FC9 no longer fires in the one `DMPRStuck_OA_0` month it caught.
+`DMPRStuck_OA_0` stays detected through FC8, FC10, FC11 and FC12.
 
 #### Not evaluated, and why
 

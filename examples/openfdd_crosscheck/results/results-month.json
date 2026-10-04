@@ -3,7 +3,7 @@
  "window": "month",
  "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
  "versions": {
-  "camber": "0.99.1 at commit acd70a9 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
+  "camber": "0.100.0 at commit c1c709f (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
   "role_map": "1",
   "profiles": "2",
   "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
@@ -46,6 +46,12 @@
      "6": 11.9,
      "7": 11.9,
      "8": 11.9
+    },
+    "oa_damper_min": 45.0,
+    "oa_damper_min_by_month": {
+     "6": 28.0,
+     "7": 28.0,
+     "8": 28.0
     }
    }
   }
@@ -1006,56 +1012,68 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 0,
+       "fn": 5,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 4,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4345
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 198,
-         "evaluated on fewer than 24 h": 1
+         "not applicable: its operating states never occurred": 185,
+         "evaluated on fewer than 24 h": 5
         }
        }
       },
       "FC6": {
        "tp": 15,
-       "fn": 126,
+       "fn": 131,
        "fp": 0,
-       "tn": 15,
-       "tpr": 0.1064,
+       "tn": 19,
+       "tpr": 0.1027,
        "tpr_ci": [
-        0.0655,
-        0.1681
+        0.0633,
+        0.1626
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2039
+        0.1682
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 39,
-         "evaluated on fewer than 24 h": 4
+         "not applicable: its operating states never occurred": 26,
+         "evaluated on fewer than 24 h": 8
         }
        }
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 5,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 4,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4345
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
        "not_evaluated": {
         "counts_by_reason": {
          "omitted: no heating coil": 163,
-         "not applicable: its operating states never occurred": 35,
-         "evaluated on fewer than 24 h": 1
+         "not applicable: its operating states never occurred": 22,
+         "evaluated on fewer than 24 h": 5
         }
        }
       },
@@ -1076,20 +1094,20 @@
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 52,
-         "not applicable: its operating states never occurred": 51
+         "evaluated on fewer than 24 h": 51,
+         "not applicable: its operating states never occurred": 52
         }
        }
       },
       "FC9": {
-       "tp": 1,
-       "fn": 86,
+       "tp": 0,
+       "fn": 87,
        "fp": 0,
        "tn": 9,
-       "tpr": 0.0115,
+       "tpr": 0.0,
        "tpr_ci": [
-        0.002,
-        0.0623
+        0.0,
+        0.0423
        ],
        "fpr": 0.0,
        "fpr_ci": [
@@ -1098,8 +1116,8 @@
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 52,
-         "not applicable: its operating states never occurred": 51
+         "evaluated on fewer than 24 h": 51,
+         "not applicable: its operating states never occurred": 52
         }
        }
       },
@@ -1164,8 +1182,8 @@
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 8,
-         "not applicable: its operating states never occurred": 17
+         "evaluated on fewer than 24 h": 7,
+         "not applicable: its operating states never occurred": 18
         }
        }
       },
@@ -4389,55 +4407,67 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 0,
+       "fn": 5,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 4,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4345
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 35,
-         "evaluated on fewer than 24 h": 1
+         "not applicable: its operating states never occurred": 22,
+         "evaluated on fewer than 24 h": 5
         }
        }
       },
       "FC6": {
        "tp": 0,
-       "fn": 6,
+       "fn": 11,
        "fp": 0,
-       "tn": 3,
+       "tn": 7,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.3903
+        0.2588
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.5615
+        0.3543
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 24,
-         "evaluated on fewer than 24 h": 3
+         "not applicable: its operating states never occurred": 11,
+         "evaluated on fewer than 24 h": 7
         }
        }
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 5,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 4,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.4345
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 35,
-         "evaluated on fewer than 24 h": 1
+         "not applicable: its operating states never occurred": 22,
+         "evaluated on fewer than 24 h": 5
         }
        }
       },
@@ -4455,27 +4485,27 @@
        "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 4,
-         "not applicable: its operating states never occurred": 31
+         "evaluated on fewer than 24 h": 3,
+         "not applicable: its operating states never occurred": 32
         }
        }
       },
       "FC9": {
-       "tp": 1,
-       "fn": 0,
+       "tp": 0,
+       "fn": 1,
        "fp": 0,
        "tn": 0,
-       "tpr": 1.0,
+       "tpr": 0.0,
        "tpr_ci": [
-        0.2065,
-        1.0
+        0.0,
+        0.7935
        ],
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 4,
-         "not applicable: its operating states never occurred": 31
+         "evaluated on fewer than 24 h": 3,
+         "not applicable: its operating states never occurred": 32
         }
        }
       },
@@ -4528,8 +4558,8 @@
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 8,
-         "not applicable: its operating states never occurred": 17
+         "evaluated on fewer than 24 h": 7,
+         "not applicable: its operating states never occurred": 18
         }
        }
       },
@@ -5917,59 +5947,65 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 0,
+       "fn": 7,
        "fp": 0,
-       "tn": 1,
-       "tpr": null,
-       "tpr_ci": null,
+       "tn": 7,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3543
+       ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.3543
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 198
+         "not applicable: its operating states never occurred": 185
         }
        }
       },
       "FC6": {
        "tp": 15,
-       "fn": 129,
+       "fn": 136,
        "fp": 0,
-       "tn": 16,
-       "tpr": 0.1042,
+       "tn": 22,
+       "tpr": 0.0993,
        "tpr_ci": [
-        0.0641,
-        0.1648
+        0.0611,
+        0.1574
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.1936
+        0.1487
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 39
+         "not applicable: its operating states never occurred": 26
         }
        }
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 7,
        "fp": 0,
-       "tn": 1,
-       "tpr": null,
-       "tpr_ci": null,
+       "tn": 7,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3543
+       ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.3543
        ],
        "not_evaluated": {
         "counts_by_reason": {
          "omitted: no heating coil": 163,
-         "not applicable: its operating states never occurred": 35
+         "not applicable: its operating states never occurred": 22
         }
        }
       },
@@ -5977,7 +6013,7 @@
        "tp": 4,
        "fn": 132,
        "fp": 0,
-       "tn": 12,
+       "tn": 11,
        "tpr": 0.0294,
        "tpr_ci": [
         0.0115,
@@ -5986,32 +6022,32 @@
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.2588
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 51
+         "not applicable: its operating states never occurred": 52
         }
        }
       },
       "FC9": {
-       "tp": 1,
-       "fn": 135,
+       "tp": 0,
+       "fn": 136,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.0074,
+       "tn": 11,
+       "tpr": 0.0,
        "tpr_ci": [
-        0.0013,
-        0.0405
+        0.0,
+        0.0275
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.2588
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 51
+         "not applicable: its operating states never occurred": 52
         }
        }
       },
@@ -6061,7 +6097,7 @@
        "tp": 4,
        "fn": 162,
        "fp": 0,
-       "tn": 16,
+       "tn": 15,
        "tpr": 0.0241,
        "tpr_ci": [
         0.0094,
@@ -6070,11 +6106,11 @@
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.1936
+        0.2039
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 17
+         "not applicable: its operating states never occurred": 18
         }
        }
       },
@@ -9289,58 +9325,64 @@
       },
       "FC5": {
        "tp": 0,
-       "fn": 0,
+       "fn": 7,
        "fp": 0,
-       "tn": 1,
-       "tpr": null,
-       "tpr_ci": null,
+       "tn": 7,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3543
+       ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.3543
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 35
+         "not applicable: its operating states never occurred": 22
         }
        }
       },
       "FC6": {
        "tp": 0,
-       "fn": 8,
+       "fn": 15,
        "fp": 0,
-       "tn": 4,
+       "tn": 10,
        "tpr": 0.0,
        "tpr_ci": [
         0.0,
-        0.3244
+        0.2039
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.4899
+        0.2775
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 24
+         "not applicable: its operating states never occurred": 11
         }
        }
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 7,
        "fp": 0,
-       "tn": 1,
-       "tpr": null,
-       "tpr_ci": null,
+       "tn": 7,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3543
+       ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.3543
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 35
+         "not applicable: its operating states never occurred": 22
         }
        }
       },
@@ -9348,41 +9390,35 @@
        "tp": 1,
        "fn": 3,
        "fp": 0,
-       "tn": 1,
+       "tn": 0,
        "tpr": 0.25,
        "tpr_ci": [
         0.0456,
         0.6994
        ],
-       "fpr": 0.0,
-       "fpr_ci": [
-        0.0,
-        0.7935
-       ],
+       "fpr": null,
+       "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 31
+         "not applicable: its operating states never occurred": 32
         }
        }
       },
       "FC9": {
-       "tp": 1,
-       "fn": 3,
+       "tp": 0,
+       "fn": 4,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.25,
+       "tn": 0,
+       "tpr": 0.0,
        "tpr_ci": [
-        0.0456,
-        0.6994
-       ],
-       "fpr": 0.0,
-       "fpr_ci": [
         0.0,
-        0.7935
+        0.4899
        ],
+       "fpr": null,
+       "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 31
+         "not applicable: its operating states never occurred": 32
         }
        }
       },
@@ -9432,7 +9468,7 @@
        "tp": 1,
        "fn": 14,
        "fp": 0,
-       "tn": 4,
+       "tn": 3,
        "tpr": 0.0667,
        "tpr_ci": [
         0.0119,
@@ -9441,11 +9477,11 @@
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.4899
+        0.5615
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 17
+         "not applicable: its operating states never occurred": 18
         }
        }
       },

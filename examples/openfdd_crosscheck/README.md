@@ -60,9 +60,9 @@ docker builder prune   # drop the Rust build cache afterwards
 
 Since 0.101 the JSON leaves out the per-verdict list by default and collapses each "not
 evaluated" map to counts per reason (a month-window run would otherwise write about 200k more
-lines); the Markdown tables are the same either way. `--keep-verdicts` keeps them: the committed
-`results-run.json` and `probes.json` were written with it (the default then), `results-month.json`
-without.
+lines); the Markdown tables are the same either way. `--keep-verdicts` keeps them. The committed
+results were re-run on the integrated 0.101 code at the new default, so none of them carries the
+per-verdict list.
 
 An engine whose prerequisite is missing is listed under "Not run" with the reason. The runner
 checks `docker info` once, with a 20 s timeout.

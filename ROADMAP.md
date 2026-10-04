@@ -404,6 +404,17 @@ Version numbers are given only where a release is already planned.
     - [x] #104 config runs resolve the facility time zone the way the read API does;
     - [x] integration: the open-fdd cross-check re-run on the merged code, and the suggester
       tables reconciled.
+  - **0.101 — seasonal damper minimum, data-led role suggestions, walk-down follows the heading**
+    (integrated, not yet released). Closes #105–#109:
+    - [x] #105 `g36_afdd` takes a seasonal OA damper minimum (`oa_damper_min_by_month`), used by
+      the `lbnl-ddahu` template (45 %, 28 % in June to August);
+    - [x] #106 time-series suggester step 1: held-out names with their data, a setpoint guard and
+      a range check without a unit;
+    - [x] #107 the point-role suggester reads the data by default when a series is passed
+      (`use_timeseries=False` opts out);
+    - [x] #108 the walk-down's equipment item follows the cause that heads the RCx issue;
+    - [x] #109 the open-fdd cross-check leaves the per-verdict list out of its JSON by default;
+    - [x] integration: the open-fdd cross-check re-run on the merged code.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process

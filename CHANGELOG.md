@@ -8,6 +8,29 @@ All notable changes to CAMBER are documented here. The format follows
 
 <!-- Each 0.101 branch adds its bullets only inside its own marked block. -->
 
+**0.101: a seasonal OA damper minimum, data-led point-role suggestions by default, and a
+walk-down that follows the heading cause (#105–#109).** `g36_afdd` takes a seasonal OA damper
+minimum, `oa_damper_min_by_month` (#105). The `lbnl-ddahu` template uses it: 45 %, and 28 % in
+June to August. The unit's winter heating hours return to OS#1 there, and its winter hours
+idling at the minimum are no longer read as free cooling. #105 has a limit: FC6 still cannot
+catch the dual-duct damper stuck shut (`DMPRStuck_OA_0`) on this data. Outside the summer that
+run's damper command saturates open, so its hours are OS#5, where FC6 does not apply. The run is
+still caught, through FC8, FC10, FC11 and FC12. The time-series point-role suggester gains a
+setpoint guard and a range check for points with no unit (#106). **Default change (#107):**
+`suggest_roles`, `review_unmapped` and `review_bacnet` now read the data whenever a series is
+passed; `use_timeseries=False` opts out and gives the 0.100 output byte for byte. With a series
+passed, top-1 rises against 0.100 on every evaluation pool. Against the name alone, pools with
+strong names dip slightly on dirty series: BTS Brick-class names read 89.4 % with the series
+against 93.2 % from the name alone, because site C's negative airflows and dropouts fail the
+range check. `docs/MAPPING-ASSIST.md` advises `use_timeseries=False`, or cleaning the series,
+where the names are already reliable. The RCx walk-down's equipment item now follows the cause
+that heads the issue (#108), which changes the two re-headed catalog issues (`lbnl-ddahu`
+`DMPRStuck_OA_0`, `lbnl-sdahu` `damper_stuck_075`). The open-fdd cross-check leaves the
+per-verdict list out of its JSON by default (#109). It was re-run once on the merged code with
+all three engines: only CAMBER's `lbnl-ddahu` verdicts change, as #105 reported, and every
+engine's any-FC result is unchanged. The synthetic, fleet, LBNL, BDG2 and BDG2 savings benchmark
+gates did not move.
+
 <!-- 0101-walkdown -->
 ### Changed
 - **The walk-down's equipment item follows the cause that heads the RCx issue (#108).** Since
@@ -26,9 +49,8 @@ All notable changes to CAMBER are documented here. The format follows
   `run_crosscheck.py` now omits the per-verdict list and collapses the per-equipment "not
   evaluated" reasons to counts unless `--keep-verdicts` is passed; a month-window run otherwise
   writes about 200k more lines. `--omit-verdicts` is still accepted (it is the default). The
-  Markdown output is the same either way. The committed results are not re-run:
-  `results-month.json` was written with the omission, `results-run.json` and `probes.json`
-  with the verdicts (pass `--keep-verdicts` to reproduce them).
+  Markdown output is the same either way. The committed results were re-run at integration
+  with the new default, so none of them carries the per-verdict list.
 <!-- /0101-walkdown -->
 
 <!-- 0101-g36-seasonal -->
