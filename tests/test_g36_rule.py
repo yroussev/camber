@@ -118,6 +118,42 @@ def test_occupancy_changes_extend_mode_delay_and_min_oa_enables_fc6():
     assert fc6["status"] == "evaluated" and fc6["pct"] == 0.0
 
 
+def _ahu_at_10pct_oa():
+    """``_ahu`` on a hot day (OAT 90F, RAT 74F) cooling with 10 % OA by the temperature balance."""
+    fr = _ahu()
+    on = fr[Role.SUPPLY_FAN_SPEED] > 0
+    fr[Role.OAT] = np.where(on, 90.0, 70.0)
+    fr[Role.MIXED_AIR_TEMP] = np.where(on, 74.0 + 0.1 * 16.0, 72.0)
+    return fr
+
+
+def test_fc6_seasonal_minimum_by_month():
+    # 0.100 (#97): a July frame at 10 % OA. Against a fixed 45 % minimum FC6 trips (35 points
+    # off, beyond G36's 30-point tolerance); with July's own 12 % minimum it does not.
+    fr = _ahu_at_10pct_oa()
+    fixed = G36AFDD(min_oa_pct=45).analyze("AHU-1", fr)
+    assert fixed.metrics["fc"]["FC6"]["pct"] == 100.0
+    seasonal = G36AFDD(min_oa_pct=45, min_oa_pct_by_month={7: 12}).analyze("AHU-1", fr)
+    fc6 = seasonal.metrics["fc"]["FC6"]
+    assert fc6["status"] == "evaluated" and fc6["pct"] == 0.0
+    assert fc6["applicable_hours"] == fixed.metrics["fc"]["FC6"]["applicable_hours"]
+    assert any("seasonal minimum of 45 %, by month {7: 12 %}" in c for c in seasonal.caveats)
+    assert not any("seasonal" in c for c in fixed.caveats)
+    # a month the override does not name keeps min_oa_pct; config keys may be strings
+    other = make_rule("g36_afdd", min_oa_pct=45, min_oa_pct_by_month={"1": 12})
+    assert other.min_oa_pct_by_month == {1: 12.0}
+    assert other.analyze("AHU-1", fr).metrics["fc"]["FC6"]["pct"] == 100.0
+    # the default output carries no seasonal wording and the rule's default is None
+    assert G36AFDD().min_oa_pct_by_month is None
+
+
+def test_fc6_seasonal_minimum_is_validated():
+    with pytest.raises(ValueError, match="months 1-12"):
+        G36AFDD(min_oa_pct=30, min_oa_pct_by_month={13: 10})
+    with pytest.raises(ValueError, match="needs min_oa_pct"):
+        G36AFDD(min_oa_pct_by_month={6: 10})
+
+
 def test_missing_inputs_are_declined_not_asserted_clean():
     fr = _ahu().drop(columns=[Role.DUCT_STATIC, Role.DUCT_STATIC_SP])
     f = G36AFDD().analyze("AHU-1", fr)

@@ -21,7 +21,8 @@ Each exercise's section has the same parts: **Answer key**, **Discussion points*
 ### `air-sat-reset`: Supply-air temperature reset
 
 Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets, CAMBER
-0.98.0-dev, with the commands on the [exercise page](air-sat-reset.md#setup).
+0.98.0-dev (the dual-duct `supply_air_reset` reading 0.100.0-dev, after its cold-deck setpoint
+was mapped), with the commands on the [exercise page](air-sat-reset.md#setup).
 
 **Answer key**
 
@@ -31,12 +32,16 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
    matter. Against the Guideline 36 outdoor-air target the supply air is colder in 71% of the
    occupied running hours, by a mean 6.0 °F (`supply_air_reset_compliance`, a **warn**). The
    faulted runs read the same: the sequence has no reset.
-2. *The dual-duct cold deck?* Not reset either: `supply_air_reset` is a **warn**, "no reset (SAT
-   pinned low at ~55 F regardless of OAT)", and the supply air is below the Guideline 36 target
-   in 66% of the hours. No setpoint is mapped, so the verdict comes from the supply air itself.
-   The dataset's documentation describes a 60 °F cold-deck setpoint in economizer weather; the
-   data hold 55 °F in every row (the data issue *The 60 F economizer supply-air setpoint is not in
-   the data*). The published description and the published data disagree; CAMBER reads the data.
+2. *The dual-duct cold deck?* Not reset either: `supply_air_reset` is a **warn**, "not reset
+   (setpoint flat at ~55F)", and the supply air is below the Guideline 36 target in 66% of the
+   hours. Since 0.100 the cold-deck setpoint is mapped, and the rule reads it: it never moves (a
+   range of 0.00 °F all year at 55.0 °F). Before 0.100 no setpoint was mapped and the same
+   **warn** came from the supply air itself ("SAT pinned low at ~55 F regardless of OAT"). The
+   dataset's documentation describes a 60 °F cold-deck setpoint in economizer weather; the
+   setpoint and the supply air hold 55 °F in every row (the data issue *The 60 F economizer
+   supply-air setpoint is not in the data*). The published description and the published data
+   disagree; CAMBER reads the data. The hot deck has its own setpoint (90 °F), which is not
+   mapped: the answer is about the cold deck only.
 3. *The Irish unit?* `supply_air_reset` is **ok**, "reset present": over the cooling hours its
    supply air *falls* as the outdoor air warms, by -0.14 °F per °F, and
    `supply_air_reset_compliance` is **ok** (it tracks the target). Falling with outdoor air is

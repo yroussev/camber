@@ -83,8 +83,8 @@ Each config runs the supply-air rules only:
    supply air against its outdoor temperature.
 2. **Run the three configs** and read the findings each `camber run` prints.
 3. **Shape.** For each unit, read `supply_air_reset`: its verdict, `slope_per_F` (°F of supply
-   air per °F of outdoor air) and, on the single-duct unit, `sp_range_f` (how far the setpoint
-   moved).
+   air per °F of outdoor air) and, on the two LBNL units, `sp_range_f` (how far the setpoint
+   moved; on the dual-duct unit it is the cold-deck setpoint).
 4. **Target.** Read `supply_air_reset_compliance`: `pct_below_g36_target` and `mean_gap_f`.
 5. **Holding the setpoint.** Read `supply_air_control` on the single-duct runs: the share of
    occupied running hours too warm and too cold, and `occupancy_gate` (which hours it judged).

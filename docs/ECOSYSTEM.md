@@ -399,7 +399,7 @@ narrower than the evidence supports. Any-FC results:
 |---|---|---|
 | CAMBER | 1/2 detected, 0/1 false alarms | TPR 0.04 [0.01–0.20], FPR 0/12 |
 | open-fdd pandas, own defaults | 2/2 detected, 1/1 false alarms | TPR 0.75, FPR 9/12 |
-| open-fdd pandas, G36 tolerances | 2/2 detected, 1/1 false alarms | TPR 0.58, FPR 5/12 |
+| open-fdd pandas, G36 tolerances | 2/2 detected, 1/1 false alarms | TPR 0.62, FPR 6/12 |
 | open-fdd SQL, own defaults | 2/2 detected, 1/1 false alarms | TPR 0.75, FPR 9/12 |
 | open-fdd SQL, G36 tolerances | 2/2 detected, 1/1 false alarms | TPR 0.75, FPR 9/12 |
 
@@ -443,6 +443,44 @@ one heating-only test the mapping can run there, changes as follows:
 
 FC5 never fired on this unit before #95, so no detection changes.
 
+**CAMBER and open-fdd since #97 and #98 (0.100).** Two changes reach `lbnl-ddahu`. The catalog
+mapping now maps the published cold-deck supply-air setpoint (`CSA_TEMPSPT`, 55.0 °F in every
+row) as the SAT setpoint (#98), for all three engines. The run template now enables CAMBER's FC6
+with the unit's documented seasonal minimum OA: 31.8 %, and 11.9 % in June to August (#97). The
+`lbnl-sdahu` results do not change. Per run on `lbnl-ddahu`, before → after:
+
+| FC | Engine | Before (0.99) | After (0.100) |
+|---|---|---|---|
+| FC6 | CAMBER | not evaluated: no minimum OA | 0/2, FPR 0/1: fault-free 0.07 %, `DMPRStuck_OA_0` 1.8 %, `DMPRStuck_OA_100` 0 % |
+| FC7 | open-fdd (all) | not evaluated: no SAT setpoint | 0/2, FPR 0/1 |
+| FC9 | CAMBER | not evaluated: no SAT setpoint | fires on `DMPRStuck_OA_0` (20.8 % of 126 h); under 24 h on the other two runs |
+| FC9 | open-fdd (all) | not evaluated | 0/2, FPR 0/1 (0.7–1.2 % on every run) |
+| FC11 | CAMBER | not evaluated | fires on `DMPRStuck_OA_0` (12.3 % of 53 h); under 24 h on the other two runs |
+| FC11 | open-fdd (all) | not evaluated | 1/2, FPR 0/1: `DMPRStuck_OA_0` 9.7–14.0 % |
+| FC13 | CAMBER | not evaluated | 0/2, FPR 0/1 (0 % on every run) |
+| FC13 | open-fdd pandas, own defaults | not evaluated | 1/2, FPR 0/1: `DMPRStuck_OA_0` 19.8 % |
+| FC13 | open-fdd pandas, G36 tolerances | not evaluated | 0/2, FPR 0/1 |
+| FC13 | open-fdd SQL (both profiles) | not evaluated | 1/2, FPR 0/1: `DMPRStuck_OA_0` 11.9 % |
+| Any FC | all | as above | unchanged for every engine |
+
+In month windows, CAMBER's any-FC result is unchanged (TPR 0.04, FPR 0/12). The open-fdd
+pandas engine at G36 tolerances goes from TPR 0.58 with FPR 5/12 to TPR 0.62 with FPR 6/12: its
+FC9 now fires on one fault-free month. The other open-fdd results are unchanged.
+
+FC6 does not catch the damper stuck shut. G36 evaluates FC6 only in heating and in mechanical
+cooling at minimum OA. On this unit, CAMBER's learned OA damper minimum is 28 %, the summer
+position, so nearly all of FC6's applicable hours fall in June to August. Against an 11.9 %
+minimum, a damper stuck shut is off by less than G36's 30-point tolerance. A fixed 31.8 % would
+flag `DMPRStuck_OA_0` (32.1 % of its applicable hours), but only by judging those summer hours
+against the other season's minimum. The fault-free run reads `ok` either way. The fault-free
+values that #94 recorded for a single minimum (FC6 20.5 % at 31.8, 47.1 % at 11.9, re-measured on
+the 0.98 code) predate #95, which moved the hot-deck heating hours with the damper open out of
+OS#1: FC6's applicable hours on the fault-free run fell from 2,105 to 744 (hourly). The winter
+heating hours run with the damper at or above its 45 % winter minimum, beyond the learned 28 %,
+so they are now OS#5. A seasonal OA damper minimum would return them to FC6. All of these setpoint
+tests judge the cold deck, because the mapping reads it as SAT. The hot deck's own 90 °F
+setpoint is not mapped.
+
 #### Not evaluated, and why
 
 `lbnl-sdahu`:
@@ -460,11 +498,11 @@ FC5 never fired on this unit before #95, so no detection changes.
 
 | FC | Engine | Why it was not evaluated |
 |---|---|---|
-| FC9, FC11, FC13 | all | No SAT setpoint is mapped (the cold-deck setpoint is published but not in the catalog mapping). |
+| FC9, FC11 | CAMBER | Since #98 they are evaluated, but the fault-free run and `DMPRStuck_OA_100` have under 24 h in their operating states. |
 | FC14 | CAMBER | Declined: MAT/SAT span both coils. |
 | FC14 | open-fdd pandas | No coil temperatures. |
 | FC14 | open-fdd SQL | Evaluated: falls back to MAT/SAT. |
-| FC6 | all | No minimum OA is given. |
+| FC6 | open-fdd (both) | Needs a VAV total airflow and a design minimum OA flow. CAMBER evaluates FC6 from its template's seasonal minimum OA fraction (since #97). |
 | FC5 | CAMBER | Since #95: the hot deck heats with the OA damper above its learned minimum, so there are no OS#1 hours to judge (0.5 h on the fault-free run). |
 
 #### SQL engine: the source-reading findings, tested
@@ -507,8 +545,8 @@ outcomes as predicted).
   role is missing from the building's columns, which are the union over all its equipment.
   Equipment that lacks a role its neighbour has is reported with 0 fault hours rather than
   skipped. The harness therefore gives each equipment its own building. In a first run with all
-  units in one building, FC9, FC11 and FC13 were reported for the dual-duct unit, which has no
-  SAT setpoint.
+  units in one building, FC9, FC11 and FC13 were reported for the dual-duct unit, which then had
+  no SAT setpoint mapped.
 
 #### What drives the differences
 
@@ -562,7 +600,8 @@ These are behaviour differences, each traced to a cause on public code and open 
 - **"FC7, FC9, FC11, FC13 need a SAT setpoint, which this dataset didn't include."** No longer
   true for SDAHU. The dataset publishes `SA_TEMPSPT`, a constant 55.2 °F, and the catalog maps
   it, so FC9, FC11 and FC13 are now evaluated by every engine. FC7 is still not evaluated, because
-  the unit has no heating coil.
+  the unit has no heating coil. Since 0.100 (#98) the same holds for the dual-duct unit's cold
+  deck (`CSA_TEMPSPT`).
 - **"The equations agree to 0.00 pts" and "same faults, same hours".** Both describe the
   per-interval equations of 0.1.5 with CAMBER's time filters off. They do not carry over to fault
   rates now:

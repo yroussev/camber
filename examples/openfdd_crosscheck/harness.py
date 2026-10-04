@@ -686,7 +686,9 @@ def standard_caveats(window: str, datasets: list) -> list:
     if "lbnl-ddahu" in datasets:
         out.append(
             "lbnl-ddahu is a dual-duct AHU: G36 §5.16.14 is written for single-duct units. The "
-            "mapping reads the cold-deck discharge as SAT and the hot-deck valve as the heating "
-            "valve, so 'SAT below MAT while heating' is the design there, not a fault."
+            "mapping reads the cold-deck discharge as SAT, the cold-deck setpoint as the SAT "
+            "setpoint and the hot-deck valve as the heating valve, so 'SAT below MAT while "
+            "heating' is the design there, not a fault, and the SAT setpoint tests (FC7, FC9, "
+            "FC11, FC13) judge the cold deck only; the hot deck's own setpoint is not mapped."
         )
     return out

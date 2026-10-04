@@ -83,7 +83,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
 | [`filter_fouling`](#filter_fouling) | 1 |  |
 | [`free_cooling_missed`](#free_cooling_missed) | 9 |  |
-| [`g36_afdd`](#g36_afdd) | 14 |  |
+| [`g36_afdd`](#g36_afdd) | 15 |  |
 | [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
 | [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 10 |  |
 | [`hp_mode_vs_need`](#hp_mode_vs_need) | 9 |  |
@@ -652,6 +652,7 @@ How to calibrate:
 | `heating_coil` | `null` | flag | `false`, `true` | CAMBER judgment: a missing heating-valve point is read as no heating coil |
 | `mat_sat_as_coil_temps` | `true` | flag | `false`, `true` | standard: ASHRAE Guideline 36-2021 §5.16.14 (MAT/SAT may stand in for the coil temperatures, depending on the AHU configuration) |
 | `min_oa_pct` | `null` | % of supply airflow (OA fraction) | 0.0 to 100.0 | CAMBER judgment: the design minimum is a building property |
+| `min_oa_pct_by_month` | `null` | % of supply airflow, per month | 0.0 to 100.0 | CAMBER judgment: only for a sequence with a seasonal minimum (as outdoor_air_fraction takes it); G36 judges %OA against the active minimum-OA setpoint, which a seasonal sequence changes |
 | `mode_delay_min` | `30.0` | min | 0.0 to 120.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (ModeDelay; verified against Addendum p) |
 | `alarm_delay_min` | `30.0` | min | 0.0 to 120.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (AlarmDelay; verified against Addendum p) |
 | `avg_window_min` | `5.0` | min | 1.0 to 30.0 | standard: ASHRAE Guideline 36-2021 §5.16.14 (five-minute rolling averages) |
@@ -669,6 +670,7 @@ How to calibrate:
 - `heating_coil`: Set it from the unit's schedule or drawings: true when the AHU has a heating coil whose valve is not trended (the rule then declines), false to ignore a mapped valve. *Note:* None = inferred from whether a heating-valve point is mapped.
 - `mat_sat_as_coil_temps`: Leave it on for an AHU with no heating coil between the mixed- and supply-air sensors; turn it off when another component (a preheat coil, an energy wheel) sits between them.
 - `min_oa_pct`: Take it from the design minimum OA over design airflow, or measure the OA fraction at minimum damper position on a known-good fan-on period. *Note:* None = FC6 is declined. G36 uses the active minimum-OA setpoint over actual airflow.
+- `min_oa_pct_by_month`: Enter the sequence's minimum for each month that differs from min_oa_pct, e.g. {6: 11.9, 7: 11.9, 8: 11.9} on lbnl-ddahu (a 28 % damper minimum in Jun-Aug, 45 % otherwise), and use the same values outdoor_air_fraction uses. *Note:* None = min_oa_pct all year. A {month (1-12): pct} mapping; it needs min_oa_pct, the minimum in the other months. Each value must lie in the range.
 - `mode_delay_min`: Keep the G36 value; lengthen it only if trends show the unit still settling after a fan start or mode change beyond 30 minutes.
 - `alarm_delay_min`: Keep the G36 value; it should be several sample intervals long so that a fault must persist across more than one sample.
 - `avg_window_min`: Keep the G36 value; on trends coarser than 5 minutes the window holds a single sample.
