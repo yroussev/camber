@@ -4,6 +4,44 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.101.0] — Unreleased
+
+<!-- Each 0.101 branch adds its bullets only inside its own marked block. -->
+
+<!-- 0101-suggester-ts -->
+### Changed
+- **Time-series suggester, step 1: held-out measurement and the two known fixes (#106).** Both
+  fixes act only with `FeatureSuggester(use_timeseries=True)`. The default suggester, and so
+  `suggest_roles` and `review_unmapped` without a suggester, is byte-identical. Switching the
+  default is #107 and waits for sign-off.
+  - **Setpoint guard.** When a point's name says setpoint (`setpoint`, `SP`, `STPT`,
+    `RMCLGSPT`), the data ranks only the setpoint roles. `robod`'s `temp_setpoint` stays
+    `cool_sp`, where the data alone had made it `space_temp`.
+  - **Range check without a unit.** A point with no declared unit is now range-checked on the
+    time-series path. Before, it skipped the check. It is read in every plausible unit of the
+    role (the units the role templates try), and the best reading counts. A °C room temperature
+    passes, and a sentinel such as `-999` is demoted, as on the default path.
+  - **Measured on the held-out catalog names with their data** (`catalog_names.py --data`, new;
+    89 of the 223 names have a usable open-tier series). Top-1 / top-3 %:
+    - name only: 76.4 / 79.8;
+    - name plus data: 76.4 / 82.0 before, 75.3 / 80.9 after;
+    - the default suggester with the series passed: 49.4 / 50.6. Its range check reads a
+      unitless temperature as °F.
+
+    After the fixes the data helps 3 points and hurts 4. The 4 losses are refrigerated-case air
+    temperatures labelled as air-handler roles. Two of them, at about -3 °F, are below those
+    roles' physical bounds.
+  - **Other evaluation pools** (name plus data, top-1): real names 95.3 → 95.7 %, with 0 losses
+    (was 2); real names excluding in-sample names 89.1 → 90.7 %. Simulated LBNL sets and BTS are
+    unchanged. The synthetic names move by at most +0.1. Details and the helped and hurt lists
+    are in `docs/MAPPING-ASSIST.md`.
+- **`real_names.dataset_points` takes `keep_series`** and returns each point's 15-minute series
+  with its profile. The evaluation scripts only.
+
+None of these figures is a gated benchmark. The synthetic, fleet, LBNL, BDG2 and BDG2 savings
+benchmark gates are not affected.
+<!-- /0101-suggester-ts -->
+
 ## [0.100.0] — Unreleased
 
 <!-- Each 0.100 branch adds its bullets only inside its own marked block. -->

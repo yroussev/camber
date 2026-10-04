@@ -24,7 +24,7 @@ import difflib
 import re
 from dataclasses import asdict, dataclass
 
-from .mapping_confidence import _in_bound_units
+from .mapping_confidence import _DELTA_TEMP_ROLES, _in_bound_units
 from .model.mapping import MappingProvider
 from .model.roles import Role
 from .sensorhealth import PHYSICAL_BOUNDS, range_violation_frac
@@ -578,6 +578,62 @@ def _outdoor_guard(toks):
     return allowed | ({Role.WETBULB_TEMP} if "wetbulb" in concepts else frozenset())
 
 
+_SETPOINT_ROLES = frozenset(r for r in Role if "sp" in _ROLE_CONCEPTS[r])
+
+
+def _setpoint_guard(toks):
+    """The setpoint guard of the time-series path (0.101, #106): the roles the data may promote
+    for a point whose name says it is a setpoint, or ``None`` (no guard).
+
+    A zone setpoint that an occupant adjusts, or that resets through the day, moves like the room
+    temperature it controls, so the data alone reads ``temp_setpoint`` as ``space_temp``. When the
+    name says setpoint, the data only ranks among the setpoint roles: it still chooses a cooling
+    or heating setpoint, or a supply-air one, by the level, but it cannot turn a setpoint into a
+    sensor."""
+    concepts = {c for _, cs, _, _ in toks for c in cs}
+    return _SETPOINT_ROLES if "sp" in concepts else None
+
+
+def _plausible_scalings(role: Role) -> list:
+    """``[(scale, offset)]`` that take a series in each plausible unit of ``role`` onto the units
+    :data:`~camber.sensorhealth.PHYSICAL_BOUNDS` uses (0.101, #106): the role template's units
+    (:data:`~camber.mapping_timeseries.UNIT_SCALES`), and for a temperature without a template
+    degF and degC. A series is read as is first."""
+    from .mapping_timeseries import ROLE_TEMPLATES, UNIT_SCALES
+
+    out = [(1.0, 0.0)]
+    t = ROLE_TEMPLATES.get(role)
+    if t is not None and t.family in UNIT_SCALES:
+        out += list(UNIT_SCALES[t.family].values())
+    elif role.value.endswith("_temp") or role is Role.OAT:
+        out.append(UNIT_SCALES["temp"]["degC"])
+    return list(dict.fromkeys(out))
+
+
+def _ts_range_violation(series, role: Role, unit: str) -> float:
+    """The physical-range violation of ``series`` for ``role`` on the time-series path.
+
+    With a declared unit it is the default path's check. Without one (0.101, #106) the series is
+    read in each plausible unit of the role and the best reading counts, so a degC zone
+    temperature or a duct static in Pa is not rejected for its unit, while a series that no
+    plausible unit puts inside the bounds (a sentinel, a dead channel) is.
+    Before 0.101 a point with no declared unit skipped the check on this path."""
+    if unit:
+        return range_violation_frac(_in_bound_units(series, role, unit), role)
+    best = float("nan")
+    for a, b in _plausible_scalings(role):
+        if role in _DELTA_TEMP_ROLES:
+            b = 0.0  # a temperature difference converts without the offset
+        try:
+            scaled = series if (a, b) == (1.0, 0.0) else series * a + b
+        except TypeError:  # a non-numeric series: only the reading as is
+            continue
+        rv = range_violation_frac(scaled, role)
+        if rv == rv and not best <= rv:
+            best = rv
+    return best
+
+
 class FeatureSuggester:
     """Dependency-light role suggester from a tag's string, unit, and data range-fit.
 
@@ -589,7 +645,9 @@ class FeatureSuggester:
     :class:`~camber.mapping_timeseries.ProfileModel` used instead of the hand-written role
     templates. Without ``use_timeseries`` the suggestions are name, unit and range only; 0.100
     (#102) extended the name vocabulary (so some names now get a different suggestion) and added
-    the weather-station guard to the time-series path (:func:`_outdoor_guard`).
+    the weather-station guard to the time-series path (:func:`_outdoor_guard`). 0.101 (#106) adds
+    the setpoint guard (:func:`_setpoint_guard`) and range-checks a point with no declared unit
+    in every plausible unit (:func:`_ts_range_violation`); both act only on the time-series path.
     """
 
     def __init__(
@@ -673,6 +731,7 @@ class FeatureSuggester:
         lexical = {role: _string_score(words, role) for role in self.vocab}
         best_lex = max((s for s, _ in lexical.values()), default=0.0)
         outdoor_only = _outdoor_guard(words)
+        setpoint_only = _setpoint_guard(words)
         scored = []
         for role in self.vocab:
             s, basis = lexical[role]
@@ -687,13 +746,15 @@ class FeatureSuggester:
             t_score, t_note = ts.get(role, (0.0, ""))
             if outdoor_only is not None and role not in outdoor_only:
                 t_score, t_note = 0.0, ""  # the weather-station guard (0.100, #102)
+            if setpoint_only is not None and role not in setpoint_only:
+                t_score, t_note = 0.0, ""  # the setpoint guard (0.101, #106)
             if t_score > 0:
                 s = blend(s, t_score, best_lex)
                 bases.append("timeseries")
-            # the physical-range gate needs a declared unit here: without one the templates
-            # already judged the level in every plausible unit (a C series is not an F one)
-            if s > 0.0 and series is not None and u and role in PHYSICAL_BOUNDS:
-                rv = range_violation_frac(_in_bound_units(series, role, u), role)
+            # the physical-range gate; without a declared unit the series is read in each
+            # plausible unit of the role (a C series is not an F one) -- 0.101, #106
+            if s > 0.0 and series is not None and role in PHYSICAL_BOUNDS:
+                rv = _ts_range_violation(series, role, u)
                 if rv == rv:
                     if rv > 0.1:
                         s *= 1.0 - min(rv, 1.0)

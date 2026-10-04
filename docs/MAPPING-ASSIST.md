@@ -172,8 +172,18 @@ fs.suggest("3dfa2bab_f8f2_485b", series=point_series)
 
 **Opt-in.** Without `use_timeseries=True`, a caller gets the name-only suggestions above: those
 of 0.95 until 0.99, and the extended vocabulary from 0.100. With it, the physical-range gate runs
-only when a unit is declared -- without one the templates already judged the level in every
-plausible unit.
+in the declared unit. Until 0.100 it ran only when a unit was declared. From 0.101 (#106), a
+point with no unit is range-checked in every plausible unit of the role, the same readings the
+templates try (°C or °F, Pa or inH2O...), and the best reading counts. A 22 °C room is no
+longer out of range for being read as °F, and a sentinel or dead channel (`-999`) that fits no
+unit is demoted as it is on the default path.
+
+**Setpoint guard (0.101, #106).** An occupant-adjusted or reset zone setpoint moves like the room
+it controls, so the data alone read `temp_setpoint` as `space_temp`. When the name says setpoint
+(`setpoint`, `SP`, `STPT`, or a run-together `RMCLGSPT`), the data now ranks only the setpoint
+roles. It still chooses a cooling, heating or supply-air setpoint by the level, but it cannot
+turn a setpoint into a sensor. `SPT` alone is a space temperature, so it does not trigger the
+guard.
 
 **Weather-station guard (0.100, #102).** A weather-station point is often a different sensor from
 the site's outdoor reference, so the hour-by-hour weather features did not make it look
@@ -465,12 +475,97 @@ styles. It is what places an anonymised point at all (BTS: 0 → 48 %). The cost
 
 - It changes those callers' output, including the BACnet review path, whenever they pass series.
 - One residual loss: a setpoint named only `temp_setpoint` is read as the room temperature its
-  data resembles.
+  data resembles. *Fixed in 0.101 (#106): the setpoint guard.*
 - Without a declared unit, the time-series path skips the physical-range gate and relies on the
-  templates instead.
+  templates instead. *Fixed in 0.101 (#106): it checks every plausible unit.*
 
 Without a series the two paths agree, so callers that pass no data are unaffected. None of these
 numbers is a gated benchmark.
+
+#### 0.101: held-out names with their data, and the two fixes (#106)
+
+This is step 1 of the recommendation above: measure, and fix the two known costs. **The default
+does not change** (that is step 2, #107, after sign-off).
+
+`catalog_names.py --data` scores the held-out catalog names (out of sample for the name
+vocabulary) with their series from the catalog data. Each point is read as `real_names.py`
+reads it: 15-minute means from the first fault-free run, with no unit passed. The held-out lab
+and test datasets publish runs of 18 to 24 hours, so a series needs half a day of data here, not
+two days. Three suggesters are compared:
+
+- **name only**: `FeatureSuggester()` with no series;
+- **name only, series passed**: the same default suggester when a caller passes the series. It
+  adds the physical-range gate, read in °F when no unit is declared;
+- **name + data**: `FeatureSuggester(use_timeseries=True)` with the series.
+
+Of the 223 held-out names, 89 have a usable series. `rbc-g36-ahu` (83 names) is research-only and
+is not read. The `nist-heatpump-fdd` runs (15 names) are a few hours long. Of the other 36, 33
+are columns CAMBER derives at ingest: the `ornl-frp-vav` per-room setpoint and occupancy copies
+(`CLGSP_102`...), and fan- and compressor-on flags. Two medium-temperature names share their
+series with the low-temperature mapping and are scored there. `finnish-dcv`'s supply-air CO2
+has no series in the runs read.
+
+| mapping file | points (with data) | name only top-1 / top-3 % | name only, series passed top-1 / top-3 % | name + data, 0.100 top-1 / top-3 % | name + data, 0.101 top-1 / top-3 % |
+|---|---|---|---|---|---|
+| `cofactor_drammen_heat` | 1 (1) | 0.0 / 0.0 | 0.0 / 0.0 | 100.0 / 100.0 | 100.0 / 100.0 |
+| `cofactor_drammen_power` | 1 (1) | 0.0 / 0.0 | 0.0 / 0.0 | 100.0 / 100.0 | 100.0 / 100.0 |
+| `finnish_dcv` | 5 (4) | 75.0 / 75.0 | 50.0 / 75.0 | 75.0 / 100.0 | 75.0 / 100.0 |
+| `nist_ibal` | 10 (10) | 10.0 / 20.0 | 20.0 / 20.0 | 10.0 / 20.0 | 20.0 / 20.0 |
+| `ornl_frp_vav` | 92 (61) | 98.4 / 100.0 | 62.3 / 62.3 | 98.4 / 100.0 | 98.4 / 100.0 |
+| `ornl_supermarket_lt` | 7 (6) | 33.3 / 33.3 | 0.0 / 0.0 | 33.3 / 33.3 | 0.0 / 0.0 |
+| `ornl_supermarket_mt` | 7 (4) | 50.0 / 75.0 | 50.0 / 50.0 | 0.0 / 50.0 | 0.0 / 75.0 |
+| `valladolid_meter` | 1 (1) | 0.0 / 0.0 | 0.0 / 0.0 | 0.0 / 0.0 | 0.0 / 0.0 |
+| `valladolid_weather` | 1 (1) | 0.0 / 0.0 | 0.0 / 0.0 | 0.0 / 0.0 | 0.0 / 0.0 |
+| **pooled, with data** | **89** | **76.4 / 79.8** | **49.4 / 50.6** | **76.4 / 82.0** | **75.3 / 80.9** |
+| pooled, all held-out names | 223 | 83.0 / 85.2 | 72.2 / 73.5 | 83.0 / 86.1 | 82.5 / 85.7 |
+
+*Without a series the three suggesters agree, so a name with no data counts the same for each
+in the all-names row. `cofactor-drammen`'s `Tout` is one series under two mapping files.*
+
+Where the data changes the name's top-1 (0.101):
+
+- **Helped (3):**
+  - `cofactor-drammen`'s `Tout`, twice. The name says nothing, and the data reads outdoor air.
+  - `nist-ibal`'s `ch1_p_dis`. The name alone reads a supply-air temperature, and a pressure
+    of about 220 psi is out of that role's range (the 0.101 range check without a unit).
+- **Hurt (4), all refrigerated-display-case air temperatures in `ornl-supermarket-fdd`. The
+  catalog labels them with the air-handler roles `supply_air_temp` and `return_air_temp`.**
+  - The medium-temperature case's supply and return air (`T-MTCase-Sup`, `T-MTCase-Ret`,
+    32-45 °F) read as humidities at a percent-like level. This was a loss before 0.101 too.
+  - The low-temperature case's supply and return air (`T-LTcase-Sup`, `T-LTcase-Ret`, about
+    -3 °F) are below the supply- and return-air physical bounds in any unit. The 0.101 range
+    check now demotes them, as the default path already does when a series is passed.
+
+What the two fixes change on every evaluation pool (re-run on the same inputs; "before" is
+0.100):
+
+| evaluation | name + data before top-1 / top-3 % | name + data after top-1 / top-3 % |
+|---|---|---|
+| held-out catalog names with data (89), series passed | 76.4 / 82.0 | 75.3 / 80.9 |
+| real names, pooled (422) | 95.3 / 96.9 | 95.7 / 96.9 |
+| real, "excluding in-sample names" (129) | 89.1 / 93.8 | 90.7 / 93.8 |
+| simulated LBNL sets (78) | 78.2 / 85.9 | 78.2 / 85.9 |
+| BTS anonymised (903), templates | 48.0 / 65.2 | 48.0 / 65.2 |
+| BTS Brick-class labels as names (upper bound), templates | 95.5 / 99.9 | 95.5 / 99.9 |
+| synthetic `VAV-2-14 DA-T` | 73.9 / 86.3 | 74.0 / 86.7 |
+| synthetic `201-AHU3:SA-TMP` | 74.0 / 85.3 | 74.0 / 85.9 |
+
+*The other synthetic styles, every name-only row and every data-only row are unchanged.
+`real_names.py`, `bts.py` and `messy_names.py` score cached profiles without the series, so
+there the range-check fix does not act. Only `catalog_names.py --data` passes the series.*
+
+- **The setpoint guard removes the last real-name loss.** Both `robod` rooms' `temp_setpoint`
+  keep `cool_sp`. On real names the data now helps 6 points and hurts none (0.100: 6 and 2).
+- **The range check without a unit makes the time-series path judge a point's range as the
+  default path does, without the °F assumption.** It gains `ch1_p_dis` and costs the two
+  freezer-case temperatures, whose labels stretch an air-handler role below its physical bounds.
+- **Read the series-passed column before deciding #107.** Today, a caller who passes series
+  without units to the default suggester loses 27 points of top-1 on these names (76.4 → 49.4 %).
+  The default range check reads every unitless temperature as °F, so 22 °C rooms and 13 °C
+  supply air fall out of range. The time-series path keeps 75.3 %. Changing the default path's
+  unitless range check would also change default output. It is not done here.
+- The held-out pool with data is small (89 points), and one file (`ornl_frp_vav`, 61 points)
+  dominates it. Its runs are one day long, so the daily and weekly features are not measured.
 
 ## Review the unmapped tags — `review_unmapped`
 
