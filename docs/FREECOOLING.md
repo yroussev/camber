@@ -38,6 +38,10 @@ is NaN — nothing is fabricated. Pairs with `camber.fault_economics` (fault →
 screen. Pass the unit's own dry-bulb high limit for a climate-appropriate count: see
 [TUNING.md](TUNING.md#a-climate-dependent-default-the-free-cooling-high-limit-free_cooling_missed).
 
+`low_limit_f` (0.100, default `None`) is the economizer's low-limit lockout. Hours with OAT below it
+are neither available nor missed, and `hours_low_limit_excluded` counts them. The
+`free_cooling_missed` rule takes the same parameter and applies the same test.
+
 ## Further reading
 
 PNNL's [Air-Side Economizer Operation](https://www.pnnl.gov/sites/default/files/media/file/pnnl_sa_86706.pdf) guide (PNNL-SA-86706) and training

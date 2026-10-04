@@ -29,16 +29,33 @@ benchmark gates did not move.
   templates now run it at the documented 60 °F high limit, reading each unit's own OA damper
   command and mixed-air temperature. Hourly, `lbnl-ddahu` `DMPRStuck_OA_0` reads *warn* (14.5 %
   of free-cooling hours, cause: damper not delivering), and its fault-free and `DMPRStuck_OA_100`
-  runs read *ok*. On `lbnl-sdahu`, `damper_stuck_010`, `damper_stuck_025` and
-  `onset_damper_stuck_025` read *fault* (49 %, 49 % and 30 %) and `damper_stuck_075` *warn* (13 %),
-  all with cause damper not delivering. The fault-free and `coi_leakage_010` runs read *warn*
-  (17.5 % and 18.3 %, economizer not commanded): 93 % of those hours fall below the unit's 33.8 °F
-  low-limit lockout, which holds the damper at its minimum by design, and the rule has no low
-  limit. The template comment records this. The lbnl-sdahu RCx report has 13 issues, up from 8.
+  runs read *ok*. `lbnl-sdahu` also sets the unit's documented 33.8 °F low-limit lockout
+  (`low_limit_f`, below), so 3,374 of its 5,515 sub-60 °F hours count as free-cooling weather.
+  There `damper_stuck_010` and `damper_stuck_025` read *fault* (49.6 %), and
+  `onset_damper_stuck_025` and `damper_stuck_075` read *warn* (21.1 % and 20.8 %), all with cause
+  damper not delivering. The fault-free and `coi_leakage_010` runs read *ok* (1.96 % and 1.93 %).
+  Without the low limit they read *warn* (17.5 % and 18.3 %), because 93 % of their missed hours
+  fall below the lockout, where the sequence holds the damper at its minimum by design. The
+  template comment records both. The lbnl-sdahu RCx report has 11 issues, up from 8.
   `free_cooling_missed` is not a scored target, so `camber datasets score` and the gated
   benchmarks do not move. The other four air-handler templates do not run it, and each comment
   says why. `nuig-ahu101` is 100 % outdoor air with no mixing box. On `lbnl-b59`, `ornl-frp-ops`
   and `ornl-frp-vav` the rooftop units trend no cooling-valve command, so the rule would decline.
+
+### Added
+- **`free_cooling_missed` takes an economizer low-limit lockout, `low_limit_f` (provisional).**
+  Many sequences lock the economizer out below a low outdoor-air temperature and hold the OA
+  damper at its minimum, so mechanical cooling in that weather is not missed free cooling. With
+  `low_limit_f` set, hours below it are neither available nor missed. They are reported as
+  `low_limit_excluded_hours` (and `low_limit_cooling_hours`, those with mechanical cooling
+  running), with a caveat. `camber.freecooling.free_cooling_opportunity` takes the same
+  parameter through the same weather test and reports `hours_low_limit_excluded`. The RCx
+  report's economizer page passes the rule's value to it. The default `None` keeps both outputs
+  byte-identical, with none of the new metrics or fields. `lbnl-sdahu` sets 33.8 °F. `lbnl-ddahu`
+  does not: no lockout is documented for that unit, and on its fault-free run the OA damper
+  modulates above its minimum down to about 15 °F. Its findings are unchanged. The two #101 RCx
+  headings hold. The `air-economizer` and `capstone` workbook exercises keep their own configs
+  and do not set it, so their answers do not move.
 <!-- /0100-integration -->
 
 <!-- 0100-sensor -->

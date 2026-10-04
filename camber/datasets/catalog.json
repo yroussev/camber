@@ -363,7 +363,7 @@
     "Valves and dampers map to the controller demand columns (*_DM), not the measured positions: a stuck device's position hides the fault the rules look for.",
     "The unit exports no fan run-status point (SF_SPD_DM, which the inventory lists as the supply-fan status, equals SYS_CTL in every row). CAMBER derives one: SF_ON = 1 when the speed command SF_CS is above 0, which agrees with the supply-fan power being above 5 W in 99.8% of rows; it maps to supply_fan_status, SF_CS to supply_fan_speed.",
     "The unit's minimum OA is a fixed 10% damper position (inventory section 1.2), which measures as a 1.6% OA fraction (median of 119,163 occupied, fan-on minutes at that position): the run template sets min_oa_pct 1.6. A damper stuck at 10% is therefore indistinguishable from normal operation outside economizer weather; its symptom is the missed economizer (61.8% vs 1.6% OA in 33.8-60 F weather).",
-    "The economizer runs only between 33.8 F and 60 F (inventory section 1.2): below 33.8 F it is locked out by design, so cold-weather 'missed free cooling' is not a fault on this unit. The run template sets economizer_high_limit's high_limit_f to 60.",
+    "The economizer runs only between 33.8 F and 60 F (inventory section 1.2): below 33.8 F it is locked out by design, so cold-weather 'missed free cooling' is not a fault on this unit. The run template sets economizer_high_limit's high_limit_f to 60, and free_cooling_missed's high_limit_f to 60 and low_limit_f to 33.8.",
     "damper_stuck_100 is a short run (2018-04-01 to 2018-11-01)."
    ],
    "data_issues": [

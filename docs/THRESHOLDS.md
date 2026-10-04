@@ -82,7 +82,7 @@ The registry is a provisional API (0.98): its shape may still change before 1.0.
 | [`dx_refrigerant_charge`](#dx_refrigerant_charge) | 12 |  |
 | [`economizer_high_limit`](#economizer_high_limit) | 11 |  |
 | [`filter_fouling`](#filter_fouling) | 1 |  |
-| [`free_cooling_missed`](#free_cooling_missed) | 9 |  |
+| [`free_cooling_missed`](#free_cooling_missed) | 10 |  |
 | [`g36_afdd`](#g36_afdd) | 15 |  |
 | [`heatpump_defrost`](#heatpump_defrost) | 1 | yes |
 | [`hp_capacity_shortfall`](#hp_capacity_shortfall) | 10 |  |
@@ -632,6 +632,7 @@ How to calibrate:
 | `stuck_min_share_pct` | `20.0` | % of missed, well-conditioned free-cooling samples | 5.0 to 60.0 | CAMBER judgment, checked on lbnl-sdahu (stuck-damper runs 40-87 %, fault-free and valve-leak runs 0 %) and lbnl-ddahu (stuck-closed run 95 %, fault-free 0 %) |
 | `stuck_min_hours` | `24.0` | hours | 6.0 to 168.0 | CAMBER judgment: one day of evidence before naming a mechanical cause |
 | `stuck_low_oaf_pct` | `30.0` | % outdoor-air fraction | 5.0 to 60.0 | CAMBER judgment: below 30 % the damper delivers about its minimum-OA share or less |
+| `low_limit_f` | `null` | °F (outdoor air dry-bulb) | 20.0 to 50.0 | CAMBER judgment: no lockout is assumed, because a low limit is a property of the unit's own sequence (freeze protection of the coils and the mixing box), not a general value |
 
 How to calibrate:
 
@@ -644,6 +645,7 @@ How to calibrate:
 - `stuck_min_share_pct`: Read commanded_open_pct on units whose dampers are known to work: set it well above their value (usually 0 %) and below that of a unit with a known stuck damper. *Note:* Below it, with a damper command trended, missed_cause is economizer_not_commanded.
 - `stuck_min_hours`: Raise it for long windows or noisy mixed-air sensors; one day is the floor for an hourly trend. *Note:* With the share met on fewer hours, missed_cause is undetermined.
 - `stuck_low_oaf_pct`: Set it just above the unit's design minimum OA fraction plus a margin; a damper delivering less while commanded open reads 'stuck low', more reads 'stuck part open'. *Note:* Recorded on the finding; the recommendation reads it (aso DEFAULT_PARAMS econ_stuck_low_oaf_pct mirrors the default).
+- `low_limit_f`: Set it to the economizer low-limit lockout programmed in the unit's sequence of operations. From trends, take the OAT below which the OA damper command never leaves its minimum over a winter of known-good operation. Record the source in the config's basis map. *Note:* None = no lockout: every hour below high_limit_f is free-cooling weather (the pre-0.100 finding, byte-identical). When set, hours below it are neither available nor missed; they are counted in low_limit_excluded_hours (low_limit_cooling_hours of them with mechanical cooling running) with a caveat. Must be below high_limit_f. camber.freecooling.free_cooling_opportunity takes the same parameter, and the RCx report's economizer page passes this rule's value to it.
 
 ## g36_afdd
 

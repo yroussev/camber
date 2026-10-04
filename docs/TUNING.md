@@ -254,6 +254,15 @@ and that depends on climate:
 setpoint: it checks that the damper closes *above* the limit. On a tuned site, set both from the
 same sequence value.
 
+**The low limit (0.100).** Many sequences also lock the economizer out below a low outdoor-air
+temperature (freeze protection) and hold the OA damper at its minimum. Mechanical cooling in that
+weather is not missed free cooling, so set `free_cooling_missed`'s `low_limit_f` to the lockout in
+the unit's sequence. Hours below it are then left out of the free-cooling weather and reported as
+`low_limit_excluded_hours`. The default, `None`, assumes no lockout. From trends, the lockout is
+the OAT below which the OA damper command never leaves its minimum over a known-good winter. The
+`lbnl-sdahu` template sets its documented 33.8 °F. Without it, that unit's fault-free run reads
+*warn*, because nearly all its "missed" hours are lockout hours.
+
 ## See also
 
 - [THRESHOLDS.md](THRESHOLDS.md): every parameter, its basis and calibration hint (generated).

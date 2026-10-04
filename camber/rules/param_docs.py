@@ -539,6 +539,23 @@ PARAM_DOCS["free_cooling_missed"].update(
     }
 )
 # ---- end 098-rcx-cause ----
+# ---- begin 0100-integration: free_cooling_missed economizer low-limit lockout ----
+PARAM_DOCS["free_cooling_missed"]["low_limit_f"] = _P(
+    "°F (outdoor air dry-bulb)",
+    "CAMBER judgment: no lockout is assumed, because a low limit is a property of the unit's own "
+    "sequence (freeze protection of the coils and the mixing box), not a general value",
+    "Set it to the economizer low-limit lockout programmed in the unit's sequence of operations. "
+    "From trends, take the OAT below which the OA damper command never leaves its minimum over a "
+    "winter of known-good operation. Record the source in the config's basis map.",
+    (20.0, 50.0),
+    "None = no lockout: every hour below high_limit_f is free-cooling weather (the pre-0.100 "
+    "finding, byte-identical). When set, hours below it are neither available nor missed; they "
+    "are counted in low_limit_excluded_hours (low_limit_cooling_hours of them with mechanical "
+    "cooling running) with a caveat. Must be below high_limit_f. "
+    "camber.freecooling.free_cooling_opportunity takes the same parameter, and the RCx report's "
+    "economizer page passes this rule's value to it.",
+)
+# ---- end 0100-integration ----
 
 PARAM_DOCS["leaking_valve"] = {
     "fan_heat_f": _P(

@@ -1901,6 +1901,11 @@ def _sec_economizer(S) -> dict | None:
     rule = ctx.rule("economizer_high_limit")
     configured = rule is not None and "economizer_high_limit" in ctx.overrides
     rule = rule if rule is not None else EconomizerHighLimit()
+    # 0.100: free_cooling_missed's economizer low-limit lockout, when set, so the page's free-
+    # cooling table and the rule count the same weather (None = no lockout, as before)
+    low_limit = getattr(ctx.rule("free_cooling_missed"), "low_limit_f", None)
+    if low_limit is not None and not float(low_limit) < float(rule.high_limit_f):
+        low_limit = None  # the page's high limit is economizer_high_limit's; never invert them
     blocks: list = []
     oat_issue = [
         c
@@ -1989,7 +1994,9 @@ def _sec_economizer(S) -> dict | None:
             if econ is None:
                 econ = pd.Series(False, index=fr.index)
             sig = sig.where(~econ[on].fillna(False).astype(bool), 0.0)
-            fc = free_cooling_opportunity(oat, sig, high_limit_f=float(rule.high_limit_f))
+            fc = free_cooling_opportunity(
+                oat, sig, high_limit_f=float(rule.high_limit_f), low_limit_f=low_limit
+            )
             rows_fc.append(
                 [
                     e,
@@ -2010,8 +2017,14 @@ def _sec_economizer(S) -> dict | None:
     if rows_fc:
         blocks.append(
             _p(
-                f"Free cooling (fan-on hours with OAT below the "
-                f"{float(rule.high_limit_f):g}°F high "
+                "Free cooling (fan-on hours with OAT "
+                + (
+                    f"from the {float(low_limit):g}°F low-limit lockout (free_cooling_missed's "
+                    "low_limit_f) up to the "
+                    if low_limit is not None
+                    else "below the "
+                )
+                + f"{float(rule.high_limit_f):g}°F high "
                 "limit while the cooling valve was open and the unit was not already near 100 % "
                 "outside air -- an integrated economizer is not counted; OA fraction from the "
                 f"temperature balance where |OAT − RAT| ≥ {ECON_MIN_DELTA_F:g} °F, else the "

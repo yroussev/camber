@@ -28,6 +28,15 @@ command stayed below open); with no damper signal it is ``undetermined``. These 
 additive: severity is unchanged. ``commanded_open_oaf_median_pct`` (the OA fraction delivered
 while commanded open) below ``stuck_low_oaf_pct`` reads as "stuck low", above it as "stuck part
 open".
+
+**Economizer low-limit lockout (0.100).** Many sequences lock the economizer out below a low OAT
+limit (freeze protection), holding the OA damper at minimum by design, so mechanical cooling in
+that weather is not missed free cooling. With ``low_limit_f`` set, samples with OAT below it are
+taken out of the free-cooling opportunity (they are neither available nor missed) and counted in
+``low_limit_excluded_hours``, with a caveat; ``low_limit_cooling_hours`` says how many of them ran
+mechanical cooling. The test is :mod:`camber.freecooling`'s, the one
+:func:`~camber.freecooling.free_cooling_opportunity` applies with the same parameter. ``None``
+(the default) keeps the pre-0.100 finding byte-identical, with none of the low-limit metrics.
 """
 
 from __future__ import annotations
@@ -39,6 +48,8 @@ from ..freecooling import (
     ECON_DAMPER_MIN_PCT,
     ECON_MIN_DELTA_F,
     ECON_OAF_MIN_PCT,
+    _check_low_limit,
+    _free_cooling_weather,
     integrated_economizer_mask,
 )
 from ..model.roles import Role
@@ -82,8 +93,12 @@ class FreeCoolingMissed:
         stuck_min_share_pct: float = 20.0,
         stuck_min_hours: float = 24.0,
         stuck_low_oaf_pct: float = 30.0,
+        # 0.100: the economizer low-limit lockout (°F); None = no lockout, as before
+        low_limit_f: float | None = None,
     ):
+        _check_low_limit(high_limit_f, low_limit_f)
         self.high_limit_f = high_limit_f
+        self.low_limit_f = low_limit_f
         self.active = active
         self.warn_pct = warn_pct
         self.fault_pct = fault_pct
@@ -95,15 +110,19 @@ class FreeCoolingMissed:
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         oat, cool = frame[Role.OAT], normalize_percent(frame[Role.COOL_VALVE])
-        available = (oat < self.high_limit_f) & oat.notna() & cool.notna()
+        weather, below_low = _free_cooling_weather(oat, self.high_limit_f, self.low_limit_f)
+        valid = oat.notna() & cool.notna()
+        available = weather & valid
         n_avail = int(available.sum())
         step_h = _step_hours(frame.index)
+        low = self._low_limit_metrics(below_low & valid, cool, step_h)
         if n_avail == 0:
             return Finding(
                 rule=self.name,
                 equip=equip,
                 severity="info",
                 summary=f"{equip}: no free-cooling weather in the window",
+                metrics=low,  # {} without a low limit, as before
             )
         running = available & (cool > self.active)
         econ = integrated_economizer_mask(
@@ -164,6 +183,7 @@ class FreeCoolingMissed:
                 "econ_oaf_min_pct": ECON_OAF_MIN_PCT,
                 "econ_min_delta_f": ECON_MIN_DELTA_F,
                 **cause,
+                **low,
             },
             summary=(
                 f"{equip}: mechanical cooling (valve > {self.active:g}%) ran {pct:.0f}% of the "
@@ -174,9 +194,49 @@ class FreeCoolingMissed:
                     if n_integrated
                     else ""
                 )
+                + (
+                    f"; {low['low_limit_excluded_hours']:g} h below the {self.low_limit_f:g}°F "
+                    "low-limit lockout not judged"
+                    if low and low["low_limit_excluded_hours"]
+                    else ""
+                )
             ),
-            caveats=caveats,
+            caveats=caveats + self._low_limit_caveat(low),
         )
+
+    def _low_limit_metrics(self, locked: pd.Series, cool: pd.Series, step_h) -> dict:
+        """0.100: the samples below the economizer low-limit lockout, taken out of the
+        opportunity. Empty (no metrics at all) without a ``low_limit_f``."""
+        if self.low_limit_f is None:
+            return {}
+        n = int(locked.sum())
+        n_cool = int((locked & (cool > self.active)).sum())
+        return {
+            "low_limit_f": self.low_limit_f,
+            "n_low_limit_excluded_samples": n,
+            "low_limit_excluded_hours": None if step_h is None else round(n * step_h, 1),
+            "low_limit_cooling_hours": None if step_h is None else round(n_cool * step_h, 1),
+        }
+
+    def _low_limit_caveat(self, low: dict) -> list:
+        if not low or not low["n_low_limit_excluded_samples"]:
+            return []
+        span = (
+            f"{low['low_limit_excluded_hours']:g} hours"
+            if low["low_limit_excluded_hours"] is not None
+            else f"{low['n_low_limit_excluded_samples']} samples"
+        )
+        cooled = (
+            f" (mechanical cooling ran in {low['low_limit_cooling_hours']:g} of them)"
+            if low["low_limit_cooling_hours"]
+            else ""
+        )
+        return [
+            f"{span} with OAT below the {self.low_limit_f:g} °F economizer low-limit lockout are "
+            f"not counted as free-cooling weather{cooled}: the sequence holds the OA damper at "
+            "its minimum there by design. The lockout setting itself is not verified -- confirm "
+            "it against the unit's sequence of operations"
+        ]
 
     def _missed_cause(self, frame: pd.DataFrame, missed: pd.Series, step_h) -> dict:
         """0.98 (#88): why free cooling was missed -- the damper was told to open and did not

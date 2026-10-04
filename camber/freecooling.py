@@ -63,9 +63,41 @@ class FreeCoolingOpportunity:
     recoverable_kwh: float  # addressable × recover_frac
     savings_usd: float  # recoverable × price (NaN if no price given)
     high_limit_f: float
+    # 0.100: the economizer low-limit lockout, when one is passed. Below it the sequence holds the
+    # OA damper at minimum by design, so those hours are not free-cooling opportunity; they are
+    # counted here instead. Omitted from :meth:`as_dict` when no low limit was passed.
+    low_limit_f: float | None = None
+    hours_low_limit_excluded: float = 0.0
 
     def as_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if self.low_limit_f is None:  # pre-0.100 output, byte-identical
+            del d["low_limit_f"], d["hours_low_limit_excluded"]
+        return d
+
+
+def _check_low_limit(high_limit_f: float, low_limit_f: float | None) -> None:
+    if low_limit_f is not None and not low_limit_f < high_limit_f:
+        raise ValueError(
+            f"low_limit_f ({low_limit_f:g}) must be below high_limit_f ({high_limit_f:g})"
+        )
+
+
+def _free_cooling_weather(oat, high_limit_f: float, low_limit_f: float | None = None):
+    """``(available, below_low_limit)`` boolean masks on ``oat``'s index -- the one free-cooling
+    weather test :func:`free_cooling_opportunity` and the ``free_cooling_missed`` rule share.
+
+    *Available* is OAT below ``high_limit_f`` and, with a ``low_limit_f``, at or above it.
+    ``below_low_limit`` is OAT below the low limit (all ``False`` without one): weather in which
+    the economizer is locked out by design, so it is not free-cooling opportunity. NaN OAT is in
+    neither mask.
+    """
+    below_high = oat < high_limit_f
+    if low_limit_f is None:
+        return below_high, pd.Series(False, index=oat.index)
+    _check_low_limit(high_limit_f, low_limit_f)
+    below_low = oat < low_limit_f
+    return below_high & ~below_low, below_low
 
 
 def free_cooling_opportunity(
@@ -74,6 +106,7 @@ def free_cooling_opportunity(
     *,
     cooling_kw=None,
     high_limit_f: float = DEFAULT_FREE_COOLING_HIGH_LIMIT_F,
+    low_limit_f: float | None = None,
     active_thresh: float = 0.05,
     recover_frac: float = 0.7,
     price_per_kwh: float | None = None,
@@ -90,15 +123,24 @@ def free_cooling_opportunity(
     ``oat``)
     the missed-hours energy is summed; ``recover_frac`` is the fraction an economizer could offset,
     and ``price_per_kwh`` values it.
+
+    ``low_limit_f`` (0.100, default ``None``) is the economizer's low-limit lockout: hours with
+    OAT below it are not free-cooling opportunity (the sequence holds the OA damper at minimum
+    there by design); they are counted in ``hours_low_limit_excluded`` instead. ``None`` keeps the
+    pre-0.100 result. It must be below ``high_limit_f``. The same test the ``free_cooling_missed``
+    rule's ``low_limit_f`` applies.
     """
     cols = {"oat": oat, "cool": cooling_signal}
     if cooling_kw is not None:
         cols["kw"] = cooling_kw
     df = pd.DataFrame(cols).dropna(subset=["oat", "cool"])
+    _check_low_limit(high_limit_f, low_limit_f)
     if df.empty:
-        return FreeCoolingOpportunity(0.0, 0.0, float("nan"), 0.0, 0.0, float("nan"), high_limit_f)
+        return FreeCoolingOpportunity(
+            0.0, 0.0, float("nan"), 0.0, 0.0, float("nan"), high_limit_f, low_limit_f
+        )
     dt = interval_hours(df.index)
-    available = df["oat"] < high_limit_f
+    available, below_low = _free_cooling_weather(df["oat"], high_limit_f, low_limit_f)
     active = df["cool"] > active_thresh
     missed = available & active
 
@@ -122,6 +164,8 @@ def free_cooling_opportunity(
         recoverable_kwh=round(recoverable, 2),
         savings_usd=round(savings, 2) if np.isfinite(savings) else float("nan"),
         high_limit_f=high_limit_f,
+        low_limit_f=low_limit_f,
+        hours_low_limit_excluded=round(float(below_low.sum()) * dt, 2),
     )
 
 
