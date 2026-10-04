@@ -907,6 +907,7 @@ def site_checks(
     trust: dict | None = None,
     skipped=(),
     declined=(),
+    heading_causes: dict | None = None,
 ) -> list:
     """The walk-down checklist for ranked ``issues`` (:class:`camber.rules.triage.Issue`).
 
@@ -916,6 +917,12 @@ def site_checks(
     the config's ``{rule: params}`` (a parameter named there is a site value, not a default);
     ``trust`` ``{equip: {role: SensorTrust}}`` adds the trust score to a sensor item; ``skipped``
     is ``RunResult.rules_skipped`` and ``declined`` the declined findings (Appendix A).
+
+    ``heading_causes`` ``{issue key: (rule, cause key)}`` (0.101, #108) names the cause that heads
+    an issue when it is not the root's -- the RCx report's member cause (#101). That issue's
+    equipment item then follows the named rule and cause (its template, its rule's references and
+    the cause's recommendation references when a member finding carries it), so the item matches
+    the heading. An issue not named keeps the root's item, as before.
 
     Returns :class:`SiteCheck` items ordered sensors, equipment, design values, data; within a
     kind, by issue rank (Appendix A items last). Duplicates (same kind, equipment and point) are
@@ -958,11 +965,26 @@ def site_checks(
             slug = rname.split(":", 1)[1]
             sensor(slug, iss.equip, f"{rname} {iss.severity}", iss, rname, walk)
             continue
-        # 2. the equipment check for this rule and cause
-        entry = SITE_CHECKS.get(rname)
-        tmpls = _templates(entry, cause_key(root)) if entry else []
+        # 2. the equipment check for this rule and cause -- the heading's, when a member's cause
+        # heads the issue (0.101, #108)
+        erule, ekey, erefs = rname, cause_key(root), rrefs
+        head = (heading_causes or {}).get(getattr(iss, "key", None))
+        if head is not None and tuple(head) != (rname, ekey):
+            erule, ekey = str(head[0]), str(head[1])
+            member = next(
+                (
+                    f
+                    for f in getattr(iss, "members", None) or ()
+                    if getattr(f, "rule", "") == erule and cause_key(f) == ekey
+                ),
+                None,
+            )
+            mrec = recommend(member) if recommend is not None and member is not None else None
+            erefs = _refs(getattr(mrec, "references", None), reference_ids_for(erule), walk)
+        entry = SITE_CHECKS.get(erule)
+        tmpls = _templates(entry, ekey) if entry else []
         if not tmpls:
-            tmpls = [_generic(rname, rule_of(rname))]
+            tmpls = [_generic(erule, rule_of(erule))]
         for t in tmpls:
             add(
                 SiteCheck(
@@ -973,8 +995,8 @@ def site_checks(
                     t.point,
                     t.confirms,
                     t.refutes,
-                    rrefs,
-                    rname,
+                    erefs,
+                    erule,
                     iss.rank,
                 )
             )

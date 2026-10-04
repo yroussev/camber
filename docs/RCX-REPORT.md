@@ -123,8 +123,8 @@ outside air". On the catalog run templates two issues are re-headed this way. Si
 `lbnl-ddahu` and `lbnl-sdahu` templates run `free_cooling_missed`. `lbnl-ddahu` `DMPRStuck_OA_0`
 now reads "Outdoor-air damper not modulating (stuck low)". `lbnl-sdahu` `damper_stuck_075` reads
 "Outdoor-air damper not modulating (stuck part open)", where its root, `economizer_high_limit`,
-reads "Economizer open above the high limit". The walk-down's equipment item still follows the
-root finding.
+reads "Economizer open above the high limit". Since 0.101 (#108) the walk-down's equipment item
+follows the same cause (see [Verify on site](#verify-on-site)).
 
 ## Verify on site
 
@@ -144,7 +144,14 @@ chapter is reproduced, and the item texts are CAMBER's own.
   controller check), `chw_plant_reset`'s reset direction and flow mode, a pump pinned at a VFD
   floor CAMBER inferred (`near_min_source`), the reheat valve whose position diverges from its
   demand, and so on. A rule without a template gets a generic item built from its required
-  inputs.
+  inputs. The item follows the cause that heads the issue (0.101, #108): when a member's cause
+  heads it ([Which cause heads an issue](#which-cause-heads-an-issue)), the report passes that
+  rule and cause key to `site_checks(heading_causes={issue key: (rule, cause key)})`, and the item
+  is the member's template, with that rule's references; otherwise it is the root's. On the 15
+  catalog run templates this changes 2 of 98 issues' items, the two re-headed ones: `lbnl-ddahu`
+  `DMPRStuck_OA_0` (from the minimum-outdoor-air damper position to the outdoor-air damper's
+  blades, linkage and actuator) and `lbnl-sdahu` `damper_stuck_075` (from the damper on a hot
+  hour against the high limit to the same blades-and-linkage check).
 - **Design values.** `DESIGN_PARAMS` names the site facts a rule assumes (not its detection
   thresholds). An item is listed when the issue's rule ran with that parameter at its default
   (not named in the config's `rules[].params`): confirm it against the drawings or the
