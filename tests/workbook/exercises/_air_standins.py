@@ -110,9 +110,9 @@ def sdahu(
 def ddahu(idx: pd.DatetimeIndex) -> pd.DataFrame:
     """One lbnl-ddahu-shaped dual-duct AHU: a cold deck held at 55 F, a hot deck heating.
 
-    The cold deck's supply air is held at a fixed 55 F whatever the weather (no setpoint is
-    trended), and by design the hot deck heats while the cold deck cools: both valves are open
-    together in mild weather.
+    The cold deck's supply air is held at its fixed 55 F setpoint whatever the weather (the
+    cold-deck setpoint is trended and mapped since 0.100, #98), and by design the hot deck heats
+    while the cold deck cools: both valves are open together in mild weather.
     """
     n = len(idx)
     oat = weather(idx)
@@ -130,6 +130,7 @@ def ddahu(idx: pd.DatetimeIndex) -> pd.DataFrame:
             Role.RETURN_AIR_TEMP: rat,
             Role.MIXED_AIR_TEMP: mat,
             Role.SUPPLY_AIR_TEMP: sat,
+            Role.SUPPLY_AIR_TEMP_SP: np.full(n, 55.0),
             Role.OA_DAMPER: np.where(occ, 45.0, 0.0),
             Role.COOL_VALVE: cool,
             Role.HEAT_VALVE: heat,

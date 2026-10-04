@@ -1,5 +1,5 @@
 {
-  "_comment": "Run template for lbnl-ddahu: OA fraction at the mixing box against the unit's SEASONAL design minimum. The sequence (inventory section 1.2(ii)) holds a 28% minimum damper position Jun-Aug and 45% otherwise; measured on the fault-free run (OA_CFM / (CSA_CFM + HSA_CFM) over the occupied, fan-on minutes at those two positions) they give 11.9% and 31.8% OA, and the temperature balance the rule uses agrees (13.6% and 31.8%). A seasonal minimum was chosen over judging measured OA flow against one number: the design itself has two minima, so no single number -- temperature- or flow-based -- is right in both seasons (against 11.9% the healthy winter reads as excess OA; against 31.8% the 45%-stuck run passes). The rule judges fan-on (CSF_CS), operate-mode (SYS_CTL) samples. simultaneous_heat_cool is not run: by design the hot deck heats to 90 F while the cold deck cools to 55 F. leaking_valve is not run (0.98, #84): the mapped supply air is the cold deck (CSA_TEMP), which the hot-deck heating coil never touches, so the default rule judges a heating leak on the wrong air stream. Run on the whole store it false-faults DDAHU__DMPRStuck_OA_0 (a heating-leak signature in 46.8% of both-valves-shut hours, hourly) and declines the fault-free and OA_100 runs (fewer than 10 fan-on hours with both valves shut). With judge_heating_on_supply_air false the heating coil is left unjudged (no hot-deck coil leaving-air point is mapped) and that run reads ok.",
+  "_comment": "Run template for lbnl-ddahu: OA fraction at the mixing box against the unit's SEASONAL design minimum. The sequence (inventory section 1.2(ii)) holds a 28% minimum damper position Jun-Aug and 45% otherwise; measured on the fault-free run (OA_CFM / (CSA_CFM + HSA_CFM) over the occupied, fan-on minutes at those two positions) they give 11.9% and 31.8% OA, and the temperature balance the rule uses agrees (13.6% and 31.8%). A seasonal minimum was chosen over judging measured OA flow against one number: the design itself has two minima, so no single number -- temperature- or flow-based -- is right in both seasons (against 11.9% the healthy winter reads as excess OA; against 31.8% the 45%-stuck run passes). The rule judges fan-on (CSF_CS), operate-mode (SYS_CTL) samples. simultaneous_heat_cool is not run: by design the hot deck heats to 90 F while the cold deck cools to 55 F. leaking_valve is not run (0.98, #84): the mapped supply air is the cold deck (CSA_TEMP), which the hot-deck heating coil never touches, so the default rule judges a heating leak on the wrong air stream. Run on the whole store it false-faults DDAHU__DMPRStuck_OA_0 (a heating-leak signature in 46.8% of both-valves-shut hours, hourly) and declines the fault-free and OA_100 runs (fewer than 10 fan-on hours with both valves shut). With judge_heating_on_supply_air false the heating coil is left unjudged (no hot-deck coil leaving-air point is mapped) and that run reads ok. G36 AFDD (0.100, #97, #98): g36_afdd runs with FC6 judged against the same seasonal minimum, min_oa_pct 31.8 with min_oa_pct_by_month 11.9 in Jun-Aug. Hourly, FC6 reads 0.13% on the fault-free run (ok), 1.96% on DMPRStuck_OA_0 and 0.13% on DMPRStuck_OA_100. FC6 applies in heating and mechanical cooling at minimum OA, and the learned OA damper minimum is 28% (the summer position), so nearly all its applicable hours fall in Jun-Aug; against an 11.9% minimum a damper stuck shut is off by less than G36's 30-point tolerance, so FC6 is not a stuck-closed detector on this unit. A fixed 31.8 would flag DMPRStuck_OA_0 (32.1%), but only by judging those summer hours against the other season's minimum. Since 0.100 (#98) the cold-deck setpoint CSA_TEMPSPT (55 F in every row) is mapped, so FC9, FC11 and FC13 are evaluated: DMPRStuck_OA_0 adds FC9 20.7% and FC11 12.2% to its FC8/FC10/FC12 fault; FC13 reads 0% on every run; the fault-free run's FC9 hits fall on 4 free-cooling hours, under the 24-hour floor, and it stays ok. The G36 tests read the cold deck as SAT and the hot-deck valve as the heating valve: G36 section 5.16.14 is written for single-duct units, and on this unit the hot deck heats to its own 90 F setpoint by design, which no mapped role judges.",
   "source": {
     "kind": "store",
     "store": "",
@@ -22,6 +22,21 @@
           "7": 11.9,
           "8": 11.9
         }
+      }
+    },
+    {
+      "name": "g36_afdd",
+      "params": {
+        "min_oa_pct": 31.8,
+        "min_oa_pct_by_month": {
+          "6": 11.9,
+          "7": 11.9,
+          "8": 11.9
+        }
+      },
+      "basis": {
+        "min_oa_pct": "documented: the 45% minimum damper position of the sequence outside Jun-Aug (inventory section 1.2(ii)), measured as a 31.8% OA fraction on the fault-free run; the same value outdoor_air_fraction uses",
+        "min_oa_pct_by_month": "documented: the 28% minimum damper position in Jun-Aug (inventory section 1.2(ii)), measured as an 11.9% OA fraction on the fault-free run; the same values outdoor_air_fraction uses"
       }
     }
   ],

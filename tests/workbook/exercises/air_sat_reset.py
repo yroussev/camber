@@ -15,10 +15,12 @@ Real-data figures were recorded from::
 
 (CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29; the ``supply_air_control``
 figures re-recorded with 0.98.0-dev on 2026-09-30, when the rule gained its trended-occupancy
-gate, #84.) The share of the fault-free unit's too-warm fan-on hours that are unoccupied (78%)
-was read from the same store with ``ParquetStore.read_role_frame(..., resample="1h")`` and
-``camber.schedules.fan_on_mask``, the rule's own fan gate (see ``_warm_hours_unoccupied``); the
-ungated 12% by re-running the config with ``occupancy_gate: "off"`` (``_ungated_warn``).
+gate, #84; the ``lbnl-ddahu`` ``supply_air_reset`` reading re-recorded with 0.100.0-dev on
+2026-10-03, when the cold-deck setpoint was mapped, #98.) The share of the fault-free unit's
+too-warm fan-on hours that are unoccupied (78%) was read from the same store with
+``ParquetStore.read_role_frame(..., resample="1h")`` and ``camber.schedules.fan_on_mask``, the
+rule's own fan gate (see ``_warm_hours_unoccupied``); the ungated 12% by re-running the config
+with ``occupancy_gate: "off"`` (``_ungated_warn``).
 """
 
 from __future__ import annotations
@@ -38,7 +40,7 @@ def standin(store) -> None:
     - ds-lbnl-sdahu: the fault-free unit holds its fixed 55.25 F setpoint (no reset); the damper
       stuck at 75 % floods the mixing box with cold air in the cool weeks and, with no heating
       coil, the supply air falls below its setpoint.
-    - ds-lbnl-ddahu: the cold deck is held at 55 F in all weather, with no setpoint trended.
+    - ds-lbnl-ddahu: the cold deck is held at its flat 55 F setpoint in all weather.
     - ds-irish-ahu: the supply air is reset down as the outdoor air warms (a G36-style reset).
     """
     idx = hourly_index(days=28)
@@ -184,6 +186,8 @@ EXERCISE = Exercise(
         # lbnl-ddahu: the cold deck pinned at 55 F
         Finding("supply_air_reset", "DDAHU__fault_free", severity=("warn",), run="ddahu"),
         Check("ddahu reads as flat", _direction("ddahu", "DDAHU__fault_free", "flat")),
+        # 0.100 (#98): the cold-deck setpoint is mapped, and it never moves
+        Metric("supply_air_reset", "DDAHU__fault_free", "sp_range_f", 0.0, 0.01, run="ddahu"),
         Finding(
             "supply_air_reset_compliance", "DDAHU__fault_free", severity=("warn",), run="ddahu"
         ),
