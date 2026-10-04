@@ -19,6 +19,11 @@ at ingest (a fan-on flag computed from a power reading) are not published names 
 The same physical point in several runs (operating scenarios, fault runs of a simulation) is
 scored once, from its first fault-free run.
 
+**From 0.100 every lexical figure here is in-sample.** The 0.100 vocabulary additions (#102:
+``AF``, ``WH``, ``SW`` / ``RW``, ``STA``, "presence", the weather-station guard...) were chosen
+from the misses of the 0.96 run on these names. The out-of-sample reference for the name side is
+``catalog_names.py`` (the catalog mappings this script does not use).
+
 Real buildings and the LBNL simulated FDD sets (systematic, simulation-style names such as
 ``SA_TEMP``) are reported separately. Every dataset is open-tier; cite each as its catalog entry
 asks (``camber datasets info <id>``).
@@ -88,6 +93,12 @@ LEAKAGE = {
     "names: the lexical figures are partly in-sample; the RTU labels are the publisher's Brick "
     "classes with CAMBER overrides",
 }
+
+#: 0.100 (#102): the vocabulary was extended from the 0.96 misses on these names
+VOCAB_0100 = (
+    "the 0.100 vocabulary additions were chosen from the 0.96 misses on these names, so every "
+    "lexical figure is in-sample from 0.100; catalog_names.py is the out-of-sample name check"
+)
 
 
 # --------------------------------------------------------------------------- inputs
@@ -401,6 +412,7 @@ def main(argv=None) -> int:
                 print(f"  {tag}: {row[0]} {row[1]!r} {row[2]}: {row[3]} -> {row[4]}")
     for did, why in LEAKAGE.items():
         print(f"\nleakage, {did}: {why}")
+    print(f"\nleakage, all datasets: {VOCAB_0100}")
     print(f"\nresults: {os.path.join(args.out, 'results.json')}")
     return 0
 

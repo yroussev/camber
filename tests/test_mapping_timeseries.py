@@ -180,3 +180,24 @@ def test_timeseries_path_uses_the_data_when_the_name_says_nothing():
                             (profile_series(zone()), "space_temp")])  # fmt: skip
     got = FeatureSuggester(use_timeseries=True, model=m).suggest("x", profile=prof)
     assert got[0].role == "pump_status" and "fitted profile model" in got[0].rationale
+
+
+def test_0100_weather_station_guard_keeps_the_data_on_weather_roles():
+    # an outdoor humidity whose data the templates read as an outdoor airflow (no hour-by-hour
+    # match with the site's outdoor reference): a weather-station name keeps it a weather role
+    rh = _s(np.clip(50 + 10 * np.sin((HOUR - 3) / 24 * 2 * np.pi) + RNG.normal(0, 2, len(IDX)),
+                    20, 100))  # fmt: skip
+    fs = FeatureSuggester(use_timeseries=True, oat=OAT)
+    got = fs.suggest("Weather_7", series=rh)
+    assert got[0].role == "outdoor_rh"
+    allowed = {"oat", "outdoor_rh", "outdoor_co2"}
+    assert all(x.role in allowed or x.basis != "combined" for x in got)
+    # a named outdoor point never takes a wet-bulb or supply-air role from the data alone
+    for name, series in [("Weather_Current_Temperature", OAT2), ("Weather_Current_Humidity", rh)]:
+        roles = [x.role for x in fs.suggest(name, series=series)]
+        assert "wetbulb_temp" not in roles and "supply_air_humidity" not in roles
+    # without an outdoor word there is no guard
+    from camber.mapping_assist import _outdoor_guard, _tag_tokens
+
+    assert _outdoor_guard(_tag_tokens("3dfa2bab_f8f2_485b")) is None
+    assert Role.WETBULB_TEMP in _outdoor_guard(_tag_tokens("OA_WB"))

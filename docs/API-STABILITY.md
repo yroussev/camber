@@ -612,6 +612,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `diagnose_ahu_drift`; and in `camber.rules.param_docs`, `DRIFT_PARAM_DOCS`, `DRIFT_EXEMPT`,
   `documented_drift_rules` and `drift_rule_params`. Without `coil_leak` nothing changes.
 <!-- /0100-leak-drift -->
+<!-- 0100-suggester (#102) -->
+- **Point-role suggester vocabulary and weather-station guard** (0.100; #102), additive and
+  provisional: the `camber.mapping_assist` constants `WATER_AIR_PENALTY` and
+  `UNLOCATED_TEMP_PENALTY`, and the example script `examples/suggester_eval/catalog_names.py`.
+  Behaviour change: the default name-only `FeatureSuggester` reads more abbreviations and applies
+  water-medium and unlocated-temperature rules, so some names get a different suggestion. With
+  `use_timeseries=True`, the data ranks only outdoor roles for a point whose name places it
+  outdoors. The vocabulary, the multipliers and the guard may be retuned in a minor release.
+<!-- /0100-suggester -->
 
 ## Deprecated
 

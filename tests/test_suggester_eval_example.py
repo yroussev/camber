@@ -11,6 +11,7 @@ sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.join(_ROOT, "examples", "suggester_eval"))
 
 import bts as ev  # noqa: E402
+import catalog_names  # noqa: E402
 import messy_names  # noqa: E402
 import real_names  # noqa: E402
 
@@ -134,3 +135,16 @@ def test_messy_names_are_seeded_and_scored_per_style():
     for r in res.values():
         assert r["lexical"]["n"] == len(recs) and r["combined"]["top1"] is not None
     assert messy_names.table(res).startswith("| naming style (synthetic)")
+
+
+# ------------------------------------------- catalog_names.py (shipped mappings, no data)
+
+
+def test_catalog_names_scores_only_the_held_out_mappings():
+    pts = catalog_names.held_out_points()
+    files = {f for f, _, _ in pts}
+    assert files and not any(f.startswith(catalog_names.IN_SAMPLE) for f in files)
+    assert all("{" not in name for _, name, _ in pts)
+    res = catalog_names.evaluate(pts)
+    assert res["pooled"]["n"] == len(pts) and 0 <= res["pooled"]["top1"] <= 100
+    assert set(res["by_file"]) == files

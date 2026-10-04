@@ -312,3 +312,73 @@ def test_celsius_unit_on_the_ml_and_llm_range_gates():
     ok = suggest_roles("DaTemp", suggester=LLMSuggester(stub), series=_series(13, 16), unit="degC")
     bad = suggest_roles("DaTemp", suggester=LLMSuggester(stub), series=_series(13, 16))
     assert ok[0].confidence > bad[0].confidence
+
+
+# ------------------------------------------- 0.100 (#102): vocabulary from public conventions
+
+# Generic point names in common BAS / Haystack / Brick style (not taken from an evaluation
+# dataset), each with the role an engineer would assign. Before 0.100 each was missed: no
+# suggestion, an outdoor-air default for an unlocated temperature, airflow for a water flow, a
+# supply-fan speed for a pump or tower fan, or boiler_status for any status.
+_VOCAB_0100 = {
+    "AF_VAV_7": Role.AIRFLOW,  # AF: airflow
+    "WH_Main": Role.POWER,  # WH: watt-hours
+    "Pmp1_Sts": Role.PUMP_STATUS,
+    "PM_STA_2": Role.PUMP_STATUS,
+    "CHWP1_SPD": Role.CHW_PUMP_SPEED,
+    "CT1_FAN_SPD": Role.TOWER_FAN_SPEED,  # CT: cooling tower
+    "SF_Enable": Role.SUPPLY_FAN_STATUS,
+    "AHU1_SAF_SS": Role.SUPPLY_FAN_STATUS,
+    "occupant_presence": Role.OCCUPANCY,
+    "PIR_Sensor": Role.OCCUPANCY,
+    "Temperature": Role.SPACE_TEMP,  # no location: a space temperature, not outdoor air
+    "Temp_Setpoint": Role.COOL_SP,  # a zone setpoint, not supply_air_temp_sp
+    "Water_Flow": Role.HW_FLOW,  # a water flow is not airflow
+    "Boiler_Supply_Temp": Role.HW_SUPPLY_TEMP,
+    "CHL_SW_TEMP": Role.CHW_SUPPLY_TEMP,  # SW: supply water, on a chiller
+    "OA_WB": Role.WETBULB_TEMP,
+    "AHU1_OADMPR": Role.OA_DAMPER,  # run together
+    "RMCLGSPT": Role.COOL_SP,
+    "HWL_DPSPT": Role.HW_DIFF_PRESS_SP,
+    "AHU1_SATSP": Role.SUPPLY_AIR_TEMP_SP,
+    "Sply_Air_Temp": Role.SUPPLY_AIR_TEMP,  # a vowel-dropped abbreviation
+    "Main_CValve": Role.COOL_VALVE,
+    "HC_LAT": Role.HEAT_COIL_LEAVING_TEMP,
+    "Weather_Current_Temperature": Role.OAT,
+    "Weather_Current_Humidity": Role.OUTDOOR_RH,
+    "air_temp_set_1": Role.OAT,  # the Synoptic / MesoWest weather-station suffix
+}
+
+
+@pytest.mark.parametrize("name,role", sorted(_VOCAB_0100.items()))
+def test_0100_vocabulary_ranks_the_right_role_first(name, role):
+    assert suggest_roles(name)[0].role == role.value
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "3dfa2bab-f8f2-485b-86f2-cc45af12ea90",  # a UUID: its hex groups are not abbreviations
+        "PM2.5",  # particulate matter is not a pump
+        "PM10_Outdoor_Value",
+        "Chiller1",  # equipment alone places the point on a loop but names no quantity
+    ],
+)
+def test_0100_opaque_or_equipment_only_names_suggest_no_water_role(name):
+    roles = _roles(suggest_roles(name, k=5))
+    assert not any(r.startswith(("pump", "chw_", "hw_", "cool_coil")) for r in roles)
+    if "-" in name:
+        assert roles == []
+
+
+def test_0100_run_together_words_split_only_into_known_abbreviations():
+    from camber.mapping_assist import _segment
+
+    assert _segment("oadmpr") == ["oa", "dmpr"]
+    assert _segment("rmclgspt") == ["rm", "clg", "setpt"]  # a trailing SPT is a setpoint
+    assert _segment("lecture") is None and _segment("core") is None
+
+
+def test_0100_water_point_is_not_an_air_side_role():
+    top3 = _roles(suggest_roles("Chilled_Water_Flow", k=3))
+    assert top3[0] == Role.CHW_FLOW.value and Role.AIRFLOW.value not in top3

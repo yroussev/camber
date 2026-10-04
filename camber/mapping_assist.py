@@ -31,6 +31,8 @@ from .sensorhealth import PHYSICAL_BOUNDS, range_violation_frac
 
 __all__ = [
     "ROLE_UNIT",
+    "UNLOCATED_TEMP_PENALTY",
+    "WATER_AIR_PENALTY",
     "RoleSuggestion",
     "FeatureSuggester",
     "MLSuggester",
@@ -115,10 +117,14 @@ def _norm(s: str) -> list[str]:
     drops pure digit runs and trailing instance numbers (``AHU1`` -> ahu); keeps ``co2`` whole.
     """
     s = re.sub(r"(?i)co2", " co2 ", str(s))
+    # particulate matter (PM2.5, PM10) is not a pump: keep it whole (0.100, #102)
+    s = re.sub(
+        r"(?i)pm[-_. ]?(2[._]?5|10)(?![0-9])", lambda m: f" pm{m.group(1)[0]}{m.group(1)[-1]} ", s
+    )
     words = []
     for chunk in re.split(r"[^A-Za-z0-9]+", _CAMEL.sub(" ", s)):
         w = chunk.lower()
-        if w != "co2":
+        if w not in ("co2", "pm25", "pm10"):
             w = w.rstrip("0123456789")
         if w:
             words.append(w)
@@ -191,6 +197,41 @@ _syn("chw return", "chwr", "chwrt")
 _syn("cw supply", "cws", "cwst")
 _syn("cw return", "cwr", "cwrt")
 _syn("duct static press", "dsp")
+# 0.100 (#102): abbreviations from public naming conventions (Project Haystack tag names, Brick
+# class names and common BAS point-naming practice) that the 0.96 real-name evaluation found
+# missing. Each names a quantity, a location or a piece of equipment; none is dataset-specific.
+_syn("flow", "af", "cmh", "lps")  # airflow; cubic metres per hour; litres per second
+_syn("power", "pow", "wh", "kwh", "mels", "ltg", "lighting")  # watt-hours; misc. electric loads
+_syn("status", "sta", "enable", "enabled", "ena", "ss")  # ss: start/stop
+_syn("pump", "pump", "pmp", "pm")  # pm2.5 / pm10 are kept whole by _norm
+_syn("occupancy", "presence", "occupant", "occupants", "pir", "motion")
+_syn("humidity", "relative")  # relative humidity
+_syn("outdoor", "weather", "wx", "meteo")  # a weather-station point is an outdoor point
+# a wet-bulb or dew-point word names a temperature on its own (OA_WB is a temperature)
+_syn("wetbulb temp", "wetbulb", "wb")
+_syn("dewpoint temp", "dewpoint", "dewpt")
+_syn("chw pump", "chwp")  # chilled-water / hot-water / condenser-water pump
+_syn("hw pump", "hwp", "hhwp")
+_syn("cw pump", "cwp", "cdwp")
+_syn("outdoor", "drybulb")  # the dry-bulb temperature of a weather record (dry_bulb_temp)
+_syn("tower", "ct")  # cooling tower
+_syn("boiler", "boi")
+_syn("supply fan", "saf", "sf")
+_syn("supply", "sw")  # supply water (CHL_SW_TEMP); the word also marks the water medium
+_syn("return", "rw")  # return water
+_syn("supply temp", "swt", "lwt")  # supply / leaving water temperature
+_syn("return temp", "rwt")
+_syn("entering temp", "ewt")
+_syn("entering", "ent", "entering")
+_syn("leaving", "lvg", "leaving")
+_syn("hw heat", "hwl")  # hot-water loop
+_syn("chw cool", "chwl")  # chilled-water loop
+_syn("cw", "cdwl")  # condenser-water loop
+_syn("heat valve", "hvlv", "hvalve")  # HValve, HVlv (a camelCase split re-joins the H)
+_syn("cool valve", "cvlv", "cvalve")
+_syn("heat coil", "hc")
+_syn("cool coil", "cc")
+_syn("leaving temp", "lat")  # leaving air temperature (of a coil)
 
 #: tokens that name a compound (several concepts in one initialism) -- reported as "initials"
 _COMPOUND = frozenset(
@@ -203,9 +244,58 @@ _NOISE = frozenset(
         "air water loop pos position cmd command value val pv sensor sen sns input output ai ao bi "
         "bo av bv mv point pt signal fbk feedback tn present level lvl rate "
         "ahu ah rtu vav fcu mau doas unit sys system aru hp chiller plant equip bldg "
-        "act actual"
+        "act actual "
+        "chl chlr wtr pct percent frac degc degf celsius fahrenheit"  # 0.100 (#102)
     ).split()
 )
+#: 0.100 (#102): equipment words that place a point on a water loop without naming a quantity.
+#: They add the loop's concept to what the tag *covers* (``CHL_SW_TEMP`` -> chw supply temp) but
+#: never explain a word on their own, so a tag naming only the equipment suggests nothing new.
+_CONTEXT: dict[str, tuple] = {
+    "chiller": ("chw",),
+    "chl": ("chw",),
+    "chlr": ("chw",),
+    "boiler": ("hw",),
+    "blr": ("hw",),
+    "boi": ("hw",),
+    "tower": ("cw",),
+    "twr": ("cw",),
+    "ct": ("cw",),
+}
+#: 0.100 (#102): words that put a point in water, not air. A water point is not an air-side role
+#: (a chilled-water flow is not ``airflow``; a loop's supply temperature not ``supply_air_temp``).
+_WATER_WORDS = frozenset(
+    "water wtr sw rw swt rwt lwt ewt gpm hwl chwl cdwl chwp hwp hhwp cwp cdwp".split()
+)
+_WATER_CONCEPTS = frozenset({"hw", "chw", "cw"})
+#: concepts that say *where* a temperature is measured. A temperature that names none of them nor
+#: its kind (``air_temperature``, ``temp_setpoint``) is read as a space temperature, the commonest
+#: one in a building -- not, as before 0.100, as whichever temperature role came first (outdoor
+#: air).
+_LOCATIONS = frozenset(
+    "supply return mixed outdoor exhaust relief hw chw cw coil condenser evaporator source line "
+    "duct leaving entering liquid suction".split()
+)
+#: what makes a temperature specific: a location, or the kind of temperature it is
+_TEMP_KINDS = frozenset({"wetbulb", "superheat", "subcooling", "dewpoint"})
+_TEMP_QUALIFIERS = _LOCATIONS | _TEMP_KINDS | {"space", "approach", "heat", "cool"}
+#: multipliers on a role's lexical score (CAMBER judgment, the same order as the 0.4 an
+#: incompatible unit applies): an air-side role for a water point, and a located temperature role
+#: for a temperature that names no location
+WATER_AIR_PENALTY = 0.4
+UNLOCATED_TEMP_PENALTY = 0.6
+#: role concepts a tag word may name without the role requiring them: a zone setpoint is a
+#: space temperature setpoint (``temp_setpoint`` -> cool_sp, not supply_air_temp_sp)
+_ROLE_IMPLIED: dict = {
+    Role.COOL_SP: frozenset({"space", "temp"}),
+    Role.HEAT_SP: frozenset({"space", "temp"}),
+}
+_OPAQUE_ID = re.compile(
+    r"(?i)[0-9a-f]{8}([-_]?)[0-9a-f]{4}\1[0-9a-f]{4}\1[0-9a-f]{4}\1[0-9a-f]{12}"
+)
+_WEATHER_WORDS = frozenset({"weather", "wx", "meteo"})
+#: the Synoptic / MesoWest weather-station variable suffix (``air_temp_set_1``): an outdoor point
+_WEATHER_SET = re.compile(r"(?i)(?:^|[^a-z0-9])set_\d+[a-z]?$")
 #: location qualifiers weigh half in precision: ``ZoneDaTemp`` is a supply temp *at* a zone
 _LOW_WEIGHT = frozenset({"zone", "zn", "room", "rm"})
 #: air-stream qualifiers; the terminal (VAV) DAMPER role conflicts with a tag that names one
@@ -238,6 +328,40 @@ _ROLE_CONCEPTS = {r: _role_concepts(r) for r in Role}
 _KNOWN = frozenset(c for cs in _SYNONYMS.values() for c in cs) | frozenset(
     c for cs in _ROLE_CONCEPTS.values() for c in cs
 )
+_AIR_ROLES = frozenset(
+    r
+    for r in Role
+    if "air" in r.value.split("_")
+    or r
+    in (
+        Role.OAT,
+        Role.SPACE_TEMP,
+        Role.AIRFLOW,
+        Role.AIRFLOW_SP,
+        Role.OA_AIRFLOW,
+        Role.DUCT_STATIC,
+        Role.DUCT_STATIC_SP,
+        Role.DAMPER,
+        Role.OA_DAMPER,
+        Role.OUTDOOR_RH,
+        Role.WETBULB_TEMP,
+        Role.FILTER_DIFF_PRESS,
+        Role.SUPPLY_FAN_SPEED,
+        Role.SUPPLY_FAN_STATUS,
+        Role.CO2,
+        Role.OUTDOOR_CO2,
+        Role.STATIC_PRESSURE_REQUESTS,
+        Role.COOL_SP,  # zone setpoints
+        Role.HEAT_SP,
+    )
+)
+#: water-side roles: the loops' temperatures, pressures, flows and pumps
+_WATER_ROLES = frozenset(
+    r
+    for r in Role
+    if _ROLE_CONCEPTS[r] & {"hw", "chw", "cw", "source", "pump"}
+    or r in (Role.COND_ENTERING_WATER_TEMP, Role.BOILER_STATUS)
+)
 
 
 def _merge_split_abbrevs(words: list) -> list:
@@ -258,10 +382,63 @@ def _merge_split_abbrevs(words: list) -> list:
     return out
 
 
+def _segment(w: str):
+    """Split a run-together word (``oadmpr``, ``rmclgspt``, ``dpspt``) into known abbreviations,
+    or ``None``. 0.100 (#102). Every piece must be a known abbreviation (two letters or more) or
+    a noise word (three or more), at least one piece must carry meaning, and the split with the
+    fewest pieces wins (on a tie, the one with the longer leading pieces). Only unknown words of
+    five letters or more are tried, and a word that does not split cleanly is left alone."""
+    if len(w) < 5:
+        return None
+    n = len(w)
+    best: list = [None] * (n + 1)  # best[i]: the fewest-piece split of w[:i]
+    best[0] = []
+    for i in range(1, n + 1):
+        for j in range(i - 1, -1, -1):
+            if best[j] is None:
+                continue
+            piece = w[j:i]
+            ok = (len(piece) >= 2 and piece in _SYNONYMS) or (len(piece) >= 3 and piece in _NOISE)
+            if not ok:
+                continue
+            cand = best[j] + [piece]
+            if best[i] is None or len(cand) < len(best[i]):
+                best[i] = cand
+    split = best[n]
+    if not split or len(split) < 2 or len(split) > 4 or all(p in _NOISE for p in split):
+        return None
+    # a run-together name ends in a setpoint, not a space temperature: TEMPSPT, RMCLGSPT
+    return [split[0]] + ["setpt" if p in ("spt", "stpt") else p for p in split[1:]]
+
+
 def _tag_tokens(token: str) -> list:
-    """``[(word, concepts, weight, how)]`` per tag word; how = exact/initials/fuzzy/unknown."""
+    """``[(word, concepts, weight, how)]`` per tag word; how = exact/initials/fuzzy/unknown, or
+    ``context``: a zero-weight marker (equipment that places the point on a water loop, a word
+    naming the water medium) that never explains a word by itself (0.100, #102)."""
+    if _OPAQUE_ID.fullmatch(str(token).strip()):
+        return []  # a UUID names nothing; its hex groups (cc45, af12) are not abbreviations
     out = []
-    for w in _merge_split_abbrevs(_norm(token)):
+    words = _merge_split_abbrevs(_norm(token))
+    weather_set = bool(_WEATHER_SET.search(str(token)))
+    expanded: list = []
+    for w in words:
+        if w not in _NOISE and w not in _SYNONYMS and w not in _KNOWN:
+            parts = _segment(w)
+            if parts:
+                expanded.extend(parts)
+                continue
+        expanded.append(w)
+    for w in expanded:
+        if w in _CONTEXT:
+            out.append((w, _CONTEXT[w], 0.0, "context"))
+        if w in _WATER_WORDS:
+            out.append((w, ("water",), 0.0, "context"))
+        if w in _WEATHER_WORDS:
+            out.append((w, ("weather",), 0.0, "context"))
+        if weather_set and w == "set":
+            out.append((w, ("weather",), 0.0, "context"))
+            out.append((w, ("outdoor",), 1.0, "exact"))  # air_temp_set_1: a weather station
+            continue
         if w in _NOISE:
             continue
         weight = 0.5 if w in _LOW_WEIGHT else 1.0
@@ -275,9 +452,37 @@ def _tag_tokens(token: str) -> list:
         )
         if close:
             out.append((w, _SYNONYMS[close[0]], weight, "fuzzy"))
+            continue
+        abbr = _vowel_dropped(w)
+        if abbr:
+            out.append((w, abbr, weight, "fuzzy"))
         else:
             out.append((w, (), 0.5, "unknown"))  # unexplained word: dilutes precision, half weight
     return out
+
+
+def _is_subsequence(short: str, long: str) -> bool:
+    it = iter(long)
+    return all(ch in it for ch in short)
+
+
+#: whole words (four letters or more) an abbreviation may be cut from
+_LONG_WORDS = tuple(w for w in _SYNONYMS if len(w) >= 4 and w.isalpha())
+
+
+def _vowel_dropped(w: str):
+    """The concepts of the long word ``w`` abbreviates by dropping letters (``sply`` -> supply,
+    ``dschg`` -> discharge), or ``None``. 0.100 (#102). The abbreviation must start with the long
+    word's first letter, keep its letters in order, have four letters or more but at most one
+    vowel, be shorter than the word, and every long word it fits must name the same concepts."""
+    if len(w) < 4 or not w.isalpha() or sum(ch in "aeiou" for ch in w) > 1:
+        return None  # a real word (core, east) keeps its vowels; an abbreviation drops them
+    hits = {
+        _SYNONYMS[lw]
+        for lw in _LONG_WORDS
+        if lw[0] == w[0] and len(lw) > len(w) and _is_subsequence(w, lw)
+    }
+    return next(iter(hits)) if len(hits) == 1 else None
 
 
 def _initials(role: Role) -> str:
@@ -302,11 +507,17 @@ def _string_score(words, role: Role) -> tuple[float, str]:
     if not toks or not rc:
         return 0.0, "edit_distance"
     initials = _initials(role)
+    tag_concepts = {c for _, cs, _, _ in toks for c in cs}
+    # a zone setpoint accounts for an unlocated temperature word, not a supply-air one
+    implied = frozenset() if tag_concepts & _LOCATIONS else _ROLE_IMPLIED.get(role, frozenset())
     covered: set = set()
     explained = total = 0.0
     hows = set()
     for w, cs, weight, how in toks:
         total += weight
+        if how == "context":  # coverage only: places the point, explains no word (0.100)
+            covered |= set(cs) & rc
+            continue
         if len(initials) >= 3 and w == initials:
             covered |= rc
             explained += weight
@@ -317,15 +528,54 @@ def _string_score(words, role: Role) -> tuple[float, str]:
             covered |= hit
             explained += weight
             hows.add(how)
-    if not covered:
+        elif set(cs) & implied:
+            explained += weight  # a word the role accounts for without requiring it (0.100)
+    if not covered or not explained:
         return 0.0, "edit_distance"
     recall = len(covered) / len(rc)
     precision = explained / total if total else 0.0
     score = 0.9 * recall * (0.5 + 0.5 * precision)
     if role is Role.DAMPER and any(set(cs) & _STREAMS for _, cs, _, _ in toks):
         score *= 0.5  # an outdoor/return/exhaust/relief damper is an AHU damper, not a VAV damper
+    water = bool(tag_concepts & (_WATER_CONCEPTS | {"water"}))
+    if water and (role in _AIR_ROLES or ("temp" in rc and role not in _WATER_ROLES)):
+        score *= WATER_AIR_PENALTY  # a water point is not an air-side role (0.100, #102)
+    elif (
+        "temp" in tag_concepts
+        and not water
+        and not tag_concepts & _TEMP_QUALIFIERS
+        and "temp" in rc
+        and role is not Role.SPACE_TEMP
+    ):
+        score *= UNLOCATED_TEMP_PENALTY  # an unlocated temperature is not a located one (0.100)
+    elif "temp" in rc and tag_concepts & _TEMP_KINDS and not rc & tag_concepts & _TEMP_KINDS:
+        score *= UNLOCATED_TEMP_PENALTY  # a wet-bulb temperature is not a dry-bulb one (0.100)
     basis = "initials" if "initials" in hows else "edit_distance" if "fuzzy" in hows else "ngram"
     return round(score, 4), basis
+
+
+_OUTDOOR_ROLES = frozenset(r for r in Role if "outdoor" in _ROLE_CONCEPTS[r])
+_WEATHER_ROLES = frozenset({Role.OAT, Role.OUTDOOR_RH, Role.OUTDOOR_CO2})
+
+
+def _outdoor_guard(toks):
+    """The weather-station guard of the time-series path (0.100, #102): the roles the data may
+    promote for a point whose name places it outdoors, or ``None`` (no guard).
+
+    A weather-station or outdoor point (``Weather_Current_Temperature``, ``air_temp_set_1``,
+    ``OA_Humidity``) is often a different sensor from the site's outdoor reference, so the
+    hour-by-hour weather features do not make it look "outdoor" enough and the data alone read
+    its temperature as a wet-bulb and its humidity as a supply-air humidity. When the name says
+    outdoor, the data only ranks the outdoor roles -- for a weather station (``weather``, ``wx``,
+    ``meteo``, the ``_set_N`` suffix) only the weather quantities, not an outdoor damper or
+    airflow; a wet-bulb needs the name to say so too (outdoor dry- and wet-bulb temperatures
+    behave alike)."""
+    concepts = {c for _, cs, _, _ in toks for c in cs}
+    if "outdoor" not in concepts:
+        return None
+    # a weather station measures the weather, not an air handler's outdoor damper or airflow
+    allowed = _WEATHER_ROLES if "weather" in concepts else _OUTDOOR_ROLES
+    return allowed | ({Role.WETBULB_TEMP} if "wetbulb" in concepts else frozenset())
 
 
 class FeatureSuggester:
@@ -337,7 +587,9 @@ class FeatureSuggester:
     with the name so that an informative name still dominates. ``oat`` is an outdoor-air series
     of the site (the weather-response features); ``model`` a fitted
     :class:`~camber.mapping_timeseries.ProfileModel` used instead of the hand-written role
-    templates. Without ``use_timeseries`` the suggestions are exactly those of earlier releases.
+    templates. Without ``use_timeseries`` the suggestions are name, unit and range only; 0.100
+    (#102) extended the name vocabulary (so some names now get a different suggestion) and added
+    the weather-station guard to the time-series path (:func:`_outdoor_guard`).
     """
 
     def __init__(
@@ -420,6 +672,7 @@ class FeatureSuggester:
                 ts = template_scores(profile, unit, vocab=self.vocab)
         lexical = {role: _string_score(words, role) for role in self.vocab}
         best_lex = max((s for s, _ in lexical.values()), default=0.0)
+        outdoor_only = _outdoor_guard(words)
         scored = []
         for role in self.vocab:
             s, basis = lexical[role]
@@ -432,6 +685,8 @@ class FeatureSuggester:
                 else:
                     s *= 0.4
             t_score, t_note = ts.get(role, (0.0, ""))
+            if outdoor_only is not None and role not in outdoor_only:
+                t_score, t_note = 0.0, ""  # the weather-station guard (0.100, #102)
             if t_score > 0:
                 s = blend(s, t_score, best_lex)
                 bases.append("timeseries")

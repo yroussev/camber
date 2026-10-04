@@ -64,6 +64,8 @@ Dependency-light and always on. It scores every `Role` from three signals:
   `oa_airflow`, `ReHeatVlvPos` `evap_approach_temp` and `SAT` `sat_reset_requests`; on a published
   16-point AHU list the name-only top suggestion was right for 3 points and is now right for 16.
   An outdoor/return/exhaust/relief/mixed damper is not suggested as the terminal `damper` role.
+  0.100 (#102) extends the vocabulary and adds context rules; see
+  [Vocabulary and context](#vocabulary-and-context-0100) below.
 - **Unit compatibility** — a `ROLE_UNIT` table (degF/degC → temp, `%` → valve/damper/speed, cfm →
   airflow, kW → power, gpm → flow, inH2O → duct static, ppm → CO₂). A compatible unit gives a small
   bump (and on its own a weak ≤ 0.3 suggestion); a **known-incompatible** unit strongly demotes the
@@ -81,6 +83,55 @@ for s in suggest_roles("AH1_SAT", unit="degF", series=sat_series, k=3):
     print(s.role, round(s.confidence, 2), s.rationale)
 # supply_air_temp 0.98  'AH1_SAT' matches the initials of supply_air_temp; unit 'degf' fits ...
 ```
+
+### Vocabulary and context (0.100)
+
+The 0.96 evaluation on real names showed that most misses were vocabulary gaps. 0.100 (#102)
+fills them from public conventions: Project Haystack tag names, Brick class names and common BAS
+point-naming practice. Nothing in it is dataset-specific.
+
+- **New abbreviations.**
+  - `AF` (airflow); `CMH` and `LPS` (flow units used as words).
+  - `WH`, `kWh`, `POW`, `MELs` and lighting (`LTG`) for power.
+  - `STA`, `Enable` and `SS` (start/stop) for status.
+  - `PM` and `PMP` for pump; `CHWP`, `HWP` and `CWP` for the loop pumps.
+  - `CT` (cooling tower), `SAF` and `SF` (supply fan), `BOI` (boiler).
+  - `SW`, `RW`, `SWT`, `RWT`, `LWT` and `EWT` for supply, return, leaving and entering water.
+  - `HWL`, `CHWL` and `CDWL` for the hot-water, chilled-water and condenser-water loops.
+  - `HValve` / `CValve` for heating and cooling valves; `HC`, `CC` and `LAT` for coil leaving air.
+  - presence, occupant, `PIR` and motion for occupancy.
+  - weather, `WX` and meteo for an outdoor (weather-station) point; dry-bulb, wet-bulb and dew
+    point name temperatures of their own.
+  - Particulate matter (`PM2.5`, `PM10`) is kept whole, so it is never read as a pump.
+- **Run-together words** (`OADMPR`, `RMCLGSPT`, `HWL_DPSPT`) are split into known abbreviations.
+  Only an unknown word of five letters or more is tried. Every piece must be known, the split
+  with the fewest pieces wins, and a trailing `SPT` in such a word is a setpoint. A real word that
+  does not split cleanly (`lecture`) is left alone.
+- **Vowel-dropped abbreviations** (`Sply` → supply) are read when the word has four letters or
+  more and at most one vowel, starts with the long word's first letter, keeps its letters in
+  order, and fits only one meaning. A real word such as `core` keeps its vowels and is not
+  matched.
+- **Water, not air.** A tag that names water (`water`, `SW`, `GPM`, a loop, `HW`/`CHW`/`CW`, or a
+  chiller, boiler or tower) does not get an air-side role (`airflow`, `supply_air_temp`, a zone
+  setpoint...) or a refrigerant temperature. Such a role is multiplied by `WATER_AIR_PENALTY`
+  (0.4). Equipment words add the loop to what the tag covers (`CHL_SW_TEMP` → `chw_supply_temp`)
+  but never suggest a role on their own.
+- **Unlocated temperatures.** A temperature that names no location and no kind of temperature
+  (`air_temperature`, `Temp`) is read as a space temperature, the commonest in a building. Before
+  0.100 it became outdoor air only because that role came first. Every other temperature role is
+  multiplied by `UNLOCATED_TEMP_PENALTY` (0.6). The same factor separates kinds of temperature: a
+  tag that says wet-bulb is not a dry-bulb `oat`. A zone setpoint (`cool_sp`, `heat_sp`) accounts
+  for an unlocated temperature word, so `temp_setpoint` → `cool_sp` (then `heat_sp`), not
+  `supply_air_temp_sp`.
+- **UUIDs name nothing.** A UUID's hex groups (`cc45`, `af12`) are not read as abbreviations.
+
+**This changes the default output.** On a 6,546-case corpus (1,091 point names from the shipped
+catalog mappings, the evaluation datasets, BTS's Brick classes and a list of generic BAS names,
+each with no unit and with five units), 2,076 cases changed and the top-1 role changed in 854.
+The 0.95 golden cases are unchanged. The top-1 changes are names that had no suggestion before
+(`AF_VAV_7`, `SF_Enable`, `RMCLGSPT`), unlocated temperatures moving from `oat` to `space_temp`,
+setpoints moving from `supply_air_temp_sp` to `cool_sp`, water points leaving air-side roles,
+and pump and tower-fan speeds leaving `supply_fan_speed`.
 
 ## Time-series evidence — `use_timeseries=True` (0.96)
 
@@ -119,10 +170,19 @@ fs.suggest("3dfa2bab_f8f2_485b", series=point_series)
 #                 rationale='sensor data at the level of space_temp (read as degC)'), ...]
 ```
 
-**Opt-in; the default is unchanged.** Without `use_timeseries=True` every existing caller gets
-exactly the suggestions of 0.95 (checked on 3,948 token × series × unit cases, and by golden
-tests). With it, the physical-range gate runs only when a unit is declared -- without one the
-templates already judged the level in every plausible unit.
+**Opt-in.** Without `use_timeseries=True`, a caller gets the name-only suggestions above: those
+of 0.95 until 0.99, and the extended vocabulary from 0.100. With it, the physical-range gate runs
+only when a unit is declared -- without one the templates already judged the level in every
+plausible unit.
+
+**Weather-station guard (0.100, #102).** A weather-station point is often a different sensor from
+the site's outdoor reference, so the hour-by-hour weather features did not make it look
+"outdoor" enough. The data alone then read an outdoor temperature as a wet-bulb and an outdoor
+humidity as a supply-air humidity. When the name places a point outdoors, the data now ranks
+only the outdoor roles. For a weather station (`weather`, `WX`, `meteo`, or the Synoptic /
+MesoWest `_set_N` suffix of `air_temp_set_1`), it ranks only the weather quantities (`oat`,
+`outdoor_rh`, `outdoor_co2`), not an outdoor damper or airflow. A wet-bulb needs the name to say
+so, because outdoor dry- and wet-bulb temperatures behave alike.
 
 ### Evaluation
 
@@ -136,7 +196,9 @@ Three evaluations, none of them gated benchmarks. Scripts and details are in
 
 #### Real point names (open catalog datasets)
 
-`real_names.py` scores every point of each dataset below by its **published BMS name**.
+`real_names.py` scores every point of each dataset below by its **published BMS name**. The
+tables in this section are the 0.96 baseline, before the 0.100 vocabulary; the 0.100 figures are
+in [0.100: before and after](#0100-before-and-after-102).
 
 - **Labels.** The ground truth is the dataset's catalog mapping: the role CAMBER assigned to each
   published point name when the dataset was catalogued. CAMBER hand-curated these mappings from
@@ -227,8 +289,8 @@ helped 6 and hurt none.
   -0.3 points.
 - **The data costs weather-station points.** That is the one systematic loss.
 - **Many misses are vocabulary gaps, not data problems** (`AF`, `WH`, `SW` / `RW`, `STA`,
-  "presence"). Extending the abbreviation table is a separate, name-side change, left for a
-  later release so these figures stay a clean baseline.
+  "presence"). 0.100 extends the abbreviation table (see below); these figures stay the
+  baseline.
 
 **Attribution** (as each catalog entry requires; `camber datasets info <id>` gives the full
 record):
@@ -248,6 +310,63 @@ record):
   doi:10.1038/s41597-022-01858-6, CC BY 4.0.
 - `lbnl-*` simulated sets: Granderson et al. (2022), LBNL Fault Detection and Diagnostics
   Datasets, doi:10.25984/1881324, CC BY 4.0.
+
+#### 0.100: before and after (#102)
+
+The vocabulary additions and the weather-station guard, re-run on the same scripts and inputs.
+"Before" is 0.99.1 re-run today. Its figures match the baseline tables above, except where the
+catalog has gained points since 0.96: `lbnl-chiller` now has 14 points and `lbnl-fpu` 20.
+
+**Read the real-name rows as in-sample.** The 0.100 vocabulary was chosen from the 0.96 misses
+on these names, so the "excluding in-sample names" row is no longer out of sample.
+`catalog_names.py` is the out-of-sample name check: it scores the published names of the
+catalog mappings that `real_names.py` does not use (223 points, 11 mapping files, name only,
+no download).
+
+| evaluation | before top-1 / top-3 % | after top-1 / top-3 % |
+|---|---|---|
+| real names, pooled (422), name only | 82.5 / 82.9 | 94.3 / 95.0 |
+| real names, pooled (422), name + data | 83.9 / 89.1 | 95.3 / 96.9 |
+| real, "excluding in-sample names" (129), name only | 52.7 / 53.5 | 86.0 / 88.4 |
+| real, "excluding in-sample names" (129), name + data | 58.1 / 72.9 | 89.1 / 93.8 |
+| simulated LBNL sets (77), name only | 45.5 / 59.7 | 72.7 / 85.7 |
+| simulated LBNL sets (77), name + data | 53.2 / 66.2 | 77.9 / 85.7 |
+| **held-out catalog names (223), name only (out of sample)** | **72.2 / 75.3** | **83.0 / 85.2** |
+| BTS anonymised (903), name + data, templates | 48.0 / 65.2 | 48.0 / 65.2 |
+| BTS Brick-class labels as names (upper bound), name only | 93.0 / 97.2 | 93.2 / 97.2 |
+| BTS Brick-class labels as names (upper bound), name + data | 95.2 / 99.9 | 95.5 / 99.9 |
+
+*The data-only rows do not change (38.9 / 54.7 real, 22.1 / 35.1 simulated): the vocabulary is
+name-side.*
+
+Synthetic vendor-style names (`messy_names.py`; synthetic, not real-world naming):
+
+| naming style (synthetic) | name only top-1 before → after % | name + data top-1 before → after % |
+|---|---|---|
+| `AHU1_SAT` | 25.1 → 64.6 | 51.8 → 74.0 |
+| `VAV-2-14 DA-T` | 57.4 → 64.7 | 74.0 → 73.9 |
+| `B2.L3.FCU07.RmTmp` | 67.9 → 79.4 | 77.6 → 84.4 |
+| `ahu_03_supply_temp` | 87.9 → 93.9 | 90.9 → 94.1 |
+| `201-AHU3:SA-TMP` | 56.7 → 63.3 | 74.0 → 74.0 |
+
+- **Out of sample, the name alone gains 11 points of top-1** (72.2 → 83.0 % on the held-out
+  catalog names). Most of the gain is run-together setpoints (`CLGSP_102`, `HTGSP_102`), wet-bulb
+  temperatures and occupant counts.
+  - One held-out top-3 hit was lost: a NIST heat-pump temperature (`1500_ODLiqSV_TempF`) now
+    reads as a space temperature instead of outdoor air. Both are wrong.
+  - The remaining held-out misses are refrigerant-side names (`P-LT-SUC`, `CompSuct_Suph_F`,
+    `ch1_sh_rtd`). They are left for a later vocabulary pass, so this set stays out of sample.
+- **The weather-station losses are gone.** The data no longer hurts any weather-station point:
+  `air_temp_set_1`, `relative_humidity_set_1` and the NUIG weather temperature and humidity keep
+  their outdoor roles. The guard alone does not change a top-1 on these sets, because the
+  extended names already place them outdoors. It keeps the runners-up on outdoor roles, and it
+  decides the case where the name says only "weather" (tested).
+- **Where the data still changes top-1 on real names**, it helps 6 points (the `ornl-frp-ops`
+  VAV discharge temperatures `T_VAV_*`, whose names give no location) and hurts 2. Before, it
+  helped 11 and hurt 5. The 2 losses are one setpoint named `temp_setpoint` in two `robod`
+  rooms: the name now says `cool_sp`, but the data, which looks like a room temperature, carries
+  it to `space_temp`. The simulated sets: helped 4, hurt 0 (before: helped 6, hurt 0).
+- On `dash-space` names the data's top-1 moves by -0.1 point. Every other row rises or holds.
 
 #### BTS: anonymised names
 
@@ -334,10 +453,21 @@ the scores. **These names are synthetic, not real-world naming.**
   readable.
 - Long-word names come close to the Brick-class upper bound.
 
-**Proposal (not made):** `review_unmapped(..., series_by_token=...)` could switch the time-series
-path on by default whenever series are given. It would change existing callers' output, and on
-real names it costs weather-station points, so it is left for a maintainer decision. None of
-these numbers is a gated benchmark.
+**Recommendation (0.100, not made; needs maintainer sign-off).** Switch the time-series path on
+by default in `suggest_roles` and `review_unmapped` when a series is passed and no suggester is
+given, with a way to opt out. The 0.96 objection, that the data costs weather-station points, is
+answered by the 0.100 guard. With the extended vocabulary, the data adds top-1 on every real
+and simulated pool (real 94.3 → 95.3 %, simulated 72.7 → 77.9 %) and on all five synthetic
+styles. It is what places an anonymised point at all (BTS: 0 → 48 %). The costs:
+
+- It changes those callers' output, including the BACnet review path, whenever they pass series.
+- One residual loss: a setpoint named only `temp_setpoint` is read as the room temperature its
+  data resembles.
+- Without a declared unit, the time-series path skips the physical-range gate and relies on the
+  templates instead.
+
+Without a series the two paths agree, so callers that pass no data are unaffected. None of these
+numbers is a gated benchmark.
 
 ## Review the unmapped tags — `review_unmapped`
 

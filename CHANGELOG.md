@@ -124,8 +124,8 @@ All notable changes to CAMBER are documented here. The format follows
   only, which does not read the setpoint.
 <!-- /0100-ddahu -->
 
-### Added
 <!-- 0100-leak-drift -->
+### Added
 - **A coil-valve leak drift detector against the unit's own baseline (#100; opt-in,
   provisional).** This is the follow-up planned in #84. `leaking_valve` catches the published
   10 % leak on `lbnl-sdahu` only with a fan heat calibrated on the fault-free run, and that run is
@@ -167,6 +167,46 @@ All notable changes to CAMBER are documented here. The format follows
   - **Proposed gated keys, not added, for sign-off:** `drift.coil_leak_drift.recall` /
     `precision` / `f1` 1.0 and `fpr` 0.0 on the SDAHU benchmark drift cases.
 <!-- /0100-leak-drift -->
+
+<!-- 0100-suggester -->
+### Changed
+- **Point-role suggester: vocabulary from public naming conventions (#102). This changes the
+  default name-only output.** The 0.96 real-name evaluation showed most misses were vocabulary
+  gaps. `FeatureSuggester` now reads:
+  - new abbreviations: `AF`, `WH`, `STA`, `Enable`, `SS`, `PM` / `PMP`, `CHWP` / `HWP` / `CWP`,
+    `CT`, `SAF` / `SF`, `BOI`, `SW` / `RW` / `SWT` / `RWT` / `LWT` / `EWT`, `HWL` / `CHWL` /
+    `CDWL`, `HValve` / `CValve`, `HC` / `CC` / `LAT`, presence, occupant, `PIR`, weather / `WX`,
+    and dry-bulb, wet-bulb and dew point;
+  - run-together words (`OADMPR`, `RMCLGSPT`) split into known abbreviations, and vowel-dropped
+    abbreviations (`Sply`).
+
+  Context rules use the same lexical score:
+  - a water point is not given an air-side role (a chilled-water flow is not `airflow`);
+  - a chiller, boiler or tower places a point on its loop;
+  - an unlocated temperature (`air_temperature`) reads as a space temperature, not outdoor air;
+  - `temp_setpoint` reads as a zone setpoint, not `supply_air_temp_sp`;
+  - a wet-bulb is not a dry-bulb `oat`;
+  - pump and tower-fan speeds no longer read as `supply_fan_speed`;
+  - a UUID or `PM2.5` names nothing.
+
+  On a 6,546-case name × unit corpus, the top-1 role changed in 854 cases. The 0.95 golden cases
+  are unchanged. Module constants `WATER_AIR_PENALTY` (0.4) and `UNLOCATED_TEMP_PENALTY` (0.6)
+  hold the two new multipliers. Results on the same inputs (`examples/suggester_eval`):
+  - real names, pooled, name only: 82.5 → 94.3 % top-1 (in-sample: the vocabulary was chosen
+    from these misses);
+  - held-out catalog names, name only (new `catalog_names.py`, out of sample): 72.2 → 83.0 %;
+  - BTS anonymised: unchanged.
+- **Weather-station guard on the time-series path (#102).** With `use_timeseries=True`, the data
+  ranks only the outdoor roles when a point's name places it outdoors. For a weather station
+  (`weather`, `WX`, meteo, the Synoptic `_set_N` suffix), it ranks only `oat`, `outdoor_rh` and
+  `outdoor_co2`. A wet-bulb needs the name to say so. The data no longer turns an outdoor
+  temperature into a wet-bulb or an outdoor humidity into a supply-air humidity. On real names,
+  the data's top-1 losses fell from 5 to 2.
+- **Not changed: the time-series path stays opt-in.** `docs/MAPPING-ASSIST.md` recommends
+  turning it on when series are passed. That needs maintainer sign-off.
+
+The synthetic, fleet, LBNL, BDG2 and BDG2 savings benchmark gates are not affected.
+<!-- /0100-suggester -->
 
 ## [0.99.1] — 2026-10-03
 
