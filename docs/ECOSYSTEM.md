@@ -467,6 +467,10 @@ In month windows, CAMBER's any-FC result is unchanged (TPR 0.04, FPR 0/12). The 
 pandas engine at G36 tolerances goes from TPR 0.58 with FPR 5/12 to TPR 0.62 with FPR 6/12: its
 FC9 now fires on one fault-free month. The other open-fdd results are unchanged.
 
+Re-run once on the integrated 0.100 code, with all three engines at the same pin: every verdict
+above holds, on both units and in both windows. #101 changes RCx headings only, and the
+`free_cooling_missed` entries the 0.100 templates gained do not reach `g36_afdd`.
+
 FC6 does not catch the damper stuck shut. G36 evaluates FC6 only in heating and in mechanical
 cooling at minimum OA. On this unit, CAMBER's learned OA damper minimum is 28 %, the summer
 position, so nearly all of FC6's applicable hours fall in June to August. Against an 11.9 %

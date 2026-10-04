@@ -3,7 +3,7 @@
  "window": "run",
  "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
  "versions": {
-  "camber": "0.99.1 at commit 5b0bc10 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
+  "camber": "0.99.1 at commit acd70a9 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
   "role_map": "1",
   "profiles": "2",
   "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
