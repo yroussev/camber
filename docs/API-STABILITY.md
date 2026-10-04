@@ -596,6 +596,13 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   explicit `timezone` on the registry entry, or a per-site zone in the dataset block, now also sets
   the run's zone (daily `mv` day lengths, a `shared_oat` file's clock) where it did not before.
 <!-- /0100-rcx -->
+<!-- 0101-walkdown (#108) -->
+- **Walk-down follows the heading cause** (0.101; #108), additive and provisional: the
+  `heading_causes=` keyword of `camber.walkdown.site_checks` (`{issue key: (rule, cause key)}`).
+  Behaviour change: in the RCx report's "Verify on site" section, an issue headed by a member's
+  cause gets that member's equipment item (its `rule` and `references` are the member rule's)
+  instead of the root's.
+<!-- /0101-walkdown -->
 <!-- 0100-terminal (#99) -->
 - **Fan-heat cap by box type** (0.100; #99), additive and provisional: the `box_type=` keyword of
   `ReheatPenalty` (`None`, `"single_duct"`, `"parallel"` or `"series"`), the constant

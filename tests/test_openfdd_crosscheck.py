@@ -280,7 +280,8 @@ def test_score_keeps_not_evaluated_apart_and_engines_separate():
 
 
 def test_markdown_and_offline_probe_run(tmp_path):
-    rc.main(["--probe", "--out", str(tmp_path), "--sql-skip", "no Docker in tests"])
+    argv = ["--probe", "--out", str(tmp_path), "--sql-skip", "no Docker in tests"]
+    rc.main([*argv, "--keep-verdicts"])  # 0.101 (#109): verdicts are left out by default
     res = json.loads((tmp_path / "probes.json").read_text())
     assert res["not_run"] == {
         hx.ENGINE_PANDAS: "no --openfdd-python given",
@@ -342,3 +343,30 @@ def test_template_params_come_from_the_catalog_run_template():
     vs = rc.run_camber({"X": f}, {"X": {"min_oa_pct": 1.6}})
     assert {v.fc: v for v in vs}["FC6"].evaluated
     assert not {v.fc: v for v in rc.run_camber({"X": f})}["FC6"].evaluated
+
+
+def test_verdicts_are_omitted_by_default_and_kept_on_request(tmp_path):
+    """0.101 (#109): the per-verdict list is left out unless --keep-verdicts is passed."""
+
+    def run(*flags):
+        out = tmp_path / "-".join(f.strip("-") for f in flags or ("default",))
+        argv = ["--probe", "--work", str(tmp_path / "work"), "--out", str(out), *flags]
+        assert rc.main(argv) == 0
+        with open(out / "probes.json", encoding="utf-8") as fh:
+            return json.load(fh)
+
+    default = run()
+    assert default["verdicts"] == "omitted (--omit-verdicts)"
+    for sc in default["scores"]["common"]["pooled"].values():
+        assert isinstance(sc["overall"]["not_evaluated"], int)
+        assert all("counts_by_reason" in fc["not_evaluated"] for fc in sc["per_fc"].values())
+    assert default["probes"]  # the probe report reads the verdicts in memory, not the JSON
+    assert run("--omit-verdicts") == default  # the old flag still works, and is the default
+    kept = run("--keep-verdicts")
+    assert isinstance(kept["verdicts"], list) and kept["verdicts"]
+    assert {v["engine"] for v in kept["verdicts"]} == {hx.ENGINE_CAMBER}
+    assert kept["probes"] == default["probes"]
+    md = {d: (tmp_path / d / "probes.md").read_text() for d in ("default", "keep-verdicts")}
+    assert md["default"] == md["keep-verdicts"]  # the Markdown is the same either way
+    with pytest.raises(SystemExit):
+        rc.main(["--probe", "--keep-verdicts", "--omit-verdicts"])

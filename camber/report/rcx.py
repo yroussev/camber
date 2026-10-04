@@ -2643,9 +2643,15 @@ def _sec_verify(S) -> dict | None:
     missing points. No items -> no section."""
     from ..aso import recommend
     from ..references import WALKDOWN_REFERENCES
-    from ..walkdown import site_checks
+    from ..walkdown import cause_key, site_checks
 
     ctx = S["ctx"]
+    # 0.101 (#108): the equipment item follows the cause that heads the issue (#101)
+    heads: dict = {}
+    for iss in S["issues"]:
+        lead, _cause = _cause_lead(iss, frame=ctx.frame(iss.equip))
+        if lead is not None:
+            heads[iss.key] = (getattr(lead, "rule", ""), cause_key(lead))
     checks = site_checks(
         S["issues"],
         recommend=recommend,
@@ -2654,6 +2660,7 @@ def _sec_verify(S) -> dict | None:
         trust=S["trust_gated"],
         skipped=getattr(ctx.run, "rules_skipped", None) or (),
         declined=S["declined"],
+        heading_causes=heads,
     )
     if not checks:
         return None

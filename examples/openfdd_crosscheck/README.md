@@ -54,8 +54,15 @@ python examples/openfdd_crosscheck/run_crosscheck.py \
     --openfdd-python ofvenv/bin/python --sql-image camber-crosscheck/fdd_cli:32a6d44
 #   --window month   scores each (run, month) as a case
 #   --probe          runs the synthetic probes instead of the datasets
+#   --keep-verdicts  keeps the per-verdict list in the JSON (left out by default)
 docker builder prune   # drop the Rust build cache afterwards
 ```
+
+Since 0.101 the JSON leaves out the per-verdict list by default and collapses each "not
+evaluated" map to counts per reason (a month-window run would otherwise write about 200k more
+lines); the Markdown tables are the same either way. `--keep-verdicts` keeps them: the committed
+`results-run.json` and `probes.json` were written with it (the default then), `results-month.json`
+without.
 
 An engine whose prerequisite is missing is listed under "Not run" with the reason. The runner
 checks `docker info` once, with a 20 s timeout.

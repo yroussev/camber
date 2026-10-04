@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.101.0] — Unreleased
+
+<!-- 0101-walkdown -->
+### Changed
+- **The walk-down's equipment item follows the cause that heads the RCx issue (#108).** Since
+  0.100 (#101) a member finding's equipment-level cause can head an issue, but the "Verify on
+  site" equipment item still followed the root finding. `camber.walkdown.site_checks` takes
+  `heading_causes={issue key: (rule, cause key)}` (additive, provisional), and the RCx report
+  passes the cause it chose for each re-headed issue. That issue's equipment item is then the
+  member rule's template for that cause, with the member rule's references; an issue the root
+  heads keeps the root's item. This intentionally changes the Verify on site section for
+  re-headed issues only. On the 15 catalog run templates (default subsets), 2 of 98 issues
+  change, the two #101 re-headed: `lbnl-ddahu` `DMPRStuck_OA_0` and `lbnl-sdahu`
+  `damper_stuck_075` now ask for the outdoor-air damper's blades, linkage and actuator under a
+  full open and close command, not the minimum-position setting or the damper on a hot hour. The
+  RCx golden is unchanged (its synthetic site has no re-headed issue).
+- **open-fdd cross-check: the per-verdict list is left out of the JSON by default (#109).**
+  `run_crosscheck.py` now omits the per-verdict list and collapses the per-equipment "not
+  evaluated" reasons to counts unless `--keep-verdicts` is passed; a month-window run otherwise
+  writes about 200k more lines. `--omit-verdicts` is still accepted (it is the default). The
+  Markdown output is the same either way. The committed results are not re-run:
+  `results-month.json` was written with the omission, `results-run.json` and `probes.json`
+  with the verdicts (pass `--keep-verdicts` to reproduce them).
+<!-- /0101-walkdown -->
+
 ## [0.100.0] — 2026-10-04
 
 <!-- Each 0.100 branch adds its bullets only inside its own marked block. -->
