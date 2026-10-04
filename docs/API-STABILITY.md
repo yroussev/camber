@@ -621,6 +621,18 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `use_timeseries=True`, the data ranks only outdoor roles for a point whose name places it
   outdoors. The vocabulary, the multipliers and the guard may be retuned in a minor release.
 <!-- /0100-suggester -->
+<!-- 0101-suggester-ts (#106, #107) -->
+- **Point-role suggester defaults to the data when a series is passed** (0.101; #106, #107),
+  provisional. **Behaviour change:** `camber.mapping_assist.suggest_roles`, `review_unmapped` and
+  `camber.interop.bacnet.review_bacnet` build `FeatureSuggester(use_timeseries=True)` when a
+  series is passed for a token and no suggester is given. Their new keyword `use_timeseries`
+  (`None` by default: on when a series is passed) opts out with `False`, which reproduces the
+  0.100 output. Without a series the output is unchanged. The `FeatureSuggester` class default
+  stays name-only. On the time-series path, a name that says setpoint lets the data rank only
+  setpoint roles, and a point with no declared unit is range-checked in every plausible unit.
+  The example `real_names.dataset_points` takes `keep_series`, and `catalog_names.py` takes
+  `--data`. The guards and the default may be retuned in a minor release.
+<!-- /0101-suggester-ts -->
 
 ## Deprecated
 

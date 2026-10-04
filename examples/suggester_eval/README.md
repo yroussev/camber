@@ -67,7 +67,8 @@ python examples/suggester_eval/catalog_names.py --data   # --search DIR also fin
 
 - Three suggesters are compared on each point with data:
   - name only (`FeatureSuggester()`, no series);
-  - the same default suggester with the series passed (adds the physical-range gate);
+  - the name-only suggester with the series passed, which adds the physical-range gate (the
+    0.100 default; from 0.101 the `use_timeseries=False` opt-out);
   - name plus data (`FeatureSuggester(use_timeseries=True)`).
 - It reports top-1 and top-3 per mapping file and pooled, and each point whose top-1 the data
   helped or hurt against the name alone.

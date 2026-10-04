@@ -143,7 +143,8 @@ def test_default_suggester_is_unchanged_and_ignores_the_new_keywords():
 
 
 # (token, series, unit) -> the default suggester's output recorded on 0.95 (8f2d7b8), before
-# the time-series path existed: the default must stay byte-identical.
+# the time-series path existed. From 0.101 (#107) it is the opt-out (use_timeseries=False), and
+# the default without a series: both must stay byte-identical.
 LINEAR = "linear 13-16"
 GOLDEN = [
     ("AH1_SAT", None, "degF", [("supply_air_temp", 0.95), ("hw_supply_temp", 0.65),
@@ -159,10 +160,57 @@ GOLDEN = [
 
 
 @pytest.mark.parametrize("token,series,unit,want", GOLDEN)
-def test_default_output_matches_the_previous_release(token, series, unit, want):
+def test_opt_out_output_matches_the_previous_release(token, series, unit, want):
+    # 0.101 (#107): use_timeseries=False is the 0.95 default, byte for byte; without a series
+    # the new default is too
     s = pd.Series(np.linspace(13, 16, len(IDX)), index=IDX) if series == LINEAR else None
-    got = [(x.role, x.confidence) for x in suggest_roles(token, series=s, unit=unit)]
+    got = [(x.role, x.confidence)
+           for x in suggest_roles(token, series=s, unit=unit, use_timeseries=False)]  # fmt: skip
     assert got == want
+    if s is None:
+        assert [(x.role, x.confidence) for x in suggest_roles(token, unit=unit)] == want
+
+
+# 0.101 (#107): with a series, the default reads the data too. The golden series cases recorded
+# on the time-series path (the top role holds; the confidences rise with the data's evidence).
+GOLDEN_0101 = [
+    ("OaTemp", "degC", [("oat", 1.0), ("supply_air_temp", 0.4175), ("mixed_air_temp", 0.4175)]),
+    ("OaTemp", None, [("oat", 0.975), ("oa_damper", 0.3798), ("oa_airflow", 0.3742)]),
+]
+
+
+@pytest.mark.parametrize("token,unit,want", GOLDEN_0101)
+def test_0101_default_with_a_series_reads_the_data(token, unit, want):
+    s = pd.Series(np.linspace(13, 16, len(IDX)), index=IDX)
+    got = suggest_roles(token, series=s, unit=unit)
+    assert [(x.role, x.confidence) for x in got] == want
+    explicit = suggest_roles(token, series=s, unit=unit, use_timeseries=True)
+    assert [x.as_dict() for x in got] == [x.as_dict() for x in explicit]
+
+
+def test_0101_review_unmapped_defaults_and_opt_out():
+    from camber.mapping_assist import review_unmapped
+    from camber.model.mapping import MappingProvider
+
+    mp = MappingProvider.from_dict({"aliases": {}})
+    s = zone()
+    on = review_unmapped(["temp_setpoint", "Rm_T"], mp, series_by_token={"temp_setpoint": s})
+    off = review_unmapped(["temp_setpoint", "Rm_T"], mp, series_by_token={"temp_setpoint": s},
+                          use_timeseries=False)  # fmt: skip
+    ts = FeatureSuggester(mp, use_timeseries=True).suggest("temp_setpoint", series=s)
+    lex = FeatureSuggester(mp).suggest("temp_setpoint", series=s)
+    assert on["suggestions"]["temp_setpoint"] == ts
+    assert off["suggestions"]["temp_setpoint"] == lex
+    # a token without a series is suggested by name alone either way
+    assert (
+        on["suggestions"]["Rm_T"]
+        == off["suggestions"]["Rm_T"]
+        == FeatureSuggester(mp).suggest("Rm_T")
+    )
+    # an explicit suggester is used as given
+    got = review_unmapped(["temp_setpoint"], mp, series_by_token={"temp_setpoint": s},
+                          suggester=FeatureSuggester(mp))  # fmt: skip
+    assert got["suggestions"]["temp_setpoint"] == lex
 
 
 def test_timeseries_path_uses_the_data_when_the_name_says_nothing():

@@ -162,17 +162,27 @@ point. `FeatureSuggester(use_timeseries=True)` also reads **what the data says**
   still dominates and the data only breaks its ties.
 
 ```python
-from camber.mapping_assist import FeatureSuggester
+from camber.mapping_assist import FeatureSuggester, suggest_roles
 
 fs = FeatureSuggester(use_timeseries=True, oat=site_oat_series)
 fs.suggest("3dfa2bab_f8f2_485b", series=point_series)
 # [RoleSuggestion(role='space_temp', basis='timeseries',
 #                 rationale='sensor data at the level of space_temp (read as degC)'), ...]
+
+suggest_roles("3dfa2bab_f8f2_485b", series=point_series)  # 0.101: the same path by default
+suggest_roles("3dfa2bab_f8f2_485b", series=point_series, use_timeseries=False)  # the opt-out
 ```
 
-**Opt-in.** Without `use_timeseries=True`, a caller gets the name-only suggestions above: those
-of 0.95 until 0.99, and the extended vocabulary from 0.100. With it, the physical-range gate runs
-in the declared unit. Until 0.100 it ran only when a unit was declared. From 0.101 (#106), a
+**The default, from 0.101 (#107).** When a series is passed and no suggester is given,
+`suggest_roles`, `review_unmapped` and `camber.interop.bacnet.review_bacnet` use the time-series
+path. `use_timeseries=False` opts out and gives the 0.100 output, byte for byte: the name, the
+unit and the physical-range check. Without a series the default is unchanged. The functions
+pass no outdoor-air series, so the weather features are not measured; build
+`FeatureSuggester(use_timeseries=True, oat=...)` and pass it as `suggester=` to use them. The
+`FeatureSuggester` class itself stays name-only unless it is built with `use_timeseries=True`.
+Until 0.100 the time-series path was opt-in only.
+
+**Range check.** On the time-series path, the physical-range gate runs in the declared unit. Until 0.100 it ran only when a unit was declared. From 0.101 (#106), a
 point with no unit is range-checked in every plausible unit of the role, the same readings the
 templates try (°C or °F, Pa or inH2O...), and the best reading counts. A 22 °C room is no
 longer out of range for being read as °F, and a sentinel or dead channel (`-999`) that fits no
@@ -466,7 +476,7 @@ the scores. **These names are synthetic, not real-world naming.**
   readable.
 - Long-word names come close to the Brick-class upper bound.
 
-**Recommendation (0.100, not made; needs maintainer sign-off).** Switch the time-series path on
+**Recommendation (0.100; approved and made in 0.101, #107).** Switch the time-series path on
 by default in `suggest_roles` and `review_unmapped` when a series is passed and no suggester is
 given, with a way to opt out. The 0.96 objection, that the data costs weather-station points, is
 answered by the 0.100 guard. With the extended vocabulary, the data adds top-1 on every real
@@ -484,8 +494,8 @@ numbers is a gated benchmark.
 
 #### 0.101: held-out names with their data, and the two fixes (#106)
 
-This is step 1 of the recommendation above: measure, and fix the two known costs. **The default
-does not change** (that is step 2, #107, after sign-off).
+This is step 1 of the recommendation above: measure, and fix the two known costs. Step 2, the
+default switch, follows below (#107).
 
 `catalog_names.py --data` scores the held-out catalog names (out of sample for the name
 vocabulary) with their series from the catalog data. Each point is read as `real_names.py`
@@ -494,8 +504,9 @@ and test datasets publish runs of 18 to 24 hours, so a series needs half a day o
 two days. Three suggesters are compared:
 
 - **name only**: `FeatureSuggester()` with no series;
-- **name only, series passed**: the same default suggester when a caller passes the series. It
-  adds the physical-range gate, read in °F when no unit is declared;
+- **name + range check**: the name-only suggester with the series passed, the 0.100 default
+  (from 0.101 the `use_timeseries=False` opt-out). It adds the physical-range gate, read in °F
+  when no unit is declared;
 - **name + data**: `FeatureSuggester(use_timeseries=True)` with the series.
 
 Of the 223 held-out names, 89 have a usable series. `rbc-g36-ahu` (83 names) is research-only and
@@ -505,7 +516,7 @@ are columns CAMBER derives at ingest: the `ornl-frp-vav` per-room setpoint and o
 series with the low-temperature mapping and are scored there. `finnish-dcv`'s supply-air CO2
 has no series in the runs read.
 
-| mapping file | points (with data) | name only top-1 / top-3 % | name only, series passed top-1 / top-3 % | name + data, 0.100 top-1 / top-3 % | name + data, 0.101 top-1 / top-3 % |
+| mapping file | points (with data) | name only top-1 / top-3 % | name + range check top-1 / top-3 % | name + data, 0.100 top-1 / top-3 % | name + data, 0.101 top-1 / top-3 % |
 |---|---|---|---|---|---|
 | `cofactor_drammen_heat` | 1 (1) | 0.0 / 0.0 | 0.0 / 0.0 | 100.0 / 100.0 | 100.0 / 100.0 |
 | `cofactor_drammen_power` | 1 (1) | 0.0 / 0.0 | 0.0 / 0.0 | 100.0 / 100.0 | 100.0 / 100.0 |
@@ -559,13 +570,51 @@ there the range-check fix does not act. Only `catalog_names.py --data` passes th
 - **The range check without a unit makes the time-series path judge a point's range as the
   default path does, without the °F assumption.** It gains `ch1_p_dis` and costs the two
   freezer-case temperatures, whose labels stretch an air-handler role below its physical bounds.
-- **Read the series-passed column before deciding #107.** Today, a caller who passes series
-  without units to the default suggester loses 27 points of top-1 on these names (76.4 → 49.4 %).
-  The default range check reads every unitless temperature as °F, so 22 °C rooms and 13 °C
-  supply air fall out of range. The time-series path keeps 75.3 %. Changing the default path's
-  unitless range check would also change default output. It is not done here.
+- **The range-check column is why the default switched (#107).** Under 0.100, a caller who
+  passed series without units to the default suggester lost 27 points of top-1 on these names
+  (76.4 → 49.4 %). That range check reads every unitless temperature as °F, so 22 °C rooms and
+  13 °C supply air fall out of range. The time-series path keeps 75.3 %.
 - The held-out pool with data is small (89 points), and one file (`ornl_frp_vav`, 61 points)
   dominates it. Its runs are one day long, so the daily and weekly features are not measured.
+
+#### 0.101: the default switch, before and after (#107)
+
+Every pool is re-scored at default settings: `suggest_roles(name, series=series)`, with no unit,
+no outdoor-air series and no suggester. "Before" is the 0.100 default with the series passed
+(the name, the unit and the range check; from 0.101 the `use_timeseries=False` opt-out).
+"After" is the 0.101 default. The no-series column is the default without a series, which does
+not change. The series are passed whole here, so the range check acts in every pool (the
+earlier tables score cached profiles).
+
+| pool | points | default, no series top-1 / top-3 % | default with series, 0.100 top-1 / top-3 % | default with series, 0.101 top-1 / top-3 % | top-1 helped / hurt |
+|---|---|---|---|---|---|
+| held-out catalog names with series | 89 | 76.4 / 79.8 | 49.4 / 50.6 | 73.0 / 80.9 | 23 / 2 |
+| real names | 422 | 94.3 / 95.0 | 84.8 / 85.5 | 95.7 / 96.9 | 46 / 0 |
+| real names, excluding in-sample names | 129 | 86.0 / 88.4 | 57.4 / 59.7 | 90.7 / 93.8 | 43 / 0 |
+| simulated LBNL sets | 78 | 71.8 / 85.9 | 73.1 / 85.9 | 74.4 / 85.9 | 1 / 0 |
+| BTS anonymised | 903 | 0.0 / 0.0 | 0.0 / 0.0 | 46.2 / 64.6 | 417 / 0 |
+| BTS Brick-class labels as names (upper bound) | 903 | 93.2 / 97.2 | 25.5 / 31.6 | 89.4 / 97.2 | 578 / 1 |
+| synthetic `AHU1_SAT` | 903 | 64.6 / 69.4 | 14.8 / 17.2 | 70.4 / 81.7 | 506 / 4 |
+| synthetic `VAV-2-14 DA-T` | 903 | 64.7 / 78.6 | 17.3 / 23.4 | 71.3 / 86.0 | 496 / 8 |
+| synthetic `B2.L3.FCU07.RmTmp` | 903 | 79.4 / 84.6 | 20.7 / 25.1 | 80.8 / 89.6 | 546 / 3 |
+| synthetic `ahu_03_supply_temp` | 903 | 93.9 / 96.9 | 25.9 / 30.6 | 89.9 / 96.2 | 579 / 1 |
+| synthetic `201-AHU3:SA-TMP` | 903 | 63.3 / 77.0 | 16.6 / 23.1 | 70.5 / 86.6 | 492 / 5 |
+
+*Synthetic names are synthetic, and the BTS Brick-class rows are an upper bound, not real-world
+naming.*
+
+- **Passing a series no longer costs a caller.** Under 0.100 the default range check read every
+  unitless temperature as °F, so passing °C data dropped top-1 to 15-57 % on most pools. From
+  0.101 the default with a series is at or above the name alone on every real, held-out and
+  simulated pool except the held-out set (73.0 against 76.4 %, with top-3 80.9 against 79.8 %).
+- **The held-out figure is 73.0 %, not the 75.3 % above,** because the default passes no
+  outdoor-air series: the weather features are not measured.
+- **On strong names, the range check without a unit costs a little.** With BTS Brick-class names
+  the default with a series reaches 89.4 %, below the name alone (93.2 %). The same series
+  without the range check reach 95.5 %. BTS site C's data has negative airflows and dropouts, so
+  the check demotes airflows to airflow setpoints (19 points) and a few CO2 and zone points. The
+  `ahu_03_supply_temp` style shows the same (93.9 → 89.9 %). Pass `use_timeseries=False`, or
+  clean the series, where the names are already reliable.
 
 ## Review the unmapped tags — `review_unmapped`
 

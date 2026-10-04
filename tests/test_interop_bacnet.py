@@ -130,6 +130,28 @@ def test_review_bacnet_accepts_optional_series():
     assert out["n_unmapped"] == 1  # unmapped, but now scored with the series too
 
 
+def test_review_bacnet_reads_the_series_by_default_with_an_opt_out():
+    # 0.101 (#107): an object with a trend series is suggested from its name and its data; the
+    # opt-out keeps the 0.100 name, unit and range-check suggestions
+    import numpy as np
+    import pandas as pd
+
+    idx = pd.date_range("2025-01-01", periods=48, freq="1h")
+    series = {"RoomTemp": pd.Series(np.full(48, 72.0), index=idx)}
+    objs = [_Obj("RoomTemp", "analogInput", 1, "degreesFahrenheit")]
+    on = ib.review_bacnet(objs, MappingProvider(), series_by_name=series)
+    off = ib.review_bacnet(objs, MappingProvider(), series_by_name=series, use_timeseries=False)
+    got = [(s.role, s.confidence) for s in on["suggestions"]["RoomTemp"]]
+    assert got == [("space_temp", 0.9892), ("return_air_temp", 0.4612),
+                   ("supply_air_temp", 0.4609)]  # fmt: skip
+    assert [(s.role, s.confidence) for s in off["suggestions"]["RoomTemp"]] == [
+        ("space_temp", 0.98), ("oat", 0.455), ("supply_air_temp", 0.455)
+    ]  # fmt: skip
+    # without series nothing changes
+    plain = ib.review_bacnet(objs, MappingProvider())
+    assert plain == ib.review_bacnet(objs, MappingProvider(), use_timeseries=False)
+
+
 # --------------------------------------------------------------------------- import-light
 
 

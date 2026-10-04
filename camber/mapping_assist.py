@@ -648,6 +648,8 @@ class FeatureSuggester:
     the weather-station guard to the time-series path (:func:`_outdoor_guard`). 0.101 (#106) adds
     the setpoint guard (:func:`_setpoint_guard`) and range-checks a point with no declared unit
     in every plausible unit (:func:`_ts_range_violation`); both act only on the time-series path.
+    The class default stays name-only; from 0.101 (#107) :func:`suggest_roles` and
+    :func:`review_unmapped` build it with ``use_timeseries=True`` when a series is passed.
     """
 
     def __init__(
@@ -977,10 +979,20 @@ def suggest_roles(
     unit=None,
     suggester=None,
     k: int = 3,
+    use_timeseries: bool | None = None,
 ) -> list:
-    """Ranked role suggestions for one ``token`` (default :class:`FeatureSuggester`)."""
-    s = suggester if suggester is not None else FeatureSuggester(mapping)
-    return s.suggest(token, series=series, unit=unit, k=k)
+    """Ranked role suggestions for one ``token`` (default :class:`FeatureSuggester`).
+
+    0.101 (#107): when a ``series`` is passed and no ``suggester`` is given, the default suggester
+    reads the data too (``FeatureSuggester(use_timeseries=True)``, see
+    :mod:`camber.mapping_timeseries`). ``use_timeseries=False`` keeps the name, unit and
+    range-check suggester of 0.100; ``True`` asks for the time-series path explicitly. Without a
+    series the default is unchanged. ``use_timeseries`` is ignored when a ``suggester`` is given.
+    """
+    if suggester is None:
+        ts = series is not None if use_timeseries is None else bool(use_timeseries)
+        suggester = FeatureSuggester(mapping, use_timeseries=ts)
+    return suggester.suggest(token, series=series, unit=unit, k=k)
 
 
 def review_unmapped(
@@ -992,6 +1004,7 @@ def review_unmapped(
     suggester=None,
     k: int = 3,
     min_confidence: float = 0.5,
+    use_timeseries: bool | None = None,
 ) -> dict:
     """Find the tokens that don't map and attach ranked role suggestions to each.
 
@@ -999,6 +1012,9 @@ def review_unmapped(
     each. Returns ``{"suggestions": {token: [RoleSuggestion,...]}, "review_list": [...],
     "n_unmapped": int}`` — a human-confirm artifact. **Never mutates ``mapping``**; a confirmed
     suggestion is applied by editing the mapping spec (`MappingProvider.from_dict`).
+
+    0.101 (#107): a token with a series in ``series_by_token`` is suggested from its name and its
+    data by default (see :func:`suggest_roles`); ``use_timeseries=False`` opts out.
     """
     from .mapping_confidence import review as _review
 
@@ -1011,7 +1027,15 @@ def review_unmapped(
         )["unmapped"]
     ]
     suggestions = {
-        t: suggest_roles(t, mapping, series=sbt.get(t), unit=un.get(t), suggester=suggester, k=k)
+        t: suggest_roles(
+            t,
+            mapping,
+            series=sbt.get(t),
+            unit=un.get(t),
+            suggester=suggester,
+            k=k,
+            use_timeseries=use_timeseries,
+        )
         for t in unmapped
     }
     review_list = [

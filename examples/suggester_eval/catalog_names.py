@@ -14,7 +14,8 @@ when the dataset was catalogued. It needs no download: the names and labels ship
 
 **Names plus data (``--data``, 0.101, #106).** Each held-out name is also scored with its series
 from the catalog data. Three suggesters are compared: the name only (``FeatureSuggester()``),
-the same default suggester with the series passed (it adds the physical-range gate), and the
+the name-only suggester with the series passed (it adds the physical-range gate; the 0.100
+default, from 0.101 the ``use_timeseries=False`` opt-out), and the
 name plus data (``FeatureSuggester(use_timeseries=True)``). Each is reported per mapping file and
 pooled, with every point whose top-1 the data helped or hurt against the name alone.
 
@@ -147,7 +148,7 @@ def held_out_series(points, search, work: str, *, min_samples: int = MIN_SAMPLES
 
 
 #: the three suggesters compared on the held-out points with data
-DATA_METHODS = ("name only", "name only, series passed", "name + data")
+DATA_METHODS = ("name only", "name + range check", "name + data")
 
 
 def _data_tops(name: str, data) -> dict:
@@ -158,8 +159,9 @@ def _data_tops(name: str, data) -> dict:
     prof, series = data
     return {
         "name only": lex,
-        # the default suggester when a caller passes the series: the name and the range check
-        "name only, series passed": [
+        # the name-only suggester with the series passed: the name and the range check (the 0.100
+        # default with a series; from 0.101 the use_timeseries=False opt-out)
+        "name + range check": [
             s.role for s in FeatureSuggester().suggest(name, series=series, k=3)
         ],
         "name + data": [

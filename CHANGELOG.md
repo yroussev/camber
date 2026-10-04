@@ -10,10 +10,28 @@ All notable changes to CAMBER are documented here. The format follows
 
 <!-- 0101-suggester-ts -->
 ### Changed
+- **Default change: the point-role suggester reads the data when a series is passed (#107).**
+  `suggest_roles`, `review_unmapped` and `camber.interop.bacnet.review_bacnet` now use the
+  time-series path (`FeatureSuggester(use_timeseries=True)`) when a series is passed for a token
+  and no suggester is given. **This intentionally changes their output whenever a series is
+  passed**, including the BACnet review path when `series_by_name` is given. The new keyword
+  `use_timeseries=False` opts out and gives the 0.100 output byte for byte. Without a series the
+  output is unchanged, and so are `roles_from_bacnet` and `vendor_aliases`, which pass no
+  series. The `FeatureSuggester` class default stays name-only. At default settings with the
+  series passed (no unit, no outdoor-air series), top-1 before → after:
+  - held-out catalog names: 49.4 → 73.0 %;
+  - real names: 84.8 → 95.7 %;
+  - simulated LBNL sets: 73.1 → 74.4 %;
+  - BTS anonymised: 0.0 → 46.2 %;
+  - BTS Brick-class names (upper bound): 25.5 → 89.4 %;
+  - the five synthetic styles: 15-26 → 70-90 %.
+
+  On strong names the unitless range check costs a little against the name alone. With BTS
+  Brick-class names it is 89.4 % against 93.2 %, because site C's negative airflows are out of
+  range. The full table is in `docs/MAPPING-ASSIST.md`.
 - **Time-series suggester, step 1: held-out measurement and the two known fixes (#106).** Both
-  fixes act only with `FeatureSuggester(use_timeseries=True)`. The default suggester, and so
-  `suggest_roles` and `review_unmapped` without a suggester, is byte-identical. Switching the
-  default is #107 and waits for sign-off.
+  fixes act only on the time-series path, which from #107 is the default when a series is
+  passed.
   - **Setpoint guard.** When a point's name says setpoint (`setpoint`, `SP`, `STPT`,
     `RMCLGSPT`), the data ranks only the setpoint roles. `robod`'s `temp_setpoint` stays
     `cool_sp`, where the data alone had made it `space_temp`.
