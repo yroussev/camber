@@ -640,7 +640,7 @@ def _engine_tables(engines: dict) -> list:
         for fc in FCS:
             r = sc["per_fc"][fc]
             ne = r["not_evaluated"]
-            if "counts_by_reason" in ne:  # collapsed (--omit-verdicts)
+            if "counts_by_reason" in ne:  # collapsed (the default; --keep-verdicts keeps them)
                 ne = {
                     f"{why}#{i}": why for why, n in ne["counts_by_reason"].items() for i in range(n)
                 }

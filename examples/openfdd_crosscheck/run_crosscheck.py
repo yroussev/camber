@@ -25,7 +25,9 @@ Then::
         --openfdd-python ofvenv/bin/python --sql-image camber-crosscheck/fdd_cli:32a6d44
 
 Engines whose prerequisite is missing are reported under "not run", never silently skipped.
-``--probe`` runs the synthetic probes (``harness.PROBES``) instead of the datasets.
+``--probe`` runs the synthetic probes (``harness.PROBES``) instead of the datasets. The per-verdict
+list and the per-equipment "not evaluated" reasons are left out of the JSON by default (0.101,
+#109; the "not evaluated" reasons are collapsed to counts); ``--keep-verdicts`` keeps them.
 """
 
 from __future__ import annotations
@@ -253,8 +255,19 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default=os.path.join(hx.HERE, "results"))
     ap.add_argument("--work", help="scratch directory (default: a temporary one, removed after)")
     ap.add_argument("--probe", action="store_true", help="run the synthetic probes instead")
-    ap.add_argument(
-        "--omit-verdicts", action="store_true", help="leave the per-verdict list out of the JSON"
+    keep = ap.add_mutually_exclusive_group()
+    keep.add_argument(
+        "--keep-verdicts",
+        dest="keep_verdicts",
+        action="store_true",
+        help="keep the per-verdict list (and the per-equipment 'not evaluated' reasons) in the "
+        "JSON; left out by default since 0.101 (a month-window run writes about 200k lines more)",
+    )
+    keep.add_argument(
+        "--omit-verdicts",
+        dest="keep_verdicts",
+        action="store_false",
+        help="leave the per-verdict list out of the JSON (the default; kept for older commands)",
     )
     args = ap.parse_args(argv)
 
@@ -346,12 +359,13 @@ def main(argv=None) -> int:
             }
             for name, rule in (("common", hx.common_verdict), ("native", hx.native_verdict))
         },
-        "verdicts": "omitted (--omit-verdicts)"
-        if args.omit_verdicts
-        else [v.as_dict() for v in verdicts],
+        # the marker text is unchanged since 0.99, so a re-run writes what the results hold
+        "verdicts": [v.as_dict() for v in verdicts]
+        if args.keep_verdicts
+        else "omitted (--omit-verdicts)",
         "caveats": hx.standard_caveats(args.window, list(groups)),
     }
-    if args.omit_verdicts:
+    if not args.keep_verdicts:
         _collapse_not_evaluated(results["scores"])
     if args.probe:
         results["probes"] = probe_report(verdicts)
