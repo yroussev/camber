@@ -707,6 +707,20 @@ PARAM_DOCS["g36_afdd"] = {
         (0.0, 100.0),
         "None = FC6 is declined. G36 uses the active minimum-OA setpoint over actual airflow.",
     ),
+    # ---- begin 0100-ddahu (#97): FC6 against a seasonal minimum ----
+    "min_oa_pct_by_month": _P(
+        "% of supply airflow, per month",
+        "CAMBER judgment: only for a sequence with a seasonal minimum (as outdoor_air_fraction "
+        "takes it); G36 judges %OA against the active minimum-OA setpoint, which a seasonal "
+        "sequence changes",
+        "Enter the sequence's minimum for each month that differs from min_oa_pct, e.g. "
+        "{6: 11.9, 7: 11.9, 8: 11.9} on lbnl-ddahu (a 28 % damper minimum in Jun-Aug, 45 % "
+        "otherwise), and use the same values outdoor_air_fraction uses.",
+        (0.0, 100.0),
+        "None = min_oa_pct all year. A {month (1-12): pct} mapping; it needs min_oa_pct, the "
+        "minimum in the other months. Each value must lie in the range.",
+    ),
+    # ---- end 0100-ddahu (#97) ----
     "mode_delay_min": _P(
         "min",
         "standard: ASHRAE Guideline 36-2021 §5.16.14 (ModeDelay; verified against Addendum p)",

@@ -25,6 +25,9 @@ What the adapter decides (and says, as caveats):
   free-cooling labels.
 * **FC6** needs the minimum outdoor-air fraction, which no role carries; pass ``min_oa_pct`` (the
   design minimum OA as a % of supply airflow) to evaluate it against %OA from the temperatures.
+  A sequence with a seasonal minimum adds ``min_oa_pct_by_month`` (0.100, #97), the same
+  ``{month: pct}`` override ``outdoor_air_fraction`` takes: each sample is judged against its own
+  month's minimum.
 * **Free cooling needs an open economizer** (0.98, #94). A fan-on hour with both coils inactive is
   G36 OS#2 only when the OA damper is open beyond its minimum position plus ``oa_damper_tol``; at
   or below it (a deadband hour, an unoccupied recirculation run) it is OS#5, where FC8/FC9 and the
@@ -66,6 +69,7 @@ from ..fdd_g36 import (
     run_g36_afdd,
 )
 from ..model.roles import Role
+from ..oafraction import _sample_minima
 from ..schedules import effective_occupied_mask
 from ..units import normalize_percent
 from .applicability import RULE_EQUIP_CLASSES
@@ -144,6 +148,7 @@ class G36AFDD:
         heating_coil: bool | None = None,  # None: inferred from a mapped heating-valve point
         mat_sat_as_coil_temps: bool = True,  # MAT/SAT as CCET/CCLT where G36 allows (see module)
         min_oa_pct: float | None = None,  # design minimum OA, % of supply airflow (enables FC6)
+        min_oa_pct_by_month: dict | None = None,  # {month: pct} seasonal override (0.100, #97)
         mode_delay_min: float = MODE_DELAY_MIN,  # G36 ModeDelay
         alarm_delay_min: float = ALARM_DELAY_MIN,  # G36 AlarmDelay
         avg_window_min: float = AVG_WINDOW_MIN,  # G36 rolling-average window
@@ -159,6 +164,16 @@ class G36AFDD:
         self.heating_coil = heating_coil
         self.mat_sat_as_coil_temps = mat_sat_as_coil_temps
         self.min_oa_pct = min_oa_pct
+        # a seasonal design minimum (0.100, #97): {month (1-12): pct} overriding min_oa_pct in
+        # those months, as outdoor_air_fraction takes it
+        by_month = {int(k): float(v) for k, v in (min_oa_pct_by_month or {}).items()}
+        if any(not 1 <= k <= 12 for k in by_month):
+            raise ValueError("g36_afdd: min_oa_pct_by_month keys must be months 1-12")
+        if by_month and min_oa_pct is None:
+            raise ValueError(
+                "g36_afdd: min_oa_pct_by_month needs min_oa_pct (the minimum in the other months)"
+            )
+        self.min_oa_pct_by_month = by_month or None
         self.mode_delay_min = mode_delay_min
         self.alarm_delay_min = alarm_delay_min
         self.avg_window_min = avg_window_min
@@ -259,12 +274,25 @@ class G36AFDD:
             span = df["OAT"] - df["RAT"]
             pct = 100.0 * (df["MAT"] - df["RAT"]) / span.where(span.abs() >= 1.0)
             df["pct_oa"] = pct.clip(-50.0, 150.0)
-            df["pct_oa_min"] = float(self.min_oa_pct)
-            caveats.append(
-                f"FC6 compares %OA from the air temperatures with a fixed minimum of "
-                f"{float(self.min_oa_pct):g} % (G36 uses the active minimum-OA setpoint over "
-                "actual airflow)"
-            )
+            if self.min_oa_pct_by_month:
+                df["pct_oa_min"] = _sample_minima(
+                    df.index, float(self.min_oa_pct), self.min_oa_pct_by_month
+                ).to_numpy()
+                months = ", ".join(
+                    f"{m}: {v:g} %" for m, v in sorted(self.min_oa_pct_by_month.items())
+                )
+                caveats.append(
+                    f"FC6 compares %OA from the air temperatures with a seasonal minimum of "
+                    f"{float(self.min_oa_pct):g} %, by month {{{months}}} (G36 uses the active "
+                    "minimum-OA setpoint over actual airflow)"
+                )
+            else:
+                df["pct_oa_min"] = float(self.min_oa_pct)
+                caveats.append(
+                    f"FC6 compares %OA from the air temperatures with a fixed minimum of "
+                    f"{float(self.min_oa_pct):g} % (G36 uses the active minimum-OA setpoint over "
+                    "actual airflow)"
+                )
         else:
             declined_fcs[6] = (
                 "needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
