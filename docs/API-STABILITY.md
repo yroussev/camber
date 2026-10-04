@@ -587,6 +587,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   heating coil alone active and the damper open beyond its minimum (plus `oa_damper_tol`) is now
   OS#5, not OS#1, and a missing damper reading there is unclassified.
 <!-- /099-g36-heating -->
+<!-- 0100-suggester (#102) -->
+- **Point-role suggester vocabulary and weather-station guard** (0.100; #102), additive and
+  provisional: the `camber.mapping_assist` constants `WATER_AIR_PENALTY` and
+  `UNLOCATED_TEMP_PENALTY`, and the example script `examples/suggester_eval/catalog_names.py`.
+  Behaviour change: the default name-only `FeatureSuggester` reads more abbreviations and applies
+  water-medium and unlocated-temperature rules, so some names get a different suggestion. With
+  `use_timeseries=True`, the data ranks only outdoor roles for a point whose name places it
+  outdoors. The vocabulary, the multipliers and the guard may be retuned in a minor release.
+<!-- /0100-suggester -->
 
 ## Deprecated
 

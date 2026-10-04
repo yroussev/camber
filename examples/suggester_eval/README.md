@@ -8,6 +8,7 @@ evidence of `camber.mapping_timeseries`) three ways. None of these is a gated be
 | `real_names.py` | open catalog datasets that publish their **real BMS point names** | how the suggester does on real naming, with and without the data |
 | `bts.py` | **BTS**: three real buildings, anonymised ids, Brick classes | what the data alone recovers when the names are hidden |
 | `messy_names.py` | BTS points with **synthetic** vendor-style names | tolerance to abbreviations and site conventions (synthetic, never mixed into real figures) |
+| `catalog_names.py` | the published point names of the catalog mappings `real_names.py` does not use (shipped, no download) | the out-of-sample name check from 0.100 on |
 
 Results and caveats: [docs/MAPPING-ASSIST.md](../../docs/MAPPING-ASSIST.md#evaluation).
 
@@ -39,6 +40,21 @@ where adding the data changed the top-1 result.
   leaves both out.
 - Only open-tier entries are used. Cite each dataset as its catalog entry asks
   (`camber datasets info <id>`).
+
+- **From 0.100 the lexical figures are in-sample.** The 0.100 vocabulary additions (#102) were
+  chosen from the 0.96 misses on these names. Use `catalog_names.py` for an out-of-sample read.
+
+## `catalog_names.py`: held-out catalog names (0.100)
+
+```sh
+python examples/suggester_eval/catalog_names.py      # no download; reads camber/datasets/mappings
+```
+
+Scores the default name-only `FeatureSuggester()` on every published point name of the catalog
+mappings that `real_names.py` does not evaluate, against the role CAMBER assigned when the
+dataset was catalogued. Templated names (`zone_{z}_temp`) are skipped. It reports each mapping
+file and the pool, and lists every miss. One large file (`ornl_frp_vav.json`, 92 points) weighs
+heavily in the pool.
 
 ## `bts.py`: BTS, names hidden
 

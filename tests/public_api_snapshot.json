@@ -1400,6 +1400,8 @@
     "MLSuggester",
     "ROLE_UNIT",
     "RoleSuggestion",
+    "UNLOCATED_TEMP_PENALTY",
+    "WATER_AIR_PENALTY",
     "review_unmapped",
     "suggest_roles"
   ],
