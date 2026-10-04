@@ -392,6 +392,18 @@ Version numbers are given only where a release is already planned.
       `docs/ECOSYSTEM.md`.
   - **0.99.1 — patch:** `/facilities` and the trend viewer report the site zone of an
     open-fdd-ingested facility, including one ingested with 0.99.0 (#96).
+  - **0.100 — follow-ups from 0.99** (integrated, not yet released). Closes #97–#104:
+    - [x] #97 `g36_afdd` FC6 against a seasonal minimum OA, used by the `lbnl-ddahu` template;
+    - [x] #98 `lbnl-ddahu` maps its cold-deck SAT setpoint (FC9, FC11 and FC13 evaluated);
+    - [x] #99 `reheat_penalty` `box_type` caps the fan-heat estimate by box;
+    - [x] #100 opt-in `coil_leak_drift` against the unit's own baseline (measured, not gated);
+    - [x] #101 a member's equipment-level cause heads an RCx issue; the `lbnl-ddahu` and
+      `lbnl-sdahu` templates run `free_cooling_missed`;
+    - [x] #102 suggester vocabulary from public conventions and a weather-station guard;
+    - [x] #103 setpoint-level grouping for the sensor-health outlier read, measured and rejected;
+    - [x] #104 config runs resolve the facility time zone the way the read API does;
+    - [x] integration: the open-fdd cross-check re-run on the merged code, and the suggester
+      tables reconciled.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process

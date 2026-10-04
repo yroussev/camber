@@ -6,6 +6,23 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.100.0] — Unreleased
 
+<!-- Each 0.100 branch adds its bullets only inside its own marked block. -->
+
+**0.100: the dual-duct unit's seasonal minimum, equipment causes heading RCx issues, and an
+opt-in leak drift detector (#97–#104).** `g36_afdd` FC6 takes a seasonal minimum OA (#97). The
+`lbnl-ddahu` mapping adds its cold-deck SAT setpoint, so G36 FC9, FC11 and FC13 are evaluated
+there (#98); the dataset re-ingests once, and the open-fdd cross-check was re-run on the merged
+code. `reheat_penalty` takes a `box_type` that caps its fan-heat estimate by box (#99). A new
+opt-in `coil_leak_drift` judges coil-valve leaks against the unit's own baseline (#100). Its
+results are measured records, not gated. An RCx issue is now headed by a member finding's cause
+when that cause names the equipment at fault (#101). The `lbnl-ddahu` and `lbnl-sdahu`
+templates now run `free_cooling_missed`, which re-heads two catalog issues. The point-role
+suggester reads more public naming conventions and keeps weather-station points outdoors
+(#102). This intentionally changes the default suggester output. Setpoint-level grouping for the
+sensor-health outlier read was measured and rejected (#103). Config runs resolve a facility's
+time zone the way the read API does (#104). The synthetic, fleet, LBNL, BDG2 and BDG2 savings
+benchmark gates did not move.
+
 <!-- 0100-integration -->
 ### Changed
 - **Dataset templates: `lbnl-ddahu` and `lbnl-sdahu` run `free_cooling_missed` (#101).** Both
