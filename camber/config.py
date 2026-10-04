@@ -134,8 +134,10 @@ sees them (the DST fall-back repeat keeps its first reading; the spring-forward 
 in a naive local export). Without it such stamps keep the clock as written -- UTC for ``Z`` -- and
 a :class:`~camber.tsparse.TimezoneWarning` says so; ``"strict_timezone": true`` refuses them
 instead. A store source is already on the site's wall clock (``camber datasets ingest`` converts
-with the catalog entry's ``local_timezone``); there ``timezone`` defaults to that zone and applies
-only to a ``shared_oat`` CSV file, and a ``timezone`` that disagrees with the catalog warns.
+with the catalog entry's ``local_timezone``); there ``timezone`` defaults to the facility's zone and
+applies only to a ``shared_oat`` CSV file, and a ``timezone`` that disagrees with it warns. The
+facility's zone is looked up as the read API does (0.100, #104): the registry entry's ``timezone``,
+the dataset-catalog block and entry, then an open-fdd ingest's provenance.
 Either way the zone also sets the length of a daily ``mv`` day (0.93, #68): the autumn fall-back
 day sums 25 hours of energy, the spring-forward day 23 (see docs/MANDV.md).
 
@@ -441,49 +443,36 @@ def _catalog_timezone(meta: dict) -> str | None:
     """The site zone a catalog dataset was ingested into (``ingest.local_timezone``), if known.
 
     0.99 (#22): a facility ingested from an open-fdd package records the zone it was given
-    (``meta["openfdd"]["timezone"]``); that is the store's clock too.
+    (``meta["openfdd"]["timezone"]``); that is the store's clock too. Config runs resolve a
+    facility's zone with :func:`camber._provenance.facility_timezone` since 0.100 (#104); this
+    narrower lookup is kept for callers that use it.
     """
+    from ._provenance import _valid_zone, catalog_dataset_timezone
+
     ofdd = (meta or {}).get("openfdd")
     if isinstance(ofdd, dict) and ofdd.get("timezone"):
-        from .tsparse import check_timezone
-
-        try:
-            return check_timezone(ofdd["timezone"])
-        except ValueError:
-            return None
+        return _valid_zone(ofdd["timezone"])
     block = (meta or {}).get("dataset") or {}
-    did = block.get("dataset_id") if isinstance(block, dict) else None
-    if not did:
-        return None
-    try:
-        from .datasets import get as _get_dataset
-
-        entry = _get_dataset(did)
-    except Exception:  # an unknown / retired id, or a catalog that fails to load
-        return None
-    tz = (entry.ingest or {}).get("local_timezone") or entry.timezone or None
-    # 0.93 (#68): only an IANA zone -- an entry's ``timezone`` is often a prose description of
-    # its clock (e.g. "naive timestamps on one uniform hourly grid ..."), not a zone
-    from .tsparse import check_timezone
-
-    try:
-        return check_timezone(tz)
-    except ValueError:
-        return None
+    return catalog_dataset_timezone(block.get("dataset_id") if isinstance(block, dict) else None)
 
 
 def _site_timezone(source: dict, meta: dict | None = None) -> dict:
     """``{"timezone", "strict_timezone"}`` for a config source (validated; see the module doc).
 
-    A store facility ingested from the dataset catalog already knows its zone: it is the default,
-    and a ``source.timezone`` that disagrees with it warns (the store is on the catalog's clock).
+    A store facility already knows its zone: it is the default, and a ``source.timezone`` that
+    disagrees with it warns (the store is on that zone's clock). 0.100 (#104): the facility's zone
+    is resolved as the read API resolves it (:func:`camber._provenance.facility_timezone`): the
+    registry entry's ``timezone`` first, then the dataset-catalog block and entry, then the open-fdd
+    provenance. Before, a run read only the catalog or the open-fdd provenance.
     """
     from .tsparse import check_timezone
 
     tz = check_timezone(source.get("timezone") or None)
     strict = bool(source.get("strict_timezone", False))
     if meta is not None:
-        known = _catalog_timezone(meta)
+        from ._provenance import facility_timezone
+
+        known = facility_timezone(meta)
         if known and tz and known != tz:
             warnings.warn(
                 f"source.timezone {tz!r} differs from the zone this dataset was ingested in "

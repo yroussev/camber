@@ -14,43 +14,16 @@ import pandas as pd
 
 
 def _facility_timezone(meta: dict) -> str | None:
-    """The site's IANA zone for a registry entry, when the store or registry records one.
+    """The site's IANA zone for a registry entry, when the store or registry records one (0.96).
 
-    0.96: the store holds naive wall-clock time, so the trend viewer labels its time axis with
-    this zone. Looked up in order: a ``timezone`` on the registry entry, the dataset-catalog block
-    (``local_timezone`` of a per-site ingest, else ``timezone``), then the catalog entry the
-    facility was ingested from, then (0.99.1, #96) the zone an open-fdd ingest recorded in its
-    ``"openfdd"`` provenance, so a facility ingested with 0.99.0 needs no re-ingest. Anything that
-    is not a valid IANA zone is ignored.
+    The store holds naive wall-clock time, so the trend viewer labels its time axis with this zone.
+    0.100 (#104): the lookup is :func:`camber._provenance.facility_timezone`, shared with config
+    runs: the entry's ``timezone``, the dataset-catalog block, the catalog entry, then the open-fdd
+    provenance (0.99.1, #96).
     """
-    from ..tsparse import check_timezone
+    from .._provenance import facility_timezone
 
-    def valid(tz) -> str | None:
-        if not isinstance(tz, str) or not tz.strip():
-            return None
-        try:
-            return check_timezone(tz.strip())
-        except ValueError:
-            return None
-
-    meta = meta or {}
-    block = meta.get("dataset")
-    if not isinstance(block, dict):
-        block = {}
-    for tz in (meta.get("timezone"), block.get("local_timezone"), block.get("timezone")):
-        if valid(tz):
-            return valid(tz)
-    if block.get("dataset_id"):
-        from ..config import _catalog_timezone
-
-        # the dataset block alone: the catalog zone comes before the open-fdd provenance below
-        tz = valid(_catalog_timezone({"dataset": block}))
-        if tz:
-            return tz
-    ofdd = meta.get("openfdd")
-    if isinstance(ofdd, dict):
-        return valid(ofdd.get("timezone"))
-    return None
+    return facility_timezone(meta)
 
 
 class ReadAPI:
