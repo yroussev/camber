@@ -14,6 +14,11 @@ Five drift detectors watch one air handler, and each is deliberately narrow:
   fraction-at-matched-damper-command (an *up* is a leaking / stuck-open damper, a *down* is a stuck
   or slipping-closed one).
 
+Opt-in (0.100, #100): :class:`camber.rules.coil_leak_rule.CoilLeakDrift` -- a coil's valve-shut air
+rise at matched mixed air (a *fall* is a cooling-valve leak, a *rise* a heating-valve leak). It
+appears only when a family entry names ``coil_leak``, keyed ``coil_leak_drift:<which>`` on the coil
+side.
+
 :func:`diagnose_ahu_drift` reads the individual Findings, names each drifting signal's localized
 cause, flags **corroboration** when two or more agree, and -- the headline -- runs the **fan-power
 disambiguation** that no single signal can do. A fan-power excess alone is ambiguous between *the
@@ -227,6 +232,21 @@ def diagnose_ahu_drift(findings, *, equip: str | None = None) -> AhuDriftDiagnos
             cf.severity,
             m.get("coil_valve_drift_pct"),
             cause,
+            "coil",
+        )
+
+    # --- 0.100 (#100): opt-in coil-valve leak drift, on the coil side (absent unless opted in) ---
+    for lf in _all(fs, "coil_leak_drift"):
+        if _declined(lf, caveats) or lf.severity not in _DEGRADING:
+            continue
+        m = lf.metrics
+        which = m.get("coil_leak_which") or "coil"
+        _record(
+            f"coil_leak_drift:{which}",
+            lf.severity,
+            m.get("coil_leak_drift_f"),
+            f"{which}-coil valve passing water while commanded shut (leak or stuck partly open) "
+            "-- or a shifted supply / mixed-air sensor",
             "coil",
         )
 

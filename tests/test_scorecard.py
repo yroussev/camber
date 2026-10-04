@@ -82,14 +82,16 @@ def test_every_shipped_rule_has_a_category():
     for several releases, outside the maintenance grade their four siblings counted toward. This
     fails the moment a new built-in or drift rule is added without a category.
     """
-    from camber.driftrun import DRIFT_FAMILIES, build_drift_suite
+    from camber.driftrun import COIL_LEAK_COILS, DRIFT_FAMILIES, build_drift_suite
     from camber.rules.builtin import rule_names
     from camber.scorecard import RULE_CATEGORY
     from camber.store.modelstore import BaselineStore
 
     shipped = set(rule_names())
     for family in DRIFT_FAMILIES:
-        suite = build_drift_suite(family, BaselineStore(), sustained_alarm=True)
+        # 0.100 (#100): the opt-in leak-drift detectors ship too (ahu family, coil_leak)
+        leak = COIL_LEAK_COILS if family == "ahu" else ()
+        suite = build_drift_suite(family, BaselineStore(), sustained_alarm=True, coil_leak=leak)
         shipped |= {r.name for r in suite}
 
     assert not shipped - set(RULE_CATEGORY), (

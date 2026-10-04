@@ -40,6 +40,7 @@ the chiller drift rules complement the static approach check.
 | `DuctStaticControlDrift` | duct static pressure | airflow (cfm) | both | fall = fan cannot hold setpoint (degradation/leakage) vs rise = over-pressurization (sensor-low/stuck damper) — with the static-reset schedule subtracted out |
 | `CoilValveDrift` | cool/heat valve position | delivered air-ΔT (MAT↔SAT) | up | coil fouling / waterside starvation / air bypass / valve-authority loss — valve creep before SAT control fails (econ-gated; waterside-reset caveated) |
 | `EconomizerDamperDrift` | outdoor-air fraction (temp-inferred) | OA-damper command (%) | both | up = damper leaking / stuck-open (excess OA) vs down = damper stuck/slipping closed (lost free cooling / under-ventilation) — degenerate-mixing gated, MAT-stratification caveated |
+| `CoilLeakDrift` (opt-in, 0.100) | valve-shut air rise across the coil (coil leaving or supply air − mixed air) | mixed-air temperature (°F) | down (cooling) / up (heating) | a coil valve passing water while commanded shut — a leak, or a valve stuck partly open; a shifted supply/mixed-air sensor reads the same (caveated). Only when a family entry names `coil_leak`; judged inside the baseline's mixed-air range only ([CLI](CLI.md#leak-drift-opt-in)) |
 
 **Fan efficiency is the air-side energy signal.** A healthy fan draws a repeatable power at a given
 airflow; more power at matched airflow is efficiency loss. It is **one-sided up** and reuses the

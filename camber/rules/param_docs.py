@@ -39,6 +39,8 @@ from dataclasses import dataclass
 __all__ = [
     "BASIS_KINDS",
     "DELEGATES",
+    "DRIFT_EXEMPT",
+    "DRIFT_PARAM_DOCS",
     "EXEMPT",
     "FIXED",
     "PARAM_DOCS",
@@ -46,7 +48,9 @@ __all__ = [
     "RuleParam",
     "config_snippet",
     "describe",
+    "documented_drift_rules",
     "documented_rules",
+    "drift_rule_params",
     "json_value",
     "render_text",
     "rule_params",
@@ -2738,6 +2742,158 @@ def rule_params(rule: str) -> list[RuleParam]:
 def documented_rules() -> list[str]:
     """The sorted names of every registered rule (each has an entry, or no tunables)."""
     return sorted(_rule_factories())
+
+
+# ==== begin 0100-leak-drift (#100): opt-in drift detectors ====
+#
+# The drift detectors are not registered rules (each needs an injected BaselineStore), so they are
+# not in PARAM_DOCS. The opt-in ones a config can tune are documented here, keyed by rule name, and
+# rendered into docs/THRESHOLDS.md under "Opt-in drift detectors"; tests/test_coil_leak_drift.py
+# checks the entries against the constructors exactly as tests/test_param_docs.py does for rules.
+
+#: Opt-in drift detector -> parameter -> documentation (provisional, 0.100).
+DRIFT_PARAM_DOCS: dict[str, dict[str, ParamDoc]] = {}
+#: Opt-in drift detector -> constructor parameters that are not thresholds, with the reason.
+DRIFT_EXEMPT: dict[str, dict[str, str]] = {}
+
+_CUSUM_BASIS = "CAMBER judgment: provisional and untuned, shared by every drift detector"
+_CUSUM_CAL = (
+    "Leave it until labelled fault onsets exist to time against; then calibrate it with "
+    "camber.driftvalidation.sweep."
+)
+
+DRIFT_PARAM_DOCS["coil_leak_drift"] = {
+    "warn_f": _P(
+        "°F",
+        "CAMBER judgment: screening-grade; above the repeatability of a pair of duct temperature "
+        "sensors read against their own past (a fixed calibration offset cancels in a drift)",
+        "Freeze a baseline on one known-good period and score another known-good period; set the "
+        "floor above the |coil_leak_drift_f| it reads (lbnl-sdahu: 0.0-0.1 °F; lbnl-fcu: 0.0-0.4 "
+        "°F).",
+        (0.25, 3.0),
+        "A warn needs both warn_f and warn_sigma, in the leak's direction.",
+    ),
+    "fault_f": _P(
+        "°F",
+        "CAMBER judgment: screening-grade",
+        "Keep it well above warn_f.",
+        (0.5, 6.0),
+    ),
+    "warn_sigma": _P(
+        "σ (baseline residual standard deviations)",
+        "CAMBER judgment: screening-grade, the same sigma floor as coil_valve_drift",
+        "Score known-good periods against each other and set it above the largest "
+        "|coil_leak_drift_sigma| they read. The published 10 % leak on lbnl-sdahu reads 3.5-3.7σ, "
+        "so a floor above about 3.4 misses it; on lbnl-fcu floors from 2.0 to 3.0 change the "
+        "false alarms from 2/33 to 0/33 and miss no leak.",
+        (1.5, 6.0),
+    ),
+    "fault_sigma": _P(
+        "σ",
+        "CAMBER judgment: screening-grade, the same sigma floor as coil_valve_drift",
+        "Keep it above warn_sigma.",
+        (2.5, 10.0),
+    ),
+    "valve_closed_thr": _P(
+        "% of valve stroke",
+        "public source: PNNL Re-tuning Ch.5 with CAMBER judgment (leaking_valve's deadband)",
+        "Set it just above the position the valve commands read when the BAS commands them closed "
+        "(their 95th percentile on off hours).",
+        (0.0, 15.0),
+    ),
+    "fan_on_min": _P(
+        "fraction (mean fan status over a sample)",
+        "CAMBER judgment: a resampled hour counts as fan-on when the fan ran at least half of it, "
+        "as in the other drift detectors",
+        "Raise it towards 1.0 on a unit whose fan cycles within the hour, so only hours with air "
+        "moving throughout are judged (a cycling fan-coil's leak hours can then all drop out).",
+        (0.1, 1.0),
+    ),
+    "fan_speed_thr": _P(
+        "% of full fan speed",
+        "CAMBER judgment: any speed above a near-zero command counts as running",
+        "Set it just above the speed signal the drive reports when stopped.",
+        (0.0, 30.0),
+        "Used only when no fan status is mapped.",
+    ),
+    "occupied_only": _P(
+        "flag",
+        "CAMBER judgment: a leak shows whenever the unit runs (leaking_valve's default); the "
+        "baseline already holds the unit's own unoccupied behaviour",
+        "Turn it on when unoccupied fan-on hours (night cycling, warm-up) are too few or too "
+        "erratic to fit; compare coil_leak_baseline_sigma_f with it on and off on a known-good "
+        "period.",
+        (False, True),
+        "Reads the trended occupancy (the OCCUPANCY role) when it has values, else assumes "
+        "weekdays 07-18; the coil_leak_occupancy_gate metric says which.",
+    ),
+    "use_coil_leaving": _P(
+        "flag",
+        "CAMBER judgment: a coil's own leaving-air sensor isolates the coil from the fan and the "
+        "supply-air sensor",
+        "Turn it off only to compare with the supply-air path; the baseline must be fitted on the "
+        "same sensor it scores (the detector declines otherwise).",
+        (False, True),
+    ),
+    "judge_heating_on_supply_air": _P(
+        "flag",
+        "CAMBER judgment: on a single-duct unit the supply air leaves the heating coil",
+        "Set it false when the mapped supply air does not pass the heating coil (a dual-duct unit "
+        "whose supply_air_temp is the cold deck); map the heating coil's leaving air instead.",
+        (False, True),
+        "Heating coil only. False with no HEAT_COIL_LEAVING_TEMP declines the heating instance.",
+    ),
+    "min_mat_span_f": _P(
+        "°F (mixed-air range of the baseline)",
+        "CAMBER judgment: a narrower range does not identify a slope",
+        "Leave it; below it the baseline is a flat level that scores only current hours inside its "
+        "mixed-air band (coil_leak_n_out_of_scope counts the rest).",
+        (5.0, 30.0),
+    ),
+    "slack_sigma": _P("σ", _CUSUM_BASIS, _CUSUM_CAL, (0.25, 2.0)),
+    "limit_sigma": _P("σ", _CUSUM_BASIS, _CUSUM_CAL, (4.0, 20.0)),
+    "clip_sigma": _P("σ", _CUSUM_BASIS, _CUSUM_CAL, (2.0, 8.0)),
+    "min_consecutive": _P("count (samples)", _CUSUM_BASIS, _CUSUM_CAL, (1, 48)),
+}
+DRIFT_EXEMPT["coil_leak_drift"] = {
+    "store": "the injected baseline store",
+    "site": "identity",
+    "run_id": "identity",
+    "coil": "identity: set by the family entry's coil_leak list",
+    "freeze_if_missing": "set by the drift run (never from a config)",
+}
+
+
+def _drift_factories() -> dict:
+    from .coil_leak_rule import CoilLeakDrift
+
+    return {"coil_leak_drift": CoilLeakDrift}
+
+
+def documented_drift_rules() -> list[str]:
+    """The sorted names of the opt-in drift detectors documented in :data:`DRIFT_PARAM_DOCS`."""
+    return sorted(_drift_factories())
+
+
+def drift_rule_params(rule: str) -> list[RuleParam]:
+    """Every tunable parameter of the opt-in drift detector ``rule``, with its default and doc.
+
+    Defaults come from the constructor signature; :data:`DRIFT_EXEMPT` parameters are left out.
+    Raises ``KeyError`` for an unknown detector.
+    """
+    cls = _drift_factories()[rule]
+    exempt = DRIFT_EXEMPT.get(rule, {})
+    docs = DRIFT_PARAM_DOCS.get(rule, {})
+    out = []
+    for p in _signature_params(cls):
+        if p.name in exempt:
+            continue
+        default = None if p.default is inspect.Parameter.empty else p.default
+        out.append(RuleParam(rule, p.name, default, docs.get(p.name)))
+    return out
+
+
+# ==== end 0100-leak-drift ====
 
 
 # --------------------------------------------------------------------------- rendering

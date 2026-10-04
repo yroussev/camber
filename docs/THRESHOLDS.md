@@ -1228,3 +1228,58 @@ How to calibrate:
 - `start_hour`: Set it to the start of the building's occupied mode, read from the BAS schedule or from the hour the supply fan or occupied-mode point switches on in a typical week of trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `end_hour`: Set it to the end of occupied mode (exclusive), read from the BAS schedule or trends. *Note:* Used only when no occupancy point (the OCCUPANCY role) is mapped: one replaces the schedule.
 - `occupied_days`: List the days the building runs occupied mode, e.g. [0, 1, 2, 3, 4, 5] for a Saturday schedule. *Note:* A list of integers; each must lie in the range.
+
+## Opt-in drift detectors
+
+Drift detectors that a run config switches on per drift family; they are not in the list above
+because they compare a current window with a frozen or declared baseline instead of judging one
+frame. Set their parameters on the family entry, beside the switch:
+
+```json
+{"drift": {"families": [{"class": "AHU", "family": "ahu",
+                         "reference": {"period": ["2025-01-01", "2025-06-30"]},
+                         "coil_leak": ["cooling"],
+                         "coil_leak_params": {"warn_sigma": 3.0}}]}}
+```
+
+These entries are a provisional API (0.100).
+
+### coil_leak_drift
+
+| Parameter | Default | Unit | Range | Basis |
+|---|---|---|---|---|
+| `warn_f` | `0.5` | °F | 0.25 to 3.0 | CAMBER judgment: screening-grade; above the repeatability of a pair of duct temperature sensors read against their own past (a fixed calibration offset cancels in a drift) |
+| `fault_f` | `1.5` | °F | 0.5 to 6.0 | CAMBER judgment: screening-grade |
+| `warn_sigma` | `2.5` | σ (baseline residual standard deviations) | 1.5 to 6.0 | CAMBER judgment: screening-grade, the same sigma floor as coil_valve_drift |
+| `fault_sigma` | `4.0` | σ | 2.5 to 10.0 | CAMBER judgment: screening-grade, the same sigma floor as coil_valve_drift |
+| `valve_closed_thr` | `5.0` | % of valve stroke | 0.0 to 15.0 | public source: PNNL Re-tuning Ch.5 with CAMBER judgment (leaking_valve's deadband) |
+| `fan_on_min` | `0.5` | fraction (mean fan status over a sample) | 0.1 to 1.0 | CAMBER judgment: a resampled hour counts as fan-on when the fan ran at least half of it, as in the other drift detectors |
+| `fan_speed_thr` | `5.0` | % of full fan speed | 0.0 to 30.0 | CAMBER judgment: any speed above a near-zero command counts as running |
+| `occupied_only` | `false` | flag | `false`, `true` | CAMBER judgment: a leak shows whenever the unit runs (leaking_valve's default); the baseline already holds the unit's own unoccupied behaviour |
+| `use_coil_leaving` | `true` | flag | `false`, `true` | CAMBER judgment: a coil's own leaving-air sensor isolates the coil from the fan and the supply-air sensor |
+| `judge_heating_on_supply_air` | `true` | flag | `false`, `true` | CAMBER judgment: on a single-duct unit the supply air leaves the heating coil |
+| `min_mat_span_f` | `10.0` | °F (mixed-air range of the baseline) | 5.0 to 30.0 | CAMBER judgment: a narrower range does not identify a slope |
+| `slack_sigma` | `0.5` | σ | 0.25 to 2.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `limit_sigma` | `8.0` | σ | 4.0 to 20.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `clip_sigma` | `4.0` | σ | 2.0 to 8.0 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+| `min_consecutive` | `6` | count (samples) | 1 to 48 | CAMBER judgment: provisional and untuned, shared by every drift detector |
+
+How to calibrate:
+
+- `warn_f`: Freeze a baseline on one known-good period and score another known-good period; set the floor above the |coil_leak_drift_f| it reads (lbnl-sdahu: 0.0-0.1 °F; lbnl-fcu: 0.0-0.4 °F). *Note:* A warn needs both warn_f and warn_sigma, in the leak's direction.
+- `fault_f`: Keep it well above warn_f.
+- `warn_sigma`: Score known-good periods against each other and set it above the largest |coil_leak_drift_sigma| they read. The published 10 % leak on lbnl-sdahu reads 3.5-3.7σ, so a floor above about 3.4 misses it; on lbnl-fcu floors from 2.0 to 3.0 change the false alarms from 2/33 to 0/33 and miss no leak.
+- `fault_sigma`: Keep it above warn_sigma.
+- `valve_closed_thr`: Set it just above the position the valve commands read when the BAS commands them closed (their 95th percentile on off hours).
+- `fan_on_min`: Raise it towards 1.0 on a unit whose fan cycles within the hour, so only hours with air moving throughout are judged (a cycling fan-coil's leak hours can then all drop out).
+- `fan_speed_thr`: Set it just above the speed signal the drive reports when stopped. *Note:* Used only when no fan status is mapped.
+- `occupied_only`: Turn it on when unoccupied fan-on hours (night cycling, warm-up) are too few or too erratic to fit; compare coil_leak_baseline_sigma_f with it on and off on a known-good period. *Note:* Reads the trended occupancy (the OCCUPANCY role) when it has values, else assumes weekdays 07-18; the coil_leak_occupancy_gate metric says which.
+- `use_coil_leaving`: Turn it off only to compare with the supply-air path; the baseline must be fitted on the same sensor it scores (the detector declines otherwise).
+- `judge_heating_on_supply_air`: Set it false when the mapped supply air does not pass the heating coil (a dual-duct unit whose supply_air_temp is the cold deck); map the heating coil's leaving air instead. *Note:* Heating coil only. False with no HEAT_COIL_LEAVING_TEMP declines the heating instance.
+- `min_mat_span_f`: Leave it; below it the baseline is a flat level that scores only current hours inside its mixed-air band (coil_leak_n_out_of_scope counts the rest).
+- `slack_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `limit_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `clip_sigma`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+- `min_consecutive`: Leave it until labelled fault onsets exist to time against; then calibrate it with camber.driftvalidation.sweep.
+
+Not thresholds: `store` (the injected baseline store); `site` (identity); `run_id` (identity); `coil` (identity: set by the family entry's coil_leak list); `freeze_if_missing` (set by the drift run (never from a config)).

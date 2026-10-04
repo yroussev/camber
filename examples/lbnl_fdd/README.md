@@ -94,6 +94,17 @@ boiler fouling (`boiler_efficiency_drift`), tower fouling from fan effort
 (`cooling_tower_fan_effort_drift`) and the condenser-bypass valve (`condenser_bypass_leak`), with
 TPR/FPR and Wilson intervals (measured, not gated; see `docs/VALIDATION.md`).
 
+`leak_drift.py` (0.100, #100) scores the opt-in coil-valve leak drift detector (`coil_leak_drift`)
+on the SDAHU leak run and the FCU cooling and heating leaks. Each run is judged against the
+unit's fault-free run three ways: a 60/40 split, a declared twin, and a mid-year onset. It reports
+TPR/FPR with Wilson intervals. The stuck-open valves and the supply-air sensor biases are reported
+but not scored. The FCU leak runs are in the full archive only, so extract
+`FCU_VLVLeak_*` and the other FCU runs from `LBNL_FCU.zip` next to `FCU_FaultFree.csv`:
+
+```bash
+python examples/lbnl_fdd/leak_drift.py --sdahu DIR --fcu DIR [--json keys.json]
+```
+
 ## Data & license
 
 Dataset: **LBNL Fault Detection and Diagnostics Datasets**, by LBNL/PNNL/NREL/

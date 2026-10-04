@@ -73,6 +73,7 @@ from .rules.base import Finding, Registry
 from .vavdrift import diagnose_vav_drift
 
 __all__ = [
+    "COIL_LEAK_COILS",
     "DriftFamily",
     "DriftFamilyResult",
     "DriftResult",
@@ -281,6 +282,8 @@ def build_drift_suite(
     coils=("cooling",),
     sustained_alarm: bool = False,
     elevation_ft: float | None = None,
+    coil_leak=(),
+    coil_leak_params: dict | None = None,
 ) -> list:
     """The detector instances making up one drift ``family``, sharing one baseline ``store``.
 
@@ -291,6 +294,11 @@ def build_drift_suite(
     ``site_elevation_ft``) is handed to every detector that derives a wet-bulb from OAT + RH (those
     with an ``elevation_ft`` attribute); the others ignore it. Raises ``KeyError`` naming the known
     families on an unknown ``family``.
+
+    ``coil_leak`` (0.100, #100; opt-in, provisional) appends one
+    :class:`~camber.rules.coil_leak_rule.CoilLeakDrift` per named coil (``"cooling"`` /
+    ``"heating"``) to the ``ahu`` family, built with ``coil_leak_params``; empty (the default)
+    leaves every suite exactly as before. Naming coils on another family is a ``ValueError``.
     """
     try:
         fam = DRIFT_FAMILIES[family]
@@ -304,9 +312,41 @@ def build_drift_suite(
         coils=tuple(coils),
         sustained_alarm=sustained_alarm,
     )
+    if coil_leak:
+        suite += _coil_leak_rules(
+            family,
+            store,
+            site=site,
+            run_id=run_id,
+            freeze_if_missing=freeze_if_missing,
+            coils=coil_leak,
+            params=coil_leak_params,
+        )
     if elevation_ft is not None:
         _apply_site_elevation(suite, elevation_ft)
     return suite
+
+
+# --- 0.100 (#100) opt-in coil-valve leak drift (0100-leak-drift) ---------------------------------
+#: The coils a family entry may name under ``coil_leak``.
+COIL_LEAK_COILS = ("cooling", "heating")
+
+
+def _coil_leak_rules(family, store, *, site, run_id, freeze_if_missing, coils, params) -> list:
+    """The opt-in leak-drift detectors of an ``ahu`` family entry (appended after the roll-up's own
+    detectors, so the default suite's order and contents never change)."""
+    from .rules.coil_leak_rule import CoilLeakDrift
+
+    if family != "ahu":
+        raise ValueError(f"coil_leak applies to the 'ahu' drift family only, not {family!r}")
+    bad = [c for c in coils if c not in COIL_LEAK_COILS]
+    if bad:
+        raise ValueError(f"coil_leak coils must be among {list(COIL_LEAK_COILS)}, got {bad}")
+    kw = {"site": site, "run_id": run_id, "freeze_if_missing": freeze_if_missing}
+    return [CoilLeakDrift(store, coil=c, **kw, **dict(params or {})) for c in dict.fromkeys(coils)]
+
+
+# --- end 0.100 coil-valve leak drift --------------------------------------------------------------
 
 
 def _apply_site_elevation(rules, elevation_ft) -> None:
@@ -666,8 +706,9 @@ def run_drift(
     ``refs_by_class`` maps an equipment class to its discovered
     :class:`~camber.resolve.EquipRef` s (what a config-driven run already builds). ``families`` is
     a sequence of dicts, each naming a ``class`` and a ``family`` plus the optional ``coils`` /
-    ``plant`` / ``sustained_alarm`` / per-family ``baseline`` / ``current`` overrides. ``baseline``
-    and ``current`` are the default ``(start, end)`` windows.
+    ``plant`` / ``sustained_alarm`` / per-family ``baseline`` / ``current`` overrides, and (0.100,
+    #100, ``ahu`` only) ``coil_leak`` / ``coil_leak_params`` for the opt-in leak-drift detectors.
+    ``baseline`` and ``current`` are the default ``(start, end)`` windows.
 
     An entry may also declare a ``reference`` (0.98, #86, S4): ``{"equip": "<name>"}`` (another
     discovered equipment known to be healthy, optionally with a ``"period"`` slicing it) or
@@ -740,6 +781,8 @@ def run_drift(
             coils=tuple(entry.get("coils") or ("cooling",)),
             sustained_alarm=bool(entry.get("sustained_alarm")),
             elevation_ft=elevation_ft,
+            coil_leak=tuple(entry.get("coil_leak") or ()),
+            coil_leak_params=entry.get("coil_leak_params"),
         )
 
         findings: list = []
@@ -890,6 +933,8 @@ def refit_baselines(
     coils=("cooling",),
     sustained_alarm: bool = False,
     elevation_ft: float | None = None,
+    coil_leak=(),
+    coil_leak_params: dict | None = None,
 ) -> dict:
     """Re-fit one family's baselines over ``period``, without touching any real store.
 
@@ -914,6 +959,8 @@ def refit_baselines(
         coils=tuple(coils),
         sustained_alarm=sustained_alarm,
         elevation_ft=elevation_ft,
+        coil_leak=coil_leak,
+        coil_leak_params=coil_leak_params,
     )
     for rule in suite:
         _run_one(

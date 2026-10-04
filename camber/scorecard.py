@@ -97,6 +97,7 @@ RULE_CATEGORY = {
     "filter_loading_drift": "maintenance",
     "duct_static_drift": "maintenance",
     "coil_valve_drift": "maintenance",
+    "coil_leak_drift": "maintenance",  # 0.100 (#100): opt-in, in the ahu family via coil_leak
     "economizer_damper_drift": "maintenance",
     "pump_flow_drift": "maintenance",
     "pump_head_drift": "maintenance",

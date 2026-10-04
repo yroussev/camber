@@ -602,6 +602,16 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `camber.rules.reheat_rule.BOX_TYPES`, and the finding metrics `box_type`, `fan_lift_f` and
   `fan_heat_closed_f` (present only when `box_type` is set).
 <!-- /0100-terminal -->
+<!-- 0100-leak-drift (#100) -->
+- **Coil-valve leak drift** (0.100; #100), additive, opt-in and provisional: the drift detector
+  `camber.rules.coil_leak_rule.CoilLeakDrift` (rule name `coil_leak_drift`; its constructor
+  parameters, module constants, `coil_leak_*` metrics and the model kinds `coil_leak_cool` /
+  `coil_leak_heat`); the `drift.families[]` keys `coil_leak` and `coil_leak_params` (`ahu` family
+  only); the `coil_leak=` / `coil_leak_params=` keywords of `camber.driftrun.build_drift_suite` and
+  `refit_baselines` and `camber.driftrun.COIL_LEAK_COILS`; the `coil_leak_drift:<coil>` signal of
+  `diagnose_ahu_drift`; and in `camber.rules.param_docs`, `DRIFT_PARAM_DOCS`, `DRIFT_EXEMPT`,
+  `documented_drift_rules` and `drift_rule_params`. Without `coil_leak` nothing changes.
+<!-- /0100-leak-drift -->
 
 ## Deprecated
 

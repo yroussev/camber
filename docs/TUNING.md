@@ -92,6 +92,14 @@ A declared reference is re-fitted on every run and never stored, and the referen
 way ([PLANT-DETECTORS](PLANT-DETECTORS.md#validation)).
 <!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
 
+<!-- 0100-leak-drift (#100) begin -->
+A leak is a case where the drift form removes a calibration altogether. `leaking_valve` needs the
+unit's fan heat to see a small cooling leak (the circularity below). The opt-in `coil_leak_drift`
+detector instead fits the unit's valve-shut rise from mixed to supply air on a known-good period,
+so the fan heat is part of the baseline and nothing is calibrated on the window it scores
+([CLI](CLI.md#leak-drift-opt-in), [VALIDATION](VALIDATION.md)).
+<!-- 0100-leak-drift (#100) end -->
+
 ## 3. Avoid circular calibration
 
 **If you calibrate on a period and then score on the same period, the score is not evidence.**
