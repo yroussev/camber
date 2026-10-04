@@ -136,7 +136,58 @@ def render_markdown() -> str:
             out.append(f"Not thresholds: {items}.\n")
         if rule in pd.FIXED:
             out.append(f"Fixed in code: {pd.FIXED[rule]}\n")
+    out += _drift_sections()  # 0.100 (#100)
     return "\n".join(out).rstrip() + "\n"
+
+
+_DRIFT_INTRO = """\
+## Opt-in drift detectors
+
+Drift detectors that a run config switches on per drift family; they are not in the list above
+because they compare a current window with a frozen or declared baseline instead of judging one
+frame. Set their parameters on the family entry, beside the switch:
+
+```json
+{"drift": {"families": [{"class": "AHU", "family": "ahu",
+                         "reference": {"period": ["2025-01-01", "2025-06-30"]},
+                         "coil_leak": ["cooling"],
+                         "coil_leak_params": {"warn_sigma": 3.0}}]}}
+```
+
+These entries are a provisional API (0.100).
+"""
+
+
+def _drift_sections() -> list:
+    """The "Opt-in drift detectors" part of the page (0.100, #100)."""
+    rules = pd.documented_drift_rules()
+    if not rules:
+        return []
+    out = [_DRIFT_INTRO]
+    for rule in rules:
+        out.append(f"### {rule}\n")
+        params = pd.drift_rule_params(rule)
+        out.append("| Parameter | Default | Unit | Range | Basis |")
+        out.append("|---|---|---|---|---|")
+        for rp in params:
+            d = rp.doc
+            out.append(
+                f"| `{rp.name}` | `{pd.json_value(rp.default)}` | {_cell(d.unit)} | "
+                f"{_cell(_range(d.range, rp.default, d.unit))} | {_cell(d.basis)} |"
+            )
+        out.append("")
+        out.append("How to calibrate:\n")
+        for rp in params:
+            d = rp.doc
+            line = f"- `{rp.name}`: {d.calibrate}"
+            if d.note:
+                line += f" *Note:* {d.note}"
+            out.append(line)
+        out.append("")
+        if rule in pd.DRIFT_EXEMPT:
+            items = "; ".join(f"`{k}` ({v})" for k, v in pd.DRIFT_EXEMPT[rule].items())
+            out.append(f"Not thresholds: {items}.\n")
+    return out
 
 
 def main(argv=None) -> int:

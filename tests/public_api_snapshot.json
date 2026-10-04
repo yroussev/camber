@@ -437,6 +437,7 @@
     "build_dossier"
   ],
   "camber.driftrun": [
+    "COIL_LEAK_COILS",
     "DRIFT_FAMILIES",
     "DriftFamily",
     "DriftFamilyResult",
@@ -1897,6 +1898,20 @@
   "camber.rules.cohort_starvation_rule": [
     "CohortStarvation"
   ],
+  "camber.rules.coil_leak_rule": [
+    "CoilLeakDrift",
+    "FAN_ON_MIN",
+    "FAN_SPEED_ON",
+    "LEAK_FAULT_F",
+    "LEAK_FAULT_SIGMA",
+    "LEAK_WARN_F",
+    "LEAK_WARN_SIGMA",
+    "LEAVING_PLAUSIBLE",
+    "MIN_MAT_SPAN",
+    "MIXED_AIR_PLAUSIBLE",
+    "RISE_PLAUSIBLE",
+    "VALVE_CLOSED"
+  ],
   "camber.rules.coil_valve_rule": [
     "CoilValveDrift",
     "DELTAT_PLAUSIBLE",
@@ -2090,6 +2105,8 @@
   "camber.rules.param_docs": [
     "BASIS_KINDS",
     "DELEGATES",
+    "DRIFT_EXEMPT",
+    "DRIFT_PARAM_DOCS",
     "EXEMPT",
     "FIXED",
     "PARAM_DOCS",
@@ -2097,7 +2114,9 @@
     "RuleParam",
     "config_snippet",
     "describe",
+    "documented_drift_rules",
     "documented_rules",
+    "drift_rule_params",
     "json_value",
     "render_text",
     "rule_params",

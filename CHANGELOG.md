@@ -4,6 +4,52 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.100.0] — Unreleased
+
+### Added
+<!-- 0100-leak-drift -->
+- **A coil-valve leak drift detector against the unit's own baseline (#100; opt-in,
+  provisional).** This is the follow-up planned in #84. `leaking_valve` catches the published
+  10 % leak on `lbnl-sdahu` only with a fan heat calibrated on the fault-free run, and that run is
+  also scored. The new `coil_leak_drift` (`camber.rules.coil_leak_rule.CoilLeakDrift`) calibrates
+  nothing. It fits the coil's valve-shut air rise (the coil's leaving air, or the supply air,
+  minus the mixed air, on fan-on hours with every mapped coil valve shut) against the mixed air on
+  a known-good window. It then flags a shift in the current window at the same mixed-air
+  temperature: down for a cooling leak, up for a heating leak.
+  - **How it runs.** It uses the existing drift machinery, so the baseline can be a frozen one or
+    a declared reference from 0.98 (another unit, or a known-good period of the same unit).
+  - **What it judges.** Only current hours inside the baseline's mixed-air range are judged. The
+    rest are counted and caveated, never extrapolated.
+  - **What it reports.** A finding reports the shift in °F and in baseline sigmas, the basis
+    sensor, the gates applied and a sustained-shift alarm. A warn or fault also says that a
+    shifted supply-air or mixed-air sensor, or a valve stuck partly open, reads the same.
+  - **How to switch it on.** An `ahu` drift family entry opts in with `"coil_leak": ["cooling"]`
+    (or `["cooling", "heating"]`) and may tune it with `"coil_leak_params": {...}`.
+    `build_drift_suite` and `refit_baselines` take the matching `coil_leak=` and
+    `coil_leak_params=` keywords.
+  - **Roll-up.** `diagnose_ahu_drift` puts a leak on the coil side as
+    `coil_leak_drift:<coil>`. The scorecard counts it under maintenance.
+  - **Defaults are unchanged.** Without the key no suite, config, template or benchmark changes.
+  - **Documentation.** Its parameters are documented in the new
+    `camber.rules.param_docs.DRIFT_PARAM_DOCS` and rendered in `docs/THRESHOLDS.md` under "Opt-in
+    drift detectors". Also updated: CLI.md ("Leak drift (opt-in)"), TUNING.md, AHU-DRIFT.md and
+    API-STABILITY.md.
+- **Validation on the LBNL leak runs (measured, not gated).** `examples/lbnl_fdd/leak_drift.py`
+  scores the detector against each unit's fault-free run three ways: a 60/40 split, a declared
+  twin, and a mid-year onset splice. It reports TPR/FPR with 95 % Wilson intervals.
+  - **`lbnl-sdahu`.** The 10 % leak reads −1.05 to −1.11 °F (−3.5 to −3.7σ). TPR is 1/1
+    (0.21-1.00) in every mode and FPR 0/2-0/3, with no calibration.
+  - **`lbnl-fcu`.** Cooling and heating leaks at 20 / 50 / 80 %: TPR 6/6 (5/5 onset), each on
+    the right coil. FPR is 1/33 split (a −4 °C room-sensor bias, +2.5σ) and 0/32-0/33 for twin and
+    onset. The point-in-time `leaking_valve` at its defaults reads 24/33 there.
+  - **Not scored.** Stuck-open valves (the same symptom) fire on 4/4 SDAHU and 9/10 FCU runs.
+    The SDAHU supply-air sensor biases −2 / −4 °C fire as cooling leaks; this sensor confound is
+    stated in every finding.
+  - **No leak runs elsewhere.** The dual-duct archive has none.
+  - **Proposed gated keys, not added, for sign-off:** `drift.coil_leak_drift.recall` /
+    `precision` / `f1` 1.0 and `fpr` 0.0 on the SDAHU benchmark drift cases.
+<!-- /0100-leak-drift -->
+
 ## [0.99.1] — 2026-10-03
 
 **0.99.1 patch: open-fdd-ingested facilities report their time zone (#96).** The synthetic, fleet,

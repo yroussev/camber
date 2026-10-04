@@ -71,6 +71,9 @@ _MODEL_TYPES = {
     "dx_superheat": LoadBaseline,
     "dx_temp_split": LoadBaseline,
     "discharge_superheat": LoadBaseline,
+    # 0.100 (#100): a coil's valve-shut air rise, fitted on the mixed air (opt-in leak drift)
+    "coil_leak_cool": LoadBaseline,
+    "coil_leak_heat": LoadBaseline,
 }
 
 

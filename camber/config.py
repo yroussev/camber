@@ -107,6 +107,13 @@ reference equipment itself declines (``reason="is_reference"``). Such a family n
 no windows (they default to the whole history; a period reference's current window to everything
 after it), and ``camber drift freeze`` refuses it.
 
+An ``ahu`` family entry may opt in to the **coil-valve leak drift** detector (0.100, #100;
+provisional): ``"coil_leak": ["cooling"]`` (or ``["cooling", "heating"]``) appends a
+:class:`~camber.rules.coil_leak_rule.CoilLeakDrift` per coil, which judges the coil's valve-shut
+air rise against the baseline at matched mixed air, and ``"coil_leak_params": {...}`` overrides its
+constructor defaults (``docs/THRESHOLDS.md``, "Opt-in drift detectors"). Without the key the family
+is unchanged. It works with a frozen store or a declared reference alike.
+
 **Store-backed source.** ``"source": {"kind": "store", "store": "lab_store", "facility_id":
 "ds-lbnl-sdahu"}`` reads equipment from a :class:`~camber.store.ParquetStore` (e.g. one filled by
 ``camber datasets ingest``) instead of per-point CSV folders. The store already holds role-named
@@ -2180,8 +2187,50 @@ def _drift_families(spec: dict, refs_by_class: dict) -> list:
                 e[key] = win
         if e.get("reference") is not None:
             e["reference"] = _drift_reference(e["reference"], f"{cls}:{fam}", refs_by_class)
+        if e.get("coil_leak") is not None or e.get("coil_leak_params") is not None:
+            e["coil_leak"], e["coil_leak_params"] = _drift_coil_leak(e, f"{cls}:{fam}")
         out.append(e)
     return out
+
+
+# --- 0.100 (#100) opt-in coil-valve leak drift (0100-leak-drift) ---------------------------------
+
+
+def _drift_coil_leak(entry: dict, where: str) -> tuple:
+    """Validate ``drift.families[].coil_leak`` (a list of ``"cooling"`` / ``"heating"``, ``ahu``
+    family only) and ``coil_leak_params`` (constructor overrides of
+    :class:`~camber.rules.coil_leak_rule.CoilLeakDrift`). Returns ``(coils, params)``."""
+    from .driftrun import COIL_LEAK_COILS
+    from .rules.coil_leak_rule import CoilLeakDrift
+    from .store.modelstore import BaselineStore
+
+    coils = entry.get("coil_leak")
+    params = entry.get("coil_leak_params")
+    if entry.get("family") != "ahu":
+        raise ValueError(f"drift family {where}: coil_leak applies to the 'ahu' family only")
+    if isinstance(coils, str) or not isinstance(coils, (list, tuple)) or not coils:
+        raise ValueError(
+            f"drift family {where}: coil_leak must be a non-empty list of "
+            f"{list(COIL_LEAK_COILS)}, got {coils!r}"
+        )
+    bad = [c for c in coils if c not in COIL_LEAK_COILS]
+    if bad:
+        raise ValueError(
+            f"drift family {where}: unknown coil_leak coil(s) {bad} "
+            f"(known: {list(COIL_LEAK_COILS)})"
+        )
+    params = dict(params or {})
+    fixed = sorted(set(params) & {"store", "site", "run_id", "coil", "freeze_if_missing"})
+    if fixed:
+        raise ValueError(f"drift family {where}: coil_leak_params may not set {fixed}")
+    try:
+        CoilLeakDrift(BaselineStore(), **params)
+    except TypeError as exc:
+        raise ValueError(f"drift family {where}: invalid coil_leak_params: {exc}") from exc
+    return list(dict.fromkeys(coils)), params
+
+
+# --- end 0.100 coil-valve leak drift --------------------------------------------------------------
 
 
 # --- 0.98 (#86, S4) declared drift reference (098-plant-reference) ------------------------------
@@ -2724,6 +2773,8 @@ def drift_refit(config: dict, *, base_dir: str = ".", period=None, run_id: str =
                 coils=tuple(entry.get("coils") or ("cooling",)),
                 sustained_alarm=bool(entry.get("sustained_alarm")),
                 elevation_ft=site_elevation_ft(config),
+                coil_leak=tuple(entry.get("coil_leak") or ()),
+                coil_leak_params=entry.get("coil_leak_params"),
             )
         )
     return out

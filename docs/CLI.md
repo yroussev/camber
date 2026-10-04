@@ -264,6 +264,34 @@ its own year-long run with no before-and-after on one unit (see
 [PLANT-DETECTORS](PLANT-DETECTORS.md) and [TUNING](TUNING.md#drift-references)).
 <!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
 
+### Leak drift (opt-in)
+
+<!-- 0100-leak-drift (#100) begin -->
+An `ahu` family entry can add the coil-valve **leak** drift detector, `coil_leak_drift`
+(provisional, 0.100). It fits the coil's valve-shut air rise (the coil's leaving air, or the supply
+air, minus the mixed air, on fan-on hours with every coil valve shut) against the mixed air on
+the baseline. It then flags a shift at the same mixed-air temperature: down for a cooling leak,
+up for a heating leak. The unit's fan heat is part of the baseline, so nothing has to be
+calibrated.
+
+```json
+{"class": "AHU", "family": "ahu",
+ "reference": {"period": ["2025-04-01", "2025-09-30"]},
+ "coil_leak": ["cooling", "heating"],
+ "coil_leak_params": {"warn_sigma": 3.0}}
+```
+
+`coil_leak` names the coils to judge. `coil_leak_params` overrides the detector's defaults, which
+are listed in [THRESHOLDS](THRESHOLDS.md#opt-in-drift-detectors). It works with a frozen store or a
+declared reference. Without the key the family is unchanged.
+
+Only current hours inside the baseline's mixed-air range are judged. The rest are counted and
+named in a caveat, so a baseline from one season says nothing about another. A shifted
+supply-air or mixed-air sensor reads exactly like a leak, and so does a valve stuck partly open.
+Every warn says to check the sensors first. A leak shows in the AHU roll-up on the coil side.
+Measured results are in [VALIDATION](VALIDATION.md).
+<!-- 0100-leak-drift (#100) end -->
+
 ### Untested is not steady
 
 Two things can leave an equipment unscored — no detector's required roles resolved, or every

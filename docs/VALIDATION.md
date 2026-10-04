@@ -294,6 +294,79 @@ with FPR still 0 %.
 > the rule is not run: its mapped supply air is the cold deck, which the hot-deck heating coil
 > never touches (`judge_heating_on_supply_air: false` leaves that coil unjudged).
 
+<!-- 0100-leak-drift (#100) begin -->
+**A leak judged against the unit's own baseline: `coil_leak_drift` (0.100, #100; opt-in).** The
+calibrated fan heat above is circular. The drift detector avoids calibrating anything: it fits the
+coil's valve-shut rise (supply or coil leaving air minus mixed air, fan-on hours with every coil
+valve shut) against the mixed air on a known-good window, then flags a shift in the current window
+at the same mixed-air temperature. A cooling leak moves the rise down, a heating leak moves it up.
+Only current hours inside the baseline's mixed-air range are judged. It is opt-in: an `ahu` drift
+family entry names `"coil_leak": ["cooling"]` (see [the CLI guide](CLI.md#leak-drift-opt-in)).
+`examples/lbnl_fdd/leak_drift.py` scores it on both LBNL units with labelled leaks. The dual-duct
+archive has no leak run. These are **measured, not gated** results, and nothing here was fitted
+on a scored run. The script scores each run three ways:
+
+- **split** (the benchmark's drift design): the baseline is the fault-free run's first 60 %;
+- **twin** (a declared reference equipment): the baseline is the whole fault-free run, which is
+  not itself scored;
+- **onset** (a declared known-good period): each run is spliced onto the fault-free run at
+  2018-07-01, and the healthy half is the baseline. The fault-free run spliced onto itself is the
+  seasonal negative.
+
+| Unit (runs) | Mode | TPR (95 % CI) | FPR (95 % CI) | Notes |
+|---|---|---:|---:|---|
+| SDAHU (one 10 % cooling leak; fault-free, 4 stuck dampers) | split | 1/1 (0.21-1.00) | 0/3 (0.00-0.56) | leak −1.10 °F (−3.7σ) over 1,384 hours; fault-free tail +0.03 °F. Dampers stuck at 10 / 25 % decline: they have no fan-on hour with the valve shut |
+| | twin | 1/1 (0.21-1.00) | 0/2 (0.00-0.66) | leak −1.11 °F (−3.6σ) |
+| | onset | 1/1 (0.21-1.00) | 0/3 (0.00-0.56) | leak −1.05 °F (−3.5σ); the fault-free second half +0.02 °F |
+| FCU (cooling and heating leaks at 20 / 50 / 80 %; 33 negative runs) | split | 6/6 (0.61-1.00) | 1/33 (0.01-0.15) | leaks −14 to −19 °F (cooling) and +26 to +39 °F (heating), each on the right coil. The false alarm is the room-sensor bias −4 °C (+4.9 °F, +2.5σ, on 104 hours; 234 more fell outside the baseline's range) |
+| | twin | 6/6 (0.61-1.00) | 0/32 (0.00-0.11) | |
+| | onset | 5/5 (0.57-1.00) | 0/33 (0.00-0.10) | heating leak 50 % declines: fewer than 10 valve-shut hours after the onset |
+
+The FCU negatives are the fault-free run and the damper, fouling, filter, fan-outlet, OA-inlet,
+room-sensor and unstable-control faults. Valves stuck **closed** are negatives too.
+
+Two groups are reported and not scored:
+
+- **Same symptom.** A valve stuck partly or fully **open**, or a reversed valve signal, passes
+  water while it is commanded shut, which is physically the same symptom. The detector fires on
+  all four SDAHU stuck-valve runs (−1.1 to −17.4 °F) and on 9/10 FCU runs. The FCU heating valve
+  stuck at 20 % reads +3.4 °F (1.7σ).
+- **Confound.** A supply-air sensor bias moves the supply-minus-mixed rise exactly as a leak
+  does. The SDAHU `coi_bias_-2` / `-4` runs fire as cooling leaks (−4.6 / −8.2 °F). The positive
+  biases move the rise up, which a cooling-only unit does not judge. Every finding carries the
+  "check both sensors against a reference thermometer" caveat for this reason. A coil
+  leaving-air sensor narrows the confound to that one sensor.
+
+**Before / after.** The default outputs do not change: the detector runs only when a config opts
+in. Compared with the point-in-time `leaking_valve` on the same whole-year runs:
+
+| Unit | `leaking_valve` | `coil_leak_drift` (split) |
+|---|---|---|
+| SDAHU | defaults: misses the leak (TPR 0/1, FPR 0/3); `lbnl-sdahu` template: catches it (1/1, 0/3), but its fan heat was calibrated on a scored run | catches it (1/1, 0/3), with no calibration |
+| FCU | defaults: TPR 6/6, FPR **24/33** (0.56-0.85). Healthy runs show a heating-leak signature in 10-20 % of valve-shut hours | TPR 6/6, FPR 1/33 |
+
+Through `camber drift run` on the `lbnl-sdahu` store, with `AHU__fault_free` as the declared
+reference and `coil_leak: ["cooling"]`, the leak reads warn at −1.11 °F (−3.6σ), the same as the
+script's twin mode, and the AHU roll-up puts it on the coil side.
+
+**Sensitivity.** The defaults (`warn_sigma` 2.5 and `fault_sigma` 4.0, from `coil_valve_drift`;
+`warn_f` 0.5 °F; `occupied_only` off, as in `leaking_valve`) were not fitted to these runs. With
+`warn_sigma` anywhere from 2.0 to 3.0 every leak is still caught, and the FCU false alarms range
+from 2/33 to 0/33. Above about 3.4σ the SDAHU leak is missed. With `occupied_only` on, the SDAHU
+results do not change, but the FCU false alarms rise to 3-4 of 32-33: the stuck-80 % damper and
+the ±4 °C room-sensor biases.
+
+**What is thin.** SDAHU has a single leak run (its four published "severities" are one file), so
+its TPR interval spans 0.21-1.00. The FCU leaks are large, and the point-in-time rule also
+catches them. The small leak that the drift detector exists for appears once in the open data.
+
+Proposed gated keys, **not added**, for the maintainer's sign-off: `drift.coil_leak_drift.recall`
+1.0, `.precision` 1.0, `.f1` 1.0 and `.fpr` 0.0. These would come from the benchmark's SDAHU
+drift section with `positive: "coi_leakage"` and `cross_negative: ("damper_stuck",)`: 4 runs
+scored and 2 declined, with no existing key moving. The FCU leak runs are not in the default fetch,
+so they would be an opt-in record (like the FPU subset), not a gate.
+<!-- 0100-leak-drift (#100) end -->
+
 **`reheat_capacity_shortfall` on `lbnl-b59` (#44).** Of the 35 underfloor terminals with a heating
 setpoint and a reheat valve, zone 051 (RTU01) sits more than 1.5 °F below its 72 °F setpoint with
 its valve at 90 % or more in 35.8 % of occupied hours (1,586 h over three years, median 2.9 °F
