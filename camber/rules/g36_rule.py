@@ -34,7 +34,9 @@ What the adapter decides (and says, as caveats):
   other free-cooling tests do not apply. ``oa_damper_min`` is the unit's minimum position; by
   default it is learned from the unit's own mechanical-cooling hours at minimum OA (the finding's
   ``oa_damper_min`` / ``oa_damper_min_source`` say which). Without an OA damper point OS#2 is read
-  from the valves alone, with a caveat.
+  from the valves alone, with a caveat. A sequence with a seasonal minimum position adds
+  ``oa_damper_min_by_month`` (0.101, #105), ``{month: position %}`` overriding ``oa_damper_min``
+  in the months it names, as ``min_oa_pct_by_month`` does for FC6.
 * **Heating needs minimum OA** (0.99, #95). By the same §5.16.14 definitions a fan-on hour with the
   heating coil alone active is OS#1 only when the OA damper is at its minimum position (at or
   below ``oa_damper_min`` plus ``oa_damper_tol``, the same learned or configured minimum); with the
@@ -156,6 +158,7 @@ class G36AFDD:
         valve_thr: float = 5.0,  # valve % above which a coil is active
         oa_damper_min: float | None = None,  # OA damper minimum position %; None = learned
         oa_damper_tol: float = OA_DAMPER_TOL,  # points above the minimum: OS#2 beyond, OS#1 within
+        oa_damper_min_by_month: dict | None = None,  # {month: position %} (0.101, #105)
         occupancy_gate: str = "off",  # "off" (G36: every operating hour) or "trended"
         warn_pct: float = WARN_PCT,  # screening-grade
         fault_pct: float = FAULT_PCT,  # screening-grade
@@ -186,6 +189,17 @@ class G36AFDD:
             )
         self.oa_damper_min = oa_damper_min
         self.oa_damper_tol = oa_damper_tol
+        # a seasonal minimum damper position (0.101, #105): {month (1-12): position %}
+        # overriding oa_damper_min in those months, mirroring min_oa_pct_by_month
+        damper_by_month = {int(k): float(v) for k, v in (oa_damper_min_by_month or {}).items()}
+        if any(not 1 <= k <= 12 for k in damper_by_month):
+            raise ValueError("g36_afdd: oa_damper_min_by_month keys must be months 1-12")
+        if damper_by_month and oa_damper_min is None:
+            raise ValueError(
+                "g36_afdd: oa_damper_min_by_month needs oa_damper_min (the minimum position in "
+                "the other months)"
+            )
+        self.oa_damper_min_by_month = damper_by_month or None
         self.occupancy_gate = occupancy_gate
         self.warn_pct = warn_pct
         self.fault_pct = fault_pct
@@ -336,7 +350,16 @@ class G36AFDD:
             oa_damper_min=self.oa_damper_min,
             oa_damper_tol=self.oa_damper_tol,
             occupied=occ,
+            oa_damper_min_by_month=self.oa_damper_min_by_month,
         )
+        if res is not None and res.oa_damper_min_by_month:
+            months = ", ".join(
+                f"{m}: {v:g} %" for m, v in sorted(res.oa_damper_min_by_month.items())
+            )
+            caveats.append(
+                f"OS#1 and OS#2 judge the OA damper against a seasonal minimum position of "
+                f"{float(self.oa_damper_min or 0.0):g} %, by month {{{months}}}"
+            )
         return res, caveats, declined_fcs, None
 
     @staticmethod
@@ -468,6 +491,13 @@ class G36AFDD:
                 # 0.98 (#94): what OS#2 was judged against, and the idle hours it excluded
                 "oa_damper_min": res.oa_damper_min,
                 "oa_damper_min_source": res.oa_damper_min_source,
+                # 0.101 (#105): the seasonal override, only when one was given (default outputs
+                # keep their keys)
+                **(
+                    {"oa_damper_min_by_month": res.oa_damper_min_by_month}
+                    if res.oa_damper_min_by_month
+                    else {}
+                ),
                 "idle_at_min_oa_hours": round(float(res.n_idle_at_min_oa) * step_h, 2),
                 # 0.99 (#95): heating hours with the OA damper off its minimum (OS#5, not OS#1)
                 "heating_above_min_oa_hours": round(float(res.n_heating_above_min_oa) * step_h, 2),

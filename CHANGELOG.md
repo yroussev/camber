@@ -4,6 +4,20 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.101.0] — Unreleased
+
+<!-- 0101-g36-seasonal -->
+### Added
+- **`g36_afdd` takes a seasonal OA damper minimum (#105).** A new `oa_damper_min_by_month`
+  parameter (`{month: position %}`, mirroring `min_oa_pct_by_month`) overrides `oa_damper_min`
+  in the months it names, so the operating states judge each interval's OA damper against its own
+  month's minimum position: heating (OS#1) at it, free cooling (OS#2) beyond it. It needs
+  `oa_damper_min`, the position in the other months. `run_g36_afdd` gains the same keyword and
+  `G36Result` a trailing `oa_damper_min_by_month` field; the finding reports the metric only when
+  it is set, and a caveat names the seasonal minimum. The default is `None`, so default outputs
+  are byte-identical. Param docs and `docs/THRESHOLDS.md` cover it.
+<!-- /0101-g36-seasonal -->
+
 ## [0.100.0] — Unreleased
 
 <!-- Each 0.100 branch adds its bullets only inside its own marked block. -->

@@ -621,6 +621,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   `use_timeseries=True`, the data ranks only outdoor roles for a point whose name places it
   outdoors. The vocabulary, the multipliers and the guard may be retuned in a minor release.
 <!-- /0100-suggester -->
+<!-- 0101-g36-seasonal (#105) -->
+- **G36 seasonal OA damper minimum** (0.101; #105), additive and provisional: the `g36_afdd`
+  parameter `oa_damper_min_by_month` and its metric of the same name (present only when it is
+  set); the `oa_damper_min_by_month=` keyword of `camber.fdd_g36.run_g36_afdd` and the trailing
+  `G36Result` field `oa_damper_min_by_month`. Without it nothing changes.
+<!-- /0101-g36-seasonal -->
 
 ## Deprecated
 
