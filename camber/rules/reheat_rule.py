@@ -57,6 +57,27 @@ samples only when ``SUPPLY_FAN_STATUS`` is mapped; >= 12 of them), clipped to 0-
 entering primary air. The default ``None`` leaves the bounds as they were. The offset is not added
 to the open-valve check when that check measures from the box's own closed-valve discharge, which
 already carries the fan's heat.
+
+**Box type (0.100, #99).** What lifts a closed-valve discharge depends on the box. A single-duct
+box has no fan, so only duct gains and sensor error (1-3 °F). A parallel fan-powered box runs its
+fan in heating only, so in cooling, with the valve shut, the discharge is the primary air (the
+LBNL parallel box: 0.0 °F on the fault-free run). A series box runs its fan whenever the zone is
+occupied and pulls primary and plenum air through it, so its discharge sits well above the primary
+air (the LBNL series box: 13.7 °F, median over its fault-free closed-valve, airflow-bearing hours).
+``box_type`` (``"single_duct"``, ``"parallel"``, ``"series"``; default None) sets the caps on the
+``"auto"`` estimate. It has no effect on a numeric ``fan_heat_f`` or on None. ``"single_duct"``
+caps both bounds at 3 °F and ``"parallel"`` at 8 °F, as None does. ``"series"`` caps the no-rise
+bound (valve open) at 10 °F and keeps the big-rise bound (valve shut) at 8 °F. The two checks are
+capped separately because the estimate is learned from the closed-valve samples that the big-rise
+check judges. With a higher cap, a passing valve's heat is learned as fan heat and the check
+cancels itself out: on the LBNL series runs, a 9-11 °F cap drops the passing-valve caveat on the
+50 % and 80 % leaks and on the stuck-at-80 % and stuck-at-100 % valves (demand-only), which 8 °F
+keeps. With the 10 °F cap, the open-valve check has a 15 °F no-rise bound. That bound sits between
+the highest stuck-valve rise (12.9 °F, stuck at 20 %) and the lowest working full-valve rise (17.6
+°F) on those runs, where the 8 °F cap left 0.06 °F of margin below the 13 °F bound. These caps
+were set on the labelled LBNL runs, so they are an in-sample fit, not a held-out result. With
+``box_type`` set, the finding also reports ``box_type``, ``fan_lift_f`` (the uncapped estimate)
+and ``fan_heat_closed_f`` (the big-rise allowance). ``fan_heat_f`` remains the no-rise allowance.
 """
 
 from __future__ import annotations
@@ -83,6 +104,29 @@ _DIVERGE_DEMAND_PCT = 90.0  # the controller asks for (near) full heat ...
 _DIVERGE_POSITION_PCT = 5.0  # ... and the valve reads shut (the closed-valve convention)
 _DIVERGE_SHARE = 0.25  # on at least this share of the occupied full-demand samples
 _FAN_HEAT_MAX_F = 8.0  # "auto" fan heat is clipped to 0-8 °F
+# ==== begin 0100-terminal (#99): the "auto" cap by box type ====
+# box_type -> (cap on the no-rise allowance, valve open; cap on the big-rise allowance, valve shut)
+_FAN_HEAT_CAPS_F = {
+    None: (_FAN_HEAT_MAX_F, _FAN_HEAT_MAX_F),
+    "single_duct": (3.0, 3.0),  # no fan: duct gains and sensor error only
+    "parallel": (_FAN_HEAT_MAX_F, _FAN_HEAT_MAX_F),  # fan runs in heating only
+    "series": (10.0, _FAN_HEAT_MAX_F),  # fan always on, mixing in plenum air (see module doc)
+}
+BOX_TYPES = ("single_duct", "parallel", "series")
+
+
+def _check_box_type(box_type):
+    """Validate ``box_type``: None or one of :data:`BOX_TYPES`."""
+    if box_type is not None and box_type not in BOX_TYPES:
+        raise ValueError(f"box_type must be None or one of {BOX_TYPES}, not {box_type!r}")
+    return box_type
+
+
+def _cap(lift: float, cap: float) -> float:
+    return round(min(max(lift, 0.0), cap), 2)
+
+
+# ==== end 0100-terminal ====
 
 
 def _pct_series(frame: pd.DataFrame, role: Role) -> pd.Series | None:
@@ -206,6 +250,7 @@ class ReheatPenalty:
         end_hour: float = 18,
         occupied_days=(0, 1, 2, 3, 4),
         fan_heat_f: float | str | None = None,
+        box_type: str | None = None,
     ):
         # The schedule is only an assumption: a trended OCCUPANCY point replaces it.
         self.start_hour = start_hour
@@ -213,6 +258,8 @@ class ReheatPenalty:
         self.occupied_days = tuple(occupied_days)
         # 0.98 (#85): °F a fan-powered box's own fan adds to its discharge ("auto": per box)
         self.fan_heat_f = _check_fan_heat(fan_heat_f)
+        # 0.100 (#99): "single_duct" / "parallel" / "series" -- sets the caps on the "auto" estimate
+        self.box_type = _check_box_type(box_type)
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
@@ -381,8 +428,19 @@ class ReheatPenalty:
         out["_ref_label"] = ref_label
         # 0.98 (#85): a fan-powered box's own fan heat raises both bounds
         fan = self._fan_heat(frame, rise, closed_s, basis)
+        fan_closed, lift = fan, None
+        if self.fan_heat_f == "auto" and fan is not None:
+            # 0.100 (#99): the uncapped estimate is capped per check, by box type
+            lift = round(fan, 2)
+            cap_open, cap_closed = _FAN_HEAT_CAPS_F[self.box_type]
+            fan, fan_closed = _cap(fan, cap_open), _cap(fan, cap_closed)
         out["fan_heat_f"] = fan
+        if self.box_type is not None:
+            out["box_type"] = self.box_type
+            out["fan_lift_f"] = lift
+            out["fan_heat_closed_f"] = fan_closed
         fan = fan or 0.0
+        fan_closed = fan_closed or 0.0
         open_fan = 0.0 if basis == "closed_valve_discharge" else fan  # its reference has it
         checked = False
         if int(open_s.sum()) >= _MIN_CHECK_SAMPLES:
@@ -394,7 +452,7 @@ class ReheatPenalty:
                 return out
         if int(closed_s.sum()) >= _MIN_CHECK_SAMPLES:
             checked = True
-            share = float((rise[closed_s] >= _BIG_RISE_F + fan).mean())
+            share = float((rise[closed_s] >= _BIG_RISE_F + fan_closed).mean())
             out["valve_closed_big_rise_share"] = round(share, 3)
             if share >= _BIG_RISE_SHARE:
                 out["valve_dat_consistency"] = "closed_with_rise"
@@ -405,9 +463,9 @@ class ReheatPenalty:
         return out
 
     def _fan_heat(self, frame: pd.DataFrame, rise, closed_s, basis: str):
-        """The fan heat (°F) the bounds allow for: the configured value, the "auto" estimate, or
-        None (not configured, or "auto" without the entering air or enough samples -> no
-        offset)."""
+        """The fan heat (°F) the bounds allow for: the configured value, the "auto" estimate
+        (uncapped; the caller caps it by box type), or None (not configured, or "auto" without
+        the entering air or enough samples -> no offset)."""
         if self.fan_heat_f is None or self.fan_heat_f != "auto":
             return self.fan_heat_f
         if basis != "entering_air":
@@ -418,7 +476,7 @@ class ReheatPenalty:
         s = s & rise.notna()
         if int(s.sum()) < _MIN_CHECK_SAMPLES:
             return None
-        return round(min(max(float(rise[s].median()), 0.0), _FAN_HEAT_MAX_F), 2)
+        return float(rise[s].median())
 
     def _declined(self, equip: str, res, check: dict, div: dict | None = None) -> Finding:
         """#63: the valve reads full open but the air shows no rise -- don't count the reheat."""

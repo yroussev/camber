@@ -4,6 +4,31 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.100.0] — Unreleased
+
+<!-- 0100-terminal -->
+### Added
+- **`reheat_penalty(box_type=None)`: the `"auto"` fan-heat cap by box type (#99,
+  provisional).** The `"auto"` estimate of a fan-powered box's closed-valve lift was clipped to
+  0-8 °F whatever the box. On the LBNL series boxes (`lbnl-fpu` SFPU runs) the real lift is
+  13.7 °F, so the clip always bound. `box_type` declares the box: `"single_duct"` (no fan) caps
+  the estimate at 3 °F, and `"parallel"` caps it at 8 °F, as before. `"series"` caps the no-rise
+  allowance (valve open) at 10 °F and keeps the big-rise allowance (valve shut) at 8 °F. The big-rise
+  check judges the closed-valve samples that the estimate is learned from, so with a higher cap a
+  passing valve's heat is learned as fan heat and the check cancels itself out. With `box_type`
+  set, the finding also reports `box_type`, `fan_lift_f` (the uncapped estimate) and
+  `fan_heat_closed_f`. The default (None) and a numeric `fan_heat_f` are unchanged, and default
+  outputs are byte-identical. Measured on all 31 PFPU and 31 SFPU runs (hourly, read through the
+  measured position and through the demand alone): `"parallel"` matches the default on every PFPU
+  run. `"series"` leaves every SFPU verdict unchanged and widens the declines' margin. The valve
+  stuck at 20 % (12.9 °F rise) was declined 0.06 °F under the old 13 °F bound and is now 2.1 °F
+  under the 15 °F bound, while the lowest working full-valve rise (17.6 °F) stays 2.6 °F above
+  it. A symmetric series cap of 9-11 °F would have dropped the passing-valve caveat on the 50 %
+  and 80 % leaks and on the valves stuck at 80 % and 100 % (read through the demand). The caps
+  were set on these labelled runs, so they are an in-sample fit. The `lbnl-fpu` exercise configs
+  are unchanged, because their boxes are parallel. `docs/THRESHOLDS.md` documents `box_type`.
+<!-- /0100-terminal -->
+
 ## [0.99.1] — 2026-10-03
 
 **0.99.1 patch: open-fdd-ingested facilities report their time zone (#96).** The synthetic, fleet,

@@ -587,6 +587,12 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   heating coil alone active and the damper open beyond its minimum (plus `oa_damper_tol`) is now
   OS#5, not OS#1, and a missing damper reading there is unclassified.
 <!-- /099-g36-heating -->
+<!-- 0100-terminal (#99) -->
+- **Fan-heat cap by box type** (0.100; #99), additive and provisional: the `box_type=` keyword of
+  `ReheatPenalty` (`None`, `"single_duct"`, `"parallel"` or `"series"`), the constant
+  `camber.rules.reheat_rule.BOX_TYPES`, and the finding metrics `box_type`, `fan_lift_f` and
+  `fan_heat_closed_f` (present only when `box_type` is set).
+<!-- /0100-terminal -->
 
 ## Deprecated
 

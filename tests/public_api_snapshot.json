@@ -2140,6 +2140,7 @@
     "ReheatMinimization"
   ],
   "camber.rules.reheat_rule": [
+    "BOX_TYPES",
     "ReheatPenalty"
   ],
   "camber.rules.reset_effectiveness_rule": [
