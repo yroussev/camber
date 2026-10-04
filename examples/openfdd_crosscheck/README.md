@@ -63,7 +63,8 @@ checks `docker info` once, with a 20 s timeout.
 CAMBER runs `g36_afdd` at the G36 defaults plus the `g36_afdd` parameters of each dataset's
 catalog run template (on `lbnl-sdahu`, `min_oa_pct` 1.6, which enables FC6; on `lbnl-ddahu`,
 since 0.100, the unit's seasonal minimum, `min_oa_pct` 31.8 with `min_oa_pct_by_month` 11.9 in
-June to August), as `camber datasets` does.
+June to August, and since 0.101 its seasonal minimum damper position, `oa_damper_min` 45 with
+`oa_damper_min_by_month` 28 in June to August), as `camber datasets` does.
 
 The SQL engine gets **one building per equipment**. `fdd_cli run-rules` checks a rule's
 required roles against the building's columns, the union over its equipment, so equipment

@@ -16,6 +16,25 @@ All notable changes to CAMBER are documented here. The format follows
   `G36Result` a trailing `oa_damper_min_by_month` field; the finding reports the metric only when
   it is set, and a caveat names the seasonal minimum. The default is `None`, so default outputs
   are byte-identical. Param docs and `docs/THRESHOLDS.md` cover it.
+
+### Changed
+- **The `lbnl-ddahu` template sets the unit's seasonal damper minimum (#105).** `g36_afdd` now
+  runs with `oa_damper_min` 45 and `oa_damper_min_by_month` 28 in June to August (the documented
+  sequence positions), where the learned minimum was the 28 % summer position all year. Hourly,
+  every verdict holds: the fault-free and `DMPRStuck_OA_100` runs stay *ok* and `DMPRStuck_OA_0`
+  *fault*. The winter heating hours at the 45 % minimum return to OS#1, so FC6 judges 1,111 h on
+  the fault-free run (was 744 h; 0.09 %) and 1,273 h on `DMPRStuck_OA_100` (was 762 h; 0.08 %),
+  and FC5 and FC7 are evaluated there (367 h and 529 h, 0 %). Winter hours idling at the 45 %
+  minimum are no longer free cooling: the fault-free run's 4 h of FC9 hits go, and on
+  `DMPRStuck_OA_0` FC8 reads 100 % of 48 h (was 39.7 % of 121 h) and FC9 0 % (was 20.7 %).
+  **FC6 still does not catch `DMPRStuck_OA_0`** (1.96 % of 766 h, unchanged), which #105 set out
+  to do. Outside June to August that run's damper command saturates (median 100 %) while the hot
+  deck heats, or both coils run, so its hours are OS#5, where G36 does not apply FC6, and the
+  temperature balance there reads a median 17.7 % OA, within G36's 30-point tolerance of the
+  31.8 % minimum anyway. `lbnl-sdahu` is unchanged. `g36_afdd` is not a scored target, so
+  `camber datasets score` and the gated benchmarks do not move. The open-fdd cross-check's CAMBER
+  verdicts on `lbnl-ddahu` change (any-FC unchanged in both windows); docs/ECOSYSTEM.md has the
+  before/after.
 <!-- /0101-g36-seasonal -->
 
 ## [0.100.0] — Unreleased
