@@ -143,7 +143,8 @@ def test_default_suggester_is_unchanged_and_ignores_the_new_keywords():
 
 
 # (token, series, unit) -> the default suggester's output recorded on 0.95 (8f2d7b8), before
-# the time-series path existed: the default must stay byte-identical.
+# the time-series path existed. From 0.101 (#107) it is the opt-out (use_timeseries=False), and
+# the default without a series: both must stay byte-identical.
 LINEAR = "linear 13-16"
 GOLDEN = [
     ("AH1_SAT", None, "degF", [("supply_air_temp", 0.95), ("hw_supply_temp", 0.65),
@@ -159,17 +160,65 @@ GOLDEN = [
 
 
 @pytest.mark.parametrize("token,series,unit,want", GOLDEN)
-def test_default_output_matches_the_previous_release(token, series, unit, want):
+def test_opt_out_output_matches_the_previous_release(token, series, unit, want):
+    # 0.101 (#107): use_timeseries=False is the 0.95 default, byte for byte; without a series
+    # the new default is too
     s = pd.Series(np.linspace(13, 16, len(IDX)), index=IDX) if series == LINEAR else None
-    got = [(x.role, x.confidence) for x in suggest_roles(token, series=s, unit=unit)]
+    got = [(x.role, x.confidence)
+           for x in suggest_roles(token, series=s, unit=unit, use_timeseries=False)]  # fmt: skip
     assert got == want
+    if s is None:
+        assert [(x.role, x.confidence) for x in suggest_roles(token, unit=unit)] == want
+
+
+# 0.101 (#107): with a series, the default reads the data too. The golden series cases recorded
+# on the time-series path (the top role holds; the confidences rise with the data's evidence).
+GOLDEN_0101 = [
+    ("OaTemp", "degC", [("oat", 1.0), ("supply_air_temp", 0.4175), ("mixed_air_temp", 0.4175)]),
+    ("OaTemp", None, [("oat", 0.975), ("oa_damper", 0.3798), ("oa_airflow", 0.3742)]),
+]
+
+
+@pytest.mark.parametrize("token,unit,want", GOLDEN_0101)
+def test_0101_default_with_a_series_reads_the_data(token, unit, want):
+    s = pd.Series(np.linspace(13, 16, len(IDX)), index=IDX)
+    got = suggest_roles(token, series=s, unit=unit)
+    assert [(x.role, x.confidence) for x in got] == want
+    explicit = suggest_roles(token, series=s, unit=unit, use_timeseries=True)
+    assert [x.as_dict() for x in got] == [x.as_dict() for x in explicit]
+
+
+def test_0101_review_unmapped_defaults_and_opt_out():
+    from camber.mapping_assist import review_unmapped
+    from camber.model.mapping import MappingProvider
+
+    mp = MappingProvider.from_dict({"aliases": {}})
+    s = zone()
+    on = review_unmapped(["temp_setpoint", "Rm_T"], mp, series_by_token={"temp_setpoint": s})
+    off = review_unmapped(["temp_setpoint", "Rm_T"], mp, series_by_token={"temp_setpoint": s},
+                          use_timeseries=False)  # fmt: skip
+    ts = FeatureSuggester(mp, use_timeseries=True).suggest("temp_setpoint", series=s)
+    lex = FeatureSuggester(mp).suggest("temp_setpoint", series=s)
+    assert on["suggestions"]["temp_setpoint"] == ts
+    assert off["suggestions"]["temp_setpoint"] == lex
+    # a token without a series is suggested by name alone either way
+    assert (
+        on["suggestions"]["Rm_T"]
+        == off["suggestions"]["Rm_T"]
+        == FeatureSuggester(mp).suggest("Rm_T")
+    )
+    # an explicit suggester is used as given
+    got = review_unmapped(["temp_setpoint"], mp, series_by_token={"temp_setpoint": s},
+                          suggester=FeatureSuggester(mp))  # fmt: skip
+    assert got["suggestions"]["temp_setpoint"] == lex
 
 
 def test_timeseries_path_uses_the_data_when_the_name_says_nothing():
     fs = FeatureSuggester(use_timeseries=True, oat=OAT)
     anon = fs.suggest("3dfa2bab_f8f2_485b", series=OAT2)
-    assert anon and anon[0].role in ("oat", "wetbulb_temp") and anon[0].basis == "timeseries"
-    assert "read as degC" in anon[0].rationale
+    # the data places it (0.101, #106: the physical-range check now joins it without a unit)
+    assert anon and anon[0].role in ("oat", "wetbulb_temp") and anon[0].basis == "combined"
+    assert "read as degC" in anon[0].rationale and "physical bounds" in anon[0].rationale
     # a clear name keeps its role on top even when the data is ambiguous
     named = fs.suggest("Zone_Air_Temperature_Sensor", series=setpoint())
     assert named[0].role == "space_temp" and named[0].basis == "combined"
@@ -191,7 +240,8 @@ def test_0100_weather_station_guard_keeps_the_data_on_weather_roles():
     got = fs.suggest("Weather_7", series=rh)
     assert got[0].role == "outdoor_rh"
     allowed = {"oat", "outdoor_rh", "outdoor_co2"}
-    assert all(x.role in allowed or x.basis != "combined" for x in got)
+    # the data (its template note) ranks only weather roles; 0.101 adds the range check's basis
+    assert all(x.role in allowed or "data at the level" not in x.rationale for x in got)
     # a named outdoor point never takes a wet-bulb or supply-air role from the data alone
     for name, series in [("Weather_Current_Temperature", OAT2), ("Weather_Current_Humidity", rh)]:
         roles = [x.role for x in fs.suggest(name, series=series)]
@@ -201,3 +251,56 @@ def test_0100_weather_station_guard_keeps_the_data_on_weather_roles():
 
     assert _outdoor_guard(_tag_tokens("3dfa2bab_f8f2_485b")) is None
     assert Role.WETBULB_TEMP in _outdoor_guard(_tag_tokens("OA_WB"))
+
+
+def test_0101_setpoint_guard_keeps_a_named_setpoint_a_setpoint():
+    # an occupant-adjusted zone setpoint moves like the room it controls: before 0.101 the data
+    # carried ``temp_setpoint`` to space_temp; the name says setpoint, so the data now only ranks
+    # the setpoint roles (#106)
+    from camber.mapping_assist import _SETPOINT_ROLES, _setpoint_guard, _tag_tokens
+
+    fs = FeatureSuggester(use_timeseries=True, oat=OAT)
+    got = fs.suggest("temp_setpoint", series=zone())
+    assert got[0].role == "cool_sp"
+    assert all(Role(x.role) in _SETPOINT_ROLES or "data at the level" not in x.rationale
+               for x in got)  # fmt: skip
+    assert "space_temp" not in [x.role for x in got[:1]]
+    # the guard follows the name: a setpoint word (also run together) guards, a sensor does not
+    assert _setpoint_guard(_tag_tokens("RMCLGSPT")) == _SETPOINT_ROLES
+    assert _setpoint_guard(_tag_tokens("Zone_Temp")) is None
+    assert _setpoint_guard(_tag_tokens("ZN-SPT")) is None  # SPT is a space temperature
+    # a sensor name is unaffected
+    assert fs.suggest("Zone_Temp", series=zone())[0].role == "space_temp"
+
+
+def test_0101_range_check_without_a_unit_reads_every_plausible_unit():
+    from camber.mapping_assist import _ts_range_violation
+    from camber.sensorhealth import range_violation_frac
+
+    room_c = zone()  # degC
+    # read as is (degF) a 22 C room is impossible; read as degC it fits
+    assert range_violation_frac(room_c, Role.SPACE_TEMP) == 1.0
+    assert _ts_range_violation(room_c, Role.SPACE_TEMP, "") == 0.0
+    # a declared unit is trusted, as on the default path
+    assert _ts_range_violation(room_c, Role.SPACE_TEMP, "degf") == 1.0
+    assert _ts_range_violation(room_c, Role.SPACE_TEMP, "degc") == 0.0
+    # a duct static in Pa fits once read as Pa; a sentinel fits no unit
+    assert _ts_range_violation(_s(np.full(len(IDX), 250.0)), Role.DUCT_STATIC, "") == 0.0
+    assert _ts_range_violation(_s(np.full(len(IDX), -999.0)), Role.SPACE_TEMP, "") == 1.0
+    # a temperature difference converts without the offset (2 C of subcooling is 3.6 F)
+    assert _ts_range_violation(_s(np.full(len(IDX), -15.0)), Role.SUBCOOLING_TEMP, "") == 0.0
+    assert _ts_range_violation(_s(np.full(len(IDX), -15.0)), Role.SUBCOOLING_TEMP, "degc") == 1.0
+
+
+def test_0101_time_series_path_range_checks_a_point_with_no_unit():
+    # a dead channel (-999) named as a supply-air temperature: before 0.101 the time-series path
+    # skipped the range check without a unit and kept supply_air_temp first; the default path
+    # (name and series) already demoted it, and now both do (#106)
+    dead = _s(np.full(len(IDX), -999.0) + RNG.normal(0, 0.01, len(IDX)))
+    ts = [x.role for x in FeatureSuggester(use_timeseries=True).suggest("SupplyAirTemp",
+                                                                        series=dead)]  # fmt: skip
+    assert "supply_air_temp" not in ts
+    assert "supply_air_temp" not in [x.role for x in suggest_roles("SupplyAirTemp", series=dead)]
+    # a degC zone temperature with no unit keeps its role and gains the range-fit basis
+    got = FeatureSuggester(use_timeseries=True).suggest("Zone_Temp", series=zone())
+    assert got[0].role == "space_temp" and "physical bounds" in got[0].rationale

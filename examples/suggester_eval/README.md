@@ -8,7 +8,7 @@ evidence of `camber.mapping_timeseries`) three ways. None of these is a gated be
 | `real_names.py` | open catalog datasets that publish their **real BMS point names** | how the suggester does on real naming, with and without the data |
 | `bts.py` | **BTS**: three real buildings, anonymised ids, Brick classes | what the data alone recovers when the names are hidden |
 | `messy_names.py` | BTS points with **synthetic** vendor-style names | tolerance to abbreviations and site conventions (synthetic, never mixed into real figures) |
-| `catalog_names.py` | the published point names of the catalog mappings `real_names.py` does not use (shipped, no download) | the out-of-sample name check from 0.100 on |
+| `catalog_names.py` | the published point names of the catalog mappings `real_names.py` does not use (shipped, no download; `--data` reads their series) | the out-of-sample name check from 0.100 on, and from 0.101 names plus data on the same points |
 
 Results and caveats: [docs/MAPPING-ASSIST.md](../../docs/MAPPING-ASSIST.md#evaluation).
 
@@ -55,6 +55,30 @@ mappings that `real_names.py` does not evaluate, against the role CAMBER assigne
 dataset was catalogued. Templated names (`zone_{z}_temp`) are skipped. It reports each mapping
 file and the pool, and lists every miss. One large file (`ornl_frp_vav.json`, 92 points) weighs
 heavily in the pool.
+
+**Names plus data (`--data`, 0.101).** It also scores each held-out name with its series from
+the catalog data:
+
+```sh
+camber datasets fetch cofactor-drammen finnish-dcv nist-heatpump-fdd nist-ibal ornl-frp-vav \
+  ornl-supermarket-fdd valladolid-uva --subset full
+python examples/suggester_eval/catalog_names.py --data   # --search DIR also finds copies on disk
+```
+
+- Three suggesters are compared on each point with data:
+  - name only (`FeatureSuggester()`, no series);
+  - the name-only suggester with the series passed, which adds the physical-range gate (the
+    0.100 default; from 0.101 the `use_timeseries=False` opt-out);
+  - name plus data (`FeatureSuggester(use_timeseries=True)`).
+- It reports top-1 and top-3 per mapping file and pooled, and each point whose top-1 the data
+  helped or hurt against the name alone.
+- Series are read as in `real_names.py`: 15-minute means from the first fault-free run, with no
+  unit passed. A series needs half a day of data (`--min-samples 48`), because these lab and
+  test datasets publish runs of 18 to 24 hours.
+- Only open-tier entries are read. `rbc-g36-ahu` is research-only, so its names are scored by
+  name only.
+- The series themselves are scored, not cached profiles, because the range gate reads them.
+- Archive members are extracted under `--work`.
 
 ## `bts.py`: BTS, names hidden
 

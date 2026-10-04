@@ -20,8 +20,10 @@ and scores every role against them.
 * :func:`blend` -- how a time-series score joins the lexical one so that an informative **name
   still dominates**: the data's weight shrinks as the best lexical score grows.
 
-It is advisory, like the rest of mapping assist, and opt-in: ``FeatureSuggester`` behaves exactly
-as before unless it is built with ``use_timeseries=True``.
+It is advisory, like the rest of mapping assist. ``FeatureSuggester`` behaves exactly as before
+unless it is built with ``use_timeseries=True``; from 0.101 (#107) ``suggest_roles`` and
+``review_unmapped`` build it so by default when a series is passed (``use_timeseries=False``
+opts out).
 """
 
 from __future__ import annotations

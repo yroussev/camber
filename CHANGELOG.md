@@ -6,6 +6,8 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.101.0] — Unreleased
 
+<!-- Each 0.101 branch adds its bullets only inside its own marked block. -->
+
 <!-- 0101-walkdown -->
 ### Changed
 - **The walk-down's equipment item follows the cause that heads the RCx issue (#108).** Since
@@ -59,6 +61,58 @@ All notable changes to CAMBER are documented here. The format follows
   verdicts on `lbnl-ddahu` change (any-FC unchanged in both windows); docs/ECOSYSTEM.md has the
   before/after.
 <!-- /0101-g36-seasonal -->
+
+<!-- 0101-suggester-ts -->
+### Changed
+- **Default change: the point-role suggester reads the data when a series is passed (#107).**
+  `suggest_roles`, `review_unmapped` and `camber.interop.bacnet.review_bacnet` now use the
+  time-series path (`FeatureSuggester(use_timeseries=True)`) when a series is passed for a token
+  and no suggester is given. **This intentionally changes their output whenever a series is
+  passed**, including the BACnet review path when `series_by_name` is given. The new keyword
+  `use_timeseries=False` opts out and gives the 0.100 output byte for byte. Without a series the
+  output is unchanged, and so are `roles_from_bacnet` and `vendor_aliases`, which pass no
+  series. The `FeatureSuggester` class default stays name-only. At default settings with the
+  series passed (no unit, no outdoor-air series), top-1 before → after:
+  - held-out catalog names: 49.4 → 73.0 %;
+  - real names: 84.8 → 95.7 %;
+  - simulated LBNL sets: 73.1 → 74.4 %;
+  - BTS anonymised: 0.0 → 46.2 %;
+  - BTS Brick-class names (upper bound): 25.5 → 89.4 %;
+  - the five synthetic styles: 15-26 → 70-90 %.
+
+  On strong names the unitless range check costs a little against the name alone. With BTS
+  Brick-class names it is 89.4 % against 93.2 %, because site C's negative airflows are out of
+  range. The full table is in `docs/MAPPING-ASSIST.md`.
+- **Time-series suggester, step 1: held-out measurement and the two known fixes (#106).** Both
+  fixes act only on the time-series path, which from #107 is the default when a series is
+  passed.
+  - **Setpoint guard.** When a point's name says setpoint (`setpoint`, `SP`, `STPT`,
+    `RMCLGSPT`), the data ranks only the setpoint roles. `robod`'s `temp_setpoint` stays
+    `cool_sp`, where the data alone had made it `space_temp`.
+  - **Range check without a unit.** A point with no declared unit is now range-checked on the
+    time-series path. Before, it skipped the check. It is read in every plausible unit of the
+    role (the units the role templates try), and the best reading counts. A °C room temperature
+    passes, and a sentinel such as `-999` is demoted, as on the default path.
+  - **Measured on the held-out catalog names with their data** (`catalog_names.py --data`, new;
+    89 of the 223 names have a usable open-tier series). Top-1 / top-3 %:
+    - name only: 76.4 / 79.8;
+    - name plus data: 76.4 / 82.0 before, 75.3 / 80.9 after;
+    - the default suggester with the series passed: 49.4 / 50.6. Its range check reads a
+      unitless temperature as °F.
+
+    After the fixes the data helps 3 points and hurts 4. The 4 losses are refrigerated-case air
+    temperatures labelled as air-handler roles. Two of them, at about -3 °F, are below those
+    roles' physical bounds.
+  - **Other evaluation pools** (name plus data, top-1): real names 95.3 → 95.7 %, with 0 losses
+    (was 2); real names excluding in-sample names 89.1 → 90.7 %. Simulated LBNL sets and BTS are
+    unchanged. The synthetic names move by at most +0.1. Details and the helped and hurt lists
+    are in `docs/MAPPING-ASSIST.md`.
+- **`real_names.dataset_points` takes `keep_series`** and returns each point's 15-minute series
+  with its profile. The evaluation scripts only.
+
+None of these figures is a gated benchmark. The synthetic, fleet, LBNL, BDG2 and BDG2 savings
+benchmark gates are not affected.
+<!-- /0101-suggester-ts -->
 
 ## [0.100.0] — 2026-10-04
 

@@ -180,13 +180,17 @@ def mapping_from_bacnet(objects, *, mapping=None, vendor_aliases=None) -> Mappin
     return MappingProvider.from_dict({"aliases": {n: r.value for n, r in roles.items()}})
 
 
-def review_bacnet(objects, mapping, *, series_by_name=None, k=3, min_confidence=0.5) -> dict:
+def review_bacnet(
+    objects, mapping, *, series_by_name=None, k=3, min_confidence=0.5, use_timeseries=None
+) -> dict:
     """Ranked role suggestions for the discovered objects an existing ``mapping`` doesn't resolve.
 
     Shapes discovery into :func:`camber.mapping_assist.review_unmapped` inputs (object names as
     tokens, normalized BACnet units as the unit hint). ``series_by_name`` (name → trend series) is
     optional — pass it only if you've pulled snapshots, since range-fit needs a series discovery
     alone doesn't provide; unit + name signals carry the suggestion otherwise. Advisory only.
+    0.101 (#107): an object with a series is suggested from its name and its data by default;
+    ``use_timeseries=False`` keeps the name, unit and range-check suggestions.
     """
     objs = list(objects)
     names = [getattr(o, "object_name", "") or "" for o in objs]
@@ -199,6 +203,7 @@ def review_bacnet(objects, mapping, *, series_by_name=None, k=3, min_confidence=
         units=units,
         k=k,
         min_confidence=min_confidence,
+        use_timeseries=use_timeseries,
     )
 
 

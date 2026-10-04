@@ -176,8 +176,11 @@ def _published_name(run, col: str) -> str:
     return col
 
 
-def dataset_points(entry, subset: str, search, work: str, *, log=print) -> list:
-    """``[record]`` for every mapped, published point of one dataset: name, role, series profile."""
+def dataset_points(
+    entry, subset: str, search, work: str, *, log=print, keep_series: bool = False
+) -> list:
+    """``[record]`` for every mapped, published point of one dataset: name, role, series profile
+    (and with ``keep_series`` the 15-minute series itself, under ``"series"``; not cacheable)."""
     spec = {k: v for k, v in entry.ingest.items() if k != "recode"}  # raw values, not recoded
     derived = {dv.get("column") for dv in spec.get("derive") or []}
     runs = select_runs(entry, subset)
@@ -256,17 +259,18 @@ def dataset_points(entry, subset: str, search, work: str, *, log=print) -> list:
     out = []
     for key, name, role, s, rid, prov in uniq.values():
         ref = next((o[3] for o in oats if o[0] != key), None)
-        out.append(
-            {
-                "site": entry.id,
-                "name": name,
-                "equip": key[0],
-                "run": rid,
-                "role": role,
-                "label_source": prov,
-                "profile": profile_series(s, oat=ref).as_dict(),
-            }
-        )
+        rec = {
+            "site": entry.id,
+            "name": name,
+            "equip": key[0],
+            "run": rid,
+            "role": role,
+            "label_source": prov,
+            "profile": profile_series(s, oat=ref).as_dict(),
+        }
+        if keep_series:
+            rec["series"] = s
+        out.append(rec)
     return out
 
 
