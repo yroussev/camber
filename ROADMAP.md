@@ -392,7 +392,7 @@ Version numbers are given only where a release is already planned.
       `docs/ECOSYSTEM.md`.
   - **0.99.1 — patch:** `/facilities` and the trend viewer report the site zone of an
     open-fdd-ingested facility, including one ingested with 0.99.0 (#96).
-  - **0.100 — follow-ups from 0.99** (integrated, not yet released). Closes #97–#104:
+  - **0.100 — follow-ups from 0.99** (released 2026-10-04). Closes #97–#104:
     - [x] #97 `g36_afdd` FC6 against a seasonal minimum OA, used by the `lbnl-ddahu` template;
     - [x] #98 `lbnl-ddahu` maps its cold-deck SAT setpoint (FC9, FC11 and FC13 evaluated);
     - [x] #99 `reheat_penalty` `box_type` caps the fan-heat estimate by box;

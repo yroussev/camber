@@ -4,7 +4,7 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
-## [0.100.0] — Unreleased
+## [0.100.0] — 2026-10-04
 
 <!-- Each 0.100 branch adds its bullets only inside its own marked block. -->
 
