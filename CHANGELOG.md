@@ -4,6 +4,22 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.100.0] — Unreleased
+
+<!-- 0100-sensor -->
+### Documentation
+- **Sensor health: the setpoint level as a grouping key is measured and rejected (#103).** The
+  alternative to the residual read deferred from #87 judges a controlled point's outliers within
+  each level of its setpoint, when the setpoint takes at most 4 distinct values. It was measured
+  for supply air and duct static on every catalog RCx report (511 trust-table rows). As proposed,
+  it moves no row: no catalog setpoint has two to four levels. The LBNL single-duct runs hold one
+  constant level, and `lbnl-b59` and `nuig-ahu101` reset theirs. Grouping by the four most common
+  levels does reach those two units, and it lowers every supply air it touches by 0.01-0.12.
+  `lbnl-b59` RTU03 and RTU04 go from *trusted* to *suspect*. Not adopted; there is no code
+  change. docs/SENSOR-HEALTH.md records the measurement, and a new test pins that `mode="auto"`
+  does not group by setpoint.
+<!-- /0100-sensor -->
+
 ## [0.99.1] — 2026-10-03
 
 **0.99.1 patch: open-fdd-ingested facilities report their time zone (#96).** The synthetic, fleet,
