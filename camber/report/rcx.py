@@ -872,12 +872,15 @@ def _issue_dict(i) -> dict:
     from ..aso import recommend
 
     rec = recommend(i.root)
+    lead, lead_cause = _cause_lead(i)
     return {
         "key": i.key,
         "rank": i.rank,
         # 0.98 (#88): the packaged action's title and the finding's cause (the issue heading)
         "title": rec.title if rec is not None else _humanize(getattr(i.root, "rule", "")),
-        "cause": rec.cause if rec is not None else "",
+        "cause": lead_cause if lead is not None else (rec.cause if rec is not None else ""),
+        # 0.100 (#101): the rule whose finding names the cause (a member's, when more specific)
+        "cause_rule": getattr(lead if lead is not None else i.root, "rule", ""),
         "equip": i.equip,
         "severity": i.severity,
         "rules": i.rules,
@@ -1681,7 +1684,8 @@ def _sec_summary(S) -> dict:
     for iss in issues[: max(int(o.top_n), 0)]:
         rec = recommend(iss.root)
         title, action, _sug = _advice(S, iss, rec)
-        title = _heading(rec, title)  # 0.98 (#88): the Issue column names the cause
+        # 0.98 (#88): the Issue column names the cause; 0.100 (#101): a member's, when more specific
+        title = _heading(rec, title, _cause_lead(iss))
         action = action[:1].upper() + action[1:] if action else ""
         action = action or "Engineer to specify (no packaged action)."
         cost = _fmt_usd(iss.cost) if iss.cost is not None else _cut(iss.cost_basis_note, 60)
@@ -2327,11 +2331,63 @@ def _plant_first(iss) -> str:
     )
 
 
-def _heading(rec, title: str) -> str:
+def _heading(rec, title: str, lead: tuple | None = None) -> str:
     """An issue's heading: the finding's cause when the recommendation names one (0.98, #88), else
-    the action title."""
+    the action title. ``lead`` is :func:`_cause_lead`'s result: a member's more specific cause
+    (0.100, #101) heads the issue instead of the root's."""
+    if lead is not None and lead[0] is not None:
+        return lead[1]
     cause = getattr(rec, "cause", "") if rec is not None else ""
     return cause or title
+
+
+# 0.100 (#101): the causes that name a component which does not do what it is told -- a damper that
+# does not deliver the outside air it is commanded to, a valve whose position does not follow its
+# demand, a leaking valve, a stuck actuator, a drifting damper. ``(rule, cause key)``, with the
+# cause key read as the walk-down reads it (:func:`camber.walkdown.cause_key`, the same metrics the
+# recommender reads); ``"*"`` matches every cause of the rule. Such a cause is more specific than a
+# symptom or a control-sequence cause (outside air below the minimum, excess outside air, a reset
+# that does not reach its end): it says which part to repair.
+_EQUIPMENT_CAUSES = frozenset(
+    {
+        ("free_cooling_missed", "damper_not_delivering"),
+        ("reheat_penalty", "valve_divergence"),
+        ("leaking_valve", "*"),
+        ("actuator_stuck", "*"),
+        ("economizer_damper_drift", "*"),
+    }
+)
+
+
+def _equipment_cause(finding) -> bool:
+    """True when ``finding``'s cause is equipment-level (:data:`_EQUIPMENT_CAUSES`)."""
+    from ..walkdown import cause_key
+
+    rule = getattr(finding, "rule", "")
+    return (rule, "*") in _EQUIPMENT_CAUSES or (rule, cause_key(finding)) in _EQUIPMENT_CAUSES
+
+
+def _cause_lead(iss, *, frame=None) -> tuple:
+    """``(member, cause)`` when a member finding's cause should head ``iss`` (0.100, #101), else
+    ``(None, "")``.
+
+    Precedence: (1) a root whose own cause is equipment-level keeps the heading; (2) otherwise the
+    first member, in the issue's root-first chain order (the most upstream), whose cause is
+    equipment-level and whose recommendation names it leads the heading; (3) otherwise the root's
+    cause, as before. The action, its title and its references stay the root's in every case."""
+    from ..aso import recommend
+
+    members = list(getattr(iss, "members", None) or [])
+    if not members or _equipment_cause(iss.root):
+        return None, ""
+    for f in members[1:]:
+        if not _equipment_cause(f):
+            continue
+        rec = recommend(f, frame=frame)
+        cause = getattr(rec, "cause", "") if rec is not None else ""
+        if cause:
+            return f, cause
+    return None, ""
 
 
 def _packaged_advice(S, iss, rec) -> tuple:
@@ -2369,6 +2425,7 @@ def _sec_issue(S, iss) -> dict:
     root = iss.root
     rec = recommend(root, frame=ctx.frame(iss.equip))
     title, action, suggested = _advice(S, iss, rec)
+    lead = _cause_lead(iss, frame=ctx.frame(iss.equip))  # 0.100 (#101)
     blocks: list = []
     if iss.conditional:
         blocks.append(
@@ -2453,6 +2510,17 @@ def _sec_issue(S, iss) -> dict:
             ]
         )
     blocks.append(_table(["Role", "Rule", "Severity", "Estimate $/yr", "Finding"], mrows))
+    if lead[0] is not None:
+        # 0.100 (#101): say where the heading's cause comes from; the action stays the root's
+        own = getattr(rec, "cause", "") if rec is not None else ""
+        blocks.append(
+            _p(
+                f"Cause from the {getattr(lead[0], 'rule', '')} member, which names the "
+                "equipment at fault"
+                + (f" (the root finding reads: {own})" if own else "")
+                + ". The recommended action is the root finding's."
+            )
+        )
     if action:
         # 0.98 (#88): the heading names the cause; the action paragraph keeps the action's title
         blocks.append(_p(f"Recommended action — {title}: {action}"))
@@ -2497,7 +2565,7 @@ def _sec_issue(S, iss) -> dict:
     if ai:
         blocks.append(_p(ai))
     sec = _section(
-        f"issue-{iss.key}", f"Issue {iss.rank}: {_heading(rec, title)}", blocks, kind="issue"
+        f"issue-{iss.key}", f"Issue {iss.rank}: {_heading(rec, title, lead)}", blocks, kind="issue"
     )
     sec["slot"] = f"issue:{iss.key}"
     return sec

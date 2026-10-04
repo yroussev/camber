@@ -587,6 +587,15 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   heating coil alone active and the damper open beyond its minimum (plus `oa_damper_tol`) is now
   OS#5, not OS#1, and a missing damper reading there is unclassified.
 <!-- /099-g36-heating -->
+<!-- 0100-rcx (#101, #104) -->
+- **RCx heading cause and the facility time zone** (0.100; #101, #104), additive and provisional:
+  the `cause_rule` key of each RCx issue in `RcxReport.to_dict()` (the rule of the finding whose
+  cause heads the issue). Behaviour changes: an RCx issue whose member finding names the equipment
+  at fault, while its root does not, is headed (and its `cause` key filled) with the member's cause;
+  a config run on a store source takes the facility's zone as `/facilities` reports it, so an
+  explicit `timezone` on the registry entry, or a per-site zone in the dataset block, now also sets
+  the run's zone (daily `mv` day lengths, a `shared_oat` file's clock) where it did not before.
+<!-- /0100-rcx -->
 
 ## Deprecated
 

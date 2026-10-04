@@ -334,8 +334,9 @@ asset.
 known, the time axis and the hover readout show that wall clock as **site time**, labelled with
 the zone (e.g. `time (Australia/Sydney)`), and a **UTC** box converts both to UTC. The zone comes
 from `/facilities`, whose rows carry a `timezone` key only when one is recorded: a `timezone` on
-the facility's registry entry, or, for a catalog dataset, the zone it was ingested into. Without a
-zone the axis reads the stored clock as UTC, as before.
+the facility's registry entry, or, for a catalog dataset, the zone it was ingested into, or the
+zone an open-fdd ingest recorded. Config runs on a store source use the same lookup (0.100, #104).
+Without a zone the axis reads the stored clock as UTC, as before.
 
 ## Scope
 

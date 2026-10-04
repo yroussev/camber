@@ -861,8 +861,10 @@ sample in the repeated hour for both passes of the clock (`repeated_hour_weights
 sums 25 hours of energy, and its mean temperature weights that hour twice. The weight lands only
 on the fall-back days, so every other day is bit for bit what it was. An export that kept both
 readings under one stamp is averaged first, so both count. The zone comes from `source.timezone`,
-or, for a store facility ingested from the catalog, from the entry's `local_timezone` (for
-example `cofactor-drammen`, Europe/Oslo). Every daily `mv` path takes it: the plain run, each
+or, for a store facility, from the zone the facility records, looked up as the read API's
+`/facilities` does (0.100, #104): a `timezone` on its registry entry, the dataset block on the
+entry (a per-site zone, as each BDG2 site records), the catalog entry's `local_timezone` (for
+example `cofactor-drammen`, Europe/Oslo), then an open-fdd ingest's zone. Every daily `mv` path takes it: the plain run, each
 declared method, the ledger and the versioned baselines of `camber mv`. A source with no zone
 keeps the historical days. Hourly frames are not changed.
 
