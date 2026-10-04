@@ -230,21 +230,24 @@ in [0.100: before and after](#0100-before-and-after-102).
 | real, excluding in-sample names, mean over 5 datasets | | 59.9 | 49.1 | 63.9 |
 
 The LBNL simulated FDD sets are reported apart, because their names are systematic and
-simulation-style (`SA_TEMP`, `CHL_SW_TEMP_1`, `HWL_DPSPT`):
+simulation-style (`SA_TEMP`, `CHL_SW_TEMP_1`, `HWL_DPSPT`). This table is re-run with the 0.99.1
+vocabulary on the 0.100 catalog, which has gained points since 0.96: `lbnl-chiller` has 14 points,
+`lbnl-fpu` 20, and `lbnl-ddahu` 11, because its cold-deck setpoint `CSA_TEMPSPT` is mapped from
+0.100 (#98).
 
 | dataset (simulated) | points | name only top-1 / top-3 % | data only top-1 / top-3 % | name + data top-1 / top-3 % |
 |---|---|---|---|---|
 | `lbnl-sdahu` | 12 | 58.3 / 66.7 | 50.0 / 58.3 | 75.0 / 83.3 |
 | `lbnl-fcu` | 12 | 50.0 / 58.3 | 25.0 / 33.3 | 66.7 / 75.0 |
-| `lbnl-ddahu` | 10 | 60.0 / 80.0 | 20.0 / 30.0 | 80.0 / 80.0 |
-| `lbnl-fpu` | 18 | 66.7 / 66.7 | 33.3 / 61.1 | 66.7 / 66.7 |
-| `lbnl-chiller` | 11 | 9.1 / 27.3 | 0.0 / 9.1 | 9.1 / 27.3 |
+| `lbnl-ddahu` | 11 | 54.5 / 72.7 | 27.3 / 36.4 | 81.8 / 81.8 |
+| `lbnl-fpu` | 20 | 60.0 / 70.0 | 30.0 / 55.0 | 60.0 / 70.0 |
+| `lbnl-chiller` | 14 | 7.1 / 35.7 | 0.0 / 7.1 | 7.1 / 28.6 |
 | `lbnl-boiler` | 9 | 33.3 / 44.4 | 0.0 / 11.1 | 33.3 / 66.7 |
-| **simulated, pooled** | **72** | **48.6 / 58.3** | **23.6 / 37.5** | **56.9 / 66.7** |
+| **simulated, pooled** | **78** | **44.9 / 59.0** | **23.1 / 35.9** | **53.8 / 66.7** |
 
 **Where the data helps and hurts the name.** Adding the data (`use_timeseries=True`) changed the
 top-1 result of 16 real-building points: it helped 11 and hurt 5. On the simulated sets it
-helped 6 and hurt none.
+helped 7 and hurt none.
 
 - **Helped:**
   - Room temperatures whose names never say "zone" or "room" (`..._Lecture_Theatre_3_Avg_Temp`,
@@ -253,8 +256,8 @@ helped 6 and hurt none.
     cannot place at all.
   - `lbnl-b59`'s `hp_hws_temp`, which the name alone reads as a supply-air temperature.
   - On the simulated sets, cooling valves the name read as heating valves (`CHWC_VLV_DM`),
-    unplaced FCU valves, a supply-air setpoint (`SA_TEMPSPT`) and a cold-deck temperature
-    (`CSA_TEMP`).
+    unplaced FCU valves, a supply-air setpoint (`SA_TEMPSPT`), a cold-deck setpoint
+    (`CSA_TEMPSPT`) and a cold-deck temperature (`CSA_TEMP`).
 - **Hurt:**
   - Weather-station points, twice: a correctly named outdoor temperature became `wetbulb_temp`,
     and an outdoor humidity became `supply_air_humidity` (`nuig-ahu101`, and `lbnl-b59`'s
@@ -314,8 +317,8 @@ record):
 #### 0.100: before and after (#102)
 
 The vocabulary additions and the weather-station guard, re-run on the same scripts and inputs.
-"Before" is 0.99.1 re-run today. Its figures match the baseline tables above, except where the
-catalog has gained points since 0.96: `lbnl-chiller` now has 14 points and `lbnl-fpu` 20.
+"Before" is 0.99.1 re-run today. Its figures match the baseline tables above; the simulated
+table is already on the 0.100 catalog (78 points).
 
 **Read the real-name rows as in-sample.** The 0.100 vocabulary was chosen from the 0.96 misses
 on these names, so the "excluding in-sample names" row is no longer out of sample.
@@ -329,14 +332,14 @@ no download).
 | real names, pooled (422), name + data | 83.9 / 89.1 | 95.3 / 96.9 |
 | real, "excluding in-sample names" (129), name only | 52.7 / 53.5 | 86.0 / 88.4 |
 | real, "excluding in-sample names" (129), name + data | 58.1 / 72.9 | 89.1 / 93.8 |
-| simulated LBNL sets (77), name only | 45.5 / 59.7 | 72.7 / 85.7 |
-| simulated LBNL sets (77), name + data | 53.2 / 66.2 | 77.9 / 85.7 |
+| simulated LBNL sets (78), name only | 44.9 / 59.0 | 71.8 / 85.9 |
+| simulated LBNL sets (78), name + data | 53.8 / 66.7 | 78.2 / 85.9 |
 | **held-out catalog names (223), name only (out of sample)** | **72.2 / 75.3** | **83.0 / 85.2** |
 | BTS anonymised (903), name + data, templates | 48.0 / 65.2 | 48.0 / 65.2 |
 | BTS Brick-class labels as names (upper bound), name only | 93.0 / 97.2 | 93.2 / 97.2 |
 | BTS Brick-class labels as names (upper bound), name + data | 95.2 / 99.9 | 95.5 / 99.9 |
 
-*The data-only rows do not change (38.9 / 54.7 real, 22.1 / 35.1 simulated): the vocabulary is
+*The data-only rows do not change (38.9 / 54.7 real, 23.1 / 35.9 simulated): the vocabulary is
 name-side.*
 
 Synthetic vendor-style names (`messy_names.py`; synthetic, not real-world naming):
@@ -365,7 +368,7 @@ Synthetic vendor-style names (`messy_names.py`; synthetic, not real-world naming
   VAV discharge temperatures `T_VAV_*`, whose names give no location) and hurts 2. Before, it
   helped 11 and hurt 5. The 2 losses are one setpoint named `temp_setpoint` in two `robod`
   rooms: the name now says `cool_sp`, but the data, which looks like a room temperature, carries
-  it to `space_temp`. The simulated sets: helped 4, hurt 0 (before: helped 6, hurt 0).
+  it to `space_temp`. The simulated sets: helped 5, hurt 0 (before: helped 7, hurt 0).
 - On `dash-space` names the data's top-1 moves by -0.1 point. Every other row rises or holds.
 
 #### BTS: anonymised names
@@ -457,7 +460,7 @@ the scores. **These names are synthetic, not real-world naming.**
 by default in `suggest_roles` and `review_unmapped` when a series is passed and no suggester is
 given, with a way to opt out. The 0.96 objection, that the data costs weather-station points, is
 answered by the 0.100 guard. With the extended vocabulary, the data adds top-1 on every real
-and simulated pool (real 94.3 → 95.3 %, simulated 72.7 → 77.9 %) and on all five synthetic
+and simulated pool (real 94.3 → 95.3 %, simulated 71.8 → 78.2 %) and on all five synthetic
 styles. It is what places an anonymised point at all (BTS: 0 → 48 %). The costs:
 
 - It changes those callers' output, including the BACnet review path, whenever they pass series.

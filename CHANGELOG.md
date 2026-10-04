@@ -6,6 +6,24 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.100.0] — Unreleased
 
+<!-- 0100-integration -->
+### Changed
+- **Dataset templates: `lbnl-ddahu` and `lbnl-sdahu` run `free_cooling_missed` (#101).** Both
+  templates now run it at the documented 60 °F high limit, reading each unit's own OA damper
+  command and mixed-air temperature. Hourly, `lbnl-ddahu` `DMPRStuck_OA_0` reads *warn* (14.5 %
+  of free-cooling hours, cause: damper not delivering), and its fault-free and `DMPRStuck_OA_100`
+  runs read *ok*. On `lbnl-sdahu`, `damper_stuck_010`, `damper_stuck_025` and
+  `onset_damper_stuck_025` read *fault* (49 %, 49 % and 30 %) and `damper_stuck_075` *warn* (13 %),
+  all with cause damper not delivering. The fault-free and `coi_leakage_010` runs read *warn*
+  (17.5 % and 18.3 %, economizer not commanded): 93 % of those hours fall below the unit's 33.8 °F
+  low-limit lockout, which holds the damper at its minimum by design, and the rule has no low
+  limit. The template comment records this. The lbnl-sdahu RCx report has 13 issues, up from 8.
+  `free_cooling_missed` is not a scored target, so `camber datasets score` and the gated
+  benchmarks do not move. The other four air-handler templates do not run it, and each comment
+  says why. `nuig-ahu101` is 100 % outdoor air with no mixing box. On `lbnl-b59`, `ornl-frp-ops`
+  and `ornl-frp-vav` the rooftop units trend no cooling-valve command, so the rule would decline.
+<!-- /0100-integration -->
+
 <!-- 0100-sensor -->
 ### Documentation
 - **Sensor health: the setpoint level as a grouping key is measured and rejected (#103).** The
@@ -33,14 +51,13 @@ All notable changes to CAMBER are documented here. The format follows
   says in one line which member named the cause. The executive summary's Issue column and the
   `cause` key of `RcxReport.to_dict()` issues follow the heading; each issue gains `cause_rule`,
   the rule of the finding that names it. See docs/RCX-REPORT.md, "Which cause heads an issue".
-  On the catalog run templates (15 datasets, default subsets, 92 issues) no heading changes:
-  only `irish-ahu` runs `free_cooling_missed`, and its one issue has no such member. With
-  `free_cooling_missed` added to the six air-handler templates that lack it, two of 81 issues
-  change: `lbnl-ddahu`
-  `DMPRStuck_OA_0` reads "Outdoor-air damper not modulating (stuck low)" (was "Outside air below
-  the ventilation minimum"), and `lbnl-sdahu` `damper_stuck_075` reads "Outdoor-air damper not
-  modulating (stuck part open)" (was "Economizer open above the high limit"). The RCx golden file
-  is unchanged: its synthetic site has no member with an equipment-level cause.
+  On the catalog run templates (15 datasets, default subsets, 98 issues) two headings change,
+  both through `free_cooling_missed`, which the `lbnl-ddahu` and `lbnl-sdahu` templates now run
+  (see *Dataset templates* below): `lbnl-ddahu` `DMPRStuck_OA_0` reads "Outdoor-air damper not
+  modulating (stuck low)" (was "Outside air below the ventilation minimum"), and `lbnl-sdahu`
+  `damper_stuck_075` reads "Outdoor-air damper not modulating (stuck part open)" (was "Economizer
+  open above the high limit"). No other heading changes. The RCx golden file is unchanged: its
+  synthetic site has no member with an equipment-level cause.
 
 ### Fixed
 - **Config runs resolve a store facility's time zone the same way as the read API (#104).**
@@ -164,8 +181,9 @@ All notable changes to CAMBER are documented here. The format follows
     The SDAHU supply-air sensor biases −2 / −4 °C fire as cooling leaks; this sensor confound is
     stated in every finding.
   - **No leak runs elsewhere.** The dual-duct archive has none.
-  - **Proposed gated keys, not added, for sign-off:** `drift.coil_leak_drift.recall` /
-    `precision` / `f1` 1.0 and `fpr` 0.0 on the SDAHU benchmark drift cases.
+  - **Not gated (maintainer decision).** The detector's results stay measured, opt-in records.
+    No `drift.coil_leak_drift` key is added to any benchmark baseline, and the LBNL benchmark
+    does not run the detector.
 <!-- /0100-leak-drift -->
 
 <!-- 0100-suggester -->

@@ -119,7 +119,12 @@ finding that names it. The executive summary uses the same heading. For example,
 whose outside air is below its minimum (`outdoor_air_fraction`, the root) while its damper is
 commanded open in mild weather and delivers 5 % outside air (the `free_cooling_missed` member) is
 headed "Outdoor-air damper not modulating (stuck low)", and its action stays "Restore minimum
-outside air". The walk-down's equipment item still follows the root finding.
+outside air". On the catalog run templates two issues are re-headed this way. Since 0.100 the
+`lbnl-ddahu` and `lbnl-sdahu` templates run `free_cooling_missed`. `lbnl-ddahu` `DMPRStuck_OA_0`
+now reads "Outdoor-air damper not modulating (stuck low)". `lbnl-sdahu` `damper_stuck_075` reads
+"Outdoor-air damper not modulating (stuck part open)", where its root, `economizer_high_limit`,
+reads "Economizer open above the high limit". The walk-down's equipment item still follows the
+root finding.
 
 ## Verify on site
 

@@ -380,11 +380,11 @@ the ±4 °C room-sensor biases.
 its TPR interval spans 0.21-1.00. The FCU leaks are large, and the point-in-time rule also
 catches them. The small leak that the drift detector exists for appears once in the open data.
 
-Proposed gated keys, **not added**, for the maintainer's sign-off: `drift.coil_leak_drift.recall`
-1.0, `.precision` 1.0, `.f1` 1.0 and `.fpr` 0.0. These would come from the benchmark's SDAHU
-drift section with `positive: "coi_leakage"` and `cross_negative: ("damper_stuck",)`: 4 runs
-scored and 2 declined, with no existing key moving. The FCU leak runs are not in the default fetch,
-so they would be an opt-in record (like the FPU subset), not a gate.
+**Not gated (maintainer decision, 0.100).** The gated keys that were proposed,
+`drift.coil_leak_drift.recall` 1.0, `.precision` 1.0, `.f1` 1.0 and `.fpr` 0.0 from the benchmark's
+SDAHU drift section, were declined. The results above are measured, opt-in records, re-run with
+`examples/lbnl_fdd/leak_drift.py`. No benchmark baseline carries a `coil_leak_drift` key, and the
+LBNL benchmark does not run the detector.
 <!-- 0100-leak-drift (#100) end -->
 
 **`reheat_capacity_shortfall` on `lbnl-b59` (#44).** Of the 35 underfloor terminals with a heating
