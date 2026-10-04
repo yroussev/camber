@@ -117,7 +117,11 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
     record it in `valve_signal`, and caveat a demand ≥ 90 % while the position reads ≤ 5 % on a
     quarter of the full-demand samples as a stuck or failed valve. On fan-powered boxes
     `fan_heat_f` (°F, or `"auto"`: the median closed-valve lift, clipped to 0–8 °F) raises both
-    valve-vs-discharge bounds by the box fan's own heat.
+    valve-vs-discharge bounds by the box fan's own heat. `box_type` (0.100, #99: `"single_duct"`,
+    `"parallel"`, `"series"`) sets the caps on that estimate. A series box's fan always runs and
+    mixes in plenum air, so its no-rise allowance is capped at 10 °F, while the big-rise allowance
+    stays at 8 °F. The estimate is learned from the closed-valve samples, and a higher cap there
+    would absorb a passing valve's heat.
   - *Not overcooling.* `overcooling_severity` excludes morning recovery (`WARMUP`, else the first
     `recovery_hours` of each occupied block) and fan-off free-floating, and reports a space below
     setpoint with its reheat ≥ `reheat_saturated_pct` open as a **heating shortfall**. The

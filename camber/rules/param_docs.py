@@ -879,9 +879,34 @@ PARAM_DOCS["reheat_penalty"]["fan_heat_f"] = _P(
     '10 °F big rise with the valve shut). A number raises both by that many °F. "auto" uses the '
     "median closed-valve, airflow-bearing lift over the entering air (>= 12 samples, fan-on only "
     "when SUPPLY_FAN_STATUS is mapped), clipped to 0-8 °F; without the entering air or enough "
-    "samples it adds nothing. The finding reports the value used as fan_heat_f.",
+    "samples it adds nothing. The finding reports the value used as fan_heat_f. box_type sets "
+    'the "auto" caps per box type (0.100, #99).',
 )
 # ==== end 098-terminal-reheat ====
+# ==== begin 0100-terminal (#99) ====
+PARAM_DOCS["reheat_penalty"]["box_type"] = _P(
+    "choice",
+    "CAMBER judgment (0.100, #99), checked in-sample on the labelled LBNL fan-powered runs. A "
+    "single-duct box has no fan, so its closed-valve lift is duct gains and sensor error (1-3 °F). "
+    "A parallel box runs its fan in heating only, so its closed-valve lift was 0.0 °F on the "
+    "fault-free run. A series box's fan always runs and mixes in plenum air, so its lift was "
+    "13.7 °F. On the series runs, a 10 °F no-rise cap puts the 15 °F bound between the stuck "
+    "valves' rise (12.9 °F at most) and the working full-valve rise (17.6 °F at least). Raising "
+    "the big-rise cap past 8 °F lost the passing-valve caveat on the 50 % and 80 % leaks.",
+    "Declare it from the box schedule or the submittals: series fan-powered (fan runs whenever "
+    "the zone is occupied), parallel fan-powered (fan runs in heating), or single-duct (no "
+    'fan). It only matters with fan_heat_f "auto". On a site with several box types, use a '
+    "separate run for each type.",
+    ("single_duct", "parallel", "series"),
+    'None (default) caps the "auto" estimate at 8 °F on both bounds, as before 0.100. '
+    '"single_duct" caps it at 3 °F and "parallel" at 8 °F, on both bounds. "series" caps the '
+    "no-rise allowance (valve open) at 10 °F and keeps the big-rise allowance (valve shut) at "
+    "8 °F: the estimate is learned from the closed-valve samples, so a higher cap there would "
+    "absorb a passing valve's heat. A numeric fan_heat_f is used as given. With box_type set, "
+    "the finding also reports box_type, fan_lift_f (the uncapped estimate) and "
+    "fan_heat_closed_f.",
+)
+# ==== end 0100-terminal ====
 PARAM_DOCS["overcooling_min_flow"] = {**_SCHEDULE}
 
 PARAM_DOCS["overcooling_severity"] = {

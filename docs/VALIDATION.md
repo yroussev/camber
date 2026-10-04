@@ -237,6 +237,26 @@ Caveats, stated because the intervals are wide:
   (`camber.rules.cohort`).
 <!-- 0.98 (#85 items 1-2, #89 item 3, 098-terminal-stuck) end -->
 
+<!-- 0100-terminal (#99) begin -->
+### Fan-powered box fan heat by box type (`lbnl-fpu`, 0.100)
+
+`reheat_penalty(fan_heat_f="auto")` learns a box's closed-valve lift over the entering primary air.
+Over the occupied, airflow-bearing hours with the valve shut, the median lift on the fault-free
+runs is **0.0 °F on the parallel box** (its fan runs in heating only) and **13.7 °F on the series
+box** (its fan always runs and pulls in plenum air). Until 0.100 the estimate was clipped at 8 °F
+for every box. `box_type="series"` caps the open-valve (no-rise) allowance at 10 °F and keeps the
+closed-valve (big-rise) allowance at 8 °F. All 62 runs were read hourly, through the measured
+position and through the demand alone. Every verdict (severity and consistency) is the same as with
+the 8 °F clip. On the SFPU runs, the stuck valves' full-demand rise is at most 12.9 °F (stuck at 20
+%), against the old 13 °F bound and the new 15 °F bound. The working full-valve rise is at least
+17.6 °F. A symmetric higher cap does harm: at 9-11 °F the big-rise check loses the passing-valve
+caveat on the 50 % and 80 % leaks and on the valves stuck at 80 % and 100 % (demand only), because
+the lift is learned from the same closed-valve samples the check judges. `box_type="parallel"`
+matches the default on every PFPU run. The caps were chosen on these labelled runs, so this is an
+in-sample check, not a rate. The `drift.vav_*` and `drift.sfpu.*` opt-in numbers come from
+`vav_reheat_valve_drift`, not this rule, and are unchanged.
+<!-- 0100-terminal (#99) end -->
+
 <!-- 0.93 rules1 (#42, #43, #44) -->
 ### 0.93 air-side checks on real, unlabelled data (setback, leaking valve, reheat capacity)
 
