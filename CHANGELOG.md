@@ -4,6 +4,54 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.100.0] — Unreleased
+
+<!-- 0100-ddahu -->
+### Added
+- **`g36_afdd` FC6 takes a seasonal minimum OA (#97).** A new `min_oa_pct_by_month` parameter
+  (`{month: pct}`, the override `outdoor_air_fraction` already takes) makes FC6 judge each sample
+  against its own month's minimum. It needs `min_oa_pct` for the other months, and the FC6
+  caveat names the seasonal minimum. The default is `None`, so default outputs are unchanged.
+  Param docs and `docs/THRESHOLDS.md` cover it.
+- **The `lbnl-ddahu` run template runs `g36_afdd` (#97).** FC6 is judged against the unit's
+  documented seasonal minimum: 31.8 %, and 11.9 % in June to August (the values
+  `outdoor_air_fraction` uses), with a `basis` map. Hourly, FC6 reads 0.13 % on the fault-free
+  run (`ok`), 1.96 % on `DMPRStuck_OA_0` and 0.13 % on `DMPRStuck_OA_100`. No verdict depends on
+  FC6. FC6 is not a stuck-closed detector on this unit. Since #95 its applicable hours are almost
+  all in June to August, the learned OA damper minimum being the 28 % summer position, and
+  against an 11.9 % minimum a damper stuck shut is off by less than G36's 30-point tolerance. A
+  fixed 31.8 % would flag `DMPRStuck_OA_0` (32.1 %), but only by judging summer hours against
+  the winter minimum. The #94 figures for a single minimum (fault-free FC6 20.5 % at 31.8, 47.1 %
+  at 11.9) predate #95. On the current code both single minima read the fault-free run `ok`.
+
+### Changed
+- **`lbnl-ddahu` maps its cold-deck supply-air setpoint (#98).** `CSA_TEMPSPT` (the
+  publisher's Brick model types it as a supply-air temperature setpoint of the cold deck; 55.0 °F
+  in every row) now maps to `supply_air_temp_sp`, next to the cold-deck `CSA_TEMP`. Both roles are
+  the cold deck. The hot deck's own 90 °F setpoint is not mapped, and the mapping, template and
+  cross-check caveats say so. **The dataset content hash changes, so stores re-ingest
+  `lbnl-ddahu` once.**
+  - `g36_afdd` now evaluates FC9, FC11 and FC13 on the unit. `DMPRStuck_OA_0` adds FC9 (20.7 %)
+    and FC11 (12.2 %) to the FC8, FC10 and FC12 it already flagged. FC13 reads 0 % on every run.
+    The fault-free run's FC9 hits fall on its 4 free-cooling hours, under the 24-hour floor, so
+    it stays `ok`. No run's severity changes.
+  - **The open-fdd cross-check was re-run** (`examples/openfdd_crosscheck/results/`). Only
+    `lbnl-ddahu` verdicts change. Every engine's any-FC result per run is unchanged. The open-fdd
+    engines now evaluate FC7, FC9, FC11 and FC13 there: FC11 fires on `DMPRStuck_OA_0` in all four
+    open-fdd runs, and FC13 in the SQL engine and the pandas engine at its own defaults. In month
+    windows, the pandas engine at G36 tolerances goes from TPR 0.58 with FPR 5/12 to TPR 0.62 with
+    FPR 6/12, because FC9 fires on one fault-free month. `docs/ECOSYSTEM.md` has the before/after.
+  - **Workbook `air-sat-reset`.** `supply_air_reset` now reads the flat cold-deck setpoint on
+    `DDAHU__fault_free`: "not reset (setpoint flat at ~55F)", where it read "no reset (SAT pinned
+    low at ~55 F regardless of OAT)" from the supply air before. The severity (`warn`), the
+    direction (`flat`) and the 66 % below the G36 target are unchanged. The instructor key, the
+    page, the exercise config comment and the stand-in follow, and a new check pins
+    `sp_range_f` 0.0.
+- **Unchanged.** No gated benchmark key moves: the synthetic, fleet, LBNL, BDG2 and BDG2
+  savings benchmarks all hold. The LBNL benchmark's DDAHU family scores `outdoor_air_fraction`
+  only, which does not read the setpoint.
+<!-- /0100-ddahu -->
+
 ## [0.99.1] — 2026-10-03
 
 **0.99.1 patch: open-fdd-ingested facilities report their time zone (#96).** The synthetic, fleet,

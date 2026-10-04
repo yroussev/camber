@@ -3,7 +3,7 @@
  "window": "month",
  "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
  "versions": {
-  "camber": "0.98.0 at commit b5c4b91 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
+  "camber": "0.99.1 at commit 5b0bc10 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
   "role_map": "1",
   "profiles": "2",
   "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
@@ -33,14 +33,21 @@
    "id": "lbnl-ddahu",
    "licence": "CC-BY-4.0",
    "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
-   "content_hash": "0d74f6bb7f4c04b245bb96ec8c1daec58633f93f1cf6fc38155bd5ee62c80c08",
+   "content_hash": "6e51fda2923093fb83329416787f0a2131b7c73e38a2c6c0145792138f7672e4",
    "subset": "default",
    "n_labelled": 3,
    "n_fault_free": 1,
    "fault_types": {
     "damper": 2
    },
-   "camber_template_params": {}
+   "camber_template_params": {
+    "min_oa_pct": 31.8,
+    "min_oa_pct_by_month": {
+     "6": 11.9,
+     "7": 11.9,
+     "8": 11.9
+    }
+   }
   }
  ],
  "applied_mappings": {
@@ -1015,24 +1022,23 @@
       },
       "FC6": {
        "tp": 15,
-       "fn": 120,
+       "fn": 126,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1111,
+       "tn": 15,
+       "tpr": 0.1064,
        "tpr_ci": [
-        0.0685,
-        0.1752
+        0.0655,
+        0.1681
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.2039
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 15,
-         "evaluated on fewer than 24 h": 1,
-         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 36
+         "not applicable: its operating states never occurred": 39,
+         "evaluated on fewer than 24 h": 4
         }
        }
       },
@@ -1048,7 +1054,8 @@
        "not_evaluated": {
         "counts_by_reason": {
          "omitted: no heating coil": 163,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 35,
+         "evaluated on fewer than 24 h": 1
         }
        }
       },
@@ -1075,14 +1082,14 @@
        }
       },
       "FC9": {
-       "tp": 0,
+       "tp": 1,
        "fn": 86,
        "fp": 0,
        "tn": 9,
-       "tpr": 0.0,
+       "tpr": 0.0115,
        "tpr_ci": [
-        0.0,
-        0.0428
+        0.002,
+        0.0623
        ],
        "fpr": 0.0,
        "fpr_ci": [
@@ -1091,9 +1098,8 @@
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "evaluated on fewer than 24 h": 48,
-         "not applicable: its operating states never occurred": 20,
-         "declined: missing input(s): SATSP": 36
+         "evaluated on fewer than 24 h": 52,
+         "not applicable: its operating states never occurred": 51
         }
        }
       },
@@ -1136,9 +1142,8 @@
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 53,
-         "evaluated on fewer than 24 h": 60,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 78,
+         "evaluated on fewer than 24 h": 71
         }
        }
       },
@@ -1166,24 +1171,23 @@
       },
       "FC13": {
        "tp": 36,
-       "fn": 100,
+       "fn": 107,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.2647,
+       "tn": 15,
+       "tpr": 0.2517,
        "tpr_ci": [
-        0.1978,
-        0.3446
+        0.1877,
+        0.3287
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.2039
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 12,
-         "evaluated on fewer than 24 h": 3,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 34,
+         "evaluated on fewer than 24 h": 7
         }
        }
       },
@@ -1397,17 +1401,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: heating-valve": 163,
-         "missing roles: discharge-air-temp-sp": 36
+         "missing roles: heating-valve": 163
         }
        }
       },
@@ -1431,24 +1440,22 @@
        }
       },
       "FC9": {
-       "tp": 8,
-       "fn": 143,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.053,
+       "tp": 10,
+       "fn": 165,
+       "fp": 1,
+       "tn": 23,
+       "tpr": 0.0571,
        "tpr_ci": [
-        0.0271,
-        0.1011
+        0.0313,
+        0.102
        ],
-       "fpr": 0.0,
+       "fpr": 0.0417,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.0074,
+        0.2024
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -1471,24 +1478,22 @@
        }
       },
       "FC11": {
-       "tp": 14,
-       "fn": 137,
+       "tp": 17,
+       "fn": 158,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.0927,
+       "tn": 24,
+       "tpr": 0.0971,
        "tpr_ci": [
-        0.056,
-        0.1496
+        0.0615,
+        0.1501
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -1512,23 +1517,21 @@
       },
       "FC13": {
        "tp": 6,
-       "fn": 145,
+       "fn": 169,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.0397,
+       "tn": 24,
+       "tpr": 0.0343,
        "tpr_ci": [
-        0.0183,
-        0.084
+        0.0158,
+        0.0728
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -1569,30 +1572,30 @@
       }
      },
      "overall": {
-      "tp": 87,
-      "fn": 88,
-      "fp": 5,
-      "tn": 19,
-      "tpr": 0.4971,
+      "tp": 88,
+      "fn": 87,
+      "fp": 6,
+      "tn": 18,
+      "tpr": 0.5029,
       "tpr_ci": [
-       0.4239,
-       0.5705
+       0.4295,
+       0.5761
       ],
-      "fpr": 0.2083,
+      "fpr": 0.25,
       "fpr_ci": [
-       0.0924,
-       0.4047
+       0.12,
+       0.449
       ],
       "not_evaluated": 0
      },
      "by_fault_type": {
       "damper": {
-       "tp": 40,
-       "fn": 27,
-       "tpr": 0.597,
+       "tp": 41,
+       "fn": 26,
+       "tpr": 0.6119,
        "tpr_ci": [
-        0.4774,
-        0.7061
+        0.4922,
+        0.7195
        ]
       },
       "sensor_bias": {
@@ -1738,17 +1741,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: heating-valve": 163,
-         "missing roles: discharge-air-temp-sp": 36
+         "missing roles: heating-valve": 163
         }
        }
       },
@@ -1772,24 +1780,22 @@
        }
       },
       "FC9": {
-       "tp": 21,
-       "fn": 130,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.1391,
+       "tp": 23,
+       "fn": 152,
+       "fp": 1,
+       "tn": 23,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0928,
-        0.2033
+        0.0892,
+        0.1895
        ],
-       "fpr": 0.0,
+       "fpr": 0.0417,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.0074,
+        0.2024
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -1812,24 +1818,22 @@
        }
       },
       "FC11": {
-       "tp": 19,
-       "fn": 132,
+       "tp": 23,
+       "fn": 152,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1258,
+       "tn": 24,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0821,
-        0.1882
+        0.0892,
+        0.1895
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -1852,24 +1856,22 @@
        }
       },
       "FC13": {
-       "tp": 13,
-       "fn": 138,
+       "tp": 18,
+       "fn": 157,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.0861,
+       "tn": 24,
+       "tpr": 0.1029,
        "tpr_ci": [
-        0.051,
-        0.1417
+        0.0661,
+        0.1567
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -2079,17 +2081,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: htg_valve_pct": 163,
-         "missing roles: sat_sp": 36
+         "missing roles: htg_valve_pct": 163
         }
        }
       },
@@ -2113,24 +2120,22 @@
        }
       },
       "FC9": {
-       "tp": 21,
-       "fn": 130,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.1391,
+       "tp": 23,
+       "fn": 152,
+       "fp": 1,
+       "tn": 23,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0928,
-        0.2033
+        0.0892,
+        0.1895
        ],
-       "fpr": 0.0,
+       "fpr": 0.0417,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.0074,
+        0.2024
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -2153,24 +2158,22 @@
        }
       },
       "FC11": {
-       "tp": 19,
-       "fn": 132,
+       "tp": 23,
+       "fn": 152,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1258,
+       "tn": 24,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0821,
-        0.1882
+        0.0892,
+        0.1895
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -2193,24 +2196,22 @@
        }
       },
       "FC13": {
-       "tp": 4,
-       "fn": 147,
+       "tp": 9,
+       "fn": 166,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.0265,
+       "tn": 24,
+       "tpr": 0.0514,
        "tpr_ci": [
-        0.0103,
-        0.0661
+        0.0273,
+        0.0948
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -2422,17 +2423,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: htg_valve_pct": 163,
-         "missing roles: sat_sp": 36
+         "missing roles: htg_valve_pct": 163
         }
        }
       },
@@ -2456,24 +2462,22 @@
        }
       },
       "FC9": {
-       "tp": 21,
-       "fn": 130,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.1391,
+       "tp": 23,
+       "fn": 152,
+       "fp": 1,
+       "tn": 23,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0928,
-        0.2033
+        0.0892,
+        0.1895
        ],
-       "fpr": 0.0,
+       "fpr": 0.0417,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.0074,
+        0.2024
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -2496,24 +2500,22 @@
        }
       },
       "FC11": {
-       "tp": 19,
-       "fn": 132,
+       "tp": 23,
+       "fn": 152,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1258,
+       "tn": 24,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0821,
-        0.1882
+        0.0892,
+        0.1895
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -2536,24 +2538,22 @@
        }
       },
       "FC13": {
-       "tp": 4,
-       "fn": 147,
+       "tp": 9,
+       "fn": 166,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.0265,
+       "tn": 24,
+       "tpr": 0.0514,
        "tpr_ci": [
-        0.0103,
-        0.0661
+        0.0273,
+        0.0948
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -4405,16 +4405,23 @@
       },
       "FC6": {
        "tp": 0,
-       "fn": 0,
+       "fn": 6,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 3,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3903
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.5615
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 36
+         "not applicable: its operating states never occurred": 24,
+         "evaluated on fewer than 24 h": 3
         }
        }
       },
@@ -4429,7 +4436,8 @@
        "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 35,
+         "evaluated on fewer than 24 h": 1
         }
        }
       },
@@ -4453,17 +4461,21 @@
        }
       },
       "FC9": {
-       "tp": 0,
+       "tp": 1,
        "fn": 0,
        "fp": 0,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.2065,
+        1.0
+       ],
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "evaluated on fewer than 24 h": 4,
+         "not applicable: its operating states never occurred": 31
         }
        }
       },
@@ -4494,7 +4506,8 @@
        "fpr_ci": null,
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 25,
+         "evaluated on fewer than 24 h": 11
         }
        }
       },
@@ -4522,16 +4535,23 @@
       },
       "FC13": {
        "tp": 0,
-       "fn": 0,
+       "fn": 7,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 3,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3543
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.5615
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 22,
+         "evaluated on fewer than 24 h": 4
         }
        }
       },
@@ -4705,17 +4725,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -4738,18 +4762,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 2,
+       "fn": 22,
+       "fp": 1,
+       "tn": 11,
+       "tpr": 0.0833,
+       "tpr_ci": [
+        0.0232,
+        0.2585
+       ],
+       "fpr": 0.0833,
+       "fpr_ci": [
+        0.0149,
+        0.3539
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -4772,18 +4800,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 3,
+       "fn": 21,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.125,
+       "tpr_ci": [
+        0.0434,
+        0.31
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -4807,17 +4839,21 @@
       },
       "FC13": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -4852,30 +4888,30 @@
       }
      },
      "overall": {
-      "tp": 14,
-      "fn": 10,
-      "fp": 5,
-      "tn": 7,
-      "tpr": 0.5833,
+      "tp": 15,
+      "fn": 9,
+      "fp": 6,
+      "tn": 6,
+      "tpr": 0.625,
       "tpr_ci": [
-       0.3883,
-       0.7553
+       0.4271,
+       0.7884
       ],
-      "fpr": 0.4167,
+      "fpr": 0.5,
       "fpr_ci": [
-       0.1933,
-       0.6805
+       0.2538,
+       0.7462
       ],
       "not_evaluated": 0
      },
      "by_fault_type": {
       "damper": {
-       "tp": 14,
-       "fn": 10,
-       "tpr": 0.5833,
+       "tp": 15,
+       "fn": 9,
+       "tpr": 0.625,
        "tpr_ci": [
-        0.3883,
-        0.7553
+        0.4271,
+        0.7884
        ]
       }
      }
@@ -4990,17 +5026,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -5023,18 +5063,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 2,
+       "fn": 22,
+       "fp": 1,
+       "tn": 11,
+       "tpr": 0.0833,
+       "tpr_ci": [
+        0.0232,
+        0.2585
+       ],
+       "fpr": 0.0833,
+       "fpr_ci": [
+        0.0149,
+        0.3539
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -5057,18 +5101,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 4,
+       "fn": 20,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.1667,
+       "tpr_ci": [
+        0.0668,
+        0.3585
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -5091,18 +5139,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 5,
+       "fn": 19,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -5275,17 +5327,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -5308,18 +5364,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 2,
+       "fn": 22,
+       "fp": 1,
+       "tn": 11,
+       "tpr": 0.0833,
+       "tpr_ci": [
+        0.0232,
+        0.2585
+       ],
+       "fpr": 0.0833,
+       "fpr_ci": [
+        0.0149,
+        0.3539
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -5342,18 +5402,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 4,
+       "fn": 20,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.1667,
+       "tpr_ci": [
+        0.0668,
+        0.3585
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -5376,18 +5440,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 5,
+       "fn": 19,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -5568,17 +5636,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -5601,18 +5673,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 2,
+       "fn": 22,
+       "fp": 1,
+       "tn": 11,
+       "tpr": 0.0833,
+       "tpr_ci": [
+        0.0232,
+        0.2585
+       ],
+       "fpr": 0.0833,
+       "fpr_ci": [
+        0.0149,
+        0.3539
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -5635,18 +5711,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 4,
+       "fn": 20,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.1667,
+       "tpr_ci": [
+        0.0668,
+        0.3585
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -5669,18 +5749,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 5,
+       "fn": 19,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -5851,23 +5935,22 @@
       },
       "FC6": {
        "tp": 15,
-       "fn": 121,
+       "fn": 129,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1103,
+       "tn": 16,
+       "tpr": 0.1042,
        "tpr_ci": [
-        0.068,
-        0.174
+        0.0641,
+        0.1648
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.1936
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 15,
-         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 36
+         "not applicable: its operating states never occurred": 39
         }
        }
       },
@@ -5875,15 +5958,18 @@
        "tp": 0,
        "fn": 0,
        "fp": 0,
-       "tn": 0,
+       "tn": 1,
        "tpr": null,
        "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "counts_by_reason": {
          "omitted: no heating coil": 163,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 35
         }
        }
       },
@@ -5909,24 +5995,23 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 132,
+       "tp": 1,
+       "fn": 135,
        "fp": 0,
-       "tn": 11,
-       "tpr": 0.0,
+       "tn": 12,
+       "tpr": 0.0074,
        "tpr_ci": [
-        0.0,
-        0.0283
+        0.0013,
+        0.0405
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2588
+        0.2425
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 20,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 51
         }
        }
       },
@@ -5953,23 +6038,22 @@
       },
       "FC11": {
        "tp": 14,
-       "fn": 86,
+       "fn": 95,
        "fp": 0,
-       "tn": 10,
-       "tpr": 0.14,
+       "tn": 12,
+       "tpr": 0.1284,
        "tpr_ci": [
-        0.0853,
-        0.2214
+        0.0781,
+        0.2041
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2775
+        0.2425
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 53,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 78
         }
        }
       },
@@ -5996,23 +6080,22 @@
       },
       "FC13": {
        "tp": 36,
-       "fn": 103,
+       "fn": 114,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.259,
+       "tn": 15,
+       "tpr": 0.24,
        "tpr_ci": [
-        0.1933,
-        0.3376
+        0.1787,
+        0.3143
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.2039
        ],
        "not_evaluated": {
         "counts_by_reason": {
-         "not applicable: its operating states never occurred": 12,
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 34
         }
        }
       },
@@ -6225,17 +6308,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: heating-valve": 163,
-         "missing roles: discharge-air-temp-sp": 36
+         "missing roles: heating-valve": 163
         }
        }
       },
@@ -6259,24 +6347,22 @@
        }
       },
       "FC9": {
-       "tp": 10,
-       "fn": 141,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.0662,
+       "tp": 14,
+       "fn": 161,
+       "fp": 2,
+       "tn": 22,
+       "tpr": 0.08,
        "tpr_ci": [
-        0.0364,
-        0.1176
+        0.0482,
+        0.1298
        ],
-       "fpr": 0.0,
+       "fpr": 0.0833,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.0232,
+        0.2585
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -6299,24 +6385,22 @@
        }
       },
       "FC11": {
-       "tp": 18,
-       "fn": 133,
+       "tp": 23,
+       "fn": 152,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1192,
+       "tn": 24,
+       "tpr": 0.1314,
        "tpr_ci": [
-        0.0767,
-        0.1806
+        0.0892,
+        0.1895
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -6339,24 +6423,22 @@
        }
       },
       "FC13": {
-       "tp": 146,
-       "fn": 5,
+       "tp": 151,
+       "fn": 24,
        "fp": 12,
-       "tn": 0,
-       "tpr": 0.9669,
+       "tn": 12,
+       "tpr": 0.8629,
        "tpr_ci": [
-        0.9248,
-        0.9858
+        0.804,
+        0.9061
        ],
-       "fpr": 1.0,
+       "fpr": 0.5,
        "fpr_ci": [
-        0.7575,
-        1.0
+        0.3143,
+        0.6857
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -6566,17 +6648,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: heating-valve": 163,
-         "missing roles: discharge-air-temp-sp": 36
+         "missing roles: heating-valve": 163
         }
        }
       },
@@ -6600,24 +6687,22 @@
        }
       },
       "FC9": {
-       "tp": 109,
-       "fn": 42,
-       "fp": 8,
-       "tn": 4,
-       "tpr": 0.7219,
+       "tp": 119,
+       "fn": 56,
+       "fp": 13,
+       "tn": 11,
+       "tpr": 0.68,
        "tpr_ci": [
-        0.6456,
-        0.7871
+        0.6077,
+        0.7446
        ],
-       "fpr": 0.6667,
+       "fpr": 0.5417,
        "fpr_ci": [
-        0.3906,
-        0.8619
+        0.3507,
+        0.7211
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -6640,24 +6725,22 @@
        }
       },
       "FC11": {
-       "tp": 32,
-       "fn": 119,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.2119,
+       "tp": 44,
+       "fn": 131,
+       "fp": 6,
+       "tn": 18,
+       "tpr": 0.2514,
        "tpr_ci": [
-        0.1543,
-        0.2838
+        0.193,
+        0.3206
        ],
-       "fpr": 0.0,
+       "fpr": 0.25,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.12,
+        0.449
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -6680,24 +6763,22 @@
        }
       },
       "FC13": {
-       "tp": 148,
-       "fn": 3,
-       "fp": 12,
-       "tn": 0,
-       "tpr": 0.9801,
+       "tp": 160,
+       "fn": 15,
+       "fp": 15,
+       "tn": 9,
+       "tpr": 0.9143,
        "tpr_ci": [
-        0.9432,
-        0.9932
+        0.8634,
+        0.9474
        ],
-       "fpr": 1.0,
+       "fpr": 0.625,
        "fpr_ci": [
-        0.7575,
-        1.0
+        0.4271,
+        0.7884
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -6738,30 +6819,30 @@
       }
      },
      "overall": {
-      "tp": 172,
-      "fn": 3,
-      "fp": 22,
-      "tn": 2,
-      "tpr": 0.9829,
+      "tp": 175,
+      "fn": 0,
+      "fp": 23,
+      "tn": 1,
+      "tpr": 1.0,
       "tpr_ci": [
-       0.9508,
-       0.9942
+       0.9785,
+       1.0
       ],
-      "fpr": 0.9167,
+      "fpr": 0.9583,
       "fpr_ci": [
-       0.7415,
-       0.9768
+       0.7976,
+       0.9926
       ],
       "not_evaluated": 0
      },
      "by_fault_type": {
       "damper": {
-       "tp": 64,
-       "fn": 3,
-       "tpr": 0.9552,
+       "tp": 67,
+       "fn": 0,
+       "tpr": 1.0,
        "tpr_ci": [
-        0.8764,
-        0.9847
+        0.9458,
+        1.0
        ]
       },
       "sensor_bias": {
@@ -6907,17 +6988,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: htg_valve_pct": 163,
-         "missing roles: sat_sp": 36
+         "missing roles: htg_valve_pct": 163
         }
        }
       },
@@ -6941,24 +7027,22 @@
        }
       },
       "FC9": {
-       "tp": 109,
-       "fn": 42,
-       "fp": 8,
-       "tn": 4,
-       "tpr": 0.7219,
+       "tp": 119,
+       "fn": 56,
+       "fp": 13,
+       "tn": 11,
+       "tpr": 0.68,
        "tpr_ci": [
-        0.6456,
-        0.7871
+        0.6077,
+        0.7446
        ],
-       "fpr": 0.6667,
+       "fpr": 0.5417,
        "fpr_ci": [
-        0.3906,
-        0.8619
+        0.3507,
+        0.7211
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -6981,24 +7065,22 @@
        }
       },
       "FC11": {
-       "tp": 32,
-       "fn": 119,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.2119,
+       "tp": 44,
+       "fn": 131,
+       "fp": 6,
+       "tn": 18,
+       "tpr": 0.2514,
        "tpr_ci": [
-        0.1543,
-        0.2838
+        0.193,
+        0.3206
        ],
-       "fpr": 0.0,
+       "fpr": 0.25,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.12,
+        0.449
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -7021,24 +7103,22 @@
        }
       },
       "FC13": {
-       "tp": 20,
-       "fn": 131,
+       "tp": 27,
+       "fn": 148,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1325,
+       "tn": 24,
+       "tpr": 0.1543,
        "tpr_ci": [
-        0.0874,
-        0.1957
+        0.1083,
+        0.2152
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -7250,17 +7330,22 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "missing roles: htg_valve_pct": 163,
-         "missing roles: sat_sp": 36
+         "missing roles: htg_valve_pct": 163
         }
        }
       },
@@ -7284,24 +7369,22 @@
        }
       },
       "FC9": {
-       "tp": 109,
-       "fn": 42,
-       "fp": 8,
-       "tn": 4,
-       "tpr": 0.7219,
+       "tp": 119,
+       "fn": 56,
+       "fp": 13,
+       "tn": 11,
+       "tpr": 0.68,
        "tpr_ci": [
-        0.6456,
-        0.7871
+        0.6077,
+        0.7446
        ],
-       "fpr": 0.6667,
+       "fpr": 0.5417,
        "fpr_ci": [
-        0.3906,
-        0.8619
+        0.3507,
+        0.7211
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -7324,24 +7407,22 @@
        }
       },
       "FC11": {
-       "tp": 32,
-       "fn": 119,
-       "fp": 0,
-       "tn": 12,
-       "tpr": 0.2119,
+       "tp": 44,
+       "fn": 131,
+       "fp": 6,
+       "tn": 18,
+       "tpr": 0.2514,
        "tpr_ci": [
-        0.1543,
-        0.2838
+        0.193,
+        0.3206
        ],
-       "fpr": 0.0,
+       "fpr": 0.25,
        "fpr_ci": [
-        0.0,
-        0.2425
+        0.12,
+        0.449
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -7364,24 +7445,22 @@
        }
       },
       "FC13": {
-       "tp": 20,
-       "fn": 131,
+       "tp": 27,
+       "fn": 148,
        "fp": 0,
-       "tn": 12,
-       "tpr": 0.1325,
+       "tn": 24,
+       "tpr": 0.1543,
        "tpr_ci": [
-        0.0874,
-        0.1957
+        0.1083,
+        0.2152
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.2425
+        0.138
        ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -9228,16 +9307,22 @@
       },
       "FC6": {
        "tp": 0,
-       "fn": 0,
+       "fn": 8,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 4,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.3244
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.4899
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT": 36
+         "not applicable: its operating states never occurred": 24
         }
        }
       },
@@ -9245,14 +9330,17 @@
        "tp": 0,
        "fn": 0,
        "fp": 0,
-       "tn": 0,
+       "tn": 1,
        "tpr": null,
        "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 35
         }
        }
       },
@@ -9278,17 +9366,23 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 3,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.25,
+       "tpr_ci": [
+        0.0456,
+        0.6994
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 31
         }
        }
       },
@@ -9315,16 +9409,22 @@
       },
       "FC11": {
        "tp": 0,
-       "fn": 0,
+       "fn": 9,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 2,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2992
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.6576
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 25
         }
        }
       },
@@ -9351,16 +9451,22 @@
       },
       "FC13": {
        "tp": 0,
-       "fn": 0,
+       "fn": 11,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 3,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.2588
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.5615
+       ],
        "not_evaluated": {
         "counts_by_reason": {
-         "declined: missing input(s): SATSP": 36
+         "not applicable: its operating states never occurred": 22
         }
        }
       },
@@ -9534,17 +9640,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -9567,18 +9677,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 4,
+       "fn": 20,
+       "fp": 2,
+       "tn": 10,
+       "tpr": 0.1667,
+       "tpr_ci": [
+        0.0668,
+        0.3585
+       ],
+       "fpr": 0.1667,
+       "fpr_ci": [
+        0.047,
+        0.448
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -9601,18 +9715,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 5,
+       "fn": 19,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -9635,18 +9753,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 5,
+       "fn": 19,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2083,
+       "tpr_ci": [
+        0.0924,
+        0.4047
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -9819,17 +9941,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -9852,18 +9978,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -9886,18 +10016,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 12,
+       "fn": 12,
+       "fp": 6,
+       "tn": 6,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.3143,
+        0.6857
+       ],
+       "fpr": 0.5,
+       "fpr_ci": [
+        0.2538,
+        0.7462
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -9920,18 +10054,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 12,
+       "fn": 12,
+       "fp": 3,
+       "tn": 9,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.3143,
+        0.6857
+       ],
+       "fpr": 0.25,
+       "fpr_ci": [
+        0.0889,
+        0.5323
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: discharge-air-temp-sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -9966,30 +10104,30 @@
       }
      },
      "overall": {
-      "tp": 21,
-      "fn": 3,
-      "fp": 10,
-      "tn": 2,
-      "tpr": 0.875,
+      "tp": 24,
+      "fn": 0,
+      "fp": 11,
+      "tn": 1,
+      "tpr": 1.0,
       "tpr_ci": [
-       0.69,
-       0.9566
+       0.862,
+       1.0
       ],
-      "fpr": 0.8333,
+      "fpr": 0.9167,
       "fpr_ci": [
-       0.552,
-       0.953
+       0.6461,
+       0.9851
       ],
       "not_evaluated": 0
      },
      "by_fault_type": {
       "damper": {
-       "tp": 21,
-       "fn": 3,
-       "tpr": 0.875,
+       "tp": 24,
+       "fn": 0,
+       "tpr": 1.0,
        "tpr_ci": [
-        0.69,
-        0.9566
+        0.862,
+        1.0
        ]
       }
      }
@@ -10104,17 +10242,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -10137,18 +10279,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -10171,18 +10317,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 12,
+       "fn": 12,
+       "fp": 6,
+       "tn": 6,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.3143,
+        0.6857
+       ],
+       "fpr": 0.5,
+       "fpr_ci": [
+        0.2538,
+        0.7462
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -10205,18 +10355,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 7,
+       "fn": 17,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2917,
+       "tpr_ci": [
+        0.1491,
+        0.4917
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -10397,17 +10551,21 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 24,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.138
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC8": {
@@ -10430,18 +10588,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 10,
+       "fn": 14,
+       "fp": 5,
+       "tn": 7,
+       "tpr": 0.4167,
+       "tpr_ci": [
+        0.2447,
+        0.6117
+       ],
+       "fpr": 0.4167,
+       "fpr_ci": [
+        0.1933,
+        0.6805
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC10": {
@@ -10464,18 +10626,22 @@
        }
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
-       "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tp": 12,
+       "fn": 12,
+       "fp": 6,
+       "tn": 6,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.3143,
+        0.6857
+       ],
+       "fpr": 0.5,
+       "fpr_ci": [
+        0.2538,
+        0.7462
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC12": {
@@ -10498,18 +10664,22 @@
        }
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 7,
+       "fn": 17,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 12,
+       "tpr": 0.2917,
+       "tpr_ci": [
+        0.1491,
+        0.4917
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.2425
+       ],
        "not_evaluated": {
-        "counts_by_reason": {
-         "missing roles: sat_sp": 36
-        }
+        "counts_by_reason": {}
        }
       },
       "FC14": {
@@ -10589,6 +10759,6 @@
   "Simulated data (LBNL FDD datasets, CC-BY-4.0, fetched from the publisher; never redistributed). Fault labels are per run, not per hour: a run counts as detected when the FC fires anywhere in it, including in seasons where the fault has no symptom.",
   "Tolerance profiles change tolerances only; ModeDelay, confirm/AlarmDelay windows and the valve/damper thresholds that select operating states stay at each engine's defaults.",
   "Month windows: each (run, month) is scored as a case. Months of one run are not independent, so the intervals are narrower than the evidence supports.",
-  "lbnl-ddahu is a dual-duct AHU: G36 \u00a75.16.14 is written for single-duct units. The mapping reads the cold-deck discharge as SAT and the hot-deck valve as the heating valve, so 'SAT below MAT while heating' is the design there, not a fault."
+  "lbnl-ddahu is a dual-duct AHU: G36 \u00a75.16.14 is written for single-duct units. The mapping reads the cold-deck discharge as SAT, the cold-deck setpoint as the SAT setpoint and the hot-deck valve as the heating valve, so 'SAT below MAT while heating' is the design there, not a fault, and the SAT setpoint tests (FC7, FC9, FC11, FC13) judge the cold deck only; the hot deck's own setpoint is not mapped."
  ]
 }

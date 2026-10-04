@@ -3,7 +3,7 @@
  "window": "run",
  "verdict_rule": "an FC fires on a run when its fault hours reach 5% of that engine's own evaluated hours, over at least 24 evaluated hours (else not evaluated); the engines' own alarms are scored separately under `native`",
  "versions": {
-  "camber": "0.98.0 at commit b5c4b91 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
+  "camber": "0.99.1 at commit 5b0bc10 (g36_afdd at the G36 defaults, plus each dataset's run-template params)",
   "role_map": "1",
   "profiles": "2",
   "open-fdd pin": "PyPI 4.4.9, commit 32a6d4479abed81f9d6d0ff426260cc8ad8e30e2",
@@ -33,14 +33,21 @@
    "id": "lbnl-ddahu",
    "licence": "CC-BY-4.0",
    "citation": "Granderson, J., Lin, G., Chen, Y., Casillas, A., Im, P., Jung, S., Benne, K., Ling, J., Gorthala, R., Wen, J., Chen, Z., Huang, S., Vrabie, D. (2022). LBNL Fault Detection and Diagnostics Datasets. Lawrence Berkeley National Laboratory. doi:10.25984/1881324",
-   "content_hash": "0d74f6bb7f4c04b245bb96ec8c1daec58633f93f1cf6fc38155bd5ee62c80c08",
+   "content_hash": "6e51fda2923093fb83329416787f0a2131b7c73e38a2c6c0145792138f7672e4",
    "subset": "default",
    "n_labelled": 3,
    "n_fault_free": 1,
    "fault_types": {
     "damper": 2
    },
-   "camber_template_params": {}
+   "camber_template_params": {
+    "min_oa_pct": 31.8,
+    "min_oa_pct_by_month": {
+     "6": 11.9,
+     "7": 11.9,
+     "8": 11.9
+    }
+   }
   }
  ],
  "applied_mappings": {
@@ -240,24 +247,21 @@
       },
       "FC6": {
        "tp": 2,
-       "fn": 10,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1667,
+       "tn": 2,
+       "tpr": 0.1429,
        "tpr_ci": [
-        0.047,
-        0.448
+        0.0401,
+        0.3994
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "not_evaluated": {
-        "AHU__coi_stuck_075": "not applicable: its operating states never occurred",
-        "DDAHU__DMPRStuck_OA_0": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__DMPRStuck_OA_100": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__fault_free": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
+        "AHU__coi_stuck_075": "not applicable: its operating states never occurred"
        }
       },
       "FC7": {
@@ -284,9 +288,9 @@
         "AHU__damper_stuck_075": "omitted: no heating coil",
         "AHU__damper_stuck_100_short": "omitted: no heating coil",
         "AHU__fault_free": "omitted: no heating coil",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_0": "not applicable: its operating states never occurred",
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred",
+        "DDAHU__fault_free": "evaluated on fewer than 24 h"
        }
       },
       "FC8": {
@@ -312,14 +316,14 @@
        }
       },
       "FC9": {
-       "tp": 0,
+       "tp": 1,
        "fn": 11,
        "fp": 0,
        "tn": 1,
-       "tpr": 0.0,
+       "tpr": 0.0833,
        "tpr_ci": [
-        0.0,
-        0.2588
+        0.0149,
+        0.3539
        ],
        "fpr": 0.0,
        "fpr_ci": [
@@ -329,9 +333,8 @@
        "not_evaluated": {
         "AHU__damper_stuck_010": "evaluated on fewer than 24 h",
         "AHU__damper_stuck_025": "evaluated on fewer than 24 h",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred",
+        "DDAHU__fault_free": "evaluated on fewer than 24 h"
        }
       },
       "FC10": {
@@ -359,14 +362,14 @@
        }
       },
       "FC11": {
-       "tp": 2,
+       "tp": 3,
        "fn": 7,
        "fp": 0,
        "tn": 1,
-       "tpr": 0.2222,
+       "tpr": 0.3,
        "tpr_ci": [
-        0.0632,
-        0.5474
+        0.1078,
+        0.6032
        ],
        "fpr": 0.0,
        "fpr_ci": [
@@ -378,9 +381,8 @@
         "AHU__coi_bias_m4": "not applicable: its operating states never occurred",
         "AHU__coi_stuck_050": "evaluated on fewer than 24 h",
         "AHU__coi_stuck_075": "not applicable: its operating states never occurred",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_100": "evaluated on fewer than 24 h",
+        "DDAHU__fault_free": "evaluated on fewer than 24 h"
        }
       },
       "FC12": {
@@ -402,24 +404,21 @@
       },
       "FC13": {
        "tp": 3,
-       "fn": 9,
+       "fn": 11,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.25,
+       "tn": 2,
+       "tpr": 0.2143,
        "tpr_ci": [
-        0.0889,
-        0.5323
+        0.0757,
+        0.4759
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "not_evaluated": {
-        "AHU__coi_stuck_075": "not applicable: its operating states never occurred",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "AHU__coi_stuck_075": "not applicable: its operating states never occurred"
        }
       },
       "FC14": {
@@ -676,13 +675,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: heating-valve",
         "AHU__coi_bias_4": "missing roles: heating-valve",
@@ -697,10 +702,7 @@
         "AHU__damper_stuck_025": "missing roles: heating-valve",
         "AHU__damper_stuck_075": "missing roles: heating-valve",
         "AHU__damper_stuck_100_short": "missing roles: heating-valve",
-        "AHU__fault_free": "missing roles: heating-valve",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
+        "AHU__fault_free": "missing roles: heating-valve"
        }
       },
       "FC8": {
@@ -722,24 +724,20 @@
       },
       "FC9": {
        "tp": 1,
-       "fn": 12,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0769,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0137,
-        0.3331
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 3,
@@ -759,25 +757,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -798,24 +792,20 @@
       },
       "FC13": {
        "tp": 1,
-       "fn": 12,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0769,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0137,
-        0.3331
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 1,
@@ -1069,13 +1059,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: heating-valve",
         "AHU__coi_bias_4": "missing roles: heating-valve",
@@ -1090,10 +1086,7 @@
         "AHU__damper_stuck_025": "missing roles: heating-valve",
         "AHU__damper_stuck_075": "missing roles: heating-valve",
         "AHU__damper_stuck_100_short": "missing roles: heating-valve",
-        "AHU__fault_free": "missing roles: heating-valve",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
+        "AHU__fault_free": "missing roles: heating-valve"
        }
       },
       "FC8": {
@@ -1115,24 +1108,20 @@
       },
       "FC9": {
        "tp": 1,
-       "fn": 12,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0769,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0137,
-        0.3331
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 4,
@@ -1152,25 +1141,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -1190,25 +1175,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 1,
-       "fn": 12,
+       "tp": 2,
+       "fn": 13,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0769,
+       "tn": 2,
+       "tpr": 0.1333,
        "tpr_ci": [
-        0.0137,
-        0.3331
+        0.0374,
+        0.3788
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 4,
@@ -1462,13 +1443,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: htg_valve_pct",
         "AHU__coi_bias_4": "missing roles: htg_valve_pct",
@@ -1483,10 +1470,7 @@
         "AHU__damper_stuck_025": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_075": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_100_short": "missing roles: htg_valve_pct",
-        "AHU__fault_free": "missing roles: htg_valve_pct",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
+        "AHU__fault_free": "missing roles: htg_valve_pct"
        }
       },
       "FC8": {
@@ -1508,24 +1492,20 @@
       },
       "FC9": {
        "tp": 1,
-       "fn": 12,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0769,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0137,
-        0.3331
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 3,
@@ -1545,25 +1525,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -1583,25 +1559,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 13,
+       "tp": 1,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0,
-        0.2281
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 10,
@@ -1839,13 +1811,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: htg_valve_pct",
         "AHU__coi_bias_4": "missing roles: htg_valve_pct",
@@ -1860,10 +1838,7 @@
         "AHU__damper_stuck_025": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_075": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_100_short": "missing roles: htg_valve_pct",
-        "AHU__fault_free": "missing roles: htg_valve_pct",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
+        "AHU__fault_free": "missing roles: htg_valve_pct"
        }
       },
       "FC8": {
@@ -1885,24 +1860,20 @@
       },
       "FC9": {
        "tp": 1,
-       "fn": 12,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0769,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0137,
-        0.3331
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 4,
@@ -1922,25 +1893,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -1960,25 +1927,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 13,
+       "tp": 1,
+       "fn": 14,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0,
+       "tn": 2,
+       "tpr": 0.0667,
        "tpr_ci": [
-        0.0,
-        0.2281
+        0.0119,
+        0.2982
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 10,
@@ -3951,18 +3914,20 @@
       },
       "FC6": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__DMPRStuck_OA_100": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__fault_free": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC7": {
        "tp": 0,
@@ -3974,9 +3939,9 @@
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_0": "not applicable: its operating states never occurred",
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred",
+        "DDAHU__fault_free": "evaluated on fewer than 24 h"
        }
       },
       "FC8": {
@@ -3997,18 +3962,20 @@
        }
       },
       "FC9": {
-       "tp": 0,
+       "tp": 1,
        "fn": 0,
        "fp": 0,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.2065,
+        1.0
+       ],
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred",
+        "DDAHU__fault_free": "evaluated on fewer than 24 h"
        }
       },
       "FC10": {
@@ -4029,18 +3996,20 @@
        }
       },
       "FC11": {
-       "tp": 0,
+       "tp": 1,
        "fn": 0,
        "fp": 0,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.2065,
+        1.0
+       ],
        "fpr": null,
        "fpr_ci": null,
        "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_100": "evaluated on fewer than 24 h",
+        "DDAHU__fault_free": "evaluated on fewer than 24 h"
        }
       },
       "FC12": {
@@ -4062,18 +4031,20 @@
       },
       "FC13": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 0,
@@ -4237,18 +4208,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 1,
@@ -4269,18 +4242,20 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 1,
@@ -4300,19 +4275,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -4333,18 +4310,20 @@
       },
       "FC13": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 0,
@@ -4508,18 +4487,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 2,
@@ -4540,18 +4521,20 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 1,
@@ -4571,19 +4554,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -4603,19 +4588,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 0,
@@ -4779,18 +4766,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 1,
@@ -4811,18 +4800,20 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 1,
@@ -4842,19 +4833,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -4874,19 +4867,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 2,
@@ -5054,18 +5049,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 2,
@@ -5086,18 +5083,20 @@
       },
       "FC9": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 1,
@@ -5117,19 +5116,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -5149,19 +5150,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 2,
@@ -5346,35 +5349,35 @@
       },
       "FC6": {
        "tp": 2,
-       "fn": 10,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1667,
+       "tn": 2,
+       "tpr": 0.1429,
        "tpr_ci": [
-        0.047,
-        0.448
+        0.0401,
+        0.3994
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "not_evaluated": {
-        "AHU__coi_stuck_075": "not applicable: its operating states never occurred",
-        "DDAHU__DMPRStuck_OA_0": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__DMPRStuck_OA_100": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__fault_free": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
+        "AHU__coi_stuck_075": "not applicable: its operating states never occurred"
        }
       },
       "FC7": {
        "tp": 0,
        "fn": 0,
        "fp": 0,
-       "tn": 0,
+       "tn": 1,
        "tpr": null,
        "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "omitted: no heating coil",
         "AHU__coi_bias_4": "omitted: no heating coil",
@@ -5390,9 +5393,8 @@
         "AHU__damper_stuck_075": "omitted: no heating coil",
         "AHU__damper_stuck_100_short": "omitted: no heating coil",
         "AHU__fault_free": "omitted: no heating coil",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_0": "not applicable: its operating states never occurred",
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred"
        }
       },
       "FC8": {
@@ -5415,24 +5417,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
+       "tp": 1,
        "fn": 13,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.0,
+       "tn": 2,
+       "tpr": 0.0714,
        "tpr_ci": [
-        0.0,
-        0.2281
+        0.0127,
+        0.3147
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred"
        }
       },
       "FC10": {
@@ -5456,26 +5456,23 @@
        }
       },
       "FC11": {
-       "tp": 2,
-       "fn": 9,
+       "tp": 3,
+       "fn": 10,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1818,
+       "tn": 2,
+       "tpr": 0.2308,
        "tpr_ci": [
-        0.0514,
-        0.477
+        0.0818,
+        0.5026
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "not_evaluated": {
         "AHU__coi_bias_m4": "not applicable: its operating states never occurred",
-        "AHU__coi_stuck_075": "not applicable: its operating states never occurred",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "AHU__coi_stuck_075": "not applicable: its operating states never occurred"
        }
       },
       "FC12": {
@@ -5497,24 +5494,21 @@
       },
       "FC13": {
        "tp": 3,
-       "fn": 9,
+       "fn": 11,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.25,
+       "tn": 2,
+       "tpr": 0.2143,
        "tpr_ci": [
-        0.0889,
-        0.5323
+        0.0757,
+        0.4759
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
        "not_evaluated": {
-        "AHU__coi_stuck_075": "not applicable: its operating states never occurred",
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "AHU__coi_stuck_075": "not applicable: its operating states never occurred"
        }
       },
       "FC14": {
@@ -5769,13 +5763,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: heating-valve",
         "AHU__coi_bias_4": "missing roles: heating-valve",
@@ -5790,10 +5790,7 @@
         "AHU__damper_stuck_025": "missing roles: heating-valve",
         "AHU__damper_stuck_075": "missing roles: heating-valve",
         "AHU__damper_stuck_100_short": "missing roles: heating-valve",
-        "AHU__fault_free": "missing roles: heating-valve",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
+        "AHU__fault_free": "missing roles: heating-valve"
        }
       },
       "FC8": {
@@ -5814,25 +5811,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 2,
+       "tp": 4,
        "fn": 11,
-       "fp": 0,
+       "fp": 1,
        "tn": 1,
-       "tpr": 0.1538,
+       "tpr": 0.2667,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.109,
+        0.5195
        ],
-       "fpr": 0.0,
+       "fpr": 0.5,
        "fpr_ci": [
-        0.0,
-        0.7935
+        0.0945,
+        0.9055
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 6,
@@ -5852,25 +5845,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -5890,25 +5879,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 13,
-       "fn": 0,
+       "tp": 14,
+       "fn": 1,
        "fp": 1,
-       "tn": 0,
-       "tpr": 1.0,
+       "tn": 1,
+       "tpr": 0.9333,
        "tpr_ci": [
-        0.7719,
-        1.0
+        0.7018,
+        0.9881
        ],
-       "fpr": 1.0,
+       "fpr": 0.5,
        "fpr_ci": [
-        0.2065,
-        1.0
+        0.0945,
+        0.9055
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 6,
@@ -6162,13 +6147,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: heating-valve",
         "AHU__coi_bias_4": "missing roles: heating-valve",
@@ -6183,10 +6174,7 @@
         "AHU__damper_stuck_025": "missing roles: heating-valve",
         "AHU__damper_stuck_075": "missing roles: heating-valve",
         "AHU__damper_stuck_100_short": "missing roles: heating-valve",
-        "AHU__fault_free": "missing roles: heating-valve",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
+        "AHU__fault_free": "missing roles: heating-valve"
        }
       },
       "FC8": {
@@ -6207,25 +6195,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 13,
+       "tp": 15,
        "fn": 0,
-       "fp": 1,
+       "fp": 2,
        "tn": 0,
        "tpr": 1.0,
        "tpr_ci": [
-        0.7719,
+        0.7961,
         1.0
        ],
        "fpr": 1.0,
        "fpr_ci": [
-        0.2065,
+        0.3424,
         1.0
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 12,
@@ -6245,25 +6229,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 5,
+       "tp": 7,
        "fn": 8,
-       "fp": 0,
+       "fp": 1,
        "tn": 1,
-       "tpr": 0.3846,
+       "tpr": 0.4667,
        "tpr_ci": [
-        0.1771,
-        0.6448
+        0.2481,
+        0.6988
        ],
-       "fpr": 0.0,
+       "fpr": 0.5,
        "fpr_ci": [
-        0.0,
-        0.7935
+        0.0945,
+        0.9055
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 4,
@@ -6283,25 +6263,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 13,
+       "tp": 15,
        "fn": 0,
-       "fp": 1,
+       "fp": 2,
        "tn": 0,
        "tpr": 1.0,
        "tpr_ci": [
-        0.7719,
+        0.7961,
         1.0
        ],
        "fpr": 1.0,
        "fpr_ci": [
-        0.2065,
+        0.3424,
         1.0
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 12,
@@ -6555,13 +6531,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: htg_valve_pct",
         "AHU__coi_bias_4": "missing roles: htg_valve_pct",
@@ -6576,10 +6558,7 @@
         "AHU__damper_stuck_025": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_075": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_100_short": "missing roles: htg_valve_pct",
-        "AHU__fault_free": "missing roles: htg_valve_pct",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
+        "AHU__fault_free": "missing roles: htg_valve_pct"
        }
       },
       "FC8": {
@@ -6600,25 +6579,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 13,
+       "tp": 15,
        "fn": 0,
-       "fp": 1,
+       "fp": 2,
        "tn": 0,
        "tpr": 1.0,
        "tpr_ci": [
-        0.7719,
+        0.7961,
         1.0
        ],
        "fpr": 1.0,
        "fpr_ci": [
-        0.2065,
+        0.3424,
         1.0
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 6,
@@ -6638,25 +6613,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 5,
+       "tp": 7,
        "fn": 8,
-       "fp": 0,
+       "fp": 1,
        "tn": 1,
-       "tpr": 0.3846,
+       "tpr": 0.4667,
        "tpr_ci": [
-        0.1771,
-        0.6448
+        0.2481,
+        0.6988
        ],
-       "fpr": 0.0,
+       "fpr": 0.5,
        "fpr_ci": [
-        0.0,
-        0.7935
+        0.0945,
+        0.9055
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -6676,25 +6647,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 13,
@@ -6932,13 +6899,19 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
         "AHU__coi_bias_2": "missing roles: htg_valve_pct",
         "AHU__coi_bias_4": "missing roles: htg_valve_pct",
@@ -6953,10 +6926,7 @@
         "AHU__damper_stuck_025": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_075": "missing roles: htg_valve_pct",
         "AHU__damper_stuck_100_short": "missing roles: htg_valve_pct",
-        "AHU__fault_free": "missing roles: htg_valve_pct",
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
+        "AHU__fault_free": "missing roles: htg_valve_pct"
        }
       },
       "FC8": {
@@ -6977,25 +6947,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 13,
+       "tp": 15,
        "fn": 0,
-       "fp": 1,
+       "fp": 2,
        "tn": 0,
        "tpr": 1.0,
        "tpr_ci": [
-        0.7719,
+        0.7961,
         1.0
        ],
        "fpr": 1.0,
        "fpr_ci": [
-        0.2065,
+        0.3424,
         1.0
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 12,
@@ -7015,25 +6981,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 5,
+       "tp": 7,
        "fn": 8,
-       "fp": 0,
+       "fp": 1,
        "tn": 1,
-       "tpr": 0.3846,
+       "tpr": 0.4667,
        "tpr_ci": [
-        0.1771,
-        0.6448
+        0.2481,
+        0.6988
        ],
-       "fpr": 0.0,
+       "fpr": 0.5,
        "fpr_ci": [
-        0.0,
-        0.7935
+        0.0945,
+        0.9055
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 4,
@@ -7053,25 +7015,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 2,
-       "fn": 11,
+       "tp": 3,
+       "fn": 12,
        "fp": 0,
-       "tn": 1,
-       "tpr": 0.1538,
+       "tn": 2,
+       "tpr": 0.2,
        "tpr_ci": [
-        0.0433,
-        0.4224
+        0.0705,
+        0.4519
        ],
        "fpr": 0.0,
        "fpr_ci": [
         0.0,
-        0.7935
+        0.6576
        ],
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 13,
@@ -9033,32 +8991,36 @@
       },
       "FC6": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__DMPRStuck_OA_100": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-        "DDAHU__fault_free": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC7": {
        "tp": 0,
        "fn": 0,
        "fp": 0,
-       "tn": 0,
+       "tn": 1,
        "tpr": null,
        "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_0": "not applicable: its operating states never occurred",
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred"
        }
       },
       "FC8": {
@@ -9081,18 +9043,22 @@
        }
       },
       "FC9": {
-       "tp": 0,
+       "tp": 1,
        "fn": 0,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
+       "tn": 1,
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
        "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
+        "DDAHU__DMPRStuck_OA_100": "not applicable: its operating states never occurred"
        }
       },
       "FC10": {
@@ -9113,19 +9079,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 1,
@@ -9146,18 +9114,20 @@
       },
       "FC13": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "declined: missing input(s): SATSP",
-        "DDAHU__DMPRStuck_OA_100": "declined: missing input(s): SATSP",
-        "DDAHU__fault_free": "declined: missing input(s): SATSP"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 0,
@@ -9321,18 +9291,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 2,
@@ -9352,19 +9324,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 1,
@@ -9384,19 +9358,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -9416,19 +9392,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 0,
@@ -9592,18 +9570,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 2,
@@ -9623,19 +9603,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 2,
@@ -9655,19 +9637,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 2,
@@ -9687,19 +9671,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: discharge-air-temp-sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: discharge-air-temp-sp",
-        "DDAHU__fault_free": "missing roles: discharge-air-temp-sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 0,
@@ -9863,18 +9849,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 2,
@@ -9894,19 +9882,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 1,
@@ -9926,19 +9916,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 0,
@@ -9958,19 +9950,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 2,
@@ -10138,18 +10132,20 @@
       },
       "FC7": {
        "tp": 0,
-       "fn": 0,
+       "fn": 2,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.0,
+       "tpr_ci": [
+        0.0,
+        0.6576
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC8": {
        "tp": 2,
@@ -10169,19 +10165,21 @@
        "not_evaluated": {}
       },
       "FC9": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC10": {
        "tp": 2,
@@ -10201,19 +10199,21 @@
        "not_evaluated": {}
       },
       "FC11": {
-       "tp": 0,
+       "tp": 2,
        "fn": 0,
-       "fp": 0,
+       "fp": 1,
        "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tpr": 1.0,
+       "tpr_ci": [
+        0.3424,
+        1.0
+       ],
+       "fpr": 1.0,
+       "fpr_ci": [
+        0.2065,
+        1.0
+       ],
+       "not_evaluated": {}
       },
       "FC12": {
        "tp": 2,
@@ -10233,19 +10233,21 @@
        "not_evaluated": {}
       },
       "FC13": {
-       "tp": 0,
-       "fn": 0,
+       "tp": 1,
+       "fn": 1,
        "fp": 0,
-       "tn": 0,
-       "tpr": null,
-       "tpr_ci": null,
-       "fpr": null,
-       "fpr_ci": null,
-       "not_evaluated": {
-        "DDAHU__DMPRStuck_OA_0": "missing roles: sat_sp",
-        "DDAHU__DMPRStuck_OA_100": "missing roles: sat_sp",
-        "DDAHU__fault_free": "missing roles: sat_sp"
-       }
+       "tn": 1,
+       "tpr": 0.5,
+       "tpr_ci": [
+        0.0945,
+        0.9055
+       ],
+       "fpr": 0.0,
+       "fpr_ci": [
+        0.0,
+        0.7935
+       ],
+       "not_evaluated": {}
       },
       "FC14": {
        "tp": 2,
@@ -12900,12 +12902,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC6",
-   "evaluated": false,
-   "reason": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 14.0,
+   "eval_hours": 776.75,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -12913,7 +12915,7 @@
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC7",
    "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
+   "reason": "not applicable: its operating states never occurred",
    "fault_hours": null,
    "eval_hours": null,
    "denominator": "",
@@ -12936,12 +12938,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 26.25,
+   "eval_hours": 126.25,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": true
   },
   {
    "engine": "camber g36_afdd",
@@ -12960,12 +12962,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 6.5,
+   "eval_hours": 53.0,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": true
   },
   {
    "engine": "camber g36_afdd",
@@ -12984,12 +12986,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 829.75,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13080,12 +13082,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC6",
-   "evaluated": false,
-   "reason": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 759.25,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13093,7 +13095,7 @@
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC7",
    "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
+   "reason": "not applicable: its operating states never occurred",
    "fault_hours": null,
    "eval_hours": null,
    "denominator": "",
@@ -13117,7 +13119,7 @@
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC9",
    "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
+   "reason": "not applicable: its operating states never occurred",
    "fault_hours": null,
    "eval_hours": null,
    "denominator": "",
@@ -13140,12 +13142,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 5.5,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13164,12 +13166,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 764.75,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13260,24 +13262,24 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC6",
-   "evaluated": false,
-   "reason": "declined: needs the minimum outdoor-air fraction (set min_oa_pct) and MAT/RAT/OAT",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.5,
+   "eval_hours": 759.75,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
    "profile": "camber_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 0.5,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13296,12 +13298,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 4.25,
+   "eval_hours": 4.25,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13320,12 +13322,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 5.5,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -13344,12 +13346,12 @@
    "profile": "camber_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "declined: missing input(s): SATSP",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 764.75,
+   "denominator": "fan-on hours in the FC's G36 operating states, outside ModeDelay",
+   "native_fired": false
   },
   {
    "engine": "camber g36_afdd",
@@ -15972,12 +15974,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -15996,12 +15998,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.25,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16020,12 +16022,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 487.0,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16044,12 +16046,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 713.75,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16152,12 +16154,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -16176,12 +16178,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.5,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16200,12 +16202,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 21.0,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16224,12 +16226,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 2.0,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16332,12 +16334,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -16356,12 +16358,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.5,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16380,12 +16382,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 17.75,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -16404,12 +16406,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 1.0,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -19032,12 +19034,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -19056,12 +19058,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 26.75,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -19080,12 +19082,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 348.5,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -19104,12 +19106,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 9.5,
+   "eval_hours": 3611.75,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -19212,12 +19214,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -19236,12 +19238,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 26.75,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -19260,12 +19262,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -19284,12 +19286,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3275.0,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -19392,12 +19394,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -19416,12 +19418,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 26.75,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": true
   },
   {
    "engine": "open-fdd pandas",
@@ -19440,12 +19442,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -19464,12 +19466,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: discharge-air-temp-sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3334.25,
+   "denominator": "samples inside the rule's operational gate (fan proven on, after the startup delay), as hours",
+   "native_fired": false
   },
   {
    "engine": "open-fdd pandas",
@@ -22092,12 +22094,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -22116,12 +22118,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.25,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22140,12 +22142,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 487.0,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22164,12 +22166,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 414.25,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22272,12 +22274,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -22296,12 +22298,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.5,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22320,12 +22322,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 21.0,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22344,12 +22346,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -22452,12 +22454,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -22476,12 +22478,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.5,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22500,12 +22502,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 17.75,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -22524,12 +22526,12 @@
    "profile": "openfdd_defaults",
    "equip": "DDAHU__fault_free",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -25152,12 +25154,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -25176,12 +25178,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.25,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25200,12 +25202,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 487.0,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25224,12 +25226,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_0",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 414.25,
+   "eval_hours": 3485.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25332,12 +25334,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -25356,12 +25358,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.5,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25380,12 +25382,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 21.0,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25404,12 +25406,12 @@
    "profile": "g36",
    "equip": "DDAHU__DMPRStuck_OA_100",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3156.25,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -25512,12 +25514,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC7",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -25536,12 +25538,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC9",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 38.5,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25560,12 +25562,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC11",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 17.75,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": true
   },
   {
    "engine": "open-fdd sql",
@@ -25584,12 +25586,12 @@
    "profile": "g36",
    "equip": "DDAHU__fault_free",
    "fc": "FC13",
-   "evaluated": false,
-   "reason": "missing roles: sat_sp",
-   "fault_hours": null,
-   "eval_hours": null,
-   "denominator": "",
-   "native_fired": null
+   "evaluated": true,
+   "reason": null,
+   "fault_hours": 0.0,
+   "eval_hours": 3227.5,
+   "denominator": "fan-on hours of the exported frame (the rule reports fault hours only)",
+   "native_fired": false
   },
   {
    "engine": "open-fdd sql",
@@ -25620,6 +25622,6 @@
   "Small samples: each labelled run is one case, so the Wilson intervals are wide; read differences between engines through the intervals, not the point rates.",
   "Simulated data (LBNL FDD datasets, CC-BY-4.0, fetched from the publisher; never redistributed). Fault labels are per run, not per hour: a run counts as detected when the FC fires anywhere in it, including in seasons where the fault has no symptom.",
   "Tolerance profiles change tolerances only; ModeDelay, confirm/AlarmDelay windows and the valve/damper thresholds that select operating states stay at each engine's defaults.",
-  "lbnl-ddahu is a dual-duct AHU: G36 \u00a75.16.14 is written for single-duct units. The mapping reads the cold-deck discharge as SAT and the hot-deck valve as the heating valve, so 'SAT below MAT while heating' is the design there, not a fault."
+  "lbnl-ddahu is a dual-duct AHU: G36 \u00a75.16.14 is written for single-duct units. The mapping reads the cold-deck discharge as SAT, the cold-deck setpoint as the SAT setpoint and the hot-deck valve as the heating valve, so 'SAT below MAT while heating' is the design there, not a fault, and the SAT setpoint tests (FC7, FC9, FC11, FC13) judge the cold deck only; the hot deck's own setpoint is not mapped."
  ]
 }
