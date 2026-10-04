@@ -4,6 +4,43 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.100.0] — Unreleased
+
+<!-- 0100-rcx -->
+### Changed
+- **An RCx issue is headed by a member's cause when it names the equipment at fault (#101).**
+  An issue's heading came from its chain's root finding, which can hide a more specific cause on
+  a member. A cause is equipment-level when it names a component that does not do what it is told:
+  a damper that does not deliver the outside air it is commanded to (`free_cooling_missed`,
+  `damper_not_delivering`), a reheat valve whose position does not follow its demand, a leaking
+  valve, a stuck actuator, or a drifting OA damper. The precedence: a root with an equipment-level
+  cause keeps the heading; otherwise the most upstream member with one heads the issue; otherwise
+  the root's cause, as before. The action, its title and its links stay the root's, and the page
+  says in one line which member named the cause. The executive summary's Issue column and the
+  `cause` key of `RcxReport.to_dict()` issues follow the heading; each issue gains `cause_rule`,
+  the rule of the finding that names it. See docs/RCX-REPORT.md, "Which cause heads an issue".
+  On the catalog run templates (15 datasets, default subsets, 92 issues) no heading changes:
+  only `irish-ahu` runs `free_cooling_missed`, and its one issue has no such member. With
+  `free_cooling_missed` added to the six air-handler templates that lack it, two of 81 issues
+  change: `lbnl-ddahu`
+  `DMPRStuck_OA_0` reads "Outdoor-air damper not modulating (stuck low)" (was "Outside air below
+  the ventilation minimum"), and `lbnl-sdahu` `damper_stuck_075` reads "Outdoor-air damper not
+  modulating (stuck part open)" (was "Economizer open above the high limit"). The RCx golden file
+  is unchanged: its synthetic site has no member with an equipment-level cause.
+
+### Fixed
+- **Config runs resolve a store facility's time zone the same way as the read API (#104).**
+  Since 0.99.1 `/facilities` reads a facility's zone from its registry entry's `timezone` first.
+  Config runs on a store source read only the catalog entry's zone or the open-fdd provenance, so
+  an explicit `timezone` on the registry entry was ignored by runs. Both now use one lookup: the
+  entry's `timezone`, the dataset block on the entry, the catalog entry, then the open-fdd
+  provenance. Behaviour change: a per-site zone in a facility's dataset block now also sets a
+  run's zone, as `/facilities` already reported it. Each BDG2 site records one. On the ten BDG2
+  sites' template runs (65 daily meter baselines) the fall-back and spring-forward days now have
+  their 25 and 23 hours; no verdict changes, CV(RMSE) moves by at most 0.0003 and R² by at most
+  0.0012.
+<!-- /0100-rcx -->
+
 ## [0.99.1] — 2026-10-03
 
 **0.99.1 patch: open-fdd-ingested facilities report their time zone (#96).** The synthetic, fleet,

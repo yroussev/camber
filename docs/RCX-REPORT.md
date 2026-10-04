@@ -32,7 +32,7 @@ headers repeat, and the screen-only table of contents is hidden in print.
 | P5 | SAT reset census | Three labelled tiers, [below](#sat-reset-tiers). |
 | P6 | Air distribution | Duct static by hour of day (fan-on samples only) and any static-reset findings. Omitted when there is no duct static. |
 | P7 | M&V and drift | The drift report and the `mv_baseline` results, including declines. Omitted when neither ran. |
-| P8+ | One page per issue | Headed by the finding's cause (0.98, #88: "Outdoor-air damper not modulating (stuck low)"), not the remedy; the recommended action keeps its own title ("Recommended action — Repair the outdoor-air damper or actuator: ..."), and the executive summary's Issue column shows the cause. $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
+| P8+ | One page per issue | Headed by the finding's cause (0.98, #88: "Outdoor-air damper not modulating (stuck low)"), not the remedy; the recommended action keeps its own title ("Recommended action — Repair the outdoor-air damper or actuator: ..."), and the executive summary's Issue column shows the cause. When a member finding names the equipment at fault and the root does not, the member's cause heads the issue (0.100, #101; [precedence below](#which-cause-heads-an-issue)). $/yr with its basis and assumptions; the evidence charts; the members (root first) with the union violation hours; the recommended action; the confidence grade with "why we believe this"; conditional / dependent notes; the engineer's note. |
 | — | Verify on site | 0.98 (#88): the walk-down checklist, after the issue pages ([`camber.walkdown`](#verify-on-site), provisional). A lead paragraph links PNNL Re-tuning chapter 9 (Building Walk Down), then one table per kind of item, in walk-down order: **sensors and setpoints** (each sensor a conditional issue leans on, with its trust; a `sensor_drift` issue's sensor; each input a check declined as untrusted), **equipment and controls** (one item per issue from a per-rule, per-cause template), **design values** the checks assumed (a site fact such as a minimum outdoor-air fraction, a high limit or an occupancy schedule left at the rule's default) and **points the checks lacked** (Appendix A's checks not evaluated). Columns: # (linked to the issue; A for Appendix A), Equipment, Look at, Point, Confirms, Refutes. Section id `verify`, engineer-note slot `section:verify`; on by default, omitted when it would be empty. |
 | — | Further reading | 0.96 (#78): the [PNNL Re-tuning guides and chapters](REFERENCES.md) relevant to this report's issues only, guides first, as links (nothing reproduced), plus chapter 9 when the report has a Verify on site section. Each issue page also ends its recommended action with **Learn more** links, and `to_dict()` carries each issue's `references` ids. Section id `reading`; no engineer-note slot. |
 | A–E | Appendices | A: every decline, caveat, trust-gated decline, missing optional input and unevaluated equipment. B: the assumptions actually used — cost defaults, price, sizing, occupancy source, fan-gate source, week-selection scores. C: rules run and a config hash. D: fact index (reserved). E: orphaned engineer notes. |
@@ -93,6 +93,33 @@ sequence is given as the fix only when the config declares one for the unit: a `
 Otherwise a check that assumes a G36 sequence (a rule named `*_g36` or `g36_*`) gets no packaged
 action ("engineer to specify"), and any other action worded as G36 practice is labelled a G36
 reference, to be checked against the unit's own sequence first.
+
+### Which cause heads an issue
+
+0.100 (#101). An issue's heading is a cause, read from one finding's recommendation. Some causes
+are **equipment-level**: they name a component that does not do what it is told. These are a
+damper that does not deliver the outside air it is commanded to (`free_cooling_missed` with
+`missed_cause` `damper_not_delivering`), a reheat valve whose position does not follow its demand
+(`reheat_penalty` at or above the valve-divergence share), a leaking valve (`leaking_valve`), a
+stuck actuator (`actuator_stuck`) and a drifting OA damper (`economizer_damper_drift`). The cause is
+read as the walk-down reads it (`camber.walkdown.cause_key`). Other causes name a symptom or a
+sequence problem: outside air below the minimum, excess outside air, a reset that does not reach
+its end. The heading follows this precedence:
+
+1. A root whose own cause is equipment-level keeps the heading.
+2. Otherwise, the first member in the chain's root-first order (the most upstream) whose cause is
+   equipment-level, and whose recommendation names it, heads the issue.
+3. Otherwise the root's cause heads it, as before.
+
+The action, its title, its suggested value and its Learn-more links stay the root's in every case.
+When a member's cause leads, the page says so in one line above the recommended action ("Cause
+from the free_cooling_missed member, which names the equipment at fault (the root finding reads:
+...)"). `to_dict()` issues carry the heading's `cause` and, from 0.100, `cause_rule`: the rule of the
+finding that names it. The executive summary uses the same heading. For example, an air handler
+whose outside air is below its minimum (`outdoor_air_fraction`, the root) while its damper is
+commanded open in mild weather and delivers 5 % outside air (the `free_cooling_missed` member) is
+headed "Outdoor-air damper not modulating (stuck low)", and its action stays "Restore minimum
+outside air". The walk-down's equipment item still follows the root finding.
 
 ## Verify on site
 
