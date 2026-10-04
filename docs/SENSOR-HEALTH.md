@@ -182,7 +182,33 @@ by up to -0.34 (an LBNL single-duct AHU's duct static, *trusted* 1.00 -> *suspec
 verdict changes in both directions on the LBNL and ORNL data. A fan-off reading is not one
 population either (it drifts from coil to plenum temperature as the unit coasts), so splitting it
 out moves healthy points as much as it fixes anything. *Also rejected:* reading supply air relative
-to its setpoint, which scored worse on every unit tried; it is deferred.
+to its setpoint, which scored worse on every unit tried.
+
+*Measured and rejected (0.100, #103): the setpoint level as a grouping key.* The alternative to the
+residual read is to judge a controlled point's outliers within each level of its setpoint, and to do
+so only when the setpoint takes few distinct values (at most 4, compared at 0.01). It was measured
+for supply air and duct static on every catalog RCx report (511 trust-table rows):
+
+| Grouping | Rows moved | Direction |
+|---|---|---|
+| At most 4 distinct setpoint values (the proposed rule) | 0 | none: no catalog unit qualifies |
+| At most 4 levels holding at least 95 % of the samples | 0 | none |
+| The 4 most common levels, other samples read pooled | 5 | all down |
+| As above, fan-on samples only | 5 | all down |
+
+No catalog setpoint has two to four levels. The LBNL single-duct runs hold one constant supply-air
+(55.18 °F) and static setpoint, which leaves nothing to group. `lbnl-b59`'s four rooftop units
+(414-493 distinct values) and `nuig-ahu101` (576) reset theirs. `irish-ahu` and the LBNL dual-duct
+and fan-powered units trend no supply-air or static setpoint. The rule as proposed therefore
+changes nothing that real data can check. Grouping by the four most common levels reaches
+`lbnl-b59` and `nuig-ahu101`, where it covers 74-88 % of the samples. There it lowers every supply
+air it touches: `lbnl-b59`'s by 0.07-0.12, with RTU03 (0.88 -> 0.77) and RTU04 (0.84 -> 0.74) going
+from *trusted* to *suspect*, and `nuig-ahu101`'s by 0.01-0.03. The supply air holds within
+0.07-0.14 °F of its setpoint at the median (fan on). Within one level, the robust scale therefore
+falls to the 0.5 °F precision floor, and the ordinary excursions after a load or setpoint change
+(90th percentile 1.4-4.7 °F) read as outliers. The pooled read absorbs them in the spread across
+levels. This is the same mechanism that made the residual read worse. Neither form is adopted, and
+`mode="auto"` does not group by setpoint (`tests/test_sensorhealth_103.py` pins this).
 
 **Stray lead and tail rows.** A few rows logged long before (or after) a point's real record make
 its coverage over its own span low, though the record itself is complete. When a point's longest
