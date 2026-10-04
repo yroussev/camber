@@ -481,9 +481,32 @@ values that #94 recorded for a single minimum (FC6 20.5 % at 31.8, 47.1 % at 11.
 the 0.98 code) predate #95, which moved the hot-deck heating hours with the damper open out of
 OS#1: FC6's applicable hours on the fault-free run fell from 2,105 to 744 (hourly). The winter
 heating hours run with the damper at or above its 45 % winter minimum, beyond the learned 28 %,
-so they are now OS#5. A seasonal OA damper minimum would return them to FC6. All of these setpoint
-tests judge the cold deck, because the mapping reads it as SAT. The hot deck's own 90 °F
-setpoint is not mapped.
+so they are now OS#5. A seasonal OA damper minimum returns them to FC6 (#105, below), but not on
+`DMPRStuck_OA_0`. All of these setpoint tests judge the cold deck, because the mapping reads it as
+SAT. The hot deck's own 90 °F setpoint is not mapped.
+
+**CAMBER since #105 (0.101).** The `lbnl-ddahu` run template now also gives the operating states
+the unit's documented seasonal minimum damper position, `oa_damper_min` 45 % with
+`oa_damper_min_by_month` 28 % in June to August, where the learned minimum was the 28 % summer
+position all year. The open-fdd engines do not read the template, and `lbnl-sdahu` does not
+change. Per run on `lbnl-ddahu`, measured on CAMBER's side of the cross-check (15-minute data),
+before → after:
+
+| FC | Before (0.100) | After (0.101) |
+|---|---|---|
+| FC5, FC7 | evaluated on 0.5 h of the fault-free run only | evaluated on the fault-free run (400.5 h) and `DMPRStuck_OA_100` (554.5 h); never fire. `DMPRStuck_OA_0` has no OS#1 hours |
+| FC6 | 0/2, FPR 0/1 over 759–777 h | 0/2, FPR 0/1 over 777–1,314 h: `DMPRStuck_OA_0` 1.8 %, unchanged |
+| FC8 | fires on `DMPRStuck_OA_0` (49.5 of 126.25 h); fault-free 0 of 4.25 h | fires on `DMPRStuck_OA_0` (49.5 of 49.75 h); not evaluated on the fault-free run |
+| FC9 | fires on `DMPRStuck_OA_0` (26.25 of 126.25 h); fault-free 4.25 of 4.25 h, under the 24 h floor | 0 of 49.75 h on `DMPRStuck_OA_0`; not evaluated on the fault-free run |
+| Any FC | 1/2 detected, 0/1 false alarms | unchanged |
+
+The FC9 hours on both runs were winter hours with the damper command at or near its 45 %
+minimum, read as free cooling against the learned 28 %; they are OS#5 now. In month windows
+CAMBER's any-FC result is unchanged (TPR 0.04, FPR 0/12). FC6 still does not catch the damper
+stuck shut, and no damper minimum can make it: outside June to August the faulted unit's damper
+command saturates (median 100 %) while the hot deck heats, or both coils run, so those hours are
+OS#5, where FC6 does not apply. The temperature balance there reads a median 17.7 % OA, which is
+within G36's 30-point tolerance of 31.8 % in any case.
 
 #### Not evaluated, and why
 
@@ -507,7 +530,7 @@ setpoint is not mapped.
 | FC14 | open-fdd pandas | No coil temperatures. |
 | FC14 | open-fdd SQL | Evaluated: falls back to MAT/SAT. |
 | FC6 | open-fdd (both) | Needs a VAV total airflow and a design minimum OA flow. CAMBER evaluates FC6 from its template's seasonal minimum OA fraction (since #97). |
-| FC5 | CAMBER | Since #95: the hot deck heats with the OA damper above its learned minimum, so there are no OS#1 hours to judge (0.5 h on the fault-free run). |
+| FC5 | CAMBER | Since #95 the hot deck heats with the OA damper above its learned minimum, so there were no OS#1 hours to judge. Since #105 the template's seasonal damper minimum restores them on the fault-free run and `DMPRStuck_OA_100`; `DMPRStuck_OA_0` still has none (its damper command saturates open). |
 
 #### SQL engine: the source-reading findings, tested
 

@@ -789,9 +789,27 @@ PARAM_DOCS["g36_afdd"] = {
         (0.0, 60.0),
         "None = learned: the median OA damper command over fan-on hours of mechanical cooling "
         "below econ_damper_open (the OS#4 position); with fewer than 24 such intervals, 0 % "
-        "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 %. "
+        "(closed). lbnl-sdahu learns 10 %, its documented fixed minimum; lbnl-ddahu learns 28 % "
+        "(its summer position; its template sets the seasonal minimum, 45 % with "
+        "oa_damper_min_by_month 28 % in Jun-Aug, since 0.101). "
         "The same minimum splits OS#2 (beyond it) and OS#1 (at it) since 0.99.",
     ),
+    # ---- begin 0101-g36-seasonal (#105): a seasonal minimum damper position ----
+    "oa_damper_min_by_month": _P(
+        "% of damper stroke (OA damper), per month",
+        "standard: ASHRAE Guideline 36-2021 §5.16.14 (operating-state definitions, as for "
+        "oa_damper_min); CAMBER judgment: only for a sequence whose minimum position changes "
+        "with the season, as min_oa_pct_by_month does for FC6",
+        "Enter the sequence's minimum position for each month that differs from oa_damper_min, "
+        "e.g. oa_damper_min 45 with {6: 28, 7: 28, 8: 28} on lbnl-ddahu (inventory section "
+        "1.2(ii)). Check it against the damper command on hours the unit holds its minimum.",
+        (0.0, 60.0),
+        "None = oa_damper_min all year. A {month (1-12): position} mapping; it needs "
+        "oa_damper_min, the position in the other months, so it never combines with a learned "
+        "minimum. Each value must lie in the range. The finding reports it as "
+        "oa_damper_min_by_month.",
+    ),
+    # ---- end 0101-g36-seasonal (#105) ----
     "oa_damper_tol": _P(
         "percentage points of damper stroke",
         "CAMBER judgment (#94): a noise margin above the minimum position; G36 gives no damper "

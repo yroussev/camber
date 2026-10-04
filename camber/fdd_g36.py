@@ -359,7 +359,8 @@ def _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open, oa_econ=None):
     an interval with both coils inactive is economizing (OS#2): at or below it the interval is
     OS#5, and a NaN damper there is unclassified. A heating interval is OS#1 only at or below it
     (the damper at its minimum, 0.99 #95), OS#5 beyond it, and unclassified on a NaN damper.
-    ``None`` (no damper point) keeps the valves-only reading.
+    ``None`` (no damper point) keeps the valves-only reading. It is a scalar, or an array of one
+    position per interval for a seasonal minimum (0.101, #105).
     """
     missing = np.isnan(hc) | np.isnan(cc)
     heating = hc > valve_thr
@@ -418,6 +419,20 @@ def _learn_oa_min(hc, cc, oa, on, valve_thr, econ_damper_open):
     if n < OA_MIN_LEARN_N:
         return None, n
     return float(np.median(oa[sel])), n
+
+
+def _oa_min_by_month(oa_damper_min, by_month) -> dict | None:
+    """The validated ``{month: position}`` seasonal OA damper minimum (0.101, #105), or None."""
+    if not by_month:
+        return None
+    out = {int(k): float(v) for k, v in by_month.items()}
+    if any(not 1 <= m <= 12 for m in out):
+        raise ValueError("oa_damper_min_by_month keys must be months 1-12")
+    if oa_damper_min is None:
+        raise ValueError(
+            "oa_damper_min_by_month needs oa_damper_min (the minimum position in the other months)"
+        )
+    return out
 
 
 def _false(n):
@@ -660,6 +675,10 @@ class G36Result:
     #: and applicable, plus ``fan_on``, ``suspended``, ``os`` and (0.98) ``evaluable``; indexed like
     #: the cleaned frame
     masks: pd.DataFrame | None = None
+    # --- provisional (0.101, #105) ---------------------------------------------------------------
+    #: the caller's seasonal ``{month: position %}`` override of ``oa_damper_min`` (0.101, #105);
+    #: None when not given or without an OA damper point
+    oa_damper_min_by_month: dict | None = None
 
     def as_dict(self):
         """Return the result as a plain dict (faults flattened to FC<n>_pct keys).
@@ -801,6 +820,7 @@ def run_g36_afdd(
     oa_damper_min: float | None = None,
     oa_damper_tol: float = OA_DAMPER_TOL,
     occupied=None,
+    oa_damper_min_by_month: dict | None = None,
 ) -> G36Result | None:
     """Run the G36 AFDD fault set over an AHU frame.
 
@@ -843,6 +863,12 @@ def run_g36_afdd(
     missing damper reading leaves it unclassified. Without an ``OA_Damper`` column OS#1 and OS#2
     are read from the valves alone, with a caveat.
 
+    **Seasonal minimum position** (0.101, #105): ``oa_damper_min_by_month`` (``{month (1-12):
+    position %}``) overrides ``oa_damper_min`` in the months it names, so a sequence with a summer
+    and a winter minimum judges each interval against its own month's position (by the index's
+    month). It needs ``oa_damper_min``, the position in the other months; the result's
+    ``oa_damper_min`` stays that position and ``oa_damper_min_by_month`` echoes the override.
+
     **occupied** (0.98, #94): an optional boolean mask (array or Series aligned to ``df``) of the
     intervals the caller wants evaluated, e.g. a trended occupancy point. Fan-on intervals outside
     it are never evaluated and are counted in ``n_unoccupied``. G36 itself suspends AFDD only when
@@ -877,6 +903,7 @@ def run_g36_afdd(
         df = df[~df.index.duplicated(keep="last")].sort_index()
     if fan_gate not in ("auto", "none"):
         raise ValueError(f"fan_gate must be 'auto' or 'none', got {fan_gate!r}")
+    oa_by_month = _oa_min_by_month(oa_damper_min, oa_damper_min_by_month)
     k = thr or G36Thresholds()
     n = len(df)
     delays = {
@@ -978,6 +1005,10 @@ def run_g36_afdd(
             "free cooling, and a heating interval counts as heating at minimum OA"
         )
     oa_econ = None if oa_min is None else oa_min + float(oa_damper_tol)
+    if oa_econ is not None and oa_by_month:
+        # a seasonal minimum (0.101, #105): each interval's own month's position
+        month_min = pd.Series(df.index.month).map(oa_by_month).fillna(oa_min)
+        oa_econ = month_min.to_numpy(dtype=float) + float(oa_damper_tol)
     os_codes = _classify_os_vec(hc, cc, oa, valve_thr, econ_damper_open, oa_econ)
     if oa_econ is not None:
         with np.errstate(invalid="ignore"):
@@ -1093,6 +1124,7 @@ def run_g36_afdd(
         delays=delays,
         oa_damper_min=None if oa_min is None else round(oa_min, 2),
         oa_damper_min_source=oa_min_src,
+        oa_damper_min_by_month=oa_by_month if has_oa else None,
         n_idle_at_min_oa=n_idle_min,
         n_unoccupied=n_unocc,
         n_heating_above_min_oa=n_heat_open,

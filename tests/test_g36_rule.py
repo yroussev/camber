@@ -247,3 +247,67 @@ def test_occupancy_gate_trended_evaluates_occupied_hours_only():
     assert any("no occupancy point is trended" in c for c in g.caveats)
     with pytest.raises(ValueError, match="occupancy_gate"):
         G36AFDD(occupancy_gate="schedule")
+
+
+def _two_season_ahu():
+    """Three January days heating at a 45 % winter damper minimum with 10 % OA by the temperature
+    balance (MAT 60 F from RAT 70 F / OAT -30 F), and three July days cooling at the 28 % summer
+    minimum."""
+    jan = pd.date_range("2026-01-05", periods=24 * 3, freq="1h")
+    jul = pd.date_range("2026-07-06", periods=24 * 3, freq="1h")
+    idx = jan.append(jul)
+    winter = idx.month == 1
+    return pd.DataFrame(
+        {
+            Role.SUPPLY_FAN_STATUS: np.ones(len(idx)),
+            Role.HEAT_VALVE: np.where(winter, 80.0, 0.0),
+            Role.COOL_VALVE: np.where(winter, 0.0, 60.0),
+            Role.OA_DAMPER: np.where(winter, 45.0, 28.0),
+            Role.SUPPLY_AIR_TEMP: np.where(winter, 65.0, 55.0),
+            Role.SUPPLY_AIR_TEMP_SP: np.where(winter, 65.0, 55.0),
+            Role.MIXED_AIR_TEMP: np.where(winter, 60.0, 75.6),
+            Role.RETURN_AIR_TEMP: np.full(len(idx), 70.0),
+            Role.OAT: np.where(winter, -30.0, 90.0),
+        },
+        index=idx,
+    ), winter
+
+
+def test_oa_damper_minimum_by_month_brings_winter_heating_into_fc6():
+    # 0.101 (#105): with the learned 28 % summer minimum the winter heating hours at the 45 %
+    # winter minimum are OS#5, outside FC6; the seasonal minimum puts them in OS#1, where FC6
+    # judges their 10 % OA against the 45 % design minimum (35 points off) and trips
+    fr, winter = _two_season_ahu()
+    learned = G36AFDD(min_oa_pct=45, min_oa_pct_by_month={7: 20}).analyze("AHU-1", fr)
+    m = learned.metrics
+    assert m["oa_damper_min"] == 28.0 and "oa_damper_min_by_month" not in m
+    assert m["os_hours"]["OS1"] == 0.0 and m["fc"]["FC6"]["pct"] == 0.0
+    assert not any("seasonal minimum position" in c for c in learned.caveats)
+    seasonal = G36AFDD(
+        min_oa_pct=45,
+        min_oa_pct_by_month={7: 20},
+        oa_damper_min=45,
+        oa_damper_min_by_month={7: 28},
+    ).analyze("AHU-1", fr)
+    s = seasonal.metrics
+    assert s["oa_damper_min"] == 45.0 and s["oa_damper_min_source"] == "caller"
+    assert s["oa_damper_min_by_month"] == {7: 28.0}
+    assert s["os_hours"]["OS1"] == float(winter.sum())
+    assert s["os_hours"]["OS4"] == float((~winter).sum())
+    fc6 = s["fc"]["FC6"]
+    assert fc6["applicable_hours"] == float(len(fr)) - s["suspended_hours"]
+    assert fc6["hours"] == float(winter.sum())  # every winter hour, none of the summer ones
+    assert any(
+        "seasonal minimum position of 45 %, by month {7: 28 %}" in c for c in seasonal.caveats
+    )
+    # config keys may be strings; the default is None
+    other = make_rule("g36_afdd", oa_damper_min=45, oa_damper_min_by_month={"7": 28})
+    assert other.oa_damper_min_by_month == {7: 28.0}
+    assert G36AFDD().oa_damper_min_by_month is None
+
+
+def test_oa_damper_minimum_by_month_is_validated():
+    with pytest.raises(ValueError, match="months 1-12"):
+        G36AFDD(oa_damper_min=45, oa_damper_min_by_month={13: 28})
+    with pytest.raises(ValueError, match="needs oa_damper_min"):
+        G36AFDD(oa_damper_min_by_month={7: 28})

@@ -262,11 +262,12 @@ role-frame and returns a `Finding`. Run with `registry.run(name, equip_refs, map
   deadband hour, an unoccupied recirculation run) is OS#5, where only FC1-FC4 apply. The minimum
   is `oa_damper_min`, learned by default from the unit's mechanical-cooling hours at minimum OA.
   Since 0.99 (#95) heating (OS#1) likewise needs the OA damper at that minimum: a heating hour
-  with the damper open beyond it is OS#5.
+  with the damper open beyond it is OS#5. Since 0.101 (#105) `oa_damper_min_by_month` gives a
+  sequence with a seasonal minimum position its own minimum per month.
   Unoccupied operation is evaluated, as in G36; `occupancy_gate="trended"` limits the evaluation
   to a trended occupancy point's occupied hours. Parameters: `heating_coil`, `min_oa_pct`
   (enables FC6, the test for a damper stuck open at minimum OA), `oa_damper_min`,
-  `oa_damper_tol`, `occupancy_gate`, `mode_delay_min`, `alarm_delay_min`, and the
+  `oa_damper_min_by_month`, `oa_damper_tol`, `occupancy_gate`, `mode_delay_min`, `alarm_delay_min`, and the
   screening-grade `warn_pct` / `fault_pct`. Like
   every air-handler rule it declines a VAV box, heat pump, fan coil or plant
   (`camber.rules.applicability`), and an FC13 it reports is linked to a chilled-water plant short

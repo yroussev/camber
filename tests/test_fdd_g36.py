@@ -511,3 +511,68 @@ def test_heating_with_a_missing_damper_reading_is_unclassified():
     df2, cooling2, _ = _heating_frame()
     r2 = run_g36_afdd(df2, "AHU", oa_damper_min=70.0)
     assert r2.os_distribution[OS_HEATING] == int((~cooling2).sum())
+
+
+def _two_season_frame():
+    """Three January days heating with the OA damper at a 45 % winter minimum, and three July
+    days: cooling at the 28 % summer minimum before noon, both coils idle with the damper at 40 %
+    after it (economizing above the summer minimum, below the winter one)."""
+    jan = pd.date_range("2026-01-05", periods=24 * 3, freq="1h")
+    jul = pd.date_range("2026-07-06", periods=24 * 3, freq="1h")
+    idx = jan.append(jul)
+    winter = idx.month == 1
+    cooling = ~winter & (idx.hour < 12)
+    idle = ~winter & ~cooling
+    df = pd.DataFrame(
+        {
+            "FS": 100.0,
+            "HC": np.where(winter, 100.0, 0.0),
+            "CC": np.where(cooling, 60.0, 0.0),
+            "OA_Damper": np.where(winter, 45.0, np.where(cooling, 28.0, 40.0)),
+            "SAT": 55.0,
+            "MAT": 60.0,
+            "RAT": 70.0,
+            "OAT": 40.0,
+        },
+        index=idx,
+    )
+    return df, winter, cooling, idle
+
+
+def test_oa_damper_minimum_by_month():
+    # 0.101 (#105): a seasonal minimum position judges each interval against its month's
+    df, winter, cooling, idle = _two_season_frame()
+    kw = {"mode_delay_min": 0, "alarm_delay_min": 0}
+    learned = run_g36_afdd(df, "AHU", **kw)
+    # learned from the July cooling hours: 28 %, so the winter minimum reads as open
+    assert learned.oa_damper_min == 28.0 and learned.oa_damper_min_by_month is None
+    assert learned.n_heating_above_min_oa == int(winter.sum())
+    assert learned.os_distribution[OS_HEATING] == 0
+    assert learned.os_distribution[OS_FREECOOL] == int(idle.sum())
+    # one fixed 45 % minimum: winter heating is OS#1, but July's 40 % idle hours sit at it
+    fixed = run_g36_afdd(df, "AHU", oa_damper_min=45.0, **kw)
+    assert fixed.os_distribution[OS_HEATING] == int(winter.sum())
+    assert fixed.os_distribution[OS_FREECOOL] == 0 and fixed.n_idle_at_min_oa == int(idle.sum())
+    # seasonal: 45 % with July at 28 % -- both seasons read as the sequence runs them
+    r = run_g36_afdd(df, "AHU", oa_damper_min=45.0, oa_damper_min_by_month={"7": 28}, **kw)
+    assert r.oa_damper_min == 45.0 and r.oa_damper_min_source == "caller"
+    assert r.oa_damper_min_by_month == {7: 28.0}
+    assert r.os_distribution[OS_HEATING] == int(winter.sum())
+    assert r.os_distribution[OS_FREECOOL] == int(idle.sum())
+    assert r.os_distribution[OS_MECH_MINOA] == int(cooling.sum())
+    assert r.n_heating_above_min_oa == 0 and r.n_idle_at_min_oa == 0
+    # without a damper point there is nothing to judge, and nothing is echoed
+    nodmp = run_g36_afdd(
+        df.drop(columns="OA_Damper"), "AHU", oa_damper_min=45.0, oa_damper_min_by_month={7: 28}
+    )
+    assert nodmp.oa_damper_min is None and nodmp.oa_damper_min_by_month is None
+
+
+def test_oa_damper_minimum_by_month_is_validated():
+    import pytest
+
+    df, *_ = _two_season_frame()
+    with pytest.raises(ValueError, match="months 1-12"):
+        run_g36_afdd(df, "AHU", oa_damper_min=45.0, oa_damper_min_by_month={0: 28})
+    with pytest.raises(ValueError, match="needs oa_damper_min"):
+        run_g36_afdd(df, "AHU", oa_damper_min_by_month={7: 28})
