@@ -415,6 +415,12 @@ Version numbers are given only where a release is already planned.
     - [x] #108 the walk-down's equipment item follows the cause that heads the RCx issue;
     - [x] #109 the open-fdd cross-check leaves the per-verdict list out of its JSON by default;
     - [x] integration: the open-fdd cross-check re-run on the merged code.
+  - **0.102 — follow-ups from 0.101** (integrated, not yet released). Closes #110–#112:
+    - [x] #110 the suggester's unitless range check no longer overturns a strong name on a dirty
+      series (dropout zeros ignored; a strong name keeps at least 75 % of its score);
+    - [x] #111 the `air-economizer` exercise teaches the economizer low-limit lockout; the capstone
+      adopts it;
+    - [x] #112 the RCx report ranks uncosted issues of one severity by confidence before the key.
 - **RCx report, next phase:** grounded AI prose with a cited fact index, an excess-outside-air cost
   model, cross-equipment (AHU → VAV) issues, and PDF output.
 - **open-fdd integration (#22):** items 1–4 are built for 0.99 (above), at the file and process
