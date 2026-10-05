@@ -125,10 +125,11 @@ caltrack_savings_hourly(
 
 ## Questions
 
-1. Find the onset unit's economizer issue. What rank, severity and confidence does the report
-   give it, and what is ranked above it? What cause does its heading name, what evidence in the
-   `free_cooling_missed` finding supports that cause (`missed_cause`, `commanded_open_pct`), and
-   what should the walk-down still confirm before anything is repaired?
+1. Which issue does the report rank first, on which unit, at what severity and confidence? None
+   of the issues has a cost here: what puts this one above the other warns? What cause does its
+   heading name, what evidence in the `free_cooling_missed` finding supports that cause
+   (`missed_cause`, `commanded_open_pct`), and what should the walk-down still confirm before
+   anything is repaired?
 2. How often did the onset unit run mechanical cooling in free-cooling weather, against the
    control? Why is a damper stuck for half the year only a warn over the whole year, and why do
    the outdoor-air-fraction rules stay quiet on it?

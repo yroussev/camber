@@ -19,7 +19,8 @@ power, baseline test against setback test).
 (CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
 refusal's data need, the damper issue's cause and the "Verify on site" section, 0.98.0-dev,
 2026-09-30; the free-cooling figures, the issue ranking and the walk-down rows with the
-economizer low-limit lockout in the config (#111), 0.102.0-dev, 2026-10-04.)
+economizer low-limit lockout in the config (#111), 0.102.0-dev, 2026-10-04; the ranking with
+uncosted issues ordered by confidence (#112), 0.102.0-dev, 2026-10-05.)
 """
 
 from __future__ import annotations
@@ -43,7 +44,6 @@ from camber.store import ParquetStore
 ONSET, FREE = "AHU__onset_damper_stuck_025", "AHU__fault_free"
 _MIN_OAF = 0.016  # the unit's own design minimum (its fixed 10 % damper position)
 _STUCK_OAF = 0.044  # the 25 % damper's OA fraction, a design parameter of the fault
-_DAMPER_RANK = {REAL: 3, STANDIN: 1}  # the onset unit's damper issue in the RCx ranking
 
 
 # --------------------------------------------------------------------------- the checks
@@ -76,10 +76,10 @@ def _low_limit_adopted(ctx) -> None:
 def _rcx_ranking(ctx) -> None:
     """Step 1: the onset unit's economizer chain is an issue headed by its cause (0.98, #88): the
     damper was commanded open and outside air did not arrive, so the recommended action is a
-    damper repair, not "enable the economizer". On the real data it is a warn ranked 3rd, the
-    only high-confidence issue: the two above it are uncosted warns too, and uncosted issues of one
-    severity are ordered by a fixed key, not by priority. The fault-free control has no economizer
-    issue: with the low limit its missed free cooling is ok."""
+    damper repair, not "enable the economizer". It ranks first. On the real data it is an
+    uncosted warn, the only high-confidence issue: the next two are uncosted warns at confidence
+    M, and uncosted issues of one severity rank by confidence before the key (0.102, #112). The
+    fault-free control has no economizer issue: with the low limit its missed free cooling is ok."""
     rep = _rcx(ctx)
     issues = rep.to_dict()["issues"]
     econ = [i for i in issues if i["chain"] == "econ"]
@@ -89,19 +89,19 @@ def _rcx_ranking(ctx) -> None:
     assert iss["cause"] == "Outdoor-air damper not modulating (stuck low)", iss
     assert iss["title"] == "Repair the outdoor-air damper or actuator", iss
     assert iss["confidence"] == "H", iss
-    rank = _DAMPER_RANK[ctx.mode]
-    assert iss["rank"] == rank, (iss["rank"], [(i["equip"], i["rules"]) for i in issues])
+    assert iss["rank"] == 1, (iss["rank"], [(i["equip"], i["rules"]) for i in issues])
     if ctx.mode == REAL:
-        assert iss["severity"] == "warn", iss
-        above = issues[: rank - 1]
-        assert all(i["severity"] == "warn" and i["cost"] is None for i in above), above
-        assert [(i["equip"], i["rules"]) for i in above] == [
+        assert iss["severity"] == "warn" and iss["cost"] is None, iss
+        below = issues[1:3]
+        assert all(i["severity"] == "warn" and i["cost"] is None for i in below), below
+        assert all(i["confidence"] == "M" for i in below), below
+        assert [(i["equip"], i["rules"]) for i in below] == [
             (ONSET, ["supply_air_reset"]),
             (FREE, ["static_pressure_reset"]),
-        ], above
+        ], below
         assert all(i["confidence"] != "H" for i in issues if i is not iss), issues
     html = rep.to_html()
-    assert f"Issue {rank}: Outdoor-air damper not modulating (stuck low)" in html
+    assert "Issue 1: Outdoor-air damper not modulating (stuck low)" in html
     assert "Recommended action — Repair the outdoor-air damper or actuator" in html
 
 
@@ -153,7 +153,7 @@ def _rcx_verify(ctx) -> None:
     equipment = next(rows for lead, rows in kinds.items() if lead.startswith("Equipment"))
     damper = [r for r in equipment if r[1] == ONSET and r[3].startswith("oa_damper (command)")]
     assert len(damper) == 1, equipment
-    assert damper[0][0].endswith(f">{_DAMPER_RANK[ctx.mode]}</a>"), damper  # that issue's item
+    assert damper[0][0].endswith(">1</a>"), damper  # the top issue's item
     assert "blades" in damper[0][2] and "mixed-air sensor" in damper[0][5], damper
     assert not [r for r in equipment if r[1] == FREE and "oa_damper" in r[3]], equipment
     assert not any(lead.startswith("Design values") for lead in leads), leads

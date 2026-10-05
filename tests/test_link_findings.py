@@ -190,6 +190,29 @@ def test_finding_confidence_is_the_minimum_component_with_a_why_line_each():
     assert mid.components == {"sample": "M", "corroboration": "M"}
 
 
+def test_uncosted_issues_of_one_tier_rank_by_confidence_then_key():
+    """0.102 (#112): within a tier, uncosted issues rank H, M, L, then ungraded, then by key;
+    costed issues keep their dollar order whatever their confidence."""
+    equips = ["A", "B", "C", "D", "E", "F", "G"]
+    fs = [_f("leaking_valve", equip=e) for e in equips]
+    usd = {"A": None, "B": None, "C": None, "D": None, "E": 10.0, "F": 900.0, "G": None}
+    grade = {"A": "L", "B": "M", "C": "H", "D": "M", "E": "H", "F": "L", "G": "?"}
+    costs = [_cost(f, usd[f.equip]) for f in fs]
+
+    def conf(i):
+        c = finding_confidence(i.root)
+        c.level = grade[i.equip]
+        return c
+
+    issues = link_findings(fs, rules=REG, costs=costs, confidence_for=conf)
+    m = sorted(["B", "D"], key=lambda e: next(i.key for i in issues if i.equip == e))
+    assert [i.equip for i in issues] == ["F", "E", "C", *m, "A", "G"]
+    again = link_findings(
+        list(reversed(fs)), rules=REG, costs=list(reversed(costs)), confidence_for=conf
+    )
+    assert [i.key for i in again] == [i.key for i in issues]
+
+
 def test_confidence_for_hook_and_issue_properties():
     f = _f("leaking_valve")
     (issue,) = link_findings(

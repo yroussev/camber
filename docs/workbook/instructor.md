@@ -1263,21 +1263,24 @@ synthetic, cut from the open BDG2 meters.
 Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev (the
 damper issue's cause, the M&V data need and the Verify on site section: 0.98.0-dev; the
 free-cooling figures, the ranking and the walk-down rows with the economizer low limit in the
-config: 0.102.0-dev), with the commands on the [exercise page](capstone.md#setup). The RCx
-report is the one written before the drift baselines are frozen. The config sets
-`free_cooling_missed`'s economizer low-limit lockout at the documented 33.8 °F, as learners did in
-step 5 of `air-economizer`, so neither unit's cold-weather hours at the damper minimum count as
-missed free cooling.
+config, and uncosted issues ranked by confidence: 0.102.0-dev), with the commands on the
+[exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
+are frozen. The config sets `free_cooling_missed`'s economizer low-limit lockout at the
+documented 33.8 °F, as learners did in step 5 of `air-economizer`, so neither unit's cold-weather
+hours at the damper minimum count as missed free cooling.
 
 **Answer key**
 
-1. *The economizer issue.* Issue 3 is headed "Outdoor-air damper not modulating (stuck low)", on
+1. *The top issue.* Rank 1 is headed "Outdoor-air damper not modulating (stuck low)", on
    `AHU__onset_damper_stuck_025`, a **warn** with confidence H, the only high-confidence issue in
-   the report. The two ranked above it are also uncosted warns: the onset unit's supply-air
-   reset and the control's static-pressure reset, both at confidence M. Within one severity the
-   report puts unconditional issues before conditional ones and costed before uncosted, by cost;
-   past that the order is fixed but arbitrary (the issue key). So rank 3 here is not a priority judgement: confidence, and the drift check of
-   question 5, are what single the damper out. The heading names the cause; the recommended
+   the report. Every issue here is an uncosted warn (the config gives no equipment sizing), so
+   no dollars separate them. Within one severity the report puts unconditional issues before
+   conditional ones and costed before uncosted, by cost; uncosted issues then rank by
+   confidence, H before M before L, and only then by the issue key, a fixed tie-break. The
+   damper issue is first because its evidence is the most trustworthy; the onset unit's
+   supply-air reset and the control's static-pressure reset follow at confidence M. Rank here
+   is a ranking by confidence, not by size: the drift check of question 5 is what confirms the
+   damper. The heading names the cause; the recommended
    action is "Repair the outdoor-air damper or actuator": stroke the damper from the BAS and
    watch the blades, the linkage and the actuator before changing any economizer logic. The
    finding tells the two causes apart by setting the command against the temperatures. On 90%
@@ -1304,11 +1307,11 @@ missed free cooling.
 4. *Walk-down checklist and re-tuning plan* (a model answer; accept any that covers the
    evidence). The report's **Verify on site** section is the generated version: its sensor table
    leads with the onset unit's `duct_static_sp` (trust 0.40, untrusted), then the equipment table
-   lists each issue's item in rank order: the supply-air and static-reset logic of both units,
-   and, on issue 3, the onset unit's damper (look at the blades, linkage and actuator while the
-   BAS strokes it; confirms if the blades stay near one position at a 100 % command; refutes if
-   they travel fully, and then the mixed-air sensor is the suspect). With the low limit the
-   control has no economizer item. It lists no design values: the economizer's minimum outdoor
+   lists each issue's item in rank order: first, on issue 1, the onset unit's damper (look at
+   the blades, linkage and actuator while the BAS strokes it; confirms if the blades stay near
+   one position at a 100 % command; refutes if they travel fully, and then the mixed-air sensor
+   is the suspect), then the supply-air and static-reset logic of both units. With the low limit
+   the control has no economizer item. It lists no design values: the economizer's minimum outdoor
    air (1.6 %), 60 °F high limit and 33.8 °F low limit are site parameters in this config, not
    rule defaults. The "rule defaults" confidence lines belong to `supply_air_reset`
    and `static_pressure_reset`, whose parameters are detection thresholds, not site facts. A
@@ -1355,8 +1358,8 @@ missed free cooling.
 
 - Freezing the drift baselines before writing the RCx report, so the report already contains the
   drift verdict.
-- Reading the rank of uncosted issues of one severity as a priority. Add `report.loads` sizing
-  to cost them, or weigh confidence and the walk-down.
+- Reading the rank of uncosted issues of one severity as a measure of size. It orders them by
+  confidence; add `report.loads` sizing to cost them and rank them by dollars.
 - Dropping the low limit from `cap.json` to make the damper issue a fault again. The control
   then warns too, for hours its sequence locks the economizer out by design.
 - Reprogramming the economizer on a damper-cause issue: the command already opens, so the fix is

@@ -32,6 +32,30 @@ All notable changes to CAMBER are documented here. The format follows
   updated.
 <!-- /0102-workbook-lowlimit -->
 
+<!-- 0102-rcx-rank -->
+### Changed
+- **RCx: uncosted issues of one severity rank by confidence before the issue key (#112).**
+  `link_findings` used to order uncosted issues of one tier by issue key, a fixed but arbitrary
+  tie-break. They now rank by input-trust confidence, H before M before L, and then by key.
+  Severity, conditional-last and costed-first by dollars are unchanged, and costed issues keep
+  their dollar order. This intentionally changes the RCx ranking where uncosted issues of one
+  tier differ in confidence. On the 15 catalog run templates (default subsets), 4 of 96 issues
+  change rank, in 2 reports, and each pair swaps. In `lbnl-ddahu`, `DMPRStuck_OA_100`'s
+  `outdoor_air_fraction` fault (H) moves from 2 to 1 above `DMPRStuck_OA_0`'s `g36_afdd` fault
+  (M). In `ornl-frp-ops`, `base_heating`'s `night_weekend_setback` fault (H) moves from 2 to 1
+  above `sb_heating`'s `compressor_short_cycle` fault (M). Both reports keep their chosen week;
+  only its evidence score, which weights issues by 1/rank, changes. The RCx golden is unchanged:
+  its synthetic site has no uncosted tie with mixed confidence. `docs/RCX-REPORT.md` describes
+  the new order.
+- **Workbook `capstone`: the damper issue ranks first again (#112).** On the real data, the onset
+  unit's stuck-damper issue (an uncosted warn, confidence H) now ranks 1, above the onset unit's
+  supply-air reset and the control's static-pressure reset (uncosted warns, confidence M). It
+  ranked 3 in #111. The declaration asserts rank 1 in both modes. The page's question 1 asks what
+  puts the issue first when nothing is costed. The instructor key explains the confidence order,
+  lists the damper first in the walk-down, and rewords the common mistake about reading an
+  uncosted rank as a measure of size.
+<!-- /0102-rcx-rank -->
+
 ## [0.101.0] — 2026-10-04
 
 <!-- Each 0.101 branch adds its bullets only inside its own marked block. -->

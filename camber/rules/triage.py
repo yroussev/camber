@@ -727,7 +727,8 @@ def link_findings(
       str | None`` names a reason to leave a member out of the dollars (e.g. a reference target the
       site never declared).
     * **Rank**: severity tier, then non-conditional before conditional, costed before uncosted, $
-      descending; ties break on the key, so the order is deterministic.
+      descending; uncosted issues of one tier then rank by confidence, H before M before L
+      (0.102, #112); ties break on the key, so the order is deterministic.
     * **Confidence**: ``confidence_for(issue) -> Confidence`` (default: :func:`finding_confidence`
       of the root with the trust scores of its inputs and the conditional causes).
     * **Plant capacity** (0.91): an issue carrying a SAT-high finding (:func:`is_sat_high`) gets
@@ -879,12 +880,19 @@ def link_findings(
             i.conditional,
             i.cost is None,
             -(i.cost or 0.0),
+            _confidence_rank(i) if i.cost is None else 0,
             i.key,
         )
     )
     for n, iss in enumerate(issues, 1):
         iss.rank = n
     return issues
+
+
+def _confidence_rank(issue) -> int:
+    """Sort position of an issue's confidence grade: H, then M, then L, then ungraded (#112)."""
+    lvl = getattr(issue, "confidence", None)
+    return _LEVELS[::-1].index(lvl) if lvl in _LEVELS else len(_LEVELS)
 
 
 def _mask_union(findings, mask_for, gate):

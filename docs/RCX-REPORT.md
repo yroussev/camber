@@ -55,7 +55,9 @@ stays the same from run to run.
 - **Uncosted is explicit.** An issue with no costed member shows what the estimator needs
   (`uncosted — needs heating_capacity_kbtuh`). Sizing comes from `report.loads`.
 - **Rank**: severity tier; then non-conditional before conditional; then costed before uncosted;
-  then $/yr, largest first; ties break on the key, so the order is deterministic.
+  then $/yr, largest first. Uncosted issues of one tier then rank by confidence, H before M
+  before L (0.102, #112), so the issue with the most trustworthy evidence leads when no dollars
+  separate them. Ties break on the key, so the order is deterministic.
 
 **Sensor precedence.** A sensor problem is derived from the data. It is one of three things: a
 `sensor_drift:<role>` finding at warn or fault; an untrusted or stuck trust verdict on the gated
