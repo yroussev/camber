@@ -188,6 +188,24 @@ templates try (°C or °F, Pa or inH2O...), and the best reading counts. A 22 °
 longer out of range for being read as °F, and a sentinel or dead channel (`-999`) that fits no
 unit is demoted as it is on the default path.
 
+**Range check on dirty series (0.102, #110).** Two changes stop the unitless check from
+overturning a strong name on a dirty series:
+
+- **Exact zeros where the role cannot read 0 are dropouts.** A 0 is left out of the check when
+  no plausible unit puts it inside the role's bounds (a 0 °C room is 32 °F, below a space
+  temperature's floor; no CO2 reads 0 ppm). An all-zero series then gives no range verdict.
+  Where 0 is a real reading (a closed damper, a stopped fan's airflow), zeros still count.
+- **A strong name keeps at least 75 % of its score.** When the role is the name's best lexical
+  match and scores at least 0.6 (`INFORMATIVE_NAME`, where the data only breaks ties), the
+  check multiplies its score by no less than `STRONG_NAME_RANGE_FLOOR` (0.75). Negative or
+  sign-flipped flows, sentinel codes and mixed scales then cost a strong name some score, but
+  they no longer hand top-1 to a role with no physical bounds, such as an airflow setpoint. A
+  series with no reading inside the bounds in any plausible unit (a `-999` dead channel) is
+  still demoted in full.
+
+Both act only on the time-series path, and only without a declared unit. A declared unit is
+trusted as before.
+
 **Setpoint guard (0.101, #106).** An occupant-adjusted or reset zone setpoint moves like the room
 it controls, so the data alone read `temp_setpoint` as `space_temp`. When the name says setpoint
 (`setpoint`, `SP`, `STPT`, or a run-together `RMCLGSPT`), the data now ranks only the setpoint
@@ -613,8 +631,56 @@ naming.*
   the default with a series reaches 89.4 %, below the name alone (93.2 %). The same series
   without the range check reach 95.5 %. BTS site C's data has negative airflows and dropouts, so
   the check demotes airflows to airflow setpoints (19 points) and a few CO2 and zone points. The
-  `ahu_03_supply_temp` style shows the same (93.9 → 89.9 %). Pass `use_timeseries=False`, or
-  clean the series, where the names are already reliable.
+  `ahu_03_supply_temp` style shows the same (93.9 → 89.9 %). *Fixed in 0.102 (#110): see the
+  next section.*
+
+#### 0.102: the range check on dirty series (#110)
+
+The same scoring as the 0.101 table: every pool at default settings,
+`suggest_roles(name, series=series)` with the whole series, no unit, no outdoor-air series and
+no suggester. "Before" is 0.101, "after" is 0.102. The no-series column does not change.
+
+| pool | points | default, no series top-1 / top-3 % | default with series, 0.101 top-1 / top-3 % | default with series, 0.102 top-1 / top-3 % | top-1 helped / hurt |
+|---|---|---|---|---|---|
+| held-out catalog names with series | 89 | 76.4 / 79.8 | 73.0 / 80.9 | 73.0 / 80.9 | 0 / 0 |
+| real names | 422 | 94.3 / 95.0 | 95.7 / 96.9 | 95.7 / 96.9 | 0 / 0 |
+| real names, excluding in-sample names | 129 | 86.0 / 88.4 | 90.7 / 93.8 | 90.7 / 93.8 | 0 / 0 |
+| simulated LBNL sets | 78 | 71.8 / 85.9 | 74.4 / 85.9 | 74.4 / 85.9 | 0 / 0 |
+| BTS anonymised | 903 | 0.0 / 0.0 | 46.2 / 64.6 | 46.2 / 64.6 | 0 / 0 |
+| BTS Brick-class labels as names (upper bound) | 903 | 93.2 / 97.2 | 89.4 / 97.2 | 93.4 / 99.9 | 36 / 0 |
+| synthetic `AHU1_SAT` | 903 | 64.6 / 69.4 | 70.4 / 81.7 | 73.0 / 84.1 | 24 / 1 |
+| synthetic `VAV-2-14 DA-T` | 903 | 64.7 / 78.6 | 71.3 / 86.0 | 73.3 / 86.8 | 20 / 2 |
+| synthetic `B2.L3.FCU07.RmTmp` | 903 | 79.4 / 84.6 | 80.8 / 89.6 | 82.7 / 90.8 | 17 / 0 |
+| synthetic `ahu_03_supply_temp` | 903 | 93.9 / 96.9 | 89.9 / 96.2 | 93.9 / 98.9 | 36 / 0 |
+| synthetic `201-AHU3:SA-TMP` | 903 | 63.3 / 77.0 | 70.5 / 86.6 | 73.0 / 87.3 | 23 / 1 |
+
+*Synthetic names are synthetic, and the BTS Brick-class rows are an upper bound, not real-world
+naming.*
+
+- **No pool loses top-1 or top-3.** The held-out, real-name, simulated and anonymised pools keep
+  every top-1, so the held-out pool keeps its 0.101 gain. `catalog_names.py --data` (name plus
+  data with the series) is also unchanged. The only other change is a third suggestion: 15
+  `lbnl-b59` zone fan speeds, often 0, now list `space_temp` third, because their zeros are
+  dropouts for a temperature.
+- **Strong names are back at or above the name alone.** BTS Brick-class names read 93.4 % with
+  the series (93.2 % from the name alone; 89.4 % in 0.101), and the `ahu_03_supply_temp` style
+  93.9 % (93.9 %; 89.9 % in 0.101). The 0.101 losses were site C's discharge airflows logged
+  mostly negative (19 points, read as airflow setpoints), all-zero outdoor CO2 and zone
+  temperature channels, zone temperatures at a fraction of their scale, and sentinel-laden
+  chilled-water and hot-water points.
+- **The 4 synthetic points that now miss** are three airflow setpoints whose synthetic
+  abbreviation (`D-CFM-SPT`, `D-FLW-SPT`) scores `airflow` as the name's best role, and one
+  chilled-water return (`B8_CWRTMP`) read as condenser water. In 0.101 the range check had demoted their negative `airflow`
+  readings, and the setpoint, which has no physical bounds, won by that asymmetry.
+- **Switching the unitless check off entirely** scores a little higher on most pools (BTS
+  Brick-class 95.5 %, held-out 74.2 / 82.0 %), but real-name top-3 falls to 96.7 % and a
+  sentinel or dead channel (`-999`) is no longer demoted, which #106 added the check for. The
+  check stays and is capped instead. Floors from 0.5 to 1.0 give the same top-1 on every pool to within
+  a point. The remaining gap is mostly weak names (`On_Off_Status` read as a compressor status,
+  19 points), not strong ones.
+- The zero-dropout rule alone, without the cap, lifts BTS Brick-class names by under a point
+  (90.3 %): the airflow losses are negative readings, not zeros. Dropping every exact zero,
+  whatever the role, scores lower than 0.101, because 0 is a real reading for many roles.
 
 ## Review the unmapped tags — `review_unmapped`
 

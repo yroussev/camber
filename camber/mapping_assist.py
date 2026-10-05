@@ -31,6 +31,7 @@ from .sensorhealth import PHYSICAL_BOUNDS, range_violation_frac
 
 __all__ = [
     "ROLE_UNIT",
+    "STRONG_NAME_RANGE_FLOOR",
     "UNLOCATED_TEMP_PENALTY",
     "WATER_AIR_PENALTY",
     "RoleSuggestion",
@@ -578,6 +579,16 @@ def _outdoor_guard(toks):
     return allowed | ({Role.WETBULB_TEMP} if "wetbulb" in concepts else frozenset())
 
 
+#: the least the unitless physical-range gate of the time-series path keeps of a role's score
+#: when the name strongly supports that role: it is the token's best lexical role and scores at
+#: least :data:`~camber.mapping_timeseries.INFORMATIVE_NAME` (0.102, #110). A dirty series --
+#: negative or sign-flipped flows, sentinel codes, mixed scales -- then costs a strong name at
+#: most a quarter of its score instead of overturning it. A series with no reading inside the
+#: bounds in any plausible unit (a sentinel, a dead channel) is still demoted in full. CAMBER
+#: judgment, checked on the suggester evaluation pools (``examples/suggester_eval``): 0.5 to 1.0
+#: give the same top-1 on every pool to within a point; 0.75 leaves the gate a say.
+STRONG_NAME_RANGE_FLOOR = 0.75
+
 _SETPOINT_ROLES = frozenset(r for r in Role if "sp" in _ROLE_CONCEPTS[r])
 
 
@@ -610,6 +621,14 @@ def _plausible_scalings(role: Role) -> list:
     return list(dict.fromkeys(out))
 
 
+def _zero_plausible(role: Role, scalings) -> bool:
+    """Whether a reading of exactly 0 lies inside ``role``'s physical bounds in some plausible
+    unit (0.102, #110): ``0 * scale + offset`` for each of ``scalings``, without the offset for
+    a temperature difference. A 0 degC zone temperature (32 degF) and a 0 ppm CO2 are not."""
+    lo, hi = PHYSICAL_BOUNDS[role]
+    return any(lo <= (0.0 if role in _DELTA_TEMP_ROLES else b) <= hi for _, b in scalings)
+
+
 def _ts_range_violation(series, role: Role, unit: str) -> float:
     """The physical-range violation of ``series`` for ``role`` on the time-series path.
 
@@ -617,11 +636,21 @@ def _ts_range_violation(series, role: Role, unit: str) -> float:
     read in each plausible unit of the role and the best reading counts, so a degC zone
     temperature or a duct static in Pa is not rejected for its unit, while a series that no
     plausible unit puts inside the bounds (a sentinel, a dead channel) is.
-    Before 0.101 a point with no declared unit skipped the check on this path."""
+    Before 0.101 a point with no declared unit skipped the check on this path. From 0.102 (#110)
+    exact zeros are left out when the role cannot read 0 in any plausible unit
+    (:func:`_zero_plausible`): they are dropouts, and an all-zero series gives no verdict."""
     if unit:
         return range_violation_frac(_in_bound_units(series, role, unit), role)
+    scalings = _plausible_scalings(role)
+    if not _zero_plausible(role, scalings):
+        # 0.102 (#110): an exact zero the role cannot read in any plausible unit is a dropout,
+        # not evidence; an all-zero series (a dead channel) then says nothing about the role
+        try:
+            series = series[series != 0]
+        except TypeError:  # a non-numeric series: left to the check as is
+            pass
     best = float("nan")
-    for a, b in _plausible_scalings(role):
+    for a, b in scalings:
         if role in _DELTA_TEMP_ROLES:
             b = 0.0  # a temperature difference converts without the offset
         try:
@@ -648,6 +677,9 @@ class FeatureSuggester:
     the weather-station guard to the time-series path (:func:`_outdoor_guard`). 0.101 (#106) adds
     the setpoint guard (:func:`_setpoint_guard`) and range-checks a point with no declared unit
     in every plausible unit (:func:`_ts_range_violation`); both act only on the time-series path.
+    0.102 (#110) keeps that unitless check from overturning a strong name on a dirty series: exact
+    zeros a role cannot read are dropouts, and the name's best role keeps at least
+    :data:`STRONG_NAME_RANGE_FLOOR` of its score unless no reading fits.
     The class default stays name-only; from 0.101 (#107) :func:`suggest_roles` and
     :func:`review_unmapped` build it with ``use_timeseries=True`` when a series is passed.
     """
@@ -716,7 +748,7 @@ class FeatureSuggester:
 
     def _suggest_ts(self, token, *, series, unit, k, oat, profile) -> list:
         """The time-series-aware path (``use_timeseries=True``; see :mod:`.mapping_timeseries`)."""
-        from .mapping_timeseries import blend, profile_series, template_scores
+        from .mapping_timeseries import INFORMATIVE_NAME, blend, profile_series, template_scores
 
         words = _tag_tokens(token)
         u = _norm_unit(unit)
@@ -759,7 +791,12 @@ class FeatureSuggester:
                 rv = _ts_range_violation(series, role, u)
                 if rv == rv:
                     if rv > 0.1:
-                        s *= 1.0 - min(rv, 1.0)
+                        m = 1.0 - min(rv, 1.0)
+                        if not u and rv < 1.0 and lex >= max(best_lex, INFORMATIVE_NAME):
+                            # a strong name is not overturned by a dirty series; a series that
+                            # never fits (a sentinel, a dead channel) still is (0.102, #110)
+                            m = max(m, STRONG_NAME_RANGE_FLOOR)
+                        s *= m
                     else:
                         s += 0.03
                         bases.append("range_fit")
