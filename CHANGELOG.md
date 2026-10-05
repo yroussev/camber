@@ -4,6 +4,34 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.102.0] — Unreleased
+
+<!-- Each 0.102 branch adds its bullets only inside its own marked block. -->
+
+<!-- 0102-workbook-lowlimit -->
+### Changed
+- **Workbook `air-economizer` teaches the economizer low-limit lockout (#111).** A new step 5
+  has learners read `free_cooling_missed`'s warn on the fault-free unit (17.5 %). They then find
+  from the trends and the unit's sequence that 899 of its 965 missed hours (93 %) fall below the
+  documented 33.8 °F lockout, where the damper is held at its minimum by design. They set
+  `low_limit_f` 33.8 and re-run: the fault-free unit reads ok (1.96 %), and the dampers stuck at
+  10 % and 25 % stay a fault (49.6 %). The exercise config leaves the low limit out on purpose,
+  and its `_comment` says so. The declaration pins both readings, and the page (a new step and
+  question, with later ones renumbered) and the instructor key are updated. The stand-in now
+  models the lockout (four cold days below it), so both readings are also checked offline.
+- **Workbook `capstone` adopts the same low limit (#111), which intentionally changes its
+  answers.** `free_cooling_missed` in the capstone config now sets `low_limit_f` 33.8, with a
+  basis, to match the dataset template and the economizer exercise. On the real data the
+  control unit reads ok (2.0 %, was a 17 % warn) and loses its spurious "enable the economizer"
+  issue and walk-down item. The onset unit reads a warn at 21 % (was a 30 % fault): six healthy
+  months dilute a 1 July onset in a year-long share. Its damper issue keeps its cause heading
+  and confidence H, and it now has stronger cause evidence (`commanded_open_pct` 89.9 % of 640
+  h, was 40.3 % of 673 h). It ranks third behind two uncosted warns, whose order within one
+  severity is a fixed tiebreak, not a priority. The key now teaches that point. Drift is
+  unchanged (-83, fault). The declaration, the page (questions 1 and 2, a caveat) and the key are
+  updated.
+<!-- /0102-workbook-lowlimit -->
+
 ## [0.101.0] — 2026-10-04
 
 <!-- Each 0.101 branch adds its bullets only inside its own marked block. -->

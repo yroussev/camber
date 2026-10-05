@@ -1,5 +1,5 @@
 {
-  "_comment": "Workbook exercise capstone (docs/workbook/capstone.md): the lbnl-sdahu spliced fault-onset run AHU__onset_damper_stuck_025 (fault-free until 2018-07-01, then the OA damper stuck at 25%) beside the fault-free run AHU__fault_free as its control. Rules: the economizer three of the air-economizer exercise with this unit's own design minimum (a 1.6% OA fraction at its fixed 10% minimum damper position) and its fixed 60 F dry-bulb high limit, both from the dataset template (configs/lbnl-sdahu.json), plus supply_air_control, supply_air_reset and static_pressure_reset so the RCx report has the air-side issues a re-tuning plan must weigh. drift: the ahu family with the first half of 2018 (before the onset) as the frozen baseline and the second half as the current window; `camber drift freeze` writes capstone-baselines.json next to this config, and `camber drift run` scores against it. Freeze only after writing the RCx report: once baselines exist, `camber run` and `camber report` fold the drift verdicts into the findings.",
+  "_comment": "Workbook exercise capstone (docs/workbook/capstone.md): the lbnl-sdahu spliced fault-onset run AHU__onset_damper_stuck_025 (fault-free until 2018-07-01, then the OA damper stuck at 25%) beside the fault-free run AHU__fault_free as its control. Rules: the economizer three of the air-economizer exercise with this unit's own design minimum (a 1.6% OA fraction at its fixed 10% minimum damper position) and its fixed 60 F dry-bulb high limit, both from the dataset template (configs/lbnl-sdahu.json), and for free_cooling_missed the documented 33.8 F economizer low-limit lockout (low_limit_f, also the template's; the air-economizer exercise adds it in its step 5), so the hours below it, when the sequence holds the damper at its minimum by design, are not read as missed free cooling, plus supply_air_control, supply_air_reset and static_pressure_reset so the RCx report has the air-side issues a re-tuning plan must weigh. drift: the ahu family with the first half of 2018 (before the onset) as the frozen baseline and the second half as the current window; `camber drift freeze` writes capstone-baselines.json next to this config, and `camber drift run` scores against it. Freeze only after writing the RCx report: once baselines exist, `camber run` and `camber report` fold the drift verdicts into the findings.",
   "_dataset": "lbnl-sdahu",
   "source": {
     "kind": "store",
@@ -35,7 +35,11 @@
     {
       "name": "free_cooling_missed",
       "params": {
-        "high_limit_f": 60.0
+        "high_limit_f": 60.0,
+        "low_limit_f": 33.8
+      },
+      "basis": {
+        "low_limit_f": "documented: the economizer runs between 33.8 F and 60 F (inventory section 1.2), so below 33.8 F it is locked out and the sequence holds the OA damper at its 10% minimum by design; the low limit the air-economizer exercise adds"
       }
     },
     "supply_air_control",

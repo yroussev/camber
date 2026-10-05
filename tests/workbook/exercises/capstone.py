@@ -17,8 +17,9 @@ and the M&V attempt in Python shown on the page (``caltrack_savings_hourly`` on 
 power, baseline test against setback test).
 
 (CAMBER 0.97.0-dev, the lbnl-sdahu and ornl-frp-ops default subsets, 2026-09-29; the M&V
-refusal's data need, the top issue's cause and the "Verify on site" section, 0.98.0-dev,
-2026-09-30.)
+refusal's data need, the damper issue's cause and the "Verify on site" section, 0.98.0-dev,
+2026-09-30; the free-cooling figures, the issue ranking and the walk-down rows with the
+economizer low-limit lockout in the config (#111), 0.102.0-dev, 2026-10-04.)
 """
 
 from __future__ import annotations
@@ -29,8 +30,9 @@ import tempfile
 
 import numpy as np
 import pandas as pd
-from _workbook import REAL, Check, Exercise, Finding, Metric, Run, write_standin
+from _workbook import REAL, STANDIN, Check, Exercise, Finding, Metric, Run, write_standin
 
+from camber import datasets
 from camber.config import run_config, run_drift_config
 from camber.mandv.caltrack import caltrack_savings_hourly
 from camber.mandv.sufficiency import InsufficientBaseline
@@ -41,6 +43,7 @@ from camber.store import ParquetStore
 ONSET, FREE = "AHU__onset_damper_stuck_025", "AHU__fault_free"
 _MIN_OAF = 0.016  # the unit's own design minimum (its fixed 10 % damper position)
 _STUCK_OAF = 0.044  # the 25 % damper's OA fraction, a design parameter of the fault
+_DAMPER_RANK = {REAL: 3, STANDIN: 1}  # the onset unit's damper issue in the RCx ranking
 
 
 # --------------------------------------------------------------------------- the checks
@@ -58,30 +61,59 @@ def _rcx(ctx):
     return cache["rcx"]
 
 
+def _low_limit_adopted(ctx) -> None:
+    """The capstone keeps the economizer low-limit lockout the air-economizer exercise teaches
+    (#111): free_cooling_missed runs with the dataset template's documented 33.8 F."""
+
+    def low(cfg):
+        rule = next(r for r in cfg["rules"] if r.get("name") == "free_cooling_missed")
+        return rule["params"].get("low_limit_f")
+
+    template = datasets.config_template("lbnl-sdahu", ctx.store)
+    assert low(ctx.config("main")) == low(template) == 33.8, (low(ctx.config()), low(template))
+
+
 def _rcx_ranking(ctx) -> None:
-    """Step 1: the top issue is the onset unit's economizer chain, at fault severity. Its heading
-    names the cause (0.98, #88): the damper was commanded open and outside air did not arrive, so
-    the recommended action is a damper repair, not "enable the economizer"."""
+    """Step 1: the onset unit's economizer chain is an issue headed by its cause (0.98, #88): the
+    damper was commanded open and outside air did not arrive, so the recommended action is a
+    damper repair, not "enable the economizer". On the real data it is a warn ranked 3rd, the
+    only high-confidence issue: the two above it are uncosted warns too, and uncosted issues of one
+    severity are ordered by a fixed key, not by priority. The fault-free control has no economizer
+    issue: with the low limit its missed free cooling is ok."""
     rep = _rcx(ctx)
-    top = rep.to_dict()["issues"][0]
-    assert top["equip"] == ONSET and top["severity"] == "fault", top
-    assert "free_cooling_missed" in top["rules"] and top["chain"] == "econ", top
-    assert top["cause"] == "Outdoor-air damper not modulating (stuck low)", top
-    assert top["title"] == "Repair the outdoor-air damper or actuator", top
+    issues = rep.to_dict()["issues"]
+    econ = [i for i in issues if i["chain"] == "econ"]
+    assert len(econ) == 1, [(i["equip"], i["rules"]) for i in econ]
+    (iss,) = econ
+    assert iss["equip"] == ONSET and "free_cooling_missed" in iss["rules"], iss
+    assert iss["cause"] == "Outdoor-air damper not modulating (stuck low)", iss
+    assert iss["title"] == "Repair the outdoor-air damper or actuator", iss
+    assert iss["confidence"] == "H", iss
+    rank = _DAMPER_RANK[ctx.mode]
+    assert iss["rank"] == rank, (iss["rank"], [(i["equip"], i["rules"]) for i in issues])
+    if ctx.mode == REAL:
+        assert iss["severity"] == "warn", iss
+        above = issues[: rank - 1]
+        assert all(i["severity"] == "warn" and i["cost"] is None for i in above), above
+        assert [(i["equip"], i["rules"]) for i in above] == [
+            (ONSET, ["supply_air_reset"]),
+            (FREE, ["static_pressure_reset"]),
+        ], above
+        assert all(i["confidence"] != "H" for i in issues if i is not iss), issues
     html = rep.to_html()
-    assert "Issue 1: Outdoor-air damper not modulating (stuck low)" in html
+    assert f"Issue {rank}: Outdoor-air damper not modulating (stuck low)" in html
     assert "Recommended action — Repair the outdoor-air damper or actuator" in html
 
 
 def _missed_cause(ctx) -> None:
     """Step 1 (0.98, #88): the finding separates the causes. On the onset unit the damper was
     commanded open while the outdoor-air fraction stayed near its stuck value; the control's
-    missed hours (real data) all had the damper commanded low."""
+    few missed hours above the low limit (real data) all had the damper commanded low."""
     m = ctx.finding("free_cooling_missed", ONSET).metrics
     assert m["missed_cause"] == "damper_not_delivering", m
     assert m["commanded_open_oaf_median_pct"] < m["stuck_low_oaf_pct"], m
     if ctx.mode == REAL:
-        assert (m["commanded_open_pct"], m["commanded_open_hours"]) == (40.3, 673.0), m
+        assert (m["commanded_open_pct"], m["commanded_open_hours"]) == (89.9, 640.0), m
         assert m["commanded_open_oaf_median_pct"] == 4.4, m
         free = ctx.finding("free_cooling_missed", FREE).metrics
         assert free["missed_cause"] == "economizer_not_commanded", free
@@ -104,8 +136,9 @@ def _rcx_verify(ctx) -> None:
     """Step 2 (0.98, #88): the generated "Verify on site" section. The static-setpoint point the
     conditional issue leans on comes first (a sensor item), then the onset unit's damper item,
     which says what would confirm the stuck damper and what would point at the mixed-air sensor
-    instead. The economizer's minimum and high limit are site parameters in this config, so no
-    design-value item asks to confirm them."""
+    instead. The economizer's minimum, high limit and low limit are site parameters in this
+    config, so no design-value item asks to confirm them, and with the low limit the fault-free
+    control has no economizer item."""
     rep = _rcx(ctx)
     sec = next(s for s in rep.to_dict()["sections"] if s["id"] == "verify")
     assert sec["title"] == "Verify on site" and sec["slot"] == "section:verify", sec["title"]
@@ -120,8 +153,9 @@ def _rcx_verify(ctx) -> None:
     equipment = next(rows for lead, rows in kinds.items() if lead.startswith("Equipment"))
     damper = [r for r in equipment if r[1] == ONSET and r[3].startswith("oa_damper (command)")]
     assert len(damper) == 1, equipment
-    assert damper[0][0].endswith(">1</a>"), damper  # the top issue's item
+    assert damper[0][0].endswith(f">{_DAMPER_RANK[ctx.mode]}</a>"), damper  # that issue's item
     assert "blades" in damper[0][2] and "mixed-air sensor" in damper[0][5], damper
+    assert not [r for r in equipment if r[1] == FREE and "oa_damper" in r[3]], equipment
     assert not any(lead.startswith("Design values") for lead in leads), leads
     html = rep.to_html()
     assert "<h2>Verify on site</h2>" in html and "ch9_building_walkdown.pdf" in html
@@ -322,13 +356,17 @@ EXERCISE = Exercise(
     ),
     expect=(
         # step 1: the findings and the RCx report
-        Finding("free_cooling_missed", ONSET, severity=("fault",)),
-        Finding("free_cooling_missed", FREE, severity=("ok", "warn")),
+        # the economizer low-limit lockout, as the air-economizer exercise teaches it (#111)
+        Check("the config keeps the low-limit lockout", _low_limit_adopted, quote="33.8 °F"),
+        # a year's share dilutes a mid-year onset: a warn on the real data
+        Finding("free_cooling_missed", ONSET, severity=("warn",), on=REAL),
+        Finding("free_cooling_missed", ONSET, severity=("fault",), on=STANDIN),
+        Finding("free_cooling_missed", FREE, severity=("ok",)),
         Finding("outdoor_air_fraction", ONSET, present=False),
-        Metric("free_cooling_missed", ONSET, "missed_pct", 30.0, 0.5, on=REAL, quote="30%"),
-        Metric("free_cooling_missed", FREE, "missed_pct", 17.0, 0.5, on=REAL, quote="17%"),
-        Check("RCx: the top issue names its cause", _rcx_ranking, quote="stuck low"),
-        Check("why free cooling was missed", _missed_cause, quote="40%"),
+        Metric("free_cooling_missed", ONSET, "missed_pct", 21.1, 0.5, on=REAL, quote="21%"),
+        Metric("free_cooling_missed", FREE, "missed_pct", 1.96, 0.1, on=REAL, quote="2.0%"),
+        Check("RCx: the damper issue names its cause", _rcx_ranking, quote="stuck low"),
+        Check("why free cooling was missed", _missed_cause, quote="90%"),
         Check("RCx: the conditional issue", _rcx_conditional, quote="trust 0.40"),
         Check("RCx: the generated walk-down checklist", _rcx_verify, quote="Verify on site"),
         # step 4: verification by drift
