@@ -1401,6 +1401,7 @@
     "MLSuggester",
     "ROLE_UNIT",
     "RoleSuggestion",
+    "STRONG_NAME_RANGE_FLOOR",
     "UNLOCATED_TEMP_PENALTY",
     "WATER_AIR_PENALTY",
     "review_unmapped",

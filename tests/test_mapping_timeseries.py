@@ -304,3 +304,47 @@ def test_0101_time_series_path_range_checks_a_point_with_no_unit():
     # a degC zone temperature with no unit keeps its role and gains the range-fit basis
     got = FeatureSuggester(use_timeseries=True).suggest("Zone_Temp", series=zone())
     assert got[0].role == "space_temp" and "physical bounds" in got[0].rationale
+
+
+def _occupied():
+    return (HOUR >= 7) & (HOUR < 18) & (IDX.dayofweek.to_numpy() < 5)
+
+
+def test_0102_exact_zero_dropouts_are_not_range_evidence():
+    # a zero a role cannot read in any plausible unit (a 0 degC room is 32 degF) is a dropout:
+    # it is left out of the unitless range check, and an all-zero series gives no verdict (#110)
+    from camber.mapping_assist import _ts_range_violation
+
+    room = zone().to_numpy().copy()
+    room[RNG.random(len(IDX)) < 0.4] = 0.0  # 40 % dropouts
+    assert _ts_range_violation(_s(room), Role.SPACE_TEMP, "") == 0.0
+    assert math.isnan(_ts_range_violation(_s(np.zeros(len(IDX))), Role.OUTDOOR_CO2, ""))
+    # where 0 is a real reading (a closed damper, a stopped fan's airflow) zeros still count
+    assert _ts_range_violation(_s(np.zeros(len(IDX))), Role.AIRFLOW, "") == 0.0
+    assert _ts_range_violation(_s(np.full(len(IDX), -500.0)), Role.AIRFLOW, "") == 1.0
+    # a declared unit is trusted as before: zeros are read as zeros
+    assert _ts_range_violation(_s(room), Role.SPACE_TEMP, "degc") > 0.3
+    # a strongly named point on a dead (all-zero) channel keeps the name's role
+    assert suggest_roles("Outside_Air_CO2_Sensor", series=_s(np.zeros(len(IDX))))[0].role == (
+        "outdoor_co2"
+    )
+
+
+def test_0102_dirty_series_does_not_overturn_a_strong_name():
+    # a terminal airflow logged with a negative sign most of the time (a sign convention, or a
+    # bad scaling): before 0.102 the unitless range check demoted ``airflow`` to almost nothing
+    # and the setpoint (which has no physical bounds) took top-1 (#110)
+    flow = np.where(_occupied(), -400.0, -150.0) + RNG.normal(0, 20, len(IDX))
+    flow[RNG.random(len(IDX)) < 0.1] = 120.0
+    got = suggest_roles("Discharge_Air_Flow_Sensor", series=_s(flow))
+    assert got[0].role == "airflow"
+    # a zone temperature with a scale mix-up on most samples keeps its role too
+    room = zone().to_numpy().copy()
+    room[RNG.random(len(IDX)) < 0.85] /= 6.0
+    assert suggest_roles("Zone_Air_Temperature_Sensor", series=_s(room))[0].role == "space_temp"
+    # a series that never fits (a sentinel, a dead channel) is still demoted in full
+    dead = _s(np.full(len(IDX), -999.0) + RNG.normal(0, 0.01, len(IDX)))
+    assert "supply_air_temp" not in [x.role for x in suggest_roles("SupplyAirTemp", series=dead)]
+    # the 0.100 opt-out is unchanged
+    old = suggest_roles("Discharge_Air_Flow_Sensor", series=_s(flow), use_timeseries=False)
+    assert old[0].role != "airflow"

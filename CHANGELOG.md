@@ -6,6 +6,8 @@ All notable changes to CAMBER are documented here. The format follows
 
 ## [0.102.0] — Unreleased
 
+**0.102: follow-ups from 0.101 (#110–#112).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue (the only high-confidence one) ranks first again (#112).
+
 <!-- Each 0.102 branch adds its bullets only inside its own marked block. -->
 
 <!-- 0102-workbook-lowlimit -->
@@ -26,8 +28,8 @@ All notable changes to CAMBER are documented here. The format follows
   issue and walk-down item. The onset unit reads a warn at 21 % (was a 30 % fault): six healthy
   months dilute a 1 July onset in a year-long share. Its damper issue keeps its cause heading
   and confidence H, and it now has stronger cause evidence (`commanded_open_pct` 89.9 % of 640
-  h, was 40.3 % of 673 h). It ranks third behind two uncosted warns, whose order within one
-  severity is a fixed tiebreak, not a priority. The key now teaches that point. Drift is
+  h, was 40.3 % of 673 h). With #112 it ranks first again: among
+  uncosted issues of one severity, confidence now decides the order before the issue key. Drift is
   unchanged (-83, fault). The declaration, the page (questions 1 and 2, a caveat) and the key are
   updated.
 <!-- /0102-workbook-lowlimit -->
@@ -55,6 +57,33 @@ All notable changes to CAMBER are documented here. The format follows
   lists the damper first in the walk-down, and rewords the common mistake about reading an
   uncosted rank as a measure of size.
 <!-- /0102-rcx-rank -->
+<!-- 0102-suggester-range -->
+### Changed
+- **The unitless range check no longer overturns a strong name on a dirty series (#110).** On
+  the time-series path (the default when a series is passed, from 0.101), a point with no
+  declared unit is range-checked in every plausible unit. Two changes act on that check only:
+  - an exact zero that the role cannot read in any plausible unit (a 0 °C room, 0 ppm CO2) is
+    a dropout and is left out; an all-zero series gives no range verdict;
+  - when the role is the name's best lexical match and scores at least 0.6, the check keeps at
+    least `STRONG_NAME_RANGE_FLOOR` (0.75) of its score. A series with no reading inside the
+    bounds in any unit (a `-999` dead channel) is still demoted in full.
+
+  **This intentionally changes suggestions when a series is passed without a unit.** A declared
+  unit, the `use_timeseries=False` opt-out and the name-only default are unchanged. At default
+  settings with the series passed, top-1 0.101 → 0.102:
+  - held-out catalog names, real names, simulated LBNL sets, BTS anonymised: unchanged
+    (73.0, 95.7, 74.4, 46.2 %);
+  - BTS Brick-class names (upper bound): 89.4 → 93.4 % (name alone 93.2 %);
+  - the five synthetic styles: 70.4-89.9 → 73.0-93.9 %; `ahu_03_supply_temp` 89.9 → 93.9 %
+    (name alone 93.9 %).
+
+  No pool loses top-1 or top-3. Before and after tables, and the 4 synthetic points that now
+  miss, are in `docs/MAPPING-ASSIST.md`.
+- **`camber.mapping_assist.STRONG_NAME_RANGE_FLOOR`** (new, provisional): the floor above, a
+  module constant like `WATER_AIR_PENALTY`.
+
+None of these figures is a gated benchmark.
+<!-- /0102-suggester-range -->
 
 ## [0.101.0] — 2026-10-04
 
