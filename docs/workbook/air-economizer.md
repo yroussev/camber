@@ -16,6 +16,8 @@ Read these first (PNNL, free):
 - [Air-Side Economizer Operation][pnnl-guide-economizer], the re-tuning guide: its two
   questions, whether the outdoor-air damper is open when outdoor conditions are not favorable
   and whether the cooling coil runs during economizer mode, are the two halves of this exercise.
+  Read it with the unit's own sequence in mind: "favorable" is whatever the sequence says it is,
+  including the outdoor temperature below which it locks the economizer out (step 5).
 - [Chapter 6: Economizer Operations][pnnl-retuning-ch6] of the re-tuning training.
 - [AHU Minimum Outdoor-Air Operation][pnnl-guide-min-oa], for why the unit's own design minimum
   matters.
@@ -52,7 +54,7 @@ Irish unit is `AHU__ahu` in `ds-irish-ahu`.
 3. When the job is done, the row links to **trends** (the trend viewer) and **report** (the
    dataset's default config). This exercise uses its own config: use the command line for step 2
    of the steps below, and the lab's trend viewer to look at the data. The `irish-ahu` row's
-   **report** runs that dataset's default config, which step 6 uses.
+   **report** runs that dataset's default config, which step 7 uses.
 
 ### On the command line
 
@@ -70,7 +72,8 @@ camber run irish.json --out irish_out
 
 The exercise's config (`--exercise air-economizer`) runs three rules: `outdoor_air_fraction`,
 `economizer_high_limit` and `free_cooling_missed`, with this unit's own design minimum (a 1.6 %
-outdoor-air fraction) and its fixed 60 °F dry-bulb high limit. `camber report econ.json --out
+outdoor-air fraction) and its fixed 60 °F dry-bulb high limit. It leaves out one more setting
+of the unit's sequence on purpose: step 5 has you find it. `camber report econ.json --out
 econ.html` gives the same findings as a report with evidence charts.
 
 The Irish unit's default config (`irish.json`) runs the same three economizer rules with a
@@ -89,8 +92,24 @@ the rules judge every sample.
    Then find `economizer_high_limit`: is the unit locked out to minimum above 60 °F?
 4. **Stuck closed.** Find `free_cooling_missed` for each run: the share of free-cooling hours
    (outdoor air below 60 °F) in which the cooling coil ran anyway.
-5. **Score.** Run `camber datasets score` on the findings and read the per-detector rates.
-6. **A real unit.** Run the Irish config and read `outdoor_air_fraction`,
+5. **The fault-free unit's warn.** `free_cooling_missed` also warns on `AHU__fault_free`. Before
+   you call it a fault, find out when those hours happen:
+   - In the trend viewer, open `AHU__fault_free` on a cold weekday in January. Read the outdoor
+     air temperature, the outdoor-air damper command and the cooling valve together while the
+     fan runs. Then do the same on a mild spring morning.
+   - In the finding, read `missed_cause` and `missed_damper_cmd_median_pct`: where was the damper
+     commanded during the missed hours?
+   - Read the unit's sequence: `camber datasets info lbnl-sdahu` lists, under its known issues,
+     the outdoor temperatures between which the dataset's inventory says the economizer runs.
+
+   Below its low limit the sequence holds the damper at its minimum by design (typically to keep
+   freezing air off the coils), so those hours are not free-cooling weather. Add the lockout to
+   the rule in `econ.json`, `"low_limit_f": 33.8` in `free_cooling_missed`'s `params`, re-run
+   with a new `--out` folder, and read the fault-free unit and the stuck dampers again.
+   `low_limit_excluded_hours` counts the hours the rule set aside, and `low_limit_cooling_hours`
+   how many of them had the coil running.
+6. **Score.** Run `camber datasets score` on the findings and read the per-detector rates.
+7. **A real unit.** Run the Irish config and read `outdoor_air_fraction`,
    `economizer_high_limit` and `free_cooling_missed` on `AHU__ahu`. In the trend viewer, find
    the months when the damper was held fully open.
 
@@ -102,11 +121,14 @@ the rules judge every sample.
    median is much higher. Why is that not a fault?
 3. Which stuck dampers do the outdoor-air-fraction rules miss, and why?
 4. Where do those dampers show up instead? Compare them with the fault-free unit.
-5. What true- and false-positive rates does the label score give `outdoor_air_fraction`, and
+5. Why does `free_cooling_missed` warn on the fault-free unit? What share of its missed hours
+   fall below the economizer's low limit, what does the rule read with `low_limit_f` set, and
+   are the stuck dampers still caught?
+6. What true- and false-positive rates does the label score give `outdoor_air_fraction`, and
    what does the overall score count as missed?
-6. What do the three economizer rules say about the Irish unit? Which of it would you raise as
+7. What do the three economizer rules say about the Irish unit? Which of it would you raise as
    a fault, and which as a question for the site?
-7. Is the Irish unit's excess outdoor air explained by the documented 100 % outdoor-air period?
+8. Is the Irish unit's excess outdoor air explained by the documented 100 % outdoor-air period?
    How would you check with CAMBER?
 
 ## What CAMBER shows
@@ -114,7 +136,9 @@ the rules judge every sample.
 - **Findings.** `camber run` prints one line per finding with its severity (`fault`, `warn`,
   `ok`); `econ_out/findings.json` holds every metric, e.g. `median_oaf_cooling` and
   `excess_oa_pct` for `outdoor_air_fraction`, `not_locked_out_pct` for `economizer_high_limit`,
-  `missed_pct` for `free_cooling_missed`.
+  `missed_pct` and `missed_cause` for `free_cooling_missed`. With `low_limit_f` set,
+  `free_cooling_missed` also reports `low_limit_excluded_hours` and `low_limit_cooling_hours`,
+  and its summary line says how many hours below the lockout it did not judge.
 - **Evidence.** In the report, the `outdoor_air_fraction` finding carries a chart of the
   outdoor-air fraction against the outdoor temperature, drawn from the samples the rule judged,
   with the band it judges them against.
@@ -128,6 +152,10 @@ the rules judge every sample.
 - The outdoor-air fraction here comes from a temperature balance (mixed, return and outdoor
   air); it is unreliable when the outdoor and return temperatures are close, and CAMBER leaves
   those samples out.
+- The low limit is a property of this unit's sequence, not a general value: another unit may
+  lock out at a different temperature, or not at all. Set it from the unit's own sequence, or
+  from a winter of known-good trends (the outdoor temperature below which the damper command
+  never leaves its minimum), never to make a warn go away.
 - The 100 % damper run is shorter than the others (`_short`), so it has fewer free-cooling
   hours.
 - The simulated schedule runs one weekday late; see the dataset's data issues.

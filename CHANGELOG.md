@@ -4,6 +4,58 @@ All notable changes to CAMBER are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/) from 1.0 onward.
 
+## [0.102.0] — Unreleased
+
+<!-- Each 0.102 branch adds its bullets only inside its own marked block. -->
+
+<!-- 0102-workbook-lowlimit -->
+### Changed
+- **Workbook `air-economizer` teaches the economizer low-limit lockout (#111).** A new step 5
+  has learners read `free_cooling_missed`'s warn on the fault-free unit (17.5 %). They then find
+  from the trends and the unit's sequence that 899 of its 965 missed hours (93 %) fall below the
+  documented 33.8 °F lockout, where the damper is held at its minimum by design. They set
+  `low_limit_f` 33.8 and re-run: the fault-free unit reads ok (1.96 %), and the dampers stuck at
+  10 % and 25 % stay a fault (49.6 %). The exercise config leaves the low limit out on purpose,
+  and its `_comment` says so. The declaration pins both readings, and the page (a new step and
+  question, with later ones renumbered) and the instructor key are updated. The stand-in now
+  models the lockout (four cold days below it), so both readings are also checked offline.
+- **Workbook `capstone` adopts the same low limit (#111), which intentionally changes its
+  answers.** `free_cooling_missed` in the capstone config now sets `low_limit_f` 33.8, with a
+  basis, to match the dataset template and the economizer exercise. On the real data the
+  control unit reads ok (2.0 %, was a 17 % warn) and loses its spurious "enable the economizer"
+  issue and walk-down item. The onset unit reads a warn at 21 % (was a 30 % fault): six healthy
+  months dilute a 1 July onset in a year-long share. Its damper issue keeps its cause heading
+  and confidence H, and it now has stronger cause evidence (`commanded_open_pct` 89.9 % of 640
+  h, was 40.3 % of 673 h). It ranks third behind two uncosted warns, whose order within one
+  severity is a fixed tiebreak, not a priority. The key now teaches that point. Drift is
+  unchanged (-83, fault). The declaration, the page (questions 1 and 2, a caveat) and the key are
+  updated.
+<!-- /0102-workbook-lowlimit -->
+
+<!-- 0102-rcx-rank -->
+### Changed
+- **RCx: uncosted issues of one severity rank by confidence before the issue key (#112).**
+  `link_findings` used to order uncosted issues of one tier by issue key, a fixed but arbitrary
+  tie-break. They now rank by input-trust confidence, H before M before L, and then by key.
+  Severity, conditional-last and costed-first by dollars are unchanged, and costed issues keep
+  their dollar order. This intentionally changes the RCx ranking where uncosted issues of one
+  tier differ in confidence. On the 15 catalog run templates (default subsets), 4 of 96 issues
+  change rank, in 2 reports, and each pair swaps. In `lbnl-ddahu`, `DMPRStuck_OA_100`'s
+  `outdoor_air_fraction` fault (H) moves from 2 to 1 above `DMPRStuck_OA_0`'s `g36_afdd` fault
+  (M). In `ornl-frp-ops`, `base_heating`'s `night_weekend_setback` fault (H) moves from 2 to 1
+  above `sb_heating`'s `compressor_short_cycle` fault (M). Both reports keep their chosen week;
+  only its evidence score, which weights issues by 1/rank, changes. The RCx golden is unchanged:
+  its synthetic site has no uncosted tie with mixed confidence. `docs/RCX-REPORT.md` describes
+  the new order.
+- **Workbook `capstone`: the damper issue ranks first again (#112).** On the real data, the onset
+  unit's stuck-damper issue (an uncosted warn, confidence H) now ranks 1, above the onset unit's
+  supply-air reset and the control's static-pressure reset (uncosted warns, confidence M). It
+  ranked 3 in #111. The declaration asserts rank 1 in both modes. The page's question 1 asks what
+  puts the issue first when nothing is costed. The instructor key explains the confidence order,
+  lists the damper first in the walk-down, and rewords the common mistake about reading an
+  uncosted rank as a measure of size.
+<!-- /0102-rcx-rank -->
+
 ## [0.101.0] — 2026-10-04
 
 <!-- Each 0.101 branch adds its bullets only inside its own marked block. -->

@@ -16,7 +16,10 @@ Real-data figures were recorded from::
 
 (CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29.) The irish-ahu period
 figures (53% / 45%) come from the same config with ``source.start`` / ``source.end`` set to
-2017-06-01 .. 2020-03-01 and 2020-08-01 .. 2021-12-01 (see ``_irish_by_period``).
+2017-06-01 .. 2020-03-01 and 2020-08-01 .. 2021-12-01 (see ``_irish_by_period``). The low-limit
+figures (step 5, #111: 1.96% with the lockout, 899 of the 965 missed hours below it) come from
+``econ.json`` with ``"low_limit_f": 33.8`` added to ``free_cooling_missed`` (see ``_low_limit``;
+CAMBER 0.102.0-dev, 2026-10-04).
 """
 
 from __future__ import annotations
@@ -48,6 +51,7 @@ _STUCK_OAF = {
     "damper_stuck_100_short": 1.0,
 }
 _MIN_OAF = 0.016  # the unit's own design minimum (a 10 % damper position)
+_LOW_LIMIT_F = 33.8  # the unit's economizer low-limit lockout (inventory section 1.2)
 _LABELS = {
     "AHU__fault_free": "",
     "AHU__coi_leakage_010": "valve_leak",
@@ -56,22 +60,27 @@ _LABELS = {
 
 
 def _ahu(idx: pd.DatetimeIndex, stuck_oaf: float | None) -> pd.DataFrame:
-    """One single-duct AHU, cooling coil only, fixed 60 F dry-bulb economizer high limit.
+    """One single-duct AHU, cooling coil only, fixed 60 F dry-bulb economizer high limit and a
+    33.8 F low-limit lockout.
 
-    Two cool weeks (OAT 33-57 F: free cooling) then two warm ones (70-90 F: cooling weather),
-    occupied 06-18 on weekdays with the fan on only then. The controller's damper *command*
-    always modulates; a stuck damper fixes the actual OA fraction behind it.
+    Four cold days (OAT 20-32 F: below the lockout), the rest of two cool weeks (33-57 F: free
+    cooling), then two warm ones (70-90 F: cooling weather), occupied 06-18 on weekdays with the
+    fan on only then. Below the lockout the sequence holds the damper at its minimum, so the coil
+    cools the mixed air, as on the real unit. The controller's damper *command* otherwise always
+    modulates; a stuck damper fixes the actual OA fraction behind it.
     """
     day = np.arange(len(idx)) // 24
     phase = np.sin((idx.hour.to_numpy() - 9) / 24 * 2 * np.pi)
-    oat = np.where(day < 14, 45.0 + 12.0 * phase, 80.0 + 10.0 * phase)
+    oat = np.where(
+        day < 4, 26.0 + 6.0 * phase, np.where(day < 14, 45.0 + 12.0 * phase, 80.0 + 10.0 * phase)
+    )
     rat = np.full(len(idx), 72.0) + 0.3 * np.cos(np.arange(len(idx)))
     occ = (idx.dayofweek < 5) & (idx.hour >= 6) & (idx.hour < 18)
     fan = occ.astype(float)
     # economizer below the high limit: the OA fraction that mixes to 55 F, else the minimum
     with np.errstate(divide="ignore", invalid="ignore"):
         need = np.clip((rat - 55.0) / (rat - oat), _MIN_OAF, 1.0)
-    cmd_oaf = np.where(oat < 60.0, need, _MIN_OAF)
+    cmd_oaf = np.where((oat >= _LOW_LIMIT_F) & (oat < 60.0), need, _MIN_OAF)
     damper = np.where(occ, 10.0 + 90.0 * (cmd_oaf - _MIN_OAF) / (1.0 - _MIN_OAF), 0.0)
     oaf = cmd_oaf if stuck_oaf is None else np.full(len(idx), stuck_oaf)
     mat = np.where(occ, oaf * oat + (1.0 - oaf) * rat, rat - 1.0)
@@ -119,6 +128,47 @@ def _stuck_closed_miss_more(ctx) -> None:
         assert f is not None, f"no free_cooling_missed finding on {eq}"
         got, ref = f.metrics["missed_pct"], base.metrics["missed_pct"]
         assert got >= 2 * ref, f"{eq} missed {got}% vs fault-free {ref}% (expected >= 2x)"
+
+
+def _low_limit(ctx):
+    """Step 5: ``econ.json`` re-run with the unit's economizer low-limit lockout set on
+    ``free_cooling_missed`` (``"low_limit_f": 33.8``), as the page has learners do."""
+    cache = ctx.__dict__.setdefault("_air_economizer", {})
+    if "low" not in cache:
+        cfg = ctx.config()
+        rule = next(r for r in cfg["rules"] if r.get("name") == "free_cooling_missed")
+        assert "low_limit_f" not in rule["params"], "the exercise config already sets low_limit_f"
+        rule["params"]["low_limit_f"] = _LOW_LIMIT_F
+        cache["low"] = run_config(cfg, base_dir=ctx.store)
+    return {f.equip: f for f in cache["low"].findings if f.rule == "free_cooling_missed"}
+
+
+def _lockout_explains_fault_free(ctx) -> None:
+    """Step 5: most of the fault-free unit's missed hours are below the lockout (damper commanded
+    at its minimum); with the lockout set it reads ok."""
+    before = ctx.finding("free_cooling_missed", "AHU__fault_free").metrics
+    assert before["missed_cause"] == "economizer_not_commanded", before
+    after = _low_limit(ctx)["AHU__fault_free"]
+    assert after.severity == "ok", (after.severity, after.metrics)
+    m = after.metrics
+    missed = before["missed_pct"] / 100 * before["n_free_cooling_hours"]
+    below = m["low_limit_cooling_hours"]
+    assert below / missed >= 0.9, f"{below} of {missed:.0f} missed hours below the lockout"
+    if ctx.mode == REAL:
+        assert abs(m["missed_pct"] - 1.96) <= 0.1, m["missed_pct"]
+        assert (round(missed), below) == (965, 899.0), (missed, below)
+        assert m["low_limit_excluded_hours"] == 2141.0, m
+
+
+def _lockout_keeps_stuck_caught(ctx) -> None:
+    """Step 5: with the lockout set, the dampers stuck near minimum are still a fault."""
+    low = _low_limit(ctx)
+    for eq in ("AHU__damper_stuck_010", "AHU__damper_stuck_025"):
+        f = low[eq]
+        assert f.severity == "fault", (eq, f.severity, f.metrics["missed_pct"])
+        assert f.metrics["missed_cause"] == "damper_not_delivering", (eq, f.metrics)
+        if ctx.mode == REAL:
+            assert abs(f.metrics["missed_pct"] - 49.6) <= 0.1, (eq, f.metrics["missed_pct"])
 
 
 def _excess_oa(ctx, start: str, end: str) -> float:
@@ -184,7 +234,8 @@ EXERCISE = Exercise(
         # ... but the free cooling it can't deliver shows up as mechanical cooling
         Finding("free_cooling_missed", "AHU__damper_stuck_010", severity=("fault",)),
         Finding("free_cooling_missed", "AHU__damper_stuck_025", severity=("fault",)),
-        Finding("free_cooling_missed", "AHU__fault_free", severity=("ok", "warn")),
+        # the fault-free unit warns: its coil runs below the low-limit lockout (step 5)
+        Finding("free_cooling_missed", "AHU__fault_free", severity=("warn",)),
         Check("stuck-closed dampers miss free cooling far more", _stuck_closed_miss_more),
         Metric(
             "free_cooling_missed",
@@ -203,6 +254,16 @@ EXERCISE = Exercise(
             0.5,
             on=REAL,
             quote="17.5%",
+        ),
+        # step 5: the low-limit lockout explains the fault-free warn and keeps the stuck dampers
+        Check(
+            "the lockout explains the fault-free warn", _lockout_explains_fault_free, quote="1.96%"
+        ),
+        Check(
+            "with the lockout the stuck dampers stay caught",
+            _lockout_keeps_stuck_caught,
+            on=BOTH,
+            quote="49.6%",
         ),
         # the label score: outdoor_air_fraction finds 2 of the 4 stuck dampers, no false alarm
         Score("outdoor_air_fraction", tpr=0.5, fpr=0.0, quote="TPR 50%", on=BOTH),

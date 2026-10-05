@@ -15,7 +15,7 @@ one-week test can and cannot support.
 Read these first (PNNL, free):
 
 - [Air-Side Economizer Operation][pnnl-guide-economizer], the re-tuning guide behind the report's
-  top issue.
+  economizer issue.
 - [Chapter 9: Building Walk Down][pnnl-retuning-ch9] of the re-tuning training: what to look at
   on site, and how the walk-down feeds the re-tuning.
 - [Chapter 10: Re-Tuning Building Controls and Systems][pnnl-retuning-ch10]: making the changes
@@ -62,8 +62,9 @@ camber report cap.json --layout rcx --out cap_rcx.html
 ```
 
 The exercise config runs the economizer rules with this unit's own design minimum and high
-limit, plus the supply-air and static-pressure rules, on the onset series and its control; read
-its `_comment`. **Write the RCx report before you freeze drift baselines**: once they exist,
+limit, and `free_cooling_missed` with the economizer low-limit lockout you found in the
+[economizer exercise](air-economizer.md) (`low_limit_f` 33.8), plus the supply-air and
+static-pressure rules, on the onset series and its control; read its `_comment`. **Write the RCx report before you freeze drift baselines**: once they exist,
 `camber run` and `camber report` fold the drift verdicts in. Then, for verification:
 
 ```
@@ -124,12 +125,14 @@ caltrack_savings_hourly(
 
 ## Questions
 
-1. Which issue does the report rank first, on which unit, at what severity? What cause does
-   its heading name, what evidence in the `free_cooling_missed` finding supports that cause
+1. Which issue does the report rank first, on which unit, at what severity and confidence? None
+   of the issues has a cost here: what puts this one above the other warns? What cause does its
+   heading name, what evidence in the `free_cooling_missed` finding supports that cause
    (`missed_cause`, `commanded_open_pct`), and what should the walk-down still confirm before
    anything is repaired?
 2. How often did the onset unit run mechanical cooling in free-cooling weather, against the
-   control? Why do the outdoor-air-fraction rules stay quiet on it?
+   control? Why is a damper stuck for half the year only a warn over the whole year, and why do
+   the outdoor-air-fraction rules stay quiet on it?
 3. Which issue is *conditional*, on what, and with what trust? What goes on the walk-down list
    for it?
 4. Write your walk-down checklist and your re-tuning plan (steps 2 and 3). How does your
@@ -162,6 +165,9 @@ caltrack_savings_hourly(
 
 ## Caveats
 
+- `free_cooling_missed` judges the whole year: a damper that sticks on 1 July shares its
+  free-cooling hours with six healthy months, so the yearly share understates it. Drift, which
+  compares the two halves, is the check built for an onset.
 - The onset series is a splice of two simulations, not one unit breaking; the "before" and
   "after" are perfect twins except for the damper.
 - The damper and valve points map to the controller's demand signals, so the command keeps
