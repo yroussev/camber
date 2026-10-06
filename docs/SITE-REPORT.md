@@ -33,6 +33,10 @@ html = build_site_report(
 open("site.html", "w").write(html)
 ```
 
+![Screenshot of a site report: the health scorecard, the readiness ribbon and the start of the load carpet](img/shots/site-report.png)
+
+*Synthetic data: the top of a site report for a demo site: the health scorecard, then the dashboard's readiness ribbon and load carpet.*
+
 Composed from the existing report fragments (`scorecard`, `actionplan`, the dashboard sections and
 pattern-J evidence engine) — matplotlib inlined as base64, no web framework, read-only toward the
 BAS. Flags: `sections` (A/B/E/I), `rank_by`, `top_n`, `normalize`, `frames` (per-equipment evidence),

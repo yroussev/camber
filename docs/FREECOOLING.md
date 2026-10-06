@@ -27,6 +27,10 @@ opp = free_cooling_opportunity(
 opp.hours_missed, opp.recoverable_kwh, opp.savings_usd  # e.g. 286 h, 10010 kWh, $1502
 ```
 
+![Cooling valve against outdoor temperature on fan-on hours, with the valve open 45 to 70 percent below 60 F](img/analytics/free-cooling.png)
+
+*Synthetic data: an air handler whose damper stays at minimum, drawn by `free_cooling_missed`'s evidence hook on its fan-on hours. Below 60 °F the cooling valve should be closed; it runs 45–70 % instead.*
+
 Free cooling is *available* when OAT is below `high_limit_f` and *missed* when it's available yet
 mechanical cooling runs (`cooling_signal > active_thresh`). With `cooling_kw` the missed-hours energy
 is summed; `recover_frac` is the share an economizer could offset; `price_per_kwh` (caller-supplied)

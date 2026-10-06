@@ -145,6 +145,10 @@ the rules judge every sample.
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
   intervals, for the dataset's declared detectors, and which rules fired on each labelled run.
 
+![Outdoor-air fraction against outdoor temperature with the rule's band; hot-weather samples sit far above the minimum](../img/workbook/air-economizer.png)
+
+*Synthetic illustration, not this exercise's dataset: the `outdoor_air_fraction` evidence chart for a damper stuck about 75 % open. The band is the rule's own minimum and changeover; red points are the cooling-weather samples it counts as excess outdoor air.*
+
 ## Caveats
 
 - The data are simulated: one unit, one climate, one control sequence. Real dampers stick part

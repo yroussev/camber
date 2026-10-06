@@ -24,6 +24,10 @@ flowchart TD
 
 *Airflow-normalized baselines feed five per-detector drifts; co-movement rolls up into one per-AHU locus, with ahusim as the physics check.*
 
+![Filter pressure drop against airflow: the frozen baseline band and the current period above it at every airflow](img/analytics/ahu-drift.png)
+
+*Synthetic data: `ahusim` with filter loading, drawn by `drift_evidence` for `filter_loading_drift`. At matched airflow the filter's pressure drop has risen well above the frozen baseline's band.*
+
 Like the other families, each detector is a **period rule** (`Registry.run_periods`), freezes a
 load-normalized baseline into a `BaselineStore` on first use, reports a period statistic **and** a
 sustained-shift CUSUM alarm, labels its thresholds *screening-grade* / *provisional-untuned*, and

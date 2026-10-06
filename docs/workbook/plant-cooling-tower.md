@@ -111,6 +111,10 @@ effort against `PLANT__fault_free`, fitted in memory on each run and never store
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
   intervals, for the dataset's declared detectors.
 
+![Cooling-tower approach against wet-bulb temperature, with later points above the design-plus-3 F line](../img/workbook/plant-cooling-tower.png)
+
+*Synthetic illustration, not this exercise's dataset: tower approach (condenser-water supply minus wet-bulb) against wet-bulb, with a band up to the design approach plus 3 °F, the line `pct_hours_high_approach` counts above. The approach grows week by week.*
+
 ## Caveats
 
 - The data are simulated. The simulated tower's design approach is not published, so the config's

@@ -110,6 +110,10 @@ an enable, not a run status, so CAMBER decides when the chiller runs from its po
   more of the hours near full speed, a `warn` from 30 %, or at half the hours or more near the
   minimum.
 
+![Chilled-water supply temperature against outdoor temperature, flat at 44 F; the mild-weather points fall below the reset band](../img/workbook/plant-chw-reset-pumping.png)
+
+*Synthetic illustration, not this exercise's dataset: chilled-water supply against outdoor temperature on the packaged `chw_reset` diagnostic template. A supply held at 44 °F in mild weather is a reset that never happens.*
+
 ## Caveats
 
 - The delta-T is chiller 1's own, on a primary loop whose flow does not follow the load, so it

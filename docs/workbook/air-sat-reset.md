@@ -118,6 +118,10 @@ Each config runs the supply-air rules only:
 - **Report.** `camber report sat.json --out sat.html` shows the same findings with evidence
   charts.
 
+![Supply-air temperature against outdoor temperature, flat near 55 F across the whole range](../img/workbook/air-sat-reset.png)
+
+*Synthetic illustration, not this exercise's dataset: the `supply_air_reset` evidence chart: occupied, fan-on cooling hours. A flat cloud at 55 °F is a supply-air setpoint that is never reset in mild weather.*
+
 ## Caveats
 
 - The two LBNL units are simulations with a fixed sequence; the Irish unit is real but trends

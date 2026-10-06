@@ -113,6 +113,10 @@ setpoint is logged.
 - **Score.** `camber datasets score` prints the rates for the declared detector
   (`actuator_stuck` → stuck damper), scoring only the box under test on each day.
 
+![Zone temperature against its cooling and heating setpoints over a week, with the occupied afternoons over setpoint shaded](../img/workbook/zone-bad-box.png)
+
+*Synthetic illustration, not this exercise's dataset: the `unmet_setpoint_hours` evidence trend for a box whose damper is stuck at 30 %. Shaded spans are the occupied hours the zone ran over its cooling setpoint.*
+
 ## Caveats
 
 - Every scenario is a different day, with different weather. Comparing a box across days mixes

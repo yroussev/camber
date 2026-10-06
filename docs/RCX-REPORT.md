@@ -13,6 +13,10 @@ camber report site.json --out rcx.html --layout rcx --week oat-range --paper a4
 camber report site.json --out rcx.html --layout rcx --notes notes.json --notes-template slots.json
 ```
 
+![Screenshot of the RCx report's contents, cover and executive summary](img/shots/rcx-report.png)
+
+*Synthetic data: the opening of an RCx report for a two-AHU demo site: the contents, the cover and the executive summary's KPI strip and issue table.*
+
 `--layout` defaults to the config's `report.layout`, and that defaults to `audit` (the
 Std-211 audit report), so existing configs behave exactly as before. Any other name is looked up in
 the `camber.reports` [plugin](PLUGINS.md) entry-point group.

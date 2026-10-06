@@ -117,6 +117,10 @@ given, occupant diversity D is 1. Read the config's `_comment` before you read t
   schedule.
 - **Report.** `camber report b59.json --out b59.html` shows the same findings.
 
+![Zone CO2 over two weeks, peaking near 1,350 ppm every occupied afternoon](../img/workbook/zone-min-oa.png)
+
+*Synthetic illustration, not this exercise's dataset: the zone CO₂ trend that `co2_ventilation` draws as its evidence. Afternoon peaks well above 1,100 ppm suggest the zone gets less outdoor air than its occupants need.*
+
 ## Caveats
 
 - Everything rests on the assumed area and population. They are reasonable for an office, and

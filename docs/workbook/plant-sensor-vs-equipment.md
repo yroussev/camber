@@ -96,6 +96,10 @@ The exercise's config (`--exercise plant-sensor-vs-equipment`) runs four physica
   (`chiller_efficiency`, `cooling_tower_approach`) and lists which rules fired on each labelled
   run. Its per-detector rates count every sensor-bias run as a negative.
 
+![Tower-leaving, chiller-entering and condenser-return water temperatures, the chiller-entering line between the other two, with shaded spans](../img/workbook/plant-sensor-vs-equipment.png)
+
+*Synthetic illustration, not this exercise's dataset: the `condenser_bypass_leak` evidence trend. With the bypass valve shut, the water entering the chiller runs warmer than the water leaving the tower: either a leaking valve or a sensor offset, which the rule's `attribution` separates.*
+
 ## Caveats
 
 - The data are simulated, and each bias is constant all year. A real sensor drifts slowly, so its

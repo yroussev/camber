@@ -103,6 +103,10 @@ The config runs two rules on each rooftop unit at one-minute resolution:
   every day), and says so.
 - **Report.** `camber report ops.json --out ops.html` shows the findings with evidence charts.
 
+![Carpet of supply-fan status by hour and date; after the first week the fan runs around the clock](../img/workbook/air-scheduling.png)
+
+*Synthetic illustration, not this exercise's dataset: the `night_weekend_setback` evidence carpet of the supply-fan status. The first week follows a weekday schedule; from the second the fan runs nights and weekends.*
+
 ## Caveats
 
 - The building was unoccupied during the tests, with no internal gains: the "daytime" load is

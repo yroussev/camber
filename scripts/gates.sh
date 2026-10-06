@@ -9,7 +9,8 @@
 #
 # Gates: ruff check + format (use the CI ruff: CI installs the latest), mypy,
 # pytest with the 90% coverage floor, the public-API snapshot, the synthetic, fleet,
-# LBNL, BDG2 and BDG2 savings benchmarks, mkdocs --strict, site neutrality and attribution (tree,
+# LBNL, BDG2 and BDG2 savings benchmarks, the docs figures (scripts/docs_figures.py --check),
+# mkdocs --strict, site neutrality and attribution (tree,
 # CHANGELOG + archive, commit messages), version consistency and release notes, the
 # validation dossier, and an sdist/wheel build with package-data and clean-install
 # checks.
@@ -69,6 +70,7 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
     gate pytest pytest.log "$PYTHON" -m pytest -q -p no:cacheprovider --cov=camber --cov-branch --cov-report=term --cov-fail-under=90
     grep -E "^TOTAL|passed|failed" "$out/pytest.log" | tail -2 | sed 's/^/  /' | tee -a "$sum"
     gate api_snapshot snapshot.log "$PYTHON" -m pytest -q -p no:cacheprovider tests/test_public_api.py
+    gate docs_figures docs_figures.log "$PYTHON" scripts/docs_figures.py --check
     if [ $FAST -eq 0 ]; then
       bench() {  # name script baseline tol needs_data
         local name=$1 script=$2 base=$3 tol=$4 needs=$5

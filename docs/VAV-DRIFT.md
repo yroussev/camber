@@ -21,6 +21,10 @@ flowchart TD
 
 *Command-normalized baselines feed the damper- and reheat-valve creep detectors; co-movement rolls up per-box, with vavsim as the physics check.*
 
+![VAV damper position against commanded airflow: the frozen baseline band and the current period above it](img/analytics/vav-drift.png)
+
+*Synthetic data: `vavsim` with damper authority loss, drawn by `drift_evidence` for `vav_airflow_drift`. The box now needs a wider damper for the same commanded airflow.*
+
 Like the other families, each detector is a **period rule** (`Registry.run_periods`), freezes a
 load-normalized baseline into a `BaselineStore` on first use, reports a period statistic **and** a
 sustained-shift CUSUM alarm, labels its thresholds *screening-grade* / *provisional-untuned*, and

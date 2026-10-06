@@ -26,6 +26,10 @@ flowchart LR
     avoided --> cusum["cusum tracking"]
 ```
 
+![Daily energy against outdoor temperature with a five-parameter change-point fit and its two change points](img/viz/energy-signature.png)
+
+*Synthetic data: a year of daily energy fitted by `best_model`, drawn with `charts.energy_signature`. The fit picked a five-parameter model: heating below about 49 °F, a flat base, cooling above about 62 °F.*
+
 ## Terminology bridge
 
 | IPMVP / CalTRACK term | CAMBER |
@@ -82,6 +86,10 @@ print(res.model_kind, round(res.baseline_r2, 3))
 print(res.savings.savings_pct, "±", res.savings.fractional_uncertainty)  # fractions
 print(res.savings.coverage["tier"], res.savings.caveats)  # did the baseline cover it?
 ```
+
+![Cumulative projected baseline and actual energy over a year, the avoided energy shaded green with a 90 percent band](img/viz/savings.png)
+
+*Synthetic data: `charts.savings_chart` for a 10 % saving: the baseline projected onto the reporting year's weather, the actual energy, and the G14 uncertainty band on the running total.*
 
 If the reporting weather lies far outside the baseline's, `res.savings.declined` is `True` and the
 savings fields are `None` — see [Extrapolation](#extrapolation-coverage-caveats-and-declining).

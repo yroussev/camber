@@ -163,6 +163,10 @@ caltrack_savings_hourly(
   why. A refusal for too little baseline data also says what data is needed: the exception's
   `need` attribute (`e.need["text"]`) gives the hours required, available and still missing.
 
+![Screenshot of the RCx report's contents, cover and executive summary](../img/shots/rcx-report.png)
+
+*Synthetic data: the opening of an RCx report (`--layout rcx`) for a two-AHU demo site: the contents, the cover and the executive summary's issue table.*
+
 ## Caveats
 
 - `free_cooling_missed` judges the whole year: a damper that sticks on 1 July shares its

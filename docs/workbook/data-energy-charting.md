@@ -122,6 +122,10 @@ Swap the facility and equipment ids for the other meters (Fox is `ds-bdg2-fox`).
 - Charts of the same views: `camber.charts.loadprofile_chart` (weekday and weekend profiles,
   load-duration curve), see [Visualization](../VISUALIZATION.md).
 
+![Carpet plot of whole-building load by hour of day and date, with one weekend running a weekday schedule](../img/workbook/data-energy-charting.png)
+
+*Synthetic illustration, not this exercise's dataset: a load carpet, hour of day against date. Each weekday shows the occupied block; the one weekend that runs a weekday schedule stands out at once.*
+
 ## Caveats
 
 - The occupied window is a default (weekdays 07:00-18:00); a lodging building has no

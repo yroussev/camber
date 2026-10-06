@@ -115,6 +115,10 @@ camber run irish.json --out irish_out
 - **Caveats.** Both rules say what they could not check (a missing coil sensor, a missing
   humidity or dew point, a missing fan signal). Read them before the verdict.
 
+![Cooling valve, mixed-air and supply-air temperatures over one week; the supply air drops below the mixed air while the cooling valve is shut](../img/workbook/air-heat-cool.png)
+
+*Synthetic illustration, not this exercise's dataset: the `leaking_valve` evidence trend. With the cooling valve at 0 %, the supply air still leaves several degrees colder than the mixed air: the coil passes chilled water.*
+
 ## Caveats
 
 - One simulated leak, one size: the four published leak "severities" are byte-identical copies

@@ -156,6 +156,10 @@ print(sensor_trust(light[Role.POWER], Role.POWER).stuck_intervals)
 - **Ingest notes**: `camber datasets ingest` prints each quirk it annotates or fixes; the
   catalog's data issues say why.
 
+![Data-quality heatmap of six points by coverage, score, flatline and outlier share](../img/workbook/data-trend-quality.png)
+
+*Synthetic illustration, not this exercise's dataset: CAMBER's data-quality dashboard for six trends with the usual problems: a return-air sensor held for a week, CO₂ spikes, a three-day gap in the outdoor temperature, a point trended from day six.*
+
 ## Caveats
 
 - Every health verdict is a prompt to look, not a diagnosis. *Suspect* means "check this before

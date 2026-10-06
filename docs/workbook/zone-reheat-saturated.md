@@ -115,6 +115,10 @@ limits itself to the fault-free day with an `"equip"` list.
   produces no finding for that box.
 - **Report.** `camber report rh.json --out rh.html` shows the same findings with evidence charts.
 
+![Zone temperature below the heating setpoint on occupied winter days, the spans shaded](../img/workbook/zone-reheat-saturated.png)
+
+*Synthetic illustration, not this exercise's dataset: the `reheat_capacity_shortfall` evidence trend. The shaded spans are occupied hours below the heating setpoint while the reheat valve was already at 100 %.*
+
 ## Caveats
 
 - `lbnl-fpu` is simulated: the stuck-shut valve is the only saturated-reheat case in the default

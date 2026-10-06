@@ -16,6 +16,35 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 **0.102: follow-ups from 0.101 (#110–#112).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue (the only high-confidence one) ranks first again (#112).
 
+### Added
+- **Sample charts and screenshots across the docs (#113).** The docs site and README had no
+  images. `scripts/docs_figures.py` renders 36 figures and three README thumbnails into
+  `docs/img/` with CAMBER's own chart code: the `camber.charts` primitives, the rules' evidence
+  hooks and the drift detectors' frozen-baseline bands. The data is deterministic synthetic data (`camber.synth`, the `ahusim`,
+  `driftsim`, `vavsim` and `pumpsim` simulators, the DCV simulator and small seeded generators);
+  no downloaded dataset is read. A fixed style, the Agg backend, a fixed dpi and size and PNGs
+  with no metadata keep reruns byte-stable on one machine.
+- **One figure per chart pattern in [Visualization](docs/VISUALIZATION.md) (#113)**, next to its
+  code example: readiness ribbon, fault-annotated trend, load carpet (with a new short section),
+  quality dashboard, OAT scatter, diagnostic scatter, the fitted drift band, rule evidence, cohort
+  small multiples, M&V savings, load profile and load-duration curve, box by hour, and a new
+  CUSUM and energy-signature section.
+- **A hero figure on the analytics pages (#113)**: free cooling, chiller, AHU, VAV and pump
+  drift, M&V (the change-point fit and the savings chart), sensor health and schedule inference.
+- **The evidence chart each workbook exercise discusses (#113)**, with a caption that marks it as
+  a synthetic illustration rather than the exercise's dataset: the stuck outdoor-air damper's OA
+  fraction, the leaking cooling valve, the reheat penalty, chiller kW/ton, tower approach, the
+  change-point baseline and the rest. The exercises' text and answers are unchanged.
+- **Screenshots (#113)** of the RCx report, the site report, the `camber lab` catalog page and
+  the `camber serve` trend viewer, on a synthetic two-AHU site. `--screenshots` takes them with
+  headless Google Chrome, serving on 127.0.0.1 and stopping the servers afterwards; it is
+  optional, as CI has no browser.
+- **A small gallery in the README (#113)**: three thumbnails linking to the docs pages.
+- **`scripts/docs_figures.py --check` (#113)**, run by `scripts/gates.sh` and by
+  `tests/test_docs_figures.py`. It fails when an image referenced from `docs/**/*.md` or
+  `README.md` is missing or over 150 KB, when a docs image has no alt text or caption, when a
+  generated figure is missing, unreferenced or stale, or when `docs/img/` exceeds 5 MB.
+
 ### Changed
 - **Workbook `air-economizer` teaches the economizer low-limit lockout (#111).** A new step 5
   has learners read `free_cooling_missed`'s warn on the fault-free unit (17.5 %). They then find

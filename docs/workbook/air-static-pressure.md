@@ -96,6 +96,10 @@ camber run census.json --out census_out
   collapsed.
 - **Report.** `camber report sp.json --out sp.html` shows the same findings with evidence charts.
 
+![Box plot of duct static pressure by hour of day, one flat band around 1.5 in. w.c.](../img/viz/box-by-hour.png)
+
+*Synthetic illustration, not this exercise's dataset: the RCx report's air-distribution chart, duct static by hour of day on fan-on samples. One flat band at every hour is a static setpoint that is never trimmed back at light load.*
+
 ## Caveats
 
 - The single-duct unit is a simulation with a fixed sequence: a flat setpoint is its design, and

@@ -24,6 +24,10 @@ flowchart TD
 
 *Duty-normalized baselines feed five per-detector drifts; co-movement rolls up per-loop, then per-plant, with pumpsim as the physics check.*
 
+![Pump head against pump speed: the frozen baseline band and the current period falling below it as speed rises](img/analytics/pump-drift.png)
+
+*Synthetic data: `pumpsim` with impeller wear, drawn by `drift_evidence` for `pump_head_drift`. At high speed the pump no longer makes the head it did.*
+
 Like the chiller detectors, each is a **period rule** (`Registry.run_periods`), freezes a
 load-normalized baseline into a `BaselineStore` on first use, reports a period statistic **and** a
 sustained-shift CUSUM alarm, labels its thresholds *screening-grade* / *provisional-untuned*

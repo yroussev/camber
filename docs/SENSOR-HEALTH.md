@@ -9,6 +9,10 @@ reasoning.
 Every check returns what it could not evaluate as `None` / an `info` severity plus a caveat, never
 as "clean" (the honesty convention in `camber/rules/base.py`).
 
+![BAS outdoor-air temperature tracking a weather-station reference, then held flat for three days, the flat stretch shaded](img/analytics/sensor-health.png)
+
+*Synthetic data: a BAS outdoor-air sensor that holds one value for three days. `sensor_trust` reports the stuck interval (shaded) and scores the point suspect.*
+
 ## Per-point trust: `sensor_trust`, `frame_sensor_health`, `untrusted_roles`
 
 `sensor_trust(series, role)` combines coverage, gaps, flatline, robust outliers and the role's

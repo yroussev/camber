@@ -47,6 +47,10 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 camber lab --store lab_store          # then open http://127.0.0.1:8765/lab
 ```
 
+![Screenshot of the camber lab catalog table: dataset rows with kind, licence badge, sizes, status and links](img/shots/lab.png)
+
+*The `camber lab` catalog page on an empty store: each dataset's kind, licence tier, download and store sizes, status, and its exercise and publisher links.*
+
 **The catalog table.** Each dataset shows its kind, its licence **tier** (a green *open* badge,
 or a red *research-only* one), its download size and its estimated size once ingested. It also
 shows what is already fetched or ingested. Filter by licence tier, kind, labelled faults or

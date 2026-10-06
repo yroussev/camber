@@ -190,6 +190,10 @@ Repeat the two commands with `Fox_lodging_Stephen__electricity` for the second m
   is not SEP-valid and why, and when the band is optimistic.
 - `camber mv report` draws the same results as an HTML page (see [M&V](../MANDV.md)).
 
+![Daily gas use against outdoor temperature with a three-parameter heating change-point fit](../img/workbook/mv-baselines.png)
+
+*Synthetic illustration, not this exercise's dataset: a daily heating baseline fitted with `best_model`. Gas use falls with outdoor temperature down to a base load above the change point near 60 °F.*
+
 ## Caveats
 
 - A saving with no documented measure behind it is a change to explain, not a saving to claim.

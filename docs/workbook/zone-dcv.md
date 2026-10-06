@@ -128,6 +128,10 @@ some rules are left out.
 - **Report.** Each row's **report** link in the lab shows the same findings with evidence
   charts.
 
+![Room CO2 over two weeks, rising on occupied days and falling back overnight](../img/workbook/zone-dcv.png)
+
+*Synthetic illustration, not this exercise's dataset: the room CO₂ trend that `dcv_verification` draws as its evidence, from CAMBER's DCV simulator with the outdoor air held at a fixed position.*
+
 ## Caveats
 
 - The Finnish test controlled the airflow on a machine-learning occupant *estimate*; CAMBER maps

@@ -122,6 +122,10 @@ report with evidence charts.
   intervals, for the dataset's declared detectors (here only `airflow_tracking`), and which rules
   fired on each labelled run.
 
+![Reheat valve position against outdoor temperature, with the valve open 30 to 50 % in warm weather](../img/workbook/zone-reheat-overcooling.png)
+
+*Synthetic illustration, not this exercise's dataset: the `reheat_penalty` evidence chart, reheat valve against outdoor temperature. Reheat held open on 80 to 95 °F days is energy spent undoing the cooling.*
+
 ## Caveats
 
 - The data are simulated: one building, one climate, one control sequence, and a fault held all

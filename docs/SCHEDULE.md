@@ -30,6 +30,10 @@ cmp = compare_schedule(sch, stated)
 cmp["extra_runtime_slots"], cmp["n_missing"], cmp["agreement"]
 ```
 
+![Carpet plot of building load by hour of day and date, weekday blocks plus one weekend that runs all day](img/viz/carpet.png)
+
+*Synthetic data: eight weeks of hourly load as a carpet (`charts.load_carpet`). The weekday blocks are the schedule `detect_schedule` recovers; the weekend that runs a weekday profile is the extra runtime `compare_schedule` reports.*
+
 The method is transparent: mark each interval "on" above a threshold (default `base + 0.5·(peak −
 base)` from the 10th/90th percentiles), then take the majority state per hour-of-week across all
 weeks. `compare_schedule` returns the **extra-runtime** slots (running when it shouldn't — a setback

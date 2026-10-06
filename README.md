@@ -19,6 +19,15 @@ against those roles. Map a building's tags once and the whole rule set runs on i
 **[yroussev.github.io/camber](https://yroussev.github.io/camber/)** — the rendered docs, with
 search. Everything below is a summary of it.
 
+## A look at the output
+
+| [![Fault-annotated multi-trend: cooling and heating valves with the simultaneous-heat/cool afternoons shaded](docs/img/thumbs/multitrend.png)](https://yroussev.github.io/camber/VISUALIZATION/) | [![Chiller condenser approach on its frozen drift baseline, the current period above the band](docs/img/thumbs/chiller-drift.png)](https://yroussev.github.io/camber/CHILLER-DRIFT/) | [![Cumulative M&V savings against a projected baseline with a 90 percent uncertainty band](docs/img/thumbs/savings.png)](https://yroussev.github.io/camber/MANDV/) |
+|:---:|:---:|:---:|
+| Fault-annotated trends ([Visualization](docs/VISUALIZATION.md)) | Drift against a frozen baseline ([Chiller drift](docs/CHILLER-DRIFT.md)) | M&V savings with uncertainty ([M&V](docs/MANDV.md)) |
+
+All three are drawn by CAMBER's own chart code on synthetic data; `scripts/docs_figures.py`
+renders every figure in the docs.
+
 ## What it does
 
 Full API-level detail — every capability, its flags, and the standard it cites — is in

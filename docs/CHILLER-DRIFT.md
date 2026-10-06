@@ -20,6 +20,10 @@ flowchart TD
 
 *Frozen-baseline fit feeds a period statistic and a streaming CUSUM; per-side roll-ups combine into one whole-machine verdict.*
 
+![Condenser approach against chiller load: a green band from the frozen baseline and the current period's points well above it](img/analytics/chiller-drift.png)
+
+*Synthetic data: `driftsim` with condenser fouling, drawn by `drift_evidence` for `chiller_approach_drift`. The band is the frozen baseline's fit ± 2 residual sigmas; at matched load the current approach sits 2–3 °F above it.*
+
 All of these detectors are **period rules** — run them with
 [`Registry.run_periods`](API-STABILITY.md) against a baseline period and a current period. Each
 freezes a load-normalized baseline into a [`BaselineStore`](SCALE.md) on first use, so the reference

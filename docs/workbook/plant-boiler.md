@@ -118,6 +118,10 @@ Its `drift` section adds the boiler drift family with a **declared reference**:
   intervals, for the entry's one declared detector, `boiler_efficiency_drift` (target: boiler
   fouling).
 
+![Boiler run status over two days, switching on and off every 45 minutes except on the coldest hours](../img/workbook/plant-boiler.png)
+
+*Synthetic illustration, not this exercise's dataset: the `boiler_short_cycle` evidence trend of the boiler's run status: 15 minutes on, 30 off, through every mild hour.*
+
 ## Caveats
 
 - The data are simulated: one plant, one climate, one control sequence.

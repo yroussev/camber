@@ -109,6 +109,10 @@ because the simulated chiller's design curve is not published, plus `cooling_tow
 - **Score.** `camber datasets score` prints the true- and false-positive rates, with 95 %
   intervals, for the dataset's declared detectors, and which rules fired on each labelled run.
 
+![Chiller kW per ton against cooling load; most part-load points sit above the warn ceiling](../img/workbook/plant-chiller-efficiency.png)
+
+*Synthetic illustration, not this exercise's dataset: kW/ton against load, drawn with CAMBER's diagnostic scatter and a band up to the rule's warn ceiling (1.2 times the 0.85 kW/ton design). The degraded chiller crosses it at part load.*
+
 ## Caveats
 
 - The data are simulated. A real chiller's ceiling comes from its schedule (kW/ton at design and

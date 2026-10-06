@@ -39,6 +39,11 @@ from camber.charts.readiness import readiness_ribbon
 
 readiness_ribbon(df, max_bins=240)  # df: wide point/role frame
 ```
+
+![Readiness ribbon of six points over three weeks, green where data is present, red for a three-day gap and a late start](img/viz/readiness.png)
+
+*Synthetic data: six trended points over three weeks. The red blocks are a three-day gap in the outdoor temperature and a zone point that starts on day six; the percentages are each point's coverage.*
+
 Flags = `max_bins` (time resolution), `title`, `max_xticks`. `presence_matrix(df)` returns the
 raw `(matrix, bin_starts, coverage)` if you want the numbers.
 
@@ -48,9 +53,29 @@ from camber.charts.multitrend import fault_multitrend
 
 fault_multitrend(df, ["load_kw", "sat"], spans={"high_load": df["load_kw"] > 95}, normalize=True)
 ```
+
+![Normalised cooling valve, heating valve and outdoor temperature over a week, with the afternoons when both valves are open shaded](img/viz/multitrend.png)
+
+*Synthetic data: `camber.synth.make_ahu_trends(fault="reheat")`, normalised to 0–1. The shaded spans are where a heating-valve-open and cooling-valve-open mask is true: simultaneous heating and cooling every weekday afternoon.*
+
 `spans` is `{label: boolean Series}` — each rule supplies the timestamps where it tripped, and
 each True run is shaded once. Flags: `normalize` (overlay disparate units 0–1), `shade_color`,
 `shade_alpha`, `title`. `mask_to_spans(mask)` is the reusable mask→intervals helper.
+
+### E — load carpet
+```python
+from camber.charts.carpet import load_carpet
+
+load_carpet(df["load_kw"], agg="mean", label="Load (kW)")  # hour of day x date
+```
+
+![Carpet plot of building load by hour of day and date, weekday blocks plus one weekend that runs all day](img/viz/carpet.png)
+
+*Synthetic data: eight weeks of hourly building load. Each weekday is a bright block from 06:00 to 19:00; the one weekend that runs a weekday profile joins two weeks into one long block.*
+
+Each column is a day and each row an hour, so the occupied schedule, the setback and a day the
+building was left on read at a glance. Flags: `agg`, `cmap`, `label`, `title`, `max_xticks`.
+`carpet_matrix(series)` returns the raw `(matrix, hours, dates)`.
 
 ### I — data-quality dashboard
 ```python
@@ -58,6 +83,11 @@ from camber.charts.quality_dashboard import quality_dashboard
 
 quality_dashboard(df, metrics=("coverage", "score", "flatline_frac", "outlier_frac"))
 ```
+
+![Data-quality heatmap of six points by coverage, score, flatline, outliers and in-regime outliers](img/viz/quality.png)
+
+*Synthetic data: the same six points as the ribbon, with the opt-in in-regime outlier column. The supply-air and pump points cycle, so their plain outlier share is high and their in-regime share is zero; the CO₂ spikes stay outliers in either read.*
+
 A heatmap colored so **green = good** for every metric (higher-is-better and lower-is-better are
 both mapped correctly). Built from `camber.ingest.quality.assess`.
 
@@ -78,6 +108,11 @@ from camber.charts.oat_scatter import oat_scatter, classify_shape, brush_back
 ax, shape = oat_scatter(load_kw, oat, ylabel="kW")  # overlays the change-point fit + guides
 shape.shape  # "linear" | "hockey-stick" | "v" | "scattered"
 ```
+
+![Occupied building load against outdoor temperature with a fitted line, classified as linear](img/viz/oat-scatter.png)
+
+*Synthetic data: six weeks of occupied-hour building load against outdoor temperature. `oat_scatter` overlays the best change-point fit and labels the cloud's shape (here linear, R² 0.97).*
+
 The *shape of the cloud* against outdoor-air temperature reveals control behavior a time-series
 buries. `classify_shape(series, oat)` labels it from the fitted change-point model + goodness of fit
 (a weak fit → `scattered`, i.e. no OAT dependence) with no chart required, returning a
@@ -95,6 +130,11 @@ from camber.charts.diagnostic import diagnostic_scatter, TEMPLATES
 
 ax, violating = diagnostic_scatter(role_frame, TEMPLATES["sat_reset"])  # violating: bool Series
 ```
+
+![Supply-air temperature against outdoor temperature with the G36 reset band; cold-weather points below the band are red](img/viz/diagnostic.png)
+
+*Synthetic data: a supply-air temperature held at 55 °F, on the packaged `sat_reset` template. The band rises as the outdoor air cools; the red points are the cold-weather hours the reset should have raised.*
+
 Each subsystem has an *expected signature*; a `DiagnosticTemplate` names two roles and an
 `expected(x) -> (low, high)` band, and `diagnostic_scatter` overlays that band, shades the points
 outside it, and returns the **violating mask** — so the figure doubles as a rule's evidence (feeds
@@ -117,6 +157,10 @@ from camber.store.modelstore import BaselineStore
 model = BaselineStore.load("baselines.json").model_for("Site", "CH_1", "chiller_approach_cond")
 ax, violating = diagnostic_scatter(current_frame, fitted_band(model, "tons", "approach_f", k=2))
 ```
+
+![Condenser approach against chiller load: a green band from the frozen baseline and the current period's points well above it](img/analytics/chiller-drift.png)
+
+*Synthetic data: `driftsim` with condenser fouling. The band is the frozen baseline's fitted line ± 2 residual sigmas; the current period's approach sits above it at every load.*
 
 Outside the load envelope the baseline was fitted on, the band is `NaN`: the shaded region shows a
 **gap** and points there are **not** counted as violations. Judging a reading against an extrapolated
@@ -164,6 +208,11 @@ The dashboard wires it automatically — pass `rules=`:
 ```python
 html = build_dashboard(df, findings=findings, rules=registry)  # evidence=True by default
 ```
+
+![Heating valve against cooling valve; points with both valves open are red](img/viz/evidence.png)
+
+*Synthetic data: the evidence chart `simultaneous_heat_cool` declares, rendered by `render_evidence`. Points where the heating valve is open while the cooling valve runs are the violating samples.*
+
 Each actionable finding whose rule opts in renders its evidence chart under an **Evidence** section.
 The **Std-211 audit report** does the same — `AuditReport.to_html(rules=…, frames={equip: frame})`
 embeds each finding's evidence beneath the findings table (per-equipment frames, so a fleet audit
@@ -176,6 +225,11 @@ from camber.charts.cohort import cohort_small_multiples, cohort_deviation
 fig, res = cohort_small_multiples(frames, Role.AIRFLOW)  # frames: {equip: role-frame}
 res.outliers  # units > k robust-σ from the cohort norm
 ```
+
+![Small multiples of airflow for eight VAV boxes, the starved box first and in red](img/viz/cohort.png)
+
+*Synthetic data: airflow for eight boxes over a week. The box at about a third of its peers' airflow is ranked first and drawn in red.*
+
 Small multiples of a role across a **cohort** of like equipment, ordered by deviation (worst first),
 outliers in red. Deviation is a robust z-score (median/MAD) of a per-unit `summary` (`mean` / `peak`
 / `load_factor`), so a couple of odd units don't move the reference. The same score powers a FDD
@@ -192,6 +246,11 @@ ax, res = savings_chart(
 )
 res.avoided_energy, res.abs_uncertainty  # e.g. 2983 ± 1318 at 90%
 ```
+
+![Cumulative projected baseline and actual energy over a year, the avoided energy shaded green with a 90 percent band](img/viz/savings.png)
+
+*Synthetic data: a year of daily energy after a 10 % saving, against a change-point baseline fitted on the year before. The grey band is the G14 fractional savings uncertainty at 90 %.*
+
 The IPMVP Option-C picture: cumulative **baseline-projected vs actual** energy, the avoided energy
 shaded between them (green = saved, red = excess), and the **ASHRAE G14 Annex-B fractional savings
 uncertainty** carried as a ± band on the running total — savings *and* how sure we are of them. Fit
@@ -220,6 +279,11 @@ from camber.charts.loadprofile_chart import load_profile_chart, load_duration_ch
 load_profile_chart(load_kw, split=True)  # weekday vs weekend hour-of-day shape
 load_duration_chart(load_kw, price=0.15)  # LDC + energy-cost translation
 ```
+
+![Weekday and weekend hour-of-day load profiles beside a load-duration curve](img/viz/load-profile.png)
+
+*Synthetic data: eight weeks of hourly building load. Left, the weekday and weekend profiles with the base load; right, the load-duration curve with peak, base load and the energy cost at $0.15/kWh.*
+
 Two views on load shape. `load_profile_chart` plots the average load by hour-of-day (weekday vs
 weekend when `split`, exposing schedule gaps) with the base load annotated. `load_duration_chart`
 sorts every interval high-to-low against the % of time it's exceeded — the area is energy, the left
@@ -242,6 +306,34 @@ where `mask` is true. A duct static that is never reset down overnight or at lig
 flat band. Each hour is labelled with its sample count (red under 10), so a handful of
 night-cycle samples is not read as a daily pattern. The [RCx report](RCX-REPORT.md) uses it on the
 air-distribution page.
+
+![Box plot of duct static pressure by hour of day, one flat band around 1.5 in. w.c.](img/viz/box-by-hour.png)
+
+*Synthetic data: duct static on fan-on samples, by hour of day. The same band at every hour is a static setpoint that is never reset; each hour is labelled with its sample count.*
+
+### CUSUM and energy signature
+
+The two M&V primitives from 0.1 draw what [MANDV.md](MANDV.md) computes:
+
+```python
+from camber.charts.cusum_chart import cusum_plot
+from camber.charts.energy_signature import energy_signature
+
+ax, model = energy_signature(daily_oat, daily_kwh)  # the best change-point model, overlaid
+cusum_plot(projected, actual, limit=None)  # running sum of projected minus actual
+```
+
+![Daily energy against outdoor temperature with a five-parameter change-point fit](img/viz/energy-signature.png)
+
+*Synthetic data: a year of daily energy against outdoor temperature. `energy_signature` fits the best of the 2P to 5P change-point models (here 5P) and marks its change points.*
+
+![CUSUM of projected minus actual energy over a year, flat until May and then climbing](img/viz/cusum.png)
+
+*Synthetic data: the same building's next year, projected from that baseline. The CUSUM stays near zero until a retrofit in May, then climbs as the savings accumulate (green = net savings).*
+
+`energy_signature` takes `model=` to draw a fit you already have and `kinds=` to limit the
+candidates. `cusum_plot` shades net savings green and net waste red; `limit` adds a ± control
+band, and `chained_cusum_plot` draws one CUSUM across a chain of baseline versions.
 
 ## The HTML dashboard
 
@@ -311,6 +403,10 @@ synchronized multitrend links to a timestamp readout exactly like the static pan
 camber serve /path/to/store          # read-only API + live dashboard at http://127.0.0.1:8080/ui
 python -m camber.api.server /path/to/store 8080   # equivalent; JSON endpoints unchanged
 ```
+
+![Screenshot of the live trend viewer: facility and equipment selectors, role checkboxes and two unit panels](img/shots/trend-viewer.png)
+
+*Synthetic data: the `/ui` trend viewer on a demo store, with one panel per unit (% and inH₂O) on a shared time axis.*
 
 Framework-free and dependency-light: stdlib `http.server` + inline vanilla JS/SVG, **no framework, no
 CDN, no external asset** (a strict `Content-Security-Policy` header is sent on the HTML route). It is
