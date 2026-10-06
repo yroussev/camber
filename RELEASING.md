@@ -10,7 +10,14 @@ distribution (only the `camber/` package + README + LICENSE).
 
 1. `pytest -q` is green locally and in CI.
 2. Version bumped in `pyproject.toml` and `camber/__init__.py` (`__version__`).
-3. `CHANGELOG.md` updated: move items from *unreleased* to the new version, dated.
+3. `CHANGELOG.md` updated: move items from *unreleased* to the new version, dated. Each version
+   has one heading per type (`### Added`, `### Changed`, `### Fixed`, ...), with no HTML
+   comments: branches that each add bullets merge them under the shared headings before the
+   release. Keep `CHANGELOG.md` under 150 KB (GitHub stops rendering Markdown files above about
+   210 KB): when a release would take it past that, move the oldest versions, unchanged, into a
+   `docs/changelog/changelog-<from>-<to>.md` archive, each under 150 KB, and link it from
+   `CHANGELOG.md`, `docs/changelog/index.md` and the mkdocs nav. `tests/test_changelog.py`
+   enforces the 200 KB ceiling, the headings, the comments and the links.
 4. Provenance sweep: no proprietary/client material in the package
    (`git grep -niE "<predecessor tool, client, and site names>" camber/` returns nothing of concern).
 

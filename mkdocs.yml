@@ -115,6 +115,11 @@ nav:
       - Security: SECURITY.md
       - Validation: VALIDATION.md
       - API stability & deprecation: API-STABILITY.md
+  - Changelog:
+      - Overview: changelog/index.md
+      - "0.90 to 0.95": changelog/changelog-0.90-0.95.md
+      - "0.60 to 0.89": changelog/changelog-0.60-0.89.md
+      - "0.1 to 0.59": changelog/changelog-0.1-0.59.md
 # Internal working docs (historical release plans + design proposals) stay in the repo for
 # contributors but are not part of the published site.
 exclude_docs: |

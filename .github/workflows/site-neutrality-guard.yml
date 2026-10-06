@@ -34,7 +34,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Scan tracked files, CHANGELOG, and commit messages
+      - name: Scan tracked files, the changelog, and commit messages
         shell: bash
         run: |
           set -euo pipefail
@@ -66,12 +66,13 @@ jobs:
             fi
           done < <(python3 .github/scripts/site_neutrality_patterns.py)
 
-          # CHANGELOG.md and commit messages ignore exemptions: every rule applies.
-          echo "== Scanning CHANGELOG.md =="
+          # CHANGELOG.md, its archive (docs/changelog/) and commit messages ignore exemptions:
+          # every rule applies.
+          echo "== Scanning CHANGELOG.md and docs/changelog/ =="
           while IFS=$'\t' read -r pat why _exempt; do
             [ -n "$pat" ] || continue
-            if grep -inE -- "$pat" CHANGELOG.md; then
-              echo "::error::CHANGELOG.md matches a site-neutrality rule ($why)"
+            if grep -inE -- "$pat" CHANGELOG.md docs/changelog/*.md; then
+              echo "::error::The changelog matches a site-neutrality rule ($why)"
               fail=1
             fi
           done < <(python3 .github/scripts/site_neutrality_patterns.py)
