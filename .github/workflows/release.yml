@@ -205,8 +205,14 @@ jobs:
         run: |
           set -euo pipefail
           ver="${GITHUB_REF_NAME#v}"
-          awk -v v="$ver" 'index($0,"## ["v"]")==1{f=1;next} f&&/^## \[/{exit} f{print}' \
-            CHANGELOG.md > RELEASE_NOTES.md || true
+          # The current release is in CHANGELOG.md; older ones (a re-run on an old tag) may have
+          # been moved to the docs/changelog/ archive. A section ends at the next "## " heading.
+          for f in CHANGELOG.md docs/changelog/changelog-*.md; do
+            [ -f "$f" ] || continue
+            awk -v v="$ver" 'index($0,"## ["v"]")==1{f=1;next} f&&/^## /{exit} f{print}' \
+              "$f" > RELEASE_NOTES.md || true
+            [ -s RELEASE_NOTES.md ] && break
+          done
           if [ ! -s RELEASE_NOTES.md ]; then
             echo "See CHANGELOG.md for the ${GITHUB_REF_NAME} changes." > RELEASE_NOTES.md
           fi

@@ -32,9 +32,9 @@ for that one rule. Only two kinds of rule are exempt, each in one file:
   which transcribes every Portfolio Manager property type as printed, that
   generic type among them.
 
-Commit messages, CHANGELOG.md and the release artefacts are scanned with every
-rule and ignore exemptions, and the licence-encumbered dataset rules are never
-exempt anywhere.
+Commit messages, CHANGELOG.md and its archive (``docs/changelog/``) and the release
+artefacts are scanned with every rule and ignore exemptions, and the licence-encumbered
+dataset rules are never exempt anywhere.
 
 Output: one rule per line, TAB-separated ``regex<TAB>reason<TAB>exempt_paths``
 where ``exempt_paths`` is a comma-separated list (empty when the rule has none).

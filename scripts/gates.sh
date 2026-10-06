@@ -10,7 +10,7 @@
 # Gates: ruff check + format (use the CI ruff: CI installs the latest), mypy,
 # pytest with the 90% coverage floor, the public-API snapshot, the synthetic, fleet,
 # LBNL, BDG2 and BDG2 savings benchmarks, mkdocs --strict, site neutrality and attribution (tree,
-# CHANGELOG, commit messages), version consistency and release notes, the
+# CHANGELOG + archive, commit messages), version consistency and release notes, the
 # validation dossier, and an sdist/wheel build with package-data and clean-install
 # checks.
 #
@@ -90,11 +90,12 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
       gate mkdocs_strict mkdocs.log "$PYTHON" -m mkdocs build --strict -d "$out/site"
     fi
 
-    # site neutrality + attribution: tree, CHANGELOG and the commit messages since RANGE_BASE
+    # site neutrality + attribution: tree, CHANGELOG (+ its docs/changelog/ archive) and the commit
+    # messages since RANGE_BASE
     local msgs; msgs=$(git log --format='%H %s%n%b' "$RANGE_BASE..$ref" 2>/dev/null)
     local nfail=0
     local ex=(':(exclude).github/scripts/site_neutrality_patterns.py' ':(exclude).github/workflows/site-neutrality-guard.yml' ':(exclude).githooks/denylist.local' ':(exclude).githooks/denylist.local.example')
-    # third field: paths exempt from that rule in the tree scan only; CHANGELOG and commit
+    # third field: paths exempt from that rule in the tree scan only; the changelogs and commit
     # messages are checked against every rule, as in site-neutrality-guard.yml
     while IFS=$'\t' read -r pat _ exempt; do
       [ -n "$pat" ] || continue
@@ -105,7 +106,7 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
         for p in "${_paths[@]}"; do rex+=(":(exclude)$p"); done
       fi
       git grep -iInE -- "$pat" -- . "${ex[@]}" ${rex[@]+"${rex[@]}"} >>"$out/neutrality.log" && nfail=1
-      grep -inE -- "$pat" CHANGELOG.md >>"$out/neutrality.log" && nfail=1
+      grep -inE -- "$pat" CHANGELOG.md docs/changelog/*.md >>"$out/neutrality.log" && nfail=1
       printf '%s\n' "$msgs" | grep -inE -- "$pat" >>"$out/neutrality.log" && nfail=1
     done < <("$PYTHON" .github/scripts/site_neutrality_patterns.py)
     [ $nfail -eq 0 ] && res site_neutrality PASS || res site_neutrality "FAIL (see $out/neutrality.log)"
@@ -126,7 +127,7 @@ run_gates() {  # $1 = work tree, $2 = label, $3 = ref for commit messages
     pv=$(sed -nE 's/^version = "([^"]+)".*/\1/p' pyproject.toml | head -1)
     iv=$(sed -nE 's/.*__version__ = "([^"]+)".*/\1/p' camber/__init__.py | head -1)
     [ "$pv" = "$iv" ] && res version "PASS ($pv)" || res version "FAIL (pyproject $pv, __init__ $iv)"
-    awk -v v="$pv" 'index($0,"## ["v"]")==1{f=1;next} f&&/^## \[/{exit} f{print}' CHANGELOG.md >"$out/RELEASE_NOTES.md"
+    awk -v v="$pv" 'index($0,"## ["v"]")==1{f=1;next} f&&/^## /{exit} f{print}' CHANGELOG.md >"$out/RELEASE_NOTES.md"
     [ -s "$out/RELEASE_NOTES.md" ] && res changelog_notes "PASS ($(wc -l <"$out/RELEASE_NOTES.md" | tr -d ' ') lines)" || res changelog_notes "FAIL (no ## [$pv] entry)"
 
     if [ $FAST -eq 0 ]; then
