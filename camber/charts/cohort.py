@@ -148,6 +148,7 @@ def cohort_small_multiples(
     Returns ``(fig, CohortResult)``. ``rank="deviation"`` orders units by ``|z|`` descending (worst
     first); anything else keeps insertion order. At most ``max_units`` panels are drawn.
     """
+    import matplotlib.dates as mdates
     import matplotlib.pyplot as plt
 
     res = cohort_deviation(frames, role, k=k, summary=summary)
@@ -172,6 +173,11 @@ def cohort_small_multiples(
         zlbl = f"  z={res.z[equip]:+.1f}" if equip in res.z else ""
         ax.set_title(f"{equip}{zlbl}", fontsize=8, color="#d62728" if is_out else "#222")
         ax.tick_params(labelsize=6)
+        if isinstance(s.index, pd.DatetimeIndex) and len(s):
+            # 0.102 (#117): a small panel fits a few concise date ticks, not overlapping full dates
+            loc = mdates.AutoDateLocator(maxticks=4)
+            ax.xaxis.set_major_locator(loc)
+            ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(loc))
     for j in range(n, nrows * ncols):  # hide unused panels
         axes[j // ncols][j % ncols].axis("off")
     fig.suptitle(

@@ -546,10 +546,35 @@ def _value_runs(series: pd.Series, gate=None, *, join=False) -> pd.DataFrame:
     gate goes False, as in the gated flatline read. With ``join=True`` (0.92, #66) a run is
     *not* broken where the gate goes False -- a value identical across successive running
     stretches is one run -- and its ``hours`` are the gated hours it spans (samples x step), not
-    the wall-clock time the off stretches would add.
+    the wall-clock time the off stretches would add. With ``join="held"`` (0.102, #118) a run
+    joins across an off stretch only when the reading also held its value through that stretch
+    (every logged off sample equals it): a sensor frozen through fan-off is one run, while a duct
+    reading that drifts to the plenum with the fan off and returns to the same setpoint starts a
+    new run. ``hours`` are again the gated hours; ``start`` / ``end`` are gated samples.
     """
     s = pd.to_numeric(series, errors="coerce")
     step = _step(s.index)
+    if join == "held" and gate is not None:
+        full = s.dropna()
+        if full.empty or not isinstance(full.index, pd.DatetimeIndex):
+            return pd.DataFrame(columns=["start", "end", "n", "value", "hours"])
+        g = pd.Series(gate).reindex(full.index).fillna(False).astype(bool)
+        rid = full.ne(full.shift()).cumsum()[g]  # runs over every sample, counted on gated ones
+        on = full[g]
+        if on.empty:
+            return pd.DataFrame(columns=["start", "end", "n", "value", "hours"])
+        ts = pd.Series(on.index, index=on.index)
+        g2 = pd.DataFrame({"ts": ts, "v": on, "rid": rid}).groupby("rid")
+        out = pd.DataFrame(
+            {
+                "start": g2["ts"].min(),
+                "end": g2["ts"].max(),
+                "n": g2["v"].size(),
+                "value": g2["v"].first(),
+            }
+        )
+        out["hours"] = out["n"] * step.total_seconds() / 3600.0
+        return out.reset_index(drop=True)
     if gate is not None:
         g = pd.Series(gate).reindex(s.index).fillna(False).astype(bool)
         seg = None if join else (~g).cumsum()[g]
@@ -595,7 +620,10 @@ def _stuck_runs(series: pd.Series, role, gate=None, stuck_hours=None, run_gate=N
             # says nothing without knowing when the fan ran: judged in the gated mode only
             return None, [], 0
         use_gate = gate
-    runs = _value_runs(series, use_gate, join=run_gate is not None)
+    # 0.92 (#66): a plant point's run spans its off stretches; 0.102 (#118): a fan-gated one's
+    # too, when the reading also held through them (a frozen sensor, not a controlled setpoint)
+    join = True if run_gate is not None else ("held" if use_gate is not None else False)
+    runs = _value_runs(series, use_gate, join=join)
     if runs.empty:
         return None, [], 0
     if role in _IDLE_ROLES:

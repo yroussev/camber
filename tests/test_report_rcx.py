@@ -170,7 +170,11 @@ def test_report_structure_banner_issues_and_evidence(run, captured):
     assert econ.cost is None and "uncosted" in econ.cost_basis_note
     assert rep.kpis["annual_cost_usd"] == pytest.approx(top.cost)
     assert f"id='issue-{econ.key}'" in html and f"href='#issue-{econ.key}'" in html
-    assert rep.week.start == pd.Timestamp("2026-03-09")  # the planted economizer fault week
+    # the #1 issue's planted reheat week: since 0.102 (#114) the simultaneous heat/cool evidence
+    # carries the rule's own violation mask, so the top issue scores the week it is in (before,
+    # it had no mask and the lower-ranked economizer fault week won)
+    assert rep.week.start == pd.Timestamp("2026-03-16")
+    assert top.hours_union and top.hours_union > 0
     # json-friendly
     d = json.loads(json.dumps(rep.to_dict()))
     assert d["issues"][0]["key"] == top.key and d["week"]["mode"] == "evidence"

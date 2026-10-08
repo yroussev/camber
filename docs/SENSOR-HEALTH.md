@@ -93,7 +93,11 @@ at "suspect" (0.75, less the stuck share of the samples); `longest_flat_hours` i
 Flows, static, pump head and power legitimately sit at their "off" value for a weekend, so a run
 at or below 2 % of the series' 99th-percentile magnitude is never counted. The fan-dependent roles
 (`FAN_GATED_ROLES`) are judged on fan-on stretches only, in the gated mode: without a gate a duct
-temperature holding still while the fan is off can't be told from a stuck one. Override a limit
+temperature holding still while the fan is off can't be told from a stuck one. A run on a
+fan-gated role joins across a fan-off span when the reading held the same value through that span
+too (0.102), and its duration is the fan-on hours it covers: a sensor frozen for days on a
+scheduled fan is one run, while a reading that drifts with the fan off and returns to the same
+setpoint starts a new run each morning. Override a limit
 with `sensor_trust(..., stuck_hours={Role.SPACE_TEMP: 12})`.
 
 **Coverage over the point's own span.** A point that was added part-way through the window is not

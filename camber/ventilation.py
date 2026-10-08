@@ -381,6 +381,7 @@ def assess_dcv(
     min_lift_people: float = 1.0,
     stratify_hour: bool = True,
     fan_off_mask=None,
+    masks_out: dict | None = None,
 ) -> DcvResult:
     """Verify DCV: is outdoor air raised when -- and only when -- ventilation demand is high?
 
@@ -449,6 +450,12 @@ def assess_dcv(
     un-flagged morning warm-up closure makes a static DCV look like it responds.
 
     ``min_corr`` is deprecated and ignored.
+
+    ``masks_out`` (0.102, #119), a dict, is filled with boolean Series of the samples behind each
+    sub-check: ``"below_floor"`` (every below-floor occupied sample), ``"breach"`` (CO₂ above
+    ``co2_setpoint`` with OA at its floor), ``"high"`` (judged samples at high demand) and
+    ``"high_at_floor"`` (those with OA at its floor -- demand the OA did not answer). A key is
+    absent when its check did not run. The result is unchanged.
     """
     if min_corr is not None:
         from ._deprecation import warn_deprecated
@@ -486,6 +493,8 @@ def assess_dcv(
         )
         below = df["oa"].to_numpy(dtype=float) < fl_all * (1.0 - floor_tol)
         below_floor = _pct(below)
+        if masks_out is not None:
+            masks_out["below_floor"] = pd.Series(below, index=df.index)
         floor_kw["below_floor_total_pct"] = below_floor
         off = np.zeros(len(df), dtype=bool)
         if fan_off_mask is not None:  # 0.98 (#93): fan-off samples are named, not a shortfall
@@ -595,6 +604,11 @@ def assess_dcv(
     if co2_setpoint is not None and kind == "co2":
         at_min = oa <= floor * (1.0 + floor_tol) if floor is not None else at_floor
         breach = _pct((d > co2_setpoint) & at_min)
+        if masks_out is not None:
+            masks_out["breach"] = pd.Series((d > co2_setpoint) & at_min, index=df.index)
+    if masks_out is not None:
+        masks_out["high"] = pd.Series(high, index=df.index)
+        masks_out["high_at_floor"] = pd.Series(high & at_floor, index=df.index)
     excess = (
         _pct(oa[low] > floor[low] * (1.0 + floor_tol))
         if floor is not None and _enough(low)

@@ -71,6 +71,7 @@ def analyze_co2_ventilation(
     occupied_only: bool = True,
     economizer_mask: pd.Series | None = None,
     min_hours: int = 10,
+    masks_out: dict | None = None,
 ) -> CO2VentilationResult | None:
     """Score CO2-based ventilation adequacy. ``df`` has 'CO2' (ppm) and optional
     'OutdoorCO2' (ppm); the rule wrapper maps roles to these.
@@ -87,6 +88,10 @@ def analyze_co2_ventilation(
     figure. With fewer than ``min_hours`` occupied hours outside economizer mode,
     ``over_vent_pct`` is ``None`` (not judged). Under-ventilation is judged on every occupied hour:
     an economizer only ever lowers CO2.
+
+    ``masks_out`` (0.102, #119), a dict, is filled with boolean Series on ``df``'s index:
+    ``"under"`` (the samples counted in ``under_vent_pct``) and ``"over"`` (those counted in
+    ``over_vent_pct``: near outdoor, outside economizer mode). The result is unchanged.
     """
     if "CO2" not in df.columns:
         return None
@@ -108,6 +113,13 @@ def analyze_co2_ventilation(
     rise = co2 - outdoor
     under = float((rise > delta_high_ppm).mean())
     near = rise < delta_low_ppm
+
+    def _on(sel: pd.Series) -> pd.Series:
+        return pd.Series(df.index.isin(sel.index[sel.to_numpy(dtype=bool)]), index=df.index)
+
+    if masks_out is not None:
+        masks_out["under"] = _on(rise > delta_high_ppm)
+        masks_out["over"] = _on(near)
     over_pct: float | None = round(100.0 * float(near.mean()), 1)
     econ_kw: dict = {}
     if economizer_mask is not None:
@@ -116,6 +128,8 @@ def analyze_co2_ventilation(
             em = em[~em.index.duplicated(keep="last")]
         econ = em.reindex(co2.index).fillna(False).astype(bool)
         rest = near[~econ]
+        if masks_out is not None:
+            masks_out["over"] = _on(near & ~econ)
         econ_kw = {
             "econ_hours_pct": round(100.0 * float(econ.mean()), 1),
             "over_vent_econ_pct": round(100.0 * float(near[econ].mean()), 1)

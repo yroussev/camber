@@ -95,8 +95,7 @@ class CoolingTowerApproach:
             metrics,
         )
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run the diagnostic on an equipment role-frame; return a Finding."""
+    def _run(self, equip: str, frame: pd.DataFrame, masks_out: dict | None = None):
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame.rename(columns=cols)
         # a 0-1 fan speed would never clear the percent gates (Registry.run normalizes upstream;
@@ -104,14 +103,56 @@ class CoolingTowerApproach:
         for col in ("TowerFanSpeed", "RH"):
             if col in legacy.columns:
                 legacy[col] = normalize_percent(pd.to_numeric(legacy[col], errors="coerce"))
-        res = analyze_cooling_tower_approach(
+        return analyze_cooling_tower_approach(
             legacy,
             equip,
             design_approach_f=self.design_approach_f,
             min_effort_pct=self.min_effort_pct,
             elevation_ft=self.elevation_ft,
             pressure_psia=self.pressure_psia,
+            masks_out=masks_out,
         )
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The judged samples counted in ``pct_hours_high_approach`` (0.102, #119): approach
+        above design + 3 F at the operating / high-fan gate. All False when nothing is judged."""
+        out: dict = {}
+        self._run("", frame, masks_out=out)
+        return out.get("high", pd.Series(False, index=frame.index))
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: approach vs wet-bulb over the judged samples, the high ones shaded (#119).
+
+        The scatter carries only the samples the rule judged (operating, at high fan effort when
+        the fan is trended), on a band from the design approach + 3 F the rule counts against."""
+        from ..charts._labels import role_label
+        from ..charts.diagnostic import band
+        from ..charts.evidence import Evidence
+
+        out: dict = {}
+        if self._run(equip, frame, masks_out=out) is None or "judged" not in out:
+            return None
+        limit = self.design_approach_f + 3.0  # analyze_cooling_tower_approach's high_margin_f
+        return Evidence(
+            renderer="diagnostic",
+            template=band(
+                "wetbulb",
+                "approach",
+                low=-2.0,  # the approach is clipped at 2 F below wet-bulb (sensor noise)
+                high=limit,
+                name=f"{equip}: tower approach vs design {self.design_approach_f:g} F + 3 F",
+                xlabel=role_label(Role.WETBULB_TEMP),
+                ylabel="approach: CW supply − wet-bulb (°F)",
+            ),
+            frame=out["judged"],
+            mask=out["high"],
+            label=f"approach > {limit:g} F",
+            title=f"{equip}: cooling-tower approach",
+        )
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Run the diagnostic on an equipment role-frame; return a Finding."""
+        res = self._run(equip, frame)
         if res is None:
             if Role.TOWER_FAN_SPEED in frame.columns and self.min_effort_pct is not None:
                 tail, caveat, extra = self._decline_reason(frame)

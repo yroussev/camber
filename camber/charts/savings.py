@@ -53,7 +53,7 @@ def savings_chart(
     rho: float | None = None,
     ax=None,
     title: str | None = None,
-    ylabel: str = "Energy",
+    ylabel: str = "energy",
     extrapolation: ExtrapolationPolicy | None = None,
 ):
     """Plot cumulative M&V savings with a G14 uncertainty band. Returns ``(ax, SavingsResult)``.
@@ -86,7 +86,7 @@ def savings_chart(
     if res.declined:
         ax.plot(x, cum_base, color="#999999", lw=1.6, ls="--", label="extrapolated — not a saving")
         ax.plot(x, cum_act, color="#111111", lw=1.8, label="actual")
-        ax.set_ylabel(f"Cumulative {ylabel.lower()}")
+        ax.set_ylabel(f"Cumulative {ylabel}")  # 0.102 (#116): keep the unit's case
         ax.set_title(title or "M&V savings declined — severe extrapolation of the baseline")
         ax.legend(loc="best", fontsize=8)
         return ax, res
@@ -139,7 +139,7 @@ def savings_chart(
     if cov.get("tier") in ("moderate", "severe") and cov.get("share_points_outside") is not None:
         share = cov["share_points_outside"]
         extra = f"\nextrapolated: {share:.0%} of points outside the baseline range"
-    ax.set_ylabel(f"Cumulative {ylabel.lower()}")
+    ax.set_ylabel(f"Cumulative {ylabel}")  # 0.102 (#116): keep the unit's case
     ax.set_title(title or f"M&V savings — {tot}{unc} ({pct} of baseline{fit}){extra}")
     ax.legend(loc="best", fontsize=8)
     return ax, res

@@ -61,7 +61,10 @@ def _section_image(letter, df, *, spans, carpet_col, multitrend_cols, normalize)
             ax.text(0.5, 0.5, "no numeric column for a load carpet", ha="center", va="center")
             ax.axis("off")
         else:
-            load_carpet(df[col], ax=ax, title=f"Load carpet — {col}")
+            from ..charts._labels import role_label
+
+            # 0.102 (#115): the colour bar names the column, not always "Load (kW)"
+            load_carpet(df[col], ax=ax, title=f"Load carpet — {col}", label=role_label(col))
     elif letter == "I":
         quality_dashboard(df, ax=ax)
     else:

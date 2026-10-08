@@ -12,8 +12,10 @@ band -- either one someone *designed* (a reset schedule, a high limit) or, via
 :func:`diagnostic_scatter` renders it and returns the **violating mask** (feeding pattern J — every
 rule renders its evidence). A small packaged :data:`TEMPLATES` set covers the common subsystems, and
 the constructors (:func:`band`, :func:`reset_line`, :func:`economizer_template`,
-:func:`no_simultaneous_template`) build your own. Valve/damper signals are the normalized 0–1
-fractions the ingest layer produces. numpy/pandas; matplotlib lazy-imported.
+:func:`no_simultaneous_template`) build your own. Valve signals are percent (0–100), the scale
+CAMBER normalises valve commands to (0.102, #114: the heat/cool template assumed 0–1 before);
+:func:`economizer_template` still reads its damper as a 0–1 fraction. numpy/pandas; matplotlib
+lazy-imported.
 """
 
 from __future__ import annotations
@@ -81,15 +83,27 @@ def diagnostic_scatter(
     ax=None,
     shade: bool = True,
     tolerance: float = 0.0,
+    violating=None,
 ):
     """Plot ``template``'s two roles with the expected band overlaid; shade violations.
 
     Returns ``(ax, violating_mask)`` — the mask is a boolean Series over the frame's index (points
     outside the expected band ± ``tolerance``), ready to feed pattern J / `mask_to_spans`.
+
+    ``violating`` (0.102, #114), a boolean Series on the frame's index, overrides that mask: a
+    rule whose verdict gates samples the band cannot see (occupancy, a dehumidification class)
+    passes the samples it actually flagged, so the chart shades exactly those. Plotted samples
+    it does not name are not violating.
     """
     import matplotlib.pyplot as plt
 
     xv, yv, lo, hi, mask = _evaluate(frame, template, tolerance)
+    if violating is not None:
+        v = pd.Series(violating)
+        if not v.index.is_unique:
+            v = v[~v.index.duplicated(keep="last")]
+        v = v.reindex(mask.index)
+        mask = v.where(v.notna(), False).astype(bool)
     violating = mask.to_numpy(dtype=bool)
 
     if ax is None:
@@ -119,8 +133,10 @@ def diagnostic_scatter(
             zorder=3,
         )
 
-    ax.set_xlabel(template.xlabel or getattr(template.x, "name", str(template.x)))
-    ax.set_ylabel(template.ylabel or getattr(template.y, "name", str(template.y)))
+    from ._labels import role_label
+
+    ax.set_xlabel(template.xlabel or role_label(template.x))
+    ax.set_ylabel(template.ylabel or role_label(template.y))
     frac = float(violating.mean()) if len(violating) else 0.0
     title = f"{template.name} — {frac:.0%} out of band"
     ax.set_title(title + (f"  · {template.cite}" if template.cite else ""))
@@ -248,9 +264,13 @@ def economizer_template(
     )
 
 
-def no_simultaneous_template(*, active: float = 0.05, y_max: float = 1.0) -> DiagnosticTemplate:
+def no_simultaneous_template(*, active: float = 5.0, y_max: float = 100.0) -> DiagnosticTemplate:
     """Heating valve vs cooling valve: when cooling is active (x > ``active``) the heating valve
-    must be near zero (``[0, active]``); otherwise it may range up to ``y_max``."""
+    must be near zero (``[0, active]``); otherwise it may range up to ``y_max``.
+
+    Valves are percent (0.102, #114): ``active`` is 5 %, the open threshold the
+    ``simultaneous_heat_cool`` rule counts with (:func:`camber.ahu.analyze_ahu`'s ``valve_thr``),
+    so a point outside the band is one with both valves open past it."""
 
     def expected(xv):
         lo = np.zeros(len(xv))
@@ -262,8 +282,8 @@ def no_simultaneous_template(*, active: float = 0.05, y_max: float = 1.0) -> Dia
         Role.COOL_VALVE,
         Role.HEAT_VALVE,
         expected,
-        "cooling valve (0–1)",
-        "heating valve (0–1)",
+        "cooling valve (%)",
+        "heating valve (%)",
         "ASHRAE G36 — no simultaneous heat/cool",
     )
 

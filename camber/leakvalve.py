@@ -94,6 +94,11 @@ def _fan_on(work: pd.DataFrame, speed_thr: float):
     return None
 
 
+def _on(index, flagged) -> pd.Series:
+    """A boolean Series on ``index``, True at the labels in ``flagged``."""
+    return pd.Series(index.isin(flagged), index=index)
+
+
 def _median(s: pd.Series) -> float | None:
     s = s.dropna()
     return round(float(s.median()), 1) if len(s) else None
@@ -112,6 +117,7 @@ def analyze_leak_valves(
     measured_fan_heat_f: float | None = None,  # the unit's measured fan rise (cooling-leak test)
     cool_delta_thr_f: float | None = None,  # cooling-leak margin; None = delta_thr_f
     judge_heating_on_supply_air: bool = True,  # False: heating judged on HeatCoilLeaving only
+    masks_out: dict | None = None,  # 0.102 (#119): filled with the flagged samples
 ) -> LeakValveResult | None:
     """Detect leaking coil valves at an AHU. ``df`` has CHW_Valve, HHW_Valve,
     MixedAir, SupplyAir (measure-named), and optionally HeatCoilLeaving, CoolCoilLeaving,
@@ -130,6 +136,10 @@ def analyze_leak_valves(
     ``delta_thr_f``); ``occupied_only`` uses a trended ``Occupancy`` column when present; and
     ``judge_heating_on_supply_air=False`` leaves a heating coil without its own leaving-air
     sensor unjudged (``hw_judged`` False) instead of judging it on the supply air.
+
+    ``masks_out`` (0.102, #119), a dict, is filled with ``"hw"`` and ``"chw"``: boolean Series on
+    ``df``'s index of the samples counted in ``hw_leak_pct`` and ``chw_leak_pct`` -- what an
+    evidence chart shades. Left empty when nothing is judged. The result is unchanged.
     """
     # The cooling coil + air temps are required; the heating coil is optional, so a
     # cooling-only AHU (no heating valve) is still screened for a cooling-coil leak.
@@ -203,6 +213,9 @@ def analyze_leak_valves(
     chw_ok = chw_src.dropna()
     chw_line = (cool_shift or 0.0) - cool_thr
     chw_pct = 100.0 * float((chw_ok < chw_line).mean()) if len(chw_ok) else 0.0
+    if masks_out is not None:
+        masks_out["hw"] = _on(df.index, hw_ok[hw_ok > delta_thr_f].index if hw_judged else [])
+        masks_out["chw"] = _on(df.index, chw_ok[chw_ok < chw_line].index)
     return LeakValveResult(
         equip=equip,
         n_both_closed=n,

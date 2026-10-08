@@ -120,6 +120,37 @@ def _cycles(x: np.ndarray, move_min: float) -> int:
     return reversals // 2
 
 
+def _judged_days(s: pd.Series, move_min: float) -> tuple[list, list]:
+    """``(days, moving)``: the ``(day, samples)`` pairs judged (>= 4 samples) and the days among
+    them the setpoint moved on (range >= ``move_min`` and not held at its modal value)."""
+    tol = move_min / 2.0
+    days = [(d, x) for d, x in s.groupby(s.index.normalize()) if len(x) >= _MIN_DAY_SAMPLES]
+    moving = []
+    for d, x in days:
+        if float(x.max() - x.min()) < move_min:
+            continue
+        if _modal(x, tol)[1] < _HELD_SHARE:
+            moving.append(d)
+    return days, moving
+
+
+def _held_samples(sp, *, move_min: float) -> pd.Series:
+    """The samples of ``sp`` on days the setpoint did **not** move (0.102, #119).
+
+    A boolean Series on ``sp``'s index: True for every non-missing sample outside the moving days
+    :func:`classify_setpoint_reset` counts (a day with too few samples to judge is not a moving
+    day). What a "no reset" evidence chart shades.
+    """
+    raw = pd.Series(sp)
+    s = pd.Series(sp, dtype=float).dropna()
+    if not isinstance(s.index, pd.DatetimeIndex):
+        s.index = pd.to_datetime(s.index)
+    _days, moving = _judged_days(s.sort_index(), move_min)
+    idx = pd.DatetimeIndex(pd.to_datetime(raw.index))
+    held = ~idx.normalize().isin(moving) & pd.to_numeric(raw, errors="coerce").notna().to_numpy()
+    return pd.Series(held, index=raw.index)
+
+
 def classify_setpoint_reset(
     sp,
     driver=None,
@@ -155,13 +186,7 @@ def classify_setpoint_reset(
         return empty
     rng = float(s.max() - s.min())
     tol = move_min / 2.0
-    days = [(d, x) for d, x in s.groupby(s.index.normalize()) if len(x) >= _MIN_DAY_SAMPLES]
-    moving = []
-    for d, x in days:
-        if float(x.max() - x.min()) < move_min:
-            continue
-        if _modal(x, tol)[1] < _HELD_SHARE:
-            moving.append(d)
+    days, moving = _judged_days(s, move_min)
     n_days, n_moving = len(days), len(moving)
     cycles = _cycles(s.to_numpy(dtype=float), move_min)
     levels, held_share = _levels(s, tol)
