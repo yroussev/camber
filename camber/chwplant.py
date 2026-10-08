@@ -115,6 +115,7 @@ def analyze_chw_plant(
     design_deltaT_min_f: float = 8.0,  # PNNL low-deltaT threshold
     occupied_only: bool = True,
     running=None,
+    masks_out: dict | None = None,
 ) -> CHWPlantResult | None:
     """Diagnose a chilled-water plant. ``df`` columns are measure names.
 
@@ -128,6 +129,10 @@ def analyze_chw_plant(
       chwst_low_f=46F      -- typical low CHWST design; at/below = "held low".
       reset_slope_flat=.05 -- |d(CHWST)/d(OAT)| below this = effectively no reset.
       design_deltaT_min=8F -- loop deltaT below this = low-deltaT syndrome (Ch.8).
+
+    ``masks_out`` (0.102, #119), a dict, is filled with boolean Series on ``df``'s index:
+    ``"low_deltaT"`` (the judged samples counted in ``low_deltaT_pct``) and ``"chwst_low"`` (those
+    counted in ``pct_chwst_low``). The result is unchanged.
     """
     if "CHWS_Temp" not in df.columns:
         return None
@@ -157,6 +162,10 @@ def analyze_chw_plant(
 
     chwst_median = round(float(sup.median()), 1)
     pct_low = round(100.0 * float((sup <= chwst_low_f).mean()), 1)
+    if masks_out is not None:
+        held = sup <= chwst_low_f
+        masks_out["chwst_low"] = pd.Series(df.index.isin(sup.index[held.to_numpy()]), df.index)
+        masks_out["low_deltaT"] = pd.Series(False, index=df.index)
 
     # Reset is CHWST-vs-OAT modulation. Without OAT (or without enough overlapping data)
     # we CANNOT evaluate it -- report None, never a confident "no reset" (False).
@@ -179,6 +188,9 @@ def analyze_chw_plant(
         low_dt_pct = (
             round(100.0 * float((dt < design_deltaT_min_f).mean()), 1) if len(dt) else float("nan")
         )
+        if masks_out is not None:
+            low = dt < design_deltaT_min_f
+            masks_out["low_deltaT"] = pd.Series(df.index.isin(dt.index[low.to_numpy()]), df.index)
     else:
         dt_median = low_dt_pct = float("nan")
 

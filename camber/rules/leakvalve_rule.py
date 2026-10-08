@@ -102,13 +102,12 @@ class LeakingValve:
             # per instance, so the default rule's declared inputs (and every golden) stay as-is
             self.roles_optional = type(self).roles_optional + (Role.OCCUPANCY,)
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
-        """Run the diagnostic on an equipment role-frame; return a Finding."""
+    def _run(self, equip: str, frame: pd.DataFrame, masks_out: dict | None = None):
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         if not self.occupied_only:
             cols.pop(Role.OCCUPANCY, None)
         legacy = frame.rename(columns=cols)
-        res = analyze_leak_valves(
+        return analyze_leak_valves(
             legacy,
             equip,
             valve_closed_thr=self.valve_closed_thr,
@@ -119,7 +118,52 @@ class LeakingValve:
             cool_delta_thr_f=self.cool_delta_thr_f,
             occupied_only=self.occupied_only,
             judge_heating_on_supply_air=self.judge_heating_on_supply_air,
+            masks_out=masks_out,
         )
+
+    def violation_masks(self, frame: pd.DataFrame) -> dict:
+        """``{"heating leak": mask, "cooling leak": mask}`` (0.102, #119): the both-valves-shut
+        samples counted in ``hw_leak_pct`` / ``chw_leak_pct``, boolean Series on ``frame``'s
+        index (all False when the rule judges nothing)."""
+        out: dict = {}
+        self._run("", frame, masks_out=out)
+        none = pd.Series(False, index=frame.index)
+        return {"heating leak": out.get("hw", none), "cooling leak": out.get("chw", none)}
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """Every sample either leak signature counts (the union of :meth:`violation_masks`)."""
+        m = self.violation_masks(frame)
+        return m["heating leak"] | m["cooling leak"]
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: the valves and the air temperatures the rule compares, its leak samples
+        shaded (#119)."""
+        from ..charts.evidence import Evidence
+
+        temps = (
+            Role.COOL_VALVE,  # the valves read shut over the shaded samples
+            Role.HEAT_VALVE,
+            Role.MIXED_AIR_TEMP,
+            Role.SUPPLY_AIR_TEMP,
+            Role.HEAT_COIL_LEAVING_TEMP,
+            Role.COOL_COIL_LEAVING_TEMP,
+        )
+        roles = [r for r in temps if r in frame.columns]
+        if not roles:
+            return None
+        masks = self.violation_masks(frame)
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=masks["heating leak"] | masks["cooling leak"],
+            masks=masks,
+            label="valves shut, air shifts (leak)",
+            title=f"{equip}: leaking valve",
+        )
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        """Run the diagnostic on an equipment role-frame; return a Finding."""
+        res = self._run(equip, frame)
         if res is None:
             return Finding(
                 rule=self.name, equip=equip, severity="info", summary="insufficient data"

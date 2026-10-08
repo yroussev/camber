@@ -41,6 +41,34 @@ class BoilerCyclingResult:
         return asdict(self)
 
 
+def _running_starts(status: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """``(running, start)`` on a status trend's samples: firing (> 0.5), and off->on."""
+    running = status > 0.5
+    return running, running & ~running.shift(1, fill_value=False)
+
+
+def _short_cycle_samples(df: pd.DataFrame, *, max_starts_per_day: float) -> pd.Series:
+    """The firing starts on short-cycling days (0.102, #119).
+
+    A boolean Series on ``df``'s index: True at each off->on start, counted as
+    :func:`analyze_boiler_cycling` counts them, on a calendar day with at least
+    ``max_starts_per_day`` of them. What a short-cycling evidence chart shades. All False without
+    ``BoilerStatus``.
+    """
+    out = pd.Series(False, index=df.index)
+    if "BoilerStatus" not in df.columns:
+        return out
+    w = df["BoilerStatus"].dropna()
+    if not len(w):
+        return out
+    _running, start = _running_starts(w)
+    day = pd.DatetimeIndex(w.index).normalize()
+    per_day = start.groupby(day).sum()
+    busy = per_day.index[per_day.to_numpy() >= max_starts_per_day]
+    flagged = start & pd.Series(day.isin(busy), index=w.index)
+    return pd.Series(df.index.isin(w.index[flagged.to_numpy()]), index=df.index)
+
+
 def analyze_boiler_cycling(
     df: pd.DataFrame,
     equip: str,
@@ -54,8 +82,8 @@ def analyze_boiler_cycling(
     span_days = (w.index.max() - w.index.min()).total_seconds() / 86400.0
     span_days = max(span_days, 1.0)
 
-    running = w["BoilerStatus"] > 0.5
-    starts = int((running & ~running.shift(1, fill_value=False)).sum())
+    running, start = _running_starts(w["BoilerStatus"])
+    starts = int(start.sum())
 
     return BoilerCyclingResult(
         equip=equip,

@@ -85,6 +85,43 @@ def _populated(df, col):
     return None
 
 
+def _considered(df, occupied_only: bool):
+    """The intervals :func:`analyze_ahu` judges: all of ``df``, or its occupied ones."""
+    work = df.copy()
+    if occupied_only:
+        work = work[
+            occupied_mask(
+                work.index,
+                occ=_populated(work, "Occupancy"),
+                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
+                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
+            )
+        ]
+    return work
+
+
+def _simultaneous_hc_mask(
+    df, *, valve_thr: float = 5.0, occupied_only: bool = True, exclude=None
+) -> pd.Series:
+    """The intervals :func:`analyze_ahu` counts as simultaneous heating and cooling (0.102, #114).
+
+    A boolean Series on ``df``'s index: considered (occupied) intervals with both ``CHW_Valve``
+    and ``HHW_Valve`` above ``valve_thr``, minus any interval in ``exclude`` (a boolean Series,
+    e.g. the dehumidification classes a rule does not count). False everywhere when a valve
+    column is missing.
+    """
+    out = pd.Series(False, index=df.index)
+    if "CHW_Valve" not in df.columns or "HHW_Valve" not in df.columns or not len(df):
+        return out
+    work = _considered(df, occupied_only)
+    simul = (work["CHW_Valve"] > valve_thr) & (work["HHW_Valve"] > valve_thr)
+    if exclude is not None:
+        ex = pd.Series(exclude).reindex(work.index)
+        simul = simul & ~ex.where(ex.notna(), False).astype(bool)
+    out.loc[simul.index[simul.to_numpy(dtype=bool)]] = True
+    return out
+
+
 def analyze_ahu(
     df,
     equip,
@@ -116,20 +153,11 @@ def analyze_ahu(
     """
     if "CHW_Valve" not in df.columns or "HHW_Valve" not in df.columns:
         return None
-    work = df.copy()
-    n_all = len(work)
+    n_all = len(df)
     if n_all == 0:
         return None
 
-    if occupied_only:
-        work = work[
-            occupied_mask(
-                work.index,
-                occ=_populated(work, "Occupancy"),
-                warmup=work["WarmUp"] if "WarmUp" in work.columns else None,
-                cooldown=work["CoolDown"] if "CoolDown" in work.columns else None,
-            )
-        ]
+    work = _considered(df, occupied_only)
     n = len(work)
     if n == 0:
         return None

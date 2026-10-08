@@ -141,3 +141,39 @@ class StaticPressureReset:
             summary=f"{equip}: static-pressure setpoint range {rng:.2f} inWC — {verdict}",
             caveats=caveats,
         )
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The samples behind a "no reset" verdict (0.102, #119): when the rule finds the setpoint
+        not resetting, the judged (fan-on) setpoint samples on days it held still -- every judged
+        sample when it is flat or too thin to tell. All False when it resets."""
+        from ..setpoint_reset import _held_samples
+
+        none = pd.Series(False, index=frame.index)
+        if Role.DUCT_STATIC_SP not in frame.columns:
+            return none
+        f = self.analyze("", frame)
+        if f.metrics.get("resets", True):
+            return none
+        fan, _src = fan_on_mask(frame)
+        keep = None if fan is None else fan.reindex(frame.index).fillna(False).astype(bool)
+        sp = frame[Role.DUCT_STATIC_SP] if keep is None else frame[Role.DUCT_STATIC_SP][keep]
+        if f.metrics.get("sp_behaviour") in ("flat", "insufficient"):
+            judged = sp.notna()
+        else:
+            judged = _held_samples(sp, move_min=self.move_min_inwc)
+        return none | judged.reindex(frame.index, fill_value=False).astype(bool)
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: the static setpoint (and pressure), the held, unreset hours shaded (#119)."""
+        from ..charts.evidence import Evidence
+
+        if Role.DUCT_STATIC_SP not in frame.columns:
+            return None
+        roles = [r for r in (Role.DUCT_STATIC_SP, Role.DUCT_STATIC) if r in frame.columns]
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=self.violation_mask(frame),
+            label="setpoint held (no reset)",
+            title=f"{equip}: duct static-pressure reset",
+        )

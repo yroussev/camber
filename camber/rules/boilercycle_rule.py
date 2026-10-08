@@ -72,3 +72,34 @@ class BoilerShortCycle:
             ),
             caveats=[GAS_RUN_CAVEAT] if run_source else [],  # 0.98 (#86 item 4a)
         )
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The firing starts on days with at least ``max_starts_per_day`` of them (0.102, #119),
+        read from the same run status the rule counts (the gas-input fallback included)."""
+        from ..boilercycle import _short_cycle_samples
+
+        status_frame, _src = with_boiler_status(frame)
+        cols = {r: c for r, c in _ROLE_TO_COL.items() if r in status_frame.columns}
+        m = _short_cycle_samples(
+            status_frame.rename(columns=cols), max_starts_per_day=self.max_starts_per_day
+        )
+        return m.reindex(frame.index, fill_value=False)
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: the boiler's firing trend, the starts on short-cycling days shaded (#119).
+
+        The trend is the run status, or -- when firing is read from the gas input -- the gas
+        input itself, the data the rule examined."""
+        from ..charts.evidence import Evidence
+
+        status_frame, run_source = with_boiler_status(frame)
+        if Role.BOILER_STATUS not in status_frame.columns:
+            return None
+        role = Role.GAS_INPUT_RATE if run_source else Role.BOILER_STATUS
+        return Evidence(
+            renderer="multitrend",
+            roles=[role],
+            mask=self.violation_mask(frame),
+            label=f"start, on a day with >= {self.max_starts_per_day:g} starts",
+            title=f"{equip}: boiler short-cycling",
+        )
