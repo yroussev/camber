@@ -112,6 +112,14 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 None of these figures is a gated benchmark.
 
+### Fixed
+- **A stuck supply-air sensor on a scheduled fan is now flagged (#118).** With the fan gate on,
+  a fan-dependent role's flat run was broken at every fan-off span, so a sensor frozen for four
+  days on a 13 h schedule never reached the 24 h stuck limit. A run now joins across a fan-off
+  span when the reading held the same value through it, and its length is the fan-on hours it
+  covers, as the plant gate already counts running hours. A reading that moves with the fan off
+  still starts a new run, so a supply air held at setpoint each day is not flagged.
+
 ## [0.101.0] — 2026-10-04
 
 **0.101: a seasonal OA damper minimum, data-led point-role suggestions by default, and a
