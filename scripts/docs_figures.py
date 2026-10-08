@@ -543,7 +543,6 @@ def _viz_evidence():
 
 @figure("viz/cohort.png")
 def _viz_cohort():
-    import matplotlib.dates as mdates
     import pandas as pd
 
     from camber.charts.cohort import cohort_small_multiples
@@ -556,10 +555,6 @@ def _viz_cohort():
             f[Role.AIRFLOW] = f[Role.AIRFLOW] * 0.35  # starved box
         frames[f"VAV-{i}"] = pd.DataFrame({Role.AIRFLOW: f[Role.AIRFLOW]})
     fig, _ = cohort_small_multiples(frames, Role.AIRFLOW, ncols=4, figsize=(9.0, 4.0))
-    for ax in fig.axes:  # small panels: concise date ticks so the labels do not collide
-        loc = mdates.AutoDateLocator(maxticks=4)
-        ax.xaxis.set_major_locator(loc)
-        ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(loc))
     fig.tight_layout()
     return fig
 
@@ -833,11 +828,10 @@ def _wb_chiller_eff():
 
 @figure("workbook/plant-cooling-tower.png")
 def _wb_tower():
-    import matplotlib.pyplot as plt
     import numpy as np
     import pandas as pd
 
-    from camber.charts.diagnostic import band, diagnostic_scatter
+    from camber.model.roles import Role
 
     idx = _hourly(21)
     rng = _rng(21)
@@ -846,29 +840,15 @@ def _wb_tower():
     week = ((idx - idx[0]).days // 7).to_numpy()
     approach = 6.5 + 0.15 * (wb - 66) + np.where(week >= 1, 4.0 * week / 2, 0.0)
     approach = approach + rng.normal(0, 0.5, n)
-    derived = pd.DataFrame({"wetbulb": wb, "approach": approach}, index=idx)
-    design = 7.0
-    tmpl = band(
-        "wetbulb",
-        "approach",
-        low=0.0,
-        high=design + 3.0,
-        name="tower approach vs design + 3 F",
-        xlabel="Outdoor wet-bulb (°F)",
-        ylabel="Approach: CW supply − wet-bulb (°F)",
-    )
-    fig, ax = plt.subplots(figsize=STD)
-    diagnostic_scatter(derived, tmpl, ax=ax)
-    fig.tight_layout()
-    return fig
+    frame = pd.DataFrame({Role.WETBULB_TEMP: wb, Role.CW_SUPPLY_TEMP: wb + approach}, index=idx)
+    return _evidence_fig("cooling_tower_approach", "CT-1", frame)
 
 
 @figure("workbook/plant-chw-reset-pumping.png")
 def _wb_chw_reset():
-    import matplotlib.pyplot as plt
+    import numpy as np
     import pandas as pd
 
-    from camber.charts.diagnostic import TEMPLATES, diagnostic_scatter
     from camber.model.roles import Role
 
     idx = _hourly(21)
@@ -876,11 +856,17 @@ def _wb_chw_reset():
     n = len(idx)
     oat = _oat(idx, rng, center=68, amp=16)
     chws = 44 + rng.normal(0, 0.3, n)  # held at 44 F whatever the weather
-    frame = pd.DataFrame({Role.OAT: oat, Role.CHW_SUPPLY_TEMP: chws}, index=idx)
-    fig, ax = plt.subplots(figsize=STD)
-    diagnostic_scatter(frame, TEMPLATES["chw_reset"], ax=ax)
-    fig.tight_layout()
-    return fig
+    chwr = chws + 10 + rng.normal(0, 0.5, n)
+    frame = pd.DataFrame(
+        {
+            Role.OAT: oat,
+            Role.CHW_SUPPLY_TEMP: chws,
+            Role.CHW_RETURN_TEMP: chwr,
+            Role.COMPRESSOR_STATUS: np.ones(n),
+        },
+        index=idx,
+    )
+    return _evidence_fig("chw_plant_reset", "CHW-1", frame, figsize=WIDE)
 
 
 @figure("workbook/plant-boiler.png")

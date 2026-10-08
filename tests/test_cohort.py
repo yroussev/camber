@@ -94,3 +94,14 @@ def test_cohort_rule_info_below_min_cohort():
     rule = CohortDeviation(Role.AIRFLOW, min_cohort=5)
     f = rule.analyze_fleet(_cohort(n_units=2, outlier=False))
     assert f.severity == "info" and f.equip == "<fleet>"
+
+
+def test_cohort_small_multiples_use_concise_date_ticks():
+    # 0.102 (#117): full dates overlapped on the small panels
+    import matplotlib.dates as mdates
+
+    fig, res = cohort_small_multiples(_cohort(outlier=True), Role.AIRFLOW)
+    drawn = [ax for ax in fig.get_axes() if ax.get_visible() and ax.axison]
+    assert len(drawn) == len(res.values)
+    for ax in drawn:
+        assert isinstance(ax.xaxis.get_major_formatter(), mdates.ConciseDateFormatter)

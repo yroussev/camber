@@ -50,6 +50,8 @@ def fault_multitrend(
     """
     import matplotlib.pyplot as plt
 
+    from ._labels import role_label, role_unit
+
     cols = list(columns) if columns is not None else [c for c in df.columns]
     if ax is None:
         _, ax = plt.subplots(figsize=(13, 4))
@@ -58,11 +60,18 @@ def fault_multitrend(
         if normalize:
             lo, hi = float(np.nanmin(s)), float(np.nanmax(s))
             s = (s - lo) / (hi - lo) if hi > lo else s * 0.0
-        ax.plot(df.index, s.to_numpy(), lw=0.9, label=str(getattr(c, "value", c)))
+        ax.plot(df.index, s.to_numpy(), lw=0.9, label=role_label(c))
 
     shaded_labels = set()
+    idx = df.index.sort_values() if isinstance(df.index, pd.DatetimeIndex) else None
     for label, mask in (spans or {}).items():
         for start, end in mask_to_spans(mask):
+            if start == end and idx is not None:
+                # 0.102 (#119): a one-sample span (a boiler start, a brief excursion) is drawn
+                # over its own interval, to the next sample, rather than as an invisible hairline
+                pos = idx.searchsorted(end, side="right")
+                if pos < len(idx):
+                    end = idx[pos]
             ax.axvspan(
                 start,
                 end,
@@ -73,7 +82,10 @@ def fault_multitrend(
             shaded_labels.add(label)
 
     ax.set_xlabel("Time")
-    ax.set_ylabel("normalized (0–1)" if normalize else "value")
+    # 0.102 (#115): series sharing one unit read it on the axis (each legend entry names its own)
+    units = {role_unit(c) for c in cols}
+    shared = units.pop() if len(units) == 1 else ""
+    ax.set_ylabel("normalized (0–1)" if normalize else (shared or "value"))
     n_viol = len(shaded_labels)
     ax.set_title(
         title

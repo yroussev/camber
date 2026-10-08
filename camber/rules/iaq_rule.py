@@ -95,10 +95,50 @@ class CO2Ventilation:
         econ, basis = self._mask_for(frame)
         return self._judge(equip, frame, econ, basis)
 
-    def _judge(self, equip, frame, econ, basis, *, source=None) -> Finding:
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The occupied samples behind the finding (0.102, #119): CO2 above the
+        under-ventilation threshold, or, when the finding is over-ventilation, CO2 near outdoor
+        outside economizer mode. A boolean Series on ``frame``'s (de-duplicated) index."""
+        return self._violation(frame)[0]
+
+    def _violation(self, frame: pd.DataFrame) -> tuple:
+        """``(mask, label)`` for :meth:`violation_mask` and the evidence chart."""
+        if not frame.index.is_unique:
+            frame = frame[~frame.index.duplicated(keep="last")]
+        econ, basis = self._mask_for(frame)
+        out: dict = {}
+        f = self._judge("", frame, econ, basis, masks_out=out)
+        none = pd.Series(False, index=frame.index)
+        under = f.metrics.get("under_vent_pct")
+        over = f.metrics.get("over_vent_pct")
+        if under is not None and under < 5.0 and over is not None and over >= 60.0:
+            return out.get("over", none), "CO2 near outdoor (over-ventilated)"
+        high = f"CO2 > {f.metrics['outdoor_co2_ppm'] + 700:.0f} ppm" if under is not None else ""
+        return out.get("under", none), f"{high} (under-ventilated)".strip()
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: zone CO2 (and outdoor CO2), the flagged occupied hours shaded (#119)."""
+        from ..charts.evidence import Evidence
+
+        if Role.CO2 not in frame.columns:
+            return None
+        mask, label = self._violation(frame)
+        roles = [r for r in (Role.CO2, Role.OUTDOOR_CO2) if r in frame.columns]
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=mask,
+            label=label,
+            title=f"{equip}: CO2 ventilation",
+            frame=frame[~frame.index.duplicated(keep="last")]
+            if not frame.index.is_unique
+            else None,
+        )
+
+    def _judge(self, equip, frame, econ, basis, *, source=None, masks_out=None) -> Finding:
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         legacy = frame[[r for r in _ROLE_TO_COL if r in frame.columns]].rename(columns=cols)
-        res = analyze_co2_ventilation(legacy, equip, economizer_mask=econ)
+        res = analyze_co2_ventilation(legacy, equip, economizer_mask=econ, masks_out=masks_out)
         if res is None:
             return Finding(
                 rule=self.name,

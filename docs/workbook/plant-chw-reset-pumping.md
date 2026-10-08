@@ -110,9 +110,9 @@ an enable, not a run status, so CAMBER decides when the chiller runs from its po
   more of the hours near full speed, a `warn` from 30 %, or at half the hours or more near the
   minimum.
 
-![Chilled-water supply temperature against outdoor temperature, flat at 44 F; the mild-weather points fall below the reset band](../img/workbook/plant-chw-reset-pumping.png)
+![Chilled-water supply, return and outdoor temperatures over three weeks; the supply stays flat at 44 F and the occupied running hours are shaded](../img/workbook/plant-chw-reset-pumping.png)
 
-*Synthetic illustration, not this exercise's dataset: chilled-water supply against outdoor temperature on the packaged `chw_reset` diagnostic template. A supply held at 44 °F in mild weather is a reset that never happens.*
+*Synthetic illustration, not this exercise's dataset: the `chw_plant_reset` evidence trend. The supply is held at 44 °F whatever the outdoor temperature, a reset that never happens. The shaded hours are the occupied running hours the rule judged with the supply at or below 46 °F.*
 
 ## Caveats
 

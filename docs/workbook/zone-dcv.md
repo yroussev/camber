@@ -128,9 +128,9 @@ some rules are left out.
 - **Report.** Each row's **report** link in the lab shows the same findings with evidence
   charts.
 
-![Room CO2 over two weeks, rising on occupied days and falling back overnight](../img/workbook/zone-dcv.png)
+![Room CO2 and outdoor airflow over two weeks, scaled to one axis; the high-CO2 hours with the outdoor air at its fixed position are shaded](../img/workbook/zone-dcv.png)
 
-*Synthetic illustration, not this exercise's dataset: the room CO₂ trend that `dcv_verification` draws as its evidence, from CAMBER's DCV simulator with the outdoor air held at a fixed position.*
+*Synthetic illustration, not this exercise's dataset: the room CO₂ and outdoor-air trends that `dcv_verification` draws as its evidence, each scaled 0–1, from CAMBER's DCV simulator with the outdoor air held at a fixed position. The shaded samples are the ones behind the verdict: judged samples at high demand, with the outdoor air still at its fixed position. The outdoor-air peaks are economizer hours, which the rule leaves out.*
 
 ## Caveats
 

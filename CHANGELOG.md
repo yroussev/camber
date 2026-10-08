@@ -119,6 +119,48 @@ None of these figures is a gated benchmark.
   span when the reading held the same value through it, and its length is the fan-on hours it
   covers, as the plant gate already counts running hours. A reading that moves with the fan off
   still starts a new run, so a supply air held at setpoint each day is not flagged.
+- **The `simultaneous_heat_cool` evidence chart uses the rule's threshold on the percent scale
+  (#114).** `no_simultaneous_template` assumed 0–1 valves (`active=0.05`), so on CAMBER's percent
+  valves it shaded points from 0.05 % open. It now defaults to `active=5.0`, `y_max=100.0` with
+  "(%)" axes, and the rule's evidence passes its own flagged samples (occupied, both valves above
+  5 %, less the dehumidification-with-reheat classes it does not count) through a new
+  `violating=` argument of `diagnostic_scatter`. A test checks that the shaded samples equal the
+  rule's. `economizer_template` still reads its damper as 0–1.
+- **Evidence axes and carpet colour bars name the role and its unit (#115).** The carpet colour
+  bar always read "Load (kW)", and scatter axes showed raw role names such as
+  `COND_APPROACH_TEMP`. Evidence carpets, OAT scatters, diagnostic-axis fallbacks, drift-band
+  axes and multi-trend legends now read e.g. "cond approach temp (°F)", with the unit from
+  `camber.api.ui.role_units`, the trend viewer's source. A multi-trend whose series share a unit
+  shows it on the y axis. The site report's carpet colour bar names its column.
+- **`savings_chart` keeps the unit's case (#116).** `ylabel="kWh"` rendered "Cumulative kwh".
+  The default label is now "energy".
+- **Cohort small multiples get concise date ticks (#117).** `cohort_small_multiples` panels use
+  matplotlib's concise date formatter (at most four ticks), so multi-week dates no longer
+  overlap. The docs-figure workaround is removed.
+- **Seven more rules shade their flagged samples in their evidence (#119).** Each has a
+  `violation_mask(frame)` built from what the rule counts:
+  - `leaking_valve`: the fan-on, both-valves-shut samples counted in `hw_leak_pct` /
+    `chw_leak_pct`;
+  - `static_pressure_reset`: when not resetting, the judged setpoint samples on days it held;
+  - `dcv_verification`: high-demand samples the OA did not answer (static or uncorrelated), plus
+    the setpoint-breach, below-floor and unventilated samples;
+  - `co2_ventilation`: the occupied samples counted as under-ventilated, or as over-ventilated
+    when that is the finding;
+  - `cooling_tower_approach`: an approach-against-wet-bulb scatter of the judged samples, the ones
+    above design + 3 °F in red;
+  - `chw_plant_reset`: low-ΔT running hours where ΔT is judged, and CHWST held at or below 46 °F
+    when there is no reset;
+  - `boiler_short_cycle`: each start on a day with at least `max_starts_per_day` starts.
+
+  The analysis functions behind them take an optional `masks_out` dict; their results are
+  unchanged. A one-sample shaded span in a multi-trend is now drawn to the next sample instead
+  of as a hairline.
+
+  No verdict or finding changes. In the RCx report these issues, and `simultaneous_heat_cool`,
+  now report violation hours instead of "not measured", and the evidence-mode representative week
+  can move to the top issue's fault week. The synthetic RCx golden's week moves from 2026-03-09 to
+  2026-03-16, the planted reheat week of its top issue. The workbook cooling-tower and CHW-reset
+  figures are now drawn from those rules' evidence.
 
 ## [0.101.0] — 2026-10-04
 

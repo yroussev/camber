@@ -70,9 +70,9 @@ def test_economizer_stuck_minimum_flagged():
 
 def test_no_simultaneous_heat_cool_flagged():
     oat, rng, idx = _oat()
-    cool = pd.Series(np.where(oat > 70, 0.7, 0.0), index=idx)
-    heat_ok = pd.Series(np.where(oat < 40, 0.6, 0.0), index=idx)  # never both open
-    heat_bad = pd.Series(np.full(len(oat), 0.5), index=idx)  # heating on during cooling
+    cool = pd.Series(np.where(oat > 70, 70.0, 0.0), index=idx)  # valves are percent (#114)
+    heat_ok = pd.Series(np.where(oat < 40, 60.0, 0.0), index=idx)  # never both open
+    heat_bad = pd.Series(np.full(len(oat), 50.0), index=idx)  # heating on during cooling
     _, m_ok = diagnostic_scatter(
         pd.DataFrame({Role.COOL_VALVE: cool, Role.HEAT_VALVE: heat_ok}),
         TEMPLATES["no_simultaneous_hc"],

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from ._labels import role_label
 from .diagnostic import _col
 
 
@@ -46,6 +47,9 @@ class Evidence:
     # condition (``{"FC13": ...}``) -- so a consumer can read one condition's hours instead of the
     # union. None = the rule exposes only the union ``mask``.
     masks: object = None
+    # 0.102 (#119): min-max scale each multitrend series to 0-1, for roles in unlike units (CO2 in
+    # ppm against an OA flow in cfm) that would otherwise flatten one another
+    normalize: bool = False
 
 
 def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
@@ -63,13 +67,20 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
         from .diagnostic import diagnostic_scatter
 
         tmpl = evidence.template
-        return diagnostic_scatter(frame, tmpl, ax=ax)  # type: ignore[arg-type]  # template
+        # 0.102 (#114): a rule-supplied mask is what the chart shades (the band alone cannot see
+        # the rule's own gates)
+        return diagnostic_scatter(frame, tmpl, ax=ax, violating=evidence.mask)  # type: ignore[arg-type]
     if r == "multitrend":
         from .multitrend import fault_multitrend
 
         spans = {evidence.label: evidence.mask} if evidence.mask is not None else None
         ax = fault_multitrend(
-            frame, list(evidence.roles) or None, spans=spans, ax=ax, title=evidence.title or None
+            frame,
+            list(evidence.roles) or None,
+            spans=spans,
+            ax=ax,
+            title=evidence.title or None,
+            normalize=evidence.normalize,
         )
         return ax, evidence.mask
     if r == "oat_scatter":
@@ -80,14 +91,19 @@ def render_evidence(evidence: Evidence, frame: pd.DataFrame, *, ax=None):
             y,
             _col(frame, Role.OAT),
             ax=ax,
-            ylabel=str(getattr(evidence.roles[0], "value", evidence.roles[0])).replace("_", " "),
+            ylabel=role_label(evidence.roles[0]),
             title=evidence.title or None,
         )
         return ax, evidence.mask
     if r == "carpet":
         from .carpet import load_carpet
 
-        ax = load_carpet(_col(frame, evidence.roles[0]), ax=ax, title=evidence.title or None)
+        ax = load_carpet(
+            _col(frame, evidence.roles[0]),
+            ax=ax,
+            title=evidence.title or None,
+            label=role_label(evidence.roles[0]),  # 0.102 (#115): not always "Load (kW)"
+        )
         return ax, None
     raise ValueError(
         f"unknown evidence renderer {r!r}; use diagnostic/multitrend/oat_scatter/carpet"
@@ -145,8 +161,8 @@ def drift_evidence(rule, equip: str, frame: pd.DataFrame, *, k: float = 2.0):
             metric,
             k=k,
             name=f"{equip}: {name}",
-            xlabel=getattr(load, "name", str(load)),
-            ylabel=getattr(metric, "name", str(metric)),
+            xlabel=role_label(load),
+            ylabel=role_label(metric),
         ),
         frame=prepared,
         title=f"{equip}: {name} vs frozen baseline",

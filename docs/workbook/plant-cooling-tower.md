@@ -113,7 +113,7 @@ effort against `PLANT__fault_free`, fitted in memory on each run and never store
 
 ![Cooling-tower approach against wet-bulb temperature, with later points above the design-plus-3 F line](../img/workbook/plant-cooling-tower.png)
 
-*Synthetic illustration, not this exercise's dataset: tower approach (condenser-water supply minus wet-bulb) against wet-bulb, with a band up to the design approach plus 3 °F, the line `pct_hours_high_approach` counts above. The approach grows week by week.*
+*Synthetic illustration, not this exercise's dataset: the `cooling_tower_approach` evidence chart. Tower approach (condenser-water supply minus wet-bulb) against wet-bulb, over the samples the rule judged, with a band up to the design approach plus 3 °F. The red points are the samples `pct_hours_high_approach` counts. The approach grows week by week.*
 
 ## Caveats
 

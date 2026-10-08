@@ -211,7 +211,7 @@ html = build_dashboard(df, findings=findings, rules=registry)  # evidence=True b
 
 ![Heating valve against cooling valve; points with both valves open are red](img/viz/evidence.png)
 
-*Synthetic data: the evidence chart `simultaneous_heat_cool` declares, rendered by `render_evidence`. Points where the heating valve is open while the cooling valve runs are the violating samples.*
+*Synthetic data: the evidence chart `simultaneous_heat_cool` declares, rendered by `render_evidence`. Valves are in percent, and the red points are exactly the samples the rule counts: both valves above its 5 % open threshold during occupied hours.*
 
 Each actionable finding whose rule opts in renders its evidence chart under an **Evidence** section.
 The **Std-211 audit report** does the same — `AuditReport.to_html(rules=…, frames={equip: frame})`

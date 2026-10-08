@@ -299,15 +299,37 @@ class SimultaneousHeatCool:
             summary=summary,
         )
 
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The samples this rule counts as a fault (0.102, #114): occupied, both valves above the
+        5 % open threshold, and -- where the dehumidification classes apply -- neither
+        dehumidification with reheat nor possibly so (those are reported, not counted). A boolean
+        Series on ``frame``'s (de-duplicated) index."""
+        from ..ahu import _simultaneous_hc_mask
+
+        if not frame.index.is_unique:
+            frame = frame[~frame.index.duplicated(keep="last")]
+        classes, _ev = self._classes(frame)
+        cols = {role: col for role, col in _ROLE_TO_AHU_COL.items() if role in frame.columns}
+        exclude = None
+        if classes is not None:
+            exclude = classes["dehum"] | classes["possible"]
+        return _simultaneous_hc_mask(frame.rename(columns=cols), exclude=exclude)
+
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: render the heat-vs-cool valve diagnostic (both-open points shaded)."""
-        from ..charts.diagnostic import TEMPLATES
+        """Pattern J: the heat-vs-cool valve diagnostic, the samples the rule counts shaded.
+
+        0.102 (#114): the template is on the percent scale with the rule's own 5 % threshold, and
+        the shaded points are :meth:`violation_mask` -- the band alone cannot see the occupancy
+        gate or the dehumidification classes."""
+        from ..charts.diagnostic import no_simultaneous_template
         from ..charts.evidence import Evidence
 
         if Role.HEAT_VALVE in frame.columns and Role.COOL_VALVE in frame.columns:
             return Evidence(
                 renderer="diagnostic",
-                template=TEMPLATES["no_simultaneous_hc"],
+                template=no_simultaneous_template(active=5.0),
+                mask=self.violation_mask(frame),
+                label="both valves open (counted)",
                 title=f"{equip}: simultaneous heat/cool",
             )
         return None

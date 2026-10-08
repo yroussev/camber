@@ -38,8 +38,8 @@ from camber.rules.simul_hc import SimultaneousHeatCool  # noqa: E402
 def _hc_frame(n=200, seed=0):
     idx = pd.date_range("2024-07-01", periods=n, freq="1h")
     rng = np.random.default_rng(seed)
-    cool = pd.Series(np.where(idx.hour > 12, 0.6, 0.0), index=idx)
-    heat = pd.Series(np.where((idx.hour > 12) & (idx.hour < 18), 0.5, 0.0), index=idx)  # overlaps
+    cool = pd.Series(np.where(idx.hour > 12, 60.0, 0.0), index=idx)  # valves are percent
+    heat = pd.Series(np.where((idx.hour > 12) & (idx.hour < 18), 50.0, 0.0), index=idx)  # overlaps
     oat = pd.Series(rng.uniform(60, 90, n), index=idx)
     return pd.DataFrame({Role.HEAT_VALVE: heat, Role.COOL_VALVE: cool, Role.OAT: oat})
 

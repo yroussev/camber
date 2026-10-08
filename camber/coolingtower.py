@@ -232,6 +232,7 @@ def analyze_cooling_tower_approach(
     min_effort_pct: float | None = 90.0,  # judge approach only at/above this fan speed
     elevation_ft: float | None = None,  # site elevation for a derived wet-bulb (None = sea level)
     pressure_psia: float | None = None,  # or a measured barometric pressure
+    masks_out: dict | None = None,  # 0.102 (#119): filled with the judged samples
 ) -> CoolingTowerResult | None:
     """Compute tower approach from CW supply temp and wet-bulb (measured or derived).
 
@@ -251,6 +252,10 @@ def analyze_cooling_tower_approach(
 
     A derived wet-bulb assumes sea level unless ``elevation_ft`` / ``pressure_psia`` is given (see
     :func:`stull_wetbulb_f`); at altitude the uncorrected approach reads low.
+
+    ``masks_out`` (0.102, #119), a dict, is filled with ``"judged"`` (a DataFrame of the
+    ``wetbulb`` and ``approach`` of every sample judged) and ``"high"`` (a boolean Series on
+    ``df``'s index of the samples counted in ``pct_hours_high_approach``). The result is unchanged.
     """
     if "CWS_Temp" not in df.columns:
         return None
@@ -297,7 +302,11 @@ def analyze_cooling_tower_approach(
 
     approach = (w.CWS_Temp - w._wb).clip(lower=-2)  # can't beat wet-bulb (allow noise)
     rng = cw_range_f(w) if "CWR_Temp" in w.columns else None
-    high = float((approach > design_approach_f + high_margin_f).mean())
+    is_high = approach > design_approach_f + high_margin_f
+    high = float(is_high.mean())
+    if masks_out is not None:
+        masks_out["judged"] = pd.DataFrame({"wetbulb": w._wb, "approach": approach})
+        masks_out["high"] = pd.Series(df.index.isin(is_high.index[is_high.to_numpy()]), df.index)
 
     return CoolingTowerResult(
         equip=equip,

@@ -150,8 +150,53 @@ class CHWPlantReset:
             return "unknown"
         return "constant" if res.flow_cv <= self.constant_flow_cv else "variable"
 
+    def violation_masks(self, frame: pd.DataFrame) -> dict:
+        """The running samples behind the finding (0.102, #119), boolean Series on ``frame``'s
+        index: ``"low deltaT"`` -- loop deltaT below ``design_deltaT_min_f``, only when the rule
+        judges it (a return temperature, not constant flow) -- and ``"CHWST held low"`` -- CHWST
+        at or below 46 F, only when the rule finds no reset (flat or reversed)."""
+        none = pd.Series(False, index=frame.index)
+        out: dict = {}
+        f = self._analyze(frame, masks_out=out)
+        m = f.metrics
+        pct = m.get("low_deltaT_pct")  # NaN when no return temperature was usable
+        dt_judged = pct is not None and pct == pct and m.get("flow_mode") != "constant"
+        return {
+            "low deltaT": out.get("low_deltaT", none) if dt_judged else none,
+            "CHWST held low": (
+                out.get("chwst_low", none) if m.get("chwst_reset_present") is False else none
+            ),
+        }
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The union of :meth:`violation_masks`."""
+        m = self.violation_masks(frame)
+        return m["low deltaT"] | m["CHWST held low"]
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: CHW supply/return and OAT, the hours behind the finding shaded (#119)."""
+        from ..charts.evidence import Evidence
+
+        roles = [
+            r for r in (Role.CHW_SUPPLY_TEMP, Role.CHW_RETURN_TEMP, Role.OAT) if r in frame.columns
+        ]
+        if Role.CHW_SUPPLY_TEMP not in roles:
+            return None
+        masks = self.violation_masks(frame)
+        return Evidence(
+            renderer="multitrend",
+            roles=roles,
+            mask=masks["low deltaT"] | masks["CHWST held low"],
+            masks=masks,
+            label=f"low deltaT (< {self.design_deltaT_min_f:g}F) or CHWST held low, no reset",
+            title=f"{equip}: CHW plant reset / deltaT",
+        )
+
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
         """Run the diagnostic on an equipment role-frame; return a Finding."""
+        return self._analyze(frame, equip=equip)
+
+    def _analyze(self, frame: pd.DataFrame, *, equip: str = "", masks_out=None) -> Finding:
         cols = {r: c for r, c in _ROLE_TO_COL.items() if r in frame.columns}
         if Role.CHW_FLOW in frame.columns:
             cols[Role.CHW_FLOW] = "CHW_Flow"
@@ -166,7 +211,11 @@ class CHWPlantReset:
                 summary=f"{equip}: did not run in the window (run {source} never on); not judged",
             )
         res = analyze_chw_plant(
-            legacy, equip, running=run, design_deltaT_min_f=self.design_deltaT_min_f
+            legacy,
+            equip,
+            running=run,
+            design_deltaT_min_f=self.design_deltaT_min_f,
+            masks_out=masks_out,
         )
         if res is None:
             return Finding(

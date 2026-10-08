@@ -137,3 +137,13 @@ def test_declined_chart_draws_no_saving_and_no_band():
         ax=plt.subplots()[1],
     )
     assert res2.avoided_energy is not None and "extrapolated" in ax2.get_title()
+
+
+def test_savings_chart_keeps_the_unit_case():
+    # 0.102 (#116): the axis label used to lower-case its unit ("Cumulative kwh")
+    model, cv, rng = _baseline()
+    Tr, yr = _report(model, rng, 0.85)
+    ax, _ = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv, ylabel="kWh")
+    assert ax.get_ylabel() == "Cumulative kWh"
+    ax2, _ = savings_chart(model, Tr, yr, n_baseline=200, p_baseline=2, cv_rmse=cv)
+    assert ax2.get_ylabel() == "Cumulative energy"

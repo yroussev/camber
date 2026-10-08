@@ -263,7 +263,9 @@ class DemandControlledVentilation:
                 segs.append((role, pd.Series(True, index=frame.index)))
         return segs
 
-    def _judge(self, equip: str, frame: pd.DataFrame, demand: pd.Series) -> Finding:
+    def _judge(
+        self, equip: str, frame: pd.DataFrame, demand: pd.Series, masks_out: list | None = None
+    ) -> Finding:
         """Evaluate one OA source against a demand series; shared by both DCV rules.
 
         0.93 (#37): judged per OA signal segment (:meth:`_oa_segments`). The first segment with a
@@ -283,7 +285,14 @@ class DemandControlledVentilation:
             # a fallback segment with too few occupied samples to judge is not worth a line
             if i > 0 and int((seg & occupied & demand.notna()).sum()) < self.min_samples:
                 continue
-            parts.append(self._judge_segment(equip, frame, demand, role, seg, fallback=i > 0))
+            seg_masks: dict | None = {} if masks_out is not None else None
+            parts.append(
+                self._judge_segment(
+                    equip, frame, demand, role, seg, fallback=i > 0, masks_out=seg_masks
+                )
+            )
+            if masks_out is not None:
+                masks_out.append((parts[-1]["metrics"]["status"], seg_masks))
         if len(parts) > 1:
             lead = next((p for p in parts if p["metrics"]["status"] != "insufficient"), parts[0])
         else:
@@ -328,6 +337,7 @@ class DemandControlledVentilation:
         segment: pd.Series,
         *,
         fallback: bool = False,
+        masks_out: dict | None = None,
     ) -> dict:
         """One OA signal's DCV judgement over the samples ``segment`` selects."""
         caveats: list = []
@@ -410,6 +420,7 @@ class DemandControlledVentilation:
             min_samples=self.min_samples,
             stratify_hour=self.stratify_hour,
             fan_off_mask=fan_off_speed if floor is not None else None,
+            masks_out=masks_out,
         )
 
         # Occupied, CO₂ high, and nothing ventilating: the fan off or the OA damper shut. The
@@ -428,6 +439,8 @@ class DemandControlledVentilation:
         if judged.sum() >= self.min_samples:
             hit = (off & (demand >= limit))[judged]
             unvent = round(100.0 * float(hit.mean()), 1)
+            if masks_out is not None:
+                masks_out["unventilated"] = hit
             unvent_h = round(float(hit.sum()) * step_h, 1) if step_h == step_h else None
 
         # 0.98 (#93): occupied, below the floor, with the supply fan off -- named apart from the
@@ -596,6 +609,49 @@ class DemandControlledVentilation:
             "caveats": caveats,
             "label": label,
         }
+
+    def violation_mask(self, frame: pd.DataFrame) -> pd.Series:
+        """The samples behind the verdict (0.102, #119), a boolean Series on ``frame``'s
+        (de-duplicated) index. Per judged OA signal: for a **static** OA every judged sample at
+        high demand (DCV asked, OA never moved), for **uncorrelated** OA those with OA at its
+        floor; and, wherever those checks run, CO₂ above ``co2_setpoint`` with OA at its minimum,
+        OA below ``oa_floor_cfm``, and occupied high-CO₂ samples with nothing ventilating."""
+        if not frame.index.is_unique:
+            frame = frame[~frame.index.duplicated(keep="last")]
+        out = pd.Series(False, index=frame.index)
+        if _oa_role(frame, self.full_outdoor_air) is None or Role.CO2 not in frame.columns:
+            return out
+        collected: list = []
+        self._judge("", frame, frame[Role.CO2], masks_out=collected)
+        keys = {"static": "high", "uncorrelated": "high_at_floor"}
+        for status, masks in collected:
+            names = [keys[status]] if status in keys else []
+            names += ["breach", "below_floor", "unventilated"]
+            for name in names:
+                m = (masks or {}).get(name)
+                if m is None:
+                    continue
+                m = m[~m.index.duplicated(keep="last")].reindex(frame.index)
+                out = out | m.where(m.notna(), False).astype(bool)
+        return out
+
+    def evidence(self, equip: str, frame: pd.DataFrame):
+        """Pattern J: CO₂ and the OA signal judged, the samples behind the verdict shaded (#119)."""
+        from ..charts.evidence import Evidence
+
+        oa = _oa_role(frame, self.full_outdoor_air)
+        if oa is None or Role.CO2 not in frame.columns:
+            return None
+        dedup = frame[~frame.index.duplicated(keep="last")] if not frame.index.is_unique else None
+        return Evidence(
+            renderer="multitrend",
+            roles=[Role.CO2, oa],
+            mask=self.violation_mask(frame),
+            label="demand not answered / under-ventilated",
+            title=f"{equip}: DCV verification",
+            frame=dedup,
+            normalize=True,  # CO₂ in ppm against OA in cfm or %
+        )
 
     def analyze(self, equip: str, frame: pd.DataFrame) -> Finding | None:
         if _oa_role(frame, self.full_outdoor_air) is None:
