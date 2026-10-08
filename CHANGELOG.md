@@ -112,6 +112,21 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 
 None of these figures is a gated benchmark.
 
+### Fixed
+- **`free_cooling_missed` judges fan-on hours only, and its evidence plots only the hours it
+  judges (#120).** The rule had no fan gate: overnight and weekend hours with the supply fan
+  stopped counted as free-cooling weather, so they diluted the missed share, and a cooling-valve
+  output parked open with the fan off read as missed free cooling. It now uses the fan-on gate the
+  other air-side rules use (`camber.schedules.fan_on_mask`: fan status, else speed, else
+  airflow), with a `fan_gate` parameter (default on) and the `fan_gate` and `n_masked_fan_off`
+  metrics. A unit with no fan signal is judged ungated, as before, and names
+  `supply_fan_status` in `_missing_optional`. The evidence chart is now a diagnostic scatter of
+  the judged samples (fan on, OAT inside the free-cooling window) with the missed ones in red;
+  integrated-economizer samples are drawn but never red, so the chart's out-of-band share is
+  `missed_pct`. It used to scatter every sample, fan-off and warm-weather hours included. This
+  intentionally raises the missed share on units whose fan stops, so the `air-economizer` and
+  `capstone` workbook answers move with it (#120). No gated benchmark moves.
+
 ## [0.101.0] — 2026-10-04
 
 **0.101: a seasonal OA damper minimum, data-led point-role suggestions by default, and a

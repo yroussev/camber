@@ -81,7 +81,7 @@ def test_evidence_recommendations_and_registration():
     cold = pd.DataFrame(
         {Role.OAT: oat, Role.COOL_VALVE: pd.Series(np.where(oat < 60, 0.5, 0.3), index=idx)}
     )
-    assert finding_evidence(FreeCoolingMissed(), "AHU-1", cold).renderer == "oat_scatter"
+    assert finding_evidence(FreeCoolingMissed(), "AHU-1", cold).renderer == "diagnostic"
     assert recommend(FreeCoolingMissed().analyze("AHU-1", cold)) is not None
     names = set(rule_names())
     assert {"economizer_high_limit", "static_pressure_reset", "free_cooling_missed"} <= names

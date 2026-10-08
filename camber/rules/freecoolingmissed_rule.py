@@ -37,6 +37,14 @@ taken out of the free-cooling opportunity (they are neither available nor missed
 mechanical cooling. The test is :mod:`camber.freecooling`'s, the one
 :func:`~camber.freecooling.free_cooling_opportunity` applies with the same parameter. ``None``
 (the default) keeps the pre-0.100 finding byte-identical, with none of the low-limit metrics.
+
+**Fan-gated by default (0.102, #120).** With the supply fan stopped there is no air moving across
+the cooling coil and nothing for an economizer to do, so a fan-off sample is neither free-cooling
+opportunity nor missed free cooling. Only fan-on samples are judged (fan status, else fan speed,
+else airflow -- see :func:`camber.schedules.fan_on_mask`, the gate the other air-side rules use);
+``n_masked_fan_off`` counts the free-cooling-weather samples taken out. A unit that trends no fan
+signal is judged ungated, as before, and the finding says so (the ``fan_gate`` metric, and
+``supply_fan_status`` in ``_missing_optional``). ``fan_gate=False`` turns the gate off.
 """
 
 from __future__ import annotations
@@ -53,6 +61,7 @@ from ..freecooling import (
     integrated_economizer_mask,
 )
 from ..model.roles import Role
+from ..schedules import FAN_GATE_NONE, fan_on_mask
 from ..units import normalize_percent
 from .base import Finding
 
@@ -78,7 +87,15 @@ class FreeCoolingMissed:
     roles_required = (Role.COOL_VALVE, Role.OAT)
     # #63: the OA damper, else the mixed/return-air balance, says when the unit is already on
     # (nearly) 100 % outside air -- an integrated economizer, not missed free cooling
-    roles_optional = (Role.OA_DAMPER, Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP)
+    roles_optional = (
+        Role.OA_DAMPER,
+        Role.MIXED_AIR_TEMP,
+        Role.RETURN_AIR_TEMP,
+        # 0.102 (#120) fan-on gate: status, else speed, else airflow (camber.schedules.fan_on_mask)
+        Role.SUPPLY_FAN_STATUS,
+        Role.SUPPLY_FAN_SPEED,
+        Role.AIRFLOW,
+    )
 
     def __init__(
         self,
@@ -95,8 +112,11 @@ class FreeCoolingMissed:
         stuck_low_oaf_pct: float = 30.0,
         # 0.100: the economizer low-limit lockout (°F); None = no lockout, as before
         low_limit_f: float | None = None,
+        # 0.102 (#120): judge fan-on samples only (when the unit trends a fan signal)
+        fan_gate: bool = True,
     ):
         _check_low_limit(high_limit_f, low_limit_f)
+        self.fan_gate = fan_gate
         self.high_limit_f = high_limit_f
         self.low_limit_f = low_limit_f
         self.active = active
@@ -108,22 +128,32 @@ class FreeCoolingMissed:
         self.stuck_min_hours = stuck_min_hours
         self.stuck_low_oaf_pct = stuck_low_oaf_pct
 
-    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+    def _fan(self, frame: pd.DataFrame):
+        """``(fan-on mask | None, source label)`` -- ``(None, "off")`` when gating is disabled."""
+        if not self.fan_gate:
+            return None, "off"
+        return fan_on_mask(frame)
+
+    def _judged(self, frame: pd.DataFrame) -> dict:
+        """The samples this rule judges, shared by :meth:`analyze` and :meth:`evidence` so the
+        chart is drawn from exactly the samples behind the verdict.
+
+        ``available`` (free-cooling weather, both inputs present, fan on when gated), ``missed``
+        and ``integrated`` (subsets of it; ``integrated`` is ``None`` when the unit trends neither
+        an OA damper nor MAT + RAT), ``cool`` (valve %), the fan-gate label and the
+        free-cooling-weather samples the gate took out.
+        """
         oat, cool = frame[Role.OAT], normalize_percent(frame[Role.COOL_VALVE])
         weather, below_low = _free_cooling_weather(oat, self.high_limit_f, self.low_limit_f)
         valid = oat.notna() & cool.notna()
+        fan, fan_src = self._fan(frame)
+        if fan is not None:
+            on = pd.Series(fan.to_numpy(dtype=bool), index=frame.index)
+            n_fan_off = int((weather & valid & ~on).sum())
+            valid = valid & on
+        else:
+            n_fan_off = 0
         available = weather & valid
-        n_avail = int(available.sum())
-        step_h = _step_hours(frame.index)
-        low = self._low_limit_metrics(below_low & valid, cool, step_h)
-        if n_avail == 0:
-            return Finding(
-                rule=self.name,
-                equip=equip,
-                severity="info",
-                summary=f"{equip}: no free-cooling weather in the window",
-                metrics=low,  # {} without a low limit, as before
-            )
         running = available & (cool > self.active)
         econ = integrated_economizer_mask(
             oat,
@@ -131,6 +161,49 @@ class FreeCoolingMissed:
             mat=frame[Role.MIXED_AIR_TEMP] if Role.MIXED_AIR_TEMP in frame.columns else None,
             rat=frame[Role.RETURN_AIR_TEMP] if Role.RETURN_AIR_TEMP in frame.columns else None,
         )
+        integrated = None if econ is None else running & econ
+        missed = running if integrated is None else running & ~integrated
+        return {
+            "cool": cool,
+            "available": available,
+            "missed": missed,
+            "integrated": integrated,
+            "locked": below_low & valid,
+            "fan_gate": fan_src,
+            "n_masked_fan_off": n_fan_off,
+        }
+
+    def _missing(self, frame: pd.DataFrame, fan_src: str) -> list:
+        """Optional inputs truly absent -- the three fan signals are alternatives, so one is
+        named only when none is present (pre-empts the runner's backstop)."""
+        plain = (Role.OA_DAMPER, Role.MIXED_AIR_TEMP, Role.RETURN_AIR_TEMP)
+        out = [r.value for r in plain if r not in frame.columns]
+        if fan_src == FAN_GATE_NONE:
+            out.append(Role.SUPPLY_FAN_STATUS.value)
+        return out
+
+    def analyze(self, equip: str, frame: pd.DataFrame) -> Finding:
+        j = self._judged(frame)
+        cool, available = j["cool"], j["available"]
+        fan_metrics: dict = {"fan_gate": j["fan_gate"], "n_masked_fan_off": j["n_masked_fan_off"]}
+        missing = self._missing(frame, j["fan_gate"])
+        if missing:  # the fan signals are alternatives: pre-empt the runner's per-role backstop
+            fan_metrics["_missing_optional"] = missing
+        n_avail = int(available.sum())
+        step_h = _step_hours(frame.index)
+        low = self._low_limit_metrics(j["locked"], cool, step_h)
+        if n_avail == 0:
+            return Finding(
+                rule=self.name,
+                equip=equip,
+                severity="info",
+                summary=(
+                    f"{equip}: no free-cooling weather in the window"
+                    + (" with the supply fan on" if j["n_masked_fan_off"] else "")
+                ),
+                metrics={**low, **fan_metrics},
+            )
+        econ = j["integrated"]
         caveats: list = []
         if econ is None:
             econ_basis = None
@@ -141,7 +214,7 @@ class FreeCoolingMissed:
                 "cooling, so the missed share may be overstated -- map OA_DAMPER or MAT + RAT"
             )
         else:
-            integrated = running & econ
+            integrated = econ
             has_temps = (
                 Role.MIXED_AIR_TEMP in frame.columns and Role.RETURN_AIR_TEMP in frame.columns
             )
@@ -152,7 +225,7 @@ class FreeCoolingMissed:
                 if has_temps
                 else "damper"
             )
-        missed = running & ~integrated
+        missed = j["missed"]
         n_integrated = int(integrated.sum())
         pct = 100.0 * float(missed.sum()) / n_avail
         hours = None if step_h is None else round(n_avail * step_h, 1)
@@ -184,6 +257,7 @@ class FreeCoolingMissed:
                 "econ_min_delta_f": ECON_MIN_DELTA_F,
                 **cause,
                 **low,
+                **fan_metrics,
             },
             summary=(
                 f"{equip}: mechanical cooling (valve > {self.active:g}%) ran {pct:.0f}% of the "
@@ -297,11 +371,62 @@ class FreeCoolingMissed:
         return out
 
     def evidence(self, equip: str, frame: pd.DataFrame):
-        """Pattern J: cooling-valve position vs OAT — cooling at low OAT stands out."""
+        """Pattern J: cooling-valve position vs OAT on the samples the rule judges (0.102, #120).
+
+        Drawn from :meth:`_judged`, the samples behind the verdict: free-cooling weather (between
+        the low limit, when set, and ``high_limit_f``), both inputs present, and the supply fan on
+        when the gate applies -- fan-off hours, warm weather and low-limit lockout hours are not
+        plotted. The expected band is the valve at or below ``active`` %; the red points are
+        exactly the missed samples ``missed_pct`` counts. Integrated-economizer samples (cooling
+        on ~100 % outside air) are plotted but have no bound, so they are never red, and the
+        chart's out-of-band share equals ``missed_pct``. ``mask`` is the missed samples.
+        """
+        import numpy as np
+
+        from ..charts.diagnostic import DiagnosticTemplate
         from ..charts.evidence import Evidence
 
+        j = self._judged(frame)
+        keep = j["available"]
+        if not keep.any():
+            return None
+        ycol = "cooling_valve_pct"
+        derived = pd.DataFrame({Role.OAT: frame[Role.OAT][keep], ycol: j["cool"][keep]})
+        integ = j["integrated"]
+        free = (
+            np.ones(len(derived), dtype=bool)
+            if integ is None
+            else ~integ[keep].to_numpy(dtype=bool)
+        )
+        lo_ok = np.where(free, 0.0, np.nan)
+        hi_ok = np.where(free, float(self.active), np.nan)
+
+        def expected(xv):
+            # one bound per plotted sample, in frame order (``derived`` has no NaN, so the
+            # renderer evaluates every row in order)
+            if len(xv) != len(derived):
+                return np.zeros(len(xv)), np.full(len(xv), float(self.active))
+            return lo_ok, hi_ok
+
+        window = (
+            f"{self.low_limit_f:g}-{self.high_limit_f:g}°F"
+            if self.low_limit_f is not None
+            else f"< {self.high_limit_f:g}°F"
+        )
+        gate = "fan on, " if j["fan_gate"] not in (FAN_GATE_NONE, "off") else ""
+        tmpl = DiagnosticTemplate(
+            f"Free cooling missed ({gate}OAT {window}, valve > {self.active:g}%)",
+            Role.OAT,
+            ycol,
+            expected,
+            "OAT (°F)",
+            "cooling valve (%)",
+        )
         return Evidence(
-            renderer="oat_scatter",
-            roles=[Role.COOL_VALVE],
+            renderer="diagnostic",
+            template=tmpl,
+            frame=derived,
+            mask=j["missed"][keep],
+            label="missed free cooling",
             title=f"{equip}: cooling vs OAT (free-cooling)",
         )

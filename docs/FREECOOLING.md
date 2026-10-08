@@ -29,7 +29,7 @@ opp.hours_missed, opp.recoverable_kwh, opp.savings_usd  # e.g. 286 h, 10010 kWh,
 
 ![Cooling valve against outdoor temperature on fan-on hours, with the valve open 45 to 70 percent below 60 F](img/analytics/free-cooling.png)
 
-*Synthetic data: an air handler whose damper stays at minimum, drawn by `free_cooling_missed`'s evidence hook on its fan-on hours. Below 60 °F the cooling valve should be closed; it runs 45–70 % instead.*
+*Synthetic data: an air handler whose damper stays at minimum, drawn by `free_cooling_missed`'s evidence hook, which plots only the hours the rule judges (fan on, OAT below the high limit) and marks the missed ones. Below 60 °F the cooling valve should be closed; it runs 45–70 % instead.*
 
 Free cooling is *available* when OAT is below `high_limit_f` and *missed* when it's available yet
 mechanical cooling runs (`cooling_signal > active_thresh`). With `cooling_kw` the missed-hours energy

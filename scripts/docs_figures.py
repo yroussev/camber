@@ -668,10 +668,8 @@ def _viz_energy_signature():
 
 @figure("analytics/free-cooling.png")
 def _an_free_cooling():
-    from camber.model.roles import Role
-
+    # the rule judges fan-on hours only (#120): no pre-filter here
     frame = _ahu(days=21, seed=9, fault="free_cooling_missed", center=58, amp=14)
-    frame = frame[frame[Role.SUPPLY_FAN_STATUS] > 0.5]  # the fan-on hours
     return _evidence_fig("free_cooling_missed", "AHU-1", frame)
 
 

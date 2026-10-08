@@ -556,6 +556,8 @@ PARAM_DOCS["free_cooling_missed"]["low_limit_f"] = _P(
     "economizer page passes this rule's value to it.",
 )
 # ---- end 0100-integration ----
+# 0.102 (#120): the fan-on gate the other air-side rules use
+PARAM_DOCS["free_cooling_missed"]["fan_gate"] = _AIR_FAN_GATE
 
 PARAM_DOCS["leaking_valve"] = {
     "fan_heat_f": _P(
