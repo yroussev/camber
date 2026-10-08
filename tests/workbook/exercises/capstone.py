@@ -20,7 +20,8 @@ power, baseline test against setback test).
 refusal's data need, the damper issue's cause and the "Verify on site" section, 0.98.0-dev,
 2026-09-30; the free-cooling figures, the issue ranking and the walk-down rows with the
 economizer low-limit lockout in the config (#111), 0.102.0-dev, 2026-10-04; the ranking with
-uncosted issues ordered by confidence (#112), 0.102.0-dev, 2026-10-05.)
+uncosted issues ordered by confidence (#112), 0.102.0-dev, 2026-10-05; the free-cooling
+figures with ``free_cooling_missed`` judging fan-on hours only (#120), 0.102.0-dev, 2026-10-08.)
 """
 
 from __future__ import annotations
@@ -31,7 +32,7 @@ import tempfile
 
 import numpy as np
 import pandas as pd
-from _workbook import REAL, STANDIN, Check, Exercise, Finding, Metric, Run, write_standin
+from _workbook import REAL, Check, Exercise, Finding, Metric, Run, write_standin
 
 from camber import datasets
 from camber.config import run_config, run_drift_config
@@ -77,9 +78,10 @@ def _rcx_ranking(ctx) -> None:
     """Step 1: the onset unit's economizer chain is an issue headed by its cause (0.98, #88): the
     damper was commanded open and outside air did not arrive, so the recommended action is a
     damper repair, not "enable the economizer". It ranks first. On the real data it is an
-    uncosted warn, the only high-confidence issue: the next two are uncosted warns at confidence
-    M, and uncosted issues of one severity rank by confidence before the key (0.102, #112). The
-    fault-free control has no economizer issue: with the low limit its missed free cooling is ok."""
+    uncosted fault (0.102, #120: the rule judges fan-on hours only), the only fault and the only
+    high-confidence issue; the next two are uncosted warns at confidence M, ranked by confidence
+    before the key (#112). The fault-free control has no economizer issue: with the low limit its
+    missed free cooling is ok."""
     rep = _rcx(ctx)
     issues = rep.to_dict()["issues"]
     econ = [i for i in issues if i["chain"] == "econ"]
@@ -91,7 +93,7 @@ def _rcx_ranking(ctx) -> None:
     assert iss["confidence"] == "H", iss
     assert iss["rank"] == 1, (iss["rank"], [(i["equip"], i["rules"]) for i in issues])
     if ctx.mode == REAL:
-        assert iss["severity"] == "warn" and iss["cost"] is None, iss
+        assert iss["severity"] == "fault" and iss["cost"] is None, iss
         below = issues[1:3]
         assert all(i["severity"] == "warn" and i["cost"] is None for i in below), below
         assert all(i["confidence"] == "M" for i in below), below
@@ -113,7 +115,7 @@ def _missed_cause(ctx) -> None:
     assert m["missed_cause"] == "damper_not_delivering", m
     assert m["commanded_open_oaf_median_pct"] < m["stuck_low_oaf_pct"], m
     if ctx.mode == REAL:
-        assert (m["commanded_open_pct"], m["commanded_open_hours"]) == (89.9, 640.0), m
+        assert (m["commanded_open_pct"], m["commanded_open_hours"]) == (90.3, 640.0), m
         assert m["commanded_open_oaf_median_pct"] == 4.4, m
         free = ctx.finding("free_cooling_missed", FREE).metrics
         assert free["missed_cause"] == "economizer_not_commanded", free
@@ -358,13 +360,12 @@ EXERCISE = Exercise(
         # step 1: the findings and the RCx report
         # the economizer low-limit lockout, as the air-economizer exercise teaches it (#111)
         Check("the config keeps the low-limit lockout", _low_limit_adopted, quote="33.8 °F"),
-        # a year's share dilutes a mid-year onset: a warn on the real data
-        Finding("free_cooling_missed", ONSET, severity=("warn",), on=REAL),
-        Finding("free_cooling_missed", ONSET, severity=("fault",), on=STANDIN),
+        # judged on fan-on hours (#120) the mid-year onset is a fault on the real data too
+        Finding("free_cooling_missed", ONSET, severity=("fault",)),
         Finding("free_cooling_missed", FREE, severity=("ok",)),
         Finding("outdoor_air_fraction", ONSET, present=False),
-        Metric("free_cooling_missed", ONSET, "missed_pct", 21.1, 0.5, on=REAL, quote="21%"),
-        Metric("free_cooling_missed", FREE, "missed_pct", 1.96, 0.1, on=REAL, quote="2.0%"),
+        Metric("free_cooling_missed", ONSET, "missed_pct", 41.7, 0.5, on=REAL, quote="42%"),
+        Metric("free_cooling_missed", FREE, "missed_pct", 3.63, 0.1, on=REAL, quote="3.6%"),
         Check("RCx: the damper issue names its cause", _rcx_ranking, quote="stuck low"),
         Check("why free cooling was missed", _missed_cause, quote="90%"),
         Check("RCx: the conditional issue", _rcx_conditional, quote="trust 0.40"),

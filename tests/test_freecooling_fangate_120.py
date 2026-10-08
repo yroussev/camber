@@ -87,15 +87,16 @@ def test_evidence_plots_only_judged_samples_and_flags_the_missed():
     assert ev.renderer == "diagnostic"
     on = fr[Role.SUPPLY_FAN_STATUS] > 0.5
     assert ev.frame.index.equals(fr.index[on])  # no fan-off hour plotted
-    red = template_violations(ev.frame, ev.template)
-    assert red.equals(ev.mask)
-    assert int(red.sum()) == 30  # the 08-10 hours, ten days
-    assert float(red.mean()) * 100 == rule.analyze("AHU-1", fr).metrics["missed_pct"]
+    # with no integrated economizer the band alone flags exactly the rule's missed samples
+    assert template_violations(ev.frame, ev.template).equals(ev.mask)
+    assert int(ev.mask.sum()) == 30  # the 08-10 hours, ten days
+    assert float(ev.mask.mean()) * 100 == rule.analyze("AHU-1", fr).metrics["missed_pct"]
     import matplotlib
 
     matplotlib.use("Agg")
     ax, mask = render_evidence(ev, fr)
     assert int(mask.sum()) == 30 and "fan on" in ax.get_title()
+    assert ax.get_xlabel() == "oat (°F)" and ax.get_ylabel() == "cool valve (%)"
 
 
 def test_evidence_leaves_out_weather_outside_the_window_and_never_reds_integrated():
@@ -111,7 +112,11 @@ def test_evidence_leaves_out_weather_outside_the_window_and_never_reds_integrate
     assert ev.frame.index.min() >= fr.index[48]  # days 1-2 not plotted
     assert len(ev.frame) == m["n_free_cooling_samples"] == 8 * 12
     assert m["n_integrated_economizer_samples"] == 3
-    red = template_violations(ev.frame, ev.template)
-    assert int(red.sum()) == 7 * 3  # day 3's integrated hours are plotted but not red
-    assert red.equals(ev.mask)
+    # day 3's integrated hours sit above the band but the chart does not shade them
+    assert int(template_violations(ev.frame, ev.template).sum()) == 8 * 3
+    import matplotlib
+
+    matplotlib.use("Agg")
+    _, red = render_evidence(ev, fr)
+    assert int(red.sum()) == 7 * 3 and red.equals(ev.mask)
     assert float(red.mean()) * 100 == pytest.approx(m["missed_pct"], abs=0.01)

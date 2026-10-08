@@ -91,9 +91,11 @@ the rules judge every sample.
    outdoor-air fraction in cooling weather, and the share of cooling hours above the minimum.
    Then find `economizer_high_limit`: is the unit locked out to minimum above 60 °F?
 4. **Stuck closed.** Find `free_cooling_missed` for each run: the share of free-cooling hours
-   (outdoor air below 60 °F) in which the cooling coil ran anyway.
-5. **The fault-free unit's warn.** `free_cooling_missed` also warns on `AHU__fault_free`. Before
-   you call it a fault, find out when those hours happen:
+   (outdoor air below 60 °F, supply fan running) in which the cooling coil ran anyway. Hours
+   with the fan off are not judged: `n_masked_fan_off` counts them.
+5. **The fault-free unit's fault.** `free_cooling_missed` also reports a **fault** on
+   `AHU__fault_free`, the healthy unit. Before you write it up, find out when those hours
+   happen:
    - In the trend viewer, open `AHU__fault_free` on a cold weekday in January. Read the outdoor
      air temperature, the outdoor-air damper command and the cooling valve together while the
      fan runs. Then do the same on a mild spring morning.
@@ -105,7 +107,8 @@ the rules judge every sample.
    Below its low limit the sequence holds the damper at its minimum by design (typically to keep
    freezing air off the coils), so those hours are not free-cooling weather. Add the lockout to
    the rule in `econ.json`, `"low_limit_f": 33.8` in `free_cooling_missed`'s `params`, re-run
-   with a new `--out` folder, and read the fault-free unit and the stuck dampers again.
+   with a new `--out` folder, and read the fault-free unit and the stuck dampers again: the
+   healthy unit should now read clean.
    `low_limit_excluded_hours` counts the hours the rule set aside, and `low_limit_cooling_hours`
    how many of them had the coil running.
 6. **Score.** Run `camber datasets score` on the findings and read the per-detector rates.
@@ -121,7 +124,7 @@ the rules judge every sample.
    median is much higher. Why is that not a fault?
 3. Which stuck dampers do the outdoor-air-fraction rules miss, and why?
 4. Where do those dampers show up instead? Compare them with the fault-free unit.
-5. Why does `free_cooling_missed` warn on the fault-free unit? What share of its missed hours
+5. Why does `free_cooling_missed` report a fault on the fault-free unit? What share of its missed hours
    fall below the economizer's low limit, what does the rule read with `low_limit_f` set, and
    are the stuck dampers still caught?
 6. What true- and false-positive rates does the label score give `outdoor_air_fraction`, and
@@ -159,7 +162,7 @@ the rules judge every sample.
 - The low limit is a property of this unit's sequence, not a general value: another unit may
   lock out at a different temperature, or not at all. Set it from the unit's own sequence, or
   from a winter of known-good trends (the outdoor temperature below which the damper command
-  never leaves its minimum), never to make a warn go away.
+  never leaves its minimum), never to make a finding go away.
 - The 100 % damper run is shorter than the others (`_short`), so it has fewer free-cooling
   hours.
 - The simulated schedule runs one weekday late; see the dataset's data issues.

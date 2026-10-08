@@ -171,9 +171,25 @@ None of these figures is a gated benchmark.
   `supply_fan_status` in `_missing_optional`. The evidence chart is now a diagnostic scatter of
   the judged samples (fan on, OAT inside the free-cooling window) with the missed ones in red;
   integrated-economizer samples are drawn but never red, so the chart's out-of-band share is
-  `missed_pct`. It used to scatter every sample, fan-off and warm-weather hours included. This
-  intentionally raises the missed share on units whose fan stops, so the `air-economizer` and
-  `capstone` workbook answers move with it (#120). No gated benchmark moves.
+  `missed_pct` (the rule's mask is what the chart shades, through #114's `violating=`), and the
+  axes are labelled by role and unit (#115). It used to scatter every sample, fan-off and
+  warm-weather hours included. No gated benchmark moves.
+
+  This intentionally raises the missed share on units whose fan stops, and the workbook answers
+  move with it (real `lbnl-sdahu` data; the fan runs only in occupied hours there):
+  - `air-economizer`: the fault-free unit is a **fault** at 34.1 % (was a 17.5 % warn); its 965
+    missed hours, 899 of them below the lockout, are unchanged, but the fan-off hours no longer
+    dilute them. With `low_limit_f` 33.8 it reads ok at 3.63 % (was 1.96 %), with 1,014 hours
+    set aside (was 2,141). The dampers stuck at 10 % and 25 % miss free cooling in 100 % of the
+    fan-on free-cooling hours, with and without the lockout (were 49.4 % and 49.6 %). The page
+    now frames step 5 as the healthy unit reading as a full fault until the lockout is set. The
+    Irish unit trends no fan signal and is unchanged (8.0 %, ok).
+  - `capstone`: the onset unit is a **fault** at 41.7 % (was a 21 % warn) and the control ok at
+    3.6 % (was 2.0 %); `commanded_open_pct` is 90.3 (was 89.9) on the same 640 h. The damper
+    issue is now the report's only fault and still ranks first, with confidence H; the rest of
+    the ranking is unchanged.
+
+  The declarations, the two exercise pages and the instructor key are updated.
 
 ## [0.101.0] — 2026-10-04
 

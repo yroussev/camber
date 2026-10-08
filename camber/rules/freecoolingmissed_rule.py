@@ -376,10 +376,11 @@ class FreeCoolingMissed:
         Drawn from :meth:`_judged`, the samples behind the verdict: free-cooling weather (between
         the low limit, when set, and ``high_limit_f``), both inputs present, and the supply fan on
         when the gate applies -- fan-off hours, warm weather and low-limit lockout hours are not
-        plotted. The expected band is the valve at or below ``active`` %; the red points are
-        exactly the missed samples ``missed_pct`` counts. Integrated-economizer samples (cooling
-        on ~100 % outside air) are plotted but have no bound, so they are never red, and the
-        chart's out-of-band share equals ``missed_pct``. ``mask`` is the missed samples.
+        plotted. The expected band is the valve at or below ``active`` %. ``mask`` is the missed
+        samples ``missed_pct`` counts, and the renderer shades exactly those (#114's
+        ``violating=``): integrated-economizer samples (cooling on ~100 % outside air) sit above
+        the band but are not red, so the chart's out-of-band share equals ``missed_pct``.
+        Axis labels come from :func:`camber.charts._labels.role_label`.
         """
         import numpy as np
 
@@ -390,23 +391,11 @@ class FreeCoolingMissed:
         keep = j["available"]
         if not keep.any():
             return None
-        ycol = "cooling_valve_pct"
-        derived = pd.DataFrame({Role.OAT: frame[Role.OAT][keep], ycol: j["cool"][keep]})
-        integ = j["integrated"]
-        free = (
-            np.ones(len(derived), dtype=bool)
-            if integ is None
-            else ~integ[keep].to_numpy(dtype=bool)
-        )
-        lo_ok = np.where(free, 0.0, np.nan)
-        hi_ok = np.where(free, float(self.active), np.nan)
+        derived = pd.DataFrame({Role.OAT: frame[Role.OAT][keep], Role.COOL_VALVE: j["cool"][keep]})
+        active = float(self.active)
 
         def expected(xv):
-            # one bound per plotted sample, in frame order (``derived`` has no NaN, so the
-            # renderer evaluates every row in order)
-            if len(xv) != len(derived):
-                return np.zeros(len(xv)), np.full(len(xv), float(self.active))
-            return lo_ok, hi_ok
+            return np.zeros(len(xv)), np.full(len(xv), active)
 
         window = (
             f"{self.low_limit_f:g}-{self.high_limit_f:g}°F"
@@ -417,10 +406,8 @@ class FreeCoolingMissed:
         tmpl = DiagnosticTemplate(
             f"Free cooling missed ({gate}OAT {window}, valve > {self.active:g}%)",
             Role.OAT,
-            ycol,
+            Role.COOL_VALVE,
             expected,
-            "OAT (°F)",
-            "cooling valve (%)",
         )
         return Evidence(
             renderer="diagnostic",

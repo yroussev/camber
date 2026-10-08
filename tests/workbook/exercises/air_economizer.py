@@ -17,9 +17,10 @@ Real-data figures were recorded from::
 (CAMBER 0.97.0-dev, the default subset of each dataset, 2026-09-29.) The irish-ahu period
 figures (53% / 45%) come from the same config with ``source.start`` / ``source.end`` set to
 2017-06-01 .. 2020-03-01 and 2020-08-01 .. 2021-12-01 (see ``_irish_by_period``). The low-limit
-figures (step 5, #111: 1.96% with the lockout, 899 of the 965 missed hours below it) come from
+figures (step 5, #111: 3.63% with the lockout, 899 of the 965 missed hours below it) come from
 ``econ.json`` with ``"low_limit_f": 33.8`` added to ``free_cooling_missed`` (see ``_low_limit``;
-CAMBER 0.102.0-dev, 2026-10-04).
+CAMBER 0.102.0-dev, 2026-10-04). ``free_cooling_missed`` judges fan-on hours only from 0.102
+(#120); its figures here were re-recorded then (2026-10-08).
 """
 
 from __future__ import annotations
@@ -145,8 +146,10 @@ def _low_limit(ctx):
 
 def _lockout_explains_fault_free(ctx) -> None:
     """Step 5: most of the fault-free unit's missed hours are below the lockout (damper commanded
-    at its minimum); with the lockout set it reads ok."""
-    before = ctx.finding("free_cooling_missed", "AHU__fault_free").metrics
+    at its minimum); without the lockout it is a fault, with it it reads ok."""
+    base = ctx.finding("free_cooling_missed", "AHU__fault_free")
+    assert base.severity == "fault", (base.severity, base.metrics["missed_pct"])
+    before = base.metrics
     assert before["missed_cause"] == "economizer_not_commanded", before
     after = _low_limit(ctx)["AHU__fault_free"]
     assert after.severity == "ok", (after.severity, after.metrics)
@@ -155,9 +158,9 @@ def _lockout_explains_fault_free(ctx) -> None:
     below = m["low_limit_cooling_hours"]
     assert below / missed >= 0.9, f"{below} of {missed:.0f} missed hours below the lockout"
     if ctx.mode == REAL:
-        assert abs(m["missed_pct"] - 1.96) <= 0.1, m["missed_pct"]
+        assert abs(m["missed_pct"] - 3.63) <= 0.1, m["missed_pct"]
         assert (round(missed), below) == (965, 899.0), (missed, below)
-        assert m["low_limit_excluded_hours"] == 2141.0, m
+        assert m["low_limit_excluded_hours"] == 1014.0, m
 
 
 def _lockout_keeps_stuck_caught(ctx) -> None:
@@ -168,7 +171,7 @@ def _lockout_keeps_stuck_caught(ctx) -> None:
         assert f.severity == "fault", (eq, f.severity, f.metrics["missed_pct"])
         assert f.metrics["missed_cause"] == "damper_not_delivering", (eq, f.metrics)
         if ctx.mode == REAL:
-            assert abs(f.metrics["missed_pct"] - 49.6) <= 0.1, (eq, f.metrics["missed_pct"])
+            assert f.metrics["missed_pct"] == 100.0, (eq, f.metrics["missed_pct"])
 
 
 def _excess_oa(ctx, start: str, end: str) -> float:
@@ -234,36 +237,36 @@ EXERCISE = Exercise(
         # ... but the free cooling it can't deliver shows up as mechanical cooling
         Finding("free_cooling_missed", "AHU__damper_stuck_010", severity=("fault",)),
         Finding("free_cooling_missed", "AHU__damper_stuck_025", severity=("fault",)),
-        # the fault-free unit warns: its coil runs below the low-limit lockout (step 5)
-        Finding("free_cooling_missed", "AHU__fault_free", severity=("warn",)),
+        # the fault-free unit is a fault: its coil runs below the low-limit lockout (step 5)
+        Finding("free_cooling_missed", "AHU__fault_free", severity=("fault",)),
         Check("stuck-closed dampers miss free cooling far more", _stuck_closed_miss_more),
         Metric(
             "free_cooling_missed",
             "AHU__damper_stuck_025",
             "missed_pct",
-            49.4,
-            0.5,
+            100.0,
+            0.1,
             on=REAL,
-            quote="49%",
+            quote="100%",
         ),
         Metric(
             "free_cooling_missed",
             "AHU__fault_free",
             "missed_pct",
-            17.5,
+            34.1,
             0.5,
             on=REAL,
-            quote="17.5%",
+            quote="34.1%",
         ),
-        # step 5: the low-limit lockout explains the fault-free warn and keeps the stuck dampers
+        # step 5: the low-limit lockout explains the fault-free fault and keeps the stuck dampers
         Check(
-            "the lockout explains the fault-free warn", _lockout_explains_fault_free, quote="1.96%"
+            "the lockout explains the fault-free fault", _lockout_explains_fault_free, quote="3.63%"
         ),
         Check(
             "with the lockout the stuck dampers stay caught",
             _lockout_keeps_stuck_caught,
             on=BOTH,
-            quote="49.6%",
+            quote="100%",
         ),
         # the label score: outdoor_air_fraction finds 2 of the 4 stuck dampers, no false alarm
         Score("outdoor_air_fraction", tpr=0.5, fpr=0.0, quote="TPR 50%", on=BOTH),

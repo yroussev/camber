@@ -209,8 +209,9 @@ Figures from the real `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` default subsets
 
 ### `air-economizer`: a stuck outdoor-air damper and missed free cooling
 
-Figures from the real `lbnl-sdahu` default subset, CAMBER 0.97.0-dev (the low-limit figures of
-question 5: 0.102.0-dev), with the commands on the [exercise page](air-economizer.md#setup).
+Figures from the real `lbnl-sdahu` default subset, CAMBER 0.97.0-dev (the `free_cooling_missed`
+figures of questions 4 and 5, with the rule judging fan-on hours only (#120) and the low limit:
+0.102.0-dev), with the commands on the [exercise page](air-economizer.md#setup).
 
 **Answer key**
 
@@ -227,10 +228,12 @@ question 5: 0.102.0-dev), with the commands on the [exercise page](air-economize
    `AHU__damper_stuck_025`. Stuck near the minimum, they admit about as much outdoor air as a
    healthy unit in cooling weather (1.6 % and 4.4 %), so there is no excess to find.
 4. *Where do they show up instead?* In `free_cooling_missed`: both are a **fault**, with
-   mechanical cooling running in 49% of the free-cooling hours (outdoor air below 60 °F),
-   against 17.5% for the fault-free unit (a **warn**). The damper can't open to cool for free,
-   so the coil does the work.
-5. *The fault-free unit's warn: the economizer low limit.* Its `missed_cause` is
+   mechanical cooling running in 100% of the free-cooling hours (outdoor air below 60 °F, supply
+   fan running): the damper can't open to cool for free, so the coil does the work every hour.
+   But the fault-free unit is a **fault** too, at 34.1%. A healthy unit reading as a full fault
+   is the puzzle of question 5. The rule does not judge hours with the fan off
+   (`n_masked_fan_off`): no air moves across the coil, so there is nothing to economize.
+5. *The fault-free unit's fault: the economizer low limit.* Its `missed_cause` is
    `economizer_not_commanded` and `missed_damper_cmd_median_pct` is 10: on the missed hours the
    damper was commanded to its 10 % minimum, not open. The trends show when: on cold winter
    weekdays (December to February, most of them) the damper command sits at its minimum while
@@ -239,9 +242,9 @@ question 5: 0.102.0-dev), with the commands on the [exercise page](air-economize
    datasets info lbnl-sdahu`) says the economizer runs only between 33.8 °F and 60 °F. Below
    33.8 °F the sequence locks the economizer out, so those hours are not free-cooling weather.
    899 of the fault-free unit's 965 missed hours, 93 %, are below the lockout. With
-   `"low_limit_f": 33.8` the rule sets aside 2,141 hours below it, judges the remaining 3,374
-   free-cooling hours, and the fault-free unit reads **ok** at 1.96%. The stuck dampers stay
-   caught: the 10 % and 25 % runs are still a **fault**, at 49.6%, with
+   `"low_limit_f": 33.8` the rule sets aside 1,014 fan-on hours below it, judges the remaining
+   1,818 free-cooling hours, and the fault-free unit reads clean: **ok** at 3.63%. The stuck
+   dampers stay caught: the 10 % and 25 % runs are still a **fault**, at 100%, with
    `missed_cause: damper_not_delivering` (the damper commanded open, the outside air not
    arriving). The low limit removes a design behaviour from the opportunity; it does not hide
    the fault, because a stuck damper misses free cooling above the low limit too.
@@ -267,8 +270,8 @@ question 5: 0.102.0-dev), with the commands on the [exercise page](air-economize
   in hot weather, closed wastes free cooling in cool weather. PNNL's economizer guide asks both
   questions; each CAMBER rule answers one of them.
 - `free_cooling_missed` is not one of the dataset's declared detector targets, so
-  `camber datasets score` doesn't count it. Ask why: without the unit's low limit it also warns
-  on the fault-free unit (17.5%). A detector with a non-zero baseline has to be read against the
+  `camber datasets score` doesn't count it. Ask why: without the unit's low limit it also reports
+  a fault on the fault-free unit (34.1%). A detector with a non-zero baseline has to be read against the
   unit's own fault-free run, which is what question 4 does; question 5 then finds where that
   baseline comes from.
 - "Favorable conditions" in the economizer guide's first question are what the unit's sequence
@@ -287,13 +290,13 @@ question 5: 0.102.0-dev), with the commands on the [exercise page](air-economize
 - Reading the annual median OA fraction (about 40 % on the fault-free unit) as excess outdoor
   air. Excess outdoor air is judged on cooling-weather samples only.
 - Concluding that the 10 % and 25 % runs are healthy because the OA-fraction rules are quiet.
-- Treating the `warn` on the fault-free unit's `free_cooling_missed` as a fault to fix, without
+- Treating the fault on the fault-free unit's `free_cooling_missed` as a fault to fix, without
   comparing it with the faulted runs or checking when its missed hours happen.
-- Setting `low_limit_f` to make the warn go away rather than from the unit's sequence. The value
+- Setting `low_limit_f` to make the fault go away rather than from the unit's sequence. The value
   is the documented 33.8 °F; a higher number would also set aside hours a stuck damper misses.
 - Running the dataset's default config (`camber datasets config lbnl-sdahu` without
   `--exercise`) for steps 2 to 5: it already sets the low limit on `free_cooling_missed`, so the
-  fault-free warn of question 5 never appears, and it adds rules this exercise does not ask
+  fault-free fault of question 5 never appears, and it adds rules this exercise does not ask
   about.
 - Reading the Irish findings as scored detections. The data are unlabelled; a documented
   operating decision (100 % outdoor air) is not a fault, and a finding is a question for the site.
@@ -1263,8 +1266,8 @@ synthetic, cut from the open BDG2 meters.
 Figures from the real `lbnl-sdahu` and `ornl-frp-ops` default subsets, CAMBER 0.97.0-dev (the
 damper issue's cause, the M&V data need and the Verify on site section: 0.98.0-dev; the
 free-cooling figures, the ranking and the walk-down rows with the economizer low limit in the
-config, and uncosted issues ranked by confidence: 0.102.0-dev), with the commands on the
-[exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
+config, uncosted issues ranked by confidence, and `free_cooling_missed` judging fan-on hours
+only (#120): 0.102.0-dev), with the commands on the [exercise page](capstone.md#setup). The RCx report is the one written before the drift baselines
 are frozen. The config sets `free_cooling_missed`'s economizer low-limit lockout at the
 documented 33.8 °F, as learners did in step 5 of `air-economizer`, so neither unit's cold-weather
 hours at the damper minimum count as missed free cooling.
@@ -1272,34 +1275,35 @@ hours at the damper minimum count as missed free cooling.
 **Answer key**
 
 1. *The top issue.* Rank 1 is headed "Outdoor-air damper not modulating (stuck low)", on
-   `AHU__onset_damper_stuck_025`, a **warn** with confidence H, the only high-confidence issue in
-   the report. Every issue here is an uncosted warn (the config gives no equipment sizing), so
-   no dollars separate them. Within one severity the report puts unconditional issues before
-   conditional ones and costed before uncosted, by cost; uncosted issues then rank by
-   confidence, H before M before L, and only then by the issue key, a fixed tie-break. The
-   damper issue is first because its evidence is the most trustworthy; the onset unit's
-   supply-air reset and the control's static-pressure reset follow at confidence M. Rank here
-   is a ranking by confidence, not by size: the drift check of question 5 is what confirms the
-   damper. The heading names the cause; the recommended
+   `AHU__onset_damper_stuck_025`, a **fault** with confidence H: the only fault and the only
+   high-confidence issue in the report. No issue here has a cost (the config gives no equipment
+   sizing), so no dollars separate them. The report ranks by severity first, so the damper fault
+   leads the warns. Within one severity it puts unconditional issues before conditional ones and
+   costed before uncosted, by cost; uncosted issues then rank by confidence, H before M before
+   L, and only then by the issue key, a fixed tie-break. That is why the onset unit's supply-air
+   reset and the control's static-pressure reset, uncosted warns at confidence M, follow. Rank
+   here is not a measure of size: the drift check of question 5 is what confirms the damper. The heading names the cause; the recommended
    action is "Repair the outdoor-air damper or actuator": stroke the damper from the BAS and
    watch the blades, the linkage and the actuator before changing any economizer logic. The
    finding tells the two causes apart by setting the command against the temperatures. On 90%
    of the missed free-cooling hours with a usable temperature balance (640 h), the damper was
    commanded at least 90 % open, yet the outdoor-air fraction from the mixed-air temperature
-   stayed near 4 % (`missed_cause: damper_not_delivering`, `commanded_open_pct` 89.9). On the
+   stayed near 4 % (`missed_cause: damper_not_delivering`, `commanded_open_pct` 90.3). On the
    fault-free control, the damper was commanded low on its few missed hours
    (`economizer_not_commanded`, 0 %), and the control has no economizer issue at all. "Stuck
    low" is inferred from the mixed-air temperature, and a badly placed mixed-air sensor reads the
    same way. That is why the walk-down confirms it.
 2. *Missed free cooling.* With the 33.8 °F low limit, the onset unit ran mechanical cooling in
-   21% of the free-cooling hours (outdoor air between 33.8 °F and 60 °F), a **warn**, against
-   2.0% for the fault-free control (**ok**). The share is over the whole year, and the damper
-   stuck only from 1 July: six healthy months dilute it, which is why it is a warn and not a
-   fault. A damper stuck at 25 % admits about as much outdoor air in cooling weather as the
-   unit's small design minimum, so the outdoor-air-fraction rules see nothing to object to.
-   Without the low limit, as before 0.102, the figures were 30 % (a fault, then the report's top
-   issue) and 17 % (a warn on the control, with its own "enable the economizer" issue): most of
-   both units' missed hours were cold-weather hours at the damper minimum, by design.
+   42% of the free-cooling hours (outdoor air between 33.8 °F and 60 °F, supply fan running), a
+   **fault**, against 3.6% for the fault-free control (**ok**). The rule judges only hours with
+   the fan on: with the fan off nothing moves across the coil and there is nothing to
+   economize. The share is over the whole year, and the damper stuck only from 1 July, so six
+   healthy months still dilute it; it is a fault all the same. A damper stuck at 25 % admits
+   about as much outdoor air in cooling weather as the unit's small design minimum, so the
+   outdoor-air-fraction rules see nothing to object to. Before 0.102 the rule also counted the
+   fan-off nights and weekends, which diluted both shares to about half: 21 % (a warn) and
+   2.0 %. Without the low limit the figures are 61 % and 34 %, a fault on both units: most of
+   the control's missed hours are cold-weather hours at the damper minimum, by design.
 3. *The conditional issue.* The onset unit's static-pressure reset issue is conditional on
    `duct_static_sp` (trust 0.40): in the faulted half of the splice the published setpoint is a
    placeholder that the ingest masks, so half the year has no setpoint. Walk-down item: read the
@@ -1360,8 +1364,8 @@ hours at the damper minimum count as missed free cooling.
   drift verdict.
 - Reading the rank of uncosted issues of one severity as a measure of size. It orders them by
   confidence; add `report.loads` sizing to cost them and rank them by dollars.
-- Dropping the low limit from `cap.json` to make the damper issue a fault again. The control
-  then warns too, for hours its sequence locks the economizer out by design.
+- Dropping the low limit from `cap.json`. The damper stays a fault, and the control becomes one
+  too (34 %), for hours its sequence locks the economizer out by design.
 - Reprogramming the economizer on a damper-cause issue: the command already opens, so the fix is
   mechanical.
 - Ordering a new actuator on the heading alone: "stuck low" comes from the mixed-air

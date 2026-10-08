@@ -126,13 +126,13 @@ caltrack_savings_hourly(
 ## Questions
 
 1. Which issue does the report rank first, on which unit, at what severity and confidence? None
-   of the issues has a cost here: what puts this one above the other warns? What cause does its
+   of the issues has a cost here: what puts this one above the others? What cause does its
    heading name, what evidence in the `free_cooling_missed` finding supports that cause
    (`missed_cause`, `commanded_open_pct`), and what should the walk-down still confirm before
    anything is repaired?
 2. How often did the onset unit run mechanical cooling in free-cooling weather, against the
-   control? Why is a damper stuck for half the year only a warn over the whole year, and why do
-   the outdoor-air-fraction rules stay quiet on it?
+   control? Which hours does the rule judge, how does a damper stuck for half the year still read
+   as a fault over the whole year, and why do the outdoor-air-fraction rules stay quiet on it?
 3. Which issue is *conditional*, on what, and with what trust? What goes on the walk-down list
    for it?
 4. Write your walk-down checklist and your re-tuning plan (steps 2 and 3). How does your
@@ -169,8 +169,8 @@ caltrack_savings_hourly(
 
 ## Caveats
 
-- `free_cooling_missed` judges the whole year: a damper that sticks on 1 July shares its
-  free-cooling hours with six healthy months, so the yearly share understates it. Drift, which
+- `free_cooling_missed` judges the whole year (its fan-on hours): a damper that sticks on 1 July
+  shares its free-cooling hours with six healthy months, so the yearly share understates it. Drift, which
   compares the two halves, is the check built for an onset.
 - The onset series is a splice of two simulations, not one unit breaking; the "before" and
   "after" are perfect twins except for the damper.
