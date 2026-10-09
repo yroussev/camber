@@ -21,6 +21,14 @@ with headless Google Chrome (``CHROME`` overrides its path). The servers are sto
 afterwards. CI has no browser, so the PNGs are committed and ``--check`` only verifies that
 they exist.
 
+The ``docs/LAB.md`` walkthrough shots (``shots/lab-*.png``) are the one exception to "no
+downloaded dataset": they show the lab on the open (CC-BY-4.0) ``ornl-frp-ops`` catalog dataset,
+as a learner sees it, and their captions credit it. Its file is taken from a local copy
+(:data:`LAB_FROM_DIR`) through the same verified ``--from-dir`` path a learner uses, never
+downloaded; without the copy those shots are skipped. A lab runs in-process for them, with a small
+script appended to its page that ticks a row, opens the dialog or brushes the trend, as a learner
+would by hand (the page's CSP is widened by that script's hash, for the screenshots only).
+
 ``--check`` fails when an image referenced from ``docs/**/*.md`` or ``README.md`` is missing
 or over the size cap, when a docs image has no alt text or no caption line, when a generated
 figure or screenshot is missing or not referenced, when a file under ``docs/img/`` is not one
@@ -60,7 +68,22 @@ SCREENSHOTS = {
     "shots/site-report.png": "site report",
     "shots/lab.png": "camber lab catalog page",
     "shots/trend-viewer.png": "camber serve /ui trend viewer",
+    # 0.102 (#121): the docs/LAB.md walkthrough, on the open ornl-frp-ops dataset (a local copy)
+    "shots/lab-select.png": "camber lab: a dataset ticked, its sizes against the free disk",
+    "shots/lab-job.png": "camber lab: a finished Fetch & ingest job and the dataset's links",
+    "shots/lab-ack.png": "camber lab: the research-only acknowledgement dialog",
+    "shots/lab-trends.png": "camber lab: the trend viewer on the ingested dataset",
+    "shots/lab-report.png": "camber lab: the dataset's on-demand report",
 }
+
+#: the open (CC-BY-4.0) dataset the LAB.md walkthrough shots use, and where its file is read
+#: from: ``CAMBER_DOCS_FROM_DIR`` (a directory holding its default subset's four CSV files), else
+#: a source checkout's ``examples/_data/ornl_frp_ops``. Nothing is downloaded; without the files
+#: the walkthrough shots are skipped and the committed PNGs stay as they are.
+LAB_DATASET = "ornl-frp-ops"
+LAB_FROM_DIR = os.environ.get(
+    "CAMBER_DOCS_FROM_DIR", os.path.join(ROOT, "examples", "_data", "ornl_frp_ops")
+)
 
 
 def figure(path: str):
@@ -1177,7 +1200,152 @@ def screenshots() -> list:
                     s.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     s.kill()
+        done += _lab_walkthrough(tmp, out)
     return done
+
+
+# The LAB.md walkthrough. Each driver is a small script appended to the page for one screenshot:
+# it does what a learner does by hand (search, tick, press, brush), once the page has loaded.
+_WHEN = (
+    "function when(test,fn,n){n=n||0;if(test()){fn();return;}if(n>300)return;"
+    "setTimeout(function(){when(test,fn,n+1);},50);}"
+    "function rows(){return document.querySelectorAll('#rows tr').length>0;}"
+    "function fire(el,type){el.dispatchEvent(new Event(type,{bubbles:true}));}"
+)
+_DRIVE_SELECT = (
+    "when(rows,function(){var q=document.getElementById('q');q.value='ornl';fire(q,'input');"
+    "var cb=document.querySelector('input[aria-label=\"select %(id)s\"]');"
+    "cb.checked=true;fire(cb,'change');});"
+)
+_DRIVE_JOB = (
+    "when(function(){return rows()&&document.querySelector('#jobs .job');},function(){"
+    "var q=document.getElementById('q');q.value='%(id)s';fire(q,'input');});"
+)
+_DRIVE_ACK = (
+    "when(rows,function(){var l=document.getElementById('lic');l.value='research';fire(l,'change');"
+    "var cb=document.querySelector('input[aria-label=\"select at-30bldg-sensors\"]');"
+    "cb.checked=true;fire(cb,'change');document.getElementById('go').click();"
+    "when(function(){return document.getElementById('ack').open;},function(){"
+    "var b=document.getElementById('ack-check');b.checked=true;fire(b,'change');"
+    "var t=document.getElementById('ack-typed');t.value='at-30bldg-sensors';fire(t,'input');});});"
+)
+_DRIVE_TRENDS = (
+    "var WANT=['supply_air_temp','return_air_temp','supply_fan_status'];"
+    "var eq=document.getElementById('equip');"
+    "function upd(){return document.getElementById('updated').textContent;}"
+    "when(function(){return document.querySelectorAll('#roles input').length>3&&"
+    "/points/.test(upd());},function(){"
+    "document.querySelectorAll('#roles input').forEach(function(c){"
+    "c.checked=WANT.indexOf(c.value)>=0;});document.getElementById('live').checked=false;"
+    "eq.value='RTU__sb_heating';"
+    "setTimeout(function(){document.getElementById('refresh').click();"
+    "when(function(){return document.querySelectorAll('#legend > span').length===WANT.length;},"
+    "function(){setTimeout(function(){var svg=document.getElementById('trend'),"
+    "r=svg.getBoundingClientRect(),y=r.top+90,xa=r.left+r.width*0.40,xb=r.left+r.width*0.56;"
+    "function m(t,x,el){(el||svg).dispatchEvent(new MouseEvent(t,{clientX:x,clientY:y,"
+    "bubbles:true}));}"
+    "m('mousedown',xa);m('mousemove',xb);m('mouseup',xb,window);m('mousemove',xb);},300);});"
+    "},1100);});"
+)
+
+
+def _lab_walkthrough(tmp: str, out: dict) -> list:
+    """The LAB.md walkthrough shots: the lab, in-process, on an open catalog dataset."""
+    import json
+    import threading
+    import time
+    import urllib.request
+
+    from camber import datasets
+
+    files = [f["name"] for f in datasets.get(LAB_DATASET).subset_files("default")]
+    if not all(os.path.isfile(os.path.join(LAB_FROM_DIR, f)) for f in files):
+        print(
+            f"skipping the LAB.md walkthrough shots: no local copy of {LAB_DATASET} (set "
+            f"CAMBER_DOCS_FROM_DIR to a directory holding {', '.join(files)})"
+        )
+        return []
+    import camber.api.server as api_server
+    from camber.datasets._ops import adopt_local_files
+    from camber.lab import LabApp, make_lab_server
+    from camber.lab import _server as lab_server
+    from camber.lab._ui import _sha256_source
+
+    lab_dir = os.path.join(tmp, "walk", "demo")  # the page shows the last two path parts
+    cache = os.path.join(lab_dir, "cache")
+    os.makedirs(cache, exist_ok=True)
+    app = LabApp(store=os.path.join(lab_dir, "lab_store"), data_dir=cache)
+    httpd = make_lab_server(app, port=0)
+    base = f"http://127.0.0.1:{app.port}"
+    page0, csp0, ui0 = lab_server.lab_page_html, lab_server.LAB_CSP, api_server.live_dashboard_html
+    drive = {"lab": "", "ui": ""}
+
+    def lab_page(token):
+        page = page0(token)
+        js = drive["lab"]
+        return page.replace("</body>", f"<script>{js}</script></body>") if js else page
+
+    def ui_page():
+        page = ui0()
+        return page.replace("</body>", f"<script>{drive['ui']}</script></body>")
+
+    def set_lab(js: str) -> None:
+        drive["lab"] = (_WHEN + js) if js else ""
+        extra = _sha256_source(drive["lab"]) + " " if js else ""
+        lab_server.LAB_CSP = csp0.replace("script-src ", "script-src " + extra, 1)
+
+    lab_server.lab_page_html = lab_page
+    api_server.live_dashboard_html = ui_page
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    names = [f"shots/lab-{k}.png" for k in ("select", "job", "ack", "trends", "report")]
+    try:
+        # 1. the catalog, searched and one dataset ticked (nothing fetched yet)
+        set_lab(_DRIVE_SELECT % {"id": LAB_DATASET})
+        _chrome_shot(f"{base}/lab", out[names[0]], size=(1280, 900))
+        # 2. Fetch & ingest. The verified local copy stands in for the download: the fetch finds
+        #    the pinned file already in the cache and downloads nothing; the ingest runs as usual
+        adopt_local_files(datasets.get(LAB_DATASET), LAB_FROM_DIR, data_dir=cache)
+        html = urllib.request.urlopen(f"{base}/lab", timeout=10).read().decode()
+        token = re.search(r"camber-lab-token' content='([^']+)'", html).group(1)
+        req = urllib.request.Request(
+            f"{base}/lab/jobs/fetch",
+            data=json.dumps({"ids": [LAB_DATASET], "ingest": True}).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": base,
+                lab_server.TOKEN_HEADER: token,
+            },
+        )
+        job = json.loads(urllib.request.urlopen(req, timeout=10).read())["job"]
+        for _ in range(600):
+            job = app.job(job["id"])
+            if job["state"] in ("done", "failed", "cancelled"):
+                break
+            time.sleep(0.2)
+        if job["state"] != "done":
+            raise RuntimeError(f"walkthrough job {job['state']}: {job.get('error')}")
+        set_lab(_DRIVE_JOB % {"id": LAB_DATASET})
+        _chrome_shot(f"{base}/lab", out[names[1]], size=(1280, 760))
+        # 3. the research-only dialog (the dialog only: nothing is acknowledged or fetched)
+        set_lab(_DRIVE_ACK)
+        _chrome_shot(f"{base}/lab", out[names[2]], size=(1280, 760))
+        set_lab("")
+        # 4. trends: the economizer's temperatures and damper, a span brushed
+        drive["ui"] = _WHEN + _DRIVE_TRENDS
+        _chrome_shot(
+            f"{base}/ui?facility_id=ds-{LAB_DATASET}", out[names[3]], size=(1280, 820), wait_ms=9000
+        )
+        # 5. the on-demand report (built here first, so the shot does not wait on it)
+        app.report_html(f"ds-{LAB_DATASET}")
+        _chrome_shot(f"{base}/lab/reports/ds-{LAB_DATASET}", out[names[4]], size=(1280, 1000))
+    finally:
+        lab_server.lab_page_html, lab_server.LAB_CSP = page0, csp0
+        api_server.live_dashboard_html = ui0
+        httpd.shutdown()
+        httpd.server_close()
+        app.close()
+    return names
 
 
 # --------------------------------------------------------------------------- --check

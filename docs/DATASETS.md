@@ -38,7 +38,6 @@ datasets.config_template("lbnl-sdahu", "lab_store", out="sdahu.json")
 print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 ```
 
-<!-- 096-lab (#77) -->
 ## The lab (`camber lab`)
 
 `camber lab` is the same workflow in a browser, for learning and teaching:
@@ -46,6 +45,10 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 ```
 camber lab --store lab_store          # then open http://127.0.0.1:8765/lab
 ```
+
+New to it? [Using the lab](LAB.md) walks through a first session step by step, then covers
+reading the trends and the report, disk use and cleanup, setting up a class, and
+troubleshooting.
 
 ![Screenshot of the camber lab catalog table: dataset rows with kind, licence badge, sizes, status and links](img/shots/lab.png)
 
@@ -100,7 +103,6 @@ Without a workspace, the lab writes to a plain store (`--store`, default `./lab_
 with each one. The only writes it accepts are queueing or cancelling a job for **catalog ids**.
 The full list is in [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096). From
 Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
-<!-- /096-lab -->
 
 ## The catalog
 
@@ -134,7 +136,6 @@ Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 `camber datasets info <id>` prints the full entry: publisher, citation and DOI, what it teaches,
 the subsets and their download sizes, and the entry's **known issues**.
 
-<!-- 097-framework (#79) -->
 **Workbook exercises (0.97, provisional).** An entry used by the
 [re-tuning workbook](workbook/index.md) names its exercise in `suggested_analyses.exercise`:
 either a page of the docs, as its path under `docs/` (`workbook/<exercise-id>.md`, optionally
@@ -145,7 +146,6 @@ site. Where the dataset's default config does not fit an exercise, the exercise 
 template in `camber/datasets/configs/exercises/<exercise-id>.json`, which names the dataset it
 was tuned for (`"_dataset"`) and is written the usual way:
 `camber datasets config <id> --exercise <exercise-id> --store DIR --out cfg.json`.
-<!-- /097-framework -->
 
 Every entry has a `default` subset (small enough to try -- small in **bytes**: at most 100 MB once
 ingested, whatever its run count, since a real building's runs are its equipment) and a `full`

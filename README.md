@@ -113,6 +113,9 @@ python -m pytest -q                 # run the test suite
 python examples/synthetic_demo.py   # data-free FDD demo on generated trends
 ```
 
+To learn on open building datasets in a browser, run `camber lab`: [Using the lab](docs/LAB.md)
+walks through a first session, from picking a dataset to reading its report.
+
 CAMBER installs a `camber` console script. A whole analysis is one JSON config
 (source → mapping → equipment → rules → report) and one command:
 

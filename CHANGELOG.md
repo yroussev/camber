@@ -44,6 +44,17 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
   `tests/test_docs_figures.py`. It fails when an image referenced from `docs/**/*.md` or
   `README.md` is missing or over 150 KB, when a docs image has no alt text or caption, when a
   generated figure is missing, unreferenced or stale, or when `docs/img/` exceeds 5 MB.
+- **[Using the lab](docs/LAB.md), a step-by-step guide to `camber lab` (#121)**, early in the
+  docs navigation and linked from the README, DATASETS.md, CLI.md and the workbook. A first
+  session on the open `ornl-frp-ops` dataset (install, start, pick a dataset, Fetch & ingest,
+  trends, the report's top finding, the exercise, and the matching CLI commands), then how to
+  read the trend viewer and the report, where the cache and the store live and how to clean
+  them up, a classroom setup (pre-fetching for an offline room, manual downloads with
+  `--from-dir`, a portfolio workspace, what loopback-only means on a shared computer) and
+  troubleshooting. `scripts/docs_figures.py --screenshots` adds five walkthrough screenshots;
+  unlike the other figures they show a real open dataset (credited in their captions), read
+  from a local copy through the verified `--from-dir` path and never downloaded, and they are
+  skipped when no local copy is present.
 
 ### Changed
 - **Workbook `air-economizer` teaches the economizer low-limit lockout (#111).** A new step 5

@@ -63,7 +63,6 @@ constructor for the run — e.g. a high-outside-air building setting its design 
           {"name": "economizer_high_limit", "params": {"high_limit_f": 75, "min_damper": 0.45}}]
 ```
 
-<!-- BEGIN 098-thresholds (#90) -->
 ### YAML configs and tunable thresholds (provisional, 0.98)
 
 **YAML.** Every command that takes a config (`run`, `report`, `explain`, `ask`, `fleet`, `drift`,
@@ -92,9 +91,7 @@ role, the reset kind) are fixed. A rule entry may also carry a `basis` map (`{"f
 "calibrated on ..."}`), which is copied into each of its findings as `metrics["param_basis"]`.
 [THRESHOLDS.md](THRESHOLDS.md) is the generated reference and [TUNING.md](TUNING.md) is the
 calibration guide.
-<!-- END 098-thresholds (#90) -->
 
-<!-- BEGIN 098-followups (#92) -->
 **Site elevation (`site_elevation_ft`).** A rule that derives the wet-bulb from outdoor air
 temperature and RH assumes sea-level pressure unless it knows the site's elevation. One top-level
 config key sets it for the site, in feet above sea level:
@@ -109,7 +106,6 @@ A rule's own `elevation_ft` or `pressure_psia` param wins over it, and a measure
 ignores it. Without it a derived wet-bulb is caveated as sea-level. Set it before freezing a
 drift baseline: a baseline frozen at one elevation and scored at another shifts by the wet-bulb
 difference (about 2.6 °F at 1,600 m in hot, dry air).
-<!-- END 098-followups (#92) -->
 
 ## Report layouts
 
@@ -197,7 +193,6 @@ When a fix lands, the reference *should* move — on someone's say-so:
 camber drift accept config.json --equip AHU_1 --by "A. Engineer" --reason "filter replaced"
 ```
 
-
 ### The write policy is a verb, not a setting
 
 A run that mints the baseline it scores against is circular: whatever the equipment is doing now
@@ -224,7 +219,6 @@ detector, so the flag would not be honoured.
 
 ### A declared reference
 
-<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) begin -->
 Sometimes the reference is not this equipment's own past but something known to be healthy: a
 sister unit, or a season you have evidence was clean. A family can **declare** it instead of
 reading a frozen baseline:
@@ -262,11 +256,9 @@ baseline, and keep the reference's provenance in the config's `_comment`. The `l
 `lbnl-boiler` templates use `{"equip": "PLANT__fault_free"}`, because each labelled fault there is
 its own year-long run with no before-and-after on one unit (see
 [PLANT-DETECTORS](PLANT-DETECTORS.md) and [TUNING](TUNING.md#drift-references)).
-<!-- 0.98 (#86 items 1 and 5, 098-plant-reference) end -->
 
 ### Leak drift (opt-in)
 
-<!-- 0100-leak-drift (#100) begin -->
 An `ahu` family entry can add the coil-valve **leak** drift detector, `coil_leak_drift`
 (provisional, 0.100). It fits the coil's valve-shut air rise (the coil's leaving air, or the supply
 air, minus the mixed air, on fan-on hours with every coil valve shut) against the mixed air on
@@ -290,7 +282,6 @@ named in a caveat, so a baseline from one season says nothing about another. A s
 supply-air or mixed-air sensor reads exactly like a leak, and so does a valve stuck partly open.
 Every warn says to check the sensors first. A leak shows in the AHU roll-up on the coil side.
 Measured results are in [VALIDATION](VALIDATION.md).
-<!-- 0100-leak-drift (#100) end -->
 
 ### Untested is not steady
 
@@ -318,7 +309,6 @@ magnitude floors are *screening-grade* (characterized for the signal class, not 
 machines) and the CUSUM timing parameters are *provisional-untuned*. There is no flag to suppress
 it. Read a drift finding as "worth a walkdown", not as a dispatch-grade verdict — see
 [CHILLER-DRIFT.md](CHILLER-DRIFT.md#calibrating-the-thresholds) for how to calibrate.
-
 
 ## M&V baselines
 
@@ -357,7 +347,6 @@ camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [
   degree-day bases (`base_f: "auto"` selects them at freeze). `rebaseline` records any change of
   bases. `report` adds the bases, the avoided cost and the calendarized months. See
   [MANDV.md](MANDV.md#versioned-billing-baselines-provisional-094-72).
-<!-- 095-mv -->
 - **Billing entries, 0.95 (#74).**
   - `propose` searches a new window of whole bills for a rebaseline-class trigger, as it does
     for days. The window covers a full service year, and the latest one that meets every rule
@@ -369,7 +358,6 @@ camber mv report     config.json --out mv.html [--json mv.json] [--as-of DATE] [
     (trigger T1), and `propose` / `run` report what it finds. Declared events stay the
     recommended way to record a change. See
     [MANDV.md](MANDV.md#step-changes-on-bills-provisional-095-74).
-<!-- /095-mv -->
 
 **Energy units (provisional, 0.92).** A top-level `"units": {"system": "ip" | "si"}` reports M&V
 energy in kBtu or kWh. The fits stay in the meter's unit, and the findings carry `energy_unit` and
@@ -476,15 +464,15 @@ only), and an `"adjustments": [...]` ledger then restates that method's saving f
 events and static factors, guarded by `ecm_dates` / `settle_days`; `"validity"` (`g14`, `sep` or
 `both`) governs both (see [MANDV.md](MANDV.md#the-mv-flow-method-then-adjustments-then-result)).
 
-<!-- 096-lab (#77) -->
 ### The local catalog UI: `camber lab` (provisional, 0.96)
 
 ```
 camber lab [--workspace W | --store S] [--dir D] [--port 8765] [--docs DIR]
 ```
 
-This starts a local web page at `http://127.0.0.1:8765/lab` for the same catalog. From it you
-can:
+This starts a local web page at `http://127.0.0.1:8765/lab` for the same catalog. For a
+step-by-step guide, with screenshots, a classroom setup and troubleshooting, see
+[Using the lab](LAB.md). From it you can:
 
 - filter the datasets by licence tier, kind, labels, or what you have ingested;
 - tick one or more, compare the download and store sizes with the free disk, and press **Fetch &
@@ -510,7 +498,6 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.
-<!-- /096-lab -->
 
 ## Portfolio and facility lifecycle
 
@@ -594,7 +581,6 @@ drift freeze` then needs `--reason`, and `freeze` / `accept` take the lock and a
 Renaming the facility changes none of it. See
 [PORTFOLIO.md](PORTFOLIO.md#per-facility-state).
 
-<!-- 095-edge (#18 step 5) -->
 ## Edge lifecycle (provisional, 0.95)
 
 The edge forwarder's device commands (`run`, `send-once`, `status`, `selftest`) are described in
@@ -634,7 +620,6 @@ camber edge bucket-rules --provider s3|gcs|azure [--policy FILE] [--facility ID]
 - `bucket-rules` reads the workspace's retention policy (or `--policy FILE`) and prints the provider
   lifecycle JSON with a summary; `--out` writes the JSON; `--json` prints only the JSON. Applying
   it (with the provider's own tool) replaces the bucket's lifecycle configuration.
-<!-- /095-edge -->
 
 ## Weather privacy audit
 
