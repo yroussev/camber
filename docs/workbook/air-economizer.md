@@ -74,7 +74,8 @@ The exercise's config (`--exercise air-economizer`) runs three rules: `outdoor_a
 `economizer_high_limit` and `free_cooling_missed`, with this unit's own design minimum (a 1.6 %
 outdoor-air fraction) and its fixed 60 °F dry-bulb high limit. It leaves out one more setting
 of the unit's sequence on purpose: step 5 has you find it. `camber report econ.json --out
-econ.html` gives the same findings as a report with evidence charts.
+econ.html` gives the same findings as a report; add `--layout rcx` for the printable RCx report
+with evidence charts.
 
 The Irish unit's default config (`irish.json`) runs the same three economizer rules with a
 minimum calibrated from the unit's own minimum-position months (a 4.1 % outdoor-air fraction)

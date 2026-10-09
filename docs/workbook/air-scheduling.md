@@ -101,7 +101,7 @@ The config runs two rules on each rooftop unit at one-minute resolution:
   reports starts per day against a 12-a-day threshold.
 - **Caveats.** With no trended occupancy the rule uses the schedule in the config (07:00-22:00,
   every day), and says so.
-- **Report.** `camber report ops.json --out ops.html` shows the findings with evidence charts.
+- **Report.** `camber report ops.json --out ops.html` shows the findings as a report; add `--layout rcx` for the printable RCx report with evidence charts.
 
 ![Carpet of supply-fan status by hour and date; after the first week the fan runs around the clock](../img/workbook/air-scheduling.png)
 

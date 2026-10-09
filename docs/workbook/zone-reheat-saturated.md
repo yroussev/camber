@@ -113,7 +113,7 @@ limits itself to the fault-free day with an `"equip"` list.
   is the depth alone); `unmet_setpoint_hours` reports `too_cold_pct`.
 - **What is missing is also an answer.** A rule that needs a signal the data do not have
   produces no finding for that box.
-- **Report.** `camber report rh.json --out rh.html` shows the same findings with evidence charts.
+- **Report.** `camber report rh.json --out rh.html` shows the same findings as a report; add `--layout rcx` for the printable RCx report with evidence charts.
 
 ![Zone temperature below the heating setpoint on occupied winter days, the spans shaded](../img/workbook/zone-reheat-saturated.png)
 
