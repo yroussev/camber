@@ -43,7 +43,7 @@ print(datasets.score("lbnl-sdahu", "lab_store")["overall"])
 `camber lab` is the same workflow in a browser, for learning and teaching:
 
 ```
-camber lab --store lab_store          # then open http://127.0.0.1:8765/lab
+camber lab --store lab_store          # then open the URL it prints (.../lab?token=...)
 ```
 
 New to it? [Using the lab](LAB.md) walks through a first session step by step, then covers
@@ -99,8 +99,11 @@ facility goes through the [lifecycle](PORTFOLIO.md):
 Without a workspace, the lab writes to a plain store (`--store`, default `./lab_store`).
 
 **Security.** The lab binds `127.0.0.1` only, and it answers only requests addressed to
-`127.0.0.1` or `localhost`. It accepts writes only from its own page, which sends a per-run token
-with each one. The only writes it accepts are queueing or cancelling a job for **catalog ids**.
+`127.0.0.1` or `localhost`. Every page and request needs this run's access token: open the
+launch URL `camber lab` prints (`http://127.0.0.1:8765/lab?token=...`, also saved in a launch
+file only you can read), and the browser keeps a session cookie for it (0.102). Other accounts
+on a shared computer get 401. It accepts writes only from its own page, which also sends a
+per-run CSRF token with each one. The only writes it accepts are queueing or cancelling a job for **catalog ids**.
 The full list is in [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096). From
 Python, `camber.lab.LabApp` and `make_lab_server` are the (provisional) API.
 

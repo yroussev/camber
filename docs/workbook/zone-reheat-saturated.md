@@ -42,7 +42,7 @@ fault-free day (`RTU_VAV_<room>__d3_fault_free`): a real building on a normal da
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-fpu` and `ornl-frp-vav` and press **Fetch & ingest**.
 3. When the jobs are done, use each row's **trends** link to look at the data. This exercise
    uses its own configs: run them from the command line.

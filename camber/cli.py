@@ -959,7 +959,8 @@ def _lab_target(args):
 
 
 def _cmd_lab(args) -> int:
-    from .lab import LabApp, make_lab_server
+    from .lab import LabApp, announce, make_lab_server
+    from .lab._auth import remove_launch_file
 
     try:
         store, ws = _lab_target(args)
@@ -970,7 +971,10 @@ def _cmd_lab(args) -> int:
         return 1
     where = f"workspace {app.portfolio.root}" if app.portfolio is not None else f"store {store}"
     print(f"camber lab: {where}; dataset cache {app.data_dir}", flush=True)
-    print(f"open http://127.0.0.1:{app.port}/lab  (loopback only; Ctrl-C to stop)", flush=True)
+    # 0.102 (#127): every route needs the access token, so the launch URL carries it. It goes
+    # to this terminal and a 0600 launch file only -- no browser is started, so it is never on
+    # a command line where `ps` would show it to other users.
+    launch = announce(app)
     try:  # pragma: no cover - blocking server loop
         httpd.serve_forever()
     except KeyboardInterrupt:  # pragma: no cover
@@ -978,6 +982,7 @@ def _cmd_lab(args) -> int:
     finally:
         httpd.server_close()
         app.close()
+        remove_launch_file(launch, app.launch_url())
     return 0
 
 

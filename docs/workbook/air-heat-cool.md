@@ -45,7 +45,7 @@ The equipment used: `AHU__fault_free` and `AHU__coi_leakage_010` in `ds-lbnl-sda
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` and press **Fetch & ingest**.
 3. The `lbnl-sdahu` and `irish-ahu` rows' **report** links run their default configs, which
    this exercise uses; the dual-duct part has its own config, run from the command line.

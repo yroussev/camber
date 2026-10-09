@@ -1299,22 +1299,29 @@ def _lab_walkthrough(tmp: str, out: dict) -> list:
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     names = [f"shots/lab-{k}.png" for k in ("select", "job", "ack", "trends", "report")]
+
+    # every lab route needs the access token (#127): each headless Chrome (a fresh profile) opens
+    # the launch URL, which sets the session cookie and redirects to the page without the token.
+    # The token is on Chrome's command line here only because this throwaway lab lives for the
+    # few seconds of the shots; `camber lab` itself never puts it in argv.
+    def url(path, query=""):
+        return app.launch_url(path) + (f"&{query}" if query else "")
+
     try:
         # 1. the catalog, searched and one dataset ticked (nothing fetched yet)
         set_lab(_DRIVE_SELECT % {"id": LAB_DATASET})
-        _chrome_shot(f"{base}/lab", out[names[0]], size=(1280, 900))
+        _chrome_shot(url("/lab"), out[names[0]], size=(1280, 900))
         # 2. Fetch & ingest. The verified local copy stands in for the download: the fetch finds
         #    the pinned file already in the cache and downloads nothing; the ingest runs as usual
         adopt_local_files(datasets.get(LAB_DATASET), LAB_FROM_DIR, data_dir=cache)
-        html = urllib.request.urlopen(f"{base}/lab", timeout=10).read().decode()
-        token = re.search(r"camber-lab-token' content='([^']+)'", html).group(1)
         req = urllib.request.Request(
             f"{base}/lab/jobs/fetch",
             data=json.dumps({"ids": [LAB_DATASET], "ingest": True}).encode(),
             headers={
                 "Content-Type": "application/json",
                 "Origin": base,
-                lab_server.TOKEN_HEADER: token,
+                "Authorization": f"Bearer {app.access_token}",
+                lab_server.TOKEN_HEADER: app.token,
             },
         )
         job = json.loads(urllib.request.urlopen(req, timeout=10).read())["job"]
@@ -1326,19 +1333,22 @@ def _lab_walkthrough(tmp: str, out: dict) -> list:
         if job["state"] != "done":
             raise RuntimeError(f"walkthrough job {job['state']}: {job.get('error')}")
         set_lab(_DRIVE_JOB % {"id": LAB_DATASET})
-        _chrome_shot(f"{base}/lab", out[names[1]], size=(1280, 760))
+        _chrome_shot(url("/lab"), out[names[1]], size=(1280, 760))
         # 3. the research-only dialog (the dialog only: nothing is acknowledged or fetched)
         set_lab(_DRIVE_ACK)
-        _chrome_shot(f"{base}/lab", out[names[2]], size=(1280, 760))
+        _chrome_shot(url("/lab"), out[names[2]], size=(1280, 760))
         set_lab("")
         # 4. trends: the economizer's temperatures and damper, a span brushed
         drive["ui"] = _WHEN + _DRIVE_TRENDS
         _chrome_shot(
-            f"{base}/ui?facility_id=ds-{LAB_DATASET}", out[names[3]], size=(1280, 820), wait_ms=9000
+            url("/ui", f"facility_id=ds-{LAB_DATASET}"),
+            out[names[3]],
+            size=(1280, 820),
+            wait_ms=9000,
         )
         # 5. the on-demand report (built here first, so the shot does not wait on it)
         app.report_html(f"ds-{LAB_DATASET}")
-        _chrome_shot(f"{base}/lab/reports/ds-{LAB_DATASET}", out[names[4]], size=(1280, 1000))
+        _chrome_shot(url(f"/lab/reports/ds-{LAB_DATASET}"), out[names[4]], size=(1280, 1000))
     finally:
         lab_server.lab_page_html, lab_server.LAB_CSP = page0, csp0
         api_server.live_dashboard_html = ui0

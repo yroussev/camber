@@ -44,7 +44,7 @@ electricity and chilled water (`Fox_lodging_Stephen__electricity`,
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `bdg2` and `valladolid-uva` and press **Fetch & ingest**.
 3. Open **trends** for each meter: zoom to a week in March, then to a whole year.
 

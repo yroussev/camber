@@ -470,7 +470,8 @@ events and static factors, guarded by `ecm_dates` / `settle_days`; `"validity"` 
 camber lab [--workspace W | --store S] [--dir D] [--port 8765] [--docs DIR]
 ```
 
-This starts a local web page at `http://127.0.0.1:8765/lab` for the same catalog. For a
+This starts a local web page for the same catalog and prints its launch URL,
+`http://127.0.0.1:8765/lab?token=<this run's access token>`: open that whole URL. For a
 step-by-step guide, with screenshots, a classroom setup and troubleshooting, see
 [Using the lab](LAB.md). From it you can:
 
@@ -493,8 +494,12 @@ them. The acknowledgement goes to the same ledger as `--accept-noncommercial`.
   **exercise** link. In a source checkout the lab serves the page itself from `docs/workbook/`
   (at `/lab/docs/workbook/<id>.md`), so it opens offline; `--docs DIR` points at another docs
   tree. Without one, the link goes to the published docs site.
-- **Security.** The server binds `127.0.0.1` only; there is no `--host`. It accepts writes only
-  with a per-run token, from its own origin, as JSON of at most 16 KiB (see
+- **Security.** The server binds `127.0.0.1` only; there is no `--host`. Every route needs the
+  access token (0.102): the launch URL swaps it for a session cookie, and a script can send
+  `Authorization: Bearer <token>`. The URL is printed to the terminal and saved, readable by you
+  only, in `lab-<port>.url` under `$XDG_RUNTIME_DIR/camber/` (else `~/.config/camber/`); it is
+  deleted when the lab stops. There is no option that takes the token on the command line. Writes
+  also need a per-run CSRF token, from the lab's own origin, as JSON of at most 16 KiB (see
   [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096)).
 - **Stopping.** Ctrl-C stops it. A running download stops with its partial file kept, and the
   next fetch resumes it.

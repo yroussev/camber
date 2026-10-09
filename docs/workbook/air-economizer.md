@@ -49,7 +49,7 @@ Irish unit is `AHU__ahu` in `ds-irish-ahu`.
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-sdahu` and `irish-ahu` and press **Fetch & ingest**.
 3. When the job is done, the row links to **trends** (the trend viewer) and **report** (the
    dataset's default config). This exercise uses its own config: use the command line for step 2

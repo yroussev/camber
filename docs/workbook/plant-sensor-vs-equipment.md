@@ -42,7 +42,7 @@ labelled `sensor_bias`: chiller 1's leaving-water sensor (`PLANT__chiller_bias_1
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Choose the **full** subset, tick `lbnl-chiller` and press **Fetch & ingest**.
 3. When the job is done, the row links to **trends** (the trend viewer). This exercise uses its
    own config: use the command line for step 2 of the steps below.

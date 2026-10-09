@@ -44,7 +44,7 @@ south and east). The faults are imposed on one of them only. CAMBER maps the sou
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-fpu` and press **Fetch & ingest** (a 2.2 GB download: start it early).
 3. When the job is done, the row links to **trends** (the trend viewer) and **report** (the
    dataset's default config). This exercise uses its own config: use the command line for step 2

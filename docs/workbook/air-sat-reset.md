@@ -43,7 +43,7 @@ The equipment used: `AHU__fault_free` and `AHU__damper_stuck_075` in `ds-lbnl-sd
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-sdahu`, `lbnl-ddahu` and `irish-ahu` and press **Fetch & ingest**.
 3. When the jobs are done, open each row's **trends** link to look at the supply-air
    temperature, its setpoint (where there is one) and the outdoor air. The exercise's own

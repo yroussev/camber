@@ -43,7 +43,7 @@ score, every other run.
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Choose the **full** subset, tick `lbnl-chiller` and press **Fetch & ingest**.
 3. When the job is done, the row links to **trends** (the trend viewer) and **report** (the
    dataset's default config, which is this exercise's second run). The first run uses its own

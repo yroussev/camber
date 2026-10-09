@@ -41,7 +41,7 @@ Read these first (PNNL, free):
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `<dataset-id>` and press **Fetch & ingest**.
 3. <What to open from the row: trends, report.>
 

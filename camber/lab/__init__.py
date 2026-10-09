@@ -11,10 +11,12 @@ the dataset facilities (``ds-<id>``) follow the facility lifecycle and every act
 
     app = LabApp(store="lab_store")            # or LabApp(workspace="portfolio")
     httpd = make_lab_server(app, port=8765)    # 127.0.0.1 only; any other host is refused
+    print(app.launch_url())                    # the secret URL that opens the lab (0.102, #127)
     httpd.serve_forever()
 
-``camber serve`` stays GET-only; the lab is a separate server with its own request checks (Host /
-Origin allowlist, CSRF token, JSON only, 16 KiB bodies, strict CSP) -- see docs/SECURITY.md.
+``camber serve`` stays GET-only; the lab is a separate server with its own request checks (an
+access token / session cookie on every route, Host / Origin allowlist, CSRF token, JSON only,
+16 KiB bodies, strict CSP) -- see docs/SECURITY.md.
 This API is **provisional** (docs/API-STABILITY.md).
 """
 
@@ -22,7 +24,14 @@ from __future__ import annotations
 
 from ._app import DEFAULT_PORT, LAB_HOST, LabApp, LabError
 from ._jobs import Job, JobCancelled, JobQueue
-from ._server import BODY_LIMIT, TOKEN_HEADER, dispatch_lab, make_lab_server, serve_lab
+from ._server import (
+    BODY_LIMIT,
+    TOKEN_HEADER,
+    announce,
+    dispatch_lab,
+    make_lab_server,
+    serve_lab,
+)
 
 __all__ = [
     "LabApp",
@@ -33,6 +42,7 @@ __all__ = [
     "dispatch_lab",
     "make_lab_server",
     "serve_lab",
+    "announce",
     "LAB_HOST",
     "DEFAULT_PORT",
     "BODY_LIMIT",

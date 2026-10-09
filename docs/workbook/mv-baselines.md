@@ -59,7 +59,7 @@ anyone can check. Label them synthetic wherever you show them.
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `cofactor-drammen`, `valladolid-uva` and `bdg2` and press **Fetch & ingest**.
 3. Use **trends** to look at the meters; the M&V runs below use the command line.
 

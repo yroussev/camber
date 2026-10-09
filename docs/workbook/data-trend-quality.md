@@ -46,7 +46,7 @@ The equipment used: `AHU101__ahu101` (facility `ds-nuig-ahu101`); `RTU01` to `RT
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `nuig-ahu101` and `irish-ahu` and press **Fetch & ingest**. For `lbnl-b59`, download the
    files by hand first (see the command line below), then ingest from that folder.
 3. Each row links to **trends** and **report**. The trend viewer is where you will look at the

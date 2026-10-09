@@ -292,9 +292,32 @@ that accepts writes. It is built for one person on their own machine:
   origins, and every POST must carry one. A browser's `Sec-Fetch-Site` other than `same-origin` or
   `none` is refused. The lab answers no CORS preflight (`OPTIONS` is 405), so no other origin can
   send it a JSON POST.
-- **CSRF token.** Each run generates a random token, held only in the lab page (which another
-  origin cannot read). Every POST must send it in `X-Camber-Lab-Token`; it is compared with
-  `hmac.compare_digest`.
+- **Access token on every route (0.102, #127).** Loopback is not private on a computer that
+  several accounts use at once: any local user can connect to `127.0.0.1:<port>`. So each run
+  creates a random 256-bit **access token**, separate from the CSRF token below, and every
+  request needs it, GET or POST, including the lab page, the catalog and job JSON, reports,
+  workbook pages and the delegated `/ui`, `/facilities`, `/points` and `/history`:
+  - `camber lab` prints the launch URL `http://127.0.0.1:<port>/lab?token=<access token>` to its
+    terminal. A GET with a valid `?token=` gets a session cookie `camber-lab-<port>` (a separate
+    random session id, `HttpOnly; SameSite=Strict; Path=/`, no expiry, so it ends with the
+    browser session) and a 303 to the same URL without the token, so the secret does not stay
+    in the address bar or the history. The redirect never leaves the lab's origin.
+  - Every other request needs that cookie, or `Authorization: Bearer <access token>` for a
+    script. Without either the answer is 401 with a short page (or JSON error) that says to open
+    the URL from the terminal; a wrong `?token=` or bearer token is 403. Only a valid token sets
+    the cookie. Every secret comparison is `hmac.compare_digest` on bytes.
+  - The URL is also written to a **launch file**, `lab-<port>.url`, in `$XDG_RUNTIME_DIR/camber`
+    (else `$XDG_CONFIG_HOME/camber` or `~/.config/camber`). The folder is made 0700 and the file
+    0600, written to a fresh `O_EXCL` temporary file and renamed into place. A folder or an
+    existing file owned by another account, or writable by group or others, is refused: the lab
+    then prints a warning, writes nothing and still runs. The file is deleted when the lab stops.
+  - The lab opens no browser, so the token is never on a command line that `ps` shows to other
+    users, and there is no CLI option that takes it. `LabApp(access_token=...)` sets it
+    explicitly for tests and scripts (at least 16 characters, and not the CSRF token).
+- **CSRF token.** Each run also generates a random CSRF token, held only in the lab page (which
+  another origin cannot read, and which itself needs the session). Every POST must send it in
+  `X-Camber-Lab-Token` as well as the session cookie (or bearer token); it is compared with
+  `hmac.compare_digest`. A POST never accepts `?token=`.
 - **Narrow writes.** POST accepts only `application/json` (else 415) with a body of at most
   16 KiB (else 413, decided on the declared length before the body is read; chunked bodies are
   refused). Unknown fields are refused. The only writes are queueing a fetch or ingest job, and
@@ -326,8 +349,25 @@ that accepts writes. It is built for one person on their own machine:
   OpenADR or edge module, directly or through anything they import. A static test
   (`tests/test_lab.py`) enforces this.
 
-The lab has no user accounts. Anyone who can run processes as you on the machine can use it,
-exactly as they could run `camber datasets` themselves.
+**Residual risks.** The lab has no user accounts: whoever holds the launch URL or the session
+cookie can use it until it stops.
+
+- **Your own account and root.** Anything that runs as you, or as root, can read the terminal,
+  the launch file, the browser's cookie store or the lab process's memory. It could equally run
+  `camber datasets` against your cache and store itself, so the token adds no barrier there.
+- **No TLS on loopback.** The token and the cookie travel in clear over `127.0.0.1`. Reading
+  loopback traffic needs root (a packet capture), which is already covered above; there is no
+  `Secure` cookie flag because there is no HTTPS.
+- **Cookies are not per-port.** Browsers send a `127.0.0.1` cookie to every port on that host.
+  The cookie is `HttpOnly` and named per port, but if you open in the same browser a page that
+  another local user serves on another `127.0.0.1` port, that server receives your lab cookie
+  and could replay it while your lab runs. `SameSite=Strict` does not help, since every port of
+  one host is the same site. Do not browse other people's local servers while a lab runs, or
+  use a separate browser profile for the lab.
+- **Copies you make.** A launch URL pasted into a chat, a screenshot, a shell history or a
+  shared document gives its reader the lab until it stops. Each start makes a new token.
+- **Windows.** The launch file's owner and mode checks are POSIX; on Windows the file inherits
+  the folder's ACL.
 <!-- /096-lab -->
 
 ## References

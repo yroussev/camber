@@ -45,7 +45,7 @@ The exercise uses the four rooftop units (`RTU01`–`RTU04`, class AHU) and the 
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. `lbnl-b59` is a **manual** download: Dryad serves its files only to a browser. Its row in the
    lab (and `camber datasets info lbnl-b59`) says which files to download and from where. Put
    them in one directory, `b59_download`.

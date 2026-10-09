@@ -2,9 +2,11 @@
 
 :class:`LabApp` is what :func:`camber.lab.dispatch_lab` routes to. It holds the store (a plain
 :class:`~camber.store.ParquetStore`, or a portfolio workspace's store), the dataset cache
-directory, the job queue, the per-run CSRF token and the host/origin allowlist once the server is
-bound. Everything here goes through the public :mod:`camber.datasets` pipeline -- the lab adds no
-second way to download or ingest data -- and, in a workspace, through the 0.95 facility lifecycle.
+directory, the job queue, the per-run secrets (the access token behind the launch URL, the session
+id its cookie carries and the CSRF token the page sends back; 0.102, #127) and the host/origin
+allowlist once the server is bound. Everything here goes through the public
+:mod:`camber.datasets` pipeline -- the lab adds no second way to download or ingest data -- and,
+in a workspace, through the 0.95 facility lifecycle.
 
 **Workspace mode.** A dataset's facility (``ds-<id>``) is registered ``provisioning`` before its
 first ingest, the ingest runs under the workspace's single-writer lock, and the facility is
@@ -60,6 +62,8 @@ class LabApp:
     Pass exactly one of ``store`` (a ParquetStore or its directory) or ``workspace`` (a portfolio
     workspace root). ``data_dir`` is the dataset cache (default: :func:`camber.datasets` rules).
     ``entries`` replaces the packaged catalog and ``opener`` the HTTPS opener -- both for tests.
+    ``access_token`` fixes the secret behind the launch URL (for tests and scripts; at least 16
+    characters; default: a fresh random one per run). ``token`` fixes the CSRF token likewise.
     """
 
     def __init__(
@@ -72,6 +76,7 @@ class LabApp:
         opener=None,
         token: str | None = None,
         docs_dir=None,
+        access_token: str | None = None,
     ):
         if (store is None) == (workspace is None):
             raise ValueError("pass exactly one of store= or workspace=")
@@ -89,6 +94,17 @@ class LabApp:
         self._entries = tuple(entries) if entries is not None else None
         self.opener = opener
         self.token = token or secrets.token_urlsafe(32)
+        # 0.102 (#127): every request must be authenticated -- the access token (launch URL /
+        # bearer) or the session cookie it buys. Both are separate from the CSRF token, which the
+        # page carries in plain sight of anyone who can load it.
+        from ._auth import MIN_TOKEN_LEN, new_secret
+
+        if access_token is not None and len(str(access_token)) < MIN_TOKEN_LEN:
+            raise ValueError(f"access_token must be at least {MIN_TOKEN_LEN} characters")
+        self.access_token = str(access_token) if access_token else new_secret()
+        if self.access_token == self.token:
+            raise ValueError("access_token must differ from the CSRF token")
+        self.session_id = new_secret()
         # 0.97 (#79): the docs tree a relative exercise link is served from (None: link to the
         # published site). Default: docs/ beside the package, when it has a workbook/ folder.
         from ._docs import default_docs_dir
@@ -109,6 +125,16 @@ class LabApp:
         hosts = {f"{LAB_HOST}:{self.port}", f"localhost:{self.port}"}
         self.allowed_hosts = frozenset(hosts)
         self.allowed_origins = frozenset(f"http://{h}" for h in hosts)
+
+    def launch_url(self, path: str = "/lab") -> str:
+        """The URL that opens the lab: ``http://127.0.0.1:<port><path>?token=<access token>``.
+        It is a secret: print it to the terminal or a private file, never to a shared log."""
+        from urllib.parse import quote
+
+        from ._auth import TOKEN_PARAM
+
+        secret = quote(self.access_token, safe="")
+        return f"http://{LAB_HOST}:{self.port}{path}?{TOKEN_PARAM}={secret}"
 
     def close(self) -> None:
         """Stop the job worker (the running job finishes; queued ones are cancelled)."""

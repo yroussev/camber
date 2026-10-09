@@ -1101,6 +1101,7 @@
     "LabApp",
     "LabError",
     "TOKEN_HEADER",
+    "announce",
     "dispatch_lab",
     "make_lab_server",
     "serve_lab"

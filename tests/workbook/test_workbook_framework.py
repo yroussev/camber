@@ -171,7 +171,8 @@ def _lab(tmp_path, docs_dir):
 
 
 def _get(app, path):
-    return dispatch_lab(app, "GET", path, {}, {"Host": f"127.0.0.1:{PORT}"})
+    auth = {"Authorization": f"Bearer {app.access_token}"}  # every lab route needs it (#127)
+    return dispatch_lab(app, "GET", path, {}, {"Host": f"127.0.0.1:{PORT}", **auth})
 
 
 def test_default_docs_dir_is_the_checkout_docs():

@@ -2,11 +2,13 @@
 
 No network: the fake catalog entry (a tiny LBNL-shaped zip of three labelled AHU runs) is served by
 an injected opener, as in tests/test_datasets_ingest.py. Covered: the pure ``dispatch_lab`` routes
-and the delegated read routes; 403 for a missing / bad token, a bad or missing Origin, a bad Host
-and a cross-site fetch; 415 and 413; the research-only acknowledgement (403 without it, recorded
-in the ledger with it); the job lifecycle and cancel (queued and running); a non-loopback bind
-refused; the CSP and security headers over real HTTP; `camber serve` still refusing POST; the
-0.95 lifecycle and audit log in a workspace; the no-OT import boundary; the CLI.
+and the delegated read routes; authentication on every route (0.102, #127: 401 without the session
+cookie or bearer token, the ``?token=`` exchange for the cookie and its flags, wrong secrets
+refused, the 0600 launch file and a refused insecure folder); 403 for a missing / bad token, a bad
+or missing Origin, a bad Host and a cross-site fetch; 415 and 413; the research-only acknowledgement
+(403 without it, recorded in the ledger with it); the job lifecycle and cancel (queued and running);
+a non-loopback bind refused; the CSP and security headers over real HTTP; `camber serve` still
+refusing POST; the 0.95 lifecycle and audit log in a workspace; the no-OT import boundary; the CLI.
 """
 
 import ast
@@ -34,6 +36,7 @@ from camber.lab import (  # noqa: E402
     JobCancelled,
     JobQueue,
     LabApp,
+    _auth,
     dispatch_lab,
     make_lab_server,
 )
@@ -78,8 +81,13 @@ def app(tmp_path):
     a.close()
 
 
+def _cookie(app, value=None):
+    return f"{_auth.cookie_name(app.port)}={app.session_id if value is None else value}"
+
+
 def _hdrs(app, **over):
-    h = {"Host": f"127.0.0.1:{app.port}"}
+    """Request headers: the lab's Host and, unless ``Cookie=None``, a valid session cookie."""
+    h = {"Host": f"127.0.0.1:{app.port}", "Cookie": _cookie(app)}
     h.update(over)
     return {k: v for k, v in h.items() if v is not None}
 
@@ -263,6 +271,205 @@ def test_manual_entry_is_not_fetched(tmp_path):
         app.close()
 
 
+# --------------------------------------------------------------------------- authentication (#127)
+
+_GET_ROUTES = (
+    "/",
+    "/lab",
+    "/lab/",
+    "/lab/catalog",
+    "/lab/jobs",
+    "/lab/jobs/0123456789ab",
+    "/lab/jobs/fetch",
+    "/lab/reports/ds-test-ahu",
+    "/lab/docs/workbook/air-economizer.md",
+    "/ui",
+    "/ui/",
+    "/facilities",
+    "/points",
+    "/history",
+    "/nope",
+)
+_PAGES = {
+    "/",
+    "/lab",
+    "/lab/",
+    "/lab/reports/ds-test-ahu",
+    "/lab/docs/workbook/air-economizer.md",
+    "/ui",
+    "/ui/",
+}
+
+
+def test_every_route_needs_credentials(app):
+    for path in _GET_ROUTES:
+        status, body, h = get(app, path, Cookie=None)
+        assert status == 401, path
+        assert h["WWW-Authenticate"].startswith("Bearer") and "Set-Cookie" not in h
+        if path in _PAGES:
+            assert h["Content-Type"].startswith("text/html") and "terminal" in body
+            assert "default-src 'none'" in h["Content-Security-Policy"]
+            assert "<script" not in body and app.token not in body
+        else:
+            assert "terminal" in body["error"]
+    for path in ("/lab/jobs/fetch", "/lab/jobs/ingest", "/lab/jobs/0123456789ab/cancel"):
+        assert post(app, path, {"ids": ["test-ahu"]}, Cookie=None)[0] == 401, path
+    for method in ("PUT", "DELETE", "HEAD", "OPTIONS"):
+        assert dispatch_lab(app, method, "/lab", {}, _hdrs(app, Cookie=None), b"")[0] == 401
+    assert app.jobs.jobs() == []
+
+
+def test_token_sets_the_cookie_and_redirects_without_it(app):
+    q = {"token": [app.access_token], "facility_id": ["ds-test-ahu"]}
+    status, body, h = get(app, "/ui", q, Cookie=None)
+    assert status == 303 and h["Location"] == "/ui?facility_id=ds-test-ahu"
+    assert app.access_token not in h["Location"] and app.access_token not in json.dumps(body)
+    name, _, rest = h["Set-Cookie"].partition("=")
+    value, *flags = [p.strip() for p in rest.split(";")]
+    assert name == f"camber-lab-{app.port}" and value == app.session_id
+    assert sorted(flags) == ["HttpOnly", "Path=/", "SameSite=Strict"]  # no Expires: per session
+    assert get(app, "/lab", {"token": [app.access_token]}, Cookie=None)[2]["Location"] == "/lab"
+    # the cookie it set then opens every route
+    assert get(app, "/ui", {"facility_id": ["ds-test-ahu"]}, Cookie=h["Set-Cookie"])[0] == 200
+    # a crafted path never redirects off the lab
+    for path in ("//evil.example/x", "/\\evil.example", "evil"):
+        status, _, h = get(app, path, {"token": [app.access_token]}, Cookie=None)
+        assert status == 303 and h["Location"] == "/lab"
+
+
+def test_secrets_are_distinct_and_wrong_ones_are_refused(app):
+    assert len({app.access_token, app.session_id, app.token}) == 3
+    for bad in ("x", app.token, app.session_id, app.access_token[:-1], "é" * 20):
+        status, _, h = get(app, "/lab", {"token": [bad]}, Cookie=None)
+        assert status == 403 and "Set-Cookie" not in h
+        assert get(app, "/lab/catalog", Cookie=None, Authorization=f"Bearer {bad}")[0] == 403
+    for bad in ("", "x", app.access_token, app.token, app.session_id + "x"):
+        assert get(app, "/lab/catalog", Cookie=_cookie(app, bad))[0] == 401
+    # the right session id under another port's cookie name (another lab's) is not this lab's
+    other = f"{_auth.cookie_name(app.port + 1)}={app.session_id}"
+    assert get(app, "/lab/catalog", Cookie=other)[0] == 401
+    assert get(app, "/lab/catalog", Cookie=f"a=b; {_cookie(app)}; c=d")[0] == 200
+    for scheme, status in (("Bearer", 200), ("bearer", 200), ("Basic", 401)):
+        auth = f"{scheme} {app.access_token}"
+        assert get(app, "/lab/catalog", Cookie=None, Authorization=auth)[0] == status
+
+
+def test_post_needs_the_session_and_the_csrf_token(app):
+    body = {"ids": ["test-ahu"]}
+    # the cookie alone is not enough: the CSRF header is still required
+    status, out, _ = post(app, "/lab/jobs/fetch", body, **{TOKEN_HEADER: None})
+    assert status == 403 and "CSRF" in out["error"]
+    bearer = {"Cookie": None, "Authorization": f"Bearer {app.access_token}"}
+    assert post(app, "/lab/jobs/fetch", body, **bearer, **{TOKEN_HEADER: None})[0] == 403
+    # the CSRF token alone is not enough either, and a POST takes no ?token=
+    assert post(app, "/lab/jobs/fetch", body, Cookie=None)[0] == 401
+    data = json.dumps(body).encode()
+    hdrs = _hdrs(
+        app,
+        Cookie=None,
+        Origin=f"http://127.0.0.1:{PORT}",
+        **{"Content-Type": "application/json", TOKEN_HEADER: app.token},
+    )
+    q = {"token": [app.access_token]}
+    assert dispatch_lab(app, "POST", "/lab/jobs/fetch", q, hdrs, data)[0] == 401
+    assert app.jobs.jobs() == []
+
+
+def test_host_and_origin_are_checked_before_the_credentials(app):
+    q = {"token": [app.access_token]}
+    status, body, h = get(app, "/lab", q, Cookie=None, Host="rebind.example")
+    assert status == 403 and "host" in body["error"] and "Set-Cookie" not in h
+    assert get(app, "/lab", q, Cookie=None, **{"Sec-Fetch-Site": "cross-site"})[0] == 403
+    assert get(app, "/lab", q, Cookie=None, Origin="http://evil.example")[0] == 403
+    assert get(app, "/lab", q, Cookie=None, **{"Sec-Fetch-Site": "none"})[0] == 303
+    assert post(app, "/lab/jobs/fetch", {"ids": ["x"]}, Origin=None)[0] == 403
+
+
+def test_explicit_access_token(tmp_path):
+    a = _app(tmp_path, access_token="s" * 20)
+    try:
+        assert a.access_token == "s" * 20
+        assert a.launch_url() == f"http://127.0.0.1:{PORT}/lab?token={'s' * 20}"
+        assert a.launch_url("/ui") == f"http://127.0.0.1:{PORT}/ui?token={'s' * 20}"
+    finally:
+        a.close()
+    with pytest.raises(ValueError, match="at least 16"):
+        _app(tmp_path, access_token="short")
+    with pytest.raises(ValueError, match="differ"):
+        _app(tmp_path, access_token="t" * 20, token="t" * 20)
+
+
+# --------------------------------------------------------------------------- the launch file
+
+
+def test_launch_file_is_private(tmp_path):
+    d = tmp_path / "cfg" / "camber"
+    path = _auth.write_launch_file("http://127.0.0.1:1/lab?token=abc", 1, d)
+    assert path == str(d / "lab-1.url")
+    assert open(path).read() == "http://127.0.0.1:1/lab?token=abc\n"
+    assert os.stat(path).st_mode & 0o777 == 0o600
+    assert os.stat(d).st_mode & 0o777 == 0o700
+    # rewritten in place (a restarted lab), still 0600, no temporary file left behind
+    os.chmod(path, 0o644)
+    _auth.write_launch_file("http://127.0.0.1:1/lab?token=new", 1, d)
+    assert os.stat(path).st_mode & 0o777 == 0o600 and os.listdir(d) == ["lab-1.url"]
+    # removed on exit only while it still holds this lab's URL
+    _auth.remove_launch_file(path, "http://127.0.0.1:1/lab?token=abc")
+    assert os.path.exists(path)
+    _auth.remove_launch_file(path, "http://127.0.0.1:1/lab?token=new")
+    assert not os.path.exists(path)
+
+
+def test_launch_dir_resolution(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
+    assert _auth.launch_dir() == str(tmp_path / "run" / "camber")
+    monkeypatch.delenv("XDG_RUNTIME_DIR")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    assert _auth.launch_file(8765) == str(tmp_path / "cfg" / "camber" / "lab-8765.url")
+    monkeypatch.delenv("XDG_CONFIG_HOME")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    assert _auth.launch_dir() == str(tmp_path / "home" / ".config" / "camber")
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX owners and modes")
+def test_insecure_launch_folder_or_file_is_refused(tmp_path, monkeypatch, capsys):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    for mode in (0o770, 0o777, 0o722):
+        os.chmod(shared, mode)
+        with pytest.raises(PermissionError, match="group- or world-writable"):
+            _auth.write_launch_file("u", 1, shared)
+        assert os.listdir(shared) == []
+    os.chmod(shared, 0o700)
+    bad = shared / "lab-1.url"
+    bad.write_text("planted")
+    os.chmod(bad, 0o666)
+    with pytest.raises(PermissionError, match="file"):
+        _auth.write_launch_file("u", 1, shared)
+    assert bad.read_text() == "planted"
+    # a folder another user owns
+    me = os.getuid()
+    monkeypatch.setattr(os, "getuid", lambda: me + 1)
+    with pytest.raises(PermissionError, match="owned by another user"):
+        _auth.write_launch_file("u", 2, tmp_path / "theirs")
+    monkeypatch.undo()
+    # the lab still runs and prints the URL, but writes nothing there
+    a = _app(tmp_path)
+    try:
+        os.chmod(shared, 0o777)
+        from camber.lab import announce
+
+        assert announce(a, launch_dir=shared) is None
+        out, err = capsys.readouterr()
+        assert a.launch_url() in out and "launch file not written" in err
+        os.chmod(shared, 0o700)
+        path = announce(a, launch_dir=tmp_path / "ok")
+        assert path and path in capsys.readouterr().out
+    finally:
+        os.chmod(shared, 0o700)
+        a.close()
+
+
 # --------------------------------------------------------------------------- research-only
 
 
@@ -442,16 +649,23 @@ def test_non_loopback_bind_is_refused(tmp_path, host):
         a.close()
 
 
-def _http(url, *, method="GET", data=None, headers=None):
+def _http(url, *, method="GET", data=None, headers=None, opener=None):
     req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with (opener or urllib.request.build_opener()).open(req, timeout=30) as r:
             return r.status, dict(r.headers), r.read()
     except urllib.error.HTTPError as e:
         return e.code, dict(e.headers), e.read()
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kw):
+        return None
+
+
 def test_http_round_trip_headers_and_checks(tmp_path):
+    import http.cookiejar
+
     a = _app(tmp_path)
     httpd = make_lab_server(a, port=0)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -459,27 +673,47 @@ def test_http_round_trip_headers_and_checks(tmp_path):
     try:
         assert httpd.server_address[0] == "127.0.0.1" and a.port == httpd.server_address[1]
         base = f"http://127.0.0.1:{a.port}"
-        status, h, body = _http(base + "/lab")
+        # no credentials: 401 everywhere, the delegated read routes included
+        for path in ("/lab", "/lab/catalog", "/ui", "/facilities", "/points", "/history"):
+            status, h, body = _http(base + path)
+            assert status == 401 and a.token.encode() not in body, path
+        assert b"terminal" in _http(base + "/lab")[2]
+        # the launch URL: 303 with the cookie, without following it
+        raw = urllib.request.build_opener(_NoRedirect)
+        status, h, _ = _http(a.launch_url(), opener=raw)
+        assert status == 303 and h["Location"] == "/lab"
+        assert h["Set-Cookie"] == _auth.session_cookie(a.port, a.session_id)
+        # a browser-like client: follows the redirect, keeps the cookie
+        jar = http.cookiejar.CookieJar()
+        browser = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+        status, h, body = _http(a.launch_url(), opener=browser)
         assert status == 200 and h["Content-Security-Policy"] == LAB_CSP
+        assert [c.value for c in jar] == [a.session_id] and a.access_token.encode() not in body
         assert h["X-Content-Type-Options"] == "nosniff" and h["Referrer-Policy"] == "no-referrer"
         assert h["X-Frame-Options"] == "DENY" and h["Cache-Control"] == "no-store"
         assert a.token.encode() in body
-        status, h, _ = _http(base + "/lab/catalog")
+        status, h, _ = _http(base + "/lab/catalog", opener=browser)
         assert status == 200 and "default-src 'none'" in h["Content-Security-Policy"]
+        assert _http(base + "/facilities", opener=browser)[0] == 200
+        # a script: the bearer token instead of the cookie
+        bearer = {"Authorization": f"Bearer {a.access_token}"}
+        assert _http(base + "/lab/catalog", headers=bearer)[0] == 200
 
         payload = json.dumps({"ids": ["test-ahu"]}).encode()
         hdr = {"Content-Type": "application/json", "Origin": base}
-        assert _http(base + "/lab/jobs/fetch", method="POST", data=payload, headers=hdr)[0] == 403
+        assert _http(base + "/lab/jobs/fetch", method="POST", data=payload, headers=hdr)[0] == 401
+        post_ = dict(opener=browser, method="POST")
+        assert _http(base + "/lab/jobs/fetch", data=payload, headers=hdr, **post_)[0] == 403
         hdr[TOKEN_HEADER] = a.token
-        status, _, body = _http(base + "/lab/jobs/fetch", method="POST", data=payload, headers=hdr)
+        status, _, body = _http(base + "/lab/jobs/fetch", data=payload, headers=hdr, **post_)
         assert status == 202
         assert a.jobs.get(json.loads(body)["job"]["id"]).wait(60)
         big = b"{" + b" " * (BODY_LIMIT + 10) + b"}"
-        assert _http(base + "/lab/jobs/fetch", method="POST", data=big, headers=hdr)[0] == 413
-        assert _http(base + "/lab", method="PUT", data=b"{}", headers=hdr)[0] == 405
-        assert _http(base + "/lab", method="OPTIONS", headers=hdr)[0] == 405
+        assert _http(base + "/lab/jobs/fetch", data=big, headers=hdr, **post_)[0] == 413
+        assert _http(base + "/lab", method="PUT", data=b"{}", headers=hdr, opener=browser)[0] == 405
+        assert _http(base + "/lab", method="OPTIONS", headers=hdr, opener=browser)[0] == 405
         # DNS rebinding: a foreign Host header is refused even on the loopback socket
-        assert _http(base + "/lab", headers={"Host": "rebind.example"})[0] == 403
+        assert _http(base + "/lab", headers={"Host": "rebind.example"}, opener=browser)[0] == 403
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -661,14 +895,29 @@ def test_cli_lab_plain_store_and_workspace(tmp_path, monkeypatch, capsys):
         made.append((app, port))
         return _FakeHTTPD(app)
 
+    seen = []
+    real_announce = lab.announce
+
+    def announce(app):  # the launch file exists while the lab runs
+        path = real_announce(app)
+        seen.append((path, open(path).read(), oct(os.stat(path).st_mode & 0o777)))
+        return path
+
     monkeypatch.setattr(lab, "make_lab_server", fake)
+    monkeypatch.setattr(lab, "announce", announce)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.delenv("CAMBER_PORTFOLIO", raising=False)
     monkeypatch.chdir(tmp_path)
     store = str(tmp_path / "st")
     assert cli.main(["lab", "--store", store, "--dir", str(tmp_path / "c"), "--port", "9001"]) == 0
     app, port = made[-1]
     assert port == 9001 and app.mode == "store" and app.store.root == store
-    assert "127.0.0.1:9001/lab" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"http://127.0.0.1:9001/lab?token={app.access_token}" in out
+    path, text, mode = seen[-1]
+    assert path == str(tmp_path / "run" / "camber" / "lab-9001.url") and path in out
+    assert text == app.launch_url() + "\n" and mode == "0o600"
+    assert not os.path.exists(path)  # removed when the lab stops
 
     ws = Portfolio.init(str(tmp_path / "ws")).root
     assert cli.main(["lab", "--workspace", ws, "--dir", str(tmp_path / "c")]) == 0

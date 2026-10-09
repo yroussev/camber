@@ -213,7 +213,7 @@ and never copied, with an open dataset from the catalog: read the guide, open th
 lab and on the command line.
 
 ```
-camber lab                     # open http://127.0.0.1:8765/lab, Fetch & ingest lbnl-sdahu
+camber lab                     # open the URL it prints, Fetch & ingest lbnl-sdahu
 camber datasets config lbnl-sdahu --exercise air-economizer --store lab_store --out econ.json
 camber run econ.json
 ```

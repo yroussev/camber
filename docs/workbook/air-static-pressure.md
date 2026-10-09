@@ -43,7 +43,7 @@ setpoint, which is why the exercise needs both datasets.
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-sdahu` and `ornl-frp-vav` and press **Fetch & ingest**.
 3. Use each row's **trends** link to look at the data; the exercise's own configs are run from
    the command line.

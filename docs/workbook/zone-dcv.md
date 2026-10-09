@@ -53,7 +53,7 @@ The equipment:
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `finnish-dcv`, `b4b-windesheim` and `sdu-ou44` and press **Fetch & ingest**.
 3. When the jobs are done, each row links to **trends** and to **report**. The report runs the
    dataset's default config, which is the config this exercise uses, so you can do the whole

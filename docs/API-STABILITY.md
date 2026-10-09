@@ -484,7 +484,10 @@ CHANGELOG entry, without a deprecation window) until they are declared stable.
   markup and the catalog-view JSON may change with the exercises. Also additive: the internal
   `via=` of `camber.datasets._ops.fetch_dataset` (the ledger records `"lab fetch"`), and the
   `/ui?facility_id=` deep link of the live viewer. `camber serve` and `camber.api.server.dispatch`
-  are unchanged and stay GET-only.
+  are unchanged and stay GET-only. Since 0.102 (#127) every lab route needs the access token
+  (the launch URL's `?token=`, its `camber-lab-<port>` session cookie, or
+  `Authorization: Bearer`); added, also provisional: `LabApp(access_token=...)`,
+  `LabApp.access_token`, `LabApp.launch_url()` and `camber.lab.announce`.
 <!-- /096-lab -->
 <!-- 096-report (#78) -->
 - **`camber.references`** (added in 0.96, provisional, #78) -- the linked-reference registry:

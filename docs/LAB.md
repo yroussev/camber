@@ -50,13 +50,20 @@ cd camber-course
 camber lab
 ```
 
-It prints two lines and keeps running:
+It prints a few lines and keeps running:
 
 ```
 camber lab: store lab_store; dataset cache <the cache's full path>
-open http://127.0.0.1:8765/lab  (loopback only; Ctrl-C to stop)
+open this URL in your browser (it carries this run's access token; keep it private):
+    http://127.0.0.1:8765/lab?token=<a long random token>
+the URL is also saved, readable by you only, in <the launch file's full path>
+loopback only; Ctrl-C to stop
 ```
 
+- **The launch URL** opens the lab. Its `token` is a new random secret each time the lab starts,
+  and every page and request of the lab needs it, so keep it to yourself as you would a password.
+  The launch file holds the same URL in case you lose the terminal (see
+  [The page says 401](#the-page-says-401-open-the-url-from-the-terminal)).
 - **The store** is where ingested data goes: `lab_store`, in the folder you started from. Start
   the lab from the same folder next time (or pass `--store`) to find your data again.
 - **The dataset cache** is where downloads go, by default `~/.cache/camber/datasets`. See
@@ -65,8 +72,12 @@ open http://127.0.0.1:8765/lab  (loopback only; Ctrl-C to stop)
 
 ### Step 3: open the page and pick a dataset
 
-Open `http://127.0.0.1:8765/lab` in your browser. The page lists every catalog dataset, one per
-row. Type `ornl` in the search box, tick **ornl-frp-ops**, and leave **Subset** at `default`.
+Open the launch URL the lab printed, the whole line with its `?token=...`, in your browser:
+copy it from the terminal, or Cmd-click / Ctrl-click it if your terminal makes links clickable.
+The lab swaps the token for a cookie that lasts until you close the browser, and the address bar
+then shows plain `http://127.0.0.1:8765/lab`. Reload it and open the trends and reports from it
+as usual while the browser and the lab keep running. The page lists every catalog dataset, one
+per row. Type `ornl` in the search box, tick **ornl-frp-ops**, and leave **Subset** at `default`.
 
 ![The camber lab catalog searched for ornl: three rows, ornl-frp-ops ticked, and the line under the table reading 1 selected, download 14 MB and store about 8.6 MB against the free disk](img/shots/lab-select.png)
 
@@ -372,19 +383,30 @@ that belongs to one. Then:
 ### What "loopback only" means for a shared machine
 
 The lab binds `127.0.0.1` only, and has no option to listen anywhere else: no other computer can
-reach it. It answers only requests addressed to `127.0.0.1:<port>` or `localhost:<port>`, and it
-accepts a change (queueing or cancelling a job, for catalog ids only) only from its own page,
-which sends a random token created each time the lab starts. That keeps other websites open in
-your browser from using it.
+reach it. But on a computer that several people are logged in to, each of them can reach
+`127.0.0.1`. So, since 0.102, every page and request of the lab needs the access token in the
+launch URL, or the cookie the browser gets for it:
 
-The lab has **no user accounts**. Anything that can open `127.0.0.1:<port>` on the same computer
-can use it, including another person logged in to that computer at the same time: they could
-read your ingested data and queue fetches and ingests into your cache and store. So:
+- the token is created each time the lab starts and is shown only in the terminal that started
+  it and in a launch file only your account can read; the lab never puts it on a command line,
+  where other people's process lists would show it;
+- without it, every page, the catalog, the jobs, the reports, the trend viewer and its data
+  answer *401* and show nothing;
+- a change (queueing or cancelling a job, for catalog ids only) must also come from the lab's
+  own page, which sends a second token, and the lab answers only requests addressed to
+  `127.0.0.1:<port>` or `localhost:<port>`. That keeps other websites open in your browser from
+  using it.
 
-- give each learner their own computer or their own login session, and run one lab per learner;
-- on a computer that several people use at once, do not leave a lab running unattended;
+The lab still has **no user accounts**: whoever has the launch URL can use it. Your own account
+and the computer's administrators (root) can read the terminal and the launch file, so on a
+shared computer:
+
+- do not paste the launch URL into a chat, a screenshot or a shared document;
+- give each learner their own login, and run one lab per learner;
+- do not leave a lab running unattended; stop it with Ctrl-C when you are done;
 - to show data to a room, project your screen, or publish a store read-only with
-  `camber serve` (it accepts no writes). The lab cannot be opened from another computer.
+  `camber serve` (it accepts no writes and has no token: see its notes in SECURITY.md). The lab
+  cannot be opened from another computer.
 
 The full list of the lab's request checks is in
 [SECURITY.md](SECURITY.md#11-the-lab-server-camber-lab-provisional-096).
@@ -404,12 +426,37 @@ port 8765. Stop the other lab, or pick another port:
 camber lab --port 8766
 ```
 
-`--port 0` lets the system pick a free port; the startup line prints the address to open.
+`--port 0` lets the system pick a free port; the launch URL the lab prints carries it.
+
+### The page says 401: open the URL from the terminal
+
+The page reads *Open the lab from its terminal*, or a trend or report says *401*. The browser has
+no valid lab cookie: you typed or bookmarked `http://127.0.0.1:8765/lab` without the token, the
+browser was closed (the cookie lasts one browser session), or the lab was restarted (each start
+makes a new token, and the old URL and cookie stop working). Open the launch URL again, the whole
+line with `?token=...`, from the terminal where `camber lab` is running.
+
+Lost the terminal? The lab also saved the URL in its launch file, `lab-<port>.url`, readable by
+your account only:
+
+- on Linux, `$XDG_RUNTIME_DIR/camber/lab-8765.url` (usually `/run/user/<your uid>/camber/`);
+- elsewhere, or when `XDG_RUNTIME_DIR` is not set, `~/.config/camber/lab-8765.url` (or
+  `$XDG_CONFIG_HOME/camber/` when that is set).
+
+The lab deletes the file when it stops. If the lab printed *warning: launch file not written*,
+the folder or an old file there is writable by other accounts, or belongs to another account,
+and the lab refused to put the secret in it. Make the folder yours and private (`chmod 700`),
+or just use the URL in the terminal.
+
+A *403* that says *That lab token is not valid for this run* means the URL holds an old or
+mistyped token: copy it again.
 
 ### The page says "host not allowed"
 
 You opened the lab under another name, such as the computer's name or its network address. Use
-`http://127.0.0.1:8765/lab` or `http://localhost:8765/lab`, on the computer the lab runs on.
+`http://127.0.0.1:8765/lab` or `http://localhost:8765/lab`, on the computer the lab runs on. The
+cookie belongs to the name you first opened, so for `localhost` open the launch URL with
+`localhost` in place of `127.0.0.1`.
 
 ### Fetch & ingest is greyed out
 

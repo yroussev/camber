@@ -38,7 +38,7 @@ before you look.
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `ornl-frp-vav` and press **Fetch & ingest** (it needs CAMBER's `xlsx` extra).
 3. When the job is done, the row links to **trends** (the trend viewer) and **report** (the
    dataset's default config, the one this exercise uses).

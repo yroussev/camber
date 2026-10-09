@@ -45,7 +45,7 @@ Read these first (PNNL, free):
 
 ### In the lab
 
-1. Run `camber lab` and open `http://127.0.0.1:8765/lab`.
+1. Run `camber lab` and open the URL it prints (`http://127.0.0.1:8765/lab?token=...`).
 2. Tick `lbnl-sdahu` and `ornl-frp-ops` and press **Fetch & ingest**.
 3. Use **trends** to look at `AHU__onset_damper_stuck_025` around 1 July, and at the two RTU
    tests at night. The runs below use the command line.

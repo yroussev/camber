@@ -124,6 +124,22 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 None of these figures is a gated benchmark.
 
 ### Fixed
+- **`camber lab` needs its access token on every route (#127, security).** The lab binds
+  127.0.0.1, but every GET was unauthenticated and the page carried the CSRF token, so any
+  other account on a shared computer could load `/lab`, read the token, queue fetches and
+  ingests, and read the ingested data, reports and trends. Each run now makes a random access
+  token, separate from the CSRF token, and prints the launch URL
+  `http://127.0.0.1:<port>/lab?token=...`. A valid `?token=` sets an `HttpOnly`,
+  `SameSite=Strict` session cookie and redirects to the URL without it; every request, GET or
+  POST, the delegated `/ui`, `/facilities`, `/points` and `/history` included, then needs the
+  cookie (or `Authorization: Bearer <token>`), else 401. POSTs still need the CSRF header and
+  the Origin / Host checks. The URL is also saved to a 0600 launch file, `lab-<port>.url`, in a
+  0700 folder under `$XDG_RUNTIME_DIR/camber` or `~/.config/camber`; a folder or file that is
+  group- or world-writable or owned by another account is refused. The lab opens no browser,
+  so the token never appears in `ps`. New in the provisional API: `LabApp(access_token=...)`,
+  `LabApp.launch_url()` and `camber.lab.announce`. SECURITY.md §11 describes the model and
+  its residual risks; LAB.md, CLI.md, DATASETS.md, the README and the workbook pages now say to
+  open the URL `camber lab` prints.
 - **A stuck supply-air sensor on a scheduled fan is now flagged (#118).** With the fan gate on,
   a fan-dependent role's flat run was broken at every fan-off span, so a sensor frozen for four
   days on a 13 h schedule never reached the 24 h stuck limit. A run now joins across a fan-off

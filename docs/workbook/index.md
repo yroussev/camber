@@ -33,7 +33,8 @@ and find the problems it teaches you to look for.
 camber lab
 ```
 
-Open `http://127.0.0.1:8765/lab`, tick a dataset and press **Fetch & ingest**. A dataset used by
+Open the URL `camber lab` prints (`http://127.0.0.1:8765/lab?token=...`: the token is a
+new secret each run), tick a dataset and press **Fetch & ingest**. A dataset used by
 an exercise has an **exercise** link in its row. From a source checkout, the lab serves the page
 itself, so it opens offline; otherwise the link goes to this site. New to the lab?
 [Using the lab](../LAB.md) walks through a first session step by step, and its
