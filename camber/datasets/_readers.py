@@ -4,7 +4,8 @@
 extension:
 
 * ``.csv`` / ``.txt`` / ``.tsv`` -- :func:`pandas.read_csv` (core; ``encoding`` declares a text
-  encoding other than UTF-8, e.g. ``"latin-1"``);
+  encoding other than UTF-8, e.g. ``"latin-1"``), each column typed in one pass
+  (``low_memory=False``), so a stray text row never splits a column into mixed types;
 * ``.parquet`` -- :func:`pandas.read_parquet` (core);
 * ``.xlsx`` / ``.xlsm`` -- :func:`pandas.read_excel` with ``openpyxl``, the ``xlsx`` extra
   (``pip install "camber-toolkit[xlsx]"``);
@@ -164,6 +165,12 @@ def read_table(
         kw["encoding"] = encoding
     if header_marker:
         kw["skiprows"] = _marker_row(path, str(header_marker), sep, encoding)
+    # 0.103 (#126): parse each column in one pass. Chunked parsing (pandas' default low_memory)
+    # types a column per chunk, so an export with a units row under its header (ornl-frp-ops)
+    # comes back with float and str values mixed in one column and a DtypeWarning per file. The
+    # ingest converts every value column with pd.to_numeric either way, so the stored values do
+    # not change; only the warning goes.
+    kw.setdefault("low_memory", False)
     return pd.read_csv(path, usecols=usecols, sep=sep, **kw)
 
 

@@ -12,6 +12,52 @@ Releases before 0.96.0 are archived under [`docs/changelog/`](docs/changelog/ind
 - [0.60.0 to 0.89.0](docs/changelog/changelog-0.60-0.89.md)
 - [0.1.0 to 0.59.0](docs/changelog/changelog-0.1-0.59.md)
 
+## [0.103.0] — Unreleased
+
+### Added
+- **Single-writer locks on plain stores and dataset caches (#124).** Two processes writing one
+  cache or one store, such as two `camber lab`s or a lab and `camber datasets ingest`, no longer
+  corrupt each other. Every write to a dataset cache holds `<cache>/_lock`: a fetch that
+  downloads, `ingest --from-dir`, an ingest extracting archive members or recording an
+  acknowledgement, and `remove`. An ingest and `remove --purge-store` hold the store's lock:
+  `<store>/_lock` for a plain store, or the workspace's own lock for a store in a portfolio
+  workspace, which is re-entered rather than doubled, so the lab's workspace ingest cannot
+  deadlock. It is the portfolio's kernel lock (`flock`, `msvcrt` on Windows), released when its
+  process exits, so a crash leaves no stale lock. A second writer waits up to 30 seconds, then
+  stops with `dataset cache … is locked by <pid>@<host> since <time>` (or `store … is locked by
+  …`); `camber datasets` exits 1. Reads take no lock. See
+  [DATASETS.md](docs/DATASETS.md#caches-locks-and-a-read-only-shared-cache).
+- **A read-only shared cache (#124).** A dataset cache the user cannot write, such as a course
+  folder shared read-only across a classroom, now works for `camber datasets` and `camber lab`.
+  A fetch whose files are all present and match their pinned SHA-256 downloads and writes
+  nothing. An ingest reads the downloads in place and uses the archive members already extracted
+  there. Members still needed are extracted into a scratch folder beside the ingest's staging
+  area in the store, deleted when the ingest ends. Downloading, `ingest --from-dir` and `remove`
+  stop with *the dataset cache … is read-only for this user* and change nothing.
+  [Using the lab](docs/LAB.md#sharing-one-cache-read-only) describes setting one up for a class.
+
+### Changed
+- **A fetch of files already in the cache no longer rewrites the manifest (#124).** When every
+  file of the subset is present, verifies, and is already recorded, `camber datasets fetch` (and
+  the lab's **Fetch & ingest**) leaves `manifest.json` untouched; its `fetched_at` keeps the time
+  of the fetch that downloaded the files. A research-only fetch still records its
+  acknowledgement.
+- **Research-only acknowledgements against a read-only cache are per user (#124).** They go to
+  the user's own ledger, `$XDG_STATE_HOME/camber/datasets/acknowledgements.json` (else
+  `~/.local/state/camber/datasets/acknowledgements.json`), with the cache's path in each record.
+  Only that ledger counts for a read-only cache. The acceptance recorded in the cache by whoever
+  filled it does not stand in for another user's, so each learner accepts a research-only
+  dataset's terms once. A writable cache keeps its acknowledgements in its own ledger and
+  manifest, as before.
+
+### Fixed
+- **`ornl-frp-ops` ingests without pandas `DtypeWarning`s (#126).** The export has a units row
+  under its header, and pandas' chunked CSV parsing typed each chunk of a column separately,
+  then warned that the columns had mixed types. The catalog's CSV reader now types each column
+  in one pass (`low_memory=False`). The stored values are unchanged: every value column goes
+  through `pd.to_numeric` either way, and re-ingesting all 23 locally cached dataset subsets
+  gives the same rows as 0.102. No other catalog dataset raised the warning.
+
 ## [0.102.0] — 2026-10-10
 
 **0.102: follow-ups from 0.101, sample charts across the docs, a guide to the lab, and an access token on every lab route (#110–#121, #127).** The suggester's unitless range check no longer overturns a strong name on a dirty series (#110); the `air-economizer` workbook exercise teaches the economizer low-limit lockout and the capstone adopts it (#111); and the RCx report ranks uncosted issues of equal severity by confidence before the issue key, so the capstone's stuck-damper issue ranks first again (#112). The docs site gains charts and screenshots rendered by CAMBER's own chart code (#113) and a step-by-step guide to `camber lab` (#121). Evidence charts shade exactly what each rule flags and name roles with their units (#114–#117, #119). A stuck supply-air sensor on a scheduled fan is now flagged (#118). **Behaviour change (#120):** `free_cooling_missed` no longer judges fan-off hours, so missed shares rise on units whose fan runs only when occupied; the `air-economizer` and capstone answers move with it. **Security (#127):** `camber lab` now requires a per-run access token on every route; open the URL it prints.

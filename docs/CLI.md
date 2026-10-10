@@ -435,7 +435,15 @@ the published data (`info <id>` lists them) and ingests it exactly as published 
 store to compare the two; `ingest` warns when the store's disk is smaller than the subset's
 estimated size. Exit codes: `2` checksum mismatch (a download is kept as `.bad`; a
 `--from-dir` file is left untouched), `3` licence gate, `4` not enough disk, `1` any other error
-(including a manual entry named to `fetch`, or a missing extra). A typical session:
+(including a manual entry named to `fetch`, a missing extra, a busy lock or a read-only cache).
+
+**Locks and a read-only cache (0.103).** `fetch`, `ingest` and `remove` take a single-writer
+lock on the cache (`<dir>/_lock`) and, for `ingest` and `remove --purge-store`, on the store
+(`<store>/_lock`, or the portfolio workspace's lock for a workspace store). A second writer waits
+up to 30 seconds, then exits 1 with `dataset cache … is locked by <pid>@<host> since <time>` (or
+`store … is locked by …`). Reads such as `status` take no lock. A cache you cannot write works for
+`fetch` of files that are already there and verify (nothing is written) and for `ingest`; see
+[DATASETS.md](DATASETS.md#caches-locks-and-a-read-only-shared-cache). A typical session:
 
 ```
 camber datasets fetch lbnl-sdahu
