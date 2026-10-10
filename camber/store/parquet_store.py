@@ -267,8 +267,9 @@ class ParquetStore:
         df[_MONTH] = df[_TS].dt.month.astype("int32")
         table = _canonical_table(df)
         seq = self._next_seq(facility_id)
-        # Single-threaded and order-preserving, one row group per part: the default threaded write
-        # lands batches in completion order, so the same rows would give different bytes (#130).
+        # Single-threaded (so batches keep their order), one row group per part: the default
+        # threaded write lands batches in completion order, so the same rows would give different
+        # bytes (#130).
         ds.write_dataset(
             table,
             self.root,
@@ -278,8 +279,7 @@ class ParquetStore:
             existing_data_behavior="overwrite_or_ignore",
             basename_template=f"part-{seq}-{{i}}.parquet",
             file_options=ds.ParquetFileFormat().make_write_options(**_PARQUET_OPTIONS),
-            use_threads=False,
-            preserve_order=True,
+            use_threads=False,  # also keeps order; preserve_order is not in pyarrow 16
             min_rows_per_group=_ROWS_PER_GROUP,
             max_rows_per_group=_ROWS_PER_GROUP,
         )
