@@ -96,6 +96,9 @@ pip install camber-toolkit             # from PyPI
 pip install "camber-toolkit[brick]"    # + rdflib, for robust Brick-model parsing (optional)
 ```
 
+On numpy 1.x, also pin `"pyarrow<26"`: pyarrow 26 needs numpy 2 but does not declare it, so
+pip can pair it with numpy 1.x and `import pyarrow` then fails.
+
 The core is dependency-light (numpy / pandas / pyarrow / matplotlib). Everything else is an
 **optional extra**, lazy-imported so the core never pays for it: `brick`, `haystack`, `modbus`,
 `mqtt`, `bacnet`, `opcua`, `pv`, `psychro`, `tariff`, `ml`, `energyplus`, `yaml`, `docs`, `dev`.

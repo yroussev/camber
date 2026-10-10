@@ -94,7 +94,9 @@ jobs:
 
       - name: Pin numpy ${{ matrix.numpy }}
         if: matrix.numpy != ''
-        run: pip install "numpy${{ matrix.numpy }}"
+        # pyarrow 26 needs numpy 2 at import but does not declare it, so pinning numpy 1.x after
+        # the install would leave pyarrow 26 unimportable: pin a numpy-1-compatible pyarrow too.
+        run: pip install "numpy${{ matrix.numpy }}" "pyarrow<26"
 
       - name: Test
         run: pytest -q
